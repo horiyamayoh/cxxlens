@@ -21,8 +21,8 @@ properties:
     additionalProperties: false
     required: [authority, report_schema, required_tuple_fields, required_claim_fields, pending_or_wildcard, unlisted_surface]
     properties:
-      authority: {const: exact-gr-report-tuple-only}
-      report_schema: {const: cxxlens.ng-release-qualification-report.v1}
+      authority: {const: exact-certification-registry-tuple-only}
+      report_schema: {const: cxxlens.provider-certification-registry.v1}
       required_tuple_fields: {const: [provider_id, provider_version, binary_digest, relation, interpretation, toolchain, platform]}
       required_claim_fields: {const: [capabilities, guarantee, security_profile_digest, evidence_digest]}
       pending_or_wildcard: {const: forbidden}

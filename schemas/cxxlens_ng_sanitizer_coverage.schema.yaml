@@ -64,7 +64,7 @@ properties:
     additionalProperties: false
     required: [workflow, coverage_checker, check_after_ctest]
     properties:
-      workflow: {const: .github/workflows/nightly.yml}
+      workflow: {const: .github/workflows/release.yml}
       coverage_checker: {const: tools/quality/check_sanitizer_coverage.py}
       check_after_ctest: {const: true}
 $defs:

@@ -38,16 +38,17 @@ either identity. A manifest content digest in a semantic-v2-only field, or a
 semantic-v2 digest in either manifest identity field, is rejected.
 
 This is an authority and source-private validation amendment only. NG1
-remains `proposed`, unadvertised, and unavailable for live transport or
-production qualification until its independent implementation and measured
-qualification gates are complete.
+remains `proposed`, unadvertised, and unavailable for live transport until its
+implementation has direct positive, negative, fault, and determinism/resource
+test coverage. The support surface is unchanged by this amendment.
 
 ## Consequences
 
 The manifest-to-resume boundary is directly usable without inventing a
 semantic projection, while replay identity remains domain-separated by the
-semantic-v2 token digest. Qualification reports continue to bind the measured
-binary and selected contract with their exact `sha256:` content digests.
+semantic-v2 token digest. Provider manifests and runtime trust checks continue
+to bind the measured binary and selected contract with their exact `sha256:`
+content digests.
 
 The source-private validator and deterministic control codec must keep the
 field-specific grammar explicit. Positive and negative vectors must cover the
@@ -56,6 +57,6 @@ manifest-derived path and reject namespace substitution.
 ## Acceptance gate
 
 DF-0243 is resolved by this accepted amendment and its mirrored hardening,
-protocol, report, vector, checker, and focused unit-test traceability. This
-ADR does not authorize live NG1 transport, capability advertisement, or a
-production-support claim.
+protocol, vector, checker, and focused direct-test coverage. This ADR does not
+authorize live NG1 transport, capability advertisement, or a production-support
+claim.

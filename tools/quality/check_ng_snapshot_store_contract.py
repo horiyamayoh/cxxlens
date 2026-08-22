@@ -23,31 +23,28 @@ CONTRACT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_snapshot_store_contract.schema.yaml"
 )
 EXPECTED_SCHEMA_DIGEST = (
-    "sha256:939021ff7797042e9fcb62e11efef3d1bd8a69424243fe59e5c9eb1acc6dfd0e"
+    "sha256:1881bbc166aca955d0c1e3d47dc890cda5d7815accab7d3b401bb605222ee7e5"
 )
 MANIFEST_SCHEMA = pathlib.Path("schemas/cxxlens_ng_snapshot_manifest.schema.yaml")
 VECTORS = pathlib.Path("schemas/cxxlens_ng_store_conformance_vectors.yaml")
 VECTORS_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_store_conformance_vectors.schema.yaml"
 )
-REPORT_SCHEMA = pathlib.Path(
-    "schemas/cxxlens_ng_store_conformance_report.schema.yaml"
-)
 
 EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST = (
-    "sha256:6f9d7e5eb117f2da204da929eeb0d32b27102014fe23f87114de737add184b93"
+    "sha256:b019707f54866f559a5ea2954a086d8ecbef4ef3c0ce04d5b435842868c4d031"
 )
 EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
-    "sha256:fd2a96157107d3823c03c730606e9f380875a454cb82eaeecf9ba5cda785aa8f"
+    "sha256:0327025e44dc6e691c91bca5000608b4036e3f871a7d0908aad71e1cb02328fb"
 )
 EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
-    "sha256:8d809188559c98b15a0eb145b0341ad8ad3bb87a5d848f7bc20d11c61b5c90a6"
+    "sha256:503548c0baa80ce12cda22b61828d6b1209c9206cbc50439ddbeb70d4d50ebab"
 )
 EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST = (
-    "sha256:904481b74af4fbc790267264aca5d864e9bba13a24646b1ee669c53d1f7af4d5"
+    "sha256:93ba9422c197391573896e85016ff899f554a76924d841b2139f7a225eafc4b9"
 )
 EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST = (
-    "sha256:b2bf7e63954fb709ffac98fa62c0872dadf4e5297a48f069b89a0722a0912ddb"
+    "sha256:bec85afaa49d1a989fe37f17a81b71c3ab7a1c37c4205d2c73d803f76d4736fe"
 )
 
 SELECTOR_FIELDS = (
@@ -428,7 +425,7 @@ DF_0200_SQLITE_CAPACITY_DECISION = {
             "requires": [
                 "physical-format-v3-authority",
                 "deterministic-v2-to-v3-migration",
-                "reopen-compaction-pin-and-backend-parity-qualification",
+                "reopen-compaction-pin-and-backend-parity-direct-tests",
             ],
         },
         "B": {
@@ -440,20 +437,20 @@ DF_0200_SQLITE_CAPACITY_DECISION = {
             "requires": [
                 "successor-version",
                 "fresh-request-and-budget-authority",
-                "same-cap-for-memory-and-sqlite-qualification",
+                "same-cap-for-memory-and-sqlite-direct-tests",
             ],
         },
     },
     "implementation_and_acceptance": (
-        "may-proceed-under-accepted-option-a-not-qualified-until-required-evidence"
+        "may-proceed-under-accepted-option-a-direct-tests-required-before-production-binding"
     ),
 }
 EXPECTED_DF_0200_MATERIALIZATION_INGRESS = {
     "status": "accepted-authority-implementation-pending",
     "resolution_id": "cxxlens.df-0200.incremental-claim-store.v1",
-    "implementation_disposition": "pending-implementation-and-qualification",
+    "implementation_disposition": "pending-implementation-and-direct-tests",
     "activation": (
-        "accepted-df-0200-review-and-sqlite-option-a-authority-binding"
+        "accepted-df-0200-direct-test-and-sqlite-option-a-authority-binding"
     ),
     "caller_scope": "installed-clang22-materializer-only",
     "bridge": "source-private-non-installed-header-without-public-catalog-entry",
@@ -591,7 +588,7 @@ EXPECTED_DF_0200_MATERIALIZATION_INGRESS = {
         "current_physical_format": (
             "cxxlens.sqlite-semantic-store.v3-3.0.0-bounded-8388608-byte-chunks"
         ),
-        "publish_and_reopen_qualification": (
+        "publish_and_reopen_direct_test_matrix": (
             "required-current-v3-plus-v2-read-migration-and-limit-exceeding-parity"
         ),
         "filesystem_readwrite_admission": (
@@ -1569,30 +1566,26 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
             "forbidden-until-ordinary-fresh-initialization-independently-completes"
         ),
         "accepted_empty_normalization_receiptless_crash_profile_draft": {
-            "status": (
-                "accepted-authority-disposable-qualification-implementation-"
-                "pending-production-blocked"
-            ),
+            "status": "accepted-authority-disposable-runtime-test-pending-production-blocked",
             "sqlite_profile_path": (
                 "transaction.fresh_v3_initialization.guards.filesystem."
                 "precreate_census.preauthority_sidecar_candidate."
                 "accepted_empty_original_normalization.receiptless_crash_profile_draft"
             ),
             "activation": (
-                "accepted-proposal-review-b6cbb86347e02c4b374d7991a1f78d2535789ced-"
-                "authorizes-only-the-named-SQLite-profile-disposable-qualification-"
-                "layer-and-canonical-or-production-activation-remains-gated-with-no-"
-                "static-SQLite-runtime-inference"
+                "direct-positive-negative-fault-determinism-and-resource-tests-"
+                "must-pass-for-the-named-SQLite-profile-and-canonical-or-production-"
+                "activation-remains-gated-with-no-static-SQLite-runtime-inference"
             ),
             "qualification_implementation": (
-                "exact-proposal-review-accepted-may-proceed-only-for-classifier-"
-                "ports-effect-gates-and-fixture-scoped-cleanup-recovery-normalizer-"
-                "and-fault-harness-behind-the-nonforgeable-disposable-fixture-"
-                "capability"
+                "direct-positive-negative-fault-determinism-and-resource-tests-"
+                "may-proceed-only-for-classifier-ports-effect-gates-and-fixture-"
+                "scoped-cleanup-recovery-normalizer-and-fault-harness-behind-the-"
+                "nonforgeable-disposable-fixture-capability"
             ),
             "production_activation": (
-                "blocked-until-the-complete-evidence-gate-independent-review-and-"
-                "accepted-profile-replacement"
+                "blocked-until-direct-positive-negative-fault-determinism-and-"
+                "resource-tests-pass-and-accepted-profile-replacement"
             ),
             "family_partition": [
                 "F0-exact-pre-no-sidecar",
@@ -1613,7 +1606,7 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
                 (
                     "exact-layer-discriminator-and-family-applicable-runtime-build-"
                     "vfs-device-filesystem-S-P-N-E-receipt-with-disposable-run-plan-"
-                    "or-accepted-production-report-never-cross-authorizing"
+                    "or-runtime-safety-receipt-never-cross-authorizing"
                 ),
                 "continuous-parent-namespace-epoch-and-object-entry-identities",
                 "exact-family-tag-and-raw-whole-main-plus-sidecar-byte-receipts",
@@ -1636,15 +1629,10 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
                 "rejected-and-no-production-API-route"
             ),
             "profile_receipt_layering": (
-                "disposable-binds-capability-run-plan-and-candidate-report-ID-without-"
-                "the-future-report-production-rejects-that-capability-and-binds-an-"
-                "accepted-canonical-report-digest"
-            ),
-            "review_receipt_separation": (
-                "accepted-proposal-b6cbb86347e02c4b374d7991a1f78d2535789ced-issue-"
-                "202-comment-5094406150-authorizes-only-disposable-qualification-"
-                "implementation-and-a-distinct-later-production-evidence-review-is-"
-                "required"
+                "disposable-binds-capability-run-plan-and-runtime-safety-receipt-"
+                "without-authorizing-production-production-requires-direct-positive-"
+                "negative-fault-determinism-and-resource-tests-and-the-product-safety-"
+                "receipt"
             ),
             "public_success": (
                 "forbidden-the-only-success-is-an-internal-receipt-bound-handoff-to-"
@@ -1992,8 +1980,6 @@ def validate_all(
         results.append({"id": vector["id"], **actual, "matched": True})
     if comparisons != 36:
         fail("store.perturbation-matrix-incomplete", str(comparisons))
-    report = make_report(contract, results, comparisons)
-    schema_validate(report, load_yaml(root / REPORT_SCHEMA), "store report")
     return contract, results, comparisons
 
 
@@ -2018,18 +2004,11 @@ def make_report(
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("check", "report"))
+    parser.add_argument("mode", choices=("check",))
     parser.add_argument("--root", type=pathlib.Path, default=ROOT)
-    parser.add_argument("--output", type=pathlib.Path)
     args = parser.parse_args()
     contract, results, comparisons = validate_all(args.root.resolve())
     report = make_report(contract, results, comparisons)
-    if args.mode == "report":
-        rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
-        if args.output is None:
-            print(rendered, end="")
-        else:
-            args.output.write_text(rendered, encoding="utf-8")
     print(
         "verified snapshot/store contract: "
         f"{len(results)} vectors, {comparisons} perturbations, "

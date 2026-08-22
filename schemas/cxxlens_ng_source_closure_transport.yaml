@@ -5,29 +5,6 @@ authority:
   adr: docs/design/adr/0102-dedicated-source-closure-transport.md
   identity_adr: docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md
   owner_issue: '#261'
-  review: {status: required, reviewer: null, ref: null, exact_main_commit: null}
-review_findings:
-  status: blocking
-  exact_main_commit: d7dfb7a2a5d2fe7e2fa247232be46da577166aa4
-  ref: https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-5358501463
-  reviewer: codex-independent-reviewer/01a01fe3-fd16-7191-8275-275ba44196eb
-  receipt_id: null
-  required_resolutions:
-    - id: SC-R2-01
-      problem: request-v2-2-nests-protocol-1-1-and-source-bytes
-      decision: replace-with-full-v2-2-authority-derived-from-v2-1-minus-content-plus-protocol-1-2
-    - id: SC-R2-02
-      problem: provider-cannot-recompute-task-v4
-      decision: protocol-1-2-input-chunks-carry-canonical-complete-task-v4-metadata-before-closure-transfer
-    - id: SC-R2-03
-      problem: manifest-bound-excludes-valid-adr-0101-closure
-      decision: forty-mib-manifest-and-eighty-eight-mib-spool-with-constructibility-witness
-    - id: SC-R2-04
-      problem: phase-authentic-reject-is-declarative
-      decision: closed-control-schemas-plus-executable-reject-union-validator
-    - id: SC-R2-05
-      problem: review-reference-not-content-bound
-      decision: committed-review-receipt-binds-verdict-reviewer-session-exact-main-sha-and-comment-body-digest
 versions:
   provider_protocol: {legacy: 1.1, proposed: 1.2, downgrade: reject}
   request: {legacy: 2.1, proposed: 2.2}
@@ -264,6 +241,3 @@ crash_effects:
   worker-crash: {effect: no-publication-or-ambient-mutation, recovery: authenticated-orphan-cleanup}
   resource-failure: {effect: no-task-acceptance, recovery: typed-reject-and-cleanup-receipt}
 counterexamples: [missing, duplicate, reordered, overlap, gap, extra, post-seal, tamper, limit-overflow, orphan-blob, missing-blob, cross-task, cross-session, stale-ack, foreign-replay, cancel-then-content, capability-absent, downgrade, message-id-collision, ambient-shadow, ng1-resume-alias, valid-transfer-rebound-to-different-outer-task]
-qualification:
-  implementation: not-claimed
-  production: not-claimed

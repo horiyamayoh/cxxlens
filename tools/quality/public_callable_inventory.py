@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import datetime
 import hashlib
 import json
 import pathlib
@@ -25,9 +24,6 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 INVENTORY = pathlib.Path("schemas/cxxlens_ng_public_callable_inventory.yaml")
 INVENTORY_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_public_callable_inventory.schema.yaml"
-)
-REPORT_SCHEMA = pathlib.Path(
-    "schemas/cxxlens_ng_public_callable_inventory_report.schema.yaml"
 )
 CALLABLE_KINDS = {
     "FunctionDecl",
@@ -2443,120 +2439,8 @@ def previous_inventory_for_check(
     return None if parent is None else parent[1]
 
 
-def current_git_state(root: pathlib.Path) -> dict[str, Any]:
-    return {
-        "revision": git_output(root, "rev-parse", "HEAD"),
-        "tree": git_output(root, "rev-parse", "HEAD^{tree}"),
-        "branch": git_output(root, "branch", "--show-current"),
-        "clean": git_output(root, "status", "--porcelain=v1") == "",
-    }
-
-
-def _markdown_escape(value: Any) -> str:
-    return str(value).replace("|", "\\|").replace("\n", " ")
-
-
 def doxygen_correspondence_digest(rows: list[dict[str, Any]]) -> str:
     return semantic_digest([row["projection"] for row in rows])
-
-
-def review_markdown(
-    document: dict[str, Any],
-    git: dict[str, Any],
-    run_url: str,
-    doxygen_digest: str,
-) -> str:
-    extractor = document["extractor"]
-    lines = [
-        "# Exact public callable inventory review",
-        "",
-        f"- Revision: `{git['revision']}`",
-        f"- Tree: `{git['tree']}`",
-        f"- Inventory digest: `{document['inventory_digest']}`",
-        f"- Callable count: `{len(document['callables'])}`",
-        f"- Extractor: `{extractor['engine']} {extractor['engine_version']}`",
-        f"- Doxygen correspondence digest: `{doxygen_digest}`",
-        f"- CI run: {run_url}",
-        "",
-        "| ID | Catalog entry | Target | Header | Fully-qualified signature | Status | Stability | Qualification | Owner |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-    ]
-    for row in document["callables"]:
-        values = (
-            row["id"],
-            row["catalog_entry"],
-            row["target"],
-            row["declaring_header"],
-            row["signature"]["source"],
-            row["status"],
-            row["stability"],
-            row["qualification"],
-            row["owner"],
-        )
-        lines.append("| " + " | ".join(_markdown_escape(value) for value in values) + " |")
-    return "\n".join(lines) + "\n"
-
-
-def _require_canonical_report_inventory(
-    root: pathlib.Path,
-    inventory_path: pathlib.Path,
-    document: dict[str, Any],
-) -> pathlib.Path:
-    canonical_path = (root / INVENTORY).resolve()
-    if inventory_path.resolve() != canonical_path:
-        fail(
-            "public callable review requires the canonical inventory path: "
-            f"{canonical_path}"
-        )
-    canonical_document = load_document(canonical_path)
-    if canonical_json(document) != canonical_json(canonical_document):
-        fail("public callable review document differs from the canonical inventory")
-    return canonical_path
-
-
-def build_report(
-    root: pathlib.Path,
-    document: dict[str, Any],
-    doxygen_rows: list[dict[str, Any]],
-    inventory_path: pathlib.Path,
-    markdown_path: pathlib.Path,
-    generated_at: str,
-    run_url: str,
-    expected_revision: str,
-) -> dict[str, Any]:
-    inventory_path = _require_canonical_report_inventory(
-        root, inventory_path, document
-    )
-    git = current_git_state(root)
-    if git["revision"] != expected_revision or git["branch"] != "main" or not git["clean"]:
-        fail(f"callable inventory review requires exact clean main revision: {git}")
-    headers = admitted_public_headers(root)
-    return {
-        "schema": "cxxlens.ng-public-callable-inventory-report.v1",
-        "result": "passed",
-        "generated_at": generated_at,
-        "run_url": run_url,
-        "git": git,
-        "inventory": {
-            "path": INVENTORY.as_posix(),
-            "file_digest": file_digest(inventory_path),
-            "semantic_digest": document["inventory_digest"],
-            "callable_count": len(document["callables"]),
-        },
-        "extractor": document["extractor"],
-        "headers": {
-            "count": len(headers),
-            "digest": semantic_digest(headers),
-        },
-        "doxygen": {
-            "count": len(doxygen_rows),
-            "digest": doxygen_correspondence_digest(doxygen_rows),
-        },
-        "review": {
-            "path": markdown_path.name,
-            "digest": file_digest(markdown_path),
-        },
-    }
 
 
 def _write_yaml(path: pathlib.Path, document: dict[str, Any]) -> None:
@@ -2573,17 +2457,11 @@ def _write_yaml(path: pathlib.Path, document: dict[str, Any]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "command", choices=("check", "generate", "check-doxygen", "report")
-    )
+    parser.add_argument("command", choices=("check", "generate", "check-doxygen"))
     parser.add_argument("--root", type=pathlib.Path, default=ROOT)
     parser.add_argument("--compiler", default="clang++-22")
     parser.add_argument("--inventory", type=pathlib.Path, default=INVENTORY)
     parser.add_argument("--doxygen-xml", type=pathlib.Path)
-    parser.add_argument("--output-json", type=pathlib.Path)
-    parser.add_argument("--output-markdown", type=pathlib.Path)
-    parser.add_argument("--run-url")
-    parser.add_argument("--expected-revision")
     arguments = parser.parse_args()
     root = arguments.root.resolve()
     inventory_path = (
@@ -2613,10 +2491,6 @@ def main() -> int:
         if existing is None:
             fail(f"public callable inventory is missing: {inventory_path}")
         validate_inventory_document(root, existing)
-        if arguments.command == "report":
-            inventory_path = _require_canonical_report_inventory(
-                root, inventory_path, existing
-            )
         if arguments.command == "check":
             previous = previous_inventory_for_check(root, inventory_path)
             if previous is not None:
@@ -2636,51 +2510,6 @@ def main() -> int:
                 f"Doxygen callable inventory check passed ({len(doxygen_rows)} callables)"
             )
             return 0
-        if not all(
-            (
-                arguments.output_json,
-                arguments.output_markdown,
-                arguments.run_url,
-                arguments.expected_revision,
-            )
-        ):
-            fail(
-                "report requires --output-json, --output-markdown, --run-url, "
-                "and --expected-revision"
-            )
-        check_ast_inventory(root, arguments.compiler, existing)
-        generated_at = (
-            datetime.datetime.now(datetime.timezone.utc)
-            .replace(microsecond=0)
-            .isoformat()
-            .replace("+00:00", "Z")
-        )
-        git = current_git_state(root)
-        doxygen_digest = doxygen_correspondence_digest(doxygen_rows)
-        markdown = review_markdown(
-            existing, git, arguments.run_url, doxygen_digest
-        )
-        arguments.output_markdown.write_text(markdown, encoding="utf-8")
-        report = build_report(
-            root,
-            existing,
-            doxygen_rows,
-            inventory_path,
-            arguments.output_markdown,
-            generated_at,
-            arguments.run_url,
-            arguments.expected_revision,
-        )
-        validate_schema(
-            report,
-            load_document(root / REPORT_SCHEMA),
-            "public callable inventory report",
-        )
-        arguments.output_json.write_text(
-            json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-        print(f"wrote public callable review report to {arguments.output_json}")
     except (
         CallableInventoryError,
         OSError,

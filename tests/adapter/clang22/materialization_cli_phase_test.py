@@ -17,9 +17,6 @@ RAW_INPUT_LIMIT_BYTES = 1 << 30
 REPORT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_clang22_materialization_report.schema.yaml"
 )
-EXECUTION_RECEIPT_SCHEMA = pathlib.Path(
-    "schemas/cxxlens_ng_clang22_materialization_execution_receipt.schema.yaml"
-)
 
 
 def load_oracle(root: pathlib.Path) -> Any:
@@ -76,40 +73,6 @@ def parse_one_json(
     return report
 
 
-def execution_receipt(
-    root: pathlib.Path,
-    oracle: Any,
-    completed: subprocess.CompletedProcess[bytes],
-    label: str,
-) -> dict[str, Any]:
-    parsed_response_count = 0
-    if completed.stdout:
-        try:
-            parse_one_json(oracle, completed.stdout, label)
-        except (AssertionError, oracle.MaterializationError):
-            parsed_response_count = 0
-        else:
-            parsed_response_count = 1
-    receipt = {
-        "schema": "cxxlens.clang22-materialization-execution-receipt.v1",
-        "actual_exit_status": completed.returncode,
-        "exact_stdout_byte_count": len(completed.stdout),
-        "stdout_sha256": "sha256:" + hashlib.sha256(completed.stdout).hexdigest(),
-        "parsed_response_count": parsed_response_count,
-        "stderr_sha256": "sha256:" + hashlib.sha256(completed.stderr).hexdigest(),
-    }
-    oracle.validate_schema(
-        receipt,
-        oracle.load(root / EXECUTION_RECEIPT_SCHEMA),
-        f"{label} execution receipt",
-        error_code="materialization.report-invalid",
-    )
-    assert receipt["actual_exit_status"] == completed.returncode
-    assert receipt["exact_stdout_byte_count"] == len(completed.stdout)
-    assert receipt["parsed_response_count"] == 1
-    return receipt
-
-
 def assert_raw_compact_failure(
     root: pathlib.Path,
     oracle: Any,
@@ -147,10 +110,6 @@ def assert_raw_compact_failure(
     assert effects["task_success_count"] == 0
     assert effects["worker_launch_attempt_count"] == 0
     assert effects["worker_launch_success_count"] == 0
-    receipt = execution_receipt(root, oracle, completed, label)
-    assert receipt["stdout_sha256"] == "sha256:" + hashlib.sha256(
-        completed.stdout
-    ).hexdigest()
 
 
 def assert_input_limit_failure(
@@ -194,7 +153,6 @@ def assert_input_limit_failure(
     assert effects["task_success_count"] == 0
     assert effects["worker_launch_attempt_count"] == 0
     assert effects["worker_launch_success_count"] == 0
-    execution_receipt(root, oracle, completed, label)
 
 
 def main() -> int:

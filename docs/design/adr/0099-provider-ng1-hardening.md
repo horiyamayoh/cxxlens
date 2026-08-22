@@ -1,4 +1,4 @@
-# ADR 0099: Provider NG1 hardening lifecycle and evidence
+# ADR 0099: Provider NG1 hardening lifecycle and runtime receipts
 
 - Status: Accepted
 - Date: 2026-08-13
@@ -11,7 +11,7 @@
 
 The integrated design makes NG1 provider hardening a distribution 1.0
 requirement and names durable resume, heartbeat, progress-rate enforcement,
-spill staging, hung-worker recovery, and long-run qualification. The accepted
+spill staging, hung-worker recovery, and long-run behavior tests. The accepted
 Provider Protocol reserves message type 23 and lists the feature names, but
 does not define the typed lifecycle semantics needed to implement or certify
 them. The existing runtime is NG0-oriented and must not infer NG1 capability
@@ -48,18 +48,14 @@ The contract defines:
 - an explicit worker crash/hang/cancel transition matrix whose shared sealed
   output is the only adoption input and never alters the previously published
   snapshot on failure;
-- exact static/shared and long-run qualification cases plus declarative
-  positive/negative vectors plus the closed
-  `schemas/cxxlens_ng_provider_ng1_qualification_report.schema.yaml`, whose
-  measured report binds one revision, tree, provider identity, protocol minor,
-  protocol-contract digest, hardening-contract digest, report-schema digest,
-  vector document/schema digests, and host-measurement provenance. The
-  checked-in vectors are explicitly authority-only and provider-unbound.
+- exact static/shared, long-run, positive, negative, and fault tests. Their
+  exit status is the acceptance result; no repository-operation report or
+  revision-bound measurement artifact is produced.
 
 Heartbeat and progress controls are transport occurrences and are not claim or
 partition authority. Only the shared typed validator's sealed output groups
 may be adopted. A provider self-claim, non-durable acknowledgement, adjacent
-provider, or unavailable platform cannot satisfy NG1 qualification.
+provider, or unavailable platform cannot satisfy the NG1 contract.
 
 ## Consequences
 
@@ -68,9 +64,9 @@ operations, and host-observed durability receipts to the NG1 session state
 machine. The existing completed-process
 `run()` path remains valid for NG0 and cannot be silently reclassified as NG1.
 The public protocol enum may expose message type 23 only together with the
-typed controls, feature negotiation, registered failure reservations, executed
-vectors, and catalog/acceptance traceability. Until implementation and
-qualification are complete, those NG1 failures are reserved in the runtime
+typed controls, feature negotiation, registered failure reservations, direct
+positive/negative/fault tests, and catalog traceability. Until implementation
+and those tests are complete, those NG1 failures are reserved in the runtime
 authority and are not active C++ terminals.
 
 Failure is fail-closed: heartbeat clock drift, liveness timeout, rate failure,
@@ -79,8 +75,8 @@ produces a stable failure and leaves the prior published snapshot unchanged.
 
 While NG1 maturity remains Proposed, NG1 failure reservations remain outside
 the active execution-report terminal enum and outside the C++ runtime terminal registry;
-the host-observed receipt schema and the conformance vectors are authority
-inputs, not production qualification evidence.
+the host-observed receipt schema and conformance vectors are product authority
+inputs, not repository-operation records.
 
 ## Alternatives rejected
 
@@ -95,13 +91,6 @@ inputs, not production qualification evidence.
 
 ## Acceptance gate
 
-The authority decision was accepted by #233 after the closed schema and
-checker, protocol/report bindings, state-machine transitions, clock/rate
-overflow and replay boundaries, spill durability/cleanup, semantic-v2 receipt
-digest boundary, and exact negative qualification matrix received independent
-review at the exact merged-main source `df89c776d65184d393980a78543ca8a081c60a91`
-with tree `d7b638d7727bb926b35dd0562dd1520b24cd3557`. #183 may now implement
-the accepted private contract. The contract maturity remains Proposed, and
-NG1 cannot be advertised or activated until executed static/shared process,
-spill, recovery, fault, and long-run evidence is bound by the exact report
-schema and measured provider identity.
+NG1 の acceptance は provider protocol、署名、binary identity、revocation、sandbox、canonical
+semantic certification の positive・negative・fault test が通ることだけである。独立 review、
+exact SHA、repository-operation report、測定 artifact は要求しない。

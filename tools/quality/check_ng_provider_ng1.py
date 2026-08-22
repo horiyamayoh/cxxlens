@@ -38,9 +38,6 @@ VECTORS = pathlib.Path("schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml
 VECTORS_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_provider_ng1_conformance_vectors.schema.yaml"
 )
-QUALIFICATION_REPORT_SCHEMA = pathlib.Path(
-    "schemas/cxxlens_ng_provider_ng1_qualification_report.schema.yaml"
-)
 DIGEST_GRAMMAR_ADR = pathlib.Path(
     "docs/design/adr/0100-ng1-resume-provider-digest-grammar.md"
 )
@@ -281,7 +278,7 @@ EXPECTED_PROGRESS = {
         "completed_units": "zero-through-total-inclusive",
         "total_units": "positive-and-constant-per-task",
     },
-    "unit": "provider-declared-monotonic-work-unit",
+    "unit": "provider-declared-monotonic-progress-unit",
     "constraints": {
         "total_units": "positive-and-constant-per-task",
         "completed_units": "zero-through-total-inclusive",
@@ -685,26 +682,9 @@ EXPECTED_STABLE_FAILURES = [
     "provider.recovery-failed",
 ]
 
-EXPECTED_QUALIFICATION = {
-    "schema": "cxxlens.provider-ng1-qualification.v1",
-    "report_schema": "schemas/cxxlens_ng_provider_ng1_qualification_report.schema.yaml",
-    "checker": "tools/quality/check_ng_provider_ng1_qualification.py",
+EXPECTED_DIRECT_TESTS = {
+    "schema": "cxxlens.provider-ng1-hardening-tests.v1",
     "vectors": "schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml",
-    "exact_binding": [
-        "revision",
-        "tree",
-        "provider_binary_digest",
-        "provider_binary_digest_source",
-        "provider_semantic_contract_digest",
-        "provider_semantic_contract_digest_source",
-        "protocol_minor",
-        "protocol_contract_digest",
-        "hardening_contract_digest",
-        "hardening_contract_schema_digest",
-        "report_schema_digest",
-        "vectors_digest",
-        "vectors_schema_digest",
-    ],
     "required_profiles": ["static", "shared"],
     "required_cases": [
         "positive-heartbeat-and-progress",
@@ -742,7 +722,7 @@ EXPECTED_QUALIFICATION = {
         "permutation-replay": "provider.resume-replay-invalid",
         "long-run-fault": "accepted-only-with-exact-certificate-or-stable-failure",
     },
-    "release_claim": "exact-measured-certificate-only",
+    "execution": "direct-tests-only",
     "unavailable_provider": "unqualified",
     "unavailable_platform": "unqualified",
 }
@@ -847,76 +827,7 @@ def validate_ng1_contract(
     expect(hardening["spill"], EXPECTED_SPILL, "spill")
     expect(hardening["recovery"], EXPECTED_RECOVERY, "recovery")
     expect(hardening["stable_failures"], EXPECTED_STABLE_FAILURES, "stable_failures")
-    expect(hardening["qualification"], EXPECTED_QUALIFICATION, "qualification")
-    qualification_schema = load_yaml(root / QUALIFICATION_REPORT_SCHEMA)
-    try:
-        jsonschema.Draft202012Validator.check_schema(qualification_schema)
-    except jsonschema.SchemaError as error:
-        fail("qualification.report_schema", f"invalid schema: {error.message}")
-    expect(
-        qualification_schema.get("$id"),
-        "https://cxxlens.dev/schemas/cxxlens.provider-ng1-qualification.v1",
-        "qualification.report_schema.$id",
-    )
-    qualification_cases = []
-    for case_id in hardening["qualification"]["required_cases"]:
-        outcome = hardening["qualification"]["required_case_outcomes"][case_id]
-        if outcome == "accepted":
-            qualification_cases.append({"id": case_id, "decision": "accepted"})
-        elif outcome.startswith("provider."):
-            qualification_cases.append(
-                {"id": case_id, "decision": "rejected", "reason_code": outcome}
-            )
-        else:
-            qualification_cases.append(
-                {"id": case_id, "decision": "recovery", "outcome": outcome}
-            )
-    qualification_certificate = {
-        "schema": "cxxlens.provider-ng1-qualification.v1",
-        "document_version": "1.0.0",
-        "authority": {
-            "contract": CONTRACT.as_posix(),
-            "vectors": VECTORS.as_posix(),
-            "decision_issue": "#233",
-            "implementation_issue": "#183",
-            "digest_grammar_adr": DIGEST_GRAMMAR_ADR.as_posix(),
-            "digest_grammar_issue": DIGEST_GRAMMAR_ISSUE,
-        },
-        "binding": {
-            "revision": "0" * 40,
-            "tree": "1" * 40,
-            "provider_binary_digest": "sha256:" + "2" * 64,
-            "provider_binary_digest_source": "host-measured-executable-bytes",
-            "provider_semantic_contract_digest": "sha256:" + "3" * 64,
-            "provider_semantic_contract_digest_source": "selected-contract-digest",
-            "protocol_minor": 1,
-            "protocol_contract_digest": document_digest(
-                protocol if protocol is not None else load_yaml(root / PROTOCOL)
-            ),
-            "hardening_contract_digest": document_digest(hardening),
-            "hardening_contract_schema_digest": document_digest(
-                load_yaml(root / CONTRACT_SCHEMA)
-            ),
-            "report_schema_digest": document_digest(qualification_schema),
-            "vectors_digest": document_digest(vectors),
-            "vectors_schema_digest": document_digest(load_yaml(root / VECTORS_SCHEMA)),
-        },
-        "profiles": [
-            {
-                "profile": profile,
-                "status": "green",
-                "evidence_digest": "sha256:" + ("4" if profile == "static" else "5") * 64,
-                "cases": qualification_cases,
-            }
-            for profile in ("static", "shared")
-        ],
-        "status": "green",
-    }
-    schema_validate(
-        qualification_certificate,
-        qualification_schema,
-        "NG1 qualification report",
-    )
+    expect(hardening["direct_tests"], EXPECTED_DIRECT_TESTS, "qualification")
     expect(
         vectors["authority"],
         {
@@ -935,7 +846,7 @@ def validate_ng1_contract(
                 "hardening_contract_digest": None,
             },
         },
-        "qualification.vectors.authority",
+        "direct_tests.vectors.authority",
     )
     expect(
         vectors["authority"].get("binding"),
@@ -948,22 +859,22 @@ def validate_ng1_contract(
             "protocol_minor": 1,
             "hardening_contract_digest": None,
         },
-        "qualification.vectors.authority.binding",
+        "direct_tests.vectors.authority.binding",
     )
-    expected_cases = set(hardening["qualification"]["required_cases"])
+    expected_cases = set(hardening["direct_tests"]["required_cases"])
     vector_ids = [vector["id"] for vector in vectors["vectors"]]
     if len(vector_ids) != len(set(vector_ids)):
-        fail("qualification.vectors", "vector IDs must be unique")
+        fail("direct_tests.vectors", "vector IDs must be unique")
     if len(vector_ids) != len(expected_cases):
         fail(
-            "qualification.vectors",
+            "direct_tests.vectors",
             f"expected exactly {len(expected_cases)} vectors, got {len(vector_ids)}",
         )
     actual_cases = set(vector_ids)
     if actual_cases != expected_cases:
-        fail("qualification.vectors", f"case set differs: expected={sorted(expected_cases)}, got={sorted(actual_cases)}")
+        fail("direct_tests.vectors", f"case set differs: expected={sorted(expected_cases)}, got={sorted(actual_cases)}")
     for vector in vectors["vectors"]:
-        expected_outcome = hardening["qualification"]["required_case_outcomes"][vector["id"]]
+        expected_outcome = hardening["direct_tests"]["required_case_outcomes"][vector["id"]]
         decision = vector["expected"]["decision"]
         expected_decision = (
             "accepted"
@@ -972,16 +883,16 @@ def validate_ng1_contract(
             if vector["class"] == "negative"
             else "recovery"
         )
-        expect(decision, expected_decision, f"qualification.vectors.{vector['id']}.decision")
+        expect(decision, expected_decision, f"direct_tests.vectors.{vector['id']}.decision")
         if vector["class"] == "positive":
-            expect(vector["expected"], {"decision": "accepted"}, f"qualification.vectors.{vector['id']}.expected")
+            expect(vector["expected"], {"decision": "accepted"}, f"direct_tests.vectors.{vector['id']}.expected")
         elif vector["class"] == "negative":
             reason = vector["expected"].get("reason_code")
             if reason is None:
-                fail(f"qualification.vectors.{vector['id']}", "negative vector lacks stable reason code")
-            expect(reason, expected_outcome, f"qualification.vectors.{vector['id']}.reason_code")
+                fail(f"direct_tests.vectors.{vector['id']}", "negative vector lacks stable reason code")
+            expect(reason, expected_outcome, f"direct_tests.vectors.{vector['id']}.reason_code")
         else:
-            expect(vector["expected"].get("outcome"), expected_outcome, f"qualification.vectors.{vector['id']}.outcome")
+            expect(vector["expected"].get("outcome"), expected_outcome, f"direct_tests.vectors.{vector['id']}.outcome")
 
     heartbeat_liveness = hardening["heartbeat"]["liveness"]
     if not (
@@ -1090,8 +1001,8 @@ def main() -> int:
     print(
         "verified NG1 hardening contract: "
         f"maturity={contract['maturity']}, "
-        f"profiles={len(contract['qualification']['required_profiles'])}, "
-        f"cases={len(contract['qualification']['required_cases'])}"
+        f"profiles={len(contract['direct_tests']['required_profiles'])}, "
+        f"cases={len(contract['direct_tests']['required_cases'])}"
     )
     return 0
 

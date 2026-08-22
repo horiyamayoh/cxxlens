@@ -877,16 +877,16 @@ namespace
 				"claim construction failed: " + (claims ? std::string{} : failure(claims.error())));
 		require(claims->materializer_semantics_digest() ==
 						"semantic-v2:sha256:"
-						"31070011864f22e80665a84fe885919a535310fca66d102f2002c2b41313b14f" &&
+						"645ab55ed537945a28da75bab00a334ea2ff780f3750744bad173804da667dff" &&
 					claims->direct_basis_digest() ==
 						"semantic-v2:sha256:"
-						"5b626a30b0742c97b2cdd17cc3b1b25a32cb3f5e38b54908b83b1128548965ee" &&
+						"85a65d0e9bb3e17a80e2a3de4f60172ef04905e1b405be9abcd00a12902f788e" &&
 					claims->canonical_adoption_transform_digest() ==
 						"semantic-v2:sha256:"
-						"559bacb92b22062b80a3f677d070c4990697f22608171277c10d0402f8fd1e6f" &&
+						"f4e521562d1a1fbbbabc3b86cf2bad7b2e3ed74cddb01521ada9cd4c69f6af53" &&
 					claims->base_ingestion_transform_digest() ==
 						"semantic-v2:sha256:"
-						"72602c67a04379f2e20fdc8c5d764aae6c5240c5363b853cf92d11655361985b" &&
+						"ef290f597e7230724717f92d7988fe0a1aa38f837925adf37b0f63cf26c304e4" &&
 					claims->assumption_set_id() ==
 						"assumption-set:semantic-v2:sha256:"
 						"054f2400cc7d6084286f98ff7c22f4fbcf531178fa605b2211346f528862a098",

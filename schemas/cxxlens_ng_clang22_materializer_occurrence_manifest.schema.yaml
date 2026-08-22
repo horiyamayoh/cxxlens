@@ -5,10 +5,11 @@ description: >-
   Source-private, co-located occurrence authority for one installed materializer.
   occurrence_payload_digest is recomputed as SHA-256 over canonical JSON of
   every other manifest field; the manifest never inventories its
-  own bytes.  The external install-artifact manifest remains the full-prefix
-  witness and includes this manifest file.  Package-owned runtime DSOs are
-  inventoried only for shared packages; external system libraries remain
-  toolchain/runtime evidence and are not occurrence-manifest entries.
+  own bytes.  The manifest is the sole runtime occurrence authority; package
+  prefix checks are performed by direct quality/release tests and are not
+  represented by a separate install-artifact witness.  Package-owned runtime
+  DSOs are inventoried only for shared packages; external system libraries
+  remain toolchain/runtime inputs and are not occurrence-manifest entries.
 type: object
 additionalProperties: false
 required:

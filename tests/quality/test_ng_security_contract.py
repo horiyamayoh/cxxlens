@@ -22,7 +22,6 @@ from check_ng_security_contract import (  # noqa: E402
     discover,
     load_yaml,
     namespace_authority,
-    report,
     sample_certificate_registry,
     sample_subject,
     sandbox,
@@ -49,7 +48,7 @@ class NgSecurityContractTest(unittest.TestCase):
         self.assertEqual(len(results), 35)
         self.assertEqual(sum(row["decision"] == "accepted" for row in results), 10)
         self.assertEqual(counts["production_certificates"], 0)
-        self.assertEqual(report(profile, results, counts)["status"], "green")
+        self.assertGreater(counts["support_tuples"], 0)
 
     def test_schema_conformance_never_grants_standard_authority(self) -> None:
         with self.assertRaisesRegex(SecurityContractError, "canonical-authority-denied"):

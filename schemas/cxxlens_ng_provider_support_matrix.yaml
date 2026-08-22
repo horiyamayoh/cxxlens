@@ -7,8 +7,8 @@ authority:
   owner: steward.ng-security
 tuple_identity: [provider_id, provider_version, binary_digest, relation, interpretation, toolchain, platform]
 production_claim_policy:
-  authority: exact-gr-report-tuple-only
-  report_schema: cxxlens.ng-release-qualification-report.v1
+  authority: exact-certification-registry-tuple-only
+  report_schema: cxxlens.provider-certification-registry.v1
   required_tuple_fields: [provider_id, provider_version, binary_digest, relation, interpretation, toolchain, platform]
   required_claim_fields: [capabilities, guarantee, security_profile_digest, evidence_digest]
   pending_or_wildcard: forbidden

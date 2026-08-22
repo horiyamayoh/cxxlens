@@ -622,13 +622,6 @@ properties:
         retained_memory_formula: one-shared-catalog-plus-fixed-buffers-plus-one-task-window-plus-one-source-plus-one-output-window
         forbidden_residency: [raw-request, aggregate-source, all-task-payloads, task-count-times-catalog-count]
         spool-failure: zero-effect-before-publication
-      execution_receipt:
-        fields: [actual-exit-status, exact-stdout-byte-count, stdout-sha256, parsed-response-count, stderr-sha256-diagnostic-only]
-        cross_binding: stdout-bytes-are-the-exact-report-artifact
-        passed_report: actual-exit-zero-and-response-count-one
-        schema_valid_failure: actual-exit-one-and-response-count-one-release-forbidden
-        no_response_failure: actual-exit-two-and-response-count-zero-release-forbidden
-        report_set_entry: [backend, report-digest, execution-receipt-digest]
       missing_extra_duplicate_matrix_entry: reject
   errors: {$ref: '#/$defs/nonempty_object'}
   lifetime: {$ref: '#/$defs/nonempty_object'}
@@ -647,17 +640,17 @@ $defs:
     const:
       status: accepted-authority-implementation-pending
       resolution_id: cxxlens.df-0200.incremental-claim-store.v1
-      implementation_disposition: pending-implementation-and-qualification
+      implementation_disposition: pending-implementation-and-direct-tests
       d1_claim_batch_oracle:
         public_reference: sdk-claim-batch-commit
-        public_reference_control_flow: independent-bounded-resident-reference-during-qualification
+        public_reference_control_flow: independent-bounded-resident-reference-during-direct-tests
         production_path: source-private-incremental-external-validator
         shared_implementation_allowlist:
         - canonical-codecs
         - identity-functions
         - field-validators
         shared_commit_control_flow_or_verdict_logic: forbidden
-        literal_all_claims_vector_call: required-for-bounded-qualification-only
+        literal_all_claims_vector_call: required-for-bounded-direct-test-only
         exact_equivalence:
         - accepted-final-occurrence-multiset
         - canonical-order
@@ -688,7 +681,7 @@ $defs:
             generator:
               visibility: source-private
               option: --emit
-              artifact_update_gate: independent-review-and-new-frozen-digest
+              artifact_update_gate: direct-positive-negative-fault-determinism-and-resource-tests-must-pass
           census:
             case_count: 10
             success_count: 9
@@ -734,9 +727,9 @@ $defs:
           - accepted-added-and-existing-occurrence-sets
           - reference-conflict-and-differential-verdicts
           - unresolved-conflict-and-differential-censuses
-          production_path_comparison: required-as-accepted-activation-step-before-production
-          corpus_regeneration: forbidden-without-independent-review-and-new-frozen-digest
-        bounded_differential_oracle: frozen-corpus-plus-independent-current-public-api-required-before-production
+          production_path_comparison: required-direct-positive-negative-fault-determinism-and-resource-tests-before-production
+          corpus_regeneration: requires-direct-positive-negative-fault-determinism-and-resource-tests
+        bounded_differential_oracle: frozen-corpus-and-current-public-api-direct-positive-negative-fault-tests-required
         qualified_zero_side_channel_result: replay-receipt-instead-of-resident-full-claim-batch-result
       d2_move_only_lifecycle:
         operations:
@@ -1305,7 +1298,7 @@ $defs:
         sqlite_prepublication: sealed-canonical-v5-payload-spool-and-independent-validation
         sqlite_predecessor_v2_capacity: single-payload-blob-runtime-max-length-1000000000-insufficient-for-required-limit-adjacent-parity
         sqlite_current_physical_format: cxxlens.sqlite-semantic-store.v3-3.0.0-bounded-8388608-byte-chunks
-        sqlite_publish_and_reopen_qualification: required-current-v3-plus-v2-read-migration-and-limit-exceeding-parity
+        sqlite_publish_and_reopen_direct_test_matrix: required-current-v3-plus-v2-read-migration-and-limit-exceeding-parity
         sqlite_capacity_decision_status: accepted
         payload_and_format: logical-canonical-v5-unchanged-except-authorized-physical-generation-current-sqlite-v3
       d4_memory_accounting:
@@ -1429,7 +1422,7 @@ $defs:
             requires:
             - physical-format-v3-authority
             - deterministic-v2-to-v3-migration
-            - reopen-compaction-pin-and-backend-parity-qualification
+            - reopen-compaction-pin-and-backend-parity-direct-tests
           B:
             decision: successor-request-budget-and-cross-backend-canonical-payload-cap
             disposition: rejected-not-selected
@@ -1437,8 +1430,8 @@ $defs:
             requires:
             - successor-version
             - fresh-request-and-budget-authority
-            - same-cap-for-memory-and-sqlite-qualification
-        implementation_and_acceptance: may-proceed-under-accepted-option-a-not-qualified-until-required-evidence
+            - same-cap-for-memory-and-sqlite-direct-tests
+        implementation_and_acceptance: may-proceed-under-accepted-option-a-direct-tests-required-before-production-binding
       d6_compatibility:
         contract_version: 2.1.0-accepted-df-0200-option-a-authority
         report_schema_canonical_json_digest: sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96

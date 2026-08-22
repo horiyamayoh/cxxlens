@@ -221,7 +221,7 @@ class NgProviderProtocolTest(unittest.TestCase):
         hardening = validate_ng1_contract(ROOT, self.contract)
         self.assertEqual(hardening["maturity"], "proposed")
         self.assertEqual(
-            hardening["qualification"]["required_cases"].count("long-run-fault"),
+            hardening["direct_tests"]["required_cases"].count("long-run-fault"),
             1,
         )
 
@@ -238,8 +238,8 @@ class NgProviderProtocolTest(unittest.TestCase):
             validate_ng1_contract(ROOT, self.contract, changed)
 
         changed = copy.deepcopy(hardening)
-        changed["qualification"]["unavailable_provider"] = "fallback"
-        with self.assertRaisesRegex(Ng1ContractError, "qualification"):
+        changed["direct_tests"]["unavailable_provider"] = "fallback"
+        with self.assertRaisesRegex(Ng1ContractError, "schema"):
             validate_ng1_contract(ROOT, self.contract, changed)
 
     def test_ng1_schema_is_closed_and_rejects_maturity_or_direction_drift(self) -> None:

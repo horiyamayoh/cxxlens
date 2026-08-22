@@ -1730,7 +1730,7 @@ allocator:
   - fully_qualified_name: cxxlens::source::relations::span::span_column::ref
     callable_kind: static
     next_overload_slot: 1
-inventory_digest: sha256:b55cbe297df5af185f724df7513ecf94aeb4825ce09f1faa36a43a98933ca35d
+inventory_digest: sha256:10d072e48b574140d7da9893ed44eb6e7f1a1118313436ec645548ad0f484c63
 callables:
 - id: cpp.callable.00100ca7a0bda4b73503b24a4e6f6d33be47b954c7553cab8f70e85f9e77f492
   identity:
@@ -2086,7 +2086,7 @@ callables:
   qualification: NG1
   owner: '#166'
   evidence:
-    catalog_digest: sha256:abb9faf2bb128375ee83b642ee35e9642524d82821393e42446d4b7582d4bcce
+    catalog_digest: sha256:9f9be8309456b9d48607a43250262abef04fad78e069d935cfddd1adf3d4064f
     implementation: src/sdk/incremental.cpp
     test: tests/unit/sdk/g5_runtime_test.cpp
     example: examples/sdk/incremental_materialization.cpp
@@ -5311,7 +5311,7 @@ callables:
   qualification: NG1
   owner: '#166'
   evidence:
-    catalog_digest: sha256:abb9faf2bb128375ee83b642ee35e9642524d82821393e42446d4b7582d4bcce
+    catalog_digest: sha256:9f9be8309456b9d48607a43250262abef04fad78e069d935cfddd1adf3d4064f
     implementation: src/sdk/incremental.cpp
     test: tests/unit/sdk/g5_runtime_test.cpp
     example: examples/sdk/incremental_materialization.cpp
@@ -5486,7 +5486,7 @@ callables:
   qualification: NG1
   owner: '#166'
   evidence:
-    catalog_digest: sha256:abb9faf2bb128375ee83b642ee35e9642524d82821393e42446d4b7582d4bcce
+    catalog_digest: sha256:9f9be8309456b9d48607a43250262abef04fad78e069d935cfddd1adf3d4064f
     implementation: src/sdk/incremental.cpp
     test: tests/unit/sdk/g5_runtime_test.cpp
     example: examples/sdk/incremental_materialization.cpp
@@ -5638,7 +5638,7 @@ callables:
   qualification: NG1
   owner: '#166'
   evidence:
-    catalog_digest: sha256:abb9faf2bb128375ee83b642ee35e9642524d82821393e42446d4b7582d4bcce
+    catalog_digest: sha256:9f9be8309456b9d48607a43250262abef04fad78e069d935cfddd1adf3d4064f
     implementation: src/sdk/incremental.cpp
     test: tests/unit/sdk/g5_runtime_test.cpp
     example: examples/sdk/incremental_materialization.cpp
@@ -9273,7 +9273,7 @@ callables:
   qualification: NG1
   owner: '#166'
   evidence:
-    catalog_digest: sha256:abb9faf2bb128375ee83b642ee35e9642524d82821393e42446d4b7582d4bcce
+    catalog_digest: sha256:9f9be8309456b9d48607a43250262abef04fad78e069d935cfddd1adf3d4064f
     implementation: src/sdk/incremental.cpp
     test: tests/unit/sdk/g5_runtime_test.cpp
     example: examples/sdk/incremental_materialization.cpp
@@ -14266,7 +14266,7 @@ callables:
   qualification: NG1
   owner: '#166'
   evidence:
-    catalog_digest: sha256:abb9faf2bb128375ee83b642ee35e9642524d82821393e42446d4b7582d4bcce
+    catalog_digest: sha256:9f9be8309456b9d48607a43250262abef04fad78e069d935cfddd1adf3d4064f
     implementation: src/sdk/incremental.cpp
     test: tests/unit/sdk/g5_runtime_test.cpp
     example: examples/sdk/incremental_materialization.cpp
@@ -15346,7 +15346,7 @@ callables:
   qualification: NG1
   owner: '#166'
   evidence:
-    catalog_digest: sha256:abb9faf2bb128375ee83b642ee35e9642524d82821393e42446d4b7582d4bcce
+    catalog_digest: sha256:9f9be8309456b9d48607a43250262abef04fad78e069d935cfddd1adf3d4064f
     implementation: src/sdk/incremental.cpp
     test: tests/unit/sdk/g5_runtime_test.cpp
     example: examples/sdk/incremental_materialization.cpp
@@ -18045,7 +18045,7 @@ callables:
   qualification: NG1
   owner: '#166'
   evidence:
-    catalog_digest: sha256:abb9faf2bb128375ee83b642ee35e9642524d82821393e42446d4b7582d4bcce
+    catalog_digest: sha256:9f9be8309456b9d48607a43250262abef04fad78e069d935cfddd1adf3d4064f
     implementation: src/sdk/incremental.cpp
     test: tests/unit/sdk/g5_runtime_test.cpp
     example: examples/sdk/incremental_materialization.cpp
@@ -19235,7 +19235,7 @@ callables:
   qualification: NG1
   owner: '#166'
   evidence:
-    catalog_digest: sha256:abb9faf2bb128375ee83b642ee35e9642524d82821393e42446d4b7582d4bcce
+    catalog_digest: sha256:9f9be8309456b9d48607a43250262abef04fad78e069d935cfddd1adf3d4064f
     implementation: src/sdk/incremental.cpp
     test: tests/unit/sdk/g5_runtime_test.cpp
     example: examples/sdk/incremental_materialization.cpp
@@ -23193,7 +23193,7 @@ callables:
   qualification: NG1
   owner: '#166'
   evidence:
-    catalog_digest: sha256:abb9faf2bb128375ee83b642ee35e9642524d82821393e42446d4b7582d4bcce
+    catalog_digest: sha256:9f9be8309456b9d48607a43250262abef04fad78e069d935cfddd1adf3d4064f
     implementation: src/sdk/incremental.cpp
     test: tests/unit/sdk/g5_runtime_test.cpp
     example: examples/sdk/incremental_materialization.cpp
@@ -25402,7 +25402,7 @@ callables:
   qualification: NG1
   owner: '#166'
   evidence:
-    catalog_digest: sha256:abb9faf2bb128375ee83b642ee35e9642524d82821393e42446d4b7582d4bcce
+    catalog_digest: sha256:9f9be8309456b9d48607a43250262abef04fad78e069d935cfddd1adf3d4064f
     implementation: src/sdk/incremental.cpp
     test: tests/unit/sdk/g5_runtime_test.cpp
     example: examples/sdk/incremental_materialization.cpp
@@ -28392,7 +28392,7 @@ callables:
   qualification: NG1
   owner: '#166'
   evidence:
-    catalog_digest: sha256:abb9faf2bb128375ee83b642ee35e9642524d82821393e42446d4b7582d4bcce
+    catalog_digest: sha256:9f9be8309456b9d48607a43250262abef04fad78e069d935cfddd1adf3d4064f
     implementation: src/sdk/incremental.cpp
     test: tests/unit/sdk/g5_runtime_test.cpp
     example: examples/sdk/incremental_materialization.cpp
@@ -29610,7 +29610,7 @@ callables:
   qualification: NG1
   owner: '#166'
   evidence:
-    catalog_digest: sha256:abb9faf2bb128375ee83b642ee35e9642524d82821393e42446d4b7582d4bcce
+    catalog_digest: sha256:9f9be8309456b9d48607a43250262abef04fad78e069d935cfddd1adf3d4064f
     implementation: src/sdk/incremental.cpp
     test: tests/unit/sdk/g5_runtime_test.cpp
     example: examples/sdk/incremental_materialization.cpp
@@ -31574,7 +31574,7 @@ callables:
   qualification: NG1
   owner: '#166'
   evidence:
-    catalog_digest: sha256:abb9faf2bb128375ee83b642ee35e9642524d82821393e42446d4b7582d4bcce
+    catalog_digest: sha256:9f9be8309456b9d48607a43250262abef04fad78e069d935cfddd1adf3d4064f
     implementation: src/sdk/incremental.cpp
     test: tests/unit/sdk/g5_runtime_test.cpp
     example: examples/sdk/incremental_materialization.cpp
@@ -31934,7 +31934,7 @@ callables:
   qualification: NG1
   owner: '#166'
   evidence:
-    catalog_digest: sha256:abb9faf2bb128375ee83b642ee35e9642524d82821393e42446d4b7582d4bcce
+    catalog_digest: sha256:9f9be8309456b9d48607a43250262abef04fad78e069d935cfddd1adf3d4064f
     implementation: src/sdk/incremental.cpp
     test: tests/unit/sdk/g5_runtime_test.cpp
     example: examples/sdk/incremental_materialization.cpp
@@ -32362,7 +32362,7 @@ callables:
   qualification: NG1
   owner: '#166'
   evidence:
-    catalog_digest: sha256:abb9faf2bb128375ee83b642ee35e9642524d82821393e42446d4b7582d4bcce
+    catalog_digest: sha256:9f9be8309456b9d48607a43250262abef04fad78e069d935cfddd1adf3d4064f
     implementation: src/sdk/incremental.cpp
     test: tests/unit/sdk/g5_runtime_test.cpp
     example: examples/sdk/incremental_materialization.cpp

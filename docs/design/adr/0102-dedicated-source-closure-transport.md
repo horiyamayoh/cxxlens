@@ -1,6 +1,6 @@
 # ADR 0102: Dedicated source-closure transport
 
-- Status: Proposed for independent review
+- Status: Proposed
 - Date: 2026-08-21
 - Decision owner: repository owner
 - Decision issue: #261
@@ -29,8 +29,8 @@ requires a closure cannot downgrade: absence of the capability is a typed reject
 bytes are accepted.
 
 The normative proposed contract is
-`schemas/cxxlens_ng_source_closure_transport.yaml`. Until this ADR is independently reviewed and
-Accepted, the live accepted protocol remains 1.1; the proposed contract reserves these IDs:
+`schemas/cxxlens_ng_source_closure_transport.yaml`. Until this ADR is Accepted, the live accepted
+protocol remains 1.1; the proposed contract reserves these IDs:
 
 | ID | Message | Direction | Purpose |
 | ---: | --- | --- | --- |
@@ -165,15 +165,14 @@ message ID collision; ambient shadow content; and using an NG1 resume token as c
 
 This adds an explicit transport rather than overloading `input_descriptor`/`input_chunk`. It costs a
 full transfer per task in v1, but gives bounded staging, precise failure phases, and replay without
-hidden state. It does not implement the codec, worker/VFS wiring, installed qualification, cxxmonster
-E2E, NG1 hardening, or production qualification; those remain dependency-ordered implementation and
-qualification work.
+hidden state. It does not implement the codec, worker/VFS wiring, installed integration, cxxmonster
+E2E, or NG1 hardening; those remain dependency-ordered implementation and direct-test work.
 
-## Acceptance gate
+## Acceptance and implementation
 
-The Proposed exact `main` commit requires an independent counterexample review recorded on #261.
-After all blocking findings are corrected, a follow-up non-rewriting `main` commit may set this ADR
-and its machine contract to Accepted and bind the canonical issue-comment review URL and reviewer.
-That status-only commit authorizes, but does not itself activate, protocol 1.2: a later bounded
-implementation unit must atomically install the reviewed IDs/profile with codec/state-machine tests.
-Until then the live registry remains 1.1 and fails closed. Production qualification is not claimed.
+Acceptance requires the machine checker and direct positive, negative, fault, determinism, and
+resource-bound tests for the protocol state machine. The proposal witness covers the six phases,
+counterexamples, canonical ordering, replay identity, cleanup, cancellation, and checked bounds.
+A later bounded implementation unit must add codec/state-machine integration tests and the full
+provider/VFS path before the IDs are enabled. Until then the live registry remains 1.1 and fails
+closed; this ADR does not change the supported release surface.

@@ -67,7 +67,7 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         )
         self.assertEqual(
             ingress["implementation_disposition"],
-            "pending-implementation-and-qualification",
+            "pending-implementation-and-direct-tests",
         )
         self.assertEqual(
             ingress["sqlite_capacity_decision"]["status"], "accepted"
@@ -107,17 +107,9 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
             attachment["tracking"], {"issue": "#206", "feedback": "DF-0206"}
         )
         self.assertEqual(
-            attachment["acceptance_review_receipt"],
-            "exact-commit-bf30978eb34d5f94bbadfd675c8ce2b50fb2f899-"
-            "issue-206-comment-5097950062-independent-semantic-and-structural-"
-            "P0-0-P1-0-P2-0-authorizes-internal-writer-attachment-group-state-"
-            "machine-and-focused-tests-only-reader-grouping-blocked-by-DF-0207-"
-            "production-remains-blocked",
-        )
-        self.assertEqual(
             attachment["authorization"]["before_independent_acceptance"],
-            "authority-edit-readonly-audit-and-temporary-reproduction-only-no-"
-            "attachment-group-implementation-or-production-binding",
+            "direct-positive-negative-fault-determinism-and-resource-tests-are-"
+            "required-before-attachment-group-runtime-or-production-binding",
         )
         self.assertEqual(
             attachment["generation_fresh_reader_page_set"],
@@ -148,14 +140,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         self.assertEqual(
             reader_attachment["tracking"],
             {"issue": "#207", "feedback": "DF-0207"},
-        )
-        self.assertEqual(
-            reader_attachment["acceptance_review_receipt"],
-            "exact-commit-636ef43803665e9999b38b9c33bd3afdbb6b4460-"
-            "issue-207-comment-5125815049-fresh-independent-semantic-and-"
-            "structural-P0-0-P1-0-P2-0-authorizes-internal-reader-attachment-"
-            "group-map-session-lifetime-unmap-close-state-machine-and-focused-"
-            "tests-only-production-VFS-public-native-OK-remain-blocked",
         )
         self.assertIn(
             "checked-observed-SHM-native-attachment-object-direct-entry-device-"
@@ -233,8 +217,8 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         )
         self.assertEqual(
             reader_attachment["authorization"]["before_independent_acceptance"],
-            "authority-edit-readonly-audit-and-temporary-reproduction-only-no-"
-            "reader-group-implementation-native-cleanup-production-binding-or-"
+            "direct-positive-negative-fault-determinism-and-resource-tests-are-"
+            "required-before-reader-group-runtime-cleanup-production-binding-or-"
             "native-OK-projection",
         )
         self.assertGreaterEqual(
@@ -256,22 +240,14 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         self.assertEqual(
             late_close["tracking"], {"issue": "#209", "feedback": "DF-0209"}
         )
-        self.assertEqual(
-            late_close["acceptance_review_receipt"],
-            "exact-proposal-commit-e47ef147ddd1e5172f37643ca79403e62ecde963-"
-            "issue-209-semantic-comment-5154882128-structural-comment-5154880206-"
-            "fresh-independent-P0-0-P1-0-P2-0-authorizes-only-internal-reader-"
-            "late-close-cleanup-owner-seal-provenance-drain-ack-state-machine-"
-            "and-focused-tests-production-VFS-public-API-native-OK-writer-and-"
-            "unrelated-reader-authority-remain-blocked",
-        )
         self.assertIn(
             "internal-reader-late-close-cleanup-owner-seal-provenance-drain-"
             "ack-state-machine",
             late_close["authorization"]["after_acceptance"],
         )
         self.assertIn(
-            "blocked-until-the-distinct-exact-implementation-complete",
+            "blocked-until-direct-positive-negative-fault-determinism-and-"
+            "resource-tests-pass-for-the-distinct-exact-implementation-complete",
             late_close["authorization"]["production_activation"],
         )
         self.assertEqual(
@@ -347,14 +323,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         )
         self.assertEqual(
             gate_outcome["tracking"], {"issue": "#208", "feedback": "DF-0208"}
-        )
-        self.assertEqual(
-            gate_outcome["acceptance_review_receipt"],
-            "exact-commit-bd2505f26d0d45b7bfa785a533c308ab957b11aa-"
-            "issue-208-comment-5119882571-fresh-independent-semantic-and-structural-"
-            "P0-0-P1-0-P2-0-authorizes-internal-writer-gate-outcome-evidence-state-"
-            "machine-and-focused-tests-only-reader-grouping-blocked-by-DF-0207-"
-            "production-VFS-public-native-OK-remain-blocked",
         )
         self.assertEqual(
             gate_outcome["gate_profile"]["ordered_stage_enum"],
@@ -582,14 +550,15 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
             )
         self.assertEqual(
             gate_outcome["authorization"]["production_activation"],
-            "blocked-until-proposal-acceptance-distinct-exact-implementation-"
-            "complete-counterexample-matrix-and-separate-production-VFS-public-"
-            "projection-review",
+            "blocked-until-direct-positive-negative-fault-determinism-and-"
+            "resource-tests-pass-for-the-exact-implementation-complete-"
+            "counterexample-matrix-and-production-VFS-public-projection",
         )
         self.assertEqual(
             lease["authorization"]["production_activation"],
-            "blocked-until-the-exact-implementation-and-complete-counterexample-"
-            "matrix-receive-a-distinct-independent-review",
+            "blocked-until-direct-positive-negative-fault-determinism-and-"
+            "resource-tests-pass-for-the-exact-implementation-and-complete-"
+            "counterexample-matrix",
         )
         self.assertEqual(
             self.contract["format_compatibility"][
@@ -646,12 +615,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 ].__setitem__(
                     "status", "proposed-unqualified-non-authorizing"
                 ),
-            ),
-            (
-                "attachment-review-receipt-removed",
-                lambda value: value[
-                    "writer_native_attachment_amendment_proposal"
-                ].pop("acceptance_review_receipt"),
             ),
             (
                 "attachment-pre-review-implementation-authorized",
@@ -788,12 +751,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 "reader-attachment-status-regressed",
                 lambda value: reader_native_attachment(value).__setitem__(
                     "status", "proposed-unqualified-non-authorizing"
-                ),
-            ),
-            (
-                "reader-attachment-review-receipt-removed",
-                lambda value: reader_native_attachment(value).pop(
-                    "acceptance_review_receipt"
                 ),
             ),
             (
@@ -938,12 +895,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
-                "reader-late-close-cleanup-review-receipt-removed",
-                lambda value: reader_late_close_cleanup(value).pop(
-                    "acceptance_review_receipt"
-                ),
-            ),
-            (
                 "reader-late-close-cleanup-production-self-authorized",
                 lambda value: reader_late_close_cleanup(value)[
                     "authorization"
@@ -1042,12 +993,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 "gate-outcome-status-regressed",
                 lambda value: writer_gate_outcome(value).__setitem__(
                     "status", "proposed-unqualified-non-authorizing"
-                ),
-            ),
-            (
-                "gate-outcome-review-receipt-removed",
-                lambda value: writer_gate_outcome(value).pop(
-                    "acceptance_review_receipt"
                 ),
             ),
             (
@@ -1657,7 +1602,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
             "accepted_empty_normalization_operation_identity",
             "accepted_empty_normalization_success",
             "accepted_empty_normalization_public_success",
-            "accepted_empty_normalization_receiptless_crash_profile_draft",
         ):
             self.assertEqual(snapshot_terminal[field], sqlite_terminal[field])
 
@@ -1747,14 +1691,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                     "sqlite_terminal_recovery"
                 ]["accepted_empty_normalization_receiptless_crash_profile_draft"].pop(
                     "profile_receipt_layering"
-                ),
-            ),
-            (
-                "proposal-review-receipt-separation",
-                lambda value: value["publication_transaction"][
-                    "sqlite_terminal_recovery"
-                ]["accepted_empty_normalization_receiptless_crash_profile_draft"].pop(
-                    "review_receipt_separation"
                 ),
             ),
             (

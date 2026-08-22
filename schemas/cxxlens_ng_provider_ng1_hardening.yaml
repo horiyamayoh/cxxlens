@@ -195,7 +195,7 @@ progress:
     monotonic_time_ns: provider-ordering-only-host-receipt-authority
     completed_units: zero-through-total-inclusive
     total_units: positive-and-constant-per-task
-  unit: provider-declared-monotonic-work-unit
+  unit: provider-declared-monotonic-progress-unit
   constraints:
     total_units: positive-and-constant-per-task
     completed_units: zero-through-total-inclusive
@@ -501,12 +501,9 @@ stable_failures:
   - provider.spill-corrupt
   - provider.recovery-failed
 
-qualification:
-  schema: cxxlens.provider-ng1-qualification.v1
-  report_schema: schemas/cxxlens_ng_provider_ng1_qualification_report.schema.yaml
-  checker: tools/quality/check_ng_provider_ng1_qualification.py
+direct_tests:
+  schema: cxxlens.provider-ng1-hardening-tests.v1
   vectors: schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml
-  exact_binding: [revision, tree, provider_binary_digest, provider_binary_digest_source, provider_semantic_contract_digest, provider_semantic_contract_digest_source, protocol_minor, protocol_contract_digest, hardening_contract_digest, hardening_contract_schema_digest, report_schema_digest, vectors_digest, vectors_schema_digest]
   required_profiles: [static, shared]
   required_cases:
     - positive-heartbeat-and-progress
@@ -542,6 +539,6 @@ qualification:
     cancellation-recovery: rollback-current-group-and-fail-closed
     permutation-replay: provider.resume-replay-invalid
     long-run-fault: accepted-only-with-exact-certificate-or-stable-failure
-  release_claim: exact-measured-certificate-only
+  execution: direct-tests-only
   unavailable_provider: unqualified
   unavailable_platform: unqualified

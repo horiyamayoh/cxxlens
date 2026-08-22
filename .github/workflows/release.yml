@@ -1,0 +1,230 @@
+name: Release tests
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-tests-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CMAKE_GENERATOR: Ninja
+  CMAKE_BUILD_PARALLEL_LEVEL: ${{ vars.CXXLENS_RELEASE_BUILD_JOBS || 2 }}
+  CTEST_PARALLEL_LEVEL: ${{ vars.CXXLENS_RELEASE_TEST_JOBS || 2 }}
+
+jobs:
+  main-tests:
+    name: Main tests (${{ matrix.shared == 'ON' && 'shared' || 'static' }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shared: ["OFF", "ON"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: developer
+      - name: Build and run the complete deterministic suite
+        env:
+          CXX: clang++-22
+        run: |
+          cmake --preset ci-quick -DCXXLENS_CLANG_ADAPTER=ON \
+            -DCXXLENS_BUILD_SHARED=${{ matrix.shared }}
+          cmake --build --preset ci-quick
+          ctest --preset ci-quick --parallel "${CTEST_PARALLEL_LEVEL}" \
+            --output-on-failure
+
+  contract-and-docs:
+    name: Contract, security, and documentation tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: developer
+          documentation: "true"
+      - name: Build and run contract assertions
+        env:
+          CXX: clang++-22
+        run: |
+          cmake --preset docs -DCXXLENS_CLANG_ADAPTER=ON
+          cmake --build --preset docs --target cxxlens-quality
+          ctest --test-dir build/docs --label-regex 'quality|security|docs' \
+            --output-on-failure
+
+  gcc-public-headers:
+    name: GCC public headers
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: none
+      - name: Compile LLVM-independent headers
+        run: |
+          g++ -std=c++23 -Wall -Wextra -Wpedantic -Werror -Iinclude \
+            -fsyntax-only tests/public_headers/cxxlens_header_test.cpp
+          g++ -std=c++23 -Wall -Wextra -Wpedantic -Werror -Iinclude \
+            -fsyntax-only tests/public_headers/sdk_header_test.cpp
+
+  asan-ubsan:
+    name: ASan and UBSan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: developer
+      - name: Run sanitizer suite
+        env:
+          CXX: clang++-22
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:exitcode=86:handle_segv=0:symbolize=1
+          UBSAN_OPTIONS: halt_on_error=1:exitcode=86:print_stacktrace=1:symbolize=1
+        run: |
+          export ASAN_SYMBOLIZER_PATH="$(command -v llvm-symbolizer-22)"
+          cmake --preset asan-ubsan
+          cmake --build --preset asan-ubsan
+          ctest --preset asan-ubsan --parallel "${CTEST_PARALLEL_LEVEL}" \
+            --output-on-failure
+
+  tsan:
+    name: ThreadSanitizer
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: developer
+      - name: Configure thread sanitizer suite
+        env:
+          CXX: clang++-22
+        run: cmake --preset tsan
+      - name: Build thread sanitizer suite
+        run: cmake --build --preset tsan
+      - name: Run thread sanitizer suite
+        env:
+          TSAN_OPTIONS: halt_on_error=1:exitcode=86:handle_segv=0:second_deadlock_stack=1:symbolize=1
+        run: ctest --preset tsan --parallel 1 --output-on-failure
+
+  static-analysis:
+    name: Static analysis
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: static-analysis
+      - name: Run clang-tidy
+        env:
+          CXX: clang++-22
+        run: |
+          cmake --preset ci-quick -DCXXLENS_ENABLE_CLANG_TIDY=ON
+          cmake --build --preset ci-quick --target cxxlens-clang-tidy
+
+  stress-and-repeat:
+    name: Stress and repeat tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: developer
+      - name: Run repeat and stress suite
+        env:
+          CXX: clang++-22
+          CCACHE_DISABLE: "1"
+        run: |
+          cmake --preset ci-quick -DCXXLENS_CLANG_ADAPTER=ON
+          cmake --build --preset ci-quick
+          ctest --test-dir build/ci-quick --repeat until-pass:3 \
+            --parallel "${CTEST_PARALLEL_LEVEL}" --output-on-failure
+          ctest --test-dir build/ci-quick --repeat until-pass:2 \
+            --parallel "${CTEST_PARALLEL_LEVEL}" --output-on-failure
+
+  maximum-scale:
+    name: Maximum materialization scale
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shared: ["OFF", "ON"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: developer
+      - name: Run scale scenarios and assert their exit status
+        env:
+          CXX: clang++-22
+        run: |
+          cmake --preset install-check -DCXXLENS_CLANG_ADAPTER=ON \
+            -DCXXLENS_BUILD_SHARED=${{ matrix.shared }}
+          cmake --build --preset install-check
+          cmake --install build/install-check --prefix "$RUNNER_TEMP/cxxlens-scale-prefix"
+          python tests/install/clang22_materializer_scale_test.py \
+            --root . \
+            --driver build/install-check/tests/cxxlens-clang22-materialization-request-driver \
+            --prefix "$RUNNER_TEMP/cxxlens-scale-prefix" \
+            --work-directory "$RUNNER_TEMP/cxxlens-scale-work"
+
+  real-projects:
+    name: Real-project and relocated install tests
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shared: ["OFF", "ON"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: developer
+      - name: Run consumer and real-project tests
+        env:
+          CXX: clang++-22
+        run: |
+          cmake --preset install-check -DCXXLENS_CLANG_ADAPTER=ON \
+            -DCXXLENS_BUILD_SHARED=${{ matrix.shared }}
+          cmake --build --preset install-check
+          ctest --test-dir build/install-check --label-regex \
+            '^(install|integration)\\.' --output-on-failure
+
+  package:
+    name: Package after every release test
+    needs: [main-tests, contract-and-docs, gcc-public-headers, asan-ubsan,
+            tsan, static-analysis, stress-and-repeat, maximum-scale, real-projects]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: developer
+      - name: Rebuild and create release packages
+        env:
+          CXX: clang++-22
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/cxxlens-packages"
+          for linkage in static shared; do
+            shared=OFF
+            test "$linkage" = shared && shared=ON
+            build="build/release-$linkage"
+            prefix="$RUNNER_TEMP/cxxlens-prefix-$linkage"
+            cmake --preset install-check -B "$build" \
+              -DCXXLENS_CLANG_ADAPTER=ON -DCXXLENS_BUILD_SHARED="$shared"
+            cmake --build "$build"
+            cmake --install "$build" --prefix "$prefix"
+            tar -C "$prefix" -czf "$RUNNER_TEMP/cxxlens-packages/cxxlens-${GITHUB_REF_NAME}-$linkage.tar.gz" .
+          done
+      - name: Publish packages for a version tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/cxxlens-packages"/*.tar.gz --clobber

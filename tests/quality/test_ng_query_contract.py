@@ -26,7 +26,6 @@ from check_ng_query_contract import (  # noqa: E402
     evaluate_ir,
     execute_vector,
     load_yaml,
-    make_report,
     normalized_ir_digest,
     relation_columns,
     schema_validate,
@@ -275,13 +274,11 @@ class NgQueryContractTests(unittest.TestCase):
         with self.assertRaisesRegex(QueryContractError, "query.schema-invalid"):
             schema_validate(candidate, self.contract_schema, "query contract")
 
-    def test_report_has_exact_operator_digests_and_backend_comparisons(self) -> None:
-        contract, results = validate_all(ROOT)
-        report = make_report(contract, results)
-        self.assertEqual(report["status"], "green")
-        self.assertEqual(len(report["operator_digests"]), 12)
-        self.assertEqual(len({row["digest"] for row in report["operator_digests"]}), 12)
-        self.assertEqual(report["backend_matrix"]["comparisons"], 12)
+    def test_operator_vectors_are_deterministic_without_a_persisted_report(self) -> None:
+        first = validate_all(ROOT)
+        second = validate_all(ROOT)
+        self.assertEqual(first, second)
+        self.assertEqual(len(first[1]), 36)
 
     def test_contract_rejects_enabling_implicit_sql_null(self) -> None:
         candidate = copy.deepcopy(self.contract)

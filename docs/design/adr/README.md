@@ -42,7 +42,6 @@
 | [0040](0040-provider-frame-version-and-flags.md) | provider frame version and flag semantics |
 | [0041](0041-provider-control-text-utf8.md) | strict UTF-8 provider control text |
 | [0042](0042-immutable-provider-selection-authority.md) | immutable provider selection authority token |
-| [0056](0056-measured-foundation-zero-audits.md) | measured foundation zero-audit subreports |
 | [0057](0057-detached-scalar-value-validation.md) | shared detached scalar value validation |
 | [0058](0058-query-scan-occurrence-column-identity.md) | scan occurrence-qualified query column identity |
 | [0059](0059-query-row-guarantee-canonical-projection.md) | lossless row-level guarantee canonical projection |
@@ -62,14 +61,8 @@
 | [0085](0085-static-row-view-exact-validation.md) | static row view exact validation |
 | [0086](0086-self-contained-claim-evidence-occurrences.md) | self-contained claim evidence occurrences |
 | [0087](0087-provider-budget-surface-parity.md) | provider budget surface parity |
-| [0088](0088-foundation-declared-github-issue-scope.md) | manifest-declared Foundation GitHub issue scope |
 | [0089](0089-high-level-author-sdk-and-wave0-readiness.md) | high-level author SDK and Wave 0 readiness |
-| [0090](0090-g5-closure-incrementality-qualification.md) | G5 closure, incrementality, and R4 qualification |
-| [0091](0091-distribution-1-production-qualification.md) | distribution 1.0 exact-SHA production qualification |
 | [0092](0092-exact-public-callable-inventory.md) | exact one-callable-per-row public C++ inventory |
-| [0093](0093-implementation-learning-design-feedback.md) | implementation learning and design-feedback governance |
-| [0094](0094-risk-tiered-goal-authorization.md) | risk-tiered standing authorization for explicit goal delegation |
-| [0095](0095-production-scope-closure.md) | exact-once production scope closure and staged qualification |
 | [0096](0096-clang22-installed-materialization-boundary.md) | provider-owned Clang 22 installed materialization boundary |
 | [0098](0098-explicit-static-relation-projection.md) | explicit generated relation static projection |
 | [0099](0099-provider-ng1-hardening.md) | provider NG1 hardening lifecycle and evidence |
@@ -78,7 +71,7 @@
 | [0102](0102-dedicated-source-closure-transport.md) | dedicated source-closure transport |
 | [0103](0103-bounded-store-candidate-and-report.md) | bounded Store candidate and report construction |
 | [0104](0104-unified-sqlite-source-lifecycle.md) | unified SQLite source lifecycle |
-| [0105](0105-direct-main-review-and-release-governance.md) | direct-main review and release governance |
+| [0106](0106-test-only-development-and-release-policy.md) | test-only development and release policy; supersedes operational evidence governance |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

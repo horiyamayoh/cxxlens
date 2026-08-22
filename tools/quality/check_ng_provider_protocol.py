@@ -29,9 +29,6 @@ VECTORS = pathlib.Path("schemas/cxxlens_ng_provider_conformance_vectors.yaml")
 VECTORS_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_provider_conformance_vectors.schema.yaml"
 )
-REPORT_SCHEMA = pathlib.Path(
-    "schemas/cxxlens_ng_provider_conformance_report.schema.yaml"
-)
 FUZZ = pathlib.Path("schemas/cxxlens_ng_provider_fuzz_corpus.yaml")
 FUZZ_SCHEMA = pathlib.Path("schemas/cxxlens_ng_provider_fuzz_corpus.schema.yaml")
 
@@ -1252,8 +1249,6 @@ def validate_all(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, Any
         results.append({"id": vector["id"], **actual, "matched": True})
     if comparisons != 6 or fuzz_cases != len(corpus["cases"]):
         fail("provider.matrix-incomplete", f"surface={comparisons}, fuzz={fuzz_cases}")
-    report = make_report(contract, results, comparisons, fuzz_cases)
-    schema_validate(report, load_yaml(root / REPORT_SCHEMA), "provider report")
     return contract, results, comparisons, fuzz_cases
 
 
@@ -1270,18 +1265,11 @@ def make_report(contract: dict[str, Any], results: list[dict[str, Any]], compari
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("check", "report"))
+    parser.add_argument("mode", choices=("check",))
     parser.add_argument("--root", type=pathlib.Path, default=ROOT)
-    parser.add_argument("--output", type=pathlib.Path)
     args = parser.parse_args()
     contract, results, comparisons, fuzz_cases = validate_all(args.root.resolve())
     report = make_report(contract, results, comparisons, fuzz_cases)
-    if args.mode == "report":
-        rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
-        if args.output:
-            args.output.write_text(rendered, encoding="utf-8")
-        else:
-            print(rendered, end="")
     print(f"verified provider protocol: {len(results)} vectors, {fuzz_cases} fuzz cases, {comparisons} surface comparisons, {digest(contract)}")
     return 0
 

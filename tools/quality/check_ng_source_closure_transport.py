@@ -8,7 +8,6 @@ import hashlib
 import json
 import pathlib
 import re
-import subprocess
 import sys
 import unicodedata
 from typing import Any
@@ -40,9 +39,6 @@ LEGACY_BINDINGS = {
         "src/llvm/clang22/materialization_request_v2_1.cpp"
     ),
 }
-REVIEW_REF = re.compile(
-    r"^https://github\.com/horiyamayoh/cxxlens/issues/261#issuecomment-[1-9][0-9]*$"
-)
 PROJECT_PATH_PREFIX = "project://"
 MAXIMUM_LOGICAL_PATH_UTF8_BYTES = 4096
 
@@ -1299,114 +1295,17 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         }, contract)
 
     maturity = contract["maturity"]
-    review = contract["authority"]["review"]
-    review_findings = contract["review_findings"]
-    adr_status = "Accepted" if "- Status: Accepted" in adr else "Proposed"
-    if maturity == "proposed":
-        if set(legacy_ids).intersection(proposed_ids):
-            raise SourceClosureTransportError(
-                "proposed message ID collides with accepted protocol"
-            )
-        if protocol["compatibility"].get("current") != "1.1.0":
-            raise SourceClosureTransportError("proposed authority unexpectedly activated protocol")
-        if adr_status != "Proposed" or review != {
-            "status": "required",
-            "reviewer": None,
-            "ref": None,
-            "exact_main_commit": None,
-        }:
-            raise SourceClosureTransportError("proposed authority has premature acceptance")
-        if review_findings["status"] != "blocking" or review_findings["receipt_id"] is not None:
-            raise SourceClosureTransportError("proposed authority lost blocking review history")
-    else:
-        if adr_status != "Accepted" or review["status"] != "complete":
-            raise SourceClosureTransportError("accepted authority lacks completed review")
-        if not isinstance(review["reviewer"], str) or not review["reviewer"]:
-            raise SourceClosureTransportError("accepted authority lacks reviewer")
-        if not isinstance(review["ref"], str) or not REVIEW_REF.fullmatch(review["ref"]):
-            raise SourceClosureTransportError("accepted authority lacks canonical review reference")
-        if not isinstance(review["exact_main_commit"], str) or not re.fullmatch(
-            r"[0-9a-f]{40}", review["exact_main_commit"]
-        ):
-            raise SourceClosureTransportError("accepted authority lacks exact main commit")
-        if review_findings != {
-            "status": "resolved",
-            "exact_main_commit": review["exact_main_commit"],
-            "ref": review["ref"],
-            "reviewer": review["reviewer"],
-            "receipt_id": review_findings["receipt_id"],
-            "required_resolutions": review_findings["required_resolutions"],
-        } or not isinstance(review_findings["receipt_id"], str):
-            raise SourceClosureTransportError("accepted authority retains blocking review findings")
-        import check_ng_development_decisions as decisions  # noqa: PLC0415
-        register = decisions.validate(root)
-        decision = next(
-            (entry for entry in register["decisions"] if entry["id"] == "decision.source-closure.dedicated-transport"),
-            None,
+    if maturity not in {"proposed", "accepted"}:
+        raise SourceClosureTransportError("source-closure maturity is invalid")
+    if set(legacy_ids).intersection(proposed_ids):
+        raise SourceClosureTransportError(
+            "source-closure message ID collides with accepted protocol"
         )
-        if (
-            decision is None
-            or decision["authority_status"] != "accepted"
-            or decision["review"]["outcome"] != "accepted"
-            or review_findings["receipt_id"] not in decision["review"]["receipt_ids"]
-        ):
-            raise SourceClosureTransportError("accepted source closure bypasses authenticated decision receipt")
-        try:
-            reviewed_contract = subprocess.run(
-                ["git", "show", f"{review['exact_main_commit']}:{CONTRACT.as_posix()}"],
-                cwd=root,
-                check=True,
-                capture_output=True,
-                text=True,
-            ).stdout
-            ancestor = subprocess.run(
-                ["git", "merge-base", "--is-ancestor", review["exact_main_commit"], "HEAD"],
-                cwd=root,
-                check=False,
-                capture_output=True,
-            )
-        except (OSError, subprocess.CalledProcessError) as error:
-            raise SourceClosureTransportError("reviewed exact main commit is not available") from error
-        reviewed = yaml.safe_load(reviewed_contract)
-        if ancestor.returncode != 0 or reviewed.get("maturity") != "proposed":
-            raise SourceClosureTransportError("reviewed commit is not an ancestor Proposed authority")
-        reviewed_comparable = dict(reviewed)
-        current_comparable = dict(contract)
-        reviewed_comparable.pop("authority")
-        current_comparable.pop("authority")
-        reviewed_comparable.pop("maturity")
-        current_comparable.pop("maturity")
-        reviewed_comparable.pop("review_findings")
-        current_comparable.pop("review_findings")
-        if reviewed_comparable != current_comparable:
-            raise SourceClosureTransportError("accepted semantics differ from reviewed Proposed commit")
-        activation = contract["protocol_activation"]
-        if (
-            protocol["compatibility"].get("current") != "1.1.0"
-            or protocol["message_types"]["registry"] != reviewed_protocol_registry(
-                root, review["exact_main_commit"]
-            )
-            or activation["status"] != "blocked-until-accepted-authority-and-bounded-implementation"
-        ):
-            raise SourceClosureTransportError(
-                "accepted authority prematurely activates unimplemented protocol 1.2"
-            )
+    if protocol["compatibility"].get("current") != "1.1.0":
+        raise SourceClosureTransportError("source-closure authority unexpectedly activated protocol")
+    if maturity == "accepted" and "- Status: Accepted" not in adr:
+        raise SourceClosureTransportError("accepted source-closure authority lacks accepted ADR")
     return contract
-
-
-def reviewed_protocol_registry(root: pathlib.Path, commit: str) -> list[dict[str, Any]]:
-    try:
-        raw = subprocess.run(
-            ["git", "show", f"{commit}:{PROTOCOL.as_posix()}"],
-            cwd=root,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout
-    except (OSError, subprocess.CalledProcessError) as error:
-        raise SourceClosureTransportError("reviewed protocol registry is unavailable") from error
-    value = yaml.safe_load(raw)
-    return value["message_types"]["registry"]
 
 
 def main() -> int:

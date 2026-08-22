@@ -95,7 +95,8 @@ namespace cxxlens::sdk::provider::detail
 	 *
 	 * The clock and observation ports are mandatory. This keeps wall-clock time, provider-reported
 	 * progress, and opaque digest strings outside lifecycle authority. The driver deliberately has
-	 * no public capability or default clock factory while NG1 qualification remains proposed.
+	 * no public capability or default clock factory until the NG1 capability has direct
+	 * positive/negative/fault coverage.
 	 */
 	struct CXXLENS_PROVIDER_DETAIL_HIDDEN ng1_live_driver_configuration
 	{
@@ -112,7 +113,7 @@ namespace cxxlens::sdk::provider::detail
 	 * Source-private coordinator/transport bridge for one NG1 session.
 	 *
 	 * Each control occurrence is stamped by the injected host clock before entering the shared NG1
-	 * adapter. Ordinary provider frames are retained under an explicit bound for a later shared
+	 * adapter. Ordinary provider frames are retained under an explicit bound for a later direct
 	 * transcript validation pass; this class never treats a control, process exit, or provider
 	 * claim as sealed output authority.
 	 */

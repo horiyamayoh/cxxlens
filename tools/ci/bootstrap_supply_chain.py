@@ -23,13 +23,6 @@ KEYRING = pathlib.Path("/etc/apt/keyrings/cxxlens-llvm.gpg")
 SOURCE_LIST = pathlib.Path("/etc/apt/sources.list.d/cxxlens-llvm.list")
 PACKAGE_CACHE_ENV = "CXXLENS_PACKAGE_CACHE"
 PACKAGE_CACHE_HIT_ENV = "CXXLENS_PACKAGE_CACHE_HIT"
-PACKAGE_CACHE_KEY_ENV = "CXXLENS_PACKAGE_CACHE_KEY"
-PACKAGE_CACHE_RECEIPT_ENV = "CXXLENS_PACKAGE_CACHE_RECEIPT"
-PACKAGE_CACHE_PROFILE_ENV = "CXXLENS_PACKAGE_CACHE_PROFILE"
-PACKAGE_CACHE_DOCUMENTATION_ENV = "CXXLENS_PACKAGE_CACHE_DOCUMENTATION"
-PACKAGE_CACHE_RUNNER_OS_ENV = "CXXLENS_PACKAGE_CACHE_RUNNER_OS"
-PACKAGE_CACHE_RUNNER_ARCH_ENV = "CXXLENS_PACKAGE_CACHE_RUNNER_ARCH"
-PACKAGE_CACHE_RECEIPT_SCHEMA = "cxxlens.ci-package-cache-receipt.v2"
 
 
 class SupplyChainError(ValueError):
@@ -107,22 +100,15 @@ def load_lock(root: pathlib.Path = ROOT) -> dict[str, Any]:
     expected_package_cache = {
         "directory": "~/.cache/cxxlens/packages",
         "environment": PACKAGE_CACHE_ENV,
-        "documentation_environment": PACKAGE_CACHE_DOCUMENTATION_ENV,
         "hit_environment": PACKAGE_CACHE_HIT_ENV,
-        "key_environment": PACKAGE_CACHE_KEY_ENV,
-        "receipt_environment": PACKAGE_CACHE_RECEIPT_ENV,
         "key_version": "v1",
         "key_template": (
             "cxxlens-ci-packages-v1-${runner.os}-${runner.arch}-"
             "${profile}-${documentation}-${lock_hash_files_digest}"
         ),
-        "profile_environment": PACKAGE_CACHE_PROFILE_ENV,
-        "receipt_schema": PACKAGE_CACHE_RECEIPT_SCHEMA,
         "scope": "exact-downloaded-debs-only",
         "correctness_role": "transport-optimization-only",
         "restore_keys": False,
-        "runner_arch_environment": PACKAGE_CACHE_RUNNER_ARCH_ENV,
-        "runner_os_environment": PACKAGE_CACHE_RUNNER_OS_ENV,
     }
     if package_cache != expected_package_cache:
         raise SupplyChainError("downloaded-package cache contract differs")
@@ -300,14 +286,6 @@ def configure_llvm_repository(llvm: dict[str, Any], key_content: bytes) -> None:
         ]
     )
 
-def package_cache_authority_digest(lock: dict[str, Any]) -> str:
-    return "sha256:" + hashlib.sha256(
-        json.dumps(
-            lock["package_cache"], sort_keys=True, separators=(",", ":")
-        ).encode("utf-8")
-    ).hexdigest()
-
-
 def package_cache_directory(lock: dict[str, Any]) -> pathlib.Path:
     config = lock["package_cache"]
     raw = os.environ.get(config["environment"], config["directory"])
@@ -397,57 +375,6 @@ def publish_cached_archive(source: pathlib.Path, target: pathlib.Path) -> pathli
     return target
 
 
-def write_package_cache_receipt(
-    lock: dict[str, Any], profile: str, records: list[dict[str, str]]
-) -> None:
-    config = lock["package_cache"]
-    raw_path = os.environ.get(config["receipt_environment"])
-    if not raw_path:
-        return
-    path = pathlib.Path(raw_path)
-    if not path.is_absolute():
-        raise SupplyChainError("package-cache receipt path must be absolute")
-    authority_digest = package_cache_authority_digest(lock)
-    key = os.environ.get(config["key_environment"], "unavailable")
-    cache_hit = "hit" if package_cache_hit_claimed(lock) else "miss"
-    if path.is_file():
-        try:
-            document = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
-            raise SupplyChainError(f"could not read package-cache receipt: {error}") from error
-        if not isinstance(document, dict):
-            raise SupplyChainError("package-cache receipt must be a JSON object")
-        if (
-            document.get("schema") != config["receipt_schema"]
-            or document.get("authority_digest") != authority_digest
-            or document.get("key") != key
-            or document.get("cache_hit") != cache_hit
-            or not isinstance(document.get("profiles"), dict)
-        ):
-            raise SupplyChainError("package-cache receipt binding differs")
-    else:
-        document = {
-            "schema": config["receipt_schema"],
-            "authority_digest": authority_digest,
-            "key": key,
-            "cache_hit": cache_hit,
-            "profiles": {},
-        }
-    canonical_records = sorted(records, key=lambda row: row["package"])
-    if profile in document["profiles"] and document["profiles"][profile] != canonical_records:
-        raise SupplyChainError(f"package-cache receipt profile differs: {profile}")
-    document["profiles"][profile] = canonical_records
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + f".tmp-{os.getpid()}")
-    try:
-        temporary.write_text(
-            json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
-
 def install_documentation(lock: dict[str, Any]) -> None:
     documentation = lock["documentation"]
     cache = package_cache_directory(lock)
@@ -463,7 +390,6 @@ def install_documentation(lock: dict[str, Any]) -> None:
         digest=documentation["sha256"],
         cache_hit=cache_hit,
     )
-    source = "verified-cache"
     if resolved is None:
         content = download(documentation["url"])
         verify_bytes(content, documentation["sha256"], "Doxygen package")
@@ -478,7 +404,6 @@ def install_documentation(lock: dict[str, Any]) -> None:
                 digest=documentation["sha256"],
             )
             resolved = publish_cached_archive(candidate, archive)
-        source = "verified-download"
     verify_deb_archive(
         resolved,
         package=documentation["package"],
@@ -504,20 +429,6 @@ def install_documentation(lock: dict[str, Any]) -> None:
     version = run(["doxygen", "--version"], capture=True)
     if version != documentation["expected_release"]:
         raise SupplyChainError(f"Doxygen release mismatch: {version}")
-    write_package_cache_receipt(
-        lock,
-        "documentation",
-        [
-            {
-                "package": documentation["package"],
-                "version": documentation["version"],
-                "architecture": documentation["architecture"],
-                "package_digest": "sha256:" + documentation["sha256"],
-                "source": source,
-            }
-        ],
-    )
-
 def install(root: pathlib.Path, profile_name: str) -> None:
     lock = load_lock(root)
     assert_runner(lock)
@@ -537,7 +448,6 @@ def install(root: pathlib.Path, profile_name: str) -> None:
     configure_llvm_repository(llvm, key_content)
 
     archives: dict[str, pathlib.Path] = {}
-    sources: dict[str, str] = {}
     missing: list[str] = []
     for name in members:
         target = cached_package_path(cache, "llvm", name, llvm["package_sha256"][name])
@@ -553,7 +463,6 @@ def install(root: pathlib.Path, profile_name: str) -> None:
             missing.append(name)
         else:
             archives[name] = resolved
-            sources[name] = "verified-cache"
 
     if missing:
         package_requests = [f"{name}={llvm['packages'][name]}" for name in missing]
@@ -578,12 +487,11 @@ def install(root: pathlib.Path, profile_name: str) -> None:
                     cache, "llvm", name, llvm["package_sha256"][name]
                 )
                 downloaded[name] = publish_cached_archive(candidate, target)
-                sources[name] = "verified-download"
             if set(downloaded) != set(missing):
                 raise SupplyChainError("downloaded LLVM package set differs from cache miss set")
             archives.update(downloaded)
 
-    if set(archives) != set(members) or set(sources) != set(members):
+    if set(archives) != set(members):
         raise SupplyChainError("resolved LLVM package set differs from profile")
     for name, archive in archives.items():
         verify_deb_archive(
@@ -604,20 +512,6 @@ def install(root: pathlib.Path, profile_name: str) -> None:
             *[str(archives[name]) for name in members],
         ]
     )
-    write_package_cache_receipt(
-        lock,
-        profile_name,
-        [
-            {
-                "package": name,
-                "version": llvm["packages"][name],
-                "architecture": llvm["architecture"],
-                "package_digest": "sha256:" + llvm["package_sha256"][name],
-                "source": sources[name],
-            }
-            for name in members
-        ],
-    )
     for name in llvm["profiles"][profile_name]:
         actual = run(
             ["dpkg-query", "--showformat=${Version}", "--show", name], capture=True
@@ -637,11 +531,9 @@ def install(root: pathlib.Path, profile_name: str) -> None:
 
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("check", "install", "verify-artifact"))
+    parser.add_argument("command", choices=("check", "install"))
     parser.add_argument("--root", type=pathlib.Path, default=ROOT)
     parser.add_argument("--profile")
-    parser.add_argument("--artifact", type=pathlib.Path)
-    parser.add_argument("--sha256")
     return parser.parse_args()
 
 
@@ -655,10 +547,6 @@ def main() -> int:
             if not args.profile:
                 raise SupplyChainError("install requires --profile")
             install(root, args.profile)
-        else:
-            if not args.artifact or not args.sha256:
-                raise SupplyChainError("verify-artifact requires --artifact and --sha256")
-            verify_bytes(args.artifact.read_bytes(), args.sha256, str(args.artifact))
     except (OSError, SupplyChainError, subprocess.SubprocessError) as error:
         print(f"CI supply-chain bootstrap failed: {error}", file=sys.stderr)
         return 1

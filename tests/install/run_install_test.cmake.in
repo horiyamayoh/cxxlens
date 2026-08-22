@@ -1,10 +1,6 @@
 set(test_root "@CMAKE_CURRENT_BINARY_DIR@/install-consumer")
 set(install_prefix "${test_root}/relocated-prefix")
 set(install_libdir "@CMAKE_INSTALL_LIBDIR@")
-set(artifact_manifest "${test_root}/install-artifact-manifest.json")
-set(artifact_configuration
-    "shared=@CXXLENS_BUILD_SHARED@,build_type=@CMAKE_BUILD_TYPE@,asan=@CXXLENS_ENABLE_ASAN@,ubsan=@CXXLENS_ENABLE_UBSAN@,tsan=@CXXLENS_ENABLE_TSAN@"
-)
 
 if(NOT DEFINED PHASE)
   message(FATAL_ERROR "install test requires an explicit PHASE")
@@ -17,18 +13,15 @@ set(install_executable_suffix "@CMAKE_EXECUTABLE_SUFFIX@")
 set(install_executable_names
     cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22
     cxxlens-clang22-materialize)
-set(artifact_source_arguments --source-revision "@CXXLENS_SOURCE_REVISION@"
-                              --source-tree "@CXXLENS_SOURCE_TREE@")
-
-# These phases are the installed native-provider qualification boundary.  An
-# AUTO/OFF structured-unavailable build remains useful for the portable SDK and
-# its unavailable-mode consumers, but it must not enter a native positive or
-# negative evidence run and later look like a provider failure.
+# These phases are the installed native-provider test boundary.  An AUTO/OFF
+# structured-unavailable build remains useful for the portable SDK and its
+# unavailable-mode consumers, but it must not enter a native positive or
+# negative provider run and later look like a provider failure.
 if(PHASE MATCHES "^clang22-materializer-(success|base64|negative)$"
    AND NOT "${cxxlens_clang22_available}" STREQUAL "TRUE")
   message(
     FATAL_ERROR
-      "installed Clang 22 qualification is unavailable before execution: adapter=${cxxlens_clang22_adapter}, reason=${cxxlens_clang22_unavailable_reason}; configure a clean build with CXXLENS_CLANG_ADAPTER=ON and an exact LLVM_DIR/Clang package, then rerun this phase. No native evidence was produced."
+      "installed Clang 22 tests are unavailable before execution: adapter=${cxxlens_clang22_adapter}, reason=${cxxlens_clang22_unavailable_reason}; configure a clean build with CXXLENS_CLANG_ADAPTER=ON and an exact LLVM_DIR/Clang package, then rerun this phase."
   )
 endif()
 
@@ -146,25 +139,8 @@ endif()
 if(PHASE STREQUAL "relocation")
   file(RENAME "${test_root}/prefix" "${install_prefix}")
   run_installed_tools(relocated)
-  execute_process(
-    COMMAND
-      "@Python3_EXECUTABLE@"
-      "@CMAKE_CURRENT_SOURCE_DIR@/../tools/quality/install_artifact_manifest.py"
-      create --root "@CMAKE_CURRENT_SOURCE_DIR@/.."
-      ${artifact_source_arguments} --prefix "${install_prefix}" --compiler
-      "@CMAKE_CXX_COMPILER@" --configuration "${artifact_configuration}"
-      --manifest "${artifact_manifest}" COMMAND_ERROR_IS_FATAL ANY)
   return()
 endif()
-
-execute_process(
-  COMMAND
-    "@Python3_EXECUTABLE@"
-    "@CMAKE_CURRENT_SOURCE_DIR@/../tools/quality/install_artifact_manifest.py"
-    verify --root "@CMAKE_CURRENT_SOURCE_DIR@/.." ${artifact_source_arguments}
-    --prefix "${install_prefix}" --compiler "@CMAKE_CXX_COMPILER@"
-    --configuration "${artifact_configuration}" --manifest
-    "${artifact_manifest}" COMMAND_ERROR_IS_FATAL ANY)
 
 if(PHASE STREQUAL "shared-runtime-layout")
   if(NOT "@CXXLENS_BUILD_SHARED@" STREQUAL "ON")
@@ -242,8 +218,8 @@ endif()
 if(PHASE STREQUAL "shared-runtime-layout" AND WIN32)
   # Windows shared targets have two install artifacts: the import library stays
   # in the archive directory, while the DLL runtime must be beside installed
-  # executables. This check is intentionally limited to layout; it is not a
-  # Windows/MSVC qualification claim.
+  # executables. This check is intentionally limited to layout; it does not
+  # advertise Windows/MSVC support.
   foreach(library IN
           ITEMS cxxlens_base cxxlens_kernel cxxlens_query cxxlens_recipes
                 cxxlens_provider_sdk cxxlens_clang22_provider_sdk)
@@ -279,8 +255,6 @@ if(PHASE STREQUAL "shared-runtime-layout")
 endif()
 
 if(PHASE STREQUAL "clang22-materializer-success")
-  set(materialization_evidence_dir "${test_root}/materialization-evidence")
-  file(REMOVE_RECURSE "${materialization_evidence_dir}")
   foreach(materialization_backend IN ITEMS memory sqlite)
     execute_process(
       COMMAND
@@ -288,19 +262,10 @@ if(PHASE STREQUAL "clang22-materializer-success")
         "@CMAKE_CURRENT_SOURCE_DIR@/install/clang22_materializer_success_test.py"
         --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --prefix "${install_prefix}"
         --executable-suffix "${install_executable_suffix}" --backend
-        "${materialization_backend}" --translation-unit-count 2 --evidence-dir
-        "${materialization_evidence_dir}" COMMAND_ERROR_IS_FATAL ANY)
+        "${materialization_backend}" --translation-unit-count 2
+        COMMAND_ERROR_IS_FATAL ANY)
   endforeach()
-  execute_process(
-    COMMAND
-      "@Python3_EXECUTABLE@"
-      "@CMAKE_CURRENT_SOURCE_DIR@/../tools/quality/check_ng_clang22_install_matrix.py"
-      --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --evidence-dir
-      "${materialization_evidence_dir}" --output
-      "${materialization_evidence_dir}/configuration-evidence.json" --prefix
-      "${install_prefix}" --executable-suffix "${install_executable_suffix}"
-      COMMAND_ERROR_IS_FATAL ANY)
-  message(STATUS "installed Clang 22 evidence: ${materialization_evidence_dir}")
+  message(STATUS "installed Clang 22 materialization tests passed")
   return()
 endif()
 
@@ -319,20 +284,14 @@ if(PHASE STREQUAL "clang22-materializer-base64")
 endif()
 
 if(PHASE STREQUAL "clang22-materializer-negative")
-  set(materialization_negative_evidence_dir
-      "${test_root}/materialization-negative-evidence")
-  file(REMOVE_RECURSE "${materialization_negative_evidence_dir}")
   execute_process(
     COMMAND
       "@Python3_EXECUTABLE@"
       "@CMAKE_CURRENT_SOURCE_DIR@/install/clang22_materializer_negative_test.py"
       --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --prefix "${install_prefix}"
-      --executable-suffix "${install_executable_suffix}" --evidence-dir
-      "${materialization_negative_evidence_dir}" COMMAND_ERROR_IS_FATAL ANY)
-  message(
-    STATUS
-      "installed Clang 22 negative evidence: ${materialization_negative_evidence_dir}"
-  )
+      --executable-suffix "${install_executable_suffix}" COMMAND_ERROR_IS_FATAL
+      ANY)
+  message(STATUS "installed Clang 22 negative materialization tests passed")
   return()
 endif()
 

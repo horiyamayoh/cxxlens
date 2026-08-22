@@ -25,9 +25,6 @@ VECTORS = pathlib.Path("schemas/cxxlens_ng_relation_conformance_vectors.yaml")
 VECTORS_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_relation_conformance_vectors.schema.yaml"
 )
-REPORT_SCHEMA = pathlib.Path(
-    "schemas/cxxlens_ng_relation_conformance_report.schema.yaml"
-)
 
 REQUIRED_RELATIONS = {
     "build.project",
@@ -1159,9 +1156,8 @@ def make_report(
 
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("check", "report"))
+    parser.add_argument("mode", choices=("check",))
     parser.add_argument("--root", type=pathlib.Path, default=ROOT)
-    parser.add_argument("--output", type=pathlib.Path)
     return parser.parse_args()
 
 
@@ -1170,16 +1166,6 @@ def main() -> int:
     root = args.root.resolve()
     registry, results = validate_contract(root)
     report = make_report(registry, results)
-    schema_validate(report, load_yaml(root / REPORT_SCHEMA), "relation report")
-    if args.mode == "report":
-        if args.output is None:
-            fail("relation.output-missing", "report mode requires --output")
-        output = args.output if args.output.is_absolute() else root / args.output
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(
-            json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
     print(
         "NG relation contract passed: "
         f"{len(registry['relations'])} descriptors, {len(results)} vectors, "

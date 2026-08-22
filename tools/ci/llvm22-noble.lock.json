@@ -2,16 +2,14 @@
   "actions": {
     "actions/cache": "0057852bfaa89a56745cba8c7296529d2fc39830",
     "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
-    "actions/download-artifact": "fa0a91b85d4f404e444e00e005971372dc801d16",
-    "actions/setup-python": "5fda3b95a4ea91299a34e894583c3862153e4b97",
-    "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02"
+    "actions/setup-python": "5fda3b95a4ea91299a34e894583c3862153e4b97"
   },
   "authority": {
     "adr": "docs/design/adr/0072-ci-supply-chain-provenance.md",
     "issue": "#141",
     "owner": "steward.ci-supply-chain"
   },
-  "document_version": "1.5.0",
+  "document_version": "1.6.0",
   "documentation": {
     "architecture": "amd64",
     "expected_release": "1.9.8",
@@ -72,27 +70,18 @@
     },
     "suite": "llvm-toolchain-noble-22"
   },
-  "local_actions": {
-    ".github/actions/setup-ci/action.yml": "0ee96f2d721b9007f7ee7ae8e7059de1a1c5de094822649007a3a124b73cc9d9"
-  },
   "local_workflows": {
-    ".github/workflows/nightly.yml": "4cd6a17e9932ff5524345e40591db4db881834c9e608c26e2f9930e35917e8ba"
+    ".github/workflows/quality.yml": "c6f7d4fa1f396288afadae8fda783c009a52e9f42c3bf6057bdc9db0827f8da3",
+    ".github/workflows/release.yml": "942a8b12eb18536f6a3a2a6161fff6eb3c718bddb7fbb46ed410865ae0ad3873"
   },
   "package_cache": {
     "correctness_role": "transport-optimization-only",
     "directory": "~/.cache/cxxlens/packages",
     "environment": "CXXLENS_PACKAGE_CACHE",
-    "documentation_environment": "CXXLENS_PACKAGE_CACHE_DOCUMENTATION",
     "hit_environment": "CXXLENS_PACKAGE_CACHE_HIT",
-    "key_environment": "CXXLENS_PACKAGE_CACHE_KEY",
     "key_template": "cxxlens-ci-packages-v1-${runner.os}-${runner.arch}-${profile}-${documentation}-${lock_hash_files_digest}",
     "key_version": "v1",
-    "profile_environment": "CXXLENS_PACKAGE_CACHE_PROFILE",
-    "receipt_environment": "CXXLENS_PACKAGE_CACHE_RECEIPT",
-    "receipt_schema": "cxxlens.ci-package-cache-receipt.v2",
     "restore_keys": false,
-    "runner_arch_environment": "CXXLENS_PACKAGE_CACHE_RUNNER_ARCH",
-    "runner_os_environment": "CXXLENS_PACKAGE_CACHE_RUNNER_OS",
     "scope": "exact-downloaded-debs-only"
   },
   "python": {
@@ -105,12 +94,7 @@
   "runner": {
     "architecture": "X64",
     "label": "ubuntu-24.04",
-    "os": "Linux",
-    "provenance_environment": [
-      "ImageOS",
-      "ImageVersion",
-      "RUNNER_ARCH"
-    ]
+    "os": "Linux"
   },
   "schema": "cxxlens.ci-supply-chain-lock.v1"
 }

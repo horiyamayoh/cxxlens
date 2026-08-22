@@ -112,17 +112,10 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
             attachment["tracking"], {"issue": "#206", "feedback": "DF-0206"}
         )
         self.assertEqual(
-            attachment["acceptance_review_receipt"],
-            "exact-commit-bf30978eb34d5f94bbadfd675c8ce2b50fb2f899-"
-            "issue-206-comment-5097950062-independent-semantic-and-structural-"
-            "P0-0-P1-0-P2-0-authorizes-internal-writer-attachment-group-state-"
-            "machine-and-focused-tests-only-reader-grouping-blocked-by-DF-0207-"
-            "production-remains-blocked",
-        )
-        self.assertEqual(
             attachment["authorization"]["production_activation"],
-            "blocked-until-attachment-amendment-acceptance-and-the-distinct-exact-"
-            "implementation-and-complete-counterexample-matrix-review",
+            "blocked-until-direct-positive-negative-fault-determinism-and-"
+            "resource-tests-pass-for-the-exact-implementation-and-complete-"
+            "counterexample-matrix",
         )
         reader_attachment = lease[
             "reader_native_attachment_amendment_proposal"
@@ -142,14 +135,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         self.assertEqual(
             reader_attachment["tracking"],
             {"issue": "#207", "feedback": "DF-0207"},
-        )
-        self.assertEqual(
-            reader_attachment["acceptance_review_receipt"],
-            "exact-commit-636ef43803665e9999b38b9c33bd3afdbb6b4460-"
-            "issue-207-comment-5125815049-fresh-independent-semantic-and-"
-            "structural-P0-0-P1-0-P2-0-authorizes-internal-reader-attachment-"
-            "group-map-session-lifetime-unmap-close-state-machine-and-focused-"
-            "tests-only-production-VFS-public-native-OK-remain-blocked",
         )
         self.assertEqual(
             reader_attachment["map_attempt"]["result_enum"],
@@ -278,8 +263,8 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         )
         self.assertEqual(
             reader_attachment["authorization"]["before_independent_acceptance"],
-            "authority-edit-readonly-audit-and-temporary-reproduction-only-no-"
-            "reader-group-implementation-native-cleanup-production-binding-or-"
+            "direct-positive-negative-fault-determinism-and-resource-tests-are-"
+            "required-before-reader-group-runtime-cleanup-production-binding-or-"
             "native-OK-projection",
         )
         self.assertEqual(
@@ -304,22 +289,14 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         self.assertEqual(
             late_close["tracking"], {"issue": "#209", "feedback": "DF-0209"}
         )
-        self.assertEqual(
-            late_close["acceptance_review_receipt"],
-            "exact-proposal-commit-e47ef147ddd1e5172f37643ca79403e62ecde963-"
-            "issue-209-semantic-comment-5154882128-structural-comment-5154880206-"
-            "fresh-independent-P0-0-P1-0-P2-0-authorizes-only-internal-reader-"
-            "late-close-cleanup-owner-seal-provenance-drain-ack-state-machine-"
-            "and-focused-tests-production-VFS-public-API-native-OK-writer-and-"
-            "unrelated-reader-authority-remain-blocked",
-        )
         self.assertIn(
             "internal-reader-late-close-cleanup-owner-seal-provenance-drain-"
             "ack-state-machine",
             late_close["authorization"]["after_acceptance"],
         )
         self.assertIn(
-            "blocked-until-the-distinct-exact-implementation-complete",
+            "blocked-until-direct-positive-negative-fault-determinism-and-"
+            "resource-tests-pass-for-the-distinct-exact-implementation-complete",
             late_close["authorization"]["production_activation"],
         )
         self.assertEqual(
@@ -395,14 +372,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         )
         self.assertEqual(
             gate_outcome["tracking"], {"issue": "#208", "feedback": "DF-0208"}
-        )
-        self.assertEqual(
-            gate_outcome["acceptance_review_receipt"],
-            "exact-commit-bd2505f26d0d45b7bfa785a533c308ab957b11aa-"
-            "issue-208-comment-5119882571-fresh-independent-semantic-and-structural-"
-            "P0-0-P1-0-P2-0-authorizes-internal-writer-gate-outcome-evidence-state-"
-            "machine-and-focused-tests-only-reader-grouping-blocked-by-DF-0207-"
-            "production-VFS-public-native-OK-remain-blocked",
         )
         self.assertEqual(
             gate_outcome["gate_attempt_owner"]["lifecycle"],
@@ -1064,13 +1033,15 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         )
         self.assertEqual(
             gate_outcome["authorization"]["before_independent_acceptance"],
-            "authority-edit-readonly-audit-and-temporary-reproduction-only-no-"
-            "gate-outcome-mutation-native-cleanup-or-production-binding",
+            "direct-positive-negative-fault-determinism-and-resource-tests-are-"
+            "required-before-gate-outcome-mutation-native-cleanup-or-production-"
+            "binding",
         )
         self.assertEqual(
             lease["authorization"]["production_activation"],
-            "blocked-until-the-exact-implementation-and-complete-counterexample-"
-            "matrix-receive-a-distinct-independent-review",
+            "blocked-until-direct-positive-negative-fault-determinism-and-"
+            "resource-tests-pass-for-the-exact-implementation-and-complete-"
+            "counterexample-matrix",
         )
         self.assertEqual(
             contract["compatibility"]["predecessor_v2"]["read_path_strategy"][
@@ -1113,18 +1084,10 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 "accepted_empty_original_normalization"
             ]
 
-        def receiptless(value: dict[str, Any]) -> dict[str, Any]:
-            return normalization(value)["receiptless_crash_profile_draft"]
-
         def precreate_census(value: dict[str, Any]) -> dict[str, Any]:
             return value["transaction"]["fresh_v3_initialization"]["guards"][
                 "filesystem"
             ]["precreate_census"]
-
-        def terminal_receiptless(value: dict[str, Any]) -> dict[str, Any]:
-            return value["transaction"]["recovery_model"][
-                "terminal_reclassification"
-            ]["accepted_empty_normalization_receiptless_crash_profile_draft"]
 
         def writer_mapping_lease(value: dict[str, Any]) -> dict[str, Any]:
             return value["compatibility"]["predecessor_v2"][
@@ -1475,12 +1438,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
-                "writer-native-attachment-review-receipt-removed",
-                lambda value: writer_native_attachment(value).pop(
-                    "acceptance_review_receipt"
-                ),
-            ),
-            (
                 "writer-native-attachment-pre-review-implementation-authorized",
                 lambda value: writer_native_attachment(value)[
                     "authorization"
@@ -1679,12 +1636,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
-                "reader-native-attachment-review-receipt-removed",
-                lambda value: reader_native_attachment(value).pop(
-                    "acceptance_review_receipt"
-                ),
-            ),
-            (
                 "reader-native-attachment-mapping-generation-identity-removed",
                 lambda value: reader_native_attachment(value)[
                     "attachment_identity"
@@ -1823,12 +1774,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
-                "reader-late-close-cleanup-review-receipt-removed",
-                lambda value: reader_late_close_cleanup(value).pop(
-                    "acceptance_review_receipt"
-                ),
-            ),
-            (
                 "reader-late-close-cleanup-production-self-authorized",
                 lambda value: reader_late_close_cleanup(value)[
                     "authorization"
@@ -1927,12 +1872,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 "writer-gate-outcome-status-regressed",
                 lambda value: writer_gate_outcome(value).__setitem__(
                     "status", "proposed-unqualified-non-authorizing"
-                ),
-            ),
-            (
-                "writer-gate-outcome-review-receipt-removed",
-                lambda value: writer_gate_outcome(value).pop(
-                    "acceptance_review_receipt"
                 ),
             ),
             (
@@ -3316,125 +3255,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 .__setitem__("checksum_authority", "complete-byte-authority"),
             ),
             (
-                "normalization-receiptless-crash-draft",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"].pop(
-                    "receiptless_crash_profile_draft"
-                ),
-            ),
-            (
-                "normalization-receiptless-crash-draft-activation",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]
-                ["receiptless_crash_profile_draft"].__setitem__(
-                    "status", "accepted-authorizing"
-                ),
-            ),
-            (
-                "normalization-receiptless-family-completeness",
-                lambda value: terminal_receiptless(value)["family_partition"].pop(),
-            ),
-            (
-                "normalization-receiptless-family-uniqueness",
-                lambda value: terminal_receiptless(value)["family_partition"].__setitem__(
-                    1, terminal_receiptless(value)["family_partition"][0]
-                ),
-            ),
-            (
-                "normalization-receiptless-fz-dispatch-precedence",
-                lambda value: precreate_census(value)[
-                    "receiptless_zero_wal_dispatch"
-                ].__setitem__(
-                    "precedence",
-                    "after-preauthority_sidecar_candidate",
-                ),
-            ),
-            (
-                "normalization-receiptless-fz-generic-route-bypass",
-                lambda value: precreate_census(value)[
-                    "preauthority_sidecar_candidate"
-                ]["wal_participation_gate"].__setitem__(
-                    "zero_byte",
-                    "accept-on-the-generic-wal-route",
-                ),
-            ),
-            (
-                "normalization-receiptless-fz-pre-post-collapse",
-                lambda value: receiptless(value)["zero_wal_candidate"].__setitem__(
-                    "projection_split",
-                    "all-zero-wal-states-enter-a-live-normalizer",
-                ),
-            ),
-            (
-                "normalization-receiptless-cold-history-inference",
-                lambda value: terminal_receiptless(value).__setitem__(
-                    "cold_operation_history_inference",
-                    "infer-the-prior-normalization-edge",
-                ),
-            ),
-            (
-                "normalization-receiptless-known-path-rebind",
-                lambda value: receiptless(value).__setitem__(
-                    "delete_identity_limit",
-                    "path-delete-is-exact-object-deletion-and-rebind-safe",
-                ),
-            ),
-            (
-                "normalization-receiptless-f0-route",
-                lambda value: precreate_census(value)[
-                    "wal_header_sidecar_absent_exact_empty_candidate"
-                ].__setitem__("accepted_empty", "return-public-success"),
-            ),
-            (
-                "normalization-receiptless-fz-route",
-                lambda value: receiptless(value)["zero_wal_candidate"].__setitem__(
-                    "next_route", "infer-completed-operation-edge"
-                ),
-            ),
-            (
-                "normalization-receiptless-fp-route",
-                lambda value: receiptless(value)[
-                    "nonhot_prefix_candidate"
-                ].__setitem__("next_route", "return-public-success"),
-            ),
-            (
-                "normalization-receiptless-fh-route",
-                lambda value: receiptless(value)[
-                    "rollback_journal_candidate"
-                ].__setitem__("next_route", "infer-completed-operation-edge"),
-            ),
-            (
-                "normalization-receiptless-fi-route",
-                lambda value: receiptless(value)[
-                    "invalidated_journal_candidate"
-                ].__setitem__("next_route", "reconstruct-cold-operation-history"),
-            ),
-            (
-                "normalization-receiptless-fo-route",
-                lambda value: receiptless(value)["absent_post_candidate"].__setitem__(
-                    "next_route", "return-public-success"
-                ),
-            ),
-            (
-                "normalization-receiptless-fp-cleanup",
-                lambda value: receiptless(value)["nonhot_prefix_candidate"].pop(
-                    "cleanup_operation"
-                ),
-            ),
-            (
-                "normalization-receiptless-checksum-nonce-formula",
-                lambda value: receiptless(value)[
-                    "invalidated_journal_candidate"
-                ].__setitem__(
-                    "checksum_nonce_reconstruction",
-                    "trust-the-stored-checksum-as-a-provenance-token",
-                ),
-            ),
-            (
                 "normalization-effect-grammar-profile-receipt",
                 lambda value: normalization(value).pop(
                     "effect_grammar_profile_receipt"
@@ -3462,153 +3282,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 "normalization-terminal-journal-delete-parent-receipt",
                 lambda value: normalization(value).pop(
                     "normalizer_final_delete_durability_receipt"
-                ),
-            ),
-            (
-                "normalization-disposable-fixture-capability",
-                lambda value: receiptless(value)["two_layer_authorization"].pop(
-                    "disposable_fixture_capability"
-                ),
-            ),
-            (
-                "normalization-proposal-design-review-receipt",
-                lambda value: receiptless(value)["two_layer_authorization"].pop(
-                    "proposal_design_review_receipt"
-                ),
-            ),
-            (
-                "normalization-receiptless-zero-wal-format-authority",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]
-                ["receiptless_crash_profile_draft"]["zero_wal_candidate"].__setitem__(
-                    "format_status", "zero-byte-wal-is-a-valid-empty-wal"
-                ),
-            ),
-            (
-                "normalization-receiptless-fixture-only-authorization",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]
-                ["receiptless_crash_profile_draft"]["two_layer_authorization"].pop(
-                    "qualification_implementation_after_acceptance"
-                ),
-            ),
-            (
-                "normalization-receiptless-production-gate",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]
-                ["receiptless_crash_profile_draft"]["two_layer_authorization"]
-                .__setitem__(
-                    "canonical_or_production_activation",
-                    "enabled-after-one-shared-probe",
-                ),
-            ),
-            (
-                "normalization-receiptless-temporary-artifact-authority",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]
-                ["receiptless_crash_profile_draft"]["shared_probe_binding"].__setitem__(
-                    "authority_status",
-                    "temporary-hash-is-production-qualification-authority",
-                ),
-            ),
-            (
-                "normalization-receiptless-durable-report-gate",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]
-                ["receiptless_crash_profile_draft"]["shared_probe_binding"].pop(
-                    "durable_replacement_gate"
-                ),
-            ),
-            (
-                "normalization-receiptless-artifact-is-not-canonical-success",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]
-                ["receiptless_crash_profile_draft"]["two_layer_authorization"]
-                .__setitem__(
-                    "source_effect_gate_interpretation",
-                    "qualification-artifact-authorizes-canonical-success",
-                ),
-            ),
-            (
-                "normalization-receiptless-parent-durability",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"].pop(
-                    "normalizer_parent_durability_receipt"
-                ),
-            ),
-            (
-                "normalization-receiptless-large-sector-record-set",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]["journal_sector_profile"]
-                .pop("large_sector_record_set"),
-            ),
-            (
-                "normalization-receiptless-invalidated-cleanup",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]
-                ["receiptless_crash_profile_draft"]["invalidated_journal_candidate"]
-                .pop("cleanup_operation"),
-            ),
-            (
-                "normalization-receiptless-hot-barrier",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]
-                ["receiptless_crash_profile_draft"]["rollback_journal_candidate"]
-                .pop("barrier_admission_and_totality"),
-            ),
-            (
-                "normalization-receiptless-journal-reserved-lock",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]
-                ["receiptless_crash_profile_draft"]
-                ["rollback_journal_candidate"].__setitem__(
-                    "recovery_lock_gate",
-                    "acquire-shared-then-reserved-then-exclusive",
-                ),
-            ),
-            (
-                "normalization-receiptless-journal-playback-authority",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]
-                ["receiptless_crash_profile_draft"]
-                ["rollback_journal_candidate"].__setitem__(
-                    "sqlite_playback_authority",
-                    "sqlite-playback-success-is-complete-acceptance-authority",
-                ),
-            ),
-            (
-                "normalization-receiptless-journal-source-effect",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]
-                ["receiptless_crash_profile_draft"]
-                ["rollback_journal_candidate"].__setitem__(
-                    "source_effect_gate", "recover-source-before-probe"
                 ),
             ),
             (
@@ -5469,12 +5142,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 lambda value: value["release_binding"][
                     "required_sqlite_evidence"
                 ].remove("limit-length-exceeding-valid-canonical-v5-reopened-parity"),
-            ),
-            (
-                "qualification-report-binding",
-                lambda value: value["release_binding"][
-                    "qualification_report"
-                ].__setitem__("revision_binding", "latest-branch"),
             ),
         ]
 

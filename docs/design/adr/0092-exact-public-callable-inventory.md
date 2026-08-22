@@ -48,16 +48,15 @@ generated public header は accepted Relation Registry から全 admitted relati
 する。generated callable も通常 row と同じ exact contract を持ち、手編集、部分 regeneration、stale generated output は
 `cxxlens-quality` を失敗させる。
 
-human review Markdown は同じ inventory から決定的に生成し、対象 commit SHA/tree、inventory canonical digest、callable count、extractor
-major、Doxygen correspondence digest を本文に保持する。別 commit の artifact、digest drift、手編集された review projection は readiness と
-release evidence に使用できない。inventory、AST/Doxygen correspondence、generated freshness、review artifact は
-`cxxlens-quality`、Wave 0 readiness、GR release qualification の同一 revision chain に組み込む。
-stable-ID transition は親 commit の inventory と比較し、CI の shallow checkout で親 history が得られない場合は pass/skip にせず失敗する。
+`cxxlens-quality` は inventory、AST/Doxygen correspondence、generated freshness を直接検査する。検査は
+現在の tree の宣言と tracked inventory の整合だけを扱い、human review 文書、exact revision の複製、
+release qualification artifact は生成・保存しない。stable-ID transition は tracked allocator state
+の不変条件として検査し、親 revision の取得を別の完了証跡にしない。
 
 ## Consequences
 
 - API family の短い catalog summary を callable completeness の証明として扱わない。
-- public callable の追加、削除、overload/qualifier/default の変更は inventory と review artifact の明示差分になる。
+- public callable の追加、削除、overload/qualifier/default の変更は inventory と直接の試験差分になる。
 - Doxygen は public header と同数であるだけでなく、個々の callable の exact correspondence を持つ。
 - stable ID allocator の履歴は削除後も保持し、過去の overload slot を別 callable に割り当てない。
 - Clang 22 が利用できない環境では exact census を skipped/pass にせず、production quality gate を fail closed にする。
@@ -65,7 +64,7 @@ stable-ID transition は親 commit の inventory と比較し、CI の shallow c
 
 ## Verification
 
-positive fixture は同じ入力からの inventory/review artifact の再生成が byte-for-byte deterministic であり、overload、template、
+positive fixture は同じ入力からの inventory projection が byte-for-byte deterministic であり、overload、template、
 constructor/destructor、operator、cv/ref/noexcept/default argument、deleted/defaulted、inline/constexpr、generated callable を保持することを
 確認する。negative fixture は未登録 free/member/overload、qualifier/default drift、declaration 削除後の orphan row、複数 entry ownership、
 private callable の誤登録、generated header の手編集を個別に拒否する。Doxygen gate は AST gate とは独立に XML の missing/extra/signature

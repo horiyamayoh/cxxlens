@@ -1,30 +1,22 @@
 # Catalog and registry index
 
-| Contract | Path | Owner | State |
-| --- | --- | --- | --- |
-| Relation Registry | `schemas/cxxlens_ng_relation_registry.yaml` | #152 | accepted exact scalar-value and cross-TU entity identity contract |
-| Logical Query Contract | `schemas/cxxlens_ng_logical_query_contract.yaml` | #61 / #166 | accepted NG0/NG1 exact contract |
-| Query Runtime Contract | `schemas/cxxlens_ng_query_runtime_contract.yaml` | #69 / #166 | implemented closure-bound anti-join |
-| Semantic Guarantee Contract | `schemas/cxxlens_ng_semantic_guarantee_contract.yaml` | #62 | accepted exact contract |
-| Snapshot / Store Contract | `schemas/cxxlens_ng_snapshot_store_contract.yaml` | #148 | accepted exact contract |
-| SQLite Physical Store | `schemas/cxxlens_ng_sqlite_store_contract.yaml` | #68 / #181 / #200 / #201 / #205 / #206 / #207 / #208 | v2 implemented; Option A v3 user-selected; DF-0201 nonmutating source-SHM recovery, DF-0205 authenticated SHM lease, DF-0206 writer attachment, DF-0207 reader attachment, and DF-0208 typed writer gate-outcome authority accepted at `6cb705c256c9576f74b50a2dca8fc4e8f72d06bb` / `bf30978eb34d5f94bbadfd675c8ce2b50fb2f899` / `636ef43803665e9999b38b9c33bd3afdbb6b4460` / `bd2505f26d0d45b7bfa785a533c308ab957b11aa`; internal writer/reader attachment implementation may proceed, while native source-SHM activation and production remain blocked until exact implementation/matrix review |
-| Provider Protocol | `schemas/cxxlens_ng_provider_protocol.yaml` | #149 / #233 | accepted NG0 exact contract; NG1 remains proposed and fail-closed, with typed heartbeat/progress/resume/spill authority, exact qualification report schema, and host-observed fsync receipt schema |
-| Provider Runtime | `schemas/cxxlens_ng_provider_runtime_contract.yaml` | #151 | implemented exact contract |
-| Clang 22 Installed Materialization | `schemas/cxxlens_ng_clang22_materialization_contract.yaml` | #181 / #205 / #206 / #207 / #208 | accepted option-2 boundary with DF-0191/DF-0192/DF-0194 and DF-0195–DF-0199 amendments; DF-0200 blocks claim/Store orchestration, detailed reporting, and scale qualification; accepted DF-0205/DF-0206/DF-0207/DF-0208 attachment/gate authority permits internal writer/reader implementation, and production remains blocked pending exact implementation/matrix review while the independent streaming/runtime foundation continues under #181 |
-| Public C++ API Catalog | `schemas/cxxlens_ng_public_api_catalog.yaml` | #66–#70 | implemented |
-| Public Callable Inventory | `schemas/cxxlens_ng_public_callable_inventory.yaml` | #169 | implemented exact Clang 22 AST and Doxygen bidirectional correspondence |
-| Acceptance Manifest | `schemas/cxxlens_ng_acceptance_manifest.yaml` | #71 | implemented foundation gates |
-| Foundation Completion | `schemas/cxxlens_ng_foundation_completion_manifest.yaml` | #113 | implemented, CI commit/finding-bound measured-audit report |
-| API Development Readiness | `schemas/cxxlens_ng_api_development_readiness.yaml` | #168 | implemented clean-main Wave 0 baseline |
-| Design Feedback Record | `schemas/cxxlens_ng_design_feedback_record.schema.yaml` | #171 | implemented non-normative implementation-learning lifecycle |
-| G5 Qualification | `schemas/cxxlens_ng_g5_qualification.yaml` | #166 | implemented exact-SHA closure, incrementality, bounded recursion, and R4 performance gate |
-| Quality Evidence Ownership | `schemas/cxxlens_ng_quality_ownership.yaml` | #156 | implemented single-owner and revision/toolchain/input-bound evidence contract |
-| Quality Evidence Instance | `schemas/cxxlens_ng_quality_evidence.schema.yaml` | #156 | implemented exact configuration evidence and workflow aggregation schema |
-| Install Artifact Manifest | `schemas/cxxlens_ng_install_artifact_manifest.schema.yaml` | #156 | implemented revision/tree/toolchain/configuration/all-file binding |
-| Security Profile | `schemas/cxxlens_ng_security_profile.yaml` | #151 | accepted exact contract |
-| Release Bundle | `schemas/cxxlens_ng_release_bundle.yaml` | #59 | accepted exact contract |
+| Contract | Path | State |
+| --- | --- | --- |
+| Relation Registry | `schemas/cxxlens_ng_relation_registry.yaml` | accepted |
+| Logical Query Contract (Issue #61) | `schemas/cxxlens_ng_logical_query_contract.yaml` | accepted |
+| Query Runtime Contract | `schemas/cxxlens_ng_query_runtime_contract.yaml` | implemented |
+| Semantic Guarantee Contract (Issue #62) | `schemas/cxxlens_ng_semantic_guarantee_contract.yaml` | accepted |
+| Snapshot / Store Contract (Issue #148) | `schemas/cxxlens_ng_snapshot_store_contract.yaml` | accepted |
+| SQLite Physical Store | `schemas/cxxlens_ng_sqlite_store_contract.yaml` | implemented with safety receipts |
+| Provider Protocol (Issue #149) | `schemas/cxxlens_ng_provider_protocol.yaml` | accepted exact contract; provider safety tests required |
+| Provider Runtime | `schemas/cxxlens_ng_provider_runtime_contract.yaml` | implemented |
+| Clang 22 Installed Materialization | `schemas/cxxlens_ng_clang22_materialization_contract.yaml` | implemented with runtime reports |
+| Public C++ API Catalog | `schemas/cxxlens_ng_public_api_catalog.yaml` | implemented |
+| Public Callable Inventory | `schemas/cxxlens_ng_public_callable_inventory.yaml` | implemented |
+| Security Profile | `schemas/cxxlens_ng_security_profile.yaml` | accepted |
+| Compatibility v2 | `schemas/cxxlens_ng_compatibility_request.schema.yaml` / `schemas/cxxlens_ng_compatibility_report.schema.yaml` | implemented |
+| Support table | `schemas/cxxlens_support_matrix.yaml` | version/environment declaration |
 
-各 contract の schema、positive/negative conformance vector、report schema は同じ prefix で配置します。
-G5 は foundation completion とは独立に認定され、distribution release gate は #167 の完了まで deferred です。
-G5 の実装はそれ自体で production-supported を意味しません。catalog entry が `contract-pending` の場合、その surface は実装済み・stable・production-supported
-ではありません。
+各 contract は schema、positive/negative/fault test、必要な product runtime receipt を同じ authority path で管理します。
+Relation Registry は Issue #152 の accepted exact scalar-value and cross-TU entity identity contract を含みます。
+開発・release の運用証跡（qualification report、review receipt、work-unit、checksum、集約 JSON）は catalog に追加しません。

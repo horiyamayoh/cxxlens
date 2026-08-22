@@ -127,7 +127,7 @@ entries:
     threading: [pure-planning-and-closure-functions-are-reentrant, returned-values-are-concurrent-readable]
     versioning: [exact-input-fingerprint-v1, materialization-plan-identity-v1, bounded-closure-result-identity-v1]
     invariants: [all-semantic-invalidation-inputs-are-explicit, changed-input-invalidates-only-its-partition, corrupt-materialization-never-reused, unchanged-exact-input-set-yields-warm-zero-and-zero-frontend-provider-executions, plan-order-and-reason-codes-are-deterministic, full-recompute-and-incremental-semantics-match, bounded-recursion-is-condition-and-interpretation-aware, bounded-closure-request-result-and-digest-bind-one-registered-derived-kind, positive-rows-survive-budget-exhaustion, truncated-recursion-never-certifies-closure, evidence-is-canonical-and-lossless]
-    implementation_evidence: [src/sdk/incremental.cpp, tests/unit/sdk/g5_runtime_test.cpp, examples/sdk/incremental_materialization.cpp, schemas/cxxlens_ng_g5_qualification.yaml, docs/design/adr/0090-g5-closure-incrementality-qualification.md]
+    implementation_evidence: [src/sdk/incremental.cpp, tests/unit/sdk/g5_runtime_test.cpp, examples/sdk/incremental_materialization.cpp, docs/design/adr/0021-query-closure-applicability.md]
 
   - id: public.project-catalog
     status: implemented

@@ -18,14 +18,12 @@ from check_ng_relation_contract import (  # noqa: E402
     CLANG22_PRIMARY_SPAN_SUFFIXES,
     REGISTRY,
     REGISTRY_SCHEMA,
-    REPORT_SCHEMA,
     VECTORS,
     RelationContractError,
     apply_patches,
     compare_api_ids,
     execute_vector,
     load_yaml,
-    make_report,
     register_extension,
     registry_semantic_projection,
     resolve_reference,
@@ -45,7 +43,6 @@ class NgRelationContractTest(unittest.TestCase):
         cls.registry = load_yaml(ROOT / REGISTRY)
         cls.registry_schema = load_yaml(ROOT / REGISTRY_SCHEMA)
         cls.vectors = load_yaml(ROOT / VECTORS)
-        cls.report_schema = load_yaml(ROOT / REPORT_SCHEMA)
 
     def vector(self, identifier: str) -> dict:
         return next(row for row in self.vectors["vectors"] if row["id"] == identifier)
@@ -310,51 +307,11 @@ class NgRelationContractTest(unittest.TestCase):
         with self.assertRaisesRegex(RelationContractError, "relation.schema-invalid"):
             schema_validate(candidate, self.registry_schema, "relation registry")
 
-    def test_report_contains_exact_descriptor_digests(self) -> None:
-        results = validate_vectors(self.registry, self.registry_schema, self.vectors)
-        report = make_report(self.registry, results)
-        self.assertEqual(report["status"], "green")
-        self.assertEqual(len(report["descriptors"]), 21)
-        self.assertEqual(len({row["digest"] for row in report["descriptors"]}), 21)
-        clang22 = {
-            row["descriptor_id"]: (row["version"], row["digest"])
-            for row in report["descriptors"]
-            if row["descriptor_id"].startswith("frontend.clang22.")
-        }
-        self.assertEqual(
-            clang22,
-            {
-                "frontend.clang22.call_observation.v2": (
-                    "2.0.0",
-                    "sha256:07ea48a7f00e80972ba59c14ee96f916772ad9ed57fc84e313e3958f08fa548a",
-                ),
-                "frontend.clang22.entity_observation.v2": (
-                    "2.0.0",
-                    "sha256:4a5012801fcde26110a9f6350177d74d7d6975edde96337d4d3918ca7a004d51",
-                ),
-                "frontend.clang22.type_observation.v2": (
-                    "2.0.0",
-                    "sha256:53c54f967eb041e75ea98463c212d259fed0d3a310038ac9c93209749e72387f",
-                ),
-            },
-        )
-
-    def test_report_schema_requires_exactly_21_descriptors(self) -> None:
-        results = validate_vectors(self.registry, self.registry_schema, self.vectors)
-        report = make_report(self.registry, results)
-        schema_validate(report, self.report_schema, "relation report")
-        for mutation in ("missing", "extra"):
-            candidate = copy.deepcopy(report)
-            if mutation == "missing":
-                candidate["descriptors"].pop()
-            else:
-                candidate["descriptors"].append(
-                    copy.deepcopy(candidate["descriptors"][-1])
-                )
-            with self.subTest(mutation=mutation), self.assertRaisesRegex(
-                RelationContractError, "relation.schema-invalid"
-            ):
-                schema_validate(candidate, self.report_schema, "relation report")
+    def test_vector_results_are_deterministic_without_a_persisted_report(self) -> None:
+        first = validate_vectors(self.registry, self.registry_schema, self.vectors)
+        second = validate_vectors(self.registry, self.registry_schema, self.vectors)
+        self.assertEqual(first, second)
+        self.assertEqual(len(first), len(self.vectors["vectors"]))
 
     def test_span_fail_closed_vectors_cover_constraint_and_reference_drift(self) -> None:
         expected = {

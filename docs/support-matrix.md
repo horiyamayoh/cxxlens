@@ -1,41 +1,18 @@
 # Support matrix
 
-| Surface | State |
-| --- | --- |
-| Language | C++23 |
-| Host | Linux primary |
-| Native Windows/MSVC distribution | Unqualified; issue [#223](https://github.com/horiyamayoh/cxxlens/issues/223) requires an exact native tuple |
-| Core target DAG | implemented and installed |
-| Relation/claim kernel | implemented |
-| In-memory and SQLite immutable snapshots | implemented with semantic parity |
-| Typed/dynamic Logical Query runtime | implemented reference engine |
-| Portable provider SDK/runtime | implemented |
-| Clang 22 native SDK/worker/materializer | production-supported only for exact tuples whose installed worker-to-store report is bound by a passed GR report |
-| Recipe foundation | implemented |
-| Flagship `calls_to_function` end-to-end recipe | implemented with typed/dynamic/provider/store parity |
-| GCC/IR/object/binary providers | future provider entries |
-| Stable third-party C++ binary plugin ABI | unsupported |
-| Source mutation apply | outside NG0 scope |
+製品の対応環境は、試験の長期保存やバイナリ digest ではなく、通常の
+[support table](../schemas/cxxlens_support_matrix.yaml) として宣言します。
+表にない組合せは `unsupported` です。
 
-Support は provider ID/version/binary digest/relation/interpretation/toolchain/platform tuple と conformance evidence
-で決まり、library version 一つから推測しません。machine-readable authority は
-[provider support matrix](../schemas/cxxlens_ng_provider_support_matrix.yaml) です。
+| Release version | Surface | OS | Architecture | Compiler/provider major | Linkage |
+| --- | --- | --- | --- | --- | --- |
+| 1.0.0 | core | Linux | x86_64 | Clang 22 | static |
+| 1.0.0 | core | Linux | x86_64 | Clang 22 | shared |
+| 1.0.0 | provider-sdk | Linux | x86_64 | Clang 22 | static |
+| 1.0.0 | provider-sdk | Linux | x86_64 | Clang 22 | shared |
 
-Distribution 1.0 の production claim は
-`cxxlens.ng-release-qualification-report.v1` に列挙された tuple だけが authority です。source-tree matrix の
-`conformance-only` entry は認定候補を表し、`binary_digest: pending`、広い platform 名、wildcard から production support を
-推測しません。report の各 tuple は exact installed worker digest、Clang toolchain identity、Linux architecture と static/shared
-configuration、relation、`cc.clang22-canonical-1` interpretation、capability、guarantee、security profile digest、evidence digest を
-保持します。各 configuration の evidence digest は、relocated installed materializer と worker、exact task/six descriptors、全 mandatory
-group を束縛する memory report と再 open 済み SQLite report の canonical two-report set digest を含みます。
-report にない provider、relation、platform、binary rebuild、または materialization report は unsupported です。
+製品の runtime provenance、claim provenance、coverage、unknown、materialization
+report、SQLite/source-closure の安全 receipt、provider の署名・binary identity・失効・sandbox・
+canonical semantic certification は機能契約として残ります。これらは release 判定用の運用証跡ではありません。
 
-Windows/MSVC is intentionally not promoted by the Linux lane. The current CI
-workflow and locked bootstrap only measure Ubuntu 24.04, while the release report
-schema accepts production platform tuples matching `linux-...-(static|shared)`.
-The provider-process and SQLite SHM/VFS implementations also still contain
-POSIX-specific paths that require a native Windows port and native negative/positive
-evidence. The Windows install test checks the portable DLL/import-library layout,
-but that layout check is not Windows/MSVC qualification. Until issue #223 has an
-exact merged-main MSVC report, Windows remains unqualified and no wildcard or
-pending tuple may be added to this matrix.
+Windows/MSVC、未掲載 OS、architecture、toolchain/provider major、linkage は引き続き unsupported です。

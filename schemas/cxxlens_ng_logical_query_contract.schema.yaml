@@ -37,7 +37,7 @@ properties:
       design:
         const: docs/design/cxxlens_next_generation_integrated_design_ja.md#20-logical-query
       decision_adr:
-        const: docs/design/adr/0090-g5-closure-incrementality-qualification.md
+        const: docs/design/adr/0021-query-closure-applicability.md
       owner_issue:
         const: '#166'
       owner:

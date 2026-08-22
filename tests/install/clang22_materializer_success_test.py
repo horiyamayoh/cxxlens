@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import pathlib
@@ -31,17 +30,6 @@ ASAN_ADDRESS_SPACE_BYTES = (1 << 63) - 1
 ASAN_SUBPROCESS_BUDGET = 1024
 OCCURRENCE_RELATIVE_PATH = (
     "share/cxxlens/materialization/clang22/occurrence-v1.json"
-)
-OCCURRENCE_FILENAME = "occurrence-v1.json"
-REQUEST_FILENAME = "cxxlens-clang22-materialization-request.json"
-REPORT_FILENAME = "cxxlens-clang22-materialization-report.json"
-EXECUTION_RECEIPT_FILENAME = "cxxlens-clang22-materialization-execution-receipt.json"
-RAW_PROVIDER_EVIDENCE_MANIFEST_FILENAME = (
-    "cxxlens-clang22-materialization-raw-provider-evidence-v1.json"
-)
-RAW_PROVIDER_EVIDENCE_DIRECTORY = "raw-provider-transcripts"
-RAW_PROVIDER_EVIDENCE_SCHEMA = (
-    "cxxlens.clang22-materialization-raw-provider-evidence.v1"
 )
 CANONICAL_BASE64_VECTOR_SOURCES = (
     b"int main() { return 0; }\n",  # RFC 4648 two-padding spelling.
@@ -70,94 +58,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="run actual installed provider tasks for one- and two-padding source spellings",
     )
-    parser.add_argument(
-        "--evidence-dir",
-        type=pathlib.Path,
-        help=(
-            "optional external evidence directory; request, exact report stdout, "
-            "and execution receipt are written below <configuration>/<backend>"
-        ),
-    )
     return parser.parse_args()
 
 
 def fail(message: str) -> None:
     raise AssertionError(message)
-
-
-def content_digest(value: bytes) -> str:
-    return "sha256:" + hashlib.sha256(value).hexdigest()
-
-
-def write_external_evidence(
-    evidence_dir: pathlib.Path,
-    configuration: str,
-    backend: str,
-    request_bytes: bytes,
-    report_bytes: bytes,
-    stderr_bytes: bytes,
-    raw_occurrences: dict[tuple[str, str, str], bytes],
-    occurrence_bytes: bytes,
-) -> None:
-    """Persist only externally observable bytes used by release qualification.
-
-    The installed process remains the report authority: the report artifact is
-    the exact stdout byte stream, and the receipt binds that byte stream.  This
-    directory is intentionally outside the installed prefix so it cannot alter
-    the immutable install-artifact manifest. Raw provider stdout is captured by
-    an independent installed-worker invocation and is retained as diagnostic
-    evidence only; it is never copied into the public report.
-    """
-
-    destination = (evidence_dir / configuration / backend).resolve()
-    destination.mkdir(parents=True, exist_ok=True)
-    receipt = {
-        "schema": "cxxlens.clang22-materialization-execution-receipt.v1",
-        "actual_exit_status": 0,
-        "exact_stdout_byte_count": len(report_bytes),
-        "stdout_sha256": content_digest(report_bytes),
-        "parsed_response_count": 1,
-        "stderr_sha256": content_digest(stderr_bytes),
-    }
-    receipt_path = destination / EXECUTION_RECEIPT_FILENAME
-    receipt_bytes = oracle_canonical_json(receipt)
-    receipt_path.write_bytes(receipt_bytes)
-    (destination / REQUEST_FILENAME).write_bytes(request_bytes)
-    (destination / REPORT_FILENAME).write_bytes(report_bytes)
-    (destination / OCCURRENCE_FILENAME).write_bytes(occurrence_bytes)
-    raw_directory = destination / RAW_PROVIDER_EVIDENCE_DIRECTORY
-    raw_directory.mkdir(parents=True, exist_ok=True)
-    task_keys = sorted(raw_occurrences)
-    manifest_entries = []
-    for ordinal, key in enumerate(task_keys):
-        raw = raw_occurrences[key]
-        relative_path = f"{RAW_PROVIDER_EVIDENCE_DIRECTORY}/task-{ordinal:04d}.bin"
-        (destination / relative_path).write_bytes(raw)
-        manifest_entries.append(
-            {
-                "task_execution_key": list(key),
-                "relative_path": relative_path,
-                "byte_count": len(raw),
-                "sha256": content_digest(raw),
-            }
-        )
-    (destination / RAW_PROVIDER_EVIDENCE_MANIFEST_FILENAME).write_bytes(
-        oracle_canonical_json(
-            {
-                "schema": RAW_PROVIDER_EVIDENCE_SCHEMA,
-                "entries": manifest_entries,
-            }
-        )
-    )
-
-
-def oracle_canonical_json(value: Any) -> bytes:
-    return json.dumps(
-        value,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
 
 
 def main() -> int:
@@ -214,7 +119,7 @@ def main() -> int:
         installed_binary_digest=files[1]["digest"],
         sandbox_policy_digest=BASELINE_POLICY_DIGEST,
     )
-    if os.environ.get("CXXLENS_ASAN_INSTALLED_QUALIFICATION") == "1":
+    if os.environ.get("CXXLENS_ASAN_INSTALLED_TEST_PROFILE") == "1":
         # AddressSanitizer reserves a platform shadow range far beyond the
         # normal finite RLIMIT_AS budget before the worker reaches main().
         # This explicit CTest profile keeps the request binding visible while
@@ -256,7 +161,7 @@ def main() -> int:
     if not materializer.is_file() or materializer.is_symlink():
         fail(f"installed materializer is missing or not regular: {materializer}")
     # Keep mutable SQLite files outside the immutable install prefix. The
-    # install-artifact manifest is verified by sibling CTest jobs, so a
+    # installed occurrence manifest is verified by sibling CTest jobs, so a
     # journal/WAL sidecar created under the prefix would race that exact file
     # census and make the package appear to change while it is being checked.
     with tempfile.TemporaryDirectory(
@@ -292,16 +197,6 @@ def main() -> int:
         oracle.load(args.root / oracle.REPORT_SCHEMA),
         "installed materializer positive report",
         error_code="materialization.report-invalid",
-    )
-    raw_occurrences = install_matrix.capture_installed_raw_provider_transcripts(
-        args.root,
-        args.prefix,
-        request,
-        occurrence,
-        executable_suffix=args.executable_suffix,
-    )
-    install_matrix.validate_independent_raw_provider_transcripts(
-        args.root, request, report, raw_occurrences
     )
     if report["response_kind"] != "detailed" or report["result"] != "passed":
         fail("installed materializer positive path did not return detailed passed")
@@ -562,18 +457,6 @@ def main() -> int:
             "installed materializer stdout is not the canonical report artifact; "
             "an external receipt cannot bind a reformatted response"
         )
-    if args.evidence_dir is not None:
-        write_external_evidence(
-            args.evidence_dir,
-            occurrence["package_configuration"],
-            args.backend,
-            request_bytes,
-            completed.stdout,
-            completed.stderr,
-            raw_occurrences,
-            occurrence_bytes,
-        )
-
     return 0
 
 

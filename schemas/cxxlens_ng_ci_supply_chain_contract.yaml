@@ -1,48 +1,22 @@
-schema: cxxlens.ng-ci-supply-chain-contract.v1
+schema: cxxlens.ng-ci-supply-chain-contract.v2
 kind: ci-supply-chain-contract
-document_version: 1.7.0
+document_version: 2.0.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
   adr: docs/design/adr/0072-ci-supply-chain-provenance.md
   issue: '#141'
-  owner: steward.ci-supply-chain
-bootstrap:
-  script: tools/ci/bootstrap_supply_chain.py
-  lock: tools/ci/llvm22-noble.lock.json
-  remote_script_execution: forbidden
-  signing_key: checksum-and-primary-fingerprint-before-root-install
-  documentation_package: checksum-and-dpkg-identity-before-root-install
-  package_versions: exact-version-and-sha256
-  fallback: forbidden
+workflow:
+  files: [.github/workflows/quality.yml, .github/workflows/release.yml]
+  action_revision: full-commit-sha
+  runner_label: ubuntu-24.04
 dependency_lock:
   requirements: tools/quality/requirements.lock
   installer_flags: [--require-hashes, '--only-binary=:all:']
   transitive: exact-version-and-sha256
   distributions: binary-only
-workflow:
-  files: [.github/workflows/quality.yml, .github/workflows/nightly.yml, .github/workflows/autonomy-fast.yml, .github/workflows/autonomy-heavy.yml, .github/workflows/autonomy-release-evaluation.yml]
-  action_revision: full-commit-sha
-  local_workflow_digest: sha256-from-supply-chain-lock
-  runner_label: ubuntu-24.04
-  bootstrap_profiles: [compiler, developer, documentation, static-analysis]
-provenance:
-  source: revision-and-tree
-  runner: label-image-version-os-release-kernel-architecture
-  actions: names-and-full-commit-shas
-  tools: version-path-and-binary-digest
-  packages: exact-dpkg-versions
-  package_cache: verified-cache-or-locked-download-with-authority-and-dependency-resolution
-  package_cache_receipt: cxxlens.ci-package-cache-receipt.v2
-  python_distributions: versions-and-record-digests
-  lock_digest: sha256
-  requirements_digest: sha256
 acceptance:
-  checksum_mismatch: reject-before-root-effect
-  exact_versions: assert-after-install
   mutable_action: reject
   unpinned_dependency: reject
   unavailable_package: fail-without-fallback
-  completion_binding: runner-toolchain-action-package-provenance
-  offline_replay: lock-plus-cached-artifacts-no-network
-  artifact_binding: source-sha-and-toolchain-digest
+  operational_artifacts: forbidden

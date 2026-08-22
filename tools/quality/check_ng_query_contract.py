@@ -30,9 +30,6 @@ VECTORS = pathlib.Path("schemas/cxxlens_ng_query_conformance_vectors.yaml")
 VECTORS_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_query_conformance_vectors.schema.yaml"
 )
-REPORT_SCHEMA = pathlib.Path(
-    "schemas/cxxlens_ng_query_conformance_report.schema.yaml"
-)
 
 NG0_OPERATORS = {
     "query.scan.v1": ("scan", 0, {"descriptor_id", "alias"}),
@@ -1183,16 +1180,13 @@ def validate_all(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, Any
     results = validate_vectors(
         contract, contract_schema, ir_schema, registry, vectors
     )
-    report = make_report(contract, results)
-    schema_validate(report, load_yaml(root / REPORT_SCHEMA), "query report")
     return contract, results
 
 
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("check", "report"))
+    parser.add_argument("mode", choices=("check",))
     parser.add_argument("--root", type=pathlib.Path, default=ROOT)
-    parser.add_argument("--output", type=pathlib.Path)
     return parser.parse_args()
 
 
@@ -1201,12 +1195,6 @@ def main() -> int:
     root = args.root.resolve()
     contract, results = validate_all(root)
     report = make_report(contract, results)
-    if args.mode == "report":
-        rendered = json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
-        if args.output:
-            args.output.write_text(rendered, encoding="utf-8")
-        else:
-            print(rendered, end="")
     print(
         f"verified {len(contract['operator_profiles'])} active query operators, "
         f"{len(results)} vectors, contract {report['contract_digest']}"

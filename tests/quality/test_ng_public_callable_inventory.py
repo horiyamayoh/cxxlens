@@ -551,25 +551,6 @@ class NgPublicCallableInventoryTest(unittest.TestCase):
                 changed["inventory_digest"] = inventory.inventory_digest(changed)
                 inventory.validate_inventory_document(ROOT, changed)
 
-    def test_review_rejects_noncanonical_or_substituted_inventory(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="cxxlens-callable-report-source-") as temporary:
-            alternate = pathlib.Path(temporary) / "inventory.yaml"
-            shutil.copy2(ROOT / inventory.INVENTORY, alternate)
-            with self.assertRaisesRegex(
-                inventory.CallableInventoryError, "canonical inventory path"
-            ):
-                inventory._require_canonical_report_inventory(
-                    ROOT, alternate, self.document
-                )
-        substituted = copy.deepcopy(self.document)
-        substituted["callables"][0]["status"] = "substituted"
-        with self.assertRaisesRegex(
-            inventory.CallableInventoryError, "differs from the canonical inventory"
-        ):
-            inventory._require_canonical_report_inventory(
-                ROOT, ROOT / inventory.INVENTORY, substituted
-            )
-
     def test_wrong_clang_major_is_rejected_before_ast_extraction(self) -> None:
         wrong_version = subprocess.CompletedProcess(
             ["clang++-21", "--version"],
@@ -920,25 +901,19 @@ void issue_attribute_words();
         workflow = (ROOT / ".github/workflows/quality.yml").read_text(
             encoding="utf-8"
         )
-        for marker in (
-            "public_callable_inventory.py report",
-            "--compiler clang++-22",
-            "--expected-revision \"${GITHUB_SHA}\"",
-            "cxxlens-ng-public-callable-inventory-${{ github.sha }}",
-            "cxxlens-ng-public-callable-inventory-report.json",
-            "cxxlens-ng-public-callable-inventory-review.md",
-            "fetch-depth: 2",
-        ):
-            self.assertIn(marker, workflow)
+        self.assertIn("cxxlens-quality", workflow)
+        self.assertNotIn("public_callable_inventory.py report", workflow)
+        self.assertNotIn("actions/upload-artifact", workflow)
+        self.assertNotIn("actions/download-artifact", workflow)
 
-    def test_nightly_clean_full_keeps_parent_history(self) -> None:
-        workflow = (ROOT / ".github/workflows/nightly.yml").read_text(
+    def test_release_workflow_is_the_only_heavy_test_lane(self) -> None:
+        workflow = (ROOT / ".github/workflows/release.yml").read_text(
             encoding="utf-8"
         )
-        self.assertIn("\n  clean-full:\n", workflow)
-        clean_full = workflow.split("\n  clean-full:\n", 1)[1]
-        self.assertIn("\n          fetch-depth: 0\n", clean_full)
-        self.assertNotIn("\n          fetch-depth: 1\n", clean_full)
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertIn('tags: ["v*"]', workflow)
+        self.assertIn("maximum-scale", workflow)
+        self.assertNotIn("actions/upload-artifact", workflow)
 
     def test_timeout_regression_probe_compiles_pidfd_enum(self) -> None:
         tests_cmake = (ROOT / "tests/CMakeLists.txt").read_text(encoding="utf-8")

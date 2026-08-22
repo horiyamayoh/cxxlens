@@ -208,16 +208,15 @@ properties:
           accepted_empty_normalization_success: intermediate-only-no-store-and-only-a-sealed-same-identity-normalized-empty-operation-edge-continues-into-ordinary-fresh-initialization
           accepted_empty_normalization_public_success: forbidden-until-ordinary-fresh-initialization-independently-completes
           accepted_empty_normalization_receiptless_crash_profile_draft:
-            status: accepted-authority-disposable-qualification-implementation-pending-production-blocked
+            status: accepted-authority-disposable-runtime-test-pending-production-blocked
             sqlite_profile_path: transaction.fresh_v3_initialization.guards.filesystem.precreate_census.preauthority_sidecar_candidate.accepted_empty_original_normalization.receiptless_crash_profile_draft
-            activation: accepted-proposal-review-b6cbb86347e02c4b374d7991a1f78d2535789ced-authorizes-only-the-named-SQLite-profile-disposable-qualification-layer-and-canonical-or-production-activation-remains-gated-with-no-static-SQLite-runtime-inference
-            qualification_implementation: exact-proposal-review-accepted-may-proceed-only-for-classifier-ports-effect-gates-and-fixture-scoped-cleanup-recovery-normalizer-and-fault-harness-behind-the-nonforgeable-disposable-fixture-capability
-            production_activation: blocked-until-the-complete-evidence-gate-independent-review-and-accepted-profile-replacement
+            activation: direct-positive-negative-fault-determinism-and-resource-tests-must-pass-for-the-named-SQLite-profile-and-canonical-or-production-activation-remains-gated-with-no-static-SQLite-runtime-inference
+            qualification_implementation: direct-positive-negative-fault-determinism-and-resource-tests-may-proceed-only-for-classifier-ports-effect-gates-and-fixture-scoped-cleanup-recovery-normalizer-and-fault-harness-behind-the-nonforgeable-disposable-fixture-capability
+            production_activation: blocked-until-direct-positive-negative-fault-determinism-and-resource-tests-pass-and-accepted-profile-replacement
             family_partition: [F0-exact-pre-no-sidecar, FZ-exact-pre-or-complete-valid-rollback-exact-empty-current-main-plus-size-zero-wal, FP-exact-pre-nonhot-journal-prefix, FH-valid-hot-journal-with-exact-preimages-and-pre-or-post-main, FI-journal-preimages-derive-exact-pre-and-deterministic-post-plus-first-28-zero-invalidated-journal, FO-complete-valid-rollback-exact-empty-current-main-no-sidecar]
-            sealed_receipt: [canonical-locator-and-pinned-runtime-vfs, exact-layer-discriminator-and-family-applicable-runtime-build-vfs-device-filesystem-S-P-N-E-receipt-with-disposable-run-plan-or-accepted-production-report-never-cross-authorizing, continuous-parent-namespace-epoch-and-object-entry-identities, exact-family-tag-and-raw-whole-main-plus-sidecar-byte-receipts, family-applicable-exact-pre-and-when-journal-preimages-exist-deterministic-post-projections-plus-byte-exact-current-main, private-validation-and-confirmed-close, source-effect-phase-and-exact-bounded-effect-receipt, post-effect-family-and-exact-next-route]
+            sealed_receipt: [canonical-locator-and-pinned-runtime-vfs, exact-layer-discriminator-and-family-applicable-runtime-build-vfs-device-filesystem-S-P-N-E-receipt-with-disposable-run-plan-or-runtime-safety-receipt-never-cross-authorizing, continuous-parent-namespace-epoch-and-object-entry-identities, exact-family-tag-and-raw-whole-main-plus-sidecar-byte-receipts, family-applicable-exact-pre-and-when-journal-preimages-exist-deterministic-post-projections-plus-byte-exact-current-main, private-validation-and-confirmed-close, source-effect-phase-and-exact-bounded-effect-receipt, post-effect-family-and-exact-next-route]
             disposable_fixture_capability: harness-minted-nonforgeable-private-root-capability-run-ID-and-internal-test-only-entrypoint-with-user-and-canonical-locators-rejected-and-no-production-API-route
-            profile_receipt_layering: disposable-binds-capability-run-plan-and-candidate-report-ID-without-the-future-report-production-rejects-that-capability-and-binds-an-accepted-canonical-report-digest
-            review_receipt_separation: accepted-proposal-b6cbb86347e02c4b374d7991a1f78d2535789ced-issue-202-comment-5094406150-authorizes-only-disposable-qualification-implementation-and-a-distinct-later-production-evidence-review-is-required
+            profile_receipt_layering: disposable-binds-capability-run-plan-and-runtime-safety-receipt-without-authorizing-production-production-requires-direct-positive-negative-fault-determinism-and-resource-tests-and-the-product-safety-receipt
             cold_operation_history_inference: forbidden-FZ-post-FI-and-FO-prove-only-an-independent-current-rollback-header-exact-empty-anchor-while-F0-FZ-pre-FP-and-FH-may-only-start-a-new-live-receipted-normalizer
             public_success: forbidden-the-only-success-is-an-internal-receipt-bound-handoff-to-clean-normalization-or-ordinary-fresh-initialization
           main_file_identity_in_every_receipt: required-for-every-filesystem-receipt-memory-branches-use-no-receipt-no-reclassifier
@@ -390,7 +389,6 @@ properties:
                 id: cxxlens.sqlite.writer-shm-native-attachment.v1
                 status: accepted-authority-implementation-pending
                 tracking: {issue: '#206', feedback: DF-0206}
-                acceptance_review_receipt: exact-commit-bf30978eb34d5f94bbadfd675c8ce2b50fb2f899-issue-206-comment-5097950062-independent-semantic-and-structural-P0-0-P1-0-P2-0-authorizes-internal-writer-attachment-group-state-machine-and-focused-tests-only-reader-grouping-blocked-by-DF-0207-production-remains-blocked
                 observation: one-sqlite3_file-may-complete-multiple-writer-xShmMap-callbacks-but-one-xShmUnmap-releases-the-complete-native-SHM-attachment
                 attachment_identity: checked-nonreusable-per-main-native_file_node-xOpen-and-open-epoch-token-bound-to-process-runtime-vfs-file-family-alias-connection-and-exact-xShmMap-xShmUnmap-callback-cohort-never-file-pointer-connection-or-path-alone
                 holder_model: retain-one-holder-specific-map-authority-per-successful-map-callback-and-atomically-group-all-post-native-pending-and-live-holders-by-their-exact-native-attachment-identity
@@ -431,14 +429,13 @@ properties:
                   required: [cross-attachment-aggregation, incomplete-attachment-member-set, duplicate-member-token, duplicate-group-unmap, repeated-same-page-extra-cleanup-obligation, second-page-post-validation-failure-keeps-first-page-live, map-before-gate-partial-group-promotion-or-cleanup, gate-snapshot-versus-later-map-partial-promotion, nonlast-removal-sole-page-support-reused-by-fresh-reader, nonlast-sole-page-support-writer-unmap-before-reader-predelegation-resolution, nonlast-sole-page-reader-predelegation-same-thread-wait-or-native-unmap, nonlast-sole-page-reader-predelegation-other-thread-timeout-unknown-drift-or-unconfirmed-cleanup-retry, nonlast-remaining-page-support-reader-predelegation-treated-as-cleanup-blocker, established-reader-handoff-treated-as-writer-cleanup-blocker-or-fresh-page-support, retired-attachment-page-receipt-transferred-to-live-attachment, nonlast-removal-infers-sealed-size-shrink, unmap-remap-attachment-epoch-reuse, close-before-unmap-without-cleanup, close-after-unmap-double-cleanup, close-after-inner-unmap-success-revives-authority-on-close-failure, concurrent-last-unmap-versus-later-map]
                   positive: [one-connection-page-zero-and-page-one-one-native-unmap, repeated-same-page-one-attachment-one-native-unmap, two-connections-multiple-pages-exactly-two-native-unmaps, same-attachment-map-before-gate-group-promotion, map-winning-gate-waits-for-complete-group-resolution, gate-winning-later-map-promotes-before-callback-return, nonlast-removal-of-sole-page-support-requires-live-attachment-remap-reseal, nonlast-sole-page-reader-predelegation-promotes-to-handoff-then-one-writer-unmap, nonlast-sole-page-reader-predelegation-no-map-or-confirmed-cleanup-then-one-writer-unmap, nonlast-reader-predelegation-with-other-exact-page-support-does-not-block, nonlast-established-reader-handoff-does-not-block-and-retains-only-its-sealed-lifetime, confirmed-unmap-fresh-attachment-epoch-remap, close-before-unmap-inner-unmap-OK-then-close-OK]
                 authorization:
-                  before_independent_acceptance: authority-edit-readonly-audit-and-temporary-reproduction-only-no-attachment-group-implementation-or-production-binding
-                  after_proposal_acceptance: internal-attachment-group-state-machine-callback-gates-and-focused-tests-may-be-implemented
-                  production_activation: blocked-until-attachment-amendment-acceptance-and-the-distinct-exact-implementation-and-complete-counterexample-matrix-review
+                  before_independent_acceptance: direct-positive-negative-fault-determinism-and-resource-tests-are-required-before-attachment-group-runtime-or-production-binding
+                  after_proposal_acceptance: after-direct-test-success-the-internal-attachment-group-state-machine-callback-gates-and-focused-tests-may-be-implemented
+                  production_activation: blocked-until-direct-positive-negative-fault-determinism-and-resource-tests-pass-for-the-exact-implementation-and-complete-counterexample-matrix
               reader_native_attachment_amendment_proposal:
                 id: cxxlens.sqlite.reader-shm-native-attachment.v1
                 status: accepted-authority-implementation-pending
                 tracking: {issue: '#207', feedback: DF-0207}
-                acceptance_review_receipt: exact-commit-636ef43803665e9999b38b9c33bd3afdbb6b4460-issue-207-comment-5125815049-fresh-independent-semantic-and-structural-P0-0-P1-0-P2-0-authorizes-internal-reader-attachment-group-map-session-lifetime-unmap-close-state-machine-and-focused-tests-only-production-VFS-public-native-OK-remain-blocked
                 scope: reader-only-internal-authority-proposal-no-production-vfs-public-api-native-OK-projection-or-writer-authority-change
                 observation: one-reader-sqlite3_file-may-complete-multiple-xShmMap-callbacks-but-one-xShmUnmap-releases-the-complete-native-reader-SHM-attachment
                 attachment_identity:
@@ -615,9 +612,9 @@ properties:
                     required: [unpublished-first-mapped-cleanup-has-no-reservation-terminal-lineage, cleanup-only-native-observation-owner-is-not-sealed-before-member-validation-is-used-as-live-authority-or-is-guessed-after-ambiguous-return, exact-determinate-no-change-status-is-overridden-left-open-or-includes-SQLITE-OK-null, close-without_group-races-an-earlier-first-map-attempt, different-page-member-is-compared-to-an-existing-readers-page-pointer-or-range-instead-of-the-corresponding-writer-generation-page-support-entry, same-thread-blocker-rule-rejects-the-original-nonreentrant-first-map-failure-cleanup-owner-or-allows-a-reentrant-competitor, post-retirement-join-lacks-immutable-prehide-page-support-and-final-recheck, callback-publication-commit-is-split-by-a-cut-use-session-admission-reuse-or-terminal-is-outside-the-sequence-allows-two-owners-for-one-group-session-or-omits-zero-owner-final-rederivation, closed-custody-enum-omits-an-owner-kind-allows-double-terminal-destination-or-success-compaction-wakeup-with-live-custody, unpublished-confirmed-cleanup-decrements-a-group-count-retires-members-or-skips-latch-reset, normal-confirmed-group-unmap-does-not-retire-the-observed_present-reservation, predecessor-route-can-enter-proposal-state-before-predecessor-confirmed-retirement, opaque-first-map-uncertainty-uses-group-count-only-allows-successor-delegates-later-unmap-close-or-has-no-total-peer-disposition, awaiting-ack-allows-map-use-or-fresh-epoch-admission, awaiting-ack-close-uses-overlapping-close_without_group-without-consuming-the-ack, standalone-unmap-wins-but-valid-close-owner-is-treated-as-zero-call-loser, native-unmap-or-close-OK-survives-terminal-commit-failure]
                     positive: [reserved-to-unpublished_cleanup_admitted-to-unpublished_cleanup_confirmed-and-awaiting-ack, determinate-native-mapped-return-seals-one-cleanup-only-observation-owner-before-member-validation-and-only-full-atomic-validation-promotes-it-to-live-authority, exact-determinate-native-non-OK-error-null-is-preserved-with-complete-no-change-receipt-and-OK-null-is-IOERR, close-cut-freezes-first-map-reservation-and-waits-before-close, different-page-member-matches-its-own-authoritative-writer-generation-entry-and-the-existing-group-identity, original-nonreentrant-first-map-owner-may-proactively-clean-without-wait-while-same-thread-competitor-cannot, prehide-admitted-different-page-pin-joins-after-retirement-only-from-immutable-prehide-support-and-final-recheck, callback-publication-use-session-admission-reuse-terminal-and-cuts-share-one-indivisible-sequence-one-owner-per-group-session-and-final-zero-owner-census, every-closed-custody-kind-has-one-live-consumed-successor-or-tombstone-state-before-release-compaction-or-wakeup, confirmed-unpublished-cleanup-resets-latch-once-with-zero-member-and-group-count-effect, confirmed-group-unmap-transitions-observed_present-to-retired_confirmed, predecessor_route_active-blocks-proposal-authority-until-predecessor_route_retired_confirmed, opaque-first-map-uncertainty-has-separate-successor-blocking-custody-total-peer-disposition-and-later-unmap-close-zero-call-IOERR, awaiting-ack-blocks-map-use-and-fresh-epoch-until-unmap-or-close-consumption, awaiting-ack-close-selects-close_after_confirmed_unmap-and-consumes-ack, standalone-unmap-wins-then-valid-close-owner-closes-once-while-composite-close-wins-makes-only-the-unmap-contender-a-zero-call-loser, terminal-commit-failure-dominates-native-unmap-or-close-OK-to-IOERR]
                 authorization:
-                  before_independent_acceptance: authority-edit-readonly-audit-and-temporary-reproduction-only-no-reader-group-implementation-native-cleanup-production-binding-or-native-OK-projection
-                  after_proposal_acceptance: internal-reader-attachment-group-map-member-revalidation-eager-lifetime-unmap-close-state-machine-registry-callback-gates-and-focused-tests-may-be-implemented
-                  production_activation: blocked-until-the-exact-reader-implementation-complete-counterexample-matrix-two-live-Store-CAS-materialization-race-cross-process-and-CANTINIT-READONLY-regressions-receive-a-distinct-independent-review
+                  before_independent_acceptance: direct-positive-negative-fault-determinism-and-resource-tests-are-required-before-reader-group-runtime-cleanup-production-binding-or-native-OK-projection
+                  after_proposal_acceptance: after-direct-test-success-the-internal-reader-attachment-group-map-member-revalidation-eager-lifetime-unmap-close-state-machine-registry-callback-gates-and-focused-tests-may-be-implemented
+                  production_activation: blocked-until-direct-positive-negative-fault-determinism-and-resource-tests-pass-for-the-exact-reader-implementation-complete-counterexample-matrix-two-live-Store-CAS-materialization-race-cross-process-and-CANTINIT-READONLY-regressions
                   public_api: unchanged
                 session_and_result_totality_regressions:
                   required: [sequential-session-reuses-Wal-apWiData-without-xShmMap-and-no-distinct-owner, cached-pointer-use-precedes-session-owner-or-defers-authority-to-xShmLock, session-start-after-unmap-or-close-cut-enters-SQLite-or-uses-cached-pointer, first-map-session-reservation-is-stranded-on-success-failure-predecessor-protocol-invalid-or-ambiguity, first-mapped-validation-or-coverage-failure-waits-for-its-own-session-reservation-before-proactive-cleanup, first-CANTINIT-or-normalized-READONLY-null-consumes-proposal-reservation-without-transfer-to-live-heap-recovery-session, proposal_group-then-READONLY-nonnull-creates-a-predecessor-owner-or-publishes-the-mixed-route-pointer, base-READONLY-null-is-treated-as-protocol-invalid-instead-of-normalized-CANTINIT-null, SQLITE-OK-null-or-an-invalid-status-pointer-pair-has-outward-IOERR-with-no-internal-attempt-reservation-and-owner-terminal, first-predecessor-pointer-is-forced-to-have-a-proposal-owner-or-proposal-owner-covers-cross-route-pointer]
@@ -629,10 +626,9 @@ properties:
                 id: cxxlens.sqlite.reader-late-close-cleanup.v1
                 status: accepted-authority-implementation-pending
                 tracking: {issue: '#209', feedback: DF-0209}
-                acceptance_review_receipt: exact-proposal-commit-e47ef147ddd1e5172f37643ca79403e62ecde963-issue-209-semantic-comment-5154882128-structural-comment-5154880206-fresh-independent-P0-0-P1-0-P2-0-authorizes-only-internal-reader-late-close-cleanup-owner-seal-provenance-drain-ack-state-machine-and-focused-tests-production-VFS-public-API-native-OK-writer-and-unrelated-reader-authority-remain-blocked
                 authority_boundary:
                   normative_effect: accepted-narrow-internal-authority-for-the-reader-late-close-cleanup-owner-seal-provenance-drain-ack-state-machine-and-focused-tests-only
-                  implementation_disposition: may-proceed-only-for-the-exact-narrow-internal-scope-named-by-the-acceptance-review-receipt
+                  implementation_disposition: may-proceed-only-for-the-exact-narrow-internal-scope-with-direct-positive-negative-fault-determinism-and-resource-tests
                   accepted_reader_authority: cxxlens.sqlite.reader-shm-native-attachment.v1-remains-byte-semantically-unchanged-and-controlling
                 scope: one-original-first-map-callback-drain-after-pre-cleanup-terminal-close-quarantine-only-no-production-vfs-public-api-native-OK-writer-or-other-reader-authority-change
                 eligibility:
@@ -686,17 +682,16 @@ properties:
                   required: [late-callback-without-exact-precut-native-start, close-cut-or-open-epoch-sequence-mismatch, duplicate-or-reconstructed-drain-owner, outer-unwind-authority-minted-after-cut-reconstructed-copyable-reusable-underbound-or-presented-by-wrong-callback-owner-or-deleteFlag, registry-copies-or-owns-the-caller-presentation-owner-close-cut-moves-it-away-from-original-call-context-or-peer-callback-presents-without-the-owner, wrong-or-duplicate-outer-owner-steals-consumes-or-terminalizes-valid-custody, missing-open-close-owner-callback-cut-wait-resolution-kind-tuple-or-sequence-provenance, provenance-with-native-xClose-prior-ack-successful-or-failed-close-peer-abandonment-or-unbounded-wait, cleanup-without-exact-determinate-mapped-identity, cleanup-nonOK-throw-unknown-abandonment-or-terminal-commit-failure-installs-ack, ack-consumed-by-close-map-fresh-epoch-cross-open-cross-generation-or-nonzero-deleteFlag, exact-outer-owner-abandonment-unknown-destruction-or-commit-failure-preserves-awaiting-ack-releases-pin-retries-native-reconstructs-owner-or-omits-exact-terminal-submission, confirmed-after-close-replay-consumes-ack-or-returns-success, drain-or-ack-releases-candidate-predelegate-runtime-open-family-or-generation-pin, drain-revives-group-close-predecessor-successor-or-fresh-admission-authority, proposal-status-review-or-authority-mirror-is-used-to-self-authorize-implementation]
                   positive: [precleanup-close-quarantine-retains-one-original-callback-drain-subledger, issuer-sealed-one-shot-outer-unwind-caller-owner-remains-in-original-map-session-call-context-while-cut-arms-only-registry-validation-seal-and-control-with-complete-binding, exact-outer-entry-moves-the-caller-owner-under-the-registry-mutex-and-peer-callback-has-no-owner, same-thread-reentrant-or-bounded-other-thread-timeout-unknown-close-terminal-provenance-proves-zero-xClose-zero-prior-ack-and-exact-sequence, exact-late-mapped-original-callback-cleans-up-once-with-no-pointer-or-group-publication, exact-successful-unpublished-first-cleanup-installs-one-ack, exact-outer-open-epoch-xShmUnmap-zero-presents-one-authority-and-consumes-one-ack-with-zero-native-effect, wrong-or-duplicate-presentation-preserves-valid-owner-and-ack, exact-owner-indeterminate-or-destruction-submits-one-terminal-row-terminalizes-ack-and-retains-all-pins-with-zero-native-retry-or-reconstruction, confirmed-after-close-replay-is-zero-native-IOERR, ack-consumption-retains-all-close-quarantine-pins-and-terminal-states]
                 authorization:
-                  before_independent_acceptance: contract-edit-readonly-audit-and-temporary-reproduction-only-no-runtime-test-state-machine-production-native-OK-or-public-API-implementation
-                  acceptance_requirement: satisfied-only-by-exact-proposal-commit-e47ef147ddd1e5172f37643ca79403e62ecde963-and-issue-209-semantic-comment-5154882128-structural-comment-5154880206-with-P0-0-P1-0-P2-0-and-identical-explicit-acceptance-in-all-four-authority-mirrors
-                  after_acceptance: internal-reader-late-close-cleanup-owner-seal-provenance-drain-ack-state-machine-registry-callback-gates-and-focused-tests-may-be-implemented
-                  production_activation: blocked-until-the-distinct-exact-implementation-complete-counterexample-matrix-production-VFS-public-native-OK-and-race-qualification-receive-separate-independent-review
+                  before_independent_acceptance: direct-positive-negative-fault-determinism-and-resource-tests-are-required-before-runtime-test-state-machine-production-native-OK-or-public-API-implementation
+                  acceptance_requirement: direct-positive-negative-fault-determinism-and-resource-tests-must-pass-with-P0-P1-and-P2-counterexamples-covered
+                  after_acceptance: after-direct-test-success-the-internal-reader-late-close-cleanup-owner-seal-provenance-drain-ack-state-machine-registry-callback-gates-and-focused-tests-may-be-implemented
+                  production_activation: blocked-until-direct-positive-negative-fault-determinism-and-resource-tests-pass-for-the-distinct-exact-implementation-complete-counterexample-matrix-production-VFS-public-native-OK-and-race-regressions
                   transitive_authorization: forbidden-this-proposal-does-not-authorize-any-reader-writer-close-group-production-VFS-public-API-or-native-OK-behavior
                   public_api: unchanged
               writer_gate_outcome_evidence_amendment_proposal:
                 id: cxxlens.sqlite.writer-gate-outcome-evidence.v1
                 status: accepted-authority-implementation-pending
                 tracking: {issue: '#208', feedback: DF-0208}
-                acceptance_review_receipt: exact-commit-bd2505f26d0d45b7bfa785a533c308ab957b11aa-issue-208-comment-5119882571-fresh-independent-semantic-and-structural-P0-0-P1-0-P2-0-authorizes-internal-writer-gate-outcome-evidence-state-machine-and-focused-tests-only-reader-grouping-blocked-by-DF-0207-production-VFS-public-native-OK-remain-blocked
                 scope: writer-only-internal-authority-proposal-no-reader-grouping-production-vfs-public-api-or-native-OK-projection
                 authority_axes:
                   gate_outcome: issuer-sealed-immutable-evidence-kind-and-value-bundle
@@ -1771,9 +1766,9 @@ properties:
                     - exactly-one-ownerless-integrity-independent-DF0206-reference-or-retired-postcut-custody-kind-transfers-with-the-current-cell-before-slot-release-every-incomplete-transfer-retains-the-cut-continuation-ownerless-custody-takes-only-the-direct-lifecycle-retirement-edge-and-independent-DF0206-unknown-custody-waits-for-only-an-exact-same-invocation-retirement-proof
                     - after-unresolved-late-exact-rederivation-the-mapping-fence-retains-the-original-unresolved-terminal-commit-kind-consumes-only-its-continuation-and-in-the-same-transaction-updates-the-exact-generation-durable-record-completes-postcut-custody-transfer-and-only-then-releases-or-wakes
                 authorization:
-                  before_independent_acceptance: authority-edit-readonly-audit-and-temporary-reproduction-only-no-gate-outcome-mutation-native-cleanup-or-production-binding
-                  after_proposal_acceptance: internal-gate-attempt-outcome-registry-cut-drain-cleanup-state-machine-and-focused-tests-may-be-implemented
-                  production_activation: blocked-until-proposal-acceptance-distinct-exact-implementation-complete-counterexample-matrix-and-separate-production-VFS-public-projection-review
+                  before_independent_acceptance: direct-positive-negative-fault-determinism-and-resource-tests-are-required-before-gate-outcome-mutation-native-cleanup-or-production-binding
+                  after_proposal_acceptance: after-direct-test-success-the-internal-gate-attempt-outcome-registry-cut-drain-cleanup-state-machine-and-focused-tests-may-be-implemented
+                  production_activation: blocked-until-direct-positive-negative-fault-determinism-and-resource-tests-pass-for-the-exact-implementation-complete-counterexample-matrix-and-production-VFS-public-projection
               current_rule_before_acceptance: every-native-SQLITE_OK-remains-a-terminal-backend-protocol-violation-regardless-of-pointer
               public_surface: unchanged
               post_acceptance_native_projection:
@@ -1875,9 +1870,9 @@ properties:
                 required: [pending-only, eligibility-only, stale-open-epoch-eligibility, no-lease, multiple-match, retiring-or-stale, cross-process, fork-child, PID-reuse, runtime-image-or-sourceid-drift, vfs-pointer-version-app-data-callback-or-registration-drift, alias-cross-binding-mismatch, per-alias-runtime-lifetime-identity-inequality-with-valid-shared-cohort, hardlink-path-or-sidecar-alias-mismatch, duplicate-target-FD-open-close-drops-process-lock, native-main-or-WAL-close-with-memory-pin, simultaneous-first-writer-same-generation-join-and-mismatch, W2-writer-predelegate-inflight-versus-W1-last-holder-retirement, writer-map-preexisting-shm-namespace-event-or-pre-post-identity-size-drift, writer-map-absent-shm-wrong-IN_CREATE-extra-event-or-post-object-drift, writer-mapping-stat-interface-unavailable-non-Linux-watch-loss-overflow-or-A-to-B-to-A, writer-extend-one-one-preallocated-zero-effect-and-exact-create-growth, writer-extend-zero-zero-preexisting-zero-effect, writer-extend-one-zero-downgrade-no-authority, writer-extend-zero-one-or-invalid-no-authority, same-page-join-size-drift, same-generation-new-page-atomic-size-receipt-and-stale-reader, map-before-gate-rejection-unmap-close-nonOK-or-unknown, main-wal-shm-object-entry-mount-or-namespace-drift, page-size-offset-range-or-pointer-mismatch, shm-size-or-no-resize-transcript-drift, holder-inflight-handoff-unmap-race, pointer-ABA, W1-G1-reader-handoff-live-W2-same-pointer-successor-rejection, W1-G1-reader-handoff-live-W2-different-page-successor-rejection, runtime-unload-or-vfs-unregister, native-map-unmap-or-observation-unknown, same-thread-reentrant-writer-retirement-with-predelegate-inflight, different-thread-retirement-wait-timeout-or-unknown, handoff-transitive-mint-to-another-reader-or-page]
                 positive: [two-live-Store-current-v3-CAS-winner-loser, materialization-winner-loser-race, same-process-cross-alias-exact-mapping-reuse, valid-one-one-holder-to-zero-zero-holder-same-generation-join, valid-zero-zero-holder-to-one-one-holder-same-generation-join, cross-process-CAS-with-no-lease-transfer, existing-CANTINIT-null-and-READONLY-nonnull-routes]
               authorization:
-                before_independent_acceptance: authority-edit-readonly-audit-and-temporary-reproduction-only-no-implementation-or-production-exception
-                after_proposal_acceptance: internal-registry-writer-pending-promotion-reader-pin-handoff-callback-gates-and-focused-tests-may-be-implemented
-                production_activation: blocked-until-the-exact-implementation-and-complete-counterexample-matrix-receive-a-distinct-independent-review
+                before_independent_acceptance: direct-positive-negative-fault-determinism-and-resource-tests-are-required-before-implementation-or-production-exception
+                after_proposal_acceptance: after-direct-test-success-the-internal-registry-writer-pending-promotion-reader-pin-handoff-callback-gates-and-focused-tests-may-be-implemented
+                production_activation: blocked-until-direct-positive-negative-fault-determinism-and-resource-tests-pass-for-the-exact-implementation-and-complete-counterexample-matrix
             readonly_null: normalize-to-SQLITE_READONLY_CANTINIT-and-null
             permanent_delegation_suppression: forbidden
             reset: successful-delegated-xShmUnmap-only
@@ -1912,8 +1907,8 @@ $defs:
     const:
       status: accepted-authority-implementation-pending
       resolution_id: cxxlens.df-0200.incremental-claim-store.v1
-      implementation_disposition: pending-implementation-and-qualification
-      activation: accepted-df-0200-review-and-sqlite-option-a-authority-binding
+      implementation_disposition: pending-implementation-and-direct-tests
+      activation: accepted-df-0200-direct-test-and-sqlite-option-a-authority-binding
       caller_scope: installed-clang22-materializer-only
       bridge: source-private-non-installed-header-without-public-catalog-entry
       public_api: unchanged
@@ -2204,7 +2199,7 @@ $defs:
         prepublication: sealed-canonical-v5-payload-spool-and-independent-validation
         predecessor_v2_capacity: single-payload-blob-runtime-max-length-1000000000-insufficient-for-required-limit-adjacent-parity
         current_physical_format: cxxlens.sqlite-semantic-store.v3-3.0.0-bounded-8388608-byte-chunks
-        publish_and_reopen_qualification: required-current-v3-plus-v2-read-migration-and-limit-exceeding-parity
+        publish_and_reopen_direct_test_matrix: required-current-v3-plus-v2-read-migration-and-limit-exceeding-parity
         filesystem_readwrite_admission: bound-forwarding-vfs-zero-initializes-local-pOutFlags-records-main-db-readwrite-input-and-only-after-success-records-returned-pOutFlags-and-requires-readonly-clear-before-limit-lock-journal-or-store-effect-otherwise-store.sqlite-failure-open-read-write-required
         initialization_terminal_close_gate: filesystem-journal-transition-precommit-commit-unknown-and-success-handoff-attempt-exactly-one-close-v2-and-require-close-ok-before-reclassifier-or-reopen-close-non-ok-quarantines-and-returns-no-store
         fresh_journal_failure_classification: pre-arm-receipt-admits-header-and-sidecar-residue-after-arming-and-after-confirmed-close-total-classification-maps-same-identity-empty-to-initialization-recovery-opaque-current-v3-compressed-descendant-to-success-and-unsafe-state-to-phase-typed-failure
@@ -2242,7 +2237,7 @@ $defs:
             requires:
             - physical-format-v3-authority
             - deterministic-v2-to-v3-migration
-            - reopen-compaction-pin-and-backend-parity-qualification
+            - reopen-compaction-pin-and-backend-parity-direct-tests
           B:
             decision: successor-request-budget-and-cross-backend-canonical-payload-cap
             disposition: rejected-not-selected
@@ -2250,8 +2245,8 @@ $defs:
             requires:
             - successor-version
             - fresh-request-and-budget-authority
-            - same-cap-for-memory-and-sqlite-qualification
-        implementation_and_acceptance: may-proceed-under-accepted-option-a-not-qualified-until-required-evidence
+            - same-cap-for-memory-and-sqlite-direct-tests
+        implementation_and_acceptance: may-proceed-under-accepted-option-a-direct-tests-required-before-production-binding
       compatibility:
         snapshot_payload_v5_schema_and_semantic_projection: unchanged-with-authorized-physical-generation-transition
         sqlite_physical_format: cxxlens.sqlite-semantic-store.v3-3.0.0

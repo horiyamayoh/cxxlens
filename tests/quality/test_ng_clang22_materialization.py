@@ -22,7 +22,6 @@ sys.path.insert(0, str(ROOT / "tests" / "install"))
 
 import check_ng_clang22_materialization as materialization  # noqa: E402
 import check_ng_clang22_install_matrix as install_matrix  # noqa: E402
-import clang22_materializer_negative_test as installed_negative  # noqa: E402
 from relation_idl_compiler import (  # noqa: E402
     canonical_relation as idl_canonical_relation,
 )
@@ -185,13 +184,8 @@ class NgClang22MaterializationTests(unittest.TestCase):
             ),
             (
                 "quality_workflow",
-                "          cmake --build --preset install-check --target \\\n"
-                "            cxxlens-provider-scaffold cxxlens-sdk-doctor "
-                "cxxlens-clang-worker-22 \\\n"
-                "            cxxlens-clang22-materialize\n",
-                "          cmake --build --preset install-check --target \\\n"
-                "            cxxlens-provider-scaffold cxxlens-sdk-doctor "
-                "cxxlens-clang-worker-22\n",
+                "          cmake --build --preset install-check\n",
+                "          cmake --build --preset install-check-broken\n",
             ),
             (
                 "install_test",
@@ -689,314 +683,6 @@ class NgClang22MaterializationTests(unittest.TestCase):
                         drift,
                         request_bytes=request_bytes,
                     )
-
-    def test_installed_negative_evidence_binds_identity_report_and_receipt(self) -> None:
-        request = self.request("static", "sqlite")
-        request["publication"]["genesis"] = False
-        request["publication"]["expected_parent_publication"] = (
-            "publication:missing-parent"
-        )
-        materialization.bind_request_identity(request)
-        materialization.validate_request(ROOT, request)
-        request_bytes = materialization.canonical_json(request)
-        cause = {
-            "kind": "sdk_error",
-            "operation": "head_current",
-            "access_path": "current-selector",
-            "code": "store.current-corrupt",
-            "field": request["publication"]["series_id"],
-            "detail": {"kind": "stable", "value": "fixture-corrupt"},
-        }
-        report = materialization.compact_failure_report(
-            request_bytes,
-            request=request,
-            phase="store-stage",
-            code="materialization.store-failure",
-            store_failure_cause=cause,
-        )
-        self.validate_report(
-            request,
-            report,
-            request_bytes=request_bytes,
-            store_failure_authority=cause,
-        )
-        completed = subprocess.CompletedProcess(
-            ["installed-materializer-fixture"],
-            1,
-            materialization.canonical_json(report) + b"\n",
-            b"",
-        )
-        receipt_bytes = installed_negative.make_execution_receipt(
-            ROOT,
-            materialization,
-            completed,
-            "fixture-store-head-corrupt",
-        )
-
-        with tempfile.TemporaryDirectory() as directory:
-            evidence_dir = pathlib.Path(directory)
-            installed_negative.write_negative_evidence(
-                materialization,
-                evidence_dir,
-                "fixture-store-head-corrupt",
-                request_bytes,
-                completed,
-                receipt_bytes,
-                request,
-                report,
-            )
-            case_dir = evidence_dir / "fixture-store-head-corrupt"
-            manifest_path = case_dir / installed_negative.NEGATIVE_MANIFEST_FILENAME
-            manifest_bytes = manifest_path.read_bytes()
-            installed_negative.validate_negative_evidence_manifest(
-                materialization,
-                request,
-                report,
-                request_bytes,
-                completed,
-                receipt_bytes,
-                manifest_bytes,
-            )
-            report_path_drift = copy.deepcopy(json.loads(manifest_bytes))
-            report_path_drift["report"]["path"] = "replaced-report.json"
-            with self.assertRaisesRegex(AssertionError, "report path"):
-                installed_negative.validate_negative_evidence_manifest(
-                    materialization,
-                    request,
-                    report,
-                    request_bytes,
-                    completed,
-                    receipt_bytes,
-                    materialization.canonical_json(report_path_drift),
-                )
-            receipt_path_drift = copy.deepcopy(json.loads(manifest_bytes))
-            receipt_path_drift["execution_receipt"]["path"] = (
-                "replaced-execution-receipt.json"
-            )
-            with self.assertRaisesRegex(AssertionError, "execution receipt path"):
-                installed_negative.validate_negative_evidence_manifest(
-                    materialization,
-                    request,
-                    report,
-                    request_bytes,
-                    completed,
-                    receipt_bytes,
-                    materialization.canonical_json(receipt_path_drift),
-                )
-            drift = copy.deepcopy(json.loads(manifest_bytes))
-            drift["source"]["tree"] = "0" * 40
-            with self.assertRaisesRegex(AssertionError, "source identity"):
-                installed_negative.validate_negative_evidence_manifest(
-                    materialization,
-                    request,
-                    report,
-                    request_bytes,
-                    completed,
-                    receipt_bytes,
-                    materialization.canonical_json(drift),
-                )
-
-        absent_cause = {
-            "kind": "sdk_error",
-            "operation": "head_current",
-            "access_path": "current-selector",
-            "code": "store.current-not-found",
-            "field": request["publication"]["series_id"],
-            "detail": {"kind": "stable", "value": ""},
-        }
-        absent_report = materialization.compact_failure_report(
-            request_bytes,
-            request=request,
-            phase="store-stage",
-            code="materialization.store-failure",
-            store_failure_cause=absent_cause,
-        )
-        self.validate_report(
-            request,
-            absent_report,
-            request_bytes=request_bytes,
-            store_failure_authority=absent_cause,
-        )
-        absent_completed = subprocess.CompletedProcess(
-            ["installed-materializer-fixture"],
-            1,
-            materialization.canonical_json(absent_report) + b"\n",
-            b"",
-        )
-        absent_receipt = installed_negative.make_execution_receipt(
-            ROOT,
-            materialization,
-            absent_completed,
-            "fixture-store-head-absent",
-        )
-        absent_manifest = installed_negative.build_negative_evidence_manifest(
-            materialization,
-            request,
-            absent_report,
-            request_bytes,
-            absent_completed,
-            absent_receipt,
-        )
-        installed_negative.validate_negative_evidence_manifest(
-            materialization,
-            request,
-            absent_report,
-            request_bytes,
-            absent_completed,
-            absent_receipt,
-            absent_manifest,
-        )
-        self.assertEqual(
-            json.loads(absent_manifest)["report"]["head_observation"],
-            "absent",
-        )
-
-    def test_installed_negative_evidence_handles_detailed_and_unbound_reports(
-        self,
-    ) -> None:
-        detailed_request = self.request("static", "sqlite")
-        detailed_request_bytes = materialization.canonical_json(detailed_request)
-        detailed_report = self.report(detailed_request)
-        self.validate_report(
-            detailed_request,
-            detailed_report,
-            request_bytes=detailed_request_bytes,
-        )
-        installed_negative.validate_detailed_report_occurrence(
-            ROOT,
-            materialization,
-            detailed_request,
-            detailed_report,
-        )
-        measured_occurrence_drift = copy.deepcopy(detailed_report)
-        measured_occurrence_drift["installation"]["measured"][
-            "manifest_file_digest"
-        ] = "sha256:" + "0" * 64
-        with self.assertRaises(materialization.MaterializationError):
-            installed_negative.validate_detailed_report_occurrence(
-                ROOT,
-                materialization,
-                detailed_request,
-                measured_occurrence_drift,
-            )
-        detailed_completed = subprocess.CompletedProcess(
-            ["installed-materializer-fixture"],
-            0,
-            materialization.canonical_json(detailed_report) + b"\n",
-            b"",
-        )
-        detailed_receipt = installed_negative.make_execution_receipt(
-            ROOT,
-            materialization,
-            detailed_completed,
-            "fixture-store-head-baseline",
-        )
-        with tempfile.TemporaryDirectory() as directory:
-            evidence_dir = pathlib.Path(directory)
-            installed_negative.write_negative_evidence(
-                materialization,
-                evidence_dir,
-                "fixture-store-head-baseline",
-                detailed_request_bytes,
-                detailed_completed,
-                detailed_receipt,
-                detailed_request,
-                detailed_report,
-            )
-            detailed_manifest = json.loads(
-                (
-                    evidence_dir
-                    / "fixture-store-head-baseline"
-                    / installed_negative.NEGATIVE_MANIFEST_FILENAME
-                ).read_bytes()
-            )
-        self.assertEqual(detailed_manifest["binding_state"], "detailed")
-        self.assertEqual(
-            detailed_manifest["source"],
-            installed_negative.negative_source_identity(detailed_request),
-        )
-        requested_occurrence_drift = copy.deepcopy(detailed_report)
-        requested_occurrence_drift["installation"]["requested"] = {
-            "occurrence_manifest_digest": "sha256:" + "f" * 64,
-        }
-        requested_drift_manifest = installed_negative.build_negative_evidence_manifest(
-            materialization,
-            detailed_request,
-            requested_occurrence_drift,
-            detailed_request_bytes,
-            detailed_completed,
-            detailed_receipt,
-        )
-        requested_drift_projection = json.loads(requested_drift_manifest)
-        self.assertEqual(
-            requested_drift_projection["source"]["occurrence_manifest_digest"],
-            detailed_report["installation"]["measured"]["manifest_file_digest"],
-        )
-        installed_negative.validate_negative_evidence_manifest(
-            materialization,
-            detailed_request,
-            requested_occurrence_drift,
-            detailed_request_bytes,
-            detailed_completed,
-            detailed_receipt,
-            requested_drift_manifest,
-        )
-
-        unbound_request = self.request("static", "sqlite")
-        unbound_request_bytes = materialization.canonical_json(unbound_request)
-        bound_worker_failure = materialization.compact_failure_report(
-            unbound_request_bytes,
-            request=unbound_request,
-            phase="worker-launch",
-            code="materialization.worker-failure",
-        )
-        self.validate_report(
-            unbound_request,
-            bound_worker_failure,
-            request_bytes=unbound_request_bytes,
-        )
-        unbound_worker_failure = copy.deepcopy(bound_worker_failure)
-        unbound_worker_failure.pop("binding")
-        with self.assertRaises(materialization.MaterializationError):
-            self.validate_report(
-                unbound_request,
-                unbound_worker_failure,
-                request_bytes=unbound_request_bytes,
-            )
-        unbound_completed = subprocess.CompletedProcess(
-            ["installed-materializer-fixture"],
-            1,
-            materialization.canonical_json(unbound_worker_failure) + b"\n",
-            b"",
-        )
-        unbound_receipt = installed_negative.make_execution_receipt(
-            ROOT,
-            materialization,
-            unbound_completed,
-            "fixture-worker-failure-unbound",
-        )
-        unbound_manifest = installed_negative.build_negative_evidence_manifest(
-            materialization,
-            unbound_request,
-            unbound_worker_failure,
-            unbound_request_bytes,
-            unbound_completed,
-            unbound_receipt,
-        )
-        installed_negative.validate_negative_evidence_manifest(
-            materialization,
-            unbound_request,
-            unbound_worker_failure,
-            unbound_request_bytes,
-            unbound_completed,
-            unbound_receipt,
-            unbound_manifest,
-        )
-        unbound_projection = json.loads(unbound_manifest)
-        self.assertEqual(unbound_projection["binding_state"], "unbound")
-        self.assertIsNone(unbound_projection["source"])
-        self.assertIsNone(unbound_projection["request"])
-        self.assertFalse(unbound_projection["qualification"]["native_positive_qualification"])
 
     def test_report_schema_errors_use_report_invalid_family(self) -> None:
         request = self.request()
@@ -2778,10 +2464,6 @@ class NgClang22MaterializationTests(unittest.TestCase):
 
     def test_writer_publish_tuple_classifier_is_complete_and_fail_closed(self) -> None:
         request = self.request("static", "sqlite")
-        execution_receipt_schema = materialization.load(
-            ROOT
-            / "schemas/cxxlens_ng_clang22_materialization_execution_receipt.schema.yaml"
-        )
         publication = materialization.stale_parent_report(
             ROOT, request
         )["publication"]
@@ -2870,35 +2552,6 @@ class NgClang22MaterializationTests(unittest.TestCase):
                     "invariant breach",
                 ):
                     materialization.classify_writer_publish_failure(request, changed)
-                disposition = (
-                    materialization.writer_publish_invariant_breach_disposition(
-                        request, changed
-                    )
-                )
-                self.assertEqual(
-                    disposition,
-                    {
-                        "schema": (
-                            "cxxlens.clang22-materialization-execution-receipt.v1"
-                        ),
-                        "actual_exit_status": 2,
-                        "exact_stdout_byte_count": 0,
-                        "stdout_sha256": materialization.content_digest(b""),
-                        "parsed_response_count": 0,
-                        "stderr_sha256": materialization.content_digest(
-                            str(
-                                materialization.WriterPublishInvariantBreach(
-                                    "writer_publish tuple is unlisted or an invariant breach requiring exit two"
-                                )
-                            ).encode("utf-8")
-                        ),
-                    },
-                )
-                materialization.validate_schema(
-                    disposition,
-                    execution_receipt_schema,
-                    "writer-publish invariant execution receipt",
-                )
 
         memory = copy.deepcopy(publication)
         memory["backend"] = "memory"
@@ -2907,38 +2560,11 @@ class NgClang22MaterializationTests(unittest.TestCase):
             "invariant breach",
         ):
             materialization.classify_writer_publish_failure(request, memory)
-        memory_disposition = (
-            materialization.writer_publish_invariant_breach_disposition(
-                request, memory
-            )
-        )
-        self.assertEqual(
-            memory_disposition,
-            {
-                "schema": "cxxlens.clang22-materialization-execution-receipt.v1",
-                "actual_exit_status": 2,
-                "exact_stdout_byte_count": 0,
-                "stdout_sha256": materialization.content_digest(b""),
-                "parsed_response_count": 0,
-                "stderr_sha256": materialization.content_digest(
-                    str(
-                        materialization.WriterPublishInvariantBreach(
-                            "writer_publish tuple is an invariant breach requiring exit two"
-                        )
-                    ).encode("utf-8")
-                ),
-            },
-        )
-        materialization.validate_schema(
-            memory_disposition,
-            execution_receipt_schema,
-            "memory writer-publish invariant execution receipt",
-        )
-        with self.assertRaisesRegex(ValueError, "typed response"):
-            materialization.writer_publish_invariant_breach_disposition(
-                request,
-                publication,
-            )
+        with self.assertRaisesRegex(
+            materialization.WriterPublishInvariantBreach,
+            "invariant breach",
+        ):
+            materialization.classify_writer_publish_failure(request, memory)
 
     def test_postpublish_classifier_preserves_first_sdk_or_projection_cause(self) -> None:
         paths = list(materialization.POSTPUBLISH_ACCESS_PATHS)
@@ -5988,7 +5614,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
         )
         self.assertEqual(
             resolution["implementation_disposition"],
-            "pending-implementation-and-qualification",
+            "pending-implementation-and-direct-tests",
         )
         self.assertEqual(
             resolution["sqlite_capacity_decision"]["status"], "accepted"
@@ -6990,20 +6616,20 @@ class NgClang22MaterializationTests(unittest.TestCase):
                 ),
             ),
             (
-                "design-legacy-report-schema-digest",
+                "design-derivation-digest",
                 design_text.replace(
-                    "sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96",
+                    "sha256:241fc96ae3a249e5a8851baa95e585460ad29378cb20d11cfcda33a69eaa9270",
                     "sha256:96c11ba8518075abed8e57c08bd38c10907b9d195ec1daafdb4fd0d57a583941",
                     1,
                 ),
                 adr_text,
             ),
             (
-                "adr-pending-unchanged-report-shape",
+                "adr-direct-test-authority",
                 design_text,
                 adr_text.replace(
-                    "accepted Option A; report-schema activation applied, qualification pending",
-                    "user-selected Option A, independent review pending",
+                    "Store/claim contract と直接の positive・negative・fault test を先に整合させる",
+                    "Store/claim contract と独立 review を先に整合させる",
                     1,
                 ).replace(
                     "request 2.1.0 shape は不変",

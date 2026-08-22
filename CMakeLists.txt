@@ -596,9 +596,11 @@ install(
   DIRECTORY schemas/
   DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas"
   FILES_MATCHING
-  PATTERN "cxxlens_ng_*")
-# Explicit runtime authority evidence used by the provider-runtime contract
-# gate.
+  PATTERN "cxxlens_ng_*"
+  PATTERN "cxxlens_ng_ci_supply_chain_contract*" EXCLUDE
+  PATTERN "cxxlens_ng_public_callable_inventory*" EXCLUDE
+  PATTERN "cxxlens_ng_sanitizer_coverage*" EXCLUDE)
+# Runtime product schemas used by installed provider/materializer consumers.
 install(
   FILES schemas/cxxlens_ng_provider_runtime_contract.yaml
         schemas/cxxlens_ng_provider_runtime_contract.schema.yaml
@@ -607,9 +609,11 @@ install(
         schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml
         schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
         schemas/cxxlens_ng_clang22_materialization_report.schema.yaml
-        schemas/cxxlens_ng_clang22_materialization_execution_receipt.schema.yaml
         schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml
   DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")
+install(FILES schemas/cxxlens_support_matrix.yaml
+              schemas/cxxlens_support_matrix.schema.yaml
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")
 install(FILES README.md SECURITY.md LICENSE NOTICE
         DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/cxxlens")
 install(DIRECTORY examples/sdk

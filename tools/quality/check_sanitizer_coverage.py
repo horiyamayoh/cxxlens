@@ -33,14 +33,9 @@ TSAN_CTEST_SELECTION = [
     "tsan",
     "--parallel",
     "1",
-    "--label-exclude",
-    "quality",
-    "--exclude-regex",
-    TSAN_NATIVE_MATERIALIZER_EXCLUSION,
-    "--output-junit",
-    "ctest.xml",
+    "--output-on-failure",
 ]
-TSAN_CTEST_STEP_NAME = "Run exact TSan CTest selection"
+TSAN_CTEST_STEP_NAME = "Run thread sanitizer suite"
 # The exact selection contract is scoped to the thread-sanitizer job; the
 # ASan/UBSan selection has an independent quality owner.
 
@@ -80,7 +75,7 @@ def extract_tsan_selection_script(workflow: str) -> str:
     jobs = document.get("jobs")
     if not isinstance(jobs, dict):
         fail("sanitizer workflow is missing jobs")
-    thread_job = jobs.get("thread-sanitizer")
+    thread_job = jobs.get("tsan")
     if not isinstance(thread_job, dict):
         fail("sanitizer workflow is missing the thread-sanitizer job")
     steps = thread_job.get("steps")
@@ -175,10 +170,10 @@ def validate_contract(root: pathlib.Path) -> dict[str, Any]:
             "-DCXXLENS_ENABLE_ASAN=@CXXLENS_ENABLE_ASAN@",
             "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
         ],
-        ".github/workflows/nightly.yml": [
-            "check_sanitizer_coverage.py",
-            "--require-install-consumers",
-            "--exclude-regex '^install\\.clang22-materializer-(success|base64|negative)$'",
+        ".github/workflows/release.yml": [
+            "name: ThreadSanitizer",
+            "cmake --preset tsan",
+            "ctest --preset tsan --parallel 1 --output-on-failure",
         ],
     }
     for relative, markers in required_markers.items():
@@ -187,7 +182,7 @@ def validate_contract(root: pathlib.Path) -> dict[str, Any]:
             if marker not in text:
                 fail(f"sanitizer implementation marker is missing: {relative}: {marker}")
 
-    workflow = (root / ".github/workflows/nightly.yml").read_text(encoding="utf-8")
+    workflow = (root / ".github/workflows/release.yml").read_text(encoding="utf-8")
     validate_tsan_ctest_selection(extract_tsan_selection_script(workflow))
     return contract
 

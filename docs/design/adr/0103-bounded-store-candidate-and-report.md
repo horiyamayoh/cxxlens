@@ -1,10 +1,10 @@
 # ADR 0103: Bounded Store candidate, adoption, and report construction
 
-- Status: Proposed for independent review
+- Status: Proposed
 - Date: 2026-08-21
 - Owner: #200
 - Contract IDs: `store.incremental-candidate.v1`, `materialization.bounded-report.v1`
-- Production qualification: not claimed
+- Support disposition: implementation and direct tests pending
 
 ## Context and scope split
 
@@ -13,7 +13,8 @@ all tasks, a second complete candidate graph, or a complete public-report DOM. D
 moving current vectors is insufficient. This ADR authorizes only prepublication candidate/adoption
 and ADR 0096 two-phase report construction. It does not claim that a reopened SQLite Store/query
 handle has `O(W)` residency. That separate unit is `wu-200-sqlite-lazy-read-residency` and remains
-blocked until its cursor lifetime, page residency, and query semantics are independently accepted.
+blocked until its cursor lifetime, page residency, and query semantics have direct positive,
+negative, and fault tests.
 
 ## Two coupled but distinct machines
 
@@ -84,7 +85,7 @@ duplicate/conflicting claims, detached rows, or coverage/unresolved/provenance/g
 `W` is the exact checked sum of a 64 MiB source/output-validation window, an 8 MiB sort arena, two
 32 KiB comparator cursors, a 1 MiB backend cursor, 64 KiB codec/hash state, a 1 MiB record buffer,
 and 4 KiB counter state: `77,729,792` resident bytes. No omitted allocator, backend cursor, codec, or
-counter state may be treated as zero-cost evidence. The maximum reserved report tail is exactly
+counter state may be treated as zero-cost. The maximum reserved report tail is exactly
 `28,321,546` bytes, derived independently from the accepted ADR 0096 maxima: 10,420,985 global
 projection bytes, 8,463,179 task-metadata bytes, 8 MiB exact SDK records, 1 MiB diagnostics, and 198
 framing bytes. It is not inferred from the source window.
@@ -104,7 +105,7 @@ The exact DF-0200 limits are:
 Record length, segment/spool capacity, offsets, counters, report reservation, and additions are
 checked before allocation/I/O. SQLite candidate/adoption/report peak retention is `O(W)`, independent
 of task count and admitted output. Memory is one immutable final payload `F` plus `O(W)` and may never
-hold a second complete `F`. Private spool/disk quota is explicit evidence, not resident memory.
+hold a second complete `F`. Private spool/disk quota is an explicit bound, not resident memory.
 
 ## Representation and compatibility
 
@@ -149,17 +150,13 @@ SQLite TEMP/page cache, a complete report DOM, candidate identity before sealing
 tail reservation, compact downgrade after attempt, loss of `publication_outcome_unknown`, partial
 stdout authority, non-v5 writes, legacy one-BLOB SQLite writes, and implicit lazy-read claims.
 
-Acceptance requires the machine checker plus an exact-candidate independent review with P0/P1 zero.
-The proposal witness executes the six-outcome policy, symbolic state ordering, separate
+Acceptance requires the machine checker plus direct positive, negative, fault, determinism, and
+resource-bound tests with all specified counterexamples covered. The proposal witness executes the
+six-outcome policy, symbolic state ordering, separate
 backend-row/immutable-input projection builders, byte-exact comparison including omission,
 duplication, reorder, and checksum-recomputed tamper, ambiguous publication authority, and checked
 u64/u128 window/descriptor arithmetic. It deliberately does not claim runtime implementation. The later bounded
 implementation unit must add 4,096 tasks/512 MiB, memory/reopened-SQLite parity, every publication and
 report crash edge, and a negative production call into a bulk API. SQLite lazy-read residency remains
-a separate blocked unit; production qualification is not claimed by either step.
-
-## Review history
-
-The review of `c69d9be74f3e4b2b42c455a7cd4bfeb30591b9e1` rejected the previous proposal with
-seven P1 findings. This redraft resolves them directionally but remains Proposed until a fresh exact
-candidate review and authenticated receipt accept it.
+a separate blocked unit; neither the proposal witness nor this ADR changes the supported release
+surface.

@@ -2,7 +2,7 @@ $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://cxxlens.dev/schemas/cxxlens.source-closure-transport.v1
 type: object
 additionalProperties: false
-required: [schema, document_version, maturity, authority, review_findings, versions, capability, message_registry, wire_controls, state_machine, phase_fields, limits, resource_policy, identity, request_task_binding, cache, compatibility, failures, failure_phase_matrix, protocol_activation, crash_effects, counterexamples, qualification]
+required: [schema, document_version, maturity, authority, versions, capability, message_registry, wire_controls, state_machine, phase_fields, limits, resource_policy, identity, request_task_binding, cache, compatibility, failures, failure_phase_matrix, protocol_activation, crash_effects, counterexamples]
 properties:
   schema: {const: cxxlens.source-closure-transport.v1}
   document_version: {const: 1.1.1}
@@ -10,31 +10,11 @@ properties:
   authority:
     type: object
     additionalProperties: false
-    required: [adr, identity_adr, owner_issue, review]
+    required: [adr, identity_adr, owner_issue]
     properties:
       adr: {const: docs/design/adr/0102-dedicated-source-closure-transport.md}
       identity_adr: {const: docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md}
       owner_issue: {const: '#261'}
-      review:
-        type: object
-        additionalProperties: false
-        required: [status, reviewer, ref, exact_main_commit]
-        properties:
-          status: {enum: [required, complete]}
-          reviewer: {type: [string, 'null']}
-          ref: {type: [string, 'null']}
-          exact_main_commit: {type: [string, 'null']}
-  review_findings:
-    type: object
-    additionalProperties: false
-    required: [status, exact_main_commit, ref, reviewer, receipt_id, required_resolutions]
-    properties:
-      status: {enum: [blocking, resolved]}
-      exact_main_commit: {type: string, pattern: '^[0-9a-f]{40}$'}
-      ref: {type: string, pattern: '^https://github\.com/horiyamayoh/cxxlens/issues/261#issuecomment-[1-9][0-9]*$'}
-      reviewer: {type: string, minLength: 1}
-      receipt_id: {oneOf: [{type: 'null'}, {type: string, pattern: '^review-receipt\.[a-z0-9.-]+\.v[0-9]+$'}]}
-      required_resolutions: {type: array, minItems: 5, maxItems: 5, uniqueItems: true}
   versions:
     const:
       provider_protocol: {legacy: 1.1, proposed: 1.2, downgrade: reject}
@@ -164,7 +144,6 @@ properties:
       minor_profile: {type: object}
   crash_effects: {type: object, required: [before-manifest, unsealed-transfer, sealed-before-ack, acknowledged-before-execution, worker-crash, resource-failure]}
   counterexamples: {type: array, minItems: 21, uniqueItems: true, items: {type: string}}
-  qualification: {const: {implementation: not-claimed, production: not-claimed}}
 $defs:
   failure_phase:
     type: object

@@ -27,31 +27,31 @@ SNAPSHOT_CONTRACT = pathlib.Path(
 # independent of the schema so a coordinated contract/schema weakening remains
 # fail closed while formatting-only YAML changes remain non-semantic.
 EXPECTED_CONTRACT_DIGEST = (
-    "sha256:3505e2a08d84b4b365a6a45145c9f6ca1cca29843237359135abcd55688ca2e5"
+    "sha256:b57971c3fc0969709fd0be4d7343c46b91f5df20283389b4c36cc58caa487066"
 )
 EXPECTED_SCHEMA_DIGEST = (
-    "sha256:289dc3afc574126b6f99c33ba02277fc70983aba58b8d44c213ce68a2e883957"
+    "sha256:62723b69d023cb843941e69d767339b72d89d0cb413be272d38782e0fd65c7ab"
 )
 
 EXPECTED_SNAPSHOT_BINDING = (
-    "sha256:9c8c9ca5a1216e17d76c771d3a6b20166867bcf8ce32dcca1aa2d0f672c832ce"
+    "sha256:48661e1a02f5f1f51c03b96a64b1ca341cfe69761838bf26bb34978a14687e58"
 )
 
 EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST = (
-    "sha256:6f9d7e5eb117f2da204da929eeb0d32b27102014fe23f87114de737add184b93"
+    "sha256:b019707f54866f559a5ea2954a086d8ecbef4ef3c0ce04d5b435842868c4d031"
 )
 
 EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
-    "sha256:fd2a96157107d3823c03c730606e9f380875a454cb82eaeecf9ba5cda785aa8f"
+    "sha256:0327025e44dc6e691c91bca5000608b4036e3f871a7d0908aad71e1cb02328fb"
 )
 EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
-    "sha256:8d809188559c98b15a0eb145b0341ad8ad3bb87a5d848f7bc20d11c61b5c90a6"
+    "sha256:503548c0baa80ce12cda22b61828d6b1209c9206cbc50439ddbeb70d4d50ebab"
 )
 EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST = (
-    "sha256:904481b74af4fbc790267264aca5d864e9bba13a24646b1ee669c53d1f7af4d5"
+    "sha256:93ba9422c197391573896e85016ff899f554a76924d841b2139f7a225eafc4b9"
 )
 EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST = (
-    "sha256:b2bf7e63954fb709ffac98fa62c0872dadf4e5297a48f069b89a0722a0912ddb"
+    "sha256:bec85afaa49d1a989fe37f17a81b71c3ab7a1c37c4205d2c73d803f76d4736fe"
 )
 
 SOURCE_SHM_READONLY_CAPABILITY: dict[str, Any] = {
@@ -498,8 +498,7 @@ ACCEPTED_EMPTY_NORMALIZATION: dict[str, Any] = {
             "and-never-inherit-the-default-matrix"
         ),
         "no_contract_default": (
-            "fixed-S-is-forbidden-and-the-observed-pinned-S-512-is-qualification-"
-            "evidence-only"
+            "fixed-S-is-forbidden-and-the-observed-pinned-S-512-is-test-vector-only"
         ),
         "cold_parser_source": (
             "big-endian-u32-sector-size-field-at-journal-header-bytes-20-through-23"
@@ -565,23 +564,15 @@ ACCEPTED_EMPTY_NORMALIZATION: dict[str, Any] = {
         "bind-an-exact-layer-discriminator-plus-loaded-SQLite-DSO-source-id-hash-"
         "build-options-VFS-backend-token-raw-xSectorSize-effective-S-temporary-status-"
         "xDeviceCharacteristics-device-filesystem-profile-decoded-P-database-page-"
-        "count-N-and-derived-Q-E-R-the-disposable-qualification-layer-additionally-"
+        "count-N-and-derived-Q-E-R-the-disposable-runtime-test-layer-additionally-"
         "binds-the-nonforgeable-fixture-capability-private-root-identity-lifetime-"
-        "harness-build-toolchain-run-plan-exact-proposal-review-receipt-and-fresh-"
-        "qualification-run-and-candidate-report-IDs-without-requiring-its-not-yet-"
-        "produced-report-and-never-authorizes-production-the-production-layer-cannot-"
-        "accept-that-capability-and-binds-an-already-accepted-canonical-qualification-"
-        "report-digest-and-distinct-production-profile-review-receipt-seal-before-the-"
-        "pending-coordination-request-and-inherit-the-receipt-through-the-full-receipt-"
-        "bounded-effect-transcript-completed-edge-and-handoff"
+        "runtime-test-profile-and-direct-positive-negative-fault-resource-"
+        "and-determinism-tests-without-authorizing-production-the-production-layer-"
+        "cannot-accept-that-capability-and-binds-the-runtime-safety-receipt-and-"
+        "direct-test-success-before-the-pending-coordination-request-and-inherit-the-"
+        "receipt-through-the-full-receipt-bounded-effect-transcript-completed-edge-"
+        "and-handoff"
     ),
-    # The nested production profile remains non-authorizing while the accepted
-    # disposable qualification layer stays fail-closed through this digest.
-    "receiptless_crash_profile_draft": {
-        "__canonical_sha256__": (
-            "sha256:988a6a894080a5976e736f2e2508366451585e31c3f120ebbe5d1c11de19a06a"
-        )
-    },
     "rollback_journal_effect_trace": (
         "xOpen-flags-2054-readwrite-create-main_journal-write-the-exact-S-byte-"
         "incomplete-header-in-minimum-of-P-and-S-byte-chunks-then-for-each-derived-"
@@ -837,7 +828,7 @@ ACCEPTED_EMPTY_NORMALIZATION: dict[str, Any] = {
             "containing-L"
         ),
         "journal_sector_pinned_default_vector": (
-            "qualification-only-raw-xSectorSize-512-effective-S-512-incomplete-"
+            "test-vector-only-raw-xSectorSize-512-effective-S-512-incomplete-"
             "header-single-512-byte-write-at-zero-page-number-one-at-512-page-one-"
             "at-516-and-checksum-at-516-plus-decoded-page-size-never-a-contract-"
             "default"
@@ -1707,57 +1698,6 @@ OPTION_A_REQUIREMENTS: tuple[tuple[tuple[str, ...], Any], ...] = (
         (
             "seal-the-accepted-empty-normalization-source-anchor-and-enter-exactly-"
             "one-clean-normalizer-with-no-public-success-inference"
-        ),
-    ),
-    (
-        (
-            "transaction",
-            "recovery_model",
-            "terminal_reclassification",
-            "accepted_empty_normalization_receiptless_crash_profile_draft",
-            "family_partition",
-        ),
-        [
-            "F0-exact-pre-no-sidecar",
-            (
-                "FZ-exact-pre-or-complete-valid-rollback-exact-empty-current-main-"
-                "plus-size-zero-wal"
-            ),
-            "FP-exact-pre-nonhot-journal-prefix",
-            "FH-valid-hot-journal-with-exact-preimages-and-pre-or-post-main",
-            (
-                "FI-journal-preimages-derive-exact-pre-and-deterministic-post-plus-"
-                "first-28-zero-invalidated-journal"
-            ),
-            "FO-complete-valid-rollback-exact-empty-current-main-no-sidecar",
-        ],
-    ),
-    (
-        (
-            "transaction",
-            "recovery_model",
-            "terminal_reclassification",
-            "accepted_empty_normalization_receiptless_crash_profile_draft",
-            "cold_operation_history_inference",
-        ),
-        (
-            "forbidden-FZ-post-FI-and-FO-prove-only-an-independent-current-rollback-"
-            "header-exact-empty-anchor-while-F0-FZ-pre-FP-and-FH-may-only-start-a-"
-            "new-live-receipted-normalizer"
-        ),
-    ),
-    (
-        (
-            "transaction",
-            "recovery_model",
-            "terminal_reclassification",
-            "accepted_empty_normalization_receiptless_crash_profile_draft",
-            "disposable_fixture_capability",
-        ),
-        (
-            "harness-minted-nonforgeable-private-root-capability-run-ID-and-internal-"
-            "test-only-entrypoint-with-user-and-canonical-locators-rejected-and-no-"
-            "production-API-route"
         ),
     ),
     (
@@ -4785,11 +4725,6 @@ def snapshot_binding_projection(snapshot: dict[str, Any]) -> dict[str, Any]:
                 "accepted_empty_normalization_public_success": terminal[
                     "accepted_empty_normalization_public_success"
                 ],
-                "accepted_empty_normalization_receiptless_crash_profile_draft": (
-                    terminal[
-                        "accepted_empty_normalization_receiptless_crash_profile_draft"
-                    ]
-                ),
             },
         }
     except (KeyError, TypeError) as error:
@@ -4869,7 +4804,6 @@ def validate_snapshot_binding(
                 "accepted_empty_normalization_operation_identity",
                 "accepted_empty_normalization_success",
                 "accepted_empty_normalization_public_success",
-                "accepted_empty_normalization_receiptless_crash_profile_draft",
             )
         },
     }

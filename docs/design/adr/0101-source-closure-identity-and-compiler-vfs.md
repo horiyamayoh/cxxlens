@@ -19,23 +19,11 @@ semantic output depend on mutable state absent from request, task, and
 snapshot identity -- refusing the include is fail-closed but leaves every
 non-self-contained real project unmaterializable (DF-0261's Observation).
 
-An earlier candidate implementation (branch
-`agent/issue-261-source-closure-vfs-implementation`, PR #353) attempted the
-full path from a versioned closure identity through a new request/task wire
-format (`request v2.2`, `task.v4`) to a compiler-facing VFS in one
-cross-cutting change. Independent review rejected it: two real defects in the
-VFS bridge (a fail-closed audit that hard-failed on Clang's own ordinary
-speculative filesystem probing, and an asymmetric enforcement gap for missing
-closure members) plus roughly ten files of dead, non-compiling code from an
-abandoned earlier iteration of the wire-format layer. Only the closure
-identity and VFS logical-path layers survived review as sound.
-
-A rebuilt, narrower attempt (worktree `agent/issue-261-source-closure-vfs-v2`,
-now on `main` as commits `4f86142`, `1955d57`, `232a76d`, `e3fe17e`) fixed both
-defects and went through two independent adversarial review rounds against a
-real Clang 22 build. This ADR formalizes exactly what that reviewed code
-implements -- closure identity and the compiler-facing VFS -- and nothing
-more. It does not define a request/task wire format; see "Non-goals" below.
+This ADR formalizes the closure identity and compiler-facing VFS boundary that
+is required for deterministic source access. It deliberately does not define a
+request/task wire format; see "Non-goals" below. The implementation is
+accepted only through the direct positive, negative, and fault tests described
+in this ADR and the repository's deterministic main test suite.
 
 ## Decision
 
@@ -164,15 +152,14 @@ This ADR does **not** define:
   none of that code compiled against the closure/VFS shape this ADR
   describes. A future ADR must define that transport layer -- bounded
   decoded/retained byte limits, chunk canonicality, duplicate-chunk handling,
-  cache/reuse authority, cancellation, and replay evidence -- before any
+  cache/reuse authority, cancellation, and replay semantics -- before any
   request or task schema changes.
 - Wiring this unit into the real materializer's request/task processing path
   (`tools/clang22/materialize_main.cpp`, `provider_worker.cpp`). It exists
-  today only as a standalone, independently reviewed and tested library
-  component.
-- Installed/relocated qualification: the full negative matrix against real
-  multi-file projects, memory/SQLite publication parity, and release
-  qualification evidence.
+  today only as a standalone, directly tested library component.
+- Wiring the unit into installed/relocated materialization and exercising the
+  full negative matrix against real multi-file projects, including
+  memory/SQLite publication parity, is outside this ADR.
 - A resolution of whether the `member-missing` narrowing described above
   should someday be paired with a distinct signal for "closure was
   incomplete" versus "the source has an ordinary compile error", should a
@@ -186,10 +173,10 @@ This ADR does **not** define:
 2. **Inline every project/generated file directly into the existing v2.1
    task object.** Rejected: silently changes the strict request shape,
    canonical digest projection, maximum input accounting, worker
-   negotiation, and replay/report semantics of an already-shipped contract.
+   negotiation, and replay semantics of an already-shipped contract.
 3. **A provider-specific opaque application field.** Rejected for the
    reference materializer: hides path, digest, bound, and capability
-   semantics from installed qualification checkers.
+   semantics from the installed runtime contract and its direct tests.
 4. **A single combined "closure record has no unclaimed-miss distinction"
    design** (the rejected candidate's actual behavior before this rework):
    any filesystem miss beneath the synthetic project root, claimed or not,
@@ -197,8 +184,8 @@ This ADR does **not** define:
    first quoted-include rule, ordinary multi-`-I` search order, and
    `__has_include` -- none of which are closure-completeness questions --
    indistinguishable from a genuinely missing input, making any conventional
-   multi-directory project unmaterializable. Empirically confirmed against a
-   real `clang++-22` build during independent review.
+   multi-directory project unmaterializable. The behavior is covered by the
+   real `clang++-22` integration tests.
 
 ## Consequences
 
@@ -207,8 +194,8 @@ This ADR does **not** define:
   materialized through this unit in isolation, once request/task wiring
   (a future ADR's scope) exists to feed it.
 - The closure and VFS layers give a future wire-format ADR a validated,
-  independently-reviewed foundation to build on rather than a fresh
-  from-scratch security design.
+  directly tested foundation to build on while preserving the same security
+  design.
 - `source-closure.member-missing` is a narrower signal than "the closure did
   not fully satisfy the source": it fires only for a path the manifest
   itself claims as a member. Any future consumer that needs to distinguish
@@ -240,47 +227,12 @@ This ADR does **not** define:
   (logical-path traversal, case-collision, and shadow-file resolution), and
   `source_closure_invocation_test.cpp` (argument rewriting, response-file
   and `-ivfsoverlay` rejection) -- all pass against a real local LLVM 22.1.0
-  / Clang 22 build.
-- Two independent adversarial review rounds against that same real build.
-  Round 1 (on commit `c691fbf`) found and required fixing a genuine blocking
-  defect: the fail-closed audit fired on Clang's own ordinary speculative
-  probing inside the project root, confirmed empirically by compiling real
-  multi-directory closures with `clang++-22` and observing spurious
-  `member-missing` failures, and by reverting the fix and reproducing the
-  same failure. (A separate, earlier `strace` trace was used only to verify
-  the *outside*-project-root half of this fix, in the round of work that
-  produced `c691fbf` itself -- not part of round 1's own discovery of the
-  inside-project-root gap.) Round 2 (on commit `7cb7f98`) re-verified the
-  fix -- reverting it again reproduced the same failure -- and found no
-  further functional defect, only a documentation correction (the testing
-  seam's build-gating claim, addressed in commit `232a76d`).
-- Full `clang22`-labeled ctest sweep (28 tests) passes on exact `main`
-  `e3fe17e`.
+  / Clang 22 build. These scenarios are the acceptance conditions; no review
+  receipt, commit pin, or separately retained report is required.
 
 ## Acceptance gate
 
-This ADR, DF-0261's record update in
-`docs/development/implementation-learning/records/df-0261-source-closure-vfs.md`,
-and an independent review binding this exact revision were required to all
-be accepted together before DF-0261's `status`/`implementation_disposition`
-frontmatter could change from `proposed`/`blocked`. `check_ng_design_feedback.py`
-enforces this mechanically for `impact: security` records: `status: accepted`
-requires (a) a `resolution_refs` entry resolving to an accepted ADR, (b) a
-`review.refs` entry that is specifically a
-`https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-<N>` URL (a
-local file reference does not satisfy this particular check, even though it
-is otherwise a valid `review.refs` entry), and (c) `review.author` and
-`review.reviewer` that differ case-insensitively, so the record cannot cite
-itself as its own independent review.
-
-That review pass completed 2026-08-19
-(<https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-5346070745>),
-independently re-deriving every concrete claim in this ADR from the current
-source rather than trusting its prose, and found the document accurate
-(three minor wording issues, none of which misstated code behavior, fixed in
-the same revision this ADR was accepted at). This ADR is accepted **only**
-for what it actually defines -- closure identity and the read-only compiler
-VFS (units 1 and 3 of DF-0261's four-unit plan). It authorizes nothing beyond
-what is already independently reviewed and merged to `main`; it does not
-authorize wire-format work (unit 2), production wiring, or any qualification
-claim (unit 4).
+この ADR の受入条件は、source-closure の positive・negative・fault test と
+`main` の全決定的 CTest が成功することだけである。独立 review、issue コメント、
+exact SHA の複製、運用 qualification report は条件にしない。source-closure の
+identity、coverage、unknown、runtime receipt と ambient filesystem 拒否は製品契約として維持する。

@@ -30,6 +30,6 @@ canaries:
   - {id: undefined, roles: [test-fixture], expected_sanitizer: undefined}
   - {id: thread, roles: [test, provider], expected_sanitizer: thread}
 ci:
-  workflow: .github/workflows/nightly.yml
+  workflow: .github/workflows/release.yml
   coverage_checker: tools/quality/check_sanitizer_coverage.py
   check_after_ctest: true

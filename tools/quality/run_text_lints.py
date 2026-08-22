@@ -27,6 +27,8 @@ def main() -> int:
             str(path.relative_to(args.root))
             for path in sorted(args.root.rglob("*"))
             if "build" not in path.parts
+            and ".claude" not in path.parts
+            and ".git" not in path.parts
             and (path.name == "CMakeLists.txt" or path.name.endswith((".cmake", ".cmake.in")))
         ]
         result |= run([cmake_format, "--check", *cmake_files], args.root)

@@ -73,9 +73,9 @@ namespace cxxlens::detail::sqlite_qualification
 	{
 		/**
 		 * Harness-supplied SHA-256 commitment over the exact selected runtime/VFS/device/build
-		 * profile, harness build/toolchain, accepted proposal-review receipt, and candidate-report
-		 * identity. This layer binds the exact bytes; it neither interprets this receipt nor lets
-		 * the receipt substitute for the live capability and fresh run ID.
+		 * profile and the bounded fixture execution plan. This layer binds the exact bytes; it
+		 * neither interprets the digest nor lets it substitute for the live capability and fresh
+		 * run ID.
 		 */
 		std::string exact_profile_digest;
 		/** SHA-256 of the exact family/run plan selected by the harness. */

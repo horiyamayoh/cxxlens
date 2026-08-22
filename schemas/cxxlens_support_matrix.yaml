@@ -1,0 +1,26 @@
+schema: cxxlens.support-matrix.v2
+entries:
+  - release_version: 1.0.0
+    surface: core
+    os: linux
+    architecture: x86_64
+    compiler_provider_major: clang22
+    linkage: static
+  - release_version: 1.0.0
+    surface: core
+    os: linux
+    architecture: x86_64
+    compiler_provider_major: clang22
+    linkage: shared
+  - release_version: 1.0.0
+    surface: provider-sdk
+    os: linux
+    architecture: x86_64
+    compiler_provider_major: clang22
+    linkage: static
+  - release_version: 1.0.0
+    surface: provider-sdk
+    os: linux
+    architecture: x86_64
+    compiler_provider_major: clang22
+    linkage: shared

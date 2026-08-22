@@ -18,7 +18,7 @@ properties:
       owner_issue:
         const: '#166'
       decision_adr:
-        const: docs/design/adr/0090-g5-closure-incrementality-qualification.md
+        const: docs/design/adr/0021-query-closure-applicability.md
   contract:
     const: schemas/cxxlens_ng_logical_query_contract.yaml
   vectors:

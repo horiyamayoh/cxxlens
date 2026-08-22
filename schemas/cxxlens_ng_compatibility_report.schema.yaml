@@ -1,6 +1,6 @@
 $schema: https://json-schema.org/draft/2020-12/schema
-$id: https://cxxlens.dev/schemas/cxxlens.ng-compatibility-report.v1
-title: cxxlens next-generation compatibility report
+$id: https://cxxlens.dev/schemas/cxxlens.ng-compatibility-report.v2
+title: cxxlens compatibility report
 type: object
 additionalProperties: false
 required:
@@ -9,9 +9,7 @@ required:
   - operation
   - decision
   - release_id
-  - selected_bundle
   - context
-  - qualification_state
   - axis_results
   - reason_codes
   - migration_steps
@@ -19,7 +17,7 @@ required:
   - fallback_used
 properties:
   schema:
-    const: cxxlens.ng-compatibility-report.v1
+    const: cxxlens.ng-compatibility-report.v2
   request_id:
     type: string
     pattern: '^[a-z][a-z0-9.-]+$'
@@ -30,28 +28,15 @@ properties:
   release_id:
     type: string
     pattern: '^[a-z][a-z0-9.-]+$'
-  selected_bundle:
-    oneOf:
-      - type: 'null'
-      - type: string
-        pattern: '^[a-z][a-z0-9.-]+$'
   context:
     enum: [provider-handshake, snapshot-open, query-load, release-startup]
-  qualification_state:
-    enum: [contract-candidate, planned, conditional, qualification-in-progress, qualified, unknown]
   axis_results:
     type: array
     items:
       type: object
       additionalProperties: false
-      required:
-        - axis
-        - required_version
-        - offered_version
-        - status
-        - reason_codes
-        - missing_required_features
-        - unavailable_optional_features
+      required: [axis, required_version, offered_version, status, reason_codes,
+                 missing_required_features, unavailable_optional_features]
       properties:
         axis:
           type: string
@@ -92,7 +77,7 @@ properties:
           type: string
           pattern: '^[a-z][a-z0-9.-]+$'
         state:
-          enum: [planned, implemented, qualified]
+          enum: [planned, implemented]
   environment_findings:
     type: array
     items:
@@ -103,6 +88,7 @@ properties:
         code:
           type: string
           pattern: '^compat\.[a-z][a-z-]+$'
+          not: {const: compat.release-not-qualified}
         severity:
           enum: [info, warning, blocker]
         message:
@@ -124,3 +110,4 @@ $defs:
     items:
       type: string
       pattern: '^compat\.[a-z][a-z-]+$'
+      not: {const: compat.release-not-qualified}

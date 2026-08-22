@@ -26,7 +26,8 @@ remote bootstrap script.
 The documentation profile uses the same fail-closed order for the exact Ubuntu
 24.04 Doxygen package: download without root, verify the locked SHA-256 and
 Debian package/version/architecture fields, install, then assert the executable
-release. Doxygen is recorded in tool and package provenance when installed.
+release. The installed version is used by the documentation check only; CI does
+not create a separate toolchain-provenance record.
 
 Python 3.12 is patch-pinned by the workflow. Direct and transitive quality
 dependencies are exact, binary-only, and hash-bound in
@@ -34,18 +35,15 @@ dependencies are exact, binary-only, and hash-bound in
 `--only-binary=:all:`. External Actions must equal the full commit revisions in
 the supply-chain lock.
 
-Every evidence-producing job emits `cxxlens.toolchain-provenance.v1` containing
-the source revision/tree, runner image identity, OS/kernel, action revisions,
-tool binary digests, exact installed LLVM packages, installed Python
-distribution RECORD digests, and both lock digests. The foundation completion
-report validates and summarizes the same-SHA records. Release-layout artifacts
-remain paired with their provenance/evidence artifacts, so source and toolchain
-identity cannot be substituted independently.
+The lock is used only while installing and checking the CI dependencies. CI
+does not emit a repository-side toolchain-provenance record, pair test output
+with an artifact, or copy a revision/checksum into a qualification report.
+GitHub's ordinary job log remains the only CI execution output.
 
 `tools/quality/check_ci_supply_chain.py` owns the static contract. It rejects a
 mutable/unknown Action, `llvm.sh`, direct network shell bootstrap, unpinned APT
 requests, unhashed Python installation, generic Python minor selection, missing
-bootstrap profiles, and incomplete provenance wiring. A cached artifact set may
+bootstrap profiles, and incomplete lock/profile wiring. A cached package set may
 be replayed without resolution; the lock remains the authority and a missing
 cached artifact is an error, never permission to select another version.
 
@@ -53,8 +51,8 @@ cached artifact is an error, never permission to select another version.
 
 - Signing-key substitution is rejected before any root filesystem effect.
 - LLVM patch updates, Action updates, Python dependency updates, and runner
-  changes become explicit provenance changes.
+  changes remain explicit changes to the bootstrap lock and its tests.
 - Upstream removal or mirror outage fails closed instead of silently changing
   the toolchain.
-- Updating the toolchain requires an intentional lock, test, contract, and
-  provenance update.
+- Updating the toolchain requires an intentional lock and test update; it does
+  not create a separate release-evidence record.

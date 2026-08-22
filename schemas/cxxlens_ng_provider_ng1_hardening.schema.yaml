@@ -3,7 +3,7 @@ $id: https://cxxlens.dev/schemas/cxxlens.provider-ng1-hardening.v1
 title: cxxlens NG1 provider hardening contract
 type: object
 additionalProperties: false
-required: [schema, document_version, maturity, authority, profile, lifecycle, heartbeat, progress, resume, spill, recovery, stable_failures, qualification]
+required: [schema, document_version, maturity, authority, profile, lifecycle, heartbeat, progress, resume, spill, recovery, stable_failures, direct_tests]
 properties:
   schema: {const: cxxlens.provider-ng1-hardening.v1}
   document_version: {const: '1.0.0'}
@@ -152,7 +152,7 @@ properties:
         monotonic_time_ns: provider-ordering-only-host-receipt-authority
         completed_units: zero-through-total-inclusive
         total_units: positive-and-constant-per-task
-      unit: provider-declared-monotonic-work-unit
+      unit: provider-declared-monotonic-progress-unit
       constraints: {total_units: positive-and-constant-per-task, completed_units: zero-through-total-inclusive, sequence: contiguous-from-zero, time: monotonic-with-heartbeat-clock, duplicate_or_replay: reject}
       enforcement:
         startup_grace_ns: 10000000000
@@ -331,13 +331,10 @@ properties:
       no_fallback: {adjacent_provider: forbidden, non-durable_resume: forbidden, manifest_self_claim: forbidden}
   stable_failures:
     const: [provider.heartbeat-clock-invalid, provider.heartbeat-timeout, provider.progress-rate, provider.resume-token-stale, provider.resume-replay-invalid, provider.spill-corrupt, provider.recovery-failed]
-  qualification:
+  direct_tests:
     const:
-      schema: cxxlens.provider-ng1-qualification.v1
-      report_schema: schemas/cxxlens_ng_provider_ng1_qualification_report.schema.yaml
-      checker: tools/quality/check_ng_provider_ng1_qualification.py
+      schema: cxxlens.provider-ng1-hardening-tests.v1
       vectors: schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml
-      exact_binding: [revision, tree, provider_binary_digest, provider_binary_digest_source, provider_semantic_contract_digest, provider_semantic_contract_digest_source, protocol_minor, protocol_contract_digest, hardening_contract_digest, hardening_contract_schema_digest, report_schema_digest, vectors_digest, vectors_schema_digest]
       required_profiles: [static, shared]
       required_cases: [positive-heartbeat-and-progress, manifest-content-digest-binding, stale-heartbeat, heartbeat-timeout, progress-sample-timeout, zero-progress-after-grace, stale-resume-token, foreign-resume-token, semantic-v2-provider-identity-rejected, content-digest-semantic-field-rejected, spill-corruption, worker-crash-recovery, worker-hang-recovery, cancellation-recovery, permutation-replay, long-run-fault]
       required_case_outcomes:
@@ -357,6 +354,6 @@ properties:
         cancellation-recovery: rollback-current-group-and-fail-closed
         permutation-replay: provider.resume-replay-invalid
         long-run-fault: accepted-only-with-exact-certificate-or-stable-failure
-      release_claim: exact-measured-certificate-only
+      execution: direct-tests-only
       unavailable_provider: unqualified
       unavailable_platform: unqualified

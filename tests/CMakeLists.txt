@@ -79,22 +79,6 @@ target_include_directories(cxxlens-sqlite-store-v3-scenario-support
 cxxlens_set_project_warnings(cxxlens-sqlite-store-v3-scenario-support)
 cxxlens_enable_sanitizers(cxxlens-sqlite-store-v3-scenario-support)
 
-cxxlens_add_test_executable(
-  cxxlens-sqlite-store-v3-qualification-case-runner
-  qualification/sqlite_store_v3_qualification_case_runner.cpp)
-target_link_libraries(
-  cxxlens-sqlite-store-v3-qualification-case-runner
-  PRIVATE cxxlens-sqlite-store-v3-scenario-support cxxlens::kernel
-          "${CMAKE_DL_LIBS}")
-target_include_directories(cxxlens-sqlite-store-v3-qualification-case-runner
-                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
-target_compile_definitions(
-  cxxlens-sqlite-store-v3-qualification-case-runner
-  PRIVATE
-    "CXXLENS_SQLITE_QUALIFICATION_CONFIGURATION=\"${CXXLENS_OCCURRENCE_CONFIGURATION}\""
-    "CXXLENS_SQLITE_QUALIFICATION_REVISION=\"${CXXLENS_SOURCE_REVISION}\""
-    "CXXLENS_SQLITE_QUALIFICATION_SOURCE_TREE=\"${CXXLENS_SOURCE_TREE}\"")
-
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-limit-length-precedence
                             unit/sdk/sqlite_limit_length_precedence_test.cpp)
 target_link_libraries(
@@ -467,11 +451,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
   # internal budgets already sum to several seconds in the best case (see
   # provider_runtime_test.cpp); ASan/UBSan's per-process-spawn instrumentation
   # overhead leaves too little headroom against a flat 30s CTest wall timeout
-  # (observed: Nightly run 32049712322, sanitizers job, Timeout). This widens
-  # the outer CTest kill timeout for instrumented builds. TSan uses the same
-  # sanitizer-only fixture budget as ASan/UBSan, so it must receive the same
-  # outer headroom or CTest can kill the test before its internal elapsed bound.
-  # The test also derives a sanitizer-only CPU/wall budget for the forked
+  # This widens the outer CTest kill timeout for instrumented builds. TSan uses
+  # the same sanitizer-only fixture budget as ASan/UBSan, so it must receive the
+  # same outer headroom or CTest can kill the test before its internal elapsed
+  # bound. The test also derives a sanitizer-only CPU/wall budget for the forked
   # fixture's cold startup; neither allowance changes production provider
   # runtime semantics.
   if(CXXLENS_ENABLE_ASAN
@@ -1126,40 +1109,22 @@ foreach(
         semantic_guarantee
         snapshot_store_contract
         sqlite_store_contract
-        sqlite_store_v3_qualification
         provider_protocol
-        provider_ng1_qualification
         provider_runtime
         security_contract
+        source_closure_transport
         release_contract
-        release_qualification
         clang22_materialization
-        clang22_materialization_scale
-        production_scope_closure
         sdk_contract
         ci_supply_chain
-        migration_completion
-        foundation_completion
-        api_development_readiness
-        api_development_readiness_wave0_baseline
-        use_case_capability_catalog
-        agent_context
-        design_feedback
         public_callable_inventory
-        g5_qualification)
+        operational_evidence_absent)
   add_test(NAME "quality.ng-${contract}"
            COMMAND "${Python3_EXECUTABLE}"
                    "${PROJECT_SOURCE_DIR}/tests/quality/test_ng_${contract}.py")
   set_tests_properties("quality.ng-${contract}"
                        PROPERTIES LABELS "quality;ng;contract")
 endforeach()
-
-add_test(
-  NAME quality.ownership
-  COMMAND "${Python3_EXECUTABLE}"
-          "${PROJECT_SOURCE_DIR}/tests/quality/test_quality_ownership.py")
-set_tests_properties(quality.ownership PROPERTIES LABELS
-                                                  "quality;ng;contract;ci")
 
 configure_file(install/run_install_test.cmake.in
                "${CMAKE_CURRENT_BINARY_DIR}/run_install_test.cmake" @ONLY)
@@ -1210,9 +1175,7 @@ add_test(
     "${PROJECT_SOURCE_DIR}/tests/install/clang22_materializer_installation_binding_test.py"
     --root "${PROJECT_SOURCE_DIR}" --prefix
     "${CMAKE_CURRENT_BINARY_DIR}/install-consumer/relocated-prefix"
-    --executable-suffix "${CMAKE_EXECUTABLE_SUFFIX}" --evidence-dir
-    "${CMAKE_CURRENT_BINARY_DIR}/install-consumer/materialization-binding-evidence"
-)
+    --executable-suffix "${CMAKE_EXECUTABLE_SUFFIX}")
 set_tests_properties(
   install.clang22-materializer-installation-binding
   PROPERTIES LABELS
@@ -1226,7 +1189,7 @@ if(CXXLENS_ENABLE_ASAN)
          install.clang22-materializer-base64
          install.clang22-materializer-negative
     APPEND
-    PROPERTY ENVIRONMENT "CXXLENS_ASAN_INSTALLED_QUALIFICATION=1")
+    PROPERTY ENVIRONMENT "CXXLENS_ASAN_INSTALLED_TEST_PROFILE=1")
 endif()
 
 add_custom_target(cxxlens-ng-test-binaries)

@@ -1015,7 +1015,7 @@ class SourceClosureTransportTest(unittest.TestCase):
             with self.assertRaisesRegex(SourceClosureTransportError, "legacy"):
                 validate(root)
 
-    def test_acceptance_requires_authenticated_decision_receipt(self) -> None:
+    def test_acceptance_does_not_require_operational_review_receipt(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
             self.rewrite(
@@ -1023,36 +1023,16 @@ class SourceClosureTransportTest(unittest.TestCase):
                 CONTRACT,
                 lambda value: (
                     value.update({"maturity": "accepted"}),
-                    value["authority"].update(
-                        {
-                            "review": {
-                                "status": "complete",
-                                "reviewer": "independent-reviewer",
-                                "ref": "https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-1",
-                                "exact_main_commit": "1" * 40,
-                            }
-                        }
-                    ),
-                    value["review_findings"].update(
-                        {
-                            "status": "resolved",
-                            "exact_main_commit": "1" * 40,
-                            "ref": "https://github.com/horiyamayoh/cxxlens/issues/261#issuecomment-1",
-                            "reviewer": "independent-reviewer",
-                            "receipt_id": "review-receipt.source-closure.v1",
-                        }
-                    ),
                 ),
             )
             adr = root / ADR
             adr.write_text(
                 adr.read_text(encoding="utf-8").replace(
-                    "- Status: Proposed for independent review", "- Status: Accepted"
+                    "- Status: Proposed", "- Status: Accepted"
                 ),
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(Exception, "development_decision_register"):
-                validate(root)
+            validate(root)
 
     def test_cross_task_cache_activation_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1065,12 +1045,22 @@ class SourceClosureTransportTest(unittest.TestCase):
             with self.assertRaisesRegex(SourceClosureTransportError, "schema|cache"):
                 validate(root)
 
-    def test_acceptance_without_review_is_rejected(self) -> None:
+    def test_acceptance_without_review_is_allowed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
-            self.rewrite(root, CONTRACT, lambda value: value.update({"maturity": "accepted"}))
-            with self.assertRaisesRegex(SourceClosureTransportError, "accepted authority"):
-                validate(root)
+            self.rewrite(
+                root,
+                CONTRACT,
+                lambda value: value.update({"maturity": "accepted"}),
+            )
+            adr = root / ADR
+            adr.write_text(
+                adr.read_text(encoding="utf-8").replace(
+                    "- Status: Proposed", "- Status: Accepted"
+                ),
+                encoding="utf-8",
+            )
+            validate(root)
 
 
 if __name__ == "__main__":

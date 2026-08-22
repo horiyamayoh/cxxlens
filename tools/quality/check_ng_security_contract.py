@@ -8,7 +8,6 @@ import copy
 import hashlib
 import json
 import pathlib
-import subprocess
 import sys
 from typing import Any, Callable
 
@@ -31,7 +30,6 @@ VECTORS = pathlib.Path("schemas/cxxlens_ng_security_conformance_vectors.yaml")
 VECTORS_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_security_conformance_vectors.schema.yaml"
 )
-REPORT_SCHEMA = pathlib.Path("schemas/cxxlens_ng_security_conformance_report.schema.yaml")
 
 SUBJECT_FIELDS = (
     "provider_id",
@@ -658,9 +656,8 @@ def report(profile: dict[str, Any], results: list[dict[str, Any]], counts: dict[
 
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("check", "report"))
+    parser.add_argument("mode", choices=("check",))
     parser.add_argument("--root", type=pathlib.Path, default=ROOT)
-    parser.add_argument("--output", type=pathlib.Path)
     return parser.parse_args()
 
 
@@ -669,15 +666,6 @@ def main() -> int:
     root = args.root.resolve()
     profile, results, counts = validate_all(root)
     value = report(profile, results, counts)
-    schema_validate(value, load_yaml(root / REPORT_SCHEMA), "security report")
-    if args.mode == "report":
-        if args.output is None:
-            fail("security.untrusted-input-invalid", "report requires --output")
-        if subprocess.run(["git", "-C", str(root), "status", "--porcelain"], check=True, capture_output=True, text=True).stdout.strip():
-            fail("security.untrusted-input-invalid", "commit-bound report requires clean worktree")
-        output = args.output if args.output.is_absolute() else root / args.output
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(
         "security contract passed: "
         f"{len(results)} vectors, {value['accepted']} accepted, {value['rejected']} rejected, "
@@ -690,6 +678,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (SecurityContractError, jsonschema.ValidationError, OSError, subprocess.SubprocessError, yaml.YAMLError) as error:
+    except (SecurityContractError, jsonschema.ValidationError, OSError, yaml.YAMLError) as error:
         print(f"security contract failed: {error}", file=sys.stderr)
         raise SystemExit(1) from error

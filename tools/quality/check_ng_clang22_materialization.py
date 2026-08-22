@@ -1228,7 +1228,7 @@ DF_0200_SQLITE_CAPACITY_DECISION = {
             "requires": [
                 "physical-format-v3-authority",
                 "deterministic-v2-to-v3-migration",
-                "reopen-compaction-pin-and-backend-parity-qualification",
+                "reopen-compaction-pin-and-backend-parity-direct-tests",
             ],
         },
         "B": {
@@ -1240,22 +1240,22 @@ DF_0200_SQLITE_CAPACITY_DECISION = {
             "requires": [
                 "successor-version",
                 "fresh-request-and-budget-authority",
-                "same-cap-for-memory-and-sqlite-qualification",
+                "same-cap-for-memory-and-sqlite-direct-tests",
             ],
         },
     },
     "implementation_and_acceptance": (
-        "may-proceed-under-accepted-option-a-not-qualified-until-required-evidence"
+        "may-proceed-under-accepted-option-a-direct-tests-required-before-production-binding"
     ),
 }
 EXPECTED_DF_0200_RESOLUTION = {
     "status": "accepted-authority-implementation-pending",
     "resolution_id": "cxxlens.df-0200.incremental-claim-store.v1",
-    "implementation_disposition": "pending-implementation-and-qualification",
+    "implementation_disposition": "pending-implementation-and-direct-tests",
     "d1_claim_batch_oracle": {
         "public_reference": "sdk-claim-batch-commit",
         "public_reference_control_flow": (
-            "independent-bounded-resident-reference-during-qualification"
+            "independent-bounded-resident-reference-during-direct-tests"
         ),
         "production_path": "source-private-incremental-external-validator",
         "shared_implementation_allowlist": [
@@ -1264,7 +1264,7 @@ EXPECTED_DF_0200_RESOLUTION = {
             "field-validators",
         ],
         "shared_commit_control_flow_or_verdict_logic": "forbidden",
-        "literal_all_claims_vector_call": "required-for-bounded-qualification-only",
+        "literal_all_claims_vector_call": "required-for-bounded-direct-test-only",
         "exact_equivalence": [
             "accepted-final-occurrence-multiset",
             "canonical-order",
@@ -1305,7 +1305,7 @@ EXPECTED_DF_0200_RESOLUTION = {
                     "visibility": "source-private",
                     "option": "--emit",
                     "artifact_update_gate": (
-                        "independent-review-and-new-frozen-digest"
+                        "direct-positive-negative-fault-determinism-and-resource-tests-must-pass"
                     ),
                 },
             },
@@ -1363,15 +1363,15 @@ EXPECTED_DF_0200_RESOLUTION = {
                 "unresolved-conflict-and-differential-censuses",
             ],
             "production_path_comparison": (
-                "required-as-accepted-activation-step-before-production"
+                "required-direct-positive-negative-fault-determinism-and-resource-tests-before-production"
             ),
             "corpus_regeneration": (
-                "forbidden-without-independent-review-and-new-frozen-digest"
+                "requires-direct-positive-negative-fault-determinism-and-resource-tests"
             ),
         },
         "bounded_differential_oracle": (
-            "frozen-corpus-plus-independent-current-public-api-required-before-"
-            "production"
+            "frozen-corpus-and-current-public-api-direct-positive-negative-fault-"
+            "tests-required"
         ),
         "qualified_zero_side_channel_result": (
             "replay-receipt-instead-of-resident-full-claim-batch-result"
@@ -1454,7 +1454,7 @@ EXPECTED_DF_0200_RESOLUTION = {
         "sqlite_current_physical_format": (
             "cxxlens.sqlite-semantic-store.v3-3.0.0-bounded-8388608-byte-chunks"
         ),
-        "sqlite_publish_and_reopen_qualification": (
+        "sqlite_publish_and_reopen_direct_test_matrix": (
             "required-current-v3-plus-v2-read-migration-and-limit-exceeding-parity"
         ),
         "sqlite_capacity_decision_status": "accepted",
@@ -1879,10 +1879,8 @@ EXPECTED_INSTALLED_OCCURRENCE = {
         "argv0_or_path_authority": "forbidden",
     },
     "trust_claim": "measured-self-consistency-and-invocation-attribution-only",
-    "external_trust_witness": (
-        "full-prefix-install-artifact-manifest-including-occurrence-manifest-bytes"
-    ),
-    "external-full-prefix-digest-in-request-or-semantic-identity": "forbidden",
+    "external_trust_witness": "installed-occurrence-manifest-and-measured-role-snapshots",
+    "external-full-prefix-manifest": "forbidden",
 }
 EXPECTED_COVERAGE_CONTRACT = {
     "record_type": "typed-coverage-unit",
@@ -3795,7 +3793,7 @@ def validate_df_0200_claim_batch_corpus(
         fail("materialization.claim-invalid", "DF-0200 C++ driver binding differs")
 
     if binding.get("production_path_comparison") != (
-        "required-as-accepted-activation-step-before-production"
+        "required-direct-positive-negative-fault-determinism-and-resource-tests-before-production"
     ):
         fail(
             "materialization.claim-invalid",
@@ -7288,12 +7286,11 @@ def validate_contract_exact(
                 "exit-two-no-response-authority-no-compact-downgrade"
             ),
             "post_commit_finalization_or_stdout_failure": (
-                "exit-two-no-response-store-record-only-recovery-authority-and-no-"
-                "release-evidence"
+                "exit-two-no-response-store-record-only-recovery-authority"
             ),
             "partial_stdout": "parsed-response-count-zero-and-non-authoritative",
             "post_commit_broken_stdout": (
-                "exit-two-no-response-store-record-only-recovery-authority-and-no-release-evidence"
+                "exit-two-no-response-store-record-only-recovery-authority"
             ),
             "sqlite_blind_retry_after_exit_two": "forbidden",
             "sqlite_recovery": (
@@ -8221,28 +8218,6 @@ def validate_contract_exact(
                 "task-count-times-catalog-count",
             ],
             "spool-failure": "zero-effect-before-publication",
-        },
-        "execution_receipt": {
-            "fields": [
-                "actual-exit-status",
-                "exact-stdout-byte-count",
-                "stdout-sha256",
-                "parsed-response-count",
-                "stderr-sha256-diagnostic-only",
-            ],
-            "cross_binding": "stdout-bytes-are-the-exact-report-artifact",
-            "passed_report": "actual-exit-zero-and-response-count-one",
-            "schema_valid_failure": (
-                "actual-exit-one-and-response-count-one-release-forbidden"
-            ),
-            "no_response_failure": (
-                "actual-exit-two-and-response-count-zero-release-forbidden"
-            ),
-            "report_set_entry": [
-                "backend",
-                "report-digest",
-                "execution-receipt-digest",
-            ],
         },
         "missing_extra_duplicate_matrix_entry": "reject",
     }:
@@ -15563,27 +15538,6 @@ def classify_writer_publish_failure(
     )
 
 
-def writer_publish_invariant_breach_disposition(
-    request: dict[str, Any],
-    publication: dict[str, Any],
-) -> dict[str, Any]:
-    """Exercise the required process boundary for an invariant-breach tuple."""
-
-    try:
-        classify_writer_publish_failure(request, publication)
-    except WriterPublishInvariantBreach as error:
-        diagnostic_bytes = str(error).encode("utf-8")
-        return {
-            "schema": "cxxlens.clang22-materialization-execution-receipt.v1",
-            "actual_exit_status": 2,
-            "exact_stdout_byte_count": 0,
-            "stdout_sha256": content_digest(b""),
-            "parsed_response_count": 0,
-            "stderr_sha256": content_digest(diagnostic_bytes),
-        }
-    raise ValueError("writer_publish tuple is classified and may use a typed response")
-
-
 def _validate_writer_publish_failure_cause(
     request: dict[str, Any],
     publication: dict[str, Any],
@@ -16283,11 +16237,10 @@ def validate_v2_1_admission_authority_text(
                 "`58,645,685`",
                 "`sha256:241fc96ae3a249e5a8851baa95e585460ad29378cb20d11cfcda33a69eaa9270`",
                 "`sha256:ff9baf9982f909d8a4f51c46f53637af6980a7d06728dfa65794ffc1eebf816d`",
-                "accepted SQLite Option A authority; report-schema activation applied, qualification pending",
+                "positive・negative・fault・resource tests が成功するまで出荷経路へ接続せず",
                 "request 2.1.0 shape は不変",
                 "13/19-file occurrence inventory",
                 "`task_sandbox_requirements maxItems: 4096`",
-                "sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96",
                 "operation-authentic kind×operation matrix",
                 "全 mismatched pair は no-response",
                 "root member の missing/extra",
@@ -16330,11 +16283,10 @@ def validate_v2_1_admission_authority_text(
                 "`58,645,685`",
                 "`sha256:241fc96ae3a249e5a8851baa95e585460ad29378cb20d11cfcda33a69eaa9270`",
                 "`sha256:ff9baf9982f909d8a4f51c46f53637af6980a7d06728dfa65794ffc1eebf816d`",
-                "accepted Option A; report-schema activation applied, qualification pending",
+                "Store/claim contract と直接の positive・negative・fault test を先に整合させる",
                 "request 2.1.0 shape は不変",
                 "13/19-file occurrence inventory",
                 "sandbox array bound",
-                "sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96",
                 "operation-authentic kind×operation matrix",
                 "全 mismatched pair は no-response",
                 "root member missing/extra",
@@ -17879,14 +17831,10 @@ def validate_baseline_recovery_source_bindings(
         )
 
     install_job = re.search(
-        r"(?ms)^  install-consumer:\n(?P<body>.*?)(?=^  [a-z0-9_-]+:\n|\Z)",
+        r"(?ms)^  installed-consumers:\n(?P<body>.*?)(?=^  [a-z0-9_-]+:\n|\Z)",
         quality_workflow,
     )
-    expected_build = (
-        "cmake --build --preset install-check --target \\\n"
-        "            cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22 \\\n"
-        "            cxxlens-clang22-materialize"
-    )
+    expected_build = "cmake --build --preset install-check\n"
     if install_job is None or expected_build not in install_job.group("body"):
         fail(
             "materialization.installed-surface-invalid",

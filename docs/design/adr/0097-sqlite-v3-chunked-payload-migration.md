@@ -6,21 +6,8 @@
 - Decision issue: #200
 - Implementation issue: #181
 - Amends: ADR 0013, ADR 0096 D6
-- Accepted qualification amendment: #202 / DF-0202 receiptless normalization interruption profile
-- Proposal review: `b6cbb86347e02c4b374d7991a1f78d2535789ced` /
-  <https://github.com/horiyamayoh/cxxlens/issues/202#issuecomment-5094406150>
-- Accepted authority amendment: #205 / DF-0205 same-process authenticated writer-mapping lease
-- Exact accepted same-process proposal: `6cb705c256c9576f74b50a2dca8fc4e8f72d06bb`
-- Same-process independent review: <https://github.com/horiyamayoh/cxxlens/issues/205#issuecomment-5095883584>
-  (`P0=0 / P1=0 / P2=0`)
-- Accepted writer native-attachment amendment: #206 / DF-0206
-- Exact accepted writer attachment proposal: `bf30978eb34d5f94bbadfd675c8ce2b50fb2f899`
-- Writer attachment independent review: <https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097950062>
-  (`P0=0 / P1=0 / P2=0`)
-- Accepted writer gate-outcome evidence amendment: #208 / DF-0208
-- Exact accepted writer gate proposal: `bd2505f26d0d45b7bfa785a533c308ab957b11aa`
-- Writer gate independent review: <https://github.com/horiyamayoh/cxxlens/issues/208#issuecomment-5119882571>
-  (`P0=0 / P1=0 / P2=0`)
+- Runtime amendments: #202 (isolated normalization), #205 (same-process mapping),
+  #206 (native attachment), and #208 (writer gate outcome)
 
 ## Context
 
@@ -201,28 +188,21 @@ transaction を維持する。actual VFS-open main/WAL/SHM identity、directory 
 read-lock slot、complete decoded logical projection を receipt にする。post-close endpoint/digest-only private copy、別 connection、
 arbitrary SQLite errorからのfallbackは禁止する。
 
-#### DF-0205 accepted authority amendment: same-process authenticated writer-mapping lease
+#### Same-process authenticated writer-mapping lease
 
-この subsection は Issue #205 の authority proposal
-`cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1` を exact commit
-`6cb705c256c9576f74b50a2dca8fc4e8f72d06bb` で固定し、Issue #205 の独立 review
-<https://github.com/horiyamayoh/cxxlens/issues/205#issuecomment-5095883584> は
-`accepted-authority-implementation-pending` (`P0=0 / P1=0 / P2=0`) として accept した。
-schema の `same_process_writer_mapping_lease_proposal` key は reviewed exact artifact/history として保持し、
-未 review proposal または acceptance pending を表さない。この acceptance は internal registry/callback
-gates/tests の実装だけを認可する。distinct exact implementation commit と全 counterexample matrix の独立
-review が完了するまで、current source は上記 blanket ruleを維持し、native `SQLITE_OK` はpointerの
-null/non-nullを問わずterminal protocol violationであり、production activationはblockする。
-proposal artifactの存在、同一PID、同一path、同一pointer、同じVFS名、または一つのStore/
+この subsection は `cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1` の runtime contract を
+定義する。internal registry/callback gates/tests はこの contract の direct test で検証し、native
+`SQLITE_OK` は pointer の null/non-null を問わず条件を満たさなければ terminal protocol violation
+として fail closed にする。提案ファイルの存在、同一PID、同一path、同一pointer、同じVFS名、または一つのStore/
 connectionへの集約はexception authorityにならない。accepted authority に基づき実装できるexceptionも、
 exact `SQLITE_OK`+non-nullを同じpointerのexact `SQLITE_READONLY`+non-nullへprojectする一経路だけである。
 SQLite WAL coreはこのresultをread-only SHM mappingとして扱う。`SQLITE_OK`を外へpass throughせず、
 `SQLITE_OK`+null、CANTINIT/READONLY以外のcode、generic non-profile callerは変更しない。
-qualification scratch/map-sequence validatorはleaseを保持せず、implementation後もnative OK terminal
-rejectionを維持する。OK→READONLY projectionはproduction `qualified_source_shm_map_route`のexact
-lease receipt付きcallbackだけに閉じる。
+map-sequence test は lease を product runtime receipt として検証し、native OK terminal rejection を維持する。
+OK→READONLY projection は production `qualified_source_shm_map_route` の exact lease receipt 付き callback
+だけに閉じる。
 
-##### DF-0206 accepted authority amendment: writer native attachment grouping
+##### Writer native attachment grouping
 
 Issue #206 / DF-0206 は、上記 accepted authority の `holder` と SQLite の native SHM attachment の
 cardinality が未定義であることを記録する。SQLite Unix VFS は一つの `sqlite3_file` から複数 region の
@@ -230,15 +210,10 @@ cardinality が未定義であることを記録する。SQLite Unix VFS は一�
 map callback ごとに cleanup holder を作り、各 holder に別の native unmap を要求する実装は、
 複数 page を一 attachment で map する正当な lifecycle を表現できない。
 
-schema の `writer_native_attachment_amendment_proposal` は
-`cxxlens.sqlite.writer-shm-native-attachment.v1` の reviewed artifact/history である。exact proposal
-`bf30978eb34d5f94bbadfd675c8ce2b50fb2f899` は Issue #206 の独立 semantic/structural review
-<https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097950062> に
-`accepted-authority-implementation-pending` (`P0=0 / P1=0 / P2=0`) として accept された。
-この acceptance は internal writer attachment-group state machine と focused tests の実装だけを認可する。
-production registry/VFS binding は distinct exact implementation/matrix review、reader grouping と reader
-exception activation は Issue #207 / DF-0207 の accepted authority まで認可しない。current native
-`SQLITE_OK` terminal rejection を維持する。
+`cxxlens.sqlite.writer-shm-native-attachment.v1` は internal writer attachment-group state machine
+と focused direct tests の runtime authority である。production registry/VFS binding、reader grouping、
+reader exception activation はそれぞれの runtime contract と positive・negative・fault tests が成立する
+まで認可しない。current native `SQLITE_OK` terminal rejection を維持する。
 
 proposal は、map attempt ごとの holder-specific pair/effect/page receipt を保持したまま、全
 post-native/pending/live holder を checked non-reusable native attachment identity で atomic group にする。
@@ -286,53 +261,27 @@ generationのsealed SHM sizeは物理縮小を推測せずmonotonic high-water o
 live support、cleanup eligibility、transfer authorityへ戻さない。inner unmap成功後のclose失敗も
 retired group authorityを復元せず、opaque handleをquarantineしてretryしない。
 
-acceptance review は少なくとも、one connectionのpage 0/page 1を一 unmapで解放するpositive、repeated
+direct tests は少なくとも、one connectionのpage 0/page 1を一 unmapで解放するpositive、repeated
 same-page、two connectionsのexact two unmaps、pending/live mixed group、cross-attachment、incomplete set、
 duplicate unmap、second-page post-validation failure、unmap/remap epoch reuse、close before/after unmap、
 later-map対last-unmap race、non-last sole-support cleanup対reader predelegationのsame/other-thread、
-remaining-support、established-handoff casesを反証する。proposal digestは四つのSQLite/Snapshot contract/schema mirrorと
-checker mutation negativeに固定し、fresh independent review前は対象実装をblockする。
-
-exact proposal `3c52b7e01a4d2a4e382940017d1dfb8f07f1be54` の
-<https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097510242> に記録した独立 reviewは
-`P0=0 / P1=2 / P2=1` でrejectした。上記の
+remaining-support、established-handoff casesを反証する。checker mutation negative も同じ runtime
+invariants を直接検査する。上記の
 per-attachment page-support recomputationとgate/later-map total orderは二つのP1 counterexampleを閉じ、
 nested status/authorization/identity、untrusted platform mint、両P1 ruleのremoval/weakeningを直接
-mutation negativeへ追加した。revised enclosing lease digestは
-`sha256:612d450d22b676e4144b76f61cab60cade3ae860f3457b7ec168a9bd00cd9550`
-であり、`9011b22` のreviewed checkpointを識別する。reader-predelegation orderingを加えたcurrent
-enclosing lease digestは
-`sha256:05624ed7e918d43705a4dd6b37884c43c4e98e7a2b89427bbe64367e0655a15f`
-である。四mirrorは同一であり、このrevised exact proposalを
-`bf30978eb34d5f94bbadfd675c8ce2b50fb2f899` として
-<https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097950062> の独立 semantic/structural
-reviewが `P0=0 / P1=0 / P2=0` で accept した。review receiptとaccepted statusを加えたDF-0206
-accepted checkpointのenclosing lease digestは
-`sha256:e522cbbe3c6bb9bf2ed645816941f1921f5884eacc36360e8dc546b779bded29` である。
-internal writer grouping/testsだけを実装可能とし、reader grouping と production activation は引き続き
-blockする。
+mutation negativeへ追加した。internal writer grouping tests が成功するまで reader grouping と production
+activation は引き続き block する。
 
-Issue #207 / DF-0207 は、同じreader `sqlite3_file`のdifferent-page mapが別handoffを作る一方、
+Reader attachment runtime semantics は、同じ reader `sqlite3_file` の different-page map が別 handoff を作る一方、
 native `xShmUnmap`はreader attachment全体を一回で解放するcardinality gapを記録する。DF-0206の
-writer-only proposal/reviewはreader groupをtransitively認可しない。accepted reader attachment
-authorityとdistinct exact implementation/matrix reviewが完了するまで、reader grouping、production
-reader exception、VFS activation、qualificationをblockし、per-map handoffへ一native outcomeを複製しない。
+writer-only runtime semantics は reader group を transitive に認可しない。reader attachment authority と
+direct positive・negative・fault tests が完了するまで、reader grouping、production reader exception、VFS
+activation を block し、per-map handoff へ一 native outcome を複製しない。
 
-##### DF-0207 accepted authority amendment: reader native attachment
+##### Reader native attachment
 
-四つのSQLite/Snapshot contract/schema mirrorの
-`reader_native_attachment_amendment_proposal` /
-`cxxlens.sqlite.reader-shm-native-attachment.v1` は
-`accepted-authority-implementation-pending` である。exact proposal commit
-`636ef43803665e9999b38b9c33bd3afdbb6b4460` / semantic digest
-`sha256:a342d01379b7d6e3c9a162dc02cf260942c4dc96783e941333c1aa2a1eeef8f0` は
-Issue #207 のfresh independent exact-commit review
-<https://github.com/horiyamayoh/cxxlens/issues/207#issuecomment-5125815049> で
-`P0=0 / P1=0 / P2=0` としてacceptされた。receipt追加後のcurrent amendment digestは
-`sha256:8d809188559c98b15a0eb145b0341ad8ad3bb87a5d848f7bc20d11c61b5c90a6`、
-enclosing lease digestは
-`sha256:f42cb94b284b2af1683d7fe573ef0a9b9d6d6706d111bf0f97d8d22a554edab5`
-である。checked identityは
+`cxxlens.sqlite.reader-shm-native-attachment.v1` は reader attachment runtime contract である。
+checked identity は
 process/runtime/VFS/file family、reader alias/lifetime、connection、main native node+`xOpen`、
 open epoch、writer mapping generation、observed SHM object/direct-entry/device/mount、map/unmap/close
 callback cohort、non-reusable attachment epochを含む。成功callbackのreceiptはcallbackごとに残すが、
@@ -375,26 +324,20 @@ routeを維持し、local proposal reservationがそこへ移った場合はconf
 proposal group後のREADONLY/non-nullは別ownerへtransferせずIOERR/nullとsole deferred group cleanupへ
 閉じる。OK/null等のinvalid pairはzero-effect revoke、exact mapped cleanup、ambiguous quarantineの
 いずれかへ必ずterminalにする。これら以外の既存rowは不変であり、
-将来review済みのadmitted OK/non-nullだけがREADONLY/same pointerへprojectできる。
+直接試験で検証済みの admitted OK/non-null だけが READONLY/same pointer へ project できる。
 
-このacceptanceはinternal reader group/member/revalidation/session lifetime/unmap/close state machine、
-registry/callback gate、focused testsだけを認可し、production/VFS/native-OK projection、public API、
-qualificationはexact implementationとfull
-counterexample matrixのdistinct independent reviewまでblockする。accepted DF-0205/DF-0206/DF-0208
-subtreeを変更しない。
+この runtime contract は reader group/member/revalidation/session lifetime/unmap/close state machine、
+registry/callback gate、focused positive・negative・fault tests を定義する。production/VFS/native-OK
+projection と public API は、これらの直接試験が通るまで block する。DF-0205/DF-0206/DF-0208 の
+product subtree は変更しない。
 
-##### DF-0208 accepted authority amendment: writer gate outcome evidence
+##### Writer gate outcome runtime receipt
 
-Issue #208 / DF-0208 の `cxxlens.sqlite.writer-gate-outcome-evidence.v1` は、accepted DF-0206 が
-要求するmap-before-gate cleanupに、exact current-v3 writer gateのnegative evidenceとsole cleanup
-authorityを与えるaccepted writer-only amendmentである。四つのSQLite/Snapshot contract/schema mirrorの
-`writer_gate_outcome_evidence_amendment_proposal`は、exact proposal
-`bd2505f26d0d45b7bfa785a533c308ab957b11aa` を Issue #208 のfresh independent semantic/structural
-review <https://github.com/horiyamayoh/cxxlens/issues/208#issuecomment-5119882571> が
-`P0=0 / P1=0 / P2=0` でacceptしたことをexact receiptへbindする。このacceptanceはinternal gate outcome
-evidence/state machine、registry cut/callback cleanupとfocused testsだけを認可する。accepted DF-0206
-fieldsとreader-predelegation ordering fenceは変更せず、DF-0207 reader grouping、production/VFS binding、
-public API、native `SQLITE_OK` projection、qualification promotionを認可しない。
+`cxxlens.sqlite.writer-gate-outcome-evidence.v1` は、DF-0206 が要求する map-before-gate cleanup に
+current-v3 writer gate の typed negative runtime receipt と sole cleanup authority を与える writer-only
+amendment である。この contract は internal gate outcome state machine、registry cut/callback cleanup
+と focused direct tests を認可する。DF-0206 fields と reader-predelegation ordering fence は変更せず、
+DF-0207 reader grouping、production/VFS binding、public API、native `SQLITE_OK` projection を認可しない。
 
 gate outcome evidence と registry cut execution は直交する二軸とする。validator issuer は process、
 runtime image/load generation/lifetime、VFS registration/callback cohort、file family、alias、
@@ -581,22 +524,14 @@ replaceし、後続dispatchは同じgenerationだけをconsume/updateする。fr
 complete transfer前、またはstale generationではslotをreleaseせず、record update、release、waiter wakeupを
 registry mutex下でatomicに順序付ける。
 
-fresh independent reviewは、closed stage result/bijection/overall outcome式、outcome/cut二軸、
+direct tests は、closed stage result/bijection/overall outcome式、outcome/cut二軸、
 owner drop retention、shared sequence exhaustion、five-state reservation claim/race/revocation、
 native-only member censusとorthogonal attachment/close authority、coverage対effect readiness、
 unresolved fenceとexact cancellation/late-resolution lineage、21-row dispatch totality/precedence、
 empty-positive first exact claim、close-only/unmap-then-close、live-positive carve-outを含むDF-0206
 cleanup-only lifetime、reader transitivity、production self-authorizationをpositive/negative双方で
-直接反証し、exact proposal
-`bd2505f26d0d45b7bfa785a533c308ab957b11aa` を
-<https://github.com/horiyamayoh/cxxlens/issues/208#issuecomment-5119882571> で
-`P0=0 / P1=0 / P2=0` としてacceptした。reviewed proposal semantic digestは
-`sha256:30fd6d29224e9707bbdf0f72b585d75c726f361e97ce6ed730dd608f985fa728`、review時の
-enclosing lease digestは
-`sha256:79f31929806955fceeb373739b5f67b8395525bb77d57f8886f6f0c559bcd89f` である。
-accepted statusとreceiptを加えたcurrent semantic digestは
-`sha256:b2bf7e63954fb709ffac98fa62c0872dadf4e5297a48f069b89a0722a0912ddb`、current enclosing lease
-digestは `sha256:a3cbda5086921c6e804cc6bd054a5f638900ee7d177ee35dbac79ae1c83abca5` である。
+直接反証する。runtime receipt の canonical typed bytes が authority であり、repository-operation
+metadata は authority ではない。
 
 lease は二段階で構築する。owned current-v3 writer の native `xShmMap` delegation前に保持できるのは
 callback-localなnon-authoritative attempt/pre-map receipt、generationまたはfirst-writer cohortの
@@ -757,19 +692,19 @@ fork child、stale generation、wrong page/size/pointer、identity/watch/effect 
 native mappingを可能ならnon-removing unmapし、既存protocol-violation latchへ閉じる。unmap outcome不明
 またはnative lifecycle ambiguityはquarantineする。
 
-exact proposal は独立 review で accept されているため、internal registry、writer pending/promotion、
-reader pin/handoff、callback gatesとfocused testsを実装できる。acceptanceだけではproduction exceptionを
-activateせず、current source はblanket native `SQLITE_OK` rejectionを維持する。public API、
+internal registry、writer pending/promotion、reader pin/handoff、callback gates と focused direct tests を
+実装する。direct tests だけでは production exception を activate せず、current source は blanket native
+`SQLITE_OK` rejection を維持する。public API、
 snapshot/publication identity、error tuple、generic VFS semanticsは変更しない。production activationには二つのlive Storeによる
 durable CAS winner/loser、materialization competitor、cross-process CAS、CANTINIT/READONLY
 regressionと、pending-only、fork/PID reuse、holder/pin/unmap race、ABA、runtime/VFS/app-data/
 callback drift、file-family/mount replacement、namespace watch loss、page/pointer/route-specific size/effect、
 writer extend pairの全4分類、simultaneous first-writer join/mismatch、W2 predelegate対W1 retire、
 new-page atomic size update、duplicate target FDによるlock-loss、native close後memory pin、
-unknown outcome、same-thread reentrant retirement、different-thread wait timeoutの全counterexample
-matrixに加え、W1/G1 reader handoff中のW2 same-pointer successor rejectionとcontrolled VFSによる
-different-page successor rejectionをexact implementation commitへbindした別のindependent reviewが
-必要である。それまではproduction same-process exceptionをactivateしない。
+unknown outcome、same-thread reentrant retirement、different-thread wait timeoutの全 direct counterexample
+tests に加え、W1/G1 reader handoff 中の W2 same-pointer successor rejection と controlled VFS による
+different-page successor rejectionを検査する。それまでは production same-process exception を activate
+しない。
 
 SQLite API が公開しない `mxFrame` や post-hoc whole-file digest を推測しない。read-lock 0 は main snapshot route として
 SQLite snapshot が保たれる限り WAL reset/rewrite/append と SHM coordination の変化を許すが、decode 前後の exact main
@@ -863,14 +798,12 @@ receipt recovery、exclusive close/release、normal RW/no-create reopen、`BEGIN
 recheckを通る。receipt driftはno-write concurrent-source-change、recovery後handoff failureはStoreをpoisonし、result operationは
 `backend-unavailable / sqlite-connection / reopen-required`、`compatibility()`とpin countはlast validated stateを返す。
 
-### DF-0202 accepted qualification amendment: receiptless normalization interruption
+### Receiptless normalization interruption
 
-この subsection の exact proposal `b6cbb86347e02c4b374d7991a1f78d2535789ced` は Issue #202 の
-independent reviewで、nonforgeable disposable fixture上のqualification implementationだけを
-`accepted-authority-disposable-qualification-implementation-pending-production-blocked` としてacceptした。
-後述のproduction qualification gateを満たすまで、canonical/user sourceまたはproduction pathの
-classifier、cleanup、recovery、normalizerをactivateしない。既存のunknown/mixed/journal-present
-rejectionをqualification acceptanceだけで緩和しない。
+この subsection は nonforgeable disposable fixture 上の isolated normalization implementation を定義する。
+canonical/user source または production path の classifier、cleanup、recovery、normalizer は、後述する
+直接の positive・negative・fault tests が成立するまで activate しない。既存の unknown/mixed/journal-present
+rejection を別の運用記録で緩和しない。
 
 対象 crash model は、underlying VFS callback が成功して caller へ戻った直後の境界で process を
 terminateする場合だけである。power loss、torn/partial sector write、kernel/device cache、
@@ -992,24 +925,23 @@ binding、exact page bytes、success authorityを代替しない。one-record、
 
 authorizationは二層に分ける。
 
-1. proposal acceptance前はauthority edit、read-only audit、temporary investigation probeだけを許し、
-   production classifier/cleanup/recovery/normalizer effectを禁止する。
-2. exact proposalのindependent acceptance後はraw classifier、typed filesystem/VFS ports、effect gates、
-   one-shot barrier、fault harness、およびfixture-scoped cleanup/recovery/normalizerを実装し、
-   そのsource effectを明示作成したisolated disposable qualification fixtureにだけ発行してよい。
+1. direct contract tests が成立する前は authority edit、read-only audit、temporary investigation probeだけを
+   許し、production classifier/cleanup/recovery/normalizer effectを禁止する。
+2. raw classifier、typed filesystem/VFS ports、effect gates、one-shot barrier、fault harness、および
+   fixture-scoped cleanup/recovery/normalizer は、明示作成した isolated disposable test fixture にだけ
+   effect を発行してよい。
    fixtureはharnessだけがisolated disposable rootの作成後にmintできるnonforgeable capabilityへ
-   閉じ、retained root identity/lifetime、exact fixture locator、qualification run id、selected
+   閉じ、retained root identity/lifetime、exact fixture locator、selected
    runtime/VFS/device/build profile、許可family/effect/fault scheduleへbindする。path、environment、
-   public flag、report field、self-asserted booleanから導出できず、serializeせず、internal
-   qualification-only entrypointだけが受理してrun終了時にrevokeする。public locatorやproduction
+   public flag、report field、self-asserted booleanから導出できず、serializeせず、fixture-only
+   entrypointだけが受理してrun終了時にrevokeする。public locatorやproduction
    APIからmint・注入・到達できず、canonical/user sourceへはまだeffectを発行しない。
 
-canonical/production activationは、temporary `/tmp` artifactをrepository-tracked exact harness、
-source/build command/toolchain、canonical report digestへ置換し、static/shared Cxxlens runnersが実際に
-loadする同一SQLite DSO identity/source-id/hash、VFS/build/device/filesystem profileをbindし、全
+canonical/production activationは、static/shared Cxxlens runnersが実際に loadする同一SQLite DSO
+identity/source-id/hash、VFS/build/device/filesystem profileをbindし、全
 callback boundary、parameterized `S/P/page-count/record-set`、parent-sync、rebind-at-unlink、
-recrash/idempotence、post-normalization fresh-transition matrixとindependent counterexample reviewを
-完了し、draft statusをaccepted profileへ置換した後だけ許す。一項でも不足すればeffect前に
+recrash/idempotence、post-normalization fresh-transition matrix の positive・negative・fault tests を
+完了した後だけ許す。一項でも不足すれば effect 前に
 `store.backend-unavailable`またはphase-specific opaqueへfail closedする。Cxxlensのstatic/shared
 configuration labelはstatic SQLite runtimeを意味せず、genuinely static SQLite imageは別identityと
 完全な別matrixを要求する。
@@ -1282,23 +1214,11 @@ finalize/一回closeを試み、close OKならsole DBを破棄、non-OKならcon
 ここで pin 後回収とは decoded process generation の lifetime であり、durable chunk row の cross-process pin protocol を
 意味しない。将来 lazy SQLite cursor を導入する場合は別の durable retention authority を先に定義する。
 
-### Release and authority binding
+### Release test binding
 
-Release Bundle の `snapshot-format` axis version `3.0.0` は、direct Store `readable_format` tuple ではなく backend-qualified
-feature と exact contract digest を束ねる release capability-bundle version である。memory の direct Store tuple 2.6.0、
-SQLite current 3.0.0、SQLite predecessor 2.6.0 は各 feature に保持し、axis version と相互代入しない。current binaryは
-memory direct、SQLite v3 direct、v2 read-only、explicit compact handlerの全truthful capabilityをaxis 3.0.0で提示し、pre-migration
-DB stateだけをbackend-qualified `sqlite-store-artifact-v2.6.0-pre-migration` context featureにする。registered migrationの
-2.6.0→3.0.0は`sqlite-store-readable-format` coordinateであり、release axis versionではない。このcontextとrequired handler
-featuresが揃う場合だけmigration-requiredで、capabilityの抑制やmemory tupleのaxis代入を禁止する。SQLite qualified report は current v3.0.0、v2.6.0 read-only direct-open、
-registered `compact-v2.6.0-to-v3.0.0` migration の結果を明示し、memory/SQLite/static/shared report-set digest と
-cold-reopen projection に bind する。v2 migration evidence は compatibility evidence であり、v2 write support を
-意味しない。これら四 case は exact revision、source tree、SQLite contract digest に bind した
-`cxxlens-ng-sqlite-store-v3-qualification-${revision}` artifact として保存し、schema は
-`schemas/cxxlens_ng_sqlite_store_v3_qualification_report.schema.yaml` とする。
-現段階の report schema は planned shape であって release qualification evidence ではない。implementation activation は producer、
-独立 relational validator と negative tests、schema/checker/report-set exact digest、chunk census/peak RSS/elapsed/disk measurements、
-GR と release consumer の atomic binding を全て追加した時だけ行う。schema-valid な自己申告 boolean 単独を green evidence にしない。
+Release の可否は release workflow が実行する memory/SQLite、static/shared、cold-reopen、chunk、
+limit、migration の positive・negative・fault test の exit status だけで判定する。repository は
+qualification report、exact revision/tree、report-set digest、測定 JSON を生成・保存しない。
 
 ## Consequences
 
@@ -1320,16 +1240,13 @@ GR と release consumer の atomic binding を全て追加した時だけ行う�
 - fault matrix は fresh initialization と migration の transaction/DDL/first-middle-last chunk/final-object-copy/marker/commit
   の各境界と subprocess crash を挿入し、
   cold reopen が exact logical-v2 schema/rows/payload/metadata/head projection または fully validated v3 のどちらかだけになることを検査する。
-- qualification は `SQLITE_LIMIT_LENGTH` を超える実 canonical-v5 payload を bounded に生成し、memory と
-  cold-reopened SQLite、static/shared の semantic/export/query parity、chunk census、peak RSS、elapsed time、disk
-  bytes を exact revision/tree の evidence に記録する。
+- direct scale and parity tests は `SQLITE_LIMIT_LENGTH` を超える実 canonical-v5 payload を bounded に生成し、
+  memory と cold-reopened SQLite、static/shared の semantic/export/query parity、chunk census、peak RSS、elapsed
+  time、disk bytes の条件を終了コードで検査する。
 - `:memory:` example/install success、active-WAL single-snapshot read、cold-reopen canonical DDL digest、valid concurrent
   recovery descendant、publication-local chunk corruption と global orphan/retired chunk corruption を独立に検査する。
 
-## Review disposition
+## Test disposition
 
-Issue #200 で選択された fresh Option A decision と本 ADR、統合設計、SQLite/Snapshot/
-Materialization contract/schema/checker/tests の exact binding は、二つの distinct independent
-falsification review で ACCEPT となった。この結果により physical Store authority として Accepted
-とし、Store v3 implementation は開始できる。implementation、required evidence、release qualification は未完了であり、
-後続の検証なしに production-qualified とは扱わない。
+Store の runtime receipt、source-closure、安全な SQLite recovery 条件は製品機能として保持する。
+実装完了は変更固有試験と main の全決定的回帰試験の成功で決まり、独立 review や運用証跡は要求しない。

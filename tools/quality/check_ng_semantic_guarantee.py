@@ -11,7 +11,6 @@ CONTRACT_SCHEMA=pathlib.Path('schemas/cxxlens_ng_semantic_guarantee_contract.sch
 METADATA_SCHEMA=pathlib.Path('schemas/cxxlens_ng_semantic_metadata.schema.yaml')
 VECTORS=pathlib.Path('schemas/cxxlens_ng_semantic_conformance_vectors.yaml')
 VECTORS_SCHEMA=pathlib.Path('schemas/cxxlens_ng_semantic_conformance_vectors.schema.yaml')
-REPORT_SCHEMA=pathlib.Path('schemas/cxxlens_ng_semantic_conformance_report.schema.yaml')
 
 class SemanticError(ValueError):
     def __init__(self,code:str,message:str): super().__init__(f'{code}: {message}'); self.code=code
@@ -153,11 +152,9 @@ def validate_all(root:pathlib.Path)->tuple[dict[str,Any],list[dict[str,Any]],int
         if actual['decision']!=expected['decision'] or actual['reason_code']!=expected['reason_code'] or ('value'in expected and actual.get('value')!=expected['value']): fail('semantic.vector-mismatch',vector['id'])
         if (vector['class']=='positive')!=(actual['decision']=='accepted'): fail('semantic.vector-class-mismatch',vector['id'])
         results.append({'id':vector['id'],**actual,'matched':True}); comparisons+=6 if vector['operation']=='backend_matrix' else 0
-    report={'schema':'cxxlens.semantic-conformance-report.v1','contract_digest':digest(contract),'vector_results':results,'backend_matrix':{'backends':['memory','sqlite'],'orders':['forward','reverse','seeded-shuffle'],'comparisons':comparisons,'all_equal':True},'status':'green'}
-    validate_schema(report,load(root/REPORT_SCHEMA),'report'); return contract,results,comparisons
+    return contract,results,comparisons
 def main()->int:
-    p=argparse.ArgumentParser(); p.add_argument('mode',choices=('check','report')); p.add_argument('--root',type=pathlib.Path,default=ROOT); p.add_argument('--output',type=pathlib.Path); a=p.parse_args(); c,r,n=validate_all(a.root.resolve()); report={'schema':'cxxlens.semantic-conformance-report.v1','contract_digest':digest(c),'vector_results':r,'backend_matrix':{'backends':['memory','sqlite'],'orders':['forward','reverse','seeded-shuffle'],'comparisons':n,'all_equal':True},'status':'green'}
-    if a.mode=='report': (a.output.write_text(json.dumps(report,indent=2,sort_keys=True)+'\n') if a.output else print(json.dumps(report,indent=2,sort_keys=True)))
+    p=argparse.ArgumentParser(); p.add_argument('mode',choices=('check',)); p.add_argument('--root',type=pathlib.Path,default=ROOT); a=p.parse_args(); c,r,n=validate_all(a.root.resolve())
     print(f'verified semantic algebra: {len(r)} vectors, {n} backend comparisons, {digest(c)}'); return 0
 if __name__=='__main__':
     try: raise SystemExit(main())

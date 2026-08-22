@@ -33,8 +33,9 @@ use-def/value flow、alias/effect/invalidation、interprocedural summary/model p
 proof-carrying rewrite/artifact、cross-provider semantic consensus です。個別 capability は kernel を
 肥大化させず、versioned relation/provider/analysis/model/recipe として追加します。
 
-machine-readable な製品方向と agent workflow は
-[API development readiness](schemas/cxxlens_ng_api_development_readiness.yaml) にあります。
+machine-readable な製品 contract は `schemas/cxxlens_ng_*` と
+`schemas/cxxlens_support_matrix.yaml` にあります。開発・release の運用方針は
+[ADR 0106](docs/design/adr/0106-test-only-development-and-release-policy.md) にあります。
 
 ## Build
 
@@ -67,7 +68,6 @@ target_compile_features(my_analyzer PRIVATE cxx_std_23)
 - [次世代統合設計](docs/design/cxxlens_next_generation_integrated_design_ja.md)
 - [Public API catalog](schemas/cxxlens_ng_public_api_catalog.yaml)
 - [Relation registry](schemas/cxxlens_ng_relation_registry.yaml)
-- [API development readiness](schemas/cxxlens_ng_api_development_readiness.yaml)
 - [開発アーキテクチャ](docs/development/architecture.md)
 - [Extending the platform](docs/development/extending-platform.md)
 - [Tutorials](docs/tutorials/README.md)

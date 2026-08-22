@@ -36,7 +36,7 @@
 | Snapshot / Store Contract | identity DAG、closure binding、publication series、format/compaction |
 | Provider Protocol Specification | process protocol、manifest、task、batch、failure |
 | Public C++ API Catalog | signature、lifetime、threading、stability |
-| Acceptance Manifest | requirement、test、gate、evidence |
+| Quality/release workflows | requirement、登録試験、直接判定、終了コード |
 | Security Profile / Trust Registries | namespace ownership、certification、discovery、sandbox、support tuple |
 | ADR | 選択理由、代替案、未確定実装方式 |
 | Examples / Tutorials | 非規範の利用例 |
@@ -106,8 +106,8 @@ Project Catalog
 
 #### NG0 — Semantic Relation Kernel
 
-NG0 は 1.0 候補の最小垂直スライスである。ただし NG0 completion だけで distribution 1.0 を
-production release してよい、という意味ではない。
+NG0 は最小垂直スライスの capability profile である。profile の completion だけで release を
+宣言せず、変更固有試験と main/release workflow の直接試験で判定する。
 
 - project catalog
 - source snapshot
@@ -157,23 +157,23 @@ GCC、LLVM IR、object/binary、remote provider は profile と独立して追�
 
 profile と distribution release の対応は次で一意に解釈する。
 
-| Profile | Release role | 1.0 blocker |
+| Profile | Release role | Required direct test scope |
 | --- | --- | --- |
-| NG0 | pre-1.0 で候補化する最小 kernel vertical slice | 必須 |
-| NG1 | 1.0 の closure、incrementality、provider production hardening | 必須 |
-| NG2 | 1.x へ独立追加可能な analysis capability | 不要 |
-| NG3 | 1.x へ独立追加可能な mutation/artifact capability | 不要 |
+| NG0 | 最小 kernel vertical slice | kernel contract と main の決定的試験 |
+| NG1 | closure、incrementality、provider runtime hardening | 対応 contract の positive・negative・fault test |
+| NG2 | 独立追加可能な analysis capability | capability 固有の直接試験 |
+| NG3 | 独立追加可能な mutation/artifact capability | capability 固有の直接試験 |
 
-NG1 は 1.0 release に必須の production hardening である。1.0 review の blocker は R0 から R4 および
-G0 から G5、GR であり、R5、R6、R7 は 1.0 blocker ではない。NG2/NG3 の実装や追加は distribution
-major を自動的に上げない。accepted stable version axis を破壊するときだけ future major を要求する。
+NG1 は対応する provider/runtime contract と直接試験をそろえる production hardening である。NG2/NG3 の
+実装や追加は distribution major を自動的に上げない。accepted stable version axis を破壊するときだけ
+future major を要求する。release の可否は release workflow の全試験終了コードで判定する。
 
 NG0 provider protocol は manifest/digest、major/feature negotiation、bounded frame、deterministic CBOR control、
 streaming column chunk、credit backpressure、ACK/同一 task transaction 内 resume、task/batch/group lifecycle、
 cancel/deadline、coverage/unresolved、structured failure、process isolation までを含む最小 protocol である。
 NG1 は durable resume token、heartbeat、progress-rate enforcement、spill staging、hung worker recovery、
 multi-process reader、adjacent provider differential、長時間 conformance を加える。詳細境界と
-release/version tuple は `schemas/cxxlens_ng_release_bundle.yaml` を規範とする。
+release/version tuple は `schemas/cxxlens_support_matrix.yaml` と各製品 contract を規範とする。
 
 ### 0.4 初期非スコープ
 
@@ -213,7 +213,7 @@ NG0 では次を安定契約にしない。
 - in-memory / SQLite parity
 - warm-zero provisioning
 - stale digest edit precondition
-- acceptance manifest 思想
+- contract と直接試験による traceability
 
 #### 互換性対象から外す
 
@@ -2137,10 +2137,9 @@ effect後ならfinalize/必要時一回rollback/一回close後のphase classifie
 close non-OKはquarantineし、`BEGIN IMMEDIATE`後のdriftはzero authority writeのまま該当publish/compaction/migration/fresh-init
 precommit規則へ委譲する。
 
-Issue #202 / DF-0202 の receiptless normalization interruption profile は、exact proposal
-`b6cbb86347e02c4b374d7991a1f78d2535789ced` の独立 review により disposable qualification
-implementation だけを accepted authority とする。canonical/user source または production path は、
-別の accepted production profile と qualification が完了するまで activate しない。対象 crash model は、
+Issue #202 / DF-0202 の receiptless normalization interruption profile は、disposable fixture に閉じた
+product runtime contract とする。canonical/user source または production path は、対象 profile の
+positive・negative・fault test と runtime receipt 条件が完了するまで activate しない。対象 crash model は、
 underlying VFS callback が成功して呼出側へ戻った境界での process
 termination だけである。power loss、torn/partial sector write、kernel/device cache、callback 内 termination、
 unqualified filesystem reorder は含まず、これらを callback-boundary evidence から推測しない。cold raw classifier は
@@ -2212,23 +2211,17 @@ matrix をbindする。admitted `S<=65536`、`512<=P<=65536`では`Q<=128`に対
 `L=floor(0x40000000/P)+1>=16385`なので、`L>Q`を全pairで機械的に証明し、存在しないcrossingを
 実行vectorにしない。代わりにsynthetic record-set negativeで`L`を注入したcandidateを拒否する。
 
-authorization は二層である。proposal acceptance 前は authority edit、read-only audit、temporary
-investigation probeだけを許す。exact proposal の independent acceptance 後は raw classifier、
-typed filesystem/VFS ports、effect gates、one-shot barrier、fault harness、およびfixture-scoped
-cleanup/recovery/normalizerを実装し、そのsource effectを明示作成したisolated disposable
-qualification fixture にだけ発行してよい。fixture authorityはharness
-だけがisolated disposable rootの作成後にmintするnonforgeable capabilityとし、retained root
-identity/lifetime、exact fixture locator、qualification run id、selected runtime/VFS/device/build
-profile、許可family/effect/fault scheduleへbindする。path、environment、public flag、report field、
-self-asserted booleanから導出できず、serializeせず、internal qualification-only entrypointだけが
-受理してrun終了時にrevokeする。public locatorまたはproduction APIからmint・注入・到達できない。
-canonical/user source と
-production activation は、repository-tracked harness/build/toolchain、static/shared Cxxlens runners が
-実際に load する同一 SQLite DSO identity/source-id/hash、VFS/build/device/filesystem profile、全
-callback boundary・parameterized large-sector・parent-sync・rebind-at-unlink・recrash/idempotence matrix、
-canonical report digest、independent counterexample review が揃い、draft profile が accepted profile
-へ置換されるまで fail closed とする。Cxxlens の static/shared runner labels から static SQLite
-runtime を推測せず、genuinely static SQLite image は別 profile/matrix を要求する。
+authorization は product contract と直接試験で閉じる。raw classifier、typed filesystem/VFS ports、
+effect gates、one-shot barrier、fault harness、および fixture-scoped cleanup/recovery/normalizer は、
+明示作成した isolated disposable fixture にだけ source effect を発行する。fixture authority は
+retained root identity/lifetime、exact fixture locator、selected runtime/VFS/device/build profile、
+許可 family/effect/fault scheduleへbindしたnonforgeable capabilityとし、path、environment、public flag、
+report field、self-asserted booleanから導出せず、serializeせず、run終了時にrevokeする。public locatorまたは
+production APIからmint・注入・到達できない。canonical/user source と production activation は、static/shared
+Cxxlens runnersが実際にloadする同一 SQLite DSO identity/source-id/hash、VFS/build/device/filesystem profile、
+全 callback boundary・parameterized large-sector・parent-sync・rebind-at-unlink・recrash/idempotence の
+positive・negative・fault tests が揃うまで fail closed とする。Cxxlens の static/shared runner labels から
+static SQLite runtime を推測せず、genuinely static SQLite image は別 profile/matrix を要求する。
 
 exact public locator `:memory:` は filesystem canonicalization 前に ephemeral fresh-v3 branch とし、sidecar、v2/migration、
 close 後 persistence を持たない。embedded NUL またはplatform pathへlosslessに表現不能なnonempty inputはruntime/filesystem
@@ -2272,14 +2265,10 @@ profile で native `SQLITE_OK` が返ることは mapping の null/non-null を�
 変換しない。writer attach 後の正当な transition は CANTINIT+null から exact READONLY+non-null である。generic non-profile caller の
 `extend=0`+OK semantics は変更しない。この per-file READONLY-family state は成功した delegated `xShmUnmap` でだけ reset する。
 
-DF-0205 の `cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1` は Issue #205 の
-exact proposal `6cb705c256c9576f74b50a2dca8fc4e8f72d06bb` を
-<https://github.com/horiyamayoh/cxxlens/issues/205#issuecomment-5095883584> の独立 review
-(`P0=0 / P1=0 / P2=0`) が `accepted-authority-implementation-pending` としてacceptした authority amendmentである。
-schema の `same_process_writer_mapping_lease_proposal` key は reviewed exact artifact/history として保持し、
-acceptance pendingを意味しない。この acceptance はinternal implementationを認可するが、distinct exact
-implementation commitと全counterexample matrixの独立 reviewが完了するまでcurrent sourceのblanket
-`SQLITE_OK` rejectionを変更せず、productionをblockする。同じloaded SQLite Unix runtimeで既存writerのinode-bound
+DF-0205 の `cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1` は、same-process writer の
+runtime safety contract である。internal implementation はこの contract の positive・negative・fault
+tests で検証し、全 counterexample が通るまで current source の blanket `SQLITE_OK` rejectionを変更せず、
+productionをblockする。同じloaded SQLite Unix runtimeで既存writerのinode-bound
 SHM mappingが再利用される場合に限り、accepted narrow exception authorityはwriter native map前のlocal
 non-authoritative attempt、exact OK+nonnullとpost-map receipt後のregistry pending、current-v3 Store
 writer gate完了後のlive leaseという順で成立し、reader delegation前にprocess-global cross-alias
@@ -2290,24 +2279,19 @@ temporary/raw external/readonly/non-main/private recovery/normalization/CREATE h
 pending単独、PID/path/VFS name/pointer equality、post-hoc endpoint equality、connection sharingは
 authorityではない。
 
-Issue #206 / DF-0206 の実装監査は、同じ `sqlite3_file` attachmentで複数pageのwriter
+Issue #206 / DF-0206 は、同じ `sqlite3_file` attachmentで複数pageのwriter
 `xShmMap`が成功し得る一方、native `xShmUnmap`はcomplete attachmentを一 callbackで解放するという
-cardinalityをaccepted DF-0205 authorityが未定義であることを示した。ADR 0097 とSQLite/Snapshot
-contract/schema mirrorの `cxxlens.sqlite.writer-shm-native-attachment.v1` は
-exact proposal `bf30978eb34d5f94bbadfd675c8ce2b50fb2f899` を Issue #206 の独立
-semantic/structural review
-<https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097950062> が
-`accepted-authority-implementation-pending` (`P0=0 / P1=0 / P2=0`) として accept した
-writer-only amendment である。map callbackごとの
+cardinalityを定義する。ADR 0097 とSQLite/Snapshot contract/schema mirrorの
+`cxxlens.sqlite.writer-shm-native-attachment.v1` は writer-only runtime contract であり、map callbackごとの
 pair/effect/page authorityを保持しつつ、checked non-reusable attachment identityに属するcomplete
 post-native/pending/live member setを一回のnative unmapへatomicにbindし、cross-attachment/partial
 group、outcome複製、duplicate cleanupを拒否する。internal writer attachment-group state machine と
 focused tests の実装だけを認可し、production VFS binding と reader grouping は認可しない。既存
 blanket native OK rejectionを変更しない。
 
-exact proposal `3c52b7e01a4d2a4e382940017d1dfb8f07f1be54` の独立 review は
-`P0=0 / P1=2 / P2=1` でrejectした。non-last attachmentが唯一supportしたpageのfresh-reader
-authorityと、map-before-gate group snapshot対later-map admissionのtotal orderが未定義だったためである。
+DF-0206 の direct counterexample tests は、non-last attachmentが唯一supportしたpageのfresh-reader
+authorityと、map-before-gate group snapshot対later-map admissionのtotal orderを含む。これらを
+runtime contract として閉じ、実装が一項でも欠ければ production を block する。
 revised proposalは各live attachment groupのexact page-support setを保持し、non-last cleanup後に残存
 support unionからfresh-reader-admissible page setをatomicに再計算する。support zeroのpageは既存exact
 handoffのsealed lifetimeを除きfresh admission不可とし、live attachmentのfresh map/resealだけで復活する。
@@ -2321,38 +2305,20 @@ cleanup済みreceiptはtransferせず、sealed SHM sizeはpage authorityと分�
 observationとして保持する。gate completionとlater mapは一つのregistry state boundaryでtotal-orderし、
 map-winningはbounded blocker、gate-winningはcallback return前promotionとする。timeout、unknown、
 open-epoch driftはcomplete groupをhide/quarantineし、successful gate後にboundary前pendingを残さない。
-`9011b22` review時のenclosing lease digestは
-`sha256:612d450d22b676e4144b76f61cab60cade3ae860f3457b7ec168a9bd00cd9550` である。
-reader-predelegation orderingを加えたcurrent digest
-`sha256:05624ed7e918d43705a4dd6b37884c43c4e98e7a2b89427bbe64367e0655a15f`
-は四つのmirror/checkerへbindする。この exact revision は
-`bf30978eb34d5f94bbadfd675c8ce2b50fb2f899` として
-<https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097950062> の独立
-semantic/structural reviewに合格した。review receiptとaccepted statusを加えたcurrent enclosing
-lease digestはDF-0206 accepted checkpointとして
-`sha256:e522cbbe3c6bb9bf2ed645816941f1921f5884eacc36360e8dc546b779bded29`
-である。この acceptance は writer-only であり、DF-0207 の reader authority または production
-activation を推移的に認可しない。
+reader-predelegation orderingを含む runtime contract は、四つの mirror/checker と direct
+positive・negative・fault tests で同一に検査する。writer-only contract は DF-0207 の reader authority
+または production activation を推移的に認可しない。
 
-Issue #207 / DF-0207 のread-only implementation auditは、同じreader `sqlite3_file`のdifferent-page
-mapが別handoffを作る一方、native `xShmUnmap`はreader attachment全体を一回で解放するcardinality
-gapを記録する。DF-0206のwriter-only proposal/reviewはreader groupをtransitively認可しない。
-reader attachment authorityとdistinct exact implementation/matrix reviewが完了するまでreader grouping、
-production reader exception、VFS activation、qualificationをblockし、一native outcomeを複製しない。
+Issue #207 / DF-0207 は、同じreader `sqlite3_file`のdifferent-page mapが別handoffを作る一方、
+native `xShmUnmap`はreader attachment全体を一回で解放するcardinality gapを定義する。DF-0206の
+writer-only runtime contract はreader groupをtransitively認可しない。reader attachment contract の
+direct positive・negative・fault testsが完了するまでreader grouping、production reader exception、VFS
+activationをblockし、一native outcomeを複製しない。
 
 四つのSQLite/Snapshot contract/schema mirrorに置く
-`reader_native_attachment_amendment_proposal` /
-`cxxlens.sqlite.reader-shm-native-attachment.v1` は Issue #207 / DF-0207 の
-`accepted-authority-implementation-pending` reader-only amendmentである。exact proposal commit
-`636ef43803665e9999b38b9c33bd3afdbb6b4460` とsemantic digest
-`sha256:a342d01379b7d6e3c9a162dc02cf260942c4dc96783e941333c1aa2a1eeef8f0` は
-Issue #207 のfresh independent exact-commit review
-<https://github.com/horiyamayoh/cxxlens/issues/207#issuecomment-5125815049> で
-`P0=0 / P1=0 / P2=0` としてacceptされた。receiptを加えたcurrent amendment digestは
-`sha256:8d809188559c98b15a0eb145b0341ad8ad3bb87a5d848f7bc20d11c61b5c90a6`、
-enclosing lease digestは
-`sha256:f42cb94b284b2af1683d7fe573ef0a9b9d6d6706d111bf0f97d8d22a554edab5`
-である。
+`cxxlens.sqlite.reader-shm-native-attachment.v1` は DF-0207 の reader-only runtime contract であり、
+checked identity と attachment lifecycle を定める。direct tests はこの contract の state machine と
+runtime receipt を検査し、repository-side proposal/review metadata を authority にしない。
 accepted DF-0205/DF-0206/DF-0208 subtree、current blanket native `SQLITE_OK` rejection、production
 VFS、public C++ APIを変更しない。checked reader attachment identityはprocess/runtime/VFS/file
 family、reader aliasとdistinct lifetime pin、connection、main `native_file_node` / `xOpen`、
@@ -2410,23 +2376,19 @@ ordinary predecessorの`SQLITE_READONLY`+nonnull、base `SQLITE_READONLY`+null�
 proposal group形成後のREADONLY/non-nullは二つ目のcleanup ownerを作らずgroupをhideして
 `SQLITE_IOERR`+nullとdeferred sole group cleanupへ閉じる。`SQLITE_OK`+null等のprotocol-invalid pairは
 zero-effectならreservationを閉じ、mappedなら一つのcleanup lineage、不明ならquarantineへ全域化する。
-将来production reviewを通過したadmitted `SQLITE_OK`+nonnullだけが`SQLITE_READONLY`+same pointerへ
-project可能で、denial、validation failure、ambiguity、`SQLITE_OK`+null、unleased `SQLITE_OK`は
-`SQLITE_IOERR`+nullである。このacceptanceはinternal reader group/map/member/revalidation、
-callback/session lifetime、unmap/close state machine、registry gate、focused testsだけを認可する。
-production/VFS/native-OK activationはexact
-implementationとcomplete counterexample matrixのdistinct independent reviewまでblockする。
+direct positive・negative・fault testsを通過したadmitted `SQLITE_OK`+nonnullだけが`SQLITE_READONLY`+same
+pointerへproject可能で、denial、validation failure、ambiguity、`SQLITE_OK`+null、unleased `SQLITE_OK`は
+`SQLITE_IOERR`+nullである。internal reader group/map/member/revalidation、callback/session lifetime、
+unmap/close state machine、registry gate はこの focused test set で直接検査し、production/VFS/native-OK
+activationは全 counterexample test が green になるまで blockする。
 
 Issue #208 / DF-0208 の
-`cxxlens.sqlite.writer-gate-outcome-evidence.v1` は、map-before-gate cleanupへexact negative evidenceと
-sole cleanup authorityを与えるaccepted writer-only amendmentである。四つのSQLite/Snapshot
-contract/schema mirrorの `writer_gate_outcome_evidence_amendment_proposal` は、exact proposal
-`bd2505f26d0d45b7bfa785a533c308ab957b11aa` を Issue #208 のfresh independent semantic/structural
-review <https://github.com/horiyamayoh/cxxlens/issues/208#issuecomment-5119882571> が
-`accepted-authority-implementation-pending` (`P0=0 / P1=0 / P2=0`) としてacceptしたことをexact
-receiptへbindする。このacceptanceはinternal gate outcome evidence/state machine、registry cut/callback
-cleanupとfocused testsだけを認可する。accepted DF-0206 fieldsとreader-predelegation ordering fenceを
-変更せず、DF-0207 reader grouping、production/VFS binding、public API、native OK projectionへ推移認可しない。
+`cxxlens.sqlite.writer-gate-outcome-evidence.v1` は、map-before-gate cleanupへtyped negative runtime
+receiptとsole cleanup authorityを与えるwriter-only contractである。四つのSQLite/Snapshot
+contract/schema mirrorの `writer_gate_outcome_evidence_amendment_proposal` は internal gate outcome
+state machine、registry cut/callback cleanup、focused direct tests の条件を定める。DF-0206 fields と
+reader-predelegation ordering fenceは変更せず、DF-0207 reader grouping、production/VFS binding、public
+API、native OK projectionへ推移認可しない。
 
 gate outcome evidenceとregistry cut executionを二軸に分ける。validator issuerはprocess/runtime/VFS/
 file-family/alias/connection/main native node+`xOpen`/open epoch、expected attachment epoch reservation、
@@ -2592,14 +2554,8 @@ replaceする。後続dispatch consumptionは同じgenerationだけをupdateし�
 continuationのcomplete transfer後にだけrelease/wakeupをatomic publishする。stale generation、incomplete
 custody、terminal record未installではslotをreleaseしない。
 
-reviewed proposal semantic digestは
-`sha256:30fd6d29224e9707bbdf0f72b585d75c726f361e97ce6ed730dd608f985fa728`、review時の
-enclosing lease canonical digestは
-`sha256:79f31929806955fceeb373739b5f67b8395525bb77d57f8886f6f0c559bcd89f` である。
-accepted statusとexact review receiptだけを加えたcurrent DF-0208 semantic digestは
-`sha256:b2bf7e63954fb709ffac98fa62c0872dadf4e5297a48f069b89a0722a0912ddb`、current enclosing lease
-canonical digestは
-`sha256:a3cbda5086921c6e804cc6bd054a5f638900ee7d177ee35dbac79ae1c83abca5` である。
+DF-0208 の semantic state は runtime contract の typed fields と direct mutation/fault tests で
+検証する。レビュー用の digest、issue state、checkpoint はこの runtime authority に含めない。
 
 local attemptはnative writer map前にwriter generation/first-writer cohort in-flight pinを取得し、
 pre-statより先に別個のwriter-map stat-only interfaceとretained-parent/ancestry namespace watchを
@@ -2692,16 +2648,15 @@ transitively mintできない。callback中に
 registry mutexを保持せず、handoff lifetime全体についてwriter closeをblockしたりnative unmap successを
 捏造しない。native lifecycle ambiguityはconnection/runtime/VFSをquarantineする。
 
-exact proposal は独立 review でaccept済みなので、internal registry/callback gates/testsの実装を開始できる。
-acceptanceだけではproduction exceptionをactivateせず、current sourceはblanket native `SQLITE_OK`
+internal registry/callback gates/tests は runtime contract に従って実装する。直接試験だけでは production exception を暗黙に
+activateせず、current sourceはblanket native `SQLITE_OK`
 rejectionを維持する。production activationは二つのlive StoreのCAS winner/loser、materialization race、cross-process CAS、
 CANTINIT/READONLY regression、およびfork/PID reuse、holder/in-flight/handoff/unmap race、ABA、
 runtime/VFS/image/app-data/callback、object/entry/mount/namespace、page/pointer/route-specific size/effect、
 extend pair全分類、simultaneous first-writer join/mismatch、W2 in-flight対W1 retire、new-page atomic
 size、duplicate target FD lock-loss、native close後memory pin、unknown outcome、same-thread reentrant
 retirement、different-thread wait timeout、controlled VFSでprior-generation handoffとは異なるpageへの
-successor map rejectionの全matrixをexact implementationへbindした別の
-independent counterexample review後だけ許す。public C++ API、snapshot/publication identity、error
+successor map rejectionを direct positive・negative・fault test で網羅する。public C++ API、snapshot/publication identity、error
 tuple、generic non-profile semanticsは変更しない。
 qualification scratch/map-sequence validatorはleaseを保持しないためnative OK terminal ruleを維持し、
 production `qualified_source_shm_map_route`のexact lease receipt付きcallbackだけがOK→READONLYを使える。
@@ -2973,9 +2928,9 @@ semantic task または adoption authority ではない。
 
 DF-0196 により installed physical occurrence は schema `cxxlens.clang22-materializer-occurrence-manifest.v1`、fixed path
 `share/cxxlens/materialization/clang22/occurrence-v1.json` の source-private manifest で認証する。manifest payload は source revision/tree、package
-configuration、closed role/path/digest inventory を持ち、自身を inventory に含めず self-digest field を除いた canonical payload を hash する。external
-install-artifact manifest は occurrence manifest bytes を含む relocated prefix 全体の独立 witness とし、その full-prefix digest を request/semantic
-snapshot identity に入れない。
+configuration、closed role/path/digest inventory を持ち、自身を inventory に含めず self-digest field を除いた canonical payload を hash する。
+installed package の prefix 検査は quality/release workflow の直接試験で行い、別の external install-artifact manifest や full-prefix digest を
+生成・保存・runtime identity の authority としない。
 
 Linux runtime は `/proc/self/exe` から actual regular/non-deleted executable object を open し、prefix の exact
 `bin/cxxlens-clang22-materialize` と同じ device/inode object であることを検証する。prefix dirfd から manifest-declared worker/authority paths を
@@ -2985,8 +2940,8 @@ write/grow/shrink と seal 追加を不可逆に封じる。以後の worker/sch
 installed path または mutable inode を再利用しない。同じ role の反復 open は同じ sealed inode の handle だけを増やし、artifact bytes を再 copy しない。
 snapshot 作成・copy・seal・再検証を完了できない環境は effect 前に拒否するため、measurement 後の rename または in-place mutation は実行 bytes を
 変えられない。
-`argv[0]`、`PATH`、request 自己申告、build-tree shadow、symlink/magic-link は occurrence authority ではない。report は requested と measured
-occurrence を分離し、external full-prefix witness が measured occurrence manifest bytes を cross-bind する。
+`argv[0]`、`PATH`、request 自己申告、build-tree shadow、symlink/magic-link は occurrence authority ではない。product report は requested と measured
+occurrence を分離し、measured manifest bytes と実行時の sealed identity を直接照合する。
 
 process invocation は `argc == 1` のみを受理し、`argv[0]` を path/identity authority にしない。unexpected option/operand は stdin を読まず、
 worker/Store/file effect を行わず、stdout zero bytes / exit 2 とする。
@@ -2995,7 +2950,7 @@ request/response raw byte は BOM のない exact UTF-8 の top-level JSON objec
 limit+1 bytes だけを消費する。limit 内は complete input の count/digest、超過時は exactly limit+1 consumed prefix の count/digest と
 `complete: false` を response に残し、未読 bytes を主張しない。任意 depth の duplicate member、invalid UTF-8、BOM、
 non-finite number、object 以外の top-level value、二つ目または trailing JSON value を effect 前に拒否し、last-key-wins decoder や authority YAML
-loader を transport に流用しない。この lexical verdict は materialization tool/checker と release evidence ingestion が同じ strict loader で所有する。
+loader を transport に流用しない。この lexical verdict は materialization tool と runtime validator が同じ strict loader で所有する。
 first failure は byte limit、strict JSON object、`schema`/`request_version` envelope、version dispatch、selected full schema、derived identity/binding の順で
 決める。raw request は一つの immutable bounded private spool へ保存する。pass 1 は DOM なしで lexical/envelope/version を検証し、pass 2 は同じ
 spool を replay して selected-v2 schema、bottom-up binding、strict JSON decoded string から source spool への streaming base64 decode を行う。
@@ -3064,9 +3019,9 @@ derived identity/binding より前に拒否する。source authority は decoded
 `content_base64` は sealed source bytes から一意に再生成した canonical spelling と request decoded string の exact 一致を独立検証して投影する。
 spelling alias を別 task identity として受理せず、raw request token を task authority に昇格させない。
 
-この補正は protected `main` 未 merge、production materializer 未実装、qualification 未実施の active v2.1 unit 内で行うため exact version
-`2.1.0` を維持する。canonical または qualified な外部 2.1 producer/consumer が見つかった場合はこの versioning 判断を reject し、明示的な
-successor version と migration boundary を再審議する。
+この補正は active v2.1 product contract と direct test の中で行うため exact version `2.1.0` を維持する。
+canonical な外部 2.1 producer/consumer が見つかった場合はこの versioning 判断を reject し、明示的な successor
+version と migration boundary を再審議する。
 
 task は最大 4096、task ごとの decoded source は 16 MiB、aggregate source は 512 MiB、response は 1 GiB、JSON depth は 64、object member は 4096、member name は
 UTF-8 256 bytes、strong ID は 512 Unicode scalar / UTF-8 2048 bytes、logical path は UTF-8 4096 bytes、SQLite relative path は UTF-8
@@ -3082,7 +3037,7 @@ physical generation、reopen receipt をこの時点で主張しない。prepubl
 して初めて stdout を書き、allocation/spool/validation failure を compact response へ downgrade しない。
 schema-valid failure response は exit 1、passed detailed response は exit 0、stdout transport 自体の failure は response authority なしの exit 2 とする。
 publication 前の response construction failure だけが zero-effect compact failure を使用できる。commit 後の broken stdout を zero-commit と偽らず、
-その場合は committed Store record が recovery authority であり、response missing の run は release evidence にしない。
+その場合は committed Store record が recovery authority であり、response missing は authoritative materialization result ではない。
 
 この installed tool は新しい public Clang-specific C++ host bridge でも general provider adoption API でもない。既存 portable task/runtime/native
 SDK は protocol authoring/conformance surface のまま維持し、installed JSON contract の task construction と publication semantics を public
@@ -3169,23 +3124,20 @@ diagnostic/evidence に限定し、row reconstruction、claim construction、Sto
 
 #### DF-0200 proposed incremental claim / Store residency resolution
 
-Issue #181 / DF-0200 の Option A は Issue #200 の fresh user decision として選択済みだが、contradiction resolution は
-distinct independent review 中である。exact binding が受理されるまでは blocked implementation を開始せず、受理後も
-実装・四象限 qualification の完了を先取りして qualified と宣言してはならない。claims oracle 失敗を
+Issue #181 / DF-0200 の Option A は Issue #200 の Store contract として選択済みである。実装は direct
+positive・negative・fault・resource tests が成功するまで出荷経路へ接続せず、claims oracle 失敗を
 materializer semantics digest の retarget で閉じてはならない。Snapshot Store contract/checker は
 resolution ID cxxlens.df-0200.incremental-claim-store.v1 と ingress object を self-contained hardcoded authority として検証し、Clang 22
 materialization checker だけが downstream から Store binding を照合する。generic Store checker が materialization contract を load する reverse
 dependency は禁止する。
 
-1. **D1 — independent claim oracle:** qualification 中の public sdk::claim_batch::commit resident control flow は production incremental control flow と
-   独立な bounded reference とする。共有可能なのは canonical codec、identity function、field validator だけであり、commit control flow、reference/conflict/
-   differential verdict logic は共有しない。pre-refactor の canonical claim-batch v2 bytes と verdict を
-   cxxlens.df-0200.claim-batch-differential-corpus.v1 として freeze し、current public API と production path の双方を比較する。corpus は added/existing、
-   new-existing hard/soft reference・conflict・differential、existing-existing non-reclassification、one-shot/split parity、入力 permutation、exact duplicate、
-   metadata-distinct occurrence を閉じ、独立 review なしの再生成を禁止する。
-   固定 artifact は `schemas/cxxlens_ng_df_0200_claim_batch_differential_corpus.tsv`、raw SHA-256
-   `f05513d05b0b57788b6f94d9c1a477c88d589b64dd8232d88a5c6c6022a84836`、10 case / success 9 / error 1 とし、専用 C++ CTest が
-   current public `sdk::claim_batch::commit` の全 input、success/error tuple、full output、verdict bytesを実行照合する。production path比較はaccepted activationで必須とする。
+1. **D1 — claim oracle direct test:** public `sdk::claim_batch::commit` の resident control flow は production incremental control flow と
+   別の bounded reference としてテストする。共有可能なのは canonical codec、identity function、field validator だけであり、commit control flow、reference/conflict/
+   differential verdict logic は共有しない。canonical claim-batch v2 bytes と verdict を
+   `cxxlens.df-0200.claim-batch-differential-corpus.v1` の固定 test input として保持し、current public API と production path の双方を比較する。
+   corpus は added/existing、new-existing hard/soft reference・conflict・differential、existing-existing non-reclassification、one-shot/split parity、入力 permutation、
+   exact duplicate、metadata-distinct occurrence を閉じる。専用 C++ CTest が current public `sdk::claim_batch::commit` の全 input、success/error tuple、
+   full output、verdict bytesを実行照合し、production path比較も同じ direct test の一部とする。
 2. **D2 — move-only lifecycle and codec:** begin、canonical-next consume_task(sealed_materialization_result&&)、finalize() && だけを受理し、task seal は一件ずつ
    破棄する。final source は cxxlens.df-0200.partition-event-stream.v1 の move-only replay source とする。codec は big-endian、canonical tuple v1 を使う。
    86-byte CXLPEV01 header、kind-u8 / key-length-u64be / payload-length-u64be / key / payload / SHA-256 checksum frame、112-byte CXLPEEND trailer を exact とし、
@@ -3194,14 +3146,14 @@ dependency は禁止する。
    canonical tuple tag/type/cardinality、全collectionのorder/dedup、全field orderを固定し、stream sequence、frame、trailer frames/prefix、
    task/partition/global event と claim/row/coverage/unresolved の各aggregateに専用domainを割り当てる。aggregateはu64 countとlength-framed full canonical
    projectionをbindする。oracle入力のexact duplicate claim occurrenceは独立claim lawでcollapse、metadata-distinct same-contentはpreserveし、final full-event duplicateはrejectする。
-3. **D3 — independent completeness and Store ingress:** completeness authority は event stream 自身の header/trailer ではなく、externally validated request と
-   sealed execution journal/task receipts である。task/partition/event/claim/row/coverage/unresolved の census+digest、segment/run/merge manifest、
-   byte/record/seal receipt を exact equality で照合し、internally self-consistent な whole-partition drop も拒否する。Store はこれら external authorities と
-   full-byte codec を独立 replay してから一 candidate / 一 publish / zero partial visibility を維持する。semantic-version component だけを u32 とし、
+3. **D3 — completeness and Store ingress:** completeness authority は event stream 自身の header/trailer ではなく、validated request と
+   sealed materialization result/task runtime receipt である。task/partition/event/claim/row/coverage/unresolved の census+digest、segment/run/merge manifest、
+   byte/record/seal receipt を exact equality で照合し、internally self-consistent な whole-partition drop も拒否する。Store は同じ validated runtime state と
+   full-byte codec を replay してから一 candidate / 一 publish / zero partial visibility を維持する。semantic-version component だけを u32 とし、
    selected requestはprovider dispatch前にcanonical taskごとexactly one entry digestをsealし、各task receiptは自身のtask ID/ordinalへcross-checkする。
    pre-encoder oracleはimmutable sealed task resultからencoderと独立にfull event projectionを列挙し、共有はcodec/identity/field validatorだけとする。
    task receiptはsuccessful-sealとProvider Runtime raw stdout/frame/sealed transcript authorityをbindし、task resultはreceipt sealとstream sealの後だけ破棄する。
-   task receiptはpre-existing selected-entryだけを参照し、全task後のcycle-free execution-journal receipt-setがordered task sealsをbindする。streamとend/trailerを
+   task receiptはpre-existing selected-entryだけを参照し、全task後のcycle-free task-result setがordered task sealsをbindする。streamとend/trailerを
    同時編集してもfixed receiptが、stream/receipt/task seal/final setを相関編集してもimmutable final-setまたはselected-entry bindingが拒否する。
    Storeはraw stdout digest/frame censusとreceipt partition/event full-projection digestをstream replayにexact比較する。
    canonical v5 collection count は u64 とする。現行 1M/10M decoder cap は authority ceiling ではなく bounded streaming で除去する legacy guard である。
@@ -3214,15 +3166,14 @@ dependency は禁止する。
    u128 overflow test は max+1 value を構築せず checked operands で起こす。proved limit/report-invalid は I/O より先、actual private spool ENOSPC は
    in-range 証明後だけである。report limit は1 GiBである。
 5. **D5 — phase-authentic publication outcomes:** materialization.spool-failure は private prepublication spool の actual port I/O/hash/ENOSPC に限る。
-   2026-07-22 の accepted activation は三 phase binding、request-bound reverse closure、partition_stage counter-overflow tuple、full report-schema canonical digest を一つの
-   change で atomically 更新した。request 2.1.0 shape は不変で、report 2.1.0 には private spool-failure、13/19-file occurrence inventory、
-   `task_sandbox_requirements maxItems: 4096` だけを activation した。SQLite writer_publish の ENOSPC/SQLITE_TOOBIG は既存
+   direct tests は三 phase binding、request-bound reverse closure、partition_stage counter-overflow tuple、full report-schema validation を一つの
+   contract として検査する。request 2.1.0 shape は不変で、report 2.1.0 には private spool-failure、13/19-file occurrence inventory、
+   `task_sandbox_requirements maxItems: 4096` を保持する。SQLite writer_publish の ENOSPC/SQLITE_TOOBIG は既存
    writer_publish / store.sqlite-failure / database / opaque と publication_outcome_unknown を維持する。publish handle 返却後の検証 failure は安全に response
    を構築できる場合 committed_unverified detailed response とする。exit 2 / stdout zero は response を安全に構築できない spool/allocation/report transport
    failure または successful receipt/checked arithmetic contradiction に限定する。
-6. **D6 — accepted SQLite Option A authority; report-schema activation applied, qualification pending:** request 2.1.0、public signatures、claim/Store identity、logical canonical v5 は変更しない。
-   report 2.1.0 は private spool-failure phase/code closure、13/19-file occurrence inventory、sandbox array bound を activation し、
-   full parsed report-schema canonical JSON digest は sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96 に固定する。
+6. **D6 — SQLite Option A physical runtime contract:** request 2.1.0、public signatures、claim/Store identity、logical canonical v5 は変更しない。
+   report 2.1.0 は private spool-failure phase/code closure、13/19-file occurrence inventory、sandbox array bound を direct tests で検査する。
    SQLite v2 single payload BLOB と runtime MAX_LENGTH 1,000,000,000 は required limit-adjacent passed memory/SQLite parity を満たさないため、
    selected alternative A と ADR 0097 に従い physical v3.0.0 の 8 MiB chunk table、16 MiB runtime floor、exact v2.6.0 read-only direct-open、
    `compact()` の deterministic COW migration を実装する。v2 `begin()` は exact
@@ -3233,7 +3184,7 @@ dependency は禁止する。
 反証は frozen corpus/current public API differential、whole-partition drop、codec unknown/missing/reorder/truncation、全 census/digest/manifest/receipt、
 record/segment/spool/u64/u128/fan-in/report boundary、exact Store overflow tuple、private spool fault、writer_publish outcome-unknown、
 committed_unverified、4096-task one-live-seal、memory/SQLite/static/shared parity、v3 chunk corruption、v2 zero-mutation read、COW migration fault matrix、
-single-BLOB limit 超の cold-reopen を含む。DF-0200 acceptance は実装着手 authority であり、これらの evidence 前に implemented/qualified と扱わない。
+ single-BLOB limit 超の cold-reopen を含む。実装完了はこれらの focused product tests と main の全決定的回帰試験が green になった場合だけとし、別の evidence/qualification record は生成しない。
 
 DF-0195 により successful Clang 22 transcript の coverage は transport と semantic の二 plane に分ける。transport は exact
 `{kind: task, id: <provider task ID>, state: covered, reason: ""}` 一件、semantic は canonical order の `cc.call-extraction`、`cc.entity`、
@@ -3297,11 +3248,8 @@ physical execution 差を global side-channel/guarantee または semantic base 
 stage leaf から導出し、static/shared で identical とする。guarantee に downstream claim-stage/base digest を
 逆流させず循環を禁止する。report schema は top-level digest/self-hashing root を持たない。validator は leaf から global
 provenance と base-guarantee cross-binding まで bottom-up に再計算し、schema-valid な任意 digest、stale child、edge swap、count drift を
-Store publication と release evidence の前に拒否する。release layer は validation 後の complete canonical report artifact bytes/value を外部
-`report_digest` に hash する。各 invocation の companion execution receipt は actual exit status、exact stdout byte count/SHA-256、parsed response count、
-stderr SHA-256 を保持し、qualified evidence は exit 0、one response、stdout と report artifact の exact byte equality を要求する。
-configuration と backend order `[memory, sqlite]` の `{backend, report_digest, execution_receipt_digest}` から external
-`report_set_digest` を導出する。これらは materialization report 内に保持しない。
+Store publication と runtime adoption の前に拒否する。materialization report 自身が typed process outcome、runtime provenance、coverage、
+unresolved、guarantee、receipt を保持し、別の external report digest、execution receipt、report-set digest を生成しない。
 
 Issue #181 / DF-0192 により v2 request/report は Registry identity を raw authority-file digest、全 21 relation の
 `authority_registry_digest`、exact admitted 12 descriptor の `engine_registry_digest` に分離する。engine inventory は canonical descriptor ID と
@@ -3337,7 +3285,7 @@ detailed failure は complete materialization/candidate snapshot を passed と�
 `store.sqlite-failure` は phase-opaque であるため、close/reopen 後の candidate absence も zero commit を証明しない。candidate の
 absence/presence や open failure にかかわらず outcome unknown とし、recovery observation と invocation attribution を分離する。
 publish が full record を返した後の Store path/error/projection mismatch は committed attribution を維持し、全 path status、成功 projection、最初の typed
-SDK error または expected/actual mismatch digestを保持する。release evidence は passed detailed response だけを受理する。
+SDK error または expected/actual mismatch digestを保持する。runtime adoption は passed detailed response だけを受理する。
 
 closure candidate は engine/schema-specific validator を通るまで authority ではない。
 
@@ -4751,12 +4699,12 @@ native-major-specific
 internal
 ```
 
-pre-1.0:
+experimental baseline:
 
 - source compatibility 非保証
 - binary ABI 非保証
 
-1.x:
+stable/versioned baseline:
 
 - `stable` C++ header の source compatibility を原則維持
 - C++ binary ABI は certified compiler/stdlib tuple でのみ別途宣言
@@ -4788,7 +4736,7 @@ evidence builder、`run_worker` を使い、frame header、sequence、credit、c
 borrowed TU/AST object を callback 外へ保存、所有、thread 移送せず、source と semantic value を detached value
 へ変換する。
 
-API family の error、lifetime、threading、versioning、invariant、実装 evidence と package/header admission は
+API family の error、lifetime、threading、versioning、invariant、実装条件と package/header admission は
 `schemas/cxxlens_ng_public_api_catalog.yaml` を authority とする。IDL generation、compile-fail、LLVM-free install
 consumer に加え、C++ 生成値を既存の `cxxlens.logical-query-ir.v1` reference validator と
 `cxxlens.provider-manifest.v1` schema へ入力する gate は `cxxlens-ng-sdk-contract-check` である。product 全体の target DAG と provider-to-snapshot
@@ -4812,12 +4760,11 @@ inventory-only row、signature drift、duplicate、複数 installed header/entry
 二つ目の exact correspondence とする。Clang/Doxygen の column 値を直接同一視せず、同一 header/line 内の declaration order で対応付けた
 両 source anchor と row 固有の name/signature projection を検査し、一方の成功で他方を
 代替しない。accepted Relation Registry から admitted generated header を全て再生成して byte freshness を検査し、generated callable も
-同じ inventory に含める。human review projection は対象 commit SHA/tree、inventory canonical digest、callable count、Clang major、
-Doxygen correspondence digest に bind し、Wave 0 readiness と GR release qualification は同一 revision の artifact だけを受理する。
+同じ inventory に含める。inventory の canonical digest、callable count、Clang major、Doxygen correspondence digest は
+AST/Doxygen の直接検査結果として利用する。これらを commit、review、readiness、release artifact へ複製しない。
 cross-header と redeclaration の同一性は pretty type string ではなく Clang mangled identity / `previousDecl` chain で判定する。alias spelling、
-同一行 Doxygen evidence 一式の交換、同一 header の default/specifier/origin drift を拒否する。stable-ID transition は親 commit と比較し、
-CI が shallow history のため親 inventory を読めない場合は fail closed にする。human review Markdown 本文にも extractor major と Doxygen
-correspondence digest を保持する。
+同一行 Doxygen 対応一式の交換、同一 header の default/specifier/origin drift を拒否する。stable-ID transition は親 inventory と比較し、
+親 inventory を読めない場合は fail closed にする。
 
 ---
 
@@ -4913,7 +4860,7 @@ derived relation output
 
 を持つ。
 
-generic solver completion を kernel 1.0 blocker にしない。
+generic solver completion を semantic kernel の release blocker にしない。
 
 ### 23.5 Rewrite/artifact — NG3
 
@@ -5154,12 +5101,12 @@ content digest
 
 | Profile | Compile Units | Relation Claims | Initial status |
 | --- | ---: | ---: | --- |
-| S | 1–100 | 100K以下 | NG0 production |
-| M | 100–5,000 | 10M以下 | NG0 qualification |
-| L | 5,000–50,000 | 100M以下 | architecture/performance qualification |
+| S | 1–100 | 100K以下 | NG0 direct tests |
+| M | 100–5,000 | 10M以下 | NG0 scale tests |
+| L | 5,000–50,000 | 100M以下 | architecture/performance direct tests |
 | XL | 50,000+ | 100M超 | future |
 
-absolute performance は reference fixture/hardware manifest と一緒に報告する。
+absolute performance は reference fixture/hardware を使う直接試験の判定対象とし、運用 report を生成しない。
 
 ### 25.4 Performance principles
 
@@ -5212,244 +5159,84 @@ telemetry は internal lock 外で通知し、semantic behavior に影響しな�
 
 ## 26. Verification and Acceptance
 
+### 26.0 Current policy (ADR 0106)
+
+開発完了は変更固有の試験と
+`main` の全決定的 CTest が成功したことだけで判定する。release は
+`.github/workflows/release.yml` の main 全件、sanitizer、static analysis、stress/repeat、
+scale、real-project、relocated-install の終了コードだけで判定し、失敗時は package を
+作成しない。試験結果を repository の report、receipt、checksum、集約 JSON、issue
+コメントへ複製しない。
+
+claim/provenance、coverage、unknown、conflict、materialization report、SQLite/source-
+closure の安全 receipt、provider の署名・binary identity・失効・sandbox・canonical
+semantic certification は製品 runtime semantics なので、この廃止対象ではない。
+
+現行の実行条件はこの節と ADR 0106、直接試験、`quality.yml`、`release.yml` に限る。
+旧来の運用証跡を新たな完了条件として再導入してはならない。
+
 ### 26.1 Principle
 
-completion は code/document existence ではなく、commit/input-bound acceptance evidence で証明する。
-foundation completion は G0–G4 と移行完了を対象とし、G5 と GR を要求する distribution 1.0 qualification とは
-分離する。tracked `schemas/cxxlens_ng_foundation_completion_manifest.yaml` が規範条件を保持し、main の同一
-commit/tree に対する clean checkout、CI job、child issue 状態は
-`cxxlens.ng-foundation-completion-report.v1` の CI artifact が結合する。manifest 自身へ final tree hash を
-埋め込む自己参照は行わない。
+完了判定は、変更固有の positive・negative・fault・determinism/resource/error 試験と、
+`main` workflow の全決定的 CTest・contract・security・documentation・install・header 試験だけで行う。
+変更に関係する通常サイズ試験は `main` の全件集合へ登録する。
+独立 review、issue の完了コメント、exact SHA の複製、checksum、集約 report、checkpoint は完了条件ではない。
 
-zero audit は completion checker が件数を仮定してはならない。`check_ng_foundation_audits.py` は各 audit について checker ID、
-検査対象の canonical set と digest、finding ID、実測 count、revision/tree を
-`cxxlens.ng-foundation-audit-report.v1` として生成する。completion checker は専用 schema を検証し、report 全体と各 entry の
-revision/tree が対象 commit に一致し、`count == len(finding_ids) == 0` の場合だけ passed report へ取り込む。Foundation 固有の
-GitHub migration blocker authority set は completion manifest の `required_closed_issues`、`authority.gate_issue`、
-`authority.tracking_issue` が宣言する exact set とする。この集合にない G5、GR、roadmap、通常の継続開発 issue は各 gate の
-authority で扱い、Foundation 判定へ遡及的に混入させない。新しく発見した Foundation blocker は未分類のまま除外せず、認定前に
-manifest の宣言集合へ追加する。宣言 issue の network/API failure、不正 JSON/state、checker 未実行、ownership 欠落、checksum drift は
-fail closed とする。宣言した issue state は対象 digest に含め、passed completion report では required、gate、tracking issue の
-すべてが closed でなければならない。この issue-scope contract は ADR 0088 が所有する。
+release は `release.yml` の終了コードだけで判定する。main 全件に加え ASan/UBSan、TSan、static analysis、
+stress/repeat、最大 scale、real-project、relocated-install を実行し、一件でも失敗した場合は package を作成しない。
+GitHub の通常 job log と Git 履歴は通常機能として残すが、repository 側で試験結果を別の artifact、report、receipt、
+issue コメントへ複製・長期保存・再検証しない。
 
 ### 26.2 Machine-readable traceability
 
-各 requirement:
+製品契約と試験の対応は、別の完了証跡を生成せず、既存の contract/catalog と試験登録そのもので表す。
+必要な対応を記述する場合も、実装判定に必要な contract と試験だけを列挙する。
 
 ```yaml
 id: FR-REL-EXT-001
-owner: schema-kernel
-profile: NG0
 contracts:
   - relation-definition/2
 components:
   - relation-registry
 tests:
   - integration.external-relation
-gates:
-  - G1
-evidence:
-  - relation-conformance-report.json
 status: proposed
 ```
 
-group-level table だけで complete を宣言しない。
+この宣言は report、digest、review receipt、issue state の生成を意味しない。
 
-### 26.3 Gates
+### 26.3 Deterministic test surface
 
-#### G0 — Base invariants
+`quality.yml` は Clang 22 の static/shared build と全決定的 CTest を実行し、contract、security、documentation、
+static/shared installed consumer、GCC public header を同じ workflow で検査する。
+path selection、fast report、JUnit、timing JSON、toolchain provenance、artifact upload/download、結果集約 job は
+この workflow に存在しない。
 
-- canonical encoding
-- semantic digest v2 domain/payload injectivity and legacy namespace separation
-- typed IDs
-- source spans
-- truth table
-- execution coverage balance
-- condition universe
-- public header native isolation
+`release.yml` は手動実行または `v*` tag で起動し、main の全決定的試験と重検査を実行する。
+最大 scale と real-project は static/shared の両方を対象とし、package job はすべての重検査 job の成功を必要とする。
+試験用 artifact は保存しない。
 
-#### G1 — Relation extension
+製品契約の変更は対応する unit、schema、protocol、backend、provider、security、install、scale、real-project 試験へ登録する。
+次の分類は試験対象を整理するための製品・品質分類であり、別の認定 gate や集約 report ではない。
 
-- dynamic relation registration
-- generated static relation
-- same logical IR
-- hard/soft reference
-- functional conflict
-- schema evolution
-- no central enum/switch
+- relation registration / generated static relation / logical IR parity
+- immutable publication / memory-SQLite parity / relocation / corruption detection
+- logical query / ordering / budget / cancellation / explicit partiality
+- provider negotiation / bounded protocol / native lifetime / crash-timeout-cancel
+- malformed or oversized output / sandbox assurance / binary and input identity
+- closure and incrementality / warm-zero / bounded recursion
+- standard semantics / differential frontend / solver / mutation safety
 
-#### G2 — Snapshot/store
+closure/coverage/unknown semantics、differential disagreement、solver convergence、stale rejection、journal/recovery、
+CAS artifact plan はそれぞれの product contract と positive・negative・fault test で直接検査する。
 
-- immutable publication
-- prior snapshot survival
-- memory/SQLite parity
-- root relocation / jobs / insertion order perturbation parity
-- cursor lifetime
-- corruption detection
-- semantic/operational separation
+release の supported surface は通常の全件試験と `schemas/cxxlens_support_matrix.yaml` の
+`{release_version, surface, os, architecture, compiler_provider_major, linkage}` の照合で決める。
+provider の署名、binary identity、失効、sandbox、canonical semantic certification と、materialization の
+provenance、coverage、unknown、runtime safety receipt は製品契約として各試験から直接検査する。
 
-#### G3 — Query/search vertical slice
-
-- `cc.entity`
-- `cc.call_site`
-- custom relation join
-- typed/dynamic query
-- normalized IR digest equality
-- memory/SQLite/reference evaluator parity
-- orderなし limit rejection
-- flagship recipe
-- budgets/cancellation
-- explicit partiality
-
-#### G4 — Provider isolation
-
-- protocol negotiation
-- Protocol 1.1 `task-input-chunks-v1` shared incremental input seal
-- exact Clang 22 worker
-- installed `cxxlens-clang22-materialize` strict JSON request/report 2.1 contract
-- exact argc、measured occurrence manifest、rooted SQLite effect VFS
-- exact six-descriptor/all-task/all-group sealed materialization
-- transport/semantic coverage planes、raw/frame/sealed receipts、closed guarantee profile
-- raw-frame diagnostic-only boundary
-- host-owned full-bundle `source.span` materialization
-- one expected-parent transaction with memory/reopened-SQLite parity
-- native lifetime
-- crash/timeout/cancel
-- malformed/oversized output
-- sandbox assurance
-- binary/input digest binding
-
-#### G5 — Closure/incrementality
-
-- closure certificate validation
-- incomplete absence unknown
-- anti-join with closure
-- warm-zero
-- affected partition invalidation
-- bounded recursion
-
-Issue #166 / ADR 0090 はこの gate を `schemas/cxxlens_ng_g5_qualification.yaml` に具体化する。absence を返す
-`query.anti_join.v1` は右 subtree の complete coverage、blocking unresolved 不在、applicable
-`relation-key-enumeration` certificate を同時に要求する。exact invalidation input、affected partition only、warm-zero、
-condition/interpretation-aware bounded fixpoint、budget exhaustion 時の positive/evidence 保持と closure 非認定を public
-contract とする。R4 performance は固定 fixture、clock、反復数、budget、compiler/OS/architecture、envelope と clean main exact-SHA report で認定し、
-distribution 1.0 support は GR が完了するまで宣言しない。
-
-#### G6 — Standard semantics expansion
-
-- reference/inheritance/templates/macros
-- adjacent frontend differential
-- same-domain conflict vs differential disagreement
-- identity ambiguity
-
-#### G7 — Solver
-
-- CFG
-- custom domain
-- convergence/truncation
-- taint/resource exemplar
-- derived relation persistence
-
-#### G8 — Mutation/artifact
-
-- stale rejection
-- journal/recovery
-- overlay reparse
-- CAS artifact
-- no partial silent write
-
-#### GR — Release
-
-- install consumption
-- static/shared
-- compiler header matrix
-- provider package
-- security profile
-- real project qualification
-- performance manifest
-- docs/support matrix
-- license/notice
-
-Issue #167 / ADR 0091 は GR を `schemas/cxxlens_ng_release_qualification.yaml` に具体化する。GR は clean `main` の
-同一 revision/tree について G0–G5、R0–R4、static/shared relocated prefix、multi-TU real-project consumer の
-memory/SQLite parity、actual-source Clang 22 provider、security negative evidence、G5 performance、Doxygen、license/notice を
-独立 validator で再検証する。production support の authority は生成された
-`cxxlens.ng-release-qualification-report.v1` の exact tuple に限る。tuple は provider ID/version、installed binary byte digest、
-relation、interpretation、toolchain、platform/configuration と capability、guarantee、security profile digest、evidence digest を
-保持する。source support matrix の `pending` または wildcard、report にない surface、別 rebuild を production-supported と
-推測してはならない。
-
-Issue #182 / ADR 0096 の Clang 22 production evidence は、同一 exact revision/tree の relocated `static` / `shared` configuration と
-`memory` / `sqlite` backend の直積四件について、`cxxlens.clang22-materialization-report.v2` exact version `2.1.0` の passed detailed response を各 combination exactly one
-要求する。
-一 report は一 backend の一 transaction だけを表し、SQLite report は close/reopen 後の検証を必須とする。release evaluation は四件の
-configuration/backend identity と digest を保持し、strict GR の各 production tuple evidence digest は同一 configuration の memory/SQLite
-complete report artifact 二件の external canonical report-set digest を含む。missing、extra、duplicate、configuration/backend swap、tool/worker/measured-occurrence/task/descriptor/group/store
-binding mismatch、backend snapshot/canonical-export/query digest 不一致、三 observation census のいずれかの non-exact count、blocking unresolved、
-full-span precondition failure、または in-report DAG の terminal cross-binding までの bottom-up 再計算不一致では tuple を生成しない。
-exact four report の全てが production exact precondition を満たし、その complete canonical artifact の external report digest が configuration ごとの
-report-set digest に bind されるまで production support を宣言しない。
-
-各 run は source-private occurrence manifest `share/cxxlens/materialization/clang22/occurrence-v1.json` の measured tool/worker/authority occurrence と、
-occurrence manifest bytes を含む external full-prefix install witness を cross-bind する。strict argc、rooted SQLite VFS receipt、Protocol 1.1
-`task-input-chunks-v1` transfer receipt、runtime raw/frame/sealed transcript receipt、transport/semantic coverage 二 plane、closed guarantee profile を
-report と external execution receipt から再計算する。request-only installation assertion、public process semantic digest、raw frame、query/reopen receiptを
-prepublication claim guarantee の代用にしない。
-
-scale/resource evidence は one-task、4096-task、16 MiB source、512 MiB aggregate source、1 GiB raw request、arbitrary short reads を含み、retained
-memory が one shared catalog + fixed buffers + one task/index/source/output window の式に従うことを測定する。raw request、aggregate source、全 task payload、
-task-count-times-catalog-count copies の resident retention、spool failure 後の effect、minor-0 materializer fallback があれば `not-qualified` とする。
-
-Issue #182 の authority-only rollout では、materializer 自身の production-scope assignment が exact
-`scope.clang22-installed-adoption-gap` / `#173` / `[DF-0182, DF-0187, DF-0191, DF-0192, DF-0195, DF-0196, DF-0197, DF-0198, DF-0199, DF-0200, DF-0205, DF-0206, DF-0207, DF-0208, DF-0261]` の `tracked-gap` である間だけ、normal release evaluation は request/report/set の
-exact zero を typed `tracked-gap-empty` として受理し、materializer executable 一件だけを install census から除外する。partial evidence、full
-matrix の先行、schema/worker の欠落は拒否する。同 assignment が `included` / `qualified` になった後は、他の tracked gap によって全体が
-`classified-with-gaps` のままでも例外を解除し、installed executable と exact four co-located request/report pairs、two report-set digest を
-要求する。これら二状態以外の owner/feedback/scope/qualification 組は fail closed とする。
-
-Issue #179 / ADR 0095 は distribution 1.0 の全 scope を
-`schemas/cxxlens_ng_production_scope_closure.yaml` の typed graph へ閉じる。Release Bundle と各 domain contract は item の ID と
-semantics を所有し、closure contract は typed reference、release disposition、cross-link、evidence/remediation mapping だけを所有する。
-exact-once は namespace 付き leaf node に適用し、callable は catalog owner から継承する。source set は production-required、
-qualification-evidence、explicit-non-1.0、unresolved-authority の disjoint union とし、valid state pair は
-`included/qualified`、`included/tracked-gap`、`excluded/not-applicable`、`unresolved/blocked` の四つだけとする。
-
-tracked gap が残る main は別名の `release-evaluation` artifact を `not-qualified` として生成できるが、production tuple と strict GR report を
-生成してはならず、`gate.release` を満たさない。全 required/evidence node と applicable blocking feedback が閉じた場合だけ
-`release-evaluation: qualified`、既存 strict GR report、final production-scope report を同じ clean revision/tree で生成する。
-Foundation、Wave 0、G5、evaluation、terminal report の digest edge は一方向とし、GR と terminal report の循環 binding を作らない。
-
-Issue #156 は gate の logical evidence ownership を
-`schemas/cxxlens_ng_quality_ownership.yaml` に固定する。linkage 非依存の quality unit test は CTest、production
-checker は `cxxlens-quality`、installed consumer は install job、instrumented execution は nightly が所有し、同じ
-workflow 内で同じ logical evidence ID を二度生成してはならない。evidence ID は check/version、revision/tree、toolchain、
-configuration、checker、normalized input set、output digest の exact tuple に bind し、cache hit は correctness evidence に
-含めない。workflow aggregation は required `(logical check, configuration)` set の欠落、余分、重複と revision/tree 不一致を
-fail closed にする。installed prefix は revision/tree、toolchain、configuration と全 file digest を持つ独立 manifest を各 consumer
-の effect 前に再検証する。`fast` / `check` は反復用であり、main/Ready の最終 SHA は selection を使わない `full`、nightly は clean
-no-cache を含む `stress` を通す。unknown file、dependency graph failure、public header、schema、CMake、workflow、selection
-rule 自身の変更は full へ fail closed する。
-
-Issue #141 / ADR 0072 は CI supply chain を source tree と同じ authority に bind する。workflow は remote
-bootstrap script を root 実行せず、checksum と primary fingerprint を照合した repository key、exact epoch-qualified
-LLVM package version、hash 付き direct/transitive Python lock、full commit SHA の Action だけを使用する。package や
-mirror が unavailable の場合に別 version/suite へ fallback しない。各 evidence job は revision/tree、runner image
-version、OS/kernel/architecture、Action revision、tool binary digest、dpkg version、Python distribution RECORD digest、
-supply-chain lock digest を一つの toolchain provenance に記録する。foundation completion report は同じ SHA の全
-provenance を再検証して runner/toolchain/action/package の集合を bind し、artifact と evidence は source SHA と
-toolchain digest を独立に差し替えられない。
-
-Wave 0 readiness は `schemas/cxxlens_ng_api_development_readiness.yaml` を authority とする。Public API target の direct edge は
-release bundle と実 CMake の `PUBLIC` / `INTERFACE` edge に一致し、public header の admission は Public API Catalog、generated
-relation header の導出可能性は Relation Registry が所有する。migration checker は superseded asset denylist に限定し、新 header
-allowlist を二重管理しない。同時 active write unit は最大四つとし、各 unit の issue、contract ID、repository-relative write path を
-machine-readable に宣言する。異なる unit の contract ID は disjoint でなければならず、write path は同一 path だけでなく祖先・子孫の
-ownership も conflict として fail closed にする。shared authority または shared contract を変更する unit は同一 contract ID または
-共通 path prefix を宣言して直列化する。main の required status check は exact name set を strict mode で要求し、同一 SHA の non-main
-成功を先行させる。main へ入った SHA は全 required artifact、JUnit、install manifest、toolchain provenance、
-Foundation completion report、authority/header digest、public callable inventory digest、同じ inventory から生成した human review artifact を
-clean revision/tree に bind した readiness report が passed の場合だけ基準線になる。GR は同じ revision の readiness report、AST census、
-独立 Doxygen correspondence を再検証し、stale または別 SHA の callable evidence を production qualification に用いない。
+quality の job は直接試験を実行し、同じ workflow 内で同じ logical test を重複させない。cache hit は試験の成功条件を
+置き換えず、欠落した test、依存関係、public header、schema、CMake、workflow の変更は該当する全件試験で検査する。
 
 ### 26.4 Test classes
 
@@ -5484,30 +5271,27 @@ provider: success,crash,timeout,malformed
 
 semantic comparison は unordered relation digest と canonical export の両方で行う。
 
-### 26.6 Installed package qualification
+### 26.6 Installed package tests
 
 static と shared は同じ `install-consumer` CI job の matrix とし、各 configuration で検査した prefix 自体を
-release-layout artifact とする。installed tool は `LD_LIBRARY_PATH` / `DYLD_LIBRARY_PATH` なしで直接実行し、prefix 全体を移設した後も
+試験対象とする。installed tool は `LD_LIBRARY_PATH` / `DYLD_LIBRARY_PATH` なしで直接実行し、prefix 全体を移設した後も
 同じ結果でなければならない。consumer は core、高水準 author SDK、Clang 22 provider SDK、installed example の全 package を build、
 install、clean-environment run する。
 
 shared package は Linux で tool に `$ORIGIN/../<install-libdir>`、library に `$ORIGIN`、macOS で対応する
 `@loader_path` policy を用いる。install binary/library の dynamic section に build-tree path を残さず、SONAME は distribution major に
-bind する。required shared dependency を除去した negative test は loader が欠落 SONAME を明示して fail することを要求する。これらの
-machine-readable authority は release bundle の `distribution_surface.package_qualification` とする。
+bind する。required shared dependency を除去した negative test は loader が欠落 SONAME を明示して fail することを要求する。
+判定は試験の終了コードで行い、install manifest や release-layout artifact を生成・保存しない。
 
 ### 26.7 First-party sanitizer closure
 
-ASan/UBSan と TSan は library だけでなく、同じ preset で実行する first-party tool、worker、test、fixture、example、negative example、
-installed consumer の全 object を compile/link instrumentation の対象とする。意図的な noninstrumented first-party allowlist は空とし、
-main build と installed consumer の全 compile database entry が configuration の exact sanitizer set と一致しなければ nightly を失敗させる。
-normal build では sanitizer flag の混入も同じ checker で拒否する。TSan と ASan/UBSan の混在は configure generation 前に拒否する。
+ASan/UBSan と TSan は library だけでなく、first-party tool、worker、test、fixture、example、negative example、installed consumer の
+全 object を compile/link instrumentation の対象とする。意図的な noninstrumented first-party allowlist は空とし、normal build への
+sanitizer flag 混入も拒否する。TSan と ASan/UBSan の混在は configure generation 前に拒否する。
 
-ASan、UBSan は test-fixture canary、TSan は test/provider 両 role の race canary を持ち、runtime が設定済み exit code 86 で failure を
-捕捉することを検証する。sanitizer options、symbolization、child process の minimal `execve` environment でも用いる runtime defaults は
-同一 contract から固定する。instrumented provider fixture は sanitizer runtime が予約する virtual address space と helper thread のために
-test request の resource limit だけを拡張し、production の host-enforced budget semantics は変更しない。machine-readable authority は
-`schemas/cxxlens_ng_sanitizer_coverage.yaml` とする。
+ASan/UBSan の canary と TSan の race canary は、runtime の終了コードで failure を捕捉する。sanitizer options、symbolization、child
+process の minimal `execve` environment における runtime defaults は同じ contract から固定し、instrumented provider fixture の resource
+limit 拡張は test process に限定する。これらは release workflow の試験条件であり、別の report や運用 artifact を生成しない。
 
 ---
 
@@ -5519,8 +5303,8 @@ Issue #72 で production tree の移行を完了した。
 - relation/claim/store/query/provider/native provider の実装は `sdk` と provider-owned boundary に統合した。
 - central fact kind、opaque custom payload、profile、旧 selector/query/reducer/store authority は削除した。
 - provider worker input/output は detached provider-owned value とし、compiler-native object を境界外へ出さない。
-- active schema、test、example、CI、quality gate は次世代 contract のみを参照する。
-- asset ledger は `active`、`archived`、`generated` の terminal state だけを許す。
+- active schema、test、example、CI、quality target は次世代 contract のみを参照する。
+- 現行の製品資産は contract、source、test、example、package の直接参照で管理する。
 
 履歴資料は archive にのみ保存し、新規実装 authority としない。以後の開発は relation、provider、query operator、
 recipe、analysis module を現在の kernel 上へ追加する。
@@ -5528,6 +5312,20 @@ recipe、analysis module を現在の kernel 上へ追加する。
 ---
 
 ## 28. Governance and Versioning
+
+### 28.0 Current policy (ADR 0106)
+
+開発・release の運用証跡は保持しない。独立 review は任意であり、高リスク変更でも
+仕様/ADR と positive・negative・fault test の成功だけを必須条件とする。Compatibility
+request/report は v2 の `os`、`architecture`、`toolchain`、`linkage` を照合し、v1 の
+`runtime_qualified`、`evidence_refs`、`qualification_state`、
+`compat.release-not-qualified` を持たない。対応環境は
+`schemas/cxxlens_support_matrix.yaml` に掲載された version/surface/environment の
+組合せだけであり、未掲載環境と Windows/MSVC は `unsupported` である。
+
+release package の可否は release workflow の全試験終了コードと通常の support table 照合で決める。
+製品 runtime が返す provenance、coverage、unknown、materialization report、安全 receipt、
+provider trust/certification は引き続き normative であり、運用証跡廃止の対象ではない。
 
 ### 28.1 Version axes
 
@@ -5551,7 +5349,8 @@ patch/artifact plan
 
 library version 一つから互換性を推測しない。
 
-`schemas/cxxlens_ng_release_bundle.yaml` は各 axis、利用 context、release profile、migration path を束ねる
+`schemas/cxxlens_ng_compatibility_request.schema.yaml` と
+`schemas/cxxlens_ng_compatibility_report.schema.yaml` は各 axis、利用 context、migration path を束ねる
 machine-readable authority である。互換性要求は `provider-handshake`、`snapshot-open`、`query-load`、
 `release-startup` のいずれかを指定し、その context の全 required axis を提示する。暗黙の bundle 選択、
 first-wins、major fallback は行わない。
@@ -5571,9 +5370,9 @@ tuple は feature projection である。current binaryはmemory direct、SQLite
 truthfully全て提示し、pre-migration DB stateだけをbackend artifact contextで示す。backend tupleやartifact versionをaxis versionと
 相互代入したり、migration判定のためcapabilityを隠してはならない。
 
-`inspect` は side-effect-free な契約判定を行う。`doctor` は同じ判定に runtime qualification evidence を
-加え、未 qualified release を `compat.release-not-qualified` として拒否する。両者とも fallback の有無を
-明示し、1.0 では常に `fallback_used: false` である。
+`inspect` と `doctor` は side-effect-free な契約判定を行う。`doctor` は同じ判定に
+通常の support table 照合を加え、未掲載環境を `compat.environment-unsupported` として拒否する。両者とも fallback の有無を
+明示し、現行 v2 では常に `fallback_used: false` である。
 
 ### 28.2 ADR required
 
@@ -5605,7 +5404,9 @@ stable public API は次を満たす。
 - experimental period
 - native API の単なる言い換えでない
 
-### 28.4 Relation review
+### 28.4 Relation contract
+
+次の項目を contract と試験へ明示する。独立 review は任意であり、試験や contract の代替にしない。
 
 - use case
 - namespace ownership
@@ -5637,39 +5438,22 @@ production-supported
 ```
 
 certification state は provider manifest の自己申告ではなく trusted certification registry に由来する。standard
-namespace authority は `canonical-semantic-qualified` 以上、production claim は exact support matrix entry を必要とする。
-support matrix は provider ID/version/binary digest/relation/interpretation/toolchain/platform tuple 単位。資格の上位化、
-tuple の wildcard、planned から production への推測は禁止する。
+namespace authority は `canonical-semantic-qualified` 以上でなければならず、provider の署名、binary identity、失効、sandbox、
+canonical semantic certification は製品の安全機能として保持する。
+release の対応環境は `schemas/cxxlens_support_matrix.yaml` の
+`{release_version, surface, os, architecture, compiler_provider_major, linkage}` を照合する。
+この対応表は binary/evidence digest や `production-supported` qualification を持たず、wildcard、未掲載環境、Windows/MSVC は
+unsupported とする。
 
-### 28.6 Implementation learning and design feedback
+### 28.6 Design change procedure
 
-実装開始後に得られた反証、hidden assumption、再利用可能な mental model、より良い設計案は、現在の authority を
-黙って迂回する根拠にも、失ってよい一時メモにもしてはならない。実装知見は次の三層で扱う。
+設計知見は通常の ADR、contract、catalog、Doxygen、positive/negative/fault test へ直接反映する。
+public semantics、identity、protocol、persistence、不可逆 effect、resource bound の変更は、仕様または ADR と
+executable state machine、および反証可能な試験を同じ変更へ含める。独立 review は任意であり、試験を代替しない。
 
-1. 統合設計、machine-readable contract、accepted ADR は normative authority であり、明示的に置換されるまで拘束力を持つ。
-2. curated mental model は normative anchor、scope、known tension を持つ non-normative explanatory document とする。
-3. design feedback record は observation、working model、evidence、alternatives、recommendation、disposition を保持する
-   durable だが non-normative な記録とする。
-
-record は専用 GitHub issue 番号から stable ID を導出し、`schemas/cxxlens_ng_design_feedback_record.schema.yaml` と
-production checker で検証する。issue comment だけを永久仕様にせず、record が `accepted` でも authority へ昇格させない。
-正式な採用は `resolution_refs` が指す ADR、contract、catalog、test、traceability の更新によってのみ成立し、対象実装は
-authority 更新後に新契約へ合わせる。
-
-correctness、security、core invariant、compatibility、不可逆な public contract の矛盾は対象実装を block する。
-current contract が健全で変更が可逆な場合だけ non-blocking とできる。local/reversible change は self review を許すが、
-public contract、core invariant、security、compatibility、irreversible change の採用は著者と異なる reviewer の反証 review を
-必須とする。record は発見元 implementation issue を一つ以上列挙する。high-risk acceptance は author/reviewer identity を分離し、
-canonical repository の tracking issue 上にある具体的な review comment に binding する。authority reference は統合設計、accepted
-ADR、schema/catalog、明示的 execution contract に限定し、archive、non-normative learning asset、implementation evidence を
-authority として扱わない。high-risk impact の active record は `blocked` とし、high-risk acceptance は accepted status の ADR を
-resolution として必要とする。reviewer を確保できなければ proposed/blocked のまま保持する。
-
-全 implementation issue は完了時に learning checkpoint を行い、`none` または関連 DF ID を evidence に残す。未解決の
-blocking record がある issue は completed にせず、non-blocking の未決事項には専用 tracking issue を残す。詳細 workflow は
-`docs/development/implementation-learning/README.md` と ADR 0093 を authority とする。
-readiness evidence では mental model、record、index、template、issue form を追跡対象として digest するが、normative authority と
-別の `implementation_learning_assets` 集合に保持する。
+実装 issue は変更固有試験と `main` workflow が green になった時点で完了とする。完了時に運用 comment、receipt、
+checkpoint、exact SHA メモ、集約 report、設計 feedback record を生成しない。未解決の製品 contract blocker は、
+通常の issue と直接の試験で追跡し、運用証跡の完了条件へ変換しない。
 
 ---
 
@@ -5697,7 +5481,7 @@ readiness evidence では mental model、record、index、template、issue form 
 | R-018 | multi-file rollback失敗 | journal、recovery_required、platform qualification |
 | R-019 | secret fingerprint漏洩 | keyed local fingerprint、report redaction |
 | R-020 | public target乱立 | initial coarse targets、internal split |
-| R-021 | 実装知見の消失または未検証メモのauthority化 | non-normative feedback record、learning checkpoint、ADR/contractへの明示昇格 |
+| R-021 | 実装知見の取りこぼし | ADR、contract、catalog、直接試験への明示反映 |
 
 ---
 
@@ -5950,12 +5734,10 @@ NG1 default:
 - [ ] memory/SQLite
 - [ ] cold/warm
 - [x] static/shared install consumer
-- [ ] README/support state matches acceptance manifest
+- [ ] README/support state matches the supported-environment table
 
-foundation gate は上記のうち G0–G4/R0–R3 に属する実装済み evidence、install consumer、legacy-zero、
-documentation drift zero を machine validation する。G5 は Issue #166 の独立した exact-SHA qualification が所有し、
-Foundation の再認定条件にはしない。GR は Issue #167 の独立 exact-SHA qualification として保持し、Foundation または G5 完了を
-production 1.0 完了へ読み替えない。
+上記は製品契約と直接試験の確認項目であり、別の foundation/GR gate、exact-SHA qualification、集約 report を生成しない。
+開発完了は変更固有試験と `main` の全決定的回帰試験で、release 可否は `release.yml` の全重検査で判定する。
 
 ---
 
@@ -6108,16 +5890,13 @@ private observation v1 を列挙する legacy/conformance manifest は installed
 
 ---
 
-## Appendix D. Reproduction Manifest
+## Appendix D. Semantic Result Identity
 
 ```yaml
-schema: cxxlens.reproduction/2
+schema: cxxlens.semantic-result/1
 
 distribution: ...
 kernel_semantics: ...
-git_revision: ...
-dirty: false
-
 catalog_digest: ...
 condition_universe: ...
 relation_registry_digest: ...
@@ -6126,25 +5905,18 @@ interpretation_policy_digest: ...
 providers:
   - id: ...
     version: ...
-    binary_digest: ...
+    binary_identity: ...
+    trust_state: ...
 
 configuration_digest: ...
-environment_identity: ...
 snapshot_id: ...
 query_or_recipe_digest: ...
 semantic_output_digest: ...
-
-operational:
-  created_at: ...
-  elapsed_ms: ...
-  peak_rss: ...
 ```
 
-operational section は semantic output digest から除外する。
-
-NG foundation の canonical reproduction report はこの一般形を
-`schemas/cxxlens_ng_foundation_completion_report.schema.yaml` に具体化し、git revision/tree、authority digest、
-version contract、CI job、issue closure、asset ledger、zero audit を記録する。
+これは product runtime の semantic identity と provider trust/provenance を表す例であり、開発・release の完了証跡ではない。
+Git revision/tree、dirty state、CI job、issue state、作成時刻、経過時間、RSS、checksum、qualification report はこの値へ含めない。
+claim、coverage、unknown、materialization report、SQLite/source-closure の安全 receipt は対応する product contract の値として保持する。
 
 ---
 
@@ -6160,23 +5932,23 @@ flowchart LR
     R5["R5 Semantic Expansion"]
     R6["R6 Graph / Solver"]
     R7["R7 Mutation / Artifacts"]
-    V1["1.0 Review"]
+    RT["Release tests"]
 
     R0 --> R1
     R1 --> R2
     R2 --> R3
     R3 --> R4
     R4 --> R5
-    R4 --> V1
+    R4 --> RT
     R5 --> R6
     R5 --> R7
-    V1 --> V1X["1.x Capability Trains"]
-    R6 --> V1X
-    R7 --> V1X
+    RT --> RTX["Release test profiles"]
+    R6 --> RTX
+    R7 --> RTX
 ```
 
-1.0 review は R0–R4 と G0–G5/GR の完了を要求する。R5/R6/R7 は 1.0 の依存辺に含めず、
-NG0/NG1 の意味核が production evidence を持つことを優先する。
+release version は release workflow の main 全件と重検査の終了コード、ならびに support matrix の掲載環境照合で判定する。
+R5/R6/R7 は独立した capability train として扱い、NG0/NG1 の意味核は対応する直接試験を通じて出荷条件を満たす。
 
 ---
 

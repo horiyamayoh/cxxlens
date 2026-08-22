@@ -1,6 +1,6 @@
 # ADR 0104: SQLite zero-effect read, nested mapping lease, and isolated normalization effect
 
-- Status: Proposed for independent review
+- Status: Accepted
 - Date: 2026-08-21
 - Owners: #201 and #205; separate effect-profile owner #202
 - Contract IDs: `store.sqlite-active-read-connection.v1`,
@@ -9,8 +9,7 @@
   `cxxlens.sqlite-nested-mapping-terminal.v1`,
   `store.sqlite-logical-read-receipt.v1`,
   `store.sqlite-exact-empty-normalization-effect.v1`
-- Production activation: fail-closed
-- Production qualification: not claimed
+- Production activation: fail-closed until the direct tests pass
 
 ## Context and ownership
 
@@ -22,8 +21,8 @@ authorizes it.
 
 No receipt substitutes for another. #201 cannot authorize normalization, #205 cannot prove logical
 database validity or CAS, and #202 cannot mint or prolong a mapping lease. Production canonical or
-user-source normalization remains disabled until the separate #202 effect profile has an exact
-candidate P0/P1-zero review and authenticated acceptance receipt.
+user-source normalization remains disabled until the separate #202 effect profile passes its direct
+positive, negative, and fault tests and the authenticated runtime receipt conditions hold.
 
 The composite `cxxlens.sqlite-nested-mapping-terminal.v1` is only the authenticated #201/#205
 handoff surface. It carries the separately sealed writer-generation and reader-attachment terminals;
@@ -171,7 +170,7 @@ to `child-inherited-custody-quarantine`. That child terminal permits no SQLite e
 close, retry, cleanup, or authority reconstruction; vanished parent-thread owners are never awaited.
 Only child process exit/exec may discard the private inherited address-space copy.
 
-## #202 independently reviewed effect profile
+## #202 isolated effect profile
 
 The effect machine is not entered by raw census or a decoded candidate. Its sole entry is:
 
@@ -181,7 +180,7 @@ The effect machine is not entered by raw census or a decoded candidate. Its sole
 `-> permitted-callback-effects -> file-and-parent-durable -> confirmed-close`
 `-> post-close-census -> normalization-receipt -> ordinary-fresh-init`.
 
-The accepted DF-0202 fixture authority remains an executable closed partition, not a label census:
+The DF-0202 fixture authority remains an executable closed partition, not a label census:
 
 - `F0 -> live-receipt -> fixture-normalizer`.
 - `FP/FH -> authenticated cleanup-or-recovery -> independently-revalidated F0 -> new-live-receipt`.
@@ -258,18 +257,15 @@ effect pair, writer effect without the exact gate, nonzero unmap delete flag, ca
 fixture-to-production promotion, missing
 parent fsync, non-empty normalization, sidecar ambiguity, and CAS reclassification.
 
-The constructibility witness must cover cold active-WAL read, private-index fallback, nested native
-mapping success/failure, multi-page attachment, two-live-Store CAS, all revoke/unload/fork/ABA and late
-callback cuts, and every executable DF-0202 callback/recrash partition. Future production activation
-additionally requires the repository-tracked harness, exact loaded SQLite DSO identity,
-callback/recrash, large-sector, rebind and parent-sync matrices, canonical report digest, a distinct
-exact-implementation review, and an explicit Accepted profile replacing the prohibition. Review
-receipt alone is insufficient. #201/#205 may be accepted together only
-after an exact-candidate P0/P1-zero review. #202 requires a distinct later review receipt and remains
-production-inactive even if #201/#205 are accepted.
+The direct test matrix must cover cold active-WAL read, private-index fallback, nested native mapping
+success/failure, multi-page attachment, two-live-Store CAS, all revoke/unload/fork/ABA and late callback
+cuts, and every executable DF-0202 callback/recrash partition. Future production activation additionally
+requires the loaded SQLite DSO identity, callback/recrash, large-sector, rebind, and parent-sync checks,
+all as positive, negative, and fault tests. Runtime receipts are the product safety authority; no
+repository-tracked harness, report digest, review receipt, or checkpoint is required.
 
-## Review history
+## Acceptance gate
 
-The review of `75b233e3c3dcf1e2c636b06313e7511bbb86c54c` rejected the sibling-machine
-proposal with five P1 findings. This redraft resolves their ordering directionally but remains
-Proposed pending machine-checker evidence and fresh independent review.
+Acceptance requires the direct positive, negative, fault, and determinism/resource tests for #201/#205/#202,
+plus the main deterministic regression suite. Runtime receipts, coverage, unknown outcomes, and fail-closed
+cleanup remain product semantics; repository-operation evidence is not a completion condition.

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import os
 import pathlib
 import subprocess
@@ -38,7 +37,6 @@ def parse_args() -> argparse.Namespace:
             "materializer; manifest paths remain canonical"
         ),
     )
-    parser.add_argument("--evidence-dir", type=pathlib.Path)
     return parser.parse_args()
 
 
@@ -120,47 +118,6 @@ def load_installed_request(
     return request, oracle.canonical_json(request)
 
 
-def make_execution_receipt(
-    root: pathlib.Path,
-    oracle: Any,
-    completed: subprocess.CompletedProcess[bytes],
-    label: str,
-) -> bytes:
-    receipt = {
-        "schema": "cxxlens.clang22-materialization-execution-receipt.v1",
-        "actual_exit_status": completed.returncode,
-        "exact_stdout_byte_count": len(completed.stdout),
-        "stdout_sha256": "sha256:" + hashlib.sha256(completed.stdout).hexdigest(),
-        "parsed_response_count": 1 if completed.stdout else 0,
-        "stderr_sha256": "sha256:" + hashlib.sha256(completed.stderr).hexdigest(),
-    }
-    oracle.validate_schema(
-        receipt,
-        oracle.load(
-            root
-            / "schemas/cxxlens_ng_clang22_materialization_execution_receipt.schema.yaml"
-        ),
-        f"{label} execution receipt",
-        error_code="materialization.report-invalid",
-    )
-    return oracle.canonical_json(receipt)
-
-
-def write_evidence(
-    evidence_dir: pathlib.Path,
-    label: str,
-    payload: bytes,
-    completed: subprocess.CompletedProcess[bytes],
-    receipt: bytes,
-) -> None:
-    destination = (evidence_dir / label).resolve()
-    destination.mkdir(parents=True, exist_ok=True)
-    (destination / "stdin.bin").write_bytes(payload)
-    (destination / "report.json").write_bytes(completed.stdout)
-    (destination / "stderr.bin").write_bytes(completed.stderr)
-    (destination / "execution-receipt.json").write_bytes(receipt)
-
-
 def assert_installation_binding_failure(
     root: pathlib.Path,
     oracle: Any,
@@ -168,7 +125,6 @@ def assert_installation_binding_failure(
     request: dict[str, Any],
     payload: bytes,
     mismatched_role: str,
-    evidence_dir: pathlib.Path | None,
 ) -> None:
     label = f"installation-{mismatched_role}"
     with tempfile.TemporaryDirectory(prefix="clang22-materializer-binding-") as directory:
@@ -231,11 +187,6 @@ def assert_installation_binding_failure(
         "worker_launch_success_count": 0,
     }:
         fail(f"{label} crossed an effect boundary: {report['effects']!r}")
-    receipt = make_execution_receipt(root, oracle, completed, label)
-    if evidence_dir is not None:
-        write_evidence(evidence_dir, label, payload, completed, receipt)
-
-
 def main() -> int:
     args = parse_args()
     root = args.root.resolve()
@@ -252,12 +203,9 @@ def main() -> int:
     if not materializer.is_file() or materializer.is_symlink():
         fail(f"installed materializer is missing or not regular: {materializer}")
 
-    evidence_dir = args.evidence_dir.resolve() if args.evidence_dir else None
     for role in ("materializer-executable", "worker-executable"):
         request, payload = load_installed_request(root, prefix, oracle, role)
-        assert_installation_binding_failure(
-            root, oracle, materializer, request, payload, role, evidence_dir
-        )
+        assert_installation_binding_failure(root, oracle, materializer, request, payload, role)
     return 0
 
 
