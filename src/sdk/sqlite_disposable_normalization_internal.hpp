@@ -1,7 +1,10 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 
 #include <cxxlens/sdk/common.hpp>
@@ -10,6 +13,110 @@
 
 namespace cxxlens::detail::sqlite_qualification
 {
+	/**
+	 * Production-inactive #202 interruption/reclassification witness.
+	 *
+	 * This vocabulary models only the fail-closed recovery boundary.  It carries no source
+	 * capability, effect permission, SQLite result, or Store handoff.  Once an effect attempt is
+	 * interrupted, the original receipt is discarded and the durable bytes must be
+	 * cold-reclassified; neither reclassification terminal can return to normalization success.
+	 */
+	enum class sqlite_disposable_normalization_recovery_phase : std::uint8_t
+	{
+		effect_pre_sealed,
+		effect_admitted,
+		effect_transcript_sealed,
+		durability_barrier_sealed,
+		normalization_receipt,
+		fresh_init_handoff_candidate,
+		recoverable_interruption,
+		original_receipt_discarded,
+		cold_reclassification_required,
+		reclassified_fz_post,
+		reclassified_other_family,
+		terminal_quarantined,
+	};
+
+	inline constexpr std::array sqlite_disposable_normalization_recovery_phases{
+		sqlite_disposable_normalization_recovery_phase::effect_pre_sealed,
+		sqlite_disposable_normalization_recovery_phase::effect_admitted,
+		sqlite_disposable_normalization_recovery_phase::effect_transcript_sealed,
+		sqlite_disposable_normalization_recovery_phase::durability_barrier_sealed,
+		sqlite_disposable_normalization_recovery_phase::normalization_receipt,
+		sqlite_disposable_normalization_recovery_phase::fresh_init_handoff_candidate,
+		sqlite_disposable_normalization_recovery_phase::recoverable_interruption,
+		sqlite_disposable_normalization_recovery_phase::original_receipt_discarded,
+		sqlite_disposable_normalization_recovery_phase::cold_reclassification_required,
+		sqlite_disposable_normalization_recovery_phase::reclassified_fz_post,
+		sqlite_disposable_normalization_recovery_phase::reclassified_other_family,
+		sqlite_disposable_normalization_recovery_phase::terminal_quarantined,
+	};
+
+	[[nodiscard]] constexpr bool is_sqlite_disposable_normalization_recovery_transition(
+		const sqlite_disposable_normalization_recovery_phase origin,
+		const sqlite_disposable_normalization_recovery_phase destination) noexcept
+	{
+		using phase = sqlite_disposable_normalization_recovery_phase;
+		switch (origin)
+		{
+			case phase::effect_pre_sealed:
+				return destination == phase::effect_admitted ||
+					destination == phase::recoverable_interruption ||
+					destination == phase::terminal_quarantined;
+			case phase::effect_admitted:
+				return destination == phase::effect_transcript_sealed ||
+					destination == phase::recoverable_interruption ||
+					destination == phase::terminal_quarantined;
+			case phase::effect_transcript_sealed:
+				return destination == phase::durability_barrier_sealed ||
+					destination == phase::recoverable_interruption ||
+					destination == phase::terminal_quarantined;
+			case phase::durability_barrier_sealed:
+				return destination == phase::normalization_receipt ||
+					destination == phase::recoverable_interruption ||
+					destination == phase::terminal_quarantined;
+			case phase::normalization_receipt:
+				return destination == phase::fresh_init_handoff_candidate ||
+					destination == phase::recoverable_interruption ||
+					destination == phase::terminal_quarantined;
+			case phase::recoverable_interruption:
+				return destination == phase::original_receipt_discarded ||
+					destination == phase::terminal_quarantined;
+			case phase::original_receipt_discarded:
+				return destination == phase::cold_reclassification_required ||
+					destination == phase::terminal_quarantined;
+			case phase::cold_reclassification_required:
+				return destination == phase::reclassified_fz_post ||
+					destination == phase::reclassified_other_family ||
+					destination == phase::terminal_quarantined;
+			case phase::fresh_init_handoff_candidate:
+				return destination == phase::recoverable_interruption ||
+					destination == phase::terminal_quarantined;
+			case phase::reclassified_fz_post:
+			case phase::reclassified_other_family:
+			case phase::terminal_quarantined:
+				return false;
+		}
+		return false;
+	}
+
+	/** Validate an uninterrupted candidate, a cold-reclassified interruption, or quarantine. */
+	[[nodiscard]] constexpr bool validate_sqlite_disposable_normalization_recovery_path(
+		const std::span<const sqlite_disposable_normalization_recovery_phase> path) noexcept
+	{
+		using phase = sqlite_disposable_normalization_recovery_phase;
+		if (path.empty() || path.front() != phase::effect_pre_sealed)
+			return false;
+		for (std::size_t index = 1U; index < path.size(); ++index)
+			if (!is_sqlite_disposable_normalization_recovery_transition(path[index - 1U],
+																		path[index]))
+				return false;
+		return path.back() == phase::fresh_init_handoff_candidate ||
+			path.back() == phase::reclassified_fz_post ||
+			path.back() == phase::reclassified_other_family ||
+			path.back() == phase::terminal_quarantined;
+	}
+
 	/**
 	 * The only physical main-header states admitted by the receiptless qualification family
 	 * classifier.  These names describe bytes observed in the current invocation; they never
