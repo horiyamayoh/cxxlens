@@ -1,5 +1,5 @@
 {
-  "asset_count": 787,
+  "asset_count": 796,
   "assets": [
     {
       "authority": "active",
@@ -1963,6 +1963,13 @@
     },
     {
       "authority": "active",
+      "path": "schemas/cxxlens_ng_agent_autonomous_completion_runner_input.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "schemas/cxxlens_ng_agent_capability_resolution.schema.yaml",
       "removal_issue": null,
       "replacement": null,
@@ -3412,6 +3419,34 @@
     },
     {
       "authority": "active",
+      "path": "src/llvm/clang22/source_closure_task_v4.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/source_closure_task_v4.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/source_closure_task_v4_worker.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/source_closure_task_v4_worker.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/llvm/clang22/source_closure_transport.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -4245,6 +4280,20 @@
     },
     {
       "authority": "active",
+      "path": "tests/adapter/clang22/source_closure_task_v4_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/source_closure_task_v4_worker_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/adapter/clang22/source_closure_test.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -4484,6 +4533,13 @@
     {
       "authority": "active",
       "path": "tests/quality/test_ng_agent_autonomous_completion.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/quality/test_ng_agent_autonomous_completion_runner.py",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -5463,6 +5519,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/run_ng_agent_autonomous_completion.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/run_text_lints.py",
       "removal_issue": null,
       "replacement": null,
@@ -5512,7 +5575,7 @@
     }
   ],
   "classifications": {
-    "active": 751,
+    "active": 760,
     "archived": 35,
     "generated": 1
   },
