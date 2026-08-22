@@ -94,6 +94,20 @@ namespace cxxlens::sdk
 	[[nodiscard]] result<sqlite_active_read_connection_receipt>
 	validate_sqlite_active_read_connection(const sqlite_active_read_connection_request& request);
 
+	/**
+	 * Revalidate an already sealed #201 connection receipt at the next lifecycle cut.
+	 *
+	 * This is intentionally a read-only, production-inert seam: it may recheck retained
+	 * namespace/object custody, but it cannot open SQLite, enter xShmMap, mint a mapping lease,
+	 * authorize normalization, or publish a logical-read result.  A receipt is accepted only when
+	 * the complete family, callback/open tuple, and zero-pre-map observation remain identical.
+	 */
+	[[nodiscard]] result<void> revalidate_sqlite_active_read_connection(
+		const sqlite_active_read_connection_receipt& receipt,
+		const sqlite_backend_namespace_census& current_census,
+		const sqlite_backend_connection_observation& current_connection,
+		const sqlite_active_read_pre_effect_census& current_pre_effect);
+
 	/** Build the exact internal URI accepted by the readonly-SHM source profile. */
 	[[nodiscard]] result<std::string>
 	make_sqlite_source_shm_readonly_uri(std::string_view canonical_absolute_path);
