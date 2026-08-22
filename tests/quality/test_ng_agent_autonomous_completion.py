@@ -15,6 +15,27 @@ import check_ng_agent_autonomous_completion as metric  # noqa: E402
 
 
 class AgentAutonomousCompletionMetricTests(unittest.TestCase):
+    def test_quality_workflow_publishes_exact_sha_metric_state(self) -> None:
+        workflow = (ROOT / ".github/workflows/quality.yml").read_text(encoding="utf-8")
+        self.assertIn("agent-autonomous-completion-metric:", workflow)
+        self.assertIn(
+            "check_ng_agent_autonomous_completion.py report", workflow
+        )
+        self.assertIn(
+            "check_ng_agent_autonomous_completion.py check", workflow
+        )
+        self.assertIn(
+            "name: cxxlens-ng-agent-autonomous-completion-${{ github.sha }}",
+            workflow,
+        )
+        self.assertIn(
+            "qualification: {const: not-qualification-evidence}",
+            (
+                ROOT
+                / "schemas/cxxlens_ng_agent_autonomous_completion_metric.schema.yaml"
+            ).read_text(encoding="utf-8"),
+        )
+
     def test_without_execution_receipts_is_not_evaluated(self) -> None:
         report = metric._report(ROOT, evidence=None)
         metric.validate_report(ROOT, report)

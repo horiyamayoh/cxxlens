@@ -310,6 +310,12 @@ invoked agent or prove semantic correctness of a claimed bounded change. The res
 evaluation-only and cannot satisfy constructibility, review, provider, platform, or release
 qualification. A caller without a real command/result receipt must leave the metric `not-evaluated`.
 
+The `quality` workflow publishes the current metric state as
+`cxxlens-ng-agent-autonomous-completion-${revision}` after rechecking the report against the
+checkout's exact revision and tree. This artifact improves provenance for the #277 readiness
+audit; it is still evaluation-only, and a report without real execution receipts remains
+`not-evaluated` with a null rate.
+
 静的 relation inventory を残す場合の契約名は `relation-presence` です。これは canonical capability resolution の
 use-case/capability graph、support tuple、input/model/evidence gap と dependency-ordered plan を読む `missing --project`
 とは別機能であり、相互代用しません。

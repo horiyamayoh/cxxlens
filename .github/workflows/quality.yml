@@ -297,6 +297,35 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  # Publish the receipt-bound #277 metric state separately from the advisory
+  # context projection. The report is exact-SHA evidence, but it remains
+  # evaluation-only and cannot qualify an agent, provider, or release.
+  agent-autonomous-completion-metric:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: none
+      - name: Generate and revalidate exact-SHA #277 metric state
+        run: |
+          set -euo pipefail
+          python tools/quality/check_ng_agent_autonomous_completion.py report \
+            --root . \
+            --output "${RUNNER_TEMP}/cxxlens-ng-agent-autonomous-completion-${GITHUB_SHA}.json"
+          python tools/quality/check_ng_agent_autonomous_completion.py check \
+            --root . \
+            --input-json "${RUNNER_TEMP}/cxxlens-ng-agent-autonomous-completion-${GITHUB_SHA}.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-ng-agent-autonomous-completion-${{ github.sha }}
+          path: ${{ runner.temp }}/cxxlens-ng-agent-autonomous-completion-${{ github.sha }}.json
+          if-no-files-found: error
+          retention-days: 90
+
   install-consumer:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-24.04
