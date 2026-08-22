@@ -589,6 +589,153 @@ class SourceClosureTransportTest(unittest.TestCase):
         with self.assertRaisesRegex(SourceClosureTransportError, "source closure ID"):
             validate_wire_control("source_closure_manifest", descriptor, b"", "task-v4-sealed", contract)
 
+        seal = {
+            "session_id": SESSION_ID,
+            "task_id": TASK_ID,
+            "task_v4_digest": semantic,
+            "manifest_digest": semantic,
+            "blob_receipts_digest": semantic,
+            "blob_count": contract["limits"]["maximum_unique_blobs"] + 1,
+            "total_bytes": 0,
+            "closure_digest": semantic,
+            "transfer_digest": semantic,
+        }
+        with self.assertRaisesRegex(SourceClosureTransportError, "seal census"):
+            validate_wire_control("source_closure_seal", seal, b"", "blob-sealed", contract)
+
+        with self.assertRaisesRegex(SourceClosureTransportError, "unknown"):
+            validate_wire_control("source_closure_unknown", {}, b"", "task-v4-sealed", contract)
+
+    def test_transfer_witness_rejects_aggregate_blob_chunk_frame_overflow(self) -> None:
+        contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
+        contract["limits"]["maximum_blob_chunk_frames"] = 1
+        schema = yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text(encoding="utf-8"))
+        payload = b"xy"
+        content = "sha256:" + hashlib.sha256(payload).hexdigest()
+        member = {
+            "file_id": source_closure_file_id("project://src/main.cpp"),
+            "logical_path": "project://src/main.cpp",
+            "role": "main",
+            "encoding": "utf8",
+            "size_bytes": len(payload),
+            "content_digest": content,
+            "read_only": True,
+        }
+        blob = {"content_digest": content, "size_bytes": len(payload)}
+        digest = closure_digest([member], [blob])
+        manifest = {
+            "schema": "cxxlens.source-closure-manifest.v1",
+            "closure_id": "source-closure:" + digest,
+            "closure_digest": digest,
+            "members": [member],
+            "blobs": [blob],
+        }
+        manifest_payload = canonical_json(manifest)
+        manifest_digest_value = manifest_digest(manifest)
+        witness = TransferStateWitness(
+            session_id=SESSION_ID,
+            task_id=TASK_ID,
+            task_v4_digest=SEMANTIC,
+            closure_id=manifest["closure_id"],
+            closure_digest=digest,
+            manifest_digest=manifest_digest_value,
+            manifest_schema=schema,
+        )
+        witness.apply(
+            "source_closure_manifest",
+            {
+                "kind": "descriptor",
+                "session_id": SESSION_ID,
+                "task_id": TASK_ID,
+                "task_v4_digest": SEMANTIC,
+                "closure_id": manifest["closure_id"],
+                "closure_digest": digest,
+                "manifest_digest": manifest_digest_value,
+                "total_bytes": len(manifest_payload),
+                "chunk_bytes": len(manifest_payload),
+                "chunk_count": 1,
+            },
+            b"",
+            contract,
+        )
+        witness.apply(
+            "source_closure_manifest",
+            {
+                "kind": "chunk",
+                "session_id": SESSION_ID,
+                "task_id": TASK_ID,
+                "manifest_digest": manifest_digest_value,
+                "chunk_index": 0,
+                "offset": 0,
+                "byte_count": len(manifest_payload),
+            },
+            manifest_payload,
+            contract,
+        )
+        witness.apply(
+            "source_closure_blob",
+            {
+                "session_id": SESSION_ID,
+                "task_id": TASK_ID,
+                "closure_digest": digest,
+                "blob_ordinal": 0,
+                "blob_digest": content,
+                "total_bytes": len(payload),
+                "chunk_bytes": 1,
+                "chunk_count": 2,
+            },
+            b"",
+            contract,
+        )
+        witness.apply(
+            "source_closure_chunk",
+            {
+                "session_id": SESSION_ID,
+                "task_id": TASK_ID,
+                "blob_ordinal": 0,
+                "blob_digest": content,
+                "chunk_index": 0,
+                "offset": 0,
+                "byte_count": 1,
+            },
+            payload[:1],
+            contract,
+        )
+        with self.assertRaisesRegex(SourceClosureTransportError, "aggregate blob chunk frame"):
+            witness.apply(
+                "source_closure_chunk",
+                {
+                    "session_id": SESSION_ID,
+                    "task_id": TASK_ID,
+                    "blob_ordinal": 0,
+                    "blob_digest": content,
+                    "chunk_index": 1,
+                    "offset": 1,
+                    "byte_count": 1,
+                },
+                payload[1:],
+                contract,
+            )
+
+    def test_phase_and_counterexample_contract_is_exact(self) -> None:
+        for label, mutate in (
+            (
+                "phase-fields",
+                lambda value: value["phase_fields"]["before-manifest"].append(
+                    "received-closure-bytes"
+                ),
+            ),
+            (
+                "counterexamples",
+                lambda value: value["counterexamples"].remove("cross-task"),
+            ),
+        ):
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temporary:
+                root = self.copied_root(temporary)
+                self.rewrite(root, CONTRACT, mutate)
+                with self.assertRaisesRegex(Exception, "transport schema validation|counterexample"):
+                    validate(root)
+
     def test_zero_byte_blob_has_descriptor_only_wire_representation(self) -> None:
         contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
         semantic = "semantic-v2:sha256:" + "1" * 64

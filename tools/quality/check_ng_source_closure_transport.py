@@ -471,6 +471,8 @@ def validate_wire_control(
     if type(payload) is not bytes:
         raise SourceClosureTransportError("wire payload is not an exact byte string")
     controls = contract["wire_controls"]
+    if name not in controls:
+        raise SourceClosureTransportError(f"unknown source-closure wire control: {name}")
     if name == "source_closure_reject":
         if payload:
             raise SourceClosureTransportError("reject control payload must be empty")
@@ -507,6 +509,13 @@ def validate_wire_control(
                 raise SourceClosureTransportError("wire control closure_id is not a source closure ID")
         elif field in {"session_id", "task_id", "spool_receipt", "cleanup_owner"}:
             validate_wire_id(field, value)
+    if name == "source_closure_blob" and control["blob_ordinal"] >= contract["limits"]["maximum_unique_blobs"]:
+        raise SourceClosureTransportError("wire blob ordinal exceeds closure bound")
+    if name == "source_closure_seal" and (
+        control["blob_count"] > contract["limits"]["maximum_unique_blobs"]
+        or control["total_bytes"] > contract["limits"]["maximum_unique_blob_bytes"]
+    ):
+        raise SourceClosureTransportError("wire seal census exceeds closure bound")
     if spec["payload"] == "empty" and payload:
         raise SourceClosureTransportError("wire control payload must be empty")
     if spec["payload"] == "exact-byte-count-frame-digest":
@@ -618,6 +627,7 @@ class TransferStateWitness:
         self.manifest: dict[str, Any] | None = None
         self.blob_receipts: list[dict[str, Any]] = []
         self.completed_blobs = 0
+        self.blob_chunk_frames = 0
         self.total_blob_bytes = 0
         self.transfer_digest: str | None = None
 
@@ -730,11 +740,21 @@ class TransferStateWitness:
                 observed_digest = "sha256:" + hashlib.sha256(self.blob_bytes).hexdigest()
                 if observed_digest != self.current_blob_digest:
                     raise SourceClosureTransportError("wire blob content digest mismatch")
+                if self.blob_chunk_frames >= contract["limits"]["maximum_blob_chunk_frames"]:
+                    raise SourceClosureTransportError(
+                        "wire aggregate blob chunk frame bound exceeded"
+                    )
+                self.blob_chunk_frames += 1
                 self.blob_receipts.append({"blob_ordinal": self.current_blob_ordinal, "blob_digest": observed_digest, "size_bytes": self.declared_bytes})
                 self.completed_blobs += 1
                 self.total_blob_bytes += self.declared_bytes
                 self.state = "blob-sealed"
             else:
+                if self.blob_chunk_frames + 1 > contract["limits"]["maximum_blob_chunk_frames"]:
+                    raise SourceClosureTransportError(
+                        "wire aggregate blob chunk frame bound exceeded"
+                    )
+                self.blob_chunk_frames += 1
                 self.state = "blob-streaming"
         elif name == "source_closure_seal":
             self._bind(control, ("task_v4_digest", "manifest_digest", "closure_digest"))
