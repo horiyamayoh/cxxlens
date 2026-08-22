@@ -21,6 +21,21 @@ SOURCE = pathlib.Path("src/llvm/clang22/materialization_store_candidate.cpp")
 TEST = pathlib.Path("tests/adapter/clang22/materialization_store_candidate_test.cpp")
 BUILD = pathlib.Path("CMakeLists.txt")
 TEST_BUILD = pathlib.Path("tests/CMakeLists.txt")
+PRODUCTION_SOURCES = (
+    pathlib.Path("tools/clang22/materialize_main.cpp"),
+    pathlib.Path("src/llvm/clang22/materialization_store.cpp"),
+    pathlib.Path("src/llvm/clang22/materialization_incremental_coordinator.cpp"),
+    pathlib.Path("src/llvm/clang22/materialization_public_report.cpp"),
+)
+
+# ADR 0103 is still proposed. Until its exact candidate endpoint is independently accepted,
+# the source-private reference port must not become an accidental production activation. This
+# narrower guard does not claim that the current bulk Store path is residency-qualified.
+FORBIDDEN_PRODUCTION_ACTIVATION = (
+    '#include "llvm/clang22/materialization_store_candidate.hpp"',
+    "begin_bounded_store_candidate(",
+    "bounded_store_candidate::",
+)
 
 
 class StoreCandidateError(ValueError):
@@ -41,12 +56,19 @@ def require_tokens(text: str, tokens: tuple[str, ...], label: str) -> None:
         raise StoreCandidateError(f"{label} missing required token(s): {', '.join(missing)}")
 
 
+def reject_tokens(text: str, tokens: tuple[str, ...], label: str) -> None:
+    present = [token for token in tokens if token in text]
+    if present:
+        raise StoreCandidateError(f"{label} contains forbidden token(s): {', '.join(present)}")
+
+
 def validate(root: pathlib.Path) -> None:
     header = read(root, HEADER)
     source = read(root, SOURCE)
     test = read(root, TEST)
     build = read(root, BUILD)
     test_build = read(root, TEST_BUILD)
+    production = {relative: read(root, relative) for relative in PRODUCTION_SOURCES}
 
     required_constants = {
         "bounded_store_max_tasks": "4096U",
@@ -76,6 +98,7 @@ def validate(root: pathlib.Path) -> None:
             "build_actual_projection",
             "compare_projections",
             "reserve_report_tail",
+            "finish_without_publication",
             "publish_once",
             "finalize_report",
         ),
@@ -103,7 +126,9 @@ def validate(root: pathlib.Path) -> None:
             "full_byte_projection_tamper_and_order_are_rejected",
             "unknown_terminal_is_fail_closed_and_not_retried",
             "report_reservation_and_resource_bounds_are_enforced",
+            "not_attempted_terminal_is_fail_closed_and_not_retried",
             "backend.calls == 1U",
+            "backend.calls == 0U",
             "full-byte-mismatch",
         ),
         "candidate test",
@@ -121,6 +146,8 @@ def validate(root: pathlib.Path) -> None:
         ),
         "candidate test registration",
     )
+    for relative, text in production.items():
+        reject_tokens(text, FORBIDDEN_PRODUCTION_ACTIVATION, f"production boundary {relative}")
 
 
 def main() -> int:

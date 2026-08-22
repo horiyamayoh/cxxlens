@@ -18,6 +18,7 @@ from check_ng_store_candidate import (  # noqa: E402
     SOURCE,
     TEST,
     TEST_BUILD,
+    PRODUCTION_SOURCES,
     StoreCandidateError,
     validate,
 )
@@ -26,7 +27,7 @@ from check_ng_store_candidate import (  # noqa: E402
 class StoreCandidateTest(unittest.TestCase):
     def copied_root(self, temporary: str) -> pathlib.Path:
         root = pathlib.Path(temporary)
-        for relative in (HEADER, SOURCE, TEST, BUILD, TEST_BUILD):
+        for relative in (HEADER, SOURCE, TEST, BUILD, TEST_BUILD, *PRODUCTION_SOURCES):
             destination = root / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / relative, destination)
@@ -68,6 +69,18 @@ class StoreCandidateTest(unittest.TestCase):
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(StoreCandidateError, "candidate test registration"):
+                validate(root)
+
+    def test_unaccepted_candidate_cannot_be_activated_in_production(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            path = root / PRODUCTION_SOURCES[0]
+            path.write_text(
+                '#include "llvm/clang22/materialization_store_candidate.hpp"\n'
+                + path.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(StoreCandidateError, "production boundary"):
                 validate(root)
 
 

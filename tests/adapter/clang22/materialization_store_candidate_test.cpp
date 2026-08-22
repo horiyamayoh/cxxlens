@@ -235,6 +235,31 @@ namespace
 				"unknown report did not finalize safely");
 	}
 
+	void not_attempted_terminal_is_fail_closed_and_not_retried()
+	{
+		auto fixture = make_candidate();
+		build_projection_pair(fixture.candidate);
+		auto report_result = make_bounded_store_report_writer(make_report_spool());
+		require(report_result.has_value(), "not-attempted report writer did not begin");
+		auto report = std::move(*report_result);
+		reserve_report(fixture.candidate, report);
+		fake_publication backend;
+		require(fixture.candidate.finish_without_publication().has_value(),
+				"zero-effect terminal did not finish");
+		require(fixture.candidate.publication_terminal() ==
+						std::optional{bounded_store_publication_terminal::not_attempted} &&
+					backend.calls == 0U,
+				"zero-effect terminal crossed the publication boundary");
+		auto replay = fixture.candidate.publish_once(backend);
+		require(!replay && replay.error().code == "store.candidate-state" && backend.calls == 0U,
+				"zero-effect terminal was replayed as publication");
+		require(fixture.candidate.finalize_report(report).has_value(),
+				"not-attempted report did not finalize safely");
+		require(report.terminal() ==
+					std::optional{bounded_store_publication_terminal::not_attempted},
+				"not-attempted report terminal drifted");
+	}
+
 	void report_reservation_and_resource_bounds_are_enforced()
 	{
 		bounded_store_limits limits;
@@ -294,6 +319,7 @@ int main()
 	positive_memory_and_sqlite_compatible_port_contract();
 	full_byte_projection_tamper_and_order_are_rejected();
 	unknown_terminal_is_fail_closed_and_not_retried();
+	not_attempted_terminal_is_fail_closed_and_not_retried();
 	report_reservation_and_resource_bounds_are_enforced();
 	invalid_terminal_is_fail_closed();
 	return 0;
