@@ -79,6 +79,16 @@ the authoring session. The authority file set must exactly equal the decision re
 the acceptance path set is checker-derived, never claimant-selected. The inferred acceptance must
 be the immediate direct-main child of the candidate on the ancestry path.
 
+The connected-verification projection is phase-authentic: a `pending` receipt carries null run
+identity fields and `pending` workflow/event/conclusion fields; a `verified` receipt carries a
+positive run/workflow identity, the active Autonomy fast workflow path/name, `push` event, and
+`success` conclusion. A finding identifier is `P0`, `P1`, or `P2` followed by one or more uppercase
+alphanumeric segments separated by single hyphens, and the per-severity finding counts must equal
+the corresponding identifier census. The offline checker also requires comment-author/reviewer
+equality, while connected verification rejects a reviewer login equal to the authenticated commit
+author or committer. Once a rejected receipt appears in first-parent history, its complete parsed
+value is immutable and cannot be removed or rewritten; a corrected candidate appends a new receipt.
+
 ## Concurrency and WIP
 
 Before writing and before commit, record `main` SHA and check active conflict-class/path ownership.

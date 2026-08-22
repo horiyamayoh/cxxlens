@@ -51,22 +51,36 @@ properties:
           additionalProperties: false
           required: [p0, p1, p2]
           properties: {p0: {type: integer, minimum: 0}, p1: {type: integer, minimum: 0}, p2: {type: integer, minimum: 0}}
-        finding_ids: {type: array, uniqueItems: true, items: {type: string, pattern: '^P[0-2]-[A-Z0-9-]+$'}}
+        finding_ids: {type: array, uniqueItems: true, items: {type: string, pattern: '^P[0-2]-[A-Z0-9]+(?:-[A-Z0-9]+)*$'}}
         verification_limits: {type: array, minItems: 1, uniqueItems: true, items: {type: string, minLength: 1}}
         connected_verification:
-          type: object
-          additionalProperties: false
-          required: [status, run_id, run_url, run_commit, workflow_id, workflow_path, workflow_name, event, conclusion]
-          properties:
-            status: {enum: [pending, verified]}
-            run_id: {oneOf: [{type: integer, minimum: 1}, {type: 'null'}]}
-            run_url: {oneOf: [{type: string, pattern: '^https://github\.com/horiyamayoh/cxxlens/actions/runs/[1-9][0-9]*$'}, {type: 'null'}]}
-            run_commit: {oneOf: [{$ref: '#/$defs/hex40'}, {type: 'null'}]}
-            workflow_id: {oneOf: [{type: integer, minimum: 1}, {type: 'null'}]}
-            workflow_path: {enum: [.github/workflows/autonomy-fast.yml, pending]}
-            workflow_name: {enum: [Autonomy fast, pending]}
-            event: {enum: [push, pending]}
-            conclusion: {enum: [pending, success]}
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [status, run_id, run_url, run_commit, workflow_id, workflow_path, workflow_name, event, conclusion]
+              properties:
+                status: {const: pending}
+                run_id: {type: 'null'}
+                run_url: {type: 'null'}
+                run_commit: {type: 'null'}
+                workflow_id: {type: 'null'}
+                workflow_path: {const: pending}
+                workflow_name: {const: pending}
+                event: {const: pending}
+                conclusion: {const: pending}
+            - type: object
+              additionalProperties: false
+              required: [status, run_id, run_url, run_commit, workflow_id, workflow_path, workflow_name, event, conclusion]
+              properties:
+                status: {const: verified}
+                run_id: {type: integer, minimum: 1}
+                run_url: {type: string, pattern: '^https://github\.com/horiyamayoh/cxxlens/actions/runs/[1-9][0-9]*$'}
+                run_commit: {$ref: '#/$defs/hex40'}
+                workflow_id: {type: integer, minimum: 1}
+                workflow_path: {const: .github/workflows/autonomy-fast.yml}
+                workflow_name: {const: Autonomy fast}
+                event: {const: push}
+                conclusion: {const: success}
         acceptance:
           type: object
           additionalProperties: false

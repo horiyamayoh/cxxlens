@@ -26,6 +26,25 @@ RECEIPT_SCHEMA = pathlib.Path("schemas/cxxlens_ng_development_review_receipts.sc
 WIP_INVENTORY = pathlib.Path("schemas/cxxlens_ng_wip_inventory.yaml")
 HIGH_RISK = {"contract", "invariant", "security", "compatibility", "irreversible", "resource-bound"}
 REVIEW_REF = re.compile(r"^https://github\.com/horiyamayoh/cxxlens/issues/([1-9][0-9]*)#issuecomment-([1-9][0-9]*)$")
+FINDING_ID = re.compile(r"^P[0-2]-[A-Z0-9]+(?:-[A-Z0-9]+)*$")
+CONNECTED_VERIFICATION_PENDING = {
+    "status": "pending",
+    "run_id": None,
+    "run_url": None,
+    "run_commit": None,
+    "workflow_id": None,
+    "workflow_path": "pending",
+    "workflow_name": "pending",
+    "event": "pending",
+    "conclusion": "pending",
+}
+CONNECTED_VERIFICATION_SUCCESS = {
+    "status": "verified",
+    "workflow_path": ".github/workflows/autonomy-fast.yml",
+    "workflow_name": "Autonomy fast",
+    "event": "push",
+    "conclusion": "success",
+}
 DIRECT_MAIN_DECISION_ID = "decision.delivery.direct-main"
 DIRECT_MAIN_OWNER_ISSUES = frozenset({"#173"})
 DIRECT_MAIN_CONTRACT_IDS = frozenset(
@@ -173,6 +192,94 @@ def _validate_receipt_git(root: pathlib.Path, receipt: dict[str, Any]) -> None:
             raise DecisionRegisterError(f"review receipt authority blob mismatch: {receipt['id']}:{authority['path']}")
     if authority_digest(receipt["authority_files"]) != receipt["authority_digest"]:
         raise DecisionRegisterError(f"review receipt authority digest mismatch: {receipt['id']}")
+
+
+def _validate_receipt_semantics(receipt: dict[str, Any]) -> None:
+    """Validate identity and phase invariants that JSON Schema cannot express."""
+    if receipt["candidate_github_login"] == receipt["reviewer_github_login"]:
+        raise DecisionRegisterError(
+            f"review receipt GitHub identities are not independent: {receipt['id']}"
+        )
+    if receipt["comment_author_login"] != receipt["reviewer_github_login"]:
+        raise DecisionRegisterError(
+            f"review receipt comment author is not the reviewer: {receipt['id']}"
+        )
+    if receipt["reviewer"] in {receipt["author"], receipt["candidate_git_author_email"]}:
+        raise DecisionRegisterError(
+            f"review receipt reviewer is not process-independent: {receipt['id']}"
+        )
+    connected = receipt["connected_verification"]
+    if connected == CONNECTED_VERIFICATION_PENDING:
+        return
+    if connected.get("status") != "verified":
+        raise DecisionRegisterError(
+            f"connected verification phase is not authentic: {receipt['id']}"
+        )
+    for key, expected in CONNECTED_VERIFICATION_SUCCESS.items():
+        if connected.get(key) != expected:
+            raise DecisionRegisterError(
+                f"connected verification phase field is not authentic: {receipt['id']}:{key}"
+            )
+    if any(
+        connected.get(key) is None
+        for key in ("run_id", "run_url", "run_commit", "workflow_id")
+    ):
+        raise DecisionRegisterError(
+            f"verified connected verification is missing run identity: {receipt['id']}"
+        )
+
+
+def _receipt_projection(receipt: dict[str, Any]) -> str:
+    """Return a formatting-independent representation of a receipt."""
+    return json.dumps(receipt, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _validate_rejected_receipt_history(root: pathlib.Path) -> None:
+    """Reject rewriting or removing a rejected receipt on first-parent history."""
+    revisions = _git(
+        root,
+        "log",
+        "--first-parent",
+        "--reverse",
+        "--format=%H",
+        "--",
+        str(RECEIPTS),
+    ).splitlines()
+    rejected: dict[str, str] = {}
+    for revision in revisions:
+        try:
+            snapshot = yaml.load(
+                _git(root, "show", f"{revision}:{RECEIPTS}"),
+                Loader=UniqueKeyLoader,
+            )
+        except DecisionRegisterError as error:
+            raise DecisionRegisterError(
+                f"cannot read review receipt history: {revision}"
+            ) from error
+        if not isinstance(snapshot, dict) or not isinstance(snapshot.get("receipts"), list):
+            raise DecisionRegisterError(
+                f"review receipt history is not a registry: {revision}"
+            )
+        current: dict[str, dict[str, Any]] = {}
+        for receipt in snapshot["receipts"]:
+            if not isinstance(receipt, dict) or not isinstance(receipt.get("id"), str):
+                raise DecisionRegisterError(
+                    f"review receipt history contains an invalid entry: {revision}"
+                )
+            if receipt["id"] in current:
+                raise DecisionRegisterError(
+                    f"duplicate historical review receipt ID: {receipt['id']}"
+                )
+            current[receipt["id"]] = receipt
+        for receipt_id, projection in rejected.items():
+            receipt = current.get(receipt_id)
+            if receipt is None or _receipt_projection(receipt) != projection:
+                raise DecisionRegisterError(
+                    f"rejected review receipt was rewritten or removed: {receipt_id}"
+                )
+        for receipt_id, receipt in current.items():
+            if receipt.get("verdict") == "rejected" and receipt_id not in rejected:
+                rejected[receipt_id] = _receipt_projection(receipt)
 
 
 def _validate_acceptance_commit(root: pathlib.Path, receipt: dict[str, Any]) -> str | None:
@@ -456,6 +563,7 @@ def canonical_review_comment(receipt: dict[str, Any]) -> str:
 
 
 def _verify_connected_receipt(receipt: dict[str, Any], token: str) -> None:
+    _validate_receipt_semantics(receipt)
     connected = receipt["connected_verification"]
     match = REVIEW_REF.fullmatch(receipt["comment_url"])
     if match is None or f"#{match.group(1)}" != receipt["owner_issue"]:
@@ -530,6 +638,8 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
             raise DecisionRegisterError("duplicate review receipt IDs")
     _schema_validate(register, schema, "decision register")
     _schema_validate(receipt_document, receipt_schema, "review receipt")
+    if verify_git:
+        _validate_rejected_receipt_history(root)
 
     decisions = register["decisions"]
     identifiers = [entry["id"] for entry in decisions]
@@ -641,16 +751,11 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
                 or receipt["reviewer"] != review["reviewer"]
             ):
                 raise DecisionRegisterError(f"review receipt identity mismatch: {receipt_id}")
-            if receipt["candidate_github_login"] == receipt["reviewer_github_login"]:
-                raise DecisionRegisterError(
-                    f"review receipt GitHub identities are not independent: {receipt_id}"
-                )
-            if receipt["reviewer"] in {receipt["author"], receipt["candidate_git_author_email"]}:
-                raise DecisionRegisterError(f"review receipt reviewer is not process-independent: {receipt_id}")
+            _validate_receipt_semantics(receipt)
             if receipt["reviewer_context_sha256"] != reviewer_context_digest(receipt):
                 raise DecisionRegisterError(f"reviewer context digest mismatch: {receipt_id}")
-            if any(not item.startswith(("P0-", "P1-", "P2-")) for item in receipt["finding_ids"]):
-                raise DecisionRegisterError(f"review finding ID has unknown severity: {receipt_id}")
+            if any(not FINDING_ID.fullmatch(item) for item in receipt["finding_ids"]):
+                raise DecisionRegisterError(f"review finding ID grammar is invalid: {receipt_id}")
             expected_output_digest = "sha256:" + hashlib.sha256(
                 receipt["review_output"].encode("utf-8")
             ).hexdigest()
@@ -663,7 +768,14 @@ def validate(root: pathlib.Path, *, verify_git: bool = True) -> dict[str, Any]:
                 and set(receipt["acceptance"]["allowed_changed_paths"]) != static_allowed
             ):
                 raise DecisionRegisterError(f"review receipt acceptance allowlist mismatch: {receipt_id}")
-            severity_ids = {severity: [item for item in receipt["finding_ids"] if item.startswith(severity.upper() + "-")] for severity in ("p0", "p1", "p2")}
+            severity_ids = {
+                severity: [
+                    item
+                    for item in receipt["finding_ids"]
+                    if item.startswith(severity.upper() + "-")
+                ]
+                for severity in ("p0", "p1", "p2")
+            }
             if any(len(severity_ids[severity]) != receipt["findings"][severity] for severity in severity_ids):
                 raise DecisionRegisterError(f"review finding census/detail mismatch: {receipt_id}")
             if review["outcome"] == "accepted" and receipt_id == latest_receipt_id:
