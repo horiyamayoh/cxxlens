@@ -47,6 +47,31 @@ class StoreCandidateTest(unittest.TestCase):
             with self.assertRaisesRegex(StoreCandidateError, "candidate source"):
                 validate(root)
 
+    def test_exact_projection_comparison_cannot_be_reduced_to_digest_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            path = root / SOURCE
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "**expected_record != **actual_record", "false", 1
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(StoreCandidateError, "candidate source"):
+                validate(root)
+
+    def test_report_reservation_and_abort_guards_cannot_disappear(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            path = root / SOURCE
+            source = path.read_text(encoding="utf-8")
+            source = source.replace(
+                "state_->report_reserved = true;", "state_->report_reserved = false;", 1
+            )
+            path.write_text(source, encoding="utf-8")
+            with self.assertRaisesRegex(StoreCandidateError, "candidate source"):
+                validate(root)
+
     def test_constant_drift_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)

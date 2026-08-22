@@ -260,6 +260,30 @@ namespace
 				"not-attempted report terminal drifted");
 	}
 
+	void abort_is_terminal_and_does_not_retry()
+	{
+		auto fixture = make_candidate();
+		fake_publication backend;
+		fixture.candidate.abort();
+		require(fixture.candidate.phase() == bounded_store_candidate_phase::aborted,
+				"candidate abort did not enter the terminal abort phase");
+		require(!fixture.candidate.publication_terminal(),
+				"abort fabricated a publication terminal");
+
+		auto report_result = make_bounded_store_report_writer(make_report_spool());
+		require(report_result.has_value(), "aborted report writer did not begin");
+		auto report = std::move(*report_result);
+		auto reserve = fixture.candidate.reserve_report_tail(report);
+		require(!reserve && reserve.error().code == "store.candidate-state",
+				"aborted candidate reserved a report tail");
+		auto publish = fixture.candidate.publish_once(backend);
+		require(!publish && publish.error().code == "store.candidate-state" && backend.calls == 0U,
+				"aborted candidate crossed the publication boundary");
+		fixture.candidate.abort();
+		require(fixture.candidate.phase() == bounded_store_candidate_phase::aborted,
+				"repeated abort changed the terminal abort state");
+	}
+
 	void report_reservation_and_resource_bounds_are_enforced()
 	{
 		bounded_store_limits limits;
@@ -320,6 +344,7 @@ int main()
 	full_byte_projection_tamper_and_order_are_rejected();
 	unknown_terminal_is_fail_closed_and_not_retried();
 	not_attempted_terminal_is_fail_closed_and_not_retried();
+	abort_is_terminal_and_does_not_retry();
 	report_reservation_and_resource_bounds_are_enforced();
 	invalid_terminal_is_fail_closed();
 	return 0;
