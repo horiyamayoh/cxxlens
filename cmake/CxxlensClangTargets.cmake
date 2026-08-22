@@ -110,6 +110,7 @@ function(cxxlens_create_clang22_worker_static_closure)
 
   add_library(
     cxxlens_clang22_worker_codecs_internal STATIC EXCLUDE_FROM_ALL
+    src/llvm/clang22/materialization_json.cpp
     src/llvm/clang22/provider_task_v3.cpp
     src/llvm/clang22/observation_v2.cpp
     src/llvm/clang22/source_closure.cpp
