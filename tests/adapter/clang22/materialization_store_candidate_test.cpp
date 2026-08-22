@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <span>
@@ -49,6 +50,7 @@ namespace
 		std::string candidate;
 		std::string expected_head;
 		std::uint32_t calls{};
+		std::function<void()> on_call;
 
 		bounded_store_publication_terminal publish_once(const std::string_view candidate_id,
 														const std::string_view head) override
@@ -56,6 +58,8 @@ namespace
 			++calls;
 			candidate = candidate_id;
 			expected_head = head;
+			if (on_call)
+				on_call();
 			return result;
 		}
 	};
@@ -213,6 +217,25 @@ namespace
 				"backend physical-key reorder was accepted");
 	}
 
+	void prepublication_failure_is_terminal_and_not_retried()
+	{
+		auto fixture = make_candidate({}, false);
+		const bounded_store_external_census wrong_census{fixture.census.task_count + 1U,
+														 fixture.census.input_bytes,
+														 fixture.census.input_digest};
+		auto failed = fixture.candidate.seal_input(wrong_census);
+		require(!failed && failed.error().code == "store.input-census-mismatch" &&
+					fixture.candidate.phase() == bounded_store_candidate_phase::aborted,
+				"input census failure did not abort the candidate");
+		fake_publication backend;
+		auto replay = fixture.candidate.publish_once(backend);
+		require(!replay && replay.error().code == "store.candidate-state" && backend.calls == 0U,
+				"failed prepublication candidate crossed the publication boundary");
+		fixture.candidate.abort();
+		require(fixture.candidate.phase() == bounded_store_candidate_phase::aborted,
+				"repeated abort changed the prepublication failure terminal");
+	}
+
 	void unknown_terminal_is_fail_closed_and_not_retried()
 	{
 		auto fixture = make_candidate();
@@ -298,17 +321,15 @@ namespace
 		auto extra = fixture.candidate.append_task(another);
 		require(!extra && extra.error().code == "store.resource-limit",
 				"task bound was not enforced");
-		require(fixture.candidate.seal_input(fixture.census).has_value(),
-				"bounded candidate input did not seal");
-		build_projection_pair(fixture.candidate);
+		require(fixture.candidate.phase() == bounded_store_candidate_phase::aborted,
+				"resource failure did not abort the candidate");
+		auto seal_after_failure = fixture.candidate.seal_input(fixture.census);
+		require(!seal_after_failure && seal_after_failure.error().code == "store.candidate-state",
+				"resource-failed candidate remained reusable");
 		auto report_result = make_bounded_store_report_writer(make_report_spool(), limits);
 		require(report_result.has_value(), "bounded report writer did not begin");
 		auto report = std::move(*report_result);
-		fake_publication backend;
-		auto before_reservation = fixture.candidate.publish_once(backend);
-		require(!before_reservation && before_reservation.error().code == "store.candidate-state",
-				"publication crossed before report reservation");
-		reserve_report(fixture.candidate, report);
+		require(report.reserve().has_value(), "bounded report tail did not reserve");
 		const std::array too_large{
 			std::byte{'1'}, std::byte{'2'}, std::byte{'3'}, std::byte{'4'}, std::byte{'5'}};
 		auto report_overflow = report.append(too_large);
@@ -336,16 +357,46 @@ namespace
 		require(fixture.candidate.finalize_report(report).has_value(),
 				"invalid-terminal unknown report did not finalize");
 	}
+
+	void reentrant_abort_preserves_publication_unknown()
+	{
+		auto fixture = make_candidate();
+		build_projection_pair(fixture.candidate);
+		auto report_result = make_bounded_store_report_writer(make_report_spool());
+		require(report_result.has_value(), "reentrant report writer did not begin");
+		auto report = std::move(*report_result);
+		reserve_report(fixture.candidate, report);
+		fake_publication backend;
+		backend.on_call = [&fixture]()
+		{
+			fixture.candidate.abort();
+		};
+		auto publication = fixture.candidate.publish_once(backend);
+		require(!publication && publication.error().code == "store.publication-outcome-unknown" &&
+					fixture.candidate.phase() ==
+						bounded_store_candidate_phase::publication_terminal &&
+					fixture.candidate.publication_terminal() ==
+						std::optional{
+							bounded_store_publication_terminal::publication_outcome_unknown} &&
+					backend.calls == 1U,
+				"reentrant abort was converted into a committed or retryable result");
+		auto replay = fixture.candidate.publish_once(backend);
+		require(!replay && backend.calls == 1U, "reentrant unknown publication was retried");
+		require(fixture.candidate.finalize_report(report).has_value(),
+				"reentrant unknown report did not finalize safely");
+	}
 } // namespace
 
 int main()
 {
 	positive_memory_and_sqlite_compatible_port_contract();
 	full_byte_projection_tamper_and_order_are_rejected();
+	prepublication_failure_is_terminal_and_not_retried();
 	unknown_terminal_is_fail_closed_and_not_retried();
 	not_attempted_terminal_is_fail_closed_and_not_retried();
 	abort_is_terminal_and_does_not_retry();
 	report_reservation_and_resource_bounds_are_enforced();
 	invalid_terminal_is_fail_closed();
+	reentrant_abort_preserves_publication_unknown();
 	return 0;
 }

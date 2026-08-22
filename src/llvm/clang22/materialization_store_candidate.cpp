@@ -448,7 +448,14 @@ namespace cxxlens::detail::clang22::materialization
 	bounded_store_candidate::bounded_store_candidate(bounded_store_candidate&&) noexcept = default;
 	bounded_store_candidate&
 	bounded_store_candidate::operator=(bounded_store_candidate&&) noexcept = default;
-	bounded_store_candidate::~bounded_store_candidate() = default;
+	bounded_store_candidate::~bounded_store_candidate()
+	{
+		// A candidate that leaves scope before a terminal outcome must never remain reusable.
+		// `abort()` is total for pre-publication phases and preserves an in-flight publication as
+		// the phase-opaque unknown terminal. The private spools are released with the state.
+		if (state_)
+			abort();
+	}
 
 	bounded_store_candidate_phase bounded_store_candidate::phase() const noexcept
 	{
@@ -475,16 +482,21 @@ namespace cxxlens::detail::clang22::materialization
 			(state_->phase != bounded_store_candidate_phase::staging_session_open &&
 			 state_->phase != bounded_store_candidate_phase::appending))
 			return sdk::unexpected(failure("store.candidate-state", "append-task", "phase"));
+		auto fail_and_abort = [&](sdk::error error) -> sdk::result<void>
+		{
+			state_->phase = bounded_store_candidate_phase::aborted;
+			return sdk::unexpected(std::move(error));
+		};
 		if (sealed_task.empty())
-			return sdk::unexpected(failure("store.input-invalid", "task", "empty"));
+			return fail_and_abort(failure("store.input-invalid", "task", "empty"));
 		if (state_->task_count >= state_->limits.max_tasks)
-			return sdk::unexpected(failure("store.resource-limit", "tasks", "maximum"));
+			return fail_and_abort(failure("store.resource-limit", "tasks", "maximum"));
 		std::uint64_t next_bytes{};
 		if (!checked_add(state_->input_bytes,
 						 sealed_task.size(),
 						 state_->limits.max_aggregate_bytes,
 						 next_bytes))
-			return sdk::unexpected(
+			return fail_and_abort(
 				failure("store.resource-limit", "input-bytes", "checked-overflow"));
 		bounded_store_record record;
 		record.kind = bounded_store_record_kind::task_result;
@@ -492,11 +504,11 @@ namespace cxxlens::detail::clang22::materialization
 		record.payload.assign(sealed_task.begin(), sealed_task.end());
 		auto encoded = encode_bounded_store_record(record, state_->limits);
 		if (!encoded)
-			return sdk::unexpected(std::move(encoded.error()));
+			return fail_and_abort(std::move(encoded.error()));
 		if (auto appended = state_->input->append(record); !appended)
-			return sdk::unexpected(std::move(appended.error()));
+			return fail_and_abort(std::move(appended.error()));
 		if (auto updated = state_->input_digest->update(*encoded); !updated)
-			return sdk::unexpected(failure("store.hash-failure", "input", "digest"));
+			return fail_and_abort(failure("store.hash-failure", "input", "digest"));
 		state_->input_bytes = next_bytes;
 		++state_->task_count;
 		state_->phase = bounded_store_candidate_phase::appending;
@@ -508,22 +520,27 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		if (!state_ || state_->phase != bounded_store_candidate_phase::appending)
 			return sdk::unexpected(failure("store.candidate-state", "seal-input", "phase"));
+		auto fail_and_abort = [&](sdk::error error) -> sdk::result<void>
+		{
+			state_->phase = bounded_store_candidate_phase::aborted;
+			return sdk::unexpected(std::move(error));
+		};
 		if (state_->task_count == 0U || census.task_count != state_->task_count ||
 			census.input_bytes != state_->input_bytes)
-			return sdk::unexpected(
+			return fail_and_abort(
 				failure("store.input-census-mismatch", "input", "count-or-bytes"));
 		if (!state_->input->seal())
-			return sdk::unexpected(failure("store.spool-failure", "input", "seal"));
+			return fail_and_abort(failure("store.spool-failure", "input", "seal"));
 		auto digest = state_->input_digest->finish();
 		if (!digest)
-			return sdk::unexpected(failure("store.hash-failure", "input", "digest"));
+			return fail_and_abort(failure("store.hash-failure", "input", "digest"));
 		if (*digest != census.input_digest)
-			return sdk::unexpected(failure("store.input-census-mismatch", "input", "digest"));
+			return fail_and_abort(failure("store.input-census-mismatch", "input", "digest"));
 		state_->phase = bounded_store_candidate_phase::input_sealed;
 		const auto identity = sdk::semantic_digest("cxxlens.store.incremental-candidate.v1",
 												   *digest + "\n" + state_->expected_head);
 		if (!identity)
-			return sdk::unexpected(failure("store.hash-failure", "candidate", "identity"));
+			return fail_and_abort(failure("store.hash-failure", "candidate", "identity"));
 		state_->candidate_id = std::move(*identity);
 		state_->phase = bounded_store_candidate_phase::candidate_identity_sealed;
 		return {};
@@ -535,13 +552,18 @@ namespace cxxlens::detail::clang22::materialization
 			!builder)
 			return sdk::unexpected(
 				failure("store.candidate-state", "expected-projection", "phase"));
+		auto fail_and_abort = [&](sdk::error error) -> sdk::result<void>
+		{
+			state_->phase = bounded_store_candidate_phase::aborted;
+			return sdk::unexpected(std::move(error));
+		};
 		state_->phase = bounded_store_candidate_phase::independently_validating;
 		if (auto built = builder(*state_->expected); !built)
-			return sdk::unexpected(std::move(built.error()));
+			return fail_and_abort(std::move(built.error()));
 		if (state_->expected->record_count() == 0U)
-			return sdk::unexpected(failure("store.corrupt", "expected-projection", "empty"));
+			return fail_and_abort(failure("store.corrupt", "expected-projection", "empty"));
 		if (auto sealed = state_->expected->seal(); !sealed)
-			return sdk::unexpected(std::move(sealed.error()));
+			return fail_and_abort(std::move(sealed.error()));
 		state_->phase = bounded_store_candidate_phase::expected_projection_sealed;
 		return {};
 	}
@@ -551,14 +573,19 @@ namespace cxxlens::detail::clang22::materialization
 		if (!state_ || state_->phase != bounded_store_candidate_phase::expected_projection_sealed ||
 			!builder)
 			return sdk::unexpected(failure("store.candidate-state", "actual-projection", "phase"));
+		auto fail_and_abort = [&](sdk::error error) -> sdk::result<void>
+		{
+			state_->phase = bounded_store_candidate_phase::aborted;
+			return sdk::unexpected(std::move(error));
+		};
 		if (auto built = builder(*state_->actual); !built)
-			return sdk::unexpected(std::move(built.error()));
+			return fail_and_abort(std::move(built.error()));
 		if (state_->actual->record_count() == 0U)
-			return sdk::unexpected(failure("store.corrupt", "actual-projection", "empty"));
+			return fail_and_abort(failure("store.corrupt", "actual-projection", "empty"));
 		if (auto sealed = state_->actual->seal(); !sealed)
-			return sdk::unexpected(std::move(sealed.error()));
+			return fail_and_abort(std::move(sealed.error()));
 		if (auto ordered = validate_actual_order(*state_->actual); !ordered)
-			return sdk::unexpected(std::move(ordered.error()));
+			return fail_and_abort(std::move(ordered.error()));
 		state_->phase = bounded_store_candidate_phase::actual_projection_sealed;
 		return {};
 	}
@@ -567,26 +594,29 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		if (!state_ || state_->phase != bounded_store_candidate_phase::actual_projection_sealed)
 			return sdk::unexpected(failure("store.candidate-state", "compare", "phase"));
+		auto fail_and_abort = [&](sdk::error error) -> sdk::result<void>
+		{
+			state_->phase = bounded_store_candidate_phase::aborted;
+			return sdk::unexpected(std::move(error));
+		};
 		auto expected = state_->expected->open_cursor();
 		auto actual = state_->actual->open_cursor();
 		if (!expected || !actual)
-			return sdk::unexpected(failure("store.corrupt", "projection", "cursor"));
+			return fail_and_abort(failure("store.corrupt", "projection", "cursor"));
 		for (;;)
 		{
 			auto expected_record = (*expected)->next();
 			auto actual_record = (*actual)->next();
 			if (!expected_record || !actual_record)
-				return sdk::unexpected(failure("store.corrupt", "projection", "cursor"));
+				return fail_and_abort(failure("store.corrupt", "projection", "cursor"));
 			if (!*expected_record && !*actual_record)
 				break;
 			if (!*expected_record || !*actual_record || **expected_record != **actual_record)
-				return sdk::unexpected(
-					failure("store.corrupt", "projection", "full-byte-mismatch"));
+				return fail_and_abort(failure("store.corrupt", "projection", "full-byte-mismatch"));
 			auto expected_bytes = encode_bounded_store_record(**expected_record, state_->limits);
 			auto actual_bytes = encode_bounded_store_record(**actual_record, state_->limits);
 			if (!expected_bytes || !actual_bytes || *expected_bytes != *actual_bytes)
-				return sdk::unexpected(
-					failure("store.corrupt", "projection", "full-byte-mismatch"));
+				return fail_and_abort(failure("store.corrupt", "projection", "full-byte-mismatch"));
 		}
 		state_->phase = bounded_store_candidate_phase::validation_sealed;
 		return {};
@@ -598,8 +628,13 @@ namespace cxxlens::detail::clang22::materialization
 		if (!state_ || state_->phase != bounded_store_candidate_phase::validation_sealed ||
 			state_->report_reserved)
 			return sdk::unexpected(failure("store.candidate-state", "report-tail", "phase"));
+		auto fail_and_abort = [&](sdk::error error) -> sdk::result<void>
+		{
+			state_->phase = bounded_store_candidate_phase::aborted;
+			return sdk::unexpected(std::move(error));
+		};
 		if (auto reserved = report.reserve(); !reserved)
-			return sdk::unexpected(std::move(reserved.error()));
+			return fail_and_abort(std::move(reserved.error()));
 		state_->report_reserved = true;
 		state_->phase = bounded_store_candidate_phase::report_tail_reserved;
 		return {};
@@ -633,6 +668,15 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(
 				failure("store.publication-outcome-unknown", "publish", "backend-exception"));
 		}
+		if (state_->phase != bounded_store_candidate_phase::publication_attempted_once)
+		{
+			// A backend must not be able to re-enter the candidate and turn an already ambiguous
+			// attempt into a committed or zero-effect result.  `abort()` owns this transition.
+			state_->terminal = bounded_store_publication_terminal::publication_outcome_unknown;
+			state_->phase = bounded_store_candidate_phase::publication_terminal;
+			return sdk::unexpected(
+				failure("store.publication-outcome-unknown", "publish", "reentrant-abort"));
+		}
 		const bool valid_terminal =
 			is_valid(terminal) && terminal != bounded_store_publication_terminal::not_attempted;
 		state_->terminal = valid_terminal
@@ -665,6 +709,14 @@ namespace cxxlens::detail::clang22::materialization
 			state_->phase == bounded_store_candidate_phase::report_finalized ||
 			state_->phase == bounded_store_candidate_phase::report_transport_failed)
 			return;
+		if (state_->phase == bounded_store_candidate_phase::publication_attempted_once)
+		{
+			// Once the backend call has started, the caller cannot prove whether the Store changed.
+			// Preserve that ambiguity instead of manufacturing a zero-effect abort.
+			state_->terminal = bounded_store_publication_terminal::publication_outcome_unknown;
+			state_->phase = bounded_store_candidate_phase::publication_terminal;
+			return;
+		}
 		state_->phase = bounded_store_candidate_phase::aborted;
 	}
 
