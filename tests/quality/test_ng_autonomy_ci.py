@@ -180,6 +180,23 @@ class AutonomyCiTest(unittest.TestCase):
             with self.assertRaisesRegex(AutonomyCiError, "missing or ambiguous"):
                 validate(root)
 
+    def test_owner_checkout_must_bind_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            path = root / ".github/workflows/autonomy-gr.yml"
+            value = yaml.safe_load(path.read_text(encoding="utf-8"))
+            checkout = next(
+                step
+                for step in value["jobs"]["collect-owner-report"]["steps"]
+                if step.get("uses", "").startswith("actions/checkout@")
+            )
+            checkout["with"]["ref"] = "main"
+            path.write_text(yaml.safe_dump(value, sort_keys=False), encoding="utf-8")
+            with self.assertRaisesRegex(
+                AutonomyCiError, "owner workflow checkout is not exact-candidate bound"
+            ):
+                validate(root)
+
     def test_release_without_publication_freshness_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)

@@ -199,6 +199,20 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         job = jobs["collect-owner-report"]
         if job.get("runs-on") != "ubuntu-24.04":
             raise AutonomyCiError(f"{owner_name} owner workflow runner drift")
+        checkout = [
+            step
+            for step in job.get("steps", [])
+            if isinstance(step.get("uses"), str)
+            and step["uses"].startswith("actions/checkout@")
+        ]
+        if (
+            len(checkout) != 1
+            or checkout[0].get("with", {}).get("ref")
+            != "${{ inputs.candidate_sha }}"
+        ):
+            raise AutonomyCiError(
+                f"{owner_name} owner workflow checkout is not exact-candidate bound"
+            )
         inputs = owner_on["workflow_dispatch"].get("inputs", {})
         if set(inputs) != {"candidate_sha", "selection_digest", "source_run_id", "source_artifact_id"}:
             raise AutonomyCiError(f"{owner_name} owner workflow input census drift")
