@@ -378,6 +378,46 @@ namespace
 					1U,
 					0U};
 		}
+
+		[[nodiscard]] ng1_spill_record spill_record() const
+		{
+			ng1_spill_record record;
+			record.task_id = spill.task_id;
+			record.dependency_group_id = spill.dependency_group_id;
+			record.atomic_output_group_id = spill.atomic_output_group_id;
+			record.batch_id = spill.batch_id;
+			record.stream_id = spill.stream_id;
+			record.payload_bytes = {std::byte{0x2aU}, std::byte{0x2bU}};
+			auto payload_digest = ng1_spill_payload_digest(record.payload_bytes);
+			require(payload_digest, "NG1 candidate spill payload digest failed");
+			record.payload_digest = *payload_digest;
+			auto record_digest = ng1_spill_record_digest(record);
+			require(record_digest, "NG1 candidate spill record digest failed");
+			record.record_digest = *record_digest;
+			return record;
+		}
+
+		[[nodiscard]] ng1_live_session_candidate_configuration
+		candidate_configuration(std::shared_ptr<clock_state> clock,
+								std::shared_ptr<observation_state> observation,
+								std::shared_ptr<process_state> process,
+								const ng1_live_activation_authority authority) const
+		{
+			auto driver =
+				configuration(std::move(clock), std::move(observation), std::move(process), 16U);
+			protocol_limits limits = driver.limits;
+			std::vector<std::byte> payload{std::byte{0x01U}, std::byte{0x02U}};
+			host_transcript_request host{{"provider:test",
+										  {"task:test",
+										   content_digest(payload),
+										   resume.normalized_invocation_digest,
+										   resume.toolchain_digest,
+										   resume.environment_digest},
+										  limits},
+										 {1024U * 1024U, 8U},
+										 std::move(payload)};
+			return {authority, std::move(driver), std::move(host)};
+		}
 	};
 
 	[[nodiscard]] std::vector<frame> clean_transcript_frames(const fixture& values)
@@ -815,6 +855,146 @@ namespace
 		require(driver->cleanup(), "process-effect failure fixture cleanup failed");
 	}
 
+	void test_ng1_candidate_requires_both_accepted_authorities()
+	{
+		fixture values;
+		auto clock = std::make_shared<clock_state>();
+		auto observation = std::make_shared<observation_state>();
+		auto process = std::make_shared<process_state>();
+
+		auto implicit = values.candidate_configuration(
+			clock,
+			observation,
+			process,
+			ng1_live_activation_authority{false,
+										  ng1_source_closure_authority_status::accepted,
+										  ng1_hardening_authority_status::accepted});
+		const auto rejected = ng1_live_session_candidate::start(std::move(implicit), {});
+		require(!rejected && rejected.error().code == "provider.ng1.implicit-downgrade-denied",
+				"NG1 candidate silently downgraded a non-explicit request");
+
+		auto source_unaccepted = values.candidate_configuration(
+			clock,
+			observation,
+			process,
+			ng1_live_activation_authority{true,
+										  ng1_source_closure_authority_status::not_accepted,
+										  ng1_hardening_authority_status::accepted});
+		const auto source_rejected =
+			ng1_live_session_candidate::start(std::move(source_unaccepted), {});
+		require(!source_rejected && source_rejected.error().field == "source-closure" &&
+					source_rejected.error().detail == "authority-not-accepted",
+				"NG1 candidate crossed the source-closure authority boundary");
+
+		auto hardening_unaccepted = values.candidate_configuration(
+			clock,
+			observation,
+			process,
+			ng1_live_activation_authority{true,
+										  ng1_source_closure_authority_status::accepted,
+										  ng1_hardening_authority_status::not_accepted});
+		const auto hardening_rejected =
+			ng1_live_session_candidate::start(std::move(hardening_unaccepted), {});
+		require(!hardening_rejected && hardening_rejected.error().field == "ng1-hardening" &&
+					hardening_rejected.error().detail == "authority-not-accepted",
+				"NG1 candidate crossed the hardening authority boundary");
+	}
+
+	void test_ng1_candidate_negotiates_shared_handshake_and_controls()
+	{
+		fixture values;
+		auto clock = std::make_shared<clock_state>();
+		auto observation = std::make_shared<observation_state>();
+		auto process = std::make_shared<process_state>();
+		auto manifest = encode_control_text("provider:test");
+		require(manifest, "NG1 candidate hello encoding failed");
+		process->incoming.push_back(frame{message_type::hello, 1U, 0U, *manifest, {}, 1U, 1U, 0U});
+		process->incoming.push_back(values.task_accepted_frame(0U));
+		process->incoming.push_back(values.heartbeat_frame(ng1_heartbeat_kind::ack, 0U, 1'800U));
+
+		auto candidate = ng1_live_session_candidate::start(
+			values.candidate_configuration(
+				clock,
+				observation,
+				process,
+				ng1_live_activation_authority{true,
+											  ng1_source_closure_authority_status::accepted,
+											  ng1_hardening_authority_status::accepted}),
+			{});
+		require(candidate && candidate->phase() == ng1_live_candidate_phase::awaiting_hello,
+				"NG1 candidate did not start in the hello phase");
+		require(candidate->negotiate({}),
+				"NG1 candidate rejected the exact provider hello/shared handshake");
+		require(candidate->phase() == ng1_live_candidate_phase::running,
+				"NG1 candidate did not enter running phase after negotiation");
+		require(process->sent.size() >= 5U &&
+					process->sent.at(0U).type == message_type::hello_ack &&
+					process->sent.at(1U).type == message_type::schema_negotiate &&
+					process->sent.at(2U).type == message_type::open_task &&
+					process->sent.back().type == message_type::close,
+				"NG1 candidate did not send the complete shared host transcript");
+
+		auto accepted = candidate->receive_provider_frame({});
+		require(accepted && accepted->has_value() && accepted->value().ng1_control_admitted(),
+				"NG1 candidate did not admit task acceptance after negotiation");
+		auto heartbeat = candidate->receive_provider_frame({});
+		require(heartbeat && heartbeat->has_value() && heartbeat->value().ng1_control_admitted(),
+				"NG1 candidate did not route heartbeat through host-receipted validation");
+
+		auto probe = values.heartbeat_frame(ng1_heartbeat_kind::probe, 0U, 1'900U);
+		require(candidate->send_host_frame(probe),
+				"NG1 candidate did not route the host heartbeat through validation");
+		require(candidate->append_spill(values.spill_record()),
+				"NG1 candidate did not route a bounded spill record through the session");
+		auto fsync = candidate->fsync_spill(0U, 0U, observation->staged_digest, 1U);
+		require(fsync, "NG1 candidate did not retain the host-observed spill fsync receipt");
+
+		auto terminated = candidate->terminate(process_status::cancelled);
+		require(terminated && candidate->phase() == ng1_live_candidate_phase::recovery &&
+					candidate->session().state() == ng1_recovery_state::worker_killed,
+				"NG1 candidate cancellation did not enter recoverable worker-killed state");
+		auto rejected_output = candidate->reject_output();
+		require(!rejected_output && candidate->session().state() == ng1_recovery_state::failed &&
+					candidate->phase() == ng1_live_candidate_phase::failed,
+				"NG1 candidate recovery cleanup accepted an unsealed output");
+		require(candidate->cleanup(), "NG1 candidate cleanup failed after cancellation");
+		require(candidate->phase() == ng1_live_candidate_phase::failed,
+				"NG1 candidate cleanup did not retain failed terminal classification");
+	}
+
+	void test_ng1_candidate_rejects_foreign_hello_without_fallback()
+	{
+		fixture values;
+		auto clock = std::make_shared<clock_state>();
+		auto observation = std::make_shared<observation_state>();
+		auto process = std::make_shared<process_state>();
+		auto manifest = encode_control_text("provider:foreign");
+		require(manifest, "NG1 foreign hello encoding failed");
+		process->incoming.push_back(frame{message_type::hello, 1U, 0U, *manifest, {}, 1U, 1U, 0U});
+
+		auto candidate = ng1_live_session_candidate::start(
+			values.candidate_configuration(
+				clock,
+				observation,
+				process,
+				ng1_live_activation_authority{true,
+											  ng1_source_closure_authority_status::accepted,
+											  ng1_hardening_authority_status::accepted}),
+			{});
+		require(candidate, "NG1 foreign-hello candidate start failed");
+		auto rejected = candidate->negotiate({});
+		require(!rejected && rejected.error().code == "provider.task-binding-mismatch" &&
+					candidate->phase() == ng1_live_candidate_phase::failed,
+				"NG1 candidate accepted a foreign hello or attempted a fallback");
+		require(process->sent.empty(),
+				"NG1 candidate sent a host handshake after foreign provider identity");
+		require(candidate->terminate(process_status::crashed),
+				"NG1 foreign-hello candidate did not terminate its process");
+		auto rejected_output = candidate->reject_output();
+		require(!rejected_output, "NG1 foreign-hello candidate accepted output after rejection");
+		require(candidate->cleanup(), "NG1 foreign-hello candidate cleanup failed");
+	}
+
 	void test_shared_validator_accepts_explicit_ng1_controls()
 	{
 		fixture values;
@@ -933,6 +1113,9 @@ int main()
 	test_live_driver_cleans_session_when_process_start_throws();
 	test_live_driver_rebases_task_timers_at_acceptance();
 	test_live_driver_does_not_sync_failed_process_effects();
+	test_ng1_candidate_requires_both_accepted_authorities();
+	test_ng1_candidate_negotiates_shared_handshake_and_controls();
+	test_ng1_candidate_rejects_foreign_hello_without_fallback();
 	test_shared_validator_accepts_explicit_ng1_controls();
 	return 0;
 }
