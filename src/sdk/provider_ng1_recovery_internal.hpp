@@ -35,7 +35,8 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] result<void> observe_progress_rate_failure();
 		/** Observe an explicit host cancellation request while the worker is running. */
 		[[nodiscard]] result<void> request_cancel();
-		/** Observe a provider cancellation acknowledgement; this is terminal and non-restartable. */
+		/** Observe a provider cancellation acknowledgement; this is terminal and non-restartable.
+		 */
 		[[nodiscard]] result<void> acknowledge_cancel();
 		/** Observe cancellation timeout; the worker-kill boundary is still required. */
 		[[nodiscard]] result<void> timeout_cancel();
