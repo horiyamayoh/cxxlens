@@ -16,6 +16,12 @@ import yaml
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MODEL = pathlib.Path("schemas/cxxlens_ng_autonomy_constructibility.yaml")
 SCHEMA = pathlib.Path("schemas/cxxlens_ng_autonomy_constructibility.schema.yaml")
+EXPECTED_AUTHORITIES = {
+    "source_closure": "docs/design/adr/0102-dedicated-source-closure-transport.md",
+    "store_candidate_report": "docs/design/adr/0103-bounded-store-candidate-and-report.md",
+    "sqlite_read_mapping": "docs/design/adr/0104-unified-sqlite-source-lifecycle.md",
+    "sqlite_normalization_effect": "docs/design/adr/0104-unified-sqlite-source-lifecycle.md",
+}
 
 
 class ConstructibilityError(ValueError):
@@ -320,6 +326,8 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     machines = model["machines"]
     for name, machine in machines.items():
         authority = machine.get("authority")
+        if authority != EXPECTED_AUTHORITIES.get(name):
+            raise ConstructibilityError(f"constructibility authority drift: {name}")
         if not isinstance(authority, str) or not (root / authority).is_file():
             raise ConstructibilityError(f"missing authority: {name}")
 

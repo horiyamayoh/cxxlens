@@ -39,6 +39,18 @@ class ConstructibilityTest(unittest.TestCase):
     def test_repository_model_is_valid(self) -> None:
         validate(ROOT)
 
+    def test_machine_authority_alias_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                lambda value: value["machines"]["source_closure"].__setitem__(
+                    "authority", "schemas/cxxlens_ng_autonomy_constructibility.yaml"
+                ),
+            )
+            with self.assertRaisesRegex(ConstructibilityError, "authority drift"):
+                validate(root)
+
     def test_message_id_collision_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
