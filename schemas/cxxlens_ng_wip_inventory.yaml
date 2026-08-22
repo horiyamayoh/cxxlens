@@ -420,6 +420,21 @@ worktrees:
   head: e4d9b6afe1b650d4bc2b58dc993d6c13f39886e2
   branch: codex/store-candidate-200
   disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-final-gap-277
+  head: 1c95432c819da35ba8b5a488adcc2d2a07a2881e
+  branch: null
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-final-sqlite-gap
+  head: ceec7626af18153360032d60bd016ae489acc623
+  branch: codex/final-sqlite-gap
+  disposition: historical-unreviewed
+- prunable: false
+  path: /tmp/cxxlens-final173
+  head: 5ac51773b05b70a608e5f9f5d575cb4dbcb97c93
+  branch: null
+  disposition: historical-unreviewed
 refs:
 - ref: agent/176-standing-authorization
   head: 15698da61901b3077329d465f2b933ea518d33c3
