@@ -413,6 +413,14 @@ namespace
 					invalid_reject.state() == source_closure_transfer_state::manifest_open &&
 					invalid_reject.next_sequence() == 1U,
 				"phase-inauthentic reject was accepted or consumed incorrectly");
+		invalid.observed_counters =
+			manifest_reject(outer, "source-closure.chunk-gap", invalid_reject_sink.cleanup_receipt)
+				.observed_counters;
+		invalid.observed_counters.front().second = 99U;
+		require(!invalid_reject.reject(invalid, 1U) &&
+					invalid_reject.state() == source_closure_transfer_state::manifest_open &&
+					invalid_reject.next_sequence() == 1U,
+				"phase-inauthentic reject counter value was accepted or consumed incorrectly");
 
 		test_sink cancel_sink;
 		test_authority cancel_authority{outer};

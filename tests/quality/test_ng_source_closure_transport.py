@@ -1170,7 +1170,10 @@ class SourceClosureTransportTest(unittest.TestCase):
         transfer = transfer_digest({"session_id": SESSION_ID, "task_id": TASK_ID, "task_v4_digest": SEMANTIC, "manifest_digest": digest, "blob_receipts_digest": receipts, "blob_count": 1, "total_bytes": 1, "closure_digest": closure})
         witness.apply("source_closure_seal", {"session_id": SESSION_ID, "task_id": TASK_ID, "task_v4_digest": SEMANTIC, "manifest_digest": digest, "blob_receipts_digest": receipts, "blob_count": 1, "total_bytes": 1, "closure_digest": closure, "transfer_digest": transfer}, b"", contract)
         phase = contract["failure_phase_matrix"]["closure-sealed"]
-        witness.apply("source_closure_reject", {"session_id": SESSION_ID, "task_id": TASK_ID, "failure_phase": "closure-sealed", "reason_code": phase["allowed"][0], "observed_counters": {name: 0 for name in phase["counters"]}, "cleanup_receipt": CLEANUP_RECEIPT}, b"", contract)
+        forged_counters = {name: 0 for name in phase["counters"]}
+        with self.assertRaisesRegex(SourceClosureTransportError, "current-phase authentic"):
+            witness.apply("source_closure_reject", {"session_id": SESSION_ID, "task_id": TASK_ID, "failure_phase": "closure-sealed", "reason_code": phase["allowed"][0], "observed_counters": forged_counters, "cleanup_receipt": CLEANUP_RECEIPT}, b"", contract)
+        witness.apply("source_closure_reject", {"session_id": SESSION_ID, "task_id": TASK_ID, "failure_phase": "closure-sealed", "reason_code": phase["allowed"][0], "observed_counters": {"blob-count": 1, "total-bytes": 1}, "cleanup_receipt": CLEANUP_RECEIPT}, b"", contract)
         self.assertEqual(witness.state, "rejected")
 
         invalid_members = [

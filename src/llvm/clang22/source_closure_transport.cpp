@@ -988,6 +988,9 @@ namespace cxxlens::detail::clang22
 				return sdk::unexpected(
 					failure("source-closure.protocol-state-invalid", "observed-counters"));
 		}
+		if (value.observed_counters != phase_counters())
+			return sdk::unexpected(failure(
+				"source-closure.protocol-state-invalid", "observed-counters", "phase-value"));
 		return {};
 	}
 

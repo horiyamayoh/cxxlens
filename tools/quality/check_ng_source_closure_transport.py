@@ -631,6 +631,49 @@ class TransferStateWitness:
         self.total_blob_bytes = 0
         self.transfer_digest: str | None = None
 
+    def _phase_counters(self) -> dict[str, int]:
+        """Return the counters that are actually observable in the current phase.
+
+        A reject is a report of the live transfer state, not a free-form diagnostic.
+        Keep this executable witness aligned with the C++ validator so a forged
+        counter value cannot be accepted by the checker while the implementation
+        rejects it.
+        """
+
+        if self.state == "task-v4-sealed":
+            return {"observed-control-frame-count": 0}
+        if self.state in {"manifest-open", "manifest-streaming"}:
+            return {
+                "declared-manifest-bytes": self.declared_bytes,
+                "next-chunk-index": self.next_index,
+                "received-manifest-bytes": self.next_offset,
+            }
+        if self.state == "manifest-validated":
+            if self.manifest is None:
+                raise SourceClosureTransportError(
+                    "phase counters require a validated manifest"
+                )
+            return {
+                "blob-count": len(self.manifest["blobs"]),
+                "member-count": len(self.manifest["members"]),
+                "total-blob-bytes": sum(
+                    blob["size_bytes"] for blob in self.manifest["blobs"]
+                ),
+            }
+        if self.state in {"blob-open", "blob-streaming", "blob-sealed"}:
+            return {
+                "blob-ordinal": self.current_blob_ordinal,
+                "declared-blob-bytes": self.declared_bytes,
+                "next-chunk-index": self.next_index,
+                "received-blob-bytes": self.next_offset,
+            }
+        if self.state == "closure-sealed":
+            return {
+                "blob-count": self.completed_blobs,
+                "total-bytes": self.total_blob_bytes,
+            }
+        return {}
+
     def _bind(self, control: dict[str, Any], fields: tuple[str, ...]) -> None:
         if any(control.get(field) != self.expected[field] for field in fields):
             raise SourceClosureTransportError("wire state witness identity binding mismatch")
@@ -654,6 +697,10 @@ class TransferStateWitness:
             }
             if control["failure_phase"] != phase_by_state.get(self.state):
                 raise SourceClosureTransportError("reject phase is not current-state authentic")
+            if control["observed_counters"] != self._phase_counters():
+                raise SourceClosureTransportError(
+                    "reject counters are not current-phase authentic"
+                )
             self.state = "rejected"
             return
         if name == "source_closure_manifest" and control["kind"] == "descriptor":
