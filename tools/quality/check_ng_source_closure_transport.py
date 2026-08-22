@@ -29,6 +29,8 @@ REQUEST = pathlib.Path("schemas/cxxlens_ng_clang22_materialization_request_v2_2.
 TASK = pathlib.Path("schemas/cxxlens_ng_provider_task_v4.schema.yaml")
 MANIFEST_SCHEMA = pathlib.Path("schemas/cxxlens_ng_source_closure_manifest_v1.schema.yaml")
 ADR = pathlib.Path("docs/design/adr/0102-dedicated-source-closure-transport.md")
+PROVIDER_RUNTIME = pathlib.Path("src/sdk/provider_runtime.cpp")
+PROVIDER_RUNTIME_TEST = pathlib.Path("tests/unit/sdk/provider_runtime_test.cpp")
 LEGACY_BINDINGS = {
     "request_schema_sha256": pathlib.Path(
         "schemas/cxxlens_ng_clang22_materialization_request.schema.yaml"
@@ -83,6 +85,61 @@ EXPECTED_RESOURCE_AUTHORITY = {
 
 class SourceClosureTransportError(ValueError):
     """A fail-closed source-closure transport contract violation."""
+
+
+def validate_runtime_activation_boundary(root: pathlib.Path) -> None:
+    """Keep proposed closure/NG1 authority out of the completed-process runtime.
+
+    The source-private duplex port is useful for bounded transport testing, but ADR 0102
+    deliberately leaves protocol 1.2 and its capability unaccepted.  A future accepted
+    authority must add an explicit implementation/checker transition; an incidental call
+    from the generic provider runtime would otherwise silently downgrade a closure task or
+    treat an NG1 provider as an NG0 completed-process provider.
+    """
+
+    runtime_path = root / PROVIDER_RUNTIME
+    test_path = root / PROVIDER_RUNTIME_TEST
+    if not runtime_path.is_file() or not test_path.is_file():
+        raise SourceClosureTransportError(
+            "runtime activation boundary evidence is missing"
+        )
+    runtime = runtime_path.read_text(encoding="utf-8")
+    runtime_test = test_path.read_text(encoding="utf-8")
+
+    required_runtime_markers = (
+        "accepted-source-closure-registry-required",
+        "task-source-closure-v1 requires accepted provider protocol 1.2",
+        "provider.ng1.capability-unavailable",
+        "source_closure_feature",
+    )
+    missing = [marker for marker in required_runtime_markers if marker not in runtime]
+    if missing:
+        raise SourceClosureTransportError(
+            f"runtime activation boundary markers are missing: {missing}"
+        )
+
+    # Exactly one occurrence is the source-private selector definition.  Any additional
+    # occurrence in src/sdk/provider_runtime.cpp would be a production dispatch call before
+    # the accepted source-closure registry and bounded live implementation exist.
+    if len(re.findall(r"\bselect_ng1_live_process_port\s*\(", runtime)) != 1:
+        raise SourceClosureTransportError(
+            "NG1 live-port selector escaped its source-private definition"
+        )
+    if len(re.findall(r"\bmake_system_ng1_duplex_process_port\s*\(\s*\)", runtime)) != 1:
+        raise SourceClosureTransportError(
+            "NG1 duplex process factory escaped the source-private selector"
+        )
+
+    required_negative_test_markers = (
+        "accepted-source-closure-registry-required",
+        "source_closure_processes.run_calls == 0U",
+        "source-closure capability did not fail closed before process launch",
+    )
+    missing = [marker for marker in required_negative_test_markers if marker not in runtime_test]
+    if missing:
+        raise SourceClosureTransportError(
+            f"runtime activation negative evidence is missing: {missing}"
+        )
 
 
 def canonical_json(value: Any) -> bytes:
@@ -1546,6 +1603,7 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         }, contract)
 
     maturity = contract["maturity"]
+    validate_runtime_activation_boundary(root)
     review = contract["authority"]["review"]
     review_findings = contract["review_findings"]
     adr_status = "Accepted" if "- Status: Accepted" in adr else "Proposed"

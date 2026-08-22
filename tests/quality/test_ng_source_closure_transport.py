@@ -24,6 +24,8 @@ from check_ng_source_closure_transport import (  # noqa: E402
     LEGACY_BINDINGS,
     PROTOCOL,
     PROTOCOL_SCHEMA,
+    PROVIDER_RUNTIME,
+    PROVIDER_RUNTIME_TEST,
     REQUEST,
     SCHEMA,
     TASK,
@@ -47,6 +49,7 @@ from check_ng_source_closure_transport import (  # noqa: E402
     validate,
     validate_manifest,
     validate_reject_control,
+    validate_runtime_activation_boundary,
     validate_wire_control,
     validate_request_binding,
     transfer_digest,
@@ -225,6 +228,8 @@ class SourceClosureTransportTest(unittest.TestCase):
             SCHEMA,
             TASK,
             MANIFEST_SCHEMA,
+            PROVIDER_RUNTIME,
+            PROVIDER_RUNTIME_TEST,
             *legacy,
         ):
             destination = root / relative
@@ -241,6 +246,31 @@ class SourceClosureTransportTest(unittest.TestCase):
 
     def test_repository_contract_is_valid(self) -> None:
         validate(ROOT)
+
+    def test_proposed_authority_rejects_runtime_ng1_dispatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            runtime = root / PROVIDER_RUNTIME
+            runtime.write_text(
+                runtime.read_text(encoding="utf-8")
+                + "\n// accidental production dispatch: make_system_ng1_duplex_process_port();\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(SourceClosureTransportError, "factory escaped"):
+                validate_runtime_activation_boundary(root)
+
+    def test_proposed_authority_requires_prelaunch_negative_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            runtime_test = root / PROVIDER_RUNTIME_TEST
+            runtime_test.write_text(
+                runtime_test.read_text(encoding="utf-8").replace(
+                    "source_closure_processes.run_calls == 0U", "source_closure_processes.run_calls == 1U"
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(SourceClosureTransportError, "negative evidence"):
+                validate_runtime_activation_boundary(root)
 
     def test_complete_v2_2_request_witness_is_schema_valid_and_bound(self) -> None:
         request, manifest = complete_request_witness(ROOT)
