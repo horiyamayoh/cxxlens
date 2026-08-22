@@ -72,7 +72,7 @@ entries:
     conflict_class: provider-protocol
     integration_owner: '#261'
     authority_sources: [docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md, docs/design/adr/0102-dedicated-source-closure-transport.md, schemas/cxxlens_ng_source_closure_transport.yaml, schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml, schemas/cxxlens_ng_provider_protocol.yaml, schemas/cxxlens_ng_autonomy_constructibility.yaml]
-    authority_digest: sha256:7cc81ce16bcf3a961d3f81ec4d246eb88d98c7009349db5d015d5a1ef342201f
+    authority_digest: sha256:e25f0946621bb66fb8b264fd592495ff61cd208b28cf467bdda199173a7d5f4f
     completion_class: bounded-implementation
     residual_qualification: installed static/shared and cxxmonster E2E remain explicit later evidence
     units:

@@ -1,5 +1,5 @@
 schema: cxxlens.source-closure-transport.v1
-document_version: 1.1.1
+document_version: 1.1.2
 maturity: proposed
 authority:
   adr: docs/design/adr/0102-dedicated-source-closure-transport.md
@@ -112,11 +112,11 @@ state_machine:
     cancel_then_connection-loss: provider.crash-with-cancel-observed
 phase_fields:
   before-manifest: [session-id, task-id, task-v4-digest, expected-closure-id, expected-closure-digest, expected-manifest-digest, observed-control-frame-count]
-  manifest-streaming: [declared-manifest-bytes, observed-bytes, next-offset, next-chunk-index, streaming-digest]
+  manifest-streaming: [declared-manifest-bytes, received-manifest-bytes, observed-bytes, next-offset, next-chunk-index, streaming-digest]
   manifest-validated: [closure-id, closure-digest, manifest-digest, member-count, blob-count, total-blob-bytes]
-  blob-streaming: [blob-ordinal, blob-digest, declared-bytes, observed-bytes, next-offset, next-chunk-index]
+  blob-streaming: [blob-ordinal, blob-digest, declared-blob-bytes, received-blob-bytes, declared-bytes, observed-bytes, next-offset, next-chunk-index]
   closure-sealed: [recomputed-manifest-digest, blob-receipts-digest, blob-count, total-bytes, transfer-digest]
-  acknowledged: [task-local-spool-receipt, cleanup-owner]
+  acknowledged: [task-local-spool-receipt, cleanup-owner, blob-count, total-bytes]
   rejected: [failure-phase, reason-code, observed-counters, cleanup-receipt]
 limits:
   maximum_members: 4096
@@ -136,6 +136,20 @@ resource_policy:
   spool: backend-owned-private-task-local-digest-bound
   complete-memory-copy: forbidden
   cleanup: reject-cancel-crash-recovery-or-task-terminal
+resource_authority:
+  closure_owned:
+    logical_prefix: project://
+    member_roles: [main, header, generated, forced-include, macro-file]
+    fallback: forbidden
+  toolchain_owned:
+    capability: cxxlens.clang22.toolchain-profile.v1
+    inputs: [clang-resource-directory-and-builtin-headers, admitted-sysroot, qualified-platform-system-header-roots, exact-compiler-runtime-vfs-profile]
+    identity_fields: [toolchain_context_id, family, exact_version, target_triple, builtin_headers_digest, sysroot, abi_digest, plugin_spec_digest]
+    root_binding: selected-pinned-profile-qualified-read-roots
+    physical_root_identity: execution-only-not-semantic-identity
+  unqualified:
+    path_effect: enoent
+    publication: reject-before-publication
 identity:
   projection_codec: canonical-json-utf8-sorted-keys-no-whitespace
   semantic_digest_codec: cxxlens-canonical-binary-v1

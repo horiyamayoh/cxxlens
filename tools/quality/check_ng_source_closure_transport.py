@@ -47,6 +47,39 @@ REVIEW_REF = re.compile(
 PROJECT_PATH_PREFIX = "project://"
 MAXIMUM_LOGICAL_PATH_UTF8_BYTES = 4096
 
+EXPECTED_RESOURCE_AUTHORITY = {
+    "closure_owned": {
+        "logical_prefix": "project://",
+        "member_roles": ["main", "header", "generated", "forced-include", "macro-file"],
+        "fallback": "forbidden",
+    },
+    "toolchain_owned": {
+        "capability": "cxxlens.clang22.toolchain-profile.v1",
+        "inputs": [
+            "clang-resource-directory-and-builtin-headers",
+            "admitted-sysroot",
+            "qualified-platform-system-header-roots",
+            "exact-compiler-runtime-vfs-profile",
+        ],
+        "identity_fields": [
+            "toolchain_context_id",
+            "family",
+            "exact_version",
+            "target_triple",
+            "builtin_headers_digest",
+            "sysroot",
+            "abi_digest",
+            "plugin_spec_digest",
+        ],
+        "root_binding": "selected-pinned-profile-qualified-read-roots",
+        "physical_root_identity": "execution-only-not-semantic-identity",
+    },
+    "unqualified": {
+        "path_effect": "enoent",
+        "publication": "reject-before-publication",
+    },
+}
+
 
 class SourceClosureTransportError(ValueError):
     """A fail-closed source-closure transport contract violation."""
@@ -278,6 +311,11 @@ def validate_reject_control(control: dict[str, Any], contract: dict[str, Any]) -
             "local-only failure cannot be serialized as source-closure_reject"
         )
     counters = control.get("observed_counters")
+    phase_fields = contract.get("phase_fields", {}).get(phase, [])
+    if not set(row["counters"]).issubset(set(phase_fields)):
+        raise SourceClosureTransportError(
+            "failure phase counters are unavailable in the current phase"
+        )
     if not isinstance(counters, dict) or set(counters) != set(row["counters"]):
         raise SourceClosureTransportError("reject counters are not phase-authentic")
     if not all(type(value) is int and 0 <= value <= (1 << 64) - 1 for value in counters.values()):
@@ -1362,13 +1400,55 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         raise SourceClosureTransportError(
             "outer task-v4 extension/wire transfer binding drift"
         )
+    if contract.get("resource_authority") != EXPECTED_RESOURCE_AUTHORITY:
+        raise SourceClosureTransportError(
+            "source/toolchain resource authority is not exact and fail-closed"
+        )
     failures = set(contract["failures"])
     matrix = contract["failure_phase_matrix"]
+    phase_fields = contract["phase_fields"]
+    expected_phase_names = {
+        "before-manifest",
+        "manifest-streaming",
+        "manifest-validated",
+        "blob-streaming",
+        "closure-sealed",
+        "acknowledged",
+        "rejected",
+    }
+    if set(phase_fields) != expected_phase_names:
+        raise SourceClosureTransportError(
+            "phase field authority has an unexpected phase census"
+        )
+    if any(
+        not isinstance(fields, list)
+        or not fields
+        or len(fields) != len(set(fields))
+        or not all(isinstance(field, str) and field for field in fields)
+        for fields in phase_fields.values()
+    ):
+        raise SourceClosureTransportError(
+            "phase field authority is not a closed ordered field list"
+        )
+    if phase_fields["rejected"] != [
+        "failure-phase",
+        "reason-code",
+        "observed-counters",
+        "cleanup-receipt",
+    ]:
+        raise SourceClosureTransportError("rejected phase fields are not exact")
     matrix_failures = {reason for phase in matrix.values() for reason in phase["allowed"]}
     if matrix_failures != failures or any(
         set(phase) != {"allowed", "counters"} for phase in matrix.values()
     ):
         raise SourceClosureTransportError("failure phase/field matrix is incomplete")
+    for phase, row in matrix.items():
+        if phase == "local-only":
+            continue
+        if not set(row["counters"]).issubset(set(phase_fields[phase])):
+            raise SourceClosureTransportError(
+                f"failure phase counters are unavailable in {phase}"
+            )
     blob_payload = b"x"
     content = "sha256:" + hashlib.sha256(blob_payload).hexdigest()
     witness_path = "project://src/main.cpp"

@@ -487,6 +487,37 @@ class SourceClosureTransportTest(unittest.TestCase):
         with self.assertRaisesRegex(SourceClosureTransportError, "uint64"):
             validate_reject_control(control, contract)
 
+    def test_reject_counters_must_be_available_in_their_failure_phase(self) -> None:
+        contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
+        contract["failure_phase_matrix"]["before-manifest"]["counters"] = [
+            "received-manifest-bytes"
+        ]
+        control = {
+            "session_id": SESSION_ID,
+            "task_id": TASK_ID,
+            "failure_phase": "before-manifest",
+            "reason_code": "source-closure.protocol-state-invalid",
+            "observed_counters": {"received-manifest-bytes": 0},
+            "cleanup_receipt": CLEANUP_RECEIPT,
+        }
+        with self.assertRaisesRegex(SourceClosureTransportError, "unavailable"):
+            validate_reject_control(control, contract)
+
+    def test_toolchain_resource_authority_is_required_and_exact(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            self.rewrite(
+                root,
+                CONTRACT,
+                lambda value: value["resource_authority"]["toolchain_owned"].update(
+                    {"physical_root_identity": "semantic-host-path"}
+                ),
+            )
+            with self.assertRaisesRegex(
+                SourceClosureTransportError, "transport schema|resource authority"
+            ):
+                validate(root)
+
     def test_local_only_failure_cannot_be_emitted_as_wire_reject(self) -> None:
         contract = yaml.safe_load((ROOT / CONTRACT).read_text(encoding="utf-8"))
         control = {
@@ -1019,7 +1050,7 @@ class SourceClosureTransportTest(unittest.TestCase):
             message_type=27,
             stream_id=1,
             sequence=29,
-            protocol_minor=1,
+            protocol_minor=2,
         )
         self.assertRegex(receipts_digest, r"^semantic-v2:sha256:[0-9a-f]{64}$")
         self.assertRegex(transfer_digest(projection), r"^semantic-v2:sha256:[0-9a-f]{64}$")
