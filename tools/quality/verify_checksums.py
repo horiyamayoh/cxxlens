@@ -121,6 +121,7 @@ PACKAGE_PATHS = (
     "schemas/cxxlens_ng_work_units.schema.yaml",
     "schemas/cxxlens_ng_agent_context_v2.schema.yaml",
     "schemas/cxxlens_ng_agent_autonomous_completion_metric.schema.yaml",
+    "schemas/cxxlens_ng_agent_autonomous_completion_runner_input.schema.yaml",
     "schemas/cxxlens_ng_autonomy_constructibility.yaml",
     "schemas/cxxlens_ng_autonomy_constructibility.schema.yaml",
     "schemas/cxxlens_ng_wip_inventory.yaml",

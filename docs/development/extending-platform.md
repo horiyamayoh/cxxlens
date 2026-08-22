@@ -286,6 +286,30 @@ consumer, support tuple, constructibility gate, or release.
 An input file containing only `not-evaluated` rows remains `not-evaluated` and is recorded with
 `evidence_source: none`; no digest-shaped or synthetic row can promote the metric to `evaluated`.
 
+The bounded command runner is `tools/quality/run_ng_agent_autonomous_completion.py`. It accepts the
+versioned `cxxlens.agent-autonomous-completion-runner-input.v1` manifest, requires the exact current
+revision/tree/catalog digest and the canonical nine-scenario order, then executes each declared argv
+without a shell in one temporary clean clone reset to the exact revision before every scenario. The
+runner uses a source-bound 900-second timeout, records byte-exact stdout/stderr and terminal status,
+and accepts `completed` only when the command emits an exact
+`cxxlens.agent-autonomous-completion-result.v1` JSON receipt for that scenario. Invalid output,
+non-zero exit, launch failure, signal, or timeout remains a typed `failed`/`safe-stop` outcome with
+the real process receipt and completion plan. The temporary clone is discarded; no command can
+modify the authority checkout. For example:
+
+```sh
+python3 tools/quality/run_ng_agent_autonomous_completion.py run \
+  --root . \
+  --input-json runner-input.json \
+  --output-evidence agent-completion-evidence.json \
+  --output-report agent-completion-report.json
+```
+
+This runner supplies executable process and content-binding evidence, but does not authenticate the
+invoked agent or prove semantic correctness of a claimed bounded change. The resulting metric remains
+evaluation-only and cannot satisfy constructibility, review, provider, platform, or release
+qualification. A caller without a real command/result receipt must leave the metric `not-evaluated`.
+
 静的 relation inventory を残す場合の契約名は `relation-presence` です。これは canonical capability resolution の
 use-case/capability graph、support tuple、input/model/evidence gap と dependency-ordered plan を読む `missing --project`
 とは別機能であり、相互代用しません。

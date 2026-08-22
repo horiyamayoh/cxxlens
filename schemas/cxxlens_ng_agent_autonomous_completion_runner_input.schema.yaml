@@ -1,0 +1,54 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-agent-autonomous-completion-runner-input.v1
+title: cxxlens receipt-bound autonomous completion runner input
+type: object
+additionalProperties: false
+required: [schema, document_version, authority, scenarios]
+properties:
+  schema: {const: cxxlens.agent-autonomous-completion-runner-input.v1}
+  document_version: {const: 1.0.0}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [revision, tree, catalog_digest]
+    properties:
+      revision: {$ref: '#/$defs/hex40'}
+      tree: {$ref: '#/$defs/hex40'}
+      catalog_digest: {$ref: '#/$defs/digest'}
+  scenarios:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [scenario_id, command]
+      properties:
+        scenario_id: {$ref: '#/$defs/id'}
+        command:
+          type: object
+          additionalProperties: false
+          required: [argv, environment]
+          properties:
+            argv:
+              type: array
+              minItems: 1
+              items: {$ref: '#/$defs/argument'}
+            environment:
+              type: array
+              uniqueItems: true
+              items:
+                type: object
+                additionalProperties: false
+                required: [name, value]
+                properties:
+                  name: {$ref: '#/$defs/environment_name'}
+                  value: {type: string, pattern: '^[^\u0000]*$'}
+$defs:
+  hex40: {type: string, pattern: '^[0-9a-f]{40}$'}
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  id:
+    type: string
+    pattern: '^[a-z][a-z0-9_]*(?:[.-][a-z0-9_]+)+$'
+  argument: {type: string, minLength: 1, pattern: '^[^\u0000]*$'}
+  environment_name: {type: string, pattern: '^[A-Za-z_][A-Za-z0-9_]*$'}

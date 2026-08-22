@@ -1180,6 +1180,7 @@ foreach(
         agent_context
         agent_capability_resolution
         agent_autonomous_completion
+        agent_autonomous_completion_runner
         design_feedback
         public_callable_inventory
         g5_qualification)
