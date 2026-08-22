@@ -273,6 +273,37 @@ namespace
 				"running state accepted an out-of-order cancel acknowledgement");
 	}
 
+	void test_cancellation_adapter_preserves_order_and_terminality()
+	{
+		const auto resume_binding = binding();
+		auto acknowledged = ng1_recovery_adapter::create(resume_binding);
+		require(acknowledged, "cancellation adapter creation failed");
+		require(acknowledged->request_cancel(), "adapter did not admit cancellation request");
+		require(acknowledged->state() == ng1_recovery_state::cancel_requested,
+				"adapter cancellation request skipped explicit state");
+		require(acknowledged->acknowledge_cancel(),
+				"adapter did not consume cancellation acknowledgement");
+		require(acknowledged->state() == ng1_recovery_state::failed,
+				"acknowledged cancellation was not terminal failure");
+		auto post_ack = acknowledged->timeout_cancel();
+		require(!post_ack && post_ack.error().code == "provider.recovery-failed",
+				"acknowledged cancellation remained restartable");
+
+		auto timed_out = ng1_recovery_adapter::create(resume_binding);
+		require(timed_out, "cancel-timeout adapter creation failed");
+		require(timed_out->request_cancel(), "cancel-timeout request was rejected");
+		require(timed_out->timeout_cancel(), "cancel-timeout escalation was rejected");
+		require(timed_out->state() == ng1_recovery_state::worker_killed,
+				"cancel-timeout did not require the worker-kill boundary");
+		auto before_request = ng1_recovery_adapter::create(resume_binding);
+		require(before_request, "out-of-order cancellation adapter creation failed");
+		auto premature_ack = before_request->acknowledge_cancel();
+		require(!premature_ack && premature_ack.error().code == "provider.recovery-failed",
+				"adapter accepted cancellation acknowledgement before request");
+		require(before_request->state() == ng1_recovery_state::running,
+				"rejected cancellation acknowledgement mutated state");
+	}
+
 	void test_durable_receipts_advance_with_the_exact_spill_prefix()
 	{
 		const auto resume_binding = binding();
@@ -331,6 +362,7 @@ int main()
 	test_hang_path_requires_kill_before_resume();
 	test_invalid_resume_fails_closed_and_wrong_order_is_rejected();
 	test_cancellation_transition_is_terminal_or_explicitly_recoverable();
+	test_cancellation_adapter_preserves_order_and_terminality();
 	test_durable_receipts_advance_with_the_exact_spill_prefix();
 	return 0;
 }
