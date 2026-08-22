@@ -937,6 +937,30 @@ set_tests_properties(
     LABELS
     "adapter;provider;clang22;source-closure;transport;security;contract")
 
+cxxlens_add_test_executable(cxxlens-clang22-source-closure-task-v4
+                            adapter/clang22/source_closure_task_v4_test.cpp)
+target_link_libraries(cxxlens-clang22-source-closure-task-v4
+                      PRIVATE cxxlens_clang22_materialization_codecs)
+add_test(NAME adapter.clang22-source-closure-task-v4
+         COMMAND cxxlens-clang22-source-closure-task-v4)
+set_tests_properties(
+  adapter.clang22-source-closure-task-v4
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;source-closure;task-v4;identity;security;contract")
+
+cxxlens_add_test_executable(cxxlens-clang22-source-closure-task-v4-worker
+                            adapter/clang22/source_closure_task_v4_worker_test.cpp)
+target_link_libraries(cxxlens-clang22-source-closure-task-v4-worker
+                      PRIVATE cxxlens_clang22_worker_core)
+add_test(NAME adapter.clang22-source-closure-task-v4-worker
+         COMMAND cxxlens-clang22-source-closure-task-v4-worker)
+set_tests_properties(
+  adapter.clang22-source-closure-task-v4-worker
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;source-closure;task-v4;vfs;security;contract")
+
 cxxlens_add_test_executable(cxxlens-clang22-source-closure-vfs
                             adapter/clang22/source_closure_vfs_test.cpp)
 target_link_libraries(cxxlens-clang22-source-closure-vfs

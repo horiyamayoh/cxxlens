@@ -414,8 +414,10 @@ endif()
 # materialization, without importing the Clang parser implementation.
 add_library(
   cxxlens_clang22_materialization_codecs STATIC
+  src/llvm/clang22/materialization_json.cpp
   src/llvm/clang22/provider_task_v3.cpp
   src/llvm/clang22/source_closure_transport.cpp
+  src/llvm/clang22/source_closure_task_v4.cpp
   src/llvm/clang22/observation_v2.cpp
   src/llvm/clang22/source_closure.cpp
   src/llvm/clang22/source_closure_invocation.cpp
@@ -438,6 +440,7 @@ add_library(
   cxxlens_clang22_worker_core STATIC
   src/llvm/clang22/provider_worker.cpp
   src/llvm/clang22/source_closure_native.cpp
+  src/llvm/clang22/source_closure_task_v4_worker.cpp
   src/llvm/clang22/materialization_io.cpp
   src/llvm/clang22/materialization_task_spool.cpp)
 target_link_libraries(
@@ -482,7 +485,6 @@ endif()
 # exported to SDK consumers.
 add_library(
   cxxlens_clang22_materializer_core STATIC
-  src/llvm/clang22/materialization_json.cpp
   src/llvm/clang22/materialization_identity.cpp
   src/llvm/clang22/materialization_io.cpp
   src/llvm/clang22/materialization_claims.cpp
