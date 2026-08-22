@@ -561,6 +561,16 @@ namespace
 					"revalidation rejects missing callback provenance");
 		}
 		{
+			auto current_connection = fixture.request.connection;
+			current_connection.source_shm_open_callback_receipt->target_namespace_epoch_identity
+				.bytes.push_back(std::byte{0x7f});
+			require(!revalidate_sqlite_active_read_connection(*receipt,
+															  fixture.request.source_census,
+															  current_connection,
+															  fixture.request.pre_effect),
+					"revalidation rejects callback namespace-epoch drift before nested mapping");
+		}
+		{
 			auto stale_receipt = *receipt;
 			stale_receipt.phase = detail::sqlite_active_read_connection_phase::source_family_sealed;
 			require(!revalidate_sqlite_active_read_connection(stale_receipt,
