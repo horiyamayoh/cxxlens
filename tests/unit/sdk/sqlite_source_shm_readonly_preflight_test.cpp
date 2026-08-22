@@ -572,6 +572,16 @@ namespace
 		}
 		{
 			auto stale_receipt = *receipt;
+			stale_receipt.target_namespace_epoch_identity.bytes.push_back(std::byte{0x7f});
+			require(
+				!revalidate_sqlite_active_read_connection(stale_receipt,
+														  fixture.request.source_census,
+														  fixture.request.connection,
+														  fixture.request.pre_effect),
+				"revalidation rejects a receipt whose target epoch is not bound to its callback");
+		}
+		{
+			auto stale_receipt = *receipt;
 			stale_receipt.phase = detail::sqlite_active_read_connection_phase::source_family_sealed;
 			require(!revalidate_sqlite_active_read_connection(stale_receipt,
 															  fixture.request.source_census,

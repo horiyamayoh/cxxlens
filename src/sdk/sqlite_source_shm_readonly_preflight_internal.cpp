@@ -3344,6 +3344,8 @@ namespace cxxlens::sdk
 				callback.connection_token != receipt.connection_custody ||
 				!valid_identity(callback.qualification_token) ||
 				!valid_identity(callback.target_namespace_epoch_identity) ||
+				callback.target_namespace_epoch_identity !=
+					receipt.target_namespace_epoch_identity ||
 				callback.canonical_vfs_locator != receipt.canonical_vfs_locator ||
 				callback.delegated_vfs_locator.empty() ||
 				callback.application_generated_uri.empty() ||
