@@ -541,7 +541,20 @@ def build_work_unit_resolution(
     return result
 
 
-def validate_resolution(root: pathlib.Path, resolution: dict[str, Any]) -> None:
+def validate_resolution(
+    root: pathlib.Path,
+    resolution: dict[str, Any],
+    *,
+    expected_authority: dict[str, Any] | None = None,
+) -> None:
+    """Validate one resolution and, when requested, bind it to current authority.
+
+    Synthetic corpus rows intentionally use the zero revision/tree and are
+    validated without a live authority expectation.  A saved resolution that
+    is checked as an executable/current artifact must opt into the exact
+    authority projection; otherwise a self-consistent old packet could be
+    mistaken for evidence from the current source tree.
+    """
     schema = _load(root / SCHEMA)
     try:
         jsonschema.Draft202012Validator.check_schema(schema)
@@ -555,6 +568,12 @@ def validate_resolution(root: pathlib.Path, resolution: dict[str, Any]) -> None:
         raise CapabilityResolutionError("resolution canonical digest mismatch")
     if resolution["authority"]["stale_policy"] != "reject":
         raise CapabilityResolutionError("resolution stale policy is not fail-closed")
+    if resolution["provenance"]["generated_at_revision"] != resolution["authority"]["revision"]:
+        raise CapabilityResolutionError("resolution provenance revision does not match authority")
+    if resolution["provenance"]["generated_at_tree"] != resolution["authority"]["tree"]:
+        raise CapabilityResolutionError("resolution provenance tree does not match authority")
+    if expected_authority is not None and resolution["authority"] != expected_authority:
+        raise CapabilityResolutionError("resolution authority is stale or mismatched")
     if resolution["result"]["state"] == "unknown" and not resolution["missing"]:
         raise CapabilityResolutionError("unknown result has no actionable missing reason")
     for index, capability in enumerate(resolution["capability_path"]):
@@ -652,7 +671,12 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "check":
                 if args.input_json is not None:
                     output = json.loads(args.input_json.read_text(encoding="utf-8"))
-                    validate_resolution(root, output)
+                    catalog = validate_catalog(root)
+                    validate_resolution(
+                        root,
+                        output,
+                        expected_authority=_authority(root, catalog, synthetic=args.synthetic),
+                    )
                 elif args.use_case:
                     output = build_resolution(
                         root,

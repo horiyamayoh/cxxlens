@@ -581,7 +581,14 @@ def _report(
         "provenance": {
             "generator": GENERATOR.as_posix(),
             "input_contract": "cxxlens.agent-autonomous-completion-evidence.v2",
-            "evidence_source": "provided-receipts" if evidence is not None else "none",
+            # A supplied file containing only not-evaluated rows is not an
+            # execution receipt.  Keep the provenance honest and preserve the
+            # fail-closed metric state in that case.
+            "evidence_source": (
+                "provided-receipts"
+                if any(row["outcome"] != "not-evaluated" for row in outcomes)
+                else "none"
+            ),
         },
     }
     report["canonical_digest"] = _digest_object(report)
@@ -678,6 +685,15 @@ def validate_report(root: pathlib.Path, report: dict[str, Any]) -> None:
         raise AgentAutonomousCompletionError("not-evaluated metric has a numeric rate")
     if report["status"] == "evaluated" and report["value_percent"] is None:
         raise AgentAutonomousCompletionError("evaluated metric has no numeric rate")
+    expected_evidence_source = (
+        "provided-receipts"
+        if any(row["outcome"] != "not-evaluated" for row in report["outcomes"])
+        else "none"
+    )
+    if report["provenance"]["evidence_source"] != expected_evidence_source:
+        raise AgentAutonomousCompletionError(
+            "metric evidence source does not match the receipt census"
+        )
     expected_value = round(100.0 * counts["completed"] / len(scenario_ids), 6)
     if evaluated and report["value_percent"] != expected_value:
         raise AgentAutonomousCompletionError("metric value does not match outcome census")

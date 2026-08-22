@@ -102,7 +102,7 @@ properties:
     properties:
       generator: {$ref: '#/$defs/path'}
       input_contract: {const: cxxlens.agent-autonomous-completion-evidence.v2}
-      evidence_source: {$ref: '#/$defs/nonempty'}
+      evidence_source: {enum: [none, provided-receipts]}
   canonical_digest: {$ref: '#/$defs/digest'}
 $defs:
   hex40: {type: string, pattern: '^[0-9a-f]{40}$'}

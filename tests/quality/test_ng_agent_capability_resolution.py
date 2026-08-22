@@ -80,6 +80,38 @@ class AgentCapabilityResolutionTests(unittest.TestCase):
                 expected_tree="1" * 40,
             )
 
+    def test_saved_resolution_check_binds_current_authority(self) -> None:
+        catalog = resolution.validate_catalog(ROOT)
+        expected = resolution._authority(ROOT, catalog, synthetic=False)
+        value = resolution.build_resolution(
+            ROOT,
+            "agent.golden-relation.v1",
+            synthetic=False,
+        )
+        resolution.validate_resolution(ROOT, value, expected_authority=expected)
+
+        stale = copy.deepcopy(value)
+        stale["authority"]["tree"] = "0" * 40
+        stale["provenance"]["generated_at_tree"] = "0" * 40
+        candidate = copy.deepcopy(stale)
+        candidate.pop("canonical_digest")
+        stale["canonical_digest"] = resolution._digest_object(candidate)
+        with self.assertRaisesRegex(resolution.CapabilityResolutionError, "authority"):
+            resolution.validate_resolution(ROOT, stale, expected_authority=expected)
+
+    def test_resolution_provenance_cannot_drift_from_authority(self) -> None:
+        value = resolution.build_resolution(
+            ROOT,
+            "agent.golden-relation.v1",
+            synthetic=True,
+        )
+        value["provenance"]["generated_at_revision"] = "1" * 40
+        candidate = copy.deepcopy(value)
+        candidate.pop("canonical_digest")
+        value["canonical_digest"] = resolution._digest_object(candidate)
+        with self.assertRaisesRegex(resolution.CapabilityResolutionError, "provenance revision"):
+            resolution.validate_resolution(ROOT, value)
+
     def test_catalog_bytes_are_part_of_the_authority_digest(self) -> None:
         catalog = copy.deepcopy(resolution.validate_catalog(ROOT))
         self.assertIn(resolution.CATALOG.as_posix(), catalog["authority"]["source_paths"])

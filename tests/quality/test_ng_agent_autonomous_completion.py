@@ -24,6 +24,16 @@ class AgentAutonomousCompletionMetricTests(unittest.TestCase):
         self.assertEqual(report["population"]["denominator"], 9)
         self.assertEqual(report["population"]["not_evaluated"], 9)
         self.assertEqual(report["qualification"], "not-qualification-evidence")
+        self.assertEqual(report["provenance"]["evidence_source"], "none")
+
+    def test_not_evaluated_report_cannot_claim_receipt_provenance(self) -> None:
+        report = metric._report(ROOT, evidence=None)
+        report["provenance"]["evidence_source"] = "provided-receipts"
+        candidate = copy.deepcopy(report)
+        candidate.pop("canonical_digest")
+        report["canonical_digest"] = metric._digest_object(candidate)
+        with self.assertRaisesRegex(metric.AgentAutonomousCompletionError, "evidence source"):
+            metric.validate_report(ROOT, report)
 
     def _evidence(self, outcome: str = "completed") -> dict:
         authority = metric._authority(ROOT)

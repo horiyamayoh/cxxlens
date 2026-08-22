@@ -234,6 +234,12 @@ infer a use-case capability. Every result preserves the closed state set
 `proved`/`disproved`/`unknown`/`partial`/`conflicting`, a typed missing reason, and a
 dependency-ordered completion plan. Unknown results are safe stops, not empty success.
 
+When checking a saved resolution with `check --input-json`, the checker binds the document to the
+current revision/tree and every catalog source digest. A self-consistent packet from an older tree
+is rejected as stale; `--synthetic` is reserved for the corpus's zero-authority fixtures and is not
+execution evidence. The installed SDK doctor follows the same boundary: an input without an exact
+authority object is reported as `unbound`, while a bound input must match the compiled authority.
+
 The installed `cxxlens-sdk-doctor` exposes the same consumer-facing boundary:
 
 ```sh
@@ -277,6 +283,8 @@ fields prove internal content binding, not that the observer is authenticated or
 execution is semantically correct. This metric reports evaluation state only;
 `qualification: not-qualification-evidence` is fixed by schema and it cannot promote a provider,
 consumer, support tuple, constructibility gate, or release.
+An input file containing only `not-evaluated` rows remains `not-evaluated` and is recorded with
+`evidence_source: none`; no digest-shaped or synthetic row can promote the metric to `evaluated`.
 
 静的 relation inventory を残す場合の契約名は `relation-presence` です。これは canonical capability resolution の
 use-case/capability graph、support tuple、input/model/evidence gap と dependency-ordered plan を読む `missing --project`
