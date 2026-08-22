@@ -26,19 +26,25 @@ cmake --build --preset dev-clang --target cxxlens-quality
 
 ```sh
 LLVM22_ROOT=/home/dhuru/.local/opt/LLVM-22.1.0-Linux-X64
+CXXLENS_SOURCE_REVISION="$(git rev-parse HEAD)"
+CXXLENS_SOURCE_TREE="$(git rev-parse HEAD^{tree})"
 cmake -S . -B build/dev-clang-native -G Ninja \
   -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON \
   -DCXXLENS_BUILD_QUALITY_TOOLS=ON -DCXXLENS_CLANG_ADAPTER=ON \
   -DCMAKE_CXX_COMPILER="$LLVM22_ROOT/bin/clang++" \
   -DCXXLENS_CLANG_FORMAT="$LLVM22_ROOT/bin/clang-format" \
   -DLLVM_DIR="$LLVM22_ROOT/lib/cmake/llvm" \
-  -DClang_DIR="$LLVM22_ROOT/lib/cmake/clang"
+  -DClang_DIR="$LLVM22_ROOT/lib/cmake/clang" \
+  -DCXXLENS_SOURCE_REVISION="$CXXLENS_SOURCE_REVISION" \
+  -DCXXLENS_SOURCE_TREE="$CXXLENS_SOURCE_TREE"
 cmake --build build/dev-clang-native -j2
 ctest --test-dir build/dev-clang-native --output-on-failure
 ```
 
 構成ログに `Enabled exact LLVM/Clang 22.1.0 adapter` が必要である。`CXXLENS_CLANG_ADAPTER=ON`
 で package 未検出になる場合は、まずこの install root と二つの CMake directory を指定する。
+install/package 試験では source revision/tree も明示する。これはインストール成果物の
+source identity を安全に固定するための製品条件であり、開発・release の運用証跡ではない。
 
 ## Main workflow
 
