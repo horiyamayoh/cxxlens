@@ -35,6 +35,25 @@ class AgentAutonomousCompletionMetricTests(unittest.TestCase):
         with self.assertRaisesRegex(metric.AgentAutonomousCompletionError, "evidence source"):
             metric.validate_report(ROOT, report)
 
+    def test_not_evaluated_receipt_census_stays_unqualified(self) -> None:
+        authority = metric._authority(ROOT)
+        evidence = {
+            "schema": "cxxlens.agent-autonomous-completion-evidence.v2",
+            "authority": {
+                key: authority[key] for key in ("revision", "tree", "catalog_digest")
+            },
+            "scenarios": [
+                {"scenario_id": scenario["scenario_id"], "outcome": "not-evaluated"}
+                for scenario in metric._scenario_set(metric._catalog(ROOT))
+            ],
+        }
+        report = metric._report(ROOT, evidence=evidence)
+        metric.validate_report(ROOT, report)
+        self.assertEqual(report["status"], "not-evaluated")
+        self.assertIsNone(report["value_percent"])
+        self.assertEqual(report["evidence_disposition"], "execution-receipts-required")
+        self.assertEqual(report["provenance"]["evidence_source"], "none")
+
     def _evidence(self, outcome: str = "completed") -> dict:
         authority = metric._authority(ROOT)
         scenarios = metric._scenario_set(metric._catalog(ROOT))

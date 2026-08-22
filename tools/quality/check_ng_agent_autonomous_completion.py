@@ -575,7 +575,9 @@ def _report(
         ),
         "status": "evaluated" if evaluated else "not-evaluated",
         "evidence_disposition": (
-            "execution-receipts-bound" if evidence is not None else "execution-receipts-required"
+            "execution-receipts-bound"
+            if evaluated
+            else "execution-receipts-required"
         ),
         "qualification": "not-qualification-evidence",
         "provenance": {
