@@ -2015,7 +2015,7 @@ namespace
 			select_provider(selection_request(executable), std::span{&legacy_major_candidate, 1U});
 		require(!legacy_major_selection &&
 					legacy_major_selection.error().code == "security.downgrade-forbidden",
-				"legacy Protocol 1.x provider was selected for the Protocol 2.0 runtime");
+				"unsupported-major provider was selected for the Protocol 2.0 runtime");
 
 		auto plain_transcript = runtime.execute(task(select(executable, "success")));
 		auto eos_transcript = runtime.execute(task(select(executable, "success-eos")));

@@ -16,7 +16,7 @@ namespace cxxlens::detail::clang22
 	 * `base_task_projection` is the complete canonical v2.2 base-task projection with source
 	 * bytes removed.  It is deliberately supplied by the request validator rather than rebuilt
 	 * here: this seam can therefore bind the v4 extension to the exact inherited authority without
-	 * silently inventing a second v2.1/v2.2 projection.
+	 * silently inventing a second projection.
 	 */
 	struct source_closure_task_v4_input
 	{

@@ -11,8 +11,7 @@
  * closure state machine; conversion is performed here after the provider
  * codec has checked the 104-byte header, checksums, version, and limits.
  *
- * This is source-private.  It is not a second wire protocol and does not
- * provide a compatibility path for Protocol 1.x or a downgrade.
+ * This is source-private and is not a second wire protocol or downgrade path.
  */
 
 #include <span>

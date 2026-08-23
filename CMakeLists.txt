@@ -406,8 +406,8 @@ cxxlens_enable_sanitizers(cxxlens_clang22_materialization_codecs)
 # Store candidate and the v2.2 request validator are consumed by focused product
 # tests and by the legacy safety support below, but neither target is part of
 # the installed materializer or worker production graph. Keeping these sources
-# in their own archives prevents a v2.1 safety test from accidentally becoming
-# the link-time owner of the v2.2 primitives.
+# in their own archives prevents a source-private safety test from accidentally
+# becoming the link-time owner of the v2.2 primitives.
 add_library(cxxlens_clang22_materialization_io_support STATIC EXCLUDE_FROM_ALL
             src/llvm/clang22/materialization_io.cpp)
 target_link_libraries(

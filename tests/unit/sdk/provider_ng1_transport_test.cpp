@@ -314,12 +314,12 @@ namespace
 		auto legacy_wire = wire;
 		legacy_wire.protocol_major = 1U;
 		require(!provider::encode_frame(legacy_wire, ng1_limits),
-				"legacy Protocol 1.x heartbeat was admitted");
+				"unsupported-major heartbeat was admitted");
 		auto legacy_encoded = *encoded;
 		legacy_encoded[4U] = std::byte{0U};
 		legacy_encoded[5U] = std::byte{1U};
 		require(!provider::decode_frame(legacy_encoded, ng1_limits),
-				"legacy Protocol 1.x frame was decoded");
+				"unsupported-major frame was decoded");
 
 		auto flagged = wire;
 		flagged.flags = static_cast<std::uint16_t>(provider::frame_flag::optional_extension);
