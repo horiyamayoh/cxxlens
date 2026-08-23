@@ -470,6 +470,22 @@ target_compile_features(cxxlens_clang22_materializer_v4_claims
 cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_claims)
 cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_claims)
 
+# This boundary consumes only sealed task-v4 claim receipts.  It intentionally
+# stops before Store mutation until the worker supplies a real recipe, output
+# plan, and publication target.
+add_library(cxxlens_clang22_materializer_v4_ingress STATIC EXCLUDE_FROM_ALL
+            src/llvm/clang22/materialization_v4_incremental_ingress.cpp)
+target_link_libraries(
+  cxxlens_clang22_materializer_v4_ingress
+  PUBLIC cxxlens::base
+  PRIVATE cxxlens_clang22_materializer_v4_claims)
+target_include_directories(cxxlens_clang22_materializer_v4_ingress
+                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_clang22_materializer_v4_ingress
+                        PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_ingress)
+cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_ingress)
+
 # Request-v2.2 admission is kept in a standalone source-private boundary.  The
 # legacy pipeline remains available only to the retained safety implementation;
 # v2.2 tests and consumers do not pull that graph merely to issue a task token.

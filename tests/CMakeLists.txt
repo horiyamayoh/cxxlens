@@ -836,7 +836,8 @@ cxxlens_add_test_executable(
   cxxlens-clang22-materialization-v4-claim-binding
   adapter/clang22/materialization_v4_claim_binding_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-v4-claim-binding
-                      PRIVATE cxxlens_clang22_materializer_v4_claims)
+                      PRIVATE cxxlens_clang22_materializer_v4_claims
+                              cxxlens_clang22_materializer_v4_ingress)
 add_test(NAME adapter.clang22-materialization-v4-claim-binding
          COMMAND cxxlens-clang22-materialization-v4-claim-binding)
 set_tests_properties(
