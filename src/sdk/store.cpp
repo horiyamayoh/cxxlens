@@ -1025,6 +1025,7 @@ namespace cxxlens::sdk
 			v5 = 5U,
 		};
 
+#if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
 		[[nodiscard]] constexpr std::optional<snapshot_payload_schema>
 		payload_schema_from_number(const std::uint8_t number) noexcept
 		{
@@ -1044,6 +1045,7 @@ namespace cxxlens::sdk
 					return std::nullopt;
 			}
 		}
+#endif
 
 		[[nodiscard]] constexpr std::string_view
 		payload_schema_magic(const snapshot_payload_schema schema) noexcept
