@@ -32,12 +32,12 @@ option(CXXLENS_BUILD_QUALITY_TOOLS "Enable local quality targets" ON)
 set(CXXLENS_SOURCE_REVISION
     ""
     CACHE STRING
-          "Exact 40-hex source commit embedded in installed occurrence evidence"
+          "Exact 40-hex source commit embedded in installed occurrence identity"
 )
 set(CXXLENS_SOURCE_TREE
     ""
     CACHE STRING
-          "Exact 40-hex source tree embedded in installed occurrence evidence")
+          "Exact 40-hex source tree embedded in installed occurrence identity")
 if((CXXLENS_SOURCE_REVISION STREQUAL "" AND NOT CXXLENS_SOURCE_TREE STREQUAL "")
    OR (NOT CXXLENS_SOURCE_REVISION STREQUAL "" AND CXXLENS_SOURCE_TREE STREQUAL
                                                    ""))
@@ -46,8 +46,6 @@ if((CXXLENS_SOURCE_REVISION STREQUAL "" AND NOT CXXLENS_SOURCE_TREE STREQUAL "")
       "CXXLENS_SOURCE_REVISION and CXXLENS_SOURCE_TREE must be supplied together"
   )
 endif()
-set(CXXLENS_SOURCE_PROVENANCE_MODE explicit)
-set(CXXLENS_SOURCE_PROVENANCE_GIT "")
 if(CXXLENS_SOURCE_REVISION STREQUAL "" AND CXXLENS_SOURCE_TREE STREQUAL "")
   find_package(Git QUIET)
   if(NOT Git_FOUND OR NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
@@ -74,8 +72,6 @@ if(CXXLENS_SOURCE_REVISION STREQUAL "" AND CXXLENS_SOURCE_TREE STREQUAL "")
   endif()
   set(CXXLENS_SOURCE_REVISION "${_cxxlens_git_revision}")
   set(CXXLENS_SOURCE_TREE "${_cxxlens_git_tree}")
-  set(CXXLENS_SOURCE_PROVENANCE_MODE git-clean)
-  set(CXXLENS_SOURCE_PROVENANCE_GIT "${GIT_EXECUTABLE}")
 endif()
 string(LENGTH "${CXXLENS_SOURCE_REVISION}" _cxxlens_source_revision_length)
 string(LENGTH "${CXXLENS_SOURCE_TREE}" _cxxlens_source_tree_length)
@@ -93,9 +89,6 @@ if(CXXLENS_BUILD_SHARED)
 else()
   set(CXXLENS_OCCURRENCE_CONFIGURATION static)
 endif()
-configure_file(
-  cmake/VerifyClang22SourceProvenance.cmake
-  "${CMAKE_CURRENT_BINARY_DIR}/VerifyClang22SourceProvenance.cmake" COPYONLY)
 configure_file(
   cmake/GenerateClang22OccurrenceManifest.cmake.in
   "${CMAKE_CURRENT_BINARY_DIR}/GenerateClang22OccurrenceManifest.cmake" @ONLY)

@@ -216,7 +216,7 @@ namespace
 		return std::move(*row);
 	}
 
-	class lock_provider final : public provider::portable_provider
+	class lock_provider final : public cxxlens::sdk::provider::portable_provider
 	{
 	  public:
 		explicit lock_provider(detached_row row) : row_{std::move(row)} {}
@@ -236,8 +236,8 @@ namespace
 			return lock_contract;
 		}
 
-		[[nodiscard]] result<void> run(const provider::task& task,
-									   provider::context& context) override
+		[[nodiscard]] result<void> run(const cxxlens::sdk::provider::task& task,
+									   cxxlens::sdk::provider::context& context) override
 		{
 			auto sink = context.relation(company::relations::lock_acquire::descriptor());
 			if (auto opened = sink.begin("calls", "lock-output", "lock-batch"); !opened)
@@ -268,11 +268,11 @@ namespace
 		detached_row row_;
 	};
 
-	[[nodiscard]] provider::task make_lock_task(lock_provider& implementation,
-												project_catalog project)
+	[[nodiscard]] cxxlens::sdk::provider::task make_lock_task(lock_provider& implementation,
+														project_catalog project)
 	{
 		const auto descriptor = company::relations::lock_acquire::descriptor();
-		auto task = provider::task::make({std::string{implementation.id()},
+		auto task = cxxlens::sdk::provider::task::make({std::string{implementation.id()},
 										  implementation.version(),
 										  std::string{implementation.semantic_contract_digest()},
 										  {descriptor},

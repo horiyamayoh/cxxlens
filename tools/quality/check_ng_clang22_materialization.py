@@ -161,6 +161,11 @@ PROVIDER_PROTOCOL_MAJOR = 2
 PROVIDER_PROTOCOL_MINOR = 0
 TASK_INPUT_FEATURE = "task-input-chunks-v2"
 SOURCE_CLOSURE_FEATURE = "task-source-closure-v2"
+MAXIMUM_SOURCE_CLOSURES = 4096
+MAXIMUM_SOURCE_CLOSURE_MEMBERS = 4096
+MAXIMUM_SOURCE_CLOSURE_BLOBS = 4096
+MAXIMUM_SOURCE_CLOSURE_BYTES = 48 * 1024 * 1024
+MAXIMUM_TASK_V4_PAYLOAD_BYTES = 88 * 1024 * 1024
 TASK_INPUT_CHUNK_BYTES = 1_048_576
 MAXIMUM_TASK_INPUT_BYTES = 67_108_864
 MAXIMUM_TASK_INPUT_CHUNKS = 64
@@ -11656,6 +11661,514 @@ def validate_raw_input_observation(
             "materialization.report-invalid",
             "raw input observation differs from exact transport bytes",
         )
+
+
+def _v2_2_task_projection(extension: dict[str, Any]) -> dict[str, Any]:
+    """Return the source-free task.v4 identity projection.
+
+    The two derived identity fields are deliberately excluded.  This mirrors
+    the product codec's recursion-free projection and keeps this checker
+    independent of source-closure bytes or repository metadata.
+    """
+
+    return {
+        key: value
+        for key, value in extension.items()
+        if key not in {"task_id", "task_v4_digest"}
+    }
+
+
+def _v2_2_request_projection(request: dict[str, Any]) -> dict[str, Any]:
+    """Return the complete source-free request.v2.2 identity projection."""
+
+    inherited_keys = (
+        "materialization_request_id",
+        "semantic_request_digest",
+        "tool",
+        "worker",
+        "project",
+        "registry",
+        "engine",
+        "interpretation_policy",
+        "trust_policy",
+        "group_topology",
+        "tasks",
+        "publication",
+    )
+    try:
+        inherited = {key: request[key] for key in inherited_keys}
+        extensions = [
+            _v2_2_task_projection(extension)
+            for extension in request["task_extensions"]
+        ]
+    except (KeyError, TypeError):
+        fail(
+            "materialization.request-invalid",
+            "request v2.2 identity projection is incomplete",
+        )
+    return {
+        "schema": request.get("schema"),
+        "request_version": request.get("request_version"),
+        "required_features": request.get("required_features"),
+        "inherited_authority": inherited,
+        "source_closures": request.get("source_closures"),
+        "task_extensions": extensions,
+    }
+
+
+def _v2_2_request_digest(request: dict[str, Any]) -> str:
+    return semantic_digest(
+        "cxxlens.clang22.materialization-request.v2_2",
+        canonical_json(_v2_2_request_projection(request)),
+    )
+
+
+def _validate_v2_2_schema(root: pathlib.Path, request: dict[str, Any]) -> None:
+    """Validate v2.2 and task.v4 with their explicit local schema references."""
+
+    request_schema = load(root / REQUEST_SCHEMA)
+    task_schema = load(root / TASK_V4_SCHEMA)
+    base_schema = load(
+        root / "schemas/cxxlens_ng_clang22_materialization_request.schema.yaml"
+    )
+    try:
+        jsonschema.Draft202012Validator.check_schema(request_schema)
+        jsonschema.Draft202012Validator.check_schema(task_schema)
+        jsonschema.Draft202012Validator.check_schema(base_schema)
+        schema_store = {
+            request_schema["$id"]: request_schema,
+            base_schema["$id"]: base_schema,
+            task_schema["$id"]: task_schema,
+            "https://cxxlens.dev/schemas/cxxlens_ng_provider_task_v4.schema.yaml": task_schema,
+        }
+        resolver = jsonschema.RefResolver.from_schema(
+            request_schema,
+            store=schema_store,
+        )
+        jsonschema.Draft202012Validator(
+            request_schema,
+            resolver=resolver,
+        ).validate(request)
+    except (
+        jsonschema.SchemaError,
+        jsonschema.ValidationError,
+        jsonschema.RefResolutionError,
+        KeyError,
+    ) as error:
+        fail("materialization.request-invalid", f"request v2.2 schema: {error}")
+
+
+def _reject_v2_2_source_bytes(value: Any, path: str = "$") -> None:
+    """Reject source payload fields in every request/task projection."""
+
+    forbidden = {"content_base64", "source_bytes", "source_bytes_base64"}
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key in forbidden:
+                fail(
+                    "materialization.request-invalid",
+                    f"{path}.{key} contains source bytes",
+                )
+            _reject_v2_2_source_bytes(child, f"{path}.{key}")
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _reject_v2_2_source_bytes(child, f"{path}[{index}]")
+
+
+def _validate_v2_2_closure_summaries(
+    request: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    closures = request.get("source_closures")
+    if (
+        not isinstance(closures, list)
+        or not closures
+        or len(closures) > MAXIMUM_SOURCE_CLOSURES
+    ):
+        fail(
+            "materialization.task-binding-mismatch",
+            "source-closure summary count is outside the product bound",
+        )
+    by_id: dict[str, dict[str, Any]] = {}
+    aggregate = 0
+    digest_pattern = re.compile(r"^semantic-v2:sha256:[0-9a-f]{64}$")
+    id_pattern = re.compile(r"^source-closure:semantic-v2:sha256:[0-9a-f]{64}$")
+    for closure in closures:
+        if not isinstance(closure, dict):
+            fail(
+                "materialization.request-invalid",
+                "source-closure summary is not an object",
+            )
+        identifier = closure.get("source_closure_id")
+        digest = closure.get("source_closure_digest")
+        manifest_digest = closure.get("manifest_digest")
+        if (
+            not isinstance(identifier, str)
+            or not id_pattern.fullmatch(identifier)
+            or not isinstance(digest, str)
+            or not digest_pattern.fullmatch(digest)
+            or identifier != "source-closure:" + digest
+            or not isinstance(manifest_digest, str)
+            or not digest_pattern.fullmatch(manifest_digest)
+        ):
+            fail(
+                "materialization.identity-mismatch",
+                "source-closure summary identity differs",
+            )
+        if identifier in by_id:
+            fail(
+                "materialization.task-binding-mismatch",
+                "request contains a duplicate source-closure summary",
+            )
+        member_count = closure.get("member_count")
+        blob_count = closure.get("blob_count")
+        unique_blob_bytes = closure.get("unique_blob_bytes")
+        if (
+            type(member_count) is not int
+            or not 1 <= member_count <= MAXIMUM_SOURCE_CLOSURE_MEMBERS
+            or type(blob_count) is not int
+            or not 1 <= blob_count <= MAXIMUM_SOURCE_CLOSURE_BLOBS
+            or type(unique_blob_bytes) is not int
+            or not 0 <= unique_blob_bytes <= MAXIMUM_SOURCE_CLOSURE_BYTES
+        ):
+            fail(
+                "materialization.request-invalid",
+                "source-closure summary exceeds a count or byte bound",
+            )
+        if aggregate > MAXIMUM_SOURCE_CLOSURE_BYTES - unique_blob_bytes:
+            fail(
+                "materialization.request-invalid",
+                "aggregate source-closure bytes exceed the product bound",
+            )
+        aggregate += unique_blob_bytes
+        by_id[identifier] = closure
+    return by_id
+
+
+def _validate_v2_2_task_extensions(
+    request: dict[str, Any],
+    closures: dict[str, dict[str, Any]],
+) -> None:
+    tasks = request.get("tasks")
+    extensions = request.get("task_extensions")
+    if (
+        not isinstance(tasks, list)
+        or not isinstance(extensions, list)
+        or len(tasks) != len(extensions)
+        or not tasks
+        or len(tasks) > MAXIMUM_SOURCE_CLOSURES
+    ):
+        fail(
+            "materialization.task-binding-mismatch",
+            "task/task.v4 index census differs",
+        )
+
+    task_ids: set[str] = set()
+    indices: set[int] = set()
+    referenced_closures: set[str] = set()
+    digest_pattern = re.compile(r"^semantic-v2:sha256:[0-9a-f]{64}$")
+    task_id_pattern = re.compile(r"^task:semantic-v2:sha256:[0-9a-f]{64}$")
+    for extension in extensions:
+        if not isinstance(extension, dict):
+            fail(
+                "materialization.request-invalid",
+                "task.v4 extension is not an object",
+            )
+        index = extension.get("base_task_index")
+        task_id = extension.get("task_id")
+        if (
+            type(index) is not int
+            or not 0 <= index < len(tasks)
+            or index in indices
+            or not isinstance(task_id, str)
+            or not task_id_pattern.fullmatch(task_id)
+            or task_id in task_ids
+        ):
+            fail(
+                "materialization.task-binding-mismatch",
+                "task.v4 ID or base index is not unique and bounded",
+            )
+        base = tasks[index]
+        if extension.get("base_provider_task_id") != base.get("provider_task_id"):
+            fail(
+                "materialization.task-binding-mismatch",
+                "task.v4/base provider task identity differs",
+            )
+        expected_base_digest = content_digest(canonical_json(base))
+        if extension.get("base_task_digest") != expected_base_digest:
+            fail(
+                "materialization.identity-mismatch",
+                "task.v4 base task projection digest differs",
+            )
+        expected_open = {
+            field: base.get(field)
+            for field in (
+                "task_input_digest",
+                "normalized_invocation_digest",
+                "toolchain_digest",
+                "environment_digest",
+            )
+        }
+        if extension.get("open_task") != expected_open:
+            fail(
+                "materialization.task-binding-mismatch",
+                "task.v4 open-task projection differs",
+            )
+        reference = extension.get("source_closure")
+        if not isinstance(reference, dict):
+            fail(
+                "materialization.task-binding-mismatch",
+                "task.v4 source-closure reference is missing",
+            )
+        closure_id = reference.get("id")
+        closure = closures.get(closure_id)
+        if (
+            closure is None
+            or reference.get("digest") != closure["source_closure_digest"]
+            or reference.get("manifest_digest") != closure["manifest_digest"]
+        ):
+            fail(
+                "materialization.task-binding-mismatch",
+                "task.v4 source-closure reference does not resolve exactly",
+            )
+        source = base.get("source", {})
+        if (
+            extension.get("main_logical_path") != source.get("logical_path")
+            or extension.get("logical_working_directory")
+            != base.get("working_directory")
+        ):
+            fail(
+                "materialization.task-binding-mismatch",
+                "task.v4 logical path binding differs from the base task",
+            )
+        normalized_project_logical_path(extension.get("main_logical_path"))
+        normalized_project_logical_path(extension.get("logical_working_directory"))
+        projection = _v2_2_task_projection(extension)
+        projection_bytes = canonical_json(projection)
+        if len(projection_bytes) > MAXIMUM_TASK_V4_PAYLOAD_BYTES:
+            fail(
+                "materialization.request-invalid",
+                "task.v4 projection exceeds its transfer bound",
+            )
+        expected_task_digest = semantic_digest(
+            "cxxlens.clang22.task.v4",
+            projection_bytes,
+        )
+        if extension.get("task_v4_digest") != expected_task_digest or task_id != (
+            "task:" + expected_task_digest
+        ):
+            fail(
+                "materialization.identity-mismatch",
+                "task.v4 semantic identity differs",
+            )
+        task_ids.add(task_id)
+        indices.add(index)
+        referenced_closures.add(closure_id)
+    if indices != set(range(len(tasks))) or referenced_closures != set(closures):
+        fail(
+            "materialization.task-binding-mismatch",
+            "task.v4/base task or source-closure census is incomplete",
+        )
+
+
+def validate_request(root: pathlib.Path, request: dict[str, Any]) -> None:
+    """Validate the current product request.v2.2/task.v4 authority.
+
+    This gate intentionally validates metadata and typed identities only.  Source
+    members are closure summaries whose bytes arrive over Protocol 2.0; no source
+    payload, implementation-byte identity, or repository-operation metadata is
+    accepted here.
+    """
+
+    _validate_v2_2_schema(root, request)
+    _reject_v2_2_source_bytes(request)
+    request_schema = load(root / REQUEST_SCHEMA)
+    validate_request_utf8_byte_limits(request, request_schema)
+    if request["publication"]["sqlite_path"] is not None:
+        canonical_sqlite_relative_path(request["publication"]["sqlite_path"])
+
+    if request["request_digest"] != _v2_2_request_digest(request) or request[
+        "request_id"
+    ] != "materialization-request:" + request["request_digest"]:
+        fail("materialization.identity-mismatch", "request v2.2 ID/digest differs")
+    if not re.fullmatch(
+        r"semantic-v2:sha256:[0-9a-f]{64}", request["semantic_request_digest"]
+    ):
+        fail("materialization.identity-mismatch", "semantic request digest grammar differs")
+
+    registry_digest, bindings = descriptor_bindings(root)
+    base_bindings = base_descriptor_bindings(root)
+    expected_registry = {
+        "path": REGISTRY.as_posix(),
+        "authority_registry_digest": registry_digest,
+        "base_descriptors": base_bindings,
+        "descriptors": bindings,
+    }
+    if request["registry"] != expected_registry:
+        fail(
+            "materialization.descriptor-binding-mismatch",
+            "request descriptor IDs/digests do not match the current registry",
+        )
+    inventory = admitted_descriptor_inventory(request["registry"])
+    if (
+        [row["descriptor_id"] for row in inventory] != ADMITTED_DESCRIPTOR_IDS
+        or request["engine"]["generation_contract"] != ENGINE_GENERATION_CONTRACT
+        or request["engine"]["admitted_descriptors"] != inventory
+        or request["engine"]["engine_registry_digest"]
+        != expected_engine_registry_digest(inventory)
+        or request["engine"]["engine_generation_id"]
+        != expected_engine_generation_id(request)
+    ):
+        fail(
+            "materialization.descriptor-binding-mismatch",
+            "descriptor engine inventory or generation identity differs",
+        )
+
+    interpretation = request["interpretation_policy"]
+    if (
+        interpretation["policy_id"] != INTERPRETATION_POLICY_ID
+        or interpretation["selected_domain"] != INTERPRETATION_DOMAIN
+        or interpretation["interpretation_policy_digest"]
+        != expected_interpretation_policy_digest(interpretation)
+    ):
+        fail("materialization.identity-mismatch", "interpretation policy identity differs")
+    worker = request["worker"]
+    trust = request["trust_policy"]
+    if (
+        worker["protocol_major"] != PROVIDER_PROTOCOL_MAJOR
+        or worker["protocol_minor"] != PROVIDER_PROTOCOL_MINOR
+        or worker["required_features"]
+        != [TASK_INPUT_FEATURE, SOURCE_CLOSURE_FEATURE]
+    ):
+        fail("materialization.version-unsupported", "Protocol 2.0 feature negotiation differs")
+    for trust_field, worker_field in (
+        ("provider_id", "provider_id"),
+        ("provider_version", "provider_version"),
+        ("semantic_contract_digest", "semantic_contract_digest"),
+        ("protocol_major", "protocol_major"),
+        ("protocol_minor", "protocol_minor"),
+        ("required_features", "required_features"),
+        ("worker_sandbox_policy_digest", "sandbox_policy_digest"),
+    ):
+        if trust[trust_field] != worker[worker_field]:
+            fail("materialization.identity-mismatch", "worker/trust policy binding differs")
+    if (
+        trust["policy_id"] != TRUST_POLICY_ID
+        or trust["execution_profile"] != "trust.native-worker"
+        or trust["required_qualification"] != "canonical-semantic-qualified"
+        or trust["task_sandbox_requirements"] != task_sandbox_requirements(request["tasks"])
+        or trust["trust_policy_digest"] != expected_trust_policy_digest(trust)
+    ):
+        fail("materialization.identity-mismatch", "trust policy identity differs")
+
+    project = request["project"]
+    catalog_entries = project["catalog_compile_units"]
+    catalog_ids = [entry["catalog_compile_unit_id"] for entry in catalog_entries]
+    if catalog_ids != sorted(catalog_ids) or len(catalog_ids) != len(set(catalog_ids)):
+        fail("materialization.catalog-census-mismatch", "catalog census is not canonical")
+    expected_catalog_digest = expected_project_catalog_digest(project)
+    if (
+        project["catalog_digest"] != expected_catalog_digest
+        or project["catalog_id"] != "catalog:" + expected_catalog_digest
+        or project["catalog_compile_unit_census_digest"]
+        != expected_catalog_compile_unit_census_digest(project)
+    ):
+        fail("materialization.catalog-census-mismatch", "project catalog identity differs")
+
+    tasks = request["tasks"]
+    task_universes = {task["condition_universe_id"] for task in tasks}
+    task_interpretations = {task["interpretation_domain"] for task in tasks}
+    selector = request["publication"]["selector"]
+    expected_selector = {
+        "catalog_id": project["catalog_id"],
+        "channel_id": selector["channel_id"],
+        "engine_generation_id": request["engine"]["engine_generation_id"],
+        "condition_universe_id": next(iter(task_universes)) if task_universes else "",
+        "relation_registry_digest": request["engine"]["engine_registry_digest"],
+        "interpretation_policy_digest": interpretation[
+            "interpretation_policy_digest"
+        ],
+        "trust_policy_digest": trust["trust_policy_digest"],
+    }
+    publication = request["publication"]
+    if (
+        len(task_universes) != 1
+        or task_interpretations != {interpretation["selected_domain"]}
+        or not selector["channel_id"]
+        or selector != expected_selector
+        or publication["series_id"] != expected_series_id(selector)
+        or publication["genesis"]
+        != (publication["expected_parent_publication"] is None)
+        or (
+            publication["backend"] == "memory"
+            and (
+                not publication["genesis"]
+                or publication["expected_parent_publication"] is not None
+                or publication["sqlite_path"] is not None
+            )
+        )
+    ):
+        fail("materialization.task-binding-mismatch", "publication selector/task policy differs")
+    if [task["selected_catalog_compile_unit_id"] for task in tasks] != catalog_ids:
+        fail("materialization.catalog-census-mismatch", "tasks do not cover the catalog exactly once")
+
+    execution_keys: list[tuple[str, str, str]] = []
+    entries_by_id = {entry["catalog_compile_unit_id"]: entry for entry in catalog_entries}
+    for task in tasks:
+        if any(
+            task[field] != project[project_field]
+            for field, project_field in (
+                ("project_id", "project_id"),
+                ("catalog_id", "catalog_id"),
+                ("catalog_digest", "catalog_digest"),
+            )
+        ):
+            fail("materialization.task-binding-mismatch", "task project/catalog binding differs")
+        if (
+            task["requested_descriptor_ids"] != DESCRIPTOR_IDS
+            or task["dependency_groups"] != ["canonical", "observation"]
+            or task["sandbox"]["policy_digest"] != worker["sandbox_policy_digest"]
+        ):
+            fail("materialization.task-binding-mismatch", "task output or sandbox binding differs")
+        source = task["source"]
+        normalized_project_logical_path(source["logical_path"])
+        if source["file_id"] != file_identity(source["logical_path"]):
+            fail("materialization.identity-mismatch", "source file identity differs")
+        if source["read_only"] is not True:
+            fail("materialization.request-invalid", "source metadata is not read-only")
+        entry = entries_by_id[task["selected_catalog_compile_unit_id"]]
+        if (
+            task["normalized_invocation_digest"]
+            != expected_normalized_invocation_digest(task)
+            or entry["effective_invocation_digest"]
+            != task["normalized_invocation_digest"]
+            or entry["source_digest"] != source["content_digest"]
+            or entry["environment_digest"] != task["environment_digest"]
+        ):
+            fail("materialization.task-binding-mismatch", "selected catalog entry differs from task")
+        if task["selected_catalog_compile_unit_id"] == task["compile_unit_id"]:
+            fail("materialization.task-binding-mismatch", "catalog and relation compile-unit IDs are aliased")
+        if (
+            task["language"] != task["variant"]["language"]
+            or task["variant"]["target_triple"] != task["toolchain"]["target_triple"]
+        ):
+            fail("materialization.task-binding-mismatch", "task base payload cross-binding differs")
+        if task["provider_task_id"] != expected_provider_task_id(request, task):
+            fail("materialization.identity-mismatch", "provider task identity differs")
+        if task["provider_execution_id"] != expected_provider_execution_id(request, task):
+            fail("materialization.identity-mismatch", "provider execution identity differs")
+        execution_keys.append(task_execution_key(task))
+    if len(execution_keys) != len(set(execution_keys)):
+        fail("materialization.task-binding-mismatch", "request contains duplicate task execution tuples")
+    rows = base_claim_rows(root, request)
+    toolchain_rows = {row["toolchain"]: row for row in rows["build.toolchain_context.v1"]}
+    for task in tasks:
+        if task["toolchain_digest"] != base_claim_row_digest(
+            "build.toolchain_context.v1", toolchain_rows[task["toolchain_context_id"]]
+        ):
+            fail("materialization.identity-mismatch", "toolchain row digest differs")
+
+    closures = _validate_v2_2_closure_summaries(request)
+    _validate_v2_2_task_extensions(request, closures)
 
 
 def _request_binding(request: dict[str, Any]) -> dict[str, str]:

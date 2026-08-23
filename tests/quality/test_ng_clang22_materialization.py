@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT / "tools" / "quality"))
 
 import check_ng_clang22_materialization as materialization  # noqa: E402
 import check_ng_provider_protocol as protocol  # noqa: E402
+import check_ng_source_closure_transport as closure_transport  # noqa: E402
 
 
 class MaterializationProtocol2Tests(unittest.TestCase):
@@ -221,6 +222,42 @@ class MaterializationProtocol2Tests(unittest.TestCase):
         with self.assertRaises(materialization.MaterializationError):
             materialization.validate_compact_store_failure_cause(
                 forged["error"], forged["effects"], None
+            )
+
+    def test_request_bound_compact_report_validates_v2_2_task_and_closure_identity(
+        self,
+    ) -> None:
+        request, _manifest = closure_transport.complete_request_witness(ROOT)
+        request_bytes = materialization.canonical_json(request)
+        report = materialization.compact_failure_report(
+            request_bytes,
+            request=request,
+            phase="worker-launch",
+            code="materialization.worker-failure",
+        )
+        materialization.validate_report(
+            ROOT,
+            request,
+            report,
+            request_bytes=request_bytes,
+        )
+
+        forged = copy.deepcopy(request)
+        forged["task_extensions"][0]["source_closure"]["manifest_digest"] = (
+            "semantic-v2:sha256:" + "0" * 64
+        )
+        forged_report = materialization.compact_failure_report(
+            materialization.canonical_json(forged),
+            request=forged,
+            phase="worker-launch",
+            code="materialization.worker-failure",
+        )
+        with self.assertRaises(materialization.MaterializationError):
+            materialization.validate_report(
+                ROOT,
+                forged,
+                forged_report,
+                request_bytes=materialization.canonical_json(forged),
             )
 
     def test_observation_v2_native_codec_binds_payload_and_span(self) -> None:
