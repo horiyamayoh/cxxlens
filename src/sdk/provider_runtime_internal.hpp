@@ -5,14 +5,59 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <cxxlens/sdk/provider.hpp>
 
+#include "provider_protocol_v2_adapter.hpp"
 #include "provider_validation_internal.hpp"
 
 namespace cxxlens::sdk::provider::detail
 {
+	/**
+	 * Independent Protocol 2.0 source-closure channel owned by the provider runtime.
+	 *
+	 * This is deliberately not part of `validate_provider_transcript`: provider output frames and
+	 * host-to-provider closure frames have different channels, sequence guards, and terminal
+	 * semantics.  A worker may retain this typed state and call `accept` for each decoded closure
+	 * frame; only `acknowledged()` exposes an execution-ready closure authority.
+	 */
+	class CXXLENS_PROVIDER_DETAIL_HIDDEN provider_runtime_closure_channel
+	{
+	  public:
+		[[nodiscard]] static result<provider_runtime_closure_channel>
+		create(provider_protocol_v2_session session);
+
+		[[nodiscard]] result<void> accept(const frame& value);
+		[[nodiscard]] provider_protocol_v2_phase phase() const noexcept
+		{
+			return state_.phase();
+		}
+		[[nodiscard]] bool acknowledged() const noexcept
+		{
+			return phase() == provider_protocol_v2_phase::acknowledged;
+		}
+		[[nodiscard]] bool rejected() const noexcept
+		{
+			return phase() == provider_protocol_v2_phase::rejected;
+		}
+		[[nodiscard]] const provider_protocol_v2_session& session() const noexcept
+		{
+			return session_;
+		}
+
+	  private:
+		provider_runtime_closure_channel(provider_protocol_v2_closure_state state,
+										 provider_protocol_v2_session session)
+			: state_{std::move(state)}, session_{std::move(session)}
+		{
+		}
+
+		provider_protocol_v2_closure_state state_;
+		provider_protocol_v2_session session_;
+	};
+
 	/**
 	 * Source-private identity carried by a shared runtime validation pass.  Empty optional
 	 * projections are permitted for the generic NG0 runtime, but the NG1 replay bridge requires

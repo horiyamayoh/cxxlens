@@ -5,21 +5,31 @@
 #include <string>
 #include <string_view>
 
+#include "sdk/provider_runtime_internal.hpp"
+#include "sdk/provider_validation_internal.hpp"
+
 namespace
 {
 	using namespace cxxlens::sdk::provider;
 	using cxxlens::sdk::provider::detail::encode_provider_protocol_v2_closure_control;
 	using cxxlens::sdk::provider::detail::encode_provider_protocol_v2_heartbeat_control;
 	using cxxlens::sdk::provider::detail::provider_protocol_v2_ack;
+	using cxxlens::sdk::provider::detail::provider_protocol_v2_blob;
+	using cxxlens::sdk::provider::detail::provider_protocol_v2_chunk;
 	using cxxlens::sdk::provider::detail::provider_protocol_v2_closure_state;
 	using cxxlens::sdk::provider::detail::provider_protocol_v2_control;
 	using cxxlens::sdk::provider::detail::provider_protocol_v2_heartbeat_control;
 	using cxxlens::sdk::provider::detail::provider_protocol_v2_heartbeat_kind;
 	using cxxlens::sdk::provider::detail::provider_protocol_v2_manifest;
+	using cxxlens::sdk::provider::detail::provider_protocol_v2_manifest_chunk;
 	using cxxlens::sdk::provider::detail::provider_protocol_v2_manifest_descriptor;
 	using cxxlens::sdk::provider::detail::provider_protocol_v2_manifest_kind;
+	using cxxlens::sdk::provider::detail::provider_protocol_v2_phase;
+	using cxxlens::sdk::provider::detail::provider_protocol_v2_reject;
+	using cxxlens::sdk::provider::detail::provider_protocol_v2_seal;
 	using cxxlens::sdk::provider::detail::provider_protocol_v2_session;
 	using cxxlens::sdk::provider::detail::provider_protocol_v2_session_binding;
+	using cxxlens::sdk::provider::detail::provider_runtime_closure_channel;
 	using cxxlens::sdk::provider::detail::validate_provider_protocol_v2_heartbeat;
 
 	void require(const bool value, const std::string_view message)
@@ -149,11 +159,193 @@ namespace
 		require(!state->accept(ack_frame), "ack before seal is rejected");
 		require(!state->accept(descriptor_frame), "replayed descriptor is rejected");
 	}
+
+	void test_runtime_closure_channel()
+	{
+		const std::string session{"provider-session:sha256:" + std::string(64U, '1')};
+		const std::string task{"task:semantic-v2:sha256:" + std::string(64U, '2')};
+		const std::string closure_digest = semantic('4');
+		const std::string manifest_digest = semantic('5');
+		const std::string task_digest = semantic('6');
+		const std::string transfer_digest = semantic('7');
+		const std::string receipts_digest = semantic('8');
+		const std::string blob_digest = "sha256:" + std::string(64U, '9');
+
+		const auto closure_frame = [&](const message_type type,
+									   const std::uint64_t sequence,
+									   provider_protocol_v2_control control,
+									   std::vector<std::byte> payload = {})
+		{
+			auto encoded = encode_provider_protocol_v2_closure_control(type, control);
+			require(encoded.has_value(), "runtime closure control encoding");
+			return frame{type,
+						 2U,
+						 sequence,
+						 std::move(*encoded),
+						 std::move(payload),
+						 protocol_v2_major,
+						 protocol_v2_minor,
+						 0U};
+		};
+
+		const provider_protocol_v2_manifest_descriptor descriptor{
+			provider_protocol_v2_manifest_kind::descriptor,
+			session,
+			task,
+			task_digest,
+			"source-closure:" + closure_digest,
+			closure_digest,
+			manifest_digest,
+			1U,
+			1U,
+			1U};
+		const provider_protocol_v2_manifest_chunk manifest_chunk{
+			provider_protocol_v2_manifest_kind::chunk, session, task, manifest_digest, 0U, 0U, 1U};
+		const provider_protocol_v2_blob blob{
+			session, task, closure_digest, 0U, blob_digest, 1U, 1U, 1U};
+		const provider_protocol_v2_chunk blob_chunk{session, task, 0U, blob_digest, 0U, 0U, 1U};
+		const provider_protocol_v2_seal seal{session,
+											 task,
+											 task_digest,
+											 manifest_digest,
+											 receipts_digest,
+											 1U,
+											 1U,
+											 closure_digest,
+											 transfer_digest};
+		const provider_protocol_v2_ack ack{
+			session,
+			task,
+			closure_digest,
+			transfer_digest,
+			"spool-receipt:semantic-v2:sha256:" + std::string(64U, 'a'),
+			"cleanup-owner:semantic-v2:sha256:" + std::string(64U, 'b')};
+		const provider_protocol_v2_reject reject{session,
+												 task,
+												 "before-manifest",
+												 "source-closure.required-feature-missing",
+												 {},
+												 "cleanup-receipt:semantic-v2:sha256:" +
+													 std::string(64U, 'c')};
+		std::vector<frame> closure_frames;
+		closure_frames.push_back(closure_frame(
+			message_type::source_closure_manifest, 0U, provider_protocol_v2_manifest{descriptor}));
+		closure_frames.push_back(closure_frame(message_type::source_closure_manifest,
+											   1U,
+											   provider_protocol_v2_manifest{manifest_chunk},
+											   {std::byte{'m'}}));
+		closure_frames.push_back(closure_frame(message_type::source_closure_blob, 2U, blob));
+		closure_frames.push_back(
+			closure_frame(message_type::source_closure_chunk, 3U, blob_chunk, {std::byte{'b'}}));
+		closure_frames.push_back(closure_frame(message_type::source_closure_seal, 4U, seal));
+		closure_frames.push_back(closure_frame(message_type::source_closure_ack, 5U, ack));
+		provider_protocol_v2_session session_config{
+			session, task, task_digest, closure_digest, manifest_digest, 2U};
+		auto channel = provider_runtime_closure_channel::create(session_config);
+		require(channel.has_value(), "runtime closure channel creation");
+		for (const auto& value : closure_frames)
+			require(channel->accept(value).has_value(), "runtime closure channel state transition");
+		require(channel->acknowledged() &&
+					channel->phase() == provider_protocol_v2_phase::acknowledged,
+				"runtime closure channel did not expose acknowledged authority");
+		auto replay = channel->accept(closure_frames.back());
+		require(!replay && replay.error().code == "protocol-v2.replay-rejected",
+				"runtime closure channel accepted a replayed ack");
+
+		const auto provider_id = std::string{"test.provider"};
+		const cxxlens::sdk::semantic_version provider_version{1U, 0U, 0U};
+		auto accepted =
+			encode_task_accepted_metadata({provider_id, provider_version.string(), task});
+		const std::vector<coverage_unit> coverage_values{{"task", task, "covered", {}}};
+		auto coverage = encode_coverage_metadata(coverage_values);
+		auto unresolved = encode_unresolved_metadata({});
+		auto evidence = encode_evidence_metadata({});
+		auto complete = encode_task_complete_metadata({task});
+		require(accepted && coverage && unresolved && evidence && complete,
+				"runtime transcript metadata encoding");
+		std::vector<frame> output_frames;
+		output_frames.push_back({message_type::task_accepted,
+								 1U,
+								 0U,
+								 std::move(*accepted),
+								 {},
+								 protocol_v2_major,
+								 protocol_v2_minor,
+								 0U});
+		output_frames.push_back({message_type::coverage_chunk,
+								 1U,
+								 1U,
+								 std::move(*coverage),
+								 {},
+								 protocol_v2_major,
+								 protocol_v2_minor,
+								 0U});
+		output_frames.push_back({message_type::unresolved_chunk,
+								 1U,
+								 2U,
+								 std::move(*unresolved),
+								 {},
+								 protocol_v2_major,
+								 protocol_v2_minor,
+								 0U});
+		output_frames.push_back({message_type::progress,
+								 1U,
+								 3U,
+								 std::move(*evidence),
+								 {},
+								 protocol_v2_major,
+								 protocol_v2_minor,
+								 0U});
+		output_frames.push_back({message_type::task_complete,
+								 1U,
+								 4U,
+								 std::move(*complete),
+								 {},
+								 protocol_v2_major,
+								 protocol_v2_minor,
+								 0U});
+
+		cxxlens::sdk::provider::detail::transcript_validation_request request{
+			task,
+			provider_id,
+			provider_version,
+			nullptr,
+			{},
+			{16U * 1024U * 1024U, 64U},
+			nullptr,
+			false,
+			nullptr,
+			1U,
+			false,
+			nullptr};
+		auto validated = cxxlens::sdk::provider::detail::validate_provider_transcript(
+			request, output_frames, {});
+		require(validated &&
+					validated->kind ==
+						cxxlens::sdk::provider::detail::transcript_terminal_kind::complete,
+				"runtime output transcript validation changed after closure split");
+
+		auto mixed_output = output_frames;
+		mixed_output.push_back(closure_frames.front());
+		validated =
+			cxxlens::sdk::provider::detail::validate_provider_transcript(request, mixed_output, {});
+		require(!validated && validated.error().code == "source-closure.channel-required",
+				"runtime mixed closure frames into the provider output transcript");
+
+		auto rejection_channel = provider_runtime_closure_channel::create(session_config);
+		require(rejection_channel.has_value(), "runtime rejection channel creation");
+		auto rejected = rejection_channel->accept(
+			closure_frame(message_type::source_closure_reject, 0U, reject));
+		require(rejected && rejection_channel->rejected() &&
+					rejection_channel->phase() == provider_protocol_v2_phase::rejected,
+				"runtime did not preserve a typed closure rejection");
+	}
 } // namespace
 
 int main()
 {
 	test_registry_and_heartbeat();
 	test_closure_state();
+	test_runtime_closure_channel();
 	std::cout << "provider Protocol 2 adapter tests passed\n";
 }

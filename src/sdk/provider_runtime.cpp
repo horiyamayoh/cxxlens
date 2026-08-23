@@ -18,6 +18,7 @@
 
 #include "json_internal.hpp"
 #include "provider_ng1_transport_internal.hpp"
+#include "provider_protocol_v2_adapter.hpp"
 #include "provider_runtime_internal.hpp"
 #include "provider_validation_internal.hpp"
 
@@ -1881,6 +1882,9 @@ namespace cxxlens::sdk::provider
 			for (std::size_t index = 0U; index < frames.size(); ++index)
 			{
 				const auto& value = frames[index];
+				if (is_source_closure_message(value.type))
+					return fail(
+						"source-closure.channel-required", request.task_id, "separate-channel");
 				if (value.stream_id != request.expected_stream_id ||
 					value.sequence != expected_sequence++)
 					return fail("provider.protocol-state-invalid", request.task_id, "sequence");
@@ -2328,7 +2332,7 @@ namespace cxxlens::sdk::provider
 					case message_type::source_closure_ack:
 					case message_type::source_closure_reject:
 						return fail(
-							"provider.protocol-state-invalid", request.task_id, "unsupported");
+							"source-closure.channel-required", request.task_id, "separate-channel");
 				}
 			}
 			if (!hello_seen || !schema_seen || !terminal_seen)
@@ -2339,6 +2343,23 @@ namespace cxxlens::sdk::provider
 															  std::move(sealed_unresolved),
 															  std::move(sealed_evidence)};
 			return terminal;
+		}
+
+		result<provider_runtime_closure_channel>
+		provider_runtime_closure_channel::create(provider_protocol_v2_session session)
+		{
+			auto state = provider_protocol_v2_closure_state::create(session);
+			if (!state)
+				return cxxlens::sdk::unexpected(std::move(state.error()));
+			return provider_runtime_closure_channel{std::move(*state), std::move(session)};
+		}
+
+		result<void> provider_runtime_closure_channel::accept(const frame& value)
+		{
+			if (!is_source_closure_message(value.type))
+				return cxxlens::sdk::unexpected(runtime_error(
+					"source-closure.channel-required", session_.task_id, "closure-frame-required"));
+			return state_.accept(value);
 		}
 	} // namespace detail
 
