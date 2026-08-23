@@ -32,6 +32,7 @@
 
 namespace
 {
+#if defined(__linux__) && defined(__GLIBC__) && defined(CXXLENS_TEST_CLANGXX22_PATH)
 	using namespace cxxlens::detail::clang22;
 	using cxxlens::sdk::provider::frame;
 	using cxxlens::sdk::provider::message_type;
@@ -425,6 +426,7 @@ namespace
 			require(errno == EINTR, "worker channel ACK read failed");
 		}
 	}
+#endif
 #endif
 } // namespace
 
