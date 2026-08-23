@@ -864,6 +864,19 @@ set_tests_properties(
   PROPERTIES LABELS "adapter;provider;clang22;materialization;task;v4;security")
 
 cxxlens_add_test_executable(
+  cxxlens-clang22-provider-worker-ingress-decoder
+  adapter/clang22/provider_worker_ingress_decoder_test.cpp)
+target_link_libraries(
+  cxxlens-clang22-provider-worker-ingress-decoder
+  PRIVATE cxxlens_clang22_materialization_codecs)
+add_test(NAME adapter.clang22-provider-worker-ingress-decoder
+         COMMAND cxxlens-clang22-provider-worker-ingress-decoder)
+set_tests_properties(
+  adapter.clang22-provider-worker-ingress-decoder
+  PROPERTIES LABELS
+             "adapter;provider;clang22;materialization;task;v4;ingress;security;bounded")
+
+cxxlens_add_test_executable(
   cxxlens-clang22-materialization-v4-claim-binding
   adapter/clang22/materialization_v4_claim_binding_test.cpp)
 target_link_libraries(

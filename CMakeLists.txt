@@ -392,7 +392,8 @@ add_library(
   src/llvm/clang22/source_closure_invocation.cpp
   src/llvm/clang22/source_closure_vfs.cpp
   src/llvm/clang22/unicode_nfc.cpp
-  src/llvm/clang22/materialization_identity.cpp)
+  src/llvm/clang22/materialization_identity.cpp
+  src/llvm/clang22/provider_worker_ingress.cpp)
 target_link_libraries(
   cxxlens_clang22_materialization_codecs
   PUBLIC cxxlens::provider_sdk
