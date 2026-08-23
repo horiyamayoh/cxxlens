@@ -413,7 +413,7 @@ namespace
 				"active WAL+SHM fault fixture did not leave an exact main/WAL recovery input");
 
 		auto recovered = sdk::open_sqlite_snapshot_store(path.string(), value);
-	require(recovered.has_value(),
+		require(recovered.has_value(),
 				"explicit SHM-absent recovery did not select the WAL-only route");
 		require_current(*recovered,
 						value,

@@ -1355,8 +1355,8 @@ namespace cxxlens::sdk
 
 	result<std::shared_ptr<sqlite_wal_recovery_workspace_builder>>
 	make_sqlite_wal_recovery_workspace_builder(
-	sqlite_backend_opaque_identity source_capability_token,
-	sqlite_private_snapshot_registry_binding registry)
+		sqlite_backend_opaque_identity source_capability_token,
+		sqlite_private_snapshot_registry_binding registry)
 	{
 		if (source_capability_token.profile.empty() || source_capability_token.bytes.empty())
 			return unexpected(workspace_error("source-binding"));
