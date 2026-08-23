@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "materialization_partition_event_stream.hpp"
+#include "materialization_request.hpp"
 #include "materialization_request_binding.hpp"
 #include "materialization_seal.hpp"
 

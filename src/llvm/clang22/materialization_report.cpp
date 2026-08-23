@@ -1089,7 +1089,7 @@ namespace cxxlens::detail::clang22::materialization
 		if (!outcome.runtime_receipt)
 			return sdk::unexpected(fail(
 				detailed_report_error_kind::missing_runtime_receipt, "runtime_receipt", "absent"));
-		// The provider seal is consumed by validate_and_seal_materialization before this
+		// The provider seal is consumed by the sealed materialization boundary before this
 		// projection is captured.  In that normal production path the immutable seal held by
 		// `materialized` is the authority.  When a caller still retains outcome.sealed, verify
 		// the two authorities below as an additional binding check.
