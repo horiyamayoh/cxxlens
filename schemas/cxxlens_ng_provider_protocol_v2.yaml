@@ -13,8 +13,7 @@ compatibility:
   accepted_minor: 0
   downgrade: reject
   implicit_downgrade: forbidden
-  legacy_protocol_1: rejected-before-payload
-  legacy_request_2_1_task_v3: rejected-before-payload
+  unsupported_peer: reject-before-payload
   implementation_identity: product-artifact-only
   product_content_digest: retained
 

@@ -16,7 +16,7 @@ protocol changes.
 
 Protocol 2.0 must make the semantic wire contract authoritative. It must carry source-closure
 identity and bounded transfer explicitly, connect NG1 liveness/recovery to the same session state
-machine, and reject an unsupported or legacy peer before accepting task payload. Product content
+machine, and reject an unsupported peer before accepting task payload. Product content
 digests, provenance, trust, sandbox, VFS, and crash-safety receipts remain required; implementation
 SHA ledgers and development qualification records do not.
 

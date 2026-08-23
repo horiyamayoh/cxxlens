@@ -44,8 +44,7 @@ properties:
       - accepted_minor
       - downgrade
       - implicit_downgrade
-      - legacy_protocol_1
-      - legacy_request_2_1_task_v3
+      - unsupported_peer
       - implementation_identity
       - product_content_digest
     properties:
@@ -56,8 +55,7 @@ properties:
       accepted_minor: {const: 0}
       downgrade: {const: reject}
       implicit_downgrade: {const: forbidden}
-      legacy_protocol_1: {const: rejected-before-payload}
-      legacy_request_2_1_task_v3: {const: rejected-before-payload}
+      unsupported_peer: {const: reject-before-payload}
       implementation_identity: {const: product-artifact-only}
       product_content_digest: {const: retained}
   wire:

@@ -1906,10 +1906,8 @@ def validate_host_input_authority(
         raise ContractError("provider runtime does not bind Protocol 2.0")
     if compatibility.get("downgrade") != "reject":
         raise ContractError("provider runtime permits protocol downgrade")
-    if compatibility.get("legacy_protocol_1") != "rejected-before-payload":
-        raise ContractError("provider runtime permits legacy Protocol 1 payloads")
-    if compatibility.get("legacy_request_2_1_task_v3") != "rejected-before-payload":
-        raise ContractError("provider runtime permits legacy request/task payloads")
+    if compatibility.get("unsupported_peer") != "reject-before-payload":
+        raise ContractError("provider runtime does not reject unsupported peers before payload")
     request_task = protocol.get("request_task", {})
     if request_task.get("request_version") != "2.2.0" or request_task.get(
         "task_schema"

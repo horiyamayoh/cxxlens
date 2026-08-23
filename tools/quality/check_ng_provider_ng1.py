@@ -821,8 +821,7 @@ def validate_ng1_contract(
         ("accepted_major", 2),
         ("accepted_minor", 0),
         ("downgrade", "reject"),
-        ("legacy_protocol_1", "rejected-before-payload"),
-        ("legacy_request_2_1_task_v3", "rejected-before-payload"),
+        ("unsupported_peer", "reject-before-payload"),
     ):
         expect(compatibility.get(field), expected, f"protocol.compatibility.{field}")
     ng1 = protocol.get("ng1")

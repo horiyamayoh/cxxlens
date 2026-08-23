@@ -34,16 +34,12 @@ class ProviderProtocol2Tests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.contract = load_yaml(ROOT / "schemas/cxxlens_ng_provider_protocol_v2.yaml")
 
-    def test_protocol2_authority_rejects_legacy(self) -> None:
+    def test_protocol2_authority_rejects_unsupported_peer(self) -> None:
         compatibility = self.contract["compatibility"]
         self.assertEqual(compatibility["accepted_major"], PROTOCOL_MAJOR)
         self.assertEqual(compatibility["accepted_minor"], PROTOCOL_MINOR)
         self.assertEqual(compatibility["downgrade"], "reject")
-        self.assertEqual(compatibility["legacy_protocol_1"], "rejected-before-payload")
-        self.assertEqual(
-            compatibility["legacy_request_2_1_task_v3"],
-            "rejected-before-payload",
-        )
+        self.assertEqual(compatibility["unsupported_peer"], "reject-before-payload")
         validate_contract_shape(self.contract)
 
     def test_fixed_header_and_canonical_cbor_are_deterministic(self) -> None:

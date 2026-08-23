@@ -18,9 +18,9 @@ import yaml
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-# Protocol 2 is the only wire authority. Legacy Protocol 1 is represented only
-# by fail-closed rejection markers in the compatibility contract; it is never
-# loaded as a compatibility shim.
+# Protocol 2 is the only wire authority. Unsupported peers are represented only
+# by a fail-closed rejection marker in the compatibility contract; no older
+# protocol is loaded as a compatibility shim.
 CONTRACT = pathlib.Path("schemas/cxxlens_ng_provider_protocol_v2.yaml")
 CONTRACT_SCHEMA = pathlib.Path("schemas/cxxlens_ng_provider_protocol_v2.schema.yaml")
 MANIFEST_SCHEMA = pathlib.Path("schemas/cxxlens_ng_provider_manifest.schema.yaml")
@@ -193,7 +193,7 @@ def validate_shared_coverage_authority(contract: dict[str, Any]) -> None:
         fail("provider.coverage-authority-invalid", "Protocol 2 authority is required")
     # Protocol 2 keeps the detailed coverage projection in task/report
     # contracts. This shared runtime helper only validates the product-level
-    # authority identity and never consults a legacy metadata block.
+    # authority identity and never consults an unsupported-peer metadata block.
 
 
 def validate_task_input_chunks(value: dict[str, Any]) -> dict[str, Any]:
@@ -710,10 +710,8 @@ def validate_task_input_authority(contract: dict[str, Any]) -> None:
         fail("provider.task-input-authority-invalid", "current protocol version")
     if compatibility.get("downgrade") != "reject":
         fail("provider.task-input-authority-invalid", "downgrade policy")
-    if compatibility.get("legacy_protocol_1") != "rejected-before-payload":
-        fail("provider.task-input-authority-invalid", "legacy protocol policy")
-    if compatibility.get("legacy_request_2_1_task_v3") != "rejected-before-payload":
-        fail("provider.task-input-authority-invalid", "legacy request/task policy")
+    if compatibility.get("unsupported_peer") != "reject-before-payload":
+        fail("provider.task-input-authority-invalid", "unsupported peer policy")
     capabilities = contract.get("capabilities", {})
     for feature in (
 		"task-input-chunks-v2",
