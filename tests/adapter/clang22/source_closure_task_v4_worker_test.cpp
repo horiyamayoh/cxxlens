@@ -12,6 +12,10 @@
 #include <utility>
 #include <vector>
 
+#if defined(CXXLENS_TEST_CLANGXX22_PATH)
+#include <clang/AST/ASTContext.h>
+#endif
+
 #include "llvm/clang22/materialization_json.hpp"
 #include "llvm/clang22/provider_worker.hpp"
 #include "llvm/clang22/provider_worker_v4.hpp"
@@ -400,15 +404,17 @@ namespace
 
 		const auto input_authority = make_input_authority(input);
 		bool callback_ran = false;
+		bool ast_available = false;
 		auto receipt = execute_provider_worker_v4(
 			{source_closure_task_v4_decoded{input, identity},
 			 std::move(received->snapshot),
 			 input_authority,
-			 [&callback_ran](cxxlens::provider::clang22::borrowed_translation_unit& unit)
+			 [&callback_ran,
+			  &ast_available](cxxlens::provider::clang22::borrowed_translation_unit& unit)
 				 -> cxxlens::sdk::result<void>
 			 {
 				 callback_ran = true;
-				 (void)unit.ast();
+				 ast_available = unit.ast().getTranslationUnitDecl() != nullptr;
 				 (void)unit.source_manager();
 				 return {};
 			 }});
@@ -416,8 +422,8 @@ namespace
 			std::cerr << "receiver-to-worker exact path failed: " << receipt.error().code << " / "
 					  << receipt.error().field << " / " << receipt.error().detail << '\n';
 		require(receipt.has_value(), "receiver snapshot did not reach exact Clang worker");
-		require(callback_ran && receipt->translation_unit_executed,
-				"exact Clang callback did not produce an execution receipt");
+		require(callback_ran && ast_available && receipt->translation_unit_executed,
+				"exact Clang callback did not produce a valid execution receipt");
 		require(receipt->task_id == identity.task_id &&
 					receipt->task_v4_digest == identity.task_v4_digest &&
 					receipt->source_closure_id == input.closure.snapshot_id,
@@ -471,17 +477,18 @@ int main()
 	// all compiler-owned state must be detached by the worker before this receipt is returned.
 	const auto exact_authority = make_input_authority(input);
 	bool callback_ran = false;
+	bool ast_available = false;
 	result = execute_source_closure_task_v4_candidate({
 		identity->input_payload,
 		input.closure,
 		identity->base_task_digest,
 		identity->task_v4_input_digest,
 		exact_authority,
-		[&callback_ran](cxxlens::provider::clang22::borrowed_translation_unit& unit)
+		[&callback_ran, &ast_available](cxxlens::provider::clang22::borrowed_translation_unit& unit)
 			-> cxxlens::sdk::result<void>
 		{
 			callback_ran = true;
-			(void)unit.ast();
+			ast_available = unit.ast().getTranslationUnitDecl() != nullptr;
 			(void)unit.source_manager();
 			return {};
 		},
@@ -490,7 +497,8 @@ int main()
 		std::cerr << "exact Clang 22 task-v4 execution failed: " << result.error().code << " / "
 				  << result.error().detail << '\n';
 	require(result.has_value(), "exact Clang 22 task-v4 candidate did not execute successfully");
-	require(callback_ran, "exact Clang 22 task-v4 callback did not run");
+	require(callback_ran && ast_available,
+			"exact Clang 22 task-v4 callback did not expose a valid AST");
 	require(result->task_id == identity->task_id,
 			"task-v4 worker receipt returned a foreign task identity");
 	require(result->task_v4_digest == identity->task_v4_digest,

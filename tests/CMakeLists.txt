@@ -1032,6 +1032,9 @@ if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG22_LIBRARY_DIRS)
       COMMAND "${_cxxlens_worker_test_clangxx}" -print-resource-dir
       OUTPUT_VARIABLE _cxxlens_worker_test_resource_dir
       OUTPUT_STRIP_TRAILING_WHITESPACE)
+    target_include_directories(
+      cxxlens-clang22-source-closure-task-v4-worker
+      SYSTEM PRIVATE "${_cxxlens_worker_test_llvm_root}/include")
     target_compile_definitions(
       cxxlens-clang22-source-closure-task-v4-worker
       PRIVATE
