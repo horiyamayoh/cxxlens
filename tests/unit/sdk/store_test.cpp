@@ -19,8 +19,8 @@
 
 #include <cxxlens/sdk.hpp>
 
-#include "../../support/sqlite_store_fixture.hpp"
 #include "../../support/sdk_store_faults.hpp"
+#include "../../support/sqlite_store_fixture.hpp"
 #include "sdk/sqlite_default_forwarding_vfs_internal.hpp"
 #include "sdk/sqlite_store_fault_injection_internal.hpp"
 

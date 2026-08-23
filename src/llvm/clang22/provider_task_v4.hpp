@@ -18,7 +18,11 @@ namespace cxxlens::detail::clang22
 	inline constexpr std::string_view provider_task_v4_schema = "cxxlens.clang22.task.v4";
 	inline constexpr std::string_view source_closure_manifest_schema =
 		"cxxlens.source-closure-manifest.v1";
-	inline constexpr std::string_view source_closure_digest_domain = "cxxlens.source-closure.v1";
+	// The task-v4 manifest and the runtime source-closure snapshot share one semantic identity.
+	// Keeping the domain here identical to source_closure.cpp prevents a sealed worker snapshot
+	// from becoming a foreign manifest merely because it crossed the task-v4 boundary.
+	inline constexpr std::string_view source_closure_digest_domain =
+		"cxxlens.clang22.source-closure.v1";
 	inline constexpr std::string_view source_closure_manifest_digest_domain =
 		"cxxlens.source-closure-manifest.v1";
 	inline constexpr std::string_view task_v4_digest_domain = "cxxlens.clang22.task.v4";

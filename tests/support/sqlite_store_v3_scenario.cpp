@@ -7,8 +7,8 @@
 #include <string_view>
 #include <utility>
 
-#include "sqlite_store_fixture.hpp"
 #include "sdk_store_faults.hpp"
+#include "sqlite_store_fixture.hpp"
 
 namespace cxxlens::test::sqlite_v3_scenario
 {

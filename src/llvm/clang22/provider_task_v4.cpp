@@ -593,7 +593,7 @@ namespace cxxlens::detail::clang22
 		return canonical_bytes_digest(
 			source_closure_digest_domain,
 			sdk::canonical_value::from_tuple({
-				sdk::canonical_value::from_string("cxxlens.clang22.source-closure.v2"),
+				sdk::canonical_value::from_string(std::string{source_closure_digest_domain}),
 				sdk::canonical_value::from_string("unicode-default-casefold-then-nfc"),
 				sdk::canonical_value::from_tuple(std::move(members)),
 				sdk::canonical_value::from_tuple(std::move(blobs)),
