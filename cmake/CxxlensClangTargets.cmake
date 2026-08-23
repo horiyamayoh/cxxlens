@@ -91,7 +91,10 @@ function(cxxlens_create_clang22_worker_static_closure)
   # static semantic stack; do not duplicate the runtime object definitions.
   add_library(
     cxxlens_clang22_worker_provider_sdk_internal STATIC EXCLUDE_FROM_ALL
-    src/sdk/provider.cpp src/sdk/incremental.cpp)
+    src/sdk/provider.cpp src/sdk/incremental.cpp
+    src/sdk/provider_protocol_v2_adapter.cpp
+    src/protocol_v2/cbor.cpp src/protocol_v2/codec.cpp
+    src/protocol_v2/closure.cpp)
   cxxlens_configure_clang22_worker_static_component(
     cxxlens_clang22_worker_provider_sdk_internal)
   target_link_libraries(
