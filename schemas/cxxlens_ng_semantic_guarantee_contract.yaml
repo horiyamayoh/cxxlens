@@ -4,7 +4,6 @@ maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#13-truth-and-guarantee
   decision_adr: docs/design/adr/0008-truth-guarantee-provenance-algebra.md
-  owner_issue: '#62'
   owner: steward.ng-semantics
 compatibility:
   version_axis: truth-guarantee-semantics

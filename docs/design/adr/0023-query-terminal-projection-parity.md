@@ -2,8 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-17
-- Decision owner: logical-query / query-runtime
-- Decision issue: #80
 - Depends on: ADR 0007, ADR 0014, ADR 0022
 
 ## Context

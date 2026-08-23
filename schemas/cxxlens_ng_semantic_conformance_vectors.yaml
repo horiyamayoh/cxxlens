@@ -1,6 +1,6 @@
 schema: cxxlens.semantic-conformance-vectors.v1
 document_version: 1.0.0
-authority: {owner_issue: '#62', decision_adr: docs/design/adr/0008-truth-guarantee-provenance-algebra.md}
+authority: {decision_adr: docs/design/adr/0008-truth-guarantee-provenance-algebra.md}
 contract: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
 vectors:
 - {id: truth-not-conflict, class: positive, operation: truth, input: {operator: not, values: [conflict]}, expected: {decision: accepted, reason_code: semantic.truth-valid, value: conflict}}

@@ -64,6 +64,87 @@ def run_input_limit(
     return completed, "sha256:" + digest.hexdigest()
 
 
+def v2_2_metadata_without_transport() -> bytes:
+    """Build a structurally valid v2.2 request with no closure frame handoff."""
+
+    semantic = lambda fill: "semantic-v2:sha256:" + fill * 64
+    content = lambda fill: "sha256:" + fill * 64
+    source_closure_id = "source-closure:" + semantic("3")
+    root: dict[str, Any] = {
+        name: {}
+        for name in (
+            "engine",
+            "group_topology",
+            "interpretation_policy",
+            "publication",
+            "project",
+            "registry",
+            "tool",
+            "trust_policy",
+        )
+    }
+    root.update(
+        {
+            "worker": {"protocol_major": 2, "protocol_minor": 0},
+            "request_digest": semantic("9"),
+            "request_id": "materialization-request:" + semantic("9"),
+            "request_version": "2.2.0",
+            "required_features": ["task-input-chunks-v2", "task-source-closure-v2"],
+            "schema": "cxxlens.clang22-materialization-request.v2_2",
+            "materialization_request_id": "materialization-authority:v2_2-test",
+            "semantic_request_digest": semantic("a"),
+            "source_closures": [
+                {
+                    "blob_count": 1,
+                    "manifest_digest": semantic("4"),
+                    "member_count": 1,
+                    "source_closure_digest": semantic("2"),
+                    "source_closure_id": source_closure_id,
+                    "unique_blob_bytes": 7,
+                }
+            ],
+            "tasks": [
+                {
+                    "source": {
+                        "content_digest": content("a"),
+                        "encoding": "utf8",
+                        "file_id": "file:sha256:" + "b" * 64,
+                        "line_index_id": "line-index:sha256:" + "c" * 64,
+                        "logical_path": "project://src/main.cpp",
+                        "read_only": True,
+                        "size_bytes": 7,
+                        "source_snapshot_id": "source-snapshot:one",
+                    }
+                }
+            ],
+            "task_extensions": [
+                {
+                    "base_provider_task_id": "task:semantic-v2:sha256:" + "5" * 64,
+                    "base_task_digest": content("6"),
+                    "base_task_index": 0,
+                    "logical_working_directory": "project://src",
+                    "main_logical_path": "project://src/main.cpp",
+                    "open_task": {
+                        "environment_digest": content("d"),
+                        "normalized_invocation_digest": semantic("e"),
+                        "task_input_digest": content("f"),
+                        "toolchain_digest": semantic("1"),
+                    },
+                    "schema": "cxxlens.clang22.task.v4",
+                    "source_closure": {
+                        "digest": semantic("2"),
+                        "id": source_closure_id,
+                        "manifest_digest": semantic("4"),
+                    },
+                    "task_id": "task:semantic-v2:sha256:" + "7" * 64,
+                    "task_v4_digest": semantic("8"),
+                }
+            ],
+        }
+    )
+    return json.dumps(root, separators=(",", ":")).encode("utf-8")
+
+
 def parse_one_json(
     oracle: Any, stdout: bytes, label: str
 ) -> dict[str, Any]:
@@ -83,6 +164,7 @@ def assert_raw_compact_failure(
     code: str,
     subject: str,
     label: str,
+    diagnostic: str | None = None,
 ) -> None:
     assert completed.returncode == 1, (label, completed.stdout, completed.stderr)
     assert completed.stderr == b"", (label, completed.stderr)
@@ -96,7 +178,7 @@ def assert_raw_compact_failure(
         "diagnostic": {
             "request-envelope": "missing-or-non-string-envelope:byte=0",
             "request-version": "unsupported-version:byte=0",
-        }.get(phase, "selected-contract"),
+        }.get(phase, diagnostic or "selected-contract"),
         "phase": phase,
         "subject": subject,
     }
@@ -199,6 +281,39 @@ def main() -> int:
         code="materialization.version-unsupported",
         subject="request-version",
         label="request-version",
+    )
+    v2_2_metadata_only = json.dumps(
+        {
+            "schema": "cxxlens.clang22-materialization-request.v2_2",
+            "request_version": "2.2.0",
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+    assert_raw_compact_failure(
+        root,
+        oracle,
+        run_materializer(args.driver, v2_2_metadata_only),
+        v2_2_metadata_only,
+        phase="request-schema",
+        code="materialization.request-invalid",
+        subject="request",
+        label="request-v2.2-shape",
+        diagnostic="member-set",
+    )
+    complete_v2_2 = v2_2_metadata_without_transport()
+    assert_raw_compact_failure(
+        root,
+        oracle,
+        run_materializer(args.driver, complete_v2_2),
+        complete_v2_2,
+        phase="request-schema",
+        code="materialization.request-invalid",
+        subject="request-v2_2",
+        label="request-v2.2-transport-boundary",
+        diagnostic=(
+            "source-code=materialization.source-closure-invalid;"
+            "source-detail=closure-transport-not-connected"
+        ),
     )
     return 0
 

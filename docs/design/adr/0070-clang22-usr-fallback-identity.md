@@ -2,8 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-18
-- Decision owner: clang22-provider
-- Decision issue: #139
 - Depends on: ADR 0048, ADR 0050, ADR 0051, ADR 0052, ADR 0054
 
 ## Context

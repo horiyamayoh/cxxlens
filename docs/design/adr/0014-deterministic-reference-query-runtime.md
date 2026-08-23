@@ -2,9 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-16
-- Decision owner: query-runtime
-- Decision issue: #69
-- Tracking issue: #56
 
 ## Context
 

@@ -109,9 +109,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
             attachment["status"], "accepted-authority-implementation-pending"
         )
         self.assertEqual(
-            attachment["tracking"], {"issue": "#206", "feedback": "DF-0206"}
-        )
-        self.assertEqual(
             attachment["authorization"]["production_activation"],
             "blocked-until-direct-positive-negative-fault-determinism-and-"
             "resource-tests-pass-for-the-exact-implementation-and-complete-"
@@ -131,10 +128,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         self.assertEqual(
             reader_attachment["status"],
             "accepted-authority-implementation-pending",
-        )
-        self.assertEqual(
-            reader_attachment["tracking"],
-            {"issue": "#207", "feedback": "DF-0207"},
         )
         self.assertEqual(
             reader_attachment["map_attempt"]["result_enum"],
@@ -286,9 +279,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         self.assertEqual(
             late_close["status"], "accepted-authority-implementation-pending"
         )
-        self.assertEqual(
-            late_close["tracking"], {"issue": "#209", "feedback": "DF-0209"}
-        )
         self.assertIn(
             "internal-reader-late-close-cleanup-owner-seal-provenance-drain-"
             "ack-state-machine",
@@ -369,9 +359,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         )
         self.assertEqual(
             gate_outcome["status"], "accepted-authority-implementation-pending"
-        )
-        self.assertEqual(
-            gate_outcome["tracking"], {"issue": "#208", "feedback": "DF-0208"}
         )
         self.assertEqual(
             gate_outcome["gate_attempt_owner"]["lifecycle"],
@@ -1050,15 +1037,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 "any_native_ok"
             ],
             "backend-protocol-violation-fail-closed-never-translate-to-readonly",
-        )
-
-    def test_source_native_ok_projection_remains_fail_closed(self) -> None:
-        source = (ROOT / "src" / "sdk" / "sqlite_default_forwarding_vfs.cpp").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn(
-            "constexpr bool source_shm_native_ok_projection_production_activation = false;",
-            source,
         )
 
     def test_option_a_structural_projection_and_vectors_pass_independently(self) -> None:

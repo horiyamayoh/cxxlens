@@ -9,10 +9,22 @@ properties:
   request_version: {const: 2.2.0}
   request_id: {type: string, pattern: '^materialization-request:semantic-v2:sha256:[0-9a-f]{64}$'}
   request_digest: {$ref: '#/$defs/semantic_digest'}
-  required_features: {const: [task-input-chunks-v1, task-source-closure-v1]}
+  required_features: {const: [task-input-chunks-v2, task-source-closure-v2]}
   materialization_request_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/strong_id}
   semantic_request_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/semantic_digest}
-  tool: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tool}
+  tool:
+    type: object
+    additionalProperties: false
+    required: [executable, interface_version, distribution_version, source_revision, source_tree, installed_executable_digest, package_configuration, occurrence_manifest_digest]
+    properties:
+      executable: {const: cxxlens-clang22-materialize}
+      interface_version: {const: 2.2.0}
+      distribution_version: {const: 1.0.0}
+      source_revision: {type: string, pattern: '^[0-9a-f]{40,64}$'}
+      source_tree: {type: string, pattern: '^[0-9a-f]{40,64}$'}
+      installed_executable_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+      package_configuration: {enum: [static, shared]}
+      occurrence_manifest_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
   worker:
     type: object
     additionalProperties: false
@@ -23,9 +35,9 @@ properties:
       provider_version: {const: 1.0.0}
       installed_binary_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/content_digest}
       semantic_contract_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/content_digest}
-      protocol_major: {const: 1}
-      protocol_minor: {const: 2}
-      required_features: {const: [task-input-chunks-v1, task-source-closure-v1]}
+      protocol_major: {const: 2}
+      protocol_minor: {const: 0}
+      required_features: {const: [task-input-chunks-v2, task-source-closure-v2]}
       sandbox_policy_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/content_digest}
   project: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/project}
   registry: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/registry}
@@ -41,9 +53,9 @@ properties:
       provider_id: {const: cxxlens.clang22.reference}
       provider_version: {const: 1.0.0}
       semantic_contract_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/content_digest}
-      protocol_major: {const: 1}
-      protocol_minor: {const: 2}
-      required_features: {const: [task-input-chunks-v1, task-source-closure-v1]}
+      protocol_major: {const: 2}
+      protocol_minor: {const: 0}
+      required_features: {const: [task-input-chunks-v2, task-source-closure-v2]}
       required_qualification: {const: canonical-semantic-qualified}
       worker_sandbox_policy_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/content_digest}
       task_sandbox_requirements:
@@ -121,4 +133,4 @@ $defs:
       member_count: {type: integer, minimum: 1, maximum: 4096}
       blob_count: {type: integer, minimum: 1, maximum: 4096}
       unique_blob_bytes: {type: integer, minimum: 0, maximum: 50331648}
-description: Complete v2.1 authority is projected at top level. Task source metadata is retained, content bytes are forbidden, protocol authority is 1.2, and v4 metadata binds closure transport.
+description: Complete v2.2 authority is projected at top level. Task source metadata is retained, content bytes are forbidden, Protocol 2.0 is mandatory, and v4 metadata binds closure transport.

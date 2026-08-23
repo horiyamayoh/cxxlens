@@ -1,9 +1,8 @@
 schema: cxxlens.provider-conformance-vectors.v1
 document_version: 1.1.0
 authority:
-  owner_issue: '#98'
   decision_adr: docs/design/adr/0041-provider-control-text-utf8.md
-contract: schemas/cxxlens_ng_provider_protocol.yaml
+contract: schemas/cxxlens_ng_provider_protocol_v2.yaml
 vectors:
   - id: wire-round-trip
     class: positive
@@ -354,11 +353,3 @@ vectors:
         - {relation: cc.entity.v1, key: entity-1, content: content-1}
       coverage: [covered:unit-1, covered:unit-2]
     expected: {decision: accepted, reason_code: provider.surface_parity-valid}
-  - id: fuzz-corpus-stable-rejection
-    class: positive
-    operation: fuzz
-    input: {corpus: schemas/cxxlens_ng_provider_fuzz_corpus.yaml}
-    expected:
-      decision: accepted
-      reason_code: provider.fuzz-valid
-      value: {cases: 19, stable_rejections: 19, crashes: 0, hangs: 0, unbounded_allocations: 0}

@@ -1,8 +1,6 @@
 # Build and test
 
-開発完了は変更固有の試験と `main` の全決定的回帰試験の成功で判定します。試験用
-JUnit、timing JSON、toolchain provenance、checksum、qualification report、集約 report は
-生成・保存しません。GitHub Actions の job log は通常の platform 機能として残ります。
+開発完了は変更固有の試験と `main` の全決定的回帰試験の成功で判定します。
 
 ## Local deterministic suite
 
@@ -55,14 +53,14 @@ source identity を安全に固定するための製品条件であり、開発�
 - static/shared の installed consumer と relocated prefix
 - GCC による LLVM-independent public header compile
 
-path selection、fast gate、report/baseline、artifact upload/download、結果集約 job はありません。
+全決定的試験を同じ workflow で実行し、終了コードで判定します。
 
 ## Release workflow
 
 `.github/workflows/release.yml` は手動実行または `v*` tag でのみ動き、main 全件に加えて
 ASan/UBSan、TSan、clang-tidy、stress/repeat、最大 materialization scale、real-project、
 relocated-install を直接実行します。重検査が一件でも失敗した場合、package job は実行されません。
-試験 artifact を保存せず、tag の package だけを公開します。
+tag の package だけを公開します。
 
 ```sh
 cmake --preset asan-ubsan && cmake --build --preset asan-ubsan

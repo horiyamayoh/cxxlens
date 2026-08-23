@@ -2,8 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-18
-- Decision owner: common/claim-kernel
-- Decision issue: #130
 - Depends on: ADR 0016, ADR 0030, ADR 0036, ADR 0057
 
 ## Context

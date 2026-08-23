@@ -1,6 +1,6 @@
 # Author SDK tutorials
 
-Issue #66 で、recipe 利用者から native provider 作者まで同じ relation descriptor と Logical Query IR を使う
+この契約で、recipe 利用者から native provider 作者まで同じ relation descriptor と Logical Query IR を使う
 5経路が runnable example になりました。repository root で次を実行します。
 
 ```sh
@@ -36,7 +36,6 @@ custom descriptor を取得し、runtime column lookup 後に typed path と同�
 [portable_provider.cpp](../../examples/sdk/portable_provider.cpp) は core enum/switch を変更せず generated
 `company.lock.acquire` を追加し、`portable_provider::run` 内で `relation_sink` と
 coverage/evidence builder を使います。provider 作者は frame header、SHA-256、sequence、credit を構成しません。
-`provider_harness` は production codec と同じ経路に no-credit、cancel、checksum、truncate fault を注入できます。
 `provider::manifest` と scaffold が出力する manifest は、同じ `cxxlens.provider-manifest.v1` schema に適合します。
 
 project scaffold は次で生成します。既存の非空 directory は上書きしません。
@@ -67,7 +66,7 @@ recipe/typed/dynamic/portable/native example を実際の install tree から再
 
 ## Relation/claim kernel
 
-[relation_claim_batch.cpp](../../examples/sdk/relation_claim_batch.cpp) は Issue #67 の walking skeleton です。
+[relation_claim_batch.cpp](../../examples/sdk/relation_claim_batch.cpp) は この契約の walking skeleton です。
 external generated relation の typed builder と runtime descriptor を同じ immutable engine へ登録し、fake provider
 observation を assertion に変換して atomic batch へ投入します。hard reference は同じ batch staging space の既存
 claim で解決し、未 materialize の soft reference は row を捨てず `unresolved_reference` として返します。

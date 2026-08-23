@@ -39,8 +39,11 @@ namespace cxxlens::detail::clang22::materialization
 	}
 
 	[[nodiscard]] inline sdk::error normalize_materialization_admission_spool_failure(
-		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): phase and context are distinct protocol labels
-		sdk::error error, const std::string_view phase, const std::string_view context)
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): phase and context are distinct
+		// protocol labels
+		sdk::error error,
+		const std::string_view phase,
+		const std::string_view context)
 	{
 		if (is_materialization_admission_no_response(error))
 			return error;

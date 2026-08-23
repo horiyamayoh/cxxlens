@@ -10,9 +10,8 @@ properties:
   authority:
     type: object
     additionalProperties: false
-    required: [owner_issue, decision_adr, owner]
+    required: [decision_adr, owner]
     properties:
-      owner_issue: {const: '#65'}
       decision_adr: {const: docs/design/adr/0011-provider-trust-certification-discovery.md}
       owner: {const: steward.ng-security}
   mutation: {const: signed-registry-update-only}

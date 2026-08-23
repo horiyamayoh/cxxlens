@@ -6,7 +6,6 @@ authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
   index: docs/design/catalogs/README.md
   decision_adr: docs/design/adr/0096-clang22-installed-materialization-boundary.md
-  owner_issue: '#182'
   owner: steward.ng-relations
 compatibility:
   version_axis: relation-descriptor

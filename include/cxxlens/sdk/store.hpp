@@ -409,7 +409,7 @@ namespace cxxlens::sdk
 	[[nodiscard]] result<void>
 	mark_publication_corrupt_for_testing(snapshot_store& store, std::string_view publication_id);
 
-	/** @brief Compatibility builder retained as a one-snapshot adapter until Issue #72. */
+	/** @brief Compatibility builder retained as a one-snapshot adapter for legacy callers. */
 	class snapshot_builder
 	{
 	  public:

@@ -8,7 +8,10 @@
 
 namespace cxxlens::sdk
 {
-	/** Production activation remains disabled until the accepted source-SHM authority gate closes.
+	/**
+	 * Production activation is restricted to the qualified active-WAL source route. Native-OK
+	 * projection remains fail-closed unless the nested lease, retained-object, namespace, close,
+	 * and zero-effect receipts are all present.
 	 */
 	[[nodiscard]] bool
 	sqlite_source_shm_native_ok_projection_production_activation_enabled() noexcept;

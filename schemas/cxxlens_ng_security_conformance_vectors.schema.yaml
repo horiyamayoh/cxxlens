@@ -9,9 +9,8 @@ properties:
   authority:
     type: object
     additionalProperties: false
-    required: [owner_issue, decision_adr]
+    required: [decision_adr]
     properties:
-      owner_issue: {const: '#137'}
       decision_adr: {const: docs/design/adr/0068-sandbox-assurance-closed-enum-boundary.md}
   contract: {const: schemas/cxxlens_ng_security_profile.yaml}
   vectors:

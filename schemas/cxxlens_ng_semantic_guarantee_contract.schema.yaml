@@ -10,11 +10,10 @@ properties:
   authority:
     type: object
     additionalProperties: false
-    required: [design, decision_adr, owner_issue, owner]
+    required: [design, decision_adr, owner]
     properties:
       design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md#13-truth-and-guarantee}
       decision_adr: {const: docs/design/adr/0008-truth-guarantee-provenance-algebra.md}
-      owner_issue: {const: '#62'}
       owner: {const: steward.ng-semantics}
   compatibility: {type: object, required: [version_axis, current, unknown_modality, unknown_approximation_axis]}
   instance_schema: {const: schemas/cxxlens_ng_semantic_metadata.schema.yaml}

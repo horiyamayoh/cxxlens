@@ -108,11 +108,11 @@ namespace cxxlens::sdk
 	  public:
 		~sqlite_wave3_wal_recovery_session() noexcept = default;
 		sqlite_wave3_wal_recovery_session(sqlite_wave3_wal_recovery_session&&) noexcept = default;
-		sqlite_wave3_wal_recovery_session& operator=(sqlite_wave3_wal_recovery_session&&) noexcept =
-			default;
+		sqlite_wave3_wal_recovery_session&
+		operator=(sqlite_wave3_wal_recovery_session&&) noexcept = default;
 		sqlite_wave3_wal_recovery_session(const sqlite_wave3_wal_recovery_session&) = delete;
-		sqlite_wave3_wal_recovery_session& operator=(const sqlite_wave3_wal_recovery_session&) =
-			delete;
+		sqlite_wave3_wal_recovery_session&
+		operator=(const sqlite_wave3_wal_recovery_session&) = delete;
 
 		[[nodiscard]] static result<sqlite_wave3_wal_recovery_session>
 		open(const sqlite_wave3_wal_recovery_input& input);
@@ -128,7 +128,7 @@ namespace cxxlens::sdk
 		[[nodiscard]] result<void> close();
 		[[nodiscard]] result<void> quarantine(std::string detail);
 
-  private:
+	  private:
 		explicit sqlite_wave3_wal_recovery_session(sqlite_wave3_wal_recovery_plan plan);
 
 		sqlite_wave3_wal_recovery_plan plan_;

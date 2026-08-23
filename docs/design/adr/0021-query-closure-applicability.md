@@ -2,8 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-17
-- Decision owner: query-runtime / snapshot-store
-- Decision issue: #78
 - Depends on: ADR 0007, ADR 0009, ADR 0013, ADR 0014
 
 ## Context

@@ -1098,9 +1098,7 @@ def validate_design(root: pathlib.Path) -> None:
         "schemas/cxxlens_ng_relation_registry.yaml",
         "envelope-presence-only",
         "cc.call_direct_target",
-        "Issue #60",
         "detached-cell-value-v2",
-        "Issue #152",
         "cross-TU semantic entity identity",
     )
     for marker in required:
@@ -1110,8 +1108,8 @@ def validate_design(root: pathlib.Path) -> None:
         if stale in design:
             fail("relation.call-example-stale", f"stale call model remains: {stale}")
     index = (root / "docs/design/catalogs/README.md").read_text(encoding="utf-8")
-    if "accepted exact scalar-value and cross-TU entity identity contract" not in index or "#152" not in index:
-        fail("relation.catalog-index-stale", "catalog index does not show accepted #152")
+    if "Relation Registry" not in index or "cross-TU entity identity" not in index:
+        fail("relation.catalog-index-stale", "relation registry authority is absent from catalog index")
 
 
 def validate_contract(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, str]]]:

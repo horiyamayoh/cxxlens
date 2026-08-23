@@ -296,12 +296,24 @@ add_library(
   src/sdk/provider_ng1_recovery.cpp
   src/sdk/provider_ng1_spill_port_internal.cpp
   src/sdk/provider_ng1_session.cpp
-  src/sdk/provider_ng1_live_driver.cpp
-  src/sdk/testing.cpp)
+  src/sdk/provider_ng1_live_driver.cpp)
 add_library(cxxlens::provider_sdk ALIAS cxxlens_provider_sdk)
 cxxlens_configure_component(cxxlens_provider_sdk provider_sdk)
 target_link_libraries(cxxlens_provider_sdk PUBLIC cxxlens::cxxlens
                                                   cxxlens::recipes)
+
+# Protocol 2 is a product transport component.  Its wire codec and closure state
+# machine are independent of repository metadata and are available to
+# provider/materializer integration tests without importing Clang headers.
+add_library(
+  cxxlens_protocol_v2 STATIC src/protocol_v2/cbor.cpp src/protocol_v2/codec.cpp
+                             src/protocol_v2/closure.cpp)
+target_link_libraries(cxxlens_protocol_v2 PUBLIC cxxlens::base)
+target_include_directories(cxxlens_protocol_v2
+                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_protocol_v2 PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens_protocol_v2)
+cxxlens_enable_sanitizers(cxxlens_protocol_v2)
 
 add_library(cxxlens_clang22_provider_sdk ${CXXLENS_LIBRARY_TYPE}
                                          src/llvm/clang22/provider_sdk.cpp)
@@ -370,9 +382,13 @@ endif()
 # materialization, without importing the Clang parser implementation.
 add_library(
   cxxlens_clang22_materialization_codecs STATIC
+  src/llvm/clang22/materialization_json.cpp
+  src/llvm/clang22/provider_task_v4.cpp
   src/llvm/clang22/provider_task_v3.cpp
   src/llvm/clang22/observation_v2.cpp
   src/llvm/clang22/source_closure.cpp
+  src/llvm/clang22/source_closure_task_v4.cpp
+  src/llvm/clang22/source_closure_transport.cpp
   src/llvm/clang22/source_closure_invocation.cpp
   src/llvm/clang22/source_closure_vfs.cpp
   src/llvm/clang22/unicode_nfc.cpp)
@@ -393,6 +409,7 @@ add_library(
   cxxlens_clang22_worker_core STATIC
   src/llvm/clang22/provider_worker.cpp
   src/llvm/clang22/source_closure_native.cpp
+  src/llvm/clang22/source_closure_task_v4_worker.cpp
   src/llvm/clang22/materialization_io.cpp
   src/llvm/clang22/materialization_task_spool.cpp)
 target_link_libraries(
@@ -409,15 +426,6 @@ target_compile_features(cxxlens_clang22_worker_core PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens_clang22_worker_core)
 cxxlens_enable_sanitizers(cxxlens_clang22_worker_core)
 cxxlens_configure_clang22(cxxlens_clang22_worker_core)
-if(BUILD_TESTING)
-  # Exposes the source-closure member-withholding seam used to keep the
-  # claimed-but-unservable invariant under test. PUBLIC because the declaration
-  # is guarded in source_closure_native.hpp, which the fixture includes.
-  # BUILD_TESTING=OFF deliberately leaves this test-only seam out of production
-  # builds; the install rules below contain only product targets and data.
-  target_compile_definitions(cxxlens_clang22_worker_core
-                             PUBLIC CXXLENS_CLANG22_SOURCE_CLOSURE_TESTING=1)
-endif()
 # Keep the provider SDK runtime on the project-wide RTTI configuration. Its
 # context owns standard-library polymorphic state (including shared_ptr control
 # blocks), so compiling only this translation unit with an RTTI-disabled
@@ -432,9 +440,10 @@ endif()
 
 # Provider-owned implementation for the installed Clang 22 machine surface. This
 # target is deliberately private: no headers, symbols, or CMake target are
-# exported to SDK consumers.
+# exported to SDK consumers.  The historical broad materializer implementation
+# is test support only; the installed v2.2 ingress below is the production path.
 add_library(
-  cxxlens_clang22_materializer_core STATIC
+  cxxlens_clang22_materializer_core STATIC EXCLUDE_FROM_ALL
   src/llvm/clang22/materialization_json.cpp
   src/llvm/clang22/materialization_identity.cpp
   src/llvm/clang22/materialization_io.cpp
@@ -460,14 +469,13 @@ add_library(
   src/llvm/clang22/materialization_execution_journal.cpp
   src/llvm/clang22/materialization_report.cpp
   src/llvm/clang22/materialization_public_report.cpp
-  src/llvm/clang22/materialization_pipeline.cpp)
-# These two implementations are byte-exact source-closure bindings. Their
-# frozen bytes are checked by check_ng_source_closure_transport.py; do not let
-# a newer clang-tidy policy rewrite or reject either immutable compatibility
-# body. They remain compiled and covered by their product contract tests.
-set_source_files_properties(
-  src/llvm/clang22/materialization_request_v2_1.cpp
-  src/llvm/clang22/provider_task_v3.cpp PROPERTIES SKIP_LINTING ON)
+  src/llvm/clang22/materialization_pipeline.cpp
+  src/llvm/clang22/provider_task_v4.cpp
+  src/llvm/clang22/materialization_request_v2_2.cpp
+  src/llvm/clang22/materialization_store_candidate.cpp
+  src/llvm/clang22/materialization_store_projection.cpp
+  src/llvm/clang22/materialization_bounded_report.cpp
+  src/llvm/clang22/materialization_store_candidate_bridge.cpp)
 target_link_libraries(
   cxxlens_clang22_materializer_core
   PUBLIC cxxlens::base
@@ -482,11 +490,25 @@ target_include_directories(cxxlens_clang22_materializer_core
 target_compile_features(cxxlens_clang22_materializer_core PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens_clang22_materializer_core)
 cxxlens_enable_sanitizers(cxxlens_clang22_materializer_core)
-if(BUILD_TESTING)
-  target_compile_definitions(
-    cxxlens_clang22_materializer_core
-    PRIVATE CXXLENS_CLANG22_MATERIALIZATION_REPORT_TESTING=1)
-endif()
+
+# The installed materializer boundary deliberately links only the v2.2 ingress
+# and metadata validator.  Keeping the test-support core out of the production
+# graph prevents dormant compatibility implementations from entering the shipped
+# executable while preserving direct tests for the retained product safety
+# primitives.
+add_library(
+  cxxlens_clang22_materializer_ingress STATIC
+  src/llvm/clang22/materialization_io.cpp
+  src/llvm/clang22/materialization_request_v2_2.cpp)
+target_link_libraries(
+  cxxlens_clang22_materializer_ingress
+  PUBLIC cxxlens::base cxxlens::provider_sdk
+  PRIVATE cxxlens_clang22_materialization_codecs cxxlens_icu_static)
+target_include_directories(cxxlens_clang22_materializer_ingress
+                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_clang22_materializer_ingress PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens_clang22_materializer_ingress)
+cxxlens_enable_sanitizers(cxxlens_clang22_materializer_ingress)
 
 add_executable(cxxlens-provider-scaffold tools/sdk/provider_scaffold_main.cpp)
 target_link_libraries(cxxlens-provider-scaffold PRIVATE cxxlens::provider_sdk)
@@ -513,9 +535,10 @@ cxxlens_set_project_warnings(cxxlens-clang-worker-22)
 cxxlens_enable_sanitizers(cxxlens-clang-worker-22)
 cxxlens_configure_installed_clang22_tool(cxxlens-clang-worker-22)
 
-add_executable(cxxlens-clang22-materialize tools/clang22/materialize_main.cpp)
+add_executable(cxxlens-clang22-materialize
+               tools/clang22/materialize_main_v2.cpp)
 target_link_libraries(cxxlens-clang22-materialize
-                      PRIVATE cxxlens_clang22_materializer_core)
+                      PRIVATE cxxlens_clang22_materializer_ingress)
 target_include_directories(cxxlens-clang22-materialize
                            PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(cxxlens-clang22-materialize PRIVATE cxx_std_23)
@@ -525,6 +548,7 @@ cxxlens_configure_installed_clang22_tool(cxxlens-clang22-materialize)
 
 set(CXXLENS_COMPILED_TARGETS
     cxxlens_base
+    cxxlens_protocol_v2
     cxxlens_kernel
     cxxlens_query
     cxxlens_recipes
@@ -532,7 +556,7 @@ set(CXXLENS_COMPILED_TARGETS
     cxxlens_clang22_provider_sdk
     cxxlens_clang22_materialization_codecs
     cxxlens_clang22_worker_core
-    cxxlens_clang22_materializer_core)
+    cxxlens_clang22_materializer_ingress)
 
 if(CXXLENS_ENABLE_CLANG_TIDY)
   find_program(CXXLENS_CLANG_TIDY NAMES clang-tidy-22 clang-tidy REQUIRED)
@@ -555,7 +579,10 @@ if(BUILD_TESTING)
   add_subdirectory(tests)
 endif()
 
-if(CXXLENS_BUILD_QUALITY_TOOLS OR CXXLENS_BUILD_DOCS)
+# Developer-only quality registration is never part of a production/install
+# configuration.  Documentation remains available independently when requested,
+# while BUILD_TESTING=OFF keeps Python/format tooling out of the package build.
+if((BUILD_TESTING AND CXXLENS_BUILD_QUALITY_TOOLS) OR CXXLENS_BUILD_DOCS)
   include(CxxlensDeveloperTools)
 endif()
 
@@ -597,9 +624,11 @@ install(
 
 install(FILES include/cxxlens/cxxlens.hpp include/cxxlens/sdk.hpp
         DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/cxxlens")
-install(DIRECTORY include/cxxlens/sdk include/cxxlens/provider
-                  include/cxxlens/relations
-        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/cxxlens")
+install(
+  DIRECTORY include/cxxlens/sdk include/cxxlens/provider
+            include/cxxlens/relations
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/cxxlens"
+  PATTERN "testing.hpp" EXCLUDE)
 install(
   DIRECTORY schemas/
   DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas"
@@ -612,7 +641,9 @@ install(
         schemas/cxxlens_ng_provider_execution_report.schema.yaml
         schemas/cxxlens_ng_clang22_materialization_contract.yaml
         schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml
-        schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
+        schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml
+        schemas/cxxlens_ng_provider_protocol_v2.yaml
+        schemas/cxxlens_ng_provider_protocol_v2.schema.yaml
         schemas/cxxlens_ng_clang22_materialization_report.schema.yaml
         schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml
   DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")

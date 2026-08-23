@@ -2,7 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-16
-- Owner: Issue #66
 - Depends on: ADR 0003, ADR 0005, ADR 0007, ADR 0010, ADR 0011
 
 ## Context
@@ -42,7 +41,7 @@ cancel、no-credit fault を注入する。scaffold は source、manifest、test
 - recipe 利用者から native provider 作者まで、同じ descriptor/IR/partiality model を段階的に利用できる。
 - ordinary SDK consumer は LLVM/Clang package を発見せずに configure、link、run できる。
 - native SDK の Clang major は package/header 名に現れ、別 major への silent fallback は起きない。
-- product 全体の component target 分割と end-to-end provider adoption は Issue #67 以降の migration であり、本 ADR は
+- product 全体の component target 分割と end-to-end provider adoption は この契約以降の migration であり、本 ADR は
   author SDK の独立 package を先に固定する。
 
 ## Verification

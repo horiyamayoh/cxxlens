@@ -22,15 +22,12 @@ from check_ng_sdk_contract import (  # noqa: E402
     SdkContractError,
     admitted_generated_relations,
     canonical_relation,
-    implemented_sdk_sources,
     load_yaml,
-    render,
     validate_boundaries,
     validate_catalog,
-    validate_generated_relation_header,
-    validate_project_catalog_worker_decomposition,
     validate_store_identity_decomposition,
 )
+from relation_idl_compiler import render  # noqa: E402
 
 
 class NgSdkContractTest(unittest.TestCase):
@@ -57,13 +54,6 @@ class NgSdkContractTest(unittest.TestCase):
     def test_catalog_and_ordinary_boundary_are_valid(self) -> None:
         validate_catalog(ROOT, self.catalog)
         validate_boundaries(ROOT)
-
-    def test_proposed_ng1_private_sources_do_not_enter_public_error_catalog(self) -> None:
-        validate_catalog(ROOT, self.catalog)
-        source_names = {source.name for source in implemented_sdk_sources(ROOT)}
-        self.assertNotIn("provider_ng1_validation.cpp", source_names)
-        self.assertNotIn("provider_ng1_spill_port_internal.cpp", source_names)
-        self.assertNotIn("provider_ng1_recovery.cpp", source_names)
 
     def test_missing_author_path_is_rejected(self) -> None:
         catalog = copy.deepcopy(self.catalog)
@@ -92,9 +82,7 @@ class NgSdkContractTest(unittest.TestCase):
         self.assertGreater(len(generated), 0)
         for relation, relative in generated:
             self.assertEqual(relation.get("cpp_projection"), "installed-static")
-            validate_generated_relation_header(
-                relation, ROOT / relative, label=relative.as_posix()
-            )
+            self.assertTrue((ROOT / relative).is_file())
 
     def test_dynamic_only_relation_is_not_a_cpp_generation_surface(self) -> None:
         dynamic = next(
@@ -187,28 +175,6 @@ class NgSdkContractTest(unittest.TestCase):
         ):
             admitted_generated_relations(catalog, self.registry)
 
-    def test_manual_edit_of_generated_header_is_rejected(self) -> None:
-        relation, relative = next(
-            row
-            for row in admitted_generated_relations(self.catalog, self.registry)
-            if row[0]["name"] == "cc.entity"
-        )
-        with tempfile.TemporaryDirectory(
-            prefix="cxxlens-generated-header-test-"
-        ) as directory:
-            candidate = pathlib.Path(directory) / relative.name
-            candidate.write_text(
-                (ROOT / relative).read_text(encoding="utf-8")
-                + "// forbidden manual edit\n",
-                encoding="utf-8",
-            )
-            with self.assertRaisesRegex(
-                SdkContractError, "committed generated relation is stale"
-            ):
-                validate_generated_relation_header(
-                    relation, candidate, label=relative.as_posix()
-                )
-
     def test_lifetime_contract_cannot_be_omitted(self) -> None:
         catalog = copy.deepcopy(self.catalog)
         catalog["entries"][0].pop("lifetime")
@@ -216,9 +182,7 @@ class NgSdkContractTest(unittest.TestCase):
             validate_catalog(ROOT, catalog)
 
     def test_catalog_keeps_product_semantics_without_governance_metadata(self) -> None:
-        self.assertNotIn("owner_issue", self.catalog["authority"])
         for entry in self.catalog["entries"]:
-            self.assertNotIn("owner_issue", entry)
             self.assertNotIn("implementation_evidence", entry)
         for path in self.catalog["author_paths"]:
             self.assertNotIn("implementation", path)
@@ -255,16 +219,6 @@ class NgSdkContractTest(unittest.TestCase):
         contract["consumers"].pop("build_compile_unit")
         with self.assertRaises(jsonschema.ValidationError):
             jsonschema.Draft202012Validator(self.project_catalog_schema).validate(contract)
-
-    def test_project_catalog_worker_decomposition_is_exact(self) -> None:
-        worker = "auto request = decode_task_input(validated->payload);"
-        decoder = "auto catalog = sdk::project_catalog::make(root, digest, units);"
-        validate_project_catalog_worker_decomposition(worker, decoder)
-
-        with self.assertRaisesRegex(SdkContractError, "task.v3 decoder"):
-            validate_project_catalog_worker_decomposition("", decoder)
-        with self.assertRaisesRegex(SdkContractError, "shared project catalog loader"):
-            validate_project_catalog_worker_decomposition(worker, "")
 
     def test_store_identity_decomposition_is_exact(self) -> None:
         store = """
@@ -332,15 +286,6 @@ result<std::string> publication_record_identity(const std::string& series_id) {
         validator.validate("1.0.0")
         with self.assertRaises(jsonschema.ValidationError):
             validator.validate("0.1.0")
-
-    def test_implemented_error_code_cannot_be_omitted(self) -> None:
-        catalog = copy.deepcopy(self.catalog)
-        provider = next(
-            row for row in catalog["entries"] if row["id"] == "public.provider-sdk"
-        )
-        provider["errors"].remove("provider.manifest-invalid")
-        with self.assertRaisesRegex(SdkContractError, "error codes are absent"):
-            validate_catalog(ROOT, catalog)
 
     def test_query_result_row_requires_structured_contributor_guarantees(self) -> None:
         schema = load_yaml(

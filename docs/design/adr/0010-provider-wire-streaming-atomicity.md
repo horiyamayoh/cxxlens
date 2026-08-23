@@ -2,10 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-16
-- Decision owner: provider-runtime
-- Decision issue: #64
-- Tracking issue: #56
-- Clarification feedback: DF-0197 / #197
 
 ## Context
 
@@ -32,7 +28,7 @@ spill staging を必須にする。
 provider output の最小検証単位は batch、最小不可分単位は atomic output group、最小 adoption/rollback 単位は
 dependency group とする。hard reference が staged output を跨ぐ atomic group は同一 dependency group に属し、
 group 全体を seal/validate してから一括 adopt する。partial result は task 開始前に宣言した dependency group 境界
-だけで許可する。adopt は snapshot draft への staging であり、published series head は Issue #63 の transaction が
+だけで許可する。adopt は snapshot draft への staging であり、published series head は この契約の transaction が
 commit するまで変化しない。
 
 provider task graph は relation requirement、normalizer/deriver stage、explicit dependency から canonical order を作る。
@@ -44,14 +40,16 @@ terminal reason とする。unsealed/invalid dependency group は rollback し�
 既に sealed/validated group を partial task result に残せる。prior published snapshot は一切変更しない。
 
 reuse/invalidation key は provider semantic contract digest と provider binary digest の両方を含む。同じ provider
-ID/version の rebuild を同一 binary と推定しない。将来の binary equivalence relaxation は Issue #65 の署名付き
+ID/version の rebuild を同一 binary と推定しない。将来の binary equivalence relaxation は この契約の署名付き
 certification contract と別 ADR を必要とする。
 
-DF-0197 / Issue #197 により Provider Protocol current は 1.1.0 とする。minor 0 の host input は従来どおり
-`hello_ack, schema_negotiate, open_task, credit, close` の exact 5 frame で、payload は `open_task` だけに許す。
-minor 1 は `required_features: [task-input-chunks-v1]` による negotiation を必須とし、`open_task` の payload を空にして、
-続く `input_descriptor` と 0 件以上の `input_chunk` で同じ logical task input bytes を運ぶ。chunk payload は最大 1 MiB、
-logical input は最大 64 MiB、chunk は最大 64 件とし、既存の 16 MiB frame payload limit は変更しない。
+Provider Protocol 2.0 は唯一の現行 wire authority であり、host input は
+`required_features: [task-input-chunks-v2]` と `task-source-closure-v2` を必要な task に対して
+明示的に negotiation する。`open_task` の payload を空にし、続く `input_descriptor`、
+`input_chunk`、source-closure frame で logical task input と closure を運ぶ。chunk payload は
+最大 1 MiB、logical input は最大 64 MiB、chunk は最大 64 件とし、既存の 16 MiB frame
+payload limit は変更しない。request 2.2/task v4 の metadata は closure bytes と分離して
+canonical に検証する。
 
 descriptor は task/input digest、total bytes、chunk bytes、chunk count、各 chunk は task/input digest、zero-based index、
 contiguous offset、byte count を exact deterministic CBOR control へ bind する。各 frame payload digest と全 chunk の streaming
@@ -66,7 +64,7 @@ frame と conformance decision を bypass してはならない。
 ## Consequences
 
 - provider は全出力を memory vector に保持せず、credit 内の column chunk だけを保持すればよい。
-- 1.1 task input も全体 vector を production transport に要求せず、共有 incremental state/digest/budget core を使用する。
+- Protocol 2.0 の task input も全体 vector を production transport に要求せず、共有 incremental state/digest/budget core を使用する。
 - Arrow/Protobuf 等の大規模 mandatory runtime dependency は NG0 kernel に入らない。
 - wire major、relation schema、provider semantics、binary identity は独立 version axis のまま保たれる。
 - compression/encryption、durable cross-process resume、remote transport は NG1 profile で negotiation する。
@@ -81,5 +79,5 @@ RFC 8949 と本プロジェクトの encoder contract は仕様であり、追�
 
 `tools/quality/check_ng_provider_protocol.py` が canonical CBOR/frame、version/feature negotiation、credit/ACK/resume、
 atomic/dependency group、hard reference staging、task graph、failure/reuse、in/out process parity を検査する。
-`schemas/cxxlens_ng_provider_fuzz_corpus.yaml` は truncation、oversize、checksum、noncanonical CBOR、sequence/credit、
-unknown required message の mutation corpus を固定し、全 case が crash せず stable rejection になることを確認する。
+Protocol quality tests は truncation、oversize、checksum、noncanonical CBOR、sequence/credit、unknown required
+message の mutation cases が crash せず stable rejection になることを確認する。

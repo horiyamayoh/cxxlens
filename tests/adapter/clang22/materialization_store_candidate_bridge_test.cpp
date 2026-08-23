@@ -23,7 +23,7 @@ namespace
 	}
 
 	[[nodiscard]] std::string input_digest(const std::vector<std::vector<std::byte>>& tasks,
-												std::uint64_t& input_bytes)
+										   std::uint64_t& input_bytes)
 	{
 		auto digest = make_materialization_sha256_accumulator();
 		require(digest != nullptr, "digest adapter unavailable");
@@ -44,11 +44,11 @@ namespace
 		return std::move(*result);
 	}
 
-	[[nodiscard]] materialization_store_candidate_bridge_request make_request(
-		const bool mismatch,
-		const bool unknown,
-		const bool replay_failure = false,
-		const bool resource_limit = false)
+	[[nodiscard]] materialization_store_candidate_bridge_request
+	make_request(const bool mismatch,
+				 const bool unknown,
+				 const bool replay_failure = false,
+				 const bool resource_limit = false)
 	{
 		std::vector<std::vector<std::byte>> tasks{
 			{std::byte{0x01U}, std::byte{0x02U}},
@@ -62,14 +62,13 @@ namespace
 		request.external_census = {tasks.size(), input_bytes, digest};
 		if (resource_limit)
 			request.limits.max_tasks = 1U;
-		request.replay_tasks = [tasks = std::move(tasks), replay_failure](const auto& consumer)
-			-> result<void>
+		request.replay_tasks = [tasks = std::move(tasks),
+								replay_failure](const auto& consumer) -> result<void>
 		{
 			for (std::size_t index{}; index < tasks.size(); ++index)
 			{
 				if (replay_failure && index == 1U)
-					return cxxlens::sdk::unexpected(
-						{"test.replay-failure", "task", "injected"});
+					return cxxlens::sdk::unexpected({"test.replay-failure", "task", "injected"});
 				const auto& task = tasks[index];
 				if (auto consumed = consumer(task); !consumed)
 					return consumed;
@@ -84,8 +83,8 @@ namespace
 			record.payload = {std::byte{0xa1U}};
 			return spool.append(record);
 		};
-		request.build_actual_projection = [mismatch](bounded_store_record_spool& spool)
-			-> result<void>
+		request.build_actual_projection =
+			[mismatch](bounded_store_record_spool& spool) -> result<void>
 		{
 			bounded_store_record record;
 			record.kind = bounded_store_record_kind::global_identity;
@@ -99,8 +98,8 @@ namespace
 			const std::array<std::byte, 2U> prefix{std::byte{'{'}, std::byte{'"'}};
 			return report.append(prefix);
 		};
-		request.write_exact_outcome_report =
-			[](bounded_store_report_writer& report, const auto) -> result<void>
+		request.write_exact_outcome_report = [](bounded_store_report_writer& report,
+												const auto) -> result<void>
 		{
 			const std::array<std::byte, 2U> suffix{std::byte{'}'}, std::byte{'\n'}};
 			return report.append(suffix);
@@ -126,20 +125,22 @@ int main()
 		auto result = run_materialization_store_candidate_bridge(make_request(false, false));
 		require(result.has_value(), "positive bridge failed");
 		require(result->terminal &&
-				*result->terminal == bounded_store_publication_terminal::committed_verified,
+					*result->terminal == bounded_store_publication_terminal::committed_verified,
 				"positive terminal mismatch");
 		require(result->report_finalized, "positive report not finalized");
 	}
 	{
 		auto result = run_materialization_store_candidate_bridge(make_request(true, false));
 		require(!result.has_value(), "projection mismatch accepted");
-		require(result.error().code == "store.corrupt", "projection mismatch classification changed");
+		require(result.error().code == "store.corrupt",
+				"projection mismatch classification changed");
 	}
 	{
 		auto result = run_materialization_store_candidate_bridge(make_request(false, true));
 		require(result.has_value(), "opaque terminal was not retained");
 		require(result->terminal &&
-				*result->terminal == bounded_store_publication_terminal::publication_outcome_unknown,
+					*result->terminal ==
+						bounded_store_publication_terminal::publication_outcome_unknown,
 				"opaque publication lost terminal classification");
 	}
 	{
@@ -148,7 +149,8 @@ int main()
 		require(result.error().code == "test.replay-failure", "task replay fault was remapped");
 	}
 	{
-		auto result = run_materialization_store_candidate_bridge(make_request(false, false, false, true));
+		auto result =
+			run_materialization_store_candidate_bridge(make_request(false, false, false, true));
 		require(!result.has_value(), "task resource limit unexpectedly succeeded");
 		require(result.error().code == "store.resource-limit", "task resource limit was not typed");
 	}

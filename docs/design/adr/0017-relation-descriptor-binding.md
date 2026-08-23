@@ -2,8 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-17
-- Decision owner: relation-kernel
-- Decision issue: #74
 - Depends on: ADR 0003, ADR 0006, ADR 0016
 
 ## Context

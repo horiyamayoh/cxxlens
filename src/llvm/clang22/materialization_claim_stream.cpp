@@ -142,7 +142,8 @@ namespace cxxlens::detail::clang22::materialization
 			projection_digest_builder& operator=(projection_digest_builder&&) noexcept = default;
 
 			[[nodiscard]] static sdk::result<projection_digest_builder>
-			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): domain and task identity are ordered digest fields
+			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): domain and task identity are
+			// ordered digest fields
 			begin(const std::string_view domain,
 				  const std::string_view task_id,
 				  const std::uint64_t expected_count,
@@ -367,7 +368,8 @@ namespace cxxlens::detail::clang22::materialization
 
 		[[nodiscard]] sdk::result<stream_audit>
 		inspect_stream(materialization_replayable_spool& spool,
-					   // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): request and task identities are ordered stream bindings
+					   // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): request and task
+					   // identities are ordered stream bindings
 					   const std::string_view request_id,
 					   const std::string_view task_id)
 		{

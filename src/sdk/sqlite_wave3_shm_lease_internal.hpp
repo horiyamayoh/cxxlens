@@ -69,12 +69,9 @@ namespace cxxlens::sdk
 		[[nodiscard]] std::size_t active_use_owners() const noexcept;
 		[[nodiscard]] std::string_view quarantine_detail() const noexcept;
 
-		[[nodiscard]] result<void>
-		begin_native(const sqlite_wave3_identity_binding& observed);
-		[[nodiscard]] result<void>
-		record_pending(const sqlite_wave3_identity_binding& observed);
-		[[nodiscard]] result<void>
-		promote(const sqlite_wave3_identity_binding& observed);
+		[[nodiscard]] result<void> begin_native(const sqlite_wave3_identity_binding& observed);
+		[[nodiscard]] result<void> record_pending(const sqlite_wave3_identity_binding& observed);
+		[[nodiscard]] result<void> promote(const sqlite_wave3_identity_binding& observed);
 		[[nodiscard]] result<void> admit_use();
 		[[nodiscard]] result<void> release_use();
 		[[nodiscard]] result<void> revoke();
@@ -110,8 +107,7 @@ namespace cxxlens::sdk
 		sqlite_wave3_shm_lease_registry(const sqlite_wave3_shm_lease_registry&) = delete;
 		sqlite_wave3_shm_lease_registry& operator=(const sqlite_wave3_shm_lease_registry&) = delete;
 
-		[[nodiscard]] result<sqlite_wave3_shm_lease>
-		reserve(sqlite_wave3_identity_binding binding);
+		[[nodiscard]] result<sqlite_wave3_shm_lease> reserve(sqlite_wave3_identity_binding binding);
 		[[nodiscard]] result<void> retire(sqlite_wave3_shm_lease& lease);
 		[[nodiscard]] result<void> close_admission();
 		[[nodiscard]] result<void> quarantine();

@@ -43,9 +43,10 @@ namespace cxxlens::sdk::provider::detail
 			return {"provider.spill-corrupt", std::string{field}, std::string{detail}};
 		}
 
-		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): digest value and diagnostic field are ordered protocol inputs
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): digest value and diagnostic field
+		// are ordered protocol inputs
 		[[nodiscard]] result<void> valid_semantic_digest(const std::string_view value,
-																	 const std::string_view field)
+														 const std::string_view field)
 		{
 			constexpr std::string_view prefix{"semantic-v2:sha256:"};
 			if (!value.starts_with(prefix) || value.size() != prefix.size() + 64U)
@@ -64,10 +65,13 @@ namespace cxxlens::sdk::provider::detail
 			map = 5U,
 		};
 
-		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): encoded value and byte width are ordered wire-format inputs
-		void append_big_endian(std::vector<std::byte>& output,
-								   const std::uint64_t value, // NOLINT(bugprone-easily-swappable-parameters): encoded value and byte width are ordered wire-format inputs
-								   const std::size_t width)
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): encoded value and byte width are
+		// ordered wire-format inputs
+		void append_big_endian(
+			std::vector<std::byte>& output,
+			const std::uint64_t value, // NOLINT(bugprone-easily-swappable-parameters): encoded
+									   // value and byte width are ordered wire-format inputs
+			const std::size_t width)
 		{
 			for (std::size_t index = width; index > 0U; --index)
 				output.push_back(static_cast<std::byte>(value >> ((index - 1U) * 8U)));
@@ -102,7 +106,8 @@ namespace cxxlens::sdk::provider::detail
 			}
 		}
 
-		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): text value and diagnostic field are ordered protocol inputs
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): text value and diagnostic field are
+		// ordered protocol inputs
 		[[nodiscard]] result<std::vector<std::byte>> cbor_text(const std::string_view value,
 															   const std::string_view field)
 		{

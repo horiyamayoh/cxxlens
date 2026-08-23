@@ -47,10 +47,11 @@ namespace cxxlens::sdk::provider::detail
 
 		using decoded_cbor_map = std::map<std::string, cbor_scalar, std::less<>>;
 
-		void append_big_endian(std::vector<std::byte>& output,
+		void append_big_endian(
+			std::vector<std::byte>& output,
 			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): wire value and byte width
-								   const std::uint64_t value,
-							   const std::size_t width)
+			const std::uint64_t value,
+			const std::size_t width)
 		{
 			for (std::size_t index = width; index > 0U; --index)
 				output.push_back(static_cast<std::byte>(value >> ((index - 1U) * 8U)));

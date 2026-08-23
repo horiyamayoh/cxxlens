@@ -10,6 +10,24 @@
 
 namespace cxxlens::detail::clang22
 {
+	/**
+	 * Optional policy port for the compiler-facing mount. A rejected member remains claimed by
+	 * the authenticated closure and therefore must fail closed as `source-closure.member-missing`.
+	 * The normal production path leaves this port empty and mounts every validated member.
+	 */
+	struct source_closure_member_mount_policy
+	{
+		using callback_type = bool (*)(std::string_view logical_path, void* context) noexcept;
+
+		callback_type should_mount{};
+		void* context{};
+
+		[[nodiscard]] bool admits(const std::string_view logical_path) const noexcept
+		{
+			return should_mount == nullptr || should_mount(logical_path, context);
+		}
+	};
+
 	/** Source-private native execution input for one authenticated source closure. */
 	struct source_closure_native_input
 	{
@@ -26,6 +44,7 @@ namespace cxxlens::detail::clang22
 		 * lookup may use, not the *bytes* those names ultimately resolve to.
 		 */
 		std::vector<std::string> qualified_read_roots;
+		source_closure_member_mount_policy member_mount_policy;
 	};
 
 	/**
@@ -62,33 +81,4 @@ namespace cxxlens::detail::clang22
 	[[nodiscard]] sdk::result<void>
 	with_source_closure_translation_unit(const source_closure_native_input& input,
 										 provider::clang22::translation_unit_callback callback);
-
-#if defined(CXXLENS_CLANG22_SOURCE_CLOSURE_TESTING) && CXXLENS_CLANG22_SOURCE_CLOSURE_TESTING
-	/**
-	 * Testing-only seam: behave exactly like `with_source_closure_translation_unit`, except that
-	 * `withheld_logical_path` -- which must be a real member of `input.closure` -- is left out of
-	 * the mounted filesystem while remaining claimed by the manifest. This manufactures the
-	 * genuinely-claimed-but-unservable state that the production path treats as a hard failure
-	 * but that a validated closure plus a successful mount cannot otherwise reach, so that the
-	 * unconditional enforcement of that invariant stays under test.
-	 *
-	 * Gating note: `BUILD_TESTING` is `ON` in every configure preset this repository currently
-	 * ships (including `install-check`, the preset used to build the "installed" materializer/
-	 * worker evidence elsewhere in this codebase) -- no preset or CI job sets it `OFF`. This seam
-	 * is therefore compiled into every build this repository's own tooling actually produces
-	 * today, not only literal test builds; do not rely on `BUILD_TESTING=OFF` as a real deployment
-	 * boundary. It stays inert in practice because (a) this declaration lives in a source-private
-	 * header under `src/`, never installed under `include/cxxlens/`, so it is not part of any
-	 * public API surface an external consumer can discover or link against, and (b) no production
-	 * call site invokes it -- this whole unit is not yet wired into the real materializer request/
-	 * task path (see the DF-0261 record). If this unit is wired into production, revisit this
-	 * seam's guard before that lands: either give the symbol explicit hidden visibility so it is
-	 * never exported from a shared build regardless of `BUILD_TESTING`, or split it into a
-	 * genuinely test-only translation unit that production linking never includes.
-	 */
-	[[nodiscard]] sdk::result<void> with_source_closure_translation_unit_withholding_member(
-		const source_closure_native_input& input,
-		std::string_view withheld_logical_path,
-		provider::clang22::translation_unit_callback callback);
-#endif
 } // namespace cxxlens::detail::clang22

@@ -1,7 +1,6 @@
 schema: cxxlens.relation-conformance-vectors.v1
 document_version: 1.5.0
 authority:
-  owner_issue: '#182'
   decision_adr: docs/design/adr/0096-clang22-installed-materialization-boundary.md
 registry: schemas/cxxlens_ng_relation_registry.yaml
 vectors:

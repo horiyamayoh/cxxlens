@@ -525,8 +525,8 @@ namespace
 			value.type = type;
 			value.stream_id = 7U;
 			value.sequence = sequence;
-			value.protocol_major = 1U;
-			value.protocol_minor = 1U;
+			value.protocol_major = provider::protocol_v2_major;
+			value.protocol_minor = provider::protocol_v2_minor;
 			value.control = std::move(control);
 			return value;
 		};

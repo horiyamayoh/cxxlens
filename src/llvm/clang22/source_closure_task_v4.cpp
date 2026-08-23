@@ -253,7 +253,7 @@ namespace cxxlens::detail::clang22
 			fields.emplace("base_provider_task_id",
 						   json_value::string(input.base_provider_task_id).value());
 			fields.emplace("base_task_index", json_value::unsigned_integer(input.base_task_index));
-			fields.emplace("base_task_v3_digest",
+			fields.emplace("base_task_digest",
 						   json_value::string(std::string{base_digest}).value());
 			fields.emplace("logical_working_directory",
 						   json_value::string(input.logical_working_directory).value());
@@ -440,12 +440,11 @@ namespace cxxlens::detail::clang22
 	sdk::result<source_closure_task_v4_decoded>
 	decode_source_closure_task_v4_input(const std::span<const std::byte> payload,
 										const source_closure_snapshot& closure,
-										const std::string_view expected_base_task_v3_digest,
+										const std::string_view expected_base_task_digest,
 										const std::string_view expected_task_v4_input_digest)
 	{
-		if (!typed_digest(expected_base_task_v3_digest, content_prefix))
-			return sdk::unexpected(
-				failure("source-closure.task-v4-invalid", "base-task-v3-digest"));
+		if (!typed_digest(expected_base_task_digest, content_prefix))
+			return sdk::unexpected(failure("source-closure.task-v4-invalid", "base-task-digest"));
 		if (payload.empty() || payload.size() > source_closure_task_v4_maximum_payload_bytes)
 			return sdk::unexpected(
 				failure("source-closure.limit-exceeded", "task-v4-input-payload"));
@@ -467,7 +466,7 @@ namespace cxxlens::detail::clang22
 		const auto& root = parsed->root();
 		constexpr std::array<std::string_view, 10U> root_fields{"base_provider_task_id",
 																"base_task_index",
-																"base_task_v3_digest",
+																"base_task_digest",
 																"logical_working_directory",
 																"main_logical_path",
 																"open_task",
@@ -484,7 +483,7 @@ namespace cxxlens::detail::clang22
 		auto task_digest = expected_string(root, "task_v4_digest", "task_v4_digest");
 		auto base_provider =
 			expected_string(root, "base_provider_task_id", "base_provider_task_id");
-		auto base_digest = expected_string(root, "base_task_v3_digest", "base_task_v3_digest");
+		auto base_digest = expected_string(root, "base_task_digest", "base_task_digest");
 		auto main_path = expected_string(root, "main_logical_path", "main_logical_path");
 		auto working_directory =
 			expected_string(root, "logical_working_directory", "logical_working_directory");
@@ -544,7 +543,7 @@ namespace cxxlens::detail::clang22
 		input.main_logical_path = std::move(*main_path);
 		input.logical_working_directory = std::move(*working_directory);
 		auto identity = build_identity(
-			input, expected_base_task_v3_digest, *expected_manifest, *task_id, *task_digest);
+			input, expected_base_task_digest, *expected_manifest, *task_id, *task_digest);
 		if (!identity)
 			return sdk::unexpected(std::move(identity.error()));
 		if (identity->input_payload != std::vector<std::byte>{payload.begin(), payload.end()})

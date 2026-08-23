@@ -2,9 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-15
-- Decision owner: architecture
-- Decision issue: #57
-- Tracking issue: #56
 
 ## Context
 
@@ -28,9 +25,9 @@ relation、portable provider、major-specific native provider も第一級の開
 - 旧統合設計と124 API catalog/freezeは移行 provenanceとなり、新規実装を認可しない。
 - 新しい relation/provider/recipe は中央 enum、switch、registry source list の変更を要求しない。
 - 通常 public header は compiler-native type を露出しない。
-- 旧実装は一括削除せず、Issue #72 の ledger に従って移行または除去する。
+- 旧実装は一括削除せず、この契約の ledger に従って移行または除去する。
 
 ## Verification
 
-Issue #57 の authority consistency gate が、新設計の最上位性、旧 dispatch の拒否、legacy API
-surface の固定、移行 baseline を検証する。最終的な legacy-zero 判定は Issue #71 が所有する。
+この契約の authority consistency gate が、新設計の最上位性、旧 dispatch の拒否、legacy API
+surface の固定、移行 baseline を検証する。最終的な legacy-zero 判定は この契約が所有する。

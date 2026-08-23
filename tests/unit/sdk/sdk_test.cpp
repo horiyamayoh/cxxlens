@@ -32,6 +32,7 @@
 #include <cxxlens/relations/source_origin.hpp>
 #include <cxxlens/relations/source_span.hpp>
 #include <cxxlens/sdk.hpp>
+#include <cxxlens/sdk/testing.hpp>
 
 namespace
 {
@@ -1803,7 +1804,7 @@ namespace
 		auto encoded = cxxlens::sdk::provider::encode_frame(frame);
 		require(encoded && encoded->size() == 105U, "protocol header size is not 104 bytes");
 		auto decoded = cxxlens::sdk::provider::decode_frame(*encoded);
-		require(decoded && decoded->type == frame.type && decoded->protocol_major == 1U &&
+		require(decoded && decoded->type == frame.type && decoded->protocol_major == 2U &&
 					decoded->protocol_minor == 0U && decoded->flags == 0U,
 				"protocol frame header did not round-trip");
 		std::string valid_control{"ASCII|"};
@@ -1845,8 +1846,9 @@ namespace
 		compatible_minor.maximum_minor = 1U;
 		auto negotiated_minor =
 			cxxlens::sdk::provider::decode_frame(future_minor, compatible_minor);
-		require(negotiated_minor && negotiated_minor->protocol_minor == 1U,
-				"negotiated compatible protocol minor was rejected");
+		require(!negotiated_minor &&
+					negotiated_minor.error().code == "provider.protocol-minor-mismatch",
+				"Protocol 2.0 accepted a future minor through a compatibility range");
 		auto required_extension = *encoded;
 		required_extension.at(11U) = std::byte{0x11};
 		auto unknown_required = cxxlens::sdk::provider::decode_frame(required_extension);
@@ -2503,8 +2505,7 @@ namespace
 			? decode_task_failed_metadata(*failed_control)
 			: cxxlens::sdk::result<task_failed_metadata>{
 				  cxxlens::sdk::unexpected(failed_control.error())};
-		const schema_negotiate_metadata schema_metadata{special,
-														std::numeric_limits<std::uint64_t>::max()};
+		const schema_negotiate_metadata schema_metadata{"cxxlens.provider-protocol.v2", 0U};
 		const open_task_metadata open_metadata{special, special, special, special, special};
 		const credit_metadata credit_metadata_value{std::numeric_limits<std::uint64_t>::max(), 42U};
 		const close_metadata close_metadata_value{special};

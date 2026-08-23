@@ -27,6 +27,7 @@
 #include <cxxlens/relations/source_file.hpp>
 #include <cxxlens/relations/source_span.hpp>
 #include <cxxlens/sdk.hpp>
+#include <cxxlens/sdk/testing.hpp>
 
 #include "llvm/clang22/provider_worker.hpp"
 

@@ -2,7 +2,6 @@
 
 - Status: accepted
 - Date: 2026-07-18
-- Issue: #141
 
 ## Context
 
@@ -36,9 +35,9 @@ dependencies are exact, binary-only, and hash-bound in
 the supply-chain lock.
 
 The lock is used only while installing and checking the CI dependencies. CI
-does not emit a repository-side toolchain-provenance record, pair test output
-with an artifact, or copy a revision/checksum into a qualification report.
-GitHub's ordinary job log remains the only CI execution output.
+does not emit a repository-side toolchain-provenance record or pair test output
+with an artifact. The ordinary job exit status and log are sufficient for
+development checks.
 
 `tools/quality/check_ci_supply_chain.py` owns the static contract. It rejects a
 mutable/unknown Action, `llvm.sh`, direct network shell bootstrap, unpinned APT

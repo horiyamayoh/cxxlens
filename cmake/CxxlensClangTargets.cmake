@@ -91,7 +91,7 @@ function(cxxlens_create_clang22_worker_static_closure)
   # static semantic stack; do not duplicate the runtime object definitions.
   add_library(
     cxxlens_clang22_worker_provider_sdk_internal STATIC EXCLUDE_FROM_ALL
-    src/sdk/provider.cpp src/sdk/incremental.cpp src/sdk/testing.cpp)
+    src/sdk/provider.cpp src/sdk/incremental.cpp)
   cxxlens_configure_clang22_worker_static_component(
     cxxlens_clang22_worker_provider_sdk_internal)
   target_link_libraries(
@@ -110,9 +110,13 @@ function(cxxlens_create_clang22_worker_static_closure)
 
   add_library(
     cxxlens_clang22_worker_codecs_internal STATIC EXCLUDE_FROM_ALL
+    src/llvm/clang22/materialization_json.cpp
+    src/llvm/clang22/provider_task_v4.cpp
     src/llvm/clang22/provider_task_v3.cpp
     src/llvm/clang22/observation_v2.cpp
     src/llvm/clang22/source_closure.cpp
+    src/llvm/clang22/source_closure_task_v4.cpp
+    src/llvm/clang22/source_closure_transport.cpp
     src/llvm/clang22/source_closure_invocation.cpp
     src/llvm/clang22/source_closure_vfs.cpp
     src/llvm/clang22/unicode_nfc.cpp)

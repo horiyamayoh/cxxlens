@@ -66,11 +66,12 @@ int main()
 	const std::vector<std::string> roots{"/usr/include"};
 
 	// A complete, bound payload reaches the candidate's explicit callback gate.  No compiler is
-	// launched on this host because the callback is absent; protocol 1.2 remains inactive.
+	// launched on this host because the callback is absent; the callback gate remains fail-closed
+	// until the production dispatcher supplies a validated compiler callback.
 	auto result = execute_source_closure_task_v4_candidate({
 		identity->input_payload,
 		input.closure,
-		identity->base_task_v3_digest,
+		identity->base_task_digest,
 		identity->task_v4_input_digest,
 		arguments,
 		roots,
@@ -84,7 +85,7 @@ int main()
 	result = execute_source_closure_task_v4_candidate({
 		identity->input_payload,
 		input.closure,
-		identity->base_task_v3_digest,
+		identity->base_task_digest,
 		wrong_input_digest,
 		arguments,
 		roots,

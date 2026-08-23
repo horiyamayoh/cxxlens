@@ -2,9 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-18
-- Decision owner: provider-protocol/provider-runtime/clang22-provider
-- Decision issue: #140
-- Clarification feedback: DF-0197 / #197
 - Depends on: ADR 0010, ADR 0038, ADR 0040, ADR 0041, ADR 0044, ADR 0069
 
 ## Context
@@ -19,14 +16,13 @@ public Provider SDK の既存 `encode_host_transcript` と `validate_host_transc
 host encoder、worker decoder、process runtime、conformance validator が共有する一つの incremental transition/digest/length/budget core とする。
 既存 vector API は bounded wrapper としてこの core を呼ぶ。
 
-Protocol minor 0 の accepted stream は stream ID 1、sequence 0..4、flags 0 の
-`hello_ack, schema_negotiate, open_task, credit, close` exact 5 frame のままとする。`open_task` 以外の payload は empty、全 control は
-typed canonical CBOR とする。manifest、task ID、task input digest、normalized invocation digest、toolchain digest、environment digest は
-launcher が渡す独立 expectation と exact matchし、`open_task` payload content digest と task input digest も一致しなければならない。
-
-Protocol minor 1 は `required_features: [task-input-chunks-v1]` が双方で negotiation された場合だけ使用する。accepted pattern は
-`hello_ack, schema_negotiate, open_task, input_descriptor, input_chunk[0..N-1], credit, close` で、stream 1、flags 0、sequence は 0 から
-連続する。`open_task` payload は empty とする。descriptor control schema
+Protocol 2.0 の accepted host stream は stream ID 1、flags 0、contiguous sequence の
+`hello_ack, schema_negotiate, open_task, input_descriptor, input_chunk[0..N-1], credit, close`
+profile とする。source-closure を要求する task はこの stream の後に manifest/blob/chunk/seal
+frame を同じ session で続ける。`open_task` payload は empty、全 control は typed canonical
+CBOR とする。manifest、task ID、task input digest、normalized invocation digest、toolchain
+digest、environment digest は launcher が渡す独立 expectation と exact matchしなければならない。
+descriptor control schema
 `cxxlens.provider-control.input-descriptor.v1` は `{task_id, input_digest, total_bytes, chunk_bytes, chunk_count}`、chunk control schema
 `cxxlens.provider-control.input-chunk.v1` は `{task_id, input_digest, chunk_index, offset, byte_count}` の exact field set とする。両
 `input_digest` は既存 `task_input_digest` そのものである。
@@ -49,7 +45,7 @@ payload failure は共有 typed `task_failed_metadata` encoder を使用し、�
 
 ## Verification
 
-minor 0 の exact 5 frame と minor 1 required feature を別々に固定する。minor 1 は zero/one byte、chunk boundary ±1、exact 64 MiB と、
+Protocol 2.0 の input descriptor/chunk profile は zero/one byte、chunk boundary ±1、exact 64 MiB と、
 descriptor/chunk schema、count/index/offset/length、missing/duplicate/reorder/extra、per-chunk/final digest、task/input cross-splice、minor/feature
 mismatch、64 MiB+1 を検査する。frame type/order/sequence/stream/flags/control、forbidden payload、manifest/schema/close、open_task全bindingも
 rejectする。uint64 max credit は受理し、max+1/極長decimal text は typed decoderで rejectする。runtime encoderの

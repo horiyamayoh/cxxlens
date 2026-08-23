@@ -23,7 +23,7 @@ namespace cxxlens::detail::clang22
 	{
 		auto decoded = decode_source_closure_task_v4_input(input.input_payload,
 														   input.closure,
-														   input.expected_base_task_v3_digest,
+														   input.expected_base_task_digest,
 														   input.expected_task_v4_input_digest);
 		if (!decoded)
 			return sdk::unexpected(std::move(decoded.error()));

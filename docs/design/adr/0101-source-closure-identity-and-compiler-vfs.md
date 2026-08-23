@@ -2,10 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-08-19
-- Decision owner: repository owner
-- Decision issue: #261
-- Implementation issue: #261
-- Design feedback: DF-0261
 - Amends: ADR 0096
 
 ## Context
@@ -20,10 +16,11 @@ snapshot identity -- refusing the include is fail-closed but leaves every
 non-self-contained real project unmaterializable (DF-0261's Observation).
 
 This ADR formalizes the closure identity and compiler-facing VFS boundary that
-is required for deterministic source access. It deliberately does not define a
-request/task wire format; see "Non-goals" below. The implementation is
-accepted only through the direct positive, negative, and fault tests described
-in this ADR and the repository's deterministic main test suite.
+is required for deterministic source access. Protocol 2.0 request 2.2/task v4
+defines the wire transport in its own schema; this ADR supplies the product
+values mounted by that transport. The implementation is accepted through the
+direct positive, negative, and fault tests described here and the deterministic
+main test suite.
 
 ## Decision
 
@@ -142,20 +139,15 @@ leaves the working directory unchanged rather than half-updated.
 
 ## Non-goals
 
-This ADR does **not** define:
+This ADR does **not** redefine:
 
-- A request- or task-level wire representation for a source closure (no
-  `request v2.2`, no `task.v4`, no new Provider Protocol capability). The
-  rejected candidate's attempt at this layer
-  (`materialization_request_v2_2.*`, `provider_task_v4*.*`,
-  `compiler_vfs.*`, `clang_compiler_vfs.*`) was deleted rather than revived;
-  none of that code compiled against the closure/VFS shape this ADR
-  describes. A future ADR must define that transport layer -- bounded
-  decoded/retained byte limits, chunk canonicality, duplicate-chunk handling,
-  cache/reuse authority, cancellation, and replay semantics -- before any
-  request or task schema changes.
+- The request/task wire representation. Protocol 2.0 request 2.2/task v4 and
+  the source-closure capability define bounded decoded/retained byte limits,
+  chunk canonicality, duplicate-chunk handling, cancellation, and replay
+  semantics. This ADR consumes the validated closure and never treats an
+  ambient checkout as an alternate transport.
 - Wiring this unit into the real materializer's request/task processing path
-  (`tools/clang22/materialize_main.cpp`, `provider_worker.cpp`). It exists
+  (`tools/clang22/materialize_main_v2.cpp`, `provider_worker.cpp`). It exists
   today only as a standalone, directly tested library component.
 - Wiring the unit into installed/relocated materialization and exercising the
   full negative matrix against real multi-file projects, including
@@ -170,8 +162,8 @@ This ADR does **not** define:
 1. **Stage a physical checkout and pass its directory to Clang.** Rejected:
    directory contents, symlinks, races, case behavior, and unrecorded host
    files could affect parsing without changing task identity.
-2. **Inline every project/generated file directly into the existing v2.1
-   task object.** Rejected: silently changes the strict request shape,
+2. **Inline every project/generated file directly into the Protocol 2.0
+   task object.** Rejected: changes the strict request shape,
    canonical digest projection, maximum input accounting, worker
    negotiation, and replay semantics of an already-shipped contract.
 3. **A provider-specific opaque application field.** Rejected for the
@@ -191,28 +183,15 @@ This ADR does **not** define:
 
 - A real, non-self-contained project whose main source includes project
   headers via a conventional `include/` + `src/` layout can now be
-  materialized through this unit in isolation, once request/task wiring
-  (a future ADR's scope) exists to feed it.
-- The closure and VFS layers give a future wire-format ADR a validated,
-  directly tested foundation to build on while preserving the same security
-  design.
+  materialized through Protocol 2.0 request/task wiring.
+- The closure and VFS layers consume the validated Protocol 2.0 transport
+  while preserving the same security design.
 - `source-closure.member-missing` is a narrower signal than "the closure did
   not fully satisfy the source": it fires only for a path the manifest
   itself claims as a member. Any future consumer that needs to distinguish
   "you forgot to include a header in the closure" from "the source has a
   syntax error" needs a different mechanism than this error code; today no
   consumer needs that distinction, so none is added speculatively.
-- The testing-only member-withholding seam
-  (`with_source_closure_translation_unit_withholding_member`, guarded by
-  `CXXLENS_CLANG22_SOURCE_CLOSURE_TESTING`) is compiled into every configure
-  preset this repository currently ships, including `install-check`, because
-  no preset sets `BUILD_TESTING=OFF`. It is not reachable today: its
-  declaration lives in a source-private header never installed under
-  `include/cxxlens/`, and no production call site invokes it. Before this
-  unit is wired into production, its guard should be hardened (explicit
-  hidden symbol visibility, or a genuinely test-only translation unit)
-  rather than continuing to rely on a `BUILD_TESTING=OFF` boundary that does
-  not exist in this repository's actual build practice.
 
 ## Verification
 
@@ -227,12 +206,10 @@ This ADR does **not** define:
   (logical-path traversal, case-collision, and shadow-file resolution), and
   `source_closure_invocation_test.cpp` (argument rewriting, response-file
   and `-ivfsoverlay` rejection) -- all pass against a real local LLVM 22.1.0
-  / Clang 22 build. These scenarios are the acceptance conditions; no review
-  receipt, commit pin, or separately retained report is required.
+  / Clang 22 build. These scenarios are the acceptance conditions.
 
 ## Acceptance gate
 
 この ADR の受入条件は、source-closure の positive・negative・fault test と
-`main` の全決定的 CTest が成功することだけである。独立 review、issue コメント、
-exact SHA の複製、運用 qualification report は条件にしない。source-closure の
+`main` の全決定的 CTest が成功することである。source-closure の
 identity、coverage、unknown、runtime receipt と ambient filesystem 拒否は製品契約として維持する。

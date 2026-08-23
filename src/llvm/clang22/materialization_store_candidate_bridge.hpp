@@ -51,15 +51,15 @@ namespace cxxlens::detail::clang22::materialization
 		std::function<sdk::result<void>(bounded_store_report_writer&)>
 			write_publication_independent_report;
 		/** Write the exact terminal/outcome section; compact downgrade is never implicit. */
-		std::function<sdk::result<void>(
-			bounded_store_report_writer&, bounded_store_publication_terminal)>
+		std::function<sdk::result<void>(bounded_store_report_writer&,
+										bounded_store_publication_terminal)>
 			write_exact_outcome_report;
 
 		/** Candidate cleanup: remove private staging and retain cleanup failure separately. */
 		std::function<sdk::result<void>()> cleanup;
 		/** Exactly one backend publication attempt. Empty means the typed no-effect path. */
 		std::function<bounded_store_publication_terminal(std::string_view candidate_id,
-																 std::string_view expected_head)>
+														 std::string_view expected_head)>
 			publish_once;
 
 		/** Optional injected report spool; production uses an anonymous sealed spool. */

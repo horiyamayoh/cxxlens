@@ -20,12 +20,16 @@
 
 namespace cxxlens::sdk::provider
 {
+	/** The sole provider wire protocol accepted by the SDK runtime. */
+	inline constexpr std::uint16_t protocol_v2_major = 2U;
+	inline constexpr std::uint16_t protocol_v2_minor = 0U;
+
 	namespace detail
 	{
 		struct relation_sink_registry;
 	} // namespace detail
 
-	/** @brief Exact protocol v1 message types. */
+	/** @brief Exact Protocol 2.0 message types. */
 	// The uint16 wire domain must retain unknown optional message IDs for accounting.
 	enum class message_type : std::uint16_t // NOLINT(performance-enum-size)
 	{
@@ -51,6 +55,7 @@ namespace cxxlens::sdk::provider
 		task_complete = 20,
 		task_failed = 21,
 		close = 22,
+		heartbeat = 23,
 	};
 
 	namespace detail
@@ -72,7 +77,7 @@ namespace cxxlens::sdk::provider
 		}
 	} // namespace detail
 
-	/** @brief Closed provider frame flag bits from the protocol v1 header. */
+	/** @brief Closed provider frame flag bits from the Protocol 2.0 header. */
 	enum class frame_flag : std::uint8_t
 	{
 		required_extension = 1U,
@@ -92,9 +97,9 @@ namespace cxxlens::sdk::provider
 	{
 		std::uint32_t max_control_bytes{65536U};
 		std::uint64_t max_payload_bytes{16777216U};
-		std::uint16_t protocol_major{1U};
-		std::uint16_t minimum_minor{};
-		std::uint16_t maximum_minor{};
+		std::uint16_t protocol_major{protocol_v2_major};
+		std::uint16_t minimum_minor{protocol_v2_minor};
+		std::uint16_t maximum_minor{protocol_v2_minor};
 		std::uint16_t supported_flags{static_cast<std::uint16_t>(frame_flag::end_of_stream)};
 	};
 
@@ -106,8 +111,8 @@ namespace cxxlens::sdk::provider
 		std::uint64_t sequence{};
 		std::vector<std::byte> control;
 		std::vector<std::byte> payload;
-		std::uint16_t protocol_major{1U};
-		std::uint16_t protocol_minor{};
+		std::uint16_t protocol_major{protocol_v2_major};
+		std::uint16_t protocol_minor{protocol_v2_minor};
 		std::uint16_t flags{};
 	};
 
@@ -366,7 +371,7 @@ namespace cxxlens::sdk::provider
 	struct schema_negotiate_metadata
 	{
 		std::string protocol_schema;
-		std::uint64_t protocol_minor{};
+		std::uint64_t protocol_minor{protocol_v2_minor};
 		[[nodiscard]] bool operator==(const schema_negotiate_metadata&) const = default;
 	};
 
@@ -689,9 +694,9 @@ namespace cxxlens::sdk::provider
 	/** @brief Provider manifest request; trust and certification remain external authority. */
 	struct protocol_range
 	{
-		std::uint32_t major{1U};
-		std::uint32_t minimum_minor{};
-		std::uint32_t maximum_minor{};
+		std::uint32_t major{protocol_v2_major};
+		std::uint32_t minimum_minor{protocol_v2_minor};
+		std::uint32_t maximum_minor{protocol_v2_minor};
 		std::vector<std::string> required_features;
 		std::vector<std::string> optional_features;
 	};

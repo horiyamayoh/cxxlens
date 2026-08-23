@@ -2,7 +2,6 @@
 
 - Status: Proposed
 - Date: 2026-08-21
-- Owner: #200
 - Contract IDs: `store.incremental-candidate.v1`, `materialization.bounded-report.v1`
 - Support disposition: implementation and direct tests pending
 

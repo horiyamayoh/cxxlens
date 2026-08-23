@@ -2,9 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-15
-- Decision owner: schema-kernel
-- Decision issue: #57
-- Tracking issue: #56
 
 ## Context
 
@@ -27,10 +24,10 @@ Versioned Relation Schema、Semantic Claim、Immutable Snapshotをkernelのデ�
 
 ## Consequences
 
-Exact NG0 relation IDL、query algebra、claim/snapshot identity、provider protocol は後続 contract issue
-Issue #60〜#65 が固定する。これらが未確定の間、個別 relation/API のstable宣言を増やさない。
+Exact NG0 relation IDL、query algebra、claim/snapshot identity、provider protocol は後続の contract/implementation work
+でこの契約群を固定する。これらが未確定の間、個別 relation/API のstable宣言を増やさない。
 
 ## Verification
 
-Issue #67 はexternal relation追加のcore diff 0、static/dynamic descriptor parity、claim validation、
+この契約はexternal relation追加のcore diff 0、static/dynamic descriptor parity、claim validation、
 same-domain conflictとcross-domain disagreementをproduction walking sliceで検証する。

@@ -310,8 +310,8 @@ namespace
 			process_invocation invocation;
 			invocation.argv = {"fake-provider"};
 			protocol_limits limits;
-			limits.minimum_minor = 1U;
-			limits.maximum_minor = 1U;
+			limits.minimum_minor = provider::protocol_v2_minor;
+			limits.maximum_minor = provider::protocol_v2_minor;
 			return {ng1_session_configuration{
 						heartbeat,
 						"dependency:test",
@@ -357,8 +357,8 @@ namespace
 					sequence,
 					std::move(*encoded),
 					{},
-					1U,
-					1U,
+					provider::protocol_v2_major,
+					provider::protocol_v2_minor,
 					0U};
 		}
 
@@ -372,8 +372,8 @@ namespace
 					sequence,
 					std::move(*encoded),
 					{},
-					1U,
-					1U,
+					provider::protocol_v2_major,
+					provider::protocol_v2_minor,
 					0U};
 		}
 
@@ -455,21 +455,63 @@ namespace
 		auto heartbeat = values.heartbeat_frame(ng1_heartbeat_kind::ack, 0U, 1'000U);
 		heartbeat.sequence = 1U;
 
-		return {frame{message_type::task_accepted, 7U, 0U, *accepted_control, {}, 1U, 1U, 0U},
+		return {frame{message_type::task_accepted,
+					  7U,
+					  0U,
+					  *accepted_control,
+					  {},
+					  provider::protocol_v2_major,
+					  provider::protocol_v2_minor,
+					  0U},
 				std::move(heartbeat),
-				frame{message_type::progress, 7U, 2U, *progress_control, {}, 1U, 1U, 0U},
-				frame{message_type::progress, 7U, 3U, *terminal_progress_control, {}, 1U, 1U, 0U},
-				frame{message_type::coverage_chunk, 7U, 4U, *coverage_control, {}, 1U, 1U, 0U},
-				frame{message_type::unresolved_chunk, 7U, 5U, *unresolved_control, {}, 1U, 1U, 0U},
-				frame{message_type::task_complete, 7U, 6U, *complete_control, {}, 1U, 1U, 0U}};
+				frame{message_type::progress,
+					  7U,
+					  2U,
+					  *progress_control,
+					  {},
+					  provider::protocol_v2_major,
+					  provider::protocol_v2_minor,
+					  0U},
+				frame{message_type::progress,
+					  7U,
+					  3U,
+					  *terminal_progress_control,
+					  {},
+					  provider::protocol_v2_major,
+					  provider::protocol_v2_minor,
+					  0U},
+				frame{message_type::coverage_chunk,
+					  7U,
+					  4U,
+					  *coverage_control,
+					  {},
+					  provider::protocol_v2_major,
+					  provider::protocol_v2_minor,
+					  0U},
+				frame{message_type::unresolved_chunk,
+					  7U,
+					  5U,
+					  *unresolved_control,
+					  {},
+					  provider::protocol_v2_major,
+					  provider::protocol_v2_minor,
+					  0U},
+				frame{message_type::task_complete,
+					  7U,
+					  6U,
+					  *complete_control,
+					  {},
+					  provider::protocol_v2_major,
+					  provider::protocol_v2_minor,
+					  0U}};
 	}
 
 	[[nodiscard]] result<ng1_output_validation_receipt>
 	validated_clean_output(const fixture& values, const std::span<const frame> frames)
 	{
 		protocol_limits limits;
-		limits.minimum_minor = 1U;
-		limits.maximum_minor = 1U;
+		limits.minimum_minor = provider::protocol_v2_minor;
+		limits.maximum_minor = provider::protocol_v2_minor;
 		execution_budget budget;
 		const transcript_validation_request request{"task:test",
 													"provider:test",
@@ -741,7 +783,14 @@ namespace
 		auto process = std::make_shared<process_state>();
 		process->incoming.push_back(values.task_accepted_frame(0U));
 		process->incoming.push_back(values.heartbeat_frame(ng1_heartbeat_kind::ack, 0U, 1'800U));
-		process->incoming.push_back(frame{message_type::batch_begin, 7U, 2U, {}, {}, 1U, 1U, 0U});
+		process->incoming.push_back(frame{message_type::batch_begin,
+										  7U,
+										  2U,
+										  {},
+										  {},
+										  provider::protocol_v2_major,
+										  provider::protocol_v2_minor,
+										  0U});
 
 		auto driver =
 			ng1_live_session_driver::start(values.configuration(clock, observation, process), {});
@@ -827,8 +876,8 @@ namespace
 		frame resume;
 		resume.type = message_type::resume;
 		resume.stream_id = 7U;
-		resume.protocol_major = 1U;
-		resume.protocol_minor = 1U;
+		resume.protocol_major = provider::protocol_v2_major;
+		resume.protocol_minor = provider::protocol_v2_minor;
 		auto rejected = driver->send_host_frame(resume);
 		require(!rejected && rejected.error().code == "provider.protocol-state-invalid",
 				"live-driver silently accepted a host resume without durable receipt");
@@ -955,8 +1004,8 @@ namespace
 		auto frames = clean_transcript_frames(values);
 
 		protocol_limits limits;
-		limits.minimum_minor = 1U;
-		limits.maximum_minor = 1U;
+		limits.minimum_minor = provider::protocol_v2_minor;
+		limits.maximum_minor = provider::protocol_v2_minor;
 		execution_budget budget;
 		const transcript_validation_request request{"task:test",
 													"provider:test",
@@ -1036,9 +1085,15 @@ namespace
 															 2U,
 															 2U});
 		require(terminal_progress, "NG1 post-terminal progress encoding failed");
-		after_terminal.insert(
-			after_terminal.begin() + 4U,
-			frame{message_type::progress, 7U, 0U, *terminal_progress, {}, 1U, 1U, 0U});
+		after_terminal.insert(after_terminal.begin() + 4U,
+							  frame{message_type::progress,
+									7U,
+									0U,
+									*terminal_progress,
+									{},
+									provider::protocol_v2_major,
+									provider::protocol_v2_minor,
+									0U});
 		for (std::size_t index{}; index < after_terminal.size(); ++index)
 			after_terminal[index].sequence = index;
 		auto after_terminal_result = validate_provider_transcript(request, after_terminal, limits);

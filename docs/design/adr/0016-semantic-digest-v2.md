@@ -2,8 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-17
-- Decision owner: identity-kernel
-- Decision issue: #120
 - Depends on: ADR 0009, ADR 0012
 
 ## Context

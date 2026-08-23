@@ -1526,8 +1526,8 @@ namespace cxxlens::sdk::query
 			   << ",\"condition_fragments\":" << strings_json(condition.fragments)
 			   << ",\"condition_universe\":" << json_string(condition.universe)
 			   << ",\"guarantee\":" << guarantee_json(guarantee)
-			   << ",\"interpretation\":" << json_string(interpretation)
-			   << R"(,"producer":{"id":)" << json_string(producer.id)
+			   << ",\"interpretation\":" << json_string(interpretation) << R"(,"producer":{"id":)"
+			   << json_string(producer.id)
 			   << ",\"semantic_contract\":" << json_string(producer.semantic_contract)
 			   << "},\"provenance\":" << json_string(provenance) << '}';
 		return output.str();

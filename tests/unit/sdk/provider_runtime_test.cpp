@@ -26,6 +26,7 @@
 #include <cxxlens/relations/cc_call_direct_target.hpp>
 #include <cxxlens/relations/company_lock_acquire.hpp>
 #include <cxxlens/sdk.hpp>
+#include <cxxlens/sdk/testing.hpp>
 #if defined(__linux__) && defined(__GLIBC__)
 #include <sys/syscall.h>
 #endif
@@ -391,7 +392,11 @@ namespace
 		value.package_identity = "company.test.process-provider.package";
 		value.publisher = "company.test";
 		value.license = "Apache-2.0";
-		value.protocol = {1U, 0U, 0U, {"credit-backpressure"}, {}};
+		value.protocol = {protocol_v2_major,
+						  protocol_v2_minor,
+						  protocol_v2_minor,
+						  {"credit-backpressure", "task-input-chunks-v2"},
+						  {}};
 		value.platform_tuples = {"linux-glibc"};
 		value.provider_binary_digest = std::move(binary);
 		value.provider_semantic_contract_digest = fixture_contract_digest;
@@ -1238,7 +1243,9 @@ namespace
 		for (std::size_t index = 0U; index < frames->size(); ++index)
 		{
 			auto wrong_type = *frames;
-			wrong_type[index].type = index == 4U ? message_type::credit : message_type::close;
+			wrong_type[index].type = wrong_type[index].type == message_type::close
+				? message_type::credit
+				: message_type::close;
 			auto wrong_sequence = *frames;
 			wrong_sequence[index].sequence ^= 1U;
 			auto wrong_stream = *frames;
@@ -1247,10 +1254,21 @@ namespace
 			wrong_flags[index].flags = static_cast<std::uint16_t>(frame_flag::required_extension);
 			auto empty_control = *frames;
 			empty_control[index].control.clear();
-			require(rejects(std::move(wrong_type)) && rejects(std::move(wrong_sequence)) &&
-						rejects(std::move(wrong_stream)) && rejects(std::move(wrong_flags)) &&
-						rejects(std::move(empty_control)),
-					"host transcript accepted a type/sequence/stream/flags/control mutation");
+			const auto wrong_type_rejected = rejects(std::move(wrong_type));
+			const auto wrong_sequence_rejected = rejects(std::move(wrong_sequence));
+			const auto wrong_stream_rejected = rejects(std::move(wrong_stream));
+			const auto wrong_flags_rejected = rejects(std::move(wrong_flags));
+			const auto empty_control_rejected = rejects(std::move(empty_control));
+			require(
+				wrong_type_rejected && wrong_sequence_rejected && wrong_stream_rejected &&
+					wrong_flags_rejected && empty_control_rejected,
+				"host transcript accepted a type/sequence/stream/flags/control mutation at index " +
+					std::to_string(index) +
+					" (type=" + (wrong_type_rejected ? "reject" : "accept") +
+					", sequence=" + (wrong_sequence_rejected ? "reject" : "accept") +
+					", stream=" + (wrong_stream_rejected ? "reject" : "accept") +
+					", flags=" + (wrong_flags_rejected ? "reject" : "accept") +
+					", control=" + (empty_control_rejected ? "reject" : "accept") + ")");
 		}
 		auto wrong_order = *frames;
 		std::swap(wrong_order[1U], wrong_order[3U]);
@@ -1280,10 +1298,9 @@ namespace
 		auto wrong_payload = *frames;
 		wrong_payload[2U].payload.push_back(std::byte{2U});
 		auto wrong_close = *frames;
-		wrong_close[4U].control = *encode_close_metadata({"other-task"});
+		wrong_close.back().control = *encode_close_metadata({"other-task"});
 		auto wrong_schema = *frames;
-		wrong_schema[1U].control =
-			*encode_schema_negotiate_metadata({"cxxlens.provider-protocol.v1", 1U});
+		wrong_schema[1U].control = *encode_control_text("cxxlens.provider-protocol.v1");
 		auto wrong_manifest = host.expectation;
 		wrong_manifest.provider_manifest += " ";
 		require(rejects(std::move(wrong_payload)) && rejects(std::move(wrong_close)) &&
@@ -1292,21 +1309,23 @@ namespace
 				"host transcript accepted payload/close/schema/manifest binding mismatch");
 
 		auto maximum_credit = *frames;
-		maximum_credit[3U].control = *encode_credit_metadata(
+		maximum_credit[5U].control = *encode_credit_metadata(
 			{std::numeric_limits<std::uint64_t>::max(), std::numeric_limits<std::uint64_t>::max()});
 		auto maximum = validate_host_transcript(maximum_credit, host.expectation);
 		auto decimal_overflow = *frames;
-		decimal_overflow[3U].control = *encode_control_text("18446744073709551616|10");
+		decimal_overflow[5U].control = *encode_control_text("18446744073709551616|10");
 		auto extreme_decimal = *frames;
-		extreme_decimal[3U].control = *encode_control_text(std::string(4096U, '9') + "|10");
+		extreme_decimal[5U].control = *encode_control_text(std::string(4096U, '9') + "|10");
 		require(maximum && maximum->credit.bytes == std::numeric_limits<std::uint64_t>::max() &&
 					maximum->credit.frames == std::numeric_limits<std::uint64_t>::max() &&
 					rejects(std::move(decimal_overflow)) && rejects(std::move(extreme_decimal)),
 				"host credit boundary did not reject decimal overflow or preserve uint64 max");
 
 		auto chunk_manifest = description;
-		chunk_manifest.protocol.maximum_minor = 1U;
-		chunk_manifest.protocol.required_features = {"credit-backpressure", "task-input-chunks-v1"};
+		chunk_manifest.protocol.major = protocol_v2_major;
+		chunk_manifest.protocol.minimum_minor = protocol_v2_minor;
+		chunk_manifest.protocol.maximum_minor = protocol_v2_minor;
+		chunk_manifest.protocol.required_features = {"credit-backpressure", "task-input-chunks-v2"};
 		constexpr std::size_t chunk_bytes = 1024U * 1024U;
 		std::vector<std::byte> streaming_bytes;
 		host_transcript_expectation streaming_expectation;
@@ -1318,8 +1337,9 @@ namespace
 				payload[index] = static_cast<std::byte>(index % 251U);
 			auto expectation = host.expectation;
 			expectation.provider_manifest = chunk_manifest.canonical_json();
-			expectation.limits.minimum_minor = 1U;
-			expectation.limits.maximum_minor = 1U;
+			expectation.limits.protocol_major = protocol_v2_major;
+			expectation.limits.minimum_minor = protocol_v2_minor;
+			expectation.limits.maximum_minor = protocol_v2_minor;
 			expectation.task.task_input_digest = content_digest(payload);
 			auto wire = encode_host_transcript({expectation, host.credit, payload});
 			auto decoded = wire ? decode_frame_stream(*wire, expectation.limits)
@@ -1334,7 +1354,7 @@ namespace
 						decoded->at(3U).type == message_type::input_descriptor &&
 						decoded->at(4U + expected_chunks).type == message_type::credit &&
 						decoded->at(5U + expected_chunks).type == message_type::close,
-					"minor-1 host input boundary failed exact descriptor/chunk shape");
+					"Protocol 2.0 host input boundary failed exact descriptor/chunk shape");
 			if (size == chunk_bytes + 1U)
 			{
 				streaming_bytes = std::move(*wire);
@@ -1359,7 +1379,7 @@ namespace
 							!validate_host_transcript(digest_mismatch, streaming_expectation) &&
 							!validate_host_transcript(descriptor_mismatch, streaming_expectation) &&
 							!validate_host_transcript(extra, streaming_expectation),
-						"minor-1 host input accepted "
+						"Protocol 2.0 host input accepted "
 						"missing/duplicate/reordered/digest/descriptor/extra");
 			}
 		}
@@ -1394,7 +1414,8 @@ namespace
 		auto streamed_seal = detail::validate_host_transcript_stream(
 			short_reads, {streaming_expectation, true}, streamed_input);
 		require(
-			streamed_seal && streamed_seal->protocol_minor() == 1U &&
+			streamed_seal && streamed_seal->protocol_major() == protocol_v2_major &&
+				streamed_seal->protocol_minor() == protocol_v2_minor &&
 				streamed_seal->total_bytes() == chunk_bytes + 1U &&
 				streamed_seal->chunk_bytes() == chunk_bytes && streamed_seal->chunk_count() == 2U &&
 				streamed_seal->ordered_chunk_digests().size() == 2U &&
@@ -1427,7 +1448,7 @@ namespace
 		require(!oversized_result &&
 					oversized_result.error().code == "provider.host-transcript-invalid" &&
 					oversized_result.error().detail == "input-limit",
-				"minor-1 logical input limit did not fail before reading or allocation");
+				"Protocol 2.0 logical input limit did not fail before reading or allocation");
 	}
 
 	void check_sealed_provider_validation()
@@ -1730,15 +1751,18 @@ namespace
 		}
 
 		auto receipt_candidate = candidate(executable, "success");
-		receipt_candidate.description.protocol.maximum_minor = 1U;
+		receipt_candidate.description.protocol.major = protocol_v2_major;
+		receipt_candidate.description.protocol.minimum_minor = protocol_v2_minor;
+		receipt_candidate.description.protocol.maximum_minor = protocol_v2_minor;
 		receipt_candidate.description.protocol.required_features = {"credit-backpressure",
-																	"task-input-chunks-v1"};
+																	"task-input-chunks-v2"};
 		auto receipt_selection =
 			select_provider(selection_request(executable), std::span{&receipt_candidate, 1U});
 		require(receipt_selection.has_value(), "runtime receipt provider selection failed");
 		auto receipt_request = task(std::move(*receipt_selection));
-		receipt_request.limits.minimum_minor = 1U;
-		receipt_request.limits.maximum_minor = 1U;
+		receipt_request.limits.protocol_major = protocol_v2_major;
+		receipt_request.limits.minimum_minor = protocol_v2_minor;
+		receipt_request.limits.maximum_minor = protocol_v2_minor;
 		auto sealed_execution = detail::execute_provider_process(*processes, receipt_request);
 		std::string receipt_failure{
 			"successful process did not retain input/output seals, identity, and runtime receipt"};
@@ -1782,16 +1806,18 @@ namespace
 		const auto& input_seal = *sealed_execution->input_seal;
 		const auto& sealed_identity = *sealed_execution->provider_identity;
 		const auto& receipt = *sealed_execution->runtime_receipt;
-		require(input_seal.protocol_major() == 1U && input_seal.protocol_minor() == 1U &&
+		require(input_seal.protocol_major() == protocol_v2_major &&
+					input_seal.protocol_minor() == protocol_v2_minor &&
 					input_seal.total_bytes() == receipt_request.payload.size() &&
 					input_seal.chunk_bytes() == 1024U * 1024U && input_seal.chunk_count() == 1U &&
 					input_seal.task().task_input_digest == receipt_request.task_input_digest &&
 					sealed_identity.provider_id == receipt_candidate.description.provider_id &&
 					sealed_identity.provider_binary_digest ==
 						receipt_candidate.description.provider_binary_digest &&
-					sealed_identity.protocol_minor == 1U &&
+					sealed_identity.protocol_major == protocol_v2_major &&
+					sealed_identity.protocol_minor == protocol_v2_minor &&
 					std::ranges::binary_search(sealed_identity.required_features,
-											   "task-input-chunks-v1") &&
+											   "task-input-chunks-v2") &&
 					sealed_identity.offered_relations ==
 						receipt_candidate.description.offered_relations,
 				"sealed input or independent provider identity lost an exact authority binding");
@@ -1941,40 +1967,55 @@ namespace
 				"skipped optional extension was omitted from frame credit accounting");
 
 		auto minor_candidate = candidate(executable, "success");
-		minor_candidate.description.protocol.maximum_minor = 1U;
+		minor_candidate.description.protocol.major = protocol_v2_major;
+		minor_candidate.description.protocol.minimum_minor = protocol_v2_minor;
+		minor_candidate.description.protocol.maximum_minor = protocol_v2_minor;
 		minor_candidate.description.protocol.required_features = {"credit-backpressure",
-																  "task-input-chunks-v1"};
+																  "task-input-chunks-v2"};
 		auto minor_selection =
 			select_provider(selection_request(executable), std::span{&minor_candidate, 1U});
 		require(minor_selection.has_value(), "minor-capable provider selection failed");
 		auto minor_request = task(std::move(*minor_selection));
-		minor_request.limits.maximum_minor = 1U;
+		minor_request.limits.protocol_major = protocol_v2_major;
+		minor_request.limits.minimum_minor = protocol_v2_minor;
+		minor_request.limits.maximum_minor = protocol_v2_minor;
 		auto negotiated_minor = runtime.execute(minor_request);
 		require(
 			negotiated_minor && negotiated_minor->succeeded() &&
 				std::ranges::all_of(negotiated_minor->frames,
 									[](const frame& value)
 									{
-										return value.protocol_minor == 1U;
+										return value.protocol_major == protocol_v2_major &&
+											value.protocol_minor == protocol_v2_minor;
 									}),
-			std::string{"session did not bind frames to the negotiated protocol minor: "} +
+			std::string{"session did not bind frames to Protocol 2.0: "} +
 				(negotiated_minor ? negotiated_minor->terminal : negotiated_minor.error().code) +
 				(negotiated_minor && !negotiated_minor->diagnostics.empty()
 					 ? ":" + negotiated_minor->diagnostics.back().detail
 					 : std::string{}));
 
 		auto missing_chunk_feature = candidate(executable, "success");
-		missing_chunk_feature.description.protocol.minimum_minor = 1U;
-		missing_chunk_feature.description.protocol.maximum_minor = 1U;
+		missing_chunk_feature.description.protocol.major = protocol_v2_major;
+		missing_chunk_feature.description.protocol.minimum_minor = protocol_v2_minor;
+		missing_chunk_feature.description.protocol.maximum_minor = protocol_v2_minor;
+		missing_chunk_feature.description.protocol.required_features = {"credit-backpressure"};
 		auto missing_chunk_selection =
 			select_provider(selection_request(executable), std::span{&missing_chunk_feature, 1U});
-		require(missing_chunk_selection.has_value(), "minor-1 missing-feature selection failed");
-		auto missing_chunk_request = task(std::move(*missing_chunk_selection));
-		missing_chunk_request.limits.minimum_minor = 1U;
-		missing_chunk_request.limits.maximum_minor = 1U;
-		auto missing_chunk = runtime.execute(missing_chunk_request);
-		require(!missing_chunk && missing_chunk.error().code == "provider.required-feature-missing",
-				"protocol minor 1 was activated without task-input-chunks-v1");
+		require(!missing_chunk_selection &&
+					missing_chunk_selection.error().code == "security.downgrade-forbidden",
+				"Protocol 2.0 provider without task-input-chunks-v2 was selected");
+
+		auto legacy_major_candidate = candidate(executable, "success");
+		legacy_major_candidate.description.protocol.major = 1U;
+		legacy_major_candidate.description.protocol.minimum_minor = 0U;
+		legacy_major_candidate.description.protocol.maximum_minor = 0U;
+		legacy_major_candidate.description.protocol.required_features = {"credit-backpressure",
+																		 "task-input-chunks-v2"};
+		auto legacy_major_selection =
+			select_provider(selection_request(executable), std::span{&legacy_major_candidate, 1U});
+		require(!legacy_major_selection &&
+					legacy_major_selection.error().code == "security.downgrade-forbidden",
+				"legacy Protocol 1.x provider was selected for the Protocol 2.0 runtime");
 
 		auto plain_transcript = runtime.execute(task(select(executable, "success")));
 		auto eos_transcript = runtime.execute(task(select(executable, "success-eos")));
@@ -2091,7 +2132,8 @@ namespace
 				"provider output exceeding granted frame credit was accepted");
 
 		auto feature_candidate = candidate(executable, "success");
-		feature_candidate.description.protocol.required_features = {"company.unsupported-feature"};
+		feature_candidate.description.protocol.required_features = {
+			"credit-backpressure", "task-input-chunks-v2", "company.unsupported-feature"};
 		auto feature_selection =
 			select_provider(selection_request(executable), std::span{&feature_candidate, 1U});
 		require(feature_selection.has_value(), "feature provider selection failed");
@@ -2720,8 +2762,9 @@ namespace
 		invocation.expected_binary_digest = executable_digest("/bin/cat");
 
 		protocol_limits limits;
-		limits.minimum_minor = 1U;
-		limits.maximum_minor = 1U;
+		limits.protocol_major = protocol_v2_major;
+		limits.minimum_minor = protocol_v2_minor;
+		limits.maximum_minor = protocol_v2_minor;
 		auto port = detail::make_system_ng1_duplex_process_port();
 		require(port != nullptr, "NG1 live process port was not created");
 		auto make_invocation = [&](std::vector<std::string> arguments)
@@ -2763,8 +2806,8 @@ namespace
 		wire.stream_id = 7U;
 		wire.sequence = 0U;
 		wire.control = *encoded_control;
-		wire.protocol_major = 1U;
-		wire.protocol_minor = 1U;
+		wire.protocol_major = protocol_v2_major;
+		wire.protocol_minor = protocol_v2_minor;
 		auto sent = (*process)->send_frame(wire);
 		require(sent.has_value(), "NG1 live frame send failed");
 		auto received = (*process)->receive_frame({});

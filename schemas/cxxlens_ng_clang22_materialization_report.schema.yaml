@@ -13,7 +13,7 @@ required:
   - raw_input_observation
 properties:
   schema: {const: cxxlens.clang22-materialization-report.v2}
-  report_version: {const: 2.1.0}
+  report_version: {const: 2.2.0}
   response_kind: {enum: [detailed, compact_failure]}
   result: {enum: [passed, failed]}
   generated_at: {type: string, format: date-time}
@@ -102,14 +102,14 @@ properties:
     required: [tool_executable, tool_interface_version, worker_executable, provider_id, provider_version, semantic_contract_digest, protocol_major, protocol_minor, required_features, sandbox_policy_digest]
     properties:
       tool_executable: {const: cxxlens-clang22-materialize}
-      tool_interface_version: {const: 2.1.0}
+      tool_interface_version: {const: 2.2.0}
       worker_executable: {const: cxxlens-clang-worker-22}
       provider_id: {const: cxxlens.clang22.reference}
       provider_version: {const: 1.0.0}
       semantic_contract_digest: {$ref: '#/$defs/content_digest'}
-      protocol_major: {const: 1}
-      protocol_minor: {const: 1}
-      required_features: {const: [task-input-chunks-v1]}
+      protocol_major: {const: 2}
+      protocol_minor: {const: 0}
+      required_features: {const: [task-input-chunks-v2, task-source-closure-v2]}
       sandbox_policy_digest: {$ref: '#/$defs/content_digest'}
   project:
     type: object
@@ -724,7 +724,7 @@ properties:
       required: [path, digest]
       properties:
         path:
-          enum: [schemas/cxxlens_ng_clang22_materialization_contract.yaml, schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml, schemas/cxxlens_ng_clang22_materialization_request.schema.yaml, schemas/cxxlens_ng_clang22_materialization_report.schema.yaml, schemas/cxxlens_ng_relation_registry.yaml]
+          enum: [schemas/cxxlens_ng_clang22_materialization_contract.yaml, schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml, schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml, schemas/cxxlens_ng_clang22_materialization_report.schema.yaml, schemas/cxxlens_ng_relation_registry.yaml]
         digest: {$ref: '#/$defs/content_digest'}
   error:
     oneOf:
@@ -1850,9 +1850,9 @@ $defs:
       provider_id: {const: cxxlens.clang22.reference}
       provider_version: {const: 1.0.0}
       semantic_contract_digest: {$ref: '#/$defs/content_digest'}
-      protocol_major: {const: 1}
-      protocol_minor: {const: 1}
-      required_features: {const: [task-input-chunks-v1]}
+      protocol_major: {const: 2}
+      protocol_minor: {const: 0}
+      required_features: {const: [task-input-chunks-v2, task-source-closure-v2]}
       required_qualification: {const: canonical-semantic-qualified}
       worker_sandbox_policy_digest: {$ref: '#/$defs/content_digest'}
       task_sandbox_requirements:
@@ -2799,9 +2799,9 @@ $defs:
         additionalProperties: false
         required: [protocol_version, required_feature, task_input_codec, logical_input_bytes, logical_input_digest, canonical_chunk_bytes, chunk_count, ordered_chunk_payload_digest_set_digest]
         properties:
-          protocol_version: {const: 1.1.0}
-          required_feature: {const: task-input-chunks-v1}
-          task_input_codec: {const: cxxlens.clang22.task.v3}
+          protocol_version: {const: 2.0.0}
+          required_feature: {const: task-input-chunks-v2}
+          task_input_codec: {const: cxxlens.clang22.task.v4}
           logical_input_bytes: {type: integer, minimum: 0, maximum: 67108864}
           logical_input_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
           canonical_chunk_bytes: {const: 1048576}

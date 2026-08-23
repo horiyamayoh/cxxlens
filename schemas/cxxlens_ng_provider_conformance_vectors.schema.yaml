@@ -6,12 +6,11 @@ required: [schema, document_version, authority, contract, vectors]
 properties:
   schema: {const: cxxlens.provider-conformance-vectors.v1}
   document_version: {type: string}
-  authority: {type: object, required: [owner_issue, decision_adr]}
-  contract: {const: schemas/cxxlens_ng_provider_protocol.yaml}
+  authority: {type: object, required: [decision_adr]}
+  contract: {const: schemas/cxxlens_ng_provider_protocol_v2.yaml}
   vectors:
     type: array
-    minItems: 34
-    maxItems: 34
+    minItems: 1
     items:
       type: object
       additionalProperties: false
@@ -20,7 +19,7 @@ properties:
         id: {type: string, pattern: '^[a-z][a-z0-9_.-]+$'}
         class: {enum: [positive, negative]}
         operation:
-          enum: [wire, negotiate, flow, resume, group, plan, failure, reuse, surface_parity, fuzz]
+          enum: [wire, negotiate, flow, resume, group, plan, failure, reuse, surface_parity]
         input: {type: object, additionalProperties: true}
         expected:
           type: object

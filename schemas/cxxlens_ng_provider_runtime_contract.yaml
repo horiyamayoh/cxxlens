@@ -4,10 +4,9 @@ maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#17-provider-model
   decision_adr: docs/design/adr/0087-provider-budget-surface-parity.md
-  owner_issue: '#151'
   owner: steward.ng-provider-runtime
 dependencies:
-  - schemas/cxxlens_ng_provider_protocol.yaml
+  - schemas/cxxlens_ng_provider_protocol_v2.yaml
   - schemas/cxxlens_ng_security_profile.yaml
   - schemas/cxxlens_ng_provider_manifest.schema.yaml
   - schemas/cxxlens_ng_snapshot_store_contract.yaml
@@ -146,16 +145,9 @@ protocol_session:
     flags: retained-and-validated
     semantic_transcript_projection: [protocol-major, protocol-minor, flags, message-type, stream-id, sequence, control-digest, payload-digest]
   host_input_profiles:
-    '1.0':
+    '2.0':
       protocol_minor: 0
-      required_features: []
-      exact_frames: [hello_ack, schema_negotiate, open_task, credit, close]
-      exact_sequences: [0, 1, 2, 3, 4]
-      payload_policy: open-task-only
-      compatibility: existing-public-five-frame-vector-api-unchanged-wrapper
-    '1.1':
-      protocol_minor: 1
-      required_features: [task-input-chunks-v1]
+      required_features: [task-input-chunks-v2]
       exact_frame_pattern: [hello_ack, schema_negotiate, open_task, input_descriptor, input_chunk-zero-or-more, credit, close]
       fixed_prefix_sequences: [0, 1, 2, 3]
       chunk_sequence: four-plus-chunk-index
@@ -164,7 +156,7 @@ protocol_session:
       payload_policy: input-chunk-only
       open_task_payload: empty
   host_input_transfer:
-    activation: {protocol_minor: 1, required_features: [task-input-chunks-v1]}
+    activation: {protocol_minor: 0, required_features: [task-input-chunks-v2]}
     limits: {chunk_payload_bytes: 1048576, logical_input_bytes: 67108864, chunks: 64}
     descriptor_control: cxxlens.provider-control.input-descriptor.v1-exact-five-fields
     chunk_control: cxxlens.provider-control.input-chunk.v1-exact-five-fields
@@ -180,7 +172,7 @@ protocol_session:
     shared_incremental_core: host-encoder-worker-decoder-process-runtime-conformance-validator
     production_full_input_vector_adapter: forbidden
     existing_public_signatures: unchanged
-    minor_0_public_vector_api: bounded-wrapper-over-shared-incremental-core
+    protocol_2_public_vector_api: bounded-wrapper-over-shared-incremental-core
   runtime_private_receipt:
     visibility: runtime-private
     exact_fields: [raw_stdout_byte_count, raw_stdout_sha256, decoded_frame_count, frame_transcript_digest, sealed_transcript_digest]

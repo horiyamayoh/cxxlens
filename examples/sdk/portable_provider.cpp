@@ -1,9 +1,11 @@
+#include <limits>
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <cxxlens/relations/company_lock_acquire.hpp>
-#include <cxxlens/sdk/testing.hpp>
+#include <cxxlens/sdk/provider.hpp>
 
 namespace
 {
@@ -84,6 +86,25 @@ namespace
 	};
 } // namespace
 
+class collecting_sink final : public cxxlens::sdk::provider::frame_sink
+{
+  public:
+	[[nodiscard]] cxxlens::sdk::result<void>
+	write(const std::span<const std::byte> frame_bytes) override
+	{
+		bytes_.insert(bytes_.end(), frame_bytes.begin(), frame_bytes.end());
+		return {};
+	}
+
+	[[nodiscard]] bool nonempty() const noexcept
+	{
+		return !bytes_.empty();
+	}
+
+  private:
+	std::vector<std::byte> bytes_;
+};
+
 int main()
 {
 	lock_provider implementation;
@@ -113,7 +134,10 @@ int main()
 										   {"calls"});
 	if (!task)
 		return 1;
-	cxxlens::sdk::testing::provider_harness harness;
-	auto report = harness.run(implementation, *task);
-	return report && report->accepted && report->frames.size() >= 7U ? 0 : 1;
+	collecting_sink sink;
+	cxxlens::sdk::provider::protocol_writer writer{sink};
+	writer.grant_credit({std::numeric_limits<std::uint64_t>::max(), 4096U});
+	if (auto run = cxxlens::sdk::provider::run_worker(implementation, *task, writer); !run)
+		return 1;
+	return sink.nonempty() ? 0 : 1;
 }

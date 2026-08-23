@@ -49,13 +49,13 @@ namespace cxxlens::detail::clang22::materialization
 			"share/cxxlens/schemas/cxxlens_ng_relation_registry.yaml",
 			"share/cxxlens/schemas/cxxlens_ng_project_catalog_contract.yaml",
 			"share/cxxlens/schemas/cxxlens_ng_portable_provider_task_contract.yaml",
-			"share/cxxlens/schemas/cxxlens_ng_provider_protocol.yaml",
+			"share/cxxlens/schemas/cxxlens_ng_provider_protocol_v2.yaml",
 			"share/cxxlens/schemas/cxxlens_ng_provider_runtime_contract.yaml",
 			"share/cxxlens/schemas/cxxlens_ng_snapshot_store_contract.yaml",
 			"share/cxxlens/schemas/cxxlens_ng_sqlite_store_contract.yaml",
 			"share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.yaml",
 			"share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml",
-			"share/cxxlens/schemas/cxxlens_ng_clang22_materialization_request.schema.yaml",
+			"share/cxxlens/schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml",
 			"share/cxxlens/schemas/cxxlens_ng_clang22_materialization_report.schema.yaml",
 		};
 		constexpr std::array<std::string_view, 6U> shared_roles{
@@ -228,13 +228,13 @@ namespace cxxlens::detail::clang22::materialization
 			return measured_descriptor_content{std::move(*digest), *before};
 		}
 
-		[[nodiscard]] sdk::result<materialization_owned_fd>
-		immutable_verified_snapshot(const int source,
-									const materialization_file_identity& expected_identity,
-									// The role labels the following digest and is intentionally separate from it.
-									// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-									const std::string_view role,
-									const std::string_view expected_digest)
+		[[nodiscard]] sdk::result<materialization_owned_fd> immutable_verified_snapshot(
+			const int source,
+			const materialization_file_identity& expected_identity,
+			// The role labels the following digest and is intentionally separate from it.
+			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+			const std::string_view role,
+			const std::string_view expected_digest)
 		{
 #if defined(__linux__) && defined(SYS_memfd_create) && defined(F_ADD_SEALS) && \
 	defined(F_GET_SEALS) && defined(F_SEAL_WRITE) && defined(F_SEAL_GROW) && \

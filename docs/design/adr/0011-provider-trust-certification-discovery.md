@@ -2,7 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-15
-- Owner: Issue #65
 - Depends on: ADR 0003, ADR 0005, ADR 0010
 
 ## Context
@@ -50,7 +49,7 @@ compiler/plugin/spec execution は opt-in、exact digest、process-tree/audit ev
 
 production signature algorithm は Ed25519、subject digest は domain-separated SHA-256 とする。秘密鍵、production
 trust anchor、certificate 発行・rotation 手順は release infrastructure の責務であり repository に埋め込まない。
-本 issue の registry は conformance trust anchor のみを持ち、production certificate を一件も宣言しない。
+この registry は conformance trust anchor のみを持ち、production certificate を一件も宣言しない。
 
 ## Verification
 

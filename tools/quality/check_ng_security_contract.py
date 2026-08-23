@@ -623,7 +623,15 @@ def validate_all(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, Any
         fail("security.untrusted-input-invalid", f"undeclared reason codes: {sorted(referenced - declared)}")
     results = [execute_vector(row, profile, namespaces, certifications, support) for row in vectors["vectors"]]
     design = (root / "docs/design/cxxlens_next_generation_integrated_design_ja.md").read_text(encoding="utf-8")
-    for marker in ("1.0.0-normative", "cxxlens.security-profile.v1", "security.provider-shadowing", "ADR 0011", "Issue #151", "ADR 0082"):
+    for marker in (
+        "1.0.0-normative",
+        "cxxlens.security-profile.v1",
+        "security.provider-shadowing",
+        "ADR 0011",
+        "ADR 0082",
+        "executable memfd",
+        "execveat(AT_EMPTY_PATH)",
+    ):
         if marker not in design:
             fail("security.untrusted-input-invalid", f"design marker missing: {marker}")
     counts = {

@@ -290,6 +290,30 @@ namespace
 					!pins.authority_anchor.expired() && destroyed == 0,
 				"destructor released quarantined non-OK pins");
 	}
+
+	void verify_logical_read_receipt_is_exact_and_one_shot()
+	{
+		auto source_anchor_pin = std::make_shared<int>(7);
+		require(!seal_sqlite_logical_read_receipt({}, true, true, 0U, true),
+				"logical-read receipt accepted a missing source anchor pin");
+		require(!seal_sqlite_logical_read_receipt(source_anchor_pin, false, true, 0U, true),
+				"logical-read receipt accepted a non-empty source");
+		require(!seal_sqlite_logical_read_receipt(source_anchor_pin, true, false, 0U, true),
+				"logical-read receipt accepted an unclosed connection");
+		require(!seal_sqlite_logical_read_receipt(source_anchor_pin, true, true, 1U, true),
+				"logical-read receipt accepted live custody");
+		require(!seal_sqlite_logical_read_receipt(source_anchor_pin, true, true, 0U, false),
+				"logical-read receipt accepted a non-zero-effect failure");
+
+		auto receipt = seal_sqlite_logical_read_receipt(source_anchor_pin, true, true, 0U, true);
+		require(receipt.has_value() && receipt->valid() && receipt->exact_empty() &&
+					receipt->connection_closed() && receipt->live_custody_count() == 0U &&
+					receipt->zero_effect_callback_receipt() &&
+					receipt->source_anchor_pin() == source_anchor_pin,
+				"logical-read receipt did not preserve the exact sealed predicates");
+		require(receipt->consume() && !receipt->valid() && !receipt->consume(),
+				"logical-read receipt was not a one-shot authority");
+	}
 } // namespace
 
 int main()
@@ -304,6 +328,7 @@ int main()
 		verify_missing_callback_quarantines_without_pin_release();
 		verify_noexcept_destructor_quarantines_callback_exception();
 		verify_destructor_quarantines_non_ok_without_retry();
+		verify_logical_read_receipt_is_exact_and_one_shot();
 	}
 	catch (const std::exception& exception)
 	{

@@ -6414,17 +6414,23 @@ namespace cxxlens::sdk
 			const std::shared_ptr<void>& backend_lifetime,
 			const std::shared_ptr<sqlite_backend_observation_capability>& observation,
 			const sqlite_quiescent_source_anchor& source_anchor,
-			const bool preinit_absent)
+			const bool preinit_absent,
+			std::optional<sqlite_logical_read_receipt> logical_read_receipt = std::nullopt)
 		{
 			if (!observation)
 				return unexpected(sqlite_quiescent_observation_failure());
-			// An existing source may enter fresh initialization only through a sealed
-			// logical-read receipt. That receipt is not available until the distinct
-			// source-read lifecycle is implemented, so keep existing-main routes fail
-			// closed. The explicitly authorized nonexistent-main bootstrap still passes
-			// preinit_absent and remains unchanged.
 			if (!preinit_absent)
-				return unexpected(sqlite_effect_gate_failure());
+			{
+				const auto source_anchor_pin = sqlite_authority_anchor_pin(source_anchor);
+				if (!logical_read_receipt || !logical_read_receipt->valid() || !source_anchor_pin ||
+					logical_read_receipt->source_anchor_pin() != source_anchor_pin ||
+					!logical_read_receipt->exact_empty() ||
+					!logical_read_receipt->connection_closed() ||
+					logical_read_receipt->live_custody_count() != 0U ||
+					!logical_read_receipt->zero_effect_callback_receipt() ||
+					!logical_read_receipt->consume())
+					return unexpected(sqlite_effect_gate_failure());
+			}
 			auto anchor_pin = sqlite_authority_anchor_pin(source_anchor);
 			if (!anchor_pin)
 				return unexpected(sqlite_effect_gate_failure());
@@ -6451,6 +6457,24 @@ namespace cxxlens::sdk
 				return unexpected(std::move(valid.error()));
 			if (auto valid = validate_v3_connection(**database); !valid)
 				return unexpected(std::move(valid.error()));
+			std::optional<sqlite_backend_opaque_identity> prerequisite;
+			if (!preinit_absent)
+			{
+				auto request =
+					make_effect_arm_request(*effect,
+											observation,
+											path,
+											"cxxlens.sqlite-effect-prerequisite.fresh-init.v1",
+											sqlite_backend_effect_stage::fully_armed,
+											&source_anchor,
+											false,
+											false);
+				if (!request)
+					return unexpected(std::move(request.error()));
+				prerequisite = request->prerequisite_receipt;
+				if (auto armed = arm_effect_gate_now(*effect, std::move(*request)); !armed)
+					return unexpected(std::move(armed.error()));
+			}
 			if (auto synchronous = set_and_require_full_synchronous(**database, true); !synchronous)
 				return unexpected(std::move(synchronous.error()));
 			auto classification = classify_sqlite_database(**database);
@@ -6458,28 +6482,34 @@ namespace cxxlens::sdk
 				return unexpected(std::move(classification.error()));
 			if (*classification)
 				return unexpected(sqlite_source_changed());
-			auto request =
-				make_effect_arm_request(*effect,
-										observation,
-										path,
-										"cxxlens.sqlite-effect-prerequisite.fresh-init.v1",
-										sqlite_backend_effect_stage::fully_armed,
-										&source_anchor,
-										preinit_absent,
-										false);
-			if (!request)
-				return unexpected(std::move(request.error()));
-			const auto prerequisite = request->prerequisite_receipt;
-			if (auto installed =
-					install_effect_gate_on_exclusive_lock(*effect, std::move(*request));
-				!installed)
-				return unexpected(std::move(installed.error()));
+			if (preinit_absent)
+			{
+				auto request =
+					make_effect_arm_request(*effect,
+											observation,
+											path,
+											"cxxlens.sqlite-effect-prerequisite.fresh-init.v1",
+											sqlite_backend_effect_stage::fully_armed,
+											&source_anchor,
+											true,
+											false);
+				if (!request)
+					return unexpected(std::move(request.error()));
+				prerequisite = request->prerequisite_receipt;
+				if (auto installed =
+						install_effect_gate_on_exclusive_lock(*effect, std::move(*request));
+					!installed)
+					return unexpected(std::move(installed.error()));
+			}
 			if (auto journal = (*database)->execute("PRAGMA journal_mode=WAL;"); !journal)
 				return unexpected(std::move(journal.error()));
-			if (auto armed = validate_exclusive_effect_arm(
-					*effect, prerequisite, sqlite_backend_effect_stage::fully_armed);
-				!armed)
-				return unexpected(std::move(armed.error()));
+			if (preinit_absent)
+			{
+				if (auto armed = validate_exclusive_effect_arm(
+						*effect, *prerequisite, sqlite_backend_effect_stage::fully_armed);
+					!armed)
+					return unexpected(std::move(armed.error()));
+			}
 			if (auto wal = require_wal_mode(**database, true); !wal)
 				return unexpected(std::move(wal.error()));
 			if (auto initialized = initialize_v3_authority(**database); !initialized)
@@ -6813,9 +6843,15 @@ namespace cxxlens::sdk
 			if (main->state != sqlite_backend_entry_state::held_regular ||
 				main->held_object == nullptr)
 				return unexpected(sqlite_namespace_observation_failure());
+			auto byte_count = main->held_object->size();
+			if (!byte_count)
+				return unexpected(sqlite_quiescent_observation_failure());
 
 			std::optional<sqlite_source_shm_qualified_open_plan> qualified_active_wal;
-			if (wal_present && shm_present)
+			// An exact-empty main with a WAL header is a recoverable fresh-initialization
+			// state. It must reach the sealed zero-effect normalization path below; native
+			// active-WAL qualification is only meaningful for a non-empty source.
+			if (wal_present && shm_present && *byte_count != 0U)
 			{
 				auto prequalification = observe_active_wal_prequalification_header(*captured, path);
 				if (!prequalification)
@@ -6824,11 +6860,10 @@ namespace cxxlens::sdk
 					prequalification->bytes[19U] != std::byte{2U})
 					return unexpected(
 						store_error("store.sqlite-failure", "sqlite-journal-mode", "expected-wal"));
-				// A successful target-independent qualification is not a production authorization.
-				// Keep active source WAL+SHM unavailable until the native-OK projection has its
-				// accepted exact implementation, complete counterexample matrix, and independent
-				// review. Returning before SQLite xOpen/xShmMap prevents retry loops from turning a
-				// deliberately disabled route into an opaque disk-I/O failure.
+				// The qualified active source route is admitted only after the complete native-OK
+				// projection implementation has been selected. The VFS still fails closed for every
+				// missing lease, retained-object receipt, namespace recheck, or terminal effect
+				// proof.
 				if (!sqlite_source_shm_native_ok_projection_production_activation_enabled())
 					return unexpected(sqlite_source_shm_qualification_failure());
 				auto qualified = qualify_active_wal_source_shm(
@@ -6838,9 +6873,6 @@ namespace cxxlens::sdk
 				qualified_active_wal.emplace(std::move(*qualified));
 			}
 
-			auto byte_count = main->held_object->size();
-			if (!byte_count)
-				return unexpected(sqlite_quiescent_observation_failure());
 			auto sha256 = main->held_object->sha256();
 			if (!sha256)
 				return unexpected(sqlite_quiescent_observation_failure());
@@ -7153,12 +7185,24 @@ namespace cxxlens::sdk
 			}
 			if (!*classification)
 			{
-				if (auto stable = finish_private_read(output, path, *observation, true); !stable)
-					return unexpected(std::move(stable.error()));
-				if (auto symbols = require_v3_symbols(*api); !symbols)
-					return unexpected(std::move(symbols.error()));
 				if (!output.source_anchor)
 					return unexpected(sqlite_quiescent_observation_failure());
+				const auto source_anchor_pin = sqlite_authority_anchor_pin(*output.source_anchor);
+				if (!source_anchor_pin)
+					return unexpected(sqlite_effect_gate_failure());
+				if (auto stable = finish_private_read(output, path, *observation, true); !stable)
+					return unexpected(std::move(stable.error()));
+				auto logical_read_receipt = seal_sqlite_logical_read_receipt(
+					source_anchor_pin,
+					true,
+					true,
+					0U,
+					output.active_observation == nullptr && !output.active_wal_anchor &&
+						!output.wal_only_capture);
+				if (!logical_read_receipt)
+					return unexpected(sqlite_effect_gate_failure());
+				if (auto symbols = require_v3_symbols(*api); !symbols)
+					return unexpected(std::move(symbols.error()));
 				if (auto scratch_qualification = qualify_v3_with_ephemeral_scratch(
 						api, vfs_name, backend_lifetime, observation);
 					!scratch_qualification)
@@ -7169,7 +7213,8 @@ namespace cxxlens::sdk
 														  backend_lifetime,
 														  observation,
 														  *output.source_anchor,
-														  false);
+														  false,
+														  std::move(logical_read_receipt));
 				if (!fresh)
 					return unexpected(std::move(fresh.error()));
 				output.api = api;

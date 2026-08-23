@@ -2,7 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-18
-- Issue: #154
 
 ## Context
 
@@ -38,4 +37,4 @@ fail closedにする。将来、validated-row tokenを導入する場合もこ�
 
 `unit.sdk.static-row-view-validation` はwrong integer type、invalid UTF-8/digest/closed symbol、different descriptor shape、foreign Column、
 optional absence、validated dynamic/static parityを検証する。SDK quality checkerはpublic headerがColumn bindingとcomplete
-`validate_row()` を実行し、Issue #154 catalog entryとtest evidenceを保持することを固定する。
+`validate_row()` を実行し、この契約 catalog entryとtest evidenceを保持することを固定する。

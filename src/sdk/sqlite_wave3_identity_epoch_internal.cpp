@@ -22,7 +22,7 @@ namespace cxxlens::sdk
 		}
 
 		[[nodiscard]] bool same_identity(const sqlite_backend_opaque_identity& lhs,
-			const sqlite_backend_opaque_identity& rhs) noexcept
+										 const sqlite_backend_opaque_identity& rhs) noexcept
 		{
 			return lhs == rhs;
 		}
@@ -72,25 +72,25 @@ namespace cxxlens::sdk
 	{
 		switch (inspect_sqlite_wave3_identity(binding))
 		{
-		case sqlite_wave3_identity_failure::none:
-			return {};
-		case sqlite_wave3_identity_failure::missing_identity:
-			return unexpected(identity_error("missing-identity"));
-		case sqlite_wave3_identity_failure::identity_too_large:
-			return unexpected(identity_error("identity-too-large"));
-		case sqlite_wave3_identity_failure::invalid_epoch:
-			return unexpected(identity_error("invalid-epoch"));
-		case sqlite_wave3_identity_failure::invalid_page:
-			return unexpected(identity_error("invalid-page"));
-		case sqlite_wave3_identity_failure::continuity_mismatch:
-			return unexpected(identity_error("continuity-mismatch"));
+			case sqlite_wave3_identity_failure::none:
+				return {};
+			case sqlite_wave3_identity_failure::missing_identity:
+				return unexpected(identity_error("missing-identity"));
+			case sqlite_wave3_identity_failure::identity_too_large:
+				return unexpected(identity_error("identity-too-large"));
+			case sqlite_wave3_identity_failure::invalid_epoch:
+				return unexpected(identity_error("invalid-epoch"));
+			case sqlite_wave3_identity_failure::invalid_page:
+				return unexpected(identity_error("invalid-page"));
+			case sqlite_wave3_identity_failure::continuity_mismatch:
+				return unexpected(identity_error("continuity-mismatch"));
 		}
 		return unexpected(identity_error("invalid-state"));
 	}
 
-	result<void> validate_sqlite_wave3_identity_continuity(
-		const sqlite_wave3_identity_binding& expected,
-		const sqlite_wave3_identity_binding& observed)
+	result<void>
+	validate_sqlite_wave3_identity_continuity(const sqlite_wave3_identity_binding& expected,
+											  const sqlite_wave3_identity_binding& observed)
 	{
 		if (const auto expected_failure = inspect_sqlite_wave3_identity(expected);
 			expected_failure != sqlite_wave3_identity_failure::none)
@@ -103,7 +103,8 @@ namespace cxxlens::sdk
 			return validate_sqlite_wave3_identity(observed);
 		}
 		if (!same_identity(expected.process_instance, observed.process_instance) ||
-			!same_identity(expected.shared_runtime_vfs_cohort, observed.shared_runtime_vfs_cohort) ||
+			!same_identity(expected.shared_runtime_vfs_cohort,
+						   observed.shared_runtime_vfs_cohort) ||
 			!same_identity(expected.exact_file_family, observed.exact_file_family) ||
 			!same_identity(expected.runtime_lifetime_pin, observed.runtime_lifetime_pin) ||
 			!same_identity(expected.open_epoch, observed.open_epoch) ||
@@ -167,8 +168,8 @@ namespace cxxlens::sdk
 		return {};
 	}
 
-	result<void> sqlite_wave3_epoch_controller::start_native(
-		const sqlite_wave3_identity_binding& observed)
+	result<void>
+	sqlite_wave3_epoch_controller::start_native(const sqlite_wave3_identity_binding& observed)
 	{
 		if (phase_ != sqlite_wave3_epoch_phase::armed || !binding_)
 		{
@@ -183,8 +184,7 @@ namespace cxxlens::sdk
 		return {};
 	}
 
-	result<void> sqlite_wave3_epoch_controller::seal(
-		const sqlite_wave3_identity_binding& observed)
+	result<void> sqlite_wave3_epoch_controller::seal(const sqlite_wave3_identity_binding& observed)
 	{
 		if (phase_ != sqlite_wave3_epoch_phase::native_started || !binding_)
 		{

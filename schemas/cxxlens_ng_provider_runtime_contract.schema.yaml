@@ -23,11 +23,10 @@ properties:
   authority:
     type: object
     additionalProperties: false
-    required: [design, decision_adr, owner_issue, owner]
+    required: [design, decision_adr, owner]
     properties:
       design: {type: string, minLength: 1}
       decision_adr: {type: string, minLength: 1}
-      owner_issue: {const: '#151'}
       owner: {const: steward.ng-provider-runtime}
   dependencies:
     type: array
@@ -44,16 +43,9 @@ properties:
     properties:
       host_input_profiles:
         const:
-          '1.0':
+          '2.0':
             protocol_minor: 0
-            required_features: []
-            exact_frames: [hello_ack, schema_negotiate, open_task, credit, close]
-            exact_sequences: [0, 1, 2, 3, 4]
-            payload_policy: open-task-only
-            compatibility: existing-public-five-frame-vector-api-unchanged-wrapper
-          '1.1':
-            protocol_minor: 1
-            required_features: [task-input-chunks-v1]
+            required_features: [task-input-chunks-v2]
             exact_frame_pattern: [hello_ack, schema_negotiate, open_task, input_descriptor, input_chunk-zero-or-more, credit, close]
             fixed_prefix_sequences: [0, 1, 2, 3]
             chunk_sequence: four-plus-chunk-index
@@ -63,7 +55,7 @@ properties:
             open_task_payload: empty
       host_input_transfer:
         const:
-          activation: {protocol_minor: 1, required_features: [task-input-chunks-v1]}
+          activation: {protocol_minor: 0, required_features: [task-input-chunks-v2]}
           limits: {chunk_payload_bytes: 1048576, logical_input_bytes: 67108864, chunks: 64}
           descriptor_control: cxxlens.provider-control.input-descriptor.v1-exact-five-fields
           chunk_control: cxxlens.provider-control.input-chunk.v1-exact-five-fields
@@ -79,7 +71,7 @@ properties:
           shared_incremental_core: host-encoder-worker-decoder-process-runtime-conformance-validator
           production_full_input_vector_adapter: forbidden
           existing_public_signatures: unchanged
-          minor_0_public_vector_api: bounded-wrapper-over-shared-incremental-core
+          protocol_2_public_vector_api: bounded-wrapper-over-shared-incremental-core
       runtime_private_receipt:
         const:
           visibility: runtime-private

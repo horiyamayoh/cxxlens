@@ -22,12 +22,12 @@ row/source value に正規化します。
 fail-closed 検証します。空文字列、`/` または `\\` で始まる root-relative path、NUL を含む path、`/` または `\\` で
 区切られた正確な `..` parent segment は `native.input-invalid`（field=`logical_path`）になります。一方、
 `project://src/foo..bar.hpp` のように component の一部として二つの dot を含む通常の名前は受理されます。この
-preflight は #261 の source-closure identity や compiler VFS を定義せず、ambient filesystem fallback も追加しません。
+preflight は source-closure identity や compiler VFS の契約を置き換えず、ambient filesystem fallback も追加しません。
 公開 validator の positive/negative acceptance は
 `tests/public_headers/provider_clang22_translation_unit_input_test.cpp`、family の invariant と evidence は
 `schemas/cxxlens_ng_public_api_catalog.yaml` が authority です。
 
 API family の stable error、lifetime、threading、versioning、invariant、実装/正例/負例は
-`schemas/cxxlens_ng_public_api_catalog.yaml`、一 callable 一 row の exact signature と declaration correspondence は
-`schemas/cxxlens_ng_public_callable_inventory.yaml` が authority です。利用例は `docs/tutorials/README.md` と
-`examples/sdk/` にあります。
+`schemas/cxxlens_ng_public_api_catalog.yaml` が authority です。各 installed header の宣言コメントと
+直接の positive/negative compile test が documentation contract を検証します。利用例は
+`docs/tutorials/README.md` と `examples/sdk/` にあります。

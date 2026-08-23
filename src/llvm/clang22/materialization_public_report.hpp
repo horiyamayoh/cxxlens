@@ -176,18 +176,16 @@ namespace cxxlens::detail::clang22::materialization
 				capacity_proof_digest_ == other.capacity_proof_digest_;
 		}
 
-#if defined(CXXLENS_CLANG22_MATERIALIZATION_REPORT_TESTING)
-		/** Test-only source-private construction seam; omitted from non-test headers. */
+		/** Construct a publication-independent projection from validated authority. */
 		[[nodiscard]] static public_materialization_prepublication_projection
-		make_for_testing(std::string binding_digest,
-						 std::string request_digest,
-						 std::string semantic_request_digest,
-						 std::string occurrence_inventory_digest,
-						 std::uint64_t task_count,
-						 std::size_t reserved_bytes,
-						 std::string capacity_proof_digest,
-						 bool issue_capability);
-#endif
+		make_prepublication_projection(std::string binding_digest,
+									   std::string request_digest,
+									   std::string semantic_request_digest,
+									   std::string occurrence_inventory_digest,
+									   std::uint64_t task_count,
+									   std::size_t reserved_bytes,
+									   std::string capacity_proof_digest,
+									   bool issue_capability = false);
 
 	  private:
 		public_materialization_prepublication_projection(std::string binding_digest,
@@ -270,11 +268,8 @@ namespace cxxlens::detail::clang22::materialization
 		const raw_input_observation* raw_input{};
 		const materialization_occurrence_manifest* occurrence_manifest{};
 		const materialization_occurrence_receipt* occurrence_receipt{};
-		/** Production report authority; mutually exclusive with the qualification-only claims view.
-		 */
+		/** Production report authority backed by bounded replayable claim storage. */
 		materialization_bounded_claim_source* bounded_claims{};
-		/** Qualification-only resident oracle retained for adapter/reference tests. */
-		const sealed_materialization_claims* claims{};
 		const materialization_store_observation* store{};
 		const public_materialization_capacity_reservation* capacity_reservation{};
 		const public_materialization_prepublication_projection* prepublication{};

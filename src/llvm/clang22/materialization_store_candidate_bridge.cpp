@@ -14,14 +14,14 @@ namespace cxxlens::detail::clang22::materialization
 		}
 
 		[[nodiscard]] sdk::error bridge_io_error(std::string field,
-										const materialization_io_failure& failure)
+												 const materialization_io_failure& failure)
 		{
-			return {"materialization.store-bridge-io", std::move(field),
-								std::to_string(static_cast<unsigned>(failure.operation))};
+			return {"materialization.store-bridge-io",
+					std::move(field),
+					std::to_string(static_cast<unsigned>(failure.operation))};
 		}
 
-		[[nodiscard]] sdk::result<std::unique_ptr<bounded_store_record_spool>>
-		make_record_spool()
+		[[nodiscard]] sdk::result<std::unique_ptr<bounded_store_record_spool>> make_record_spool()
 		{
 			auto storage = make_materialization_private_spool();
 			if (!storage)
@@ -32,16 +32,15 @@ namespace cxxlens::detail::clang22::materialization
 		class publication_adapter final : public bounded_store_publication_port
 		{
 		  public:
-			explicit publication_adapter(
-				std::function<bounded_store_publication_terminal(std::string_view, std::string_view)>
-					publish)
+			explicit publication_adapter(std::function<bounded_store_publication_terminal(
+											 std::string_view, std::string_view)> publish)
 				: publish_{std::move(publish)}
 			{
 			}
 
-			[[nodiscard]] bounded_store_publication_terminal publish_once(
-				const std::string_view candidate_id,
-				const std::string_view expected_head) override
+			[[nodiscard]] bounded_store_publication_terminal
+			publish_once(const std::string_view candidate_id,
+						 const std::string_view expected_head) override
 			{
 				if (called_ || !publish_)
 					return bounded_store_publication_terminal::publication_outcome_unknown;
@@ -85,18 +84,17 @@ namespace cxxlens::detail::clang22::materialization
 		auto expected = make_record_spool();
 		auto actual = make_record_spool();
 		if (!input || !expected || !actual)
-			return sdk::unexpected(!input
-					? std::move(input.error())
-					: !expected ? std::move(expected.error()) : std::move(actual.error()));
+			return sdk::unexpected(!input		   ? std::move(input.error())
+									   : !expected ? std::move(expected.error())
+												   : std::move(actual.error()));
 
-		auto candidate = begin_bounded_store_candidate(
-			std::move(request.staging_session_id),
-			std::move(request.expected_head),
-			request.limits,
-			std::move(*input),
-			std::move(*expected),
-			std::move(*actual),
-			std::move(request.cleanup));
+		auto candidate = begin_bounded_store_candidate(std::move(request.staging_session_id),
+													   std::move(request.expected_head),
+													   request.limits,
+													   std::move(*input),
+													   std::move(*expected),
+													   std::move(*actual),
+													   std::move(request.cleanup));
 		if (!candidate)
 			return sdk::unexpected(std::move(candidate.error()));
 
@@ -114,15 +112,15 @@ namespace cxxlens::detail::clang22::materialization
 			candidate->abort();
 			return sdk::unexpected(std::move(sealed.error()));
 		}
-		if (auto expected_built = candidate->build_expected_projection(
-				std::move(request.build_expected_projection));
+		if (auto expected_built =
+				candidate->build_expected_projection(std::move(request.build_expected_projection));
 			!expected_built)
 		{
 			candidate->abort();
 			return sdk::unexpected(std::move(expected_built.error()));
 		}
-		if (auto actual_built = candidate->build_actual_projection(
-				std::move(request.build_actual_projection));
+		if (auto actual_built =
+				candidate->build_actual_projection(std::move(request.build_actual_projection));
 			!actual_built)
 		{
 			candidate->abort();
@@ -166,7 +164,7 @@ namespace cxxlens::detail::clang22::materialization
 		const bool has_publication = static_cast<bool>(request.publish_once);
 		publication_adapter adapter{std::move(request.publish_once)};
 		sdk::result<void> terminal = has_publication ? candidate->publish_once(adapter)
-															: candidate->finish_without_publication();
+													 : candidate->finish_without_publication();
 		std::optional<sdk::error> publication_error;
 		if (!terminal)
 			publication_error = terminal.error();
@@ -183,9 +181,10 @@ namespace cxxlens::detail::clang22::materialization
 		if (auto finalized = candidate->finalize_report(*report); !finalized)
 			return sdk::unexpected(std::move(finalized.error()));
 
-		materialization_store_candidate_bridge_result output{
-			candidate->phase(), candidate->publication_terminal(), true,
-			candidate->cleanup_failed()};
+		materialization_store_candidate_bridge_result output{candidate->phase(),
+															 candidate->publication_terminal(),
+															 true,
+															 candidate->cleanup_failed()};
 		if (publication_error)
 			return sdk::unexpected(std::move(*publication_error));
 		return output;

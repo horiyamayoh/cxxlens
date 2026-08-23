@@ -6,7 +6,6 @@ authority:
   guarantee_contract: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
   snapshot_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
   decision_adr: docs/design/adr/0074-query-row-guarantee-set-validation.md
-  owner_issue: '#143'
   owner: steward.ng-query-runtime
 compatibility:
   version_axis: query-runtime-result

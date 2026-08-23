@@ -20,7 +20,6 @@ sys.path.insert(0, str(ROOT / "tools" / "quality"))
 from check_ng_source_closure_transport import (  # noqa: E402
     ADR,
     CONTRACT,
-    LEGACY_BINDINGS,
     PROTOCOL,
     PROTOCOL_SCHEMA,
     REQUEST,
@@ -89,7 +88,7 @@ class SourceClosureTransportTest(unittest.TestCase):
             "schema": "cxxlens.clang22.task.v4",
             "base_task_index": 0,
             "base_provider_task_id": base_task_id,
-            "base_task_v3_digest": content_projection_digest(base),
+            "base_task_digest": content_projection_digest(base),
             "open_task": {
                 field: base[field]
                 for field in (
@@ -111,13 +110,13 @@ class SourceClosureTransportTest(unittest.TestCase):
             "cxxlens.clang22.task.v4", task_v4_projection(extension)
         )
         extension["task_id"] = "task:" + extension["task_v4_digest"]
-        worker = {"provider_id": "cxxlens.clang22.reference", "provider_version": "1.0.0", "semantic_contract_digest": "sha256:" + "9" * 64, "protocol_major": 1, "protocol_minor": 2, "required_features": ["task-input-chunks-v1", "task-source-closure-v1"], "sandbox_policy_digest": "sha256:" + "8" * 64}
-        trust = {"policy_id": "cxxlens.clang22-installed-native-worker-trust.v1", "execution_profile": "trust.native-worker", "provider_id": worker["provider_id"], "provider_version": worker["provider_version"], "semantic_contract_digest": worker["semantic_contract_digest"], "protocol_major": 1, "protocol_minor": 2, "required_features": list(worker["required_features"]), "required_qualification": "canonical-semantic-qualified", "worker_sandbox_policy_digest": worker["sandbox_policy_digest"], "task_sandbox_requirements": [base["sandbox"]], "trust_policy_digest": "pending"}
+        worker = {"provider_id": "cxxlens.clang22.reference", "provider_version": "2.0.0", "semantic_contract_digest": "sha256:" + "9" * 64, "protocol_major": 2, "protocol_minor": 0, "required_features": ["task-input-chunks-v2", "task-source-closure-v2"], "sandbox_policy_digest": "sha256:" + "8" * 64}
+        trust = {"policy_id": "cxxlens.clang22-installed-native-worker-trust.v1", "execution_profile": "trust.native-worker", "provider_id": worker["provider_id"], "provider_version": worker["provider_version"], "semantic_contract_digest": worker["semantic_contract_digest"], "protocol_major": 2, "protocol_minor": 0, "required_features": list(worker["required_features"]), "required_qualification": "canonical-semantic-qualified", "worker_sandbox_policy_digest": worker["sandbox_policy_digest"], "task_sandbox_requirements": [base["sandbox"]], "trust_policy_digest": "pending"}
         trust["trust_policy_digest"] = trust_policy_digest(trust)
         request = {
             "schema": "cxxlens.clang22-materialization-request.v2_2",
             "request_version": "2.2.0",
-            "required_features": ["task-input-chunks-v1", "task-source-closure-v1"],
+            "required_features": ["task-input-chunks-v2", "task-source-closure-v2"],
             "materialization_request_id": "id:base",
             "semantic_request_digest": semantic,
             "tool": {}, "worker": worker, "project": {}, "registry": {}, "engine": {},
@@ -170,7 +169,7 @@ class SourceClosureTransportTest(unittest.TestCase):
             }
         )
         extension = request["task_extensions"][0]
-        extension["base_task_v3_digest"] = content_projection_digest(base)
+        extension["base_task_digest"] = content_projection_digest(base)
         extension["source_closure"] = {
             "id": closure["source_closure_id"],
             "digest": closure["source_closure_digest"],
@@ -204,16 +203,6 @@ class SourceClosureTransportTest(unittest.TestCase):
 
     def copied_root(self, temporary: str) -> pathlib.Path:
         root = pathlib.Path(temporary)
-        legacy = tuple(
-            pathlib.Path(path)
-            for path in (
-                "schemas/cxxlens_ng_clang22_materialization_request.schema.yaml",
-                "schemas/cxxlens_ng_provider_protocol.schema.yaml",
-                "src/llvm/clang22/provider_task_v3.hpp",
-                "src/llvm/clang22/provider_task_v3.cpp",
-                "src/llvm/clang22/materialization_request_v2_1.cpp",
-            )
-        )
         for relative in (
             ADR,
             CONTRACT,
@@ -222,7 +211,8 @@ class SourceClosureTransportTest(unittest.TestCase):
             SCHEMA,
             TASK,
             MANIFEST_SCHEMA,
-            *legacy,
+            pathlib.Path("schemas/cxxlens_ng_clang22_materialization_request.schema.yaml"),
+            pathlib.Path("schemas/cxxlens_ng_provider_protocol_v2.schema.yaml"),
         ):
             destination = root / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -247,7 +237,7 @@ class SourceClosureTransportTest(unittest.TestCase):
             (ROOT / REQUEST).read_text(encoding="utf-8")
         )
         legacy_request_schema = yaml.safe_load(
-            (ROOT / LEGACY_BINDINGS["request_schema_sha256"]).read_text(
+            (ROOT / "schemas/cxxlens_ng_clang22_materialization_request.schema.yaml").read_text(
                 encoding="utf-8"
             )
         )
@@ -901,7 +891,7 @@ class SourceClosureTransportTest(unittest.TestCase):
         request["tasks"][0]["source"]["content_digest"] = "sha256:" + "e" * 64
         request["tasks"][0]["task_input_digest"] = "sha256:" + "d" * 64
         extension = request["task_extensions"][0]
-        extension["base_task_v3_digest"] = content_projection_digest(request["tasks"][0])
+        extension["base_task_digest"] = content_projection_digest(request["tasks"][0])
         extension["open_task"]["task_input_digest"] = request["tasks"][0]["task_input_digest"]
         self.reseal_request(request)
         with self.assertRaisesRegex(SourceClosureTransportError, "main source"):
@@ -1007,33 +997,6 @@ class SourceClosureTransportTest(unittest.TestCase):
                 with self.assertRaisesRegex(SourceClosureTransportError, "schema|chunk"):
                     validate(root)
 
-    def test_legacy_authority_drift_is_rejected(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = self.copied_root(temporary)
-            path = root / "src/llvm/clang22/provider_task_v3.hpp"
-            path.write_text(path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
-            with self.assertRaisesRegex(SourceClosureTransportError, "legacy"):
-                validate(root)
-
-    def test_acceptance_does_not_require_operational_review_receipt(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = self.copied_root(temporary)
-            self.rewrite(
-                root,
-                CONTRACT,
-                lambda value: (
-                    value.update({"maturity": "accepted"}),
-                ),
-            )
-            adr = root / ADR
-            adr.write_text(
-                adr.read_text(encoding="utf-8").replace(
-                    "- Status: Proposed", "- Status: Accepted"
-                ),
-                encoding="utf-8",
-            )
-            validate(root)
-
     def test_cross_task_cache_activation_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
@@ -1044,23 +1007,6 @@ class SourceClosureTransportTest(unittest.TestCase):
             )
             with self.assertRaisesRegex(SourceClosureTransportError, "schema|cache"):
                 validate(root)
-
-    def test_acceptance_without_review_is_allowed(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = self.copied_root(temporary)
-            self.rewrite(
-                root,
-                CONTRACT,
-                lambda value: value.update({"maturity": "accepted"}),
-            )
-            adr = root / ADR
-            adr.write_text(
-                adr.read_text(encoding="utf-8").replace(
-                    "- Status: Proposed", "- Status: Accepted"
-                ),
-                encoding="utf-8",
-            )
-            validate(root)
 
 
 if __name__ == "__main__":

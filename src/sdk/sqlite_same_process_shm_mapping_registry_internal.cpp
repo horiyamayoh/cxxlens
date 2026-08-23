@@ -7944,12 +7944,12 @@ namespace cxxlens::sdk
 	bool sqlite_shm_reader_attachment_authority::validate_active_authority(
 		const sqlite_shm_registry_family_pin& family,
 		const sqlite_shm_reader_attachment_reservation_identity& attachment) const noexcept
-		{
-			if (!retains_exact_lifetimes(attachment))
-				return false;
-			if (!state_ || !state_->activity || !state_->audit_seal)
-				return false;
-			const auto& activity = *state_->activity;
+	{
+		if (!retains_exact_lifetimes(attachment))
+			return false;
+		if (!state_ || !state_->activity || !state_->audit_seal)
+			return false;
+		const auto& activity = *state_->activity;
 		const auto control = activity.control_;
 		const auto registry = activity.state_.lock();
 		const auto audit_control = state_->audit_seal->control_.lock();
@@ -8060,12 +8060,12 @@ namespace cxxlens::sdk
 	bool sqlite_shm_reader_map_predelegate_authority::validate_active_authority(
 		const sqlite_shm_registry_family_pin& family,
 		const sqlite_shm_reader_attachment_map_request& request) const noexcept
-		{
-			if (!valid_for_predelegation(request))
-				return false;
-			if (!state_ || !state_->activity || !state_->audit_seal)
-				return false;
-			const auto& activity = *state_->activity;
+	{
+		if (!valid_for_predelegation(request))
+			return false;
+		if (!state_ || !state_->activity || !state_->audit_seal)
+			return false;
+		const auto& activity = *state_->activity;
 		const auto control = activity.control_;
 		const auto registry = activity.state_.lock();
 		const auto audit_control = state_->audit_seal->control_.lock();

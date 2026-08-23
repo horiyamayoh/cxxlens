@@ -1126,20 +1126,22 @@ def validate_design(root: pathlib.Path) -> None:
         "annotated multiset",
         "query.limit.v1",
         "absent_if_schema_missing",
-        "Issue #61",
     ):
         if marker not in design:
             fail("query.design-marker-missing", marker)
     if "filter/project/inner/semi/union/distinct/aggregate" in design:
         fail("query.aggregate-profile-stale", "NG0 checklist still contains aggregate")
     index = (root / "docs/design/catalogs/README.md").read_text(encoding="utf-8")
-    if "Logical Query Contract" not in index or "#61" not in index:
+    if "Logical Query Contract" not in index:
         fail("query.catalog-index-stale", "query authority is absent from catalog index")
     adr = (root / "docs/design/adr/0007-logical-query-algebra.md").read_text(
         encoding="utf-8"
     )
-    if "- Status: Accepted" not in adr or "- Decision issue: #61" not in adr:
-        fail("query.adr-not-accepted", "ADR 0007 is not accepted by #61")
+    if (
+        "- Status: Accepted" not in adr
+        or "schemas/cxxlens_ng_logical_query_contract.yaml" not in adr
+    ):
+        fail("query.adr-not-accepted", "ADR 0007 does not identify the accepted query contract")
 
 
 def validate_all(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:

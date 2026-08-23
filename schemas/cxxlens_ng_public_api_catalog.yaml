@@ -32,7 +32,6 @@ packages:
       - include/cxxlens/sdk/store.hpp
       - include/cxxlens/sdk/query.hpp
       - include/cxxlens/sdk/provider.hpp
-      - include/cxxlens/sdk/testing.hpp
       - include/cxxlens/sdk/recipe.hpp
     llvm_clang_dependency: forbidden
     link_dependencies: [cxxlens::cxxlens, cxxlens::recipes]
@@ -322,7 +321,7 @@ entries:
     status: implemented
     profile: NG0
     target: cxxlens::provider_sdk
-    headers: [include/cxxlens/sdk/provider.hpp, include/cxxlens/sdk/testing.hpp]
+    headers: [include/cxxlens/sdk/provider.hpp]
     symbols:
       - name: portable_provider
         kind: class
@@ -357,12 +356,6 @@ entries:
       - name: provider.manifest
         kind: value
         signature: 'result<void> validate() const; string canonical_json() const; exact cxxlens.provider-manifest.v1 fields'
-      - name: provider_harness
-        kind: class
-        signature: 'result<conformance_report> run(portable_provider&, const task&, provider_fault) const; faults include no-credit, cancel, corrupt, truncate, wrong-direction, drop-terminal, wrong-terminal-task, credit-exceeded'
-      - name: provider transcript reference validation
-        kind: function-family
-        signature: 'result<conformance_report> validate_logical_transcript(const task&, string_view provider_id, semantic_version, span<const frame>, protocol_credit); result<conformance_report> validate_process_transcript(const task&, const manifest&, span<const frame>, protocol_credit, protocol_limits = {})'
     errors: [provider.host-transcript-invalid, provider.oversized-control, provider.oversized-payload, provider.oversized-frame, provider.unknown-message-type, provider.malformed-frame, provider.columnar-invalid, provider.protocol-major-mismatch, provider.protocol-minor-mismatch, provider.protocol-state-invalid, provider.unknown-required-extension, provider.invalid-frame-flags, provider.unsupported-compression, provider.checksum-mismatch, provider.truncated-stream, provider.backpressure, provider.batch-state-invalid, provider.coverage-invalid, provider.coverage-duplicate-request, provider.coverage-duplicate-state, provider.coverage-unrequested, provider.coverage-incomplete, provider.unresolved-invalid, provider.evidence-invalid, provider.manifest-invalid, provider.scaffold-invalid, provider.cancelled, provider.output-limit, provider.task-invalid, provider.noncontiguous-sequence, security.sandbox-policy-mismatch, sdk.golden-mismatch, sdk.harness-empty-transcript, sdk.harness-fault-not-observed]
     lifetime: [provider-context-and-relation-sink-are-callback-scoped, relation-sink-is-move-only-and-open-state-survives-move-or-destruction-in-context-registry, relation-sink-row-count-is-active-or-most-recent-batch-local, protocol-writer-borrows-frame-sink]
     threading: [worker-callback-is-synchronous-and-thread-confined, cancellation-is-stop-token-based]

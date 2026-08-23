@@ -4,7 +4,6 @@ maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#53-canonical-tuple
   decision_adr: docs/design/adr/0063-project-catalog-bottom-up-identity.md
-  owner_issue: '#121'
   owner: steward.ng-kernel
 value_types:
   compile_unit_entry:

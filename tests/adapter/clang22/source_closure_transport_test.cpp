@@ -185,8 +185,8 @@ namespace
 
 	void exercise_constants_and_digests()
 	{
-		require(source_closure_protocol_minor == 2U, "source-closure protocol minor drifted");
-		require(source_closure_capability == "task-source-closure-v1",
+		require(source_closure_protocol_minor == 0U, "source-closure protocol minor drifted");
+		require(source_closure_capability == "task-source-closure-v2",
 				"source-closure capability drifted");
 		for (std::uint16_t id = 24U; id <= 29U; ++id)
 			require(is_source_closure_message_id(id), "source-closure message ID was not reserved");
@@ -196,13 +196,13 @@ namespace
 				"heartbeat frame crossed the source seam");
 		require(!validate_source_closure_frame_header(24U, 1U),
 				"nonzero source frame flags were accepted");
-		const std::array<std::string_view, 2U> capabilities{"task-input-chunks-v1",
-															"task-source-closure-v1"};
-		const std::array<std::string_view, 1U> legacy_capabilities{"task-input-chunks-v1"};
-		const std::array<std::string_view, 1U> closure_capabilities{"task-source-closure-v1"};
-		require(validate_source_closure_capability(2U, capabilities),
+		const std::array<std::string_view, 2U> capabilities{"task-input-chunks-v2",
+															"task-source-closure-v2"};
+		const std::array<std::string_view, 1U> missing_closure_capabilities{"task-input-chunks-v2"};
+		const std::array<std::string_view, 1U> closure_capabilities{"task-source-closure-v2"};
+		require(validate_source_closure_capability(0U, capabilities),
 				"required source-closure capability was rejected");
-		require(!validate_source_closure_capability(2U, legacy_capabilities),
+		require(!validate_source_closure_capability(0U, missing_closure_capabilities),
 				"capability absence was not rejected before payload admission");
 		require(!validate_source_closure_capability(1U, closure_capabilities),
 				"protocol downgrade was not rejected");

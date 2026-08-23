@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -82,6 +83,62 @@ namespace cxxlens::sdk
 
 	using sqlite_connection_close_outcome =
 		std::variant<sqlite_confirmed_close_token, sqlite_quarantined_connection>;
+
+	/**
+	 * Move-only #201 logical-read receipt consumed by the isolated #202 entry gate.
+	 *
+	 * The source anchor pin is the retained main object from the same namespace epoch which was
+	 * rechecked after the read connection closed.  The receipt can be sealed only when the read was
+	 * exact-empty, the connection is confirmed closed, no mapping/use custody remains, and the
+	 * callback transcript is zero-effect.  It carries no Store/public success authority.
+	 */
+	class sqlite_logical_read_receipt final
+	{
+	  public:
+		sqlite_logical_read_receipt(sqlite_logical_read_receipt&& other) noexcept;
+		sqlite_logical_read_receipt& operator=(sqlite_logical_read_receipt&& other) noexcept;
+		sqlite_logical_read_receipt(const sqlite_logical_read_receipt&) = delete;
+		sqlite_logical_read_receipt& operator=(const sqlite_logical_read_receipt&) = delete;
+
+		[[nodiscard]] bool valid() const noexcept;
+		[[nodiscard]] bool exact_empty() const noexcept;
+		[[nodiscard]] bool connection_closed() const noexcept;
+		[[nodiscard]] std::size_t live_custody_count() const noexcept;
+		[[nodiscard]] bool zero_effect_callback_receipt() const noexcept;
+		[[nodiscard]] const std::shared_ptr<const void>& source_anchor_pin() const noexcept;
+
+		/** Consume the one-shot handoff before any #202 source effect is armed. */
+		[[nodiscard]] bool consume() noexcept;
+
+	  private:
+		friend std::optional<sqlite_logical_read_receipt>
+		seal_sqlite_logical_read_receipt(std::shared_ptr<const void> source_anchor_pin,
+										 bool exact_empty,
+										 bool connection_closed,
+										 std::size_t live_custody_count,
+										 bool zero_effect_callback_receipt) noexcept;
+
+		sqlite_logical_read_receipt(std::shared_ptr<const void> source_anchor_pin,
+									bool exact_empty,
+									bool connection_closed,
+									std::size_t live_custody_count,
+									bool zero_effect_callback_receipt) noexcept;
+
+		std::shared_ptr<const void> source_anchor_pin_;
+		bool exact_empty_{};
+		bool connection_closed_{};
+		std::size_t live_custody_count_{};
+		bool zero_effect_callback_receipt_{};
+		bool valid_{true};
+	};
+
+	/** Seal the only logical-read receipt admitted to the #202 effect profile. */
+	[[nodiscard]] std::optional<sqlite_logical_read_receipt>
+	seal_sqlite_logical_read_receipt(std::shared_ptr<const void> source_anchor_pin,
+									 bool exact_empty,
+									 bool connection_closed,
+									 std::size_t live_custody_count,
+									 bool zero_effect_callback_receipt) noexcept;
 
 	/**
 	 * Source-private exact-once owner for one raw SQLite connection.

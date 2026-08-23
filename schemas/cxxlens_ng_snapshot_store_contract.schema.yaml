@@ -33,7 +33,7 @@ properties:
   authority:
     type: object
     additionalProperties: false
-    required: [design, decision_adr, sqlite_decision_adr, sqlite_decision_issue, owner_issue, owner]
+    required: [design, decision_adr, sqlite_decision_adr, owner]
     properties:
       design:
         const: docs/design/cxxlens_next_generation_integrated_design_ja.md#15-immutable-snapshot-and-store
@@ -41,8 +41,6 @@ properties:
         const: docs/design/adr/0079-checked-publication-counters.md
       sqlite_decision_adr:
         const: docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
-      sqlite_decision_issue: {const: '#200'}
-      owner_issue: {const: '#148'}
       owner: {const: steward.ng-store-contract}
   compatibility:
     type: object
@@ -2225,7 +2223,6 @@ $defs:
         status: accepted
         selected_alternative: A
         decision_ref: docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
-        decision_issue: '#200'
         confirmed_blocker: sqlite-v2-single-payload-blob-runtime-max-length-1000000000-cannot-satisfy-required-limit-adjacent-passed-memory-sqlite-parity
         required_parity: limit-adjacent-passed-memory-and-reopened-sqlite
         weakening_parity: forbidden

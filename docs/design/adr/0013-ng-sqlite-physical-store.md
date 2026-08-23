@@ -2,11 +2,8 @@
 
 - Status: Accepted
 - Date: 2026-07-16
-- Decision owner: store-kernel
-- Decision issue: #68
-- Tracking issue: #56
-- Current-layout amendment: ADR 0097 / #200
-- Same-process SHM and native-attachment semantics: ADR 0097 / #205 / #206
+- Current-layout amendment: ADR 0097
+- Same-process SHM and native-attachment semantics: ADR 0097 and the SQLite lifecycle contracts
 
 ## Context
 
@@ -16,14 +13,14 @@ SQLite の物理 schema は未決定だった。relation claim、condition、clo
 
 ## Decision
 
-NG SQLite format は `cxxlens.sqlite-semantic-store.v2` とし、次の hybrid を採用する。Issue #69 で physical
-minor を 2.1.0 へ進め、payload v2 に query annotation projection を追加した。Issue #73 で minor 2.2.0 /
+NG SQLite format は `cxxlens.sqlite-semantic-store.v2` とし、次の hybrid を採用する。この契約で physical
+minor を 2.1.0 へ進め、payload v2 に query annotation projection を追加した。この契約で minor 2.2.0 /
 payload v3 とし、query row/report が exact producer ID と semantic contract を保持できるようにした。
-Issue #78 / ADR 0021 で minor 2.3.0 / payload v4 に exact partition identity binding と validated closure
+ADR 0021 で minor 2.3.0 / payload v4 に exact partition identity binding と validated closure
 certificate subject を追加し、v1〜v3 の ID-only closure は closed-world proof に使用しない。
-Issue #90 / ADR 0033 で minor 2.4.0 / payload v5 に完全な partition claim envelope を追加し、open/compaction 時に
+ADR 0033 で minor 2.4.0 / payload v5 に完全な partition claim envelope を追加し、open/compaction 時に
 manifest と query-visible row/annotation/coverage projection を bottom-up で再構成する。
-Issue #132 で physical minor を 2.5.0 とし、connection/process 間 publication CAS のための durable series headを追加する。
+この契約で physical minor を 2.5.0 とし、connection/process 間 publication CAS のための durable series headを追加する。
 
 - `cxxlens_ng_metadata` は physical format version を保持する。
 - `cxxlens_ng_publication` は publication ID、exact series ID、semantic snapshot ID、monotonic sequence、physical

@@ -2,14 +2,11 @@
 
 - Status: Accepted
 - Date: 2026-07-17
-- Decision owner: provider-sdk/provider-runtime
-- Decision issue: #101
-- Clarification feedback: DF-0195 / #195, DF-0197 / #197
 - Depends on: ADR 0010, ADR 0038, ADR 0043
 
 ## Context
 
-public `provider_harness::run()` は frame decode と sequence continuity だけで conformance を accepted にしていた。
+従来の公開 transcript harness は frame decode と sequence continuity だけで conformance を accepted にしていた。
 batch seal、output descriptor whitelist、coverage、terminal task binding、message direction/order は検証せず、production
 process runtime の typed state machine と別実装だった。そのため checksum が正しくても production では reject される
 provider が SDK conformance を通過できた。
@@ -22,8 +19,7 @@ bind する。process runtime は full hello/schema handshake mode、in-memory h
 両 mode は task acceptance、direction/order、columnar batch、coverage/unresolved/progress、terminal、credit、sequenceを同じ
 state transition と stable reason code で判定する。
 
-public testing API は decoded frames を同じ validatorへ再投入する `validate_logical_transcript()` と
-`validate_process_transcript()` を提供する。harness fault は worker実行後の encoded bytes/frame set または validation creditを
+テスト専用 adapter は decoded frames を同じ validatorへ再投入する logical/process validation entrypoint を提供する。fault は worker実行後の encoded bytes/frame set または validation creditを
 変更してから production validatorへ渡す。checksum corruption、truncationは共通 frame decoder、wrong direction、missing/wrong
 terminal、credit exhaustion は共通 typed validatorが分類する。
 
@@ -31,13 +27,12 @@ terminal、credit exhaustion は共通 typed validatorが分類する。
 logical streamをterminalにし、failure cleanup と reasonを transcriptに保持する。open batchを残した成功、未要求 descriptor、
 不完全 coverage は conformance accepted にしない。
 
-DF-0197 / Issue #197 の Provider Protocol 1.1 host input は、host encoder、worker decoder、process runtime、conformance validator が
-同じ incremental transition/digest/length/budget core を使用する。minor 0 の既存 public vector encoder/validator signature は変更せず、
-exact 5-frame stream をこの core に渡す bounded compatibility wrapper とする。minor 1 の `input_descriptor` / `input_chunk` は
+Protocol 2.0 の host input は、host encoder、worker decoder、process runtime、conformance validator が
+同じ incremental transition/digest/length/budget core を使用する。`input_descriptor` / `input_chunk` は
 欠落、重複、順序・offset・length・digest 不一致を task acceptance 前に拒否し、raw frame または input spool から semantic task や
 adoption value を再構成する別 validator を作らない。
 
-DF-0195 / Issue #195 により、この shared validator は specialization-blind のまま successful transcript ごとに exact
+この契約により、この shared validator は specialization-blind のまま successful transcript ごとに exact
 `{kind: task, id: <provider task ID>, state: covered, reason: ""}` transport record を一件要求する。それ以外の未知または追加 semantic
 coverage record は exact decoded record と wire order を losslessly retain し、generic 層では捨てず、specialization の意味へ解釈または
 再分類しない。duplicate `(kind, id)` と missing/duplicate/renamed/wrong-task/non-covered/nonempty-reason transport record は拒否する。
@@ -57,7 +52,7 @@ self-consistent でも、selected binary/semantic contract/version と異なれ�
 
 ## Consequences
 
-- harness accepted は production typed state machine を通過した complete logical streamだけを意味する。
+- テスト adapter の accepted は production typed state machine を通過した complete logical streamだけを意味する。
 - validatorの追加修正は harness、public reference、process runtimeへ同時に適用され、判定 driftを作れない。
 - host input の fragmentation/read 境界が異なっても同じ sealed logical input verdict となる。
 - specialization-specific coverage を generic validator に hard-code せず、完全な retained record set を後段の独立 specialization seal へ渡せる。

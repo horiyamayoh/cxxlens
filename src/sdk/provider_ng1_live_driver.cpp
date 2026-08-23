@@ -196,10 +196,11 @@ namespace cxxlens::sdk::provider::detail
 			configuration.maximum_retained_frames > std::numeric_limits<std::size_t>::max())
 			return cxxlens::sdk::unexpected(
 				error{"provider.output-limit", "ng1-live", "frame-count"});
-		if (configuration.limits.protocol_major != 1U || configuration.limits.minimum_minor != 1U ||
-			configuration.limits.maximum_minor != 1U)
+		if (configuration.limits.protocol_major != protocol_v2_major ||
+			configuration.limits.minimum_minor != protocol_v2_minor ||
+			configuration.limits.maximum_minor != protocol_v2_minor)
 			return cxxlens::sdk::unexpected(
-				error{"provider.protocol-minor-mismatch", "ng1-live", "minor-one-required"});
+				error{"provider.protocol-minor-mismatch", "ng1-live", "protocol-2.0-required"});
 		if (!configuration.clock || !configuration.observation || !configuration.processes)
 			return cxxlens::sdk::unexpected(
 				error{"provider.process-request-invalid", "ng1-live", "missing-port"});

@@ -74,13 +74,13 @@ namespace
 		"share/cxxlens/schemas/cxxlens_ng_relation_registry.yaml",
 		"share/cxxlens/schemas/cxxlens_ng_project_catalog_contract.yaml",
 		"share/cxxlens/schemas/cxxlens_ng_portable_provider_task_contract.yaml",
-		"share/cxxlens/schemas/cxxlens_ng_provider_protocol.yaml",
+		"share/cxxlens/schemas/cxxlens_ng_provider_protocol_v2.yaml",
 		"share/cxxlens/schemas/cxxlens_ng_provider_runtime_contract.yaml",
 		"share/cxxlens/schemas/cxxlens_ng_snapshot_store_contract.yaml",
 		"share/cxxlens/schemas/cxxlens_ng_sqlite_store_contract.yaml",
 		"share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.yaml",
 		"share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml",
-		"share/cxxlens/schemas/cxxlens_ng_clang22_materialization_request.schema.yaml",
+		"share/cxxlens/schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml",
 		"share/cxxlens/schemas/cxxlens_ng_clang22_materialization_report.schema.yaml",
 	};
 	constexpr std::array<std::string_view, 6U> shared_roles{

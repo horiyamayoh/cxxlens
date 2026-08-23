@@ -13,9 +13,9 @@
 
 namespace cxxlens::detail::clang22
 {
-	/** Source-private protocol minor/capability values; activation remains governance-gated. */
-	inline constexpr std::uint16_t source_closure_protocol_minor = 2U;
-	inline constexpr std::string_view source_closure_capability = "task-source-closure-v1";
+	/** Source-closure frames use the sole accepted Protocol 2.0 minor. */
+	inline constexpr std::uint16_t source_closure_protocol_minor = 0U;
+	inline constexpr std::string_view source_closure_capability = "task-source-closure-v2";
 
 	/** Reserved source-closure message IDs. Heartbeat 23 is owned by NG1. */
 	enum class source_closure_message_id : std::uint16_t
@@ -226,7 +226,7 @@ namespace cxxlens::detail::clang22
 		[[nodiscard]] virtual sdk::result<std::string> cleanup() = 0;
 	};
 
-	/** Validate protocol 1.2 capability/minor before accepting any closure payload bytes. */
+	/** Validate Protocol 2.0 capability before accepting any closure payload bytes. */
 	[[nodiscard]] sdk::result<void>
 	validate_source_closure_capability(std::uint16_t protocol_minor,
 									   std::span<const std::string_view> capabilities);
@@ -246,7 +246,7 @@ namespace cxxlens::detail::clang22
 								   std::uint64_t blob_count,
 								   std::uint64_t total_bytes);
 
-	/** Validate one task-bound manifest/blob transfer without activating protocol 1.2 globally. */
+	/** Validate one task-bound manifest/blob transfer under the active Protocol 2.0 profile. */
 	class source_closure_transfer_validator
 	{
 	  public:

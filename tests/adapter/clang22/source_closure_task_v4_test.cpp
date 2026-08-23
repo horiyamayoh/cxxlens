@@ -106,7 +106,7 @@ int main()
 				!payload.contains("task_v4_input_digest"),
 			"input payload does not have the exact recursion-free field boundary");
 
-	const auto base_digest = identity->base_task_v3_digest;
+	const auto base_digest = identity->base_task_digest;
 	auto decoded = decode_source_closure_task_v4_input(
 		identity->input_payload, input.closure, base_digest, identity->task_v4_input_digest);
 	require(decoded.has_value(), "valid task-v4 input payload was rejected");

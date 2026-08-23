@@ -37,7 +37,7 @@ namespace cxxlens::detail::clang22
 	{
 		std::string task_id;
 		std::string task_v4_digest;
-		std::string base_task_v3_digest;
+		std::string base_task_digest;
 		std::string manifest_digest;
 		std::string task_v4_input_digest;
 		std::vector<std::byte> semantic_projection;
@@ -77,7 +77,7 @@ namespace cxxlens::detail::clang22
 	[[nodiscard]] sdk::result<source_closure_task_v4_decoded>
 	decode_source_closure_task_v4_input(std::span<const std::byte> payload,
 										const source_closure_snapshot& closure,
-										std::string_view expected_base_task_v3_digest,
+										std::string_view expected_base_task_digest,
 										std::string_view expected_task_v4_input_digest);
 
 	/** Check the content digest used by open_task/input_descriptor before any bytes are consumed.

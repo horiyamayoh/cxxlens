@@ -2691,7 +2691,7 @@ namespace cxxlens::sdk
 				  expected_process_epoch{owner_value ? owner_value->expected_process_epoch : 0U},
 				  native_status{native_status_value}, delegated_extend{delegated_extend_value},
 				  mapping{mapping_value}, observed_attachment{std::move(observed_attachment_value)}
-				{
+			{
 			}
 			// NOLINTEND(bugprone-easily-swappable-parameters)
 			~sqlite_shm_reader_mapped_effect_receipt_control() noexcept;
@@ -4806,12 +4806,12 @@ namespace cxxlens::sdk
 					const auto close_owner_token = next_token_;
 					auto next_custodies = reader_custodies_;
 					next_custodies.emplace_back(sqlite_shm_reader_custody_kind::connection_close,
-											 sqlite_shm_reader_custody_state::live,
-											 std::nullopt,
-											 close_owner_token,
-											 0U,
-											 0U,
-											 binding);
+												sqlite_shm_reader_custody_state::live,
+												std::nullopt,
+												close_owner_token,
+												0U,
+												0U,
+												binding);
 					std::list<registry_reader_open_record> prepared_opens;
 					prepared_opens.emplace_back(registry_open_token,
 												seal,
@@ -7179,11 +7179,11 @@ namespace cxxlens::sdk
 						const auto token = next_token_;
 						auto next_custodies = reader_custodies_;
 						next_custodies.emplace_back(sqlite_shm_reader_custody_kind::use_session,
-													 sqlite_shm_reader_custody_state::live,
-													 proposal_request.attachment,
-													 token,
-													 0U,
-													 0U);
+													sqlite_shm_reader_custody_state::live,
+													proposal_request.attachment,
+													token,
+													0U,
+													0U);
 						std::list<reader_session_record> prepared_sessions;
 						prepared_sessions.push_back(
 							{token,
@@ -7321,21 +7321,21 @@ namespace cxxlens::sdk
 					const auto token = next_token_;
 					const auto reservation_token = next_token_ + 1U;
 					auto next_custodies = reader_custodies_;
-						next_custodies.emplace_back(
-							sqlite_shm_reader_custody_kind::use_session_reservation,
-							sqlite_shm_reader_custody_state::live,
-							candidate->request.attachment,
-							token,
-							0U,
-							0U);
-						next_custodies.emplace_back(
-							sqlite_shm_reader_custody_kind::
-								runtime_vfs_namespace_generation_native_mapping_lifetime_pin,
-							sqlite_shm_reader_custody_state::live,
-							candidate->request.attachment,
-							reservation_token,
-							0U,
-							0U);
+					next_custodies.emplace_back(
+						sqlite_shm_reader_custody_kind::use_session_reservation,
+						sqlite_shm_reader_custody_state::live,
+						candidate->request.attachment,
+						token,
+						0U,
+						0U);
+					next_custodies.emplace_back(
+						sqlite_shm_reader_custody_kind::
+							runtime_vfs_namespace_generation_native_mapping_lifetime_pin,
+						sqlite_shm_reader_custody_state::live,
+						candidate->request.attachment,
+						reservation_token,
+						0U,
+						0U);
 					std::list<reader_attachment_group_record> prepared_groups;
 					prepared_groups.emplace_back(
 						reservation_token, generation_->value, candidate->request.attachment);
@@ -7636,15 +7636,15 @@ namespace cxxlens::sdk
 					if (!joins_existing_group)
 						reservation_token = next_token_ + 1U;
 					auto next_custodies = reader_custodies_;
-						next_custodies.emplace_back(
-							joins_existing_group
-								? sqlite_shm_reader_custody_kind::use_session
-								: sqlite_shm_reader_custody_kind::use_session_reservation,
-							sqlite_shm_reader_custody_state::live,
-							request.attachment,
-							token,
-							0U,
-							0U);
+					next_custodies.emplace_back(
+						joins_existing_group
+							? sqlite_shm_reader_custody_kind::use_session
+							: sqlite_shm_reader_custody_kind::use_session_reservation,
+						sqlite_shm_reader_custody_state::live,
+						request.attachment,
+						token,
+						0U,
+						0U);
 					std::list<reader_session_record> prepared_sessions;
 					prepared_sessions.push_back(
 						{token,
@@ -8149,12 +8149,12 @@ namespace cxxlens::sdk
 					auto expected_mapping = *expected;
 					expected_mapping.sealed_shm_size = generation_->sealed_shm_size;
 					auto next_custodies = reader_custodies_;
-						next_custodies.emplace_back(sqlite_shm_reader_custody_kind::map_attempt,
-											 sqlite_shm_reader_custody_state::live,
-											 owner->request.attachment,
-											 token,
-											 0U,
-											 0U);
+					next_custodies.emplace_back(sqlite_shm_reader_custody_kind::map_attempt,
+												sqlite_shm_reader_custody_state::live,
+												owner->request.attachment,
+												token,
+												0U,
+												0U);
 					std::list<reader_attachment_map_record> prepared_maps;
 					prepared_maps.push_back({token,
 											 reader_phase::prepared_pre_callback,
@@ -8408,12 +8408,12 @@ namespace cxxlens::sdk
 					auto expected_mapping = *expected;
 					expected_mapping.sealed_shm_size = generation_->sealed_shm_size;
 					auto next_custodies = reader_custodies_;
-						next_custodies.emplace_back(sqlite_shm_reader_custody_kind::map_attempt,
-											 sqlite_shm_reader_custody_state::live,
-											 owner->request.attachment,
-											 next_token_,
-											 0U,
-											 0U);
+					next_custodies.emplace_back(sqlite_shm_reader_custody_kind::map_attempt,
+												sqlite_shm_reader_custody_state::live,
+												owner->request.attachment,
+												next_token_,
+												0U,
+												0U);
 					if (registry_route && retirement_blocker)
 					{
 						auto minted = registry_predelegate_minter->mint(request);
@@ -8547,8 +8547,8 @@ namespace cxxlens::sdk
 						control->phase->load(std::memory_order_acquire) !=
 							sqlite_shm_reader_lifecycle_owner_phase::admission ||
 						owner->token != map->session_token ||
-						owner->generation != map->generation ||
-														registry_family.state_ == nullptr || request.family != family_)
+						owner->generation != map->generation || registry_family.state_ == nullptr ||
+						request.family != family_)
 					{
 						return sqlite_shm_unexpected(
 							rejection(sqlite_shm_lease_rejection_reason::stale_token,
@@ -8723,7 +8723,8 @@ namespace cxxlens::sdk
 				try
 				{
 					std::scoped_lock lock{mutex_};
-						if (!owns(inflight.state_, inflight.token_) || registry_family.state_ == nullptr)
+					if (!owns(inflight.state_, inflight.token_) ||
+						registry_family.state_ == nullptr)
 						return sqlite_shm_unexpected(
 							stale_token(sqlite_shm_lease_recovery_action::deny_before_native_map));
 					const auto map = find_by_token(reader_attachment_maps_, inflight.token_);
@@ -9889,33 +9890,33 @@ namespace cxxlens::sdk
 						std::distance(next_custodies.begin(), attempt_custody));
 					const auto session_custody_index = static_cast<std::size_t>(
 						std::distance(next_custodies.begin(), session_custody));
-						next_custodies.emplace_back(
-							sqlite_shm_reader_custody_kind::attachment_group_handoff,
-							sqlite_shm_reader_custody_state::live,
-							owner->request.attachment,
-							reservation->token,
-							0U,
-							0U);
-						next_custodies.emplace_back(
-							sqlite_shm_reader_custody_kind::generation_group_count,
-							sqlite_shm_reader_custody_state::live,
-							owner->request.attachment,
-							reservation->token,
-							0U,
-							0U);
-						next_custodies.emplace_back(sqlite_shm_reader_custody_kind::use_session,
-											 sqlite_shm_reader_custody_state::live,
-											 owner->request.attachment,
-											 owner->token,
-											 0U,
-											 0U);
-						next_custodies.emplace_back(
-							sqlite_shm_reader_custody_kind::exact_present_attachment,
-							sqlite_shm_reader_custody_state::live,
-							owner->request.attachment,
-							reservation->token,
-							0U,
-							0U);
+					next_custodies.emplace_back(
+						sqlite_shm_reader_custody_kind::attachment_group_handoff,
+						sqlite_shm_reader_custody_state::live,
+						owner->request.attachment,
+						reservation->token,
+						0U,
+						0U);
+					next_custodies.emplace_back(
+						sqlite_shm_reader_custody_kind::generation_group_count,
+						sqlite_shm_reader_custody_state::live,
+						owner->request.attachment,
+						reservation->token,
+						0U,
+						0U);
+					next_custodies.emplace_back(sqlite_shm_reader_custody_kind::use_session,
+												sqlite_shm_reader_custody_state::live,
+												owner->request.attachment,
+												owner->token,
+												0U,
+												0U);
+					next_custodies.emplace_back(
+						sqlite_shm_reader_custody_kind::exact_present_attachment,
+						sqlite_shm_reader_custody_state::live,
+						owner->request.attachment,
+						reservation->token,
+						0U,
+						0U);
 					if (registry_route &&
 						(!reservation->registry_activity_authority ||
 						 !(qualified_owned_terminal
@@ -12010,24 +12011,24 @@ namespace cxxlens::sdk
 							runtime_pin_custody_index = index;
 						else if ((phase1_close_cut &&
 								  (custody.kind ==
-										   sqlite_shm_reader_custody_kind::
-											   bounded_waiter_or_continuation ||
-									   custody.kind ==
-										   sqlite_shm_reader_custody_kind::terminal_reporter) &&
+									   sqlite_shm_reader_custody_kind::
+										   bounded_waiter_or_continuation ||
+								   custody.kind ==
+									   sqlite_shm_reader_custody_kind::terminal_reporter) &&
 								  custody.owner_token == group->token &&
 								  custody.origin_sequence == group->composite_close_cut_sequence &&
 								  custody.destination_sequence == 0U) ||
-							 (late_close &&
-								 ((custody.kind ==
-									   sqlite_shm_reader_custody_kind::
-										   late_close_original_callback_drain &&
-									  custody.owner_token ==
-										  group->late_close_control->cleanup_owner_token) ||
-								  (custody.kind ==
-									   sqlite_shm_reader_custody_kind::
-										   late_close_outer_unwind_validation_seal &&
-									  custody.owner_token ==
-										  group->late_close_control->outer_owner_token))))
+								 (late_close &&
+								  ((custody.kind ==
+										sqlite_shm_reader_custody_kind::
+											late_close_original_callback_drain &&
+									custody.owner_token ==
+										group->late_close_control->cleanup_owner_token) ||
+								   (custody.kind ==
+										sqlite_shm_reader_custody_kind::
+											late_close_outer_unwind_validation_seal &&
+									custody.owner_token ==
+										group->late_close_control->outer_owner_token))))
 							continue;
 						else
 						{
@@ -15051,8 +15052,8 @@ namespace cxxlens::sdk
 				}
 				for (const auto& reservation : reader_attachment_groups_)
 				{
-					++output.attachment_reservation_phase_counts.at(static_cast<std::size_t>(
-						reservation.reservation_phase));
+					++output.attachment_reservation_phase_counts.at(
+						static_cast<std::size_t>(reservation.reservation_phase));
 					output.attachment_reservations.push_back(
 						{reservation.expected,
 						 reservation.reservation_phase,
@@ -15186,8 +15187,8 @@ namespace cxxlens::sdk
 				}
 				for (const auto& session : reader_sessions_)
 				{
-					++output.session_reservation_phase_counts.at(static_cast<std::size_t>(
-						session.lifecycle_phase));
+					++output.session_reservation_phase_counts.at(
+						static_cast<std::size_t>(session.lifecycle_phase));
 					output.session_reservations.push_back({session.token,
 														   session.request.attachment,
 														   session.lifecycle_phase,
@@ -15225,8 +15226,8 @@ namespace cxxlens::sdk
 				}
 				for (const auto& terminal : reader_session_terminals_)
 				{
-					++output.session_reservation_phase_counts.at(static_cast<std::size_t>(
-						terminal.lifecycle_phase));
+					++output.session_reservation_phase_counts.at(
+						static_cast<std::size_t>(terminal.lifecycle_phase));
 					output.session_reservations.push_back({terminal.session_token,
 														   terminal.receipt.request().attachment,
 														   terminal.lifecycle_phase,
@@ -15440,7 +15441,8 @@ namespace cxxlens::sdk
 				{
 					++output.custody_state_counts.at(static_cast<std::size_t>(custody.state));
 					if (custody.state == sqlite_shm_reader_custody_state::live)
-						++output.live_custody_kind_counts.at(static_cast<std::size_t>(custody.kind));
+						++output.live_custody_kind_counts.at(
+							static_cast<std::size_t>(custody.kind));
 				}
 				std::ranges::sort(output.events,
 								  [](const sqlite_shm_reader_lifecycle_event_test_view& left,
@@ -15774,8 +15776,8 @@ namespace cxxlens::sdk
 							!exact_cleanup_metadata || !exact_composite_metadata ||
 							!reader_lifecycle_sequences_ ||
 							std::max({tombstone.destination_sequence,
-										  tombstone.logical_ack_sequence,
-										  tombstone.composite_close_wait_resolution_sequence}) >
+									  tombstone.logical_ack_sequence,
+									  tombstone.composite_close_wait_resolution_sequence}) >
 								reader_lifecycle_sequences_->observed_last_issued())
 							return sqlite_shm_unexpected(rejection(
 								sqlite_shm_lease_rejection_reason::invalid_request,
@@ -21807,9 +21809,9 @@ namespace cxxlens::sdk
 				std::array<std::uint64_t, 2> slots{};
 				std::size_t slot_count{};
 				if (open.close_cut_sequence_slot != 0U)
-						slots.at(slot_count++) = open.close_cut_sequence_slot;
+					slots.at(slot_count++) = open.close_cut_sequence_slot;
 				if (open.close_terminal_sequence_slot != 0U)
-						slots.at(slot_count++) = open.close_terminal_sequence_slot;
+					slots.at(slot_count++) = open.close_terminal_sequence_slot;
 				if (slot_count != 0U)
 				{
 					const auto terminal = consume_reader_lifecycle_terminal_slots_locked(
@@ -22790,9 +22792,9 @@ namespace cxxlens::sdk
 			// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 			void
 			quarantine_reader_map_terminal_commit_locked(const std::uint64_t map_token,
-													 const std::uint64_t session_token) noexcept
+														 const std::uint64_t session_token) noexcept
 			// NOLINTEND(bugprone-easily-swappable-parameters)
-				{
+			{
 				static_assert(
 					std::is_nothrow_move_assignable_v<reader_attachment_group_audit_record>);
 				std::uint64_t generation{};
@@ -24461,7 +24463,7 @@ namespace cxxlens::sdk
 		std::optional<sqlite_shm_reader_attachment_target_identity> exact_target,
 		std::optional<sqlite_source_shm_target_namespace_epoch_reader_borrow>
 			borrowed_epoch) noexcept
-	// NOLINTEND(bugprone-easily-swappable-parameters)
+		// NOLINTEND(bugprone-easily-swappable-parameters)
 		: state_{std::move(state)}, map_token_{map_token}, generation_{generation},
 		  writer_holder_token_{writer_holder_token}, expected_mapping_{expected_mapping},
 		  exact_target_{std::move(exact_target)}, borrowed_epoch_{std::move(borrowed_epoch)}
@@ -24965,10 +24967,10 @@ namespace cxxlens::sdk
 		const std::uint64_t reservation_token,
 		const std::uint64_t generation,
 		const std::uint64_t wait_resolution_sequence_slot) noexcept
-	// NOLINTEND(bugprone-easily-swappable-parameters)
+		// NOLINTEND(bugprone-easily-swappable-parameters)
 		: state_{std::move(state)}, owner_token_{owner_token.value},
-		  registry_open_token_{registry_open_token}, route_{route},
-		  phase_{initial_phase}, reservation_token_{reservation_token}, generation_{generation},
+		  registry_open_token_{registry_open_token}, route_{route}, phase_{initial_phase},
+		  reservation_token_{reservation_token}, generation_{generation},
 		  wait_resolution_sequence_slot_{wait_resolution_sequence_slot}
 	{
 	}
@@ -24982,9 +24984,8 @@ namespace cxxlens::sdk
 	sqlite_shm_reader_close_obligation::sqlite_shm_reader_close_obligation(
 		sqlite_shm_reader_close_obligation&& other) noexcept
 		: state_{std::move(other.state_)}, owner_token_{std::exchange(other.owner_token_, 0U)},
-		  registry_open_token_{std::exchange(other.registry_open_token_, 0U)},
-		  route_{other.route_}, phase_{other.phase_},
-		  reservation_token_{std::exchange(other.reservation_token_, 0U)},
+		  registry_open_token_{std::exchange(other.registry_open_token_, 0U)}, route_{other.route_},
+		  phase_{other.phase_}, reservation_token_{std::exchange(other.reservation_token_, 0U)},
 		  generation_{std::exchange(other.generation_, 0U)},
 		  wait_resolution_sequence_slot_{std::exchange(other.wait_resolution_sequence_slot_, 0U)},
 		  terminal_presentation_disabled_{

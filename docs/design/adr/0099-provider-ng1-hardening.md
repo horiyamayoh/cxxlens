@@ -2,9 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-08-13
-- Decision owner: steward.ng-provider-runtime
-- Decision issue: #233
-- Implementation issue: #183
 - Amends: ADR 0010, ADR 0038
 
 ## Context
@@ -20,7 +17,7 @@ from a manifest or from NG0 tests.
 ## Decision
 
 Adopt `schemas/cxxlens_ng_provider_ng1_hardening.yaml` as the exact NG1
-hardening authority. NG1 remains opt-in at protocol minor 1 and preserves all
+hardening authority. NG1 remains an explicitly negotiated Protocol 2.0 profile and preserves all
 NG0 wire, credit, batch, coverage, unresolved, and atomicity invariants.
 
 The contract defines:
@@ -49,8 +46,7 @@ The contract defines:
   output is the only adoption input and never alters the previously published
   snapshot on failure;
 - exact static/shared, long-run, positive, negative, and fault tests. Their
-  exit status is the acceptance result; no repository-operation report or
-  revision-bound measurement artifact is produced.
+  exit status is the acceptance result.
 
 Heartbeat and progress controls are transport occurrences and are not claim or
 partition authority. Only the shared typed validator's sealed output groups
@@ -73,10 +69,8 @@ Failure is fail-closed: heartbeat clock drift, liveness timeout, rate failure,
 stale/foreign/mutated resume, spill corruption, or unknown cleanup effect
 produces a stable failure and leaves the prior published snapshot unchanged.
 
-While NG1 maturity remains Proposed, NG1 failure reservations remain outside
-the active execution-report terminal enum and outside the C++ runtime terminal registry;
-the host-observed receipt schema and conformance vectors are product authority
-inputs, not repository-operation records.
+The host-observed receipt schema and conformance vectors are product authority
+inputs. They are validated by direct tests.
 
 ## Alternatives rejected
 
@@ -91,6 +85,5 @@ inputs, not repository-operation records.
 
 ## Acceptance gate
 
-NG1 の acceptance は provider protocol、署名、binary identity、revocation、sandbox、canonical
-semantic certification の positive・negative・fault test が通ることだけである。独立 review、
-exact SHA、repository-operation report、測定 artifact は要求しない。
+NG1 の acceptance は Protocol 2.0、署名、binary identity、revocation、sandbox、canonical
+semantic certification の positive・negative・fault test が通ることだけである。

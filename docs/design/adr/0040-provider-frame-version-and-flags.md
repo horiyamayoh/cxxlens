@@ -2,8 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-17
-- Decision owner: provider-protocol/provider-runtime
-- Decision issue: #97
 - Depends on: ADR 0010, ADR 0038
 
 ## Context

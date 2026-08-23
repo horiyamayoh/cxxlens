@@ -1,7 +1,6 @@
 schema: cxxlens.security-conformance-vectors.v1
 document_version: 1.1.0
 authority:
-  owner_issue: '#137'
   decision_adr: docs/design/adr/0068-sandbox-assurance-closed-enum-boundary.md
 contract: schemas/cxxlens_ng_security_profile.yaml
 vectors:

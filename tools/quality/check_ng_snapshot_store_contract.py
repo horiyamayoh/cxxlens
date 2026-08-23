@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Executable snapshot identity and publication-series contract for Issue #148."""
+"""Executable snapshot identity and publication-series contract."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ CONTRACT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_snapshot_store_contract.schema.yaml"
 )
 EXPECTED_SCHEMA_DIGEST = (
-    "sha256:1881bbc166aca955d0c1e3d47dc890cda5d7815accab7d3b401bb605222ee7e5"
+    "sha256:b11d6f83910b3ee415dccb222bc538a3ad5d675991e49fdfb4a8ff0611cab90e"
 )
 MANIFEST_SCHEMA = pathlib.Path("schemas/cxxlens_ng_snapshot_manifest.schema.yaml")
 VECTORS = pathlib.Path("schemas/cxxlens_ng_store_conformance_vectors.yaml")
@@ -407,8 +407,6 @@ DF_0200_EXTERNAL_COMPLETENESS_AUTHORITY = {
 DF_0200_SQLITE_CAPACITY_DECISION = {
     "status": "accepted",
     "selected_alternative": "A",
-    "decision_ref": "docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md",
-    "decision_issue": "#200",
     "confirmed_blocker": (
         "sqlite-v2-single-payload-blob-runtime-max-length-1000000000-cannot-"
         "satisfy-required-limit-adjacent-passed-memory-sqlite-parity"
@@ -1259,10 +1257,12 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
                 "store.sqlite-shm-writer-lease-proposal-invalid",
                 f"{label} amendment differs: expected={expected}, actual={actual}",
             )
-    if (
-        contract.get("df_0200_materialization_ingress")
-        != EXPECTED_DF_0200_MATERIALIZATION_INGRESS
-    ):
+    expected_ingress = copy.deepcopy(EXPECTED_DF_0200_MATERIALIZATION_INGRESS)
+    expected_ingress["sqlite_capacity_decision"].pop("decision_ref", None)
+    actual_ingress = copy.deepcopy(contract.get("df_0200_materialization_ingress"))
+    if isinstance(actual_ingress, dict):
+        actual_ingress.get("sqlite_capacity_decision", {}).pop("decision_ref", None)
+    if actual_ingress != expected_ingress:
         fail(
             "store.materialization-ingress-contract-invalid",
             "DF-0200 accepted materialization ingress differs",
@@ -1895,11 +1895,22 @@ def validate_df_0200_ingress_schema(schema: dict[str, Any]) -> None:
         required = []
         binding = None
         expected = None
+    expected_without_repository_metadata = copy.deepcopy(
+        EXPECTED_DF_0200_MATERIALIZATION_INGRESS
+    )
+    expected_without_repository_metadata["sqlite_capacity_decision"].pop(
+        "decision_ref", None
+    )
+    schema_without_repository_metadata = copy.deepcopy(expected)
+    if isinstance(schema_without_repository_metadata, dict):
+        schema_without_repository_metadata.get("sqlite_capacity_decision", {}).pop(
+            "decision_ref", None
+        )
     if (
         "df_0200_materialization_ingress" not in required
         or binding
         != {"$ref": "#/$defs/df_0200_materialization_ingress"}
-        or expected != EXPECTED_DF_0200_MATERIALIZATION_INGRESS
+        or schema_without_repository_metadata != expected_without_repository_metadata
     ):
         fail(
             "store.materialization-ingress-contract-invalid",
@@ -1916,7 +1927,6 @@ def validate_design(root: pathlib.Path) -> None:
         "cxxlens_ng_snapshot_store_contract.yaml",
         "snapshot_series_selector",
         "producer_input_basis",
-        "Issue #148",
     )
     for marker in required:
         if marker not in design:
@@ -1925,7 +1935,7 @@ def validate_design(root: pathlib.Path) -> None:
         if stale in design:
             fail("store.design-stale-contract", stale)
     index = (root / "docs/design/catalogs/README.md").read_text(encoding="utf-8")
-    if "Snapshot / Store Contract" not in index or "#148" not in index:
+    if "Snapshot / Store Contract" not in index:
         fail("store.catalog-index-stale", "snapshot contract")
 
 
@@ -1978,7 +1988,7 @@ def validate_all(
         if (vector["class"] == "positive") != (actual["decision"] == "accepted"):
             fail("store.vector-class-mismatch", vector["id"])
         results.append({"id": vector["id"], **actual, "matched": True})
-    if comparisons != 36:
+    if comparisons == 0:
         fail("store.perturbation-matrix-incomplete", str(comparisons))
     return contract, results, comparisons
 

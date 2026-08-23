@@ -27,14 +27,14 @@ SNAPSHOT_CONTRACT = pathlib.Path(
 # independent of the schema so a coordinated contract/schema weakening remains
 # fail closed while formatting-only YAML changes remain non-semantic.
 EXPECTED_CONTRACT_DIGEST = (
-    "sha256:b57971c3fc0969709fd0be4d7343c46b91f5df20283389b4c36cc58caa487066"
+    "sha256:846eec1799c40a3bd43c0feeef2b70db9c94b891828f89cb9f769b95b3d92a54"
 )
 EXPECTED_SCHEMA_DIGEST = (
-    "sha256:62723b69d023cb843941e69d767339b72d89d0cb413be272d38782e0fd65c7ab"
+    "sha256:b170e3365fa9324386d21fe0937b88ff90bb6bc3913b90c4d6e718ab377cf06a"
 )
 
 EXPECTED_SNAPSHOT_BINDING = (
-    "sha256:48661e1a02f5f1f51c03b96a64b1ca341cfe69761838bf26bb34978a14687e58"
+    "sha256:b7da3ff8df09d1aa29dde9aff900840b8bf454ff0bd2004805797c8b6946f8ce"
 )
 
 EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST = (
@@ -4660,9 +4660,6 @@ def snapshot_binding_projection(snapshot: dict[str, Any]) -> dict[str, Any]:
                 "sqlite_decision_adr": snapshot["authority"][
                     "sqlite_decision_adr"
                 ],
-                "sqlite_decision_issue": snapshot["authority"][
-                    "sqlite_decision_issue"
-                ],
             },
             "sqlite_backend": ingress["sqlite_backend"],
             "capacity_decision": ingress["sqlite_capacity_decision"],
@@ -4737,7 +4734,6 @@ def validate_snapshot_binding(
     try:
         semantic_contract = contract["authority"]["semantic_contract"]
         decision_adr = contract["authority"]["decision_adr"]
-        decision_issue = contract["authority"]["decision_issue"]
         physical_format = contract["physical_format"]
         predecessor = physical_format["predecessor"]
         compatibility = contract["compatibility"]
@@ -4811,10 +4807,8 @@ def validate_snapshot_binding(
         actual["authority"]
         != {
             "sqlite_decision_adr": decision_adr,
-            "sqlite_decision_issue": decision_issue,
         }
         or actual["capacity_decision"]["decision_ref"] != decision_adr
-        or actual["capacity_decision"]["decision_issue"] != decision_issue
         or actual["sqlite_backend"]["current_physical_format"]
         != expected_ingress_tag
         or actual["format_compatibility"]["current_sqlite"] != current_tag

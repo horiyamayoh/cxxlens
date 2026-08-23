@@ -2,8 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-17
-- Decision owner: store-kernel
-- Decision issue: #92
 - Depends on: ADR 0009, ADR 0033
 
 ## Context

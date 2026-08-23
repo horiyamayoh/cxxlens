@@ -391,9 +391,11 @@ int main(const int argument_count, const char* const* arguments)
 		return error == std::errc{} && end == text.data() + text.size();
 	};
 	if (!parse_version(*expected_major, input_limits.protocol_major) ||
-		!parse_version(*expected_minor, input_limits.maximum_minor))
+		!parse_version(*expected_minor, input_limits.maximum_minor) ||
+		input_limits.protocol_major != protocol_v2_major ||
+		input_limits.maximum_minor != protocol_v2_minor)
 		return EXIT_FAILURE;
-	input_limits.minimum_minor = input_limits.maximum_minor;
+	input_limits.minimum_minor = protocol_v2_minor;
 	auto frames = decode_frame_stream(bytes, input_limits);
 	if (!frames)
 		return EXIT_FAILURE;
@@ -543,9 +545,9 @@ int main(const int argument_count, const char* const* arguments)
 
 	stdout_sink sink;
 	protocol_limits output_limits;
-	output_limits.protocol_major = frames->front().protocol_major;
-	output_limits.minimum_minor = frames->front().protocol_minor;
-	output_limits.maximum_minor = frames->front().protocol_minor;
+	output_limits.protocol_major = protocol_v2_major;
+	output_limits.minimum_minor = protocol_v2_minor;
+	output_limits.maximum_minor = protocol_v2_minor;
 	protocol_writer writer{sink, output_limits};
 	writer.grant_credit({64U * 1024U * 1024U, 65536U});
 	auto identity = *expected_manifest;

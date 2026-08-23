@@ -11,11 +11,10 @@ properties:
   authority:
     type: object
     additionalProperties: false
-    required: [design, decision_adr, owner_issue, owner]
+    required: [design, decision_adr, owner]
     properties:
       design: {type: string, minLength: 1}
       decision_adr: {const: docs/design/adr/0063-project-catalog-bottom-up-identity.md}
-      owner_issue: {const: '#121'}
       owner: {const: steward.ng-kernel}
   value_types:
     type: object

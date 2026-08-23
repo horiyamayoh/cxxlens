@@ -371,7 +371,8 @@ namespace cxxlens::sdk
 			mutable std::mutex mutex_;
 			// Value initialization is required: the state starts unsealed with no open files.
 			std::atomic<bool> sealed_{}; // NOLINT(readability-redundant-member-init)
-			std::atomic<std::size_t> open_file_count_{}; // NOLINT(readability-redundant-member-init)
+			std::atomic<std::size_t>
+				open_file_count_{}; // NOLINT(readability-redundant-member-init)
 			std::uint64_t byte_count_{};
 			sqlite_backend_copy_receipt receipt_;
 			bool registered_{};

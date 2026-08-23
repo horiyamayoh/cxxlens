@@ -1,18 +1,16 @@
 schema: cxxlens.clang22-materialization-contract.v2
-document_version: 2.1.0
+document_version: 2.2.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
   decision_adr: docs/design/adr/0096-clang22-installed-materialization-boundary.md
   sqlite_decision_adr: docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
-  sqlite_decision_issue: '#200'
-  owner_issue: '#181'
   owner: steward.ng-clang22-provider
 dependencies:
   - schemas/cxxlens_ng_relation_registry.yaml
   - schemas/cxxlens_ng_project_catalog_contract.yaml
   - schemas/cxxlens_ng_portable_provider_task_contract.yaml
-  - schemas/cxxlens_ng_provider_protocol.yaml
+  - schemas/cxxlens_ng_provider_protocol_v2.yaml
   - schemas/cxxlens_ng_provider_runtime_contract.yaml
   - schemas/cxxlens_ng_snapshot_store_contract.yaml
   - schemas/cxxlens_ng_sqlite_store_contract.yaml
@@ -28,7 +26,7 @@ surface:
   public_cpp_api: none
   generic_adoption_api: none
   clang_native_type_exposure: forbidden
-  request_schema: cxxlens.clang22-materialization-request.v2
+  request_schema: cxxlens.clang22-materialization-request.v2_2
   report_schema: cxxlens.clang22-materialization-report.v2
   transport: one-json-request-on-stdin-one-json-response-on-stdout
   stderr: diagnostic-only
@@ -76,7 +74,7 @@ surface:
       - capture-limit-plus-one-into-one-immutable-raw-spool
       - pass-one-strict-utf8-json-duplicates-envelope-and-version
       - pass-two-selected-v2-schema-and-bottom-up-binding
-      - streaming-base64-validation-and-source-receipts
+      - streaming-source-closure-validation-and-source-receipts
       - seal-complete-request-before-effects
       - replay-one-canonical-task-at-a-time
     pass_one_dom: forbidden
@@ -93,9 +91,8 @@ surface:
   resource_limits:
     maximum_task_count: 4096
     maximum_task_sandbox_requirements: 4096
-    maximum_decoded_source_bytes_per_task: 16777216
-    maximum_aggregate_decoded_source_bytes: 536870912
-    maximum_content_base64_characters_per_task: 22369624
+    maximum_source_bytes_per_task: 16777216
+    maximum_aggregate_source_bytes: 536870912
     maximum_response_bytes: 1073741824
     maximum_json_depth: 64
     maximum_json_members_per_object: 4096
@@ -107,7 +104,7 @@ surface:
       raw_spelling_bound: excluded
       schema_walk: closed-required-local-ref-allof-intersection-oneof-maximum
       global_substitution: tasks-empty-array
-      task_metadata_substitution: source-content-base64-empty-string
+      task_metadata_substitution: source-closure-metadata-empty-object
       window_bytes: 67108864
       global_selected_schema_maximum_bytes: 10420985
       global_margin_bytes: 56687879
@@ -126,7 +123,7 @@ surface:
     maximum_provider_input_chunks: 64
     raw_request_storage: bounded-chunk-read-and-private-spool
     json_processing: streaming-strict-utf8-duplicate-aware-no-one-gib-dom
-    source_decoding: streaming-base64-to-bounded-private-spool
+    source_closure: streaming-validated-manifest-blob-chunks-to-bounded-private-spool
     admission_failure:
       phase_authentic_spool_failure:
         lexical_raw_and_task_index: json-decode
@@ -202,18 +199,18 @@ surface:
     sqlite_recovery: read-only-exact-selector-parent-candidate-snapshot-and-publication-inspection
     memory_after_exit_two: process-local-store-lost-fresh-rerun-only
 versioning:
-  machine_contract: 2.1.0
-  request: 2.1.0
-  report: 2.1.0
-  provider_task_input_codec: cxxlens.clang22.task.v3
+  machine_contract: 2.2.0
+  request: 2.2.0
+  report: 2.2.0
+  provider_task_input_codec: cxxlens.clang22.task.v4
   observation_native_codec: cxxlens.clang22.observation-native.v2
-  provider_protocol: 1.1.0
-  provider_protocol_required_feature: task-input-chunks-v1
-  provider_protocol_minor_zero_fallback: forbidden
+  provider_protocol: 2.0.0
+  provider_protocol_required_features: [task-input-chunks-v2, task-source-closure-v2]
+  provider_protocol_downgrade: forbidden
   unknown_member: reject
   missing_required_member: reject
   adjacent_version_fallback: forbidden
-  migration: v1-unimplemented-unqualified-superseded-no-implicit-upgrade
+  migration: protocol-v2-request-v2_2-task-v4-only-no-implicit-downgrade
 identity:
   provider_id: cxxlens.clang22.reference
   provider_version: 1.0.0
@@ -318,8 +315,7 @@ identity:
     - environment_digest
   mismatch: materialization.identity-mismatch
   verification_ownership:
-    authority_checker_proves: [machine-shape, bounded-phase-authentic-response, exact-registry-descriptor-bindings, descriptor-id-engine-admission, named-engine-and-policy-identities, complete-store-selector, observation-v2-native-row-codec, project-catalog-bottom-up-identities, project-entry-final-relation-cross-binding, portable-provider-task-identity, clang22-task-v3-input-identity, project-task-census-cross-binding, composite-task-result-matching, source-byte-size-and-digest, source-path-and-line-index-bottom-up-identities, semantic-request-projection, report-request-source-authority-cross-binding, claim-partition-snapshot-publication-identities]
-    implementation_issue_181_shared_codecs_prove: [project-catalog-bottom-up-identities, clang22-task-v3-input-identity, observation-v2-native-row-codec, portable-provider-task-identity, provider-execution-identity, descriptor-id-engine-admission, complete-store-selector, claim-partition-snapshot-publication-identities, reopened-store-exact-comparison]
+    authority_checker_proves: [machine-shape, bounded-phase-authentic-response, exact-registry-descriptor-bindings, descriptor-id-engine-admission, named-engine-and-policy-identities, complete-store-selector, observation-v2-native-row-codec, project-catalog-bottom-up-identities, project-entry-final-relation-cross-binding, portable-provider-task-identity, clang22-task-v4-input-identity, project-task-census-cross-binding, composite-task-result-matching, source-byte-size-and-digest, source-path-and-line-index-bottom-up-identities, semantic-request-projection, report-request-source-authority-cross-binding, claim-partition-snapshot-publication-identities]
     checker_fixture_is_production_qualification: false
     self_consistent_caller_rebinding_without_shared_codec_validation: reject
 relation_outputs:
@@ -485,15 +481,13 @@ source_identity:
     authority: decoded-source-bytes
     offsets: zero-and-byte-after-each-lf-including-eof
     identity: canonical-line-index-domain-identity-over-contract-content-size-and-offsets
-  base64:
-    encoding: rfc4648-standard-alphabet-with-required-padding
-    canonicality: zero-discarded-padding-bits
-    raw_json_token_escape_spelling: non-authoritative-after-strict-string-decode
-    decoded_string: exactly-one-canonical-spelling-per-decoded-byte-sequence
-    request_schema_rejection: before-derived-identity-and-binding
-    source_authority: decoded-bytes-count-content-digest-and-line-index
-    task_v3_projection: unique-canonical-base64-derived-from-sealed-source-bytes
-    validation: decode-reencode-and-exact-compare
+  source_closure:
+    authority: validated-manifest-and-blob-metadata
+    member_metadata: [source_snapshot_id, file_id, logical_path, content_digest, size_bytes, encoding, line_index_id, read_only]
+    identity: [source_closure_id, source_closure_digest, manifest_digest, member_count, blob_count, unique_blob_bytes]
+    task_v4_projection: unique-source-closure-metadata-derived-from-sealed-content
+    request_content_bytes: forbidden
+    validation: recompute-manifest-blob-chunk-digests-and-exact-cross-compare
   validation: recompute-before-source-file-and-task-adoption
 group_topology:
   dependency_groups: [canonical, observation]
@@ -545,7 +539,7 @@ project_and_tasks:
     cross_binding: [task-normalized-invocation-digest, selected-catalog-effective-invocation-digest, final-build-compile-unit-effective-invocation-digest]
     validation_order: recompute-before-project-catalog-final-compile-unit-task-and-request-identities
   per_translation_unit_binding:
-    source: [source_snapshot_id, file_id, logical_path, content_digest, size_bytes, encoding, line_index_id, read_only, content_base64]
+    source: [source_snapshot_id, file_id, logical_path, content_digest, size_bytes, encoding, line_index_id, read_only]
     toolchain: [toolchain_context_id, family, exact_version, target_triple, builtin_headers_digest, sysroot, abi_digest, plugin_spec_digest]
     variant: [build_variant_id, project_id, toolchain_context_id, language, language_standard, target_triple, predefined_macros_digest, include_search_digest, semantic_flags_digest]
     build: [project_id, catalog_id, catalog_digest, selected_catalog_compile_unit_id, independently-derived-final-compile_unit_id, source_snapshot_id, build_variant_id, toolchain_context_id, normalized_invocation_digest-as-effective_invocation_digest, language, working_directory, environment_digest, effective_argv]
@@ -566,14 +560,14 @@ project_and_tasks:
       projection: [cxxlens.clang22.condition-ref.v1, condition-universe-id, condition-id]
       digest_domain: cxxlens.clang22.condition-ref.v1
       generic_condition_value: condition-ref-prefix-plus-semantic-digest-v2
-      validation: recompute-before-portable-task-id-and-exact-cross-bind-worker-v3
+      validation: recompute-before-portable-task-id-and-exact-cross-bind-worker-v4
     descriptor_digest: exact-runtime-descriptor-digest
     session: [exact-six-offered-outputs, empty-required-relations, cc-clang22-canonical-1-only, observation-input-stage, assertion-output-stage]
     per_tu_excluded: [task-input-payload, selected-catalog-compile-unit-id, final-relation-compile-unit-id, provider-execution-id]
     task_id: task-prefix-plus-semantic-digest-v2
     validation: independent-bottom-up-recompute-before-task-accepted
-  worker_task_v3:
-    codec: cxxlens.clang22.task.v3
+  worker_task_v4:
+    codec: cxxlens.clang22.task.v4
     canonical_integer_domain: signed-int64
     canonical_projection: [contract-tag, full-global-project-catalog, selected-catalog-compile-unit-id, final-relation-compile-unit-id, exact-per-tu-task-payload]
     full_global_project_catalog: [catalog_id, catalog_digest, logical_root, catalog_environment_digest, catalog_compile_units]
@@ -582,29 +576,28 @@ project_and_tasks:
     payload_authority: installed-tool-derived-only
     task_input_digest: sha256-content-digest-of-exact-projection-bytes
     old_codec_or_caller_payload: reject
-    source_content_base64:
-      input: canonical-rfc4648-decoded-json-string
-      projection: unique-canonical-spelling-derived-from-sealed-source-bytes
-      raw_json_escape_affects_task_identity: false
-      nonzero_discarded_padding_bits: reject-before-task-input-digest
-      cross_binding: decoded-bytes-size-content-digest-line-index-and-request-string
+    source_closure_metadata:
+      input: validated-manifest-and-blob-metadata
+      projection: source-free-task-v4-closure-summary
+      request_content_bytes: forbidden
+      cross_binding: file-id-path-content-digest-size-encoding-line-index-and-read-only
     logical_transfer:
-      authority: exact-canonical-task-v3-bytes-and-task-input-digest
+      authority: exact-canonical-task-v4-metadata-and-task-input-digest
       fragmentation_changes-logical-identity: false
       ambient-path-or-fd-authority: forbidden
     physical_transfer:
-      provider_protocol: 1.1.0
-      required_feature: task-input-chunks-v1
-      mode: authenticated-input-descriptor-and-canonical-chunks
+      provider_protocol: 2.0.0
+      required_features: [task-input-chunks-v2, task-source-closure-v2]
+      mode: authenticated-task-v4-chunks-and-source-closure
       open_task_payload: empty
       canonical_chunk_bytes: 1048576
       maximum_task_input_bytes: 67108864
       maximum_chunk_count: 64
-      task_accepted: only-after-length-order-final-digest-task-v3-and-portable-task-validation
+      task_accepted: only-after-length-order-final-digest-task-v4-closure-and-portable-task-validation
       minor-zero-inline-fallback: forbidden
     maximum_projection_proof:
       authority: checker-derived-from-every-projected-request-field-count-and-utf8-byte-bound
-      request_schema: schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
+      request_schema: schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml
       derivation_digest: sha256:009ccd68b46c1a2665af45034056f9ee29f56e209028e565d0f5eda1c21f5b54
       arithmetic: checked-uint64-add-and-multiply
       canonical_length_field_bytes: 8
@@ -623,7 +616,7 @@ project_and_tasks:
       transfer_limit_bytes: 67108864
       margin_bytes: 25578608
       saturated_vector:
-        construction: schema-maximal-canonical-task-v3-stream
+        construction: schema-maximal-canonical-task-v4-stream
         byte_count: 41530256
         digest: sha256:7bcc875ee4b64ee779c9afc0986e54cefc57afe6a9a7b6abeee8b8eaf6877b0e
       runtime_magic_constant_only: forbidden
@@ -1479,7 +1472,6 @@ claim_adoption:
       status: accepted
       selected_alternative: A
       decision_ref: docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
-      decision_issue: '#200'
       confirmed_blocker: sqlite-v2-single-payload-blob-runtime-max-length-1000000000-cannot-satisfy-required-limit-adjacent-passed-memory-sqlite-parity
       required_parity: limit-adjacent-passed-memory-and-reopened-sqlite
       weakening_parity: forbidden
@@ -1502,11 +1494,11 @@ claim_adoption:
           - same-cap-for-memory-and-sqlite-direct-tests
       implementation_and_acceptance: may-proceed-under-accepted-option-a-direct-tests-required-before-production-binding
     d6_compatibility:
-      contract_version: 2.1.0-accepted-df-0200-option-a-authority
+      contract_version: 2.2.0-accepted-option-a-authority
       report_schema_canonical_json_digest: sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96
       public_headers_signatures_and_inventory: unchanged
       public_catalog: additive-sqlite-v3-behavior-entry-with-store.migration-required-no-new-callable
-      request_and_report_shape: request-2.1.0-unchanged-report-private-spool-failure-occurrence-inventory-sandbox-bounds-activated
+      request_and_report_shape: request-2.2.0-report-private-spool-failure-occurrence-inventory-sandbox-bounds-activated
       claim_store_identities_and_logical_canonical_schema_projection: unchanged-with-authorized-physical-generation-transition
       sqlite_contract: schemas/cxxlens_ng_sqlite_store_contract.yaml
       sqlite_physical_format: cxxlens.sqlite-semantic-store.v3-3.0.0
@@ -2082,7 +2074,7 @@ report:
         construction: same-shared-validation-pass-that-constructs-immutable-seal
         public-process-semantic-digest-alias: forbidden
       input_transfer_receipt:
-        protocol: 1.1.0-task-input-chunks-v1
+        protocol: 2.0.0-task-input-chunks-v2
         fields: [task-input-codec, logical-byte-count, logical-task-input-digest, canonical-chunk-size, chunk-count, ordered-chunk-payload-digest-set-digest]
         raw-host-frames-authorize-task-or-adoption: false
     global_side_channels:
@@ -2239,8 +2231,8 @@ acceptance:
   - bounded-phase-authentic-response-union
   - streaming-bounded-request-source-and-two-phase-report-construction
   - two-pass-spool-request-without-one-gib-dom-or-all-task-payloads
-  - protocol-minor-one-authenticated-task-input-chunks-without-inline-fallback
-  - exact-task-v3-logical-identity-independent-of-fragmentation
+  - protocol-2-authenticated-task-and-source-closure-chunks-without-inline-fallback
+  - exact-task-v4-logical-identity-independent-of-fragmentation
   - separate-transport-and-semantic-coverage-planes
   - runtime-owned-raw-frame-frame-transcript-and-sealed-transcript-receipt
   - contract-owned-prepublication-guarantee-profile
@@ -2264,7 +2256,7 @@ acceptance:
   - catalog-census-equals-task-census
   - project-catalog-codec-recomputed-bottom-up
   - catalog-entry-maps-to-distinct-final-compile-unit
-  - worker-v3-binds-full-global-catalog-selected-entry-and-final-id
+  - worker-v4-binds-full-global-catalog-selected-entry-and-final-id
   - portable-provider-task-id-recomputed-from-global-semantics
   - task-results-match-by-composite-execution-key
   - all-tasks-groups-batches-mandatory

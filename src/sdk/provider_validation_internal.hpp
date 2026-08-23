@@ -47,7 +47,7 @@ namespace cxxlens::sdk::provider::detail
 		semantic_version provider_version;
 		std::string provider_binary_digest;
 		std::string provider_semantic_contract_digest;
-		std::uint16_t protocol_major{1U};
+		std::uint16_t protocol_major{protocol_v2_major};
 		std::uint16_t protocol_minor{};
 		std::vector<std::string> required_features;
 		std::string sandbox_policy_digest;
@@ -90,7 +90,7 @@ namespace cxxlens::sdk::provider::detail
 	struct CXXLENS_PROVIDER_DETAIL_HIDDEN host_input_profile
 	{
 		host_transcript_expectation expectation;
-		bool task_input_chunks_v1{};
+		bool task_input_chunks_v2{};
 	};
 
 	/** Immutable input seal produced only after exact transition/length/digest validation. */

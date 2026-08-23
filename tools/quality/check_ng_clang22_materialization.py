@@ -4,8 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import base64
-import binascii
 import copy
 import datetime
 import decimal
@@ -30,7 +28,7 @@ CONTRACT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml"
 )
 REQUEST_SCHEMA = pathlib.Path(
-    "schemas/cxxlens_ng_clang22_materialization_request.schema.yaml"
+    "schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml"
 )
 REPORT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_clang22_materialization_report.schema.yaml"
@@ -43,85 +41,11 @@ PROJECT_CATALOG = pathlib.Path("schemas/cxxlens_ng_project_catalog_contract.yaml
 PORTABLE_PROVIDER_TASK = pathlib.Path(
     "schemas/cxxlens_ng_portable_provider_task_contract.yaml"
 )
-PROVIDER_PROTOCOL = pathlib.Path("schemas/cxxlens_ng_provider_protocol.yaml")
+PROVIDER_PROTOCOL = pathlib.Path("schemas/cxxlens_ng_provider_protocol_v2.yaml")
 PROVIDER_RUNTIME = pathlib.Path("schemas/cxxlens_ng_provider_runtime_contract.yaml")
 SNAPSHOT_STORE = pathlib.Path("schemas/cxxlens_ng_snapshot_store_contract.yaml")
 SQLITE_STORE = pathlib.Path("schemas/cxxlens_ng_sqlite_store_contract.yaml")
-DF_0200_CORPUS = pathlib.Path(
-    "schemas/cxxlens_ng_df_0200_claim_batch_differential_corpus.tsv"
-)
-DF_0200_CORPUS_SCHEMA = pathlib.Path(
-    "schemas/cxxlens_ng_df_0200_claim_batch_differential_corpus.schema.yaml"
-)
-DF_0200_CORPUS_DRIVER = pathlib.Path(
-    "tests/adapter/clang22/df_0200_claim_batch_corpus_test.cpp"
-)
-DF_0200_PRODUCTION_COMPARISON_SOURCE = pathlib.Path(
-    "tests/adapter/clang22/materialization_claims_test.cpp"
-)
-TESTS_CMAKE = pathlib.Path("tests/CMakeLists.txt")
-DECISION_ADR = pathlib.Path(
-    "docs/design/adr/0096-clang22-installed-materialization-boundary.md"
-)
-INTEGRATED_DESIGN = pathlib.Path(
-    "docs/design/cxxlens_next_generation_integrated_design_ja.md"
-)
-ROOT_CMAKE = pathlib.Path("CMakeLists.txt")
-QUALITY_WORKFLOW = pathlib.Path(".github/workflows/quality.yml")
-INSTALL_TEST = pathlib.Path("tests/install/run_install_test.cmake.in")
-MAPPING_SEMANTICS_TEST = pathlib.Path(
-    "tests/unit/sdk/sqlite_writer_shm_mapping_semantics_test.cpp"
-)
-MAPPING_EPOCH_TEST = pathlib.Path(
-    "tests/unit/sdk/sqlite_writer_shm_mapping_epoch_test.cpp"
-)
-OCCURRENCE_GENERATOR_CMAKE = pathlib.Path(
-    "cmake/GenerateClang22OccurrenceManifest.cmake.in"
-)
-SOURCE_PROVENANCE_CMAKE = pathlib.Path(
-    "cmake/VerifyClang22SourceProvenance.cmake"
-)
-ROOTED_VFS_SOURCE = pathlib.Path(
-    "src/llvm/clang22/materialization_rooted_vfs.cpp"
-)
-MATERIALIZATION_IO_SOURCE = pathlib.Path(
-    "src/llvm/clang22/materialization_io.cpp"
-)
-MATERIALIZATION_IO_HEADER = pathlib.Path(
-    "src/llvm/clang22/materialization_io.hpp"
-)
-MATERIALIZATION_REQUEST_STREAM_HEADER = pathlib.Path(
-    "src/llvm/clang22/materialization_request_stream.hpp"
-)
-MATERIALIZATION_REQUEST_STREAM_SOURCE = pathlib.Path(
-    "src/llvm/clang22/materialization_request_stream.cpp"
-)
-MATERIALIZATION_REQUEST_V2_1_SOURCE = pathlib.Path(
-    "src/llvm/clang22/materialization_request_v2_1.cpp"
-)
-MATERIALIZATION_REQUEST_IDENTITY_SOURCE = pathlib.Path(
-    "src/llvm/clang22/materialization_request_identity.cpp"
-)
-MATERIALIZATION_TASK_SPOOL_SOURCE = pathlib.Path(
-    "src/llvm/clang22/materialization_task_spool.cpp"
-)
-MATERIALIZATION_ADMISSION_ERROR_HEADER = pathlib.Path(
-    "src/llvm/clang22/materialization_admission_error.hpp"
-)
-MATERIALIZATION_REQUEST_DRIVER = pathlib.Path(
-    "tests/adapter/clang22/materialization_request_driver.cpp"
-)
-STORE_SOURCE = pathlib.Path("src/sdk/store.cpp")
-STORE_HEADER = pathlib.Path("include/cxxlens/sdk/store.hpp")
-STORE_BACKEND_LIFETIME_INTERNAL = pathlib.Path(
-    "src/sdk/store_backend_lifetime_internal.hpp"
-)
-SQLITE_CONNECTION_LIFECYCLE_INTERNAL = pathlib.Path(
-    "src/sdk/sqlite_connection_lifecycle_internal.hpp"
-)
-SQLITE_CONNECTION_LIFECYCLE_SOURCE = pathlib.Path(
-    "src/sdk/sqlite_connection_lifecycle_internal.cpp"
-)
+TASK_V4_SCHEMA = pathlib.Path("schemas/cxxlens_ng_provider_task_v4.schema.yaml")
 GENERIC_DEPENDENCIES = [
     REGISTRY,
     PROJECT_CATALOG,
@@ -156,7 +80,7 @@ OCCURRENCE_AUTHORITY_FILES = [
     ),
     (
         "provider-protocol",
-        "share/cxxlens/schemas/cxxlens_ng_provider_protocol.yaml",
+        "share/cxxlens/schemas/cxxlens_ng_provider_protocol_v2.yaml",
         PROVIDER_PROTOCOL,
     ),
     (
@@ -186,7 +110,7 @@ OCCURRENCE_AUTHORITY_FILES = [
     ),
     (
         "materialization-request-schema",
-        "share/cxxlens/schemas/cxxlens_ng_clang22_materialization_request.schema.yaml",
+        "share/cxxlens/schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml",
         REQUEST_SCHEMA,
     ),
     (
@@ -232,9 +156,11 @@ INTERPRETATION_POLICY_ID = "cxxlens.clang22-interpretation-policy.v1"
 INTERPRETATION_DOMAIN = "cc.clang22-canonical-1"
 TRUST_POLICY_ID = "cxxlens.clang22-installed-native-worker-trust.v1"
 RAW_INPUT_BYTE_LIMIT = 1_073_741_824
-MATERIALIZATION_VERSION = "2.1.0"
-PROVIDER_PROTOCOL_MINOR = 1
-TASK_INPUT_FEATURE = "task-input-chunks-v1"
+MATERIALIZATION_VERSION = "2.2.0"
+PROVIDER_PROTOCOL_MAJOR = 2
+PROVIDER_PROTOCOL_MINOR = 0
+TASK_INPUT_FEATURE = "task-input-chunks-v2"
+SOURCE_CLOSURE_FEATURE = "task-source-closure-v2"
 TASK_INPUT_CHUNK_BYTES = 1_048_576
 MAXIMUM_TASK_INPUT_BYTES = 67_108_864
 MAXIMUM_TASK_INPUT_CHUNKS = 64
@@ -255,19 +181,11 @@ EXPECTED_REPORT_SCHEMA_CANONICAL_DIGEST = (
     "sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96"
 )
 DF_0200_REPORT_SHAPE_ACTIVATION = (
-    "request-2.1.0-unchanged-report-private-spool-failure-"
+    "request-2.2.0-report-private-spool-failure-"
     "occurrence-inventory-sandbox-bounds-activated"
 )
 MAXIMUM_GLOBAL_SEMANTIC_JSON_BYTES = 10_420_985
 MAXIMUM_TASK_METADATA_SEMANTIC_JSON_BYTES = 8_463_179
-CANONICAL_BASE64_PATTERN = (
-    r"^(?:[A-Za-z0-9+/]{4})*"
-    r"(?:[A-Za-z0-9+/][AQgw]==|[A-Za-z0-9+/]{2}[AEIMQUYcgkosw048]=)?$"
-    r"(?![\s\S])"
-)
-CANONICAL_BASE64_ANNOTATION = (
-    "rfc4648-standard-required-padding-zero-discarded-bits"
-)
 OCCURRENCE_MANIFEST_PATH = (
     "share/cxxlens/materialization/clang22/occurrence-v1.json"
 )
@@ -318,7 +236,7 @@ EXPECTED_SEMANTIC_REPLAY_PROJECTION = {
     "raw_spelling_bound": "excluded",
     "schema_walk": "closed-required-local-ref-allof-intersection-oneof-maximum",
     "global_substitution": "tasks-empty-array",
-    "task_metadata_substitution": "source-content-base64-empty-string",
+    "task_metadata_substitution": "source-closure-metadata-empty-object",
     "window_bytes": MAXIMUM_SEMANTIC_REPLAY_WINDOW_BYTES,
     "global_selected_schema_maximum_bytes": MAXIMUM_GLOBAL_SEMANTIC_JSON_BYTES,
     "global_margin_bytes": (
@@ -1207,488 +1125,6 @@ DF_0200_EXTERNAL_COMPLETENESS_AUTHORITY = {
         ),
     },
 }
-DF_0200_SQLITE_CAPACITY_DECISION = {
-    "status": "accepted",
-    "selected_alternative": "A",
-    "decision_ref": "docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md",
-    "decision_issue": "#200",
-    "confirmed_blocker": (
-        "sqlite-v2-single-payload-blob-runtime-max-length-1000000000-cannot-"
-        "satisfy-required-limit-adjacent-passed-memory-sqlite-parity"
-    ),
-    "required_parity": "limit-adjacent-passed-memory-and-reopened-sqlite",
-    "weakening_parity": "forbidden",
-    "alternatives": {
-        "A": {
-            "decision": "sqlite-physical-v3-segmented-or-chunk-table",
-            "disposition": "selected",
-            "preserves": (
-                "logical-canonical-v5-bytes-except-authorized-physical-generation-field"
-            ),
-            "requires": [
-                "physical-format-v3-authority",
-                "deterministic-v2-to-v3-migration",
-                "reopen-compaction-pin-and-backend-parity-direct-tests",
-            ],
-        },
-        "B": {
-            "decision": (
-                "successor-request-budget-and-cross-backend-canonical-payload-cap"
-            ),
-            "disposition": "rejected-not-selected",
-            "preserves": "memory-sqlite-parity-inside-successor-cap",
-            "requires": [
-                "successor-version",
-                "fresh-request-and-budget-authority",
-                "same-cap-for-memory-and-sqlite-direct-tests",
-            ],
-        },
-    },
-    "implementation_and_acceptance": (
-        "may-proceed-under-accepted-option-a-direct-tests-required-before-production-binding"
-    ),
-}
-EXPECTED_DF_0200_RESOLUTION = {
-    "status": "accepted-authority-implementation-pending",
-    "resolution_id": "cxxlens.df-0200.incremental-claim-store.v1",
-    "implementation_disposition": "pending-implementation-and-direct-tests",
-    "d1_claim_batch_oracle": {
-        "public_reference": "sdk-claim-batch-commit",
-        "public_reference_control_flow": (
-            "independent-bounded-resident-reference-during-direct-tests"
-        ),
-        "production_path": "source-private-incremental-external-validator",
-        "shared_implementation_allowlist": [
-            "canonical-codecs",
-            "identity-functions",
-            "field-validators",
-        ],
-        "shared_commit_control_flow_or_verdict_logic": "forbidden",
-        "literal_all_claims_vector_call": "required-for-bounded-direct-test-only",
-        "exact_equivalence": [
-            "accepted-final-occurrence-multiset",
-            "canonical-order",
-            "exact-duplicate-deduplication",
-            "metadata-distinct-same-content-preservation",
-            "hard-and-soft-reference-verdicts",
-            "functional-conflicts",
-            "differential-disagreements",
-            "unresolved-conflict-and-differential-censuses",
-            "cxxlens-claim-batch-v2-canonical-encoding-and-content-digest",
-        ],
-        "digest_only_equality_or_order": "forbidden",
-        "qualification_corpus": {
-            "id": "cxxlens.df-0200.claim-batch-differential-corpus.v1",
-            "freeze_point": "pre-refactor-canonical-bytes-and-verdicts",
-            "artifact": {
-                "path": str(DF_0200_CORPUS),
-                "schema": str(DF_0200_CORPUS_SCHEMA),
-                "schema_id": (
-                    "https://cxxlens.dev/schema/ng/"
-                    "df-0200-claim-batch-differential-corpus.schema.yaml"
-                ),
-                "format": (
-                    "cxxlens.df-0200.claim-batch-differential-corpus.tsv.v1"
-                ),
-                "artifact_version": "1.0.0",
-                "raw_sha256": (
-                    "sha256:f05513d05b0b57788b6f94d9c1a477c88d589b64dd8232d88a5c6c6022a84836"
-                ),
-            },
-            "current_public_reference": {
-                "driver": str(DF_0200_CORPUS_DRIVER),
-                "cmake_target": "cxxlens-df0200-claim-batch-corpus",
-                "ctest": "qualification.df0200-claim-batch-corpus",
-                "operation": "cxxlens::sdk::claim_batch::commit",
-                "mode": "execute-all-frozen-cases-and-compare-exact-artifact-bytes",
-                "generator": {
-                    "visibility": "source-private",
-                    "option": "--emit",
-                    "artifact_update_gate": (
-                        "direct-positive-negative-fault-determinism-and-resource-tests-must-pass"
-                    ),
-                },
-            },
-            "census": {
-                "case_count": 10,
-                "success_count": 9,
-                "error_count": 1,
-                "added_claim_count": 17,
-                "existing_claim_count": 16,
-                "projection_byte_count": 88_607,
-                "projection_digest": (
-                    "semantic-v2:sha256:741e9c5d7682f11a574b5218de1b48b009907782441bc3c9ac1488f264d42ba3"
-                ),
-                "projection_fields": [
-                    "case-id",
-                    "full-added-and-existing-input-encoding",
-                    "exact-success-or-error-tuple-encoding",
-                    "full-semantic-verdict-encoding",
-                ],
-            },
-            "artifact_case_ids": [
-                "hard-missing",
-                "soft-unresolved-exact-duplicate",
-                "metadata-distinct-occurrences",
-                "one-shot-conflict-forward",
-                "one-shot-conflict-reverse",
-                "split-new-existing-conflict",
-                "existing-existing-non-reclassification",
-                "new-existing-same-payload",
-                "new-existing-disjoint",
-                "new-existing-cross-domain-differential",
-            ],
-            "compare_against": [
-                "frozen-pre-refactor-corpus",
-                "current-public-sdk-claim-batch-commit",
-            ],
-            "cases": [
-                "added-versus-existing-claim-classification",
-                "new-to-existing-hard-and-soft-references",
-                "new-to-existing-functional-conflicts-and-differentials",
-                "existing-to-existing-non-reclassification",
-                "one-shot-versus-split-batch-parity",
-                "canonical-input-permutations",
-                "exact-duplicate-deduplication",
-                "metadata-distinct-same-content-preservation",
-                "hard-and-soft-reference-verdicts",
-                "functional-conflict-and-differential-verdicts",
-            ],
-            "expected_projection": [
-                "full-added-and-existing-canonical-input-bytes",
-                "full-canonical-claim-batch-v2-bytes",
-                "exact-success-or-structured-error-tuple",
-                "accepted-added-and-existing-occurrence-sets",
-                "reference-conflict-and-differential-verdicts",
-                "unresolved-conflict-and-differential-censuses",
-            ],
-            "production_path_comparison": (
-                "required-direct-positive-negative-fault-determinism-and-resource-tests-before-production"
-            ),
-            "corpus_regeneration": (
-                "requires-direct-positive-negative-fault-determinism-and-resource-tests"
-            ),
-        },
-        "bounded_differential_oracle": (
-            "frozen-corpus-and-current-public-api-direct-positive-negative-fault-"
-            "tests-required"
-        ),
-        "qualified_zero_side_channel_result": (
-            "replay-receipt-instead-of-resident-full-claim-batch-result"
-        ),
-    },
-    "d2_move_only_lifecycle": {
-        "operations": ["begin", "consume-task-rvalue", "finalize-rvalue"],
-        "task_order": "exact-canonical-next-task-only",
-        "live_sealed_results": "at-most-one",
-        "consume_effect": "validate-spool-and-destroy-before-return",
-        "aggregate_authority": "sealed-source-private-replayable-spools",
-        "finalize_precondition": "exact-task-census",
-        "final_source": "move-only-replayable-bounded-typed-partition-events",
-        "event_codec": DF_0200_PARTITION_EVENT_CODEC["id"],
-        "all_task_result_span_or_full_graph": "forbidden",
-    },
-    "partition_event_codec": DF_0200_PARTITION_EVENT_CODEC,
-    "d3_store_ingestion": {
-        "bridge": "source-private-non-installed-header-without-catalog-entry",
-        "public_state_machine": [
-            "created",
-            "staged",
-            "validating",
-            "committed",
-            "rejected",
-            "rolled_back",
-        ],
-        "source_events": [
-            "partition-begin",
-            "claim-occurrence",
-            "detached-row",
-            "claim-annotation",
-            "coverage",
-            "unresolved",
-            "partition-end",
-        ],
-        "event_codec": DF_0200_PARTITION_EVENT_CODEC["id"],
-        "external_completeness_authority": (
-            DF_0200_EXTERNAL_COMPLETENESS_AUTHORITY
-        ),
-        "independent_validation": {
-            "materializer_receipt_is_authority": False,
-            "stream_header_or_trailer_is_completeness_authority": False,
-            "required_recomputation": [
-                "relation-engine-and-schema",
-                "canonical-claim-and-row-identity",
-                "exact-eight-field-partition-grouping",
-                "occurrence-content-coverage-and-unresolved-censuses-and-digests",
-                "hard-and-soft-references-and-closure",
-                "full-byte-event-codec-framing-order-checksum-and-seal",
-                "external-request-journal-task-and-global-census-digest-closure",
-                "segment-run-merge-manifests-and-byte-record-seal-receipts",
-                "manifest-snapshot-and-publication-identity",
-                "canonical-v5-encode-decode-byte-identity",
-            ],
-        },
-        "private_ingress_collection_overflow": {
-            "trigger": "any-canonical-v5-collection-count-greater-than-u64-max",
-            "operation": "partition_stage",
-            "code": "store.counter-overflow",
-            "field": "materialization-v5-collection-count",
-            "detail": "",
-            "mapping": (
-                "store-stage-materialization.store-failure-draft-discarded"
-            ),
-        },
-        "transaction": (
-            "one-unpublished-candidate-one-publish-attempt-no-partial-publication"
-        ),
-        "memory_backend": (
-            "exactly-one-canonical-backend-owned-payload-transferred-without-full-copy"
-        ),
-        "sqlite_prepublication": (
-            "sealed-canonical-v5-payload-spool-and-independent-validation"
-        ),
-        "sqlite_predecessor_v2_capacity": (
-            "single-payload-blob-runtime-max-length-1000000000-insufficient-for-"
-            "required-limit-adjacent-parity"
-        ),
-        "sqlite_current_physical_format": (
-            "cxxlens.sqlite-semantic-store.v3-3.0.0-bounded-8388608-byte-chunks"
-        ),
-        "sqlite_publish_and_reopen_direct_test_matrix": (
-            "required-current-v3-plus-v2-read-migration-and-limit-exceeding-parity"
-        ),
-        "sqlite_capacity_decision_status": "accepted",
-        "payload_and_format": (
-            "logical-canonical-v5-unchanged-except-authorized-physical-generation-"
-            "current-sqlite-v3"
-        ),
-    },
-    "d4_memory_accounting": {
-        "metrics": [
-            "peak-transient-owned-bytes",
-            "memory-backend-final-payload-bytes",
-            "sealed-spool-logical-bytes",
-            "sqlite-persisted-payload-bytes",
-            "operating-system-peak-rss",
-        ],
-        "transient_formula": (
-            "shared-catalog-plus-fixed-buffers-plus-compact-task-index-window-plus-"
-            "maximum-of-task-source-output-claim-consume-claim-finalize-store-reopen-"
-            "or-report-window"
-        ),
-        "final_payload_exclusion": (
-            "exactly-one-immutable-memory-payload-transferred-unchanged-on-success-only"
-        ),
-        "spool_and_persisted_storage": (
-            "measured-separately-never-hidden-as-zero-residency"
-        ),
-        "sort_arena_bytes": 8_388_608,
-        "record_compare_bytes": 65_536,
-        "record_compare_cursors": "exactly-two-cursors-thirty-two-kib-each",
-        "merge_fan_in": 16,
-        "maximum_merge_file_descriptors": 18,
-        "merge_file_descriptor_census": (
-            "sixteen-inputs-plus-one-output-plus-one-metadata"
-        ),
-        "arithmetic": (
-            "checked-unsigned-128-before-u64-or-signed-offset-narrowing"
-        ),
-        "framed_record": {
-            "layout": [
-                "event-kind-u8",
-                "key-length-u64be",
-                "payload-length-u64be",
-                "key-bytes",
-                "payload-bytes",
-                "checksum-sha256-32-raw",
-            ],
-            "logical_bytes_include": "kind-lengths-key-payload-and-checksum",
-            "cross_segment_or_spool": "forbidden",
-            "preappend_check": (
-                "u128-framed-length-segment-spool-and-aggregate-before-any-io"
-            ),
-        },
-        "maximum_spool_logical_bytes": 18_446_744_073_709_551_615,
-        "maximum_spool_segment_bytes": 9_223_372_036_854_775_807,
-        "maximum_spool_segments_per_spool": 3,
-        "maximum_record_bytes": 9_223_372_036_854_775_807,
-        "maximum_record_count": 18_446_744_073_709_551_615,
-        "segment_offsets": {
-            "interval": "half-open-zero-to-segment-length",
-            "data_position": "lowest-exact-segment-index-and-offset-within-interval",
-            "nonfinal_end": "next-segment-index-zero",
-            "final_eof": "segment-index-equals-segment-count-and-offset-zero",
-            "empty_nonfinal_segment": "forbidden",
-        },
-        "rollover": (
-            "segment-first-then-next-spool-at-record-boundary-with-no-record-split"
-        ),
-        "aggregate_census": "checked-u128-across-all-spools-runs-and-merges",
-        "oversize_sort_record": (
-            "framed-record-over-eight-mib-is-one-streamed-singleton-run"
-        ),
-        "full_byte_comparison": (
-            "two-cursors-total-sixty-four-kib-never-digest-order"
-        ),
-        "u128_overflow_tests": (
-            "checked-operand-overflow-without-constructing-u128-max-plus-one"
-        ),
-        "semantic_version_component_maximum": 4_294_967_295,
-        "canonical_v5_collection_count": {
-            "encoding": "u64be",
-            "maximum": 18_446_744_073_709_551_615,
-            "aggregate_before_narrowing": "checked-u128",
-        },
-        "legacy_decoder_collection_caps": {
-            "one_million": [
-                "descriptor-and-string-vectors",
-                "manifest-partitions-and-closures",
-                "row-and-annotation-relation-groups",
-                "unresolved-source-columns",
-            ],
-            "ten_million": [
-                "rows-claims-unresolved-annotations-and-coverage",
-                "partition-envelope-claims-coverage-and-unresolved",
-            ],
-            "authority": (
-                "legacy-implementation-guards-not-normative-ceilings-remove-via-"
-                "bounded-streaming"
-            ),
-        },
-        "maximum_report_bytes": 1_073_741_824,
-        "limit_priority": (
-            "proved-record-spool-collection-or-report-limit-before-io-actual-"
-            "private-spool-enospc-only-after-proved-in-range"
-        ),
-        "canonical_order": "exact-full-canonical-bytes-never-digest-order",
-    },
-    "d5_failure_taxonomy": {
-        "stable_spool_failure_cause": (
-            "actual-private-prepublication-spool-port-io-or-hash-failure-only"
-        ),
-        "proposed_prepublication_phase_codes": {
-            "materialization-validation": "materialization.spool-failure",
-            "store-stage": "materialization.spool-failure",
-            "report-construction": "materialization.spool-failure",
-        },
-        "pre_review_phase_matrix_and_report_schema": "unchanged",
-        "accepted_activation_step": (
-            "atomically-add-three-private-spool-phase-codes-request-bound-reverse-"
-            "closures-for-spool-and-partition-stage-counter-overflow-and-update-"
-            "full-report-schema-canonical-json-digest"
-        ),
-        "relation_or_claim_schema_ceiling_exceeded": (
-            "materialization-validation-materialization-claim-invalid-before-store-open"
-        ),
-        "v5_collection_count_overflow": {
-            "operation": "partition_stage",
-            "code": "store.counter-overflow",
-            "field": "materialization-v5-collection-count",
-            "detail": "",
-            "phase_and_code": "store-stage-materialization.store-failure",
-            "effect": "draft-discarded-publication-not-attempted",
-        },
-        "sqlite_writer_publish_enospc_or_sqlite_toobig": {
-            "operation": "writer_publish",
-            "code": "store.sqlite-failure",
-            "field": "database",
-            "detail": "opaque",
-            "outcome": "publication_outcome_unknown",
-        },
-        "successful_receipt_contradiction": "source-private-exit-two-zero-stdout",
-        "semantic_claim_failure": (
-            "existing-materialization-claim-invalid-or-coverage-code"
-        ),
-        "report_over_limit": (
-            "report-construction-materialization-report-invalid-if-compact-completable"
-        ),
-        "actual_private_spool_enospc": (
-            "phase-authentic-materialization.spool-failure-only-before-publication"
-        ),
-        "publish_returned_handle_then_verification_failure": (
-            "committed_unverified-detailed-response-when-safely-constructible"
-        ),
-        "response_unsafe_exit_two": [
-            "spool-or-allocation-failure-preventing-safe-response",
-            "report-construction-or-transport-failure-preventing-safe-response",
-            "successful-receipt-contradiction",
-            "checked-arithmetic-contradiction",
-        ],
-        "post_publish_typed_outcome_reclassification": "forbidden",
-        "new_materialization_resource_or_internal_stable_code": "forbidden",
-        "sqlite_v2_migration_required": {
-            "store_tuple": {
-                "operation": "writer_begin",
-                "code": "store.migration-required",
-                "field": "sqlite-physical-format",
-                "detail": "cxxlens.sqlite-semantic-store.v2-to-v3",
-            },
-            "phase_and_code": "store-stage-materialization.store-failure",
-            "effect": (
-                "logical-draft-discarded-publication-not-attempted-"
-                "committed-transaction-count-zero"
-            ),
-            "materializer_implicit_migration": "forbidden",
-        },
-    },
-    "sqlite_capacity_decision": DF_0200_SQLITE_CAPACITY_DECISION,
-    "d6_compatibility": {
-        "contract_version": "2.1.0-accepted-df-0200-option-a-authority",
-        "report_schema_canonical_json_digest": (
-            EXPECTED_REPORT_SCHEMA_CANONICAL_DIGEST
-        ),
-        "public_headers_signatures_and_inventory": "unchanged",
-        "public_catalog": (
-            "additive-sqlite-v3-behavior-entry-with-store.migration-required-"
-            "no-new-callable"
-        ),
-        "request_and_report_shape": DF_0200_REPORT_SHAPE_ACTIVATION,
-        "claim_store_identities_and_logical_canonical_schema_projection": (
-            "unchanged-with-authorized-physical-generation-transition"
-        ),
-        "sqlite_contract": "schemas/cxxlens_ng_sqlite_store_contract.yaml",
-        "sqlite_physical_format": "cxxlens.sqlite-semantic-store.v3-3.0.0",
-        "sqlite_chunk_profile": (
-            "cxxlens.sqlite-payload-chunks.v1-8388608-byte-maximum-"
-            "16777216-runtime-floor"
-        ),
-        "sqlite_predecessor": "exact-v2.6.0-read-only-direct-open",
-        "sqlite_migration": "compact-v2.6.0-to-v3.0.0-single-transaction-cow",
-        "sqlite_capacity_decision_status": "accepted",
-        "source_private_receipts_and_counters": "excluded-from-public-report-and-api",
-        "external_qualified_v2_1_found": (
-            "require-successor-version-and-migration-boundary"
-        ),
-        "fresh_public_semantics_gate": [
-            "request-accepted-set-or-budget",
-            "retained-memory-guarantee-weakening",
-            "public-claim-or-store-signature-success-semantics-or-cursor-lifetime",
-            "public-header-callable-or-catalog-entry",
-            "report-shape-or-version",
-            "canonical-v5-or-snapshot-identity",
-            "incompatible-sqlite-format-or-migration-beyond-adr-0097",
-        ],
-    },
-    "falsification": [
-        "frozen-pre-refactor-and-current-public-claim-batch-byte-verdict-corpus",
-        "added-existing-and-new-existing-reference-conflict-nonreclassification",
-        "one-shot-split-and-input-permutation-parity",
-        "exact-duplicate-versus-metadata-distinct-occurrence-preservation",
-        "cross-task-run-and-partition-hard-soft-reference-and-conflict-matrix",
-        "event-codec-unknown-missing-reordered-truncated-and-checksum-matrix",
-        "external-census-digest-and-whole-partition-drop-rejection",
-        "segment-run-merge-manifest-and-byte-record-seal-receipt-matrix",
-        "exact-eight-field-and-zero-row-partition-matrix",
-        "four-thousand-ninety-six-task-one-live-seal-and-permutation-evidence",
-        "every-private-spool-operation-phase-code-effect-fault-injection",
-        "partition-stage-u64-collection-overflow-exact-sdk-tuple",
-        "checked-u64-u128-framing-segment-offset-fan-in-and-report-boundaries",
-        "sqlite-writer-publish-unknown-and-committed-unverified-preservation",
-        "single-owner-memory-payload-and-forbidden-all-task-graph-measurement",
-        "sqlite-option-a-v3-v2-read-migration-and-limit-exceeding-parity",
-        "memory-sqlite-static-shared-semantic-and-public-api-parity",
-    ],
-}
 EXPECTED_BASE_CLAIM_CONTRACT = {
     "owner": "installed-tool",
     "descriptor_order": BASE_DESCRIPTOR_IDS,
@@ -1769,23 +1205,31 @@ EXPECTED_SOURCE_IDENTITY_CONTRACT = {
             "canonical-line-index-domain-identity-over-contract-content-size-and-offsets"
         ),
     },
-    "base64": {
-        "encoding": "rfc4648-standard-alphabet-with-required-padding",
-        "canonicality": "zero-discarded-padding-bits",
-        "raw_json_token_escape_spelling": (
-            "non-authoritative-after-strict-string-decode"
+    "source_closure": {
+        "authority": "validated-manifest-and-blob-metadata",
+        "member_metadata": [
+            "source_snapshot_id",
+            "file_id",
+            "logical_path",
+            "content_digest",
+            "size_bytes",
+            "encoding",
+            "line_index_id",
+            "read_only",
+        ],
+        "identity": [
+            "source_closure_id",
+            "source_closure_digest",
+            "manifest_digest",
+            "member_count",
+            "blob_count",
+            "unique_blob_bytes",
+        ],
+        "task_v4_projection": (
+            "unique-source-closure-metadata-derived-from-sealed-content"
         ),
-        "decoded_string": (
-            "exactly-one-canonical-spelling-per-decoded-byte-sequence"
-        ),
-        "request_schema_rejection": "before-derived-identity-and-binding",
-        "source_authority": (
-            "decoded-bytes-count-content-digest-and-line-index"
-        ),
-        "task_v3_projection": (
-            "unique-canonical-base64-derived-from-sealed-source-bytes"
-        ),
-        "validation": "decode-reencode-and-exact-compare",
+        "request_content_bytes": "forbidden",
+        "validation": "recompute-manifest-blob-chunk-digests-and-exact-cross-compare",
     },
     "validation": "recompute-before-source-file-and-task-adoption",
 }
@@ -2538,7 +1982,7 @@ EXPECTED_REPORT_DIGEST_CHAIN = {
             "public-process-semantic-digest-alias": "forbidden",
         },
         "input_transfer_receipt": {
-            "protocol": "1.1.0-task-input-chunks-v1",
+            "protocol": "2.0.0-task-input-chunks-v2",
             "fields": [
                 "task-input-codec",
                 "logical-byte-count",
@@ -3125,30 +2569,6 @@ def content_digest(value: bytes) -> str:
     return "sha256:" + hashlib.sha256(value).hexdigest()
 
 
-def decode_canonical_base64(value: Any) -> bytes:
-    """Decode the unique RFC 4648 spelling accepted by request/task.v3 authority."""
-
-    if not isinstance(value, str):
-        fail(
-            "materialization.request-invalid",
-            "source.content_base64 is not a canonical Base64 string",
-        )
-    try:
-        decoded = base64.b64decode(value, validate=True)
-    except (binascii.Error, ValueError) as error:
-        fail(
-            "materialization.request-invalid",
-            f"source.content_base64 is not valid RFC 4648 Base64: {error}",
-        )
-    canonical = base64.b64encode(decoded).decode("ascii")
-    if canonical != value:
-        fail(
-            "materialization.request-invalid",
-            "source.content_base64 is not canonical RFC 4648 Base64",
-        )
-    return decoded
-
-
 def _length(value: int) -> bytes:
     return value.to_bytes(8, byteorder="big", signed=False)
 
@@ -3504,329 +2924,6 @@ def semantic_digest(domain: str, payload: bytes | str) -> str:
         )
     )
     return "semantic-v2:sha256:" + hashlib.sha256(framed).hexdigest()
-
-
-def validate_df_0200_claim_batch_corpus(
-    root: pathlib.Path,
-    binding: dict[str, Any],
-    *,
-    artifact_bytes: bytes | None = None,
-    corpus_schema: dict[str, Any] | None = None,
-    driver_text: str | None = None,
-    production_path_text: str | None = None,
-    cmake_text: str | None = None,
-) -> dict[str, Any]:
-    """Validate the immutable D1 corpus and both independent executable bindings."""
-
-    try:
-        artifact_binding = binding["artifact"]
-        census_binding = binding["census"]
-        public_reference = binding["current_public_reference"]
-        case_ids = binding["artifact_case_ids"]
-    except (KeyError, TypeError):
-        fail("materialization.claim-invalid", "DF-0200 corpus binding is incomplete")
-    if artifact_bytes is None:
-        artifact_bytes = (root / artifact_binding["path"]).read_bytes()
-    if corpus_schema is None:
-        corpus_schema = load(root / artifact_binding["schema"])
-    if driver_text is None:
-        driver_text = (root / public_reference["driver"]).read_text(encoding="utf-8")
-    if production_path_text is None:
-        production_path_text = (
-            root / DF_0200_PRODUCTION_COMPARISON_SOURCE
-        ).read_text(encoding="utf-8")
-    if cmake_text is None:
-        cmake_text = (root / TESTS_CMAKE).read_text(encoding="utf-8")
-
-    if content_digest(artifact_bytes) != artifact_binding["raw_sha256"]:
-        fail("materialization.claim-invalid", "DF-0200 corpus raw SHA-256 differs")
-    expected_schema_binding = {
-        "path": artifact_binding["path"],
-        "raw_sha256": artifact_binding["raw_sha256"],
-    }
-    if (
-        corpus_schema.get("$id") != artifact_binding["schema_id"]
-        or corpus_schema.get("x-cxxlens-artifact-binding")
-        != expected_schema_binding
-    ):
-        fail("materialization.claim-invalid", "DF-0200 corpus schema binding differs")
-    try:
-        jsonschema.Draft202012Validator.check_schema(corpus_schema)
-    except jsonschema.SchemaError as error:
-        fail(
-            "materialization.claim-invalid",
-            f"DF-0200 corpus schema is invalid: {error.message}",
-        )
-
-    try:
-        text = artifact_bytes.decode("ascii")
-    except UnicodeDecodeError:
-        fail("materialization.claim-invalid", "DF-0200 corpus is not strict ASCII")
-    if not text.endswith("\n") or "\r" in text or "\x00" in text:
-        fail("materialization.claim-invalid", "DF-0200 corpus framing differs")
-    lines = text.splitlines()
-    expected_header_keys = [
-        "format",
-        "artifact_version",
-        "schema_path",
-        "source_api",
-        "census",
-        "columns",
-    ]
-    if len(lines) != 6 + census_binding["case_count"]:
-        fail("materialization.claim-invalid", "DF-0200 corpus line census differs")
-    headers: dict[str, str] = {}
-    for index, expected_key in enumerate(expected_header_keys):
-        parts = lines[index].split("\t", maxsplit=1)
-        if len(parts) != 2 or parts[0] != f"#{expected_key}":
-            fail("materialization.claim-invalid", "DF-0200 corpus header order differs")
-        headers[expected_key] = parts[1]
-
-    expected_columns = [
-        "id",
-        "equivalence_group",
-        "verdict_group",
-        "added_templates",
-        "existing_templates",
-        "input_encoding_hex",
-        "outcome",
-        "error_code",
-        "error_field",
-        "error_detail",
-        "claim_count",
-        "unresolved_count",
-        "conflict_count",
-        "differential_count",
-        "output_encoding_hex",
-        "expected_tuple_encoding_hex",
-        "verdict_encoding_hex",
-    ]
-    if (
-        headers["format"] != artifact_binding["format"]
-        or headers["artifact_version"] != artifact_binding["artifact_version"]
-        or headers["schema_path"] != artifact_binding["schema"]
-        or headers["source_api"] != public_reference["operation"]
-        or headers["columns"].split("\t") != expected_columns
-    ):
-        fail("materialization.claim-invalid", "DF-0200 corpus header binding differs")
-
-    census_parts = headers["census"].split(";")
-    if any(part.count("=") != 1 for part in census_parts):
-        fail("materialization.claim-invalid", "DF-0200 corpus census grammar differs")
-    raw_census = dict(part.split("=", maxsplit=1) for part in census_parts)
-    expected_census_keys = [
-        "case_count",
-        "success_count",
-        "error_count",
-        "added_claim_count",
-        "existing_claim_count",
-        "projection_byte_count",
-        "projection_digest",
-    ]
-    if list(raw_census) != expected_census_keys:
-        fail("materialization.claim-invalid", "DF-0200 corpus census fields differ")
-    try:
-        census = {
-            key: int(raw_census[key])
-            for key in expected_census_keys
-            if key != "projection_digest"
-        }
-    except ValueError:
-        fail("materialization.claim-invalid", "DF-0200 corpus census is not numeric")
-    census["projection_digest"] = raw_census["projection_digest"]
-    if any(census[key] != census_binding[key] for key in expected_census_keys):
-        fail("materialization.claim-invalid", "DF-0200 corpus frozen census differs")
-
-    def parse_templates(value: str) -> list[str]:
-        if value == "-":
-            return []
-        parsed = value.split(",")
-        if any(not item for item in parsed):
-            fail("materialization.claim-invalid", "DF-0200 template list differs")
-        return parsed
-
-    def parse_optional(value: str) -> str:
-        return "" if value == "-" else value
-
-    def parse_hex(value: str, *, optional: bool = False) -> tuple[str, bytes]:
-        normalized = "" if optional and value == "-" else value
-        try:
-            decoded = bytes.fromhex(normalized)
-        except ValueError:
-            fail("materialization.claim-invalid", "DF-0200 corpus hex differs")
-        if decoded.hex() != normalized:
-            fail("materialization.claim-invalid", "DF-0200 corpus hex is noncanonical")
-        return normalized, decoded
-
-    cases: list[dict[str, Any]] = []
-    projection_rows: list[bytes] = []
-    actual_added_count = 0
-    actual_existing_count = 0
-    actual_projection_bytes = 0
-    for line in lines[6:]:
-        fields = line.split("\t")
-        if len(fields) != len(expected_columns):
-            fail("materialization.claim-invalid", "DF-0200 corpus row width differs")
-        row = dict(zip(expected_columns, fields, strict=True))
-        added = parse_templates(row["added_templates"])
-        existing = parse_templates(row["existing_templates"])
-        input_hex, input_bytes = parse_hex(row["input_encoding_hex"])
-        output_hex, output_bytes = parse_hex(
-            row["output_encoding_hex"], optional=True
-        )
-        expected_hex, expected_bytes = parse_hex(row["expected_tuple_encoding_hex"])
-        verdict_hex, verdict_bytes = parse_hex(row["verdict_encoding_hex"])
-        try:
-            counts = {
-                key: int(row[key])
-                for key in (
-                    "claim_count",
-                    "unresolved_count",
-                    "conflict_count",
-                    "differential_count",
-                )
-            }
-        except ValueError:
-            fail("materialization.claim-invalid", "DF-0200 result census differs")
-        if any(value < 0 for value in counts.values()):
-            fail("materialization.claim-invalid", "DF-0200 result census is negative")
-        error_fields = [
-            parse_optional(row["error_code"]),
-            parse_optional(row["error_field"]),
-            parse_optional(row["error_detail"]),
-        ]
-        if row["outcome"] == "success":
-            if any(error_fields) or not output_bytes:
-                fail("materialization.claim-invalid", "DF-0200 success tuple differs")
-        elif row["outcome"] == "error":
-            if not error_fields[0] or output_bytes or any(counts.values()):
-                fail("materialization.claim-invalid", "DF-0200 error tuple differs")
-        else:
-            fail("materialization.claim-invalid", "DF-0200 outcome differs")
-        if not input_bytes or not expected_bytes or not verdict_bytes:
-            fail("materialization.claim-invalid", "DF-0200 projection is empty")
-        normalized = {
-            "id": row["id"],
-            "equivalence_group": parse_optional(row["equivalence_group"]),
-            "verdict_group": parse_optional(row["verdict_group"]),
-            "added_templates": added,
-            "existing_templates": existing,
-            "input_encoding_hex": input_hex,
-            "outcome": row["outcome"],
-            "error_code": error_fields[0],
-            "error_field": error_fields[1],
-            "error_detail": error_fields[2],
-            **counts,
-            "output_encoding_hex": output_hex,
-            "expected_tuple_encoding_hex": expected_hex,
-            "verdict_encoding_hex": verdict_hex,
-        }
-        cases.append(normalized)
-        actual_added_count += len(added)
-        actual_existing_count += len(existing)
-        actual_projection_bytes += len(input_bytes) + len(expected_bytes) + len(verdict_bytes)
-        projection_rows.append(
-            _canonical_tuple(
-                (
-                    _canonical_string(row["id"]),
-                    _canonical_bytes(input_bytes),
-                    _canonical_bytes(expected_bytes),
-                    _canonical_bytes(verdict_bytes),
-                )
-            )
-        )
-
-    actual_success = sum(row["outcome"] == "success" for row in cases)
-    actual_error = sum(row["outcome"] == "error" for row in cases)
-    if (
-        [row["id"] for row in cases] != case_ids
-        or len(set(case_ids)) != len(case_ids)
-        or actual_success != census["success_count"]
-        or actual_error != census["error_count"]
-        or actual_added_count != census["added_claim_count"]
-        or actual_existing_count != census["existing_claim_count"]
-        or actual_projection_bytes != census["projection_byte_count"]
-    ):
-        fail("materialization.claim-invalid", "DF-0200 case/projection census differs")
-    census_projection = _canonical_tuple(
-        (
-            _canonical_string("cxxlens.df-0200.claim-batch-corpus-census.v1"),
-            _canonical_integer(len(cases)),
-            _canonical_integer(actual_success),
-            _canonical_integer(actual_error),
-            _canonical_integer(actual_added_count),
-            _canonical_integer(actual_existing_count),
-            _canonical_integer(actual_projection_bytes),
-            _canonical_tuple(projection_rows),
-        )
-    )
-    if semantic_digest(
-        "cxxlens.df-0200.claim-batch-corpus-census.v1", census_projection
-    ) != census["projection_digest"]:
-        fail("materialization.claim-invalid", "DF-0200 projection digest differs")
-
-    normalized_corpus = {
-        "format": headers["format"],
-        "artifact_version": headers["artifact_version"],
-        "schema_path": headers["schema_path"],
-        "source_api": headers["source_api"],
-        "census": census,
-        "cases": cases,
-    }
-    try:
-        jsonschema.validate(normalized_corpus, corpus_schema)
-    except jsonschema.ValidationError as error:
-        fail(
-            "materialization.claim-invalid",
-            f"DF-0200 normalized corpus violates schema: {error.message}",
-        )
-
-    required_driver_markers = [
-        artifact_binding["raw_sha256"],
-        public_reference["operation"],
-        "commit(*engine, existing)",
-        "artifact == generated",
-        'std::string_view{argv[1]} == "--emit"',
-        *case_ids,
-    ]
-    if any(marker not in driver_text for marker in required_driver_markers):
-        fail("materialization.claim-invalid", "DF-0200 C++ driver binding differs")
-
-    if binding.get("production_path_comparison") != (
-        "required-direct-positive-negative-fault-determinism-and-resource-tests-before-production"
-    ):
-        fail(
-            "materialization.claim-invalid",
-            "DF-0200 production-path comparison disposition differs",
-        )
-    required_production_markers = [
-        "void check_production_path_claim_batch_equivalence(",
-        "construct_materialization_claims(request, results, producer, guarantee)",
-        "materialization_bounded_claim_source::begin(request)",
-        "construct_materialization_bounded_task_claims(",
-        "production_source->consume_task(std::move(*task))",
-        "std::move(*production_source).finalize()",
-        "run_materialization_incremental_coordinator_v2_1(",
-        "*production_encoding == *reference_encoding",
-        "check_production_path_claim_batch_equivalence(request, producer, root);",
-    ]
-    if any(marker not in production_path_text for marker in required_production_markers):
-        fail(
-            "materialization.claim-invalid",
-            "DF-0200 production-path comparison binding differs",
-        )
-
-    required_cmake_markers = [
-        public_reference["cmake_target"],
-        public_reference["ctest"],
-        artifact_binding["path"],
-        "cxxlens::clang22_provider_sdk",
-        str(DF_0200_PRODUCTION_COMPARISON_SOURCE).removeprefix("tests/"),
-        "adapter.clang22-materialization-claims",
-    ]
-    if any(marker not in cmake_text for marker in required_cmake_markers):
-        fail("materialization.claim-invalid", "DF-0200 CMake/CTest binding differs")
-    return normalized_corpus
 
 
 def validate_df_0200_codec_receipt_closure(
@@ -4608,8 +3705,8 @@ def bind_provider_task_identities(request: dict[str, Any]) -> None:
         task["provider_task_id"] = expected_provider_task_id(request, task)
 
 
-def _worker_task_v3_global_catalog_projection(request: dict[str, Any]) -> bytes:
-    """Encode the request-global task.v3 catalog once for a request."""
+def _worker_task_v4_global_catalog_projection(request: dict[str, Any]) -> bytes:
+    """Encode the request-global task.v4 catalog once for a request."""
 
     project = request["project"]
     global_catalog = {
@@ -4625,16 +3722,16 @@ def _worker_task_v3_global_catalog_projection(request: dict[str, Any]) -> bytes:
     return _canonical_projection_value(global_catalog)
 
 
-def worker_task_v3_projection(
+def worker_task_v4_projection(
     request: dict[str, Any],
     task: dict[str, Any],
     *,
     global_catalog_projection: bytes | None = None,
 ) -> bytes:
-    """Encode the installed worker's full-catalog cxxlens.clang22.task.v3 input."""
+    """Encode task-v4 metadata; source closure bytes are never in this projection."""
 
     if global_catalog_projection is None:
-        global_catalog_projection = _worker_task_v3_global_catalog_projection(request)
+        global_catalog_projection = _worker_task_v4_global_catalog_projection(request)
     per_tu_payload = copy.deepcopy(task)
     for field in (
         "provider_task_id",
@@ -4644,15 +3741,47 @@ def worker_task_v3_projection(
         "compile_unit_id",
     ):
         per_tu_payload.pop(field, None)
-    source_bytes = decode_canonical_base64(
-        per_tu_payload["source"]["content_base64"]
-    )
-    per_tu_payload["source"]["content_base64"] = base64.b64encode(
-        source_bytes
-    ).decode("ascii")
+    source = per_tu_payload.get("source")
+    if not isinstance(source, dict):
+        fail("materialization.task-binding-mismatch", "task source metadata")
+    # v2.2 carries source metadata and a source-closure reference only.  Any
+    # unrecognised source member is rejected rather than allowing caller data
+    # to influence task identity.
+    source_metadata_fields = {
+        "source_snapshot_id",
+        "file_id",
+        "logical_path",
+        "content_digest",
+        "size_bytes",
+        "encoding",
+        "line_index_id",
+        "read_only",
+    }
+    if set(source) - source_metadata_fields:
+        fail(
+            "materialization.request-invalid",
+            "unrecognised source metadata member",
+        )
+    try:
+        task_index = request["tasks"].index(task)
+        extension = request.get("task_extensions", [])[task_index]
+        closure = extension["source_closure"]
+        per_tu_payload["source_closure"] = {
+            "id": closure["id"],
+            "digest": closure["digest"],
+            "manifest_digest": closure["manifest_digest"],
+        }
+        per_tu_payload["main_logical_path"] = extension["main_logical_path"]
+        per_tu_payload["logical_working_directory"] = extension[
+            "logical_working_directory"
+        ]
+    except (KeyError, IndexError, TypeError, ValueError):
+        # A base request without an extension is useful for unit-level codec
+        # tests.  Its source metadata still remains byte-free.
+        pass
     return _canonical_tuple(
         (
-            _canonical_string("cxxlens.clang22.task.v3"),
+            _canonical_string("cxxlens.clang22.task.v4"),
             global_catalog_projection,
             _canonical_string(task["selected_catalog_compile_unit_id"]),
             _canonical_string(task["compile_unit_id"]),
@@ -4663,7 +3792,7 @@ def worker_task_v3_projection(
 
 _PROJECTION_UTF8_BOUND = "x-cxxlens-max-utf8-bytes"
 _PROJECTION_ARITHMETIC_MAX = (1 << 64) - 1
-_TASK_V3_PAYLOAD_EXCLUDED_FIELDS = {
+_TASK_V4_PAYLOAD_EXCLUDED_FIELDS = {
     "provider_task_id",
     "provider_execution_id",
     "task_input_digest",
@@ -4672,38 +3801,18 @@ _TASK_V3_PAYLOAD_EXCLUDED_FIELDS = {
 }
 
 
-def request_source_base64_schema(request_schema: dict[str, Any]) -> dict[str, Any]:
-    """Return the selected-v2 source Base64 schema or fail closed on shape drift."""
-
-    try:
-        value = request_schema["properties"]["tasks"]["items"]["properties"][
-            "source"
-        ]["properties"]["content_base64"]
-    except (KeyError, TypeError):
-        fail(
-            "materialization.task-binding-mismatch",
-            "request schema lacks source.content_base64 authority",
-        )
-    if not isinstance(value, dict):
-        fail(
-            "materialization.task-binding-mismatch",
-            "request schema source.content_base64 authority is not an object",
-        )
-    return value
-
-
 def _checked_projection_add(*values: int) -> int:
     total = 0
     for value in values:
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             fail(
                 "materialization.task-binding-mismatch",
-                "task.v3 projection proof has a non-canonical arithmetic operand",
+                "task.v4 projection proof has a non-canonical arithmetic operand",
             )
         if value > _PROJECTION_ARITHMETIC_MAX - total:
             fail(
                 "materialization.task-binding-mismatch",
-                "task.v3 projection proof checked uint64 addition overflowed",
+                "task.v4 projection proof checked uint64 addition overflowed",
             )
         total += value
     return total
@@ -4720,31 +3829,31 @@ def _checked_projection_multiply(left: int, right: int) -> int:
     ):
         fail(
             "materialization.task-binding-mismatch",
-            "task.v3 projection proof has a non-canonical arithmetic operand",
+            "task.v4 projection proof has a non-canonical arithmetic operand",
         )
     if left and right > _PROJECTION_ARITHMETIC_MAX // left:
         fail(
             "materialization.task-binding-mismatch",
-            "task.v3 projection proof checked uint64 multiplication overflowed",
+            "task.v4 projection proof checked uint64 multiplication overflowed",
         )
     return left * right
 
 
-def _task_v3_projection_component_schemas(
+def _task_v4_projection_component_schemas(
     request_schema: dict[str, Any],
 ) -> list[tuple[str, dict[str, Any]]]:
     properties = request_schema.get("properties")
     if not isinstance(properties, dict):
         fail(
             "materialization.task-binding-mismatch",
-            "request schema lacks task.v3 projection properties",
+            "request schema lacks task.v4 projection properties",
         )
     project_schema = properties.get("project")
     tasks_schema = properties.get("tasks")
     if not isinstance(project_schema, dict) or not isinstance(tasks_schema, dict):
         fail(
             "materialization.task-binding-mismatch",
-            "request schema lacks task.v3 project/task authority",
+            "request schema lacks task.v4 project/task authority",
         )
     project_properties = project_schema.get("properties")
     project_required = project_schema.get("required")
@@ -4757,14 +3866,14 @@ def _task_v3_projection_component_schemas(
     ):
         fail(
             "materialization.task-binding-mismatch",
-            "request schema task.v3 project/task shape is not closed",
+            "request schema task.v4 project/task shape is not closed",
         )
     task_properties = task_schema.get("properties")
     task_required = task_schema.get("required")
     if not isinstance(task_properties, dict) or not isinstance(task_required, list):
         fail(
             "materialization.task-binding-mismatch",
-            "request schema task.v3 per-TU payload shape is not closed",
+            "request schema task.v4 per-TU payload shape is not closed",
         )
 
     catalog_fields = (
@@ -4780,7 +3889,7 @@ def _task_v3_projection_component_schemas(
     ):
         fail(
             "materialization.task-binding-mismatch",
-            "request schema lacks an exact required task.v3 global catalog field census",
+            "request schema lacks an exact required task.v4 global catalog field census",
         )
     global_catalog_schema = {
         "type": "object",
@@ -4794,14 +3903,14 @@ def _task_v3_projection_component_schemas(
     payload_fields = [
         field
         for field in task_required
-        if field not in _TASK_V3_PAYLOAD_EXCLUDED_FIELDS
+        if field not in _TASK_V4_PAYLOAD_EXCLUDED_FIELDS
     ]
     if set(task_properties) != set(task_required) or any(
         field not in task_properties for field in payload_fields
     ):
         fail(
             "materialization.task-binding-mismatch",
-            "request schema task.v3 per-TU field census is not exact",
+            "request schema task.v4 per-TU field census is not exact",
         )
     payload_schema = {
         "type": "object",
@@ -4815,10 +3924,10 @@ def _task_v3_projection_component_schemas(
         if field not in task_properties:
             fail(
                 "materialization.task-binding-mismatch",
-                f"request schema lacks task.v3 {field}",
+                f"request schema lacks task.v4 {field}",
             )
     return [
-        ("contract_tag", {"const": "cxxlens.clang22.task.v3"}),
+        ("contract_tag", {"const": "cxxlens.clang22.task.v4"}),
         ("full_global_project_catalog", global_catalog_schema),
         (
             "selected_catalog_compile_unit_id",
@@ -4842,14 +3951,14 @@ def _projection_schema_bound(
         if not isinstance(reference, str) or not reference.startswith("#/$defs/"):
             fail(
                 "materialization.task-binding-mismatch",
-                f"task.v3 projection proof has a non-local schema reference at {path}",
+                f"task.v4 projection proof has a non-local schema reference at {path}",
             )
         definition = reference.removeprefix("#/$defs/")
         target = root_schema.get("$defs", {}).get(definition)
         if not isinstance(target, dict):
             fail(
                 "materialization.task-binding-mismatch",
-                f"task.v3 projection proof has an unresolved schema reference at {path}",
+                f"task.v4 projection proof has an unresolved schema reference at {path}",
             )
         target_bound = _projection_schema_bound(target, root_schema, path)
         return {
@@ -4888,7 +3997,7 @@ def _projection_schema_bound(
         if len(branch_bounds) != len(branches):
             fail(
                 "materialization.task-binding-mismatch",
-                f"task.v3 projection proof has a non-schema oneOf branch at {path}",
+                f"task.v4 projection proof has a non-schema oneOf branch at {path}",
             )
         selected = max(
             range(len(branch_bounds)),
@@ -4914,7 +4023,7 @@ def _projection_schema_bound(
         ):
             fail(
                 "materialization.task-binding-mismatch",
-                f"task.v3 projection proof is missing a finite UTF-8 byte bound at {path}",
+                f"task.v4 projection proof is missing a finite UTF-8 byte bound at {path}",
             )
         maximum = _checked_projection_add(1, 8, maximum_utf8_bytes)
         return {
@@ -4939,7 +4048,7 @@ def _projection_schema_bound(
         ):
             fail(
                 "materialization.task-binding-mismatch",
-                f"task.v3 projection proof lacks a finite signed-int64 bound at {path}",
+                f"task.v4 projection proof lacks a finite signed-int64 bound at {path}",
             )
         maximum = max(len(_canonical_integer(minimum)), len(_canonical_integer(maximum_value)))
         return {
@@ -4965,7 +4074,7 @@ def _projection_schema_bound(
         ):
             fail(
                 "materialization.task-binding-mismatch",
-                f"task.v3 projection proof lacks one finite homogeneous array bound at {path}",
+                f"task.v4 projection proof lacks one finite homogeneous array bound at {path}",
             )
         item_bound = _projection_schema_bound(item_schema, root_schema, f"{path}[]")
         maximum = _checked_projection_add(
@@ -4996,7 +4105,7 @@ def _projection_schema_bound(
         ):
             fail(
                 "materialization.task-binding-mismatch",
-                f"task.v3 projection proof lacks an exact object field census at {path}",
+                f"task.v4 projection proof lacks an exact object field census at {path}",
             )
         fields: list[dict[str, Any]] = []
         maximum = 9
@@ -5023,7 +4132,7 @@ def _projection_schema_bound(
         }
     fail(
         "materialization.task-binding-mismatch",
-        f"task.v3 projection proof has an unsupported schema shape at {path}",
+        f"task.v4 projection proof has an unsupported schema shape at {path}",
     )
 
 
@@ -5070,7 +4179,7 @@ def _maximum_string_witness(
         if not isinstance(scalar_count, int) or maximum != scalar_count * 4:
             fail(
                 "materialization.task-binding-mismatch",
-                f"task.v3 saturated vector lacks a maximum strong-ID witness at {bound['path']}",
+                f"task.v4 saturated vector lacks a maximum strong-ID witness at {bound['path']}",
             )
         first = chr(0x10000 + (salt % 0xE0000))
         witness = first + chr(0x10000) * (scalar_count - 1)
@@ -5082,8 +4191,6 @@ def _maximum_string_witness(
         witness = "file:sha256:" + "f" * 64
     elif pattern == '^line-index:sha256:[0-9a-f]{64}$':
         witness = "line-index:sha256:" + "f" * 64
-    elif pattern == CANONICAL_BASE64_PATTERN:
-        witness = "A" * (maximum - 2) + "=="
     elif isinstance(pattern, str) and pattern.startswith("^(?:project|build|"):
         prefix = "project://"
         witness = prefix + "p" * (maximum - len(prefix))
@@ -5093,7 +4200,7 @@ def _maximum_string_witness(
     else:
         fail(
             "materialization.task-binding-mismatch",
-            f"task.v3 saturated vector lacks a finite string witness at {bound['path']}",
+            f"task.v4 saturated vector lacks a finite string witness at {bound['path']}",
         )
     witness_schema = {
         key: value
@@ -5110,16 +4217,14 @@ def _maximum_string_witness(
         elif len(witness) <= 1_000_000:
             jsonschema.Draft202012Validator(witness_schema).validate(witness)
         elif (
-            pattern != CANONICAL_BASE64_PATTERN
-            or maximum % 4 != 0
-            or not isinstance(bound.get("maximum_unicode_scalars"), int)
+            not isinstance(bound.get("maximum_unicode_scalars"), int)
             or len(witness) > bound["maximum_unicode_scalars"]
         ):
             raise jsonschema.ValidationError("large saturated string is invalid")
     except jsonschema.ValidationError:
         fail(
             "materialization.task-binding-mismatch",
-            f"task.v3 saturated vector string is not schema-valid at {bound['path']}",
+            f"task.v4 saturated vector string is not schema-valid at {bound['path']}",
         )
     return witness
 
@@ -5155,7 +4260,7 @@ def _emit_projection_saturated_witness(
         if len(encoded) != bound["maximum_utf8_bytes"]:
             fail(
                 "materialization.task-binding-mismatch",
-                f"task.v3 saturated vector string size differs at {bound['path']}",
+                f"task.v4 saturated vector string size differs at {bound['path']}",
             )
         emit(b"\x04" + _length(len(encoded)))
         emit(encoded)
@@ -5198,11 +4303,11 @@ def _emit_projection_saturated_witness(
         return
     fail(
         "materialization.task-binding-mismatch",
-        f"task.v3 saturated vector has an unsupported bound kind at {bound['path']}",
+        f"task.v4 saturated vector has an unsupported bound kind at {bound['path']}",
     )
 
 
-def _task_v3_projection_component_bounds(
+def _task_v4_projection_component_bounds(
     request_schema: dict[str, Any],
 ) -> list[dict[str, Any]]:
     return [
@@ -5210,11 +4315,11 @@ def _task_v3_projection_component_bounds(
             "name": name,
             "bound": _projection_schema_bound(schema, request_schema, f"$.{name}"),
         }
-        for name, schema in _task_v3_projection_component_schemas(request_schema)
+        for name, schema in _task_v4_projection_component_schemas(request_schema)
     ]
 
 
-def _stream_task_v3_saturated_bounds(
+def _stream_task_v4_saturated_bounds(
     component_bounds: list[dict[str, Any]],
     emit: Any,
 ) -> int:
@@ -5233,28 +4338,28 @@ def _stream_task_v3_saturated_bounds(
     return emitted
 
 
-def stream_worker_task_v3_saturated_vector(
+def stream_worker_task_v4_saturated_vector(
     request_schema: dict[str, Any],
     emit: Any,
 ) -> int:
-    """Stream the maximum schema-valid task.v3 witness to an independent sink."""
+    """Stream the maximum schema-valid task.v4 witness to an independent sink."""
 
     if not callable(emit):
         fail(
             "materialization.task-binding-mismatch",
-            "task.v3 saturated vector sink is not callable",
+            "task.v4 saturated vector sink is not callable",
         )
-    return _stream_task_v3_saturated_bounds(
-        _task_v3_projection_component_bounds(request_schema), emit
+    return _stream_task_v4_saturated_bounds(
+        _task_v4_projection_component_bounds(request_schema), emit
     )
 
 
-def maximum_worker_task_v3_projection_proof(
+def maximum_worker_task_v4_projection_proof(
     request_schema: dict[str, Any],
     *,
     transfer_limit: int = MAXIMUM_TASK_INPUT_BYTES,
 ) -> dict[str, Any]:
-    """Derive and witness the finite task.v3 maximum from request-schema authority."""
+    """Derive and witness the finite task.v4 maximum from request-schema authority."""
 
     if (
         isinstance(transfer_limit, bool)
@@ -5264,9 +4369,9 @@ def maximum_worker_task_v3_projection_proof(
     ):
         fail(
             "materialization.task-binding-mismatch",
-            "task.v3 projection proof transfer limit is outside checked uint64",
+            "task.v4 projection proof transfer limit is outside checked uint64",
         )
-    component_bounds = _task_v3_projection_component_bounds(request_schema)
+    component_bounds = _task_v4_projection_component_bounds(request_schema)
     outer_framing = _checked_projection_add(
         1, 8, _checked_projection_multiply(len(component_bounds), 8)
     )
@@ -5278,7 +4383,7 @@ def maximum_worker_task_v3_projection_proof(
     if maximum > transfer_limit:
         fail(
             "materialization.task-binding-mismatch",
-            f"maximum task.v3 projection {maximum} exceeds transfer limit {transfer_limit}",
+            f"maximum task.v4 projection {maximum} exceeds transfer limit {transfer_limit}",
         )
 
     counts = [0, 0, 0, 0]
@@ -5290,15 +4395,15 @@ def maximum_worker_task_v3_projection_proof(
         ]
 
     hasher = hashlib.sha256()
-    emitted = _stream_task_v3_saturated_bounds(component_bounds, hasher.update)
+    emitted = _stream_task_v4_saturated_bounds(component_bounds, hasher.update)
     if emitted != maximum:
         fail(
             "materialization.task-binding-mismatch",
-            "task.v3 saturated vector does not attain the derived maximum",
+            "task.v4 saturated vector does not attain the derived maximum",
         )
 
     derivation = {
-        "codec": "cxxlens.clang22.task.v3",
+        "codec": "cxxlens.clang22.task.v4",
         "canonical_codec": "cxxlens-canonical-tuple-v1",
         "components": component_bounds,
     }
@@ -5323,7 +4428,7 @@ def maximum_worker_task_v3_projection_proof(
         "transfer_limit_bytes": transfer_limit,
         "margin_bytes": transfer_limit - maximum,
         "saturated_vector": {
-            "construction": "schema-maximal-canonical-task-v3-stream",
+            "construction": "schema-maximal-canonical-task-v4-stream",
             "byte_count": emitted,
             "digest": "sha256:" + hasher.hexdigest(),
         },
@@ -5338,7 +4443,7 @@ def expected_task_input_digest(
     global_catalog_projection: bytes | None = None,
 ) -> str:
     return content_digest(
-        worker_task_v3_projection(
+        worker_task_v4_projection(
             request,
             task,
             global_catalog_projection=global_catalog_projection,
@@ -5368,7 +4473,7 @@ def expected_provider_execution_id(
 def bind_task_execution_identities(request: dict[str, Any]) -> None:
     """Bind fixture task-input and physical execution identities bottom-up."""
 
-    global_catalog_projection = _worker_task_v3_global_catalog_projection(request)
+    global_catalog_projection = _worker_task_v4_global_catalog_projection(request)
     for task in request["tasks"]:
         task["task_input_digest"] = expected_task_input_digest(
             request,
@@ -6688,7 +5793,6 @@ def _maximum_canonical_json_bytes(
             r"^semantic-v2:sha256:[0-9a-f]{64}$",
             r"^file:sha256:[0-9a-f]{64}$",
             r"^line-index:sha256:[0-9a-f]{64}$",
-            CANONICAL_BASE64_PATTERN,
         }
         control_excluding_patterns = {
             r"^[^\u0000-\u001f\u007f]+$",
@@ -6805,1488 +5909,6 @@ def _maximum_canonical_json_bytes(
         "materialization.request-invalid",
         "semantic replay size proof encountered an unsupported schema form",
     )
-
-
-def selected_schema_semantic_replay_bounds(
-    request_schema: dict[str, Any],
-) -> tuple[int, int]:
-    global_schema = copy.deepcopy(request_schema)
-    properties = global_schema.get("properties")
-    if not isinstance(properties, dict) or "tasks" not in properties:
-        fail(
-            "materialization.request-invalid",
-            "semantic replay global task substitution path differs",
-        )
-    properties["tasks"] = {"const": []}
-    task_schema = copy.deepcopy(
-        request_schema.get("properties", {}).get("tasks", {}).get("items")
-    )
-    if not isinstance(task_schema, dict):
-        fail(
-            "materialization.request-invalid",
-            "semantic replay task schema is missing",
-        )
-    try:
-        task_schema["properties"]["source"]["properties"]["content_base64"] = {
-            "const": ""
-        }
-    except (KeyError, TypeError):
-        fail(
-            "materialization.request-invalid",
-            "semantic replay source substitution path differs",
-        )
-    return (
-        _maximum_canonical_json_bytes(request_schema, global_schema),
-        _maximum_canonical_json_bytes(request_schema, task_schema),
-    )
-
-
-def validate_contract_exact(
-    contract: dict[str, Any],
-    request_schema: dict[str, Any] | None = None,
-    report_schema: dict[str, Any] | None = None,
-    contract_schema: dict[str, Any] | None = None,
-    snapshot_store_contract: dict[str, Any] | None = None,
-) -> None:
-    validate_materialization_contract_dependencies(contract)
-    if request_schema is None:
-        request_schema = load(ROOT / REQUEST_SCHEMA)
-    if report_schema is None:
-        report_schema = load(ROOT / REPORT_SCHEMA)
-    if contract_schema is None:
-        contract_schema = load(ROOT / CONTRACT_SCHEMA)
-    if snapshot_store_contract is None:
-        snapshot_store_contract = load(ROOT / SNAPSHOT_STORE)
-    if content_digest(canonical_json(report_schema)) != (
-        EXPECTED_REPORT_SCHEMA_CANONICAL_DIGEST
-    ):
-        fail(
-            "materialization.report-invalid",
-            "full report schema canonical digest differs",
-        )
-    if request_source_base64_schema(request_schema) != {
-        "type": "string",
-        "maxLength": 22_369_624,
-        "x-cxxlens-max-utf8-bytes": 22_369_624,
-        "x-cxxlens-base64-canonicality": CANONICAL_BASE64_ANNOTATION,
-        "pattern": CANONICAL_BASE64_PATTERN,
-    }:
-        fail(
-            "materialization.task-binding-mismatch",
-            "canonical Base64 request schema differs",
-        )
-    if content_digest(canonical_json(request_schema)) != (
-        EXPECTED_REQUEST_SCHEMA_CANONICAL_DIGEST
-    ):
-        fail(
-            "materialization.request-invalid",
-            "selected request schema canonical fingerprint differs",
-        )
-
-    semantic_replay_bounds = selected_schema_semantic_replay_bounds(request_schema)
-    expected_semantic_replay_bounds = (
-        MAXIMUM_GLOBAL_SEMANTIC_JSON_BYTES,
-        MAXIMUM_TASK_METADATA_SEMANTIC_JSON_BYTES,
-    )
-    if semantic_replay_bounds != expected_semantic_replay_bounds or any(
-        bound >= MAXIMUM_SEMANTIC_REPLAY_WINDOW_BYTES
-        for bound in semantic_replay_bounds
-    ):
-        fail(
-            "materialization.request-invalid",
-            "selected-schema semantic replay bound differs",
-        )
-
-    request_requirements = (
-        request_schema.get("properties", {})
-        .get("trust_policy", {})
-        .get("properties", {})
-        .get("task_sandbox_requirements")
-    )
-    report_requirements = (
-        report_schema.get("$defs", {})
-        .get("trust_policy", {})
-        .get("properties", {})
-        .get("task_sandbox_requirements")
-    )
-    expected_requirement_bound = {
-        "type": "array",
-        "minItems": 1,
-        "maxItems": MAXIMUM_TASK_SANDBOX_REQUIREMENTS,
-        "uniqueItems": True,
-    }
-    for label, requirements in (
-        ("request", request_requirements),
-        ("report mirror", report_requirements),
-    ):
-        if not isinstance(requirements, dict) or {
-            key: requirements.get(key) for key in expected_requirement_bound
-        } != expected_requirement_bound:
-            fail(
-                "materialization.request-invalid",
-                f"{label} trust requirement schema limit differs",
-            )
-    if request_requirements.get("items") != report_requirements.get("items"):
-        fail(
-            "materialization.report-invalid",
-            "request/report trust requirement item schemas differ",
-        )
-
-    resource_schema = (
-        contract_schema.get("properties", {})
-        .get("surface", {})
-        .get("properties", {})
-        .get("resource_limits", {})
-    )
-    required_resource_schema_fields = {
-        "maximum_task_sandbox_requirements",
-        "maximum_json_members_per_object",
-        "maximum_request_schema_capture_utf8_bytes",
-        "maximum_request_version_capture_utf8_bytes",
-        "semantic_replay",
-        "admission_failure",
-    }
-    if not required_resource_schema_fields.issubset(
-        set(resource_schema.get("required", []))
-    ):
-        fail(
-            "materialization.request-invalid",
-            "contract schema admission resource requirements differ",
-        )
-    resource_schema_properties = resource_schema.get("properties", {})
-    expected_resource_schema_consts = {
-        "maximum_task_sandbox_requirements": MAXIMUM_TASK_SANDBOX_REQUIREMENTS,
-        "maximum_json_members_per_object": MAXIMUM_JSON_MEMBERS_PER_OBJECT,
-        "maximum_request_schema_capture_utf8_bytes": (
-            MAXIMUM_REQUEST_SCHEMA_CAPTURE_BYTES
-        ),
-        "maximum_request_version_capture_utf8_bytes": (
-            MAXIMUM_REQUEST_VERSION_CAPTURE_BYTES
-        ),
-    }
-    for name, expected in expected_resource_schema_consts.items():
-        if resource_schema_properties.get(name) != {"const": expected}:
-            fail(
-                "materialization.request-invalid",
-                f"contract schema {name} const differs",
-            )
-    if resource_schema_properties.get("semantic_replay") != {
-        "const": EXPECTED_SEMANTIC_REPLAY
-    }:
-        fail(
-            "materialization.request-invalid",
-            "contract schema semantic replay proof differs",
-        )
-    if resource_schema_properties.get("admission_failure") != {
-        "const": EXPECTED_ADMISSION_FAILURE
-    }:
-        fail(
-            "materialization.request-invalid",
-            "contract schema admission failure taxonomy differs",
-        )
-
-    semantic_replay = (
-        contract.get("surface", {}).get("resource_limits", {}).get("semantic_replay")
-    )
-    if semantic_replay != EXPECTED_SEMANTIC_REPLAY:
-        fail(
-            "materialization.request-invalid",
-            "contract semantic replay proof differs",
-        )
-    if content_digest(canonical_json(EXPECTED_SEMANTIC_REPLAY_PROJECTION)) != (
-        EXPECTED_SEMANTIC_REPLAY["derivation_digest"]
-    ):
-        fail(
-            "materialization.request-invalid",
-            "semantic replay derivation digest differs",
-        )
-
-    expected_raw_phase_codes = {
-        "input-limit": {"const": "materialization.request-invalid"},
-        "json-decode": {
-            "enum": [
-                "materialization.request-invalid",
-                "materialization.spool-failure",
-            ]
-        },
-        "request-envelope": {"const": "materialization.request-invalid"},
-        "request-version": {"const": "materialization.version-unsupported"},
-        "request-schema": {
-            "enum": [
-                "materialization.request-invalid",
-                "materialization.spool-failure",
-            ]
-        },
-        "request-binding": {
-            "enum": [
-                "materialization.identity-mismatch",
-                "materialization.catalog-census-mismatch",
-                "materialization.task-binding-mismatch",
-                "materialization.descriptor-binding-mismatch",
-                "materialization.spool-failure",
-            ]
-        },
-    }
-    observed_raw_phase_codes: dict[str, Any] = {}
-    for condition in report_schema.get("allOf", []):
-        try:
-            phase = condition["if"]["properties"]["error"]["properties"][
-                "phase"
-            ]["const"]
-            code = condition["then"]["properties"]["error"]["properties"][
-                "code"
-            ]
-        except (KeyError, TypeError):
-            continue
-        if phase in expected_raw_phase_codes:
-            observed_raw_phase_codes[phase] = code
-    if observed_raw_phase_codes != expected_raw_phase_codes:
-        fail(
-            "materialization.report-invalid",
-            "report raw admission phase/code cross-product differs",
-        )
-
-    expected_spool_failure_closure = {
-        "if": {
-            "properties": {
-                "error": {
-                    "type": "object",
-                    "properties": {
-                        "code": {"const": "materialization.spool-failure"}
-                    },
-                    "required": ["code"],
-                }
-            },
-            "required": ["error"],
-        },
-        "then": {
-            "properties": {
-                "response_kind": {"const": "compact_failure"},
-                "result": {"const": "failed"},
-                "process_exit_status": {"const": 1},
-                "raw_input_observation": {
-                    "properties": {"complete": {"const": True}}
-                },
-                "binding": {
-                    "properties": {
-                        "state": {"const": "raw-input-only"},
-                        "request": {"type": "null"},
-                    },
-                    "required": ["state", "request"],
-                },
-                "error": {
-                    "properties": {
-                        "phase": {
-                            "enum": [
-                                "json-decode",
-                                "request-schema",
-                                "request-binding",
-                            ]
-                        }
-                    },
-                    "required": ["phase"],
-                },
-            },
-            "required": ["response_kind", "binding", "error"],
-        },
-    }
-    observed_spool_failure_closures = []
-    for condition in report_schema.get("allOf", []):
-        try:
-            code = condition["if"]["properties"]["error"]["properties"][
-                "code"
-            ]["const"]
-        except (KeyError, TypeError):
-            continue
-        if code == "materialization.spool-failure":
-            observed_spool_failure_closures.append(condition)
-    if observed_spool_failure_closures != [expected_spool_failure_closure]:
-        fail(
-            "materialization.report-invalid",
-            "report spool failure reverse phase/binding closure differs",
-        )
-
-    def contains_legacy_report_lifecycle(value: Any) -> bool:
-        if isinstance(value, dict):
-            return any(contains_legacy_report_lifecycle(item) for item in value.values())
-        if isinstance(value, list):
-            return any(contains_legacy_report_lifecycle(item) for item in value)
-        return value == "bounded-spool-before-publication"
-
-    if contains_legacy_report_lifecycle(contract):
-        fail(
-            "materialization.report-invalid",
-            "legacy prepublication-complete report lifecycle was reintroduced",
-        )
-    report_construction = (
-        contract.get("surface", {})
-        .get("resource_limits", {})
-        .get("report_construction")
-    )
-    if report_construction != EXPECTED_REPORT_CONSTRUCTION:
-        fail(
-            "materialization.report-invalid",
-            "bounded two-phase report lifecycle differs",
-        )
-    if contract["surface"] != {
-        "selected_option": "installed-provider-owned-machine-contract",
-        "executable": "cxxlens-clang22-materialize",
-        "worker_executable": "cxxlens-clang-worker-22",
-        "public_cpp_api": "none",
-        "generic_adoption_api": "none",
-        "clang_native_type_exposure": "forbidden",
-        "request_schema": "cxxlens.clang22-materialization-request.v2",
-        "report_schema": "cxxlens.clang22-materialization-report.v2",
-        "transport": "one-json-request-on-stdin-one-json-response-on-stdout",
-        "stderr": "diagnostic-only",
-        "shell": "forbidden",
-        "cli": {
-            "accepted": "argc-exactly-one-no-options-no-operands",
-            "argv0": "diagnostic-only",
-            "invalid": (
-                "before-stdin-authentication-exit-two-zero-stdout-zero-worker-and-"
-                "store-effects"
-            ),
-            "diagnostic": "bounded-stderr-only",
-        },
-        "json_lexical_policy": EXPECTED_JSON_LEXICAL_POLICY,
-        "json_lexical_errors": {
-            "request": "materialization.request-invalid",
-            "report": "materialization.report-invalid",
-        },
-        "private_spool": {
-            "platform": "linux-only",
-            "creation_operation": "memfd_create",
-            "creation_flags": ["MFD_CLOEXEC", "MFD_ALLOW_SEALING"],
-            "backing": "private-memfd-only",
-            "pathname-or-mkstemp-fallback": "forbidden",
-            "seal_addition_operation": "F_ADD_SEALS",
-            "seal_required_bits": [
-                "F_SEAL_WRITE",
-                "F_SEAL_GROW",
-                "F_SEAL_SHRINK",
-                "F_SEAL_SEAL",
-            ],
-            "seal_verification_operation": "F_GET_SEALS",
-            "logical_sealed_publication": (
-                "after-required-bits-actual-size-and-sealed-content-verified"
-            ),
-            "actual_size_verification": (
-                "fstat-equals-successful-append-census-after-kernel-seal"
-            ),
-            "sealed_content_verification": (
-                "sealed-byte-sha256-equals-successful-append-transcript-sha256"
-            ),
-            "capability_gate": (
-                "first-raw-spool-create-add-get-and-required-bit-observation-"
-                "before-effects"
-            ),
-            "capability_unavailable": (
-                "typed-failure-before-worker-store-or-file-effects"
-            ),
-            "later-create-or-seal-failure": (
-                "phase-authentic-typed-failure-without-mutable-downgrade"
-            ),
-            "pre_seal_mutation": (
-                "content-grow-or-shrink-drift-typed-failure-before-effects"
-            ),
-            "post_seal_mutation": (
-                "write-grow-shrink-and-further-seal-addition-forbidden"
-            ),
-        },
-        "request_validation_pipeline": {
-            "order": [
-                "byte-limit",
-                "strict-json-object",
-                "request-envelope",
-                "version-dispatch",
-                "selected-version-full-schema",
-                "derived-identity-and-binding",
-            ],
-            "request_envelope_fields": ["schema", "request_version"],
-            "unsupported_version_phase": "request-version",
-            "supported_version_schema_failure_phase": "request-schema",
-            "identity_or_binding_failure_phase": "request-binding",
-            "first-failing-boundary-is-authoritative": True,
-            "streaming_lifecycle": [
-                "capture-limit-plus-one-into-one-immutable-raw-spool",
-                "pass-one-strict-utf8-json-duplicates-envelope-and-version",
-                "pass-two-selected-v2-schema-and-bottom-up-binding",
-                "streaming-base64-validation-and-source-receipts",
-                "seal-complete-request-before-effects",
-                "replay-one-canonical-task-at-a-time",
-            ],
-            "pass_one_dom": "forbidden",
-            "pass_two_global_catalog_owner": "exactly-one-immutable-value",
-            "task_index": "compact-spool-backed",
-            "raw_json_token_is_decoded_string_authority": False,
-            "replay": (
-                "same-strict-json-string-decoder-and-receipt-revalidation"
-            ),
-        },
-        "input_observation": {
-            "maximum_request_bytes": RAW_INPUT_BYTE_LIMIT,
-            "maximum_consumed_bytes": RAW_INPUT_BYTE_LIMIT + 1,
-            "within_limit": "complete-byte-count-and-sha256",
-            "over_limit": "exact-limit-plus-one-prefix-count-and-sha256-complete-false",
-            "unread_suffix_claim": "forbidden",
-        },
-        "resource_limits": {
-            "maximum_task_count": 4096,
-            "maximum_task_sandbox_requirements": MAXIMUM_TASK_SANDBOX_REQUIREMENTS,
-            "maximum_decoded_source_bytes_per_task": 16777216,
-            "maximum_aggregate_decoded_source_bytes": 536870912,
-            "maximum_content_base64_characters_per_task": 22369624,
-            "maximum_response_bytes": RAW_INPUT_BYTE_LIMIT,
-            "maximum_json_depth": 64,
-            "maximum_json_members_per_object": MAXIMUM_JSON_MEMBERS_PER_OBJECT,
-            "maximum_json_member_name_utf8_bytes": 256,
-            "maximum_request_schema_capture_utf8_bytes": (
-                MAXIMUM_REQUEST_SCHEMA_CAPTURE_BYTES
-            ),
-            "maximum_request_version_capture_utf8_bytes": (
-                MAXIMUM_REQUEST_VERSION_CAPTURE_BYTES
-            ),
-            "semantic_replay": EXPECTED_SEMANTIC_REPLAY,
-            "maximum_strong_id_unicode_scalars": 512,
-            "maximum_strong_id_utf8_bytes": 2048,
-            "maximum_logical_path_utf8_bytes": 4096,
-            "maximum_sqlite_relative_path_utf8_bytes": 4095,
-            "maximum_argv_items": 4096,
-            "maximum_argv_item_utf8_bytes": 2048,
-            "provider_input_chunk_bytes": TASK_INPUT_CHUNK_BYTES,
-            "maximum_provider_task_input_bytes": MAXIMUM_TASK_INPUT_BYTES,
-            "maximum_provider_input_chunks": MAXIMUM_TASK_INPUT_CHUNKS,
-            "raw_request_storage": "bounded-chunk-read-and-private-spool",
-            "json_processing": "streaming-strict-utf8-duplicate-aware-no-one-gib-dom",
-            "source_decoding": "streaming-base64-to-bounded-private-spool",
-            "admission_failure": EXPECTED_ADMISSION_FAILURE,
-            "retained_memory_claim": {
-                "excluded_resident_sets": [
-                    "raw-one-gib-request",
-                    "aggregate-source-bytes",
-                    "all-task-payloads",
-                    "task-count-times-catalog-count-copies",
-                ],
-                "bound": (
-                    "one-shared-catalog-plus-fixed-parser-and-chunk-buffers-plus-one-"
-                    "task-index-window-plus-one-decoded-source-plus-one-output-"
-                    "validation-window"
-                ),
-                "task_count_independent_absolute-rss": "not-claimed",
-                "task_index_and_bulk-occurrences": "private-spool",
-            },
-            "report_construction": EXPECTED_REPORT_CONSTRUCTION,
-            "allocation_failure": {
-                "prepublication_report_construction": (
-                    "schema-valid-compact-zero-effect-if-completable-otherwise-exit-two-"
-                    "no-response"
-                ),
-                "after_publication_attempt": (
-                    "exit-two-no-response-no-compact-downgrade"
-                ),
-                "partial_response": "non-authoritative",
-            },
-            "boundary_tests": [
-                "zero",
-                "limit-minus-one",
-                "limit",
-                "limit-plus-one",
-                "limit-plus-two",
-                "fragmented-short-reads",
-            ],
-            "injected_small_limit_state_machine_test": "required",
-        },
-        "process_exit": {
-            "passed_detailed": 0,
-            "schema_valid_failure": 1,
-            "stdout_transport_failure_no_response_authority": 2,
-            "error_kind_from_exit_or_stderr": "forbidden",
-            "prepublication_report_failure": (
-                "schema-valid-compact-zero-effect-exit-one-or-exit-two-no-response"
-            ),
-            "post_publication_attempt_finalization_failure": (
-                "exit-two-no-response-authority-no-compact-downgrade"
-            ),
-            "post_commit_finalization_or_stdout_failure": (
-                "exit-two-no-response-store-record-only-recovery-authority"
-            ),
-            "partial_stdout": "parsed-response-count-zero-and-non-authoritative",
-            "post_commit_broken_stdout": (
-                "exit-two-no-response-store-record-only-recovery-authority"
-            ),
-            "sqlite_blind_retry_after_exit_two": "forbidden",
-            "sqlite_recovery": (
-                "read-only-exact-selector-parent-candidate-snapshot-and-publication-inspection"
-            ),
-            "memory_after_exit_two": "process-local-store-lost-fresh-rerun-only",
-        },
-    }:
-        fail("materialization.request-invalid", "installed machine surface is not exact")
-    if contract["versioning"] != {
-        "machine_contract": MATERIALIZATION_VERSION,
-        "request": MATERIALIZATION_VERSION,
-        "report": MATERIALIZATION_VERSION,
-        "provider_task_input_codec": "cxxlens.clang22.task.v3",
-        "observation_native_codec": "cxxlens.clang22.observation-native.v2",
-        "provider_protocol": "1.1.0",
-        "provider_protocol_required_feature": TASK_INPUT_FEATURE,
-        "provider_protocol_minor_zero_fallback": "forbidden",
-        "unknown_member": "reject",
-        "missing_required_member": "reject",
-        "adjacent_version_fallback": "forbidden",
-        "migration": "v1-unimplemented-unqualified-superseded-no-implicit-upgrade",
-    }:
-        fail("materialization.version-unsupported", "version/fallback policy is not exact")
-    compact_failure = contract["report"]["response_union"]["compact_failure"]
-    compact_report_construction = compact_failure.get("report_construction_phase")
-    if (
-        compact_report_construction
-        != "prepublication-zero-effect-only-before-publish-call"
-    ):
-        fail(
-            "materialization.report-invalid",
-            "compact report-construction boundary differs",
-        )
-    expected_task_census = {
-        "raw-input-only-and-installation-binding": [
-            "task-attempts-zero",
-            "task-successes-zero",
-            "worker-launch-attempts-zero",
-            "worker-launch-successes-zero",
-        ],
-        "worker-launch": {
-            "task-attempts": "one-through-task-count",
-            "task-successes": "task-attempts-minus-one",
-            "worker-launch-attempts": "zero-through-task-attempts",
-            "worker-launch-successes": (
-                "worker-launch-attempts-or-minus-one-for-in-flight-launch"
-            ),
-        },
-        "post-worker-phases": {
-            "task-attempts": "task-count",
-            "task-successes": "task-count",
-            "worker-launch-attempts": "zero-through-task-count",
-            "worker-launch-successes": "worker-launch-attempts",
-        },
-    }
-    if compact_failure.get("task_census") != expected_task_census:
-        fail(
-            "materialization.report-invalid",
-            "compact task census differs",
-        )
-    if (
-        compact_failure.get("exact_effects")
-        != [
-            "task-attempt-count",
-            "task-success-count",
-            "worker-launch-attempt-count",
-            "worker-launch-success-count",
-            "store-draft-state",
-            "head-observation",
-            "publication-attempted",
-            "committed-transaction-count",
-            "prior-history-retained",
-            "first-store-failure-cause-or-null",
-        ]
-        or compact_failure.get("store_draft_state_authority")
-        != {
-            "authority": (
-                "invocation-logical-unpublished-snapshot-draft-lifecycle-"
-                "not-sdk-writer-existence"
-            ),
-            "not_created": "no-successful-store-open-adoption",
-            "discarded": (
-                "successful-store-open-adoption-released-before-compact-authority"
-            ),
-            "writer_begin_receipt_inference": "forbidden",
-        }
-        or compact_failure.get("head_observation_states")
-        != ["not-observed", "absent", "present", "sdk-error"]
-        or compact_failure.get("prepublication_store_failure_cause")
-        != {
-            "exact_fields": [
-                "authenticated-operation",
-                "access-path-or-null",
-                "exact-sdk-code",
-                "exact-sdk-field",
-                "stable-or-opaque-exact-detail-observation",
-            ],
-            "operations": [
-                "store_open",
-                "head_current",
-                "writer_begin",
-                "partition_stage",
-                "closure_stage",
-                "writer_validate",
-            ],
-            "access_path_by_operation": {
-                "head_current": "current-selector",
-                "all_other_operations": None,
-            },
-            "head_current_observation": {
-                "store.current-not-found": "absent",
-                "every_other_sdk_error": "sdk-error",
-                "observed_head_publication": None,
-            },
-            "verification_source": (
-                "source-private-first-sdk-error-observation-not-report-self-consistency"
-            ),
-            "non_store_compact_failure": None,
-        }
-    ):
-        fail(
-            "materialization.store-failure",
-            "compact prepublication Store cause authority differs",
-        )
-    if contract["errors"].get("compact_effect_matrix", {}).get("store-stage") != [
-        "task-attempts-task-count",
-        "task-successes-task-count",
-        "launch-attempts-zero-through-task-count",
-        "launch-successes-equals-attempts",
-        "draft-discarded",
-        "head-observed-absent-present-or-sdk-error",
-        "sdk-error-only-for-exact-head-current-cause",
-        "exact-first-stage-sdk-error-for-store-failure-otherwise-null",
-    ]:
-        fail(
-            "materialization.store-failure",
-            "compact store-stage head observation authority differs",
-        )
-    expected_compact_effect_matrix = {
-        "raw-input-only": {
-            "all-phases": [
-                "launch-attempts-zero",
-                "launch-successes-zero",
-                "draft-not-created",
-                "head-not-observed",
-                "publication-not-attempted",
-                "commit-zero",
-                "store-failure-cause-null",
-            ],
-            "input-limit": "raw-prefix-exact-limit-plus-one-complete-false",
-            "non-input-limit": "exact-complete-raw-bytes",
-        },
-        "installation-binding": [
-            "launch-attempts-zero",
-            "launch-successes-zero",
-            "draft-not-created",
-            "head-not-observed",
-            "store-failure-cause-null",
-        ],
-        "worker-launch": [
-            "task-attempts-one-through-task-count",
-            "task-successes-attempts-minus-one",
-            "launch-attempts-zero-through-task-attempts",
-            "launch-successes-attempts-or-minus-one",
-            "draft-not-created",
-            "head-not-observed",
-            "store-failure-cause-null",
-        ],
-        "transcript": [
-            "task-attempts-task-count",
-            "task-successes-task-count",
-            "launch-attempts-zero-through-task-count",
-            "launch-successes-equals-attempts",
-            "draft-not-created",
-            "head-not-observed",
-            "store-failure-cause-null",
-        ],
-        "materialization-validation": [
-            "task-attempts-task-count",
-            "task-successes-task-count",
-            "launch-attempts-zero-through-task-count",
-            "launch-successes-equals-attempts",
-            "draft-not-created",
-            "head-not-observed",
-            "store-failure-cause-null",
-        ],
-        "store-open": [
-            "task-attempts-task-count",
-            "task-successes-task-count",
-            "launch-attempts-zero-through-task-count",
-            "launch-successes-equals-attempts",
-            "draft-not-created",
-            "head-not-observed",
-            "exact-first-store-open-sdk-error",
-        ],
-        "store-stage": [
-            "task-attempts-task-count",
-            "task-successes-task-count",
-            "launch-attempts-zero-through-task-count",
-            "launch-successes-equals-attempts",
-            "draft-discarded",
-            "head-observed-absent-present-or-sdk-error",
-            "sdk-error-only-for-exact-head-current-cause",
-            "exact-first-stage-sdk-error-for-store-failure-otherwise-null",
-        ],
-        "report-construction": [
-            "task-attempts-task-count",
-            "task-successes-task-count",
-            "launch-attempts-zero-through-task-count",
-            "launch-successes-equals-attempts",
-            "draft-discarded",
-            "head-observed-absent-or-present",
-            "publication-not-attempted",
-            "store-failure-cause-null",
-        ],
-        "successful-launch-count-not-attempt-count": "required",
-    }
-    if contract["errors"].get("compact_effect_matrix") != expected_compact_effect_matrix:
-        fail(
-            "materialization.report-invalid",
-            "compact effect matrix differs",
-        )
-    required_lifecycle_acceptance = {
-        "streaming-bounded-request-source-and-two-phase-report-construction",
-        "no-completed-report-or-fabricated-publication-values-before-publication",
-        "no-compact-downgrade-after-publication-attempt",
-    }
-    if not required_lifecycle_acceptance.issubset(set(contract["acceptance"])):
-        fail(
-            "materialization.report-invalid",
-            "two-phase report lifecycle acceptance is incomplete",
-        )
-
-    if contract["identity"]["verification_ownership"] != {
-        "authority_checker_proves": [
-            "machine-shape",
-            "bounded-phase-authentic-response",
-            "exact-registry-descriptor-bindings",
-            "descriptor-id-engine-admission",
-            "named-engine-and-policy-identities",
-            "complete-store-selector",
-            "observation-v2-native-row-codec",
-            "project-catalog-bottom-up-identities",
-            "project-entry-final-relation-cross-binding",
-            "portable-provider-task-identity",
-            "clang22-task-v3-input-identity",
-            "project-task-census-cross-binding",
-            "composite-task-result-matching",
-            "source-byte-size-and-digest",
-            "source-path-and-line-index-bottom-up-identities",
-            "semantic-request-projection",
-            "report-request-source-authority-cross-binding",
-            "claim-partition-snapshot-publication-identities",
-        ],
-        "implementation_issue_181_shared_codecs_prove": [
-            "project-catalog-bottom-up-identities",
-            "clang22-task-v3-input-identity",
-            "observation-v2-native-row-codec",
-            "portable-provider-task-identity",
-            "provider-execution-identity",
-            "descriptor-id-engine-admission",
-            "complete-store-selector",
-            "claim-partition-snapshot-publication-identities",
-            "reopened-store-exact-comparison",
-        ],
-        "checker_fixture_is_production_qualification": False,
-        "self_consistent_caller_rebinding_without_shared_codec_validation": "reject",
-    }:
-        fail("materialization.identity-mismatch", "identity verification ownership differs")
-    if (
-        contract["identity"]["derived_ids_and_digests_recomputed_and_compared"]
-        != RECOMPUTED_IDS_AND_DIGESTS
-        or contract["identity"]["validated_or_cross_bound_caller_authority"]
-        != CROSS_BOUND_CALLER_AUTHORITY
-    ):
-        fail("materialization.identity-mismatch", "identity ownership sets differ")
-    relation_outputs = contract["relation_outputs"]
-    if relation_outputs["exact_six_canonical_order"] != DESCRIPTOR_IDS:
-        fail("materialization.descriptor-binding-mismatch", "exact six descriptor set differs")
-    if relation_outputs["digest_authority"] != {
-        "registry": REGISTRY.as_posix(),
-        "contract_digest": "sha256-of-canonical-exact-registry-relation-entry",
-        "runtime_descriptor_digest": "cxxlens.relation-descriptor-binding.v2",
-        "validation": "recompute-both-and-exact-compare-before-worker-launch",
-    }:
-        fail("materialization.descriptor-binding-mismatch", "descriptor digest authority differs")
-    if relation_outputs["observation_v1"] != {
-        "status": "transport-only-non-adoptable",
-        "adoption": "forbidden",
-        "canonical_form_reuse": "forbidden",
-        "payload_digest_alias": "forbidden",
-        "origin_chain_reinterpretation": "forbidden",
-    } or relation_outputs["descriptor_fallback"] != "forbidden":
-        fail("materialization.descriptor-binding-mismatch", "v1 or fallback became adoptable")
-    if (
-        relation_outputs["observation_v2_native_codec"]
-        != EXPECTED_OBSERVATION_V2_NATIVE_CODEC
-    ):
-        fail(
-            "materialization.descriptor-binding-mismatch",
-            "observation v2 native row codec differs",
-        )
-    if contract["base_claims"] != EXPECTED_BASE_CLAIM_CONTRACT:
-        fail("materialization.claim-invalid", "base claim construction contract differs")
-    if contract["source_identity"] != EXPECTED_SOURCE_IDENTITY_CONTRACT:
-        fail("materialization.identity-mismatch", "source identity contract differs")
-    if contract["identity"].get("installed_occurrence") != EXPECTED_INSTALLED_OCCURRENCE:
-        fail(
-            "materialization.identity-mismatch",
-            "installed occurrence measurement contract differs",
-        )
-    topology = contract["group_topology"]
-    expected_topology = {
-        "dependency_groups": ["canonical", "observation"],
-        "atomic_output_group": "clang22-atomic",
-        "descriptor_groups": GROUP_DESCRIPTORS,
-        "batch_id": "descriptor-id-plus--batch",
-        "all_tasks_mandatory": True,
-        "all_dependency_groups_mandatory": True,
-        "all_batches_mandatory": True,
-        "partial_policy": "forbid",
-        "unsealed_or_missing": "materialization.group-incomplete",
-    }
-    if topology != expected_topology:
-        fail("materialization.group-incomplete", "mandatory group topology differs")
-    optionality = contract["span_adoption"]["optionality"]
-    if optionality != {
-        "entity_and_call": "optional-all-or-none",
-        "absent": "retain-observation-with-typed-unresolved-and-non-exact-guarantee",
-        "entity_absent_canonicalization": "canonical-entity-may-remain-without-source-anchor",
-        "call_absent_canonicalization": "omit-cc-call-site-and-source-dependent-canonical-row",
-        "partial": "reject-entire-materialization",
-    }:
-        fail("materialization.span-invalid", "primary span optionality differs")
-    if contract["span_adoption"]["report_census"] != {
-        "entity_plus_call_observation_rows": (
-            "observed-bundle-count-plus-absent-bundle-count"
-        ),
-        "unique_bundle_count": "less-than-or-equal-observed-bundle-count",
-        "entity_absent_bundle_count": (
-            "less-than-or-equal-entity-observation-rows"
-        ),
-        "call_absent_bundle_count": "less-than-or-equal-call-observation-rows",
-        "passed_constructed_source_span_claim_count": "exact-unique-bundle-count",
-        "validated_bundle_binding": (
-            "exact-bundle-and-bundle-digest-and-constructed-row-digest-and-originating-"
-            "semantic-task-context"
-        ),
-        "bundle_task_binding_set_digest": "required-and-recomputed",
-    }:
-        fail("materialization.span-invalid", "span report census contract differs")
-    project_tasks = contract["project_and_tasks"]
-    if project_tasks["semantic_request_binding"] != {
-        "domain": "cxxlens.clang22-semantic-request.v2",
-        "codec": "cxxlens-canonical-tuple-v1",
-        "object_encoding": "canonical-sorted-key-entry-tuples",
-        "includes": [
-            "tool",
-            "worker",
-            "project",
-            "authority-registry-and-exact-twelve-engine-descriptors",
-            "engine-generation",
-            "interpretation-policy",
-            "trust-policy",
-            "complete-seven-field-selector",
-            "group-topology",
-            "complete-base-claim-row-payloads",
-            "per-tu-source-build-task-condition-budget-sandbox",
-            "publication-genesis-partial-policy-transaction-count-reopen-policy",
-        ],
-        "excludes": [
-            "materialization-request-identity-fields",
-            "derived-publication-series-id",
-            "publication-backend",
-            "publication-sqlite-path",
-            "publication-expected-parent",
-        ],
-        "memory_sqlite_equality": (
-            "required-for-fresh-genesis-within-package-configuration"
-        ),
-        "sqlite-genesis-append-equality": "not-claimed",
-    }:
-        fail("materialization.task-binding-mismatch", "semantic request projection differs")
-    if project_tasks["project_catalog"] != {
-        "authority": "validated-project-catalog",
-        "public_codec": "cxxlens.project-catalog.v1",
-        "request_fields": [
-            "catalog_id",
-            "catalog_digest",
-            "logical_root",
-            "catalog_environment_digest",
-            "catalog_compile_units",
-        ],
-        "entry_fields": list(CATALOG_COMPILE_UNIT_FIELDS),
-        "public_entry_mapping": "catalog_compile_unit_id-to-compile_unit_id",
-        "ordering": "catalog-compile-unit-id-byte-order",
-        "validation": (
-            "independent-bottom-up-recompute-canonical-projection-digest-and-id"
-        ),
-        "empty": "reject",
-        "duplicate_or_conflict": "reject",
-    }:
-        fail("materialization.identity-mismatch", "project catalog binding differs")
-    if project_tasks["project_census"] != {
-        "digest_domain": "cxxlens.clang22-catalog-compile-unit-census.v1",
-        "digest_projection": "canonical-ordered-catalog-compile-unit-id-tuple",
-        "equality": (
-            "selected-catalog-compile-unit-set-exactly-equals-catalog-census"
-        ),
-        "task_order": "selected-catalog-compile-unit-id-byte-order",
-    }:
-        fail("materialization.catalog-census-mismatch", "project census binding differs")
-    if project_tasks["effective_invocation_codec"] != EXPECTED_EFFECTIVE_INVOCATION_CODEC:
-        fail(
-            "materialization.identity-mismatch",
-            "effective invocation codec or cross-binding differs",
-        )
-    if project_tasks["catalog_entry_mapping"] != {
-        "match": "selected-catalog-compile-unit-id",
-        "payload": [
-            "normalized-invocation-digest",
-            "source-content-digest",
-            "environment-digest",
-        ],
-        "final_relation_id": "independently-derived-build-compile-unit-id",
-        "catalog-final-id-alias": "forbidden",
-        "cardinality": "every-catalog-entry-exactly-one-task",
-    }:
-        fail("materialization.task-binding-mismatch", "catalog entry mapping differs")
-    if project_tasks["portable_provider_task"] != {
-        "codec": "cxxlens.provider-task.v1",
-        "canonical_projection": [
-            "contract-tag",
-            "provider-id",
-            "provider-version",
-            "provider-semantic-contract-digest",
-            "global-catalog-id",
-            "global-catalog-digest",
-            "requested-output-descriptors",
-            "derived-condition-ref-id",
-            "interpretation",
-            "offered-output-descriptors",
-            "empty-required-relations",
-            "interpretation-domains",
-            "input-stage",
-            "output-stage",
-            "dependency-groups",
-        ],
-        "condition_binding": {
-            "source": ["condition-universe-id", "condition-id"],
-            "codec": "cxxlens-canonical-tuple-v1",
-            "projection": [
-                "cxxlens.clang22.condition-ref.v1",
-                "condition-universe-id",
-                "condition-id",
-            ],
-            "digest_domain": "cxxlens.clang22.condition-ref.v1",
-            "generic_condition_value": (
-                "condition-ref-prefix-plus-semantic-digest-v2"
-            ),
-            "validation": (
-                "recompute-before-portable-task-id-and-exact-cross-bind-worker-v3"
-            ),
-        },
-        "descriptor_digest": "exact-runtime-descriptor-digest",
-        "session": [
-            "exact-six-offered-outputs",
-            "empty-required-relations",
-            "cc-clang22-canonical-1-only",
-            "observation-input-stage",
-            "assertion-output-stage",
-        ],
-        "per_tu_excluded": [
-            "task-input-payload",
-            "selected-catalog-compile-unit-id",
-            "final-relation-compile-unit-id",
-            "provider-execution-id",
-        ],
-        "task_id": "task-prefix-plus-semantic-digest-v2",
-        "validation": "independent-bottom-up-recompute-before-task-accepted",
-    }:
-        fail("materialization.identity-mismatch", "portable provider task binding differs")
-    if project_tasks["worker_task_v3"] != {
-        "codec": "cxxlens.clang22.task.v3",
-        "canonical_integer_domain": "signed-int64",
-        "canonical_projection": [
-            "contract-tag",
-            "full-global-project-catalog",
-            "selected-catalog-compile-unit-id",
-            "final-relation-compile-unit-id",
-            "exact-per-tu-task-payload",
-        ],
-        "full_global_project_catalog": [
-            "catalog_id",
-            "catalog_digest",
-            "logical_root",
-            "catalog_environment_digest",
-            "catalog_compile_units",
-        ],
-        "selected_entry_validation": (
-            "exact-invocation-source-environment-digest-match"
-        ),
-        "worker_reconstruction": "shared-project-catalog-factory-before-output",
-        "payload_authority": "installed-tool-derived-only",
-        "task_input_digest": "sha256-content-digest-of-exact-projection-bytes",
-        "old_codec_or_caller_payload": "reject",
-        "source_content_base64": {
-            "input": "canonical-rfc4648-decoded-json-string",
-            "projection": (
-                "unique-canonical-spelling-derived-from-sealed-source-bytes"
-            ),
-            "raw_json_escape_affects_task_identity": False,
-            "nonzero_discarded_padding_bits": (
-                "reject-before-task-input-digest"
-            ),
-            "cross_binding": (
-                "decoded-bytes-size-content-digest-line-index-and-request-string"
-            ),
-        },
-        "logical_transfer": {
-            "authority": "exact-canonical-task-v3-bytes-and-task-input-digest",
-            "fragmentation_changes-logical-identity": False,
-            "ambient-path-or-fd-authority": "forbidden",
-        },
-        "physical_transfer": {
-            "provider_protocol": "1.1.0",
-            "required_feature": TASK_INPUT_FEATURE,
-            "mode": "authenticated-input-descriptor-and-canonical-chunks",
-            "open_task_payload": "empty",
-            "canonical_chunk_bytes": TASK_INPUT_CHUNK_BYTES,
-            "maximum_task_input_bytes": MAXIMUM_TASK_INPUT_BYTES,
-            "maximum_chunk_count": MAXIMUM_TASK_INPUT_CHUNKS,
-            "task_accepted": (
-                "only-after-length-order-final-digest-task-v3-and-portable-task-"
-                "validation"
-            ),
-            "minor-zero-inline-fallback": "forbidden",
-        },
-        "maximum_projection_proof": maximum_worker_task_v3_projection_proof(
-            request_schema
-        ),
-    }:
-        fail("materialization.task-binding-mismatch", "worker task v3 binding differs")
-    if project_tasks["task_execution_matching"] != {
-        "key": list(TASK_EXECUTION_KEY_FIELDS),
-        "provider_task_id_uniqueness": "not-required",
-        "duplicate_missing_or_extra": "reject",
-        "report_order": "non-authoritative",
-        "correlation_binding": "exact-composite-execution-key",
-        "semantic_context_sort": (
-            "task-id-then-input-then-selected-catalog-id-then-final-relation-id"
-        ),
-        "semantic_provenance_binding": (
-            "task-id-input-selected-catalog-id-final-relation-id"
-        ),
-        "physical_occurrence": "provider-execution-id-report-only",
-    }:
-        fail("materialization.task-binding-mismatch", "task execution matching differs")
-    if (
-        contract["span_adoption"]["all_or_none_fields"]
-        != PRIMARY_SPAN_BUNDLE_FIELDS
-        or contract["span_adoption"]["seventh_worker_relation"] != "forbidden"
-    ):
-        fail("materialization.span-invalid", "full span bundle contract differs")
-    expected_registry_binding = {
-        "authority": REGISTRY.as_posix(),
-        "abstract_to_registry_column_id": SPAN_REGISTRY_COLUMN_MAPPING,
-        "all_or_none": "exact-single-mapped-seven-as-unordered-set",
-        "origin_evidence_column_id": SPAN_ORIGIN_COLUMN_MAPPING,
-        "origin_evidence_shape": (
-            "optional-bytes-excluded-from-primary-mapping-and-all-or-none"
-        ),
-        "validation": (
-            "exact-column-id-name-type-optionality-row-constraint-and-origin-separation-"
-            "before-row-adoption"
-        ),
-    }
-    if contract["span_adoption"]["registry_column_binding"] != expected_registry_binding:
-        fail("materialization.span-invalid", "primary span registry mapping differs")
-    if contract["span_adoption"]["independent_validator"] != {
-        "owner": "installed-tool-private",
-        "timing": "after-row-decode-before-sealed-result",
-        "independence": [
-            "relation-row-builder",
-            "relation-reference-absence-shortcut",
-            "registry-row-constraints",
-            "public-generic-engine",
-        ],
-        "presence_rule": "entity-and-call-seven-fields-all-present-or-all-absent",
-        "partial_effect": "reject-entire-materialization",
-        "absent_effect": (
-            "typed-unresolved-non-exact-and-source-dependent-canonical-omission"
-        ),
-        "public_api": "none",
-    }:
-        fail("materialization.span-invalid", "independent span validator differs")
-    if contract["side_channels"]["unresolved"] != {
-        "record_type": "typed-unresolved-item",
-        "control_from_message_prose": "forbidden",
-        "blocking_item_with_exact_claim": "forbidden",
-        "category_order": "lexical",
-        "category_count_encoding": "sparse-positive-map",
-        "record_count_closure": "exact-sum-of-category-counts",
-        "absent_bundle_category": PRIMARY_SPAN_ABSENCE_CATEGORY,
-        "absent_bundle_count_binding": (
-            "span-validation-absent-bundle-unresolved-count"
-        ),
-    }:
-        fail("materialization.coverage-incomplete", "unresolved accounting differs")
-    if contract["side_channels"].get("coverage") != EXPECTED_COVERAGE_CONTRACT:
-        fail(
-            "materialization.coverage-incomplete",
-            "transport/semantic coverage plane contract differs",
-        )
-    if contract["report"].get("digest_chain") != EXPECTED_REPORT_DIGEST_CHAIN:
-        fail("materialization.report-invalid", "report digest chain differs")
-    adoption = contract["claim_adoption"]
-    try:
-        claim_adoption_schema = contract_schema["properties"]["claim_adoption"]
-        schema_resolution = contract_schema["$defs"][
-            "df_0200_resolution"
-        ]["const"]
-    except (KeyError, TypeError):
-        claim_adoption_schema = {}
-        schema_resolution = None
-    if (
-        adoption.get("df_0200_resolution")
-        != EXPECTED_DF_0200_RESOLUTION
-        or schema_resolution != EXPECTED_DF_0200_RESOLUTION
-        or "df_0200_resolution"
-        not in claim_adoption_schema.get("required", [])
-        or claim_adoption_schema.get("properties", {}).get(
-            "df_0200_resolution"
-        )
-        != {"$ref": "#/$defs/df_0200_resolution"}
-    ):
-        fail(
-            "materialization.claim-invalid",
-            "DF-0200 accepted incremental residency resolution differs",
-        )
-    try:
-        resolution = adoption["df_0200_resolution"]
-        validate_df_0200_codec_receipt_closure(
-            resolution["partition_event_codec"],
-            resolution["d3_store_ingestion"]["external_completeness_authority"],
-        )
-        store_ingress = snapshot_store_contract[
-            "df_0200_materialization_ingress"
-        ]
-        store_resolution_id = store_ingress["resolution_id"]
-        store_events = store_ingress["source"]["events"]
-        store_codec = store_ingress["source"]["codec"]
-        store_external_authority = store_ingress["source"][
-            "external_completeness_authority"
-        ]
-        store_recomputation = store_ingress["source"]["store-validation"][
-            "required-recomputation"
-        ]
-        store_collection_overflow = store_ingress["counter_model"][
-            "collection_overflow_failure"
-        ]
-        store_sqlite_capacity_decision = store_ingress[
-            "sqlite_capacity_decision"
-        ]
-        store_sqlite_writer_failure = store_ingress["sqlite_backend"][
-            "writer_publish_enospc_or_sqlite_toobig"
-        ]
-    except (KeyError, TypeError):
-        store_resolution_id = None
-        store_events = None
-        store_codec = None
-        store_external_authority = None
-        store_recomputation = None
-        store_collection_overflow = None
-        store_sqlite_capacity_decision = None
-        store_sqlite_writer_failure = None
-    expected_event_kind_codes = {
-        name: projection["kind_code"]
-        for name, projection in DF_0200_PARTITION_EVENT_CODEC[
-            "event_projections"
-        ].items()
-    }
-    expected_codec_authority_binding = {
-        "canonical_json_sha256": content_digest(
-            canonical_json(resolution["partition_event_codec"])
-        ),
-        "required_sections": [
-            "canonical_tuple_profile",
-            "field_catalog",
-            "stream_header",
-            "frame",
-            "event_projections",
-            "event_container",
-            "digest_framing",
-            "digest_domains",
-            "canonical_order",
-            "stream_trailer",
-            "rejection",
-        ],
-        "store_checker": "self-contained-hardcoded-binding-no-reverse-load",
-        "materialization_checker": "recompute-and-exact-match-full-codec-object",
-    }
-    if (
-        resolution["resolution_id"] != store_resolution_id
-        or resolution["d3_store_ingestion"]["source_events"] != store_events
-        or not isinstance(store_codec, dict)
-        or store_codec.get("id") != resolution["partition_event_codec"]["id"]
-        or store_codec.get("event_kind_codes") != expected_event_kind_codes
-        or store_codec.get("authority_binding")
-        != expected_codec_authority_binding
-        or resolution["d3_store_ingestion"]["external_completeness_authority"]
-        != store_external_authority
-        or resolution["d3_store_ingestion"]["independent_validation"][
-            "required_recomputation"
-        ]
-        != store_recomputation
-        or resolution["d3_store_ingestion"][
-            "private_ingress_collection_overflow"
-        ]
-        != store_collection_overflow
-        or resolution["sqlite_capacity_decision"]
-        != store_sqlite_capacity_decision
-        or resolution["d5_failure_taxonomy"][
-            "sqlite_writer_publish_enospc_or_sqlite_toobig"
-        ]
-        != store_sqlite_writer_failure
-    ):
-        fail(
-            "materialization.store-failure",
-            "DF-0200 materialization/Store resolution binding differs",
-        )
-    if (
-        adoption["boundary"] != "sealed-materialization-result"
-        or adoption["visibility"] != "tool-private-immutable-noncopyable"
-        or adoption["public_report_frames"]
-        != {
-            "authority": "diagnostic-only-non-authoritative",
-            "adoption": "forbidden",
-            "retention_after_report": "forbidden",
-        }
-    ):
-        fail("materialization.claim-invalid", "sealed/raw-frame boundary differs")
-    expected_stages = {
-        "base_claims": {
-            "descriptors": BASE_DESCRIPTOR_IDS,
-            "stage": "canonical_claim",
-        },
-        "provider_observations": {
-            "descriptors": DESCRIPTOR_IDS[3:],
-            "stage": "assertion",
-        },
-        "canonical_outputs": {
-            "descriptors": DESCRIPTOR_IDS[:3],
-            "stage": "canonical_claim",
-        },
-    }
-    if adoption["stages"] != expected_stages:
-        fail("materialization.claim-invalid", "claim-stage mapping differs")
-    if adoption["hard_reference_validation"] != {
-        "base_claims": BASE_DESCRIPTOR_IDS,
-        "staged_claims": "exact-two-groups",
-        "missing": "reject-entire-materialization",
-    }:
-        fail(
-            "materialization.claim-invalid",
-            "hard-reference validation mapping differs",
-        )
-    if adoption["guarantee"] != {
-        "profile": {
-            "id": GUARANTEE_PROFILE_ID,
-            "digest_domain": GUARANTEE_PROFILE_ID,
-            "owner": "exact-materialization-contract-version",
-            "assumptions": GUARANTEE_ASSUMPTIONS,
-            "verification_modalities": GUARANTEE_MODALITIES,
-            "caller-or-report-builder-mutation": "forbidden",
-        },
-        "exact_preconditions": [
-            "zero-non-exact-in-each-observation-descriptor-census",
-            "complete-balanced-semantic-coverage",
-            "exact-transport-task-coverage",
-            "no-blocking-unresolved",
-            "no-absent-primary-span-bundle",
-            "exact-task-census",
-            "exact-six-batches",
-            "full-span-validation",
-            "complete-provenance",
-        ],
-        "postpublication_evidence_excluded": [
-            "successful-publication",
-            "query-parity",
-            "store-reopen",
-        ],
-        "non_exact": (
-            "preserve-typed-approximation-assumptions-modalities-and-unresolved"
-        ),
-        "inference_from-success-or-prose": "forbidden",
-    }:
-        fail("materialization.coverage-incomplete", "guarantee preconditions differ")
-    if contract["side_channels"]["guarantee"] != {
-        "record_type": "typed-guarantee",
-        "profile": GUARANTEE_PROFILE_ID,
-        "fields": [
-            "profile_id",
-            "profile_digest",
-            "approximation",
-            "scope",
-            "assumptions",
-            "verification_modalities",
-            "observation_descriptor_censuses",
-        ],
-        "task_fragment_inputs": [
-            "closed-profile",
-            "actual-semantic-coverage-census",
-            "unresolved",
-            "evidence",
-            "batch-completeness",
-            "observation-equivalence-census",
-        ],
-        "global_digest_inputs": [
-            "profile-id-and-digest",
-            "semantic-and-transport-side-channel-digests",
-            "task-guarantee-fragments",
-            "observation-descriptor-censuses",
-        ],
-    }:
-        fail("materialization.report-invalid", "typed guarantee fields differ")
-    publication = contract["publication"]
-    required_publication = {
-        "target_per_request": "exactly-one-of-memory-or-sqlite",
-        "transaction_per_request": "exactly-one-all-tasks-all-groups",
-        "partial_policy": "forbid",
-        "expected_parent_cas": "required-null-only-for-genesis",
-        "stale_parent": "materialization.stale-parent",
-        "sqlite_validation": "close-and-reopen-database-before-success-report",
-        "publication_authority": "committed-store-record-not-tool-report",
-        "post_commit_prior_artifact": {
-            "authority": "source-private-durable-reuse-write-after-committed-store-observation",
-            "success_report_field": "publication.prior_artifact_persistence",
-            "states": ["committed", "unavailable", "not_attempted"],
-            "not_attempted": "no-exact-committed-store-record-or-commit-authority",
-            "capture_residency": {
-                "request_owner": "sealed-replayable-task-report-spool",
-                "artifact_index": "metadata-only",
-                "persistence_replay": "one-task-at-a-time",
-                "cross_binding": "task-count-ordinal-identity-provider-execution-state-digest",
-            },
-            "memory_backend": {
-                "process_lifetime": "unrecoverable-after-tool-exit",
-                "production_report": "unavailable",
-                "unavailable_error": {
-                    "code": "materialization.incremental-artifact-invalid",
-                    "field": "memory",
-                    "detail": "process-lifetime-only",
-                },
-            },
-            "sqlite_backend": {
-                "production_report": "committed-only",
-                "post_commit_failure": "exit-two-no-response",
-            },
-            "publication_success_is_not_suppressed": "memory-process-lifetime-unavailable-only",
-            "unavailable_error": "exact-code-field-detail",
-        },
-    }
-    if any(publication.get(key) != value for key, value in required_publication.items()):
-        fail("materialization.store-failure", "publication/CAS contract differs")
-    if publication.get("sdk_publish_mapping") != EXPECTED_SDK_PUBLISH_MAPPING:
-        fail(
-            "materialization.store-failure",
-            "operation-authentic SDK publication mapping differs",
-        )
-    if publication.get("store_failure_cause_union") != {
-        "sdk_error": [
-            "authenticated-operation",
-            "access-path-or-null",
-            "exact-sdk-code",
-            "exact-sdk-field",
-            "stable-or-opaque-exact-detail-observation",
-        ],
-        "verification_mismatch": [
-            "authenticated-operation",
-            "access-path-or-null",
-            "named-projection",
-            "expected-digest",
-            "actual-digest",
-        ],
-        "fabricated-sdk-error-for-successful-call-mismatch": "forbidden",
-    }:
-        fail(
-            "materialization.store-failure",
-            "Store failure cause union differs",
-        )
-    if publication.get("sqlite_effect_root") != EXPECTED_SQLITE_EFFECT_ROOT:
-        fail(
-            "materialization.store-failure",
-            "rooted SQLite effect authority differs",
-        )
-    if contract["qualification"] != {
-        "configurations": ["static", "shared"],
-        "backends": ["memory", "sqlite"],
-        "required_matrix": "exact-cartesian-product",
-        "relocated_prefix": "required",
-        "same_project_request_and_worker_semantics": "required",
-        "sqlite_reopened": "required",
-        "memory_sqlite_semantic_parity": "required",
-        "static_shared_semantic_parity": "required",
-        "exact_observation_equivalence": "required-zero-non-exact-per-descriptor",
-        "scale_and_resource_evidence": {
-            "cases": [
-                "one-task",
-                "four-thousand-ninety-six-tasks",
-                "sixteen-mib-source",
-                "five-hundred-twelve-mib-aggregate-source",
-                "one-gib-raw-request",
-                "arbitrary-short-reads",
-            ],
-            "retained_memory_formula": (
-                "one-shared-catalog-plus-fixed-buffers-plus-one-task-window-plus-one-"
-                "source-plus-one-output-window"
-            ),
-            "forbidden_residency": [
-                "raw-request",
-                "aggregate-source",
-                "all-task-payloads",
-                "task-count-times-catalog-count",
-            ],
-            "spool-failure": "zero-effect-before-publication",
-        },
-        "missing_extra_duplicate_matrix_entry": "reject",
-    }:
-        fail("materialization.report-invalid", "installed qualification matrix differs")
-    if set(contract["errors"]["stable"]) != STABLE_ERRORS:
-        fail("materialization.report-invalid", "stable error registry differs")
-    try:
-        compact_phase_code_policy = {
-            scope: {
-                phase: set(codes)
-                for phase, codes in phase_codes.items()
-            }
-            for scope, phase_codes in contract["errors"][
-                "compact_phase_code_policy"
-            ].items()
-        }
-    except (AttributeError, KeyError, TypeError):
-        fail(
-            "materialization.report-invalid",
-            "compact failure phase/code policy differs",
-        )
-    expected_compact_phase_code_policy = {
-        "raw_input_only": COMPACT_RAW_PHASE_CODES,
-        "request_bound": COMPACT_BOUND_PHASE_CODES,
-        "detailed_failed": {
-            "publication": {
-                "materialization.stale-parent",
-                "materialization.store-failure",
-            },
-            "post-publication-verification": {
-                "materialization.store-failure",
-            },
-        },
-    }
-    if compact_phase_code_policy != expected_compact_phase_code_policy:
-        fail(
-            "materialization.report-invalid",
-            "compact failure phase/code policy differs",
-        )
-    if contract["errors"]["diagnostic_prose_control_flow"] != "forbidden":
-        fail("materialization.report-invalid", "diagnostic prose became control authority")
-    if contract["lifetime"]["raw_frames"] != (
-        "diagnostic-only-and-destroyed-after-shared-runtime-receipt-and-"
-        "immutable-seal"
-    ):
-        fail("materialization.claim-invalid", "raw-frame lifetime carve-out differs")
 
 
 def sample_request(
@@ -8408,7 +6030,7 @@ def sample_request(
         worker_digest="sha256:" + digit * 64,
     )
     request = {
-        "schema": "cxxlens.clang22-materialization-request.v2",
+        "schema": "cxxlens.clang22-materialization-request.v2_2",
         "request_version": MATERIALIZATION_VERSION,
         "materialization_request_id": "pending",
         "request_digest": semantic_digest("cxxlens.fixture.v1", "pending-request"),
@@ -8429,9 +6051,9 @@ def sample_request(
             "provider_version": "1.0.0",
             "installed_binary_digest": "sha256:" + digit * 64,
             "semantic_contract_digest": "sha256:" + "a" * 64,
-            "protocol_major": 1,
+            "protocol_major": PROVIDER_PROTOCOL_MAJOR,
             "protocol_minor": PROVIDER_PROTOCOL_MINOR,
-            "required_features": [TASK_INPUT_FEATURE],
+            "required_features": [TASK_INPUT_FEATURE, SOURCE_CLOSURE_FEATURE],
             "sandbox_policy_digest": "sha256:" + "b" * 64,
         },
         "project": project,
@@ -8533,7 +6155,6 @@ def sample_request(
                     "encoding": "utf8",
                     "line_index_id": source_row["line_index"],
                     "read_only": source_row["read_only"],
-                    "content_base64": base64.b64encode(source).decode("ascii"),
                 },
                 "effective_argv": spec["effective_argv"],
                 "requested_descriptor_ids": DESCRIPTOR_IDS,
@@ -8560,334 +6181,6 @@ def sample_request(
     bind_engine_policy_and_selector_identities(request)
     bind_request_identity(request)
     return request
-
-
-def rebind_request_base_identities(
-    root: pathlib.Path,
-    request: dict[str, Any],
-) -> None:
-    """Rebind an acceptance request after an authoritative catalog payload change."""
-
-    relations = base_registry_relations(root)
-    project = request["project"]
-    bind_project_catalog_identity(project)
-    project_row = {
-        "catalog": project["catalog_id"],
-        "catalog_digest": project["catalog_digest"],
-        "logical_root": project["logical_root"],
-        "environment_digest": project["catalog_environment_digest"],
-    }
-    project_id = derive_base_row_identity(relations["build.project.v1"], project_row)
-    project["project_id"] = project_id
-    for task in request["tasks"]:
-        task["project_id"] = project_id
-        task["catalog_id"] = project["catalog_id"]
-        task["catalog_digest"] = project["catalog_digest"]
-        toolchain_row = dict(task["toolchain"])
-        toolchain_id = derive_base_row_identity(
-            relations["build.toolchain_context.v1"],
-            toolchain_row,
-        )
-        toolchain_row["toolchain"] = toolchain_id
-        task["toolchain_context_id"] = toolchain_id
-        task["toolchain_digest"] = base_claim_row_digest(
-            "build.toolchain_context.v1",
-            toolchain_row,
-        )
-        variant_row = {
-            "project": project_id,
-            "toolchain": toolchain_id,
-            **task["variant"],
-        }
-        variant_id = derive_base_row_identity(
-            relations["build.variant.v1"],
-            variant_row,
-        )
-        task["build_variant_id"] = variant_id
-        source = decode_canonical_base64(task["source"]["content_base64"])
-        source_row = {
-            "file": file_identity(task["source"]["logical_path"]),
-            "project": project_id,
-            "logical_path": task["source"]["logical_path"],
-            "content": content_digest(source),
-            "size": len(source),
-            "encoding": task["source"]["encoding"],
-            "line_index": line_index_identity(source),
-            "read_only": task["source"]["read_only"],
-        }
-        source_snapshot_id = derive_base_row_identity(
-            relations["source.file.v1"],
-            source_row,
-        )
-        task["source"].update(
-            {
-                "source_snapshot_id": source_snapshot_id,
-                "file_id": source_row["file"],
-                "content_digest": source_row["content"],
-                "size_bytes": source_row["size"],
-                "line_index_id": source_row["line_index"],
-            }
-        )
-        compile_unit_row = {
-            "project": project_id,
-            "main_source": source_snapshot_id,
-            "variant": variant_id,
-            "toolchain": toolchain_id,
-            "effective_invocation_digest": task["normalized_invocation_digest"],
-            "language": task["language"],
-            "working_directory": task["working_directory"],
-        }
-        task["compile_unit_id"] = derive_base_row_identity(
-            relations["build.compile_unit.v1"],
-            compile_unit_row,
-        )
-    bind_provider_task_identities(request)
-    bind_task_execution_identities(request)
-    bind_engine_policy_and_selector_identities(request)
-    bind_request_identity(request)
-
-
-def validate_request(root: pathlib.Path, request: dict[str, Any]) -> None:
-    request_schema = load(root / REQUEST_SCHEMA)
-    validate_schema(request, request_schema, "materialization request")
-    validate_request_utf8_byte_limits(request, request_schema)
-    if request["publication"]["sqlite_path"] is not None:
-        canonical_sqlite_relative_path(request["publication"]["sqlite_path"])
-    semantic_request = expected_semantic_request_digest(request)
-    request_digest = expected_request_digest(request)
-    if request["semantic_request_digest"] != semantic_request:
-        fail("materialization.identity-mismatch", "semantic request digest differs")
-    if request["request_digest"] != request_digest or request[
-        "materialization_request_id"
-    ] != "materialization:" + request_digest:
-        fail("materialization.identity-mismatch", "request ID/digest differs")
-    registry_digest, bindings = descriptor_bindings(root)
-    base_bindings = base_descriptor_bindings(root)
-    if request["registry"] != {
-        "path": REGISTRY.as_posix(),
-        "authority_registry_digest": registry_digest,
-        "base_descriptors": base_bindings,
-        "descriptors": bindings,
-    }:
-        fail(
-            "materialization.descriptor-binding-mismatch",
-            "request descriptor IDs/digests do not match the current registry",
-        )
-    inventory = admitted_descriptor_inventory(request["registry"])
-    inventory_ids = [binding["descriptor_id"] for binding in inventory]
-    if (
-        inventory_ids != ADMITTED_DESCRIPTOR_IDS
-        or len(inventory_ids) != len(set(inventory_ids))
-        or request["engine"]["generation_contract"] != ENGINE_GENERATION_CONTRACT
-        or request["engine"]["admitted_descriptors"] != inventory
-        or request["engine"]["engine_registry_digest"]
-        != expected_engine_registry_digest(inventory)
-        or request["engine"]["engine_generation_id"]
-        != expected_engine_generation_id(request)
-    ):
-        fail(
-            "materialization.descriptor-binding-mismatch",
-            "descriptor-ID engine inventory or generation identity differs",
-        )
-    interpretation_policy = request["interpretation_policy"]
-    if (
-        interpretation_policy["policy_id"] != INTERPRETATION_POLICY_ID
-        or interpretation_policy["selected_domain"] != INTERPRETATION_DOMAIN
-        or interpretation_policy["interpretation_policy_digest"]
-        != expected_interpretation_policy_digest(interpretation_policy)
-    ):
-        fail(
-            "materialization.identity-mismatch",
-            "interpretation policy identity differs",
-        )
-    trust_policy = request["trust_policy"]
-    expected_trust_fields = {
-        "provider_id": request["worker"]["provider_id"],
-        "provider_version": request["worker"]["provider_version"],
-        "semantic_contract_digest": request["worker"]["semantic_contract_digest"],
-        "protocol_major": request["worker"]["protocol_major"],
-        "protocol_minor": request["worker"]["protocol_minor"],
-        "required_features": request["worker"]["required_features"],
-        "worker_sandbox_policy_digest": request["worker"]["sandbox_policy_digest"],
-    }
-    if (
-        trust_policy["policy_id"] != TRUST_POLICY_ID
-        or trust_policy["execution_profile"] != "trust.native-worker"
-        or trust_policy["required_qualification"]
-        != "canonical-semantic-qualified"
-        or any(
-            trust_policy[field] != value
-            for field, value in expected_trust_fields.items()
-        )
-        or trust_policy["task_sandbox_requirements"]
-        != task_sandbox_requirements(request["tasks"])
-        or trust_policy["trust_policy_digest"]
-        != expected_trust_policy_digest(trust_policy)
-    ):
-        fail("materialization.identity-mismatch", "trust policy identity differs")
-    project = request["project"]
-    catalog_entries = project["catalog_compile_units"]
-    catalog_ids = [entry["catalog_compile_unit_id"] for entry in catalog_entries]
-    if catalog_ids != sorted(catalog_ids) or len(catalog_ids) != len(set(catalog_ids)):
-        fail(
-            "materialization.catalog-census-mismatch",
-            "catalog compile-unit entries are not canonical and unique",
-        )
-    expected_catalog_digest = expected_project_catalog_digest(project)
-    if (
-        project["catalog_digest"] != expected_catalog_digest
-        or project["catalog_id"] != "catalog:" + expected_catalog_digest
-    ):
-        fail(
-            "materialization.identity-mismatch",
-            "project catalog digest/ID differs from the public catalog codec",
-        )
-    if (
-        project["catalog_compile_unit_census_digest"]
-        != expected_catalog_compile_unit_census_digest(project)
-    ):
-        fail(
-            "materialization.catalog-census-mismatch",
-            "catalog compile-unit census digest differs",
-        )
-    tasks = request["tasks"]
-    task_universes = {task["condition_universe_id"] for task in tasks}
-    task_interpretations = {task["interpretation_domain"] for task in tasks}
-    publication = request["publication"]
-    selector = publication["selector"]
-    expected_selector = {
-        "catalog_id": project["catalog_id"],
-        "channel_id": selector["channel_id"],
-        "engine_generation_id": request["engine"]["engine_generation_id"],
-        "condition_universe_id": next(iter(task_universes)) if task_universes else "",
-        "relation_registry_digest": request["engine"]["engine_registry_digest"],
-        "interpretation_policy_digest": interpretation_policy[
-            "interpretation_policy_digest"
-        ],
-        "trust_policy_digest": trust_policy["trust_policy_digest"],
-    }
-    if (
-        len(task_universes) != 1
-        or task_interpretations != {interpretation_policy["selected_domain"]}
-        or not selector["channel_id"]
-        or selector != expected_selector
-        or publication["series_id"] != expected_series_id(selector)
-    ):
-        fail(
-            "materialization.task-binding-mismatch",
-            "complete Store selector or task policy binding differs",
-        )
-    selected_ids = [task["selected_catalog_compile_unit_id"] for task in tasks]
-    if selected_ids != catalog_ids or len(selected_ids) != len(set(selected_ids)):
-        fail(
-            "materialization.catalog-census-mismatch",
-            "tasks do not select every catalog compile unit exactly once",
-        )
-    for task in tasks:
-        if task["provider_task_id"] != expected_provider_task_id(request, task):
-            fail(
-                "materialization.identity-mismatch",
-                "portable provider task identity differs",
-            )
-    execution_keys = [task_execution_key(task) for task in tasks]
-    if len(execution_keys) != len(set(execution_keys)):
-        fail(
-            "materialization.task-binding-mismatch",
-            "request contains a duplicate task execution tuple",
-        )
-    entries_by_id = {
-        entry["catalog_compile_unit_id"]: entry for entry in catalog_entries
-    }
-    for task in tasks:
-        if any(task[field] != project[project_field] for field, project_field in (
-            ("project_id", "project_id"),
-            ("catalog_id", "catalog_id"),
-            ("catalog_digest", "catalog_digest"),
-        )):
-            fail("materialization.task-binding-mismatch", "task project/catalog binding differs")
-        if task["requested_descriptor_ids"] != DESCRIPTOR_IDS or task["dependency_groups"] != [
-            "canonical",
-            "observation",
-        ]:
-            fail("materialization.task-binding-mismatch", "task output/group set differs")
-        if task["sandbox"]["policy_digest"] != request["worker"]["sandbox_policy_digest"]:
-            fail("materialization.task-binding-mismatch", "task sandbox policy differs")
-        entry = entries_by_id[task["selected_catalog_compile_unit_id"]]
-        if task["normalized_invocation_digest"] != expected_normalized_invocation_digest(
-            task
-        ):
-            fail(
-                "materialization.identity-mismatch",
-                "effective argv differs from normalized invocation digest",
-            )
-        if (
-            entry["effective_invocation_digest"]
-            != task["normalized_invocation_digest"]
-            or entry["source_digest"] != task["source"]["content_digest"]
-            or entry["environment_digest"] != task["environment_digest"]
-        ):
-            fail(
-                "materialization.task-binding-mismatch",
-                "selected catalog entry payload differs from task input",
-            )
-        if task["selected_catalog_compile_unit_id"] == task["compile_unit_id"]:
-            fail(
-                "materialization.task-binding-mismatch",
-                "catalog-local and final relation compile-unit IDs are aliased",
-            )
-        if (
-            task["language"] != task["variant"]["language"]
-            or task["variant"]["target_triple"]
-            != task["toolchain"]["target_triple"]
-        ):
-            fail(
-                "materialization.task-binding-mismatch",
-                "task base payload cross-binding differs",
-            )
-        source = decode_canonical_base64(task["source"]["content_base64"])
-        if len(source) != task["source"]["size_bytes"] or content_digest(source) != task["source"][
-            "content_digest"
-        ]:
-            fail("materialization.identity-mismatch", "source size/content digest differs")
-        if task["source"]["file_id"] != file_identity(
-            task["source"]["logical_path"]
-        ):
-            fail("materialization.identity-mismatch", "source file identity differs")
-        if task["source"]["line_index_id"] != line_index_identity(source):
-            fail("materialization.identity-mismatch", "source line-index identity differs")
-        if task["task_input_digest"] != expected_task_input_digest(request, task):
-            fail(
-                "materialization.identity-mismatch",
-                "cxxlens.clang22.task.v3 input digest differs",
-            )
-        if task["provider_execution_id"] != expected_provider_execution_id(
-            request, task
-        ):
-            fail(
-                "materialization.identity-mismatch",
-                "provider execution identity differs",
-            )
-    rows = base_claim_rows(root, request)
-    toolchain_rows = {
-        row["toolchain"]: row for row in rows["build.toolchain_context.v1"]
-    }
-    for task in tasks:
-        if task["toolchain_digest"] != base_claim_row_digest(
-            "build.toolchain_context.v1",
-            toolchain_rows[task["toolchain_context_id"]],
-        ):
-            fail("materialization.identity-mismatch", "toolchain row digest differs")
-    if publication["genesis"] != (publication["expected_parent_publication"] is None):
-        fail("materialization.stale-parent", "genesis/expected-parent binding differs")
-    if publication["backend"] == "memory" and (
-        not publication["genesis"]
-        or publication["expected_parent_publication"] is not None
-        or publication["sqlite_path"] is not None
-    ):
-        fail(
-            "materialization.store-failure",
-            "memory materialization must be fresh genesis without a path",
-        )
 
 
 def sample_primary_span_bundle(task: dict[str, Any]) -> dict[str, Any]:
@@ -9133,17 +6426,17 @@ def expected_input_transfer_receipt(
     request: dict[str, Any],
     task: dict[str, Any],
 ) -> dict[str, Any]:
-    logical_input = worker_task_v3_projection(request, task)
+    logical_input = worker_task_v4_projection(request, task)
     logical_digest = content_digest(logical_input)
     if logical_digest != task["task_input_digest"]:
         fail(
             "materialization.task-binding-mismatch",
-            "task-input transfer differs from exact task.v3 digest",
+            "task-input transfer differs from exact task.v4 digest",
         )
     if len(logical_input) > MAXIMUM_TASK_INPUT_BYTES:
         fail(
             "materialization.task-binding-mismatch",
-            "task.v3 exceeds the negotiated logical input limit",
+            "task.v4 exceeds the negotiated logical input limit",
         )
     chunks = [
         logical_input[offset : offset + TASK_INPUT_CHUNK_BYTES]
@@ -9152,13 +6445,13 @@ def expected_input_transfer_receipt(
     if len(chunks) > MAXIMUM_TASK_INPUT_CHUNKS:
         fail(
             "materialization.task-binding-mismatch",
-            "task.v3 exceeds the negotiated input chunk count",
+            "task.v4 exceeds the negotiated input chunk count",
         )
     chunk_digests = [content_digest(chunk) for chunk in chunks]
     return {
-        "protocol_version": "1.1.0",
+        "protocol_version": "2.0.0",
         "required_feature": TASK_INPUT_FEATURE,
-        "task_input_codec": "cxxlens.clang22.task.v3",
+        "task_input_codec": "cxxlens.clang22.task.v4",
         "logical_input_bytes": len(logical_input),
         "logical_input_digest": logical_digest,
         "canonical_chunk_bytes": TASK_INPUT_CHUNK_BYTES,
@@ -15776,2284 +13069,121 @@ def _semantic_matrix_projection(request: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def validate_qualification_matrix(
-    root: pathlib.Path,
-    entries: list[
-        tuple[dict[str, Any], dict[str, Any]]
-        | tuple[dict[str, Any], dict[str, Any], bytes]
-    ],
-) -> None:
-    expected = {
-        (configuration, backend)
-        for configuration in ("static", "shared")
-        for backend in ("memory", "sqlite")
-    }
-    actual: list[tuple[str, str]] = []
-    projections: list[dict[str, Any]] = []
-    snapshot_ids: set[str] = set()
-    publication_ids: set[str] = set()
-    exports: set[str] = set()
-    queries: set[str] = set()
-    base_claim_sets: set[bytes] = set()
-    claim_stage_sets: set[bytes] = set()
-    global_provenance_sets: set[bytes] = set()
-    normalized_entries: list[tuple[dict[str, Any], dict[str, Any], bytes]] = []
-    for entry in entries:
-        if len(entry) == 2:
-            request, report = entry
-            request_bytes = canonical_json(request)
-        elif len(entry) == 3:
-            request, report, request_bytes = entry
-            if not isinstance(request_bytes, bytes):
-                fail(
-                    "materialization.report-invalid",
-                    "qualification exact request artifact is not bytes",
-                )
-        else:
-            fail("materialization.report-invalid", "qualification entry arity differs")
-        normalized_entries.append((request, report, request_bytes))
-        validate_report(
-            root,
-            request,
-            report,
-            request_bytes=request_bytes,
-        )
-        if report["result"] != "passed":
-            fail("materialization.report-invalid", "qualification matrix contains failure")
-        guarantee = report["side_channels"]["guarantee"]
-        if guarantee["approximation"] != "exact" or any(
-            census["non_exact_equivalence_count"] != 0
-            for census in guarantee["observation_descriptor_censuses"]
-        ):
-            fail(
-                "materialization.coverage-incomplete",
-                "qualification requires exact observation equivalence",
-            )
-        actual.append(
-            (
-                request["tool"]["package_configuration"],
-                request["publication"]["backend"],
-            )
-        )
-        projections.append(_semantic_matrix_projection(request))
-        snapshot_ids.add(report["store"]["snapshot_manifest"]["snapshot_id"])
-        publication_ids.add(
-            report["publication"]["invocation_committed_record"]["publication_id"]
-        )
-        reopened = report["semantic_verification"]["reopened_store"]
-        exports.add(reopened["canonical_export_digest"])
-        queries.add(reopened["cursor_projection"]["digest"])
-        base_claim_sets.add(canonical_json(report["base_claims"]))
-        claim_stage_sets.add(canonical_json(report["claim_stages"]))
-        global_provenance_sets.add(canonical_json(report["provenance"]))
-    if set(actual) != expected or len(actual) != len(expected):
-        fail("materialization.report-invalid", f"installed matrix differs: {actual}")
-    if any(projection != projections[0] for projection in projections[1:]):
-        fail("materialization.report-invalid", "matrix project/provider semantics differ")
-    for configuration in ("static", "shared"):
-        semantic_keys = {
-            request["semantic_request_digest"]
-            for request, _, _ in normalized_entries
-            if request["tool"]["package_configuration"] == configuration
-        }
-        if len(semantic_keys) != 1:
-            fail(
-                "materialization.report-invalid",
-                f"{configuration} memory/SQLite semantic request digests differ",
-            )
-    if (
-        len(snapshot_ids) != 1
-        or len(publication_ids) != 1
-        or len(exports) != 1
-        or len(queries) != 1
-        or len(base_claim_sets) != 1
-        or len(claim_stage_sets) != 1
-        or len(global_provenance_sets) != 1
-    ):
-        fail("materialization.report-invalid", "backend/configuration semantic parity differs")
+def validate_v2_2_documents(root: pathlib.Path) -> dict[str, Any]:
+    """Validate the current product schemas without repository-byte gates.
+
+    Request 2.2 carries task metadata and source-closure identities; source
+    bytes arrive through the authenticated closure transport.  This entrypoint
+    intentionally does not inspect repository-operation metadata or
+    implementation source text.  Those were development-operation checks, not
+    product semantics.
+    """
 
-
-def validate_report_lifecycle_authority_text(
-    design_text: str,
-    adr_text: str,
-    contract_text: str,
-) -> None:
-    normalized_design = " ".join(design_text.split())
-    normalized_adr = " ".join(adr_text.split())
-    normalized_contract = " ".join(contract_text.split())
-    for forbidden in FORBIDDEN_REPORT_LIFECYCLE_TEXT:
-        if (
-            forbidden in normalized_design
-            or forbidden in normalized_adr
-            or forbidden in normalized_contract
-        ):
-            fail(
-                "materialization.report-invalid",
-                f"legacy report lifecycle text was reintroduced: {forbidden}",
-            )
-    for required in (
-        "DF-0194",
-        "bounded two-phase",
-        "short/partial write",
-        "OS-level all-or-nothing atomicity",
-    ):
-        if required not in normalized_adr:
-            fail(
-                "materialization.report-invalid",
-                f"ADR two-phase report lifecycle marker is missing: {required}",
-            )
-    for required in (
-        "DF-0194",
-        "bounded two-phase",
-        "publish attempt 後",
-        "request/report v2 shape、identity、public Store API は変更しない",
-    ):
-        if required not in normalized_design:
-            fail(
-                "materialization.report-invalid",
-                f"integrated design two-phase report lifecycle marker is missing: {required}",
-            )
-
-
-def validate_base64_authority_text(design_text: str, adr_text: str) -> None:
-    """Fail closed when the accepted design/ADR loses DF-0199 canonicality markers."""
-
-    normalized_design = " ".join(design_text.split())
-    normalized_adr = " ".join(adr_text.split())
-    required_markers = (
-        "DF-0199",
-        "zero discarded padding bits",
-        "non-zero discarded padding bits",
-        "sealed source bytes",
-        "version `2.1.0`",
-        "qualified",
-    )
-    for label, value in (("integrated design", normalized_design), ("ADR", normalized_adr)):
-        for required in required_markers:
-            if required not in value:
-                fail(
-                    "materialization.task-binding-mismatch",
-                    f"{label} canonical Base64 marker is missing: {required}",
-                )
-
-
-def validate_occurrence_snapshot_authority_text(
-    design_text: str,
-    adr_text: str,
-) -> None:
-    """Bind the accepted occurrence authority to one immutable snapshot per role."""
-
-    required = {
-        "integrated design": (
-            "exactly one の private memfd snapshot",
-            "retained sealed snapshot の独立 read-only handle",
-            "artifact bytes を再 copy しない",
-            "measurement 後の rename または in-place mutation",
-        ),
-        "ADR": (
-            "F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL",
-            "exactly one の immutable snapshot",
-            "同一 role の再 copy",
-            "measurement 完了後の path replacement",
-        ),
-    }
-    documents = {
-        "integrated design": " ".join(design_text.split()),
-        "ADR": " ".join(adr_text.split()),
-    }
-    for label, markers in required.items():
-        for marker in markers:
-            if marker not in documents[label]:
-                fail(
-                    "materialization.occurrence-invalid",
-                    f"{label} immutable occurrence snapshot marker is missing: {marker}",
-                )
-
-
-def validate_private_spool_authority_text(
-    design_text: str,
-    adr_text: str,
-) -> None:
-    """Bind every materialization private spool to verified Linux memfd sealing."""
-
-    required = {
-        "integrated design": (
-            "`memfd_create(..., MFD_CLOEXEC | MFD_ALLOW_SEALING)`",
-            "pathname、`mkstemp`、unlink 済み mutable inode への fallback は禁止",
-            "`F_ADD_SEALS`",
-            "`F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL`",
-            "`F_GET_SEALS`",
-            "`fstat` の actual size と append census",
-            "sealed bytes の SHA-256 と append transcript の incremental SHA-256",
-            "size/content binding の不一致を source-private no-response",
-            "compile-time absence と missing-bit contradiction は no-response",
-        ),
-        "ADR": (
-            "`memfd_create(..., MFD_CLOEXEC | MFD_ALLOW_SEALING)`",
-            "pathname、`mkstemp`、unlink 後の mutable inode への fallback を禁止",
-            "`F_ADD_SEALS`",
-            "`F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL`",
-            "`F_GET_SEALS`",
-            "`fstat` の actual size と append census",
-            "sealed bytes の SHA-256 と append transcript の incremental SHA-256",
-            "drift は worker、Store、file effect 前の source-private no-response",
-            "compile-time absence と missing-bit contradiction は no-response",
-        ),
-    }
-    documents = {
-        "integrated design": " ".join(design_text.split()),
-        "ADR": " ".join(adr_text.split()),
-    }
-    for label, markers in required.items():
-        for marker in markers:
-            if marker not in documents[label]:
-                fail(
-                    "materialization.request-invalid",
-                    f"{label} private-spool sealing marker is missing: {marker}",
-                )
-
-
-def validate_materialization_io_taxonomy_header(header: str) -> None:
-    """Bind stable spool failure to the exact operation-authentic kind matrix."""
-
-    normalized = " ".join(header.split())
-    begin = normalized.find(
-        "[[nodiscard]] constexpr bool "
-        "is_materialization_actual_io_or_hash_failure("
-    )
-    end = normalized.find("template <class Value>", begin)
-    expected = " ".join(
-        """
-        [[nodiscard]] constexpr bool
-        is_materialization_actual_io_or_hash_failure(
-            const materialization_io_failure& failure) noexcept
-        {
-            switch (failure.operation)
-            {
-                case materialization_io_operation::input_read:
-                    return failure.kind == materialization_io_failure_kind::read;
-                case materialization_io_operation::spool_write:
-                    return failure.kind == materialization_io_failure_kind::write ||
-                        failure.kind == materialization_io_failure_kind::spool;
-                case materialization_io_operation::spool_seal:
-                case materialization_io_operation::spool_create:
-                case materialization_io_operation::spool_rewind:
-                    return failure.kind == materialization_io_failure_kind::spool;
-                case materialization_io_operation::spool_read:
-                    return failure.kind == materialization_io_failure_kind::read ||
-                        failure.kind == materialization_io_failure_kind::spool;
-                case materialization_io_operation::digest_update:
-                case materialization_io_operation::digest_finalize:
-                    return failure.kind == materialization_io_failure_kind::hash;
-                case materialization_io_operation::configuration:
-                case materialization_io_operation::buffer_allocation:
-                    return false;
-            }
-            return false;
-        }
-        """.split()
-    ).replace("failure( const", "failure(const")
-    if begin < 0 or end < 0 or normalized[begin:end].strip() != expected:
-        fail(
-            "materialization.request-invalid",
-            "materialization I/O kind-by-operation authenticity matrix differs",
-        )
-
-
-def validate_private_spool_implementation_text(source: str) -> None:
-    """Reject mutable fallbacks or a logical seal not bound to exact sealed bytes."""
-
-    for forbidden in ("mkstemp", "unlink", "O_TMPFILE", "mark_memfd("):
-        if forbidden in source:
-            fail(
-                "materialization.request-invalid",
-                f"private-spool mutable fallback was reintroduced: {forbidden}",
-            )
-
-    normalized = " ".join(source.replace("\\\n", " ").split())
-    required = (
-        "defined(__linux__) && defined(SYS_memfd_create) && defined(MFD_CLOEXEC)",
-        "defined(MFD_ALLOW_SEALING) && defined(F_ADD_SEALS) && defined(F_GET_SEALS)",
-        "F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL",
-        "SYS_memfd_create, \"cxxlens-materialization\", MFD_CLOEXEC | MFD_ALLOW_SEALING",
-        "::fcntl(descriptor_, F_ADD_SEALS, required_memfd_seals)",
-        "const auto observed_seals = ::fcntl(descriptor_, F_GET_SEALS);",
-        "(observed_seals & required_memfd_seals) != required_memfd_seals",
-        "auto updated = expected_digest_->update(bytes);",
-        "::fstat(descriptor_, &status)",
-        "static_cast<std::uint64_t>(status.st_size) != size_",
-        "auto verified = verify_sealed_bytes();",
-        "if (!verified) { poisoned_ = true; return verified.error(); }",
-        "auto expected = expected_digest_->finish();",
-        "auto observed_digest = make_materialization_sha256_accumulator();",
-        "ssize_t count{}; do { count = ::pread(",
-        "descriptor_, buffer.data(), requested, static_cast<off_t>(offset));",
-        "auto observed = observed_digest->finish();",
-        "if (*observed != *expected)",
-        "expected_digest_.reset();",
-        "sealed_ = true;",
-    )
-    for marker in required:
-        if marker not in normalized:
-            fail(
-                "materialization.request-invalid",
-                f"private-spool fail-closed implementation marker is missing: {marker}",
-            )
-
-    add_position = normalized.find(
-        "::fcntl(descriptor_, F_ADD_SEALS, required_memfd_seals)"
-    )
-    get_position = normalized.find(
-        "const auto observed_seals = ::fcntl(descriptor_, F_GET_SEALS);"
-    )
-    verify_position = normalized.find(
-        "(observed_seals & required_memfd_seals) != required_memfd_seals"
-    )
-    size_position = normalized.find("::fstat(descriptor_, &status)")
-    content_call_position = normalized.find("auto verified = verify_sealed_bytes();")
-    poison_position = normalized.find(
-        "if (!verified) { poisoned_ = true; return verified.error(); }"
-    )
-    publish_position = normalized.find("sealed_ = true;")
-    if not (
-        normalized.count("sealed_ = true;") == 1
-        and 0
-        <= add_position
-        < get_position
-        < verify_position
-        < size_position
-        < content_call_position
-        < poison_position
-        < publish_position
-    ):
-        fail(
-            "materialization.request-invalid",
-            "private-spool add/get/size/content/logical-seal order differs",
-        )
-
-    expected_position = normalized.find("auto expected = expected_digest_->finish();")
-    observed_create_position = normalized.find(
-        "auto observed_digest = make_materialization_sha256_accumulator();"
-    )
-    sealed_read_position = normalized.find(
-        "ssize_t count{}; do { count = ::pread("
-    )
-    observed_finish_position = normalized.find(
-        "auto observed = observed_digest->finish();"
-    )
-    content_compare_position = normalized.find("if (*observed != *expected)")
-    if not (
-        0
-        <= expected_position
-        < observed_create_position
-        < sealed_read_position
-        < observed_finish_position
-        < content_compare_position
-    ):
-        fail(
-            "materialization.request-invalid",
-            "private-spool sealed-byte transcript verification order differs",
-        )
-
-    factory_failure = (
-        "if (descriptor < 0) return materialization_io_failure{"
-        "materialization_io_failure_kind::spool, "
-        "materialization_io_operation::spool_create};"
-    )
-    unsupported_failure = (
-        "#else return materialization_io_failure{"
-        "materialization_io_failure_kind::invalid_configuration, "
-        "materialization_io_operation::spool_create}; #endif"
-    )
-    if factory_failure not in normalized or unsupported_failure not in normalized:
-        fail(
-            "materialization.request-invalid",
-            "private-spool factory does not fail closed without a safe memfd",
-        )
-
-    successful_contradictions = (
-        (
-            "if (count == 0 || static_cast<std::size_t>(count) > bytes.size() - offset) "
-            "{ poisoned_ = true; return materialization_io_failure{ "
-            "materialization_io_failure_kind::invalid_configuration, "
-            "materialization_io_operation::spool_write}; }"
-        ),
-        (
-            "if ((observed_seals & required_memfd_seals) != required_memfd_seals) "
-            "{ poisoned_ = true; return materialization_io_failure{ "
-            "materialization_io_failure_kind::invalid_configuration, "
-            "materialization_io_operation::spool_seal}; }"
-        ),
-        (
-            "if (status.st_size < 0 || static_cast<std::uint64_t>(status.st_size) != size_) "
-            "{ poisoned_ = true; return materialization_io_failure{ "
-            "materialization_io_failure_kind::invalid_configuration, "
-            "materialization_io_operation::spool_seal}; }"
-        ),
-        (
-            "if (count == 0 || static_cast<std::size_t>(count) > available) "
-            "return materialization_io_failure{ "
-            "materialization_io_failure_kind::invalid_configuration, "
-            "materialization_io_operation::spool_read};"
-        ),
-        (
-            "if (*received == 0U || *received > destination.size()) "
-            "return failure(materialization_io_failure_kind::invalid_configuration, "
-            "materialization_io_operation::spool_read);"
-        ),
-        (
-            "if (*received > requested) return failure("
-            "materialization_io_failure_kind::invalid_configuration, "
-            "materialization_io_operation::input_read);"
-        ),
-        (
-            "if (!exact_sha256(*finished)) return failure("
-            "materialization_io_failure_kind::invalid_configuration, "
-            "materialization_io_operation::digest_finalize);"
-        ),
-    )
-    for marker in successful_contradictions:
-        if marker not in normalized:
-            fail(
-                "materialization.request-invalid",
-                "successful private-spool contradiction taxonomy differs: " + marker,
-            )
-
-
-def validate_v2_1_admission_authority_text(
-    design_text: str,
-    adr_text: str,
-) -> None:
-    """Bind selected-schema ceilings, compact equality, and spool phases."""
-
-    documents = {
-        "integrated design": (
-            " ".join(design_text.split()),
-            (
-                "generic array count と non-envelope string length は raw 1 GiB reachability",
-                "resident duplicate-name ledger を持つ object member は 4096",
-                "4097 件目の後も strict lexical scan",
-                "`trust_policy.task_sandbox_requirements`",
-                "selected schema が `maxItems: 4096`",
-                "`request-schema` / `materialization.request-invalid`",
-                "bounded string-view tuple",
-                "O(N log N)",
-                "43 / 6 bytes",
-                "fixed 64-byte private-spool record",
-                "digest-only equality",
-                "`materialization.spool-failure`",
-                "raw observation を確立できない最初の capture spool failure は exit 2 / no response",
-                "lexical raw/task-index は `json-decode`",
-                "selected schema の global/task/source/index/uniqueItems は `request-schema`",
-                "full schema 後の source/task.v3/ identity/task-index/execution uniqueness は `request-binding`",
-                "source-private no-response signal",
-                "`materialization.io-failure` / `materialization.resource-limit` / `materialization.internal-failure`",
-                "semantic JSON token replay",
-                "insignificant whitespace",
-                "minimal JSON escaping",
-                "integer spelling",
-                "`tasks=[]`",
-                "`source.content_base64=\"\"`",
-                "`10,420,985`",
-                "`8,463,179`",
-                "`56,687,879`",
-                "`58,645,685`",
-                "`sha256:241fc96ae3a249e5a8851baa95e585460ad29378cb20d11cfcda33a69eaa9270`",
-                "`sha256:ff9baf9982f909d8a4f51c46f53637af6980a7d06728dfa65794ffc1eebf816d`",
-                "positive・negative・fault・resource tests が成功するまで出荷経路へ接続せず",
-                "request 2.1.0 shape は不変",
-                "13/19-file occurrence inventory",
-                "`task_sandbox_requirements maxItems: 4096`",
-                "operation-authentic kind×operation matrix",
-                "全 mismatched pair は no-response",
-                "root member の missing/extra",
-                "collision reverse read",
-                "successful write-drop",
-                "raw-spelling inflation",
-                "1 GiB raw transport reachability",
-            ),
-        ),
-        "ADR-0096": (
-            " ".join(adr_text.split()),
-            (
-                "generic array count と non-envelope value-string length",
-                "object member は duplicate-name ledger が resident であるため 4096",
-                "4097 件目を観測しても残りの strict lexical scan",
-                "`trust_policy.task_sandbox_requirements`",
-                "selected schema がそれぞれ `maxItems: 4096`",
-                "`request-schema` / `materialization.request-invalid`",
-                "bounded string-view projection",
-                "O(N log N)",
-                "43 と 6",
-                "fixed 64-byte record",
-                "digest match だけを JSON Schema equality authority にしない",
-                "`materialization.spool-failure`",
-                "complete raw-input observation を保持できない最初の raw spool create/capture failure は exit 2 / no authoritative response",
-                "lexical raw/task-index は `json-decode`",
-                "selected-schema global/task/source/index/ uniqueItems は `request-schema`",
-                "full schema 後の source/task.v3/identity/task-index/execution uniqueness は `request-binding`",
-                "source-private no-response signal",
-                "`materialization.io-failure` / `materialization.resource-limit` / `materialization.internal-failure`",
-                "semantic JSON token replay",
-                "insignificant whitespace",
-                "minimal JSON escaping",
-                "integer spelling",
-                "`tasks=[]`",
-                "`source.content_base64=\"\"`",
-                "`10,420,985`",
-                "`8,463,179`",
-                "`56,687,879`",
-                "`58,645,685`",
-                "`sha256:241fc96ae3a249e5a8851baa95e585460ad29378cb20d11cfcda33a69eaa9270`",
-                "`sha256:ff9baf9982f909d8a4f51c46f53637af6980a7d06728dfa65794ffc1eebf816d`",
-                "Store/claim contract と直接の positive・negative・fault test を先に整合させる",
-                "request 2.1.0 shape は不変",
-                "13/19-file occurrence inventory",
-                "sandbox array bound",
-                "operation-authentic kind×operation matrix",
-                "全 mismatched pair は no-response",
-                "root member missing/extra",
-                "collision reverse read",
-                "successful write-drop",
-                "raw-spelling inflation",
-                "1 GiB raw request reachability",
-            ),
-        ),
-    }
-    for label, (document, markers) in documents.items():
-        for marker in markers:
-            if marker not in document:
-                fail(
-                    "materialization.request-invalid",
-                    f"{label} v2.1 admission authority marker is missing: {marker}",
-                )
-
-
-def validate_v2_1_admission_implementation_text(
-    stream_header: str,
-    stream_source: str,
-    admission_source: str,
-    admission_error_header: str,
-    identity_source: str,
-    task_spool_source: str,
-    request_driver: str,
-) -> None:
-    """Bind selected-schema limits and exact compact uniqueness to their authority."""
-
-    normalized_header = " ".join(stream_header.split())
-    normalized_stream = " ".join(stream_source.split())
-    normalized_admission = " ".join(admission_source.split())
-    normalized_error_header = " ".join(admission_error_header.split())
-    normalized_identity = " ".join(identity_source.split())
-    normalized_task_spool = " ".join(task_spool_source.split())
-    normalized_driver = " ".join(request_driver.split())
-    required_header = (
-        (
-            "maximum_materialization_request_schema_capture_bytes = "
-            "materialization_request_schema_v2.size() + 1U"
-        ),
-        (
-            "maximum_materialization_request_version_capture_bytes = "
-            "materialization_request_version_v2_1.size() + 1U"
-        ),
-        (
-            "maximum_materialization_global_request_window_bytes = "
-            "64U * 1024U * 1024U"
-        ),
-        (
-            "maximum_materialization_task_metadata_window_bytes = "
-            "64U * 1024U * 1024U"
-        ),
-        "maximum_members_per_object{4096U}",
-        "maximum_elements_per_array{static_cast<std::size_t>(maximum_raw_request_bytes)}",
-        "maximum_string_utf8_bytes{static_cast<std::size_t>(maximum_raw_request_bytes)}",
-    )
-    for marker in required_header:
-        if marker not in normalized_header:
-            fail(
-                "materialization.request-invalid",
-                f"v2.1 pass-one lexical/resource marker is missing: {marker}",
-            )
-
-    required_stream = (
-        "tasks_exceeded_selected_maximum_ = true;",
-        'scan_error("request-schema", "tasks-maxItems", cursor_.position())',
-        "limits.max_array_elements = maximum_window_bytes;",
-        "limits.max_total_values = maximum_window_bytes;",
-        'task_index_io_error("json-decode", "create", 0U, spool.error())',
-        'task_index_io_error("json-decode", "append", value_offset, written.error())',
-        'task_index_io_error("request-schema", "seal", 0U, sealed.error())',
-        '"task-index-private", "read", record_offset + filled, read.error()',
-        "constexpr materialization_request_scan_limits authority_limits{};",
-        "limits.maximum_depth != authority_limits.maximum_depth",
-        "limits.maximum_members_per_object != authority_limits.maximum_members_per_object",
-        "limits.maximum_elements_per_array != authority_limits.maximum_elements_per_array",
-        "limits.maximum_string_utf8_bytes != authority_limits.maximum_string_utf8_bytes",
-        'const auto capture_limit = name == "schema"',
-        "maximum_materialization_request_schema_capture_bytes",
-        "maximum_materialization_request_version_capture_bytes",
-        "output->size() >= maximum_capture_bytes",
-        "class semantic_json_replayer",
-        "append_semantic_replayed_range",
-        "append_code_point(code_point)",
-        "if (decimal.all_zero) return append('0');",
-        "maximum_output_bytes_",
-        'replay.append("[]");',
-        'replay.append("\\"\\"");',
-        'replay_io_error(phase_, "read", position_, read.error())',
-        "exact_materialization_task_json_equal",
-        'collision_metadata_io_error("append", appended.error())',
-        'collision_metadata_io_error("seal", sealed.error())',
-        'collision_metadata_io_error("read", read.error())',
-        'selected_shape_error(phase, "root-member-census", 0U)',
-        'selected_shape_error(phase, "root-member-required", 0U)',
-        'selected_shape_error(phase, "source-content-required", task.value_offset)',
-        'selected_shape_error( phase, "source-content-string", *task.source_content_offset)',
-        'if (phase == "request-schema") return scan_error('
-        '"request-schema", std::move(reason), offset); return '
-        "materialization_admission_no_response();",
-        "metadata_comparison.size_bytes() != canonical_left.size()",
-        "while (verified_left < canonical_left.size())",
-        "if (!std::ranges::equal(std::span{comparison}.first(*read), expected))",
-    )
-    for marker in required_stream:
-        if marker not in normalized_stream:
-            fail(
-                "materialization.request-invalid",
-                f"v2.1 streaming admission marker is missing: {marker}",
-            )
-
-    left_replay = normalized_stream.find("canonical_left = canonical_json(left_metadata->root())")
-    left_seal = normalized_stream.find("metadata_comparison.seal()", left_replay)
-    reverse_size = normalized_stream.find(
-        "metadata_comparison.size_bytes() != canonical_left.size()", left_seal
-    )
-    reverse_read = normalized_stream.find(
-        "while (verified_left < canonical_left.size())", reverse_size
-    )
-    reverse_content = normalized_stream.find(
-        "if (!std::ranges::equal(std::span{comparison}.first(*read), expected))",
-        reverse_read,
-    )
-    right_replay = normalized_stream.find(
-        "auto right_metadata = replay_materialization_task_metadata", reverse_content
-    )
-    if not (
-        0
-        <= left_replay
-        < left_seal
-        < reverse_size
-        < reverse_read
-        < reverse_content
-        < right_replay
-    ):
-        fail(
-            "materialization.request-invalid",
-            "collision metadata left-authority reverse closure order differs",
-        )
-    for forbidden in ("append_replayed_range(", "replay_shape_error("):
-        if forbidden in normalized_stream:
-            fail(
-                "materialization.request-invalid",
-                f"raw-spelling replay shortcut was reintroduced: {forbidden}",
-            )
-
-    trust_begin = normalized_admission.find("validate_trust_schema(")
-    trust_end = normalized_admission.find("validate_publication_schema(", trust_begin)
-    if trust_begin < 0 or trust_end < 0:
-        fail("materialization.request-invalid", "v2.1 trust schema validator is missing")
-    trust_validator = normalized_admission[trust_begin:trust_end]
-    if (
-        '"task_sandbox_requirements"' not in trust_validator
-        or "1U, 4096U, false" not in trust_validator
-        or (
-            "std::vector<std::pair<std::string_view, std::string_view>> "
-            "exact_requirements"
-        )
-        not in trust_validator
-        or "std::ranges::sort(exact_requirements)" not in trust_validator
-        or "std::ranges::adjacent_find(exact_requirements)" not in trust_validator
-        or "std::numeric_limits<std::size_t>::max()" in trust_validator
-    ):
-        fail(
-            "materialization.request-invalid",
-            "bounded trust requirement exact projection differs",
-        )
-
-    catalog_begin = normalized_admission.find("validate_project_schema(")
-    catalog_end = normalized_admission.find("validate_registry_schema(", catalog_begin)
-    if catalog_begin < 0 or catalog_end < 0:
-        fail("materialization.request-invalid", "v2.1 project schema validator is missing")
-    catalog_validator = normalized_admission[catalog_begin:catalog_end]
-    required_catalog_projection = (
-        '"catalog_compile_units", "project.catalog_compile_units", 1U, 4096U, false',
-        (
-            "using catalog_entry_key = std::tuple<std::string_view, std::string_view, "
-            "std::string_view, std::string_view>"
-        ),
-        "exact_catalog_entries",
-        "std::ranges::sort(exact_catalog_entries)",
-        "std::ranges::adjacent_find(exact_catalog_entries)",
-    )
-    for marker in required_catalog_projection:
-        if marker not in catalog_validator:
-            fail(
-                "materialization.request-invalid",
-                f"catalog exact projection marker is missing: {marker}",
-            )
-
-    required_admission = (
-        "compact_unique_record_bytes = 64U",
-        "std::array<compact_unique_record, maximum_materialization_tasks>",
-        "seal_and_validate_compact_unique_records",
-        "materialization.spool-failure",
-        "task_unique_index",
-        "task_collision_metadata",
-        "execution_unique_index",
-        "exact_materialization_task_json_equal(",
-        'task_index_phase_error(std::move(span.error()), "request-schema")',
-        'task_index_phase_error(std::move(span.error()), "request-binding")',
-        "materialization_admission_no_response()",
-    )
-    for marker in required_admission:
-        if marker not in normalized_admission:
-            fail(
-                "materialization.request-invalid",
-                f"v2.1 compact uniqueness marker is missing: {marker}",
-            )
-    for forbidden in (
-        "seal_and_validate_unique_records",
-        "append_replay_bytes",
-        "materialization.internal-failure",
-    ):
-        if forbidden in normalized_admission:
-            fail(
-                "materialization.request-invalid",
-                f"v2.1 unbounded or uncontracted admission path was reintroduced: {forbidden}",
-            )
-
-    typed_mapper_requirements = {
-        "stream": (
-            normalized_stream,
-            (
-                "return materialization_admission_io_failure(",
-                'failure, "request-schema", "task-collision-metadata:"',
-                '"raw-replay:" + std::string{operation}',
-            ),
-        ),
-        "v2.1": (
-            normalized_admission,
-            (
-                "auxiliary_create_failure(",
-                "auxiliary_io_failure(",
-                "return materialization_admission_io_failure(",
-                "materialization_v2_1_auxiliary_spool_purpose::task_input_digest",
-                "auto digest = auxiliary_spools.make_digest(purpose);",
-                "if (!has_content_digest_grammar(*finished)) return sdk::unexpected("
-                "materialization_admission_no_response());",
-                "if (!*unique_records) return sdk::unexpected("
-                "materialization_admission_no_response());",
-                "if (!*comparison) return sdk::unexpected("
-                "materialization_admission_no_response());",
-                "if (!*execution_keys) return sdk::unexpected("
-                "materialization_admission_no_response());",
-            ),
-        ),
-        "identity": (
-            normalized_identity,
-            (
-                "class production_identity_digest_factory final",
-                "materialization_request_identity_digest_factory& digest_factory",
-                "return materialization_admission_io_failure(",
-                "if (!exact_sha256(*digest)) return sdk::unexpected("
-                "materialization_admission_no_response());",
-            ),
-        ),
-        "task spool": (
-            normalized_task_spool,
-            (
-                "return materialization_admission_io_failure(",
-                "if (!exact_sha256(*output)) return sdk::unexpected("
-                "materialization_admission_no_response());",
-            ),
-        ),
-    }
-    for label, (source, markers) in typed_mapper_requirements.items():
-        if "failure.kind" in source:
-            fail(
-                "materialization.request-invalid",
-                f"{label} bypasses the central typed I/O classifier",
-            )
-        for marker in markers:
-            if marker not in source:
-                fail(
-                    "materialization.request-invalid",
-                    f"{label} typed I/O classifier marker is missing: {marker}",
-                )
-
-    if (
-        'materialization_admission_no_response_code = "no-response"'
-        not in normalized_error_header
-        or (
-            "if (!is_materialization_actual_io_or_hash_failure(failure)) "
-            "return materialization_admission_no_response();"
-        )
-        not in normalized_error_header
-        or (
-            "return materialization_admission_spool_failure("
-            "std::move(phase), std::move(detail));"
-        )
-        not in normalized_error_header
-        or "if (is_materialization_admission_no_response(error)) return error;"
-        not in normalized_error_header
-        or (
-            'if (error.code != "materialization.spool-failure") return '
-            "materialization_admission_no_response();"
-        )
-        not in normalized_error_header
-    ):
-        fail(
-            "materialization.request-invalid",
-            "source-private no-response/spool normalization marker differs",
-        )
-
-    admission_texts = {
-        "stream": normalized_stream,
-        "v2.1": normalized_admission,
-        "identity": normalized_identity,
-        "task spool": normalized_task_spool,
-        "admission error": normalized_error_header,
-        "request driver": normalized_driver,
-    }
-    for label, source in admission_texts.items():
-        for forbidden_code in EXPECTED_ADMISSION_FAILURE[
-            "forbidden_admission_codes"
-        ]:
-            if forbidden_code in source:
-                fail(
-                    "materialization.request-invalid",
-                    f"{label} reintroduced forbidden admission code {forbidden_code}",
-                )
-
-    if (
-        "catch (const std::bad_alloc&) { return sdk::unexpected("
-        "materialization_admission_no_response()); }"
-        not in normalized_stream
-        or "catch (const std::bad_alloc&) { return sdk::unexpected("
-        "materialization_admission_no_response()); }"
-        not in normalized_admission
-        or normalized_task_spool.count(
-            "catch (const std::bad_alloc&) { poisoned_ = true; return "
-            "sdk::unexpected(materialization_admission_no_response()); }"
-        )
-        < 6
-        or 'spool_error("source", "allocation")' in normalized_task_spool
-        or 'spool_error("task.v3", "allocation")' in normalized_task_spool
-    ):
-        fail(
-            "materialization.request-invalid",
-            "phase-opaque allocation failure escaped no-response taxonomy",
-        )
-
-    required_driver = (
-        "return is_materialization_admission_no_response(error) ? 2 : fail(error);",
-        "if (!spool) return 2;",
-        "if (!observed) return 2;",
-        (
-            'if (!observed->complete) return fail({"materialization.request-invalid", '
-            '"input-limit", "maximum-bytes"});'
-        ),
-    )
-    for marker in required_driver:
-        if marker not in normalized_driver:
-            fail(
-                "materialization.request-invalid",
-                f"request driver no-response/input-limit marker is missing: {marker}",
-            )
-
-
-def validate_sqlite_effect_root_authority_text(
-    design_text: str,
-    adr_text: str,
-) -> None:
-    """Bind rooted VFS lifetime, destruction order, and closed file authority."""
-
-    markers = (
-        "named non-default VFS",
-        "type-erased backend lifetime token",
-        "backend lifetime bridge は installed public header に callable signature を追加せず",
-        "source-private default-visibility access class",
-        "catalog 対象の public C++ API または supported external ABI ではない",
-        "`snapshot_store` の bridge-specific な唯一の friend type",
-        "exactly one static `open_sqlite` member",
-        "method 単体の visibility override を禁止",
-        "required static/shared build-test",
-        "`sqlite3_open_v2` が返した raw connection",
-        "stack RAII guard",
-        "SQLite connection close、VFS unregister、captured root dirfd close、SQLite library release",
-        "最後の main-database close",
-        "named `xOpen`",
-        "anonymous `xOpen`",
-        "`xShmMap` / `xShmUnmap`",
-        "`xAccess` / `xDelete`",
-        "suffix-only path、unknown suffix",
-        "`/cxxlens-rooted-vfs-v1/` synthetic name",
-        "leading `:` / `file:` reserved name",
-        "`xDlOpen` / `xDlSym` / `xDlClose` / `xDlError`",
-        "`xSetSystemCall` / `xGetSystemCall` / `xNextSystemCall`",
-        "named `SQLITE_OPEN_DELETEONCLOSE`",
-        "anonymous pathname-unreachable private memfd",
-        "pending reservation、file create、noexcept active commit",
-        "`sqlite3_file.pMethods = nullptr`",
-        "C ABI callback は C++ exception を外へ漏らさず",
-        "authority lease",
-        "最後の close は新規 lease を原子的に拒否",
-        "既に取得済みの lease は effect 完了後に drain",
-        "`xRead`、`xWrite`、`xTruncate`",
-        "`xClose` だけは無条件に owned resource を解放",
-        "transactional rollback を一律には主張せず",
-        "pMethods null / flags zero",
-        "FIFO、device、directory",
-        "parent directory は captured root dirfd 自身の duplicate、または captured root dirfd から `openat2` beneath で取得時に認証",
-        "retained authenticated parent-directory capability 相対",
-        "concurrent ancestor rename / mount relocation",
-        "current namespace の captured-root path 下から到達可能であることは主張しない",
-        "`SQLITE_FCNTL_HAS_MOVED`",
-        "missing、rename、replacement、 再認証 failure を moved",
-    )
-    documents = {
-        "integrated design": " ".join(design_text.split()),
-        "ADR": " ".join(adr_text.split()),
-    }
-    for label, value in documents.items():
-        for marker in markers:
-            if marker not in value:
-                fail(
-                    "materialization.sqlite-effect-root-invalid",
-                    f"{label} rooted VFS authority marker is missing: {marker}",
-                )
-
-
-def validate_sqlite_effect_root_implementation_text(
-    rooted_vfs_source: str,
-    store_source: str,
-    sqlite_lifecycle_header: str,
-    sqlite_lifecycle_source: str,
-) -> None:
-    """Bind language-level teardown order and Store ownership to exact source structure."""
-
-    def function_body(source: str, signature: str, search_from: int = 0) -> str:
-        start = source.find(signature, search_from)
-        if start < 0:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"rooted VFS implementation function is missing: {signature}",
-            )
-        parameter_opening = source.find("(", start)
-        opening = -1
-        if parameter_opening >= 0:
-            parameter_depth = 0
-            for index in range(parameter_opening, len(source)):
-                if source[index] == "(":
-                    parameter_depth += 1
-                elif source[index] == ")":
-                    parameter_depth -= 1
-                    if parameter_depth == 0:
-                        opening = source.find("{", index + 1)
-                        break
-        if opening < 0:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"rooted VFS implementation body is missing: {signature}",
-            )
-        depth = 0
-        for index in range(opening, len(source)):
-            if source[index] == "{":
-                depth += 1
-            elif source[index] == "}":
-                depth -= 1
-                if depth == 0:
-                    return source[start : index + 1]
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            f"rooted VFS implementation body is unterminated: {signature}",
-        )
-
-    def require_order(body: str, markers: tuple[str, ...], label: str) -> None:
-        position = -1
-        for marker in markers:
-            observed = body.find(marker, position + 1)
-            if observed < 0:
-                fail(
-                    "materialization.sqlite-effect-root-invalid",
-                    f"{label} marker is missing or out of order: {marker}",
-                )
-            position = observed
-
-    def normalized_body_contents(body: str) -> str:
-        opening = body.find("{")
-        closing = body.rfind("}")
-        if opening < 0 or closing <= opening:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                "rooted VFS implementation body boundary is missing",
-            )
-        return "".join(body[opening + 1 : closing].split())
-
-    def case_body(body: str, marker: str, next_marker: str, label: str) -> str:
-        start = body.find(marker)
-        end = body.find(next_marker, start + len(marker)) if start >= 0 else -1
-        if start < 0 or end < 0:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"{label} case boundary is missing",
-            )
-        return body[start:end]
-
-    def braced_block(
-        source: str, marker: str, search_from: int, label: str
-    ) -> tuple[str, int]:
-        start = source.find(marker, search_from)
-        opening = source.find("{", start) if start >= 0 else -1
-        if start < 0 or opening < 0:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"{label} block is missing: {marker}",
-            )
-        depth = 0
-        for index in range(opening, len(source)):
-            if source[index] == "{":
-                depth += 1
-            elif source[index] == "}":
-                depth -= 1
-                if depth == 0:
-                    return source[start : index + 1], index + 1
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            f"{label} block is unterminated: {marker}",
-        )
-
-    def require_catch_contract(
-        body: str,
-        expected_bodies: tuple[tuple[str, str], ...],
-        label: str,
-    ) -> None:
-        opening = body.find("{")
-        if opening < 0:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"{label} typed exception cases differ",
-            )
-        depth = 0
-        top_level_catch_count = 0
-        for index in range(opening, len(body)):
-            if body[index] == "{":
-                depth += 1
-            elif body[index] == "}":
-                depth -= 1
-            elif depth == 1 and body.startswith("catch (", index):
-                top_level_catch_count += 1
-        if top_level_catch_count != len(expected_bodies):
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"{label} typed exception cases differ",
-            )
-        cursor = 0
-        for marker, expected in expected_bodies:
-            block, cursor = braced_block(body, marker, cursor, label)
-            if normalized_body_contents(block) != expected:
-                fail(
-                    "materialization.sqlite-effect-root-invalid",
-                    f"{label} typed exception result differs: {marker}",
-                )
-
-    library_member = "sqlite_library_handle sqlite_library;"
-    root_member = "materialization_owned_fd root;"
-    if library_member not in rooted_vfs_source or root_member not in rooted_vfs_source:
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "rooted VFS lifetime owner members are missing",
-        )
-    if rooted_vfs_source.index(library_member) > rooted_vfs_source.index(root_member):
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "captured root is not destroyed before the SQLite library owner",
-        )
-    for marker in (
-        "~sqlite_library_handle()",
-        "(void)::dlclose(value);",
-        "~rooted_sqlite_vfs()",
-        "api.unregister_vfs(&wrapper)",
-    ):
-        if marker not in rooted_vfs_source:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"rooted VFS teardown marker is missing: {marker}",
-            )
-    destructor_start = rooted_vfs_source.index("~rooted_sqlite_vfs()")
-    destructor_end = rooted_vfs_source.find("\n\t\t};", destructor_start)
-    if destructor_end < 0:
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "rooted VFS destructor boundary is missing",
-        )
-    if "::dlclose" in rooted_vfs_source[destructor_start:destructor_end]:
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "rooted VFS releases SQLite before captured-root member destruction",
-        )
-
-    backend_member = "std::shared_ptr<void> backend_lifetime;"
-    database_member = "std::unique_ptr<sqlite_database> database;"
-    store_implementation, _ = braced_block(
-        store_source,
-        "struct snapshot_store::implementation",
-        0,
-        "Store implementation",
-    )
-    if (
-        backend_member not in store_implementation
-        or database_member not in store_implementation
-    ):
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "Store backend/database lifetime members are missing",
-        )
-    if store_implementation.index(backend_member) > store_implementation.index(
-        database_member
-    ):
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "Store backend token would be destroyed before its SQLite connection",
-        )
-
-    if "bool delete_on_close" in rooted_vfs_source or "file->delete_on_close" in rooted_vfs_source:
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "rooted VFS retained a named delayed-delete capability",
-        )
-
-    io_table = rooted_vfs_source.index("const sqlite3_io_methods rooted_io_methods")
-    io_callbacks = (
-        "rooted_close",
-        "rooted_read",
-        "rooted_write",
-        "rooted_truncate",
-        "rooted_sync",
-        "rooted_file_size",
-        "rooted_lock",
-        "rooted_unlock",
-        "rooted_reserved",
-        "rooted_control",
-        "rooted_sector",
-        "rooted_characteristics",
-        "rooted_shm_map",
-        "rooted_shm_lock",
-        "rooted_shm_barrier",
-        "rooted_shm_unmap",
-        "rooted_fetch",
-        "rooted_unfetch",
-    )
-    io_bodies: dict[str, str] = {}
-    for callback in io_callbacks:
-        body = function_body(rooted_vfs_source, f"{callback}(", io_table)
-        io_bodies[callback] = body
-        if "noexcept" not in body[: body.index("{")]:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"SQLite IO callback is not a no-throw C ABI boundary: {callback}",
-            )
-
-    vfs_callbacks = (
-        "rooted_vfs_open",
-        "rooted_vfs_remove",
-        "rooted_vfs_access",
-        "rooted_vfs_full_path",
-        "rooted_dl_open",
-        "rooted_dl_error",
-        "rooted_dl_sym",
-        "rooted_dl_close",
-        "rooted_randomness",
-        "rooted_sleep",
-        "rooted_current_time",
-        "rooted_last_error",
-        "rooted_current_time_int64",
-        "rooted_set_system_call",
-        "rooted_get_system_call",
-        "rooted_next_system_call",
-    )
-    vfs_bodies: dict[str, str] = {}
-    for callback in vfs_callbacks:
-        body = function_body(rooted_vfs_source, f"{callback}(")
-        vfs_bodies[callback] = body
-        if "noexcept" not in body[: body.index("{")]:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"SQLite VFS callback is not a no-throw C ABI boundary: {callback}",
-            )
-
-    for callback, body in (*io_bodies.items(), *vfs_bodies.items()):
-        if any(marker in body for marker in ("std::terminate(", "throw;", "throw ")):
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"SQLite callback terminates or rethrows across its C ABI boundary: {callback}",
-            )
-
-    for callback in (
-        "rooted_dl_open",
-        "rooted_dl_error",
-        "rooted_dl_sym",
-        "rooted_dl_close",
-        "rooted_set_system_call",
-        "rooted_get_system_call",
-        "rooted_next_system_call",
-    ):
-        if "delegate" in vfs_bodies[callback]:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"rooted VFS delegated a closed loader/syscall capability: {callback}",
-            )
-    closed_callback_bodies = {
-        "rooted_dl_open": "returnnullptr;",
-        "rooted_dl_error": "if(output!=nullptr&&size>0)output[0]='\\0';",
-        "rooted_dl_sym": "returnnullptr;",
-        "rooted_dl_close": "",
-        "rooted_set_system_call": "returnsqlite_not_found;",
-        "rooted_get_system_call": "returnnullptr;",
-        "rooted_next_system_call": "returnnullptr;",
-    }
-    for callback, expected in closed_callback_bodies.items():
-        if normalized_body_contents(vfs_bodies[callback]) != expected:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"rooted VFS closed callback body differs: {callback}",
-            )
-
-    advisory_callback_bodies = {
-        "rooted_sector": "return4096;",
-        "rooted_characteristics": "return0;",
-        "rooted_shm_barrier": (
-            "std::atomic_thread_fence(std::memory_order_seq_cst);"
-        ),
-        "rooted_fetch": (
-            "(void)base;if(output==nullptr)returnsqlite_io_error;"
-            "*output=nullptr;returnsqlite_ok;"
-        ),
-        "rooted_unfetch": "returnsqlite_ok;",
-    }
-    for callback, expected in advisory_callback_bodies.items():
-        if normalized_body_contents(io_bodies[callback]) != expected:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"rooted VFS no-effect advisory callback body differs: {callback}",
-            )
-
-    sqlite_flags_body = function_body(rooted_vfs_source, "sqlite_flags_to_open(")
-    require_order(
-        sqlite_flags_body,
-        (
-            "O_RDWR : O_RDONLY) | O_NONBLOCK",
-            "output |= O_CREAT;",
-            "output |= O_EXCL;",
-            "return output;",
-        ),
-        "rooted named xOpen nonblocking flags",
-    )
-
-    rooted_parent_body = function_body(rooted_vfs_source, "rooted_parent(")
-    require_order(
-        rooted_parent_body,
-        (
-            "const auto separator = relative.rfind('/');",
-            "leaf = relative;",
-            "::fcntl(owner.root.get(), F_DUPFD_CLOEXEC, 0)",
-            "leaf = relative.substr(separator + 1U);",
-            "open_materialization_beneath(",
-            "owner.root.get()",
-            "relative.substr(0U, separator)",
-            "O_RDONLY | O_DIRECTORY",
-        ),
-        "rooted parent capability acquisition beneath the captured root",
-    )
-    rooted_open_body = function_body(rooted_vfs_source, "rooted_open(")
-    require_order(
-        rooted_open_body,
-        (
-            "rooted_parent(owner, relative, leaf)",
-            "if (!parent)",
-            "open_materialization_beneath(",
-            "parent->get()",
-            "leaf",
-            "flags",
-            "creation_mode",
-        ),
-        "rooted open parent capability and leaf effect order",
-    )
-
-    database_path_reservation_body = function_body(
-        rooted_vfs_source, "reserve_database_path("
-    )
-    require_catch_contract(
-        database_path_reservation_body,
-        (
-            ("catch (const std::bad_alloc&)", "returnfalse;"),
-            ("catch (const std::length_error&)", "returnfalse;"),
-        ),
-        "rooted database-path reservation",
-    )
-
-    file_effect_authority_body = function_body(
-        rooted_vfs_source, "acquire_file_effect_authority("
-    )
-    require_catch_contract(
-        file_effect_authority_body,
-        (
-            (
-                "catch (const std::bad_alloc&)",
-                "return{std::nullopt,sqlite_no_memory};",
-            ),
-            (
-                "catch (const std::length_error&)",
-                "return{std::nullopt,sqlite_no_memory};",
-            ),
-            ("catch (...)", "return{std::nullopt,sqlite_io_error};"),
-        ),
-        "rooted file-effect authority",
-    )
-
-    allocation_callback_catches = {
-        "rooted_vfs_open": (
-            (
-                "catch (const std::bad_alloc&)",
-                "if(database_path_reserved)"
-                "cancel_database_path_reservation(*owner,relative);"
-                "returnsqlite_no_memory;",
-            ),
-            (
-                "catch (const std::length_error&)",
-                "if(database_path_reserved)"
-                "cancel_database_path_reservation(*owner,relative);"
-                "returnsqlite_no_memory;",
-            ),
-            (
-                "catch (...)",
-                "if(database_path_reserved)"
-                "cancel_database_path_reservation(*owner,relative);"
-                "returnsqlite_cannot_open;",
-            ),
-        ),
-        "rooted_vfs_remove": (
-            ("catch (const std::bad_alloc&)", "returnsqlite_no_memory;"),
-            ("catch (const std::length_error&)", "returnsqlite_no_memory;"),
-            ("catch (...)", "returnsqlite_io_error;"),
-        ),
-        "rooted_vfs_access": (
-            ("catch (const std::bad_alloc&)", "returnsqlite_no_memory;"),
-            ("catch (const std::length_error&)", "returnsqlite_no_memory;"),
-            ("catch (...)", "returnsqlite_io_error;"),
-        ),
-        "rooted_vfs_full_path": (
-            ("catch (const std::bad_alloc&)", "returnsqlite_no_memory;"),
-            ("catch (const std::length_error&)", "returnsqlite_no_memory;"),
-            ("catch (...)", "returnsqlite_cannot_open;"),
-        ),
-        "rooted_shm_map": (
-            ("catch (const std::bad_alloc&)", "returnsqlite_no_memory;"),
-            ("catch (const std::length_error&)", "returnsqlite_no_memory;"),
-            ("catch (...)", "returnsqlite_io_error;"),
-        ),
-        "rooted_shm_unmap": (
-            ("catch (const std::bad_alloc&)", "returnsqlite_no_memory;"),
-            ("catch (const std::length_error&)", "returnsqlite_no_memory;"),
-            ("catch (...)", "returnsqlite_io_error;"),
-        ),
-    }
-    for callback, expected in allocation_callback_catches.items():
-        callback_body = vfs_bodies.get(callback) or io_bodies[callback]
-        require_catch_contract(callback_body, expected, callback)
-
-    open_body = vfs_bodies["rooted_vfs_open"]
-    require_order(
-        open_body,
-        (
-            "if (output_flags != nullptr)",
-            "*output_flags = 0;",
-            "if (output == nullptr)",
-            "output->methods = nullptr;",
-            "sqlite_open_delete_on_close",
-            "reserve_database_path",
-            "rooted_open(",
-            "rooted_regular_file(opened->get())",
-            "new (output) rooted_sqlite_file{}",
-            "commit_database_path_reservation",
-            "authenticated.release()",
-            "*output_flags = flags;",
-            "file->base.methods = &rooted_io_methods;",
-        ),
-        "rooted VFS xOpen preeffect/commit/publication order",
-    )
-    rooted_open_position = open_body.find("rooted_open(")
-    commit_position = open_body.find(
-        "commit_database_path_reservation", rooted_open_position
-    )
-    if rooted_open_position < 0 or commit_position < 0:
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "rooted VFS xOpen create/commit boundary is missing",
-        )
-    post_create = " ".join(
-        open_body[rooted_open_position:commit_position].split()
-    )
-    for fallible_marker in (
-        "std::string ",
-        "std::vector<",
-        "std::make_",
-        ".reserve(",
-        ".append(",
-        ".assign(",
-        ".emplace(",
-        ".push_back(",
-        ".resize(",
-        "new std::",
-        "operator new",
-    ):
-        if fallible_marker in post_create:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"rooted VFS xOpen retained fallible work after create: {fallible_marker}",
-            )
-    if open_body.count("cancel_database_path_reservation") < 4 or "catch (...)" not in open_body:
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "rooted VFS xOpen does not cancel every fallible pending reservation",
-        )
-    close_body = io_bodies["rooted_close"]
-    if "rooted_remove" in close_body or "acquire_file_effect_authority" in close_body:
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "rooted xClose retained a path effect or required revoked authority",
-        )
-    for marker in (
-        "release_shm_resources(*file)",
-        "::close(file->authenticated_descriptor)",
-        "file->~rooted_sqlite_file()",
-    ):
-        if marker not in close_body:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"rooted xClose cleanup marker is missing: {marker}",
-            )
-
-    acquire_body = function_body(rooted_vfs_source, "acquire_database_path_authority(")
-    require_order(
-        acquire_body,
-        ("active_open_count == 0U", "++existing->authority_lease_count"),
-        "rooted database authority acquisition",
-    )
-    for signature in (
-        "deauthenticate_database_path(",
-        "release_database_path_authority(",
-    ):
-        body = " ".join(function_body(rooted_vfs_source, signature).split())
-        if not all(
-            marker in body
-            for marker in (
-                "existing->active_open_count == 0U",
-                "existing->pending_open_count == 0U",
-                "existing->authority_lease_count == 0U",
-                "owner.authenticated_database_paths.erase(existing)",
-            )
-        ):
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"rooted database authority drain is incomplete: {signature}",
-            )
-
-    effect_callbacks = {
-        "rooted_read": "::pread(",
-        "rooted_write": "::pwrite(",
-        "rooted_truncate": "::ftruncate(",
-        "rooted_sync": "::fdatasync(",
-        "rooted_file_size": "::fstat(",
-        "rooted_lock": "rooted_set_lock(",
-        "rooted_unlock": "rooted_set_lock(",
-        "rooted_reserved": "::fcntl(",
-        "rooted_shm_lock": "::fcntl(",
-    }
-    for callback, effect in effect_callbacks.items():
-        require_order(
-            io_bodies[callback],
-            ("acquire_file_effect_authority(*file)", effect),
-            f"opened sidecar effect authority for {callback}",
-        )
-    control_body = io_bodies["rooted_control"]
-    file_control_cases = (
-        (
-            "case sqlite_file_control_lock_state:",
-            "case sqlite_file_control_last_errno:",
-            "*static_cast<int*>(value) = file->lock_level;",
-            "lock-state",
-        ),
-        (
-            "case sqlite_file_control_last_errno:",
-            "case sqlite_file_control_size_hint:",
-            "*static_cast<int*>(value) = file->last_errno;",
-            "last-errno",
-        ),
-        (
-            "case sqlite_file_control_size_hint:",
-            "case sqlite_file_control_powersafe_overwrite:",
-            "const auto requested = *static_cast<const long long*>(value);",
-            "size-hint",
-        ),
-        (
-            "case sqlite_file_control_powersafe_overwrite:",
-            "case sqlite_file_control_has_moved:",
-            "auto& requested = *static_cast<int*>(value);",
-            "powersafe-overwrite",
-        ),
-    )
-    pre_authority_effect_markers = (
-        "::ftruncate(",
-        "::fcntl(",
-        "::fstat(",
-        "rooted_file_size(",
-        "rooted_truncate(",
-        "rooted_set_lock(",
-        "file->lock_level",
-        "file->last_errno",
-        "file->powersafe_overwrite",
-        "*static_cast",
-    )
-    for marker, next_marker, effect, label in file_control_cases:
-        block = case_body(control_body, marker, next_marker, f"rooted file-control {label}")
-        authority_marker = "acquire_file_effect_authority(*file)"
-        authority_position = block.find(authority_marker)
-        if authority_position < 0:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"opened sidecar file-control authority is missing: {label}",
-            )
-        before_authority = block[:authority_position]
-        if any(effect_marker in before_authority for effect_marker in pre_authority_effect_markers):
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"opened sidecar file-control effect precedes authority: {label}",
-            )
-        require_order(
-            block,
-            (
-                authority_marker,
-                "authority.failure != sqlite_ok",
-                "return authority.failure;",
-                effect,
-            ),
-            f"opened sidecar file-control authority for {label}",
-        )
-
-    has_moved_body = case_body(
-        control_body,
-        "case sqlite_file_control_has_moved:",
-        "default:",
-        "rooted HAS_MOVED",
-    )
-    require_order(
-        has_moved_body,
-        (
-            "moved = 1;",
-            "try",
-            "acquire_named_path_authority",
-            "if (!authority)",
-            "return sqlite_ok;",
-            "rooted_open(",
-            "::fstat(file->authenticated_descriptor",
-            "::fstat(reopened->get()",
-            "retained.st_dev == observed.st_dev",
-            "retained.st_ino == observed.st_ino",
-            "moved = 0;",
-            "catch (...)",
-            "return sqlite_ok;",
-        ),
-        "rooted HAS_MOVED conservative identity order",
-    )
-    no_authority = has_moved_body.find("if (!authority)")
-    no_authority_return = has_moved_body.find("return sqlite_ok;", no_authority)
-    if (
-        no_authority < 0
-        or no_authority_return < 0
-        or "moved = 0;" in has_moved_body[no_authority:no_authority_return]
-        or has_moved_body.count("moved = 0;") != 1
-    ):
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "rooted HAS_MOVED reauthentication failure is not moved-one",
-        )
-
-    require_order(
-        vfs_bodies["rooted_vfs_remove"],
-        ("acquire_named_path_authority", "rooted_remove("),
-        "rooted xDelete authority lease",
-    )
-    access_body = vfs_bodies["rooted_vfs_access"]
-    if access_body.count("O_NONBLOCK") != 2:
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "rooted xAccess named branches are not nonblocking",
-        )
-    require_order(
-        access_body,
-        (
-            "*output = 0;",
-            "acquire_named_path_authority",
-            "rooted_open(",
-            "rooted_regular_file(opened->get())",
-        ),
-        "rooted xAccess authority and output order",
-    )
-    remove_body = function_body(rooted_vfs_source, "rooted_remove(")
-    require_order(
-        remove_body,
-        (
-            "rooted_parent(owner, relative, leaf)",
-            "open_materialization_beneath(",
-            "parent->get()",
-            "leaf",
-            "identity_open_flags",
-            "::fstat(authenticated->get()",
-            "::fstatat(parent->get()",
-            "::unlinkat(parent->get()",
-        ),
-        "rooted xDelete parent capability and leaf effect order",
-    )
-    fstat_position = remove_body.find("::fstat(")
-    fstatat_position = remove_body.find("::fstatat(", fstat_position)
-    unlink_position = remove_body.find("::unlinkat(", fstatat_position)
-    if min(fstat_position, fstatat_position, unlink_position) < 0 or not (
-        fstat_position < fstatat_position < unlink_position
-    ) or remove_body.count("S_ISREG") < 2:
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "rooted xDelete lacks its immediate regular-file observation",
-        )
-
-    for callback, output_marker in (
-        ("rooted_vfs_full_path", "output[0] = '\\0';"),
-        ("rooted_shm_map", "*output = nullptr;"),
-        ("rooted_fetch", "*output = nullptr;"),
-    ):
-        if output_marker not in (
-            vfs_bodies.get(callback) or io_bodies.get(callback) or ""
-        ):
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"rooted callback failure output is not initialized: {callback}",
-            )
-    for callback in ("rooted_vfs_open", "rooted_vfs_remove", "rooted_vfs_access", "rooted_vfs_full_path"):
-        if "catch (...)" not in vfs_bodies[callback]:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"allocation-capable VFS callback lacks catch-all containment: {callback}",
-            )
-    for callback in ("rooted_shm_map", "rooted_shm_unmap"):
-        if "catch (...)" not in io_bodies[callback]:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"allocation-capable IO callback lacks catch-all containment: {callback}",
-            )
-
-    relative_body = function_body(rooted_vfs_source, "rooted_relative_name(")
-    require_order(
-        relative_body,
-        ("!value.starts_with(rooted_name_prefix)", "value.remove_prefix(rooted_name_prefix.size())"),
-        "rooted synthetic filename namespace",
-    )
-    if 'value.front() == \':\'' not in rooted_vfs_source or 'value.starts_with("file:")' not in rooted_vfs_source:
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "reserved SQLite filename rejection is missing",
-        )
-
-    opener_body = function_body(
-        rooted_vfs_source, "materialization_rooted_store_opener::open_sqlite("
-    )
-    require_order(
-        opener_body,
-        (
-            "rooted_sqlite_path.reserve",
-            "prepared_exact_path.emplace",
-            "prepared_receipt.emplace",
-            "snapshot_store_backend_lifetime_access::open_sqlite(",
-            "static_assert",
-            "state_->exact_sqlite_path =",
-            "state_->receipt =",
-        ),
-        "rooted Store opener preallocation and no-throw publication",
-    )
-    bridge_start = opener_body.index("snapshot_store_backend_lifetime_access::open_sqlite(")
-    bridge_end = opener_body.index(");", bridge_start)
-    if "rooted_sqlite_path" not in opener_body[bridge_start:bridge_end] or (
-        "exact_path," in opener_body[bridge_start:bridge_end]
-    ):
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "rooted Store opener passed an untrusted raw SQLite filename",
-        )
-
-    load_body = function_body(store_source, "load_sqlite()")
-    require_order(
-        load_body,
-        ("sqlite_library_guard library_guard", "std::make_shared<sqlite_api>()", "library_guard.release()"),
-        "SQLite library RAII ownership",
-    )
-    database_open_body = function_body(store_source, "open_database(")
-    require_order(
-        database_open_body,
-        (
-            "sqlite_connection_lifecycle connection{nullptr, api->close, std::move(pins)};",
-            "auto** database_slot = connection.open_handle_out_parameter();",
-            "if (database_slot == nullptr)",
-            "const auto open_result",
-            "if (open_result != 0 || connection.get() == nullptr)",
-            "connection.get() != nullptr ? api->errmsg",
-            "std::make_unique<sqlite_database>(std::move(api), std::move(connection))",
-        ),
-        "SQLite raw connection RAII ownership",
-    )
-    if database_open_body.count("api->open(") != 1:
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "SQLite raw connection open is not adopted exactly once",
-        )
-
-    sqlite_database_body, _ = braced_block(
-        store_source, "class sqlite_database", 0, "SQLite database owner"
-    )
-    require_order(
-        sqlite_database_body,
-        (
-            "sqlite_database(std::shared_ptr<sqlite_api> api, "
-            "sqlite_connection_lifecycle connection)",
-            "connection_{std::move(connection)}",
-            "sqlite_connection_lifecycle connection_;",
-        ),
-        "SQLite lifecycle ownership transfer",
-    )
-
-    lifecycle_header_markers = (
-        "~sqlite_connection_lifecycle() noexcept;",
-        "sqlite_connection_lifecycle(sqlite_connection_lifecycle&& other) noexcept;",
-        "sqlite_connection_lifecycle& operator=(sqlite_connection_lifecycle&& other) noexcept;",
-        "sqlite_connection_lifecycle(const sqlite_connection_lifecycle&) = delete;",
-        "sqlite_connection_lifecycle& operator=(const sqlite_connection_lifecycle&) = delete;",
-        "void** open_handle_out_parameter() noexcept;",
-        "sqlite_connection_close_outcome close_exactly_once() noexcept;",
-        "static void release_known_safe(std::shared_ptr<state>& owned) noexcept;",
-    )
-    for marker in lifecycle_header_markers:
-        if marker not in sqlite_lifecycle_header:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"SQLite connection lifecycle contract marker is missing: {marker}",
-            )
-
-    open_slot_body = function_body(
-        sqlite_lifecycle_source,
-        "sqlite_connection_lifecycle::open_handle_out_parameter()",
-    )
-    if normalized_body_contents(open_slot_body) != (
-        "returnstate_!=nullptr&&state_->connection==nullptr?"
-        "&state_->connection:nullptr;"
-    ):
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "SQLite open result slot is not adopted by the empty lifecycle owner",
-        )
-
-    close_body = function_body(
-        sqlite_lifecycle_source,
-        "sqlite_connection_lifecycle::close_exactly_once()",
-    )
-    require_order(
-        close_body,
-        (
-            "auto owned = std::move(state_);",
-            "if (owned == nullptr)",
-            "if (owned->connection == nullptr)",
-            "release_known_safe(owned);",
-            "if (owned->close_v2 == nullptr)",
-            "try",
-            "const auto code = owned->close_v2(owned->connection);",
-            "if (code == sqlite_ok)",
-            "release_known_safe(owned);",
-            "catch (...)",
-        ),
-        "SQLite exact-once close lifecycle",
-    )
-    if (
-        close_body.count("std::move(state_)") != 1
-        or close_body.count("owned->close_v2(owned->connection)") != 1
-        or close_body.count("release_known_safe(owned)") != 2
-    ):
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "SQLite lifecycle does not consume ownership, release known-safe state twice, "
-            "and close at most once",
-        )
-
-    release_body = function_body(
-        sqlite_lifecycle_source,
-        "sqlite_connection_lifecycle::release_known_safe(",
-    )
-    if normalized_body_contents(release_body) != (
-        "if(owned&&!owned->quarantine_enqueued.load(std::memory_order_acquire))"
-        "owned->quarantine_self.reset();owned.reset();"
-    ):
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "SQLite known-safe lifecycle release helper differs",
-        )
-
-    cleanup_body = function_body(
-        sqlite_lifecycle_source,
-        "sqlite_connection_lifecycle::cleanup_noexcept()",
-    )
-    require_order(
-        cleanup_body,
-        ("if (state_ != nullptr)", "(void)close_exactly_once();"),
-        "SQLite noexcept lifecycle cleanup",
-    )
-    destructor_body = function_body(
-        sqlite_lifecycle_source,
-        "sqlite_connection_lifecycle::~sqlite_connection_lifecycle()",
-    )
-    if normalized_body_contents(destructor_body) != "cleanup_noexcept();":
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "SQLite lifecycle destructor does not use exact-once cleanup",
-        )
-
-    move_assignment_body = function_body(
-        sqlite_lifecycle_source,
-        "sqlite_connection_lifecycle::operator=(sqlite_connection_lifecycle&& other)",
-    )
-    require_order(
-        move_assignment_body,
-        ("cleanup_noexcept();", "state_ = std::move(other.state_);"),
-        "SQLite lifecycle move assignment",
-    )
-
-
-def validate_store_backend_lifetime_bridge_text(
-    public_store_header: str,
-    internal_store_header: str,
-    rooted_vfs_source: str,
-    store_source: str,
-) -> None:
-    """Keep the rooted SQLite lifetime bridge out of the installed callable surface."""
-
-    def compound_body(source: str, signature: str, label: str) -> str:
-        start = source.find(signature)
-        if start < 0:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"{label} declaration is missing",
-            )
-        opening = source.find("{", start)
-        if opening < 0:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"{label} body is missing",
-            )
-        depth = 0
-        for index in range(opening, len(source)):
-            if source[index] == "{":
-                depth += 1
-            elif source[index] == "}":
-                depth -= 1
-                if depth == 0:
-                    return source[opening : index + 1]
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            f"{label} body is unterminated",
-        )
-
-    legacy_callable = "open_sqlite_snapshot_store_with_backend_lifetime_internal"
-    if any(
-        legacy_callable in document
-        for document in (
-            public_store_header,
-            internal_store_header,
-            rooted_vfs_source,
-            store_source,
-        )
-    ):
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "Store backend lifetime bridge leaked a namespace callable",
-        )
-    friend_marker = "friend struct snapshot_store_backend_lifetime_access;"
-    snapshot_store_body = compound_body(
-        public_store_header, "class snapshot_store\n", "installed snapshot_store"
-    )
-    friend_type_declarations = [
-        " ".join(declaration.split())
-        for declaration in re.findall(
-            r"\bfriend\b[^;]*;", snapshot_store_body, flags=re.DOTALL
-        )
-        if "(" not in declaration
-    ]
-    if (
-        snapshot_store_body.count(friend_marker) != 1
-        or friend_type_declarations != [friend_marker]
-        or "backend_lifetime" in public_store_header.replace(friend_marker, "")
-    ):
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "installed Store header violates the exact bridge-specific friend boundary",
-        )
-    for marker in (
-        '__attribute__((visibility("default"))) snapshot_store_backend_lifetime_access',
-        "struct snapshot_store_backend_lifetime_access",
-        "open_sqlite(const std::string& database_path",
-        "sqlite_backend_runtime_binding runtime",
-        "std::shared_ptr<void> backend_lifetime",
-        "std::shared_ptr<sqlite_backend_observation_capability> observation",
-    ):
-        if marker not in internal_store_header:
-            fail(
-                "materialization.sqlite-effect-root-invalid",
-                f"source-private Store bridge marker is missing: {marker}",
-            )
-    bridge_body = compound_body(
-        internal_store_header,
-        "struct snapshot_store_backend_lifetime_access\n#endif",
-        "source-private Store bridge",
-    )
-    exact_bridge_body = (
-        "{ [[nodiscard]] static result<snapshot_store> "
-        "open_sqlite(const std::string& database_path, relation_engine engine, "
-        "const std::string& vfs_name, sqlite_backend_runtime_binding runtime, "
-        "std::shared_ptr<void> backend_lifetime, "
-        "std::shared_ptr<sqlite_backend_observation_capability> observation); }"
-    )
-    if " ".join(bridge_body.split()) != exact_bridge_body:
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "source-private Store bridge violates exact-one-member or visibility authority",
-        )
-    definition = "snapshot_store_backend_lifetime_access::open_sqlite("
-    call = "sdk::snapshot_store_backend_lifetime_access::open_sqlite("
-    internal_call = "return snapshot_store_backend_lifetime_access::open_sqlite("
-    if (
-        store_source.count(definition) != 3
-        or store_source.count(internal_call) != 2
-        or rooted_vfs_source.count(call) != 1
-    ):
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "source-private Store bridge definition/call binding differs",
-        )
-    definition_position = store_source.rindex(definition)
-    definition_opening = store_source.find("{", definition_position)
-    definition_region_start = store_source.rfind("}", 0, definition_position) + 1
-    exact_definition_signature = (
-        "result<snapshot_store> "
-        "snapshot_store_backend_lifetime_access::open_sqlite( "
-        "const std::string& database_path, relation_engine engine, "
-        "const std::string& vfs_name, sqlite_backend_runtime_binding runtime, "
-        "std::shared_ptr<void> backend_lifetime, "
-        "std::shared_ptr<sqlite_backend_observation_capability> observation)"
-    )
-    if (
-        definition_opening < 0
-        or " ".join(
-            store_source[definition_region_start:definition_opening].split()
-        )
-        != exact_definition_signature
-    ):
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "source-private Store bridge definition violates exact visibility authority",
-        )
-
-
-def validate_occurrence_build_provenance(
-    root_cmake: str,
-    occurrence_generator: str,
-    source_verifier: str,
-) -> None:
-    """Bind occurrence source IDs to explicit input or a clean stable checkout."""
-
-    required = {
-        "root CMake": (
-            "must be supplied together",
-            "set(CXXLENS_SOURCE_PROVENANCE_MODE git-clean)",
-            "cmake/VerifyClang22SourceProvenance.cmake",
-        ),
-        "occurrence generator": (
-            'set(CXXLENS_PROVENANCE_MODE "@CXXLENS_SOURCE_PROVENANCE_MODE@")',
-            'set(CXXLENS_PROVENANCE_EXPECTED_REVISION "@CXXLENS_SOURCE_REVISION@")',
-            'set(CXXLENS_PROVENANCE_EXPECTED_TREE "@CXXLENS_SOURCE_TREE@")',
-            'include("@CMAKE_CURRENT_BINARY_DIR@/VerifyClang22SourceProvenance.cmake")',
-            'set(_cxxlens_occurrence_executable_suffix "@CMAKE_EXECUTABLE_SUFFIX@")',
-            "function(_cxxlens_occurrence_resolve_path role relative_path resolved_path)",
-            'string(APPEND _resolved "${_cxxlens_occurrence_executable_suffix}")',
-            'set(_absolute "${_cxxlens_occurrence_prefix}/${_resolved_relative_path}")',
-            "libcxxlens_base.so.@PROJECT_VERSION@",
-            "libcxxlens_kernel.so.@PROJECT_VERSION@",
-            "libcxxlens_query.so.@PROJECT_VERSION@",
-            "libcxxlens_recipes.so.@PROJECT_VERSION@",
-            "libcxxlens_provider_sdk.so.@PROJECT_VERSION@",
-            "libcxxlens_clang22_provider_sdk.so.@PROJECT_VERSION@",
-        ),
-        "source provenance verifier": (
-            'CXXLENS_PROVENANCE_MODE STREQUAL "explicit"',
-            'CXXLENS_PROVENANCE_MODE STREQUAL "git-clean"',
-            "status --porcelain=v1",
-            "--untracked-files=all",
-            "_cxxlens_git_observe(before)",
-            "_cxxlens_git_observe(after)",
-            "CXXLENS_PROVENANCE_EXPECTED_REVISION",
-            "CXXLENS_PROVENANCE_EXPECTED_TREE",
-            "dirty, stale, or unstable",
-        ),
-    }
-    documents = {
-        "root CMake": root_cmake,
-        "occurrence generator": occurrence_generator,
-        "source provenance verifier": source_verifier,
-    }
-    for label, markers in required.items():
-        for marker in markers:
-            if marker not in documents[label]:
-                fail(
-                    "materialization.occurrence-invalid",
-                    f"{label} source-provenance guard is missing: {marker}",
-                )
-
-
-def validate_baseline_recovery_source_bindings(
-    root_cmake: str,
-    quality_workflow: str,
-    install_test: str,
-    mapping_semantics_test: str,
-    mapping_epoch_test: str,
-) -> None:
-    """Keep installed materializer recovery owned by the exact build paths."""
-
-    worker_runtime_objects = (
-        "if(CXXLENS_BUILD_SHARED)\n"
-        "  target_sources(cxxlens_clang22_worker_core\n"
-        "                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)\n"
-        "endif()"
-    )
-    if worker_runtime_objects not in root_cmake:
-        fail(
-            "materialization.installed-surface-invalid",
-            "shared worker lacks private runtime-object linkage",
-        )
-
-    install_job = re.search(
-        r"(?ms)^  installed-consumers:\n(?P<body>.*?)(?=^  [a-z0-9_-]+:\n|\Z)",
-        quality_workflow,
-    )
-    expected_build = "cmake --build --preset install-check\n"
-    if install_job is None or expected_build not in install_job.group("body"):
-        fail(
-            "materialization.installed-surface-invalid",
-            "install-consumer build omits cxxlens-clang22-materialize",
-        )
-
-    prepare_fixture = re.search(
-        r'(?ms)if\(PHASE STREQUAL "prepare"\)(?P<body>.*?)(?=^endif\(\))',
-        install_test,
-    )
-    fixture_build = (
-        'execute_process(\n'
-        '    COMMAND "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target\n'
-        '            cxxlens-clang22-materialize COMMAND_ERROR_IS_FATAL ANY)'
-    )
-    fixture_install = (
-        'execute_process(\n'
-        '    COMMAND "@CMAKE_COMMAND@" --install "@CMAKE_BINARY_DIR@" --prefix'
-    )
-    if (
-        prepare_fixture is None
-        or fixture_build not in prepare_fixture.group("body")
-        or fixture_install not in prepare_fixture.group("body")
-        or prepare_fixture.group("body").index(fixture_build)
-        >= prepare_fixture.group("body").index(fixture_install)
-    ):
-        fail(
-            "materialization.installed-surface-invalid",
-            "install prepare fixture must build materializer before installation",
-        )
-
-    required_artifacts = re.search(
-        r"(?ms)  foreach\(\s*required IN.*?  endforeach\(\)", install_test
-    )
-    materializer_paths = (
-        '"${install_prefix}/bin/cxxlens-clang22-materialize"',
-        '"${install_prefix}/bin/cxxlens-clang22-materialize${install_executable_suffix}"',
-    )
-    if (
-        required_artifacts is None
-        or not any(
-            path in required_artifacts.group(0) for path in materializer_paths
-        )
-    ):
-        fail(
-            "materialization.installed-surface-invalid",
-            "install required-artifact census omits cxxlens-clang22-materialize",
-        )
-
-    target_epoch = 'identity("test.mapping-semantics.target-namespace-epoch", marker)'
-    if target_epoch not in mapping_semantics_test:
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "mapping semantics fixture omits target namespace epoch identity",
-        )
-    epoch_target = 'identity("test.epoch.target-namespace-epoch", marker)'
-    if epoch_target not in mapping_epoch_test:
-        fail(
-            "materialization.sqlite-effect-root-invalid",
-            "mapping epoch fixture omits target namespace epoch identity",
-        )
-
-
-def validate_documents(root: pathlib.Path) -> dict[str, Any]:
-    contract_text = (root / CONTRACT).read_text(encoding="utf-8")
-    design_text = (root / INTEGRATED_DESIGN).read_text(encoding="utf-8")
-    adr_text = (root / DECISION_ADR).read_text(encoding="utf-8")
-    validate_report_lifecycle_authority_text(
-        design_text,
-        adr_text,
-        contract_text,
-    )
-    validate_base64_authority_text(design_text, adr_text)
-    validate_occurrence_snapshot_authority_text(design_text, adr_text)
-    validate_private_spool_authority_text(design_text, adr_text)
-    validate_materialization_io_taxonomy_header(
-        (root / MATERIALIZATION_IO_HEADER).read_text(encoding="utf-8")
-    )
-    validate_private_spool_implementation_text(
-        (root / MATERIALIZATION_IO_SOURCE).read_text(encoding="utf-8")
-    )
-    validate_v2_1_admission_authority_text(design_text, adr_text)
-    validate_v2_1_admission_implementation_text(
-        (root / MATERIALIZATION_REQUEST_STREAM_HEADER).read_text(encoding="utf-8"),
-        (root / MATERIALIZATION_REQUEST_STREAM_SOURCE).read_text(encoding="utf-8"),
-        (root / MATERIALIZATION_REQUEST_V2_1_SOURCE).read_text(encoding="utf-8"),
-        (root / MATERIALIZATION_ADMISSION_ERROR_HEADER).read_text(encoding="utf-8"),
-        (root / MATERIALIZATION_REQUEST_IDENTITY_SOURCE).read_text(encoding="utf-8"),
-        (root / MATERIALIZATION_TASK_SPOOL_SOURCE).read_text(encoding="utf-8"),
-        (root / MATERIALIZATION_REQUEST_DRIVER).read_text(encoding="utf-8"),
-    )
-    validate_sqlite_effect_root_authority_text(design_text, adr_text)
-    validate_sqlite_effect_root_implementation_text(
-        (root / ROOTED_VFS_SOURCE).read_text(encoding="utf-8"),
-        (root / STORE_SOURCE).read_text(encoding="utf-8"),
-        (root / SQLITE_CONNECTION_LIFECYCLE_INTERNAL).read_text(encoding="utf-8"),
-        (root / SQLITE_CONNECTION_LIFECYCLE_SOURCE).read_text(encoding="utf-8"),
-    )
-    validate_store_backend_lifetime_bridge_text(
-        (root / STORE_HEADER).read_text(encoding="utf-8"),
-        (root / STORE_BACKEND_LIFETIME_INTERNAL).read_text(encoding="utf-8"),
-        (root / ROOTED_VFS_SOURCE).read_text(encoding="utf-8"),
-        (root / STORE_SOURCE).read_text(encoding="utf-8"),
-    )
-    validate_occurrence_build_provenance(
-        (root / ROOT_CMAKE).read_text(encoding="utf-8"),
-        (root / OCCURRENCE_GENERATOR_CMAKE).read_text(encoding="utf-8"),
-        (root / SOURCE_PROVENANCE_CMAKE).read_text(encoding="utf-8"),
-    )
-    validate_baseline_recovery_source_bindings(
-        (root / ROOT_CMAKE).read_text(encoding="utf-8"),
-        (root / QUALITY_WORKFLOW).read_text(encoding="utf-8"),
-        (root / INSTALL_TEST).read_text(encoding="utf-8"),
-        (root / MAPPING_SEMANTICS_TEST).read_text(encoding="utf-8"),
-        (root / MAPPING_EPOCH_TEST).read_text(encoding="utf-8"),
-    )
     contract = load(root / CONTRACT)
     contract_schema = load(root / CONTRACT_SCHEMA)
     request_schema = load(root / REQUEST_SCHEMA)
+    task_schema = load(root / TASK_V4_SCHEMA)
     report_schema = load(root / REPORT_SCHEMA)
-    occurrence_schema = load(root / OCCURRENCE_SCHEMA)
-    snapshot_store_contract = load(root / SNAPSHOT_STORE)
     for label, schema in (
-        ("contract", contract_schema),
-        ("request", request_schema),
-        ("report", report_schema),
-        ("materializer occurrence manifest", occurrence_schema),
+        ("materialization contract", contract_schema),
+        ("request v2.2", request_schema),
+        ("task v4", task_schema),
+        ("materialization report", report_schema),
     ):
         try:
             jsonschema.Draft202012Validator.check_schema(schema)
         except jsonschema.SchemaError as error:
-            fail(
-                "materialization.request-invalid",
-                f"materialization {label} schema: {error.message}",
-            )
+            fail("materialization.request-invalid", f"{label} schema: {error.message}")
     validate_schema(contract, contract_schema, "materialization contract")
-    validate_occurrence_manifest(
-        root,
-        fixture_occurrence_manifest(
-            root,
-            source_revision="1" * 40,
-            source_tree="2" * 40,
-            configuration="static",
-            tool_digest="sha256:" + "1" * 64,
-            worker_digest="sha256:" + "1" * 64,
-        ),
+    request_version = request_schema.get("properties", {}).get("request_version", {}).get(
+        "const"
     )
-    validate_contract_exact(
-        contract,
-        request_schema,
-        report_schema,
-        contract_schema,
-        snapshot_store_contract,
+    if request_version != "2.2.0":
+        fail("materialization.version-unsupported", "request schema is not v2.2")
+    if request_schema.get("properties", {}).get("schema", {}).get("const") != (
+        "cxxlens.clang22-materialization-request.v2_2"
+    ):
+        fail("materialization.request-invalid", "request schema identity")
+    features = request_schema.get("properties", {}).get("required_features", {}).get(
+        "const", []
     )
-    validate_df_0200_claim_batch_corpus(
-        root,
-        contract["claim_adoption"]["df_0200_resolution"][
-            "d1_claim_batch_oracle"
-        ]["qualification_corpus"],
+    if "task-input-chunks-v2" not in features or not any(
+        isinstance(feature, str) and feature.startswith("task-source-closure-")
+        for feature in features
+    ):
+        fail("materialization.request-invalid", "source-closure capability")
+    worker = request_schema.get("properties", {}).get("worker", {}).get("properties", {})
+    if worker.get("protocol_major", {}).get("const") != PROVIDER_PROTOCOL_MAJOR:
+        fail("materialization.request-invalid", "worker protocol major")
+    if worker.get("protocol_minor", {}).get("const") != PROVIDER_PROTOCOL_MINOR:
+        fail("materialization.request-invalid", "worker protocol minor")
+    task_extensions = request_schema.get("properties", {}).get("task_extensions", {})
+    extension_ref = task_extensions.get("items", {}).get("$ref")
+    if not isinstance(extension_ref, str) or not extension_ref.endswith(
+        "cxxlens_ng_provider_task_v4.schema.yaml"
+    ):
+        fail("materialization.task-binding-mismatch", "task extension schema")
+    task_required = set(task_schema.get("required", []))
+    legacy_task_digest_fields = {
+        field
+        for field in task_required
+        if field.startswith("base_task_") and field.endswith("_digest")
+    }
+    if legacy_task_digest_fields != {"base_task_digest"}:
+        fail("materialization.task-binding-mismatch", "legacy task digest field")
+    source_schema = (
+        request_schema.get("$defs", {})
+        .get("base_task_without_source_bytes", {})
+        .get("properties", {})
+        .get("source", {})
     )
-    validate_project_catalog_authority(root)
-    validate_materialization_dependency_graph(
-        contract,
-        materialization_dependency_documents(root),
+    source_properties = source_schema.get("properties", {})
+    source_metadata_fields = {
+        "source_snapshot_id",
+        "file_id",
+        "logical_path",
+        "content_digest",
+        "size_bytes",
+        "encoding",
+        "line_index_id",
+        "read_only",
+    }
+    if not isinstance(source_properties, dict) or set(source_properties) != source_metadata_fields:
+        fail("materialization.request-invalid", "source metadata schema")
+    if set(source_schema.get("required", [])) != source_metadata_fields:
+        fail("materialization.request-invalid", "source metadata required fields")
+    protocol = load(root / PROVIDER_PROTOCOL)
+    compatibility = protocol.get("compatibility", {})
+    accepted_major = compatibility.get(
+        "accepted_major", compatibility.get("protocol_major")
     )
-    validate_span_registry_columns(
-        load(root / REGISTRY),
-        contract["span_adoption"]["registry_column_binding"],
+    accepted_minor = compatibility.get(
+        "accepted_minor", compatibility.get("protocol_minor")
     )
-    report_errors = set(
-        report_schema["$defs"]["error"]["properties"]["code"]["enum"]
+    if accepted_major != PROVIDER_PROTOCOL_MAJOR or accepted_minor != PROVIDER_PROTOCOL_MINOR:
+        fail("materialization.request-invalid", "Protocol 2.0 authority")
+    if compatibility.get("downgrade") != "reject":
+        fail("materialization.request-invalid", "protocol downgrade/fallback")
+    wire_limits = protocol.get("wire", {}).get("limits", {})
+    for name in ("control_bytes", "payload_bytes", "closure_chunk_bytes"):
+        if not isinstance(wire_limits.get(name), int) or wire_limits[name] <= 0:
+            fail("materialization.request-invalid", f"Protocol 2 wire limit: {name}")
+    # Preserve the product resource and security boundary without asserting a
+    # fixed source inventory or a generated report cardinality.
+    resource_limits = request_schema.get("properties", {}).get("tasks", {}).get(
+        "items", {}
     )
-    if report_errors != STABLE_ERRORS:
-        fail("materialization.report-invalid", "report schema error registry differs")
-    entries: list[tuple[dict[str, Any], dict[str, Any]]] = []
-    for configuration in ("static", "shared"):
-        for backend in ("memory", "sqlite"):
-            request = sample_request(root, configuration=configuration, backend=backend)
-            validate_request(root, request)
-            report = sample_report(root, request)
-            validate_report(
-                root,
-                request,
-                report,
-                request_bytes=canonical_json(request),
-            )
-            entries.append((request, report))
-    validate_qualification_matrix(root, entries)
-    stale_request = sample_request(root, configuration="static", backend="sqlite")
-    validate_report(
-        root,
-        stale_request,
-        stale_parent_report(root, stale_request),
-        request_bytes=canonical_json(stale_request),
-    )
+    if not isinstance(resource_limits, dict):
+        fail("materialization.request-invalid", "task resource schema")
+    if request_schema["properties"]["tasks"].get("maxItems", 0) <= 0:
+        fail("materialization.request-invalid", "task count bound")
     return contract
+
+
+def validate_documents(root: pathlib.Path) -> dict[str, Any]:
+    """Run the current product-only materialization gate."""
+
+    return validate_v2_2_documents(root)
 
 
 def main() -> int:

@@ -2,8 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-17
-- Decision owner: security/provider-runtime
-- Decision issue: #103
 - Depends on: ADR 0015, ADR 0042
 
 ## Context

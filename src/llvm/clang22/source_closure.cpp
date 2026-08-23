@@ -21,8 +21,7 @@ namespace cxxlens::detail::clang22
 		constexpr std::size_t maximum_unique_blobs = 4096U;
 		constexpr std::size_t maximum_logical_path_bytes = 4096U;
 		constexpr std::uint64_t maximum_blob_bytes = std::uint64_t{16U} * 1024U * 1024U;
-		constexpr std::uint64_t maximum_unique_blob_bytes =
-			std::uint64_t{48U} * 1024U * 1024U;
+		constexpr std::uint64_t maximum_unique_blob_bytes = std::uint64_t{48U} * 1024U * 1024U;
 		constexpr std::string_view project_prefix{"project://"};
 		constexpr std::string_view closure_domain{"cxxlens.clang22.source-closure.v1"};
 

@@ -2,9 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-15
-- Decision owner: query-kernel
-- Decision issue: #61
-- Tracking issue: #56
 
 ## Context
 
@@ -54,7 +51,7 @@ relation/query result は unordered を既定とする。`order_by` は user key
 必須 tie-break として付加し、total order を作る。`limit` は total-ordered input だけを受理し、その sealed prefix
 を返す。order なし limit は validation error とする。
 
-Issue #133 により `semi_join` は左 occurrence の filter として、左 input の total order metadata、order keys、row subsequenceを
+この契約により `semi_join` は左 occurrence の filter として、左 input の total order metadata、order keys、row subsequenceを
 そのまま保存する。typed builder、IR validator、executor は同じ propertyを適用し、ordered left の直後の `limit` は許可する。
 unordered left は unordered のままであり、`inner_join` は引き続き input orderを保存しない。
 
@@ -78,9 +75,9 @@ join algorithm、thread、spill、page、cost、cache 情報を versioned Logica
 - optional minor column が descriptor にない場合、通常参照は拒否する。明示的な
   `absent_if_schema_missing` だけが tagged absent を生成できる。required column missing は常に拒否する。
 - dynamic literal は explicit type を必須とし、column の present type との exact match だけを許可する。
-- static/dynamic builder の exact C++ signature は Issue #66 が所有するが、生成する normalized IR と digest は本
+- static/dynamic builder の exact C++ signature は この契約が所有するが、生成する normalized IR と digest は本
   ADR に従う。
-- production memory/SQLite query runtime の qualification は後続実装 issue が所有する。本 ADR の reference
+- production memory/SQLite query runtime の qualification は後続実装が所有する。本 ADR の reference
   evaluator は logical semantics の executable oracle であり、legacy query engine の完成を宣言しない。
 
 ## Verification

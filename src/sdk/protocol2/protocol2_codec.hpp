@@ -20,7 +20,8 @@ namespace cxxlens::sdk::protocol2
 	inline constexpr std::uint64_t maximum_payload_bytes = 16U * 1024U * 1024U;
 	inline constexpr std::uint16_t end_of_stream_flag = 8U;
 
-	/** Protocol 2.0 message registry. IDs are semantic product identity, not source-byte identity. */
+	/** Protocol 2.0 message registry. IDs are semantic product identity, not source-byte identity.
+	 */
 	enum class message_type : std::uint16_t
 	{
 		hello = 1U,
@@ -61,8 +62,7 @@ namespace cxxlens::sdk::protocol2
 
 	[[nodiscard]] constexpr bool is_source_closure_message(const message_type value) noexcept
 	{
-		return static_cast<std::uint16_t>(value) >=
-			24U && static_cast<std::uint16_t>(value) <= 29U;
+		return static_cast<std::uint16_t>(value) >= 24U && static_cast<std::uint16_t>(value) <= 29U;
 	}
 
 	[[nodiscard]] constexpr bool is_ng1_message(const message_type value) noexcept
@@ -105,15 +105,15 @@ namespace cxxlens::sdk::protocol2
 
 	/** Encode one Protocol 2.0 frame with independent SHA-256 checksums. */
 	[[nodiscard]] result<std::vector<std::byte>> encode_frame(const frame& value,
-		limits negotiated = {});
+															  limits negotiated = {});
 	/** Decode and validate exactly one complete Protocol 2.0 frame. */
 	[[nodiscard]] result<frame> decode_frame(std::span<const std::byte> bytes,
-		limits negotiated = {});
+											 limits negotiated = {});
 
 	[[nodiscard]] result<std::string> control_text(const std::vector<control_field>& fields,
-		std::string_view key);
+												   std::string_view key);
 	[[nodiscard]] result<std::uint64_t> control_uint(const std::vector<control_field>& fields,
-		std::string_view key);
+													 std::string_view key);
 
 	[[nodiscard]] error codec_error(std::string field, std::string detail);
 } // namespace cxxlens::sdk::protocol2

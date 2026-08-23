@@ -155,17 +155,14 @@ namespace cxxlens::detail::clang22::materialization
 			else if (request.code_point <= 0xffffU)
 			{
 				output->push_back(static_cast<char>(0xe0U | (request.code_point >> 12U)));
-				output->push_back(static_cast<char>(0x80U |
-											((request.code_point >> 6U) & 0x3fU)));
+				output->push_back(static_cast<char>(0x80U | ((request.code_point >> 6U) & 0x3fU)));
 				output->push_back(static_cast<char>(0x80U | (request.code_point & 0x3fU)));
 			}
 			else
 			{
 				output->push_back(static_cast<char>(0xf0U | (request.code_point >> 18U)));
-				output->push_back(static_cast<char>(0x80U |
-											((request.code_point >> 12U) & 0x3fU)));
-				output->push_back(static_cast<char>(0x80U |
-											((request.code_point >> 6U) & 0x3fU)));
+				output->push_back(static_cast<char>(0x80U | ((request.code_point >> 12U) & 0x3fU)));
+				output->push_back(static_cast<char>(0x80U | ((request.code_point >> 6U) & 0x3fU)));
 				output->push_back(static_cast<char>(0x80U | (request.code_point & 0x3fU)));
 			}
 			if (output->size() > maximum_capture_bytes)
@@ -331,7 +328,8 @@ namespace cxxlens::detail::clang22::materialization
 					if (!consumed)
 						return sdk::unexpected(std::move(consumed.error()));
 					if (*consumed < 0 ||
-						static_cast<unsigned char>(*consumed) != static_cast<unsigned char>(expected))
+						static_cast<unsigned char>(*consumed) !=
+							static_cast<unsigned char>(expected))
 						return sdk::unexpected(materialization_admission_no_response());
 				}
 				return append(literal);
@@ -1160,11 +1158,11 @@ namespace cxxlens::detail::clang22::materialization
 					}
 					if (byte < 0x80U)
 					{
-						if (!append_byte(output,
-										 static_cast<char>(byte),
-										 decoded_bytes,
-										 string_capture_limits{maximum_utf8_bytes,
-																maximum_capture_bytes}))
+						if (!append_byte(
+								output,
+								static_cast<char>(byte),
+								decoded_bytes,
+								string_capture_limits{maximum_utf8_bytes, maximum_capture_bytes}))
 							return sdk::unexpected(
 								scan_error("json-decode", "string-byte-limit", begin));
 						continue;
@@ -1193,9 +1191,9 @@ namespace cxxlens::detail::clang22::materialization
 			}
 
 			[[nodiscard]] sdk::result<void> raw_utf8(const unsigned char first,
-																 std::string* output,
-																 std::size_t& decoded_bytes,
-																 const string_capture_limits limits)
+													 std::string* output,
+													 std::size_t& decoded_bytes,
+													 const string_capture_limits limits)
 			{
 				std::size_t width{};
 				std::uint32_t code_point{};
@@ -1274,8 +1272,8 @@ namespace cxxlens::detail::clang22::materialization
 			}
 
 			[[nodiscard]] sdk::result<void> escape(std::string* output,
-														   std::size_t& decoded_bytes,
-														   const string_capture_limits limits)
+												   std::size_t& decoded_bytes,
+												   const string_capture_limits limits)
 			{
 				auto next = cursor_.get();
 				if (!next)
@@ -1346,7 +1344,7 @@ namespace cxxlens::detail::clang22::materialization
 								scan_error("json-decode", "string-byte-limit", cursor_.position()));
 						decoded_bytes += width;
 						append_utf8(output,
-										utf8_append_request{*code_point, limits.maximum_capture_bytes});
+									utf8_append_request{*code_point, limits.maximum_capture_bytes});
 						return {};
 					}
 					default:
@@ -1367,8 +1365,8 @@ namespace cxxlens::detail::clang22::materialization
 					auto next = cursor_.get();
 					if (!next)
 						return sdk::unexpected(std::move(next.error()));
-					if (*next < 0 || static_cast<unsigned char>(*next) !=
-						static_cast<unsigned char>(byte))
+					if (*next < 0 ||
+						static_cast<unsigned char>(*next) != static_cast<unsigned char>(byte))
 						return sdk::unexpected(scan_error("json-decode", "literal", begin));
 				}
 				return {};
@@ -1709,8 +1707,7 @@ namespace cxxlens::detail::clang22::materialization
 		{
 			std::uint64_t value{};
 			for (std::size_t offset{}; offset < 8U; ++offset)
-				value = (value << 8U) |
-					std::to_integer<unsigned char>(record.at(begin + offset));
+				value = (value << 8U) | std::to_integer<unsigned char>(record.at(begin + offset));
 			return value;
 		};
 		const auto source_offset = decode(16U);

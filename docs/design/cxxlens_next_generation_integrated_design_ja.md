@@ -6,7 +6,7 @@
 | --- | --- |
 | 文書 ID | `CXXLENS-NG-SRAD-002` |
 | 文書版 | `1.0.0-normative` |
-| 文書状態 | 規範・Issue #57 / Issue #59 / Issue #60 / Issue #61 / Issue #62 / Issue #63 / Issue #64 / Issue #65 / Issue #66 反映版 |
+| 文書状態 | 規範・accepted contract 反映版 |
 | 対象製品 | 次世代 `cxxlens` |
 | 基準言語 | C++23 |
 | 初期 primary platform | Linux |
@@ -15,7 +15,7 @@
 | 設計基準 | `CXXLENS-NG-SRAD-001` と旧 `CXXLENS-SRAD-001` 資産の統合レビュー |
 | 作成日 | 2026-07-16 |
 
-本書は Issue #57 により次世代 `cxxlens` の最上位規範へ昇格した。旧
+本書は次世代 `cxxlens` の最上位規範である。旧
 `docs/archive/legacy-v1/design/cxxlens_integrated_design_ja.md` と旧 124 API freeze は移行時の provenance であり、
 新規 API、relation、provider、実装 dispatch を認可しない。
 
@@ -554,7 +554,7 @@ public target 数と internal package 数を同一にしない。
 | Relation | versioned schema を持つ claim set |
 | Partition | materialization/invalidation の単位 |
 | Snapshot | relation partitions を原子的に固定した immutable semantic view |
-| Execution Coverage | requested work unit がどう処理されたかの会計 |
+| Execution Coverage | requested task がどう処理されたかの会計 |
 | Closure Certificate | 指定 domain で absence を確定できる根拠 |
 | Unresolved | 入力不足、unsupported、open world、budget 等の未解決状態 |
 | Claim Conflict | 同じ interpretation domain の functional claim が両立しない状態 |
@@ -1244,17 +1244,17 @@ validation tightening/looseningで row acceptance が変わる場合、patch に
 
 ### 9.11 NG0 exact registry と claim envelope
 
-Issue #60 で accepted となった exact authority は
+この契約で accepted となった exact authority は
 `schemas/cxxlens_ng_relation_registry.yaml`（`cxxlens.relation-registry.v1`）である。全 user relation は
 system claim envelope を共有し、condition authority は `envelope-presence-only` とする。relation payload に
 `presence` / `condition_ref` を重複させない。system column は通常の user projection から除外し、明示要求時だけ
 stable system column ID で参照する。
 
-Issue #63 / ADR 0009 により system claim envelope は `cxxlens.claim-envelope.v2` へ更新された。producer input
+ADR 0009 により system claim envelope は `cxxlens.claim-envelope.v2` へ更新された。producer input
 は `producer_input_basis` の tagged direct/derived variant とし、direct observation に snapshot ID を要求しない。
 derived claim だけが strict-prior published snapshot と consumed partition content digest を保持できる。
 
-Issue #130 / ADR 0058 により claim envelope の全 text surface は common の `validate_utf8_text()`、
+ADR 0058 により claim envelope の全 text surface は common の `validate_utf8_text()`、
 `validate_strong_id()`、`validate_registered_symbol()` を共有する。strong ID は nonempty、strict UTF-8、control-free、最大512
 Unicode scalar、registered symbol は `[a-z][a-z0-9_.-]+` とする。public builder、aggregate revalidation、stage constructor、store
 adoption は identity encoding より前に同じ検査を行い、checked canonical string/JSON encoder は invalid UTF-8 を escape によって
@@ -1265,18 +1265,18 @@ operand とする。descriptor digest は exact descriptor の canonical project
 minor optional column は保持し、unknown closed symbol、minor required column、key/cardinality/condition/identity の
 変更は fail closed または semantic major change とする。
 
-Issue #154 / ADR 0085 により `static_row_view<Relation>::get<Column>()` は descriptor IDだけをtrusted preconditionにしない。
+ADR 0085 により `static_row_view<Relation>::get<Column>()` は descriptor IDだけをtrusted preconditionにしない。
 Columnのdescriptor/存在/exact typeを検証し、`validate_row(Relation::descriptor(), row)` でrow全体のrequired/unknown columnと
 全cell scalar/state/typeを再検証した後だけvalue-owned cellを返す。optional column欠落だけはexact optional typeのabsentを返す。
 wrong type、invalid digest/closed symbol/UTF-8、同一majorの別descriptor shape、foreign Columnはdynamic validationと同じstable errorで
 fail closedにし、validated rowではdynamic/static readのcanonical valueが一致しなければならない。
 
-Issue #74 / ADR 0017 により descriptor identity は authority contract digest と runtime が実際に使用する
+ADR 0017 により descriptor identity は authority contract digest と runtime が実際に使用する
 `canonical_form()` の双方を `cxxlens.relation-descriptor-binding.v2` で bind する。generated descriptor の
 authority digestを保持したまま column/key/reference/merge/conflict/semanticsを改変した場合は
 `sdk.descriptor-digest-mismatch` で拒否し、registry digest はこの bound descriptor digest 集合から構成する。
 
-Issue #75 / ADR 0018 により runtime descriptor validator は relation IDL の runtime projection と同じ ASCII
+ADR 0018 により runtime descriptor validator は relation IDL の runtime projection と同じ ASCII
 pattern、`semantic_major >= 1`、unique key/reference/conflict list、claim-key role parity、merge/cardinality conflict
 projectionを検査する。functional assertion の conflict columns は全 authoritative payload と exact一致し、
 非 functional mergeでは空とする。reference の `hard` は `on_missing: reject_batch`、`soft_semantic` は
@@ -1393,7 +1393,7 @@ flowchart LR
 - provider wording/native ID を authoritative payload にしない
 - canonicalization不能時は provider-local claimを保持し、捏造しない
 
-Issue #93 / ADR 0036 により、入力 claim を受け取る stage constructor は stage 固有判定と出力 encoding より前に共通の
+ADR 0036 により、入力 claim を受け取る stage constructor は stage 固有判定と出力 encoding より前に共通の
 independent input validation を実行する。`make_canonical_claim()` は入力 assertion の row、descriptor、condition、interpretation、
 producer、basis、guarantee、semantic key/assertion/content identity を `validate_claim()` で再検証する。
 `make_derived_claim()` も全入力に同じ policy を適用し、同じ invalid input は同じ validation error で拒否する。
@@ -1439,7 +1439,7 @@ semantic input digest を持ち snapshot を持たない。derived basis の `in
 より前の generation でなければならない。containing snapshot ID は store association として管理し、claim、
 basis、certificate の identity に含めない。
 
-Issue #94 / ADR 0037 により semantic claim set と evidence occurrence set を分離する。非 multiset relation の claim set は
+ADR 0037 により semantic claim set と evidence occurrence set を分離する。非 multiset relation の claim set は
 canonical sorted unique content ID 集合とし、claim envelope 全 field が完全一致する occurrence だけを deduplicate する。同じ
 content でも producer ID、input basis、provenance、guarantee、stage が異なる occurrence は canonical total order ですべて保持し、
 batch content identity v2 は公開 `claim_batch_content_encoding()` と、それだけを hash する `claim_batch_content_digest()` が所有する。
@@ -1450,7 +1450,7 @@ prose 連結にも依存しない。公開 `canonical_binary_decode()` は一つ
 encode→decode→encode の byte-for-byte 一致を検証できる。
 multiset relation の multiplicity law は変更しない。
 
-Issue #155 / ADR 0086 により、evidence occurrence の subject と cardinality を明確化する。public/persisted claim model の occurrence は
+ADR 0086 により、evidence occurrence の subject と cardinality を明確化する。public/persisted claim model の occurrence は
 別 record への occurrence ID reference ではなく、descriptor、semantic key、assertion、content、row、producer、basis、provenance、
 guarantee、stage を同じ record に持つ self-contained claim envelope である。subject kind は closed な `claim-envelope` 一種類で、
 row-only detached evidence record は存在しない。一 occurrence はちょうど一 semantic claim content に属し、複数 occurrence が同じ content
@@ -1525,13 +1525,13 @@ provider implementation version と interpretation domain を同一視しない�
 
 overlap condition だけを conflict fragment とし、非overlap fragment の claim は保持する。
 
-Issue #76 / ADR 0019 により batch commit の比較集合は accepted new claims と既存 snapshot claims の和集合とし、
+ADR 0019 により batch commit の比較集合は accepted new claims と既存 snapshot claims の和集合とし、
 少なくとも片側が new claimである全 functional pairへ同じ overlap/payload/interpretation classificationを適用する。
 existing-existingの既知 disagreementは再掲しない。pairの左右、conflict/differential record、batch content identity入力はclaimの
 canonical orderで固定し、同じclaim集合をone-shot ingestionしても複数publicationへ分割しても、new claimが
 関与する最終classificationは一致しなければならない。exact duplicateとsame payloadはconflictではない。
 
-Issue #77 / ADR 0020 により query runtime が snapshot annotation から再構成する conflict/differential side
+ADR 0020 により query runtime が snapshot annotation から再構成する conflict/differential side
 channelもclaim kernelと同じdescriptor `conflict_columns` canonical tuple digestを使用する。claim `content` IDは
 condition、interpretation、producer contractを含むoccurrence identityであり、functional payload equalityへ使用して
 はならない。queryとingestionは同じannotation集合についてrelation name、semantic key、pair orientation、overlap
@@ -1707,7 +1707,7 @@ approximation を格上げしない。
 
 ### 14.1 Execution coverage
 
-Provider/materialization が requested work unit をどう処理したかの完全会計。
+Provider/materialization が requested task をどう処理したかの完全会計。
 
 ```cpp
 enum class coverage_state {
@@ -1839,8 +1839,8 @@ message prose は control flow に使用しない。
 
 ### 15.1 Snapshot semantic identity
 
-Issue #148 の exact authority は `schemas/cxxlens_ng_snapshot_store_contract.yaml`
-（`cxxlens.snapshot-store-contract.v1`）と ADR 0079 である。基礎 identity DAG は Issue #63 / ADR 0009 を継承する。
+この契約の exact authority は `schemas/cxxlens_ng_snapshot_store_contract.yaml`
+（`cxxlens.snapshot-store-contract.v1`）と ADR 0079 である。基礎 identity DAG は ADR 0009 を継承する。
 identity は SHA-256 の全 256 bit と
 `cxxlens-canonical-tuple-v1` の versioned length-prefixed binary tuple を使用し、identity kind ごとに domain
 separation する。JSON text、absolute root、unordered iteration、timestamp、task order、backend layout は authority
@@ -1871,18 +1871,18 @@ snapshot_id = H(
 
 同一 semantic content は同じ snapshot ID を持ち得る。lineage/publication record は別 metadata。
 
-Issue #146 / ADR 0077 により、persisted publication record は公開前に
+ADR 0077 により、persisted publication record は公開前に
 `publication_id = H(series_id, snapshot_id, sequence, parent_publication)` を共通 validator で再計算し、完全一致を
 要求する。memory と SQLite の publish/persist/load/read/compact は同じ validator を使用し、不一致は
 `store.corrupt` として fail closed にする。`physical_generation`、state、corrupt flag は publication identity に
 含めず、copy-on-write compaction は generation の更新前後で同じ publication ID を保つ。
 
-Issue #147 / ADR 0078 により、snapshot semantics version の major/minor/patch は wire 上の u64 を typed u32
+ADR 0078 により、snapshot semantics version の major/minor/patch は wire 上の u64 を typed u32
 reader で range validation してから構築する。`UINT32_MAX` は受理し、それを超える値は checksum や manifest ID が
 整合していても `store.corrupt` とする。現行 v5 payload は decode 後の canonical re-encode と byte-for-byte 一致を
 要求し、unchecked narrowing によって複数の wire encoding が同じ manifest へ collapse することを禁止する。
 
-Issue #148 / ADR 0079 により、publication sequence と physical generation は unsigned 64-bit counter とし、共通の
+ADR 0079 により、publication sequence と physical generation は unsigned 64-bit counter とし、共通の
 checked add-one だけで進める。最大値からの publish/SQLite head CAS/compact は `store.counter-overflow` で fail closed
 にする。global generation の authority は checksum、publication identity、decoded record、semantic graph の検証を
 完了した committed record だけであり、corrupt および非 committed record の値を採用しない。SQLite physical minor
@@ -2069,7 +2069,7 @@ migration/compaction 後の semantic digest が元と異なる場合は commit
 しない。current head が corrupt な場合は prior head へ silent fallback せず structured failure を返す。caller が
 明示した intact prior publication は読み続けられ、repair は新しい validated physical generation として publish する。
 
-Issue #131 により `open(snapshot_id)` は decoded payload map ではなく committed publication record 集合から、publication sequence、
+この契約により `open(snapshot_id)` は decoded payload map ではなく committed publication record 集合から、publication sequence、
 physical generation の順で最新 record を一意に解決する。その record の corrupt state、payload存在、record/payload/snapshot ID bindingを
 検査し、一つでも不一致なら `store.snapshot-corrupt` として古い同一 semantic snapshot publicationへ fallbackしない。
 同じ `(publication sequence, physical generation)` を持つ異 publication ID が同じ snapshot にあれば
@@ -2077,28 +2077,28 @@ physical generation の順で最新 record を一意に解決する。その rec
 `canonical_export`、query bind、derived basis lookupも同じ checked resolverまたは exact publication resolverを使用し、memory/SQLiteで
 同じ verdict と reason codeを返す。明示した intact prior publicationだけは引き続き読み出せる。
 
-Issue #68 は `include/cxxlens/sdk/store.hpp` と `src/sdk/store.cpp` にこの port を実装した。memory/SQLite は同じ
+この契約は `include/cxxlens/sdk/store.hpp` と `src/sdk/store.cpp` にこの port を実装した。memory/SQLite は同じ
 canonical identity、partition/closure validator、publication CAS を共有する。SQLite physical format は ADR 0013 と
 `schemas/cxxlens_ng_sqlite_store_contract.yaml` が所有し、WAL journal metadata と versioned canonical payload の
 hybrid である。
 
-Issue #69 は physical minor 2.1.0 / payload v2 に query annotation projection を追加した。payload v1 は detached
+この契約は physical minor 2.1.0 / payload v2 に query annotation projection を追加した。payload v1 は detached
 row read のために読めるが、condition、interpretation、semantic key、assertion contributor、provenance、
 guarantee を推測して query を実行してはならず、`sdk.query-annotations-unavailable` で fail closed とする。
-Issue #73 は physical minor 2.2.0 / payload v3 に producer ID と semantic contract を追加した。payload v2 を
+この契約は physical minor 2.2.0 / payload v3 に producer ID と semantic contract を追加した。payload v2 を
 読む場合は producer を推測せず explicit legacy-unknown として保持する。
 
-Issue #78 / ADR 0021 は physical minor 2.3.0 / payload v4 に partition の exact identity binding と validated
+ADR 0021 は physical minor 2.3.0 / payload v4 に partition の exact identity binding と validated
 closure certificate subject を追加した。open 時に partition/certificate ID を再計算して manifest と照合する。
 payload v1〜v3 の closure ID だけから subject を推測してはならず、これらは query の closed-world proof に使わない。
 
-Issue #90 / ADR 0033 は physical minor 2.4.0 / payload v5 に canonical partition envelope を追加する。open と compaction は
+ADR 0033 は physical minor 2.4.0 / payload v5 に canonical partition envelope を追加する。open と compaction は
 完全な claim envelope、coverage、unresolved から claim identity、claim set、coverage digest、partition content/count/complete、
 row/annotation projection を bottom-up に再構成し、manifest と byte-exact に照合する。局所 validation や payload checksum だけで
 semantic integrity を宣言してはならない。duplicate snapshot 比較は annotation、coverage、partition binding、partition envelope
 を含み、physical generation/root relocation は除外する。
 
-Issue #132 は SQLite physical minor 2.5.0 に durable `cxxlens_ng_series_head` を追加する。Issue #148 は minor 2.6.0
+この契約は SQLite physical minor 2.5.0 に durable `cxxlens_ng_series_head` を追加する。この契約は minor 2.6.0
 で sequence/generation の全 u64 domain を可逆な signed INTEGER encoding と checked increment で閉じる。publish は
 `BEGIN IMMEDIATE` transaction 内で全 committed authority record から各 series の正規 head を再導出し、durable head table の ID/sequence と exact
 比較してから expected parentを再照合し、global generation allocation、immutable publication `INSERT`、head updateを同一 commitに含める。history が
@@ -2106,7 +2106,7 @@ Issue #132 は SQLite physical minor 2.5.0 に durable `cxxlens_ng_series_head` 
 正規 CAS race だけを `store.publication-conflict` とする。別 store instance が先に commitした場合、後続 writerは rollbackし、memory record/headは
 更新しない。publish path の `INSERT OR REPLACE` は禁止し、同一 publication ID の異 payloadによる上書きを許さない。
 
-Issue #200 / ADR 0097 は SQLite current physical format を
+ADR 0097 は SQLite current physical format を
 `cxxlens.sqlite-semantic-store.v3` / `3.0.0` とする。publication payload は 8 MiB の bounded BLOB chunk に分割し、
 `(publication_id, generation, chunk_ordinal)`、canonical byte offset、exact chunk/full checksum、logical byte/chunk
 census を authority とする。fresh/current v3 と v2 `compact()` だけは runtime `SQLITE_LIMIT_LENGTH` 16 MiB 以上と
@@ -2137,7 +2137,7 @@ effect後ならfinalize/必要時一回rollback/一回close後のphase classifie
 close non-OKはquarantineし、`BEGIN IMMEDIATE`後のdriftはzero authority writeのまま該当publish/compaction/migration/fresh-init
 precommit規則へ委譲する。
 
-Issue #202 / DF-0202 の receiptless normalization interruption profile は、disposable fixture に閉じた
+この契約の receiptless normalization interruption profile は、disposable fixture に閉じた
 product runtime contract とする。canonical/user source または production path は、対象 profile の
 positive・negative・fault test と runtime receipt 条件が完了するまで activate しない。対象 crash model は、
 underlying VFS callback が成功して呼出側へ戻った境界での process
@@ -2279,7 +2279,7 @@ temporary/raw external/readonly/non-main/private recovery/normalization/CREATE h
 pending単独、PID/path/VFS name/pointer equality、post-hoc endpoint equality、connection sharingは
 authorityではない。
 
-Issue #206 / DF-0206 は、同じ `sqlite3_file` attachmentで複数pageのwriter
+この契約は、同じ `sqlite3_file` attachmentで複数pageのwriter
 `xShmMap`が成功し得る一方、native `xShmUnmap`はcomplete attachmentを一 callbackで解放するという
 cardinalityを定義する。ADR 0097 とSQLite/Snapshot contract/schema mirrorの
 `cxxlens.sqlite.writer-shm-native-attachment.v1` は writer-only runtime contract であり、map callbackごとの
@@ -2309,7 +2309,7 @@ reader-predelegation orderingを含む runtime contract は、四つの mirror/c
 positive・negative・fault tests で同一に検査する。writer-only contract は DF-0207 の reader authority
 または production activation を推移的に認可しない。
 
-Issue #207 / DF-0207 は、同じreader `sqlite3_file`のdifferent-page mapが別handoffを作る一方、
+この契約は、同じreader `sqlite3_file`のdifferent-page mapが別handoffを作る一方、
 native `xShmUnmap`はreader attachment全体を一回で解放するcardinality gapを定義する。DF-0206の
 writer-only runtime contract はreader groupをtransitively認可しない。reader attachment contract の
 direct positive・negative・fault testsが完了するまでreader grouping、production reader exception、VFS
@@ -2382,7 +2382,7 @@ pointerへproject可能で、denial、validation failure、ambiguity、`SQLITE_O
 unmap/close state machine、registry gate はこの focused test set で直接検査し、production/VFS/native-OK
 activationは全 counterexample test が green になるまで blockする。
 
-Issue #208 / DF-0208 の
+この契約の
 `cxxlens.sqlite.writer-gate-outcome-evidence.v1` は、map-before-gate cleanupへtyped negative runtime
 receiptとsole cleanup authorityを与えるwriter-only contractである。四つのSQLite/Snapshot
 contract/schema mirrorの `writer_gate_outcome_evidence_amendment_proposal` は internal gate outcome
@@ -2555,7 +2555,7 @@ continuationのcomplete transfer後にだけrelease/wakeupをatomic publishす�
 custody、terminal record未installではslotをreleaseしない。
 
 DF-0208 の semantic state は runtime contract の typed fields と direct mutation/fault tests で
-検証する。レビュー用の digest、issue state、checkpoint はこの runtime authority に含めない。
+検証する。開発やレビューの状態はこの runtime authority に含めない。
 
 local attemptはnative writer map前にwriter generation/first-writer cohort in-flight pinを取得し、
 pre-statより先に別個のwriter-map stat-only interfaceとretained-parent/ancestry namespace watchを
@@ -2717,16 +2717,16 @@ chunksで持つvalid descendantもadmitする。precommitの`compact()`もidempo
 保つ。zero committed authorityのv3 compactはno-write/no-COMMITで、filesystemはconfirmed-close reclassification、exact
 `:memory:` はhealthy rollback/finalize後にsole connectionを保持するno-close successである。
 canonical payload
-schema と committed physical-generation 以外の payload bytes、semantic/publication/snapshot ID、request/report 2.1、public
+schema と committed physical-generation 以外の payload bytes、semantic/publication/snapshot ID、request 2.2/report 2.1、public
 signature、cursor lifetime は変えない。durable old chunk は successful transaction 内で除去するが、eager decoded process
 generation は最後の pin まで保持し、noncommitted row/chunk は通常 compaction でも byte-exact に維持する。
 
-Issue #91 / ADR 0034 により closure certificate の独立 validator は `partition_manifest` 単体を subject にしてはならない。
+ADR 0034 により closure certificate の独立 validator は `partition_manifest` 単体を subject にしてはならない。
 manifest と exact `snapshot_partition_binding` を検証済みの `partition_certificate_subject` に結合し、condition、interpretation、
 assumption set、producer semantics を candidate と exact match する。key-domain/evidence は digest を要求し、NG0 closure kind は
 `relation-key-enumeration` に限定する。standalone API、writer、persisted reopen は同じ validator の accept/reject 集合を持つ。
 
-Issue #92 / ADR 0035 により derived claim の consumed partition digest は文字列宣言だけでは publication できない。writer は
+ADR 0035 により derived claim の consumed partition digest は文字列宣言だけでは publication できない。writer は
 input snapshot ID を committed、non-corrupt、strict-prior publication の immutable manifest へ解決し、consumed 全 digest が
 その exact partition content 集合に含まれることを atomic に検証する。cross-series input と同一 semantic snapshot の複数
 physical publicationでも exact manifest membership は必須であり、一件でも不存在/別 snapshot 所属なら candidate 全体を拒否する。
@@ -2831,7 +2831,7 @@ trust flags
 
 provider ID/version だけで binary identity を仮定しない。
 
-Issue #124 により provider manifest v1 の provider version は runtime/schema の双方で major 1 以上を要求する。
+この契約により provider manifest v1 の provider version は runtime/schema の双方で major 1 以上を要求する。
 `make_scaffold()` は初期 version `1.0.0` の manifest value を構築し、同じ public runtime validator を通過した
 canonical JSON だけを生成する。schema-valid だが runtime-invalid な scaffold artifact を返してはならない。
 
@@ -2868,12 +2868,12 @@ digest、provider execution ID の exact tuple で対応付け、同じ tuple �
 dependency group だけを許可し、provider が rejection を無視しても task を failure にする。`batch_begin` は task ID と descriptor digest を
 含み、logical/process surface は同じ typed transcript validator で判定する。
 
-Issue #182 / ADR 0096 により installed Clang 22 materialization の provider-specific task authority は public C++ factory ではなく、
+ADR 0096 により installed Clang 22 materialization の provider-specific task authority は public C++ factory ではなく、
 provider-owned executable `cxxlens-clang22-materialize` と strict JSON の
-`cxxlens.clang22-materialization-contract.v2` / request/response v2 に置く。machine contract document、`tool.interface_version`、request、report の
-exact version は `2.1.0` とする。
-v2 response は complete detailed report と phase-authentic compact
-failure の closed union であり、未実装・未 qualification の v1 を silent migrate しない。tool は exact project catalog census から全 compile-unit task を
+`cxxlens.clang22-materialization-contract.v2` / request/response v2.2 に置く。machine contract document、`tool.interface_version`、request、report の
+exact version は `2.2.0` とする。
+v2.2 response は complete detailed report と phase-authentic compact
+failure の closed union であり、旧版を silent migrate しない。tool は exact project catalog census から全 compile-unit task を
 bottom-up に導出し、caller-supplied task ID、descriptor digest、group、implicit default、adjacent version fallback を受理しない。catalog entry の
 ID は project より上流の catalog-local input ID、`build.compile_unit` ID は project/variant/source/toolchain/invocation から導出する final relation ID
 として分離し、entry digest と relation payload の exact mapping を保持する。全 TU task は同じ validated global catalog に基づくため同じ generic
@@ -2886,8 +2886,8 @@ candidate、publication-independent report projection の独立検証と bounded
 physical generation、reopen receipt を予測または placeholder で埋めない。exactly one publish attempt 後に actual outcome と exact reopen evidence を加えて
 一つの final private spool を full schema/semantic validation し、その完了前には stdout を書かない。publish attempt 後の report finalization または transport
 failure は compact zero-effect response に downgrade せず exit 2 / no authoritative response とし、commit 済みなら Store record だけを recovery authority
-とする。DF-0194 amendment は lifecycle boundary だけを更新し、request/report v2 shape、identity、public Store API は変更しない。
-一方、DF-0195〜DF-0197 の exact report leaf、installed occurrence、chunked input authority は request/report の minor 2.1 shape として明示する。
+とする。この lifecycle boundary は request/report v2.2 shape、identity、public Store API と整合し、exact report leaf、installed occurrence、chunked input authority を
+同じ product contract として明示する。
 
 installed specialization の portable condition は ordered `(condition universe ID, condition ID)` を
 `["cxxlens.clang22.condition-ref.v1", condition universe ID, condition ID]` として
@@ -2908,20 +2908,20 @@ requested output は canonical order の `cc.call_direct_target.v1`、`cc.call_s
 `frontend.clang22.type_observation.v2` の exact six descriptor、dependency group は canonical order の exact
 `[canonical, observation]`、各 group の
 atomic output group は `clang22-atomic` とする。全 task で両 group が mandatory であり、partial task/group adoption は禁止する。
-worker input は exact `cxxlens.clang22.task.v3` codec とし、tool が request/catalog/source/build authority から full global catalog projection、selected
+worker input は exact `cxxlens.clang22.task.v4` codec とし、tool が request/catalog/source/build authority から full global catalog projection、selected
 catalog entry ID、final relation compile-unit ID、payload と digest を生成する。worker は shared catalog factory で global catalog と generic task ID を
 再構成し、selected entry の invocation/source/environment と final relation mapping を検証してから output に final relation ID を使う。
 旧 codec、caller-authored payload、task ID 下の payload mutation は fail closed に拒否する。
-v3 payload は shared `cxxlens-canonical-tuple-v1` の signed `int64` integer domain を使うため、installed JSON v2 の正の budget 値は
+v4 payload は shared `cxxlens-canonical-tuple-v1` の signed `int64` integer domain を使うため、installed JSON v2.2 の正の budget 値は
 `1..INT64_MAX` に限定し、それを超える値は worker launch 前に拒否する。public `execution_budget` の `uint64` surface 自体は変更しない。
 
-DF-0197 により installed materializer は Provider Protocol `1.1` と required feature `task-input-chunks-v1` を必須とし、minor 0 の inline
-`open_task` payload へ fallback しない。task.v3 の logical bytes と `task_input_digest` は変えず、minor 1 host sequence を exact
+installed materializer は Protocol 2.0 と required feature `task-input-chunks-v2` を必須とし、source-closure を要求する task は
+`task-source-closure-v2` も必須とする。inline `open_task` payload や別 major へ fallback しない。task.v4 の logical bytes と `task_input_digest` は変えず、host sequence を exact
 `hello_ack, schema_negotiate, open_task, input_descriptor, input_chunk*, credit, close` とする。`open_task` payload は empty、descriptor control は
 exact `{task_id,input_digest,total_bytes,chunk_bytes,chunk_count}`、chunk control は exact
 `{task_id,input_digest,chunk_index,offset,byte_count}` とし、ordered chunk payload の concatenation だけを logical input occurrence とする。
 canonical chunk は 1 MiB、logical input は最大 64 MiB、chunk は最大 64、既存 per-frame 16 MiB limit は変更しない。contiguous index/offset、
-non-final size、final remainder、total bytes、streaming SHA-256、task/input binding と task.v3 decode/bottom-up binding がすべて完了するまで
+non-final size、final remainder、total bytes、streaming SHA-256、task/input binding と task.v4 decode/bottom-up binding がすべて完了するまで
 `task_accepted` を禁止する。host encoder、worker decoder、process runtime、conformance validator は一つの incremental state machine を共有し、
 production path で full logical input vector を materialize しない。raw host frames/spool、ambient path/FD/environment/shared-memory side channel は
 semantic task または adoption authority ではない。
@@ -2953,12 +2953,13 @@ non-finite number、object 以外の top-level value、二つ目または traili
 loader を transport に流用しない。この lexical verdict は materialization tool と runtime validator が同じ strict loader で所有する。
 first failure は byte limit、strict JSON object、`schema`/`request_version` envelope、version dispatch、selected full schema、derived identity/binding の順で
 決める。raw request は一つの immutable bounded private spool へ保存する。pass 1 は DOM なしで lexical/envelope/version を検証し、pass 2 は同じ
-spool を replay して selected-v2 schema、bottom-up binding、strict JSON decoded string から source spool への streaming base64 decode を行う。
-raw token spelling を decoded base64 authority とせず、global catalog は一つの immutable value、task は compact spool-backed index とし、canonical
-order で一 task/input/output window ずつ replay、seal、破棄する。
+spool を replay して request v2.2 schema、bottom-up binding、source metadata と source-closure reference を検証する。JSON request/task から
+source bytes を decode する経路はなく、source-closure manifest/blob/chunk transfer で受信した bytes を digest、サイズ、順序、seal と照合してから
+read-only compiler VFS へ公開する。global catalog は一つの immutable value、task は compact spool-backed index とし、canonical order で一
+task/input/output window ずつ replay、seal、破棄する。
 
 pass 1 の generic array count と non-envelope string length は raw 1 GiB reachability だけで閉じ、selected schema の path-specific `maxItems` や
-source-Base64 `maxLength` を generic lexical limit として追加しない。resident duplicate-name ledger を持つ object member は 4096、depth は 64、member name は
+source metadata の size/cardinality を generic lexical limit として追加しない。resident duplicate-name ledger を持つ object member は 4096、depth は 64、member name は
 UTF-8 256 bytes の明示 lexical ceiling とする。top-level `tasks` と `trust_policy.task_sandbox_requirements` は selected schema が `maxItems: 4096` を
 所有するため、4097 件目の後も strict lexical scan と version dispatch を完了してから `request-schema` / `materialization.request-invalid` で拒否する。
 trust requirement の exact `uniqueItems` と 4096 件 catalog compile-unit の uniqueness は、schema 検証済み fixed member の bounded string-view tuple を
@@ -2969,10 +2970,9 @@ expected literal の decoded UTF-8 length+1（43 / 6 bytes）だけを保持し�
 `tasks.uniqueItems` と execution tuple uniqueness は full payload を補助 spool に保持せず、SHA-256 raw 32 bytes、logical length、task ordinal、raw
 offset/length の fixed 64-byte private-spool recordを一回読み取って sort する。同 digest/length の候補だけ raw task を replay し、左 metadata を
 collision-only sealed memfd に移す。seal 後に左 canonical metadata の exact size/content を bounded reverse read で再照合し、その authority が閉じてから
-DOM を破棄して右の一 window と比較する。Base64 は JSON escape decode 後の string、execution は exact
-three-string tuple を比較し、digest-only equality と全 header の O(N^2) scan を禁止する。
+DOM を破棄して右の一 window と比較する。source-closure reference/metadata と execution の exact tuple を比較し、digest-only equality と全 header の O(N^2) scan を禁止する。
 
-Issue #181 / DF-0197 の security addendum により、この path の private spool は Linux の
+この契約の security addendum により、この path の private spool は Linux の
 `memfd_create(..., MFD_CLOEXEC | MFD_ALLOW_SEALING)` だけで作る。pathname、`mkstemp`、unlink 済み mutable inode への fallback は禁止する。
 seal は `F_ADD_SEALS` で `F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL` を追加し、直後の `F_GET_SEALS` で全 required bits を
 確認する。その kernel seal 後に `fstat` の actual size と append census を照合し、sealed bytes の SHA-256 と append transcript の incremental
@@ -2984,15 +2984,14 @@ phase-authentic stable failure とする。互換性のための mutable fallbac
 設けない。
 
 raw observation を確立できない最初の capture spool failure は exit 2 / no response とする。sealed raw observation 後の raw/global/task replay、task-index、
-source spool、task.v3 spool、identity digest、uniqueness auxiliary に対して port が返した actual create/append/seal/read/digest I/O/hash failure は stable `materialization.spool-failure` とする。
-lexical raw/task-index は `json-decode`、selected schema の global/task/source/index/uniqueItems は `request-schema`、full schema 後の source/task.v3/
-identity/task-index/execution uniqueness は `request-binding` に固定する。Base64 grammar、shape、schema 所有 ceiling だけを request invalidity とする。
+source spool、task.v4 spool、identity digest、uniqueness auxiliary に対して port が返した actual create/append/seal/read/digest I/O/hash failure は stable `materialization.spool-failure` とする。
+lexical raw/task-index は `json-decode`、selected schema の global/task/source/index/uniqueItems は `request-schema`、full schema 後の source/task.v4/
+identity/task-index/execution uniqueness は `request-binding` に固定する。Source metadata grammar、shape、schema 所有 ceiling だけを request invalidity とする。
 stable failure は port が返した actual I/O/hash failure に限定する。allocation kind、または成功した read/seal/digest の count、sealed state、
 record census/ordinal/raw span、receipt/digest grammar が証明済み authority と矛盾する場合は内部 corruption/invariant breach とする。
 operation-authentic kind×operation matrix は `input_read×read`、`spool_write×(write|spool)`、
 `spool_seal|spool_create|spool_rewind×spool`、`spool_read×(read|spool)`、`digest_update|digest_finalize×hash` だけを stable とし、
-configuration/buffer-allocation と全 mismatched pair は no-response とする。selected replay で root member の missing/extra、または task/source/
-`content_base64` の missing/non-string を `request-schema` 中に観測した場合は `materialization.request-invalid`、同じ contradiction を
+configuration/buffer-allocation と全 mismatched pair は no-response とする。selected replay で root member の missing/extra、または task/source-closure metadata の missing/invalid を `request-schema` 中に観測した場合は `materialization.request-invalid`、同じ contradiction を
 `request-binding` 中に観測した場合は no-response とする。collision reverse read の actual read failure だけは phase-authentic stable failure、
 successful write-drop、size/count drift、zero/over-report、content corruption は no-response とする。
 proved bound breach、phase-opaque allocation failure、内部 corruption/invariant breach、compact response unsafe は stable report schema に露出しない source-private no-response signal とし、
@@ -3001,8 +3000,7 @@ driver/runtime は exit 2 / stdout zero にする。valid request の infrastruc
 
 selected-schema replay の `67,108,864` byte window は raw token spelling の ceiling ではなく、semantic JSON token replay の内部
 window とする。replay は insignificant whitespace を破棄し、JSON string を decoded UTF-8 へ戻して minimal JSON escaping だけを再適用し、
-integer spelling を同じ値の canonical decimal へ正規化する。global form では `tasks=[]`、task metadata form では
-`source.content_base64=""` を代入する。closed/required/local-ref/`allOf` intersection/`oneOf` maximum をたどる selected schema
+integer spelling を同じ値の canonical decimal へ正規化する。global form では task array を省略し、task metadata form では source-closure bytes を含めず typed identity/metadata だけを投影する。closed/required/local-ref/`allOf` intersection/`oneOf` maximum をたどる selected schema
 derivation により、global selected-schema canonical maximum は `10,420,985` bytes、task metadata maximum は `8,463,179` bytes、
 window margin はそれぞれ `56,687,879` bytes と `58,645,685` bytes である。projection の derivation digest は
 request schema 全体を parsed YAML→key-sorted compact canonical JSON とした fingerprint
@@ -3012,16 +3010,15 @@ Unicode escape、長い zero exponent などの raw-spelling inflation は repla
 縮小しない。schema walk、substitution、normalization、bound、parse result がこの証明と矛盾する場合と allocation failure は
 source-private no-response とし、port が返した actual I/O/hash failure だけを上記 phase-authentic `materialization.spool-failure` にする。
 
-Issue #181 / DF-0199 により `source.content_base64` の decoded JSON string は RFC 4648 standard alphabet、required padding、zero discarded
-padding bits を満たす canonical spelling 一つだけを受理する。JSON token 上の `=` と `\u003d` のような escape 差は同じ decoded string として
-同じ request/task identity を持つが、同じ source bytes へ decode できても non-zero discarded padding bits を持つ spelling は selected-v2 schema で
-derived identity/binding より前に拒否する。source authority は decoded bytes/count/content digest/line index であり、task.v3 の
-`content_base64` は sealed source bytes から一意に再生成した canonical spelling と request decoded string の exact 一致を独立検証して投影する。
-spelling alias を別 task identity として受理せず、raw request token を task authority に昇格させない。
+この契約により request 2.2 の task source は `source_snapshot_id`、`file_id`、`logical_path`、`content_digest`、`size_bytes`、
+`encoding`、`line_index_id`、`read_only` からなる typed metadata として保持する。source bytes と manifest/blob bytes は request/task の
+authority にインライン化せず、Protocol 2.0 の source-closure manifest/blob/chunk transfer で取得する。受信側は closure manifest、blob
+content digest、サイズ、順序、seal を検証してから read-only compiler VFS へ公開し、request/task の metadata と exact cross-bind する。
+encoded source payload の spelling を request/task identity に昇格させる経路はない。
 
-この補正は active v2.1 product contract と direct test の中で行うため exact version `2.1.0` を維持する。
-canonical な外部 2.1 producer/consumer が見つかった場合はこの versioning 判断を reject し、明示的な successor
-version と migration boundary を再審議する。
+この補正は active v2.2 product contract と direct test の中で行うため exact version `2.2.0` を維持する。
+旧 schema の外部 producer/consumer は request 2.2/task v4 の strict schema で reject する。互換 shim や暗黙の migration
+boundary は設けず、別の successor version が必要になった場合だけ新しい contract と明示的な migration boundary を定義する。
 
 task は最大 4096、task ごとの decoded source は 16 MiB、aggregate source は 512 MiB、response は 1 GiB、JSON depth は 64、object member は 4096、member name は
 UTF-8 256 bytes、strong ID は 512 Unicode scalar / UTF-8 2048 bytes、logical path は UTF-8 4096 bytes、SQLite relative path は UTF-8
@@ -3073,20 +3070,20 @@ bytes/frames credit 内の column chunk を stream し、host 側 staging valida
 limit を検査する。in-process provider も同じ logical stream state machine と validator を使用し、
 wire byte encode/decode の省略を semantic validation の bypass にしてはならない。
 
-Issue #100 / ADR 0043 により、row-oriented author surface の `relation_sink::push()` は row text を送らず、
+ADR 0043 により、row-oriented author surface の `relation_sink::push()` は row text を送らず、
 最大 256 row の bounded window を descriptor column 順へ transpose する。各 window は
 `row-window -> descriptor-column` 順で 1 column chunk ずつ stream し、task、dependency/atomic group、batch、
 descriptor ID/digest、column、row offset/count、chunk index、encoding、payload/chunk digest を exact key として
 bind する。optional absence と semantic unknown は validity/unknown bitset と unknown reason により区別し、
 host と logical validation は同じ native-independent decoder を使う。
 
-Issue #125 により `relation_sink` の row count、row offset、column chunk index/summary、ordered chunk digest は
+この契約により `relation_sink` の row count、row offset、column chunk index/summary、ordered chunk digest は
 batch-local state とし、成功した `batch_begin` ごとに初期化する。task row budget だけは context で累積する。
 複数 column の送信途中または terminal send が失敗した sink は poisoned terminal とし、同じ sink の
 `push` / `end` / 次 batch `begin` は `provider.batch-state-invalid` で fail closed する。partial column prefix を
 retry して duplicate offset/index を生成してはならない。
 
-Issue #123 / ADR 0087 により provider budget は surface-independent logical limit と process-only resource limit を分離する。
+ADR 0087 により provider budget は surface-independent logical limit と process-only resource limit を分離する。
 `output_bytes` は lifecycle frame を除く logical control+payload bytes、`rows` は validated batch row count のtask-global和、
 `diagnostics` は decoded unresolved diagnostic record 数のtask-global和であり、logical/process surface は同じ typed transcript validatorで
 exact/one-under判定する。protocol wire credit とstdout/stderr combined `transport_bytes` はlogical outputと独立である。resource側は
@@ -3096,27 +3093,27 @@ worker callback adapterであり、logical limitとcooperative cancellationだ�
 adapter自体を `provider_process_port` isolation内で実行するときだけ保証する。全logical limit超過は `provider.output-limit` でfailし、
 validated success/adoption authorityを付与しない。
 
-Issue #126 により全 `relation_sink` は callback context と共有する batch registry へ bind する。registry は
+この契約により全 `relation_sink` は callback context と共有する batch registry へ bind する。registry は
 sink token、task 内で使用済みの batch ID、唯一の active batch、永続 violation を保持する。sink は move-only とし、
 move 元や destructor で open state を消失させない。abandon、duplicate batch ID、別 sink の interleaved begin、
 send failure は context validation に残り、`run_worker()` は coverage/unresolved/progress と `task_complete` の前に
 `provider.batch-state-invalid` の task failure を送る。provider callback 自身の failure も open output を採用せず、
 failure terminal によって current group を rollback する。
 
-Issue #101 / ADR 0044 により、`provider_harness`、process runtime、public transcript reference は
+ADR 0044 により、内部の transcript test adapter と process runtime は
 `provider_validation_internal.hpp` の単一 typed transcript validator を共有する。process mode は hello/schema
-handshake から、logical harness mode は task acceptance から開始するが、その後の direction/order、descriptor whitelist、
+handshake から、logical test mode は task acceptance から開始するが、その後の direction/order、descriptor whitelist、
 columnar batch seal、credit、coverage/unresolved、task-bound terminal は同じ state transition と stable reason code で判定する。
 harness は encoded frame set または validation credit を変更してから共有 validator へ渡し、decode/sequence だけで conformance
 accepted にしてはならない。callback または side-channel finalization failure は task-bound `task_failed` を送って cleanup する。
 
-Issue #102 / ADR 0045 により、terminal verdict は raw control text ではなく typed `complete` / `failed` state と
+ADR 0045 により、terminal verdict は raw control text ではなく typed `complete` / `failed` state と
 stable registry reason の組である。`provider.success` は exact task-bound `task_complete` からだけ生成し、`task_failed` は
 登録済み non-success provider reason、task ID、error field を要求する。failure frame の `provider.success` と未登録 reason は
 `provider.schema-invalid` に fail closed する。`process_execution_report::succeeded()` は runtime-only validated state、
 `provider.success`、最終 `task_complete` frame が全て一致するときだけ true とし、public raw terminal text を authority にしない。
 
-Issue #182 / ADR 0096 の installed tool は shared validator が decode/検証した row、task/descriptor/group/batch digest、coverage、unresolved、
+ADR 0096 の installed tool は shared validator が decode/検証した row、task/descriptor/group/batch digest、coverage、unresolved、
 evidence、guarantee、provenance、terminal を tool-private の immutable `sealed-materialization-result` に value-own する。全 batch と mandatory group、
 source span、claim、hard reference、coverage が検証されるまでこの value を生成しない。raw frame、stdout bytes、diagnostic JSON と terminal prose は
 diagnostic/evidence に限定し、row reconstruction、claim construction、Store adoption の authority にしない。downstream re-decode、private codec の
@@ -3124,7 +3121,7 @@ diagnostic/evidence に限定し、row reconstruction、claim construction、Sto
 
 #### DF-0200 proposed incremental claim / Store residency resolution
 
-Issue #181 / DF-0200 の Option A は Issue #200 の Store contract として選択済みである。実装は direct
+この契約の Option A は Store contract として選択済みである。実装は direct
 positive・negative・fault・resource tests が成功するまで出荷経路へ接続せず、claims oracle 失敗を
 materializer semantics digest の retarget で閉じてはならない。Snapshot Store contract/checker は
 resolution ID cxxlens.df-0200.incremental-claim-store.v1 と ingress object を self-contained hardcoded authority として検証し、Clang 22
@@ -3167,12 +3164,12 @@ dependency は禁止する。
    in-range 証明後だけである。report limit は1 GiBである。
 5. **D5 — phase-authentic publication outcomes:** materialization.spool-failure は private prepublication spool の actual port I/O/hash/ENOSPC に限る。
    direct tests は三 phase binding、request-bound reverse closure、partition_stage counter-overflow tuple、full report-schema validation を一つの
-   contract として検査する。request 2.1.0 shape は不変で、report 2.1.0 には private spool-failure、13/19-file occurrence inventory、
+   contract として検査する。request 2.2.0 shape は不変で、report 2.2.0 には private spool-failure、13/19-file occurrence inventory、
    `task_sandbox_requirements maxItems: 4096` を保持する。SQLite writer_publish の ENOSPC/SQLITE_TOOBIG は既存
    writer_publish / store.sqlite-failure / database / opaque と publication_outcome_unknown を維持する。publish handle 返却後の検証 failure は安全に response
    を構築できる場合 committed_unverified detailed response とする。exit 2 / stdout zero は response を安全に構築できない spool/allocation/report transport
    failure または successful receipt/checked arithmetic contradiction に限定する。
-6. **D6 — SQLite Option A physical runtime contract:** request 2.1.0、public signatures、claim/Store identity、logical canonical v5 は変更しない。
+6. **D6 — SQLite Option A physical runtime contract:** request 2.2.0、public signatures、claim/Store identity、logical canonical v5 は変更しない。
    report 2.1.0 は private spool-failure phase/code closure、13/19-file occurrence inventory、sandbox array bound を direct tests で検査する。
    SQLite v2 single payload BLOB と runtime MAX_LENGTH 1,000,000,000 は required limit-adjacent passed memory/SQLite parity を満たさないため、
    selected alternative A と ADR 0097 に従い physical v3.0.0 の 8 MiB chunk table、16 MiB runtime floor、exact v2.6.0 read-only direct-open、
@@ -3196,7 +3193,7 @@ task count、semantic count は `3 * task_count` とする。semantic guarantee 
 runtime-private task receipt は decode/move 前の provider stdout frame stream の exact byte count/SHA-256、decoded frame count、domain
 `cxxlens.provider-frame-transcript.v2` の frame transcript digest、domain `cxxlens.provider-sealed-transcript.v1` の sealed transcript digest を持ち、
 後二者は immutable seal と同じ shared validation pass から導出する。public `process_execution_report::semantic_digest()` をこの receipt の alias、
-raw/frame/sealed authority、または adoption authority にしない。task result はこれに加え、task.v3 codec、logical byte count/digest、canonical
+raw/frame/sealed authority、または adoption authority にしない。task result はこれに加え、task.v4 codec、logical byte count/digest、canonical
 1 MiB chunk size、chunk count、ordered chunk payload digest-set digest の input-transfer receipt を bind する。
 
 materialization guarantee は closed profile `cxxlens.clang22-materialization-guarantee-profile.v1` と同名 domain の profile digest に bind する。
@@ -3251,12 +3248,12 @@ provenance と base-guarantee cross-binding まで bottom-up に再計算し、s
 Store publication と runtime adoption の前に拒否する。materialization report 自身が typed process outcome、runtime provenance、coverage、
 unresolved、guarantee、receipt を保持し、別の external report digest、execution receipt、report-set digest を生成しない。
 
-Issue #181 / DF-0192 により v2 request/report は Registry identity を raw authority-file digest、全 21 relation の
+この契約により v2 request/report は Registry identity を raw authority-file digest、全 21 relation の
 `authority_registry_digest`、exact admitted 12 descriptor の `engine_registry_digest` に分離する。engine inventory は canonical descriptor ID と
 runtime descriptor digest の UTF-8 sorted rows、`cxxlens.relation-registry.v1` domain で導出し、relation name、duplicate ID、authority digest alias を
 拒否する。request は engine generation、named interpretation/trust policy、Store の exact seven-field selector と SDK-derived series ID を持ち、全 task
 を selector と同じ condition universe に限定する。named trust policy は protocol major/minor の直後に exact required feature list
-`[task-input-chunks-v1]` を投影する。memory は fresh genesis/sequence 1 のみ、SQLite は fresh genesis または exact same-series head の
+`[task-input-chunks-v2]` を投影する。memory は fresh genesis/sequence 1 のみ、SQLite は fresh genesis または exact same-series head の
 checked append とし、release matrix は fresh genesis で backend/configuration independent の selector、snapshot、publication identity を要求する。
 
 claim は一つの physical-independent direct materialization basis から始めるが、canonical/base claim は SDK `make_canonical_claim()` が precursor content と
@@ -3274,9 +3271,9 @@ compaction による monotonic physical-generation transitionを検査する。`
 SDK returned record の requested snapshot binding と三 path の semantic snapshot projectionを検査する。SDK にない publication census、opaque fixture ID、
 identity-recomputed/path-agree boolean だけの証拠を禁止する。qualified publication は exact covered、unresolved zero、closure zero の direct path に限定する。
 
-Issue #181 / DF-0191 により v2 report schema は `detailed` と `compact_failure` の closed union とする。compact failure は raw-input-only または full
+この契約により v2 report schema は `detailed` と `compact_failure` の closed union とする。compact failure は raw-input-only または full
 request-bound の last authenticated boundary、phase/code、Store/head/effect ledger だけを持ち、未完成の task/claim/publication evidence を捏造しない。
-Issue #181 / DF-0198 により compact head observation は `not-observed`、`absent`、`present`、`sdk-error` の closed state とする。
+この契約により compact head observation は `not-observed`、`absent`、`present`、`sdk-error` の closed state とする。
 `head_current` が exact `store.current-not-found` を返した場合だけ `absent`、それ以外の SDK error は `sdk-error` とし、どちらも
 `observed_head_publication` は null とする。cause は authenticated operation `head_current` と access path `current-selector` を保持し、absence の推測、
 架空 record、path 消去を禁止する。他の publication 前 compact cause の access path は null とする。
@@ -3291,7 +3288,7 @@ closure candidate は engine/schema-specific validator を通るまで authority
 
 ### 17.6 Batch atomicity
 
-Issue #64 / ADR 0010 は次の 4 階層を分離する。
+ADR 0010 は次の 4 階層を分離する。
 
 - `batch`: exact relation descriptor、partition、atomic output group を固定する schema/shape 検証単位
 - `atomic_output_group`: stream output の最小不可分単位
@@ -3306,9 +3303,9 @@ reference は group 全体を reject し、soft reference 欠落は row と unre
 partial adoption は `OPEN_TASK` 時に宣言した dependency group 境界だけで許可する。implicit partial
 publish、unsealed group、output limit 後の不定 partial publish は禁止する。各 adopted group は
 coverage/unresolved を均衡させ、closure candidate の独立検証後にだけ snapshot draft へ採用する。
-published series head の更新は Issue #63 の snapshot transaction だけが行う。
+published series head の更新は この契約の snapshot transaction だけが行う。
 
-Issue #182 / ADR 0096 の Clang 22 installed materialization は一般の partial-adoption capability を使用せず、request の全 compile unit と exact
+ADR 0096 の Clang 22 installed materialization は一般の partial-adoption capability を使用せず、request の全 compile unit と exact
 `canonical` / `observation` group を一つの unpublished snapshot draft に stage する。base claim は exact canonical order の
 `build.project.v1`、`build.toolchain_context.v1`、`build.variant.v1`、`source.file.v1`、`build.compile_unit.v1`、`source.span.v1` とする。
 request は Registry の全 authoritative payload column を保持し、project catalog/root/environment、toolchain family/version/target/builtin/sysroot/ABI/
@@ -3434,7 +3431,7 @@ silent adjacent-version fallback 禁止。
 候補への fallback は、caller policy が明示的に許可し、選択・棄却理由が explain 可能な場合に限る。
 explanation は全候補の source、candidate digest、exact identity、selection/rejection reason、fallback 使用有無を保持する。
 
-Issue #150 / ADR 0081 により candidate identity は manifest 全体、ordered executable argv、authoritative path、trust/certification verdict、
+ADR 0081 により candidate identity は manifest 全体、ordered executable argv、authoritative path、trust/certification verdict、
 canonical certified qualifications、sandbox report、validation error を `cxxlens.provider-candidate.v1` の semantic-digest-v2 に bind する。
 source は identity digest へ混入せず decision の source と組にして discovery occurrence を識別する。同じ full identity を異なる source が
 発見した場合だけ source precedence で正規化し、decision order は source、provider ID/version、binary digest、candidate digest の strict total
@@ -3490,7 +3487,7 @@ process invocation の sandbox policy digest は selection authority request と
 request、process task request、manifest `sandbox_minimum` の最大値を使用し、同じ effective requirement を launch input と returned
 sandbox report の双方へ検証する。caller が task request の minimum だけを下げても downgrade してはならない。
 
-Issue #103 / ADR 0046 により、policy digest の文字列一致だけでは sandbox authority にならない。selection と process port は
+ADR 0046 により、policy digest の文字列一致だけでは sandbox authority にならない。selection と process port は
 `cxxlens.provider-sandbox-policy.v1` built-in registry から digest を immutable policy へ解決し、未知 digest を process effect 前に
 `security.sandbox-policy-mismatch` で拒否する。adapter は resolved policy から resource/seccomp plan を構成し、applied canonical
 policy の mechanism 集合を evidence v2 に bind する。Linux child は標準入出力を接続後に
@@ -3567,6 +3564,9 @@ RESUME
 TASK_COMPLETE / TASK_FAILED
 CLOSE
 HEARTBEAT (NG1)
+SOURCE_CLOSURE_MANIFEST / SOURCE_CLOSURE_BLOB / SOURCE_CLOSURE_CHUNK
+SOURCE_CLOSURE_SEAL
+SOURCE_CLOSURE_ACK / SOURCE_CLOSURE_REJECT
 ```
 
 各 stream の sequence は 0 から連続し、provider は host が付与した bytes と frames の両方の
@@ -3582,17 +3582,17 @@ adoptable state からだけ遷移できる。in-process logical stream と wire
 
 ### 18.3 Version
 
-- current protocol: `1.1.0`
+- current protocol: `2.0.0`
 - protocol major mismatch: reject
-- same major minor: feature negotiation
+- protocol minor mismatch: reject
 - unknown required feature: reject
 - unknown optional feature: ignore/preserve per specification
 - relation schema negotiation は protocol version と独立
 
 ### 18.4 Encoding
 
-Issue #64 / ADR 0010 で exact wire を確定した。machine-readable authority は
-`schemas/cxxlens_ng_provider_protocol.yaml` である。
+ADR 0010 で exact wire を確定した。machine-readable authority は
+`schemas/cxxlens_ng_provider_protocol_v2.yaml` である。
 
 - 104 byte fixed header: magic、protocol major/minor、message type、flags、stream ID、sequence、
   control/payload length、各 full SHA-256
@@ -3606,7 +3606,7 @@ ADR 0041 により、CBOR text encoder/decoder は overlong encoding、isolated/
 U+10FFFF 超過を同じ strict UTF-8 scalar validator で reject する。validated bytes は normalization や replacement を行わず
 byte-preserving とする。U+0000 は codec 上 valid として保持し、許可可否は decode 後の typed control schema が決める。
 
-Issue #138 / ADR 0069 により schema negotiate、open task、credit、close、task accepted、batch begin、coverage、unresolved、
+ADR 0069 により schema negotiate、open task、credit、close、task accepted、batch begin、coverage、unresolved、
 evidence、task complete、task failed は
 schema discriminator、exact named field、record count を持つ deterministic typed CBOR map とする。delimiter split は使用しない。
 reason/detail/summary 等の schema が許す text は `|`、LF、CR、U+0000、multi-byte UTF-8 を lossless に保持し、semantic ID の
@@ -3614,18 +3614,18 @@ grammar は decode 後に検証する。evidence は summary を含む4 fieldを
 execution report identity から落としてはならない。portable worker、process fixture、testing harness、shared host validator は同じ
 typed encoder/decoder を使用する。
 
-Issue #140 / ADR 0071 と DF-0197 により逆方向の host-to-provider handshake も共有 incremental state validator を迂回しない。profile は
-negotiated protocol minor と required feature set で閉じる。minor 0 は generic compatibility の stream 1、flags 0、sequence 0..4、
-`hello_ack, schema_negotiate, open_task, credit, close` exact five-frame profileを維持し、payload は `open_task` だけに許す。minor 1 + required
-`task-input-chunks-v1` は stream 1、flags 0、contiguous sequence の
+ADR 0071 により逆方向の host-to-provider handshake も共有 incremental state validator を迂回しない。Protocol 2.0 profile は
+negotiated required feature set で閉じ、stream 1、flags 0、contiguous sequence の
+`hello_ack, schema_negotiate, open_task, credit, close` prefix と、required
+`task-input-chunks-v2` の
 `hello_ack, schema_negotiate, open_task(empty payload), input_descriptor, input_chunk*, credit, close` とし、payload は `input_chunk` だけに許す。
 fixed prefix sequence は 0..3、chunk sequence は `4 + chunk_index`、credit は `4 + chunk_count`、close は `5 + chunk_count` とする。
-installed Clang 22 materializer は minor 1 profile だけを要求し、minor 0 へ fallback しない。
+installed Clang 22 materializer は Protocol 2.0 profile と必要な source-closure capability だけを要求し、別 major へ fallback しない。
 
 両 profile は canonical manifest、negotiated schema/minor/features、task ID、task input/invocation/toolchain/environment digest、payload content digest、
 credit、close binding を独立 launcher authority と照合する。process runtime は共有 encoderを使用し、Clang worker/fixtureは semantic payload use 前に
 共有 validatorを通す。invalid host transcriptは task acceptance/output なしで fail closedとし、frontend failure terminalは長い task IDでも共有 typed
-encoderを使用する。minor 0 の public vector API は shared incremental core 上の bounded wrapper として signature を維持する。
+encoderを使用する。public vector API は shared incremental core 上の bounded wrapper として signature を維持する。
 
 ADR 0040 により、decoder は major/minor/flags を public frame に保持し、session negotiation で選んだ exact
 major/minor と全 frame を照合する。reserved bit と unknown required extension は reject し、codec 未交渉の
@@ -3650,7 +3650,7 @@ unknown 以外の reason storage は zero/zero-width でなければならない
 ordered chunk digest 列である。C++ codec と `check_ng_provider_protocol.py` の独立 reference vector は同じ bool
 payload bytes を照合し、portable SDK と別実装の wire parity を gate する。
 
-Issue #149 / ADR 0080 により、column chunk と batch digest の semantic projection は delimiter 連結を禁止し、
+ADR 0080 により、column chunk と batch digest の semantic projection は delimiter 連結を禁止し、
 `cxxlens-canonical-tuple-v1` の named typed field recordを共有する。u64 は fixed-width big-endian bytes、column summary
 と ordered chunk digest は count、各 element length、type tag を持つ ordered tuple とする。chunk domain は
 `cxxlens.provider-column-chunk.v2`、batch domain は `cxxlens.provider-columnar-batch.v2` であり、CBOR control の field
@@ -3679,7 +3679,7 @@ ADR 0045 の execution report terminal は runtime contract の stable registry 
 
 host absolute path を identity としない。
 
-Protocol 1.1 の `task-input-chunks-v1` は logical task input を authenticated ordered chunk sequence で運ぶ。`input_descriptor` は exact
+Protocol 2.0 の `task-input-chunks-v2` は logical task input を authenticated ordered chunk sequence で運ぶ。`input_descriptor` は exact
 five fields `{task_id,input_digest,total_bytes,chunk_bytes,chunk_count}`、`input_chunk` は exact five fields
 `{task_id,input_digest,chunk_index,offset,byte_count}` を deterministic typed CBOR map として持つ。canonical chunk size は 1 MiB、logical input は
 最大 64 MiB、chunk count は最大 64 とし、既存 frame payload ceiling 16 MiB は変更しない。zero input は total/chunk count zero、chunk frame zero、
@@ -3819,7 +3819,7 @@ standard result identity は各 relation descriptor の ordered domain projectio
 ID や hidden variant は宣言済み column を介さず直接混ぜない。source がない call や direct target を対応付けられない call は observation を
 保持したまま unresolved とし、standard row を捏造しない。
 
-Issue #182 / ADR 0096 の installed Store adoption path は三つの provider-owned observation を accepted Relation Registry の semantic major 2
+ADR 0096 の installed Store adoption path は三つの provider-owned observation を accepted Relation Registry の semantic major 2
 として使用し、canonical 三 relation の major 1 と合わせた exact six-descriptor task に固定する。private observation v1 は
 diagnostic/conformance evidence に限定し、v2 row または Store claim として reinterpret しない。v2 observation identity は row の declared
 domain projection から独立再計算できなければならず、task/session descriptor は wire authority であって engine registry admission の代替ではない。
@@ -3850,7 +3850,7 @@ directness または target identity の条件にしてはならない。未publ
 `soft_semantic` / `on_missing: unresolved` policy で会計する。direct callee または exact callee projection がない call は
 provider unresolved とし、独自 target ID を捏造しない。
 
-Issue #152 / ADR 0083 により cross-TU semantic entity identity は declaration/definition occurrence anchor を含めない。
+ADR 0083 により cross-TU semantic entity identity は declaration/definition occurrence anchor を含めない。
 `cc.entity.v1` の ordered projection は canonicalization、kind、semantic owner、structural signature、toolchain、
 provider-local semantic key を共有し、synthetic direct target と actual entity publication は同じ `entity_row()` helper を
 同じ完全入力で呼ぶ。source anchor は standard entity rowへ投影せず、
@@ -3864,7 +3864,7 @@ structural signature digest は canonical type/signature だけに bindし、sou
 unit、arrival orderを含めない。kind/signature が不整合な redeclaration は
 `provider.entity-redeclaration-incompatible` として unresolved/equivalence limitation に会計し exact を主張しない。
 
-Issue #139 / ADR 0070 により Clang USR 生成失敗は qualified name と declaration kind だけの identity へ fallback しない。
+ADR 0070 により Clang USR 生成失敗は qualified name と declaration kind だけの identity へ fallback しない。
 versioned `clang22.declaration-fallback.v2` encoder は toolchain digest、canonical type/signature、template specialization、constraint、
 declaration context、source content digest と spelling offset による canonical source anchor を length-prefixed field として bind する。
 entity と direct callee は同じ encoder を使用し、identity confidence を `exact-usr` / `structural-fallback` の別 field で保持する。
@@ -3900,7 +3900,7 @@ provider-execution ID はこの semantic projection から除外する。`source
 digest、originating task context を同じ binding record に保持し、bundle→row→claim edge を report/release validator が再検証する。row と condition、
 または bundle と row の対応を入れ替えても set 全体が同じだから通る方式は禁止する。
 
-Issue #153 / ADR 0084 により、同一 macro expansion 内の call occurrence discriminator は ordered spelling origin chain から
+ADR 0084 により、同一 macro expansion 内の call occurrence discriminator は ordered spelling origin chain から
 導出する。native extraction の `observation_dedup_key()` は kind、semantic key、expansion source span、origin chainを共有し、
 同じcalleeとprimary spanでもspelling occurrenceが異なる callをcanonicalization前に捨てない。最終 call IDはorigin bytesを直接
 含めず、source-local class内のcanonical observation sortから得たordinalをbindする。このためinput/traversal順に依存せず、
@@ -3978,40 +3978,40 @@ normalized IR は次の canonical projection で digest 化する。
 
 static/dynamic query は同じ normalized IR digest を生成しなければならない。
 
-Issue #83 / ADR 0026 により Logical Query IR は一つの root を持つ root-closed DAG に限定する。root から input edge を
+ADR 0026 により Logical Query IR は一つの root を持つ root-closed DAG に限定する。root から input edge を
 逆向きに辿った node 集合は `nodes` 全集合と一致しなければならず、非到達 component は
 `sdk.query-unreachable-node` とする。全 relation requirement も reachable scan から参照されなければならず、未使用
 descriptor は `sdk.query-unused-relation-requirement` とする。canonical root traversal と executor evaluation は常に同じ
 node 集合を扱う。
 
-Issue #84 / ADR 0027 により node argument の raw JSON text は identity authority ではない。全11 operator は exact typed
+ADR 0027 により node argument の raw JSON text は identity authority ではない。全11 operator は exact typed
 `operator_arguments` へ decode した後、key order、escape、integer、column availability、typed literal を単一 canonical
 JSON へ再 encode する。noncanonical whitespace/member order/equivalent escape は受理して normalize し、condition set と
 `and` / `or` operand は canonical sort/dedup する。typed value が同じなら surface/serializer に依存せず digest は同じで
 なければならない。
 
-Issue #88 / ADR 0031 により argument JSON decoder は RFC 8259 lexical/Unicode rules を bounded fail-closed parser として
+ADR 0031 により argument JSON decoder は RFC 8259 lexical/Unicode rules を bounded fail-closed parser として
 適用する。integer leading zero、invalid raw UTF-8、isolated surrogate、vertical tab/form feed whitespace を拒否し、valid
 high+low surrogate pair は non-BMP code point に合成する。raw UTF-8、BMP escape、surrogate pair が同じ Unicode scalar sequence
 を表す場合、typed decode 後の canonical JSON と digest は一致しなければならない。
 
-Issue #89 / ADR 0032 により typed literal の storage category は encode/decode 境界を越えて保存する。`bytes` と
+ADR 0032 により typed literal の storage category は encode/decode 境界を越えて保存する。`bytes` と
 `set` / `set<T>` は byte-backed scalar として lowercase hex を byte vector に decode し、empty sequence を受理する一方、
 odd-length、uppercase、non-hex encoding は拒否する。`set<T>` の nested parameter は完全に保持し、column type と parameter が
 一致しない literal は validation で拒否する。executor は decoded set を string に fallback して比較してはならない。
 
-Issue #144 / ADR 0075 により public `query::all()` / `query::any()` は zero operand を
+ADR 0075 により public `query::all()` / `query::any()` は zero operand を
 `sdk.query-empty-expression` で拒否し、one operand は wrapper を生成せず operand 自身へ canonical fold する。`and` / `or` の
 canonical IR wrapper と decoder は引き続き minimum two operands を要求する。これにより factory が成功した unary generic composition は
 atom と同一の where / inner join / semi join semantics を持ち、同一 revision の decoder が自分で生成した value を拒否しない。
 
-Issue #115 / ADR 0058 により scan alias は digest だけの field ではなく query-local column occurrence identity とする。
+ADR 0058 により scan alias は digest だけの field ではなく query-local column occurrence identity とする。
 relation descriptor の stable column ID は schema authority のまま維持し、predicate、order、project、typed node shape と
 runtime intermediate row は `(source_alias, stable column ID)` で bind する。same relation の複数 scan に対する unqualified
 reference は曖昧として拒否し、`query::qualify()` で side を明示する。alias は semantic field なので変更は logical digest を
 変更し、terminal projection だけが occurrence-qualified key を `output.*` へ rename する。
 
-Issue #142 / ADR 0073 により reachable な全 `query.scan.v1` node の alias は query 内で一意でなければならない。
+ADR 0073 により reachable な全 `query.scan.v1` node の alias は query 内で一意でなければならない。
 public/decoded IR は canonicalization を authority とする処理、または execution の前に
 `logical_query_ir::validate()` を通し、rooted graph closure の確認後に重複を `sdk.query-duplicate-scan-alias` で拒否する。これにより join の左右が同じ
 `(source_alias, stable column ID)` key へ collapse し、predicate が一方の cell を自己比較する経路を禁止する。
@@ -4087,9 +4087,9 @@ operator ごとの規範規則:
 | `condition_restrict` | nonempty intersection を保存 | restriction と intersection | 保存 | safe input prefix を保存 |
 | `interpretation_restrict` | exact ID match を保存 | 保存 | exact ID filter | safe input prefix を保存 |
 
-Issue #133 により `semi_join` の「条件付き保存」は left input の total order metadata、order keys、filtered row subsequenceを
+この契約により `semi_join` の「条件付き保存」は left input の total order metadata、order keys、filtered row subsequenceを
 そのまま伝播することを意味する。typed builder、IR validator、executor は同じ operator propertyを使用し、ordered left に対する
-semi join直後の `limit` を受理する。Issue #166 により同じ left order law を `anti_join` にも適用するが、right subtree の
+semi join直後の `limit` を受理する。この契約により同じ left order law を `anti_join` にも適用するが、right subtree の
 complete coverage と applicable closure がなければ absence row を返さず structured unresolved とする。unordered left は
 orderを獲得せず、inner join は orderを保存しない。
 
@@ -4187,24 +4187,24 @@ relation requirement は descriptor ID と compatible minor range を持つ。ma
 拒否する。optional minor column が snapshot descriptor にない場合、通常参照は拒否し、明示した
 `absent_if_schema_missing` だけが tagged absent を返す。unknown optional minor column は round-trip 時に保持する。
 
-Issue #145 / ADR 0076 により同じ relation ID の requirement merge は first-wins を禁止する。exact descriptor は deduplicateし、
+ADR 0076 により同じ relation ID の requirement merge は first-wins を禁止する。exact descriptor は deduplicateし、
 higher minor が lower の全 column を exact に含み追加 column が optional の場合だけ compatible とする。retained authority は higher minor の
 exact descriptor/version/digestであり、全 scan occurrence の schemaをそのdescriptorへ拡張する。semantic、key、reference、merge、
 identity、同一minor digest、またはnonoptional差分は `sdk.query-relation-requirement-incompatible` で決定的に拒否し、join/unionと
 static/dynamic surfaceのoperand permutationでretained requirementとoutput schemaを変えてはならない。
 
-Issue #79 / ADR 0022 により validator は node shape を column ID の集合ではなく `column ID -> exact value_type` として
+ADR 0022 により validator は node shape を column ID の集合ではなく `column ID -> exact value_type` として
 scan、join、union、projection、root まで伝播する。`output_schema` は指定 relation descriptor 自身の column と
 descriptor ID、column ID、scalar、parameter、optionality が完全一致し、root typed shape とも一致しなければならない。
 execution 時も advertised output column の type を snapshot descriptor と再照合し、IR digest が宣言する型と返却
 cell 型の乖離を拒否する。未参照の additive optional column の欠落は compatible minor 規則どおり許容する。
 
-Issue #80 / ADR 0023 により明示 project node がない IR に canonicalizer が付与する terminal project は reference
+ADR 0023 により明示 project node がない IR に canonicalizer が付与する terminal project は reference
 executor も実行する。canonicalizer と executor は同じ `output_aliases()` を共有し、source column を deterministic な
 `output.*` ID へ rename する。projection は unordered canonical sort、output budget、cancellation publication より前に
 適用し、explicit/implicit project の digest と result row shape を一致させる。
 
-Issue #81 / ADR 0024 により execution bind は predicate、project、order、join、implicit output の全参照 column から
+ADR 0024 により execution bind は predicate、project、order、join、implicit output の全参照 column から
 schema compatibility plan を作る。`require` は snapshot column の存在と scalar、parameter、optionality、required flag、
 role の完全一致を要求する。欠落を許すのは query descriptor 上も optional である明示
 `absent_if_schema_missing` だけであり、semantic major 一致と snapshot minor 下限を満たしても required shape の破壊は
@@ -4236,20 +4236,20 @@ query result は scanned claim の exact producer semantic contract、same-domai
 disagreement を side channel と row provenance の双方に保持する。backend、scan order、projection によりこれらを
 脱落させてはならない。
 
-Issue #116 / ADR 0059 により各 `annotated_row` の canonical projection は `contributor_guarantees` を required nonempty
+ADR 0059 により各 `annotated_row` の canonical projection は `contributor_guarantees` を required nonempty
 structured set として含む。各 entry は approximation、scope、assumptions、verification modalities を lossless に保持し、
 canonical JSON key で sort/deduplicate する。result-wide `summary_guarantee` は conservative meet の別軸であり row attribution の
 代用にしない。cursor で観測できる guarantee、canonical export、unordered row tie-break、backend parity comparison は同じ
 row field set を使用する。
 
-Issue #143 / ADR 0074 により `contributor_guarantees` は public `annotated_row` 自身でも nonempty canonical
+ADR 0074 により `contributor_guarantees` は public `annotated_row` 自身でも nonempty canonical
 sorted-unique set でなければならない。`validate()` は各 guarantee の内容検証後に canonical JSON key の順序と重複を直接検証し、
 違反を `sdk.query-row-invalid` / `contributor_guarantees` で拒否する。cursor view、owned copy、canonical JSON、result schema は同じ
 件数と内容だけを観測し、canonical form の silent dedup で invalid public state を隠してはならない。
 
-Issue #117 / ADR 0060 により `summary_guarantee()` は最終 result row に寄与した semantic fragment だけを対象に accepted
+ADR 0060 により `summary_guarantee()` は最終 result row に寄与した semantic fragment だけを対象に accepted
 approximation component meet を行う。filter / project / condition / interpretation restriction は surviving fragment を保持し、join、
-semi join、union、distinct は row contributor set を合成する。empty result の source annotation fallback は Issue #135 で廃止され、
+semi join、union、distinct は row contributor set を合成する。empty result の source annotation fallback は この契約で廃止され、
 applicable relation/scope closure がなければ exact を名乗れない。
 
 summary は scope、condition partition、interpretation partitions、canonical assumption ID union、modality implication closure intersection、
@@ -4257,13 +4257,13 @@ fragment count、canonical fragment-set digest、digest-bound drill-down ref、�
 execution completeness、coverage、closure、overlap する same-domain conflict / unresolved、condition completeness を独立に確認し、除外済み
 domain/row の weak guarantee や非 overlap conflict を selected scope へ混入させない。
 
-Issue #134 / ADR 0065 により row evidence の正本は claim contributor、producer、provenance、guarantee、condition、
+ADR 0065 により row evidence の正本は claim contributor、producer、provenance、guarantee、condition、
 interpretation を束縛した canonical `query_contributor_edge` set とする。従来の独立集合は edge から導出する projection に限定し、
 operator は edge 単位で合成する。summary fragment は一 edge から singleton attribution として生成し、producer binding も canonical
 fragment bytes と digest に含める。これにより join / semi join / distinct 後も元 support tuple を復元でき、ある contributor の conflict、
 unresolved、closure 判定が無関係な guarantee fragment へ伝播しない。
 
-Issue #135 / ADR 0066 により最終 row がゼロの場合も scan annotation を fallback 再集約しない。Logical Query IR の condition / interpretation
+ADR 0066 により最終 row がゼロの場合も scan annotation を fallback 再集約しない。Logical Query IR の condition / interpretation
 restriction を root から伝播した canonical zero-row proof context を summary source とし、open / incomplete / failed / truncated execution は
 synthetic `query-empty/unknown` に保守化する。complete execution かつ全 reachable input range の applicable closure が揃う場合だけ、
 選択 partition に束縛した exact absence と closure ID を公開できる。filter や no-match join で除外された claim は empty result contributor
@@ -4324,25 +4324,25 @@ budget超過時:
 - absenceを確定しない
 - continuationは上記 seal / total-order / binding 条件を満たす場合のみ
 
-Issue #82 / ADR 0025 により operator output は共通 collector が row count と canonical accounting bytes を checked
+ADR 0025 により operator output は共通 collector が row count と canonical accounting bytes を checked
 arithmetic で予約した後にだけ保持する。memory は retained operator rows、scan source annotations、distinct key scratch を
 execution 全体で数える。semi-join は witness vector を廃止して逐次 evidence union を行い、union/order/limit、distinct
 growth、implicit terminal project も保持前に検査する。decoded IR metadata、allocator overhead、in-place sort control、
 completion 後の result side channel は logical accounting 外であり、process RSS quota とは区別する。physical explain は
 `peak-logical-bytes` と `peak-intermediate-rows` を返す。
 
-Issue #85 / ADR 0028 により reference planner は validated rooted DAG を canonical postorder へ lower してから実行する。
+ADR 0028 により reference planner は validated rooted DAG を canonical postorder へ lower してから実行する。
 `union` child は normalized subtree digest、digest collision 時は raw canonical subtree bytes の順に固定し、この total order を
 branch evaluation、bag addition、budget/cancellation accounting に共通利用する。physical explain と unresolved の node subject
 は canonical postorder ordinal へ正規化し、同じ logical digest、snapshot、runtime request の semantic result と side channel
 を builder branch order や任意 node ID に依存させない。
 
-Issue #86 / ADR 0029 により canonical query result の conflict は relation、semantic key、interpretation、overlap fragments、
+ADR 0029 により canonical query result の conflict は relation、semantic key、interpretation、overlap fragments、
 assertions、contents の全 public semantic field を exact JSON object として保持する。三つの collection は claim kernel と共有する
 canonical sort/dedup を適用し、result schema は全 field required、unknown field forbidden とする。contents または overlap の差を
 canonical comparison、cache、監査 export から落としてはならない。
 
-Issue #87 / ADR 0030 により relation、claim、logical query、query result、provider の JSON string は shared canonical encoder を
+ADR 0030 により relation、claim、logical query、query result、provider の JSON string は shared canonical encoder を
 使用する。U+0000〜U+001F は raw 出力せず short escape または lower-case `\u00xx` とし、valid non-ASCII UTF-8 は normalization
 せず byte-preserving とする。present string scalar と unknown reason は overlong、surrogate、truncated sequence を含む invalid
 UTF-8 を `sdk.cell-invalid` で拒否する。bytes scalar は hexadecimal encoding 以外で string field に混入させない。
@@ -4364,7 +4364,7 @@ cost-based optimization は internal experimental とし、semantic outputへ影
 interpretation、contributors、provenance、execution status を含む canonical semantic result を比較する。これは
 production backend qualification の代替ではなく、後続実装が一致すべき規範 oracle である。
 
-Issue #69 の production reference runtime は
+この契約の production reference runtime は
 `schemas/cxxlens_ng_query_runtime_contract.yaml` と ADR 0014 が所有する。published snapshot の annotation cursor を
 実際に読み、11 operator を同じ annotated multiset algebra で実行する。IR argument は canonical JSON authority を
 維持したまま typed decoder で exact key/type/operator correspondence を検証する。runtime budget と cancellation
@@ -4377,7 +4377,7 @@ conservative summary guarantee、logical/physical explanation を落としては
 strategy は physical explanation にのみ現れ、logical explanation、IR digest、semantic row equality の authority
 ではない。
 
-Issue #78 / ADR 0021 により `closed` は snapshot 内の closure ID の存在では判定しない。IR root から到達する各
+ADR 0021 により `closed` は snapshot 内の closure ID の存在では判定しない。IR root から到達する各
 scan path へ condition/interpretation restriction を伝播し、交差する全 partition が relation、partition content、
 coverage、condition、interpretation、assumption、producer semantics、closure kind に exact bind した certificate を
 持つ場合だけ closed-world とする。join の全 input は個別に証明する。exact partition certificate は明示された
@@ -4713,7 +4713,7 @@ stable/versioned baseline:
 
 ### 22.9 Author SDK の concrete surface
 
-Issue #66 で、次の二 package を installable production surface として導入した。
+この契約で、次の二 package を installable production surface として導入した。
 
 | Package | Target | 用途 | LLVM/Clang boundary |
 | --- | --- | --- | --- |
@@ -4740,31 +4740,22 @@ API family の error、lifetime、threading、versioning、invariant、実装条
 `schemas/cxxlens_ng_public_api_catalog.yaml` を authority とする。IDL generation、compile-fail、LLVM-free install
 consumer に加え、C++ 生成値を既存の `cxxlens.logical-query-ir.v1` reference validator と
 `cxxlens.provider-manifest.v1` schema へ入力する gate は `cxxlens-ng-sdk-contract-check` である。product 全体の target DAG と provider-to-snapshot
-vertical slice は Issue #67 以降で実装され、flagship `calls_to_function` recipe と R2 E2E は Issue #73 で
+vertical slice は この契約以降で実装され、flagship `calls_to_function` recipe と R2 E2E は この契約で
 production surface へ接続された。
 
-### 22.10 Public callable exact inventory
+### 22.10 Public C++ API documentation
 
-Issue #169 / ADR 0092 により、全 installed public callable の exact authority は
-`schemas/cxxlens_ng_public_callable_inventory.yaml` とする。Public API Catalog が admitted header、API family、package、target を
-管理し、inventory は一 callable 一 row の stable ID、fully qualified name、kind、return/parameter/default/template/constraint、
-static/virtual/constexpr、cv/ref/noexcept、deleted/defaulted、declaring header、origin、status/stability/qualification、Doxygen
-correspondence を catalog entry へ exact bind する。source line、Doxygen synthetic ID、表示 prose、signature digest は stable callable ID にしない。
-stable ID は fully qualified name、kind、scope 内で非再利用の overload slot から domain-separated hash で導出する。allocator の
-high-water mark と消滅済み scope は履歴として保持し、slot 再利用、ID swap、曖昧な複数 overload migration を拒否する。signature は
-C++ token 単位で literal spelling を保持し、constraint の enclosing/callable scope と template/leading/trailing position、nested
-`noexcept(...)`、`override` / `final` を構造化する。
+`schemas/cxxlens_ng_public_api_catalog.yaml` は installed public header の package、target、API family、
+stable error、lifetime、threading、versioning、invariant、support/stability を定義する。公開宣言の
+signature は header と C++ compiler が直接検証し、Doxygen はその宣言コメントと利用例を文書化する。
+実装ファイルの表現や checkout は API identity や protocol authority ではない。
 
-public C++ declaration の観測 authority として locked Clang 22 AST census を `cxxlens-quality` で常時実行し、header-only declaration、
-inventory-only row、signature drift、duplicate、複数 installed header/entry ownership を双方向に拒否する。Doxygen XML は AST と独立した
-二つ目の exact correspondence とする。Clang/Doxygen の column 値を直接同一視せず、同一 header/line 内の declaration order で対応付けた
-両 source anchor と row 固有の name/signature projection を検査し、一方の成功で他方を
-代替しない。accepted Relation Registry から admitted generated header を全て再生成して byte freshness を検査し、generated callable も
-同じ inventory に含める。inventory の canonical digest、Clang major、Doxygen correspondence digest は AST/Doxygen の直接検査結果として
-利用する。固定した callable 件数やこれらの値を commit、review、readiness、release artifact へ複製しない。
-cross-header と redeclaration の同一性は pretty type string ではなく Clang mangled identity / `previousDecl` chain で判定する。alias spelling、
-同一行 Doxygen 対応一式の交換、同一 header の default/specifier/origin drift を拒否する。stable-ID transition は親 inventory と比較し、
-親 inventory を読めない場合は fail closed にする。
+新しい public surface は独立 consumer/use case、既存 capability と不足 capability、結果の
+`proved`/`disproved`/`unknown`/`partial`/`conflicting`、coverage/closure/unresolved/conflict/
+guarantee/provenance の保持方法を catalog、Doxygen、schema、直接の positive/negative/fault test
+へ同時に追加する。generated header は Relation Registry の product contract から再生成し、
+生成結果は compiler、schema validator、installed consumer で検証する。固定した callable 件数、
+commit、review、release artifact を documentation contract に複製しない。
 
 ---
 
@@ -4809,7 +4800,7 @@ provenance references
 `call_search_report` とする。report は exact plan と query result を所有する。query execution が `complete` の
 場合だけ `matched`、`empty_complete`、`empty_incomplete`、`ambiguous` を確定し、`truncated` と
 `cancelled_with_partial` は `partial`、`failed_before_result` は `failed` とする。partial row の件数や target
-集合から matched、ambiguity 不在、absence を推論してはならない。Issue #136 / ADR 0067 により `empty_complete` は execution complete、
+集合から matched、ambiguity 不在、absence を推論してはならない。ADR 0067 により `empty_complete` は execution complete、
 input coverage complete、`closed()`、nonempty applicable closure IDs、exact summary guarantee をすべて満たす場合だけ返す。
 closure なし、または relation / condition / interpretation に適用できない closure だけの zero row は `empty_incomplete` とする。
 実在 row の `matched` / `ambiguous` は existential witness のため closure 非依存である。ambiguous は diagnostic prose ではなく、complete result の match row に
@@ -4917,7 +4908,7 @@ security profile の最大値とする。runtime evidence は platform、mechani
 
 `sandbox_assurance` の ordinal 比較は両 operand の closed-enum membership 検証後にのみ行う。範囲外 minimum/achieved は
 既知 assurance へ正規化せず、それぞれ `provider.sandbox-requirement-invalid` / `provider.sandbox-report-invalid` で拒否する。
-Issue #137 / ADR 0068 により requirement、report、selection、effective minimum、process output、evidence digest の全 boundary へ
+ADR 0068 により requirement、report、selection、effective minimum、process output、evidence digest の全 boundary へ
 この規則を適用する。selection/runtime は stable error を not-found/unavailable へ畳まない。`sandbox_evidence_digest` は
 `result<string>` とし、範囲外 achieved から digest を生成しない。validator は canonicalization や digest 再計算より先に
 membership を検証する。同じ規則を public closed enum 全体に適用する。
@@ -4927,7 +4918,7 @@ ADR 0046 の policy registry は baseline と strict の canonical policy bytes�
 要求する。request digest を report へ echo してはならず、selection report、execution invocation、execution report は同じ
 resolved policy identity に bind する。enforced/certified evidence の mechanism set は policy と exact に一致しなければならない。
 
-Issue #151 / ADR 0082 により provider executable は working directory を適用した target を一度だけ open し、その source FD から
+ADR 0082 により provider executable は working directory を適用した target を一度だけ open し、その source FD から
 executable memfd へ bytes を copy する。copy 後は write/grow/shrink/seal を封じ、exact sealed image bytes の digest を selected
 manifest と照合する。child は verified FD を descriptor 3 に保持し、`execveat(AT_EMPTY_PATH)` で実行する。digest 検証後に path、
 symlink、inode を再解決してはならない。rename、symlink swap、in-place mutation が競合した場合も、実行できるのは hash した sealed
@@ -5022,7 +5013,7 @@ conformance trust anchor は production authority を一切付与しない。
 
 ### 24.8 Discovery、support、validation boundary
 
-Issue #65 / ADR 0011 により discovery precedence、shadowing、downgrade rule を exact contract とする。selection は
+ADR 0011 により discovery precedence、shadowing、downgrade rule を exact contract とする。selection は
 全候補の理由を explain 可能でなければならない。support は provider ID/version/binary digest、relation、interpretation、
 toolchain、platform の exact tuple を `cxxlens.provider-support-matrix.v1` で公開し、planned/conformance-only を
 production-supported と推測しない。
@@ -5162,30 +5153,28 @@ telemetry は internal lock 外で通知し、semantic behavior に影響しな�
 ### 26.0 Current policy (ADR 0106)
 
 開発完了は変更固有の試験と
-`main` の全決定的 CTest が成功したことだけで判定する。release は
+`main` の全決定的 CTest が成功したことで判定する。release は
 `.github/workflows/release.yml` の main 全件、sanitizer、static analysis、stress/repeat、
 scale、real-project、relocated-install の終了コードだけで判定し、失敗時は package を
-作成しない。試験結果を repository の report、receipt、checksum、集約 JSON、issue
-コメントへ複製しない。
+作成しない。試験結果は通常の CTest と CI job log で確認する。
 
 claim/provenance、coverage、unknown、conflict、materialization report、SQLite/source-
 closure の安全 receipt、provider の署名・binary identity・失効・sandbox・canonical
 semantic certification は製品 runtime semantics なので、この廃止対象ではない。
 
-現行の実行条件はこの節と ADR 0106、直接試験、`quality.yml`、`release.yml` に限る。
-旧来の運用証跡を新たな完了条件として再導入してはならない。
+現行の実行条件はこの節、直接試験、`quality.yml`、`release.yml` に限る。
 
 ### 26.1 Principle
 
 完了判定は、変更固有の positive・negative・fault・determinism/resource/error 試験と、
 `main` workflow の全決定的 CTest・contract・security・documentation・install・header 試験だけで行う。
 変更に関係する通常サイズ試験は `main` の全件集合へ登録する。
-独立 review、issue の完了コメント、exact SHA の複製、checksum、集約 report、checkpoint は完了条件ではない。
+レビューは任意であり、試験を代替しない。
 
 release は `release.yml` の終了コードだけで判定する。main 全件に加え ASan/UBSan、TSan、static analysis、
 stress/repeat、最大 scale、real-project、relocated-install を実行し、一件でも失敗した場合は package を作成しない。
 GitHub の通常 job log と Git 履歴は通常機能として残すが、repository 側で試験結果を別の artifact、report、receipt、
-issue コメントへ複製・長期保存・再検証しない。
+repository のコメント欄へ複製・長期保存・再検証しない。
 
 ### 26.2 Machine-readable traceability
 
@@ -5203,18 +5192,17 @@ tests:
 status: proposed
 ```
 
-この宣言は report、digest、review receipt、issue state の生成を意味しない。
+この宣言は product contract と直接試験の対応を表す。
 
 ### 26.3 Deterministic test surface
 
 `quality.yml` は Clang 22 の static/shared build と全決定的 CTest を実行し、contract、security、documentation、
 static/shared installed consumer、GCC public header を同じ workflow で検査する。
-path selection、fast report、JUnit、timing JSON、toolchain provenance、artifact upload/download、結果集約 job は
-この workflow に存在しない。
+品質入口は CTest の直接終了コードであり、追加の実行集約・結果保存 job は持たない。
 
 `release.yml` は手動実行または `v*` tag で起動し、main の全決定的試験と重検査を実行する。
 最大 scale と real-project は static/shared の両方を対象とし、package job はすべての重検査 job の成功を必要とする。
-試験用 artifact は保存しない。
+試験結果は通常の job log と CTest の終了コードで扱う。
 
 製品契約の変更は対応する unit、schema、protocol、backend、provider、security、install、scale、real-project 試験へ登録する。
 次の分類は試験対象を整理するための製品・品質分類であり、別の認定 gate や集約 report ではない。
@@ -5297,7 +5285,7 @@ limit 拡張は test process に限定する。これらは release workflow の
 
 ## 27. Migration Completion
 
-Issue #72 で production tree の移行を完了した。
+この契約で production tree の移行を完了した。
 
 - public/build/install surface は `base/kernel/query/cpp/recipes/provider_sdk` target DAG に統一した。
 - relation/claim/store/query/provider/native provider の実装は `sdk` と provider-owned boundary に統合した。
@@ -5451,9 +5439,8 @@ unsupported とする。
 public semantics、identity、protocol、persistence、不可逆 effect、resource bound の変更は、仕様または ADR と
 executable state machine、および反証可能な試験を同じ変更へ含める。独立 review は任意であり、試験を代替しない。
 
-実装 issue は変更固有試験と `main` workflow が green になった時点で完了とする。完了時に運用 comment、receipt、
-checkpoint、exact SHA メモ、集約 report、設計 feedback record を生成しない。未解決の製品 contract blocker は、
-通常の issue と直接の試験で追跡し、運用証跡の完了条件へ変換しない。
+実装は変更固有試験と `main` workflow が green になった時点で完了とする。未解決の製品 contract blocker は、
+通常の変更管理と直接の試験で追跡する。
 
 ---
 
@@ -5498,13 +5485,13 @@ canonical vector、fuzz corpus を通過しなければならない。
 
 ### OD-002 SQLite physical schema
 
-ADR 0013 / Issue #68 の hybrid と ADR 0097 / Issue #200 の current physical v3 で解決済み。exact publication/series
+ADR 0013 の hybrid と ADR 0097 の current physical v3 で解決済み。exact publication/series
 metadata を normalized table、semantic manifest と pointer-free detached row を versioned canonical binary payload に置く。
 v3 は payload を `(publication_id, generation, chunk_ordinal)` の bounded chunk table に保存し、checksum、chunk census、
 semantic digest を open/compaction/migration 時に再検証する。exact v2.6 は read-only direct-open と既存 `compact()` の
 deterministic COW migration だけを許す。validated locator swap と同じ transaction で旧 durable chunk を除去し、
 eager decode 済み process generation だけを reader pin 解放まで保持する。旧
-`cxxlens.sqlite-fact-store.v1` は source を変更しない一方向 adapter のみ許可し、Issue #72 で撤去する。physical
+`cxxlens.sqlite-fact-store.v1` は source を変更しない一方向 adapter のみ許可し、この契約で撤去する。physical
 schema、path、page/index order は public API と semantic snapshot identity へ漏らさない。
 
 ### RD-003 Hash algorithm — ADR 0009 で解決済み
@@ -5736,7 +5723,7 @@ NG1 default:
 - [x] static/shared install consumer
 - [ ] README/support state matches the supported-environment table
 
-上記は製品契約と直接試験の確認項目であり、別の foundation/GR gate、exact-SHA qualification、集約 report を生成しない。
+上記は製品契約と直接試験の確認項目である。
 開発完了は変更固有試験と `main` の全決定的回帰試験で、release 可否は `release.yml` の全重検査で判定する。
 
 ---
@@ -5915,7 +5902,7 @@ semantic_output_digest: ...
 ```
 
 これは product runtime の semantic identity と provider trust/provenance を表す例であり、開発・release の完了証跡ではない。
-Git revision/tree、dirty state、CI job、issue state、作成時刻、経過時間、RSS、checksum、qualification report はこの値へ含めない。
+Git revision/tree、dirty state、CI job、repository の完了状態、作成時刻、経過時間、RSS、checksum、追加の完了報告はこの値へ含めない。
 claim、coverage、unknown、materialization report、SQLite/source-closure の安全 receipt は対応する product contract の値として保持する。
 
 ---

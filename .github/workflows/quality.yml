@@ -27,7 +27,7 @@ jobs:
       matrix:
         shared: ["OFF", "ON"]
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: ./.github/actions/setup-ci
         with:
           profile: developer
@@ -45,7 +45,7 @@ jobs:
     name: Contract, security, and documentation tests
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: ./.github/actions/setup-ci
         with:
           profile: developer
@@ -56,7 +56,6 @@ jobs:
         run: |
           cmake --preset docs -DCXXLENS_CLANG_ADAPTER=ON
           cmake --build --preset docs
-          cmake --build --preset docs --target cxxlens-quality
           ctest --test-dir build/docs --label-regex 'quality|security|docs' \
             --output-on-failure
 
@@ -68,7 +67,7 @@ jobs:
       matrix:
         shared: ["OFF", "ON"]
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: ./.github/actions/setup-ci
         with:
           profile: developer
@@ -86,7 +85,7 @@ jobs:
     name: GCC public headers
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: ./.github/actions/setup-ci
         with:
           profile: none

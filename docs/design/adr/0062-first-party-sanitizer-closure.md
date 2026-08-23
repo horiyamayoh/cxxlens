@@ -2,8 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-17
-- Decision owner: release-quality
-- Decision issue: #119
 - Depends on: ADR 0005, ADR 0010, ADR 0015, ADR 0055, ADR 0061
 
 ## Context

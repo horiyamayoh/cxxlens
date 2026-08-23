@@ -121,8 +121,9 @@ namespace
 
 	void exercise_branch_local_capability_absence()
 	{
-		require(!sqlite_source_shm_native_ok_projection_production_activation_enabled(),
-				"native SQLITE_OK source-SHM projection remains disabled until qualification");
+		require(
+			sqlite_source_shm_native_ok_projection_production_activation_enabled(),
+			"native SQLITE_OK source-SHM projection is enabled only through the qualified route");
 		auto optional_port = make_sqlite_source_shm_readonly_preflight(
 			sqlite_default_observation_binding{}, sqlite_backend_opaque_identity{});
 		require(optional_port.has_value() && !*optional_port,
@@ -131,7 +132,7 @@ namespace
 
 	void exercise_outer_read_phase_order()
 	{
-		// DF-0201 scope is state/test-only; this does not authorize runtime binding or activation.
+		// This validates the source-private outer receipt order used by the active-WAL runtime.
 		using phase = detail::sqlite_shm_reader_outer_read_phase;
 		constexpr std::array complete{
 			phase::unresolved,
@@ -152,10 +153,9 @@ namespace
 			phase::logical_read_receipt,
 		};
 		for (std::size_t index = 1U; index < complete.size(); ++index)
-			require(
-				detail::is_sqlite_shm_reader_outer_read_transition(complete[index - 1U],
-																   complete[index]),
-				"complete outer read follows the proposed production-inactive state-only graph");
+			require(detail::is_sqlite_shm_reader_outer_read_transition(complete[index - 1U],
+																	   complete[index]),
+					"complete outer read follows the source-private state-only graph");
 		require(detail::validate_sqlite_shm_reader_outer_read_path(complete),
 				"state-only validator recognizes the complete logical-read receipt candidate path");
 		require(!detail::is_sqlite_shm_reader_outer_read_transition(phase::wal_lock_and_prefix_held,

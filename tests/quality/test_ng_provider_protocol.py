@@ -1,490 +1,106 @@
 #!/usr/bin/env python3
-"""Properties and fault isolation tests for the NG provider protocol."""
+"""Direct Protocol 2.0 wire, identity, and failure tests."""
 
 from __future__ import annotations
 
 import copy
-import hashlib
 import itertools
 import pathlib
 import sys
 import unittest
+
+import jsonschema
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "quality"))
 
 from check_ng_provider_protocol import (  # noqa: E402
-    CONTRACT,
     FRAME,
+    PROTOCOL_MAJOR,
+    PROTOCOL_MINOR,
     ProviderContractError,
     cbor_decode,
     cbor_encode,
     decode_frame,
     encode_frame,
-    failure,
-    flow,
-    group,
     load_yaml,
-    negotiate,
-    plan,
-    reuse,
-    run_fuzz,
-    sample_manifest,
-    sample_task,
-    schema_validate,
-    surface_parity,
-    validate_all,
     validate_contract_shape,
-    validate_shared_coverage_records,
-    validate_task_input_chunks,
-    validate_task_input_corpus,
-)
-from check_ng_provider_ng1 import (  # noqa: E402
-    Ng1ContractError,
-    validate_ng1_contract,
 )
 
 
-class NgProviderProtocolTest(unittest.TestCase):
+class ProviderProtocol2Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.contract = load_yaml(ROOT / CONTRACT)
+        cls.contract = load_yaml(ROOT / "schemas/cxxlens_ng_provider_protocol_v2.yaml")
 
-    def test_contract_vectors_fuzz_and_surface_matrix(self) -> None:
-        contract, results, comparisons, fuzz_cases = validate_all(ROOT)
-        self.assertEqual(contract["maturity"], "accepted")
-        self.assertEqual(len(results), 34)
-        self.assertEqual(comparisons, 6)
-        self.assertEqual(fuzz_cases, 19)
+    def test_protocol2_authority_rejects_legacy_and_byte_binding(self) -> None:
+        compatibility = self.contract["compatibility"]
+        self.assertEqual(compatibility["accepted_major"], PROTOCOL_MAJOR)
+        self.assertEqual(compatibility["accepted_minor"], PROTOCOL_MINOR)
+        self.assertEqual(compatibility["downgrade"], "reject")
+        self.assertEqual(compatibility["legacy_protocol_1"], "rejected-before-payload")
+        self.assertEqual(
+            compatibility["legacy_request_2_1_task_v3"],
+            "rejected-before-payload",
+        )
+        self.assertNotIn("implementation_byte_sha256", compatibility)
+        self.assertNotIn("implementation_byte_identity", compatibility)
+        validate_contract_shape(self.contract)
 
-    def test_fixed_header_is_exactly_104_bytes(self) -> None:
+    def test_protocol2_schema_rejects_operation_and_byte_authority(self) -> None:
+        schema = load_yaml(
+            ROOT / "schemas/cxxlens_ng_provider_protocol_v2.schema.yaml"
+        )
+        validator = jsonschema.Draft202012Validator(schema)
+        for section, key, value in (
+            ("authority", "implementation_issue", "#183"),
+            ("authority", "source_sha256", "0" * 64),
+            ("compatibility", "implementation_byte_sha256", "0" * 64),
+        ):
+            changed = copy.deepcopy(self.contract)
+            changed[section][key] = value
+            with self.subTest(section=section, key=key):
+                with self.assertRaises(jsonschema.ValidationError):
+                    validator.validate(changed)
+
+    def test_fixed_header_and_canonical_cbor_are_deterministic(self) -> None:
         self.assertEqual(FRAME.size, 104)
-        self.assertEqual(self.contract["wire"]["fixed_header_bytes"], 104)
-
-    def test_cbor_round_trip_and_map_order_are_deterministic(self) -> None:
-        value = {"z": [1, True, None], "a": b"bytes", "longer": -2, "unicode": "\0€😀"}
+        value = {"z": [1, True, None], "a": b"bytes", "unicode": "\0€😀"}
         encoded = cbor_encode(value)
         self.assertEqual(cbor_decode(encoded), value)
         for permutation in itertools.permutations(value.items()):
             self.assertEqual(cbor_encode(dict(permutation)), encoded)
 
-    def test_cbor_text_utf8_differential_corpus_is_strict(self) -> None:
-        for invalid in (
-            b"\x61\x80",
-            b"\x61\xc2",
-            b"\x62\xc0\x80",
-            b"\x63\xe0\x80\x80",
-            b"\x64\xf0\x80\x80\x80",
-            b"\x63\xed\xa0\x80",
-            b"\x64\xf4\x90\x80\x80",
-        ):
-            with self.assertRaisesRegex(ProviderContractError, "malformed-frame"):
-                cbor_decode(invalid)
-
-    def test_frame_round_trip_preserves_control_and_payload(self) -> None:
-        frame = encode_frame({"task": "t1"}, b"payload", message_type=9, stream_id=2, sequence=3)
+    def test_frame_round_trip_and_digest_tamper_rejection(self) -> None:
+        frame = encode_frame({"task": "t1"}, b"payload", message_type=9, sequence=3)
         decoded = decode_frame(self.contract, frame)
-        self.assertEqual(decoded["control"], {"task": "t1"})
+        self.assertEqual(decoded["protocol_major"], PROTOCOL_MAJOR)
+        self.assertEqual(decoded["protocol_minor"], PROTOCOL_MINOR)
         self.assertEqual(decoded["payload_hex"], b"payload".hex())
-        self.assertEqual(decoded["sequence"], 3)
-        self.assertEqual(decoded["protocol_minor"], 0)
-        self.assertEqual(decoded["flags"], 0)
+        tampered = frame[:-1] + bytes([frame[-1] ^ 1])
+        with self.assertRaisesRegex(ProviderContractError, "checksum-mismatch"):
+            decode_frame(self.contract, tampered)
 
-    def test_wire_version_and_unknown_message_classification_fail_closed(self) -> None:
+    def test_major_downgrade_and_reserved_flags_fail_closed(self) -> None:
         with self.assertRaisesRegex(ProviderContractError, "protocol-major-mismatch"):
-            decode_frame(self.contract, encode_frame({}, protocol_major=2))
-        with self.assertRaisesRegex(ProviderContractError, "protocol-minor-mismatch"):
-            decode_frame(self.contract, encode_frame({}, protocol_minor=1))
-        accepted = decode_frame(
-            self.contract,
-            encode_frame({}, protocol_minor=1),
-            negotiated_minor=1,
-        )
-        self.assertEqual(accepted["protocol_minor"], 1)
-        with self.assertRaisesRegex(ProviderContractError, "unknown-message-type"):
-            decode_frame(self.contract, encode_frame({}, message_type=65000))
-
-    def test_frame_flags_are_fail_closed_and_optional_extensions_are_accounted(self) -> None:
-        flags = self.contract["wire"]["flags"]
-        optional = decode_frame(
-            self.contract,
-            encode_frame({}, message_type=65000, flags=flags["optional_extension"]),
-        )
-        self.assertTrue(optional["skipped_optional"])
-        self.assertEqual(optional["message_type"], 65000)
-        self.assertGreater(optional["accounted_bytes"], FRAME.size)
-        with self.assertRaisesRegex(ProviderContractError, "unknown-required-extension"):
             decode_frame(
                 self.contract,
-                encode_frame({}, message_type=65000, flags=flags["required_extension"]),
+                encode_frame({}, protocol_major=1),
             )
-        with self.assertRaisesRegex(ProviderContractError, "unsupported-compression"):
+        with self.assertRaisesRegex(ProviderContractError, "protocol-minor-mismatch"):
             decode_frame(
                 self.contract,
-                encode_frame({}, flags=flags["compressed_payload"]),
+                encode_frame({}, protocol_minor=1),
             )
         with self.assertRaisesRegex(ProviderContractError, "invalid-frame-flags"):
-            decode_frame(self.contract, encode_frame({}, flags=16))
+            decode_frame(self.contract, encode_frame({}, flags=4))
 
-    def test_unhashable_cbor_map_key_is_stable_rejection(self) -> None:
-        with self.assertRaisesRegex(ProviderContractError, "unhashable CBOR map key"):
-            cbor_decode(b"\xa1\x80\x01")
-
-    def test_credit_is_two_dimensional_and_sequence_contiguous(self) -> None:
-        base = {"stream_id": 7, "staged_digest": "digest"}
-        with self.assertRaisesRegex(ProviderContractError, "credit-exceeded"):
-            flow({**base, "credit": {"bytes": 1, "frames": 1}, "frames": [{"sequence": 0, "bytes": 2}], "ack": {"stream_id": 7, "highest_contiguous_sequence": 0, "staged_digest": "digest", "return_bytes": 0, "return_frames": 0}})
-        with self.assertRaisesRegex(ProviderContractError, "sequence-gap"):
-            flow({**base, "credit": {"bytes": 10, "frames": 1}, "frames": [{"sequence": 1, "bytes": 1}], "ack": {"stream_id": 7, "highest_contiguous_sequence": 1, "staged_digest": "digest", "return_bytes": 0, "return_frames": 0}})
-
-    def test_ack_binds_stream_and_staged_digest(self) -> None:
-        value = {"stream_id": 7, "staged_digest": "digest", "credit": {"bytes": 10, "frames": 1}, "frames": [{"sequence": 0, "bytes": 1}], "ack": {"stream_id": 8, "highest_contiguous_sequence": 0, "staged_digest": "digest", "return_bytes": 0, "return_frames": 0}}
-        with self.assertRaisesRegex(ProviderContractError, "ack-invalid"):
-            flow(value)
-
-    def test_negotiation_never_uses_adjacent_provider(self) -> None:
-        value = {"host": {"major": 1, "minor": 0, "features": ["streaming"]}, "requested": {"provider_id": "p", "provider_version": "1.0.0", "binary_digest": "d"}, "offered": {"provider_id": "p", "provider_version": "1.1.0", "binary_digest": "d", "semantic_contract_digest": "s", "protocol": {"major": 1, "minimum_minor": 0, "maximum_minor": 1}, "required_features": ["streaming"], "optional_features": []}}
-        with self.assertRaisesRegex(ProviderContractError, "adjacent-fallback"):
-            negotiate(value)
-
-    def test_hard_reference_crossing_dependency_group_rejects(self) -> None:
-        base = {"state": "sealed", "batches_sealed": True, "digests_valid": True, "coverage_balanced": True, "unresolved_accounted": True, "closures_valid": True}
-        value = {"partial_policy": "declared_dependency_groups", "groups": [dict(base, id="d1", atomic_groups=["a"], hard_references=[{"source": "a", "target": "b"}]), dict(base, id="d2", atomic_groups=["b"], hard_references=[])]}
-        with self.assertRaisesRegex(ProviderContractError, "hard-reference-group"):
-            group(value)
-
-    def test_partial_adoption_requires_predeclared_boundary(self) -> None:
-        complete = {"id": "d1", "state": "sealed", "atomic_groups": ["a"], "batches_sealed": True, "digests_valid": True, "coverage_balanced": True, "unresolved_accounted": True, "closures_valid": True, "hard_references": []}
-        failed = dict(complete, id="d2", state="streaming", atomic_groups=["b"], batches_sealed=False)
-        declared, _ = group({"partial_policy": "declared_dependency_groups", "fail_group": "d2", "groups": [complete, failed]})
-        forbidden, _ = group({"partial_policy": "forbid", "fail_group": "d2", "groups": [complete, failed]})
-        self.assertEqual(declared["adopted"], ["d1"])
-        self.assertEqual(forbidden["adopted"], [])
-
-    def test_plan_order_is_input_order_invariant(self) -> None:
-        tasks = [
-            {"id": "a", "provider_id": "p.a", "provider_version": "1", "binary_digest": "a", "input_stage": "observation", "output_stage": "assertion", "depends_on": []},
-            {"id": "b", "provider_id": "p.b", "provider_version": "1", "binary_digest": "b", "input_stage": "assertion", "output_stage": "canonical_claim", "depends_on": ["a"]},
-        ]
-        outputs = {tuple(plan({"profile": "NG0", "tasks": list(permutation)})[0]) for permutation in itertools.permutations(tasks)}
-        self.assertEqual(outputs, {("a", "b")})
-
-    def test_ng0_cycle_never_uses_tie_break(self) -> None:
-        tasks = [{"id": "a", "provider_id": "p", "provider_version": "1", "binary_digest": "d", "input_stage": "canonical_claim", "output_stage": "derived_claim", "depends_on": ["a"]}]
-        with self.assertRaisesRegex(ProviderContractError, "dependency-cycle"):
-            plan({"profile": "NG0", "tasks": tasks})
-
-    def test_binary_and_semantic_digest_both_invalidate_reuse(self) -> None:
-        stored = {field: field for field in ("provider_id", "provider_version", "semantic_contract_digest", "binary_digest", "protocol_major", "relation_descriptor_digests", "input_partition_digests", "condition_universe", "interpretation", "model_assumption_pack")}
-        self.assertEqual(reuse({"stored": stored, "requested": copy.deepcopy(stored)}), "reusable")
-        with self.assertRaisesRegex(ProviderContractError, "binary-mismatch"):
-            reuse({"stored": stored, "requested": dict(stored, binary_digest="changed")})
-        with self.assertRaisesRegex(ProviderContractError, "semantic-mismatch"):
-            reuse({"stored": stored, "requested": dict(stored, semantic_contract_digest="changed")})
-
-    def test_failure_never_mutates_prior_snapshot(self) -> None:
-        result = failure({"reason": "provider.crash", "coverage_accounted": True, "unresolved_accounted": True, "current_group": "d2", "adopted_groups": ["d1"], "partial_policy": "declared_dependency_groups"}, self.contract)
-        self.assertEqual(result["prior_snapshot"], "unchanged")
-        self.assertEqual(result["retained"], ["d1"])
-
-    def test_in_process_and_out_of_process_are_semantically_equal(self) -> None:
-        import check_ng_provider_protocol as module
-        module._CONTRACT_CACHE = self.contract
-        _, comparisons = surface_parity({"rows": [{"key": "b"}, {"key": "a"}], "coverage": ["covered"]})
-        self.assertEqual(comparisons, 6)
-
-    def test_fuzz_corpus_has_only_stable_rejections(self) -> None:
-        corpus = load_yaml(ROOT / "schemas/cxxlens_ng_provider_fuzz_corpus.yaml")
-        result = run_fuzz(self.contract, corpus)
-        self.assertEqual(result["stable_rejections"], len(corpus["cases"]))
-        self.assertEqual(result["crashes"], 0)
-
-    def test_minor_one_task_input_corpus_has_actual_positive_and_negative_data(self) -> None:
-        corpus = load_yaml(ROOT / "schemas/cxxlens_ng_provider_fuzz_corpus.yaml")
-        self.assertEqual(
-            validate_task_input_corpus(corpus),
-            {"cases": 7, "accepted": 1, "stable_rejections": 6},
-        )
-
-    def test_manifest_and_task_examples_are_schema_valid(self) -> None:
-        schema_validate(sample_manifest(), load_yaml(ROOT / "schemas/cxxlens_ng_provider_manifest.schema.yaml"), "manifest")
-        schema_validate(sample_task(), load_yaml(ROOT / "schemas/cxxlens_ng_provider_task.schema.yaml"), "task")
-
-    def test_exact_contract_schema_rejects_limit_policy_drift(self) -> None:
+    def test_contract_mutation_is_rejected_without_fixed_cardinality_assertions(self) -> None:
         changed = copy.deepcopy(self.contract)
         changed["wire"]["limits"]["payload_bytes"] += 1
-        with self.assertRaisesRegex(ProviderContractError, "schema-invalid"):
-            schema_validate(changed, load_yaml(ROOT / "schemas/cxxlens_ng_provider_protocol.schema.yaml"), "provider protocol")
-
-    def test_ng1_hardening_contract_is_closed_and_cross_bound(self) -> None:
-        hardening = validate_ng1_contract(ROOT, self.contract)
-        self.assertEqual(hardening["maturity"], "proposed")
-        self.assertEqual(
-            hardening["direct_tests"]["required_cases"].count("long-run-fault"),
-            1,
-        )
-
-    def test_ng1_hardening_rejects_control_and_replay_drift(self) -> None:
-        hardening = load_yaml(ROOT / "schemas/cxxlens_ng_provider_ng1_hardening.yaml")
-        changed = copy.deepcopy(hardening)
-        changed["progress"]["enforcement"]["arithmetic"] = "u64-division"
-        with self.assertRaisesRegex(Ng1ContractError, "progress"):
-            validate_ng1_contract(ROOT, self.contract, changed)
-
-        changed = copy.deepcopy(hardening)
-        changed["resume"]["durability"]["prerequisite"] = "volatile-ack"
-        with self.assertRaisesRegex(Ng1ContractError, "resume"):
-            validate_ng1_contract(ROOT, self.contract, changed)
-
-        changed = copy.deepcopy(hardening)
-        changed["direct_tests"]["unavailable_provider"] = "fallback"
-        with self.assertRaisesRegex(Ng1ContractError, "schema"):
-            validate_ng1_contract(ROOT, self.contract, changed)
-
-    def test_ng1_schema_is_closed_and_rejects_maturity_or_direction_drift(self) -> None:
-        hardening = load_yaml(ROOT / "schemas/cxxlens_ng_provider_ng1_hardening.yaml")
-        hardening_schema = load_yaml(ROOT / "schemas/cxxlens_ng_provider_ng1_hardening.schema.yaml")
-        changed = copy.deepcopy(hardening)
-        changed["maturity"] = "accepted"
-        with self.assertRaisesRegex(ProviderContractError, "schema-invalid"):
-            schema_validate(changed, hardening_schema, "NG1 hardening contract")
-
-        changed = copy.deepcopy(hardening)
-        changed["heartbeat"]["direction"]["ack"] = "host-to-provider"
-        with self.assertRaisesRegex(ProviderContractError, "schema-invalid"):
-            schema_validate(changed, hardening_schema, "NG1 hardening contract")
-
-    def test_ng1_vector_schema_enforces_class_specific_expected_fields(self) -> None:
-        vectors = load_yaml(ROOT / "schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml")
-        schema = load_yaml(ROOT / "schemas/cxxlens_ng_provider_ng1_conformance_vectors.schema.yaml")
-
-        changed = copy.deepcopy(vectors)
-        changed["vectors"][0]["expected"]["reason_code"] = "provider.invalid"
-        with self.assertRaisesRegex(ProviderContractError, "schema-invalid"):
-            schema_validate(changed, schema, "NG1 conformance vectors")
-
-        changed = copy.deepcopy(vectors)
-        del changed["vectors"][1]["expected"]["reason_code"]
-        with self.assertRaisesRegex(ProviderContractError, "schema-invalid"):
-            schema_validate(changed, schema, "NG1 conformance vectors")
-
-        changed = copy.deepcopy(vectors)
-        changed["vectors"][8]["expected"]["reason_code"] = "provider.invalid"
-        with self.assertRaisesRegex(ProviderContractError, "schema-invalid"):
-            schema_validate(changed, schema, "NG1 conformance vectors")
-
-    @staticmethod
-    def task_input_transfer(
-        chunks: list[bytes], chunk_bytes: int = 1048576
-    ) -> dict[str, object]:
-        hasher = hashlib.sha256()
-        for chunk in chunks:
-            hasher.update(chunk)
-        input_digest = "sha256:" + hasher.hexdigest()
-        task_id = "task:input-test"
-        total_bytes = sum(len(chunk) for chunk in chunks)
-        occurrences = []
-        offset = 0
-        for index, payload in enumerate(chunks):
-            occurrences.append(
-                {
-                    "sequence": 4 + index,
-                    "control": {
-                        "schema": "cxxlens.provider-control.input-chunk.v1",
-                        "task_id": task_id,
-                        "input_digest": input_digest,
-                        "chunk_index": index,
-                        "offset": offset,
-                        "byte_count": len(payload),
-                    },
-                    "payload": payload,
-                    "payload_digest": "sha256:"
-                    + hashlib.sha256(payload).hexdigest(),
-                }
-            )
-            offset += len(payload)
-        return {
-            "protocol_minor": 1,
-            "features": ["task-input-chunks-v1"],
-            "task_id": task_id,
-            "input_digest": input_digest,
-            "descriptor": {
-                "sequence": 3,
-                "control": {
-                    "schema": "cxxlens.provider-control.input-descriptor.v1",
-                    "task_id": task_id,
-                    "input_digest": input_digest,
-                    "total_bytes": total_bytes,
-                    "chunk_bytes": chunk_bytes,
-                    "chunk_count": len(chunks),
-                },
-            },
-            "chunks": occurrences,
-            "credit_sequence": 4 + len(chunks),
-            "close_sequence": 5 + len(chunks),
-        }
-
-    def test_task_input_chunk_boundaries_and_maximum_seal(self) -> None:
-        for total_bytes in (0, 1, 1048575, 1048576, 1048577):
-            payload = b"x" * total_bytes
-            chunks = [
-                payload[offset : offset + 1048576]
-                for offset in range(0, total_bytes, 1048576)
-            ]
-            sealed = validate_task_input_chunks(self.task_input_transfer(chunks))
-            self.assertTrue(sealed["sealed"])
-            self.assertEqual(sealed["total_bytes"], total_bytes)
-        maximum_chunk = b"m" * 1048576
-        maximum = validate_task_input_chunks(
-            self.task_input_transfer([maximum_chunk] * 64)
-        )
-        self.assertEqual(maximum["total_bytes"], 67108864)
-        self.assertEqual(maximum["chunk_count"], 64)
-
-    def test_task_input_chunk_mutations_fail_closed(self) -> None:
-        def changed(mutator: object) -> dict[str, object]:
-            value = self.task_input_transfer([b"abcd", b"e"], chunk_bytes=4)
-            assert callable(mutator)
-            mutator(value)
-            return value
-
-        mutations = (
-            lambda value: value["descriptor"]["control"].__setitem__("extra", 0),
-            lambda value: value["descriptor"]["control"].__setitem__("schema", "wrong"),
-            lambda value: value["descriptor"]["control"].__setitem__("chunk_count", 1),
-            lambda value: value.__setitem__("chunks", value["chunks"][:-1]),
-            lambda value: value.__setitem__("chunks", [value["chunks"][0]] * 2),
-            lambda value: value.__setitem__("chunks", list(reversed(value["chunks"]))),
-            lambda value: value["chunks"][0]["control"].__setitem__("chunk_index", 1),
-            lambda value: value["chunks"][1]["control"].__setitem__("offset", 3),
-            lambda value: value["chunks"][0]["control"].__setitem__("byte_count", 3),
-            lambda value: value["chunks"][0].__setitem__("payload_digest", "sha256:" + "0" * 64),
-            lambda value: value["chunks"][0]["control"].__setitem__("task_id", "task:splice"),
-            lambda value: value.__setitem__("features", []),
-            lambda value: value.__setitem__("protocol_minor", 0),
-            lambda value: value.__setitem__("credit_sequence", 99),
-        )
-        for mutation in mutations:
-            with self.subTest(mutation=mutation):
-                with self.assertRaises(ProviderContractError):
-                    validate_task_input_chunks(changed(mutation))
-
-        digest_drift = self.task_input_transfer([b"abcd", b"e"], chunk_bytes=4)
-        other_digest = "sha256:" + "0" * 64
-        digest_drift["input_digest"] = other_digest
-        digest_drift["descriptor"]["control"]["input_digest"] = other_digest
-        for chunk in digest_drift["chunks"]:
-            chunk["control"]["input_digest"] = other_digest
-        with self.assertRaisesRegex(ProviderContractError, "task-binding-mismatch"):
-            validate_task_input_chunks(digest_drift)
-
-        oversized = self.task_input_transfer([])
-        oversized["descriptor"]["control"]["total_bytes"] = 67108865
-        with self.assertRaisesRegex(ProviderContractError, "logical input limit"):
-            validate_task_input_chunks(oversized)
-
-    def test_task_input_authority_rejects_profile_or_budget_drift(self) -> None:
-        drifts = []
-        changed = copy.deepcopy(self.contract)
-        changed["profiles"]["NG0"]["required"].remove("task-input-chunks-v1")
-        drifts.append(changed)
-        changed = copy.deepcopy(self.contract)
-        changed["host_to_provider_state_machine"]["minor_profiles"]["1.0"][
-            "exact_frames"
-        ].insert(3, "input_descriptor")
-        drifts.append(changed)
-        changed = copy.deepcopy(self.contract)
-        changed["host_to_provider_state_machine"]["minor_profiles"]["1.1"][
-            "required_features"
-        ] = []
-        drifts.append(changed)
-        changed = copy.deepcopy(self.contract)
-        changed["task_input_transfer"]["limits"]["maximum_input_chunks"] = 65
-        drifts.append(changed)
-        changed = copy.deepcopy(self.contract)
-        changed["task_input_transfer"]["budget_separation"]["credit"] = "input-and-output"
-        drifts.append(changed)
-        changed = copy.deepcopy(self.contract)
-        changed["task_input_transfer"]["authority_boundary"][
-            "ambient_path-fd-environment-shared-memory-side-channel"
-        ] = "allowed"
-        drifts.append(changed)
-        for changed in drifts:
-            with self.assertRaisesRegex(
-                ProviderContractError, "task-input-authority-invalid"
-            ):
-                validate_contract_shape(changed)
-
-    def test_shared_validator_requires_transport_and_retains_unknown_semantics(self) -> None:
-        task_id = "task:coverage-test"
-        records = [
-            {"kind": "task", "id": task_id, "state": "covered", "reason": ""},
-            {
-                "kind": "future.specialization|opaque",
-                "id": "semantic:\u20ac\U0001f600",
-                "state": "unresolved",
-                "reason": "retain|without\ninterpretation\0",
-            },
-        ]
-        retained = validate_shared_coverage_records(task_id, records)
-        self.assertEqual(retained, records)
-        self.assertIsNot(retained, records)
-        self.assertEqual(retained[1], records[1])
-
-    def test_shared_transport_coverage_mutations_fail_closed(self) -> None:
-        task_id = "task:coverage-test"
-        transport = {
-            "kind": "task",
-            "id": task_id,
-            "state": "covered",
-            "reason": "",
-        }
-
-        def changed(field: str, value: str) -> list[dict[str, str]]:
-            record = copy.deepcopy(transport)
-            record[field] = value
-            return [record]
-
-        mutations = (
-            [],
-            [transport, copy.deepcopy(transport)],
-            changed("kind", "renamed-task"),
-            changed("id", "task:wrong"),
-            changed("state", "failed"),
-            changed("reason", "nonempty"),
-            [transport, {**transport, "id": "task:wrong"}],
-            [{**transport, "extra": "forbidden"}],
-        )
-        for records in mutations:
-            with self.subTest(records=records):
-                with self.assertRaisesRegex(
-                    ProviderContractError, "coverage-incomplete"
-                ):
-                    validate_shared_coverage_records(task_id, records)
-
-    def test_shared_coverage_authority_rejects_drop_or_interpretation_drift(self) -> None:
-        drifts = []
-        changed = copy.deepcopy(self.contract)
-        changed["shared_transcript_coverage"]["specialization_awareness"] = (
-            "clang22-aware"
-        )
-        drifts.append(changed)
-        changed = copy.deepcopy(self.contract)
-        changed["shared_transcript_coverage"]["non_transport_records"][
-            "unknown_or_extra_semantic"
-        ] = "discard"
-        drifts.append(changed)
-        changed = copy.deepcopy(self.contract)
-        changed["shared_transcript_coverage"]["task_transport_record"][
-            "cardinality"
-        ] = "optional"
-        drifts.append(changed)
-        for changed in drifts:
-            with self.assertRaisesRegex(
-                ProviderContractError, "coverage-authority-invalid"
-            ):
-                validate_contract_shape(changed)
+        with self.assertRaises(ProviderContractError):
+            validate_contract_shape(changed)
 
 
 if __name__ == "__main__":

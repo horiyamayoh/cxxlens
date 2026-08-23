@@ -33,8 +33,6 @@ properties:
       decision_adr: docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
       legacy_layout_adr: docs/design/adr/0013-ng-sqlite-physical-store.md
       materialization_adr: docs/design/adr/0096-clang22-installed-materialization-boundary.md
-      decision_issue: '#200'
-      implementation_issue: '#181'
   physical_format: {$ref: '#/$defs/physical_format'}
   runtime: {$ref: '#/$defs/runtime'}
   tables: {$ref: '#/$defs/tables'}

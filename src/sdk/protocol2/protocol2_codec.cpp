@@ -20,15 +20,17 @@ namespace cxxlens::sdk::protocol2
 			map = 5U,
 		};
 
-		void append_u64(std::vector<std::byte>& output, const std::uint64_t value,
-			const std::size_t width)
+		void append_u64(std::vector<std::byte>& output,
+						const std::uint64_t value,
+						const std::size_t width)
 		{
 			for (std::size_t index = width; index > 0U; --index)
 				output.push_back(static_cast<std::byte>(value >> ((index - 1U) * 8U)));
 		}
 
-		void append_head(std::vector<std::byte>& output, const major_type major,
-			const std::uint64_t value)
+		void append_head(std::vector<std::byte>& output,
+						 const major_type major,
+						 const std::uint64_t value)
 		{
 			const auto prefix = static_cast<std::uint8_t>(static_cast<std::uint8_t>(major) << 5U);
 			if (value < 24U)
@@ -72,40 +74,44 @@ namespace cxxlens::sdk::protocol2
 		};
 
 		[[nodiscard]] bool canonical_key_less(const encoded_field& left,
-			const encoded_field& right) noexcept
+											  const encoded_field& right) noexcept
 		{
 			if (left.key.size() != right.key.size())
 				return left.key.size() < right.key.size();
-			return std::lexicographical_compare(left.key.begin(), left.key.end(), right.key.begin(),
-				right.key.end());
+			return std::lexicographical_compare(
+				left.key.begin(), left.key.end(), right.key.begin(), right.key.end());
 		}
 
 		[[nodiscard]] result<std::pair<std::uint64_t, std::size_t>>
-		read_argument(const std::span<const std::byte> bytes, const std::size_t offset,
-			const std::uint8_t additional)
+		read_argument(const std::span<const std::byte> bytes,
+					  const std::size_t offset,
+					  const std::uint8_t additional)
 		{
 			if (additional < 24U)
 				return std::pair{static_cast<std::uint64_t>(additional), offset};
-			const auto width = additional == 24U ? 1U : additional == 25U ? 2U
-				: additional == 26U             ? 4U
-				: additional == 27U             ? 8U
-				                               : 0U;
+			const auto width = additional == 24U ? 1U
+				: additional == 25U				 ? 2U
+				: additional == 26U				 ? 4U
+				: additional == 27U				 ? 8U
+												 : 0U;
 			if (width == 0U || offset > bytes.size() || width > bytes.size() - offset)
 				return unexpected(codec_error("cbor", "truncated-or-indefinite"));
 			std::uint64_t value{};
 			for (std::size_t index{}; index < width; ++index)
 				value = (value << 8U) | std::to_integer<std::uint64_t>(bytes[offset + index]);
-			const auto minimum = width == 1U ? 24U : width == 2U ? 256U
-				: width == 4U            ? 65'536U
-				                          : (std::uint64_t{1U} << 32U);
+			const auto minimum = width == 1U ? 24U
+				: width == 2U				 ? 256U
+				: width == 4U				 ? 65'536U
+											 : (std::uint64_t{1U} << 32U);
 			if (value < minimum)
 				return unexpected(codec_error("cbor", "non-shortest"));
 			return std::pair{value, offset + width};
 		}
 
 		[[nodiscard]] result<std::pair<std::string, std::size_t>>
-		read_text(const std::span<const std::byte> bytes, const std::size_t offset,
-			const std::uint8_t additional)
+		read_text(const std::span<const std::byte> bytes,
+				  const std::size_t offset,
+				  const std::uint8_t additional)
 		{
 			auto length = read_argument(bytes, offset, additional);
 			if (!length)
@@ -113,10 +119,11 @@ namespace cxxlens::sdk::protocol2
 			if (length->first > bytes.size() - length->second)
 				return unexpected(codec_error("cbor", "text-length"));
 			std::string value{reinterpret_cast<const char*>(bytes.data() + length->second),
-				static_cast<std::size_t>(length->first)};
+							  static_cast<std::size_t>(length->first)};
 			if (auto valid = validate_utf8_text(value); !valid)
 				return unexpected(codec_error("cbor", "invalid-utf8"));
-			return std::pair{std::move(value), length->second + static_cast<std::size_t>(length->first)};
+			return std::pair{std::move(value),
+							 length->second + static_cast<std::size_t>(length->first)};
 		}
 
 		[[nodiscard]] result<std::pair<control_value, std::size_t>>
@@ -161,7 +168,7 @@ namespace cxxlens::sdk::protocol2
 					return 0U;
 				};
 				output[index] = static_cast<std::byte>((hex(digest[index * 2U]) << 4U) |
-					hex(digest[index * 2U + 1U]));
+													   hex(digest[index * 2U + 1U]));
 			}
 			return output;
 		}
@@ -179,7 +186,7 @@ namespace cxxlens::sdk::protocol2
 			T value{};
 			for (std::size_t index{}; index < sizeof(T); ++index)
 				value = static_cast<T>((static_cast<std::uint64_t>(value) << 8U) |
-					std::to_integer<std::uint64_t>(bytes[offset + index]));
+									   std::to_integer<std::uint64_t>(bytes[offset + index]));
 			return value;
 		}
 
@@ -261,10 +268,12 @@ namespace cxxlens::sdk::protocol2
 			if (!key)
 				return unexpected(std::move(key.error()));
 			offset = key->second;
-			std::vector<std::byte> encoded_key{bytes.begin() + static_cast<std::ptrdiff_t>(key_start),
-				bytes.begin() + static_cast<std::ptrdiff_t>(offset)};
-			if (!previous_key.empty() && !canonical_key_less(
-					encoded_field{previous_key, {}}, encoded_field{encoded_key, {}}))
+			std::vector<std::byte> encoded_key{bytes.begin() +
+												   static_cast<std::ptrdiff_t>(key_start),
+											   bytes.begin() + static_cast<std::ptrdiff_t>(offset)};
+			if (!previous_key.empty() &&
+				!canonical_key_less(encoded_field{previous_key, {}},
+									encoded_field{encoded_key, {}}))
 				return unexpected(codec_error("cbor", "noncanonical-map-order"));
 			previous_key = encoded_key;
 			if (!keys.insert(key->first).second)
@@ -289,8 +298,8 @@ namespace cxxlens::sdk::protocol2
 			return unexpected(codec_error("header", "length-limit"));
 		std::vector<std::byte> output;
 		output.reserve(frame_header_bytes + value.control.size() + value.payload.size());
-		for (const auto byte : std::array<std::byte, 4U>{std::byte{'C'}, std::byte{'X'}, std::byte{'X'},
-			std::byte{'P'}})
+		for (const auto byte : std::array<std::byte, 4U>{
+				 std::byte{'C'}, std::byte{'X'}, std::byte{'X'}, std::byte{'P'}})
 			output.push_back(byte);
 		append_be(output, protocol_major);
 		append_be(output, protocol_minor);
@@ -313,8 +322,8 @@ namespace cxxlens::sdk::protocol2
 	{
 		if (bytes.size() < frame_header_bytes)
 			return unexpected(codec_error("header", "truncated"));
-		if (bytes[0] != std::byte{'C'} || bytes[1] != std::byte{'X'} || bytes[2] != std::byte{'X'} ||
-			bytes[3] != std::byte{'P'})
+		if (bytes[0] != std::byte{'C'} || bytes[1] != std::byte{'X'} ||
+			bytes[2] != std::byte{'X'} || bytes[3] != std::byte{'P'})
 			return unexpected(codec_error("header", "magic"));
 		if (read_be<std::uint16_t>(bytes, 4U) != protocol_major ||
 			read_be<std::uint16_t>(bytes, 6U) != protocol_minor)
@@ -324,11 +333,13 @@ namespace cxxlens::sdk::protocol2
 			return unexpected(codec_error("header", "reserved-flags"));
 		const auto control_size = read_be<std::uint32_t>(bytes, 28U);
 		const auto payload_size = read_be<std::uint64_t>(bytes, 32U);
-		if (control_size > negotiated.max_control_bytes || payload_size > negotiated.max_payload_bytes)
+		if (control_size > negotiated.max_control_bytes ||
+			payload_size > negotiated.max_payload_bytes)
 			return unexpected(codec_error("header", "length-limit"));
 		if (payload_size > std::numeric_limits<std::size_t>::max() - control_size ||
 			frame_header_bytes + static_cast<std::size_t>(control_size) +
-				static_cast<std::size_t>(payload_size) != bytes.size())
+					static_cast<std::size_t>(payload_size) !=
+				bytes.size())
 			return unexpected(codec_error("header", "frame-length"));
 		const auto stream_id = read_be<std::uint64_t>(bytes, 12U);
 		if (stream_id == 0U)
@@ -337,9 +348,11 @@ namespace cxxlens::sdk::protocol2
 		const auto payload = bytes.subspan(frame_header_bytes + control_size, payload_size);
 		const auto expected_control_digest = digest_bytes(content_digest(control));
 		const auto expected_payload_digest = digest_bytes(content_digest(payload));
-		if (!std::equal(expected_control_digest.begin(), expected_control_digest.end(), bytes.begin() + 40))
+		if (!std::equal(
+				expected_control_digest.begin(), expected_control_digest.end(), bytes.begin() + 40))
 			return unexpected(codec_error("header", "control-checksum"));
-		if (!std::equal(expected_payload_digest.begin(), expected_payload_digest.end(), bytes.begin() + 72))
+		if (!std::equal(
+				expected_payload_digest.begin(), expected_payload_digest.end(), bytes.begin() + 72))
 			return unexpected(codec_error("header", "payload-checksum"));
 		frame output;
 		output.type = static_cast<message_type>(read_be<std::uint16_t>(bytes, 8U));
@@ -352,7 +365,7 @@ namespace cxxlens::sdk::protocol2
 	}
 
 	result<std::string> control_text(const std::vector<control_field>& fields,
-		const std::string_view key)
+									 const std::string_view key)
 	{
 		for (const auto& field : fields)
 			if (field.key == key)
@@ -362,7 +375,7 @@ namespace cxxlens::sdk::protocol2
 	}
 
 	result<std::uint64_t> control_uint(const std::vector<control_field>& fields,
-		const std::string_view key)
+									   const std::string_view key)
 	{
 		for (const auto& field : fields)
 			if (field.key == key)

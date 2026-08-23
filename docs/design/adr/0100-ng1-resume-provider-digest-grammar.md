@@ -2,10 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-08-15
-- Decision owner: steward.ng-provider-runtime
-- Decision issue: #243
-- Implementation issue: #183
-- Design feedback: DF-0243
 - Amends: ADR 0099, ADR 0016
 
 ## Context

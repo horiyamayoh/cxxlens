@@ -1,0 +1,164 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.provider-protocol.v2
+title: cxxlens Provider Protocol 2.0 contract
+type: object
+additionalProperties: false
+required:
+  - schema
+  - document_version
+  - maturity
+  - authority
+  - compatibility
+  - wire
+  - message_types
+  - state_machine_validation
+  - capabilities
+  - request_task
+  - source_closure_transport
+  - ng1
+  - product_boundary
+properties:
+  schema:
+    const: cxxlens.provider-protocol.v2
+  document_version:
+    const: 2.0.0
+  maturity:
+    const: accepted-for-implementation
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, decision_adr]
+    properties:
+      design:
+        const: docs/design/cxxlens_next_generation_integrated_design_ja.md#18-provider-protocol
+      decision_adr:
+        const: docs/design/adr/0107-provider-protocol-2-cutover.md
+  compatibility:
+    type: object
+    additionalProperties: false
+    required:
+      - version_axis
+      - protocol_major
+      - protocol_minor
+      - accepted_major
+      - accepted_minor
+      - downgrade
+      - implicit_downgrade
+      - legacy_protocol_1
+      - legacy_request_2_1_task_v3
+      - implementation_identity
+      - product_content_digest
+    properties:
+      version_axis: {const: provider-protocol}
+      protocol_major: {const: 2}
+      protocol_minor: {const: 0}
+      accepted_major: {const: 2}
+      accepted_minor: {const: 0}
+      downgrade: {const: reject}
+      implicit_downgrade: {const: forbidden}
+      legacy_protocol_1: {const: rejected-before-payload}
+      legacy_request_2_1_task_v3: {const: rejected-before-payload}
+      implementation_identity: {const: product-artifact-only}
+      product_content_digest: {const: retained}
+  wire:
+    type: object
+    required: [magic_ascii, fixed_header_bytes, limits, control_encoding]
+    properties:
+      magic_ascii: {const: CXXP}
+      fixed_header_bytes: {const: 104}
+      limits: {type: object}
+      control_encoding: {type: object}
+    additionalProperties: true
+  message_types:
+    type: object
+  state_machine_validation:
+    type: object
+    additionalProperties: false
+    required:
+      - validator_bypass
+      - implementation
+      - consumers
+      - modes
+      - logical_author_state
+      - fault_injection
+      - reason_parity
+      - terminal_verdict
+      - initial_order
+      - exact_bindings
+      - success_preconditions
+      - deterministic_rejections
+    properties:
+      validator_bypass: {const: forbidden}
+      implementation: {const: single-shared-typed-validator}
+      consumers:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {type: string}
+      modes:
+        type: object
+        additionalProperties: false
+        required: [process, logical]
+        properties:
+          process: {const: full-hello-schema-task-handshake}
+          logical: {const: task-accepted-onward-same-state-machine}
+      logical_author_state:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {type: string}
+      fault_injection: {type: string, minLength: 1}
+      reason_parity: {type: string, minLength: 1}
+      terminal_verdict:
+        type: object
+        additionalProperties: false
+        required:
+          - success_source
+          - task_failed_reason
+          - provider_success_in_task_failed
+          - unknown_reason
+        properties:
+          success_source: {const: validated-task-complete-only}
+          task_failed_reason: {const: registered-non-success-provider-terminal-only}
+          provider_success_in_task_failed: {const: reject-as-provider.schema-invalid}
+          unknown_reason: {const: reject-as-provider.schema-invalid}
+      initial_order:
+        const: [hello, schema_negotiate, task_accepted]
+      exact_bindings:
+        type: object
+        additionalProperties: false
+        required: [hello, task_accepted, batch_begin, column_chunk, batch_end, task_complete, task_failed]
+        properties:
+          hello: {$ref: '#/$defs/non_empty_string_list'}
+          task_accepted: {$ref: '#/$defs/non_empty_string_list'}
+          batch_begin: {$ref: '#/$defs/non_empty_string_list'}
+          column_chunk: {$ref: '#/$defs/non_empty_string_list'}
+          batch_end: {$ref: '#/$defs/non_empty_string_list'}
+          task_complete: {$ref: '#/$defs/non_empty_string_list'}
+          task_failed: {$ref: '#/$defs/non_empty_string_list'}
+      success_preconditions:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {type: string}
+      deterministic_rejections:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {type: string}
+  capabilities:
+    type: object
+  request_task:
+    type: object
+  source_closure_transport:
+    type: object
+  ng1:
+    type: object
+  product_boundary:
+    type: object
+$defs:
+  non_empty_string_list:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {type: string, minLength: 1}

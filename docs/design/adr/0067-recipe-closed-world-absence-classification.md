@@ -2,8 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-18
-- Decision owner: recipes
-- Decision issue: #136
 - Depends on: ADR 0021, ADR 0047, ADR 0060, ADR 0066
 
 ## Context

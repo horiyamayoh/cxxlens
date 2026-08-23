@@ -1,8 +1,8 @@
-#include "sqlite_wave3_exact_empty_classifier_internal.hpp"
-
 #include <cstddef>
 #include <iostream>
 #include <stdexcept>
+
+#include "sqlite_wave3_exact_empty_classifier_internal.hpp"
 
 namespace
 {
@@ -11,16 +11,16 @@ namespace
 	sqlite_wave3_exact_empty_observation base()
 	{
 		return {true,
-			true,
-			true,
-			true,
-			sqlite_wave3_empty_main_form::pre,
-			sqlite_wave3_empty_wal_state::absent,
-			sqlite_wave3_empty_journal_state::absent,
-			false,
-			false,
-			true,
-			true};
+				true,
+				true,
+				true,
+				sqlite_wave3_empty_main_form::pre,
+				sqlite_wave3_empty_wal_state::absent,
+				sqlite_wave3_empty_journal_state::absent,
+				false,
+				false,
+				true,
+				true};
 	}
 
 	void require(const bool condition, const char* message)
@@ -31,8 +31,8 @@ namespace
 		}
 	}
 
-	sqlite_wave3_exact_empty_classification classify(
-		const sqlite_wave3_exact_empty_observation& observation)
+	sqlite_wave3_exact_empty_classification
+	classify(const sqlite_wave3_exact_empty_observation& observation)
 	{
 		auto result = classify_sqlite_wave3_exact_empty(observation);
 		require(result.has_value(), "expected exact-empty family was rejected");
@@ -40,61 +40,69 @@ namespace
 	}
 
 	void require_family(const sqlite_wave3_exact_empty_observation& observation,
-		const sqlite_wave3_exact_empty_family family,
-		const sqlite_wave3_exact_empty_route route)
+						const sqlite_wave3_exact_empty_family family,
+						const sqlite_wave3_exact_empty_route route)
 	{
 		const auto value = classify(observation);
 		require(value.family == family && value.route == route && value.exact_empty &&
-			value.logical_read_receipt_required && !value.effect_profile_capability,
-			"family route or capability boundary is wrong");
+					value.logical_read_receipt_required && !value.effect_profile_capability,
+				"family route or capability boundary is wrong");
 	}
 
 	void test_seven_family_partition()
 	{
-		require_family(base(), sqlite_wave3_exact_empty_family::f0,
-			sqlite_wave3_exact_empty_route::live_receipted_normalizer);
+		require_family(base(),
+					   sqlite_wave3_exact_empty_family::f0,
+					   sqlite_wave3_exact_empty_route::live_receipted_normalizer);
 
 		auto fz_pre = base();
 		fz_pre.wal = sqlite_wave3_empty_wal_state::size_zero;
-		require_family(fz_pre, sqlite_wave3_exact_empty_family::fz_pre,
-			sqlite_wave3_exact_empty_route::live_receipted_normalizer);
+		require_family(fz_pre,
+					   sqlite_wave3_exact_empty_family::fz_pre,
+					   sqlite_wave3_exact_empty_route::live_receipted_normalizer);
 
 		auto fz_post = fz_pre;
 		fz_post.main_form = sqlite_wave3_empty_main_form::post;
-		require_family(fz_post, sqlite_wave3_exact_empty_family::fz_post,
-			sqlite_wave3_exact_empty_route::fresh_anchor_only);
+		require_family(fz_post,
+					   sqlite_wave3_exact_empty_family::fz_post,
+					   sqlite_wave3_exact_empty_route::fresh_anchor_only);
 
 		auto fp = base();
 		fp.journal = sqlite_wave3_empty_journal_state::nonhot_prefix;
-		require_family(fp, sqlite_wave3_exact_empty_family::fp,
-			sqlite_wave3_exact_empty_route::cleanup_then_revalidate_f0);
+		require_family(fp,
+					   sqlite_wave3_exact_empty_family::fp,
+					   sqlite_wave3_exact_empty_route::cleanup_then_revalidate_f0);
 
 		auto fh = base();
 		fh.journal = sqlite_wave3_empty_journal_state::hot_exact_preimages;
-		require_family(fh, sqlite_wave3_exact_empty_family::fh,
-			sqlite_wave3_exact_empty_route::cleanup_then_revalidate_f0);
+		require_family(fh,
+					   sqlite_wave3_exact_empty_family::fh,
+					   sqlite_wave3_exact_empty_route::cleanup_then_revalidate_f0);
 		fh.main_form = sqlite_wave3_empty_main_form::post;
-		require_family(fh, sqlite_wave3_exact_empty_family::fh,
-			sqlite_wave3_exact_empty_route::cleanup_then_revalidate_f0);
+		require_family(fh,
+					   sqlite_wave3_exact_empty_family::fh,
+					   sqlite_wave3_exact_empty_route::cleanup_then_revalidate_f0);
 
 		auto fi = base();
 		fi.main_form = sqlite_wave3_empty_main_form::post;
 		fi.journal = sqlite_wave3_empty_journal_state::invalidated_exact_post;
-		require_family(fi, sqlite_wave3_exact_empty_family::fi,
-			sqlite_wave3_exact_empty_route::fresh_anchor_only);
+		require_family(fi,
+					   sqlite_wave3_exact_empty_family::fi,
+					   sqlite_wave3_exact_empty_route::fresh_anchor_only);
 
 		auto fo = base();
 		fo.main_form = sqlite_wave3_empty_main_form::post;
-		require_family(fo, sqlite_wave3_exact_empty_family::fo,
-			sqlite_wave3_exact_empty_route::fresh_anchor_only);
-}
+		require_family(fo,
+					   sqlite_wave3_exact_empty_family::fo,
+					   sqlite_wave3_exact_empty_route::fresh_anchor_only);
+	}
 
 	void require_rejected(const sqlite_wave3_exact_empty_observation& observation,
-		const char* expected_detail)
+						  const char* expected_detail)
 	{
 		auto result = classify_sqlite_wave3_exact_empty(observation);
 		require(!result && result.error().detail == expected_detail,
-			"invalid exact-empty combination was admitted");
+				"invalid exact-empty combination was admitted");
 	}
 
 	void test_negative_partition()
@@ -145,8 +153,8 @@ namespace
 		for (int count = 0; count != 10000; ++count)
 		{
 			require(classify(observation).family == expected.family &&
-				classify(observation).route == expected.route,
-				"classifier result is not deterministic");
+						classify(observation).route == expected.route,
+					"classifier result is not deterministic");
 		}
 	}
 } // namespace

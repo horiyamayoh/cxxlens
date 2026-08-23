@@ -20,39 +20,35 @@ namespace cxxlens::sdk
 			return unexpected(classifier_error(detail));
 		}
 
-		[[nodiscard]] sqlite_wave3_exact_empty_classification live(
-			const sqlite_wave3_exact_empty_family family)
+		[[nodiscard]] sqlite_wave3_exact_empty_classification
+		live(const sqlite_wave3_exact_empty_family family)
 		{
 			return {family,
-				sqlite_wave3_exact_empty_route::live_receipted_normalizer,
-				true,
-				true,
-				false};
+					sqlite_wave3_exact_empty_route::live_receipted_normalizer,
+					true,
+					true,
+					false};
 		}
 
-		[[nodiscard]] sqlite_wave3_exact_empty_classification cleanup(
-			const sqlite_wave3_exact_empty_family family)
+		[[nodiscard]] sqlite_wave3_exact_empty_classification
+		cleanup(const sqlite_wave3_exact_empty_family family)
 		{
 			return {family,
-				sqlite_wave3_exact_empty_route::cleanup_then_revalidate_f0,
-				true,
-				true,
-				false};
+					sqlite_wave3_exact_empty_route::cleanup_then_revalidate_f0,
+					true,
+					true,
+					false};
 		}
 
-		[[nodiscard]] sqlite_wave3_exact_empty_classification anchor(
-			const sqlite_wave3_exact_empty_family family)
+		[[nodiscard]] sqlite_wave3_exact_empty_classification
+		anchor(const sqlite_wave3_exact_empty_family family)
 		{
-			return {family,
-				sqlite_wave3_exact_empty_route::fresh_anchor_only,
-				true,
-				true,
-				false};
+			return {family, sqlite_wave3_exact_empty_route::fresh_anchor_only, true, true, false};
 		}
 	} // namespace
 
-	result<sqlite_wave3_exact_empty_classification> classify_sqlite_wave3_exact_empty(
-		const sqlite_wave3_exact_empty_observation& observation)
+	result<sqlite_wave3_exact_empty_classification>
+	classify_sqlite_wave3_exact_empty(const sqlite_wave3_exact_empty_observation& observation)
 	{
 		if (!observation.main_present || !observation.main_regular ||
 			!observation.main_identity_valid)
@@ -99,18 +95,19 @@ namespace cxxlens::sdk
 				return reject("zero-wal-journal-mixed");
 			}
 			return observation.main_form == sqlite_wave3_empty_main_form::pre
-				? result<sqlite_wave3_exact_empty_classification>{
-					{sqlite_wave3_exact_empty_family::fz_pre,
-					 sqlite_wave3_exact_empty_route::live_receipted_normalizer,
-					 true,
-					 true,
-					 false}}
+				? result<sqlite_wave3_exact_empty_classification>{{sqlite_wave3_exact_empty_family::
+																	   fz_pre,
+																   sqlite_wave3_exact_empty_route::
+																	   live_receipted_normalizer,
+																   true,
+																   true,
+																   false}}
 				: result<sqlite_wave3_exact_empty_classification>{
-					{sqlite_wave3_exact_empty_family::fz_post,
-					 sqlite_wave3_exact_empty_route::fresh_anchor_only,
-					 true,
-					 true,
-					 false}};
+					  {sqlite_wave3_exact_empty_family::fz_post,
+					   sqlite_wave3_exact_empty_route::fresh_anchor_only,
+					   true,
+					   true,
+					   false}};
 		}
 
 		if (observation.wal != sqlite_wave3_empty_wal_state::absent)
@@ -119,28 +116,28 @@ namespace cxxlens::sdk
 		}
 		switch (observation.journal)
 		{
-		case sqlite_wave3_empty_journal_state::absent:
-			return observation.main_form == sqlite_wave3_empty_main_form::pre
-				? result<sqlite_wave3_exact_empty_classification>{live(
-					  sqlite_wave3_exact_empty_family::f0)}
-				: result<sqlite_wave3_exact_empty_classification>{anchor(
-					  sqlite_wave3_exact_empty_family::fo)};
-		case sqlite_wave3_empty_journal_state::nonhot_prefix:
-			if (observation.main_form != sqlite_wave3_empty_main_form::pre)
-			{
-				return reject("nonhot-journal-post-form");
-			}
-			return cleanup(sqlite_wave3_exact_empty_family::fp);
-		case sqlite_wave3_empty_journal_state::hot_exact_preimages:
-			return cleanup(sqlite_wave3_exact_empty_family::fh);
-		case sqlite_wave3_empty_journal_state::invalidated_exact_post:
-			if (observation.main_form != sqlite_wave3_empty_main_form::post)
-			{
-				return reject("invalidated-journal-pre-form");
-			}
-			return anchor(sqlite_wave3_exact_empty_family::fi);
-		case sqlite_wave3_empty_journal_state::invalid:
-			return reject("sidecar-state-invalid");
+			case sqlite_wave3_empty_journal_state::absent:
+				return observation.main_form == sqlite_wave3_empty_main_form::pre
+					? result<sqlite_wave3_exact_empty_classification>{live(
+						  sqlite_wave3_exact_empty_family::f0)}
+					: result<sqlite_wave3_exact_empty_classification>{
+						  anchor(sqlite_wave3_exact_empty_family::fo)};
+			case sqlite_wave3_empty_journal_state::nonhot_prefix:
+				if (observation.main_form != sqlite_wave3_empty_main_form::pre)
+				{
+					return reject("nonhot-journal-post-form");
+				}
+				return cleanup(sqlite_wave3_exact_empty_family::fp);
+			case sqlite_wave3_empty_journal_state::hot_exact_preimages:
+				return cleanup(sqlite_wave3_exact_empty_family::fh);
+			case sqlite_wave3_empty_journal_state::invalidated_exact_post:
+				if (observation.main_form != sqlite_wave3_empty_main_form::post)
+				{
+					return reject("invalidated-journal-pre-form");
+				}
+				return anchor(sqlite_wave3_exact_empty_family::fi);
+			case sqlite_wave3_empty_journal_state::invalid:
+				return reject("sidecar-state-invalid");
 		}
 		return reject("classifier-state-invalid");
 	}

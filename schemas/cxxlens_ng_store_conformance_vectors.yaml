@@ -1,7 +1,6 @@
 schema: cxxlens.store-conformance-vectors.v1
 document_version: 1.0.0
 authority:
-  owner_issue: '#63'
   decision_adr: docs/design/adr/0009-snapshot-identity-publication-series.md
 contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
 vectors:

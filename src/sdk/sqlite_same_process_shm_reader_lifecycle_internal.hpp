@@ -8,8 +8,7 @@
 namespace cxxlens::sdk::detail
 {
 	/**
-	 * The #201 outer zero-effect read success phases in the proposed, production-inactive
-	 * state-only graph.
+	 * The #201 outer zero-effect read success phases in the source-private state-only graph.
 	 *
 	 * This vocabulary mirrors the current Proposed ADR 0104 / DF-0201 state-and-test scope.  The
 	 * #205 mapping subprotocol or private heap WAL-index route is nested between the held WAL
@@ -102,9 +101,9 @@ namespace cxxlens::sdk::detail
 	}
 
 	/**
-	 * Validate the complete #201 outer success path in the proposed, production-inactive state-only
-	 * graph.  The path has no generic failure state: a typed failure or quarantine terminal is not
-	 * an outer logical-read receipt candidate.
+	 * Validate the complete #201 outer success path in the source-private state-only graph. The
+	 * path has no generic failure state: a typed failure or quarantine terminal is not an outer
+	 * logical-read receipt candidate.
 	 */
 	[[nodiscard]] constexpr bool validate_sqlite_shm_reader_outer_read_path(
 		const std::span<const sqlite_shm_reader_outer_read_phase> path) noexcept

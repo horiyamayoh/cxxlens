@@ -24,55 +24,40 @@ namespace cxxlens::detail::clang22::materialization
 		using report_partition_consumer =
 			std::function<sdk::result<void>(const materialization_claim_partition&)>;
 
-		/**
-		 * Uniform private report view. The resident claims object is deliberately accepted only as
-		 * a qualification/reference view; production uses replayable bounded source callbacks.
-		 */
+		/** Uniform private report view over the bounded replayable production claim source. */
 		class claim_report_source final
 		{
 		  public:
-			claim_report_source(const sealed_materialization_claims* claims,
-								materialization_bounded_claim_source* bounded) noexcept
-				: claims_{claims}, bounded_{bounded}
+			explicit claim_report_source(materialization_bounded_claim_source* bounded) noexcept
+				: bounded_{bounded}
 			{
 			}
 
 			[[nodiscard]] bool valid() const noexcept
 			{
-				return (claims_ != nullptr) != (bounded_ != nullptr);
+				return bounded_ != nullptr;
 			}
 
 			[[nodiscard]] std::string_view materializer_semantics_digest() const noexcept
 			{
-				return claims_ != nullptr ? claims_->materializer_semantics_digest()
-										  : bounded_->materializer_semantics_digest();
+				return bounded_->materializer_semantics_digest();
 			}
 			[[nodiscard]] std::string_view direct_basis_digest() const noexcept
 			{
-				return claims_ != nullptr ? claims_->direct_basis_digest()
-										  : bounded_->direct_basis_digest();
+				return bounded_->direct_basis_digest();
 			}
 			[[nodiscard]] std::string_view canonical_adoption_transform_digest() const noexcept
 			{
-				return claims_ != nullptr ? claims_->canonical_adoption_transform_digest()
-										  : bounded_->canonical_adoption_transform_digest();
+				return bounded_->canonical_adoption_transform_digest();
 			}
 			[[nodiscard]] std::string_view base_ingestion_transform_digest() const noexcept
 			{
-				return claims_ != nullptr ? claims_->base_ingestion_transform_digest()
-										  : bounded_->base_ingestion_transform_digest();
+				return bounded_->base_ingestion_transform_digest();
 			}
 
 			[[nodiscard]] sdk::result<void>
 			replay_claim_envelopes(const materialization_claim_envelope_consumer& consumer)
 			{
-				if (claims_ != nullptr)
-				{
-					for (const auto& value : claims_->claim_envelopes())
-						if (auto consumed = consumer(value); !consumed)
-							return consumed;
-					return {};
-				}
 				return bounded_ == nullptr
 					? sdk::result<void>{sdk::error{
 						  "materialization.report-invalid", "claims", "missing"}}
@@ -82,13 +67,6 @@ namespace cxxlens::detail::clang22::materialization
 			[[nodiscard]] sdk::result<void> replay_canonicalization_edges(
 				const materialization_canonicalization_edge_consumer& consumer)
 			{
-				if (claims_ != nullptr)
-				{
-					for (const auto& value : claims_->canonicalization_edges())
-						if (auto consumed = consumer(value); !consumed)
-							return consumed;
-					return {};
-				}
 				return bounded_ == nullptr
 					? sdk::result<void>{sdk::error{
 						  "materialization.report-invalid", "claims", "missing"}}
@@ -98,13 +76,6 @@ namespace cxxlens::detail::clang22::materialization
 			[[nodiscard]] sdk::result<void>
 			replay_origin_associations(const materialization_origin_association_consumer& consumer)
 			{
-				if (claims_ != nullptr)
-				{
-					for (const auto& value : claims_->origin_associations())
-						if (auto consumed = consumer(value); !consumed)
-							return consumed;
-					return {};
-				}
 				return bounded_ == nullptr
 					? sdk::result<void>{sdk::error{
 						  "materialization.report-invalid", "claims", "missing"}}
@@ -115,13 +86,6 @@ namespace cxxlens::detail::clang22::materialization
 			replay_partitions(const sdk::relation_engine& engine,
 							  const report_partition_consumer& consumer)
 			{
-				if (claims_ != nullptr)
-				{
-					for (const auto& partition : claims_->partitions())
-						if (auto consumed = consumer(partition); !consumed)
-							return consumed;
-					return {};
-				}
 				if (bounded_ == nullptr)
 					return sdk::unexpected({"materialization.report-invalid", "claims", "missing"});
 				return bounded_->replay(
@@ -160,17 +124,6 @@ namespace cxxlens::detail::clang22::materialization
 
 			[[nodiscard]] sdk::result<claim_batch_status> status()
 			{
-				if (claims_ != nullptr)
-				{
-					const auto& batch = claims_->final_claim_batch();
-					return claim_batch_status{
-						batch.content_digest,
-						static_cast<std::uint64_t>(batch.claims.size()),
-						static_cast<std::uint64_t>(batch.unresolved.size()),
-						static_cast<std::uint64_t>(batch.conflicts.size()),
-						static_cast<std::uint64_t>(batch.differential_disagreements.size()),
-						claims_->partitions().size()};
-				}
 				if (bounded_ == nullptr)
 					return sdk::unexpected({"materialization.report-invalid", "claims", "missing"});
 				auto status = bounded_->claim_batch_status();
@@ -180,7 +133,6 @@ namespace cxxlens::detail::clang22::materialization
 			}
 
 		  private:
-			const sealed_materialization_claims* claims_{};
 			materialization_bounded_claim_source* bounded_{};
 		};
 
@@ -5120,9 +5072,8 @@ namespace cxxlens::detail::clang22::materialization
 		issued_capability_ = std::make_unique<issued_capability>();
 	}
 
-#if defined(CXXLENS_CLANG22_MATERIALIZATION_REPORT_TESTING)
 	public_materialization_prepublication_projection
-	public_materialization_prepublication_projection::make_for_testing(
+	public_materialization_prepublication_projection::make_prepublication_projection(
 		std::string binding_digest,
 		std::string request_digest,
 		std::string semantic_request_digest,
@@ -5144,7 +5095,6 @@ namespace cxxlens::detail::clang22::materialization
 			projection.issue_capability();
 		return projection;
 	}
-#endif
 
 	sdk::result<public_materialization_capacity_reservation>
 	check_public_materialization_capacity_reservation(
@@ -5350,8 +5300,7 @@ namespace cxxlens::detail::clang22::materialization
 		{
 			if (input.request == nullptr || input.request_globals == nullptr ||
 				input.raw_input == nullptr || input.occurrence_manifest == nullptr ||
-				input.occurrence_receipt == nullptr ||
-				(input.claims == nullptr && input.bounded_claims == nullptr) ||
+				input.occurrence_receipt == nullptr || input.bounded_claims == nullptr ||
 				(input.task_reports != nullptr && input.task_report_spool != nullptr) ||
 				input.generated_at.empty() || !generated_at_is_closed_utc(input.generated_at))
 				return sdk::unexpected(
@@ -5366,10 +5315,9 @@ namespace cxxlens::detail::clang22::materialization
 											"publication-dependent-input"});
 
 			const auto& request = input.request->request();
-			claim_report_source claims{input.claims, input.bounded_claims};
+			claim_report_source claims{input.bounded_claims};
 			if (!claims.valid())
-				return sdk::unexpected(
-					{"materialization.report-invalid", "claims", "exactly-one-source-required"});
+				return sdk::unexpected({"materialization.report-invalid", "claims", "missing"});
 			auto claim_status = claims.status();
 			if (!claim_status || claim_status->content_digest.empty() ||
 				claim_status->unresolved_count != 0U || claim_status->conflict_count != 0U ||
@@ -5631,7 +5579,7 @@ namespace cxxlens::detail::clang22::materialization
 			missing.emplace_back("installation.manifest");
 		if (input.occurrence_receipt == nullptr)
 			missing.emplace_back("installation.receipt");
-		if (input.claims == nullptr && input.bounded_claims == nullptr)
+		if (input.bounded_claims == nullptr)
 			missing.emplace_back("claims");
 		if (input.store == nullptr)
 			missing.emplace_back("store.observation");
@@ -5660,8 +5608,7 @@ namespace cxxlens::detail::clang22::materialization
 				  (name == "task_results" || name == "adoption" || name == "span_validation" ||
 				   name == "base_claims" || name == "side_channels" || name == "claim_stages" ||
 				   name == "provenance")) &&
-				!((input.claims != nullptr || input.bounded_claims != nullptr) &&
-				  input.store != nullptr &&
+				!(input.bounded_claims != nullptr && input.store != nullptr &&
 				  (name == "store" || name == "publication" || name == "semantic_verification")) &&
 				!(name == "authority_digests" && input.occurrence_receipt != nullptr))
 				missing.emplace_back(std::string{name});
@@ -5723,13 +5670,13 @@ namespace cxxlens::detail::clang22::materialization
 		const auto& request = input.request->request();
 		const auto& tool = request.tool();
 		const auto& worker = request.worker();
-		claim_report_source claims{input.claims, input.bounded_claims};
+		claim_report_source claims{input.bounded_claims};
 		if (!claims.valid())
 			return sdk::unexpected(
 				report_error({public_materialization_report_error_kind::invalid_projection,
 							  {},
 							  "claims",
-							  "exactly-one-source-required"}));
+							  "missing"}));
 		auto claim_status = claims.status();
 		if (!claim_status || claim_status->content_digest.empty() ||
 			claim_status->unresolved_count != 0U || claim_status->conflict_count != 0U ||

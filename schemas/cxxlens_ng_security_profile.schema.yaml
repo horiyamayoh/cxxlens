@@ -26,12 +26,11 @@ properties:
   authority:
     type: object
     additionalProperties: false
-    required: [design, index, decision_adr, owner_issue, owner]
+    required: [design, index, decision_adr, owner]
     properties:
       design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
       index: {const: docs/design/catalogs/README.md}
       decision_adr: {const: docs/design/adr/0087-provider-budget-surface-parity.md}
-      owner_issue: {const: '#151'}
       owner: {const: steward.ng-security}
   registries:
     type: object

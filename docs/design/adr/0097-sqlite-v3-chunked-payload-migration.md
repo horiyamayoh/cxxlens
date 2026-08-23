@@ -2,12 +2,9 @@
 
 - Status: Accepted
 - Date: 2026-07-21
-- Decision owner: store-kernel
-- Decision issue: #200
-- Implementation issue: #181
 - Amends: ADR 0013, ADR 0096 D6
-- Runtime amendments: #202 (isolated normalization), #205 (same-process mapping),
-  #206 (native attachment), and #208 (writer gate outcome)
+- Runtime amendments: isolated normalization, same-process mapping, native attachment,
+  and writer gate outcome contracts
 
 ## Context
 
@@ -17,9 +14,9 @@ canonical export、query projection を得ることを要求する。SQLite phys
 canonical payload 全体を一つの BLOB row に置くため、qualified runtime の
 `SQLITE_LIMIT_LENGTH = 1,000,000,000` を越える有効な canonical-v5 payload を保存できない。
 この物理上限を public request cap として転用したり parity を弱めたりすることは、accepted
-request/report 2.1 と DF-0200 の retained-memory guarantee を変更してしまう。
+request 2.2/report 2.1 と retained-memory guarantee を変更してしまう。
 
-2026-07-21 に Issue #200 で Option A が fresh decision として選択された。本 ADR はその決定を
+2026-07-21 に この契約で Option A が fresh decision として選択された。本 ADR はその決定を
 physical Store contract に昇格し、logical payload、semantic identity、public callable を変えずに
 SQLite の単一 BLOB ceiling を除く。
 
@@ -30,7 +27,7 @@ SQLite の単一 BLOB ceiling を除く。
 current physical format は `cxxlens.sqlite-semantic-store.v3` / `3.0.0` とし、新規または空の
 database は v3 を作る。semantic payload は引き続き
 `cxxlens.ng-snapshot-payload.v5` の byte-exact canonical stream であり、v1〜v5 の既存 readable
-payload policy、snapshot/publication/claim identity、canonical export、request/report 2.1、public
+payload policy、snapshot/publication/claim identity、canonical export、request 2.2/report 2.1、public
 C++ signature、result/cursor lifetime、accepted request set は変えない。physical format と chunk
 layout は semantic snapshot ID から除外する。
 
@@ -204,7 +201,7 @@ OK→READONLY projection は production `qualified_source_shm_map_route` の exa
 
 ##### Writer native attachment grouping
 
-Issue #206 / DF-0206 は、上記 accepted authority の `holder` と SQLite の native SHM attachment の
+この契約は、上記 accepted authority の `holder` と SQLite の native SHM attachment の
 cardinality が未定義であることを記録する。SQLite Unix VFS は一つの `sqlite3_file` から複数 region の
 `xShmMap` を完了できる一方、`xShmUnmap` はその connection の complete SHM attachment を一回で外す。
 map callback ごとに cleanup holder を作り、各 holder に別の native unmap を要求する実装は、
@@ -530,8 +527,7 @@ native-only member censusとorthogonal attachment/close authority、coverage対e
 unresolved fenceとexact cancellation/late-resolution lineage、21-row dispatch totality/precedence、
 empty-positive first exact claim、close-only/unmap-then-close、live-positive carve-outを含むDF-0206
 cleanup-only lifetime、reader transitivity、production self-authorizationをpositive/negative双方で
-直接反証する。runtime receipt の canonical typed bytes が authority であり、repository-operation
-metadata は authority ではない。
+直接反証する。runtime receipt の canonical typed bytes が authority である。
 
 lease は二段階で構築する。owned current-v3 writer の native `xShmMap` delegation前に保持できるのは
 callback-localなnon-authoritative attempt/pre-map receipt、generationまたはfirst-writer cohortの
@@ -1218,7 +1214,7 @@ finalize/一回closeを試み、close OKならsole DBを破棄、non-OKならcon
 
 Release の可否は release workflow が実行する memory/SQLite、static/shared、cold-reopen、chunk、
 limit、migration の positive・negative・fault test の exit status だけで判定する。repository は
-qualification report、exact revision/tree、report-set digest、測定 JSON を生成・保存しない。
+追加の完了報告、exact revision/tree の記録、report-set digest、測定 JSON を生成・保存しない。
 
 ## Consequences
 

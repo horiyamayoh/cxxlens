@@ -63,7 +63,8 @@ _cxxlens_occurrence_append(
 )
 _cxxlens_occurrence_append(
   provider-protocol
-  "@CMAKE_INSTALL_DATADIR@/cxxlens/schemas/cxxlens_ng_provider_protocol.yaml")
+  "@CMAKE_INSTALL_DATADIR@/cxxlens/schemas/cxxlens_ng_provider_protocol_v2.yaml"
+)
 _cxxlens_occurrence_append(
   provider-runtime-contract
   "@CMAKE_INSTALL_DATADIR@/cxxlens/schemas/cxxlens_ng_provider_runtime_contract.yaml"
@@ -86,7 +87,7 @@ _cxxlens_occurrence_append(
 )
 _cxxlens_occurrence_append(
   materialization-request-schema
-  "@CMAKE_INSTALL_DATADIR@/cxxlens/schemas/cxxlens_ng_clang22_materialization_request.schema.yaml"
+  "@CMAKE_INSTALL_DATADIR@/cxxlens/schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml"
 )
 _cxxlens_occurrence_append(
   materialization-report-schema

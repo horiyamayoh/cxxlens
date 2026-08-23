@@ -98,7 +98,7 @@ $defs:
       - {$ref: '#/$defs/file'}
       - properties:
           role: {const: provider-protocol}
-          path: {const: share/cxxlens/schemas/cxxlens_ng_provider_protocol.yaml}
+          path: {const: share/cxxlens/schemas/cxxlens_ng_provider_protocol_v2.yaml}
         required: [role, path]
   provider_runtime_contract:
     allOf:
@@ -140,7 +140,7 @@ $defs:
       - {$ref: '#/$defs/file'}
       - properties:
           role: {const: materialization-request-schema}
-          path: {const: share/cxxlens/schemas/cxxlens_ng_clang22_materialization_request.schema.yaml}
+          path: {const: share/cxxlens/schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml}
         required: [role, path]
   materialization_report_schema:
     allOf:

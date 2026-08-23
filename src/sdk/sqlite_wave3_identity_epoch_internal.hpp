@@ -61,9 +61,9 @@ namespace cxxlens::sdk
 	validate_sqlite_wave3_identity(const sqlite_wave3_identity_binding& binding);
 
 	/** Validate exact continuity between a previously sealed and observed tuple. */
-	[[nodiscard]] result<void> validate_sqlite_wave3_identity_continuity(
-		const sqlite_wave3_identity_binding& expected,
-		const sqlite_wave3_identity_binding& observed);
+	[[nodiscard]] result<void>
+	validate_sqlite_wave3_identity_continuity(const sqlite_wave3_identity_binding& expected,
+											  const sqlite_wave3_identity_binding& observed);
 
 	/** Monotonic lifecycle phase for one map/open epoch. */
 	enum class sqlite_wave3_epoch_phase : std::uint8_t
@@ -88,7 +88,8 @@ namespace cxxlens::sdk
 		sqlite_wave3_epoch_controller() = default;
 		~sqlite_wave3_epoch_controller() = default;
 		sqlite_wave3_epoch_controller(sqlite_wave3_epoch_controller&&) noexcept = default;
-		sqlite_wave3_epoch_controller& operator=(sqlite_wave3_epoch_controller&&) noexcept = default;
+		sqlite_wave3_epoch_controller&
+		operator=(sqlite_wave3_epoch_controller&&) noexcept = default;
 		sqlite_wave3_epoch_controller(const sqlite_wave3_epoch_controller&) = delete;
 		sqlite_wave3_epoch_controller& operator=(const sqlite_wave3_epoch_controller&) = delete;
 
@@ -98,12 +99,9 @@ namespace cxxlens::sdk
 		[[nodiscard]] const std::optional<sqlite_wave3_identity_binding>& binding() const noexcept;
 		[[nodiscard]] std::string_view quarantine_detail() const noexcept;
 
-		[[nodiscard]] result<void>
-		arm(sqlite_wave3_identity_binding binding);
-		[[nodiscard]] result<void>
-		start_native(const sqlite_wave3_identity_binding& observed);
-		[[nodiscard]] result<void>
-		seal(const sqlite_wave3_identity_binding& observed);
+		[[nodiscard]] result<void> arm(sqlite_wave3_identity_binding binding);
+		[[nodiscard]] result<void> start_native(const sqlite_wave3_identity_binding& observed);
+		[[nodiscard]] result<void> seal(const sqlite_wave3_identity_binding& observed);
 		[[nodiscard]] result<void> revoke();
 		[[nodiscard]] result<void> quarantine(std::string detail);
 

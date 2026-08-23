@@ -4,7 +4,6 @@ maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#174-provider-task
   decision_adr: docs/design/adr/0064-portable-provider-task-session-binding.md
-  owner_issue: '#122'
   owner: steward.ng-provider-runtime
 session:
   identity: [provider_id, provider_version, provider_semantic_contract_digest]

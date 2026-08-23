@@ -2,11 +2,8 @@
 
 - Status: Accepted
 - Date: 2026-07-15
-- Decision owner: schema-kernel
-- Decision issue: #60
-- Tracking issue: #56
 
-> Amendment: ADR 0009 / Issue #63 upgrades the system envelope to
+> Amendment: ADR 0009 upgrades the system envelope to
 > `cxxlens.claim-envelope.v2`. The condition authority and relation ID decisions in this
 > ADR remain accepted; producer input is now a tagged direct/derived basis.
 
@@ -62,7 +59,7 @@ symbol、required minor column、key/cardinality/condition/identity change は f
 - bootstrap の hyphenated `build.compile-unit` / `cc.call-site` は exact underscore relation 名へ置換される。
 - system envelope は通常の user projection に現れず、明示要求時だけ system column として参照できる。
 - relation descriptor digest は canonical JSON projection から計算され、conformance report に全18件を出力する。
-- provider batch、snapshot store、query runtime、public C++ generated surface の実装は後続 issue が所有する。
+- provider batch、snapshot store、query runtime、public C++ generated surface の実装は後続の contract/implementation work が所有する。
   本 ADR はそれらを実装済みとは宣言しないが、別 ID や別 call model の採用を認めない。
 - external namespace の relation 追加は core source diff ではなく、descriptor/install input の追加として扱う。
 
@@ -74,7 +71,7 @@ partition/index、merge/cardinality、system envelope、call model、evolution�
 open/closed symbol、minor evolution、external registration、call query の positive/negative vector を固定する。
 `report` mode は registry と全 descriptor の digest、および各 vector の stable decision/reason code を出力する。
 
-Issue #67 の implementation amendment により、上記 authority を消費する production C++ walking skeleton は
+この契約の implementation amendment により、上記 authority を消費する production C++ walking skeleton は
 `include/cxxlens/sdk/relation.hpp`、`include/cxxlens/sdk/claim.hpp`、`src/sdk/` に実装された。IDL compiler は
 registry schema を入力時に検証し、committed generated tag の byte-for-byte 再現性を gate する。registry は
 engine build 後に凍結され、claim identity、stage、reference、merge/conflict/differential は独立 validator と

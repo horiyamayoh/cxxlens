@@ -2,7 +2,6 @@ schema: cxxlens.provider-certification-registry.v1
 document_version: 1.0.0
 maturity: accepted
 authority:
-  owner_issue: '#65'
   decision_adr: docs/design/adr/0011-provider-trust-certification-discovery.md
   owner: steward.ng-security
 update_policy:

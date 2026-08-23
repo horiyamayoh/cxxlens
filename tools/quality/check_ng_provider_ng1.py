@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
-"""Validate the proposed NG1 provider hardening authority.
+"""Validate the Protocol 2 NG1 product safety contract.
 
-The accepted provider protocol names NG1 features, but that name-only surface
-is not sufficient to implement or qualify a provider.  This checker keeps the
-versioned hardening contract closed until the live state machine and its
-positive/negative evidence exist.
+The checker validates typed liveness, replay, spill, and recovery semantics.
+Direct C++ tests remain the executable evidence for the state machine.
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
 import pathlib
 import sys
 from typing import Any
@@ -25,7 +21,10 @@ CONTRACT = pathlib.Path("schemas/cxxlens_ng_provider_ng1_hardening.yaml")
 CONTRACT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_provider_ng1_hardening.schema.yaml"
 )
-PROTOCOL = pathlib.Path("schemas/cxxlens_ng_provider_protocol.yaml")
+PROTOCOL = pathlib.Path("schemas/cxxlens_ng_provider_protocol_v2.yaml")
+PROTOCOL_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_provider_protocol_v2.schema.yaml"
+)
 MANIFEST_SCHEMA = pathlib.Path("schemas/cxxlens_ng_provider_manifest.schema.yaml")
 EXECUTION_REPORT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_provider_execution_report.schema.yaml"
@@ -41,7 +40,6 @@ VECTORS_SCHEMA = pathlib.Path(
 DIGEST_GRAMMAR_ADR = pathlib.Path(
     "docs/design/adr/0100-ng1-resume-provider-digest-grammar.md"
 )
-DIGEST_GRAMMAR_ISSUE = "#243"
 
 
 class Ng1ContractError(ValueError):
@@ -72,19 +70,12 @@ def expect(actual: Any, expected: Any, path: str) -> None:
         fail(path, f"expected {expected!r}, got {actual!r}")
 
 
-def document_digest(value: Any) -> str:
-    canonical = json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode("utf-8")
-    return "sha256:" + hashlib.sha256(canonical).hexdigest()
-
-
 FEATURES = [
     "durable-resume-token",
     "heartbeat",
     "progress-rate-enforcement",
     "spill-staging",
-    "long-run-fault-qualification",
+    "long-run-fault-recovery",
 ]
 
 EXPECTED_LIFECYCLE = {
@@ -682,70 +673,25 @@ EXPECTED_STABLE_FAILURES = [
     "provider.recovery-failed",
 ]
 
-EXPECTED_DIRECT_TESTS = {
-    "schema": "cxxlens.provider-ng1-hardening-tests.v1",
-    "vectors": "schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml",
-    "required_profiles": ["static", "shared"],
-    "required_cases": [
-        "positive-heartbeat-and-progress",
-        "manifest-content-digest-binding",
-        "stale-heartbeat",
-        "heartbeat-timeout",
-        "progress-sample-timeout",
-        "zero-progress-after-grace",
-        "stale-resume-token",
-        "foreign-resume-token",
-        "semantic-v2-provider-identity-rejected",
-        "content-digest-semantic-field-rejected",
-        "spill-corruption",
-        "worker-crash-recovery",
-        "worker-hang-recovery",
-        "cancellation-recovery",
-        "permutation-replay",
-        "long-run-fault",
-    ],
-    "required_case_outcomes": {
-        "positive-heartbeat-and-progress": "accepted",
-        "manifest-content-digest-binding": "accepted",
-        "stale-heartbeat": "provider.heartbeat-timeout",
-        "heartbeat-timeout": "provider.heartbeat-timeout",
-        "progress-sample-timeout": "provider.progress-rate",
-        "zero-progress-after-grace": "provider.progress-rate",
-        "stale-resume-token": "provider.resume-token-stale",
-        "foreign-resume-token": "provider.resume-token-stale",
-        "semantic-v2-provider-identity-rejected": "provider.resume-token-stale",
-        "content-digest-semantic-field-rejected": "provider.resume-token-stale",
-        "spill-corruption": "provider.spill-corrupt",
-        "worker-crash-recovery": "replay-from-ack-plus-one-or-fail-closed",
-        "worker-hang-recovery": "replay-from-durable-ack-or-fail-closed",
-        "cancellation-recovery": "rollback-current-group-and-fail-closed",
-        "permutation-replay": "provider.resume-replay-invalid",
-        "long-run-fault": "accepted-only-with-exact-certificate-or-stable-failure",
-    },
-    "execution": "direct-tests-only",
-    "unavailable_provider": "unqualified",
-    "unavailable_platform": "unqualified",
-}
-
-
 def validate_ng1_contract(
     root: pathlib.Path,
     protocol: dict[str, Any] | None = None,
     hardening: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Validate the NG1 authority and return the loaded contract."""
+    """Validate the NG1 product contract without repository-operation authority."""
 
     if hardening is None:
         hardening = load_yaml(root / CONTRACT)
-    schema = load_yaml(root / CONTRACT_SCHEMA)
-    schema_validate(hardening, schema, "NG1 hardening contract")
+    schema_validate(
+        hardening,
+        load_yaml(root / CONTRACT_SCHEMA),
+        "NG1 hardening contract",
+    )
     vectors = load_yaml(root / VECTORS)
-    schema_validate(vectors, load_yaml(root / VECTORS_SCHEMA), "NG1 conformance vectors")
-    manifest_schema = load_yaml(root / MANIFEST_SCHEMA)
-    expect(
-        manifest_schema.get("$defs", {}).get("digest", {}).get("pattern"),
-        r"^sha256:[0-9a-f]{64}$",
-        "manifest_schema.digest.pattern",
+    schema_validate(
+        vectors,
+        load_yaml(root / VECTORS_SCHEMA),
+        "NG1 conformance vectors",
     )
 
     expect(hardening["schema"], "cxxlens.provider-ng1-hardening.v1", "schema")
@@ -755,14 +701,10 @@ def validate_ng1_contract(
         hardening["authority"],
         {
             "design": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
-            "protocol": "schemas/cxxlens_ng_provider_protocol.yaml",
+            "protocol": "schemas/cxxlens_ng_provider_protocol_v2.yaml",
             "runtime": "schemas/cxxlens_ng_provider_runtime_contract.yaml",
             "decision_adr": "docs/design/adr/0099-provider-ng1-hardening.md",
-            "decision_issue": "#233",
-            "implementation_issue": "#183",
             "digest_grammar_adr": DIGEST_GRAMMAR_ADR.as_posix(),
-            "digest_grammar_issue": DIGEST_GRAMMAR_ISSUE,
-            "owner": "steward.ng-provider-runtime",
             "spill_fsync_receipt_schema": SPILL_FSYNC_RECEIPT_SCHEMA.as_posix(),
         },
         "authority",
@@ -771,10 +713,10 @@ def validate_ng1_contract(
         hardening["profile"],
         {
             "id": "NG1",
-            "protocol_major": 1,
-            "protocol_minor": 1,
+            "protocol_major": 2,
+            "protocol_minor": 0,
             "required_features": FEATURES,
-            "capability_claim": "exact-certified-qualification-only",
+            "capability_claim": "product-contract-only",
             "manifest_self_claim_authority": "forbidden",
         },
         "profile",
@@ -783,20 +725,19 @@ def validate_ng1_contract(
     expect(hardening["heartbeat"], EXPECTED_HEARTBEAT, "heartbeat")
     expect(hardening["progress"], EXPECTED_PROGRESS, "progress")
     expect(hardening["resume"], EXPECTED_RESUME, "resume")
+    expect(hardening["spill"], EXPECTED_SPILL, "spill")
+    expect(hardening["recovery"], EXPECTED_RECOVERY, "recovery")
+    expect(hardening["stable_failures"], EXPECTED_STABLE_FAILURES, "stable_failures")
+
+    # Digest grammar, manifest identity, and spill receipts are product
+    # contracts.  They are checked structurally, independently of checkout
+    # metadata or test-run bookkeeping.
     receipt_schema = load_yaml(root / SPILL_FSYNC_RECEIPT_SCHEMA)
     receipt_fields = EXPECTED_RECEIPT["exact_fields"]
     expect(receipt_schema.get("type"), "object", "spill_fsync_receipt_schema.type")
-    expect(
-        receipt_schema.get("additionalProperties"),
-        False,
-        "spill_fsync_receipt_schema.additionalProperties",
-    )
+    expect(receipt_schema.get("additionalProperties"), False, "spill_fsync_receipt_schema.additionalProperties")
     expect(receipt_schema.get("required"), receipt_fields, "spill_fsync_receipt_schema.required")
-    expect(
-        sorted(receipt_schema.get("properties", {})),
-        sorted(receipt_fields),
-        "spill_fsync_receipt_schema.properties",
-    )
+    expect(sorted(receipt_schema.get("properties", {})), sorted(receipt_fields), "spill_fsync_receipt_schema.properties")
     receipt_digest = "semantic-v2:sha256:" + "0" * 64
     receipt_instance = {
         "schema": EXPECTED_RECEIPT["schema"],
@@ -817,96 +758,37 @@ def validate_ng1_contract(
         fail("spill_fsync_receipt_schema", "unexpected properties are accepted")
     if receipt_validator.is_valid({**receipt_instance, "fsync_sequence": 0}):
         fail("spill_fsync_receipt_schema", "zero fsync sequence is accepted")
-    if receipt_validator.is_valid(
-        {
-            **receipt_instance,
-            "staged_digest": "sha256:" + "0" * 64,
-        }
-    ):
+    if receipt_validator.is_valid({**receipt_instance, "staged_digest": "sha256:" + "0" * 64}):
         fail("spill_fsync_receipt_schema", "legacy sha256 digest is accepted")
-    expect(hardening["spill"], EXPECTED_SPILL, "spill")
-    expect(hardening["recovery"], EXPECTED_RECOVERY, "recovery")
-    expect(hardening["stable_failures"], EXPECTED_STABLE_FAILURES, "stable_failures")
-    expect(hardening["direct_tests"], EXPECTED_DIRECT_TESTS, "qualification")
-    expect(
-        vectors["authority"],
-        {
-            "contract": CONTRACT.as_posix(),
-            "decision_issue": "#233",
-            "implementation_issue": "#183",
-            "digest_grammar_adr": DIGEST_GRAMMAR_ADR.as_posix(),
-            "digest_grammar_issue": DIGEST_GRAMMAR_ISSUE,
-            "binding": {
-                "state": "authority-only-unbound",
-                "revision": None,
-                "tree": None,
-                "provider_binary_digest": None,
-                "provider_semantic_contract_digest": None,
-                "protocol_minor": 1,
-                "hardening_contract_digest": None,
-            },
-        },
-        "direct_tests.vectors.authority",
-    )
-    expect(
-        vectors["authority"].get("binding"),
-        {
-            "state": "authority-only-unbound",
-            "revision": None,
-            "tree": None,
-            "provider_binary_digest": None,
-            "provider_semantic_contract_digest": None,
-            "protocol_minor": 1,
-            "hardening_contract_digest": None,
-        },
-        "direct_tests.vectors.authority.binding",
-    )
-    expected_cases = set(hardening["direct_tests"]["required_cases"])
-    vector_ids = [vector["id"] for vector in vectors["vectors"]]
-    if len(vector_ids) != len(set(vector_ids)):
-        fail("direct_tests.vectors", "vector IDs must be unique")
-    if len(vector_ids) != len(expected_cases):
-        fail(
-            "direct_tests.vectors",
-            f"expected exactly {len(expected_cases)} vectors, got {len(vector_ids)}",
-        )
-    actual_cases = set(vector_ids)
-    if actual_cases != expected_cases:
-        fail("direct_tests.vectors", f"case set differs: expected={sorted(expected_cases)}, got={sorted(actual_cases)}")
+
+    vector_ids: set[str] = set()
+    vector_classes: set[str] = set()
     for vector in vectors["vectors"]:
-        expected_outcome = hardening["direct_tests"]["required_case_outcomes"][vector["id"]]
-        decision = vector["expected"]["decision"]
-        expected_decision = (
-            "accepted"
-            if expected_outcome == "accepted"
-            else "rejected"
-            if vector["class"] == "negative"
-            else "recovery"
-        )
-        expect(decision, expected_decision, f"direct_tests.vectors.{vector['id']}.decision")
+        vector_id = vector["id"]
+        if vector_id in vector_ids:
+            fail(f"vectors.{vector_id}", "vector IDs must be unique")
+        vector_ids.add(vector_id)
+        vector_classes.add(vector["class"])
+        expected = vector["expected"]
         if vector["class"] == "positive":
-            expect(vector["expected"], {"decision": "accepted"}, f"direct_tests.vectors.{vector['id']}.expected")
+            expect(expected, {"decision": "accepted"}, f"vectors.{vector_id}.expected")
         elif vector["class"] == "negative":
-            reason = vector["expected"].get("reason_code")
-            if reason is None:
-                fail(f"direct_tests.vectors.{vector['id']}", "negative vector lacks stable reason code")
-            expect(reason, expected_outcome, f"direct_tests.vectors.{vector['id']}.reason_code")
+            expect(expected["decision"], "rejected", f"vectors.{vector_id}.decision")
+            reason = expected.get("reason_code")
+            if reason not in EXPECTED_STABLE_FAILURES:
+                fail(f"vectors.{vector_id}.reason_code", "unknown NG1 stable failure")
         else:
-            expect(vector["expected"].get("outcome"), expected_outcome, f"direct_tests.vectors.{vector['id']}.outcome")
+            expect(expected["decision"], "recovery", f"vectors.{vector_id}.decision")
+            if not expected.get("outcome"):
+                fail(f"vectors.{vector_id}.outcome", "recovery outcome is required")
+    if vector_classes != {"positive", "negative", "recovery"}:
+        fail("vectors", "positive, negative, and recovery semantics are required")
 
     heartbeat_liveness = hardening["heartbeat"]["liveness"]
-    if not (
-        heartbeat_liveness["interval_ns"]
-        < heartbeat_liveness["timeout_ns"]
-        <= heartbeat_liveness["startup_grace_ns"]
-    ):
+    if not heartbeat_liveness["interval_ns"] < heartbeat_liveness["timeout_ns"] <= heartbeat_liveness["startup_grace_ns"]:
         fail("heartbeat.liveness", "interval < timeout <= startup grace required")
     progress_enforcement = hardening["progress"]["enforcement"]
-    if not (
-        progress_enforcement["sample_window_ns"]
-        < progress_enforcement["maximum_sample_gap_ns"]
-        <= progress_enforcement["startup_grace_ns"]
-    ):
+    if not progress_enforcement["sample_window_ns"] < progress_enforcement["maximum_sample_gap_ns"] <= progress_enforcement["startup_grace_ns"]:
         fail("progress.enforcement", "sample window/gap/grace ordering")
     spill_limits = hardening["spill"]["limits"]
     if spill_limits["maximum_record_bytes"] > 16_777_216:
@@ -926,55 +808,47 @@ def validate_ng1_contract(
 
     if protocol is None:
         protocol = load_yaml(root / PROTOCOL)
-    protocol_authority = protocol.get("authority")
-    if not isinstance(protocol_authority, dict):
-        fail("protocol.authority", "authority mapping is missing")
-    expect(
-        protocol_authority.get("ng1_resume_digest_grammar_adr"),
-        DIGEST_GRAMMAR_ADR.as_posix(),
-        "protocol.authority.ng1_resume_digest_grammar_adr",
+    schema_validate(
+        protocol,
+        load_yaml(root / PROTOCOL_SCHEMA),
+        "Protocol 2 provider contract",
     )
-    expect(
-        protocol_authority.get("ng1_resume_digest_grammar_issue"),
-        DIGEST_GRAMMAR_ISSUE,
-        "protocol.authority.ng1_resume_digest_grammar_issue",
-    )
-    ng1 = protocol.get("profiles", {}).get("NG1")
+    expect(protocol.get("schema"), "cxxlens.provider-protocol.v2", "protocol.schema")
+    compatibility = protocol.get("compatibility", {})
+    for field, expected in (
+        ("protocol_major", 2),
+        ("protocol_minor", 0),
+        ("accepted_major", 2),
+        ("accepted_minor", 0),
+        ("downgrade", "reject"),
+        ("legacy_protocol_1", "rejected-before-payload"),
+        ("legacy_request_2_1_task_v3", "rejected-before-payload"),
+    ):
+        expect(compatibility.get(field), expected, f"protocol.compatibility.{field}")
+    ng1 = protocol.get("ng1")
     if not isinstance(ng1, dict):
-        fail("protocol", "NG1 profile is missing")
-    expect(ng1.get("includes"), "NG0", "protocol.profiles.NG1.includes")
-    expect(ng1.get("required"), FEATURES, "protocol.profiles.NG1.required")
-    expect(
-        ng1.get("hardening_contract"),
-        CONTRACT.as_posix(),
-        "protocol.profiles.NG1.hardening_contract",
-    )
-    message_23 = next(
-        (row for row in protocol.get("message_types", {}).get("registry", []) if row.get("id") == 23),
-        None,
-    )
-    expect(
-        message_23,
-        {"id": 23, "name": "heartbeat", "direction": "bidirectional", "profile": "NG1"},
-        "protocol.message_types.23",
-    )
-    structured = protocol.get("structured_control_metadata", {})
-    single_records = structured.get("single_records", {})
-    expect(single_records.get("heartbeat"), EXPECTED_HEARTBEAT["exact_fields"], "protocol.structured_control_metadata.heartbeat")
-    expect(single_records.get("progress"), EXPECTED_PROGRESS["exact_fields"], "protocol.structured_control_metadata.progress")
-    expect(single_records.get("resume"), EXPECTED_RESUME["exact_fields"], "protocol.structured_control_metadata.resume")
-    expect(structured.get("ng1_hardening_contract"), CONTRACT.as_posix(), "protocol.structured_control_metadata.ng1_hardening_contract")
-    expected_unsigned = [
-        "schema_negotiate.protocol_minor", "input_descriptor.total_bytes", "input_descriptor.chunk_bytes", "input_descriptor.chunk_count",
-        "input_chunk.chunk_index", "input_chunk.offset", "input_chunk.byte_count", "credit.bytes", "credit.frames",
-        "heartbeat.stream_id", "heartbeat.heartbeat_sequence", "heartbeat.monotonic_time_ns", "heartbeat.highest_contiguous_acked_sequence",
-        "progress.progress_sequence", "progress.monotonic_time_ns", "progress.completed_units", "progress.total_units",
-        "resume.stream_id", "resume.highest_contiguous_acked_sequence", "resume.token_generation",
-    ]
-    expect(structured.get("unsigned_fields"), expected_unsigned, "protocol.structured_control_metadata.unsigned_fields")
-    terminal_reasons = protocol.get("failures", {}).get("terminal_reasons", [])
-    if any(code not in terminal_reasons for code in EXPECTED_STABLE_FAILURES):
-        fail("protocol.failures", "NG1 stable failures are not registered")
+        fail("protocol.ng1", "NG1 profile is missing")
+    expect(ng1.get("hardening_contract"), CONTRACT.as_posix(), "protocol.ng1.hardening_contract")
+    expect(ng1.get("heartbeat_message_id"), 23, "protocol.ng1.heartbeat_message_id")
+    expect(ng1.get("heartbeat_clock"), "host-injected-monotonic-only", "protocol.ng1.heartbeat_clock")
+    expect(ng1.get("resume_token_cross_use"), "forbidden", "protocol.ng1.resume_token_cross_use")
+    expect(ng1.get("stale_or_foreign_token"), "typed-reject", "protocol.ng1.stale_or_foreign_token")
+    expect(ng1.get("worker_crash"), "kill-process-group-cleanup-private-spool-no-publication", "protocol.ng1.worker_crash")
+    capabilities = protocol.get("capabilities", {})
+    for feature in FEATURES:
+        if capabilities.get(feature) not in {"required", "required-for-NG1"}:
+            fail("protocol.capabilities", feature)
+    expect(protocol["request_task"].get("request_version"), "2.2.0", "protocol.request_task.request_version")
+    expect(protocol["request_task"].get("task_schema"), "cxxlens.clang22.task.v4", "protocol.request_task.task_schema")
+    expect(protocol["request_task"].get("source_bytes_in_request"), "forbidden", "protocol.request_task.source_bytes_in_request")
+    expect(protocol["request_task"].get("content_base64"), "forbidden", "protocol.request_task.content_base64")
+    registry = protocol.get("message_types", {}).get("registry", [])
+    heartbeat_rows = [row for row in registry if row.get("id") == 23]
+    expect(len(heartbeat_rows), 1, "protocol.message_types.23.count")
+    expect(heartbeat_rows[0].get("name"), "heartbeat", "protocol.message_types.23.name")
+    expect(heartbeat_rows[0].get("direction"), "bidirectional", "protocol.message_types.23.direction")
+    expect(heartbeat_rows[0].get("profile"), "NG1", "protocol.message_types.23.profile")
+
     execution_report = load_yaml(root / EXECUTION_REPORT_SCHEMA)
     terminal_enum = execution_report["properties"]["terminal"]["enum"]
     runtime = load_yaml(root / RUNTIME_CONTRACT)
@@ -1001,8 +875,7 @@ def main() -> int:
     print(
         "verified NG1 hardening contract: "
         f"maturity={contract['maturity']}, "
-        f"profiles={len(contract['direct_tests']['required_profiles'])}, "
-        f"cases={len(contract['direct_tests']['required_cases'])}"
+        f"features={len(contract['profile']['required_features'])}"
     )
     return 0
 

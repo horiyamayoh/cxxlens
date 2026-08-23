@@ -2,8 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-17
-- Decision owner: provider-protocol/provider-runtime
-- Decision issue: #98
 - Depends on: ADR 0010, ADR 0030, ADR 0040
 
 ## Context
@@ -38,5 +36,5 @@ NUL を許可しないため、decode 後かつ identity comparison/digest/repor
 
 `tests/unit/sdk/sdk_test.cpp` は valid ASCII/BMP/non-BMP/NUL の encode/decode と、7 class の invalid UTF-8 に対する encoder/
 decoder parity を検証する。`tests/unit/sdk/provider_runtime_test.cpp` は process transcript の invalid UTF-8 と typed NUL を reject
-する。`schemas/cxxlens_ng_provider_fuzz_corpus.yaml` と `tests/quality/test_ng_provider_protocol.py` は Python Unicode decoder との
-19-case stable differential corpus を検証する。
+する。`tests/quality/test_ng_provider_protocol.py` は Python Unicode decoder との
+differential cases を検証する。

@@ -830,11 +830,11 @@ namespace cxxlens::sdk::provider
 		  private:
 			static constexpr std::size_t wire_header_bytes = 104U;
 
-			[[nodiscard]] static std::uint64_t
-			read_big_endian(const std::span<const std::byte> input,
+			[[nodiscard]] static std::uint64_t read_big_endian(
+				const std::span<const std::byte> input,
 				// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): wire offset and field width
-							const std::size_t offset,
-							const std::size_t width) noexcept
+				const std::size_t offset,
+				const std::size_t width) noexcept
 			{
 				std::uint64_t value{};
 				for (std::size_t index{}; index < width; ++index)

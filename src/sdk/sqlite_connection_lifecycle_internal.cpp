@@ -31,6 +31,106 @@ namespace cxxlens::sdk
 		constexpr int sqlite_ok = 0;
 	} // namespace
 
+	sqlite_logical_read_receipt::sqlite_logical_read_receipt(
+		std::shared_ptr<const void> source_anchor_pin,
+		const bool exact_empty,
+		const bool connection_closed,
+		const std::size_t live_custody_count,
+		const bool zero_effect_callback_receipt) noexcept
+		: source_anchor_pin_{std::move(source_anchor_pin)}, exact_empty_{exact_empty},
+		  connection_closed_{connection_closed}, live_custody_count_{live_custody_count},
+		  zero_effect_callback_receipt_{zero_effect_callback_receipt}
+	{
+	}
+
+	sqlite_logical_read_receipt::sqlite_logical_read_receipt(
+		sqlite_logical_read_receipt&& other) noexcept
+		: source_anchor_pin_{std::move(other.source_anchor_pin_)}, exact_empty_{other.exact_empty_},
+		  connection_closed_{other.connection_closed_},
+		  live_custody_count_{other.live_custody_count_},
+		  zero_effect_callback_receipt_{other.zero_effect_callback_receipt_},
+		  valid_{std::exchange(other.valid_, false)}
+	{
+	}
+
+	sqlite_logical_read_receipt&
+	sqlite_logical_read_receipt::operator=(sqlite_logical_read_receipt&& other) noexcept
+	{
+		if (this == &other)
+			return *this;
+		source_anchor_pin_ = std::move(other.source_anchor_pin_);
+		exact_empty_ = other.exact_empty_;
+		connection_closed_ = other.connection_closed_;
+		live_custody_count_ = other.live_custody_count_;
+		zero_effect_callback_receipt_ = other.zero_effect_callback_receipt_;
+		valid_ = std::exchange(other.valid_, false);
+		return *this;
+	}
+
+	bool sqlite_logical_read_receipt::valid() const noexcept
+	{
+		return valid_ && source_anchor_pin_ != nullptr;
+	}
+
+	bool sqlite_logical_read_receipt::exact_empty() const noexcept
+	{
+		return exact_empty_;
+	}
+
+	bool sqlite_logical_read_receipt::connection_closed() const noexcept
+	{
+		return connection_closed_;
+	}
+
+	std::size_t sqlite_logical_read_receipt::live_custody_count() const noexcept
+	{
+		return live_custody_count_;
+	}
+
+	bool sqlite_logical_read_receipt::zero_effect_callback_receipt() const noexcept
+	{
+		return zero_effect_callback_receipt_;
+	}
+
+	const std::shared_ptr<const void>&
+	sqlite_logical_read_receipt::source_anchor_pin() const noexcept
+	{
+		return source_anchor_pin_;
+	}
+
+	bool sqlite_logical_read_receipt::consume() noexcept
+	{
+		if (!valid())
+			return false;
+		valid_ = false;
+		return true;
+	}
+
+	std::optional<sqlite_logical_read_receipt>
+	seal_sqlite_logical_read_receipt(std::shared_ptr<const void> source_anchor_pin,
+									 const bool exact_empty,
+									 const bool connection_closed,
+									 const std::size_t live_custody_count,
+									 const bool zero_effect_callback_receipt) noexcept
+	{
+		if (!source_anchor_pin || !exact_empty || !connection_closed || live_custody_count != 0U ||
+			!zero_effect_callback_receipt)
+			return std::nullopt;
+		try
+		{
+			sqlite_logical_read_receipt receipt{std::move(source_anchor_pin),
+												exact_empty,
+												connection_closed,
+												live_custody_count,
+												zero_effect_callback_receipt};
+			return std::optional<sqlite_logical_read_receipt>{std::move(receipt)};
+		}
+		catch (...)
+		{
+			return std::nullopt;
+		}
+	}
+
 	sqlite_confirmed_close_token::sqlite_confirmed_close_token(
 		const sqlite_confirmed_close_kind kind) noexcept
 		: kind_{kind}

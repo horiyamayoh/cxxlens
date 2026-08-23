@@ -25,30 +25,30 @@ namespace cxxlens::sdk
 		{
 			switch (reason)
 			{
-			case sqlite_wave3_lease_failure::invalid_identity:
-				return "invalid-identity";
-			case sqlite_wave3_lease_failure::invalid_transition:
-				return "invalid-transition";
-			case sqlite_wave3_lease_failure::continuity_mismatch:
-				return "continuity-mismatch";
-			case sqlite_wave3_lease_failure::duplicate_binding:
-				return "duplicate-binding";
-			case sqlite_wave3_lease_failure::registry_closed:
-				return "registry-closed";
-			case sqlite_wave3_lease_failure::registry_quarantined:
-				return "registry-quarantined";
-			case sqlite_wave3_lease_failure::registry_capacity:
-				return "registry-capacity";
-			case sqlite_wave3_lease_failure::stale_token:
-				return "stale-token";
-			case sqlite_wave3_lease_failure::live_use_owners:
-				return "live-use-owners";
-			case sqlite_wave3_lease_failure::use_bound_exceeded:
-				return "use-bound-exceeded";
-			case sqlite_wave3_lease_failure::missing_quarantine_detail:
-				return "missing-quarantine-detail";
-			case sqlite_wave3_lease_failure::generation_exhausted:
-				return "generation-exhausted";
+				case sqlite_wave3_lease_failure::invalid_identity:
+					return "invalid-identity";
+				case sqlite_wave3_lease_failure::invalid_transition:
+					return "invalid-transition";
+				case sqlite_wave3_lease_failure::continuity_mismatch:
+					return "continuity-mismatch";
+				case sqlite_wave3_lease_failure::duplicate_binding:
+					return "duplicate-binding";
+				case sqlite_wave3_lease_failure::registry_closed:
+					return "registry-closed";
+				case sqlite_wave3_lease_failure::registry_quarantined:
+					return "registry-quarantined";
+				case sqlite_wave3_lease_failure::registry_capacity:
+					return "registry-capacity";
+				case sqlite_wave3_lease_failure::stale_token:
+					return "stale-token";
+				case sqlite_wave3_lease_failure::live_use_owners:
+					return "live-use-owners";
+				case sqlite_wave3_lease_failure::use_bound_exceeded:
+					return "use-bound-exceeded";
+				case sqlite_wave3_lease_failure::missing_quarantine_detail:
+					return "missing-quarantine-detail";
+				case sqlite_wave3_lease_failure::generation_exhausted:
+					return "generation-exhausted";
 			}
 			return "invalid-state";
 		}
@@ -59,9 +59,8 @@ namespace cxxlens::sdk
 		}
 	} // namespace
 
-	sqlite_wave3_shm_lease::sqlite_wave3_shm_lease(
-		sqlite_wave3_identity_binding binding,
-		const std::uint64_t token)
+	sqlite_wave3_shm_lease::sqlite_wave3_shm_lease(sqlite_wave3_identity_binding binding,
+												   const std::uint64_t token)
 		: binding_{std::move(binding)}, token_{token}, phase_{sqlite_wave3_lease_phase::reserved}
 	{
 	}
@@ -104,8 +103,8 @@ namespace cxxlens::sdk
 		return quarantine_detail_;
 	}
 
-	result<void> sqlite_wave3_shm_lease::check_observed(
-		const sqlite_wave3_identity_binding& observed) const
+	result<void>
+	sqlite_wave3_shm_lease::check_observed(const sqlite_wave3_identity_binding& observed) const
 	{
 		if (const auto valid = validate_sqlite_wave3_identity_continuity(binding_, observed);
 			!valid)
@@ -115,8 +114,7 @@ namespace cxxlens::sdk
 		return {};
 	}
 
-	result<void> sqlite_wave3_shm_lease::begin_native(
-		const sqlite_wave3_identity_binding& observed)
+	result<void> sqlite_wave3_shm_lease::begin_native(const sqlite_wave3_identity_binding& observed)
 	{
 		if (phase_ != sqlite_wave3_lease_phase::reserved)
 		{
@@ -130,8 +128,8 @@ namespace cxxlens::sdk
 		return {};
 	}
 
-	result<void> sqlite_wave3_shm_lease::record_pending(
-		const sqlite_wave3_identity_binding& observed)
+	result<void>
+	sqlite_wave3_shm_lease::record_pending(const sqlite_wave3_identity_binding& observed)
 	{
 		if (phase_ != sqlite_wave3_lease_phase::native_started)
 		{
@@ -145,8 +143,7 @@ namespace cxxlens::sdk
 		return {};
 	}
 
-	result<void> sqlite_wave3_shm_lease::promote(
-		const sqlite_wave3_identity_binding& observed)
+	result<void> sqlite_wave3_shm_lease::promote(const sqlite_wave3_identity_binding& observed)
 	{
 		if (phase_ != sqlite_wave3_lease_phase::pending)
 		{
@@ -243,36 +240,42 @@ namespace cxxlens::sdk
 		return {};
 	}
 
-	result<sqlite_wave3_shm_lease> sqlite_wave3_shm_lease_registry::reserve(
-		sqlite_wave3_identity_binding binding)
+	result<sqlite_wave3_shm_lease>
+	sqlite_wave3_shm_lease_registry::reserve(sqlite_wave3_identity_binding binding)
 	{
 		std::lock_guard lock{mutex_};
 		if (quarantined_)
 		{
-			return unexpected(lease_error(invalid_detail(sqlite_wave3_lease_failure::registry_quarantined)));
+			return unexpected(
+				lease_error(invalid_detail(sqlite_wave3_lease_failure::registry_quarantined)));
 		}
 		if (!admission_allowed_)
 		{
-			return unexpected(lease_error(invalid_detail(sqlite_wave3_lease_failure::registry_closed)));
+			return unexpected(
+				lease_error(invalid_detail(sqlite_wave3_lease_failure::registry_closed)));
 		}
 		if (entries_.size() >= capacity)
 		{
-			return unexpected(lease_error(invalid_detail(sqlite_wave3_lease_failure::registry_capacity)));
+			return unexpected(
+				lease_error(invalid_detail(sqlite_wave3_lease_failure::registry_capacity)));
 		}
 		if (inspect_sqlite_wave3_identity(binding) != sqlite_wave3_identity_failure::none)
 		{
-			return unexpected(lease_error(invalid_detail(sqlite_wave3_lease_failure::invalid_identity)));
+			return unexpected(
+				lease_error(invalid_detail(sqlite_wave3_lease_failure::invalid_identity)));
 		}
 		for (const auto& entry : entries_)
 		{
 			if (entry.binding == binding)
 			{
-				return unexpected(lease_error(invalid_detail(sqlite_wave3_lease_failure::duplicate_binding)));
+				return unexpected(
+					lease_error(invalid_detail(sqlite_wave3_lease_failure::duplicate_binding)));
 			}
 		}
 		if (next_token_ == std::numeric_limits<std::uint64_t>::max())
 		{
-			return unexpected(lease_error(invalid_detail(sqlite_wave3_lease_failure::generation_exhausted)));
+			return unexpected(
+				lease_error(invalid_detail(sqlite_wave3_lease_failure::generation_exhausted)));
 		}
 		const auto token = next_token_++;
 		entries_.push_back(entry{binding, token, false});
@@ -338,8 +341,8 @@ namespace cxxlens::sdk
 		return quarantined_;
 	}
 
-	bool sqlite_wave3_shm_lease_registry::contains(
-		const sqlite_wave3_identity_binding& binding) const
+	bool
+	sqlite_wave3_shm_lease_registry::contains(const sqlite_wave3_identity_binding& binding) const
 	{
 		std::lock_guard lock{mutex_};
 		for (const auto& entry : entries_)

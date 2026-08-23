@@ -10,5 +10,5 @@ ctest --preset install-check --label-regex '^install\\.' --output-on-failure
 ```
 
 materialization report や SQLite/source-closure receipt は実行中の製品結果として維持します。
-運用 qualification report、exact-SHA manifest、集約 report は作成しません。Windows/MSVC は
+リポジトリ運用専用の完了記録は作成しません。Windows/MSVC は
 support table に掲載されていないため unsupported です。

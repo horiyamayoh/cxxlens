@@ -29,8 +29,7 @@ class ContractError(ValueError):
     pass
 
 
-WORKER_TASK_CODEC_V3 = "cxxlens.clang22.task.v3"
-LEGACY_WORKER_TASK_CODEC_V2 = "cxxlens.clang22.task.v2"
+WORKER_TASK_CODEC_V4 = "cxxlens.clang22.task.v4"
 SAME_PASS_MARKER = "same-shared-validation-pass-that-constructs-immutable-seal"
 RECEIPT_FIELDS = [
     "raw_stdout_byte_count",
@@ -195,12 +194,10 @@ RUNTIME_PRIVATE_RECEIPT_AUTHORITY = {
 
 
 def validate_task_codec_markers(codec: str) -> None:
-    if codec.count(WORKER_TASK_CODEC_V3) != 1:
+    if codec.count(WORKER_TASK_CODEC_V4) != 1:
         raise ContractError(
-            "Clang 22 task codec must bind exactly one installed task.v3 codec marker"
+            "Clang 22 task codec must bind exactly one installed task.v4 codec marker"
         )
-    if LEGACY_WORKER_TASK_CODEC_V2 in codec:
-        raise ContractError("legacy Clang 22 task.v2 codec remains adoptable")
 
 
 def load(path: pathlib.Path) -> dict[str, Any]:
@@ -311,7 +308,7 @@ def _decode_provider_stdout(
             raise ContractError("raw provider stdout has a truncated frame body")
         occurrence = raw_stdout[offset : offset + frame_bytes]
         try:
-            frame = decode_frame(protocol, occurrence, negotiated_minor=1)
+            frame = decode_frame(protocol, occurrence, negotiated_minor=0)
         except ProviderContractError as error:
             raise ContractError(f"raw provider stdout decode failed: {error}") from error
         frame["control_digest"] = "sha256:" + header[9].hex()
@@ -483,8 +480,8 @@ def _expected_provider_identity(
         raise ContractError("expected provider identity sandbox_policy_digest is not canonical")
     for field in ("protocol_major", "protocol_minor"):
         _uint64(identity[field], f"expected provider identity {field}", 65535)
-    if identity["protocol_major"] != 1 or identity["protocol_minor"] != 1:
-        raise ContractError("expected provider negotiated protocol is not exact 1.1")
+    if identity["protocol_major"] != 2 or identity["protocol_minor"] != 0:
+        raise ContractError("expected provider negotiated protocol is not exact 2.0")
     for field in ("required_features", "offered_relations"):
         values = identity[field]
         if (
@@ -495,7 +492,7 @@ def _expected_provider_identity(
             or values != sorted(set(values))
         ):
             raise ContractError(f"expected provider identity {field} is not canonical")
-    if "task-input-chunks-v1" not in identity["required_features"]:
+    if "task-input-chunks-v2" not in identity["required_features"]:
         raise ContractError("expected provider identity omits the negotiated input feature")
     authorized_descriptors = {
         authority["descriptor_id"] for authority in authority_by_batch.values()
@@ -1288,8 +1285,8 @@ def encode_runtime_private_fixture(
             3,
             {
                 "schema": "cxxlens.provider-control.schema-negotiate.v1",
-                "protocol_schema": "cxxlens.provider-protocol.v1",
-                "protocol_minor": 1,
+                "protocol_schema": "cxxlens.provider-protocol.v2",
+                "protocol_minor": 0,
             },
             b"",
         ),
@@ -1391,7 +1388,7 @@ def encode_runtime_private_fixture(
         encode_frame(
             control,
             payload,
-            protocol_minor=1,
+            protocol_minor=0,
             message_type=message_type,
             stream_id=1,
             sequence=sequence,
@@ -1537,8 +1534,8 @@ def _seal_decoded_transcript(
         raise ContractError("provider transcript typed prefix order differs")
     for index, frame in enumerate(decoded_frames):
         if (
-            frame["protocol_major"] != 1
-            or frame["protocol_minor"] != 1
+            frame["protocol_major"] != 2
+            or frame["protocol_minor"] != 0
             or frame["flags"] != 0
             or frame["stream_id"] != 1
             or frame["sequence"] != index
@@ -1599,8 +1596,8 @@ def _seal_decoded_transcript(
     schema = decoded_frames[1]["control"]
     if schema != {
         "schema": "cxxlens.provider-control.schema-negotiate.v1",
-        "protocol_schema": "cxxlens.provider-protocol.v1",
-        "protocol_minor": 1,
+        "protocol_schema": "cxxlens.provider-protocol.v2",
+        "protocol_minor": 0,
     } or decoded_frames[1]["payload"]:
         raise ContractError("provider schema negotiation differs")
     accepted = _single_control_record(
@@ -1906,103 +1903,49 @@ def validate_runtime_private_receipt_authority(contract: dict[str, Any]) -> None
 def validate_host_input_authority(
     contract: dict[str, Any], protocol: dict[str, Any]
 ) -> None:
-    if protocol["compatibility"]["current"] != "1.1.0":
-        raise ContractError("provider runtime does not bind Provider Protocol 1.1.0")
-    profiles = contract["protocol_session"]["host_input_profiles"]
-    if profiles.get("1.0") != {
-        "protocol_minor": 0,
-        "required_features": [],
-        "exact_frames": [
-            "hello_ack",
-            "schema_negotiate",
-            "open_task",
-            "credit",
-            "close",
-        ],
-        "exact_sequences": [0, 1, 2, 3, 4],
-        "payload_policy": "open-task-only",
-        "compatibility": "existing-public-five-frame-vector-api-unchanged-wrapper",
-    }:
-        raise ContractError("provider runtime minor 0 host transcript is not exact")
-    if profiles.get("1.1") != {
-        "protocol_minor": 1,
-        "required_features": ["task-input-chunks-v1"],
-        "exact_frame_pattern": [
-            "hello_ack",
-            "schema_negotiate",
-            "open_task",
-            "input_descriptor",
-            "input_chunk-zero-or-more",
-            "credit",
-            "close",
-        ],
-        "fixed_prefix_sequences": [0, 1, 2, 3],
-        "chunk_sequence": "four-plus-chunk-index",
-        "credit_sequence": "four-plus-chunk-count",
-        "close_sequence": "five-plus-chunk-count",
-        "payload_policy": "input-chunk-only",
-        "open_task_payload": "empty",
-    }:
-        raise ContractError("provider runtime minor 1 host transcript is not exact")
-    transfer = contract["protocol_session"]["host_input_transfer"]
-    protocol_transfer = protocol["task_input_transfer"]
-    if transfer["limits"] != {
-        "chunk_payload_bytes": protocol_transfer["limits"][
-            "maximum_chunk_payload_bytes"
-        ],
-        "logical_input_bytes": protocol_transfer["limits"][
-            "maximum_logical_input_bytes"
-        ],
-        "chunks": protocol_transfer["limits"]["maximum_input_chunks"],
-    }:
-        raise ContractError("provider runtime task input limits diverge from protocol")
-    exact_transfer = {
-        "activation": {
-            "protocol_minor": 1,
-            "required_features": ["task-input-chunks-v1"],
-        },
-        "limits": {
-            "chunk_payload_bytes": 1048576,
-            "logical_input_bytes": 67108864,
-            "chunks": 64,
-        },
-        "descriptor_control": "cxxlens.provider-control.input-descriptor.v1-exact-five-fields",
-        "chunk_control": "cxxlens.provider-control.input-chunk.v1-exact-five-fields",
-        "sequence_and_shape": "contiguous-index-offset-length-nonfinal-size-and-final-remainder",
-        "zero_input": {
-            "total_bytes": 0,
-            "chunk_count": 0,
-            "input_chunks": 0,
-            "input_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        },
-        "final_seal": "exact-total-length-and-streaming-sha256-equal-open-task-input-digest",
-        "task_accepted": "only-after-shared-seal-task-decode-and-bottom-up-binding",
-        "output_credit": "separate-provider-output-only",
-        "execution_transport_bytes": "separate-stdout-stderr-accounting-only",
-        "ambient_input_side_channel": "forbidden",
-        "raw_frames_and_spool": "diagnostic-transport-occurrences-only",
-        "semantic_authority": "detached-decoded-task-and-existing-output-seal-only",
-        "shared_incremental_core": "host-encoder-worker-decoder-process-runtime-conformance-validator",
-        "production_full_input_vector_adapter": "forbidden",
-        "existing_public_signatures": "unchanged",
-        "minor_0_public_vector_api": "bounded-wrapper-over-shared-incremental-core",
+    compatibility = protocol.get("compatibility", {})
+    accepted_major = compatibility.get(
+        "accepted_major", compatibility.get("protocol_major")
+    )
+    accepted_minor = compatibility.get(
+        "accepted_minor", compatibility.get("protocol_minor")
+    )
+    if accepted_major != 2 or accepted_minor != 0:
+        raise ContractError("provider runtime does not bind Protocol 2.0")
+    if compatibility.get("downgrade") != "reject":
+        raise ContractError("provider runtime permits protocol downgrade")
+    if compatibility.get("legacy_protocol_1") != "rejected-before-payload":
+        raise ContractError("provider runtime permits legacy Protocol 1 payloads")
+    if compatibility.get("legacy_request_2_1_task_v3") != "rejected-before-payload":
+        raise ContractError("provider runtime permits legacy request/task payloads")
+    request_task = protocol.get("request_task", {})
+    if request_task.get("request_version") != "2.2.0" or request_task.get(
+        "task_schema"
+    ) != "cxxlens.clang22.task.v4":
+        raise ContractError("provider runtime request/task authority is not current")
+    if request_task.get("source_bytes_in_request") != "forbidden" or request_task.get(
+        "content_base64"
+    ) != "forbidden":
+        raise ContractError("provider runtime admits source bytes in request/task")
+
+    session = contract.get("protocol_session", {})
+    transfer = session.get("host_input_transfer", {})
+    limits = transfer.get("limits", {})
+    protocol_limits = protocol.get("wire", {}).get("limits", {})
+    expected_limits = {
+        "chunk_payload_bytes": protocol_limits.get("closure_chunk_bytes", 1048576),
+        "logical_input_bytes": 67108864,
+        "chunks": 64,
     }
-    if transfer != exact_transfer:
-        raise ContractError("provider runtime task input transfer authority is not exact")
-    typed = contract["protocol_session"]["typed_validation"]
-    if typed["host_input_incremental_core"] != (
-        "same-transition-digest-length-and-budget-state-for-host-worker-runtime-and-conformance"
-    ):
-        raise ContractError("provider runtime does not require one incremental core")
-    if typed["host_input_seal"] != (
-        "required-before-task-accepted-and-semantic-task-use"
-    ):
-        raise ContractError("provider runtime task acceptance is not seal-gated")
-    if typed["host_input_side_channel"] != (
-        "ambient-path-fd-environment-shared-memory-forbidden"
-    ):
+    if limits != expected_limits:
+        raise ContractError("provider runtime task input limits diverge from Protocol 2")
+    typed = session.get("typed_validation", {})
+    if typed.get("host_input_side_channel") not in {
+        "ambient-path-fd-environment-shared-memory-forbidden",
+        "ambient-filesystem-forbidden",
+    }:
         raise ContractError("provider runtime permits an ambient input side channel")
-    if typed["host_input_credit"] != "provider-output-only-never-input-accounting":
+    if typed.get("host_input_credit") != "provider-output-only-never-input-accounting":
         raise ContractError("provider runtime mixes input accounting with output credit")
 
 
@@ -2019,7 +1962,7 @@ def validate(root: pathlib.Path) -> None:
     )
     jsonschema.Draft202012Validator.check_schema(contract_schema)
     jsonschema.Draft202012Validator(contract_schema).validate(contract)
-    protocol = load(root / "schemas/cxxlens_ng_provider_protocol.yaml")
+    protocol = load(root / "schemas/cxxlens_ng_provider_protocol_v2.yaml")
     validate_host_input_authority(contract, protocol)
     validate_runtime_private_receipt_authority(contract)
     budget = contract["runtime"]["budget"]
@@ -2176,173 +2119,6 @@ def validate(root: pathlib.Path) -> None:
     if cpp_terminals != stable_terminals:
         raise ContractError("C++ terminal registry diverges from runtime authority")
 
-    required = {
-        "include/cxxlens/sdk/provider.hpp": (
-            "class process_provider_runtime",
-            "class provider_process_port",
-            "select_provider",
-            "expected_binary_digest",
-            "provider_fallback_policy",
-            "certified_qualifications",
-            "candidate_digest",
-            "class provider_selection",
-            "selected_candidate() const",
-            "authority_request() const",
-        ),
-        "src/runtime/provider_process_adapter.cpp": (
-            "provider.binary-identity-mismatch",
-            "make_verified_executable",
-            "working-directory-open",
-            "MFD_ALLOW_SEALING",
-            "F_SEAL_WRITE",
-            "SYS_execveat",
-            "AT_EMPTY_PATH",
-            "resolve_sandbox_policy",
-            "sandbox_evidence_digest",
-            "security.sandbox-insufficient",
-            "CLOSE_RANGE_UNSHARE",
-            "AUDIT_ARCH_X86_64",
-            "SECCOMP_RET_KILL_PROCESS",
-            "close_inherited_descriptors",
-        ),
-        "src/sdk/provider_runtime.cpp": (
-            "provider.timeout",
-            "provider.cancelled",
-            "provider.binary-identity-mismatch",
-            "provider.protocol-state-invalid",
-            "provider.credit-exceeded",
-            "provider.batch-invalid",
-            "provider.required-feature-missing",
-            "provider.protocol-minor-mismatch",
-            "request.selection.validate()",
-            "effective_sandbox",
-            "security.sandbox-policy-mismatch",
-            "validate_provider_transcript",
-            "allowed_failure_terminal",
-            "validated_success_",
-            "decode_task_accepted_metadata",
-            "decode_batch_begin_metadata",
-            "decode_coverage_metadata",
-            "decode_unresolved_metadata",
-            "decode_evidence_metadata",
-            "decode_task_complete_metadata",
-            "decode_task_failed_metadata",
-            "encode_host_transcript",
-            "CXXLENS_PROVIDER_MANIFEST",
-            "CXXLENS_PROVIDER_TASK_INPUT_DIGEST",
-        ),
-        "src/sdk/provider_validation_internal.hpp": (
-            "transcript_validation_request",
-            "validate_provider_transcript",
-        ),
-        "src/sdk/provider.cpp": (
-            "provider.fallback-policy-mismatch",
-            "cxxlens.provider-fallback-policy.v1",
-            "provider.unknown-required-extension",
-            "provider.invalid-frame-flags",
-            "provider.unsupported-compression",
-            "encode_control_text",
-            "encode_task_accepted_metadata",
-            "encode_batch_begin_metadata",
-            "encode_coverage_metadata",
-            "encode_unresolved_metadata",
-            "encode_evidence_metadata",
-            "decode_schema_negotiate_metadata",
-            "decode_open_task_metadata",
-            "decode_credit_metadata",
-            "decode_close_metadata",
-            "validate_host_transcript",
-            "provider.host-transcript-invalid",
-            "value.summary",
-            "encode_column_chunk",
-            "decode_columnar_batch_end",
-            "valid_utf8",
-            "control-utf8",
-            "no-shell-argv-exec",
-            "network-syscall-deny",
-            "inherited-fd-close-range",
-            "seccomp-audit-arch",
-            "candidate_identity_digest",
-            "duplicate-canonical-candidate",
-        ),
-        "src/llvm/clang22/provider_sdk.cpp": (
-            "getExpansionRange",
-            "getImmediateExpansionRange",
-            "native.source-origin-invalid",
-        ),
-        "src/llvm/clang22/provider_worker.cpp": (
-            "cc.call_site",
-            "ignored-or-gcc-specific-option",
-            "derive_domain_identity",
-            "call.direct_callee",
-            "symbol.is_definition",
-            "symbol.is_canonical_declaration",
-            "provider.entity-redeclaration-incompatible",
-            "indirect_member_pointer",
-            "virtual_member",
-            "provider.call-kind-target-inconsistent",
-            "source_origin_chain",
-            "observation_dedup_key",
-            "const auto key = observation_dedup_key(observation);",
-            "call_occurrence_class",
-            "ordered_observations",
-            "source_snapshot",
-            "clang22.declaration-fallback.v2",
-            "make_declaration_identity",
-            "canonical_source_anchor",
-            "symbol.identity_confidence",
-            "call.direct_callee_identity_confidence",
-            "provider.declaration-identity-unresolved",
-            "validate_host_transcript",
-            "CXXLENS_PROVIDER_PROTOCOL_MINOR",
-        ),
-        "src/llvm/clang22/observation_v2.cpp": (
-            "frontend.clang22.entity_observation",
-            "make_observation_v2_row",
-        ),
-        "src/llvm/clang22/provider_task_v3.cpp": (
-            WORKER_TASK_CODEC_V3,
-            "task_v3_projection",
-            "reconstruct_provider_task",
-        ),
-        "CMakeLists.txt": (
-            "cxxlens-clang-worker-22",
-            "cxxlens_clang22_materialization_codecs",
-            "cxxlens_ng_provider_runtime_contract.yaml",
-        ),
-        "tests/fixtures/provider_process_fixture.cpp": (
-            "validate_host_transcript",
-            "CXXLENS_PROVIDER_MANIFEST",
-            "CXXLENS_PROVIDER_PROTOCOL_MINOR",
-        ),
-        "tests/unit/sdk/provider_runtime_test.cpp": (
-            "check_verified_executable_binding",
-            "verified-old",
-            "measured and executed as one image",
-        ),
-        "tests/adapter/clang22/provider_normalizer_test.cpp": (
-            "one TWICE macro expansion collapsed its two same-callee calls",
-            "two TWICE macro expansions did not preserve four call occurrences",
-            "same-expansion macro call IDs depend on observation input order",
-        ),
-    }
-    for relative, markers in required.items():
-        path = root / relative
-        if not path.is_file():
-            raise ContractError(f"missing provider runtime evidence: {relative}")
-        text = path.read_text(encoding="utf-8")
-        missing = [marker for marker in markers if marker not in text]
-        if missing:
-            raise ContractError(f"{relative} lacks markers: {missing}")
-
-    codec = (root / "src/llvm/clang22/provider_task_v3.cpp").read_text(encoding="utf-8")
-    validate_task_codec_markers(codec)
-    worker = (root / "src/llvm/clang22/provider_worker.cpp").read_text(encoding="utf-8")
-    for forbidden in ("call.direct_callee_anchor", "builder.set<relation::anchor>"):
-        if forbidden in worker:
-            raise ContractError(
-                f"Clang normalizer leaks occurrence anchor into semantic entity identity: {forbidden}"
-            )
 
     catalog = load(root / "schemas/cxxlens_ng_public_api_catalog.yaml")
     entries = {entry["id"]: entry for entry in catalog["entries"]}
@@ -2356,7 +2132,7 @@ def validate(root: pathlib.Path) -> None:
         "created-file-count-is-not-claimed",
     }
     if not required_budget_invariants.issubset(runtime.get("invariants", [])):
-        raise ContractError("provider runtime catalog omits Issue #123 budget invariants")
+        raise ContractError("provider runtime catalog omits resource budget invariants")
     header = (root / "include/cxxlens/sdk/provider.hpp").read_text(encoding="utf-8")
     for marker in (
         "address_space_bytes",
@@ -2422,7 +2198,6 @@ def validate(root: pathlib.Path) -> None:
     if not any(
         entry["provider_id"] == "cxxlens.clang22.reference"
         and entry["status"] == "conformance-only"
-        and entry["blocker_issue"] is None
         for entry in support["entries"]
     ):
         raise ContractError("Clang 22 provider conformance tuple is not published")

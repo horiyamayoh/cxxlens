@@ -1830,7 +1830,7 @@ namespace
 		std::filesystem::remove(path);
 	}
 
-	void check_sqlite_existing_empty_initialization_is_fail_closed()
+	void check_sqlite_existing_empty_initialization_and_zero_byte_containment()
 	{
 		using namespace cxxlens::test::sqlite_fixture;
 		const auto relation_engine = engine();
@@ -1862,19 +1862,25 @@ namespace
 				"existing zero-byte containment fixture copy failed");
 		std::filesystem::resize_file(zero_byte_path, 0U);
 
-		const auto require_containment =
-			[&](const std::filesystem::path& path, const std::string_view label)
+		const auto before_normalization = capture_files(existing_empty_path);
 		{
-			const auto before = capture_files(path);
-			auto opened = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
-			require(!opened && opened.error().code == "store.backend-unavailable" &&
-						opened.error().field == "sqlite" && opened.error().detail == "effect-gate",
-					std::string{label} + " did not fail closed before fresh initialization");
-			require(capture_files(path) == before,
-					std::string{label} + " changed the source file family");
-		};
-		require_containment(existing_empty_path, "existing nonzero exact-empty source");
-		require_containment(zero_byte_path, "existing zero-byte main");
+			auto opened = cxxlens::sdk::open_sqlite_snapshot_store(existing_empty_path.string(),
+																   relation_engine);
+			require(opened.has_value(), "existing exact-empty source was not normalized");
+		}
+		require(capture_files(existing_empty_path) != before_normalization,
+				"existing exact-empty normalization had no source effect");
+		require_wal_header_and_quiescent_sidecars(existing_empty_path);
+
+		const auto before_zero_byte = capture_files(zero_byte_path);
+		auto zero_byte_opened =
+			cxxlens::sdk::open_sqlite_snapshot_store(zero_byte_path.string(), relation_engine);
+		require(!zero_byte_opened && zero_byte_opened.error().code == "store.backend-unavailable" &&
+					zero_byte_opened.error().field == "sqlite" &&
+					zero_byte_opened.error().detail == "effect-gate",
+				"existing zero-byte main did not fail closed before fresh initialization");
+		require(capture_files(zero_byte_path) == before_zero_byte,
+				"existing zero-byte main changed the source file family");
 	}
 
 	void check_sqlite_v3_fresh_schema_and_chunk_boundary()
@@ -2615,14 +2621,18 @@ namespace
 				"active source-SHM symbol failure opened, changed, or privately fell back from the "
 				"raw post-crash active-v2 source");
 
-			auto still_unavailable = open_sqlite_snapshot_store(path.string(), relation_engine);
-			require(!still_unavailable &&
-						still_unavailable.error().code == "store.backend-unavailable" &&
-						still_unavailable.error().field == "sqlite" &&
-						still_unavailable.error().detail == "source-shm-readonly-qualification",
-					"native-OK production activation escaped the fail-closed source-SHM gate");
+			auto second_attempt = open_sqlite_snapshot_store(path.string(), relation_engine);
+#if defined(__linux__) && defined(F_OFD_SETLK)
+			require(second_attempt && second_attempt->compatibility().migration_required,
+					"qualified active source-SHM route did not reopen the crash remnant");
+#else
+			require(!second_attempt && second_attempt.error().code == "store.backend-unavailable" &&
+						second_attempt.error().field == "sqlite" &&
+						second_attempt.error().detail == "source-shm-readonly-qualification",
+					"unsupported active source-SHM route did not fail closed");
+#endif
 			require(capture_sqlite_source_file_family_state(path) == crash_remnant,
-					"fail-closed active source-SHM rejection changed raw post-crash identities, "
+					"active source-SHM reopen changed raw post-crash identities, "
 					"sizes, or bytes");
 		}
 #endif
@@ -2824,11 +2834,18 @@ namespace
 #endif
 			auto opened =
 				cxxlens::sdk::open_sqlite_snapshot_store(active.path().string(), relation_engine);
+#if defined(__linux__) && defined(F_OFD_SETLK)
+			require(opened.has_value(), "active WAL+SHM route was unavailable");
+			auto current = opened->current(selector(relation_engine));
+			require(current.has_value() && current->publication().sequence != 0U,
+					"active WAL+SHM route did not preserve current authority");
+#else
 			require(!opened && opened.error().code == "store.backend-unavailable" &&
 						opened.error().field == "sqlite" &&
 						opened.error().detail == "source-shm-readonly-qualification",
 					"active WAL+SHM route did not report exact fail-closed qualification "
 					"unavailability");
+#endif
 #if defined(__unix__) || defined(__APPLE__)
 			require(capture_sqlite_source_file_family_state(active.path()) == active_source_before,
 					"fail-closed active WAL+SHM route changed source identities, sizes, or bytes");
@@ -3121,6 +3138,6 @@ int main(const int argc, char** argv)
 	check_derived_basis_membership();
 	check_derived_basis_uses_checked_snapshot_resolver();
 	check_v5_manifest_order_is_canonical();
-	check_sqlite_existing_empty_initialization_is_fail_closed();
+	check_sqlite_existing_empty_initialization_and_zero_byte_containment();
 	return 0;
 }

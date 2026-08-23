@@ -157,8 +157,8 @@ namespace cxxlens::provider::clang22
 		if (compiler_filename.empty())
 			return sdk::unexpected(native_error("native.input-invalid", "logical_path"));
 		const auto parsed = clang::tooling::runToolOnCodeWithArgs(std::move(action),
-														  input.source,
-														  compiler_arguments,
+																  input.source,
+																  compiler_arguments,
 																  compiler_filename,
 																  "cxxlens-clang22");
 		if (!parsed && outcome)
@@ -174,9 +174,9 @@ namespace cxxlens::provider::clang22
 #if CXXLENS_HAS_CLANG22
 	sdk::result<void>
 	detail::with_translation_unit_vfs(const translation_unit_input& input,
-										  const std::string& compiler_filename,
-										  const std::string& tool_name,
-										  const std::vector<std::string>& compiler_arguments,
+									  const std::string& compiler_filename,
+									  const std::string& tool_name,
+									  const std::vector<std::string>& compiler_arguments,
 									  llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> filesystem,
 									  translation_unit_callback callback)
 	{

@@ -735,7 +735,7 @@ namespace cxxlens::sdk
 		for (std::size_t index = 0U; index < result.residual_run_count; ++index)
 		{
 			if (!checked_accumulate_product(result.residual_runs.at(index).population,
-												result.residual_runs.at(index).count,
+											result.residual_runs.at(index).count,
 											reconstructed))
 				return result;
 		}

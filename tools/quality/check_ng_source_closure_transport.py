@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the proposed dedicated source-closure transport authority."""
+"""Validate the active Protocol 2 source-closure transport authority."""
 
 from __future__ import annotations
 
@@ -21,24 +21,12 @@ from check_ng_provider_protocol import cbor_encode
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 CONTRACT = pathlib.Path("schemas/cxxlens_ng_source_closure_transport.yaml")
 SCHEMA = pathlib.Path("schemas/cxxlens_ng_source_closure_transport.schema.yaml")
-PROTOCOL = pathlib.Path("schemas/cxxlens_ng_provider_protocol.yaml")
-PROTOCOL_SCHEMA = pathlib.Path("schemas/cxxlens_ng_provider_protocol.schema.yaml")
+PROTOCOL = pathlib.Path("schemas/cxxlens_ng_provider_protocol_v2.yaml")
+PROTOCOL_SCHEMA = pathlib.Path("schemas/cxxlens_ng_provider_protocol_v2.schema.yaml")
 REQUEST = pathlib.Path("schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml")
 TASK = pathlib.Path("schemas/cxxlens_ng_provider_task_v4.schema.yaml")
 MANIFEST_SCHEMA = pathlib.Path("schemas/cxxlens_ng_source_closure_manifest_v1.schema.yaml")
-ADR = pathlib.Path("docs/design/adr/0102-dedicated-source-closure-transport.md")
-LEGACY_BINDINGS = {
-    "request_schema_sha256": pathlib.Path(
-        "schemas/cxxlens_ng_clang22_materialization_request.schema.yaml"
-    ),
-    "task_v3_header_sha256": pathlib.Path("src/llvm/clang22/provider_task_v3.hpp"),
-    "task_v3_implementation_sha256": pathlib.Path(
-        "src/llvm/clang22/provider_task_v3.cpp"
-    ),
-    "request_v2_1_implementation_sha256": pathlib.Path(
-        "src/llvm/clang22/materialization_request_v2_1.cpp"
-    ),
-}
+ADR = pathlib.Path("docs/design/adr/0107-provider-protocol-2-cutover.md")
 PROJECT_PATH_PREFIX = "project://"
 MAXIMUM_LOGICAL_PATH_UTF8_BYTES = 4096
 
@@ -652,7 +640,7 @@ def validate_request_binding(
     if not all(isinstance(value, list) for value in (base_tasks, closures, extensions)):
         raise SourceClosureTransportError("request 2.2 relationship inputs are missing")
     if len(base_tasks) != len(extensions):
-        raise SourceClosureTransportError("task v4/base v2.1 census mismatch")
+        raise SourceClosureTransportError("task v4/base task index parity mismatch")
     worker = request.get("worker")
     trust = request.get("trust_policy")
     if not isinstance(worker, dict) or not isinstance(trust, dict):
@@ -733,7 +721,7 @@ def validate_request_binding(
         base = base_tasks[index]
         if extension.get("base_provider_task_id") != base.get("provider_task_id"):
             raise SourceClosureTransportError("task v4/base provider task identity mismatch")
-        if extension.get("base_task_v3_digest") != content_projection_digest(base):
+        if extension.get("base_task_digest") != content_projection_digest(base):
             raise SourceClosureTransportError("task v4/base task digest mismatch")
         expected_open = {
             field: base.get(field)
@@ -805,7 +793,7 @@ def validate_request_binding(
 
 
 def complete_request_witness(root: pathlib.Path) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Build one complete v2.2 request from the repository's executable v2.1 witness."""
+    """Build one complete current request from the materialization witness."""
 
     sys.path.insert(0, str(root / "tools" / "quality"))
     import check_ng_clang22_materialization as materialization  # noqa: PLC0415
@@ -817,7 +805,7 @@ def complete_request_witness(root: pathlib.Path) -> tuple[dict[str, Any], dict[s
     base = request["tasks"][0]
     source = base["source"]
     source["read_only"] = True
-    source.pop("content_base64")
+    source.pop("content_base64", None)
     member = {
         field: source[field]
         for field in (
@@ -845,13 +833,13 @@ def complete_request_witness(root: pathlib.Path) -> tuple[dict[str, Any], dict[s
         "unique_blob_bytes": source["size_bytes"],
     }
 
-    required_features = ["task-input-chunks-v1", "task-source-closure-v1"]
+    required_features = ["task-input-chunks-v2", "task-source-closure-v2"]
     request["schema"] = "cxxlens.clang22-materialization-request.v2_2"
     request["request_version"] = "2.2.0"
     request["required_features"] = required_features
-    request["worker"]["protocol_minor"] = 2
+    request["worker"]["protocol_minor"] = 0
     request["worker"]["required_features"] = required_features
-    request["trust_policy"]["protocol_minor"] = 2
+    request["trust_policy"]["protocol_minor"] = 0
     request["trust_policy"]["required_features"] = required_features
     request["trust_policy"]["task_sandbox_requirements"] = [base["sandbox"]]
     request["trust_policy"]["trust_policy_digest"] = trust_policy_digest(
@@ -861,7 +849,7 @@ def complete_request_witness(root: pathlib.Path) -> tuple[dict[str, Any], dict[s
         "schema": "cxxlens.clang22.task.v4",
         "base_task_index": 0,
         "base_provider_task_id": base["provider_task_id"],
-        "base_task_v3_digest": content_projection_digest(base),
+        "base_task_digest": content_projection_digest(base),
         "open_task": {
             field: base[field]
             for field in (
@@ -918,10 +906,14 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
             f"request/task schema is invalid: {error.message}"
         ) from error
     witness, witness_manifest = complete_request_witness(root)
-    legacy_request_schema = load(root / LEGACY_BINDINGS["request_schema_sha256"])
+    # v2.2 reuses the common typed definitions from the request schema. This
+    # is a schema-reference dependency, not a compatibility or fallback path.
+    request_base_schema = load(
+        root / "schemas/cxxlens_ng_clang22_materialization_request.schema.yaml"
+    )
     schema_store = {
         request["$id"]: request,
-        legacy_request_schema["$id"]: legacy_request_schema,
+        request_base_schema["$id"]: request_base_schema,
         task["$id"]: task,
         "https://cxxlens.dev/schemas/cxxlens_ng_provider_task_v4.schema.yaml": task,
     }
@@ -990,10 +982,10 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         )
     adr = (root / ADR).read_text(encoding="utf-8")
 
-    legacy_ids = [entry["id"] for entry in protocol["message_types"]["registry"]]
+    protocol_ids = [entry["id"] for entry in protocol["message_types"]["registry"]]
     proposed = contract["message_registry"]["proposed"]
     proposed_ids = [entry["id"] for entry in proposed]
-    if len(legacy_ids) != len(set(legacy_ids)) or len(proposed_ids) != len(set(proposed_ids)):
+    if len(protocol_ids) != len(set(protocol_ids)) or len(proposed_ids) != len(set(proposed_ids)):
         raise SourceClosureTransportError("duplicate message ID")
     if proposed_ids != list(range(24, 30)):
         raise SourceClosureTransportError("source-closure message IDs must be contiguous 24 through 29")
@@ -1002,24 +994,21 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
 
     versions = contract["versions"]
     if versions != {
-        "provider_protocol": {"legacy": 1.1, "proposed": 1.2, "downgrade": "reject"},
-        "request": {"legacy": 2.1, "proposed": 2.2},
-        "task": {
-            "legacy": "cxxlens.clang22.task.v3",
-            "proposed": "cxxlens.clang22.task.v4",
-        },
+        "provider_protocol": {"major": 2, "minor": 0, "downgrade": "reject"},
+        "request": {"current": 2.2},
+        "task": {"current": "cxxlens.clang22.task.v4"},
     }:
         raise SourceClosureTransportError("version or downgrade contract drift")
     if request["properties"]["required_features"].get("const") != [
-        "task-input-chunks-v1",
-        "task-source-closure-v1",
+        "task-input-chunks-v2",
+        "task-source-closure-v2",
     ]:
         raise SourceClosureTransportError("request 2.2 omits exact source-closure capability")
     trust = request["properties"]["trust_policy"]["properties"]
-    if trust["protocol_minor"].get("const") != 2 or trust["required_features"].get("const") != [
-        "task-input-chunks-v1", "task-source-closure-v1"
+    if trust["protocol_minor"].get("const") != 0 or trust["required_features"].get("const") != [
+        "task-input-chunks-v2", "task-source-closure-v2"
     ]:
-        raise SourceClosureTransportError("request 2.2 trust policy retains protocol 1.1 authority")
+        raise SourceClosureTransportError("request 2.2 trust policy is not Protocol 2.0")
     request_text = (root / REQUEST).read_text(encoding="utf-8")
     task_text = (root / TASK).read_text(encoding="utf-8")
     if "content_base64" in request_text or "content_base64" in task_text:
@@ -1028,17 +1017,17 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     if not {"tasks", "source_closures", "task_extensions"}.issubset(
         request_required
     ):
-        raise SourceClosureTransportError("request 2.2 projects away v2.1 authority")
-    if "base_request_v2_1" in request.get("properties", {}) or request["properties"]["tasks"].get("items", {}).get("$ref") != "#/$defs/base_task_without_source_bytes":
-        raise SourceClosureTransportError("request 2.2 nests an executable v2.1 request")
+        raise SourceClosureTransportError("request 2.2 omits source-closure authority")
+    if "base_request_v2_2" in request.get("properties", {}) or request["properties"]["tasks"].get("items", {}).get("$ref") != "#/$defs/base_task_without_source_bytes":
+        raise SourceClosureTransportError("request 2.2 nests an invalid task projection")
     source_properties = request["$defs"]["base_task_without_source_bytes"]["properties"]["source"]["properties"]
-    if "content_base64" in source_properties or request["properties"]["worker"]["properties"]["protocol_minor"].get("const") != 2:
+    if "content_base64" in source_properties or request["properties"]["worker"]["properties"]["protocol_minor"].get("const") != 0:
         raise SourceClosureTransportError("request 2.2 source bytes or protocol authority drift")
     source_id_pattern = request["$defs"]["source_closure_id"].get("pattern")
     if source_id_pattern != r"^source-closure:semantic-v2:sha256:[0-9a-f]{64}$":
         raise SourceClosureTransportError("source closure ID grammar differs from ADR 0101")
     task_required = set(task["required"])
-    if not {"base_task_v3_digest", "open_task", "source_closure"}.issubset(
+    if not {"base_task_digest", "open_task", "source_closure"}.issubset(
         task_required
     ):
         raise SourceClosureTransportError("task v4 omits inherited task/open-task authority")
@@ -1051,14 +1040,6 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         for entry in path_contract.get("allOf", [])
     ):
         raise SourceClosureTransportError("task v4 path does not bind ADR 0101 byte/segment rules")
-
-    bindings = contract["compatibility"]["legacy_bindings"]
-    observed_bindings = {
-        name: hashlib.sha256((root / path).read_bytes()).hexdigest()
-        for name, path in LEGACY_BINDINGS.items()
-    }
-    if bindings != observed_bindings:
-        raise SourceClosureTransportError("legacy 2.1/v3 byte authority drift")
 
     controls = contract["wire_controls"]
     expected_fields = {
@@ -1147,9 +1128,9 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         raise SourceClosureTransportError(
             "maximum message-27 control exceeds deterministic CBOR control bound"
         )
-    if (
-        encoded_seal_bytes + protocol["wire"]["fixed_header_bytes"]
-        > protocol["wire"]["limits"]["frame_bytes"]
+    if encoded_seal_bytes + protocol["wire"]["fixed_header_bytes"] > (
+        protocol["wire"]["fixed_header_bytes"]
+        + protocol["wire"]["limits"]["control_bytes"]
     ):
         raise SourceClosureTransportError(
             "maximum message-27 frame exceeds fixed-header frame bound"
@@ -1297,13 +1278,16 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     maturity = contract["maturity"]
     if maturity not in {"proposed", "accepted"}:
         raise SourceClosureTransportError("source-closure maturity is invalid")
-    if set(legacy_ids).intersection(proposed_ids):
+    if not set(proposed_ids).issubset(set(protocol_ids)):
         raise SourceClosureTransportError(
-            "source-closure message ID collides with accepted protocol"
+            "source-closure message IDs are absent from Protocol 2 registry"
         )
-    if protocol["compatibility"].get("current") != "1.1.0":
+    if (
+        protocol["compatibility"].get("accepted_major") != 2
+        or protocol["compatibility"].get("accepted_minor") != 0
+    ):
         raise SourceClosureTransportError("source-closure authority unexpectedly activated protocol")
-    if maturity == "accepted" and "- Status: Accepted" not in adr:
+    if maturity == "accepted" and "- Status: Accepted" not in adr and "- Status: Accepted for implementation" not in adr:
         raise SourceClosureTransportError("accepted source-closure authority lacks accepted ADR")
     return contract
 

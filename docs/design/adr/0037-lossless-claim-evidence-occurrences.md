@@ -2,8 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-17
-- Decision owner: claim-kernel/store/query-runtime
-- Decision issue: #94
 - Depends on: ADR 0007, ADR 0009, ADR 0013, ADR 0019
 
 ## Context

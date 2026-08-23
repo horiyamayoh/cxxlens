@@ -4,7 +4,6 @@ maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#20-logical-query
   decision_adr: docs/design/adr/0021-query-closure-applicability.md
-  owner_issue: '#166'
   owner: steward.ng-query
 compatibility:
   version_axis: logical-query-ir

@@ -203,7 +203,8 @@ namespace cxxlens::detail::clang22::materialization
 
 		[[nodiscard]] sdk::result<std::string>
 		sealed_line_index_identity(materialization_replayable_spool& storage,
-								   // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): exact line-index metadata fields
+								   // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): exact
+								   // line-index metadata fields
 								   const std::uint64_t size_bytes,
 								   const std::uint64_t newline_count,
 								   const std::uint64_t offset_items_bytes,

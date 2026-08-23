@@ -135,30 +135,20 @@ namespace cxxlens::sdk::provider
 		[[nodiscard]] result<protocol_limits> negotiated_limits(const process_task_request& request)
 		{
 			const auto& offered = request.selection.selected_candidate().description.protocol;
-			const auto minimum =
-				std::max<std::uint32_t>(request.limits.minimum_minor, offered.minimum_minor);
-			auto maximum =
-				std::min<std::uint32_t>(request.limits.maximum_minor, offered.maximum_minor);
-			if (request.limits.protocol_major != offered.major || minimum > maximum ||
-				maximum > std::numeric_limits<std::uint16_t>::max())
+			if (request.limits.protocol_major != protocol_v2_major ||
+				request.limits.minimum_minor != protocol_v2_minor ||
+				request.limits.maximum_minor != protocol_v2_minor ||
+				offered.major != protocol_v2_major || offered.minimum_minor != protocol_v2_minor ||
+				offered.maximum_minor != protocol_v2_minor)
+				return cxxlens::sdk::unexpected(runtime_error(
+					"provider.protocol-minor-mismatch", "negotiation", "protocol-2.0-only"));
+			if (std::ranges::find(offered.required_features, "task-input-chunks-v2") ==
+				offered.required_features.end())
 				return cxxlens::sdk::unexpected(
-					runtime_error("provider.protocol-minor-mismatch", "negotiation"));
-			const bool chunk_feature =
-				std::ranges::find(offered.required_features, "task-input-chunks-v1") !=
-				offered.required_features.end();
-			if (chunk_feature && maximum < 1U)
-				return cxxlens::sdk::unexpected(
-					runtime_error("provider.required-feature-missing", "task-input-chunks-v1"));
-			if (!chunk_feature && maximum >= 1U)
-			{
-				if (minimum > 0U)
-					return cxxlens::sdk::unexpected(
-						runtime_error("provider.required-feature-missing", "task-input-chunks-v1"));
-				maximum = 0U;
-			}
+					runtime_error("provider.required-feature-missing", "task-input-chunks-v2"));
 			auto output = request.limits;
-			output.minimum_minor = static_cast<std::uint16_t>(maximum);
-			output.maximum_minor = static_cast<std::uint16_t>(maximum);
+			output.minimum_minor = protocol_v2_minor;
+			output.maximum_minor = protocol_v2_minor;
 			return output;
 		}
 
@@ -607,12 +597,11 @@ namespace cxxlens::sdk::provider
 				!protocol_digest(expected.task.normalized_invocation_digest) ||
 				!protocol_digest(expected.task.toolchain_digest) ||
 				!protocol_digest(expected.task.environment_digest) ||
-				expected.limits.protocol_major != 1U || minor > 1U ||
-				expected.limits.minimum_minor > minor ||
-				profile.task_input_chunks_v1 != (minor == 1U) ||
-				expected.limits.max_control_bytes == 0U ||
+				expected.limits.protocol_major != protocol_v2_major || minor != protocol_v2_minor ||
+				expected.limits.minimum_minor != protocol_v2_minor ||
+				!profile.task_input_chunks_v2 || expected.limits.max_control_bytes == 0U ||
 				expected.limits.max_payload_bytes == 0U ||
-				(profile.task_input_chunks_v1 &&
+				(profile.task_input_chunks_v2 &&
 				 expected.limits.max_payload_bytes < canonical_input_chunk_bytes))
 				return cxxlens::sdk::unexpected(runtime_error(
 					"provider.host-transcript-invalid", expected.task.task_id, "profile"));
@@ -666,7 +655,7 @@ namespace cxxlens::sdk::provider
 				{
 					auto schema = decode_schema_negotiate_metadata(value.control);
 					if (value.type != message_type::schema_negotiate || !schema ||
-						schema->protocol_schema != "cxxlens.provider-protocol.v1" ||
+						schema->protocol_schema != "cxxlens.provider-protocol.v2" ||
 						schema->protocol_minor != expected.limits.maximum_minor ||
 						!value.payload.empty())
 						return fail("schema");
@@ -675,10 +664,10 @@ namespace cxxlens::sdk::provider
 				{
 					auto task = decode_open_task_metadata(value.control);
 					if (value.type != message_type::open_task || !task || *task != expected.task ||
-						(profile_.task_input_chunks_v1 && !value.payload.empty()))
+						(profile_.task_input_chunks_v2 && !value.payload.empty()))
 						return fail("open-task");
 					task_ = std::move(*task);
-					if (!profile_.task_input_chunks_v1)
+					if (!profile_.task_input_chunks_v2)
 					{
 						if (value.payload.size() > expected.limits.max_payload_bytes)
 							return fail("inline-limit");
@@ -691,7 +680,7 @@ namespace cxxlens::sdk::provider
 							chunk_digests_.push_back(content_digest(value.payload));
 					}
 				}
-				else if (profile_.task_input_chunks_v1 && next_sequence_ == 3U)
+				else if (profile_.task_input_chunks_v2 && next_sequence_ == 3U)
 				{
 					auto descriptor = decode_input_descriptor(value.control);
 					if (value.type != message_type::input_descriptor || !descriptor ||
@@ -712,7 +701,7 @@ namespace cxxlens::sdk::provider
 					chunk_count_ = descriptor->chunk_count;
 					descriptor_seen_ = true;
 				}
-				else if (profile_.task_input_chunks_v1 && descriptor_seen_ &&
+				else if (profile_.task_input_chunks_v2 && descriptor_seen_ &&
 						 next_chunk_index_ < chunk_count_ &&
 						 next_sequence_ == 4U + next_chunk_index_)
 				{
@@ -734,8 +723,8 @@ namespace cxxlens::sdk::provider
 					received_bytes_ += expected_bytes;
 					++next_chunk_index_;
 				}
-				else if ((!profile_.task_input_chunks_v1 && next_sequence_ == 3U) ||
-						 (profile_.task_input_chunks_v1 && descriptor_seen_ &&
+				else if ((!profile_.task_input_chunks_v2 && next_sequence_ == 3U) ||
+						 (profile_.task_input_chunks_v2 && descriptor_seen_ &&
 						  next_chunk_index_ == chunk_count_ && next_sequence_ == 4U + chunk_count_))
 				{
 					auto credit = decode_credit_metadata(value.control);
@@ -745,8 +734,8 @@ namespace cxxlens::sdk::provider
 					credit_ = {credit->bytes, credit->frames};
 					credit_seen_ = true;
 				}
-				else if ((!profile_.task_input_chunks_v1 && next_sequence_ == 4U) ||
-						 (profile_.task_input_chunks_v1 && credit_seen_ &&
+				else if ((!profile_.task_input_chunks_v2 && next_sequence_ == 4U) ||
+						 (profile_.task_input_chunks_v2 && credit_seen_ &&
 						  next_sequence_ == 5U + chunk_count_))
 				{
 					auto close = decode_close_metadata(value.control);
@@ -764,9 +753,9 @@ namespace cxxlens::sdk::provider
 			[[nodiscard]] result<host_input_state_result> finish()
 			{
 				const auto& expected = profile_.expectation;
-				const auto expected_frames = profile_.task_input_chunks_v1 ? 6U + chunk_count_ : 5U;
+				const auto expected_frames = profile_.task_input_chunks_v2 ? 6U + chunk_count_ : 5U;
 				if (!closed_ || !credit_seen_ || !task_ || next_sequence_ != expected_frames ||
-					(profile_.task_input_chunks_v1 &&
+					(profile_.task_input_chunks_v2 &&
 					 (!descriptor_seen_ || next_chunk_index_ != chunk_count_ ||
 					  received_bytes_ != total_bytes_)))
 					return cxxlens::sdk::unexpected(runtime_error(
@@ -1175,12 +1164,12 @@ namespace cxxlens::sdk::provider
 			};
 			if (provider_id.empty() || provider_id.contains('\0') || provider_version.major == 0U ||
 				!canonical_digest(provider_binary_digest) ||
-				!canonical_digest(provider_semantic_contract_digest) || protocol_major != 1U ||
-				protocol_minor > 1U || !ordered_unique(required_features) ||
-				!protocol_digest(sandbox_policy_digest) || !ordered_unique(offered_relations) ||
-				(protocol_minor == 1U) !=
-					(std::ranges::find(required_features, "task-input-chunks-v1") !=
-					 required_features.end()))
+				!canonical_digest(provider_semantic_contract_digest) ||
+				protocol_major != protocol_v2_major || protocol_minor != protocol_v2_minor ||
+				!ordered_unique(required_features) || !protocol_digest(sandbox_policy_digest) ||
+				!ordered_unique(offered_relations) ||
+				std::ranges::find(required_features, "task-input-chunks-v2") ==
+					required_features.end())
 				return cxxlens::sdk::unexpected(runtime_error(
 					"provider.binary-identity-mismatch", provider_id, "expected-provider-invalid"));
 			return {};
@@ -1256,7 +1245,7 @@ namespace cxxlens::sdk::provider
 			auto input_size = input.size();
 			if (!input_size)
 				return cxxlens::sdk::unexpected(std::move(input_size.error()));
-			const auto size_limit = profile.task_input_chunks_v1
+			const auto size_limit = profile.task_input_chunks_v2
 				? maximum_logical_input_bytes
 				: profile.expectation.limits.max_payload_bytes;
 			if (*input_size > size_limit || *input_size > std::numeric_limits<std::size_t>::max())
@@ -1323,7 +1312,7 @@ namespace cxxlens::sdk::provider
 
 			auto hello = encode_control_text(profile.expectation.provider_manifest);
 			auto schema = encode_schema_negotiate_metadata(
-				{"cxxlens.provider-protocol.v1", profile.expectation.limits.maximum_minor});
+				{"cxxlens.provider-protocol.v2", profile.expectation.limits.maximum_minor});
 			auto open = encode_open_task_metadata(profile.expectation.task);
 			auto output_credit = encode_credit_metadata({credit.bytes, credit.frames});
 			auto close = encode_close_metadata({profile.expectation.task.task_id});
@@ -1340,7 +1329,7 @@ namespace cxxlens::sdk::provider
 				return cxxlens::sdk::unexpected(std::move(written.error()));
 
 			std::uint64_t sequence = 2U;
-			if (!profile.task_input_chunks_v1)
+			if (!profile.task_input_chunks_v2)
 			{
 				std::vector<std::byte> payload(static_cast<std::size_t>(*input_size));
 				if (auto read = read_exact(0U, payload); !read)
@@ -1502,7 +1491,7 @@ namespace cxxlens::sdk::provider
 				const auto control_bytes = read_host_big_endian<std::uint32_t>(header, 28U);
 				const auto payload_bytes = read_host_big_endian<std::uint64_t>(header, 32U);
 				const auto wire_type = read_host_big_endian<std::uint16_t>(header, 8U);
-				const auto profile_payload_limit = profile.task_input_chunks_v1
+				const auto profile_payload_limit = profile.task_input_chunks_v2
 					? (wire_type == static_cast<std::uint16_t>(message_type::input_chunk)
 						   ? canonical_input_chunk_bytes
 						   : 0U)
@@ -1913,8 +1902,9 @@ namespace cxxlens::sdk::provider
 						"provider.protocol-state-invalid", request.task_id, "terminal-order");
 				if (is_ng1_heartbeat_message(value.type))
 				{
-					if (!request.ng1_control_transcript || value.protocol_minor != 1U ||
-						value.flags != 0U || !value.payload.empty())
+					if (!request.ng1_control_transcript ||
+						value.protocol_minor != protocol_v2_minor || value.flags != 0U ||
+						!value.payload.empty())
 						return fail(
 							"provider.protocol-state-invalid", request.task_id, "ng1-heartbeat");
 					auto heartbeat = decode_ng1_heartbeat_control(value.control);
@@ -1964,7 +1954,7 @@ namespace cxxlens::sdk::provider
 					{
 						auto metadata = decode_schema_negotiate_metadata(value.control);
 						if (!hello_seen || schema_seen || accepted || !metadata ||
-							metadata->protocol_schema != "cxxlens.provider-protocol.v1" ||
+							metadata->protocol_schema != "cxxlens.provider-protocol.v2" ||
 							metadata->protocol_minor != session_limits.maximum_minor ||
 							!value.payload.empty())
 							return fail(
@@ -2330,6 +2320,7 @@ namespace cxxlens::sdk::provider
 					case message_type::closure_candidate:
 					case message_type::resume:
 					case message_type::close:
+					case message_type::heartbeat:
 						return fail(
 							"provider.protocol-state-invalid", request.task_id, "unsupported");
 				}
@@ -2586,7 +2577,7 @@ namespace cxxlens::sdk::provider
 			if (auto valid = provider.validate(); !valid)
 				return cxxlens::sdk::unexpected(std::move(valid.error()));
 			static const std::set<std::string, std::less<>> supported_features{
-				"credit-backpressure", "task-input-chunks-v1"};
+				"credit-backpressure", "task-input-chunks-v2"};
 			if (std::ranges::any_of(provider.protocol.required_features,
 									[&](const std::string& feature)
 									{
@@ -2645,7 +2636,7 @@ namespace cxxlens::sdk::provider
 				  request.toolchain_digest,
 				  request.environment_digest},
 				 *session_limits},
-				session_limits->maximum_minor == 1U,
+				true,
 			};
 			process_invocation invocation;
 			invocation.argv = selected.executable_argv;

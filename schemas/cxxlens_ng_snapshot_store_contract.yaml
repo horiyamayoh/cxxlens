@@ -5,8 +5,6 @@ authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#15-immutable-snapshot-and-store
   decision_adr: docs/design/adr/0079-checked-publication-counters.md
   sqlite_decision_adr: docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
-  sqlite_decision_issue: '#200'
-  owner_issue: '#148'
   owner: steward.ng-store-contract
 compatibility:
   version_axis: snapshot-identity-and-publication
@@ -694,7 +692,6 @@ df_0200_materialization_ingress:
     status: accepted
     selected_alternative: A
     decision_ref: docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
-    decision_issue: '#200'
     confirmed_blocker: sqlite-v2-single-payload-blob-runtime-max-length-1000000000-cannot-satisfy-required-limit-adjacent-passed-memory-sqlite-parity
     required_parity: limit-adjacent-passed-memory-and-reopened-sqlite
     weakening_parity: forbidden

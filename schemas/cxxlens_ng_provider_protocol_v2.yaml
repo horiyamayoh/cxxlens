@@ -4,10 +4,6 @@ maturity: accepted-for-implementation
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#18-provider-protocol
   decision_adr: docs/design/adr/0107-provider-protocol-2-cutover.md
-  implementation_issues: ['#183', '#261']
-  supersedes:
-    - schemas/cxxlens_ng_provider_protocol.yaml
-    - schemas/cxxlens_ng_source_closure_transport.yaml
 
 compatibility:
   version_axis: provider-protocol
@@ -16,11 +12,10 @@ compatibility:
   accepted_major: 2
   accepted_minor: 0
   downgrade: reject
-  implicit_legacy_fallback: forbidden
+  implicit_downgrade: forbidden
   legacy_protocol_1: rejected-before-payload
   legacy_request_2_1_task_v3: rejected-before-payload
-  implementation_byte_identity: non-authoritative
-  implementation_byte_sha256: forbidden
+  implementation_identity: product-artifact-only
   product_content_digest: retained
 
 wire:
@@ -105,14 +100,64 @@ message_types:
     - {id: 28, reserved_for: source_closure_ack}
     - {id: 29, reserved_for: source_closure_reject}
 
+# This state machine is a product contract: process and logical transcript
+# consumers must apply the same typed validation rules before adoption.  It
+# deliberately contains no repository-operation or implementation-byte
+# authority.
+state_machine_validation:
+  validator_bypass: forbidden
+  implementation: single-shared-typed-validator
+  consumers: [process-runtime, provider-worker, provider-sdk]
+  modes:
+    process: full-hello-schema-task-handshake
+    logical: task-accepted-onward-same-state-machine
+  logical_author_state: [context-shared-sink-registry, move-stable-open-batch, unique-task-batch-id, single-active-batch, abandon-is-failure]
+  fault_injection: mutate-encoded-frame-or-credit-then-shared-decode-and-validate
+  reason_parity: same-transcript-same-stable-reason
+  terminal_verdict:
+    success_source: validated-task-complete-only
+    task_failed_reason: registered-non-success-provider-terminal-only
+    provider_success_in_task_failed: reject-as-provider.schema-invalid
+    unknown_reason: reject-as-provider.schema-invalid
+  initial_order: [hello, schema_negotiate, task_accepted]
+  exact_bindings:
+    hello: [canonical-provider-manifest-v1]
+    task_accepted: [provider-id, provider-version, task-id]
+    batch_begin: [task-id, relation-descriptor-id, relation-descriptor-digest, dependency-group-id, atomic-output-group-id, batch-id]
+    column_chunk: [task-id, dependency-group-id, atomic-output-group-id, batch-id, relation-descriptor-id, relation-descriptor-digest, column-id, row-offset, row-count, chunk-index, encoding, payload-digest, chunk-digest]
+    batch_end: [task-id, dependency-group-id, atomic-output-group-id, batch-id, relation-descriptor-id, relation-descriptor-digest, declared-row-count, every-column-length, canonical-column-order, ordered-chunk-digests, batch-digest]
+    task_complete: [task-id, complete]
+    task_failed: [error-code, task-id, error-field]
+  success_preconditions:
+    - all-output-within-host-credit
+    - all-message-directions-valid
+    - every-batch-schema-valid-and-sealed
+    - every-batch-count-and-digest-valid
+    - coverage-unresolved-progress-complete
+    - closure-empty-or-independently-validated
+    - no-output-after-terminal
+  deterministic_rejections:
+    - provider.protocol-minor-mismatch
+    - provider.unknown-required-extension
+    - provider.invalid-frame-flags
+    - provider.unsupported-compression
+    - provider.protocol-state-invalid
+    - provider.credit-exceeded
+    - provider.backpressure
+    - provider.task-binding-mismatch
+    - provider.batch-invalid
+    - provider.batch-state-invalid
+    - provider.relation-incompatible
+    - provider.coverage-incomplete
+
 capabilities:
-  task-input-chunks-v1: required
-  task-source-closure-v1: required-for-task-v4
+  task-input-chunks-v2: required
+  task-source-closure-v2: required-for-task-v4
   durable-resume-token: required-for-NG1
   heartbeat: required-for-NG1
   progress-rate-enforcement: required-for-NG1
   spill-staging: required-for-NG1
-  long-run-fault-qualification: required-for-NG1
+  long-run-fault-recovery: required-for-NG1
   absence_action: typed-reject-before-payload
 
 request_task:
@@ -123,7 +168,6 @@ request_task:
   source_closure_id_domain: source-closure:semantic-v2:sha256:<64-lower-hex>
   source_bytes_in_request: forbidden
   content_base64: forbidden
-  v3_digest_as_authority: forbidden
   task_v4_authority:
     - task_input_digest
     - normalized_invocation_digest
@@ -164,6 +208,7 @@ source_closure_transport:
   complete_closure_memory_copy: forbidden
 
 ng1:
+  hardening_contract: schemas/cxxlens_ng_provider_ng1_hardening.yaml
   heartbeat_message_id: 23
   heartbeat_clock: host-injected-monotonic-only
   heartbeat_timeout_ns: 5000000000
@@ -182,9 +227,3 @@ product_boundary:
     - canonical-semantic-certification
     - digest-addressed-source-content
     - bounded-resource-and-crash-safety
-  removed:
-    - implementation-byte-sha-ledger
-    - legacy-bindings
-    - exact-source-byte-authority
-    - qualification-report
-    - issue-checkpoint

@@ -48,6 +48,5 @@ ctest --preset dev-clang --output-on-failure
 cmake --build --preset dev-clang --target cxxlens-quality
 ```
 
-開発完了は変更固有試験と main の全決定的 CTest が green になった時点です。運用証跡、issue comment、review receipt、exact-SHA
-記録、qualification JSON、Learning checkpoint は生成しません。製品 runtime の provenance、coverage、unknown、materialization
+開発完了は変更固有試験と main の全決定的 CTest が green になった時点です。製品 runtime の provenance、coverage、unknown、materialization
 report、SQLite/source-closure receipt は維持します。

@@ -2,7 +2,6 @@
 
 - Status: accepted
 - Date: 2026-07-18
-- Issue: #146
 
 ## Context
 

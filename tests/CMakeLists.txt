@@ -7,7 +7,22 @@ function(cxxlens_add_test_executable target source)
   cxxlens_enable_sanitizers(${target})
 endfunction()
 
+# Provider transcript fault harnesses are test support, not part of the
+# installed author SDK.  Keep the implementation in a test-only object library
+# so product targets cannot accidentally export the testing namespace or its
+# symbols.
+add_library(cxxlens-test-sdk-support OBJECT
+            "${PROJECT_SOURCE_DIR}/src/sdk/testing.cpp")
+target_compile_features(cxxlens-test-sdk-support PRIVATE cxx_std_23)
+target_include_directories(
+  cxxlens-test-sdk-support PRIVATE "${PROJECT_SOURCE_DIR}/include"
+                                   "${PROJECT_SOURCE_DIR}/src")
+cxxlens_set_project_warnings(cxxlens-test-sdk-support)
+cxxlens_enable_sanitizers(cxxlens-test-sdk-support)
+
 cxxlens_add_test_executable(cxxlens-unit-sdk unit/sdk/sdk_test.cpp)
+target_sources(cxxlens-unit-sdk
+               PRIVATE $<TARGET_OBJECTS:cxxlens-test-sdk-support>)
 target_link_libraries(cxxlens-unit-sdk PRIVATE cxxlens::clang22_provider_sdk)
 set(cxxlens_sdk_cases
     scalar-value-validation
@@ -49,13 +64,12 @@ target_link_libraries(cxxlens-unit-sdk-store PRIVATE cxxlens::kernel
 target_include_directories(cxxlens-unit-sdk-store
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME unit.sdk-store COMMAND cxxlens-unit-sdk-store)
-# The store suite deliberately exercises process-global SQLite/VFS lifecycle and a
-# set of fixed crash/tamper fixture paths.  Keep that one executable isolated from
-# install fixture preparation and other SQLite processes while allowing the rest of
-# the deterministic suite to run in parallel.
-set_tests_properties(unit.sdk-store PROPERTIES LABELS
-                                               "unit;sdk;store;transaction"
-                     RUN_SERIAL TRUE)
+# The store suite deliberately exercises process-global SQLite/VFS lifecycle and
+# a set of fixed crash/tamper fixture paths.  Keep that one executable isolated
+# from install fixture preparation and other SQLite processes while allowing the
+# rest of the deterministic suite to run in parallel.
+set_tests_properties(
+  unit.sdk-store PROPERTIES LABELS "unit;sdk;store;transaction" RUN_SERIAL TRUE)
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-disposable-qualification
                             unit/sdk/sqlite_disposable_qualification_test.cpp)
@@ -389,6 +403,8 @@ target_link_libraries(cxxlens-provider-process-fixture
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-runtime
                             unit/sdk/provider_runtime_test.cpp)
+target_sources(cxxlens-unit-sdk-provider-runtime
+               PRIVATE $<TARGET_OBJECTS:cxxlens-test-sdk-support>)
 if(NOT CXXLENS_BUILD_SHARED)
   target_sources(
     cxxlens-unit-sdk-provider-runtime
@@ -614,19 +630,6 @@ set_tests_properties(
   unit.sdk-provider-ng1-live-driver
   PROPERTIES LABELS "unit;sdk;provider;ng1;live;transport;session;fail-closed")
 
-cxxlens_add_test_executable(cxxlens-clang22-provider-normalizer
-                            adapter/clang22/provider_normalizer_test.cpp)
-target_link_libraries(cxxlens-clang22-provider-normalizer
-                      PRIVATE cxxlens_clang22_worker_core)
-target_include_directories(cxxlens-clang22-provider-normalizer
-                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
-add_test(NAME adapter.clang22-provider-normalizer
-         COMMAND cxxlens-clang22-provider-normalizer)
-set_tests_properties(
-  adapter.clang22-provider-normalizer
-  PROPERTIES LABELS
-             "adapter;provider;clang22;normalizer;identity;coverage;unresolved")
-
 cxxlens_add_test_executable(cxxlens-clang22-provider-worker-protocol
                             adapter/clang22/provider_worker_protocol_test.cpp)
 target_link_libraries(cxxlens-clang22-provider-worker-protocol
@@ -661,22 +664,6 @@ set_tests_properties(
   adapter.clang22-materialization-identity
   PROPERTIES LABELS "adapter;provider;clang22;materialization;identity")
 
-cxxlens_add_test_executable(cxxlens-clang22-materialization-request-driver
-                            adapter/clang22/materialization_request_driver.cpp)
-target_link_libraries(cxxlens-clang22-materialization-request-driver
-                      PRIVATE cxxlens_clang22_materializer_core)
-add_test(
-  NAME adapter.clang22-materialization-request
-  COMMAND
-    "${Python3_EXECUTABLE}"
-    "${PROJECT_SOURCE_DIR}/tests/adapter/clang22/materialization_request_test.py"
-    --root "${PROJECT_SOURCE_DIR}" --driver
-    "$<TARGET_FILE:cxxlens-clang22-materialization-request-driver>")
-set_tests_properties(
-  adapter.clang22-materialization-request
-  PROPERTIES
-    LABELS "adapter;provider;clang22;materialization;request;identity;security")
-
 add_test(
   NAME adapter.clang22-materialization-cli-phase
   COMMAND
@@ -698,28 +685,6 @@ set_tests_properties(
   adapter.clang22-materialization-io
   PROPERTIES LABELS
              "adapter;provider;clang22;materialization;streaming;security")
-
-cxxlens_add_test_executable(cxxlens-clang22-materialization-seal
-                            adapter/clang22/materialization_seal_test.cpp)
-target_link_libraries(cxxlens-clang22-materialization-seal
-                      PRIVATE cxxlens_clang22_materializer_core)
-add_test(NAME adapter.clang22-materialization-seal
-         COMMAND cxxlens-clang22-materialization-seal)
-set_tests_properties(
-  adapter.clang22-materialization-seal
-  PROPERTIES LABELS
-             "adapter;provider;clang22;materialization;seal;identity;security")
-
-cxxlens_add_test_executable(cxxlens-clang22-materialization-claims
-                            adapter/clang22/materialization_claims_test.cpp)
-target_link_libraries(cxxlens-clang22-materialization-claims
-                      PRIVATE cxxlens_clang22_materializer_core)
-add_test(NAME adapter.clang22-materialization-claims
-         COMMAND cxxlens-clang22-materialization-claims "${PROJECT_SOURCE_DIR}")
-set_tests_properties(
-  adapter.clang22-materialization-claims
-  PROPERTIES
-    LABELS "adapter;provider;clang22;materialization;claims;partition;identity")
 
 cxxlens_add_test_executable(cxxlens-df0200-claim-batch-corpus
                             adapter/clang22/df_0200_claim_batch_corpus_test.cpp)
@@ -749,6 +714,46 @@ set_tests_properties(
 )
 
 cxxlens_add_test_executable(
+  cxxlens-clang22-materialization-store-candidate
+  adapter/clang22/materialization_store_candidate_test.cpp)
+target_link_libraries(cxxlens-clang22-materialization-store-candidate
+                      PRIVATE cxxlens_clang22_materializer_core)
+add_test(NAME adapter.clang22-materialization-store-candidate
+         COMMAND cxxlens-clang22-materialization-store-candidate)
+set_tests_properties(
+  adapter.clang22-materialization-store-candidate
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;materialization;store;candidate;bounded;security")
+
+cxxlens_add_test_executable(
+  cxxlens-clang22-materialization-store-projection
+  adapter/clang22/materialization_store_projection_test.cpp)
+target_link_libraries(cxxlens-clang22-materialization-store-projection
+                      PRIVATE cxxlens_clang22_materializer_core)
+add_test(NAME adapter.clang22-materialization-store-projection
+         COMMAND cxxlens-clang22-materialization-store-projection)
+set_tests_properties(
+  adapter.clang22-materialization-store-projection
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;materialization;store;projection;bounded;security"
+)
+
+cxxlens_add_test_executable(
+  cxxlens-clang22-materialization-store-candidate-bridge
+  adapter/clang22/materialization_store_candidate_bridge_test.cpp)
+target_link_libraries(cxxlens-clang22-materialization-store-candidate-bridge
+                      PRIVATE cxxlens_clang22_materializer_core)
+add_test(NAME adapter.clang22-materialization-store-candidate-bridge
+         COMMAND cxxlens-clang22-materialization-store-candidate-bridge)
+set_tests_properties(
+  adapter.clang22-materialization-store-candidate-bridge
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;materialization;store;candidate;bridge;security")
+
+cxxlens_add_test_executable(
   cxxlens-clang22-materialization-store-outcome
   adapter/clang22/materialization_store_outcome_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-store-outcome
@@ -761,55 +766,46 @@ set_tests_properties(
              "adapter;provider;clang22;materialization;store;outcome;security")
 
 cxxlens_add_test_executable(
-  cxxlens-clang22-materialization-request-stream
-  adapter/clang22/materialization_request_stream_test.cpp)
-target_link_libraries(cxxlens-clang22-materialization-request-stream
+  cxxlens-clang22-materialization-request-v2-2
+  adapter/clang22/materialization_request_v2_2_test.cpp)
+target_link_libraries(cxxlens-clang22-materialization-request-v2-2
                       PRIVATE cxxlens_clang22_materializer_core)
-add_test(NAME adapter.clang22-materialization-request-stream
-         COMMAND cxxlens-clang22-materialization-request-stream)
+add_test(NAME adapter.clang22-materialization-request-v2-2
+         COMMAND cxxlens-clang22-materialization-request-v2-2)
 set_tests_properties(
-  adapter.clang22-materialization-request-stream
+  adapter.clang22-materialization-request-v2-2
   PROPERTIES
     LABELS
-    "adapter;provider;clang22;materialization;request;streaming;security")
+    "adapter;provider;clang22;materialization;request;v2.2;streaming;security")
+
+cxxlens_add_test_executable(cxxlens-clang22-provider-task-v4
+                            adapter/clang22/provider_task_v4_test.cpp)
+target_link_libraries(cxxlens-clang22-provider-task-v4
+                      PRIVATE cxxlens_clang22_materializer_core)
+add_test(NAME adapter.clang22-provider-task-v4
+         COMMAND cxxlens-clang22-provider-task-v4)
+set_tests_properties(
+  adapter.clang22-provider-task-v4
+  PROPERTIES LABELS "adapter;provider;clang22;materialization;task;v4;security")
+
+cxxlens_add_test_executable(cxxlens-protocol-v2
+                            protocol_v2/protocol_v2_direct_test.cpp)
+target_link_libraries(cxxlens-protocol-v2 PRIVATE cxxlens_protocol_v2)
+add_test(NAME sdk.protocol-v2 COMMAND cxxlens-protocol-v2)
+set_tests_properties(sdk.protocol-v2 PROPERTIES LABELS
+                                                "sdk;protocol;v2;security")
 
 cxxlens_add_test_executable(
-  cxxlens-clang22-materialization-request-identity
-  adapter/clang22/materialization_request_identity_test.cpp)
-target_link_libraries(cxxlens-clang22-materialization-request-identity
+  cxxlens-clang22-materialization-pipeline-v2-2
+  adapter/clang22/materialization_pipeline_v2_2_test.cpp)
+target_link_libraries(cxxlens-clang22-materialization-pipeline-v2-2
                       PRIVATE cxxlens_clang22_materializer_core)
-add_test(NAME adapter.clang22-materialization-request-identity
-         COMMAND cxxlens-clang22-materialization-request-identity)
+add_test(NAME adapter.clang22-materialization-pipeline-v2-2
+         COMMAND cxxlens-clang22-materialization-pipeline-v2-2)
 set_tests_properties(
-  adapter.clang22-materialization-request-identity
-  PROPERTIES
-    LABELS
-    "adapter;provider;clang22;materialization;request;identity;streaming;security"
-)
-
-cxxlens_add_test_executable(cxxlens-clang22-materialization-task-spool
-                            adapter/clang22/materialization_task_spool_test.cpp)
-target_link_libraries(cxxlens-clang22-materialization-task-spool
-                      PRIVATE cxxlens_clang22_materializer_core)
-add_test(NAME adapter.clang22-materialization-task-spool
-         COMMAND cxxlens-clang22-materialization-task-spool)
-set_tests_properties(
-  adapter.clang22-materialization-task-spool
+  adapter.clang22-materialization-pipeline-v2-2
   PROPERTIES LABELS
-             "adapter;provider;clang22;materialization;task;streaming;security")
-
-cxxlens_add_test_executable(
-  cxxlens-clang22-materialization-request-v2-1
-  adapter/clang22/materialization_request_v2_1_test.cpp)
-target_link_libraries(cxxlens-clang22-materialization-request-v2-1
-                      PRIVATE cxxlens_clang22_materializer_core)
-add_test(NAME adapter.clang22-materialization-request-v2-1
-         COMMAND cxxlens-clang22-materialization-request-v2-1)
-set_tests_properties(
-  adapter.clang22-materialization-request-v2-1
-  PROPERTIES
-    LABELS
-    "adapter;provider;clang22;materialization;request;v2.1;streaming;security")
+             "adapter;provider;clang22;materialization;pipeline;v2.2;security")
 
 cxxlens_add_test_executable(cxxlens-clang22-materialization-rooted-vfs
                             adapter/clang22/materialization_rooted_vfs_test.cpp)
@@ -839,27 +835,6 @@ set_tests_properties(
   adapter.clang22-materialization-occurrence
   PROPERTIES LABELS
              "adapter;provider;clang22;materialization;occurrence;security")
-
-cxxlens_add_test_executable(cxxlens-clang22-materialization-report
-                            adapter/clang22/materialization_report_test.cpp)
-target_link_libraries(cxxlens-clang22-materialization-report
-                      PRIVATE cxxlens_clang22_materializer_core)
-target_compile_definitions(
-  cxxlens-clang22-materialization-report
-  PRIVATE CXXLENS_CLANG22_MATERIALIZATION_REPORT_TESTING=1)
-add_test(NAME adapter.clang22-materialization-report
-         COMMAND cxxlens-clang22-materialization-report)
-add_test(
-  NAME adapter.clang22-materialization-report-schema
-  COMMAND
-    "${Python3_EXECUTABLE}"
-    "${PROJECT_SOURCE_DIR}/tests/adapter/clang22/materialization_report_schema_test.py"
-    --root "${PROJECT_SOURCE_DIR}" --driver
-    "$<TARGET_FILE:cxxlens-clang22-materialization-report>")
-set_tests_properties(
-  adapter.clang22-materialization-report
-  adapter.clang22-materialization-report-schema
-  PROPERTIES LABELS "adapter;provider;clang22;materialization;report;security")
 
 cxxlens_add_test_executable(cxxlens-clang22-observation-v2
                             adapter/clang22/observation_v2_test.cpp)
@@ -913,6 +888,40 @@ set_tests_properties(
   PROPERTIES
     LABELS
     "adapter;provider;clang22;source-closure;invocation;security;contract")
+
+cxxlens_add_test_executable(cxxlens-clang22-source-closure-transport
+                            adapter/clang22/source_closure_transport_test.cpp)
+target_link_libraries(cxxlens-clang22-source-closure-transport
+                      PRIVATE cxxlens_clang22_materialization_codecs)
+add_test(NAME adapter.clang22-source-closure-transport
+         COMMAND cxxlens-clang22-source-closure-transport)
+set_tests_properties(
+  adapter.clang22-source-closure-transport
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;source-closure;transport;protocol;security")
+
+cxxlens_add_test_executable(cxxlens-clang22-source-closure-task-v4
+                            adapter/clang22/source_closure_task_v4_test.cpp)
+target_link_libraries(cxxlens-clang22-source-closure-task-v4
+                      PRIVATE cxxlens_clang22_materialization_codecs)
+add_test(NAME adapter.clang22-source-closure-task-v4
+         COMMAND cxxlens-clang22-source-closure-task-v4)
+set_tests_properties(
+  adapter.clang22-source-closure-task-v4
+  PROPERTIES LABELS "adapter;provider;clang22;source-closure;task;v4;security")
+
+cxxlens_add_test_executable(
+  cxxlens-clang22-source-closure-task-v4-worker
+  adapter/clang22/source_closure_task_v4_worker_test.cpp)
+target_link_libraries(cxxlens-clang22-source-closure-task-v4-worker
+                      PRIVATE cxxlens_clang22_worker_core)
+add_test(NAME adapter.clang22-source-closure-task-v4-worker
+         COMMAND cxxlens-clang22-source-closure-task-v4-worker)
+set_tests_properties(
+  adapter.clang22-source-closure-task-v4-worker
+  PROPERTIES LABELS
+             "adapter;provider;clang22;source-closure;task;v4;worker;security")
 
 # The native bridge test needs a real compiler binary/resource-dir/root,
 # resolved from the exact LLVM/Clang 22 package `find_package(LLVM 22.1 CONFIG)`
@@ -971,6 +980,8 @@ set_tests_properties(
 
 cxxlens_add_test_executable(cxxlens-r2-vertical-slice
                             integration/r2_vertical_slice_test.cpp)
+target_sources(cxxlens-r2-vertical-slice
+               PRIVATE $<TARGET_OBJECTS:cxxlens-test-sdk-support>)
 target_link_libraries(cxxlens-r2-vertical-slice
                       PRIVATE cxxlens_clang22_worker_core)
 target_include_directories(cxxlens-r2-vertical-slice
@@ -1129,6 +1140,14 @@ foreach(
                        PROPERTIES LABELS "quality;ng;contract")
 endforeach()
 
+add_test(
+  NAME sdk.doctor-product
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/unit/sdk/check_sdk_doctor_product.py"
+    "$<TARGET_FILE:cxxlens-sdk-doctor>")
+set_tests_properties(sdk.doctor-product PROPERTIES LABELS "sdk;doctor;product")
+
 configure_file(install/run_install_test.cmake.in
                "${CMAKE_CURRENT_BINARY_DIR}/run_install_test.cmake" @ONLY)
 set(cxxlens_install_script "${CMAKE_CURRENT_BINARY_DIR}/run_install_test.cmake")
@@ -1154,14 +1173,10 @@ foreach(
   ITEMS core-consumer
         sdk-consumer
         clang22-sdk-consumer
-        clang22-materializer-success
-        clang22-materializer-base64
-        clang22-materializer-negative
         real-project-consumer
         real-project-incompatible-version
         examples-consumer
-        shared-runtime-layout
-        legacy-zero)
+        shared-runtime-layout)
   add_test(NAME "install.${phase}"
            COMMAND "${CMAKE_COMMAND}" "-DPHASE=${phase}" -P
                    "${cxxlens_install_script}")
@@ -1171,26 +1186,21 @@ foreach(
                installed_prefix PROCESSORS 2)
 endforeach()
 
-add_test(
-  NAME install.clang22-materializer-installation-binding
-  COMMAND
-    "${Python3_EXECUTABLE}"
-    "${PROJECT_SOURCE_DIR}/tests/install/clang22_materializer_installation_binding_test.py"
-    --root "${PROJECT_SOURCE_DIR}" --prefix
-    "${CMAKE_CURRENT_BINARY_DIR}/install-consumer/relocated-prefix"
-    --executable-suffix "${CMAKE_EXECUTABLE_SUFFIX}")
-set_tests_properties(
-  install.clang22-materializer-installation-binding
-  PROPERTIES LABELS
-             "install;package;acceptance;consumer;materialization;failure;phase"
-             FIXTURES_REQUIRED installed_prefix PROCESSORS 2)
+if(CXXLENS_CLANG22_AVAILABLE)
+  add_test(NAME install.clang22-materializer-v2-2
+           COMMAND "${CMAKE_COMMAND}" -DPHASE=clang22-materializer-v2-2 -P
+                   "${cxxlens_install_script}")
+  set_tests_properties(
+    install.clang22-materializer-v2-2
+    PROPERTIES LABELS
+               "install;package;acceptance;consumer;materialization;v2.2"
+               FIXTURES_REQUIRED installed_prefix PROCESSORS 2)
+endif()
 
 cxxlens_configure_sanitizer_tests()
 if(CXXLENS_ENABLE_ASAN)
   set_property(
-    TEST install.clang22-materializer-success
-         install.clang22-materializer-base64
-         install.clang22-materializer-negative
+    TEST install.clang22-materializer-v2-2
     APPEND
     PROPERTY ENVIRONMENT "CXXLENS_ASAN_INSTALLED_TEST_PROFILE=1")
 endif()
@@ -1198,30 +1208,32 @@ endif()
 add_custom_target(cxxlens-ng-test-binaries)
 add_dependencies(
   cxxlens-ng-test-binaries
+  cxxlens-sdk-doctor
   cxxlens-clang-worker-22
   cxxlens-clang22-materialize
-  cxxlens-clang22-provider-normalizer
   cxxlens-clang22-provider-worker-protocol
   cxxlens-clang22-materialization-json
   cxxlens-clang22-materialization-identity
-  cxxlens-clang22-materialization-request-driver
   cxxlens-clang22-materialization-io
-  cxxlens-clang22-materialization-claims
-  cxxlens-clang22-materialization-seal
   cxxlens-clang22-materialization-store
+  cxxlens-clang22-materialization-store-candidate
+  cxxlens-clang22-materialization-store-projection
+  cxxlens-clang22-materialization-store-candidate-bridge
   cxxlens-clang22-materialization-store-outcome
-  cxxlens-clang22-materialization-request-stream
-  cxxlens-clang22-materialization-request-identity
-  cxxlens-clang22-materialization-task-spool
-  cxxlens-clang22-materialization-request-v2-1
+  cxxlens-clang22-materialization-request-v2-2
+  cxxlens-clang22-provider-task-v4
+  cxxlens-protocol-v2
+  cxxlens-clang22-materialization-pipeline-v2-2
   cxxlens-clang22-materialization-rooted-vfs
   cxxlens-clang22-materialization-occurrence
-  cxxlens-clang22-materialization-report
   cxxlens-clang22-observation-v2
   cxxlens-clang22-unicode-nfc
   cxxlens-clang22-source-closure
   cxxlens-clang22-source-closure-vfs
   cxxlens-clang22-source-closure-invocation
+  cxxlens-clang22-source-closure-transport
+  cxxlens-clang22-source-closure-task-v4
+  cxxlens-clang22-source-closure-task-v4-worker
   cxxlens-clang22-source-closure-native
   cxxlens-r2-vertical-slice
   cxxlens-provider-process-fixture

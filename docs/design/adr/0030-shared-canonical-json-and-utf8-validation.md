@@ -2,8 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-17
-- Decision owner: query-runtime / relation-foundation
-- Decision issue: #87
 - Depends on: ADR 0007, ADR 0014, ADR 0029
 
 ## Context

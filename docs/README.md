@@ -10,14 +10,11 @@
 - [ADR index](design/adr/README.md)
 - [Development architecture](development/architecture.md)
 - [Extending the platform](development/extending-platform.md)
-- [Agent-driven public API development goal](development/agent-api-development-goal.md)
 - [Build and test](development/build-and-test.md)
 - [Support matrix](support-matrix.md)
 - [Tutorials](tutorials/README.md)
 
-開発・release の判定は [ADR 0106](design/adr/0106-test-only-development-and-release-policy.md) に従います。
-変更固有試験と main の全決定的 CTest が開発完了条件であり、release は release workflow の全重検査だけで判定します。
-運用証跡は生成・保存しません。
+開発・release の判定は変更固有試験、main の全決定的 CTest、release workflow の終了コードで行います。
 
 Machine-readable product authority は `schemas/cxxlens_ng_*` と
 `schemas/cxxlens_support_matrix.yaml` にあります。claim/provenance、coverage、unknown、

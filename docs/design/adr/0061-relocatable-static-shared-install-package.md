@@ -2,8 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-17
-- Decision owner: release-packaging
-- Decision issue: #118
 - Depends on: ADR 0005, ADR 0012, ADR 0015
 
 ## Context

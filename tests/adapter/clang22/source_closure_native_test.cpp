@@ -135,6 +135,7 @@ namespace
 			"project://src",
 			arguments_with(extra),
 			std::vector<std::string>{CXXLENS_TEST_CLANG22_ROOT},
+			{},
 		};
 	}
 
@@ -164,18 +165,28 @@ namespace
 											  const std::string_view withheld,
 											  const std::vector<std::string>& extra = {})
 	{
-		const auto input = make_input(closure, extra);
+		auto input = make_input(closure, extra);
+		struct withholding_context
+		{
+			std::string_view logical_path;
+		};
+		withholding_context context{withheld};
+		input.member_mount_policy = {
+			[](const std::string_view logical_path, void* opaque) noexcept
+			{
+				return logical_path !=
+					static_cast<const withholding_context*>(opaque)->logical_path;
+			},
+			&context};
 		run_outcome outcome;
-		auto result =
-			cxxlens::detail::clang22::with_source_closure_translation_unit_withholding_member(
-				input,
-				withheld,
-				[&outcome](cxxlens::provider::clang22::borrowed_translation_unit&)
-					-> cxxlens::sdk::result<void>
-				{
-					outcome.callback_ran = true;
-					return {};
-				});
+		auto result = with_source_closure_translation_unit(
+			input,
+			[&outcome](cxxlens::provider::clang22::borrowed_translation_unit&)
+				-> cxxlens::sdk::result<void>
+			{
+				outcome.callback_ran = true;
+				return {};
+			});
 		outcome.succeeded = result.has_value();
 		if (!result)
 		{

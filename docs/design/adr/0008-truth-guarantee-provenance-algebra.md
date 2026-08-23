@@ -2,9 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-16
-- Decision owner: semantic-kernel
-- Decision issue: #62
-- Tracking issue: #56
 
 ## Context
 
@@ -56,7 +53,7 @@ content-addressed node だけを許可する。resolver なしの child omission
 - assumption は canonical set union し、evidence edge による明示 discharge 以外で削除しない。
 - join/derivation は condition intersection、interpretation equality、全 contributor/provenance union を行う。
 - union/distinct は interpretation partition を跨いで保証を統合しない。
-- 公開 C++ value/signature は #66 が所有するが、意味と serializer は本 ADR に従う。
+- 公開 C++ value/signature は public API catalog が所有するが、意味と serializer は本 ADR に従う。
 
 ## Verification
 

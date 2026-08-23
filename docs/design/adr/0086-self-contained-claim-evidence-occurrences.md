@@ -2,11 +2,10 @@
 
 - Status: Accepted
 - Date: 2026-07-18
-- Issue: #155
 
 ## Context
 
-Issue #155 は `claim.evidence` が occurrence ID を参照し、batch が別 collection の `claim_evidence` record を所有するモデルを前提に、
+この契約は `claim.evidence` が occurrence ID を参照し、batch が別 collection の `claim_evidence` record を所有するモデルを前提に、
 missing、orphan、ambiguous、別 claim subject への付け替えを指摘した。しかし対象 commit `55efb42` と current public API のいずれにも
 その参照 model は存在しない。ADR 0037 が定めた evidence occurrence は、row、semantic identities、condition、interpretation、producer、
 input basis、provenance、guarantee、stage を含む一つの完全な `claim` envelope である。

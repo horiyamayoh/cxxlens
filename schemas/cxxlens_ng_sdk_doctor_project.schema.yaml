@@ -1,0 +1,68 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens_ng_sdk_doctor_project.schema.yaml
+title: cxxlens SDK doctor product project context
+type: object
+additionalProperties: false
+required: [schema, document_version, project]
+properties:
+  schema: {const: cxxlens.sdk-doctor-project.v1}
+  document_version: {const: 1.0.0}
+  project:
+    type: object
+    additionalProperties: false
+    required: [project_id, catalog_id, catalog_digest, logical_root, environment_digest]
+    properties:
+      project_id: {$ref: '#/$defs/nonempty_string'}
+      catalog_id: {$ref: '#/$defs/nonempty_string'}
+      catalog_digest: {$ref: '#/$defs/nonempty_string'}
+      logical_root:
+        type: string
+        pattern: '^project://.+'
+      environment_digest: {$ref: '#/$defs/nonempty_string'}
+      source_input:
+        type: object
+        additionalProperties: false
+        required: [source_snapshot_id, compilation_database_id]
+        properties:
+          source_snapshot_id: {$ref: '#/$defs/nonempty_string'}
+          compilation_database_id: {$ref: '#/$defs/nonempty_string'}
+      provider:
+        type: object
+        additionalProperties: false
+        required:
+          - provider_id
+          - provider_version
+          - protocol_major
+          - protocol_minor
+          - offered_relations
+          - features
+          - interpretation_domains
+          - sandbox_minimum
+        properties:
+          provider_id: {$ref: '#/$defs/nonempty_string'}
+          provider_version: {$ref: '#/$defs/nonempty_string'}
+          protocol_major: {$ref: '#/$defs/u32'}
+          protocol_minor: {$ref: '#/$defs/u32'}
+          offered_relations: {$ref: '#/$defs/string_set'}
+          features: {$ref: '#/$defs/string_set'}
+          interpretation_domains: {$ref: '#/$defs/string_set'}
+          sandbox_minimum: {$ref: '#/$defs/nonempty_string'}
+      store:
+        type: object
+        additionalProperties: false
+        required: [backend, format]
+        properties:
+          backend: {$ref: '#/$defs/nonempty_string'}
+          format: {$ref: '#/$defs/nonempty_string'}
+$defs:
+  nonempty_string:
+    type: string
+    minLength: 1
+  u32:
+    type: integer
+    minimum: 0
+    maximum: 4294967295
+  string_set:
+    type: array
+    uniqueItems: true
+    items: {$ref: '#/$defs/nonempty_string'}

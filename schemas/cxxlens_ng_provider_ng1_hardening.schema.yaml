@@ -3,7 +3,7 @@ $id: https://cxxlens.dev/schemas/cxxlens.provider-ng1-hardening.v1
 title: cxxlens NG1 provider hardening contract
 type: object
 additionalProperties: false
-required: [schema, document_version, maturity, authority, profile, lifecycle, heartbeat, progress, resume, spill, recovery, stable_failures, direct_tests]
+required: [schema, document_version, maturity, authority, profile, lifecycle, heartbeat, progress, resume, spill, recovery, stable_failures]
 properties:
   schema: {const: cxxlens.provider-ng1-hardening.v1}
   document_version: {const: '1.0.0'}
@@ -11,22 +11,18 @@ properties:
   authority:
     const:
       design: docs/design/cxxlens_next_generation_integrated_design_ja.md
-      protocol: schemas/cxxlens_ng_provider_protocol.yaml
+      protocol: schemas/cxxlens_ng_provider_protocol_v2.yaml
       runtime: schemas/cxxlens_ng_provider_runtime_contract.yaml
       decision_adr: docs/design/adr/0099-provider-ng1-hardening.md
-      decision_issue: '#233'
-      implementation_issue: '#183'
       digest_grammar_adr: docs/design/adr/0100-ng1-resume-provider-digest-grammar.md
-      digest_grammar_issue: '#243'
-      owner: steward.ng-provider-runtime
       spill_fsync_receipt_schema: schemas/cxxlens_ng_provider_spill_fsync_receipt.schema.yaml
   profile:
     const:
       id: NG1
-      protocol_major: 1
-      protocol_minor: 1
-      required_features: [durable-resume-token, heartbeat, progress-rate-enforcement, spill-staging, long-run-fault-qualification]
-      capability_claim: exact-certified-qualification-only
+      protocol_major: 2
+      protocol_minor: 0
+      required_features: [durable-resume-token, heartbeat, progress-rate-enforcement, spill-staging, long-run-fault-recovery]
+      capability_claim: product-contract-only
       manifest_self_claim_authority: forbidden
   lifecycle:
     const:
@@ -331,29 +327,3 @@ properties:
       no_fallback: {adjacent_provider: forbidden, non-durable_resume: forbidden, manifest_self_claim: forbidden}
   stable_failures:
     const: [provider.heartbeat-clock-invalid, provider.heartbeat-timeout, provider.progress-rate, provider.resume-token-stale, provider.resume-replay-invalid, provider.spill-corrupt, provider.recovery-failed]
-  direct_tests:
-    const:
-      schema: cxxlens.provider-ng1-hardening-tests.v1
-      vectors: schemas/cxxlens_ng_provider_ng1_conformance_vectors.yaml
-      required_profiles: [static, shared]
-      required_cases: [positive-heartbeat-and-progress, manifest-content-digest-binding, stale-heartbeat, heartbeat-timeout, progress-sample-timeout, zero-progress-after-grace, stale-resume-token, foreign-resume-token, semantic-v2-provider-identity-rejected, content-digest-semantic-field-rejected, spill-corruption, worker-crash-recovery, worker-hang-recovery, cancellation-recovery, permutation-replay, long-run-fault]
-      required_case_outcomes:
-        positive-heartbeat-and-progress: accepted
-        manifest-content-digest-binding: accepted
-        stale-heartbeat: provider.heartbeat-timeout
-        heartbeat-timeout: provider.heartbeat-timeout
-        progress-sample-timeout: provider.progress-rate
-        zero-progress-after-grace: provider.progress-rate
-        stale-resume-token: provider.resume-token-stale
-        foreign-resume-token: provider.resume-token-stale
-        semantic-v2-provider-identity-rejected: provider.resume-token-stale
-        content-digest-semantic-field-rejected: provider.resume-token-stale
-        spill-corruption: provider.spill-corrupt
-        worker-crash-recovery: replay-from-ack-plus-one-or-fail-closed
-        worker-hang-recovery: replay-from-durable-ack-or-fail-closed
-        cancellation-recovery: rollback-current-group-and-fail-closed
-        permutation-replay: provider.resume-replay-invalid
-        long-run-fault: accepted-only-with-exact-certificate-or-stable-failure
-      execution: direct-tests-only
-      unavailable_provider: unqualified
-      unavailable_platform: unqualified

@@ -1529,8 +1529,9 @@ namespace cxxlens::sdk
 								   const void* runtime_image,
 								   const void* open_callback)
 				: storage_count{(storage_bytes + sizeof(std::max_align_t) - 1U) /
-									sizeof(std::max_align_t)},
-				  // NOLINTNEXTLINE(modernize-avoid-c-arrays): SQLite requires variable-size aligned storage.
+								sizeof(std::max_align_t)},
+				  // NOLINTNEXTLINE(modernize-avoid-c-arrays): SQLite requires variable-size aligned
+				  // storage.
 				  storage{std::make_unique<std::max_align_t[]>(storage_count)},
 				  runtime_lifetime{std::move(runtime_pin)},
 				  backend_lifetime{std::move(backend_pin)}, underlying{underlying_vfs},
@@ -1548,7 +1549,8 @@ namespace cxxlens::sdk
 			}
 
 			std::size_t storage_count{};
-			// NOLINTNEXTLINE(modernize-avoid-c-arrays): SQLite requires variable-size aligned storage.
+			// NOLINTNEXTLINE(modernize-avoid-c-arrays): SQLite requires variable-size aligned
+			// storage.
 			std::unique_ptr<std::max_align_t[]> storage;
 			std::shared_ptr<void> runtime_lifetime;
 			std::shared_ptr<void> backend_lifetime;

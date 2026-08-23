@@ -1,27 +1,26 @@
 $schema: https://json-schema.org/draft/2020-12/schema
-$id: https://cxxlens.dev/schemas/cxxlens.source-closure-transport.v1
+$id: https://cxxlens.dev/schemas/cxxlens.source-closure-transport.v2
 type: object
 additionalProperties: false
 required: [schema, document_version, maturity, authority, versions, capability, message_registry, wire_controls, state_machine, phase_fields, limits, resource_policy, identity, request_task_binding, cache, compatibility, failures, failure_phase_matrix, protocol_activation, crash_effects, counterexamples]
 properties:
-  schema: {const: cxxlens.source-closure-transport.v1}
-  document_version: {const: 1.1.1}
-  maturity: {enum: [proposed, accepted]}
+  schema: {const: cxxlens.source-closure-transport.v2}
+  document_version: {const: 2.0.0}
+  maturity: {const: accepted}
   authority:
     type: object
     additionalProperties: false
-    required: [adr, identity_adr, owner_issue]
+    required: [adr, identity_adr]
     properties:
-      adr: {const: docs/design/adr/0102-dedicated-source-closure-transport.md}
+      adr: {const: docs/design/adr/0107-provider-protocol-2-cutover.md}
       identity_adr: {const: docs/design/adr/0101-source-closure-identity-and-compiler-vfs.md}
-      owner_issue: {const: '#261'}
   versions:
     const:
-      provider_protocol: {legacy: 1.1, proposed: 1.2, downgrade: reject}
-      request: {legacy: 2.1, proposed: 2.2}
-      task: {legacy: cxxlens.clang22.task.v3, proposed: cxxlens.clang22.task.v4}
+      provider_protocol: {major: 2, minor: 0, downgrade: reject}
+      request: {current: 2.2}
+      task: {current: cxxlens.clang22.task.v4}
   capability:
-    const: {id: task-source-closure-v1, required_for: [request-2.2, task-v4], absence: source-closure.required-feature-missing}
+    const: {id: task-source-closure-v2, required_for: [request-2.2, task-v4], absence: source-closure.required-feature-missing}
   message_registry:
     type: object
     additionalProperties: false
@@ -101,22 +100,15 @@ properties:
       seal_fields: {const: [session-id, task-id, task-v4-digest, manifest-digest, blob-receipts-digest, blob-count, total-bytes, closure-digest]}
       ambient_filesystem: {const: forbidden}
   request_task_binding:
-    const: {request_shape: exact-v2-1-authority-envelope-plus-closure-extensions, closure_identity: source-closure-id-equals-source-closure-prefix-plus-semantic-closure-digest, closure_ids: unique, task_ids: unique-and-exact-index-parity-with-base-v2-1-tasks, task_reference: resolves-exactly-one-request-closure, wire_transfer_identity: exact-outer-task-extension-task-id-task-v4-digest-and-source-closure-reference-before-first-transfer-frame, base_task_v3_digest: recompute-from-complete-v2-2-base-task-projection-before-v4-identity-not-legacy-v3-digest, open_task_fields: exact-base-task-task-input-invocation-toolchain-environment-digests, logical_paths: adr-0101-strict-utf8-nfc-byte-bound-and-segment-validation, blob_bytes_in_request_or_task: forbidden}
+    const: {request_shape: exact-v2-2-authority-envelope-plus-closure-extensions, closure_identity: source-closure-id-equals-source-closure-prefix-plus-semantic-closure-digest, closure_ids: unique, task_ids: unique-and-exact-index-parity-with-base-tasks, task_reference: resolves-exactly-one-request-closure, wire_transfer_identity: exact-outer-task-extension-task-id-task-v4-digest-and-source-closure-reference-before-first-transfer-frame, base_task_digest: recompute-from-complete-base-task-projection-before-v4-identity, open_task_fields: exact-base-task-task-input-invocation-toolchain-environment-digests, logical_paths: adr-0101-strict-utf8-nfc-byte-bound-and-segment-validation, blob_bytes_in_request_or_task: forbidden}
   cache:
     const: {cross_task_v1: forbidden, transfer: complete-per-task, future_activation: separate-accepted-capability-and-adr}
   compatibility:
     type: object
     additionalProperties: false
-    required: [legacy_2_1_v3, legacy_bindings, legacy_protocol_1_1, v4_without_capability, unknown_required_message, ng1_resume_or_cache_alias]
+    required: [unsupported_protocol, v4_without_capability, unknown_required_message, ng1_resume_or_cache_alias]
     properties:
-      legacy_2_1_v3: {const: byte-exact-unchanged}
-      legacy_bindings:
-        const:
-          request_schema_sha256: b960f61c1104dfc62ae12b5cec78e14be616fff70cd1c8d824b2da768a74e73a
-          task_v3_header_sha256: ce0709ab54036f17123033c750facbe56532ea7620255df023d3b1887ce4948b
-          task_v3_implementation_sha256: da52373e06a68a43bf75afbc623377854cdb578fcced9686854a95e2eb0b4535
-          request_v2_1_implementation_sha256: 952ce399e3240558ab347ca97a0b03697c1dad5bccc1bcd1cd067ecc5ccbb1b8
-      legacy_protocol_1_1: {const: supported-without-source-closure}
+      unsupported_protocol: {const: reject-before-payload}
       v4_without_capability: {const: reject-before-closure-bytes}
       unknown_required_message: {const: reject}
       ng1_resume_or_cache_alias: {const: forbidden}
@@ -138,8 +130,8 @@ properties:
     additionalProperties: false
     required: [status, target_current, target_registry, minor_profile]
     properties:
-      status: {const: blocked-until-accepted-authority-and-bounded-implementation}
-      target_current: {const: 1.2.0}
+      status: {const: active}
+      target_current: {const: 2.0.0}
       target_registry: {const: exact-existing-1-through-23-plus-contract-24-through-29}
       minor_profile: {type: object}
   crash_effects: {type: object, required: [before-manifest, unsealed-transfer, sealed-before-ack, acknowledged-before-execution, worker-crash, resource-failure]}

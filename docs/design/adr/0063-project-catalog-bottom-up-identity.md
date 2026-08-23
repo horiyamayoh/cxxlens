@@ -2,9 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-17
-- Decision owner: steward.ng-kernel
-- Decision issue: #121
-- Clarification feedback: DF-0187 / #187
 - Depends on: ADR 0012, ADR 0016, ADR 0050
 
 ## Context

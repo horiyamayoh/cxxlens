@@ -62,13 +62,11 @@
 | [0086](0086-self-contained-claim-evidence-occurrences.md) | self-contained claim evidence occurrences |
 | [0087](0087-provider-budget-surface-parity.md) | provider budget surface parity |
 | [0089](0089-high-level-author-sdk-and-wave0-readiness.md) | high-level author SDK and Wave 0 readiness |
-| [0092](0092-exact-public-callable-inventory.md) | exact one-callable-per-row public C++ inventory |
 | [0096](0096-clang22-installed-materialization-boundary.md) | provider-owned Clang 22 installed materialization boundary |
 | [0098](0098-explicit-static-relation-projection.md) | explicit generated relation static projection |
 | [0099](0099-provider-ng1-hardening.md) | provider NG1 hardening lifecycle and evidence |
 | [0100](0100-ng1-resume-provider-digest-grammar.md) | NG1 resume provider identity digest grammar |
 | [0101](0101-source-closure-identity-and-compiler-vfs.md) | source closure identity and read-only compiler VFS |
-| [0102](0102-dedicated-source-closure-transport.md) | dedicated source-closure transport |
 | [0103](0103-bounded-store-candidate-and-report.md) | bounded Store candidate and report construction |
 | [0104](0104-unified-sqlite-source-lifecycle.md) | unified SQLite source lifecycle |
 | [0106](0106-test-only-development-and-release-policy.md) | test-only development and release policy; supersedes operational evidence governance |

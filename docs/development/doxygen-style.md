@@ -3,9 +3,9 @@
 installed public header の callable は契約として文書化する。コメントは宣言側に一度だけ置き、実装側へ
 複製しない。
 
-callable の集合と exact signature は `schemas/cxxlens_ng_public_callable_inventory.yaml` が所有する。locked Clang 22 AST census と
-Doxygen XML correspondence は独立した双方向 gate であり、header にだけある callable、inventory にだけある row、Doxygen にだけある
-member、qualifier/default argument drift をいずれも拒否する。Doxygen の synthetic ID や表示用 signature を stable callable ID にしない。
+公開宣言の意味、安定したエラー、lifetime、threading、versioning は
+`schemas/cxxlens_ng_public_api_catalog.yaml` と public header が所有する。Doxygen は宣言コメントの
+構文と対応する API 説明を検査し、AST の固定件数や実装ファイルの内容を authority にしない。
 Clang と Doxygen の column 座標値は異なるため、同一 header/line 内の declaration order で対応付けた両 source anchor を inventory に保存し、
 各 anchor の qualified name と signature projection を照合する。global な件数や key 集合の一致だけを correspondence の証明にしない。
 

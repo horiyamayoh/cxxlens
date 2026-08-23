@@ -1,13 +1,16 @@
 #include "materialization_store.hpp"
 
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <map>
 #include <ranges>
 #include <span>
+#include <string_view>
 #include <utility>
 
 #include "materialization_claim_stream.hpp"
+#include "materialization_store_candidate_bridge.hpp"
 #include "sdk/store_identity_internal.hpp"
 
 namespace cxxlens::detail::clang22::materialization
@@ -28,6 +31,324 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::open_sqlite_snapshot_store(exact_path, std::move(engine));
 			}
 		};
+
+		/**
+		 * Encode one Store semantic projection field as a canonical tuple.  The bounded candidate
+		 * deliberately carries the same complete identity values that the SDK manifest carries;
+		 * digesting a rendered diagnostic or a pretty-printed object here would make the candidate
+		 * independent check weaker than the Store contract.
+		 */
+		[[nodiscard]] sdk::result<std::vector<std::byte>>
+		candidate_payload(std::vector<sdk::canonical_value> fields)
+		{
+			return sdk::canonical_binary(sdk::canonical_value::from_tuple(std::move(fields)));
+		}
+
+		[[nodiscard]] sdk::canonical_value candidate_text(const std::string_view value)
+		{
+			return sdk::canonical_value::from_string(std::string{value});
+		}
+
+		[[nodiscard]] sdk::result<std::vector<std::byte>>
+		candidate_partition_payload(const sdk::partition_manifest& partition)
+		{
+			return candidate_payload({
+				candidate_text(partition.partition_id),
+				candidate_text(partition.relation_descriptor_id),
+				candidate_text(partition.input_basis_digest),
+				candidate_text(partition.claim_set_digest),
+				candidate_text(partition.coverage_digest),
+				candidate_text(partition.content_digest),
+				sdk::canonical_value::from_integer(
+					static_cast<std::int64_t>(partition.claim_count)),
+				sdk::canonical_value::from_boolean(partition.complete),
+			});
+		}
+
+		[[nodiscard]] sdk::result<std::vector<std::byte>>
+		candidate_manifest_payload(const sdk::snapshot_manifest& manifest)
+		{
+			std::vector<sdk::canonical_value> fields{
+				candidate_text(manifest.schema),
+				candidate_text(manifest.id),
+				candidate_text(manifest.snapshot_semantics_version.string()),
+				candidate_text(manifest.catalog_semantic_digest),
+				candidate_text(manifest.condition_universe_id),
+				candidate_text(manifest.relation_registry_digest),
+				candidate_text(manifest.interpretation_policy_digest),
+				sdk::canonical_value::from_integer(
+					static_cast<std::int64_t>(manifest.partitions.size())),
+			};
+			fields.reserve(fields.size() + manifest.closure_ids.size());
+			for (const auto& closure : manifest.closure_ids)
+				fields.push_back(candidate_text(closure));
+			return candidate_payload(std::move(fields));
+		}
+
+		[[nodiscard]] sdk::result<void>
+		append_candidate_projection_records(bounded_store_record_spool& output,
+											const sdk::snapshot_manifest& manifest,
+											const bool derive_from_physical_order)
+		{
+			std::vector<bounded_store_record> records;
+			try
+			{
+				records.reserve(1U + manifest.partitions.size() * 8U + manifest.closure_ids.size());
+			}
+			catch (const std::bad_alloc&)
+			{
+				return sdk::unexpected(
+					sdk::error{"store.resource-limit", "candidate-projection", "allocation"});
+			}
+
+			auto add = [&](const bounded_store_record_kind kind,
+						   std::string key,
+						   sdk::result<std::vector<std::byte>> payload) -> sdk::result<void>
+			{
+				if (!payload)
+					return sdk::unexpected(std::move(payload.error()));
+				records.push_back({kind, std::move(key), std::move(*payload)});
+				return {};
+			};
+
+			auto global_payload = candidate_manifest_payload(manifest);
+			if (auto added = add(bounded_store_record_kind::global_identity,
+								 "snapshot",
+								 std::move(global_payload));
+				!added)
+				return sdk::unexpected(std::move(added.error()));
+
+			// Expected projection follows the immutable manifest order. The actual projection uses
+			// an independently keyed physical order below; both are compared as full framed bytes.
+			std::vector<sdk::partition_manifest> physical_partitions;
+			if (derive_from_physical_order)
+			{
+				try
+				{
+					physical_partitions = manifest.partitions;
+					std::ranges::sort(
+						physical_partitions, {}, &sdk::partition_manifest::partition_id);
+				}
+				catch (const std::bad_alloc&)
+				{
+					return sdk::unexpected(
+						sdk::error{"store.resource-limit", "candidate-projection", "allocation"});
+				}
+				for (std::size_t index{}; index < physical_partitions.size(); ++index)
+					if (index != 0U &&
+						physical_partitions[index - 1U].partition_id ==
+							physical_partitions[index].partition_id)
+						return sdk::unexpected(sdk::error{
+							"store.corrupt", "candidate-projection", "duplicate-partition-id"});
+			}
+			const auto& partitions =
+				derive_from_physical_order ? physical_partitions : manifest.partitions;
+			for (const auto& partition : partitions)
+			{
+				auto partition_payload = candidate_partition_payload(partition);
+				if (!partition_payload)
+					return sdk::unexpected(std::move(partition_payload.error()));
+				const auto prefix = std::string{"partition/"} + partition.partition_id;
+				if (auto added = add(bounded_store_record_kind::partition_begin,
+									 prefix,
+									 candidate_partition_payload(partition));
+					!added)
+					return sdk::unexpected(std::move(added.error()));
+				if (auto added = add(bounded_store_record_kind::semantic_key,
+									 prefix + "/identity",
+									 candidate_partition_payload(partition));
+					!added)
+					return sdk::unexpected(std::move(added.error()));
+				if (auto added = add(bounded_store_record_kind::claim_full_projection,
+									 prefix + "/content",
+									 candidate_partition_payload(partition));
+					!added)
+					return sdk::unexpected(std::move(added.error()));
+				if (auto added =
+						add(bounded_store_record_kind::coverage,
+							prefix + "/coverage",
+							candidate_payload({candidate_text(partition.coverage_digest)}));
+					!added)
+					return sdk::unexpected(std::move(added.error()));
+				if (auto added =
+						add(bounded_store_record_kind::provenance,
+							prefix + "/input",
+							candidate_payload({candidate_text(partition.input_basis_digest)}));
+					!added)
+					return sdk::unexpected(std::move(added.error()));
+				if (auto added = add(bounded_store_record_kind::guarantee,
+									 prefix + "/complete",
+									 candidate_payload(
+										 {sdk::canonical_value::from_boolean(partition.complete)}));
+					!added)
+					return sdk::unexpected(std::move(added.error()));
+				if (auto added = add(bounded_store_record_kind::partition_census,
+									 prefix + "/census",
+									 candidate_payload({sdk::canonical_value::from_integer(
+										 static_cast<std::int64_t>(partition.claim_count))}));
+					!added)
+					return sdk::unexpected(std::move(added.error()));
+				if (auto added = add(bounded_store_record_kind::partition_end,
+									 prefix,
+									 candidate_partition_payload(partition));
+					!added)
+					return sdk::unexpected(std::move(added.error()));
+			}
+			for (const auto& closure : manifest.closure_ids)
+			{
+				if (auto added = add(bounded_store_record_kind::closure_binding,
+									 "closure/" + closure,
+									 candidate_payload({candidate_text(closure)}));
+					!added)
+					return sdk::unexpected(std::move(added.error()));
+			}
+
+			std::ranges::sort(
+				records,
+				[](const bounded_store_record& left, const bounded_store_record& right)
+				{
+					const auto left_kind = static_cast<std::uint8_t>(left.kind);
+					const auto right_kind = static_cast<std::uint8_t>(right.kind);
+					return left_kind == right_kind ? left.key < right.key : left_kind < right_kind;
+				});
+			for (const auto& record : records)
+				if (auto appended = output.append(record); !appended)
+					return sdk::unexpected(std::move(appended.error()));
+			return {};
+		}
+
+		[[nodiscard]] sdk::result<materialization_store_candidate_bridge_request>
+		make_bounded_candidate_request(const sdk::snapshot_manifest& manifest,
+									   const validated_publication_request& publication)
+		{
+			bounded_store_limits limits;
+			std::vector<std::vector<std::byte>> task_payloads;
+			try
+			{
+				task_payloads.reserve(manifest.partitions.size());
+			}
+			catch (const std::bad_alloc&)
+			{
+				return sdk::unexpected(
+					sdk::error{"store.resource-limit", "candidate-input", "allocation"});
+			}
+			for (const auto& partition : manifest.partitions)
+			{
+				auto payload = candidate_partition_payload(partition);
+				if (!payload)
+					return sdk::unexpected(std::move(payload.error()));
+				task_payloads.push_back(std::move(*payload));
+			}
+			if (task_payloads.empty() || task_payloads.size() > limits.max_tasks)
+				return sdk::unexpected(
+					sdk::error{"store.resource-limit", "candidate-input", "task-count"});
+
+			auto digest = make_materialization_sha256_accumulator();
+			if (!digest)
+				return sdk::unexpected(
+					sdk::error{"store.hash-failure", "candidate-input", "accumulator"});
+			std::uint64_t input_bytes{};
+			for (std::size_t index{}; index < task_payloads.size(); ++index)
+			{
+				const auto& payload = task_payloads[index];
+				if (payload.size() > limits.max_aggregate_bytes ||
+					input_bytes > limits.max_aggregate_bytes - payload.size())
+					return sdk::unexpected(
+						sdk::error{"store.resource-limit", "candidate-input", "bytes"});
+				const bounded_store_record record{
+					bounded_store_record_kind::task_result, std::to_string(index), payload};
+				auto encoded = encode_bounded_store_record(record, limits);
+				if (!encoded)
+					return sdk::unexpected(std::move(encoded.error()));
+				if (auto updated = digest->update(*encoded); !updated)
+					return sdk::unexpected(
+						sdk::error{"store.hash-failure", "candidate-input", "update"});
+				input_bytes += static_cast<std::uint64_t>(payload.size());
+			}
+			auto input_digest = digest->finish();
+			if (!input_digest)
+				return sdk::unexpected(
+					sdk::error{"store.hash-failure", "candidate-input", "finish"});
+
+			materialization_store_candidate_bridge_request request;
+			request.staging_session_id = "store/" + manifest.id;
+			request.expected_head = publication.expected_parent_publication.value_or("genesis");
+			request.external_census = {static_cast<std::uint64_t>(task_payloads.size()),
+									   input_bytes,
+									   std::move(*input_digest)};
+			request.replay_tasks =
+				[payloads = std::move(task_payloads)](const auto& consumer) -> sdk::result<void>
+			{
+				for (const auto& payload : payloads)
+					if (auto consumed = consumer(payload); !consumed)
+						return consumed;
+				return {};
+			};
+			const auto expected_manifest = manifest;
+			request.build_expected_projection =
+				[expected_manifest](bounded_store_record_spool& output) -> sdk::result<void>
+			{
+				return append_candidate_projection_records(output, expected_manifest, false);
+			};
+			const auto actual_manifest = manifest;
+			request.build_actual_projection =
+				[actual_manifest](bounded_store_record_spool& output) -> sdk::result<void>
+			{
+				return append_candidate_projection_records(output, actual_manifest, true);
+			};
+			request.write_publication_independent_report =
+				[](bounded_store_report_writer& report) -> sdk::result<void>
+			{
+				static constexpr std::array prefix{std::byte{'s'},
+												   std::byte{'t'},
+												   std::byte{'o'},
+												   std::byte{'r'},
+												   std::byte{'e'},
+												   std::byte{'-'},
+												   std::byte{'c'},
+												   std::byte{'a'},
+												   std::byte{'n'},
+												   std::byte{'d'},
+												   std::byte{'i'},
+												   std::byte{'d'},
+												   std::byte{'a'},
+												   std::byte{'t'},
+												   std::byte{'e'},
+												   std::byte{'\n'}};
+				return report.append(prefix);
+			};
+			request.write_exact_outcome_report =
+				[](bounded_store_report_writer& report,
+				   const bounded_store_publication_terminal terminal) -> sdk::result<void>
+			{
+				const std::array suffix{std::byte{'t'},
+										std::byte{static_cast<unsigned char>(terminal)},
+										std::byte{'\n'}};
+				return report.append(suffix);
+			};
+			return request;
+		}
+
+		[[nodiscard]] bounded_store_publication_terminal
+		candidate_terminal_for_publish_error(const sdk::error& error,
+											 const std::string_view backend) noexcept
+		{
+			if (error.code == "store.publication-conflict" && error.field == "exact-series-id" &&
+				error.detail.empty())
+				return bounded_store_publication_terminal::rejected_stale;
+			if ((error.code == "store.counter-overflow" &&
+				 (error.field == "publication_sequence" || error.field == "physical_generation")) ||
+				(error.code == "store.hash-collision" &&
+				 error.field == "exact-candidate-snapshot-id") ||
+				(error.code == "store.snapshot-ambiguous" && error.field == "exact-snapshot-id") ||
+				(error.code == "store.corrupt" &&
+				 (error.field == "sqlite" || error.field == "exact-publication-id" ||
+				  error.field == "exact-series-id")))
+				return bounded_store_publication_terminal::rejected_store_failure;
+			if (error.code == "store.sqlite-failure" || backend == "memory")
+				return bounded_store_publication_terminal::publication_outcome_unknown;
+			return bounded_store_publication_terminal::publication_outcome_unknown;
+		}
 
 		[[nodiscard]] sdk::snapshot_partition_binding
 		partition_binding(const sdk::partition_manifest& manifest,
@@ -585,6 +906,9 @@ namespace cxxlens::detail::clang22::materialization
 		validated_publication_request publication;
 		std::optional<sdk::snapshot_store> store;
 		std::optional<sdk::snapshot_writer> writer;
+		std::optional<materialization_store_candidate_bridge_request> bounded_candidate;
+		std::optional<sdk::snapshot_handle> candidate_published_handle;
+		std::optional<sdk::error> candidate_publish_error;
 		std::unique_ptr<materialization_store_opener> owned_opener;
 		materialization_store_opener* opener{};
 	};
@@ -603,7 +927,8 @@ namespace cxxlens::detail::clang22::materialization
 
 	bool materialization_store_preparation::ready_for_publish() const noexcept
 	{
-		return state_ && state_->writer && !state_->observation.first_issue &&
+		return state_ && state_->writer && state_->bounded_candidate &&
+			state_->bounded_candidate->publish_once && !state_->observation.first_issue &&
 			!state_->observation.publication_attempted;
 	}
 
@@ -777,6 +1102,40 @@ namespace cxxlens::detail::clang22::materialization
 			}
 			output.candidate_identity = std::move(*candidate);
 		}
+		auto bounded_candidate =
+			make_bounded_candidate_request(*output.candidate_manifest, publication);
+		if (!bounded_candidate)
+		{
+			retain_sdk_failure(output,
+							   materialization_store_operation::verify_projection,
+							   std::nullopt,
+							   bounded_candidate.error());
+			state_value->writer.reset();
+			return materialization_store_preparation{std::move(state_value)};
+		}
+		state_value->bounded_candidate.emplace(std::move(*bounded_candidate));
+		const auto bounded_expected_head = state_value->bounded_candidate->expected_head;
+		state_value->bounded_candidate->publish_once =
+			[state = state_value.get(), bounded_expected_head](
+				const std::string_view,
+				const std::string_view expected_head) -> bounded_store_publication_terminal
+		{
+			if (state == nullptr || !state->writer || state->observation.publication_attempted ||
+				expected_head != bounded_expected_head)
+				return bounded_store_publication_terminal::publication_outcome_unknown;
+			state->observation.publication_attempted = true;
+			++state->observation.publish_call_count;
+			auto published = state->writer->publish();
+			state->writer.reset();
+			if (!published)
+			{
+				state->candidate_publish_error.emplace(std::move(published.error()));
+				return candidate_terminal_for_publish_error(*state->candidate_publish_error,
+															state->publication.backend);
+			}
+			state->candidate_published_handle.emplace(std::move(*published));
+			return bounded_store_publication_terminal::committed_verified;
+		};
 		return materialization_store_preparation{std::move(state_value)};
 	}
 
@@ -1039,6 +1398,40 @@ namespace cxxlens::detail::clang22::materialization
 			}
 			output.candidate_identity = std::move(*candidate);
 		}
+		auto bounded_candidate =
+			make_bounded_candidate_request(*output.candidate_manifest, publication);
+		if (!bounded_candidate)
+		{
+			retain_sdk_failure(output,
+							   materialization_store_operation::verify_projection,
+							   std::nullopt,
+							   bounded_candidate.error());
+			state_value->writer.reset();
+			return materialization_store_preparation{std::move(state_value)};
+		}
+		state_value->bounded_candidate.emplace(std::move(*bounded_candidate));
+		const auto bounded_expected_head = state_value->bounded_candidate->expected_head;
+		state_value->bounded_candidate->publish_once =
+			[state = state_value.get(), bounded_expected_head](
+				const std::string_view,
+				const std::string_view expected_head) -> bounded_store_publication_terminal
+		{
+			if (state == nullptr || !state->writer || state->observation.publication_attempted ||
+				expected_head != bounded_expected_head)
+				return bounded_store_publication_terminal::publication_outcome_unknown;
+			state->observation.publication_attempted = true;
+			++state->observation.publish_call_count;
+			auto published = state->writer->publish();
+			state->writer.reset();
+			if (!published)
+			{
+				state->candidate_publish_error.emplace(std::move(published.error()));
+				return candidate_terminal_for_publish_error(*state->candidate_publish_error,
+															state->publication.backend);
+			}
+			state->candidate_published_handle.emplace(std::move(*published));
+			return bounded_store_publication_terminal::committed_verified;
+		};
 		return materialization_store_preparation{std::move(state_value)};
 	}
 
@@ -1074,20 +1467,28 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		auto state_value = std::move(prepared.state_);
 		auto& output = state_value->observation;
-		if (!state_value->writer || output.first_issue || output.publication_attempted)
+		if (!state_value->writer || !state_value->bounded_candidate || output.first_issue ||
+			output.publication_attempted)
 			return std::move(output);
 
-		output.publication_attempted = true;
-		++output.publish_call_count;
-		auto published = state_value->writer->publish();
-		state_value->writer.reset();
-		if (!published)
+		auto candidate_request = std::move(*state_value->bounded_candidate);
+		state_value->bounded_candidate.reset();
+		auto candidate_result =
+			run_materialization_store_candidate_bridge(std::move(candidate_request));
+		if (!candidate_result && !state_value->candidate_published_handle)
 		{
-			retain_sdk_failure(output,
-							   materialization_store_operation::writer_publish,
-							   std::nullopt,
-							   published.error());
-			if (state_value->publication.backend == "sqlite")
+			state_value->writer.reset();
+			if (state_value->candidate_publish_error)
+				retain_sdk_failure(output,
+								   materialization_store_operation::writer_publish,
+								   std::nullopt,
+								   *state_value->candidate_publish_error);
+			else
+				retain_sdk_failure(output,
+								   materialization_store_operation::verify_projection,
+								   std::nullopt,
+								   candidate_result.error());
+			if (output.publication_attempted && state_value->publication.backend == "sqlite")
 			{
 				state_value->store.reset();
 				recover_sqlite_publication(
@@ -1095,8 +1496,39 @@ namespace cxxlens::detail::clang22::materialization
 			}
 			return std::move(output);
 		}
-		output.publish_returned_record = published->publication();
-		output.publish_returned_handle.emplace(std::move(*published));
+		if (!state_value->candidate_published_handle)
+		{
+			state_value->writer.reset();
+			if (state_value->candidate_publish_error)
+				retain_sdk_failure(output,
+								   materialization_store_operation::writer_publish,
+								   std::nullopt,
+								   *state_value->candidate_publish_error);
+			else
+				retain_sdk_failure(output,
+								   materialization_store_operation::writer_publish,
+								   std::nullopt,
+								   sdk::error{"store.publication-outcome-unknown",
+											  "publish",
+											  "candidate-terminal-without-record"});
+			if (output.publication_attempted && state_value->publication.backend == "sqlite")
+			{
+				state_value->store.reset();
+				recover_sqlite_publication(
+					output, state_value->engine, state_value->publication, *state_value->opener);
+			}
+			return std::move(output);
+		}
+		if (!candidate_result)
+			retain_sdk_failure(output,
+							   materialization_store_operation::verify_projection,
+							   std::nullopt,
+							   candidate_result.error());
+		output.publish_returned_record = state_value->candidate_published_handle->publication();
+		output.publish_returned_handle.emplace(std::move(*state_value->candidate_published_handle));
+		state_value->candidate_published_handle.reset();
+		if (state_value->candidate_publish_error)
+			return std::move(output);
 
 		const auto candidate = projection_of(*output.publish_returned_handle);
 		const auto& record = candidate.publication;

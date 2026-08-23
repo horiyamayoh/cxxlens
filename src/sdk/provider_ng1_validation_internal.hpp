@@ -239,8 +239,10 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] bool operator==(const ng1_spill_record&) const = default;
 	};
 
-	inline constexpr std::uint64_t ng1_spill_maximum_record_bytes = std::uint64_t{16U} * 1024U * 1024U;
-	inline constexpr std::uint64_t ng1_spill_maximum_total_bytes = std::uint64_t{64U} * 1024U * 1024U;
+	inline constexpr std::uint64_t ng1_spill_maximum_record_bytes =
+		std::uint64_t{16U} * 1024U * 1024U;
+	inline constexpr std::uint64_t ng1_spill_maximum_total_bytes =
+		std::uint64_t{64U} * 1024U * 1024U;
 	inline constexpr std::uint64_t ng1_spill_maximum_records = 65'536U;
 
 	/** Digest the exact payload bytes in the source-private spill payload domain. */

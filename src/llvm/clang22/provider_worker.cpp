@@ -46,7 +46,7 @@ namespace cxxlens::detail::clang22
 		using sdk::provider::message_type;
 
 		constexpr std::string_view provider_id = "cxxlens.clang22.reference";
-		const sdk::semantic_version provider_version{1U, 0U, 0U};
+		const sdk::semantic_version provider_version{2U, 0U, 0U};
 		struct output_plan_authority
 		{
 			provider_output_slot slot;
@@ -1270,7 +1270,7 @@ namespace cxxlens::detail::clang22
 		output.equivalence_limitations = std::move(invocation_limitations);
 		const auto derived_toolchain = sdk::semantic_digest("toolchain-context", toolchain_digest);
 		if (!derived_toolchain)
-				return sdk::unexpected(derived_toolchain.error());
+			return sdk::unexpected(derived_toolchain.error());
 		const auto toolchain =
 			toolchain_context_id.empty() ? *derived_toolchain : std::string{toolchain_context_id};
 		if (!sdk::validate_strong_id(toolchain))
@@ -1580,17 +1580,17 @@ namespace cxxlens::detail::clang22
 		if (!task_input)
 			return EXIT_FAILURE;
 		task_input_sink input_sink{**task_input};
-		auto validated = sdk::provider::detail::validate_host_transcript_stream(
-			source,
-			{{*expected_manifest,
-			  {*expected_task_id,
-			   *expected_task_digest,
-			   *expected_invocation,
-			   *expected_toolchain,
-			   *expected_environment},
-			  input_limits},
-			 input_limits.maximum_minor == 1U},
-			input_sink);
+		auto validated =
+			sdk::provider::detail::validate_host_transcript_stream(source,
+																   {{*expected_manifest,
+																	 {*expected_task_id,
+																	  *expected_task_digest,
+																	  *expected_invocation,
+																	  *expected_toolchain,
+																	  *expected_environment},
+																	 input_limits},
+																	true},
+																   input_sink);
 		if (!validated || !(*task_input)->seal())
 			return EXIT_FAILURE;
 
@@ -1599,7 +1599,7 @@ namespace cxxlens::detail::clang22
 		writer.grant_credit(validated->credit());
 		auto hello = sdk::provider::encode_control_text(*expected_manifest);
 		auto schema = sdk::provider::encode_schema_negotiate_metadata(
-			{"cxxlens.provider-protocol.v1", input_limits.maximum_minor});
+			{"cxxlens.provider-protocol.v2", input_limits.maximum_minor});
 		if (!hello || !schema)
 			return EXIT_FAILURE;
 		if (!writer.send(message_type::hello, *hello))

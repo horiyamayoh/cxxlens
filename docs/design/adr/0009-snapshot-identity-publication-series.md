@@ -2,9 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-16
-- Decision owner: store-kernel
-- Decision issue: #63
-- Tracking issue: #56
 
 ## Context
 
@@ -70,7 +67,7 @@ transaction 内の full committed authority censusを replacement set として�
 pinned generation は handle 解放まで回収しない。current head の corruption は prior head への silent
 fallback を行わず structured failure とし、明示的に開いた intact prior publication は引き続き読める。
 
-Issue #131 により semantic snapshot ID の `open` も publication record 集合を authority とする。同じ snapshot ID の
+この契約により semantic snapshot ID の `open` も publication record 集合を authority とする。同じ snapshot ID の
 committed record を publication sequence、physical generation の順で解決してから corrupt state と decoded payload の exact bindingを
 検査する。選択された最新 record が corrupt または payload unavailable なら `store.snapshot-corrupt` とし、古い publicationへ
 fallbackしない。同じ sequence/generation の異 publication ID が候補なら `store.snapshot-ambiguous` とする。`canonical_export`、query bind、derived basis lookup はこの checked resolver または exact

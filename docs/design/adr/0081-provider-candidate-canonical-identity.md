@@ -2,7 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-18
-- Owner: Issue #150
 
 ## Context
 

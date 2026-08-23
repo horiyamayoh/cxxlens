@@ -1,11 +1,11 @@
+#include "../../../src/sdk/protocol2/protocol2_codec.hpp"
+
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <span>
 #include <string>
 #include <vector>
-
-#include "../../../src/sdk/protocol2/protocol2_codec.hpp"
 
 namespace
 {
@@ -15,7 +15,8 @@ namespace
 	void control_round_trip_and_canonical_rejection()
 	{
 		const std::vector<control_field> fields{
-			{"task_id", control_value{std::string{"task:semantic-v2:sha256:" + std::string(64U, 'a')}}},
+			{"task_id",
+			 control_value{std::string{"task:semantic-v2:sha256:" + std::string(64U, 'a')}}},
 			{"kind", control_value{std::string{"source_closure_manifest"}}},
 			{"chunk_count", control_value{std::uint64_t{2U}}},
 		};
@@ -28,12 +29,17 @@ namespace
 		assert((*decoded)[1].key == "task_id");
 		assert((*decoded)[2].key == "chunk_count");
 
-		const std::vector<std::byte> non_shortest{std::byte{0xa1}, std::byte{0x61}, std::byte{'x'},
-			std::byte{0x18}, std::byte{0x01}};
+		const std::vector<std::byte> non_shortest{
+			std::byte{0xa1}, std::byte{0x61}, std::byte{'x'}, std::byte{0x18}, std::byte{0x01}};
 		assert(!cxxlens::sdk::protocol2::decode_control(non_shortest));
 
-		const std::vector<std::byte> duplicate_key{std::byte{0xa2}, std::byte{0x61}, std::byte{'x'},
-			std::byte{0x01}, std::byte{0x61}, std::byte{'x'}, std::byte{0x02}};
+		const std::vector<std::byte> duplicate_key{std::byte{0xa2},
+												   std::byte{0x61},
+												   std::byte{'x'},
+												   std::byte{0x01},
+												   std::byte{0x61},
+												   std::byte{'x'},
+												   std::byte{0x02}};
 		assert(!cxxlens::sdk::protocol2::decode_control(duplicate_key));
 	}
 
@@ -42,13 +48,18 @@ namespace
 		cxxlens::sdk::protocol2::frame input;
 		input.type = cxxlens::sdk::protocol2::message_type::source_closure_chunk;
 		input.sequence = 7U;
-		input.control = {std::byte{0xa1}, std::byte{0x63}, std::byte{'o'}, std::byte{'f'}, std::byte{'f'},
-			std::byte{0x00}};
+		input.control = {std::byte{0xa1},
+						 std::byte{0x63},
+						 std::byte{'o'},
+						 std::byte{'f'},
+						 std::byte{'f'},
+						 std::byte{0x00}};
 		input.payload = {std::byte{0x01}, std::byte{0x02}, std::byte{0x03}};
 		auto encoded = cxxlens::sdk::protocol2::encode_frame(input);
 		assert(encoded);
-		assert(encoded->size() == cxxlens::sdk::protocol2::frame_header_bytes + input.control.size() +
-			input.payload.size());
+		assert(encoded->size() ==
+			   cxxlens::sdk::protocol2::frame_header_bytes + input.control.size() +
+				   input.payload.size());
 		auto decoded = cxxlens::sdk::protocol2::decode_frame(*encoded);
 		assert(decoded);
 		assert(decoded->type == input.type);

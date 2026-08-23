@@ -6,7 +6,7 @@ required: [schema, document_version, authority, contract, vectors]
 properties:
   schema: {const: cxxlens.semantic-conformance-vectors.v1}
   document_version: {type: string}
-  authority: {type: object, required: [owner_issue, decision_adr]}
+  authority: {type: object, required: [decision_adr]}
   contract: {const: schemas/cxxlens_ng_semantic_guarantee_contract.yaml}
   vectors:
     type: array

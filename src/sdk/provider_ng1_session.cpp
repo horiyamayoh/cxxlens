@@ -675,7 +675,7 @@ namespace cxxlens::sdk::provider::detail
 	{
 		if (session_ == nullptr)
 			return unexpected(error{"provider.recovery-failed", "session", "missing"});
-		if (value.protocol_major != 1U || value.protocol_minor != 1U)
+		if (value.protocol_major != protocol_v2_major || value.protocol_minor != protocol_v2_minor)
 			return unexpected(error{"provider.protocol-minor-mismatch", "frame", "ng1"});
 		if (value.stream_id != session_->resume_binding_.stream_id)
 			return unexpected(error{"provider.task-binding-mismatch", "stream_id", "frame"});

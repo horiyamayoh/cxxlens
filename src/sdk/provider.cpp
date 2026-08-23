@@ -62,6 +62,21 @@ namespace cxxlens::sdk::provider
 			return {std::move(code), std::move(field), std::move(detail)};
 		}
 
+		[[nodiscard]] result<void> validate_protocol_limits(const protocol_limits& limits)
+		{
+			if (limits.protocol_major != protocol_v2_major)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.protocol-major-mismatch", "major"));
+			if (limits.minimum_minor != protocol_v2_minor ||
+				limits.maximum_minor != protocol_v2_minor)
+				return cxxlens::sdk::unexpected(provider_error(
+					"provider.protocol-minor-mismatch", "minor", "protocol-2.0-only"));
+			if (limits.max_control_bytes == 0U || limits.max_payload_bytes == 0U)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.protocol-state-invalid", "limits", "zero-bound"));
+			return {};
+		}
+
 		template <std::unsigned_integral T>
 		void append_big_endian(std::vector<std::byte>& output, const T value)
 		{
@@ -818,6 +833,8 @@ namespace cxxlens::sdk::provider
 
 	result<std::vector<std::byte>> encode_frame(const frame& value, const protocol_limits limits)
 	{
+		if (auto valid = validate_protocol_limits(limits); !valid)
+			return cxxlens::sdk::unexpected(std::move(valid.error()));
 		if (value.control.size() > limits.max_control_bytes)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.oversized-control", "control"));
@@ -834,7 +851,7 @@ namespace cxxlens::sdk::provider
 			value.protocol_minor > limits.maximum_minor)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.protocol-minor-mismatch", "minor"));
-		if (reserved_ng1_heartbeat && value.protocol_minor != 1U)
+		if (reserved_ng1_heartbeat && value.protocol_minor != protocol_v2_minor)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.protocol-minor-mismatch", "ng1-heartbeat"));
 		if (reserved_ng1_heartbeat && (value.flags != 0U || !value.payload.empty()))
@@ -885,6 +902,8 @@ namespace cxxlens::sdk::provider
 
 	result<frame> decode_frame(const std::span<const std::byte> input, const protocol_limits limits)
 	{
+		if (auto valid = validate_protocol_limits(limits); !valid)
+			return cxxlens::sdk::unexpected(std::move(valid.error()));
 		if (input.size() < header_size)
 			return cxxlens::sdk::unexpected(provider_error("provider.truncated-stream", "header"));
 		if (std::to_integer<char>(input[0]) != 'C' || std::to_integer<char>(input[1]) != 'X' ||
@@ -900,6 +919,12 @@ namespace cxxlens::sdk::provider
 			read_big_endian<std::uint16_t>(input, 8U) == ng1_heartbeat_wire_type;
 		if (control_length > limits.max_control_bytes || payload_length > limits.max_payload_bytes)
 			return cxxlens::sdk::unexpected(provider_error("provider.oversized-frame", "length"));
+		if (protocol_major != protocol_v2_major)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.protocol-major-mismatch", "major"));
+		if (protocol_minor != protocol_v2_minor)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.protocol-minor-mismatch", "minor"));
 		if (payload_length >
 				std::numeric_limits<std::size_t>::max() - header_size - control_length ||
 			input.size() != header_size + control_length + static_cast<std::size_t>(payload_length))
@@ -922,13 +947,7 @@ namespace cxxlens::sdk::provider
 		if (!std::ranges::equal(control_digest, input.subspan(40U, 32U)) ||
 			!std::ranges::equal(payload_digest, input.subspan(72U, 32U)))
 			return cxxlens::sdk::unexpected(provider_error("provider.checksum-mismatch", "digest"));
-		if (protocol_major != limits.protocol_major)
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.protocol-major-mismatch", "major"));
-		if (protocol_minor < limits.minimum_minor || protocol_minor > limits.maximum_minor)
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.protocol-minor-mismatch", "minor"));
-		if (reserved_ng1_heartbeat && protocol_minor != 1U)
+		if (reserved_ng1_heartbeat && protocol_minor != protocol_v2_minor)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.protocol-minor-mismatch", "ng1-heartbeat"));
 		if (reserved_ng1_heartbeat && (flags != 0U || payload_length != 0U))
@@ -973,6 +992,8 @@ namespace cxxlens::sdk::provider
 												   const protocol_limits limits,
 												   const std::uint64_t maximum_frames)
 	{
+		if (auto valid = validate_protocol_limits(limits); !valid)
+			return cxxlens::sdk::unexpected(std::move(valid.error()));
 		if (maximum_frames == 0U)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.stream-invalid", "maximum_frames"));
@@ -1310,6 +1331,9 @@ namespace cxxlens::sdk::provider
 	result<std::vector<std::byte>>
 	encode_schema_negotiate_metadata(const schema_negotiate_metadata& value)
 	{
+		if (value.protocol_schema != "cxxlens.provider-protocol.v2" ||
+			value.protocol_minor != protocol_v2_minor)
+			return cxxlens::sdk::unexpected(control_metadata_error("protocol-2.0-required"));
 		auto encoded = encode_cbor_map({
 			{"schema", std::string{"cxxlens.provider-control.schema-negotiate.v1"}},
 			{"protocol_schema", value.protocol_schema},
@@ -1330,7 +1354,8 @@ namespace cxxlens::sdk::provider
 		const auto* protocol_schema = cbor_field<std::string>(*fields, "protocol_schema");
 		const auto* protocol_minor = cbor_field<std::uint64_t>(*fields, "protocol_minor");
 		if (schema == nullptr || *schema != "cxxlens.provider-control.schema-negotiate.v1" ||
-			protocol_schema == nullptr || protocol_minor == nullptr)
+			protocol_schema == nullptr || *protocol_schema != "cxxlens.provider-protocol.v2" ||
+			protocol_minor == nullptr || *protocol_minor != protocol_v2_minor)
 			return cxxlens::sdk::unexpected(control_metadata_error("schema-negotiate-fields"));
 		return schema_negotiate_metadata{*protocol_schema, *protocol_minor};
 	}
@@ -1450,10 +1475,7 @@ namespace cxxlens::sdk::provider
 			std::vector<std::byte> bytes_;
 		} output;
 		auto sealed = detail::encode_host_transcript_incremental(
-			{request.expectation, request.expectation.limits.maximum_minor == 1U},
-			request.credit,
-			input,
-			output);
+			{request.expectation, true}, request.credit, input, output);
 		if (!sealed)
 			return cxxlens::sdk::unexpected(std::move(sealed.error()));
 		return std::move(output.bytes_);
@@ -1473,8 +1495,8 @@ namespace cxxlens::sdk::provider
 			}
 			std::vector<std::byte> bytes_;
 		} input;
-		auto sealed = detail::validate_host_transcript_incremental(
-			frames, {expectation, expectation.limits.maximum_minor == 1U}, input);
+		auto sealed =
+			detail::validate_host_transcript_incremental(frames, {expectation, true}, input);
 		if (!sealed)
 			return cxxlens::sdk::unexpected(std::move(sealed.error()));
 		return validated_host_transcript{sealed->task(), sealed->credit(), std::move(input.bytes_)};
@@ -2718,8 +2740,9 @@ namespace cxxlens::sdk::provider
 	{
 		if (!namespaced(provider_id) || provider_version.major == 0U || package_identity.empty() ||
 			publisher.empty() || license.empty() || (signature && signature->empty()) ||
-			protocol.major != 1U || protocol.minimum_minor > protocol.maximum_minor ||
-			resource_class.empty() || sandbox_minimum.empty())
+			protocol.major != protocol_v2_major || protocol.minimum_minor != protocol_v2_minor ||
+			protocol.maximum_minor != protocol_v2_minor || resource_class.empty() ||
+			sandbox_minimum.empty())
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.manifest-invalid", "identity"));
 		if (!canonical_digest(provider_binary_digest) ||
@@ -2751,6 +2774,10 @@ namespace cxxlens::sdk::provider
 								}) ||
 			!stages.contains(task_input_stage) || !stages.contains(task_output_stage))
 			return cxxlens::sdk::unexpected(provider_error("provider.manifest-invalid", "enum"));
+		if (std::ranges::find(protocol.required_features, "task-input-chunks-v2") ==
+			protocol.required_features.end())
+			return cxxlens::sdk::unexpected(provider_error(
+				"provider.manifest-invalid", "protocol", "task-input-chunks-v2-required"));
 		return {};
 	}
 
@@ -3431,7 +3458,8 @@ namespace cxxlens::sdk::provider
 		generated_manifest.package_identity = options.provider_id + ".package";
 		generated_manifest.publisher = options.provider_id + ".publisher";
 		generated_manifest.license = "UNLICENSED";
-		generated_manifest.protocol.required_features = {"credit-backpressure"};
+		generated_manifest.protocol.required_features = {"credit-backpressure",
+														 "task-input-chunks-v2"};
 		generated_manifest.platform_tuples = {"linux-development"};
 		generated_manifest.provider_binary_digest = zero_digest;
 		generated_manifest.provider_semantic_contract_digest = zero_digest;
@@ -3460,7 +3488,7 @@ namespace cxxlens::sdk::provider
 							  "call run_worker; framing, credit, and checksums are SDK-owned.\nint "
 							  "main(){return 0;}\n"});
 		output.push_back({"tests/provider_test.cpp",
-						  "#include <cxxlens/sdk/testing.hpp>\nint main(){return 0;}\n"});
+						  "#include <cxxlens/sdk/provider.hpp>\nint main(){return 0;}\n"});
 		output.push_back(
 			{"README.md",
 			 "# " + options.provider_id + "\n\nProvides `" + options.relation_name + "`.\n"});

@@ -1,84 +1,210 @@
-#include <array>
+#include <algorithm>
 #include <iostream>
+#include <string>
 #include <string_view>
-#include <utility>
+#include <vector>
 
-#include <cxxlens/relations/cc_call_site.hpp>
-#include <cxxlens/sdk.hpp>
+#include "doctor_product.hpp"
+
+namespace
+{
+	using cxxlens::sdk::doctor::canonical_json;
+	using cxxlens::sdk::doctor::markdown_projection;
+	using cxxlens::sdk::doctor::product_error;
+
+	void print_error(const product_error& error)
+	{
+		std::cerr << error.code;
+		if (!error.field.empty())
+			std::cerr << " field=" << error.field;
+		if (!error.detail.empty())
+			std::cerr << " detail=" << error.detail;
+		std::cerr << '\n';
+	}
+
+	[[nodiscard]] bool print_document(const std::string_view format, const std::string_view json)
+	{
+		if (format == "json")
+			std::cout << json << '\n';
+		else if (format == "markdown")
+			std::cout << markdown_projection(json);
+		else
+			return false;
+		return true;
+	}
+
+	[[nodiscard]] int run_relation_presence(const int argc, char** argv)
+	{
+		std::vector<std::string_view> relation_ids;
+		std::string_view format = "json";
+		for (int index = 2; index < argc; ++index)
+		{
+			const std::string_view argument{argv[index]};
+			if (argument == "--format")
+			{
+				if (++index >= argc)
+				{
+					std::cerr
+						<< "doctor.relation-request-invalid field=format detail=missing-value\n";
+					return 2;
+				}
+				format = argv[index];
+				continue;
+			}
+			if (argument.rfind("--format=", 0U) == 0U)
+			{
+				format = argument.substr(9U);
+				continue;
+			}
+			if (argument.empty() || argument.front() == '-')
+			{
+				std::cerr << "doctor.relation-request-invalid field=relation "
+							 "detail=unexpected-argument\n";
+				return 2;
+			}
+			relation_ids.push_back(argument);
+		}
+		if (format != "json" && format != "markdown")
+		{
+			std::cerr << "doctor.relation-request-invalid field=format detail=unsupported\n";
+			return 2;
+		}
+		const auto checked = cxxlens::sdk::doctor::check_relations(relation_ids);
+		if (std::holds_alternative<product_error>(checked))
+		{
+			print_error(std::get<product_error>(checked));
+			return 2;
+		}
+		const auto& checks = std::get<std::vector<cxxlens::sdk::doctor::relation_check>>(checked);
+		const auto json = canonical_json(cxxlens::sdk::doctor::to_json(checks));
+		if (!print_document(format, json))
+			return 2;
+		return std::ranges::all_of(checks,
+								   [](const auto& check)
+								   {
+									   return check.state == "proved";
+								   })
+			? 0
+			: 1;
+	}
+
+	[[nodiscard]] int run_missing(const int argc, char** argv)
+	{
+		std::string project_path;
+		std::string use_case;
+		std::string_view format = "json";
+		for (int index = 2; index < argc; ++index)
+		{
+			const std::string_view argument{argv[index]};
+			auto read_option = [&](std::string& target, const std::string_view field) -> bool
+			{
+				if (++index >= argc)
+				{
+					std::cerr << "doctor.cli-invalid field=" << field << " detail=missing-value\n";
+					return false;
+				}
+				target = argv[index];
+				return !target.empty();
+			};
+			if (argument == "--project")
+			{
+				if (!read_option(project_path, "project"))
+					return 2;
+				continue;
+			}
+			if (argument.rfind("--project=", 0U) == 0U)
+			{
+				project_path = argument.substr(10U);
+				continue;
+			}
+			if (argument == "--use-case")
+			{
+				if (!read_option(use_case, "use_case_id"))
+					return 2;
+				continue;
+			}
+			if (argument.rfind("--use-case=", 0U) == 0U)
+			{
+				use_case = argument.substr(11U);
+				continue;
+			}
+			if (argument == "--format")
+			{
+				if (++index >= argc)
+				{
+					std::cerr << "doctor.cli-invalid field=format detail=missing-value\n";
+					return 2;
+				}
+				format = argv[index];
+				continue;
+			}
+			if (argument.rfind("--format=", 0U) == 0U)
+			{
+				format = argument.substr(9U);
+				continue;
+			}
+			std::cerr << "doctor.cli-invalid field=argument detail=unexpected-argument\n";
+			return 2;
+		}
+		if (project_path.empty())
+		{
+			std::cerr << "doctor.project-required field=project detail=missing\n";
+			return 2;
+		}
+		if (use_case.empty())
+		{
+			std::cerr << "doctor.use-case-required field=use_case_id detail=missing\n";
+			return 2;
+		}
+		if (format != "json" && format != "markdown")
+		{
+			std::cerr << "doctor.cli-invalid field=format detail=unsupported\n";
+			return 2;
+		}
+		std::string read_error;
+		const auto raw = cxxlens::sdk::doctor::read_file(project_path, read_error);
+		if (!read_error.empty())
+		{
+			std::cerr << read_error << '\n';
+			return 2;
+		}
+		const auto project = cxxlens::sdk::doctor::parse_project_document(raw);
+		if (std::holds_alternative<product_error>(project))
+		{
+			print_error(std::get<product_error>(project));
+			return 2;
+		}
+		const auto resolved = cxxlens::sdk::doctor::resolve(
+			use_case, std::get<cxxlens::sdk::doctor::project_context>(project));
+		if (std::holds_alternative<product_error>(resolved))
+		{
+			print_error(std::get<product_error>(resolved));
+			return 2;
+		}
+		const auto& resolution = std::get<cxxlens::sdk::doctor::resolution>(resolved);
+		const auto json = canonical_json(cxxlens::sdk::doctor::to_json(resolution));
+		if (!print_document(format, json))
+			return 2;
+		return resolution.state == "proved" ? 0 : 1;
+	}
+
+} // namespace
 
 int main(int argc, char** argv)
 {
-	if (argc != 2 ||
-		(std::string_view{argv[1]} != "inspect" && std::string_view{argv[1]} != "doctor" &&
-		 std::string_view{argv[1]} != "query-ir" &&
-		 std::string_view{argv[1]} != "provider-manifest"))
+	if (argc < 2)
 	{
-		std::cerr << "usage: cxxlens-sdk-doctor inspect|doctor|query-ir|provider-manifest\n";
+		std::cerr << "usage: cxxlens-sdk-doctor relation-presence <relation-id>... [--format "
+					 "json|markdown]\n"
+				  << "       cxxlens-sdk-doctor missing --project <project.json> --use-case <id> "
+					 "[--format json|markdown]\n";
 		return 2;
 	}
-	using relation = cxxlens::cc::relations::call_site;
-	auto typed = cxxlens::sdk::query::from<relation>();
-	cxxlens::sdk::relation_registry registry;
-	auto added = registry.add(relation::descriptor());
-	auto dynamic = registry.require("cc.call_site", 1U);
-	if (!typed || !added || !dynamic)
-	{
-		std::cerr << "sdk.doctor-contract-invalid\n";
-		return 1;
-	}
-	auto dynamic_query = cxxlens::sdk::query::dynamic_query::from(*dynamic);
-	if (!dynamic_query || typed->ir().digest() != dynamic_query->ir().digest())
-	{
-		std::cerr << "sdk.static-dynamic-ir-mismatch\n";
-		return 1;
-	}
-	if (std::string_view{argv[1]} == "query-ir")
-	{
-		auto predicate =
-			cxxlens::sdk::query::equals_present(cxxlens::sdk::query::col<relation::ordinal>(),
-												cxxlens::sdk::query::literal::unsigned_integer(0U));
-		if (!predicate)
-			return 1;
-		auto filtered = std::move(*typed).where(std::move(*predicate));
-		if (!filtered)
-			return 1;
-		const std::array keys{cxxlens::sdk::query::col<relation::call>()};
-		auto ordered = std::move(*filtered).order_by(keys);
-		if (!ordered)
-			return 1;
-		const std::array output{cxxlens::sdk::query::col<relation::call>(),
-								cxxlens::sdk::query::col<relation::source>()};
-		auto projected = std::move(*ordered).project(output);
-		if (!projected || !projected->ir().validate())
-			return 1;
-		std::cout << projected->ir().canonical_form() << '\n';
-		return 0;
-	}
-	if (std::string_view{argv[1]} == "provider-manifest")
-	{
-		const auto zero_digest = "sha256:" + std::string(64U, '0');
-		cxxlens::sdk::provider::manifest manifest;
-		manifest.provider_id = "company.example.doctor";
-		manifest.provider_version = {1U, 0U, 0U};
-		manifest.package_identity = "company.example.doctor-package";
-		manifest.publisher = "company.example";
-		manifest.license = "Apache-2.0";
-		manifest.platform_tuples = {"linux-x86_64"};
-		manifest.provider_binary_digest = zero_digest;
-		manifest.provider_semantic_contract_digest = zero_digest;
-		manifest.offered_relations = {"cc.call_site.v1"};
-		manifest.interpretation_domains = {"cc.canonical-1"};
-		manifest.invalidation_contract = zero_digest;
-		manifest.determinism_contract = zero_digest;
-		manifest.resource_class = "provider.standard";
-		manifest.requested_qualifications = {"schema-conformant"};
-		if (!manifest.validate())
-			return 1;
-		std::cout << manifest.canonical_json() << '\n';
-		return 0;
-	}
-	std::cout << "{\"descriptor\":\"" << relation::descriptor().descriptor_digest
-			  << "\",\"mode\":\"" << argv[1] << "\",\"ordinary_llvm_dependency\":false,"
-			  << "\"query_ir\":\"" << typed->ir().digest() << "\",\"status\":\"accepted\"}\n";
-	return 0;
+	const std::string_view command{argv[1]};
+	if (command == "relation-presence")
+		return run_relation_presence(argc, argv);
+	if (command == "missing")
+		return run_missing(argc, argv);
+	std::cerr << "usage: cxxlens-sdk-doctor relation-presence|missing\n";
+	return 2;
 }

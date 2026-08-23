@@ -2,9 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-15
-- Decision owner: architecture-release
-- Decision issue: #59
-- Tracking issue: #56
 
 ## Context
 
@@ -45,9 +42,9 @@ compiler framework の型、lifetime、build/link graph を背負わず、機械
 ## Consequences
 
 - 現在の単一 `cxxlens::cxxlens` target は migration baseline のままであり、この ADR は target split を
-  実装済みとは宣言しない。実装と installed consumer tests は #67 と #71 が所有する。
-- provider protocol の NG0/NG1 exact wire contract は #64、各 version axis の意味契約は owner issue が
-  固定する。support matrix はそれらの独立性と negotiation/rejection rule を公開する。
+  実装済みとは宣言しない。実装と installed consumer tests は対応する public target と直接試験が所有する。
+- provider protocol の NG0/NG1 exact wire contract と各 version axis の意味契約は Provider Protocol schema と
+  関連 ADR が固定する。support matrix はそれらの独立性と negotiation/rejection rule を公開する。
 - 未掲載の環境は `doctor` で `compat.environment-unsupported` となる。
 - offline migration が存在しても runtime compatible とは表示せず、`migration-required` とする。
 

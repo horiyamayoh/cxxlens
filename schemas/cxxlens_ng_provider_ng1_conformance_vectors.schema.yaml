@@ -11,29 +11,14 @@ properties:
   authority:
     type: object
     additionalProperties: false
-    required: [contract, decision_issue, implementation_issue, digest_grammar_adr, digest_grammar_issue, binding]
+    required: [contract, protocol, digest_grammar_adr]
     properties:
       contract: {const: schemas/cxxlens_ng_provider_ng1_hardening.yaml}
-      decision_issue: {const: '#233'}
-      implementation_issue: {const: '#183'}
+      protocol: {const: cxxlens.provider-protocol.v2}
       digest_grammar_adr: {const: docs/design/adr/0100-ng1-resume-provider-digest-grammar.md}
-      digest_grammar_issue: {const: '#243'}
-      binding:
-        type: object
-        additionalProperties: false
-        required: [state, revision, tree, provider_binary_digest, provider_semantic_contract_digest, protocol_minor, hardening_contract_digest]
-        properties:
-          state: {const: authority-only-unbound}
-          revision: {type: 'null'}
-          tree: {type: 'null'}
-          provider_binary_digest: {type: 'null'}
-          provider_semantic_contract_digest: {type: 'null'}
-          protocol_minor: {const: 1}
-          hardening_contract_digest: {type: 'null'}
   vectors:
     type: array
-    minItems: 16
-    maxItems: 16
+    minItems: 1
     uniqueItems: true
     items:
       type: object
@@ -42,7 +27,7 @@ properties:
       properties:
         id: {type: string, pattern: '^[a-z0-9-]+$'}
         class: {enum: [positive, negative, recovery]}
-        surface: {enum: [heartbeat, progress, resume, spill, recovery, qualification]}
+        surface: {enum: [heartbeat, progress, resume, spill, recovery]}
         mutation: {type: string, minLength: 1}
         expected:
           type: object

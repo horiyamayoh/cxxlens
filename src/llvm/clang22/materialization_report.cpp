@@ -968,7 +968,7 @@ namespace cxxlens::detail::clang22::materialization
 			if (!output.add_member(
 					"schema",
 					*string("cxxlens.clang22-materialization-report.source-private-bounded.v1")) ||
-				!output.add_member("report_version", *string("1.0.0")) ||
+				!output.add_member("report_version", *string("2.2.0")) ||
 				!output.add_member("response_kind", *string("detailed_projection")) ||
 				!output.add_member("result", *string("projection_ready")) ||
 				!output.add_member("generated_at", 4U) ||
@@ -3790,7 +3790,7 @@ namespace cxxlens::detail::clang22::materialization
 		const auto& error = authority.error();
 
 		auto schema = string("cxxlens.clang22-materialization-report.v2");
-		auto report_version = string("2.1.0");
+		auto report_version = string("2.2.0");
 		auto response_kind = string("compact_failure");
 		auto result = string("failed");
 		auto generated = string(std::move(timestamp));

@@ -1,7 +1,6 @@
 schema: cxxlens.query-conformance-vectors.v1
 document_version: 1.3.0
 authority:
-  owner_issue: '#166'
   decision_adr: docs/design/adr/0021-query-closure-applicability.md
 contract: schemas/cxxlens_ng_logical_query_contract.yaml
 vectors:

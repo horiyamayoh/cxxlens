@@ -15,8 +15,7 @@ namespace cxxlens::sdk::provider::detail
 {
 	/** The reserved NG1 heartbeat wire id, kept source-private until NG1 activation. */
 	inline constexpr std::uint16_t ng1_heartbeat_message_id = 23U;
-	inline constexpr message_type ng1_heartbeat_message_type =
-		static_cast<message_type>(ng1_heartbeat_message_id);
+	inline constexpr message_type ng1_heartbeat_message_type = message_type::heartbeat;
 
 	[[nodiscard]] constexpr bool is_ng1_heartbeat_message(const message_type value) noexcept
 	{

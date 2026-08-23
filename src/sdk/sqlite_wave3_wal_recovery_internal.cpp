@@ -37,9 +37,13 @@ namespace cxxlens::sdk
 			{
 				return false;
 			}
-			return std::all_of(digest.begin(), digest.end(), [](const char value) {
-				return (value >= '0' && value <= '9') || (value >= 'a' && value <= 'f');
-			});
+			return std::all_of(digest.begin(),
+							   digest.end(),
+							   [](const char value)
+							   {
+								   return (value >= '0' && value <= '9') ||
+									   (value >= 'a' && value <= 'f');
+							   });
 		}
 
 		[[nodiscard]] bool valid_source(const sqlite_wave3_wal_source_identity& source) noexcept
@@ -51,8 +55,8 @@ namespace cxxlens::sdk
 		}
 	} // namespace
 
-	result<void> validate_sqlite_wave3_wal_source_identity(
-		const sqlite_wave3_wal_source_identity& identity)
+	result<void>
+	validate_sqlite_wave3_wal_source_identity(const sqlite_wave3_wal_source_identity& identity)
 	{
 		if (!valid_source(identity))
 		{
@@ -61,8 +65,8 @@ namespace cxxlens::sdk
 		return {};
 	}
 
-	result<sqlite_wave3_wal_recovery_plan> plan_sqlite_wave3_wal_recovery(
-		const sqlite_wave3_wal_recovery_input& input)
+	result<sqlite_wave3_wal_recovery_plan>
+	plan_sqlite_wave3_wal_recovery(const sqlite_wave3_wal_recovery_input& input)
 	{
 		if (auto source = validate_sqlite_wave3_wal_source_identity(input.source); !source)
 		{
@@ -92,77 +96,77 @@ namespace cxxlens::sdk
 		sqlite_wave3_wal_recovery_route route{sqlite_wave3_wal_recovery_route::main_only};
 		switch (input.wal_state)
 		{
-		case sqlite_wave3_wal_state::absent:
-			if (input.wal_size != 0 || !input.wal_digest.empty() ||
-				input.authoritative_prefix_bytes != 0 || input.native_readonly_cantinit ||
-				input.native_readonly_mapping || input.read_lock_index != -1)
-			{
-				return unexpected(recovery_error("absent-wal-inconsistent"));
-			}
-			break;
-		case sqlite_wave3_wal_state::size_zero:
-			if (input.wal_size != 0 || !valid_digest(input.wal_digest) ||
-				input.authoritative_prefix_bytes != 0 || input.native_readonly_mapping ||
-				(input.native_readonly_cantinit && input.read_lock_index != 0) ||
-				(!input.native_readonly_cantinit && input.read_lock_index != -1))
-			{
-				return unexpected(recovery_error("zero-wal-inconsistent"));
-			}
-			if (input.native_readonly_cantinit)
-			{
-				route = sqlite_wave3_wal_recovery_route::private_heap_index;
-			}
-			break;
-		case sqlite_wave3_wal_state::valid_nonzero:
-			if (input.wal_size == 0 || !valid_digest(input.wal_digest) ||
-				input.authoritative_prefix_bytes != input.wal_size)
-			{
-				return unexpected(recovery_error("valid-wal-inconsistent"));
-			}
-			if (input.native_readonly_cantinit && input.native_readonly_mapping)
-			{
-				return unexpected(recovery_error("multiple-native-outcomes"));
-			}
-			if (input.native_readonly_cantinit)
-			{
-				if (input.read_lock_index != 0)
+			case sqlite_wave3_wal_state::absent:
+				if (input.wal_size != 0 || !input.wal_digest.empty() ||
+					input.authoritative_prefix_bytes != 0 || input.native_readonly_cantinit ||
+					input.native_readonly_mapping || input.read_lock_index != -1)
 				{
-					return unexpected(recovery_error("private-index-lock-mismatch"));
+					return unexpected(recovery_error("absent-wal-inconsistent"));
 				}
-				route = sqlite_wave3_wal_recovery_route::private_heap_index;
-			}
-			else if (input.native_readonly_mapping)
-			{
-				if (input.read_lock_index < 0)
+				break;
+			case sqlite_wave3_wal_state::size_zero:
+				if (input.wal_size != 0 || !valid_digest(input.wal_digest) ||
+					input.authoritative_prefix_bytes != 0 || input.native_readonly_mapping ||
+					(input.native_readonly_cantinit && input.read_lock_index != 0) ||
+					(!input.native_readonly_cantinit && input.read_lock_index != -1))
 				{
-					return unexpected(recovery_error("native-mapping-lock-missing"));
+					return unexpected(recovery_error("zero-wal-inconsistent"));
 				}
-				route = sqlite_wave3_wal_recovery_route::native_readonly_mapping;
-			}
-			else
-			{
-				return unexpected(recovery_error("native-route-missing"));
-			}
-			break;
-		case sqlite_wave3_wal_state::invalid:
-			return unexpected(recovery_error("invalid-wal-state"));
+				if (input.native_readonly_cantinit)
+				{
+					route = sqlite_wave3_wal_recovery_route::private_heap_index;
+				}
+				break;
+			case sqlite_wave3_wal_state::valid_nonzero:
+				if (input.wal_size == 0 || !valid_digest(input.wal_digest) ||
+					input.authoritative_prefix_bytes != input.wal_size)
+				{
+					return unexpected(recovery_error("valid-wal-inconsistent"));
+				}
+				if (input.native_readonly_cantinit && input.native_readonly_mapping)
+				{
+					return unexpected(recovery_error("multiple-native-outcomes"));
+				}
+				if (input.native_readonly_cantinit)
+				{
+					if (input.read_lock_index != 0)
+					{
+						return unexpected(recovery_error("private-index-lock-mismatch"));
+					}
+					route = sqlite_wave3_wal_recovery_route::private_heap_index;
+				}
+				else if (input.native_readonly_mapping)
+				{
+					if (input.read_lock_index < 0)
+					{
+						return unexpected(recovery_error("native-mapping-lock-missing"));
+					}
+					route = sqlite_wave3_wal_recovery_route::native_readonly_mapping;
+				}
+				else
+				{
+					return unexpected(recovery_error("native-route-missing"));
+				}
+				break;
+			case sqlite_wave3_wal_state::invalid:
+				return unexpected(recovery_error("invalid-wal-state"));
 		}
 
 		return sqlite_wave3_wal_recovery_plan{input.source,
-			route,
-			input.main_size,
-			input.wal_size,
-			input.authoritative_prefix_bytes,
-			input.main_digest,
-			input.wal_digest,
-			true,
-			true,
-			true};
+											  route,
+											  input.main_size,
+											  input.wal_size,
+											  input.authoritative_prefix_bytes,
+											  input.main_digest,
+											  input.wal_digest,
+											  true,
+											  true,
+											  true};
 	}
 
-	result<std::vector<sqlite_wave3_wal_recovery_chunk>> chunk_sqlite_wave3_wal_prefix(
-		const std::span<const std::byte> bytes,
-		const std::size_t chunk_bytes)
+	result<std::vector<sqlite_wave3_wal_recovery_chunk>>
+	chunk_sqlite_wave3_wal_prefix(const std::span<const std::byte> bytes,
+								  const std::size_t chunk_bytes)
 	{
 		if (chunk_bytes == 0 || chunk_bytes > maximum_copy_bytes)
 		{
@@ -182,8 +186,8 @@ namespace cxxlens::sdk
 		for (std::size_t offset = 0; offset < bytes.size(); offset += chunk_bytes)
 		{
 			const auto length = std::min(chunk_bytes, bytes.size() - offset);
-			chunks.push_back({static_cast<std::uint64_t>(offset),
-				static_cast<std::uint64_t>(length)});
+			chunks.push_back(
+				{static_cast<std::uint64_t>(offset), static_cast<std::uint64_t>(length)});
 		}
 		return chunks;
 	}
@@ -194,8 +198,8 @@ namespace cxxlens::sdk
 	{
 	}
 
-	result<sqlite_wave3_wal_recovery_session> sqlite_wave3_wal_recovery_session::open(
-		const sqlite_wave3_wal_recovery_input& input)
+	result<sqlite_wave3_wal_recovery_session>
+	sqlite_wave3_wal_recovery_session::open(const sqlite_wave3_wal_recovery_input& input)
 	{
 		auto plan = plan_sqlite_wave3_wal_recovery(input);
 		if (!plan)
@@ -230,8 +234,8 @@ namespace cxxlens::sdk
 		return quarantine_detail_;
 	}
 
-	result<void> sqlite_wave3_wal_recovery_session::seal_prefix(
-		const std::span<const std::byte> bytes)
+	result<void>
+	sqlite_wave3_wal_recovery_session::seal_prefix(const std::span<const std::byte> bytes)
 	{
 		if (phase_ != sqlite_wave3_wal_recovery_phase::planned)
 		{

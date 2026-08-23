@@ -4,7 +4,6 @@ maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#19-native-compiler-integration
   decision_adr: docs/design/adr/0070-clang22-usr-fallback-identity.md
-  owner_issue: '#139'
 algorithm:
   domain: clang22.declaration-fallback.v2
   framing: length-prefixed-named-fields

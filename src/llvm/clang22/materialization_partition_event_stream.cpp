@@ -298,8 +298,8 @@ namespace cxxlens::detail::clang22::materialization
 		// Event kind, key, and payload are positional fields of the canonical event tuple.
 		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 		validate_event_projection(const materialization_partition_event_kind kind,
-								  // Key and payload are positional fields of the canonical event tuple.
-								  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+								  // Key and payload are positional fields of the canonical event
+								  // tuple. NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 								  const std::span<const std::byte> key,
 								  const std::span<const std::byte> payload)
 		{
@@ -400,8 +400,7 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(event_error("event", "unknown-kind"));
 		}
 
-		[[nodiscard]] std::array<std::byte, 32U>
-		parse_raw_digest(const std::string_view digest)
+		[[nodiscard]] std::array<std::byte, 32U> parse_raw_digest(const std::string_view digest)
 		{
 			std::array<std::byte, 32U> output{};
 			if (!digest.starts_with("sha256:") || digest.size() != 71U)
@@ -531,10 +530,10 @@ namespace cxxlens::detail::clang22::materialization
 		// Began and ended are distinct ordered state-machine flags, not interchangeable values.
 		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 		validate_frame_shape(const std::span<const std::byte> frame,
-								 const std::uint64_t ordinal,
-								 // Began and ended are distinct ordered state-machine flags.
-								 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-								 bool& began,
+							 const std::uint64_t ordinal,
+							 // Began and ended are distinct ordered state-machine flags.
+							 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+							 bool& began,
 							 bool& ended,
 							 std::vector<std::byte>& previous_order_key)
 		{
@@ -595,9 +594,9 @@ namespace cxxlens::detail::clang22::materialization
 		// The digest framing contract orders body end, spool index, frame count, and body bytes.
 		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 		digest_frames(materialization_replayable_spool& spool,
-						  // Digest framing preserves the canonical body-end/spool-index order.
-						  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-						  const std::uint64_t body_end,
+					  // Digest framing preserves the canonical body-end/spool-index order.
+					  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+					  const std::uint64_t body_end,
 					  const std::uint64_t spool_index,
 					  const std::uint64_t frame_count,
 					  const std::uint64_t body_bytes)
@@ -641,9 +640,9 @@ namespace cxxlens::detail::clang22::materialization
 		// The prefix digest framing contract orders body end, spool index, and census fields.
 		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 		digest_prefix(materialization_replayable_spool& spool,
-						  // Digest framing preserves the canonical body-end/spool-index order.
-						  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-						  const std::uint64_t body_end,
+					  // Digest framing preserves the canonical body-end/spool-index order.
+					  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+					  const std::uint64_t body_end,
 					  const std::uint64_t spool_index,
 					  const std::uint64_t frame_count,
 					  const std::uint64_t body_bytes,

@@ -2,8 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-17
-- Decision owner: claim-kernel
-- Decision issue: #93
 - Depends on: ADR 0007, ADR 0019
 
 ## Context

@@ -33,7 +33,6 @@ properties:
     - design
     - index
     - decision_adr
-    - owner_issue
     - owner
     properties:
       design:
@@ -42,8 +41,6 @@ properties:
         const: docs/design/catalogs/README.md
       decision_adr:
         const: docs/design/adr/0096-clang22-installed-materialization-boundary.md
-      owner_issue:
-        const: '#182'
       owner:
         const: steward.ng-relations
   compatibility:

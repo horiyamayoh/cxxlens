@@ -339,13 +339,13 @@ namespace cxxlens::detail::clang22
 		 * added to the in-memory content and recorded as claimed, so the two stay in step by
 		 * construction: given a validated closure and a successful mount, a claimed member is
 		 * always servable and the audit is a defence-in-depth invariant rather than an expected
-		 * outcome. `withheld_logical_path`, used only by the testing seam, deliberately breaks
-		 * that correspondence for exactly one member so the invariant stays exercised.
+		 * outcome. The source-private mount policy can deliberately break that correspondence for
+		 * a focused fault test while preserving the production default of mounting every member.
 		 */
 		[[nodiscard]] sdk::result<native_vfs_mount>
 		mount_native_vfs(const source_closure_snapshot& closure,
 						 const source_closure_invocation& invocation,
-						 const std::string_view withheld_logical_path = {})
+						 const source_closure_member_mount_policy mount_policy = {})
 		{
 			if (auto valid = closure.validate(); !valid)
 				return sdk::unexpected(std::move(valid.error()));
@@ -364,7 +364,7 @@ namespace cxxlens::detail::clang22
 				const auto synthetic =
 					std::string{source_closure_vfs::synthetic_root()} + "/" + *relative;
 				claimed_members.insert(synthetic);
-				if (!withheld_logical_path.empty() && member.logical_path == withheld_logical_path)
+				if (!mount_policy.admits(member.logical_path))
 					continue;
 				if (!memory->addFile(
 						synthetic,
@@ -392,10 +392,9 @@ namespace cxxlens::detail::clang22
 		}
 #endif
 
-		[[nodiscard]] sdk::result<void> run_source_closure_translation_unit(
-			const source_closure_native_input& input,
-			[[maybe_unused]] const std::string_view withheld_logical_path,
-			provider::clang22::translation_unit_callback callback)
+		[[nodiscard]] sdk::result<void>
+		run_source_closure_translation_unit(const source_closure_native_input& input,
+											provider::clang22::translation_unit_callback callback)
 		{
 			if (auto valid = input.closure.validate(); !valid)
 				return sdk::unexpected(std::move(valid.error()));
@@ -417,7 +416,7 @@ namespace cxxlens::detail::clang22
 				return sdk::unexpected(failure("native.input-invalid", "callback"));
 
 #if CXXLENS_HAS_CLANG22
-			auto mount = mount_native_vfs(input.closure, *invocation, withheld_logical_path);
+			auto mount = mount_native_vfs(input.closure, *invocation, input.member_mount_policy);
 			if (!mount)
 				return sdk::unexpected(std::move(mount.error()));
 			provider::clang22::translation_unit_input native_input{
@@ -462,22 +461,6 @@ namespace cxxlens::detail::clang22
 	with_source_closure_translation_unit(const source_closure_native_input& input,
 										 provider::clang22::translation_unit_callback callback)
 	{
-		return run_source_closure_translation_unit(input, {}, std::move(callback));
+		return run_source_closure_translation_unit(input, std::move(callback));
 	}
-
-#if defined(CXXLENS_CLANG22_SOURCE_CLOSURE_TESTING) && CXXLENS_CLANG22_SOURCE_CLOSURE_TESTING
-	sdk::result<void> with_source_closure_translation_unit_withholding_member(
-		const source_closure_native_input& input,
-		const std::string_view withheld_logical_path,
-		provider::clang22::translation_unit_callback callback)
-	{
-		if (withheld_logical_path.empty() ||
-			input.closure.find_member(withheld_logical_path) == nullptr)
-			return sdk::unexpected(failure("native.input-invalid",
-										   "withheld-logical-path",
-										   std::string{withheld_logical_path}));
-		return run_source_closure_translation_unit(
-			input, withheld_logical_path, std::move(callback));
-	}
-#endif
 } // namespace cxxlens::detail::clang22

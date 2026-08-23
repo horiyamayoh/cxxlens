@@ -2,19 +2,17 @@
 
 - Status: Accepted for implementation
 - Date: 2026-08-23
-- Decision owner: repository owner
-- Decision issues: #183, #261
 - Supersedes: ADR 0102 for transport versioning and compatibility
 - Depends on: ADR 0101, ADR 0099, ADR 0100
 - Normative contract: `schemas/cxxlens_ng_provider_protocol_v2.yaml`
 
 ## Context
 
-The accepted provider implementation is protocol 1.x, while source-closure transport, task v4,
-and the hardened NG1 lifecycle are represented by disconnected proposals and source-private
-fixtures. The previous source-closure proposal also treated the bytes of v2.1/v3 implementation
-files as authority. That couples product behavior to a particular checkout and makes ordinary
-refactoring, formatting, and compiler upgrades appear to be protocol changes.
+The accepted provider implementation is being cut over to Protocol 2.0, while source-closure
+transport, task v4, and the hardened NG1 lifecycle must share one live session state machine.
+Earlier development material coupled product behavior to a checkout-specific source
+representation. That made ordinary refactoring, formatting, and compiler upgrades appear to be
+protocol changes.
 
 Protocol 2.0 must make the semantic wire contract authoritative. It must carry source-closure
 identity and bounded transfer explicitly, connect NG1 liveness/recovery to the same session state
@@ -28,12 +26,12 @@ Adopt `cxxlens.provider-protocol.v2`, major 2 minor 0, as the sole implementatio
 next cutover. The normative message registry, capability rules, task/request authority, closure
 transport, bounds, NG1 rules, and product boundary are in the schema named above.
 
-Protocol 1.x is not a compatibility target for the cutover. A peer advertising another major,
-request 2.1/task v3, or a missing required capability is rejected before payload or ambient file
-access. No implicit downgrade, first-wins negotiation, legacy shim, or v1 byte-preservation test
-is permitted. The final integration owner may change the existing public provider headers and
-runtime only after this contract handoff; this commit intentionally does not change those shared
-hot files.
+Protocol 2.0 is the sole compatibility target for the cutover. A peer advertising another major,
+an obsolete request/task shape, or a missing required capability is rejected before payload or
+ambient file access. No implicit downgrade, first-wins negotiation, compatibility shim, or
+checkout-specific preservation test is permitted. The final integration owner may change the
+existing public provider headers and runtime only after this contract handoff; this commit
+intentionally does not change those shared hot files.
 
 ### Wire and identity
 
@@ -49,9 +47,10 @@ token, and a closure receipt is not a compiler or publication success.
 
 ### Request, task, and closure
 
-Protocol 2.0 requires request 2.2 and task v4 for closure-bearing work. Source bytes and
-`content_base64` are not request authority. The task v4 projection binds task input, invocation,
-toolchain, environment, closure, manifest, and the canonical main member metadata.
+Protocol 2.0 requires request 2.2 and task v4 for closure-bearing work. The request and task carry
+typed source metadata and closure identity, not inline source bytes. The source-closure manifest,
+blob, and chunk transfer is the sole source-byte path. The task v4 projection binds task input,
+invocation, toolchain, environment, closure, manifest, and the canonical main member metadata.
 
 The only closure success path is:
 
@@ -72,23 +71,15 @@ task, invocation, toolchain, environment, sandbox, and output group. Stale, fore
 replayed tokens are rejected. A hung or crashed worker is killed/cleaned as a process group and
 cannot publish output.
 
-## Removed authority
+## Product boundary
 
-The following are explicitly non-authoritative and must be deleted during integration:
-
-- implementation-file SHA and byte-exact legacy bindings;
-- `LEGACY_BINDINGS` and source-byte drift checkers;
-- lint exclusions justified only by protocol byte preservation;
-- qualification JSON, issue execution receipts, checkpoints, and other development completion
-  ceremony.
-
-This does not remove product digests, semantic identity, provenance, closure/coverage/unresolved
-state, provider binary identity/signature/revocation, sandbox policy, or crash/recovery receipts.
+Product digests, semantic identity, provenance, closure/coverage/unresolved state, provider binary
+identity/signature/revocation, sandbox policy, and crash/recovery receipts remain authoritative.
 
 ## Non-goals of this contract commit
 
 This contract commit does not alter `include/cxxlens/sdk/provider.hpp`, `src/sdk/provider.cpp`,
 `src/sdk/provider_runtime.cpp`, CMake, workflows, public catalog, or installed release behavior.
-Those are owned by the later integration wave. It also does not claim #183 or #261 complete until
-the live worker/VFS/materializer path and direct positive, negative, fault, determinism, and
-resource tests pass.
+Those are owned by the later integration wave. The product cutover is complete only after the
+live worker/VFS/materializer path and direct positive, negative, fault, determinism, and resource
+tests pass.

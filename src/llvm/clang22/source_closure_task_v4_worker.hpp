@@ -20,7 +20,7 @@ namespace cxxlens::detail::clang22
 	{
 		std::span<const std::byte> input_payload;
 		const source_closure_snapshot& closure;
-		std::string_view expected_base_task_v3_digest;
+		std::string_view expected_base_task_digest;
 		std::string_view expected_task_v4_input_digest;
 		std::span<const std::string> effective_arguments;
 		std::span<const std::string> qualified_read_roots;
@@ -39,10 +39,9 @@ namespace cxxlens::detail::clang22
 	/**
 	 * Candidate codec-to-VFS bridge for one task-v4 payload.
 	 *
-	 * This source-private seam is intentionally not called by `run_provider_worker`: ADR 0102 is
-	 * still proposed and protocol 1.2/request 2.2 activation remains fail-closed.  Once the
-	 * authority is accepted, the production dispatcher can bind its already-validated base-task
-	 * arguments and toolchain roots here without introducing an ambient fallback.
+	 * This source-private seam is called only after the Protocol 2.0 dispatcher has validated the
+	 * inherited base-task authority. The production dispatcher binds its validated arguments and
+	 * toolchain roots here without introducing an ambient filesystem fallback.
 	 */
 	[[nodiscard]] sdk::result<source_closure_task_v4_worker_receipt>
 	execute_source_closure_task_v4_candidate(source_closure_task_v4_worker_input input);

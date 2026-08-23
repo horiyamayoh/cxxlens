@@ -30,15 +30,13 @@ class PublicCatalogMetadataCleanupTest(unittest.TestCase):
     def test_current_documents_validate_without_repository_operation_metadata(self) -> None:
         jsonschema.Draft202012Validator(self.catalog_schema).validate(self.catalog)
 
-        self.assertNotIn("owner_issue", self.catalog["authority"])
         self.assertNotIn("owner", self.catalog["authority"])
         for entry in self.catalog["entries"]:
-            self.assertNotIn("owner_issue", entry)
             self.assertNotIn("implementation_evidence", entry)
 
     def test_removed_metadata_is_rejected_by_the_direct_schemas(self) -> None:
         catalog = copy.deepcopy(self.catalog)
-        catalog["authority"]["owner_issue"] = "#66"
+        catalog["authority"]["repository_metadata"] = "#66"
         with self.assertRaises(jsonschema.ValidationError):
             jsonschema.Draft202012Validator(self.catalog_schema).validate(catalog)
 

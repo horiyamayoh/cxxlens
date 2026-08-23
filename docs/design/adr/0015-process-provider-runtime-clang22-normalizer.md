@@ -2,8 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-07-16
-- Decision owner: provider-runtime
-- Decision issue: #70
 - Depends on: ADR 0009, ADR 0010, ADR 0011, ADR 0012
 
 ## Context

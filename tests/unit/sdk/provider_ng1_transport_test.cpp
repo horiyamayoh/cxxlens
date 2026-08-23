@@ -283,7 +283,7 @@ namespace
 		require(!mutated_result, "resume projection mutation was encoded");
 	}
 
-	void test_reserved_heartbeat_wire_codec_is_minor_one_only()
+	void test_reserved_heartbeat_wire_codec_is_protocol_two_only()
 	{
 		const auto control = encode_ng1_heartbeat_control(heartbeat_control());
 		require(control, "reserved heartbeat setup encoding failed");
@@ -292,13 +292,13 @@ namespace
 		wire.stream_id = 7U;
 		wire.sequence = 3U;
 		wire.control = *control;
-		wire.protocol_major = 1U;
-		wire.protocol_minor = 1U;
+		wire.protocol_major = provider::protocol_v2_major;
+		wire.protocol_minor = provider::protocol_v2_minor;
 
 		provider::protocol_limits ng1_limits;
-		ng1_limits.protocol_major = 1U;
-		ng1_limits.minimum_minor = 1U;
-		ng1_limits.maximum_minor = 1U;
+		ng1_limits.protocol_major = provider::protocol_v2_major;
+		ng1_limits.minimum_minor = provider::protocol_v2_minor;
+		ng1_limits.maximum_minor = provider::protocol_v2_minor;
 		auto encoded = provider::encode_frame(wire, ng1_limits);
 		require(encoded, "reserved heartbeat wire encoding failed");
 		auto decoded = provider::decode_frame(*encoded, ng1_limits);
@@ -311,14 +311,15 @@ namespace
 					stream->front().type == ng1_heartbeat_message_type,
 				"reserved heartbeat stream decoding failed");
 
-		auto ng0_wire = wire;
-		ng0_wire.protocol_minor = 0U;
-		provider::protocol_limits ng0_limits;
-		ng0_limits.protocol_major = 1U;
-		ng0_limits.minimum_minor = 0U;
-		ng0_limits.maximum_minor = 0U;
-		require(!provider::encode_frame(ng0_wire, ng0_limits),
-				"reserved heartbeat was admitted on NG0");
+		auto legacy_wire = wire;
+		legacy_wire.protocol_major = 1U;
+		require(!provider::encode_frame(legacy_wire, ng1_limits),
+				"legacy Protocol 1.x heartbeat was admitted");
+		auto legacy_encoded = *encoded;
+		legacy_encoded[4U] = std::byte{0U};
+		legacy_encoded[5U] = std::byte{1U};
+		require(!provider::decode_frame(legacy_encoded, ng1_limits),
+				"legacy Protocol 1.x frame was decoded");
 
 		auto flagged = wire;
 		flagged.flags = static_cast<std::uint16_t>(provider::frame_flag::optional_extension);
@@ -441,7 +442,7 @@ int main()
 	test_heartbeat_round_trip_and_validator_bridge();
 	test_progress_round_trip_and_validator_bridge();
 	test_resume_round_trip_digest_and_validator_bridge();
-	test_reserved_heartbeat_wire_codec_is_minor_one_only();
+	test_reserved_heartbeat_wire_codec_is_protocol_two_only();
 	test_strict_cbor_rejections();
 	return 0;
 }

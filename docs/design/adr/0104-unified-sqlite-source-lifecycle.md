@@ -2,7 +2,6 @@
 
 - Status: Accepted
 - Date: 2026-08-21
-- Owners: #201 and #205; separate effect-profile owner #202
 - Contract IDs: `store.sqlite-active-read-connection.v1`,
   `cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1`,
   `cxxlens.sqlite.reader-shm-native-attachment.v1`,
@@ -13,23 +12,22 @@
 
 ## Context and ownership
 
-The prior sibling-branch model was not constructible. #201 owns the zero-source-mutation active-WAL
-read connection. #205 is an authenticated same-process mapping subprotocol nested inside that live
-connection; it is not a sibling source outcome. #202 is a later persistent-effect profile that may
-start only from an already sealed logical exact-empty read receipt. A raw physical census never
-authorizes it.
+The prior sibling-branch model was not constructible. The zero-source-mutation active-WAL
+read connection contains an authenticated same-process mapping subprotocol; it is not a sibling
+source outcome. The persistent-effect profile may start only from an already sealed logical
+exact-empty read receipt. A raw physical census never authorizes it.
 
-No receipt substitutes for another. #201 cannot authorize normalization, #205 cannot prove logical
-database validity or CAS, and #202 cannot mint or prolong a mapping lease. Production canonical or
-user-source normalization remains disabled until the separate #202 effect profile passes its direct
+No receipt substitutes for another. The outer zero-effect read contract cannot authorize normalization,
+the nested mapping contract cannot prove logical database validity or CAS, and the isolated effect
+contract cannot mint or prolong a mapping lease. Production canonical or user-source normalization remains disabled until the separate effect profile passes its direct
 positive, negative, and fault tests and the authenticated runtime receipt conditions hold.
 
-The composite `cxxlens.sqlite-nested-mapping-terminal.v1` is only the authenticated #201/#205
+The composite `cxxlens.sqlite-nested-mapping-terminal.v1` is only the authenticated outer-read/nested-mapping
 handoff surface. It carries the separately sealed writer-generation and reader-attachment terminals;
 it cannot mint either underlying authority, substitute a reader zero-effect receipt, or satisfy the
 outer logical-read barrier by itself.
 
-## #201 outer zero-effect machine
+## Outer zero-effect machine
 
 The no-effect boundary begins before target `xOpen`, not after census:
 
@@ -45,18 +43,18 @@ close callback, the target family cannot be created,
 deleted, truncated, resized, renamed, or written. Census uses retained-parent, no-follow typed
 enumeration/open/stat and never re-resolves a host path. Cold active-WAL reading may receive authentic
 `SQLITE_READONLY_CANTINIT/null` and build SQLite's private heap WAL index under `WAL_READ_LOCK(0)`.
-Native `SQLITE_OK`, including null, is fail-closed unless the nested #205 callback path validates.
+Native `SQLITE_OK`, including null, is fail-closed unless the nested mapping callback path validates.
 Decode is eager and complete while connection, locks, held objects, namespace epoch, and all use
 owners remain pinned. Decode first seals a non-public candidate. The connection then revokes and
 drains all custody, calls authenticated `xShmUnmap(deleteFlag=0)` and `xClose`, and seals an exact
 zero-create/write/truncate/extend/delete/resize callback-effect transcript. Only after connection
-closure, zero live callbacks/leases/use owners, and that zero-effect receipt can #201 seal the
+closure, zero live callbacks/leases/use owners, and that zero-effect receipt can seal the
 logical read receipt.
 
-This is the #201 outer-read invariant, not a blanket reclassification of a #205 writer receipt.
+This is the outer-read invariant, not a blanket reclassification of a nested-mapping writer receipt.
 The effectful writer subprotocol is a separate authenticated RW-main/WAL-gated path: a writer
 `{1,1}` outcome is never evidence for the outer zero-effect receipt or the logical read receipt.
-If an outer custody census contains a writer terminal, #201 must independently prove that its
+If an outer custody census contains a writer terminal, the outer-read contract must independently prove that its
 writer effect scope is zero before sealing the outer receipt; a writer terminal alone cannot satisfy
 that barrier, and any observed writer effect makes the outer logical-read candidate non-authoritative.
 
@@ -66,7 +64,7 @@ epoch, WAL header/salts/authoritative prefix, decoded logical state and page/cen
 the complete mapping/private-index provenance. Empty, unresolved, conflicting, and corrupt are
 distinct terminal values.
 
-## #205 nested mapping subprotocol
+## Nested mapping subprotocol
 
 Writer and reader callbacks have different authentic authority and different post-native products.
 A writer callback follows:
@@ -170,7 +168,7 @@ to `child-inherited-custody-quarantine`. That child terminal permits no SQLite e
 close, retry, cleanup, or authority reconstruction; vanished parent-thread owners are never awaited.
 Only child process exit/exec may discard the private inherited address-space copy.
 
-## #202 isolated effect profile
+## Isolated effect profile
 
 The effect machine is not entered by raw census or a decoded candidate. Its sole entry is:
 
@@ -237,10 +235,10 @@ fresh initialization, never Store/public success. Fixture-only capability cannot
 
 | Interruption | Allowed state | Recovery |
 | --- | --- | --- |
-| before/inside #201 read or map | source unchanged | revoke, drain, unmap/close, typed fail-closed |
+| before/inside outer read or map | source unchanged | revoke, drain, unmap/close, typed fail-closed |
 | callback returns after cut | source unchanged by reader | original drain only; permanent quarantine on ambiguity |
 | fork/PID reuse/VFS unload/replacement/ABA | source unchanged by reader | hide/revoke before cleanup; no successor until census drains |
-| before #202 effect | source unchanged and #201 connection closed | release exclusive owner; discard receipt |
+| before isolated effect | source unchanged and outer connection closed | release exclusive owner; discard receipt |
 | during fixture normalization | exact DF-0202 old or journaled recoverable state | follow F0/FZ-pre/FZ-post/FP/FH/FI/FO matrix; no blind retry |
 | after durable normalization before fresh init | durable exact-empty rollback state | discard original receipt; cold-reclassify only; no original success continuation |
 | during fresh init | existing atomic Store initialization states | existing recovery; no intermediate public success |
@@ -253,7 +251,7 @@ entry without a fresh authenticated writer-lease pin, `OK+null`, different point
 member/use-owner census, stale/ABA/fork/PID/VFS lease, unload before revoke, callback effect without
 an exact writer effect receipt or reader/outer zero-effect receipt, writer `{1,0}`/`{0,1}`/unknown
 effect pair, writer effect without the exact gate, nonzero unmap delete flag, callback retry, ordinary-drain fork handling,
-`#202` entry before connection-close/zero-custody, inferred cleanup, cross-branch fallback,
+isolated-effect entry before connection-close/zero-custody, inferred cleanup, cross-branch fallback,
 fixture-to-production promotion, missing
 parent fsync, non-empty normalization, sidecar ambiguity, and CAS reclassification.
 
@@ -261,11 +259,10 @@ The direct test matrix must cover cold active-WAL read, private-index fallback, 
 success/failure, multi-page attachment, two-live-Store CAS, all revoke/unload/fork/ABA and late callback
 cuts, and every executable DF-0202 callback/recrash partition. Future production activation additionally
 requires the loaded SQLite DSO identity, callback/recrash, large-sector, rebind, and parent-sync checks,
-all as positive, negative, and fault tests. Runtime receipts are the product safety authority; no
-repository-tracked harness, report digest, review receipt, or checkpoint is required.
+all as positive, negative, and fault tests. Runtime receipts are the product safety authority.
 
 ## Acceptance gate
 
-Acceptance requires the direct positive, negative, fault, and determinism/resource tests for #201/#205/#202,
-plus the main deterministic regression suite. Runtime receipts, coverage, unknown outcomes, and fail-closed
-cleanup remain product semantics; repository-operation evidence is not a completion condition.
+Acceptance requires the direct positive, negative, fault, and determinism/resource tests for the
+SQLite lifecycle, plus the main deterministic regression suite. Runtime receipts, coverage, unknown
+outcomes, and fail-closed cleanup remain product semantics.

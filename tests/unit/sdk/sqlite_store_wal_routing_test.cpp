@@ -350,12 +350,19 @@ namespace
 		active_wal_sidecar_fixture active{path};
 		const auto before = capture_files(active.path());
 		auto opened = sdk::open_sqlite_snapshot_store(active.path().string(), value);
+#if defined(__linux__) && defined(F_OFD_SETLK)
+		require(opened.has_value(), "active current WAL+SHM route was unavailable");
+		require_current(*opened, value, expected, "active current WAL+SHM authority drifted");
+		require(capture_files(active.path()) == before,
+				"active current WAL+SHM route changed source bytes");
+#else
 		require_error(
 			opened,
 			{"store.backend-unavailable", "sqlite", "source-shm-readonly-qualification"},
 			"active current WAL+SHM route did not report fail-closed qualification unavailability");
 		require(capture_files(active.path()) == before,
 				"fail-closed active current WAL+SHM route changed source bytes");
+#endif
 
 		// A mid-factory identity replacement must be injected after the source census and before
 		// finish_private_read().  The public API has no deterministic barrier at that boundary;
@@ -373,7 +380,12 @@ namespace
 		const auto before_fault = capture_files(path);
 		const auto recovery_workspace_attempts_before_fault =
 			sdk::sqlite_wal_recovery_workspace_builder_attempt_count_for_testing();
+		// Keep this a real capability fault after the production native-OK route is enabled:
+		// disabling the source-SHM symbols must fail before xOpen and must not fall through to
+		// WAL-only recovery in the same attempt.
+		sdk::set_sqlite_source_shm_symbols_available_for_testing(false);
 		auto rejected = sdk::open_sqlite_snapshot_store(path.string(), value);
+		sdk::set_sqlite_source_shm_symbols_available_for_testing(true);
 		require_error(rejected,
 					  {"store.backend-unavailable", "sqlite", "source-shm-readonly-qualification"},
 					  "active WAL+SHM qualification fault did not fail closed");

@@ -144,7 +144,7 @@ namespace cxxlens::detail::clang22
 		[[nodiscard]] bool unsupported_path_option(const std::string_view argument) noexcept
 		{
 			constexpr std::array exact{std::string_view{"-include-pch"},
-									 std::string_view{"-ivfsoverlay"}};
+									   std::string_view{"-ivfsoverlay"}};
 			if (std::ranges::find(exact, argument) != std::end(exact))
 				return true;
 			constexpr std::array<std::string_view, 6U> prefixes{
@@ -228,13 +228,13 @@ namespace cxxlens::detail::clang22
 		}
 	} // namespace
 
-	sdk::result<source_closure_invocation>
-	prepare_source_closure_invocation(const std::span<const std::string> effective_arguments,
-										  // ordered source path fields are distinct invocation bindings.
-										  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-										  const std::string_view main_logical_path,
-									  const std::string_view logical_working_directory,
-									  const std::span<const std::string> qualified_read_roots)
+	sdk::result<source_closure_invocation> prepare_source_closure_invocation(
+		const std::span<const std::string> effective_arguments,
+		// ordered source path fields are distinct invocation bindings.
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+		const std::string_view main_logical_path,
+		const std::string_view logical_working_directory,
+		const std::span<const std::string> qualified_read_roots)
 	{
 		if (effective_arguments.size() < 2U || effective_arguments.size() > maximum_argument_count)
 			return sdk::unexpected(failure("source-closure.limit-exceeded", "effective-arguments"));

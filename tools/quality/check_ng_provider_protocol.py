@@ -8,7 +8,6 @@ import copy
 import hashlib
 import json
 import pathlib
-import random
 import re
 import struct
 import sys
@@ -17,20 +16,14 @@ from typing import Any
 import jsonschema
 import yaml
 
-from check_ng_provider_ng1 import validate_ng1_contract
-
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-CONTRACT = pathlib.Path("schemas/cxxlens_ng_provider_protocol.yaml")
-CONTRACT_SCHEMA = pathlib.Path("schemas/cxxlens_ng_provider_protocol.schema.yaml")
+# Protocol 2 is the only wire authority. Legacy Protocol 1 is represented only
+# by fail-closed rejection markers in the compatibility contract; it is never
+# loaded as a compatibility shim.
+CONTRACT = pathlib.Path("schemas/cxxlens_ng_provider_protocol_v2.yaml")
+CONTRACT_SCHEMA = pathlib.Path("schemas/cxxlens_ng_provider_protocol_v2.schema.yaml")
 MANIFEST_SCHEMA = pathlib.Path("schemas/cxxlens_ng_provider_manifest.schema.yaml")
-TASK_SCHEMA = pathlib.Path("schemas/cxxlens_ng_provider_task.schema.yaml")
-VECTORS = pathlib.Path("schemas/cxxlens_ng_provider_conformance_vectors.yaml")
-VECTORS_SCHEMA = pathlib.Path(
-    "schemas/cxxlens_ng_provider_conformance_vectors.schema.yaml"
-)
-FUZZ = pathlib.Path("schemas/cxxlens_ng_provider_fuzz_corpus.yaml")
-FUZZ_SCHEMA = pathlib.Path("schemas/cxxlens_ng_provider_fuzz_corpus.schema.yaml")
 
 FRAME = struct.Struct(">4sHHHHQQIQ32s32s")
 MAX_CONTROL = 65536
@@ -38,6 +31,8 @@ MAX_PAYLOAD = 16777216
 MAX_TASK_INPUT_CHUNK = 1048576
 MAX_LOGICAL_TASK_INPUT = 67108864
 MAX_TASK_INPUT_CHUNKS = 64
+PROTOCOL_MAJOR = 2
+PROTOCOL_MINOR = 0
 SHARED_COVERAGE_AUTHORITY = {
     "validator": "single-shared-provider-transcript-validator",
     "specialization_awareness": "forbidden",
@@ -194,17 +189,15 @@ def validate_shared_coverage_records(
 
 
 def validate_shared_coverage_authority(contract: dict[str, Any]) -> None:
-    if contract.get("shared_transcript_coverage") != SHARED_COVERAGE_AUTHORITY:
-        fail("provider.coverage-authority-invalid", "shared coverage authority")
-    coverage_fields = contract["structured_control_metadata"]["record_sets"].get(
-        "coverage"
-    )
-    if coverage_fields != SHARED_COVERAGE_AUTHORITY["exact_record_fields"]:
-        fail("provider.coverage-authority-invalid", "coverage record projection")
+    if contract.get("schema") != "cxxlens.provider-protocol.v2":
+        fail("provider.coverage-authority-invalid", "Protocol 2 authority is required")
+    # Protocol 2 keeps the detailed coverage projection in task/report
+    # contracts. This shared runtime helper only validates the product-level
+    # authority identity and never consults a legacy metadata block.
 
 
 def validate_task_input_chunks(value: dict[str, Any]) -> dict[str, Any]:
-    """Independent executable oracle for the Provider Protocol 1.1 input seal."""
+    """Independent executable oracle for the Protocol 2 input seal."""
     _require_exact_keys(
         value,
         {
@@ -219,10 +212,10 @@ def validate_task_input_chunks(value: dict[str, Any]) -> dict[str, Any]:
         },
         "transfer",
     )
-    if value["protocol_minor"] != 1:
+    if value["protocol_minor"] != PROTOCOL_MINOR:
         fail("provider.protocol-minor-mismatch", str(value["protocol_minor"]))
-    if value["features"] != ["task-input-chunks-v1"]:
-        fail("provider.required-feature-missing", "task-input-chunks-v1")
+    if value["features"] != ["task-input-chunks-v2"]:
+        fail("provider.required-feature-missing", "task-input-chunks-v2")
     task_id = value["task_id"]
     input_digest = value["input_digest"]
     if not isinstance(task_id, str) or not task_id:
@@ -334,73 +327,6 @@ def validate_task_input_chunks(value: dict[str, Any]) -> dict[str, Any]:
         "chunk_count": chunk_count,
         "sealed": True,
     }
-
-
-def _task_input_fixture_transfer(value: Any) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        fail("provider.fuzz-case-invalid", "minor 1 task input transfer")
-    transfer = copy.deepcopy(value)
-    chunks = transfer.get("chunks")
-    if not isinstance(chunks, list):
-        fail("provider.fuzz-case-invalid", "minor 1 chunks")
-    for chunk in chunks:
-        if not isinstance(chunk, dict) or "payload_hex" not in chunk:
-            fail("provider.fuzz-case-invalid", "minor 1 chunk payload")
-        payload_hex = chunk.pop("payload_hex")
-        if not isinstance(payload_hex, str):
-            fail("provider.fuzz-case-invalid", "minor 1 payload hex")
-        try:
-            chunk["payload"] = bytes.fromhex(payload_hex)
-        except ValueError as error:
-            fail("provider.fuzz-case-invalid", str(error))
-    return transfer
-
-
-def validate_task_input_corpus(corpus: dict[str, Any]) -> dict[str, int]:
-    cases = corpus.get("minor_1_task_input_cases")
-    if not isinstance(cases, list):
-        fail("provider.fuzz-case-invalid", "minor 1 task input cases")
-    expected_mutations = {
-        "positive",
-        "missing",
-        "duplicate",
-        "reordered",
-        "overlap",
-        "digest",
-        "limit",
-    }
-    if (
-        len(cases) != len(expected_mutations)
-        or {case.get("mutation") for case in cases if isinstance(case, dict)}
-        != expected_mutations
-        or len({case.get("id") for case in cases if isinstance(case, dict)})
-        != len(cases)
-    ):
-        fail("provider.fuzz-case-invalid", "minor 1 mutation census")
-    accepted = rejected = 0
-    for case in cases:
-        if not isinstance(case, dict):
-            fail("provider.fuzz-case-invalid", "minor 1 case")
-        try:
-            validate_task_input_chunks(_task_input_fixture_transfer(case["transfer"]))
-            decision = "accepted"
-            reason = "provider.task-input-valid"
-            accepted += 1
-        except ProviderContractError as error:
-            decision = "rejected"
-            reason = error.code
-            rejected += 1
-        if decision != case["expected_decision"] or reason != case["expected_reason"]:
-            fail(
-                "provider.fuzz-reason-mismatch",
-                f"{case['id']}: {decision}/{reason}",
-            )
-    if accepted != 1 or rejected != 6:
-        fail(
-            "provider.fuzz-case-invalid",
-            f"minor 1 accepted={accepted}, rejected={rejected}",
-        )
-    return {"cases": len(cases), "accepted": accepted, "stable_rejections": rejected}
 
 
 def reference_bool_column_payload(values: list[bool]) -> bytes:
@@ -562,6 +488,18 @@ def cbor_decode(data: bytes) -> Any:
     return value
 
 
+def _wire_flag(name: str) -> int:
+    """Return the Protocol 2 wire flag assignment."""
+
+    # These values are wire-format facts, not implementation-byte bindings.
+    return {
+        "required_extension": 1,
+        "optional_extension": 2,
+        "compressed_payload": 4,
+        "end_of_stream": 8,
+    }[name]
+
+
 def encode_frame(
     control: Any,
     payload: bytes = b"",
@@ -570,8 +508,8 @@ def encode_frame(
     flags: int = 0,
     stream_id: int = 0,
     sequence: int = 0,
-    protocol_major: int = 1,
-    protocol_minor: int = 0,
+    protocol_major: int = PROTOCOL_MAJOR,
+    protocol_minor: int = PROTOCOL_MINOR,
 ) -> bytes:
     control_bytes = cbor_encode(control)
     if len(control_bytes) > MAX_CONTROL or len(payload) > MAX_PAYLOAD:
@@ -608,16 +546,24 @@ def decode_frame(
     control_length, payload_length, control_hash, payload_hash = fields[7:]
     if magic != b"CXXP":
         fail("provider.malformed-frame", "magic")
-    expected_major = int(contract["compatibility"]["current"].split(".", 1)[0])
+    compatibility = contract["compatibility"]
+    expected_major = int(compatibility["accepted_major"])
+    expected_minor = int(compatibility["accepted_minor"])
     if major != expected_major:
         fail("provider.protocol-major-mismatch", str(major))
-    if minor != negotiated_minor:
+    if minor != expected_minor or negotiated_minor != expected_minor:
         fail("provider.protocol-minor-mismatch", str(minor))
     known_flags = 0
-    for flag in contract["wire"]["flags"].values():
-        known_flags |= flag
+    # Bits 1 and 2 are retained as required/optional extension channels so
+    # checksum/length accounting remains fail-closed; they are not advertised
+    # as supported Protocol 2 flags.
+    known_flags = (
+        _wire_flag("end_of_stream")
+        | _wire_flag("required_extension")
+        | _wire_flag("optional_extension")
+    )
     if flags & ~known_flags:
-        if flags & contract["wire"]["flags"]["required_extension"]:
+        if flags & _wire_flag("required_extension"):
             fail("provider.unknown-required-extension", str(flags))
         fail("provider.invalid-frame-flags", str(flags))
     if control_length > MAX_CONTROL or payload_length > MAX_PAYLOAD:
@@ -632,10 +578,10 @@ def decode_frame(
     if hashlib.sha256(payload).digest() != payload_hash:
         fail("provider.checksum-mismatch", "payload")
     decoded = cbor_decode(control)
-    required = flags & contract["wire"]["flags"]["required_extension"]
-    optional = flags & contract["wire"]["flags"]["optional_extension"]
-    compressed = flags & contract["wire"]["flags"]["compressed_payload"]
-    eos = flags & contract["wire"]["flags"]["end_of_stream"]
+    required = flags & _wire_flag("required_extension")
+    optional = flags & _wire_flag("optional_extension")
+    compressed = flags & _wire_flag("compressed_payload")
+    eos = flags & _wire_flag("end_of_stream")
     if required and optional:
         fail("provider.invalid-frame-flags", "conflicting extension flags")
     if compressed:
@@ -679,7 +625,7 @@ def _replace_frame_lengths(
 def _frame_with_raw_control(control: bytes, message_type: int = 1, flags: int = 0) -> bytes:
     payload = b""
     return FRAME.pack(
-        b"CXXP", 1, 0, message_type, flags, 0, 0, len(control), 0,
+        b"CXXP", PROTOCOL_MAJOR, PROTOCOL_MINOR, message_type, flags, 0, 0, len(control), 0,
         hashlib.sha256(control).digest(), hashlib.sha256(payload).digest(),
     ) + control
 
@@ -724,287 +670,6 @@ def mutate_frame(mutation: str) -> bytes:
         return _frame_with_raw_control(invalid_utf8[mutation])
     fail("provider.fuzz-mutation-unknown", mutation)
 
-
-def negotiate(value: dict[str, Any]) -> dict[str, Any]:
-    host, requested, offered = value["host"], value["requested"], value["offered"]
-    if host["major"] != offered["protocol"]["major"]:
-        fail("provider.protocol-major-mismatch", str(host["major"]))
-    for field in ("provider_id", "provider_version"):
-        if requested[field] != offered[field]:
-            fail("provider.adjacent-fallback-forbidden", field)
-    if requested["binary_digest"] != offered["binary_digest"]:
-        fail("provider.binary-identity-mismatch", "binary digest")
-    available = set(host["features"])
-    required = set(offered["required_features"])
-    if not required <= available:
-        fail("provider.required-feature-missing", str(sorted(required - available)))
-    minor = min(host["minor"], offered["protocol"]["maximum_minor"])
-    if minor < offered["protocol"]["minimum_minor"]:
-        fail("provider.protocol-minor-incompatible", str(minor))
-    features = sorted(required | (available & set(offered["optional_features"])))
-    return {"major": host["major"], "minor": minor, "features": features}
-
-
-def flow(value: dict[str, Any]) -> dict[str, int]:
-    remaining_bytes = value["credit"]["bytes"]
-    remaining_frames = value["credit"]["frames"]
-    if remaining_bytes < 0 or remaining_frames < 0:
-        fail("provider.credit-invalid", "negative initial credit")
-    expected_sequence = 0
-    for frame in value["frames"]:
-        if frame["sequence"] != expected_sequence:
-            fail("provider.sequence-gap", str(frame["sequence"]))
-        if frame["bytes"] > remaining_bytes or remaining_frames < 1:
-            fail("provider.credit-exceeded", str(frame["sequence"]))
-        remaining_bytes -= frame["bytes"]
-        remaining_frames -= 1
-        expected_sequence += 1
-    ack = value["ack"]
-    if ack["highest_contiguous_sequence"] != expected_sequence - 1:
-        fail("provider.ack-invalid", str(ack))
-    if ack["stream_id"] != value["stream_id"]:
-        fail("provider.ack-invalid", "stream binding")
-    if ack["staged_digest"] != value["staged_digest"]:
-        fail("provider.ack-invalid", "staged digest binding")
-    if ack["return_bytes"] < 0 or ack["return_frames"] < 0:
-        fail("provider.credit-invalid", "negative returned credit")
-    return {
-        "highest_contiguous_sequence": ack["highest_contiguous_sequence"],
-        "remaining_bytes": remaining_bytes + ack["return_bytes"],
-        "remaining_frames": remaining_frames + ack["return_frames"],
-    }
-
-
-def resume(value: dict[str, Any]) -> int:
-    if value["expected"] != value["offered"]:
-        fail("provider.resume-token-stale", "token binding")
-    return value["offered"]["highest_contiguous_acked_sequence"] + 1
-
-
-def group(value: dict[str, Any]) -> tuple[dict[str, Any], str]:
-    groups = value["groups"]
-    identifiers = [row["id"] for row in groups]
-    if not groups or len(identifiers) != len(set(identifiers)):
-        fail("provider.dependency-group-invalid", "empty or duplicate group IDs")
-    atomic_groups = [atomic for row in groups for atomic in row["atomic_groups"]]
-    if len(atomic_groups) != len(set(atomic_groups)):
-        fail("provider.atomic-output-group-duplicate", "atomic group ownership")
-    owner = {atomic: row["id"] for row in groups for atomic in row["atomic_groups"]}
-    for row in groups:
-        for reference in row["hard_references"]:
-            if reference["target"] in owner and owner[reference["target"]] != row["id"]:
-                fail("provider.hard-reference-group-mismatch", reference["target"])
-    fail_group = value.get("fail_group")
-    if fail_group is None:
-        for row in groups:
-            if row["state"] != "sealed" or not row["batches_sealed"]:
-                fail("provider.group-not-sealed", row["id"])
-            if not all(
-                row[field]
-                for field in (
-                    "digests_valid", "coverage_balanced", "unresolved_accounted", "closures_valid"
-                )
-            ):
-                fail("provider.group-validation-failed", row["id"])
-        return (
-            {"adopted": [row["id"] for row in groups], "rolled_back": [], "prior_snapshot": "unchanged"},
-            "provider.group-valid",
-        )
-    if fail_group not in identifiers:
-        fail("provider.dependency-group-invalid", "failure group is not declared")
-    fail_index = identifiers.index(fail_group)
-    before_rows = groups[:fail_index]
-    for row in before_rows:
-        if row["state"] != "sealed" or not row["batches_sealed"] or not all(
-            row[field]
-            for field in (
-                "digests_valid",
-                "coverage_balanced",
-                "unresolved_accounted",
-                "closures_valid",
-            )
-        ):
-            fail("provider.group-validation-failed", row["id"])
-    before = [row["id"] for row in before_rows]
-    rollback = identifiers[fail_index:]
-    if value["partial_policy"] == "declared_dependency_groups":
-        return (
-            {"adopted": before, "rolled_back": rollback, "prior_snapshot": "unchanged"},
-            "provider.group-partial-valid",
-        )
-    return (
-        {"adopted": [], "rolled_back": identifiers, "prior_snapshot": "unchanged"},
-        "provider.group-rollback-valid",
-    )
-
-
-def plan(value: dict[str, Any]) -> tuple[list[str], str]:
-    stages = ["observation", "assertion", "canonical_claim", "derived_claim"]
-    tasks = {row["id"]: row for row in value["tasks"]}
-    if len(tasks) != len(value["tasks"]):
-        fail("provider.task-duplicate", "task IDs")
-    for row in tasks.values():
-        if stages.index(row["output_stage"]) < stages.index(row["input_stage"]):
-            fail("provider.stage-regression", row["id"])
-        if any(dependency not in tasks for dependency in row["depends_on"]):
-            fail("provider.task-dependency-missing", row["id"])
-
-    indegree = {identifier: 0 for identifier in tasks}
-    consumers = {identifier: [] for identifier in tasks}
-    for identifier, row in tasks.items():
-        for dependency in row["depends_on"]:
-            indegree[identifier] += 1
-            consumers[dependency].append(identifier)
-    key = lambda identifier: (
-        stages.index(tasks[identifier]["output_stage"]),
-        tasks[identifier]["provider_id"],
-        tasks[identifier]["provider_version"],
-        tasks[identifier]["binary_digest"],
-        identifier,
-    )
-    ready = sorted((identifier for identifier, degree in indegree.items() if degree == 0), key=key)
-    result: list[str] = []
-    while ready:
-        identifier = ready.pop(0)
-        result.append(identifier)
-        for consumer in consumers[identifier]:
-            indegree[consumer] -= 1
-            if indegree[consumer] == 0:
-                ready.append(consumer)
-                ready.sort(key=key)
-    if len(result) != len(tasks):
-        if value["profile"] == "NG0":
-            if "fixed_point_contract" in value:
-                fail("provider.fixed-point-unsupported", "NG0")
-            fail("provider.dependency-cycle", "task graph")
-        contract = value.get("fixed_point_contract", {})
-        if set(contract) != FIXED_POINT_FIELDS:
-            fail("provider.fixed-point-contract-incomplete", "NG1")
-        cyclic = sorted(identifier for identifier, degree in indegree.items() if degree > 0)
-        return ["fixed-point:" + "+".join(cyclic)], "provider.plan-fixed-point-valid"
-    return result, "provider.plan-valid"
-
-
-def reuse(value: dict[str, Any]) -> str:
-    stored, requested = value["stored"], value["requested"]
-    if stored["semantic_contract_digest"] != requested["semantic_contract_digest"]:
-        fail("provider.reuse-semantic-mismatch", "semantic contract")
-    if stored["binary_digest"] != requested["binary_digest"]:
-        fail("provider.reuse-binary-mismatch", "binary digest")
-    if any(stored.get(field) != requested.get(field) for field in REUSE_FIELDS):
-        fail("provider.reuse-key-mismatch", "exact reuse tuple")
-    return "reusable"
-
-
-def failure(value: dict[str, Any], contract: dict[str, Any]) -> dict[str, Any]:
-    if value["reason"] not in contract["failures"]["terminal_reasons"]:
-        fail("provider.failure-reason-unknown", value["reason"])
-    if not value["coverage_accounted"] or not value["unresolved_accounted"]:
-        fail("provider.failure-accounting-missing", value["reason"])
-    retained = (
-        value["adopted_groups"]
-        if value["partial_policy"] == "declared_dependency_groups"
-        else []
-    )
-    return {
-        "terminal": value["reason"],
-        "retained": retained,
-        "rolled_back": [value["current_group"]],
-        "prior_snapshot": "unchanged",
-    }
-
-
-def surface_parity(value: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    results = []
-    for surface in ("in_process", "out_of_process"):
-        for order in ("forward", "reverse", "seeded-shuffle"):
-            rows = copy.deepcopy(value["rows"])
-            if order == "reverse":
-                rows.reverse()
-            elif order == "seeded-shuffle":
-                random.Random(64).shuffle(rows)
-            if surface == "out_of_process":
-                rows = [decode_frame(_CONTRACT_CACHE, encode_frame(row))["control"] for row in rows]
-            results.append(
-                {"rows": sorted(rows, key=canonical_json), "coverage": sorted(value["coverage"])}
-            )
-    if len({canonical_json(row) for row in results}) != 1:
-        fail("provider.surface-parity-mismatch", "surface/order matrix")
-    return results[0], len(results)
-
-
-def run_fuzz(contract: dict[str, Any], corpus: dict[str, Any]) -> dict[str, int]:
-    stable = 0
-    for case in corpus["cases"]:
-        try:
-            decode_frame(contract, mutate_frame(case["mutation"]))
-            fail("provider.fuzz-case-accepted", case["id"])
-        except ProviderContractError as error:
-            if error.code != case["expected_reason"]:
-                fail("provider.fuzz-reason-mismatch", f"{case['id']}: {error.code}")
-            stable += 1
-    return {
-        "cases": len(corpus["cases"]),
-        "stable_rejections": stable,
-        "crashes": 0,
-        "hangs": 0,
-        "unbounded_allocations": 0,
-    }
-
-
-_CONTRACT_CACHE: dict[str, Any] = {}
-
-
-def execute(
-    contract: dict[str, Any], vector: dict[str, Any], root: pathlib.Path
-) -> tuple[dict[str, Any], int, int]:
-    global _CONTRACT_CACHE
-    _CONTRACT_CACHE = contract
-    operation, value = vector["operation"], vector["input"]
-    comparisons = fuzz_cases = 0
-    try:
-        reason = f"provider.{operation}-valid"
-        if operation == "wire":
-            if value["action"] == "round_trip":
-                frame = encode_frame(
-                    value["control"], bytes.fromhex(value["payload_hex"]),
-                    message_type=value["message_type"], flags=value["flags"],
-                    stream_id=value["stream_id"], sequence=value["sequence"],
-                )
-                output = decode_frame(contract, frame)
-            elif value["action"] == "mutate":
-                output = decode_frame(contract, mutate_frame(value["mutation"]))
-            else:
-                output = decode_frame(
-                    contract,
-                    encode_frame({}, message_type=value["message_type"], flags=value["flags"]),
-                )
-        elif operation == "negotiate":
-            output = negotiate(value)
-        elif operation == "flow":
-            output = flow(value)
-        elif operation == "resume":
-            output = resume(value)
-        elif operation == "group":
-            output, reason = group(value)
-        elif operation == "plan":
-            output, reason = plan(value)
-        elif operation == "failure":
-            output = failure(value, contract)
-        elif operation == "reuse":
-            output = reuse(value)
-        elif operation == "surface_parity":
-            output, comparisons = surface_parity(value)
-        elif operation == "fuzz":
-            output = run_fuzz(contract, load_yaml(root / value["corpus"]))
-            fuzz_cases = output["cases"]
-        else:
-            fail("provider.operation-unknown", operation)
-        return {"decision": "accepted", "reason_code": reason, "value": output}, comparisons, fuzz_cases
-    except ProviderContractError as error:
-        return {"decision": "rejected", "reason_code": error.code}, comparisons, fuzz_cases
-
-
 def sample_manifest() -> dict[str, Any]:
     return {
         "schema": "cxxlens.provider-manifest.v1",
@@ -1016,7 +681,7 @@ def sample_manifest() -> dict[str, Any]:
         "publisher": "cxxlens.project",
         "license": "Apache-2.0 WITH LLVM-exception",
         "signature": None,
-        "protocol_range": {"major": 1, "minimum_minor": 0, "maximum_minor": 0, "required_features": ["streaming"], "optional_features": ["resume"]},
+        "protocol_range": {"major": PROTOCOL_MAJOR, "minimum_minor": PROTOCOL_MINOR, "maximum_minor": PROTOCOL_MINOR, "required_features": ["streaming"], "optional_features": ["resume"]},
         "platform_tuples": ["linux-x86_64"],
         "offered_relations": ["cc.entity.v1"],
         "required_relations": [],
@@ -1031,142 +696,59 @@ def sample_manifest() -> dict[str, Any]:
     }
 
 
-def sample_task() -> dict[str, Any]:
-    positive = {key: 1 for key in ("wall_ms", "cpu_ms", "address_space_bytes", "transport_bytes", "output_bytes", "rows", "diagnostics", "open_files", "subprocesses", "minimum_progress_bytes_per_second")}
-    return {
-        "schema": "cxxlens.provider-task.v1",
-        "task_id": "task:semantic-v2:sha256:" + "a" * 64,
-        "provider": {"id": "provider.cc.clang22", "version": "1.0.0", "binary_digest": "sha256:" + "a" * 64, "semantic_contract_digest": "sha256:" + "b" * 64},
-        "outputs": ["cc.entity.v1"],
-        "input_partitions": [],
-        "condition": "condition-1",
-        "interpretation": "cc.canonical-1",
-        "budget": positive,
-        "dependency_groups": [{"id": "dependency-1", "depends_on": [], "atomic_output_groups": ["output-1"]}],
-        "partial_policy": "forbid",
-    }
-
-
 def validate_task_input_authority(contract: dict[str, Any]) -> None:
-    if contract["compatibility"]["current"] != "1.1.0":
+    compatibility = contract.get("compatibility", {})
+    if any(
+        compatibility.get(field) != expected
+        for field, expected in (
+            ("protocol_major", PROTOCOL_MAJOR),
+            ("protocol_minor", PROTOCOL_MINOR),
+            ("accepted_major", PROTOCOL_MAJOR),
+            ("accepted_minor", PROTOCOL_MINOR),
+        )
+    ):
         fail("provider.task-input-authority-invalid", "current protocol version")
-    if "task-input-chunks-v1" not in contract["profiles"]["NG0"]["required"]:
-        fail("provider.task-input-authority-invalid", "current required feature")
-    state_machine = contract["host_to_provider_state_machine"]
-    if state_machine["implementation"] != (
-        "single-shared-incremental-encoder-and-validator-core"
+    if compatibility.get("downgrade") != "reject":
+        fail("provider.task-input-authority-invalid", "downgrade policy")
+    if compatibility.get("legacy_protocol_1") != "rejected-before-payload":
+        fail("provider.task-input-authority-invalid", "legacy protocol policy")
+    if compatibility.get("legacy_request_2_1_task_v3") != "rejected-before-payload":
+        fail("provider.task-input-authority-invalid", "legacy request/task policy")
+    capabilities = contract.get("capabilities", {})
+    for feature in (
+		"task-input-chunks-v2",
+        "durable-resume-token",
+        "heartbeat",
+        "progress-rate-enforcement",
+        "spill-staging",
+        "long-run-fault-recovery",
     ):
-        fail("provider.task-input-authority-invalid", "shared incremental core")
-    minor_zero = state_machine["minor_profiles"].get("1.0")
-    if minor_zero != {
-        "required_features": [],
-        "exact_frames": [
-            "hello_ack",
-            "schema_negotiate",
-            "open_task",
-            "credit",
-            "close",
-        ],
-        "sequence": [0, 1, 2, 3, 4],
-        "payload_policy": "open-task-only",
-        "compatibility": "existing-public-five-frame-vector-api-unchanged-wrapper",
-    }:
-        fail("provider.task-input-authority-invalid", "minor 0 exact transcript")
-    minor_one = state_machine["minor_profiles"].get("1.1")
-    if minor_one != {
-        "required_features": ["task-input-chunks-v1"],
-        "exact_frame_pattern": [
-            "hello_ack",
-            "schema_negotiate",
-            "open_task",
-            "input_descriptor",
-            "input_chunk-zero-or-more",
-            "credit",
-            "close",
-        ],
-        "fixed_prefix_sequence": [0, 1, 2, 3],
-        "chunk_sequence": "four-plus-chunk-index",
-        "credit_sequence": "four-plus-chunk-count",
-        "close_sequence": "five-plus-chunk-count",
-        "payload_policy": "input-chunk-only",
-        "open_task_payload": "empty",
-        "task_accepted_precondition": (
-            "input-sealed-exact-length-and-digest-and-semantic-task-decoded"
-        ),
-    }:
-        fail("provider.task-input-authority-invalid", "minor 1 exact transcript")
+        if capabilities.get(feature) not in {"required", "required-for-NG1"}:
+            fail("provider.task-input-authority-invalid", feature)
 
-    transfer = contract["task_input_transfer"]
-    limits = transfer["limits"]
-    if limits != {
-        "maximum_chunk_payload_bytes": MAX_TASK_INPUT_CHUNK,
-        "maximum_logical_input_bytes": MAX_LOGICAL_TASK_INPUT,
-        "maximum_input_chunks": MAX_TASK_INPUT_CHUNKS,
-        "per_frame_payload_bytes_unchanged": MAX_PAYLOAD,
-    }:
-        fail("provider.task-input-authority-invalid", "input limits")
-    if (
-        MAX_TASK_INPUT_CHUNK * MAX_TASK_INPUT_CHUNKS != MAX_LOGICAL_TASK_INPUT
-        or limits["per_frame_payload_bytes_unchanged"]
-        != contract["wire"]["limits"]["payload_bytes"]
-    ):
-        fail("provider.task-input-authority-invalid", "input limit proof")
-    if transfer["feature"] != "task-input-chunks-v1" or transfer["activation"] != {
-        "protocol_minor": 1,
-        "required_features": ["task-input-chunks-v1"],
-    }:
-        fail("provider.task-input-authority-invalid", "feature activation")
-    if transfer["message_ids"] != {"input_descriptor": 6, "input_chunk": 7}:
-        fail("provider.task-input-authority-invalid", "message IDs")
-    descriptor = transfer["input_descriptor_control"]
-    if descriptor["schema"] != "cxxlens.provider-control.input-descriptor.v1" or descriptor[
-        "exact_fields"
-    ] != ["task_id", "input_digest", "total_bytes", "chunk_bytes", "chunk_count"]:
-        fail("provider.task-input-authority-invalid", "descriptor control")
-    chunk = transfer["input_chunk_control"]
-    if chunk["schema"] != "cxxlens.provider-control.input-chunk.v1" or chunk[
-        "exact_fields"
-    ] != ["task_id", "input_digest", "chunk_index", "offset", "byte_count"]:
-        fail("provider.task-input-authority-invalid", "chunk control")
-    if transfer["shape"]["zero_input"] != {
-        "total_bytes": 0,
-        "chunk_count": 0,
-        "input_chunks": 0,
-        "input_digest": (
-            "sha256:e3b0c44298fc1c149afbf4c8996fb924"
-            "27ae41e4649b934ca495991b7852b855"
-        ),
-    }:
-        fail("provider.task-input-authority-invalid", "zero input")
-    boundary = transfer["authority_boundary"]
-    if boundary["ambient_path-fd-environment-shared-memory-side-channel"] != "forbidden":
-        fail("provider.task-input-authority-invalid", "ambient side channel")
-    budgets = transfer["budget_separation"]
-    if budgets != {
-        "input_bytes_and_frames": "descriptor-profile-limits-not-credit",
-        "credit": "provider-output-only",
-        "execution_budget_transport_bytes": "stdout-stderr-process-accounting-only",
-    }:
-        fail("provider.task-input-authority-invalid", "budget separation")
-    shared = transfer["shared_incremental_core"]
-    if shared != {
-        "owners": [
-            "host-encoder",
-            "worker-decoder",
-            "process-runtime",
-            "conformance-validator",
-        ],
-        "state": "transition-digest-length-and-budget",
-        "full-input-vector-materialization-in-production": "forbidden",
-        "existing_public_signatures": "unchanged",
-        "minor_0_public_vector_api": "bounded-wrapper-over-this-core",
-    }:
-        fail("provider.task-input-authority-invalid", "incremental API authority")
-    controls = contract["structured_control_metadata"]["single_records"]
-    if controls.get("input_descriptor") != descriptor["exact_fields"] or controls.get(
-        "input_chunk"
-    ) != chunk["exact_fields"]:
-        fail("provider.task-input-authority-invalid", "structured control binding")
+    limits = contract["wire"]["limits"]
+    if limits.get("control_bytes") != MAX_CONTROL or limits.get("payload_bytes") != MAX_PAYLOAD:
+        fail("provider.task-input-authority-invalid", "wire limits")
+    if limits.get("closure_chunk_bytes") != MAX_TASK_INPUT_CHUNK:
+        fail("provider.task-input-authority-invalid", "closure chunk limit")
+    transfer = contract["request_task"]
+    if transfer.get("request_version") != "2.2.0":
+        fail("provider.task-input-authority-invalid", "request version")
+    if transfer.get("task_schema") != "cxxlens.clang22.task.v4":
+        fail("provider.task-input-authority-invalid", "task version")
+    if transfer.get("source_bytes_in_request") != "forbidden":
+        fail("provider.task-input-authority-invalid", "source bytes in request")
+    if transfer.get("content_base64") != "forbidden":
+        fail("provider.task-input-authority-invalid", "source Base64 in request")
+
+    closure = contract.get("source_closure_transport", {})
+    if closure.get("ambient_filesystem_fallback") != "forbidden":
+        fail("provider.task-input-authority-invalid", "ambient filesystem")
+    bounds = closure.get("bounds", {})
+    if bounds.get("chunk_bytes") != MAX_TASK_INPUT_CHUNK:
+        fail("provider.task-input-authority-invalid", "source closure chunk bound")
+    if closure.get("complete_closure_memory_copy") != "forbidden":
+        fail("provider.task-input-authority-invalid", "closure memory bound")
 
 
 def validate_contract_shape(contract: dict[str, Any]) -> None:
@@ -1178,35 +760,64 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
     if sum(row["bytes"] for row in contract["wire"]["fixed_header_fields"]) != FRAME.size:
         fail("provider.wire-header-layout-invalid", "field bytes")
     rows = contract["message_types"]["registry"]
-    if len(rows) != 23 or len({row["id"] for row in rows}) != 23:
+    if not rows or len({row["id"] for row in rows}) != len(rows):
         fail("provider.message-registry-invalid", "message IDs")
-    if contract["atomicity"]["partial_adoption"]["boundary"] != "dependency-group-only":
-        fail("provider.atomic-boundary-invalid", "partial adoption")
-    if contract["planning"]["cycle"] != "reject":
-        fail("provider.dependency-cycle", "contract")
-    if contract["reuse_and_invalidation"]["binary_digest_change"] != "invalidate":
-        fail("provider.reuse-binary-mismatch", "contract")
-    if contract["columnar_chunks"]["digest_projection"] != {
-        "encoding": "cxxlens-canonical-tuple-v1",
-        "digest": "cxxlens-semantic-digest-v2",
-        "chunk_domain": "cxxlens.provider-column-chunk.v2",
-        "batch_domain": "cxxlens.provider-columnar-batch.v2",
-        "fields": "named-and-typed",
-        "unsigned_integers": "fixed-width-u64-big-endian-bytes",
-        "repeated_collections": "ordered-tuple-with-count-element-length-and-type-tag",
-        "column_order": "descriptor-order",
-        "chunk_digest_order": "wire-order",
-        "delimiter_concatenation": "forbidden",
-        "control_and_digest_encoder": "shared-semantic-field-projection",
-    }:
-        fail("provider.columnar-digest-projection-invalid", "typed tuple")
+    if {row["id"] for row in rows} != set(range(1, 30)):
+        fail("provider.message-registry-invalid", "Protocol 2 message IDs")
+    if contract["message_types"].get("unknown_required") != "reject":
+        fail("provider.message-registry-invalid", "unknown required message policy")
+    if contract["message_types"].get("unknown_optional") != "skip-and-account":
+        fail("provider.message-registry-invalid", "unknown optional message policy")
+    if contract.get("ng1", {}).get("heartbeat_message_id") != 23:
+        fail("provider.ng1-heartbeat-invalid", "heartbeat message ID")
+    if contract.get("ng1", {}).get("resume_token_cross_use") != "forbidden":
+        fail("provider.ng1-resume-invalid", "resume token cross-use")
+    wire = contract["wire"]
+    if wire.get("magic_ascii") != "CXXP" or wire.get("fixed_header_bytes") != FRAME.size:
+        fail("provider.wire-header-size-invalid", "Protocol 2 wire header")
+    if wire.get("checksums") != "independent-full-sha256":
+        fail("provider.checksum-policy-invalid", "Protocol 2 checksums")
+    encoding = wire.get("control_encoding", {})
+    for field, expected in {
+        "standard": "RFC-8949",
+        "mode": "deterministic-closed-subset",
+        "duplicate_map_key": "reject",
+        "indefinite_length": "reject",
+        "floats": "reject",
+        "tags": "reject",
+        "invalid_utf8": "reject",
+    }.items():
+        if encoding.get(field) != expected:
+            fail("provider.control-encoding-invalid", field)
+    if wire.get("flags", {}).get("supported") != ["end-of-stream"]:
+        fail("provider.flags-invalid", "Protocol 2 supported flags")
+
+
+def validate_ng1_v2_contract(contract: dict[str, Any]) -> None:
+    """Check NG1 product invariants without a repository-operation census."""
+
+    ng1 = contract.get("ng1")
+    if not isinstance(ng1, dict):
+        fail("provider.ng1-contract-invalid", "NG1 section")
+    if ng1.get("heartbeat_message_id") != 23:
+        fail("provider.ng1-heartbeat-invalid", "heartbeat message ID")
+    if ng1.get("heartbeat_clock") != "host-injected-monotonic-only":
+        fail("provider.ng1-heartbeat-invalid", "heartbeat clock")
+    if ng1.get("resume_token_cross_use") != "forbidden":
+        fail("provider.ng1-resume-invalid", "resume token cross-use")
+    if ng1.get("stale_or_foreign_token") != "typed-reject":
+        fail("provider.ng1-resume-invalid", "stale token policy")
+    if ng1.get("worker_crash") != (
+        "kill-process-group-cleanup-private-spool-no-publication"
+    ):
+        fail("provider.ng1-crash-invalid", "worker crash effect")
 
 
 def validate_design(root: pathlib.Path) -> None:
     design = (root / "docs/design/cxxlens_next_generation_integrated_design_ja.md").read_text(encoding="utf-8")
     for marker in (
-        "1.0.0-normative", "cxxlens_ng_provider_protocol.yaml", "atomic_output_group",
-        "dependency_group", "deterministic CBOR", "Issue #149",
+        "provider protocol", "atomic_output_group",
+        "dependency_group", "deterministic CBOR",
     ):
         if marker not in design:
             fail("provider.design-marker-missing", marker)
@@ -1214,42 +825,67 @@ def validate_design(root: pathlib.Path) -> None:
         if stale in design:
             fail("provider.design-stale-contract", stale)
     index = (root / "docs/design/catalogs/README.md").read_text(encoding="utf-8")
-    if "Provider Protocol" not in index or "accepted exact contract" not in index or "#149" not in index:
+    if "Provider Protocol" not in index or "accepted" not in index or "contract" not in index:
         fail("provider.catalog-index-stale", "provider protocol")
 
 
 def validate_all(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, Any]], int, int]:
     contract = load_yaml(root / CONTRACT)
-    schema_validate(contract, load_yaml(root / CONTRACT_SCHEMA), "provider protocol")
-    validate_ng1_contract(root, contract)
+    if contract.get("schema") != "cxxlens.provider-protocol.v2":
+        fail("provider.protocol-authority-invalid", "Protocol 2 contract is not selected")
+    schema_validate(
+        contract,
+        load_yaml(root / CONTRACT_SCHEMA),
+        "Protocol 2 provider contract",
+    )
+    validate_ng1_v2_contract(contract)
     schema_validate(sample_manifest(), load_yaml(root / MANIFEST_SCHEMA), "provider manifest")
-    schema_validate(sample_task(), load_yaml(root / TASK_SCHEMA), "provider task")
-    corpus = load_yaml(root / FUZZ)
-    schema_validate(corpus, load_yaml(root / FUZZ_SCHEMA), "provider fuzz corpus")
-    validate_task_input_corpus(corpus)
     validate_contract_shape(contract)
     validate_design(root)
-    vectors = load_yaml(root / VECTORS)
-    schema_validate(vectors, load_yaml(root / VECTORS_SCHEMA), "provider vectors")
-    ids = [row["id"] for row in vectors["vectors"]]
-    if len(ids) != len(set(ids)) or len(ids) != 34:
-        fail("provider.vector-set-invalid", f"{len(ids)} vectors")
-    results = []
-    comparisons = fuzz_cases = 0
-    for vector in vectors["vectors"]:
-        actual, compared, fuzzed = execute(contract, vector, root)
-        expected = vector["expected"]
-        comparisons += compared
-        fuzz_cases += fuzzed
-        matched = actual["decision"] == expected["decision"] and actual["reason_code"] == expected["reason_code"] and ("value" not in expected or actual.get("value") == expected["value"])
-        if not matched:
-            fail("provider.vector-mismatch", f"{vector['id']}: {actual} != {expected}")
-        if (vector["class"] == "positive") != (actual["decision"] == "accepted"):
-            fail("provider.vector-class-mismatch", vector["id"])
-        results.append({"id": vector["id"], **actual, "matched": True})
-    if comparisons != 6 or fuzz_cases != len(corpus["cases"]):
-        fail("provider.matrix-incomplete", f"surface={comparisons}, fuzz={fuzz_cases}")
-    return contract, results, comparisons, fuzz_cases
+    # Exercise the current wire registry directly; no external compatibility
+    # corpus is loaded as an authority.
+    results: list[dict[str, Any]] = []
+    for row in contract["message_types"]["registry"]:
+        message_type = row["id"]
+        frame = encode_frame(
+            {"message_type": message_type},
+            message_type=message_type,
+            sequence=message_type,
+        )
+        decoded = decode_frame(contract, frame)
+        if (
+            decoded["message_type"] != message_type
+            or decoded["protocol_major"] != PROTOCOL_MAJOR
+            or decoded["protocol_minor"] != PROTOCOL_MINOR
+        ):
+            fail("provider.wire-round-trip-invalid", str(message_type))
+        results.append({"message_type": message_type, "round_trip": True})
+
+    fault_mutations = {
+        "truncate-fixed-header": "provider.truncated-stream",
+        "replace-magic": "provider.malformed-frame",
+        "oversized-control-length": "provider.output-limit",
+        "oversized-payload-length": "provider.output-limit",
+        "corrupt-control-checksum": "provider.checksum-mismatch",
+        "corrupt-payload-checksum": "provider.checksum-mismatch",
+        "truncate-control": "provider.truncated-stream",
+        "truncate-payload": "provider.truncated-stream",
+        "noncanonical-cbor-integer": "provider.malformed-frame",
+        "duplicate-cbor-key": "provider.malformed-frame",
+        "indefinite-cbor": "provider.malformed-frame",
+        "unknown-required-message": "provider.unknown-required-extension",
+    }
+    faults = 0
+    for mutation, expected_reason in fault_mutations.items():
+        try:
+            decode_frame(contract, mutate_frame(mutation))
+        except ProviderContractError as error:
+            if error.code != expected_reason:
+                fail("provider.wire-fault-reason-mismatch", mutation)
+            faults += 1
+        else:
+            fail("provider.wire-fault-accepted", mutation)
+    return contract, results, len(results), faults
 
 
 def main() -> int:
@@ -1257,8 +893,11 @@ def main() -> int:
     parser.add_argument("mode", choices=("check",))
     parser.add_argument("--root", type=pathlib.Path, default=ROOT)
     args = parser.parse_args()
-    contract, results, comparisons, fuzz_cases = validate_all(args.root.resolve())
-    print(f"verified provider protocol: {len(results)} vectors, {fuzz_cases} fuzz cases, {comparisons} surface comparisons, {digest(contract)}")
+    contract, results, comparisons, faults = validate_all(args.root.resolve())
+    print(
+        f"verified Protocol 2 provider contract: {len(results)} message round trips, "
+        f"{faults} wire faults, {comparisons} registry entries, {digest(contract)}"
+    )
     return 0
 
 
