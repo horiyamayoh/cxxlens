@@ -117,7 +117,8 @@ def main() -> int:
         "subject": "request-v2_2",
         "diagnostic": (
             "source-code=materialization.source-closure-invalid;"
-            "source-detail=closure-transport-not-connected"
+            "source-detail=source-closure-channel-required;"
+            "transport=protocol-v2-separate-channel"
         ),
     }:
         fail(f"unexpected disconnected source-closure error: {report['error']!r}")

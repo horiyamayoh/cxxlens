@@ -83,6 +83,13 @@ namespace
 	class stdin_reader final : public materialization_byte_reader
 	{
 	  public:
+		/**
+		 * The installed boundary deliberately has one transport plane on stdin:
+		 * one bounded JSON metadata document.  Source-closure frames are a
+		 * separate Protocol 2.0 channel owned by the provider runtime.  Do not
+		 * append a binary transcript to this stream; the strict JSON parser below
+		 * rejects it as trailing data before any effectful phase.
+		 */
 		materialization_io_result<std::size_t> read(const std::span<std::byte> destination) override
 		{
 			std::cin.read(reinterpret_cast<char*>(destination.data()),
@@ -94,6 +101,33 @@ namespace
 			return static_cast<std::size_t>(received);
 		}
 	};
+
+	/**
+	 * Names the two disjoint ingress planes without pretending that this
+	 * installed executable has a source-closure receiver.  Keeping the
+	 * unavailable state explicit makes the handoff fail closed instead of
+	 * silently treating metadata as a source snapshot or guessing a framing
+	 * boundary from concatenated stdin bytes.
+	 */
+	enum class materialization_ingress_channel : std::uint8_t
+	{
+		metadata_json_stdin,
+		source_closure_protocol_v2,
+	};
+
+	inline constexpr std::string_view source_closure_transport_required_detail =
+		"source-code=materialization.source-closure-invalid;"
+		"source-detail=source-closure-channel-required;"
+		"transport=protocol-v2-separate-channel";
+	inline constexpr std::string_view source_closure_mixed_stdin_detail =
+		"source-code=materialization.source-closure-invalid;"
+		"source-detail=metadata-and-source-closure-must-use-separate-channels;"
+		"transport=stdin-json-only";
+
+	[[nodiscard]] bool is_trailing_transport_data(const sdk::error& error) noexcept
+	{
+		return error.field == "input" && error.detail.starts_with("trailing-data:byte=");
+	}
 
 	struct ingress_envelope
 	{
@@ -260,6 +294,12 @@ int main(const int argc, char**)
 	{
 		if (is_materialization_admission_no_response(ingress.error()))
 			return no_response();
+		if (is_trailing_transport_data(ingress.error()))
+			return emit_failure(*observed,
+								"materialization.request-invalid",
+								"json-decode",
+								"source-closure-transport",
+								source_closure_mixed_stdin_detail);
 		if (ingress.error().field == "request-envelope")
 			return emit_failure(*observed,
 								"materialization.request-invalid",
@@ -290,6 +330,5 @@ int main(const int argc, char**)
 						"materialization.request-invalid",
 						"request-schema",
 						"request-v2_2",
-						"source-code=materialization.source-closure-invalid;"
-						"source-detail=closure-transport-not-connected");
+						source_closure_transport_required_detail);
 }

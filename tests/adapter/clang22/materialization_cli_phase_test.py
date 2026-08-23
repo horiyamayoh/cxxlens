@@ -312,7 +312,23 @@ def main() -> int:
         label="request-v2.2-transport-boundary",
         diagnostic=(
             "source-code=materialization.source-closure-invalid;"
-            "source-detail=closure-transport-not-connected"
+            "source-detail=source-closure-channel-required;"
+            "transport=protocol-v2-separate-channel"
+        ),
+    )
+    assert_raw_compact_failure(
+        root,
+        oracle,
+        run_materializer(args.driver, complete_v2_2 + b"\x00\x01binary-frame"),
+        complete_v2_2 + b"\x00\x01binary-frame",
+        phase="json-decode",
+        code="materialization.request-invalid",
+        subject="source-closure-transport",
+        label="json-and-binary-concatenation",
+        diagnostic=(
+            "source-code=materialization.source-closure-invalid;"
+            "source-detail=metadata-and-source-closure-must-use-separate-channels;"
+            "transport=stdin-json-only"
         ),
     )
     return 0
