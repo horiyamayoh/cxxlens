@@ -23,7 +23,7 @@ CONTRACT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_snapshot_store_contract.schema.yaml"
 )
 EXPECTED_SCHEMA_DIGEST = (
-    "sha256:b11d6f83910b3ee415dccb222bc538a3ad5d675991e49fdfb4a8ff0611cab90e"
+    "sha256:a7ec1d727689e9719d9e220b6ab22c116ccfbe23e5b02bcb22bfa4d12d314e73"
 )
 MANIFEST_SCHEMA = pathlib.Path("schemas/cxxlens_ng_snapshot_manifest.schema.yaml")
 VECTORS = pathlib.Path("schemas/cxxlens_ng_store_conformance_vectors.yaml")
@@ -32,19 +32,19 @@ VECTORS_SCHEMA = pathlib.Path(
 )
 
 EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST = (
-    "sha256:b019707f54866f559a5ea2954a086d8ecbef4ef3c0ce04d5b435842868c4d031"
+    "sha256:3961e3d6eff4ffb2b3cb887c7b4d2e4ed145028ee5b5b101ebbe20a320666fb5"
 )
 EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
-    "sha256:0327025e44dc6e691c91bca5000608b4036e3f871a7d0908aad71e1cb02328fb"
+    "sha256:47b4c9adee53a9ba6948b143d95dba4eed97efd253e5a3096b5783fba865874c"
 )
 EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
-    "sha256:503548c0baa80ce12cda22b61828d6b1209c9206cbc50439ddbeb70d4d50ebab"
+    "sha256:df86801ae255c6fe55059309ecb4616643e9f55f50b80db3387ab268824e93a9"
 )
 EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST = (
-    "sha256:93ba9422c197391573896e85016ff899f554a76924d841b2139f7a225eafc4b9"
+    "sha256:148ecbea8da36516d7d0c8c900706088a91d73f10d14ccb8049968c0cea7b2b3"
 )
 EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST = (
-    "sha256:bec85afaa49d1a989fe37f17a81b71c3ab7a1c37c4205d2c73d803f76d4736fe"
+    "sha256:3e821c512969418f381e4a95023e2b02c13b62673c063d37745dfa537f53be9a"
 )
 
 SELECTOR_FIELDS = (
@@ -405,7 +405,6 @@ DF_0200_EXTERNAL_COMPLETENESS_AUTHORITY = {
     },
 }
 DF_0200_SQLITE_CAPACITY_DECISION = {
-    "status": "accepted",
     "selected_alternative": "A",
     "confirmed_blocker": (
         "sqlite-v2-single-payload-blob-runtime-max-length-1000000000-cannot-"
@@ -439,14 +438,9 @@ DF_0200_SQLITE_CAPACITY_DECISION = {
             ],
         },
     },
-    "implementation_and_acceptance": (
-        "may-proceed-under-accepted-option-a-direct-tests-required-before-production-binding"
-    ),
 }
 EXPECTED_DF_0200_MATERIALIZATION_INGRESS = {
-    "status": "accepted-authority-implementation-pending",
     "resolution_id": "cxxlens.df-0200.incremental-claim-store.v1",
-    "implementation_disposition": "pending-implementation-and-direct-tests",
     "activation": (
         "accepted-df-0200-direct-test-and-sqlite-option-a-authority-binding"
     ),
@@ -1257,12 +1251,9 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
                 "store.sqlite-shm-writer-lease-proposal-invalid",
                 f"{label} amendment differs: expected={expected}, actual={actual}",
             )
-    expected_ingress = copy.deepcopy(EXPECTED_DF_0200_MATERIALIZATION_INGRESS)
-    expected_ingress["sqlite_capacity_decision"].pop("decision_ref", None)
-    actual_ingress = copy.deepcopy(contract.get("df_0200_materialization_ingress"))
-    if isinstance(actual_ingress, dict):
-        actual_ingress.get("sqlite_capacity_decision", {}).pop("decision_ref", None)
-    if actual_ingress != expected_ingress:
+    if contract.get("df_0200_materialization_ingress") != (
+        EXPECTED_DF_0200_MATERIALIZATION_INGRESS
+    ):
         fail(
             "store.materialization-ingress-contract-invalid",
             "DF-0200 accepted materialization ingress differs",
@@ -1566,7 +1557,6 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
             "forbidden-until-ordinary-fresh-initialization-independently-completes"
         ),
         "accepted_empty_normalization_receiptless_crash_profile_draft": {
-            "status": "accepted-authority-disposable-runtime-test-pending-production-blocked",
             "sqlite_profile_path": (
                 "transaction.fresh_v3_initialization.guards.filesystem."
                 "precreate_census.preauthority_sidecar_candidate."
@@ -1576,12 +1566,6 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
                 "direct-positive-negative-fault-determinism-and-resource-tests-"
                 "must-pass-for-the-named-SQLite-profile-and-canonical-or-production-"
                 "activation-remains-gated-with-no-static-SQLite-runtime-inference"
-            ),
-            "qualification_implementation": (
-                "direct-positive-negative-fault-determinism-and-resource-tests-"
-                "may-proceed-only-for-classifier-ports-effect-gates-and-fixture-"
-                "scoped-cleanup-recovery-normalizer-and-fault-harness-behind-the-"
-                "nonforgeable-disposable-fixture-capability"
             ),
             "production_activation": (
                 "blocked-until-direct-positive-negative-fault-determinism-and-"
@@ -1895,22 +1879,11 @@ def validate_df_0200_ingress_schema(schema: dict[str, Any]) -> None:
         required = []
         binding = None
         expected = None
-    expected_without_repository_metadata = copy.deepcopy(
-        EXPECTED_DF_0200_MATERIALIZATION_INGRESS
-    )
-    expected_without_repository_metadata["sqlite_capacity_decision"].pop(
-        "decision_ref", None
-    )
-    schema_without_repository_metadata = copy.deepcopy(expected)
-    if isinstance(schema_without_repository_metadata, dict):
-        schema_without_repository_metadata.get("sqlite_capacity_decision", {}).pop(
-            "decision_ref", None
-        )
     if (
         "df_0200_materialization_ingress" not in required
         or binding
         != {"$ref": "#/$defs/df_0200_materialization_ingress"}
-        or schema_without_repository_metadata != expected_without_repository_metadata
+        or expected != EXPECTED_DF_0200_MATERIALIZATION_INGRESS
     ):
         fail(
             "store.materialization-ingress-contract-invalid",

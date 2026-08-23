@@ -350,10 +350,8 @@ publication_transaction:
     accepted_empty_normalization_success: intermediate-only-no-store-and-only-a-sealed-same-identity-normalized-empty-operation-edge-continues-into-ordinary-fresh-initialization
     accepted_empty_normalization_public_success: forbidden-until-ordinary-fresh-initialization-independently-completes
     accepted_empty_normalization_receiptless_crash_profile_draft:
-      status: accepted-authority-disposable-runtime-test-pending-production-blocked
       sqlite_profile_path: transaction.fresh_v3_initialization.guards.filesystem.precreate_census.preauthority_sidecar_candidate.accepted_empty_original_normalization.receiptless_crash_profile_draft
       activation: direct-positive-negative-fault-determinism-and-resource-tests-must-pass-for-the-named-SQLite-profile-and-canonical-or-production-activation-remains-gated-with-no-static-SQLite-runtime-inference
-      qualification_implementation: direct-positive-negative-fault-determinism-and-resource-tests-may-proceed-only-for-classifier-ports-effect-gates-and-fixture-scoped-cleanup-recovery-normalizer-and-fault-harness-behind-the-nonforgeable-disposable-fixture-capability
       production_activation: blocked-until-direct-positive-negative-fault-determinism-and-resource-tests-pass-and-accepted-profile-replacement
       family_partition: [F0-exact-pre-no-sidecar, FZ-exact-pre-or-complete-valid-rollback-exact-empty-current-main-plus-size-zero-wal, FP-exact-pre-nonhot-journal-prefix, FH-valid-hot-journal-with-exact-preimages-and-pre-or-post-main, FI-journal-preimages-derive-exact-pre-and-deterministic-post-plus-first-28-zero-invalidated-journal, FO-complete-valid-rollback-exact-empty-current-main-no-sidecar]
       sealed_receipt: [canonical-locator-and-pinned-runtime-vfs, exact-layer-discriminator-and-family-applicable-runtime-build-vfs-device-filesystem-S-P-N-E-receipt-with-disposable-run-plan-or-runtime-safety-receipt-never-cross-authorizing, continuous-parent-namespace-epoch-and-object-entry-identities, exact-family-tag-and-raw-whole-main-plus-sidecar-byte-receipts, family-applicable-exact-pre-and-when-journal-preimages-exist-deterministic-post-projections-plus-byte-exact-current-main, private-validation-and-confirmed-close, source-effect-phase-and-exact-bounded-effect-receipt, post-effect-family-and-exact-next-route]
@@ -372,9 +370,7 @@ publication_transaction:
     close_non_ok: quarantine-connection-and-vfs-pins-poison-reopen-required-without-reopen
     unsafe: poison-reopen-required-with-old-pins-valid
 df_0200_materialization_ingress:
-  status: accepted-authority-implementation-pending
   resolution_id: cxxlens.df-0200.incremental-claim-store.v1
-  implementation_disposition: pending-implementation-and-direct-tests
   activation: accepted-df-0200-direct-test-and-sqlite-option-a-authority-binding
   caller_scope: installed-clang22-materializer-only
   bridge: source-private-non-installed-header-without-public-catalog-entry
@@ -689,9 +685,7 @@ df_0200_materialization_ingress:
     publish_returned_handle_verification_failure: committed_unverified-detailed-response-when-safely-constructible
     compaction_and_pin: preserve-existing-copy-on-write-and-generation-pin-semantics
   sqlite_capacity_decision:
-    status: accepted
     selected_alternative: A
-    decision_ref: docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
     confirmed_blocker: sqlite-v2-single-payload-blob-runtime-max-length-1000000000-cannot-satisfy-required-limit-adjacent-passed-memory-sqlite-parity
     required_parity: limit-adjacent-passed-memory-and-reopened-sqlite
     weakening_parity: forbidden
@@ -712,7 +706,6 @@ df_0200_materialization_ingress:
         - successor-version
         - fresh-request-and-budget-authority
         - same-cap-for-memory-and-sqlite-direct-tests
-    implementation_and_acceptance: may-proceed-under-accepted-option-a-direct-tests-required-before-production-binding
   compatibility:
     snapshot_payload_v5_schema_and_semantic_projection: unchanged-with-authorized-physical-generation-transition
     sqlite_physical_format: cxxlens.sqlite-semantic-store.v3-3.0.0
@@ -877,12 +870,8 @@ format_compatibility:
       any_native_ok: backend-protocol-violation-fail-closed-never-translate-to-readonly
       same_process_writer_mapping_lease_proposal:
         id: cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1
-        status: accepted-authority-implementation-pending
-        tracking: {issue: '#205', feedback: DF-0205}
         writer_native_attachment_amendment_proposal:
           id: cxxlens.sqlite.writer-shm-native-attachment.v1
-          status: accepted-authority-implementation-pending
-          tracking: {issue: '#206', feedback: DF-0206}
           observation: one-sqlite3_file-may-complete-multiple-writer-xShmMap-callbacks-but-one-xShmUnmap-releases-the-complete-native-SHM-attachment
           attachment_identity: checked-nonreusable-per-main-native_file_node-xOpen-and-open-epoch-token-bound-to-process-runtime-vfs-file-family-alias-connection-and-exact-xShmMap-xShmUnmap-callback-cohort-never-file-pointer-connection-or-path-alone
           holder_model: retain-one-holder-specific-map-authority-per-successful-map-callback-and-atomically-group-all-post-native-pending-and-live-holders-by-their-exact-native-attachment-identity
@@ -928,8 +917,6 @@ format_compatibility:
             production_activation: blocked-until-direct-positive-negative-fault-determinism-and-resource-tests-pass-for-the-exact-implementation-and-complete-counterexample-matrix
         reader_native_attachment_amendment_proposal:
           id: cxxlens.sqlite.reader-shm-native-attachment.v1
-          status: accepted-authority-implementation-pending
-          tracking: {issue: '#207', feedback: DF-0207}
           scope: reader-only-internal-authority-proposal-no-production-vfs-public-api-native-OK-projection-or-writer-authority-change
           observation: one-reader-sqlite3_file-may-complete-multiple-xShmMap-callbacks-but-one-xShmUnmap-releases-the-complete-native-reader-SHM-attachment
           attachment_identity:
@@ -1118,11 +1105,8 @@ format_compatibility:
             positive: [active-proposal-group-admits-one-exact-session-owner, exact-live-local-generation-admits-one-generation-bound-proposal-reservation, ordinary-existing-cross-process-or-no-local-generation-enters-existing-byte-route-with-zero-proposal-custody, ambiguous-or-cut-partition-rejects-before-SQLite-entry]
         reader_late_close_cleanup_amendment_proposal:
           id: cxxlens.sqlite.reader-late-close-cleanup.v1
-          status: accepted-authority-implementation-pending
-          tracking: {issue: '#209', feedback: DF-0209}
           authority_boundary:
             normative_effect: accepted-narrow-internal-authority-for-the-reader-late-close-cleanup-owner-seal-provenance-drain-ack-state-machine-and-focused-tests-only
-            implementation_disposition: may-proceed-only-for-the-exact-narrow-internal-scope-with-direct-positive-negative-fault-determinism-and-resource-tests
             accepted_reader_authority: cxxlens.sqlite.reader-shm-native-attachment.v1-remains-byte-semantically-unchanged-and-controlling
           scope: one-original-first-map-callback-drain-after-pre-cleanup-terminal-close-quarantine-only-no-production-vfs-public-api-native-OK-writer-or-other-reader-authority-change
           eligibility:
@@ -1184,8 +1168,6 @@ format_compatibility:
             public_api: unchanged
         writer_gate_outcome_evidence_amendment_proposal:
           id: cxxlens.sqlite.writer-gate-outcome-evidence.v1
-          status: accepted-authority-implementation-pending
-          tracking: {issue: '#208', feedback: DF-0208}
           scope: writer-only-internal-authority-proposal-no-reader-grouping-production-vfs-public-api-or-native-OK-projection
           authority_axes:
             gate_outcome: issuer-sealed-immutable-evidence-kind-and-value-bundle

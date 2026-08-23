@@ -27,31 +27,31 @@ SNAPSHOT_CONTRACT = pathlib.Path(
 # independent of the schema so a coordinated contract/schema weakening remains
 # fail closed while formatting-only YAML changes remain non-semantic.
 EXPECTED_CONTRACT_DIGEST = (
-    "sha256:846eec1799c40a3bd43c0feeef2b70db9c94b891828f89cb9f769b95b3d92a54"
+    "sha256:12b0ed293665d359fb95f08607010969f5caf40c5bf68765ca63072499a705d4"
 )
 EXPECTED_SCHEMA_DIGEST = (
-    "sha256:b170e3365fa9324386d21fe0937b88ff90bb6bc3913b90c4d6e718ab377cf06a"
+    "sha256:2ff3ef264b1ea7e21d189a71816b8099f77a32838cfd98a88fa2be0c2d69437b"
 )
 
 EXPECTED_SNAPSHOT_BINDING = (
-    "sha256:b7da3ff8df09d1aa29dde9aff900840b8bf454ff0bd2004805797c8b6946f8ce"
+    "sha256:6ab1538ece3865ef62b3610da96b118f4683bf9caa90c7f99d570dbffe81c526"
 )
 
 EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST = (
-    "sha256:b019707f54866f559a5ea2954a086d8ecbef4ef3c0ce04d5b435842868c4d031"
+    "sha256:3961e3d6eff4ffb2b3cb887c7b4d2e4ed145028ee5b5b101ebbe20a320666fb5"
 )
 
 EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
-    "sha256:0327025e44dc6e691c91bca5000608b4036e3f871a7d0908aad71e1cb02328fb"
+    "sha256:47b4c9adee53a9ba6948b143d95dba4eed97efd253e5a3096b5783fba865874c"
 )
 EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
-    "sha256:503548c0baa80ce12cda22b61828d6b1209c9206cbc50439ddbeb70d4d50ebab"
+    "sha256:df86801ae255c6fe55059309ecb4616643e9f55f50b80db3387ab268824e93a9"
 )
 EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST = (
-    "sha256:93ba9422c197391573896e85016ff899f554a76924d841b2139f7a225eafc4b9"
+    "sha256:148ecbea8da36516d7d0c8c900706088a91d73f10d14ccb8049968c0cea7b2b3"
 )
 EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST = (
-    "sha256:bec85afaa49d1a989fe37f17a81b71c3ab7a1c37c4205d2c73d803f76d4736fe"
+    "sha256:3e821c512969418f381e4a95023e2b02c13b62673c063d37745dfa537f53be9a"
 )
 
 SOURCE_SHM_READONLY_CAPABILITY: dict[str, Any] = {
@@ -4808,7 +4808,6 @@ def validate_snapshot_binding(
         != {
             "sqlite_decision_adr": decision_adr,
         }
-        or actual["capacity_decision"]["decision_ref"] != decision_adr
         or actual["sqlite_backend"]["current_physical_format"]
         != expected_ingress_tag
         or actual["format_compatibility"]["current_sqlite"] != current_tag

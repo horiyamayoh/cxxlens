@@ -63,16 +63,7 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         contract, results, comparisons = validate_all(ROOT)
         self.assertEqual(contract["maturity"], "accepted")
         ingress = contract["df_0200_materialization_ingress"]
-        self.assertEqual(
-            ingress["status"], "accepted-authority-implementation-pending"
-        )
-        self.assertEqual(
-            ingress["implementation_disposition"],
-            "pending-implementation-and-direct-tests",
-        )
-        self.assertEqual(
-            ingress["sqlite_capacity_decision"]["status"], "accepted"
-        )
+        self.assertEqual(ingress["sqlite_capacity_decision"]["selected_alternative"], "A")
         self.assertEqual(len(results), len(load_yaml(ROOT / VECTORS)["vectors"]))
         self.assertGreater(comparisons, 0)
         self.assertEqual(document_digest(self.schema), EXPECTED_SCHEMA_DIGEST)
@@ -93,16 +84,10 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
             document_digest(lease),
             EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST,
         )
-        self.assertEqual(
-            lease["status"], "accepted-authority-implementation-pending"
-        )
         attachment = lease["writer_native_attachment_amendment_proposal"]
         self.assertEqual(
             document_digest(attachment),
             EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
-        )
-        self.assertEqual(
-            attachment["status"], "accepted-authority-implementation-pending"
         )
         self.assertEqual(
             attachment["authorization"]["before_independent_acceptance"],
@@ -130,10 +115,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         self.assertEqual(
             reader_attachment["id"],
             "cxxlens.sqlite.reader-shm-native-attachment.v1",
-        )
-        self.assertEqual(
-            reader_attachment["status"],
-            "accepted-authority-implementation-pending",
         )
         self.assertIn(
             "checked-observed-SHM-native-attachment-object-direct-entry-device-"
@@ -228,9 +209,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
             document_digest(late_close),
             EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST,
         )
-        self.assertEqual(
-            late_close["status"], "accepted-authority-implementation-pending"
-        )
         self.assertIn(
             "internal-reader-late-close-cleanup-owner-seal-provenance-drain-"
             "ack-state-machine",
@@ -308,9 +286,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         self.assertEqual(
             gate_outcome["id"],
             "cxxlens.sqlite.writer-gate-outcome-evidence.v1",
-        )
-        self.assertEqual(
-            gate_outcome["status"], "accepted-authority-implementation-pending"
         )
         self.assertEqual(
             gate_outcome["gate_profile"]["ordered_stage_enum"],

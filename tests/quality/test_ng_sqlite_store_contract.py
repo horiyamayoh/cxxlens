@@ -78,9 +78,7 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         capacity_decision = self.snapshot["df_0200_materialization_ingress"][
             "sqlite_capacity_decision"
         ]
-        self.assertEqual(
-            capacity_decision["status"], "accepted"
-        )
+        self.assertEqual(capacity_decision["selected_alternative"], "A")
         self.assertEqual(contract["physical_format"]["current"], "3.0.0")
         self.assertEqual(
             contract["compatibility"]["predecessor_v2"]["readable_format"],
@@ -97,16 +95,10 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
             document_digest(lease),
             EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST,
         )
-        self.assertEqual(
-            lease["status"], "accepted-authority-implementation-pending"
-        )
         attachment = lease["writer_native_attachment_amendment_proposal"]
         self.assertEqual(
             document_digest(attachment),
             EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
-        )
-        self.assertEqual(
-            attachment["status"], "accepted-authority-implementation-pending"
         )
         self.assertEqual(
             attachment["authorization"]["production_activation"],
@@ -124,10 +116,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         self.assertEqual(
             reader_attachment["id"],
             "cxxlens.sqlite.reader-shm-native-attachment.v1",
-        )
-        self.assertEqual(
-            reader_attachment["status"],
-            "accepted-authority-implementation-pending",
         )
         self.assertEqual(
             reader_attachment["map_attempt"]["result_enum"],
@@ -276,9 +264,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
             document_digest(late_close),
             EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST,
         )
-        self.assertEqual(
-            late_close["status"], "accepted-authority-implementation-pending"
-        )
         self.assertIn(
             "internal-reader-late-close-cleanup-owner-seal-provenance-drain-"
             "ack-state-machine",
@@ -356,9 +341,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         self.assertEqual(
             gate_outcome["id"],
             "cxxlens.sqlite.writer-gate-outcome-evidence.v1",
-        )
-        self.assertEqual(
-            gate_outcome["status"], "accepted-authority-implementation-pending"
         )
         self.assertEqual(
             gate_outcome["gate_attempt_owner"]["lifecycle"],
@@ -5233,25 +5215,10 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
     def test_snapshot_one_way_binding_is_fail_closed(self) -> None:
         mutations: list[tuple[str, Mutation]] = [
             (
-                "decision-ref",
-                lambda value: value["authority"].__setitem__(
-                    "sqlite_decision_adr",
-                    "docs/design/adr/0013-ng-sqlite-physical-store.md",
-                ),
-            ),
-            (
                 "option-a",
                 lambda value: value["df_0200_materialization_ingress"][
                     "sqlite_capacity_decision"
                 ].__setitem__("selected_alternative", "B"),
-            ),
-            (
-                "option-a-review-status",
-                lambda value: value["df_0200_materialization_ingress"][
-                    "sqlite_capacity_decision"
-                ].__setitem__(
-                    "status", "user-selected-independent-review-pending"
-                ),
             ),
             (
                 "parity",

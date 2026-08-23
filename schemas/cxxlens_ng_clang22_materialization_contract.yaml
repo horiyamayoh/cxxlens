@@ -700,9 +700,7 @@ claim_adoption:
   visibility: tool-private-immutable-noncopyable
   construction: shared-typed-transcript-validator-only
   df_0200_resolution:
-    status: accepted-authority-implementation-pending
     resolution_id: cxxlens.df-0200.incremental-claim-store.v1
-    implementation_disposition: pending-implementation-and-direct-tests
     d1_claim_batch_oracle:
       public_reference: sdk-claim-batch-commit
       public_reference_control_flow: independent-bounded-resident-reference-during-direct-tests
@@ -1361,7 +1359,6 @@ claim_adoption:
       sqlite_predecessor_v2_capacity: single-payload-blob-runtime-max-length-1000000000-insufficient-for-required-limit-adjacent-parity
       sqlite_current_physical_format: cxxlens.sqlite-semantic-store.v3-3.0.0-bounded-8388608-byte-chunks
       sqlite_publish_and_reopen_direct_test_matrix: required-current-v3-plus-v2-read-migration-and-limit-exceeding-parity
-      sqlite_capacity_decision_status: accepted
       payload_and_format: logical-canonical-v5-unchanged-except-authorized-physical-generation-current-sqlite-v3
     d4_memory_accounting:
       metrics:
@@ -1469,9 +1466,7 @@ claim_adoption:
         effect: logical-draft-discarded-publication-not-attempted-committed-transaction-count-zero
         materializer_implicit_migration: forbidden
     sqlite_capacity_decision:
-      status: accepted
       selected_alternative: A
-      decision_ref: docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
       confirmed_blocker: sqlite-v2-single-payload-blob-runtime-max-length-1000000000-cannot-satisfy-required-limit-adjacent-passed-memory-sqlite-parity
       required_parity: limit-adjacent-passed-memory-and-reopened-sqlite
       weakening_parity: forbidden
@@ -1492,7 +1487,6 @@ claim_adoption:
           - successor-version
           - fresh-request-and-budget-authority
           - same-cap-for-memory-and-sqlite-direct-tests
-      implementation_and_acceptance: may-proceed-under-accepted-option-a-direct-tests-required-before-production-binding
     d6_compatibility:
       contract_version: 2.2.0-accepted-option-a-authority
       report_schema_canonical_json_digest: sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96
@@ -1505,7 +1499,6 @@ claim_adoption:
       sqlite_chunk_profile: cxxlens.sqlite-payload-chunks.v1-8388608-byte-maximum-16777216-runtime-floor
       sqlite_predecessor: exact-v2.6.0-read-only-direct-open
       sqlite_migration: compact-v2.6.0-to-v3.0.0-single-transaction-cow
-      sqlite_capacity_decision_status: accepted
       source_private_receipts_and_counters: excluded-from-public-report-and-api
       external_qualified_v2_1_found: require-successor-version-and-migration-boundary
       fresh_public_semantics_gate:
