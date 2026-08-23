@@ -444,8 +444,12 @@ target_link_libraries(cxxlens-unit-sdk-provider-runtime
 target_include_directories(cxxlens-unit-sdk-provider-runtime
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
 if(CXXLENS_BUILD_SHARED)
-  target_sources(cxxlens-unit-sdk-provider-runtime
-                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+  target_sources(
+    cxxlens-unit-sdk-provider-runtime
+    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
+  target_link_libraries(cxxlens-unit-sdk-provider-runtime
+                        PRIVATE cxxlens_protocol_v2)
 endif()
 add_test(NAME unit.sdk-provider-runtime
          COMMAND cxxlens-unit-sdk-provider-runtime
@@ -621,8 +625,12 @@ target_link_libraries(cxxlens-unit-sdk-provider-ng1-session
 target_include_directories(cxxlens-unit-sdk-provider-ng1-session
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
 if(CXXLENS_BUILD_SHARED)
-  target_sources(cxxlens-unit-sdk-provider-ng1-session
-                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+  target_sources(
+    cxxlens-unit-sdk-provider-ng1-session
+    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
+  target_link_libraries(cxxlens-unit-sdk-provider-ng1-session
+                        PRIVATE cxxlens_protocol_v2)
 endif()
 add_test(NAME unit.sdk-provider-ng1-session
          COMMAND cxxlens-unit-sdk-provider-ng1-session)
@@ -649,8 +657,12 @@ target_link_libraries(cxxlens-unit-sdk-provider-ng1-live-driver
 target_include_directories(cxxlens-unit-sdk-provider-ng1-live-driver
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
 if(CXXLENS_BUILD_SHARED)
-  target_sources(cxxlens-unit-sdk-provider-ng1-live-driver
-                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+  target_sources(
+    cxxlens-unit-sdk-provider-ng1-live-driver
+    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
+  target_link_libraries(cxxlens-unit-sdk-provider-ng1-live-driver
+                        PRIVATE cxxlens_protocol_v2)
 endif()
 add_test(NAME unit.sdk-provider-ng1-live-driver
          COMMAND cxxlens-unit-sdk-provider-ng1-live-driver)
@@ -1123,6 +1135,13 @@ cxxlens_add_test_executable(cxxlens-r2-vertical-slice
 target_sources(cxxlens-r2-vertical-slice
                PRIVATE $<TARGET_OBJECTS:cxxlens-test-sdk-support>)
 target_link_libraries(cxxlens-r2-vertical-slice PRIVATE cxxlens::provider_sdk)
+if(CXXLENS_BUILD_SHARED)
+  target_sources(
+    cxxlens-r2-vertical-slice
+    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
+  target_link_libraries(cxxlens-r2-vertical-slice PRIVATE cxxlens_protocol_v2)
+endif()
 add_test(NAME integration.r2-vertical-slice COMMAND cxxlens-r2-vertical-slice)
 set_tests_properties(
   integration.r2-vertical-slice

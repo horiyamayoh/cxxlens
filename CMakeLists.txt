@@ -466,8 +466,11 @@ target_link_libraries(
   PUBLIC cxxlens::clang22_provider_sdk
   PRIVATE cxxlens_clang22_materialization_codecs)
 if(CXXLENS_BUILD_SHARED)
-  target_sources(cxxlens_clang22_worker_core
-                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+  target_sources(
+    cxxlens_clang22_worker_core
+    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
+  target_link_libraries(cxxlens_clang22_worker_core PRIVATE cxxlens_protocol_v2)
 endif()
 target_include_directories(cxxlens_clang22_worker_core
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -524,8 +527,12 @@ if(BUILD_TESTING)
             cxxlens_clang22_materialization_request_v2_2_support
             cxxlens_clang22_materializer_bounded_support)
   if(CXXLENS_BUILD_SHARED)
-    target_sources(cxxlens_clang22_materializer_safety_support
-                   PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+    target_sources(
+      cxxlens_clang22_materializer_safety_support
+      PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
+              "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
+    target_link_libraries(cxxlens_clang22_materializer_safety_support
+                          PRIVATE cxxlens_protocol_v2)
   endif()
   target_include_directories(cxxlens_clang22_materializer_safety_support
                              PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
