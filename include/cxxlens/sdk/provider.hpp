@@ -27,6 +27,8 @@ namespace cxxlens::sdk::provider
 	namespace detail
 	{
 		struct relation_sink_registry;
+		/** Source-private inherited source-closure channel authority for one process launch. */
+		struct process_inherited_channel_binding;
 	} // namespace detail
 
 	/** @brief Exact Protocol 2.0 message types. */
@@ -979,6 +981,13 @@ namespace cxxlens::sdk::provider
 		execution_budget budget;
 		sandbox_requirement sandbox;
 		std::string expected_binary_digest;
+		/**
+		 * Optional source-closure endpoints inherited by the provider child.  The concrete binding
+		 * is source-private; callers obtain it from the provider runtime's typed factory.  A process
+		 * launch validates the task/session/closure/transfer identity and preserves only these
+		 * descriptors (all other descriptors at or above 4 are closed in the child).
+		 */
+		std::shared_ptr<const detail::process_inherited_channel_binding> inherited_channel;
 	};
 
 	/** @brief Detached process result with achieved sandbox evidence. */

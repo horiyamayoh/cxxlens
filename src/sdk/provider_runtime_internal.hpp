@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -15,6 +16,42 @@
 
 namespace cxxlens::sdk::provider::detail
 {
+	/**
+	 * Source-private process inheritance authority for one Protocol 2.0 source-closure channel.
+	 *
+	 * The parent owns the descriptors.  The Linux process adapter borrows them for the child and
+	 * closes every other descriptor in the inherited range.  The fstat snapshot is part of the
+	 * binding digest so descriptor-number reuse cannot silently attach a foreign channel.
+	 */
+	struct CXXLENS_PROVIDER_DETAIL_HIDDEN process_inherited_channel_binding
+	{
+		int read_descriptor{-1};
+		int write_descriptor{-1};
+		std::string task_id;
+		std::string session_id;
+		std::string closure_digest;
+		std::string transfer_digest;
+		std::string binding_digest;
+		std::uint64_t read_device{};
+		std::uint64_t read_inode{};
+		std::uint32_t read_mode{};
+		std::uint64_t write_device{};
+		std::uint64_t write_inode{};
+		std::uint32_t write_mode{};
+
+		[[nodiscard]] result<void> validate() const;
+	};
+
+	/** Create a validated borrowed source-closure channel binding for a process invocation. */
+	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN
+		result<std::shared_ptr<const process_inherited_channel_binding>>
+		make_process_inherited_channel_binding(int read_descriptor,
+											   int write_descriptor,
+											   std::string task_id,
+											   std::string session_id,
+											   std::string closure_digest,
+											   std::string transfer_digest);
+
 	/**
 	 * Independent Protocol 2.0 source-closure channel owned by the provider runtime.
 	 *

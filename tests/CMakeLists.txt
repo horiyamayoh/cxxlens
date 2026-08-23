@@ -495,6 +495,29 @@ add_test(NAME unit.sdk-provider-runtime-host-streaming
 add_test(NAME unit.sdk-provider-runtime-receipt
          COMMAND cxxlens-unit-sdk-provider-runtime --receipt-only
                  "$<TARGET_FILE:cxxlens-provider-process-fixture>")
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  cxxlens_add_test_executable(cxxlens-unit-sdk-provider-process-channel
+                              unit/sdk/provider_process_channel_test.cpp)
+  target_link_libraries(cxxlens-unit-sdk-provider-process-channel
+                        PRIVATE cxxlens::provider_sdk)
+  target_include_directories(cxxlens-unit-sdk-provider-process-channel
+                             PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  if(CXXLENS_BUILD_SHARED)
+    target_sources(
+      cxxlens-unit-sdk-provider-process-channel
+      PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
+              "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
+    target_link_libraries(cxxlens-unit-sdk-provider-process-channel
+                          PRIVATE cxxlens_protocol_v2)
+  endif()
+  add_test(NAME unit.sdk-provider-process-channel
+           COMMAND cxxlens-unit-sdk-provider-process-channel)
+  set_tests_properties(
+    unit.sdk-provider-process-channel
+    PROPERTIES LABELS
+               "unit;sdk;provider;process;source-closure;security;cancellation")
+endif()
 set_tests_properties(
   unit.sdk-provider-runtime
   PROPERTIES

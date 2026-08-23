@@ -81,6 +81,201 @@ namespace cxxlens::sdk::provider
 	} // namespace detail
 #endif
 
+	namespace detail
+	{
+		namespace
+		{
+			[[nodiscard]] error
+			process_error(std::string code, std::string field, std::string detail = {})
+			{
+				return {std::move(code), std::move(field), std::move(detail)};
+			}
+
+			constexpr std::string_view semantic_digest_prefix{"semantic-v2:sha256:"};
+			constexpr std::string_view task_digest_prefix{"task:semantic-v2:sha256:"};
+			constexpr std::string_view session_digest_prefix{"provider-session:sha256:"};
+
+			[[nodiscard]] bool valid_typed_digest(const std::string_view value,
+												  const std::string_view prefix) noexcept
+			{
+				if (!value.starts_with(prefix) || value.size() != prefix.size() + 64U)
+					return false;
+				for (const auto byte : value.substr(prefix.size()))
+					if (!((byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f')))
+						return false;
+				return true;
+			}
+
+			[[nodiscard]] result<std::string>
+			process_channel_binding_digest(const process_inherited_channel_binding& value)
+			{
+				return canonical_identity_digest(
+					"process-channel",
+					std::array{
+						canonical_value::from_string(value.task_id),
+						canonical_value::from_string(value.session_id),
+						canonical_value::from_string(value.closure_digest),
+						canonical_value::from_string(value.transfer_digest),
+						canonical_value::from_integer(value.read_descriptor),
+						canonical_value::from_integer(value.write_descriptor),
+						canonical_value::from_string(std::to_string(value.read_device)),
+						canonical_value::from_string(std::to_string(value.read_inode)),
+						canonical_value::from_string(std::to_string(value.read_mode)),
+						canonical_value::from_string(std::to_string(value.write_device)),
+						canonical_value::from_string(std::to_string(value.write_inode)),
+						canonical_value::from_string(std::to_string(value.write_mode)),
+					});
+			}
+
+#if defined(__linux__) && defined(__GLIBC__)
+			struct descriptor_identity
+			{
+				std::uint64_t device{};
+				std::uint64_t inode{};
+				std::uint32_t mode{};
+			};
+
+			[[nodiscard]] result<descriptor_identity> inspect_channel_descriptor(
+				const int descriptor, const std::string_view field, const bool read_endpoint)
+			{
+				if (descriptor < 4)
+					return cxxlens::sdk::unexpected(
+						process_error("provider.process-channel-invalid",
+									  std::string{field},
+									  "reserved-descriptor"));
+				const auto descriptor_flags = ::fcntl(descriptor, F_GETFD);
+				if (descriptor_flags < 0)
+					return cxxlens::sdk::unexpected(
+						process_error("provider.process-channel-invalid",
+									  std::string{field},
+									  "descriptor-closed"));
+				if ((descriptor_flags & FD_CLOEXEC) != 0)
+					return cxxlens::sdk::unexpected(
+						process_error("provider.process-channel-invalid",
+									  std::string{field},
+									  "close-on-exec-set"));
+				const auto status_flags = ::fcntl(descriptor, F_GETFL);
+				if (status_flags < 0)
+					return cxxlens::sdk::unexpected(process_error(
+						"provider.process-channel-invalid", std::string{field}, "status"));
+				if ((status_flags & O_NONBLOCK) == 0)
+					return cxxlens::sdk::unexpected(
+						process_error("provider.process-channel-invalid",
+									  std::string{field},
+									  "blocking-descriptor"));
+				const auto access_mode = status_flags & O_ACCMODE;
+				if ((read_endpoint && access_mode == O_WRONLY) ||
+					(!read_endpoint && access_mode == O_RDONLY))
+					return cxxlens::sdk::unexpected(process_error(
+						"provider.process-channel-invalid", std::string{field}, "access-mode"));
+				struct stat metadata{};
+				if (::fstat(descriptor, &metadata) != 0)
+					return cxxlens::sdk::unexpected(process_error(
+						"provider.process-channel-invalid", std::string{field}, "stat"));
+				if (!S_ISFIFO(metadata.st_mode) && !S_ISSOCK(metadata.st_mode))
+					return cxxlens::sdk::unexpected(process_error(
+						"provider.process-channel-invalid", std::string{field}, "channel-type"));
+				return descriptor_identity{static_cast<std::uint64_t>(metadata.st_dev),
+										   static_cast<std::uint64_t>(metadata.st_ino),
+										   static_cast<std::uint32_t>(metadata.st_mode)};
+			}
+#endif
+		} // namespace
+
+		result<void> process_inherited_channel_binding::validate() const
+		{
+			if (!valid_typed_digest(task_id, task_digest_prefix))
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-invalid", "task_id", "typed-digest"));
+			if (!valid_typed_digest(session_id, session_digest_prefix))
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", "session_id", "typed-digest"));
+			if (!valid_typed_digest(closure_digest, semantic_digest_prefix))
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", "closure_digest", "typed-digest"));
+			if (!valid_typed_digest(transfer_digest, semantic_digest_prefix))
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", "transfer_digest", "typed-digest"));
+			if (read_descriptor < 4 || write_descriptor < 4)
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", "descriptor", "reserved-descriptor"));
+			if (read_descriptor == write_descriptor)
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-invalid", "descriptor", "duplicate"));
+			if (!binding_digest.starts_with("process-channel:sha256:") ||
+				binding_digest.size() != std::string_view{"process-channel:sha256:"}.size() + 64U)
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", "binding_digest", "typed-digest"));
+
+#if defined(__linux__) && defined(__GLIBC__)
+			auto read = inspect_channel_descriptor(read_descriptor, "read_descriptor", true);
+			if (!read)
+				return cxxlens::sdk::unexpected(std::move(read.error()));
+			auto write = inspect_channel_descriptor(write_descriptor, "write_descriptor", false);
+			if (!write)
+				return cxxlens::sdk::unexpected(std::move(write.error()));
+			if (read->device != read_device || read->inode != read_inode ||
+				read->mode != read_mode || write->device != write_device ||
+				write->inode != write_inode || write->mode != write_mode)
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-foreign", "descriptor", "identity"));
+#else
+			return cxxlens::sdk::unexpected(process_error(
+				"provider.process-channel-unavailable", "platform", "linux-glibc-required"));
+#endif
+			auto expected = process_channel_binding_digest(*this);
+			if (!expected || *expected != binding_digest)
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-foreign", "binding", "identity"));
+			return {};
+		}
+
+		result<std::shared_ptr<const process_inherited_channel_binding>>
+		make_process_inherited_channel_binding(const int read_descriptor,
+											   const int write_descriptor,
+											   std::string task_id,
+											   std::string session_id,
+											   std::string closure_digest,
+											   std::string transfer_digest)
+		{
+			if (read_descriptor == write_descriptor)
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-invalid", "descriptor", "duplicate"));
+			process_inherited_channel_binding value;
+			value.read_descriptor = read_descriptor;
+			value.write_descriptor = write_descriptor;
+			value.task_id = std::move(task_id);
+			value.session_id = std::move(session_id);
+			value.closure_digest = std::move(closure_digest);
+			value.transfer_digest = std::move(transfer_digest);
+#if defined(__linux__) && defined(__GLIBC__)
+			auto read = inspect_channel_descriptor(read_descriptor, "read_descriptor", true);
+			if (!read)
+				return cxxlens::sdk::unexpected(std::move(read.error()));
+			auto write = inspect_channel_descriptor(write_descriptor, "write_descriptor", false);
+			if (!write)
+				return cxxlens::sdk::unexpected(std::move(write.error()));
+			value.read_device = read->device;
+			value.read_inode = read->inode;
+			value.read_mode = read->mode;
+			value.write_device = write->device;
+			value.write_inode = write->inode;
+			value.write_mode = write->mode;
+#else
+			return cxxlens::sdk::unexpected(process_error(
+				"provider.process-channel-unavailable", "platform", "linux-glibc-required"));
+#endif
+			auto digest = process_channel_binding_digest(value);
+			if (!digest)
+				return cxxlens::sdk::unexpected(std::move(digest.error()));
+			value.binding_digest = std::move(*digest);
+			if (auto valid = value.validate(); !valid)
+				return cxxlens::sdk::unexpected(std::move(valid.error()));
+			return std::shared_ptr<const process_inherited_channel_binding>{
+				std::make_shared<process_inherited_channel_binding>(std::move(value))};
+		}
+	} // namespace detail
+
 	namespace
 	{
 		[[nodiscard]] error
@@ -413,16 +608,61 @@ namespace cxxlens::sdk::provider
 				::prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &program) == 0;
 		}
 
-		[[nodiscard]] bool close_inherited_descriptors() noexcept
+		[[nodiscard]] bool close_descriptor_range(const unsigned int first,
+												  const unsigned int last) noexcept
 		{
 #if defined(SYS_close_range)
-			return ::syscall(SYS_close_range,
-							 4U,
-							 std::numeric_limits<unsigned int>::max(),
-							 CLOSE_RANGE_UNSHARE) == 0;
+			if (first > last)
+				return true;
+			return ::syscall(SYS_close_range, first, last, CLOSE_RANGE_UNSHARE) == 0;
 #else
+			(void)first;
+			(void)last;
 			return false;
 #endif
+		}
+
+		[[nodiscard]] bool prepare_inherited_descriptors(
+			const detail::process_inherited_channel_binding* binding) noexcept
+		{
+			if (binding == nullptr)
+				return true;
+			for (const auto descriptor : {binding->read_descriptor, binding->write_descriptor})
+			{
+				const auto descriptor_flags = ::fcntl(descriptor, F_GETFD);
+				const auto status_flags = ::fcntl(descriptor, F_GETFL);
+				if (descriptor_flags < 0 || status_flags < 0 ||
+					::fcntl(descriptor, F_SETFD, descriptor_flags & ~FD_CLOEXEC) < 0 ||
+					::fcntl(descriptor, F_SETFL, status_flags | O_NONBLOCK) < 0)
+					return false;
+			}
+			return true;
+		}
+
+		[[nodiscard]] bool close_inherited_descriptors(
+			const detail::process_inherited_channel_binding* binding) noexcept
+		{
+			std::array<int, 2U> ordered{-1, -1};
+			if (binding != nullptr)
+			{
+				ordered[0] = binding->read_descriptor;
+				ordered[1] = binding->write_descriptor;
+				if (ordered[1] >= 0 && ordered[1] < ordered[0])
+					std::swap(ordered[0], ordered[1]);
+			}
+			unsigned int first = 4U;
+			for (const auto descriptor : ordered)
+			{
+				if (descriptor < 0)
+					break;
+				const auto value = static_cast<unsigned int>(descriptor);
+				if (value < first || !close_descriptor_range(first, value - 1U))
+					return false;
+				if (value == std::numeric_limits<unsigned int>::max())
+					return true;
+				first = value + 1U;
+			}
+			return close_descriptor_range(first, std::numeric_limits<unsigned int>::max());
 		}
 
 		[[nodiscard]] bool configure_child(const process_invocation& invocation,
@@ -1031,6 +1271,11 @@ namespace cxxlens::sdk::provider
 				auto policy = resolve_sandbox_policy(invocation.sandbox.policy_digest);
 				if (!policy)
 					return cxxlens::sdk::unexpected(std::move(policy.error()));
+				if (invocation.inherited_channel)
+				{
+					if (auto valid = invocation.inherited_channel->validate(); !valid)
+						return cxxlens::sdk::unexpected(std::move(valid.error()));
+				}
 				auto verified = make_verified_executable(invocation);
 				if (!verified)
 					return cxxlens::sdk::unexpected(std::move(verified.error()));
@@ -1106,7 +1351,8 @@ namespace cxxlens::sdk::provider
 					if ((verified->image.get() == 3
 							 ? ::fcntl(verified->image.get(), F_SETFD, FD_CLOEXEC)
 							 : ::dup3(verified->image.get(), 3, O_CLOEXEC)) < 0 ||
-						!close_inherited_descriptors())
+						!prepare_inherited_descriptors(invocation.inherited_channel.get()) ||
+						!close_inherited_descriptors(invocation.inherited_channel.get()))
 						::_exit(126);
 					if (!invocation.working_directory.empty() &&
 						::chdir(invocation.working_directory.c_str()) != 0)
@@ -1204,6 +1450,11 @@ namespace cxxlens::sdk::provider
 				auto policy = resolve_sandbox_policy(invocation.sandbox.policy_digest);
 				if (!policy)
 					return cxxlens::sdk::unexpected(std::move(policy.error()));
+				if (invocation.inherited_channel)
+				{
+					if (auto valid = invocation.inherited_channel->validate(); !valid)
+						return cxxlens::sdk::unexpected(std::move(valid.error()));
+				}
 				auto verified = make_verified_executable(invocation);
 				if (!verified)
 					return cxxlens::sdk::unexpected(std::move(verified.error()));
@@ -1300,7 +1551,8 @@ namespace cxxlens::sdk::provider
 					if ((verified->image.get() == 3
 							 ? ::fcntl(verified->image.get(), F_SETFD, FD_CLOEXEC)
 							 : ::dup3(verified->image.get(), 3, O_CLOEXEC)) < 0 ||
-						!close_inherited_descriptors())
+						!prepare_inherited_descriptors(invocation.inherited_channel.get()) ||
+						!close_inherited_descriptors(invocation.inherited_channel.get()))
 						::_exit(126);
 					if (!invocation.working_directory.empty() &&
 						::chdir(invocation.working_directory.c_str()) != 0)
