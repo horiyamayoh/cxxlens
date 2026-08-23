@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "llvm/clang22/provider_worker.hpp"
 #include "llvm/clang22/source_closure_task_v4.hpp"
 
 namespace
@@ -55,6 +56,55 @@ namespace
 		input.logical_working_directory = "project://src";
 		return input;
 	}
+
+	class closure_authority final : public provider_worker_v2_2_closure_authority
+	{
+	  public:
+		bool acknowledged_state{};
+		std::string session{"provider-session:sha256:" + std::string(64U, '6')};
+		std::string task;
+		std::string task_digest;
+		std::string closure;
+		std::string closure_digest_value;
+		std::string transfer{"semantic-v2:sha256:" + std::string(64U, '7')};
+
+		cxxlens::sdk::result<void> revalidate() const override
+		{
+			if (task.empty() || task_digest.empty() || closure.empty() ||
+				closure_digest_value.empty())
+				return cxxlens::sdk::unexpected(
+					{"source-closure.authority-invalid", "identity", "missing"});
+			return {};
+		}
+		[[nodiscard]] bool acknowledged() const noexcept override
+		{
+			return acknowledged_state;
+		}
+		[[nodiscard]] std::string_view session_id() const noexcept override
+		{
+			return session;
+		}
+		[[nodiscard]] std::string_view task_id() const noexcept override
+		{
+			return task;
+		}
+		[[nodiscard]] std::string_view task_v4_digest() const noexcept override
+		{
+			return task_digest;
+		}
+		[[nodiscard]] std::string_view closure_id() const noexcept override
+		{
+			return closure;
+		}
+		[[nodiscard]] std::string_view closure_digest() const noexcept override
+		{
+			return closure_digest_value;
+		}
+		[[nodiscard]] std::string_view transfer_digest() const noexcept override
+		{
+			return transfer;
+		}
+	};
 
 #if defined(CXXLENS_TEST_CLANGXX22_PATH)
 	[[nodiscard]] std::vector<std::string> exact_clang_arguments()
@@ -147,6 +197,49 @@ int main()
 			"task-v4 worker receipt returned a foreign input digest");
 	require(result->closure_id == input.closure.snapshot_id,
 			"task-v4 worker receipt returned a foreign closure identity");
+
+	// The production dispatcher must not announce task_accepted before the authenticated
+	// message-28 closure ACK.  The rejected attempt must not enter the compiler callback.
+	closure_authority authority;
+	authority.task = identity->task_id;
+	authority.task_digest = identity->task_v4_digest;
+	authority.closure = input.closure.snapshot_id;
+	authority.closure_digest_value = input.closure.closure_digest;
+	std::vector<std::string> events;
+	const auto make_dispatch_input = [&]()
+	{
+		return provider_worker_v2_2_dispatch_input{
+			{identity->input_payload,
+			 input.closure,
+			 identity->base_task_digest,
+			 identity->task_v4_input_digest,
+			 exact_arguments,
+			 qualified_read_roots,
+			 [&events](cxxlens::provider::clang22::borrowed_translation_unit& unit)
+				 -> cxxlens::sdk::result<void>
+			 {
+				 events.emplace_back("compiled");
+				 (void)unit.ast();
+				 (void)unit.source_manager();
+				 return {};
+			 }},
+			&authority,
+			[&events](const source_closure_task_v4_identity&) -> cxxlens::sdk::result<void>
+			{
+				events.emplace_back("accepted");
+				return {};
+			}};
+	};
+	result = run_provider_worker_v2_2(make_dispatch_input());
+	require(!result && result.error().code == "source-closure.task-accepted-before-ack",
+			"v2.2 worker announced task acceptance before closure ACK");
+	require(events.empty(), "pre-ACK worker path reached an acceptance or compiler callback");
+
+	authority.acknowledged_state = true;
+	result = run_provider_worker_v2_2(make_dispatch_input());
+	require(result.has_value(), "ACKed v2.2 worker dispatcher did not execute Clang");
+	require(events == std::vector<std::string>{"accepted", "compiled"},
+			"v2.2 worker event order was not ACK -> task_accepted -> Clang callback");
 #endif
 
 	return 0;

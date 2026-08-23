@@ -12,7 +12,8 @@
 #include <cxxlens/sdk/provider.hpp>
 
 #include "llvm/clang22/observation_v2.hpp"
-#include "llvm/clang22/provider_task_v3.hpp"
+#include "llvm/clang22/source_closure_task_v4.hpp"
+#include "llvm/clang22/source_closure_task_v4_worker.hpp"
 
 namespace cxxlens::detail::clang22
 {
@@ -128,6 +129,52 @@ namespace cxxlens::detail::clang22
 								bool invocation_exact,
 								std::vector<std::string> invocation_limitations = {},
 								std::string_view toolchain_context_id = {});
+
+	/**
+	 * Authenticated source-closure state supplied by the Protocol 2.0 dispatcher.
+	 *
+	 * The runtime owns the concrete implementation.  In particular, `revalidate()` must verify
+	 * the completed message-24..29 transfer and its cleanup/custody receipt; a caller must not
+	 * implement this interface from a boolean or an untrusted task field.  Keeping this as a
+	 * narrow port lets the worker consume the v2.2 authority without importing the old task.v3
+	 * decoder into the new path.
+	 */
+	class provider_worker_v2_2_closure_authority
+	{
+	  public:
+		virtual ~provider_worker_v2_2_closure_authority() = default;
+		[[nodiscard]] virtual sdk::result<void> revalidate() const = 0;
+		[[nodiscard]] virtual bool acknowledged() const noexcept = 0;
+		[[nodiscard]] virtual std::string_view session_id() const noexcept = 0;
+		[[nodiscard]] virtual std::string_view task_id() const noexcept = 0;
+		[[nodiscard]] virtual std::string_view task_v4_digest() const noexcept = 0;
+		[[nodiscard]] virtual std::string_view closure_id() const noexcept = 0;
+		[[nodiscard]] virtual std::string_view closure_digest() const noexcept = 0;
+		[[nodiscard]] virtual std::string_view transfer_digest() const noexcept = 0;
+	};
+
+	using provider_worker_v2_2_task_accepted_callback =
+		std::move_only_function<sdk::result<void>(const source_closure_task_v4_identity&)>;
+
+	/** Inputs which have already crossed the Protocol 2.0 task-v4/closure transport boundary. */
+	struct provider_worker_v2_2_dispatch_input
+	{
+		source_closure_task_v4_worker_input task;
+		const provider_worker_v2_2_closure_authority* closure{};
+		/** Called only after closure acknowledgement and identity revalidation. */
+		provider_worker_v2_2_task_accepted_callback task_accepted;
+	};
+
+	/**
+	 * Execute one authenticated task-v4 closure through the exact Clang callback.
+	 *
+	 * This is the v2.2 worker entrypoint.  It rejects before `task_accepted` when the source
+	 * closure has not reached the authenticated ACK state, and it decodes only task-v4 input.  The
+	 * callback is reached only after the acceptance callback succeeds; no result is manufactured
+	 * for a missing/foreign/failed closure transfer.
+	 */
+	[[nodiscard]] sdk::result<source_closure_task_v4_worker_receipt>
+	run_provider_worker_v2_2(provider_worker_v2_2_dispatch_input input);
 
 	/** Run the worker from a bounded-read host stream; the stream is never materialized. */
 	[[nodiscard]] int run_provider_worker(std::istream& input, std::ostream& output);
