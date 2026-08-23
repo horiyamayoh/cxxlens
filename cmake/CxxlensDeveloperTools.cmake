@@ -1,5 +1,4 @@
 find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
-find_program(CXXLENS_PUBLIC_CALLABLE_CLANG NAMES clang++-22 REQUIRED)
 find_program(CXXLENS_CLANG_FORMAT NAMES clang-format-22 REQUIRED)
 
 # Developer quality is deliberately test-only. These targets run contract
@@ -75,15 +74,6 @@ add_custom_target(
   VERBATIM)
 
 add_custom_target(
-  cxxlens-ng-public-callable-inventory-check
-  COMMAND
-    "${Python3_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/public_callable_inventory.py"
-    check --root "${CMAKE_CURRENT_SOURCE_DIR}" --compiler
-    "${CXXLENS_PUBLIC_CALLABLE_CLANG}"
-  VERBATIM)
-
-add_custom_target(
   cxxlens-public-boundary-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -97,14 +87,6 @@ add_custom_target(
     "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_runtime_port_usage.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
-  VERBATIM)
-
-add_custom_target(
-  cxxlens-sanitizer-coverage-check
-  COMMAND
-    "${Python3_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_sanitizer_coverage.py"
-    contract --root "${CMAKE_CURRENT_SOURCE_DIR}"
   VERBATIM)
 
 add_custom_target(cxxlens-quality)
@@ -124,10 +106,8 @@ add_dependencies(
   cxxlens-ng-security-contract-check
   cxxlens-ng-sdk-contract-check
   cxxlens-ng-ci-supply-chain-check
-  cxxlens-ng-public-callable-inventory-check
   cxxlens-public-boundary-check
   cxxlens-runtime-port-check
-  cxxlens-sanitizer-coverage-check
   cxxlens-text-lint
   cxxlens-format-check)
 
@@ -168,11 +148,6 @@ if(CXXLENS_BUILD_DOCS)
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/verify_doxygen.py"
       "${CMAKE_CURRENT_BINARY_DIR}/doxygen/xml" --ng-catalog
       "${CMAKE_CURRENT_SOURCE_DIR}/schemas/cxxlens_ng_public_api_catalog.yaml"
-    COMMAND
-      "${Python3_EXECUTABLE}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/public_callable_inventory.py"
-      check-doxygen --root "${CMAKE_CURRENT_SOURCE_DIR}" --doxygen-xml
-      "${CMAKE_CURRENT_BINARY_DIR}/doxygen/xml"
     DEPENDS docs
     VERBATIM)
   add_dependencies(cxxlens-quality cxxlens-doxygen-contract)

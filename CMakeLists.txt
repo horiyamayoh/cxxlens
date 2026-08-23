@@ -413,10 +413,8 @@ if(BUILD_TESTING)
   # Exposes the source-closure member-withholding seam used to keep the
   # claimed-but-unservable invariant under test. PUBLIC because the declaration
   # is guarded in source_closure_native.hpp, which the fixture includes.
-  # BUILD_TESTING is ON in every preset this repository ships (including
-  # install-check), so this is compiled into every build produced today, not
-  # only literal test builds -- see the gating note in source_closure_native.hpp
-  # for why that is still safe and what to revisit before production wiring.
+  # BUILD_TESTING=OFF deliberately leaves this test-only seam out of production
+  # builds; the install rules below contain only product targets and data.
   target_compile_definitions(cxxlens_clang22_worker_core
                              PUBLIC CXXLENS_CLANG22_SOURCE_CLOSURE_TESTING=1)
 endif()
@@ -561,6 +559,9 @@ if(CXXLENS_BUILD_QUALITY_TOOLS OR CXXLENS_BUILD_DOCS)
   include(CxxlensDeveloperTools)
 endif()
 
+# Test-only targets are gated above and are not installed. The package surface
+# below remains available with BUILD_TESTING=OFF and contains only product
+# libraries, tools, headers, schemas, and documentation.
 install(
   TARGETS cxxlens_base cxxlens_kernel cxxlens_query cxxlens_cpp cxxlens_recipes
           cxxlens
@@ -603,10 +604,7 @@ install(
   DIRECTORY schemas/
   DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas"
   FILES_MATCHING
-  PATTERN "cxxlens_ng_*"
-  PATTERN "cxxlens_ng_ci_supply_chain_contract*" EXCLUDE
-  PATTERN "cxxlens_ng_public_callable_inventory*" EXCLUDE
-  PATTERN "cxxlens_ng_sanitizer_coverage*" EXCLUDE)
+  PATTERN "cxxlens_ng_*")
 # Runtime product schemas used by installed provider/materializer consumers.
 install(
   FILES schemas/cxxlens_ng_provider_runtime_contract.yaml
