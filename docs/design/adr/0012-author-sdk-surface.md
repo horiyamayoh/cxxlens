@@ -47,7 +47,7 @@ cancel、no-credit fault を注入する。scaffold は source、manifest、test
 
 ## Verification
 
-`tools/quality/check_ng_sdk_contract.py` は exact catalog、5 author path、IDL 生成、compile-fail 例、通常 SDK の
+`tools/quality/check_ng_sdk_contract.py` は exact catalog、author path、IDL 生成、compile-fail 例、通常 SDK の
 LLVM-free boundary、非中央集権的な extension surface を検証する。さらに C++ が出力した Logical Query IR と
 provider manifest を既存の accepted schema/reference validator へ入力する。C++ unit/public-header/install tests は typed/dynamic
 IR parity、row-view expiry/thread affinity、frame checksum/credit、coverage accounting、native pointer rejection を検証する。

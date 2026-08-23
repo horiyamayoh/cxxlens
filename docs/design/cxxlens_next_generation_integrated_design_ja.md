@@ -4720,7 +4720,7 @@ Issue #66 で、次の二 package を installable production surface として�
 | `cxxlensProviderSDK` | `cxxlens::provider_sdk` | generated/dynamic relation、Logical Query IR、detached snapshot、portable provider、harness、recipe lowering | 通常 header/link とも禁止 |
 | `cxxlensClang22ProviderSDK` | `cxxlens::clang22_provider_sdk` | callback-scoped Clang 22 source normalization と detachment | `<cxxlens/provider/clang22.hpp>` だけで明示 opt-in |
 
-5 author path は次の同一 semantic substrate を使う。
+Author paths は次の同一 semantic substrate を使う。
 
 ```text
 generated typed query ─┐
@@ -4746,10 +4746,10 @@ production surface へ接続された。
 ### 22.10 Public callable exact inventory
 
 Issue #169 / ADR 0092 により、全 installed public callable の exact authority は
-`schemas/cxxlens_ng_public_callable_inventory.yaml` とする。Public API Catalog が admitted header、API family、package、target、owner を
+`schemas/cxxlens_ng_public_callable_inventory.yaml` とする。Public API Catalog が admitted header、API family、package、target を
 管理し、inventory は一 callable 一 row の stable ID、fully qualified name、kind、return/parameter/default/template/constraint、
-static/virtual/constexpr、cv/ref/noexcept、deleted/defaulted、declaring header、origin、status/stability/qualification、evidence を
-catalog entry へ exact bind する。source line、Doxygen synthetic ID、表示 prose、signature digest は stable callable ID にしない。
+static/virtual/constexpr、cv/ref/noexcept、deleted/defaulted、declaring header、origin、status/stability/qualification、Doxygen
+correspondence を catalog entry へ exact bind する。source line、Doxygen synthetic ID、表示 prose、signature digest は stable callable ID にしない。
 stable ID は fully qualified name、kind、scope 内で非再利用の overload slot から domain-separated hash で導出する。allocator の
 high-water mark と消滅済み scope は履歴として保持し、slot 再利用、ID swap、曖昧な複数 overload migration を拒否する。signature は
 C++ token 単位で literal spelling を保持し、constraint の enclosing/callable scope と template/leading/trailing position、nested
@@ -4760,8 +4760,8 @@ inventory-only row、signature drift、duplicate、複数 installed header/entry
 二つ目の exact correspondence とする。Clang/Doxygen の column 値を直接同一視せず、同一 header/line 内の declaration order で対応付けた
 両 source anchor と row 固有の name/signature projection を検査し、一方の成功で他方を
 代替しない。accepted Relation Registry から admitted generated header を全て再生成して byte freshness を検査し、generated callable も
-同じ inventory に含める。inventory の canonical digest、callable count、Clang major、Doxygen correspondence digest は
-AST/Doxygen の直接検査結果として利用する。これらを commit、review、readiness、release artifact へ複製しない。
+同じ inventory に含める。inventory の canonical digest、Clang major、Doxygen correspondence digest は AST/Doxygen の直接検査結果として
+利用する。固定した callable 件数やこれらの値を commit、review、readiness、release artifact へ複製しない。
 cross-header と redeclaration の同一性は pretty type string ではなく Clang mangled identity / `previousDecl` chain で判定する。alias spelling、
 同一行 Doxygen 対応一式の交換、同一 header の default/specifier/origin drift を拒否する。stable-ID transition は親 inventory と比較し、
 親 inventory を読めない場合は fail closed にする。

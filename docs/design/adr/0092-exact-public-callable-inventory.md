@@ -21,7 +21,7 @@ Relation Registry から再生成できることに加え、commit された byt
 `schemas/cxxlens_ng_public_callable_inventory.yaml` を全 installed public callable の one-callable-per-row contract とする。Public API
 Catalog は header/family/package の admission と ownership を引き続き所有し、各 inventory row は catalog entry、package、target に
 exact bind する。row は少なくとも stable callable ID、fully qualified name、callable kind、structured canonical signature、declaring
-header、origin、status、stability、qualification、owner、implementation/test/example/Doxygen evidence を持つ。
+header、origin、status、stability、qualification、Doxygen correspondence を持つ。
 
 canonical signature は C++ token 単位で literal spelling を保持し、return type、parameter type/name/default argument、template parameter と
 scope/position 付き constraint、static/virtual/constexpr/override/final、cv/ref/nested noexcept、deleted/defaulted state を別 field として保持する。
