@@ -1040,6 +1040,7 @@ namespace cxxlens::sdk
 			control_, std::move(retained_owner), std::move(pin_identity)};
 	}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 	std::pair<sqlite_writer_shm_native_lifetime_revoker, sqlite_writer_shm_native_lifetime_source>
 	sqlite_writer_shm_native_lifetime_test_factory::create_source(
 		const sqlite_writer_shm_native_lifetime_role role,
@@ -1058,6 +1059,7 @@ namespace cxxlens::sdk
 			sqlite_writer_shm_native_lifetime_source{std::move(control), retained_owner},
 		};
 	}
+#endif
 
 	sqlite_shm_lease_result<std::pair<sqlite_writer_shm_native_lifetime_revoker,
 									  sqlite_writer_shm_native_lifetime_source>>

@@ -22,7 +22,9 @@ namespace cxxlens::sdk
 
 	class sqlite_writer_shm_mapping_epoch_test_peer;
 	class sqlite_same_process_shm_registry_test_peer;
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 	class sqlite_writer_shm_native_lifetime_test_factory;
+#endif
 	class sqlite_writer_shm_native_lifetime_production_factory;
 	class sqlite_writer_shm_mapping_receipt_validator;
 	class sqlite_writer_shm_mapping_epoch_receipt;
@@ -83,7 +85,9 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool revoke() noexcept;
 
 	  private:
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 		friend class sqlite_writer_shm_native_lifetime_test_factory;
+#endif
 		friend class sqlite_writer_shm_native_lifetime_production_factory;
 		friend class sqlite_writer_shm_mapping_epoch_test_peer;
 
@@ -125,7 +129,9 @@ namespace cxxlens::sdk
 	  private:
 		friend class detail::sqlite_writer_shm_mapping_epoch_state;
 		friend class sqlite_writer_shm_native_lifetime_source;
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 		friend class sqlite_writer_shm_native_lifetime_test_factory;
+#endif
 		friend class sqlite_writer_shm_native_lifetime_production_factory;
 		friend class sqlite_writer_shm_mapping_epoch_port;
 		friend class sqlite_writer_shm_mapping_epoch_test_peer;
@@ -165,7 +171,9 @@ namespace cxxlens::sdk
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_writer_shm_native_lifetime_pin> mint_pin();
 
 	  private:
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 		friend class sqlite_writer_shm_native_lifetime_test_factory;
+#endif
 		friend class sqlite_writer_shm_native_lifetime_production_factory;
 
 		sqlite_writer_shm_native_lifetime_source(
@@ -199,6 +207,7 @@ namespace cxxlens::sdk
 					  const std::shared_ptr<void>& retained_owner) noexcept;
 	};
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 	class sqlite_writer_shm_native_lifetime_test_factory final
 	{
 	  public:
@@ -216,6 +225,7 @@ namespace cxxlens::sdk
 					  std::optional<sqlite_backend_opaque_identity> native_xopen_receipt,
 					  const std::shared_ptr<void>& retained_owner);
 	};
+#endif
 
 	/** Only the closed zero/one/multiple-or-overflow census is representable. */
 	enum class sqlite_writer_shm_bounded_count : std::uint8_t
