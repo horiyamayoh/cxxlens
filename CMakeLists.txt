@@ -307,6 +307,8 @@ target_include_directories(
   cxxlens_protocol_v2
   PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
 target_compile_features(cxxlens_protocol_v2 PRIVATE cxx_std_23)
+set_target_properties(cxxlens_protocol_v2 PROPERTIES POSITION_INDEPENDENT_CODE
+                                                     ON)
 cxxlens_set_project_warnings(cxxlens_protocol_v2)
 cxxlens_enable_sanitizers(cxxlens_protocol_v2)
 target_link_libraries(cxxlens_provider_sdk PUBLIC cxxlens_protocol_v2)
