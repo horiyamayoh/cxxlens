@@ -8,6 +8,7 @@
 #include <cxxlens/sdk/store.hpp>
 
 #include "materialization_json.hpp"
+#include "materialization_publication_types.hpp"
 #include "provider_task_v3.hpp"
 
 namespace cxxlens::detail::clang22::materialization
@@ -27,16 +28,6 @@ namespace cxxlens::detail::clang22::materialization
 		 * payload check.
 		 */
 		std::optional<clang22_task_source_receipt> source_receipt;
-	};
-
-	struct validated_publication_request
-	{
-		std::string backend;
-		sdk::snapshot_series_selector selector;
-		std::string series_id;
-		bool genesis{};
-		std::optional<std::string> expected_parent_publication;
-		std::optional<std::string> sqlite_path;
 	};
 
 	/** Fully bound request. The raw JSON document remains the report/source authority. */

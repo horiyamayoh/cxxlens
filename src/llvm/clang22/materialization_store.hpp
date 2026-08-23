@@ -9,7 +9,7 @@
 #include <variant>
 #include <vector>
 
-#include "materialization_request.hpp"
+#include "materialization_publication_types.hpp"
 #include "materialization_request_binding.hpp"
 
 namespace cxxlens::detail::clang22::materialization
