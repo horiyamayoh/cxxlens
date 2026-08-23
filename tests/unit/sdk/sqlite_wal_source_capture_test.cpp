@@ -441,6 +441,17 @@ namespace
 	void verify_io_and_builder_failures()
 	{
 		{
+			auto invalid_wal = std::vector<std::byte>(sqlite_wal_header_byte_count, std::byte{});
+			auto fixture = make_pair(std::move(invalid_wal));
+			fake_workspace_builder builder;
+			auto captured = capture_sqlite_wal_source(fixture.main, fixture.wal, builder);
+			require(!captured && captured.error().code == "store.sqlite-failure" &&
+						captured.error().field == "sqlite-initialization-sidecar" &&
+						captured.error().detail == "unrecognized-preauthority-state" &&
+						builder.append_calls == 0U && builder.seal_calls == 0U,
+					"invalid WAL header was admitted to private recovery");
+		}
+		{
 			auto fixture = make_pair(committed_wal());
 			fixture.main->fail_size_call = 1U;
 			fake_workspace_builder builder;

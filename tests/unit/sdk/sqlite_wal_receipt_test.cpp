@@ -615,6 +615,20 @@ namespace
 					sqlite_wal_parser_resident_byte_bound == 65'592U,
 				"WAL scanner requested or retained a whole-WAL-sized byte window");
 	}
+
+	void verify_replay_is_deterministic()
+	{
+		synthetic_wal wal{{.order = sqlite_wal_checksum_byte_order::little_endian}};
+		wal.append_frame({.page_number = 1U, .database_page_count = 0U, .seed = 17U});
+		wal.append_frame({.page_number = 2U, .database_page_count = 2U, .seed = 29U});
+		const auto one_byte = scan(wal.bytes(), 1U);
+		const auto large_fragments = scan(wal.bytes(), 65'536U);
+		require(one_byte.receipt == large_fragments.receipt,
+				"WAL receipt changed with source fragmentation");
+		require(one_byte.receipt.authoritative_prefix_byte_count == wal.bytes().size() &&
+					one_byte.receipt.validated_prefix_byte_count == wal.bytes().size(),
+				"deterministic WAL replay did not retain the exact committed prefix");
+	}
 } // namespace
 
 int main()
@@ -629,6 +643,7 @@ int main()
 		verify_header_and_frame_rejections();
 		verify_checked_accounting();
 		verify_fragmentation_and_residency_bound();
+		verify_replay_is_deterministic();
 		return 0;
 	}
 	catch (const std::exception& failure)

@@ -600,6 +600,19 @@ namespace
 								  std::span<const std::byte>{main_bytes}.first(1U))
 						 .has_value(),
 				"failed copy binding did not terminalize builder");
+
+		auto forged_scan = no_commit_scan;
+		forged_scan.validated_prefix_byte_count = 0U;
+		auto structural_builder =
+			make_sqlite_wal_recovery_workspace_builder(source_token(), runtime.registry());
+		require(structural_builder.has_value(), "create structural-failure builder");
+		append_fragmented(
+			**structural_builder, sqlite_wal_recovery_copy_role::main_database, main_bytes);
+		auto structural_rejected = (*structural_builder)
+									   ->seal({copy_receipt(main_bytes),
+											   copy_receipt(std::span<const std::byte>{}),
+											   forged_scan});
+		require(!structural_rejected, "workspace accepted a structurally incomplete WAL receipt");
 	}
 
 	void exercise_bounded_append(sqlite_runtime& runtime)
@@ -612,6 +625,7 @@ namespace
 		require(!target.append(sqlite_wal_recovery_copy_role::main_database, oversized).has_value(),
 				"workspace admitted an oversized copy window");
 	}
+
 } // namespace
 
 int main()

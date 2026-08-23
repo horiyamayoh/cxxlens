@@ -560,12 +560,24 @@ namespace cxxlens::sdk
 					scan.valid_commit_count == 0U && scan.torn_remainder_byte_count == 0U &&
 					expectation.authoritative_wal_prefix.byte_count == 0U;
 			if (scan.classification == sqlite_wal_scan_classification::committed_prefix)
-				return scan.header.has_value() && scan.last_valid_commit.has_value() &&
-					scan.authoritative_prefix_byte_count > sqlite_wal_header_byte_count &&
-					scan.authoritative_prefix_byte_count ==
+			{
+				if (!scan.header.has_value() || !scan.last_valid_commit.has_value() ||
+					scan.valid_frame_count < scan.last_valid_commit->frame_number ||
+					scan.valid_commit_count == 0U ||
+					scan.validated_prefix_byte_count < scan.authoritative_prefix_byte_count ||
+					scan.inspected_byte_count < scan.validated_prefix_byte_count ||
+					scan.last_valid_commit->prefix_byte_count !=
+						scan.authoritative_prefix_byte_count ||
+					scan.authoritative_prefix_byte_count <= sqlite_wal_header_byte_count)
+					return false;
+				return scan.authoritative_prefix_byte_count ==
 					expectation.authoritative_wal_prefix.byte_count;
+			}
 			if (scan.classification == sqlite_wal_scan_classification::no_valid_commit)
 				return scan.header.has_value() && !scan.last_valid_commit.has_value() &&
+					scan.valid_commit_count == 0U &&
+					scan.validated_prefix_byte_count >= sqlite_wal_header_byte_count &&
+					scan.inspected_byte_count >= scan.validated_prefix_byte_count &&
 					scan.authoritative_prefix_byte_count == 0U &&
 					expectation.authoritative_wal_prefix.byte_count == 0U;
 			return false;
@@ -645,14 +657,27 @@ namespace cxxlens::sdk
 			sealed_.store(true, std::memory_order_release);
 			{
 				std::scoped_lock registry_lock{workspace_registration_mutex};
-				if (runtime_->registry.find(vfs_name_.c_str()) != nullptr ||
-					runtime_->registry.register_vfs(&wrapper_, 0) != sqlite_ok ||
-					runtime_->registry.find(vfs_name_.c_str()) != &wrapper_)
+				if (runtime_->registry.find(vfs_name_.c_str()) != nullptr)
 				{
 					sealed_.store(false, std::memory_order_release);
 					return unexpected(workspace_error("vfs-register"));
 				}
+				if (runtime_->registry.register_vfs(&wrapper_, 0) != sqlite_ok)
+				{
+					sealed_.store(false, std::memory_order_release);
+					return unexpected(workspace_error("vfs-register"));
+				}
+				// Mark registration before the postcondition check so every successful registration
+				// is retired by the destructor, including an unexpected registry mismatch.
 				registered_ = true;
+				if (runtime_->registry.find(vfs_name_.c_str()) != &wrapper_)
+				{
+					if (runtime_->registry.unregister_vfs(&wrapper_) != sqlite_ok)
+						std::terminate();
+					registered_ = false;
+					sealed_.store(false, std::memory_order_release);
+					return unexpected(workspace_error("vfs-register"));
+				}
 			}
 			auto self = shared_from_this();
 			return std::static_pointer_cast<sqlite_wal_recovery_workspace>(std::move(self));
@@ -661,6 +686,8 @@ namespace cxxlens::sdk
 		result<sqlite_wal_recovery_workspace_receipt> workspace_state::snapshot_receipt() const
 		{
 			std::scoped_lock lock{mutex_};
+			if (!sealed_.load(std::memory_order_acquire) || !receipt_.sealed)
+				return unexpected(workspace_error("receipt-state"));
 			if (!receipt_accounting_valid_)
 				return unexpected(workspace_error("receipt-counter-overflow"));
 			try

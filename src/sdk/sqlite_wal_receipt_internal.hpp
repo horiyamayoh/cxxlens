@@ -103,6 +103,8 @@ namespace cxxlens::sdk
 		std::uint64_t valid_frame_count{};
 		std::uint64_t valid_commit_count{};
 		std::uint64_t torn_remainder_byte_count{};
+
+		[[nodiscard]] bool operator==(const sqlite_wal_scan_receipt&) const = default;
 	};
 
 	struct sqlite_wal_frame_layout
