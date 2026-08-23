@@ -73,7 +73,13 @@ namespace cxxlens::sdk
 
 	/** Production no-op unless a BUILD_TESTING scope owns the calling thread. */
 #if defined(__GNUC__) || defined(__clang__)
+	// The test dispatcher is intentionally interposable by the private test object library.  The
+	// production no-op remains source-private so it cannot become an installed testing surface.
+#if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
 	[[nodiscard]] __attribute__((visibility("default")))
+#else
+	[[nodiscard]] __attribute__((visibility("hidden")))
+#endif
 #else
 	[[nodiscard]]
 #endif
