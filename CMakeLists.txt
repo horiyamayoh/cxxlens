@@ -453,6 +453,23 @@ target_compile_features(cxxlens_clang22_materializer_bounded_support
 cxxlens_set_project_warnings(cxxlens_clang22_materializer_bounded_support)
 cxxlens_enable_sanitizers(cxxlens_clang22_materializer_bounded_support)
 
+# The task-v4 claim boundary is source-private until the production Store
+# handoff is connected.  It is nevertheless built as a first-class typed
+# boundary so the v4 authority/receipt contract cannot depend on the legacy
+# request or task graph.
+add_library(cxxlens_clang22_materializer_v4_claims STATIC EXCLUDE_FROM_ALL
+            src/llvm/clang22/materialization_v4_claim_binding.cpp)
+target_link_libraries(
+  cxxlens_clang22_materializer_v4_claims
+  PUBLIC cxxlens::base
+  PRIVATE cxxlens::kernel cxxlens_clang22_materialization_codecs)
+target_include_directories(cxxlens_clang22_materializer_v4_claims
+                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_clang22_materializer_v4_claims
+                        PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_claims)
+cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_claims)
+
 # Worker/parser implementation stays out of the installed Clang 22 SDK DSO. It
 # is linked only by provider-owned executables and source-private tests.
 add_library(
