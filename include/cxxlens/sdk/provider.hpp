@@ -983,9 +983,9 @@ namespace cxxlens::sdk::provider
 		std::string expected_binary_digest;
 		/**
 		 * Optional source-closure endpoints inherited by the provider child.  The concrete binding
-		 * is source-private; callers obtain it from the provider runtime's typed factory.  A process
-		 * launch validates the task/session/closure/transfer identity and preserves only these
-		 * descriptors (all other descriptors at or above 4 are closed in the child).
+		 * is source-private; callers obtain it from the provider runtime's typed factory.  A
+		 * process launch validates the task/session/closure/transfer identity and preserves only
+		 * these descriptors (all other descriptors at or above 4 are closed in the child).
 		 */
 		std::shared_ptr<const detail::process_inherited_channel_binding> inherited_channel;
 	};
