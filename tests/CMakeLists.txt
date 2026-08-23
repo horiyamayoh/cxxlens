@@ -901,6 +901,17 @@ set_tests_properties(
     LABELS
     "adapter;provider;clang22;source-closure;transport;protocol;security")
 
+cxxlens_add_test_executable(cxxlens-clang22-source-closure-spool
+                            adapter/clang22/source_closure_spool_test.cpp)
+target_link_libraries(cxxlens-clang22-source-closure-spool
+                      PRIVATE cxxlens_clang22_materialization_codecs)
+add_test(NAME adapter.clang22-source-closure-spool
+         COMMAND cxxlens-clang22-source-closure-spool)
+set_tests_properties(
+  adapter.clang22-source-closure-spool
+  PROPERTIES LABELS
+             "adapter;provider;clang22;source-closure;spool;bounded;security")
+
 cxxlens_add_test_executable(cxxlens-clang22-source-closure-task-v4
                             adapter/clang22/source_closure_task_v4_test.cpp)
 target_link_libraries(cxxlens-clang22-source-closure-task-v4
@@ -953,6 +964,43 @@ set_tests_properties(
   adapter.clang22-source-closure-task-v4-worker
   PROPERTIES LABELS
              "adapter;provider;clang22;source-closure;task;v4;worker;security")
+
+cxxlens_add_test_executable(cxxlens-clang22-provider-worker-v4
+                            adapter/clang22/provider_worker_v4_test.cpp)
+target_link_libraries(cxxlens-clang22-provider-worker-v4
+                      PRIVATE cxxlens_clang22_worker_core)
+if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG22_LIBRARY_DIRS)
+  list(GET CXXLENS_CLANG22_LIBRARY_DIRS 0 _cxxlens_worker_v4_test_lib_dir)
+  get_filename_component(_cxxlens_worker_v4_test_llvm_root
+                         "${_cxxlens_worker_v4_test_lib_dir}" DIRECTORY)
+  find_program(
+    _cxxlens_worker_v4_test_clangxx
+    NAMES clang++-22 clang++
+    PATHS "${_cxxlens_worker_v4_test_llvm_root}/bin"
+    NO_DEFAULT_PATH NO_CACHE)
+  if(_cxxlens_worker_v4_test_clangxx)
+    execute_process(
+      COMMAND "${_cxxlens_worker_v4_test_clangxx}" -print-resource-dir
+      OUTPUT_VARIABLE _cxxlens_worker_v4_test_resource_dir
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    target_compile_definitions(
+      cxxlens-clang22-provider-worker-v4
+      PRIVATE
+        CXXLENS_TEST_CLANG22_ROOT="${_cxxlens_worker_v4_test_llvm_root}"
+        CXXLENS_TEST_CLANGXX22_PATH="${_cxxlens_worker_v4_test_clangxx}"
+        CXXLENS_TEST_CLANG22_RESOURCE_DIR="${_cxxlens_worker_v4_test_resource_dir}"
+    )
+  endif()
+  unset(_cxxlens_worker_v4_test_lib_dir)
+  unset(_cxxlens_worker_v4_test_llvm_root)
+  unset(_cxxlens_worker_v4_test_clangxx)
+  unset(_cxxlens_worker_v4_test_resource_dir)
+endif()
+add_test(NAME adapter.clang22-provider-worker-v4
+         COMMAND cxxlens-clang22-provider-worker-v4)
+set_tests_properties(
+  adapter.clang22-provider-worker-v4
+  PROPERTIES LABELS "adapter;provider;clang22;source-closure;task;v4;worker;security")
 
 # The native bridge test needs a real compiler binary/resource-dir/root,
 # resolved from the exact LLVM/Clang 22 package `find_package(LLVM 22.1 CONFIG)`

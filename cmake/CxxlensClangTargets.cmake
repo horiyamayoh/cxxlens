@@ -115,6 +115,7 @@ function(cxxlens_create_clang22_worker_static_closure)
     src/llvm/clang22/provider_task_v3.cpp
     src/llvm/clang22/observation_v2.cpp
     src/llvm/clang22/source_closure.cpp
+    src/llvm/clang22/source_closure_spool.cpp
     src/llvm/clang22/source_closure_task_v4.cpp
     src/llvm/clang22/source_closure_transport.cpp
     src/llvm/clang22/source_closure_invocation.cpp
