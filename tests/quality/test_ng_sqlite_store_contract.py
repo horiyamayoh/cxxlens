@@ -304,7 +304,7 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
             late_close["acknowledgement"]["confirmed_after_close_replay"],
         )
         self.assertIn(
-            "does-not-authorize-any-reader-writer-close-group",
+            "does-not-mint-any-reader-writer-close-group",
             late_close["scope_boundary"]["transitive_authorization"],
         )
         gate_outcome = lease[
