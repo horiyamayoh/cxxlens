@@ -13,27 +13,26 @@ namespace cxxlens::detail::clang22
 {
 	namespace
 	{
-		[[nodiscard]] sdk::error failure(std::string code,
-												std::string field,
-												std::string detail = {})
+		[[nodiscard]] sdk::error
+		failure(std::string code, std::string field, std::string detail = {})
 		{
 			return {std::move(code), std::move(field), std::move(detail)};
 		}
 
 		[[nodiscard]] sdk::result<void>
 		validate_binding_identity(const source_closure_task_v4_decoded& metadata,
-											 std::string_view closure_id,
-											 std::string_view closure_digest,
-											 std::string_view manifest_digest,
-											 std::string_view main_file_id,
-											 const materialization::materialization_v4_claim_binding& binding)
+								  std::string_view closure_id,
+								  std::string_view closure_digest,
+								  std::string_view manifest_digest,
+								  std::string_view main_file_id,
+								  const materialization::materialization_v4_claim_binding& binding)
 		{
 			const auto& base = binding.base_task;
 			const auto& task = binding.task;
 			const auto reject = [&](const std::string_view field)
 			{
-				return sdk::unexpected(
-					failure("source-closure.task-v4-binding-mismatch", "claim-output", std::string{field}));
+				return sdk::unexpected(failure(
+					"source-closure.task-v4-binding-mismatch", "claim-output", std::string{field}));
 			};
 			if (binding.task_index != metadata.input.base_task_index)
 				return reject("task-index");
@@ -93,8 +92,8 @@ namespace cxxlens::detail::clang22
 			return {};
 		}
 
-		[[nodiscard]] sdk::result<void>
-		validate_publication(const materialization::materialization_v4_store_publication_authority& value)
+		[[nodiscard]] sdk::result<void> validate_publication(
+			const materialization::materialization_v4_store_publication_authority& value)
 		{
 			const std::array<std::pair<std::string_view, std::string_view>, 3U> ids{{
 				{"analysis-recipe", value.analysis_recipe_digest},
@@ -103,8 +102,9 @@ namespace cxxlens::detail::clang22
 			}};
 			for (const auto& [field, id] : ids)
 				if (auto valid = sdk::validate_strong_id(id); !valid)
-					return sdk::unexpected(failure(
-						"provider-worker-v4.output-authority-invalid", std::string{field}, "strong-id"));
+					return sdk::unexpected(failure("provider-worker-v4.output-authority-invalid",
+												   std::string{field},
+												   "strong-id"));
 			return {};
 		}
 	} // namespace
@@ -164,12 +164,12 @@ namespace cxxlens::detail::clang22
 				failure("provider-worker-v4.output-invalid", "callback", "not-produced"));
 
 		if (auto valid = validate_binding_identity(metadata,
-												closure_id,
-												closure_digest,
-												*manifest_digest,
-												main_file_id,
-												translation->binding);
-				!valid)
+												   closure_id,
+												   closure_digest,
+												   *manifest_digest,
+												   main_file_id,
+												   translation->binding);
+			!valid)
 			return sdk::unexpected(std::move(valid.error()));
 
 		auto sealed = materialization::seal_materialization_v4_claim_translation(
@@ -183,10 +183,7 @@ namespace cxxlens::detail::clang22
 		if (!receipt)
 			return sdk::unexpected(std::move(receipt.error()));
 		auto ingress = materialization::admit_materialization_v4_store_ingress(
-			input.output_authority.engine,
-			*receipt,
-			tasks,
-			input.output_authority.publication);
+			input.output_authority.engine, *receipt, tasks, input.output_authority.publication);
 		if (!ingress)
 			return sdk::unexpected(std::move(ingress.error()));
 		return provider_worker_v4_claim_receipt{

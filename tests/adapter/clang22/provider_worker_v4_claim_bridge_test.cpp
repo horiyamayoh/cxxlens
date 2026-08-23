@@ -181,12 +181,12 @@ namespace
 		output.closure_digest = closure.closure_digest;
 		for (const auto& member : closure.members)
 			output.members.push_back({member.file_id,
-										 member.logical_path,
-										 "main",
-										 "utf8",
-										 member.size_bytes,
-										 member.content_digest,
-										 member.read_only});
+									  member.logical_path,
+									  "main",
+									  "utf8",
+									  member.size_bytes,
+									  member.content_digest,
+									  member.read_only});
 		for (const auto& blob : closure.blobs)
 			output.blobs.push_back({blob.content_digest, blob.size_bytes});
 		auto digest_value = source_closure_manifest_digest(closure);
@@ -195,8 +195,8 @@ namespace
 		return output;
 	}
 
-	[[nodiscard]] provider_task_v4_base_task base_task(
-		const source_closure_task_v4_decoded& metadata)
+	[[nodiscard]] provider_task_v4_base_task
+	base_task(const source_closure_task_v4_decoded& metadata)
 	{
 		provider_task_v4_base_task output;
 		output.provider_task_id = metadata.input.base_provider_task_id;
@@ -221,7 +221,7 @@ namespace
 	}
 
 	[[nodiscard]] provider_task_v4 task(const source_closure_task_v4_decoded& metadata,
-										 const provider_task_v4_base_task& base)
+										const provider_task_v4_base_task& base)
 	{
 		provider_task_v4 output;
 		output.base_task_index = metadata.input.base_task_index;
@@ -233,11 +233,11 @@ namespace
 							base.environment_digest};
 		auto manifest_value = manifest(metadata.input.closure);
 		output.source_closure = {metadata.input.closure.snapshot_id,
-									 metadata.input.closure.closure_digest,
-									 manifest_value.manifest_digest,
-									 static_cast<std::uint64_t>(manifest_value.members.size()),
-									 static_cast<std::uint64_t>(manifest_value.blobs.size()),
-									 manifest_value.blobs.front().size_bytes};
+								 metadata.input.closure.closure_digest,
+								 manifest_value.manifest_digest,
+								 static_cast<std::uint64_t>(manifest_value.members.size()),
+								 static_cast<std::uint64_t>(manifest_value.blobs.size()),
+								 manifest_value.blobs.front().size_bytes};
 		output.main_logical_path = metadata.input.main_logical_path;
 		output.logical_working_directory = metadata.input.logical_working_directory;
 		auto task_digest = derive_provider_task_v4_digest(output);
@@ -245,15 +245,15 @@ namespace
 		output.task_v4_digest = *task_digest;
 		output.task_id = "task:" + *task_digest;
 		require(output.task_id == metadata.identity.task_id &&
-				output.task_v4_digest == metadata.identity.task_v4_digest,
+					output.task_v4_digest == metadata.identity.task_v4_digest,
 				"bridge task identity diverged from worker metadata");
 		return output;
 	}
 
 	[[nodiscard]] sdk::claim make_claim(const sdk::relation_engine& value,
-										 std::string key,
-										 std::string payload,
-										 const std::string_view provenance)
+										std::string key,
+										std::string payload,
+										const std::string_view provenance)
 	{
 		sdk::observation observed{
 			row(std::move(key), std::move(payload)),
@@ -269,9 +269,8 @@ namespace
 		return std::move(*output);
 	}
 
-	[[nodiscard]] [[maybe_unused]] materialization_v4_claim_translation translation(
-		const sdk::relation_engine& value,
-		const source_closure_task_v4_decoded& metadata)
+	[[nodiscard]] [[maybe_unused]] materialization_v4_claim_translation
+	translation(const sdk::relation_engine& value, const source_closure_task_v4_decoded& metadata)
 	{
 		auto base = base_task(metadata);
 		auto task_value = task(metadata, base);
@@ -320,13 +319,13 @@ namespace
 		return {std::move(binding_value), std::move(*committed), std::move(partition)};
 	}
 
-	[[nodiscard]] provider_worker_v4_output_authority output_authority(
-		const sdk::relation_engine& value)
+	[[nodiscard]] provider_worker_v4_output_authority
+	output_authority(const sdk::relation_engine& value)
 	{
 		return {value,
-			{"semantic-v2:sha256:" + std::string(64U, '9'),
-			 "semantic-v2:sha256:" + std::string(64U, 'a'),
-			 "publication-target:v4-test"}};
+				{"semantic-v2:sha256:" + std::string(64U, '9'),
+				 "semantic-v2:sha256:" + std::string(64U, 'a'),
+				 "publication-target:v4-test"}};
 	}
 } // namespace
 
@@ -347,14 +346,13 @@ int main()
 	auto invalid_authority = output_authority(relation_engine);
 	invalid_authority.publication.publication_target.clear();
 	rejected = execute_provider_worker_v4_with_claim_output(
-		{{metadata,
-		  closure,
-		  authority,
-		  {}},
+		{{metadata, closure, authority, {}},
 		 std::move(invalid_authority),
 		 [](provider::clang22::borrowed_translation_unit&)
 			 -> sdk::result<materialization_v4_claim_translation>
-		 { return sdk::unexpected(sdk::error{"test.callback-not-reached", "callback", {}}); }});
+		 {
+			 return sdk::unexpected(sdk::error{"test.callback-not-reached", "callback", {}});
+		 }});
 	require(!rejected && rejected.error().code == "provider-worker-v4.output-authority-invalid",
 			"v4 claim bridge accepted invalid output authority");
 
@@ -364,13 +362,10 @@ int main()
 	auto detached = translation(relation_engine, metadata);
 	bool callback_ran = false;
 	auto positive = execute_provider_worker_v4_with_claim_output(
-		{{std::move(metadata),
-		  std::move(closure),
-		  authority,
-		  {}},
+		{{std::move(metadata), std::move(closure), authority, {}},
 		 output_authority(relation_engine),
-		 [detached = std::move(detached), &callback_ran](
-			 provider::clang22::borrowed_translation_unit& unit) mutable
+		 [detached = std::move(detached),
+		  &callback_ran](provider::clang22::borrowed_translation_unit& unit) mutable
 			 -> sdk::result<materialization_v4_claim_translation>
 		 {
 			 callback_ran = true;
@@ -395,17 +390,16 @@ int main()
 	auto foreign_closure = foreign_metadata.input.closure;
 	auto foreign_translation = translation(relation_engine, foreign_metadata);
 	foreign_translation.binding.task.task_id.back() =
-			foreign_translation.binding.task.task_id.back() == '0' ? '1' : '0';
+		foreign_translation.binding.task.task_id.back() == '0' ? '1' : '0';
 	auto foreign = execute_provider_worker_v4_with_claim_output(
-		{{std::move(foreign_metadata),
-		  std::move(foreign_closure),
-		  authority,
-		  {}},
+		{{std::move(foreign_metadata), std::move(foreign_closure), authority, {}},
 		 output_authority(relation_engine),
-		 [foreign_translation = std::move(foreign_translation)](
-			 provider::clang22::borrowed_translation_unit&) mutable
+		 [foreign_translation =
+			  std::move(foreign_translation)](provider::clang22::borrowed_translation_unit&) mutable
 			 -> sdk::result<materialization_v4_claim_translation>
-		 { return std::move(foreign_translation); }});
+		 {
+			 return std::move(foreign_translation);
+		 }});
 	require(!foreign && foreign.error().code == "source-closure.task-v4-binding-mismatch",
 			"v4 claim bridge accepted a foreign detached translation");
 #else

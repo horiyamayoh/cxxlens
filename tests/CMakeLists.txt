@@ -1096,8 +1096,10 @@ if(UNIX)
            COMMAND cxxlens-clang22-installed-materializer-source-closure)
   set_tests_properties(
     adapter.clang22-installed-materializer-source-closure
-    PROPERTIES LABELS
-               "adapter;provider;clang22;source-closure;fd;materializer;security;bounded")
+    PROPERTIES
+      LABELS
+      "adapter;provider;clang22;source-closure;fd;materializer;security;bounded"
+  )
 endif()
 
 cxxlens_add_test_executable(cxxlens-clang22-source-closure-task-v4
@@ -1215,7 +1217,8 @@ add_test(NAME adapter.clang22-provider-worker-v4-claim-bridge
 set_tests_properties(
   adapter.clang22-provider-worker-v4-claim-bridge
   PROPERTIES LABELS
-             "adapter;provider;clang22;materialization;worker;v4;claim;security")
+             "adapter;provider;clang22;materialization;worker;v4;claim;security"
+)
 
 cxxlens_add_test_executable(cxxlens-clang22-provider-worker-channel
                             adapter/clang22/provider_worker_channel_test.cpp)
@@ -1574,7 +1577,11 @@ add_dependencies(
   cxxlens-clang22-materialization-store-outcome
   cxxlens-clang22-materialization-request-v2-2
   cxxlens-clang22-provider-task-v4
+  cxxlens-clang22-provider-worker-ingress-decoder
+  cxxlens-clang22-materialization-v4-claim-binding
+  cxxlens-clang22-materialization-v4-store-positive
   cxxlens-protocol-v2
+  cxxlens-unit-sdk-provider-protocol-v2-adapter
   cxxlens-clang22-materialization-pipeline-v2-2
   cxxlens-clang22-materialization-rooted-vfs
   cxxlens-clang22-materialization-occurrence
@@ -1584,9 +1591,14 @@ add_dependencies(
   cxxlens-clang22-source-closure-vfs
   cxxlens-clang22-source-closure-invocation
   cxxlens-clang22-source-closure-transport
+  cxxlens-clang22-source-closure-spool
+  cxxlens-clang22-source-closure-receiver
   cxxlens-clang22-source-closure-task-v4
   cxxlens-clang22-source-closure-task-v4-worker
   cxxlens-clang22-source-closure-native
+  cxxlens-clang22-provider-worker-v4
+  cxxlens-clang22-provider-worker-v4-claim-bridge
+  cxxlens-clang22-provider-worker-channel
   cxxlens-r2-vertical-slice
   cxxlens-provider-process-fixture
   cxxlens-public-header-cxxlens
@@ -1644,6 +1656,8 @@ add_dependencies(
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   add_dependencies(cxxlens-ng-test-binaries
                    cxxlens-unit-sdk-provider-process-channel)
+  add_dependencies(cxxlens-ng-test-binaries cxxlens-clang22-source-closure-fd
+                   cxxlens-clang22-installed-materializer-source-closure)
 endif()
 
 if(CXXLENS_ENABLE_ASAN OR CXXLENS_ENABLE_UBSAN)
