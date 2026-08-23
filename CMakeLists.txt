@@ -391,7 +391,8 @@ add_library(
   src/llvm/clang22/source_closure_transport.cpp
   src/llvm/clang22/source_closure_invocation.cpp
   src/llvm/clang22/source_closure_vfs.cpp
-  src/llvm/clang22/unicode_nfc.cpp)
+  src/llvm/clang22/unicode_nfc.cpp
+  src/llvm/clang22/materialization_identity.cpp)
 target_link_libraries(
   cxxlens_clang22_materialization_codecs
   PUBLIC cxxlens::provider_sdk
@@ -503,6 +504,35 @@ target_compile_features(cxxlens_clang22_materializer_v2_2_pipeline_support
 cxxlens_set_project_warnings(cxxlens_clang22_materializer_v2_2_pipeline_support)
 cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v2_2_pipeline_support)
 
+if(BUILD_TESTING)
+  # The request/task-v3 implementation is retained only for the source-private
+  # safety path. Keep its complete translation-unit closure in a separately
+  # owned archive so request-v2.2, task-v4, and the installed worker cannot gain
+  # a transitive dependency on the old graph. This is a dependency boundary, not
+  # a compatibility facade: the legacy API remains available only to the safety
+  # target until its consumers are migrated to v4.
+  add_library(
+    cxxlens_clang22_materializer_legacy_request_support STATIC EXCLUDE_FROM_ALL
+    src/llvm/clang22/materialization_request.cpp
+    src/llvm/clang22/materialization_request_identity.cpp
+    src/llvm/clang22/materialization_request_stream.cpp
+    src/llvm/clang22/materialization_request_v2_1.cpp
+    src/llvm/clang22/provider_task_v3.cpp
+    src/llvm/clang22/materialization_task_spool.cpp)
+  target_link_libraries(
+    cxxlens_clang22_materializer_legacy_request_support
+    PUBLIC cxxlens::base
+    PRIVATE cxxlens::provider_sdk cxxlens_clang22_materialization_codecs
+            cxxlens_clang22_materialization_io_support)
+  target_include_directories(cxxlens_clang22_materializer_legacy_request_support
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_materializer_legacy_request_support
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(
+    cxxlens_clang22_materializer_legacy_request_support)
+  cxxlens_enable_sanitizers(cxxlens_clang22_materializer_legacy_request_support)
+endif()
+
 # Worker/parser implementation stays out of the installed Clang 22 SDK DSO. It
 # is linked only by provider-owned executables and source-private tests.
 add_library(
@@ -544,14 +574,7 @@ if(BUILD_TESTING)
   # target also does not exist in production or install configurations.
   add_library(
     cxxlens_clang22_materializer_safety_support STATIC EXCLUDE_FROM_ALL
-    src/llvm/clang22/materialization_identity.cpp
     src/llvm/clang22/materialization_claims.cpp
-    src/llvm/clang22/materialization_request.cpp
-    src/llvm/clang22/materialization_request_identity.cpp
-    src/llvm/clang22/materialization_request_stream.cpp
-    src/llvm/clang22/materialization_request_v2_1.cpp
-    src/llvm/clang22/provider_task_v3.cpp
-    src/llvm/clang22/materialization_task_spool.cpp
     src/llvm/clang22/materialization_seal.cpp
     src/llvm/clang22/materialization_partition_event_stream.cpp
     src/llvm/clang22/materialization_incremental_coordinator.cpp
@@ -576,7 +599,8 @@ if(BUILD_TESTING)
             cxxlens_clang22_materialization_codecs
             cxxlens_clang22_materialization_io_support
             cxxlens_clang22_materialization_request_v2_2_support
-            cxxlens_clang22_materializer_bounded_support)
+            cxxlens_clang22_materializer_bounded_support
+            cxxlens_clang22_materializer_legacy_request_support)
   if(CXXLENS_BUILD_SHARED)
     target_sources(
       cxxlens_clang22_materializer_safety_support
