@@ -33,7 +33,7 @@
 #include "sqlite_limit_length_control_internal.hpp"
 #include "sqlite_payload_streaming_internal.hpp"
 #include "sqlite_source_shm_readonly_preflight_internal.hpp"
-#include "sqlite_store_fault_injection_internal.hpp"
+#include "sqlite_store_fault_dispatch_internal.hpp"
 #include "sqlite_store_terminal_internal.hpp"
 #include "sqlite_terminal_reclassifier_internal.hpp"
 #include "sqlite_wal_receipt_internal.hpp"

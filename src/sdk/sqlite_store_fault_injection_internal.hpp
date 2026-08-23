@@ -1,66 +1,9 @@
 #pragma once
 
-#include <cstdint>
-
-#include "sqlite_store_terminal_internal.hpp"
+#include "sqlite_store_fault_dispatch_internal.hpp"
 
 namespace cxxlens::sdk
 {
-	/** Typed Store/SQLite boundaries; no SQL text or diagnostic prose participates in matching. */
-	enum class sqlite_store_fault_boundary : std::uint8_t
-	{
-		transaction_begin,
-		wal_coordination,
-		journal_transition,
-		ddl_object,
-		metadata_row,
-		payload_chunk,
-		final_object_copy,
-		format_marker,
-		transaction_commit,
-		transaction_rollback,
-		statement_finalize,
-		connection_close,
-		terminal_namespace_census,
-		terminal_reopen,
-		terminal_validation,
-		source_shm_symbol_resolution,
-	};
-
-	enum class sqlite_store_fault_timing : std::uint8_t
-	{
-		before,
-		after,
-	};
-
-	/**
-	 * A directive requested by a source-private test scope.
-	 *
-	 * The dispatcher performs no failure, close, or process action. In particular, process crash
-	 * and close-non-OK directives are interpreted only by Store integration or a subprocess test.
-	 */
-	enum class sqlite_store_fault_action : std::uint8_t
-	{
-		none,
-		observe_only,
-		report_failure,
-		report_failure_after_delegate,
-		request_process_crash,
-		request_close_non_ok,
-	};
-
-	/** One one-based occurrence at an exact typed boundary. */
-	struct sqlite_store_fault_event
-	{
-		sqlite_store_operation operation{sqlite_store_operation::publish};
-		sqlite_store_fault_boundary boundary{sqlite_store_fault_boundary::transaction_begin};
-		sqlite_store_fault_timing timing{sqlite_store_fault_timing::before};
-		std::uint64_t ordinal{1U};
-		std::uint64_t total{1U};
-
-		[[nodiscard]] bool operator==(const sqlite_store_fault_event&) const = default;
-	};
-
 	struct sqlite_store_fault_plan
 	{
 		sqlite_store_fault_event event;
@@ -69,17 +12,7 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool operator==(const sqlite_store_fault_plan&) const = default;
 	};
 
-	/** Allocation-free instruction returned to the exact integration call site. */
-	struct sqlite_store_fault_directive
-	{
-		sqlite_store_fault_event event;
-		sqlite_store_fault_action action{sqlite_store_fault_action::none};
-		bool issued{};
-
-		[[nodiscard]] bool operator==(const sqlite_store_fault_directive&) const = default;
-	};
-
-	/** Allocation-free observation of dispatcher activity within one scope. */
+	/** Allocation-free observation of dispatcher activity within one test scope. */
 	struct sqlite_store_fault_observation
 	{
 		std::uint64_t observed_event_count{};
@@ -183,12 +116,9 @@ namespace cxxlens::sdk
 	}
 
 	/**
-	 * Source-private thread-local fault scope.
-	 *
-	 * Only the outermost valid scope on a thread is active. A fault plan issues at most one
-	 * directive, even if an integration bug dispatches the same event more than once. An
-	 * `observe_only` plan never issues a directive and counts every exact matching event, providing
-	 * passive qualification evidence without changing execution.
+	 * Source-private thread-local fault scope. This declaration belongs only to BUILD_TESTING
+	 * support; production Store code consumes the typed dispatch contract without linking or
+	 * exposing a scope that can inject failures.
 	 */
 #if defined(__GNUC__) || defined(__clang__)
 	class __attribute__((visibility("default"))) sqlite_store_fault_scope
@@ -222,13 +152,4 @@ namespace cxxlens::sdk
 		bool active_{};
 		bool directive_issued_{};
 	};
-
-	/** Production no-op unless the calling thread owns one active private fault scope. */
-#if defined(__GNUC__) || defined(__clang__)
-	[[nodiscard]] __attribute__((visibility("default")))
-#else
-	[[nodiscard]]
-#endif
-	sqlite_store_fault_directive
-	dispatch_sqlite_store_fault(const sqlite_store_fault_event& event) noexcept;
 } // namespace cxxlens::sdk

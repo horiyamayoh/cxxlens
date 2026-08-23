@@ -1,4 +1,4 @@
-#include "sqlite_store_fault_injection_internal.hpp"
+#include "sqlite_store_fault_dispatch_internal.hpp"
 
 namespace cxxlens::sdk
 {
