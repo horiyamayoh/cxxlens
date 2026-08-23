@@ -9,9 +9,9 @@
 #include <utility>
 #include <vector>
 
-#include "llvm/clang22/materialization_store.hpp"
 #include "llvm/clang22/materialization_v4_claim_binding.hpp"
 #include "llvm/clang22/materialization_v4_incremental_ingress.hpp"
+#include "llvm/clang22/materialization_v4_store_source.hpp"
 #include "llvm/clang22/source_closure.hpp"
 
 namespace
@@ -243,45 +243,6 @@ namespace
 				digest('c')};
 	}
 
-	class sealed_partition_source final : public materialization_store_partition_replay_source
-	{
-	  public:
-		sealed_partition_source(const sdk::relation_engine& engine,
-								const materialization_v4_store_ingress& ingress,
-								std::vector<const materialization_v4_claim_sealed*> tasks)
-			: engine_{engine}, ingress_{&ingress}, tasks_{std::move(tasks)}
-		{
-		}
-
-		sdk::result<void> replay(const materialization_store_partition_consumer& consumer) override
-		{
-			if (!consumer)
-				return sdk::unexpected({"materialization.v4-store-source", "consumer", "missing"});
-			const std::span<const materialization_v4_claim_sealed* const> sealed{tasks_};
-			if (auto valid = validate_materialization_v4_incremental_receipt(
-					engine_, ingress_->receipt, sealed);
-				!valid)
-				return sdk::unexpected(std::move(valid.error()));
-			for (const auto* task : tasks_)
-			{
-				if (task == nullptr)
-					return sdk::unexpected({"materialization.v4-store-source", "task", "null"});
-				auto partition = task->translation.partition;
-				if (auto consumed = consumer(std::move(partition)); !consumed)
-					return consumed;
-			}
-			++replay_count;
-			return {};
-		}
-
-		std::size_t replay_count{};
-
-	  private:
-		const sdk::relation_engine& engine_;
-		const materialization_v4_store_ingress* ingress_{};
-		std::vector<const materialization_v4_claim_sealed*> tasks_;
-	};
-
 	void positive_v4_store_publication()
 	{
 		auto value = engine();
@@ -290,51 +251,53 @@ namespace
 		const std::array<const materialization_v4_claim_sealed*, 1U> sealed_tasks{&*sealed};
 		auto receipt = make_materialization_v4_incremental_receipt(value, sealed_tasks);
 		require(receipt && receipt->complete, "positive v4 receipt was not complete");
-		const materialization_v4_store_publication_authority authority{
-			"semantic-v2:sha256:" + std::string(64U, '9'),
-			"semantic-v2:sha256:" + std::string(64U, 'a'),
-			"publication-target:v4-positive"};
-		auto ingress =
-			admit_materialization_v4_store_ingress(value, *receipt, sealed_tasks, authority);
-		require(ingress.has_value(), "positive v4 Store ingress was rejected");
-
 		const auto selector_value = selector(value);
-		const validated_publication_request publication{
-			"memory", selector_value, selector_value.id(), true, std::nullopt, std::nullopt};
-		streaming_prepared_store_transaction prepared{
-			{selector_value,
-			 {1U, 0U, 0U},
-			 "sha256:6666666666666666666666666666666666666666666666666666666666666666",
-			 std::nullopt},
-			{},
-			{}};
-		sealed_partition_source source{value, *ingress, {&*sealed}};
-		auto observed = execute_materialization_store_streaming(
-			value, publication, std::move(prepared), source);
-		require(!observed.first_issue && observed.publication_attempted &&
-					observed.publish_returned_record && observed.publish_returned_handle &&
-					observed.candidate_manifest &&
-					observed.candidate_manifest->partitions.front().complete &&
-					source.replay_count == 2U,
-				"positive v4 result did not publish through bounded Store");
-		require(observed.publish_returned_record->state == sdk::publication_state::committed &&
-					!observed.publish_returned_record->corrupt,
-				"positive v4 publication was not committed and noncorrupt");
+		materialization_v4_provider_output_authority authority;
+		authority.materialization_request_id = receipt->materialization_request_id;
+		authority.publication = {"semantic-v2:sha256:" + std::string(64U, '9'),
+								 "semantic-v2:sha256:" + std::string(64U, 'a'),
+								 "publication-target:v4-positive"};
+		authority.snapshot = {
+			selector_value,
+			{1U, 0U, 0U},
+			digest('9'),
+			std::nullopt,
+		};
+		sdk::closure_candidate closure;
+		closure.relation_descriptor_id = sealed->translation.partition.relation_descriptor_id;
+		closure.subject_partition_id = sealed->partition_manifest.partition_id;
+		closure.partition_content_digest = sealed->partition_manifest.content_digest;
+		closure.coverage_digest = sealed->partition_manifest.coverage_digest;
+		closure.key_domain_digest = digest('d');
+		closure.condition = sealed->partition_binding.condition;
+		closure.interpretation = sealed->partition_binding.interpretation;
+		closure.assumption_set_id = sealed->partition_binding.assumption_set_id;
+		closure.closure_kind = "relation-key-enumeration";
+		closure.producer_semantics = sealed->partition_binding.producer_semantics;
+		closure.evidence_digest = digest('e');
+		authority.closures = {std::move(closure)};
+
+		auto source =
+			make_materialization_v4_store_source(value, *receipt, sealed_tasks, authority);
+		require(source.has_value(), "positive v4 Store source was rejected");
+		auto store = sdk::make_in_memory_snapshot_store(value);
+		require(store.has_value(), "positive v4 Store backend was not created");
+		auto published = publish_materialization_v4_store_source(value, *store, std::move(*source));
+		require(published.has_value(), "positive v4 Store source did not publish");
+		require(published->snapshot.publication().state == sdk::publication_state::committed &&
+					!published->snapshot.publication().corrupt &&
+					!published->snapshot.manifest().partitions.empty() &&
+					published->snapshot.manifest().partitions.front().complete &&
+					published->snapshot.manifest().closure_ids.size() == 1U &&
+					published->authority.publication == authority.publication &&
+					published->receipt == *receipt,
+				"positive v4 publication lost authority or was not committed");
 
 		sealed->translation.partition.coverage.front().state = "unknown";
 		sealed->translation.partition.coverage.front().reason = "tampered";
-		sealed_partition_source tampered_source{value, *ingress, {&*sealed}};
-		streaming_prepared_store_transaction tampered_prepared{
-			{selector_value,
-			 {1U, 0U, 0U},
-			 "sha256:6666666666666666666666666666666666666666666666666666666666666666",
-			 std::nullopt},
-			{},
-			{}};
-		auto rejected = execute_materialization_store_streaming(
-			value, publication, std::move(tampered_prepared), tampered_source);
-		require(rejected.first_issue && !rejected.publication_attempted,
-				"tampered v4 result crossed the Store publication boundary");
+		auto rejected =
+			make_materialization_v4_store_source(value, *receipt, sealed_tasks, authority);
+		require(!rejected, "tampered v4 output crossed the Store source boundary");
 	}
 } // namespace
 
