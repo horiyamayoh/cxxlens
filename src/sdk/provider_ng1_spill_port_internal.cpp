@@ -43,14 +43,15 @@ namespace cxxlens::sdk::provider::detail
 			return {"provider.spill-corrupt", std::string{field}, std::string{detail}};
 		}
 
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): digest value and diagnostic field are ordered protocol inputs
 		[[nodiscard]] result<void> valid_semantic_digest(const std::string_view value,
-														 const std::string_view field)
+																	 const std::string_view field)
 		{
 			constexpr std::string_view prefix{"semantic-v2:sha256:"};
 			if (!value.starts_with(prefix) || value.size() != prefix.size() + 64U)
 				return unexpected(corrupt_error(field, "semantic-v2"));
 			for (const auto byte : value.substr(prefix.size()))
-				if (!((byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f')))
+				if ((byte < '0' || byte > '9') && (byte < 'a' || byte > 'f'))
 					return unexpected(corrupt_error(field, "semantic-v2"));
 			return {};
 		}
@@ -63,9 +64,10 @@ namespace cxxlens::sdk::provider::detail
 			map = 5U,
 		};
 
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): encoded value and byte width are ordered wire-format inputs
 		void append_big_endian(std::vector<std::byte>& output,
-							   const std::uint64_t value,
-							   const std::size_t width)
+								   const std::uint64_t value, // NOLINT(bugprone-easily-swappable-parameters): encoded value and byte width are ordered wire-format inputs
+								   const std::size_t width)
 		{
 			for (std::size_t index = width; index > 0U; --index)
 				output.push_back(static_cast<std::byte>(value >> ((index - 1U) * 8U)));
@@ -100,6 +102,7 @@ namespace cxxlens::sdk::provider::detail
 			}
 		}
 
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): text value and diagnostic field are ordered protocol inputs
 		[[nodiscard]] result<std::vector<std::byte>> cbor_text(const std::string_view value,
 															   const std::string_view field)
 		{
@@ -208,7 +211,7 @@ namespace cxxlens::sdk::provider::detail
 					  add_text("payload_digest", record.payload_digest),
 					  add_text("record_digest", record.record_digest)})
 					if (!outcome)
-						return unexpected(std::move(outcome.error()));
+						return unexpected(outcome.error());
 
 				std::ranges::sort(fields,
 								  [](const encoded_field& left, const encoded_field& right)
@@ -414,7 +417,7 @@ namespace cxxlens::sdk::provider::detail
 									  require_value(payload_digest),
 									  require_value(record_digest)})
 				if (!value)
-					return unexpected(std::move(value.error()));
+					return unexpected(value.error());
 			if (*schema != spill_schema)
 				return unexpected(corrupt_error("schema", "unexpected"));
 

@@ -199,7 +199,7 @@ namespace cxxlens::sdk
 		{
 			std::array<std::byte, sizeof(value)> bytes{};
 			for (std::size_t index = 0; index < bytes.size(); ++index)
-				bytes[index] =
+				bytes.at(index) =
 					static_cast<std::byte>((value >> static_cast<unsigned>(index * 8U)) & 0xffU);
 			return {
 				"cxxlens.sqlite.reader-attachment-epoch.registry-v1",
@@ -425,11 +425,7 @@ namespace cxxlens::sdk
 
 		[[nodiscard]] std::shared_ptr<sqlite_shm_process_identity_issuer_state>
 		make_identity_issuer_state_for_registry(
-			std::weak_ptr<void> registry_state,
-			std::shared_ptr<std::atomic<std::uint64_t>> process_epoch,
-			std::shared_ptr<std::atomic_bool> registry_quarantine_latch,
-			std::shared_ptr<std::atomic_bool> registry_issuer_owner_latch,
-			std::uint64_t expected_process_epoch,
+			sqlite_shm_identity_issuer_registry_bindings bindings,
 			const sqlite_backend_opaque_identity& process_instance,
 			std::uint64_t first_sequence);
 		[[nodiscard]] sqlite_shm_reader_lifecycle_identity_scope seal_identity_scope_for_registry(
@@ -727,6 +723,8 @@ namespace cxxlens::sdk
 			const std::uint64_t open_token{};
 			std::atomic<sqlite_shm_reader_open_phase> phase{sqlite_shm_reader_open_phase::active};
 			std::atomic_bool authority_valid{true};
+			// The counter must start at zero; this explicit initializer is intentional.
+			// NOLINTNEXTLINE(readability-redundant-member-init)
 			std::atomic_size_t descendant_authority_count{};
 		};
 
@@ -2791,7 +2789,7 @@ namespace cxxlens::sdk
 							return released.error();
 						}
 					}
-					return std::move(**result);
+					return **result;
 				}
 				catch (...)
 				{
@@ -3733,15 +3731,14 @@ namespace cxxlens::sdk
 
 						result.emplace(family->coordinator->complete_registry_reader_unmap(
 							unmap, receipt, completed_activity));
-						if (!*result &&
-							(result->error().reason ==
-								 sqlite_shm_lease_rejection_reason::lifecycle_ambiguous ||
-							 result->error().reason ==
-								 sqlite_shm_lease_rejection_reason::quarantined))
-							synchronize_coordinator_quarantines_locked();
-						else if (*result &&
-								 (*result)->kind() ==
-									 sqlite_shm_reader_unmap_terminal_kind::terminal_quarantined)
+						if ((!*result &&
+							 (result->error().reason ==
+								  sqlite_shm_lease_rejection_reason::lifecycle_ambiguous ||
+							  result->error().reason ==
+								  sqlite_shm_lease_rejection_reason::quarantined)) ||
+							(*result &&
+							 (*result)->kind() ==
+								 sqlite_shm_reader_unmap_terminal_kind::terminal_quarantined))
 							synchronize_coordinator_quarantines_locked();
 					}
 					if (!result)
@@ -4156,7 +4153,7 @@ namespace cxxlens::sdk
 							return released.error();
 						}
 					}
-					return std::move(**result);
+					return **result;
 				}
 				catch (...)
 				{
@@ -4509,7 +4506,8 @@ namespace cxxlens::sdk
 					return rejection(sqlite_shm_lease_rejection_reason::stale_token);
 				try
 				{
-					auto prepared = receipt;
+					// Snapshot the caller's receipt before taking the registry lock.
+					auto prepared = receipt; // NOLINT(performance-unnecessary-copy-initialization)
 					std::scoped_lock lock{mutex_};
 					synchronize_activity_controls_locked();
 					synchronize_reader_open_controls_locked();
@@ -7946,10 +7944,12 @@ namespace cxxlens::sdk
 	bool sqlite_shm_reader_attachment_authority::validate_active_authority(
 		const sqlite_shm_registry_family_pin& family,
 		const sqlite_shm_reader_attachment_reservation_identity& attachment) const noexcept
-	{
-		if (!retains_exact_lifetimes(attachment))
-			return false;
-		const auto& activity = *state_->activity;
+		{
+			if (!retains_exact_lifetimes(attachment))
+				return false;
+			if (!state_ || !state_->activity || !state_->audit_seal)
+				return false;
+			const auto& activity = *state_->activity;
 		const auto control = activity.control_;
 		const auto registry = activity.state_.lock();
 		const auto audit_control = state_->audit_seal->control_.lock();
@@ -8060,10 +8060,12 @@ namespace cxxlens::sdk
 	bool sqlite_shm_reader_map_predelegate_authority::validate_active_authority(
 		const sqlite_shm_registry_family_pin& family,
 		const sqlite_shm_reader_attachment_map_request& request) const noexcept
-	{
-		if (!valid_for_predelegation(request))
-			return false;
-		const auto& activity = *state_->activity;
+		{
+			if (!valid_for_predelegation(request))
+				return false;
+			if (!state_ || !state_->activity || !state_->audit_seal)
+				return false;
+			const auto& activity = *state_->activity;
 		const auto control = activity.control_;
 		const auto registry = activity.state_.lock();
 		const auto audit_control = state_->audit_seal->control_.lock();
@@ -8260,14 +8262,14 @@ namespace cxxlens::sdk
 		std::optional<sqlite_shm_reader_session> session,
 		std::optional<sqlite_shm_lease_rejection> rejection_value) noexcept
 		: kind_{kind}, proposal_request_{std::move(proposal_request)}, session_{std::move(session)},
-		  rejection_{std::move(rejection_value)}
+		  rejection_{rejection_value}
 	{
 	}
 
 	sqlite_shm_reader_session_admission::sqlite_shm_reader_session_admission(
 		sqlite_shm_reader_session_admission&& other) noexcept
 		: kind_{other.kind_}, proposal_request_{std::move(other.proposal_request_)},
-		  session_{std::move(other.session_)}, rejection_{std::move(other.rejection_)}
+		  session_{std::move(other.session_)}, rejection_{other.rejection_}
 	{
 	}
 
@@ -8586,7 +8588,7 @@ namespace cxxlens::sdk
 
 	sqlite_shm_registry_family_pin::sqlite_shm_registry_family_pin(
 		std::shared_ptr<detail::sqlite_shm_mapping_registry_state> state,
-		const coordinates value) noexcept
+		coordinates value) noexcept
 		: state_{std::move(state)}, process_epoch_{value.process_epoch},
 		  alias_token_{value.alias_token}, family_epoch_{value.family_epoch},
 		  pin_token_{value.pin_token},
@@ -8711,11 +8713,11 @@ namespace cxxlens::sdk
 		: state_{std::move(state)},
 		  identity_issuer_owner_latch_{std::make_shared<std::atomic_bool>(true)},
 		  identity_issuer_state_{detail::make_identity_issuer_state_for_registry(
-			  std::weak_ptr<void>{state_},
-			  state_->process_epoch_latch_for_identity_issuer(),
-			  state_->registry_quarantine_latch_for_identity_issuer(),
-			  identity_issuer_owner_latch_,
-			  state_->process_epoch_for_identity_issuer(),
+			  {.registry_state = std::weak_ptr<void>{state_},
+			   .process_epoch = state_->process_epoch_latch_for_identity_issuer(),
+			   .registry_quarantine_latch = state_->registry_quarantine_latch_for_identity_issuer(),
+			   .registry_issuer_owner_latch = identity_issuer_owner_latch_,
+			   .expected_process_epoch = state_->process_epoch_for_identity_issuer()},
 			  state_->process_instance_for_identity_issuer(),
 			  1U)}
 	{
@@ -9650,7 +9652,7 @@ namespace cxxlens::sdk
 		return sqlite_shm_verified_reader_unmap_terminal_receipt{unmap,
 																 std::move(callback),
 																 evidence_kind,
-																 std::move(native_status),
+																 native_status,
 																 caller_delete_flag,
 																 delegated_delete_flag,
 																 std::move(native_effect_receipt),
@@ -9671,7 +9673,7 @@ namespace cxxlens::sdk
 		return sqlite_shm_verified_reader_unmap_terminal_receipt{close,
 																 std::move(callback),
 																 evidence_kind,
-																 std::move(native_status),
+																 native_status,
 																 caller_delete_flag,
 																 delegated_delete_flag,
 																 std::move(native_effect_receipt),
@@ -9689,7 +9691,7 @@ namespace cxxlens::sdk
 		return sqlite_shm_verified_reader_close_terminal_receipt{close,
 																 std::move(callback),
 																 evidence_kind,
-																 std::move(native_status),
+																 native_status,
 																 std::move(native_effect_receipt)};
 	}
 
@@ -9704,7 +9706,7 @@ namespace cxxlens::sdk
 		return sqlite_shm_verified_reader_close_terminal_receipt{close,
 																 std::move(callback),
 																 evidence_kind,
-																 std::move(native_status),
+																 native_status,
 																 std::move(native_effect_receipt)};
 	}
 

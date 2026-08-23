@@ -19,11 +19,12 @@ namespace cxxlens::detail::clang22::materialization
 {
 	namespace
 	{
-		constexpr std::size_t line_index_scan_bytes = 64U * 1024U;
+		constexpr std::size_t line_index_scan_bytes = std::size_t{64U} * 1024U;
 		constexpr std::string_view line_index_contract = "cxxlens.byte-line-index.v1";
-		constexpr char line_index_identity_domain[] = "cxxlens\0line-index\0v1\0";
+		constexpr std::string_view line_index_identity_domain{
+			"cxxlens\0line-index\0v1\0", sizeof("cxxlens\0line-index\0v1\0") - 1U};
 
-		[[nodiscard]] sdk::error limit_error(std::string)
+		[[nodiscard]] sdk::error limit_error(std::string_view)
 		{
 			return materialization_admission_no_response();
 		}
@@ -132,7 +133,7 @@ namespace cxxlens::detail::clang22::materialization
 			{
 				std::array<std::byte, 8U> bytes{};
 				for (std::size_t index{}; index < bytes.size(); ++index)
-					bytes[index] = static_cast<std::byte>(
+					bytes.at(index) = static_cast<std::byte>(
 						(value >> (56U - static_cast<unsigned>(index * 8U))) & 0xffU);
 				return append(bytes);
 			}
@@ -159,7 +160,7 @@ namespace cxxlens::detail::clang22::materialization
 					return framed;
 				std::array<std::byte, 8U> bytes{};
 				for (std::uint64_t index{}; index < width; ++index)
-					bytes[static_cast<std::size_t>(index)] =
+					bytes.at(static_cast<std::size_t>(index)) =
 						static_cast<std::byte>((value >> ((width - index - 1U) * 8U)) & 0xffU);
 				return append(std::span{bytes}.first(static_cast<std::size_t>(width)));
 			}
@@ -202,6 +203,7 @@ namespace cxxlens::detail::clang22::materialization
 
 		[[nodiscard]] sdk::result<std::string>
 		sealed_line_index_identity(materialization_replayable_spool& storage,
+								   // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): exact line-index metadata fields
 								   const std::uint64_t size_bytes,
 								   const std::uint64_t newline_count,
 								   const std::uint64_t offset_items_bytes,
@@ -212,8 +214,7 @@ namespace cxxlens::detail::clang22::materialization
 			if (!line_digest || !verification_digest)
 				return sdk::unexpected(materialization_admission_no_response());
 			digest_writer writer{*line_digest};
-			const auto domain = std::string_view{line_index_identity_domain,
-												 sizeof(line_index_identity_domain) - 1U};
+			const auto domain = line_index_identity_domain;
 			if (auto appended =
 					writer.append(std::as_bytes(std::span{domain.data(), domain.size()}));
 				!appended)
@@ -258,8 +259,10 @@ namespace cxxlens::detail::clang22::materialization
 				const auto bytes = std::span{buffer}.first(*read);
 				if (auto updated = verification_digest->update(bytes); !updated)
 					return sdk::unexpected(io_error("source", updated.error()));
-				for (std::size_t index{}; index < bytes.size(); ++index)
-					if (bytes[index] == std::byte{'\n'})
+				std::size_t index{};
+				for (const auto byte : bytes)
+				{
+					if (byte == std::byte{'\n'})
 					{
 						const auto line_offset = offset + static_cast<std::uint64_t>(index) + 1U;
 						++observed_newlines;
@@ -270,6 +273,8 @@ namespace cxxlens::detail::clang22::materialization
 						if (auto value = writer.nonnegative_integer(line_offset); !value)
 							return sdk::unexpected(std::move(value.error()));
 					}
+					++index;
+				}
 				offset += static_cast<std::uint64_t>(*read);
 			}
 			if (observed_newlines != newline_count || observed_items_bytes != offset_items_bytes)
@@ -324,14 +329,18 @@ namespace cxxlens::detail::clang22::materialization
 						poisoned_ = true;
 						return sdk::unexpected(io_error("source", hashed.error()));
 					}
-					for (std::size_t index{}; index < bytes.size(); ++index)
-						if (bytes[index] == std::byte{'\n'})
+					std::size_t index{};
+					for (const auto byte : bytes)
+					{
+						if (byte == std::byte{'\n'})
 						{
 							const auto offset =
 								size_bytes_ + static_cast<std::uint64_t>(index) + 1U;
 							++newline_count_;
 							offset_items_bytes_ += 8U + canonical_integer_bytes(offset);
 						}
+						++index;
+					}
 					size_bytes_ += static_cast<std::uint64_t>(bytes.size());
 					return {};
 				}

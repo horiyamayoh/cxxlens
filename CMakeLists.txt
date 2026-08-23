@@ -463,6 +463,13 @@ add_library(
   src/llvm/clang22/materialization_report.cpp
   src/llvm/clang22/materialization_public_report.cpp
   src/llvm/clang22/materialization_pipeline.cpp)
+# These two implementations are byte-exact source-closure bindings. Their
+# frozen bytes are checked by check_ng_source_closure_transport.py; do not let
+# a newer clang-tidy policy rewrite or reject either immutable compatibility
+# body. They remain compiled and covered by their product contract tests.
+set_source_files_properties(
+  src/llvm/clang22/materialization_request_v2_1.cpp
+  src/llvm/clang22/provider_task_v3.cpp PROPERTIES SKIP_LINTING ON)
 target_link_libraries(
   cxxlens_clang22_materializer_core
   PUBLIC cxxlens::base

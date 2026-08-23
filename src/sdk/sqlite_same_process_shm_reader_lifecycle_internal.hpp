@@ -58,6 +58,7 @@ namespace cxxlens::sdk::detail
 	};
 
 	[[nodiscard]] constexpr bool is_sqlite_shm_reader_outer_read_transition(
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): ordered state-machine edge
 		const sqlite_shm_reader_outer_read_phase origin,
 		const sqlite_shm_reader_outer_read_phase destination) noexcept
 	{
@@ -151,6 +152,7 @@ namespace cxxlens::sdk::detail
 	};
 
 	[[nodiscard]] constexpr bool is_sqlite_shm_reader_attachment_reservation_transition(
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): ordered reservation edge
 		const sqlite_shm_reader_attachment_reservation_phase origin,
 		const sqlite_shm_reader_attachment_reservation_phase destination) noexcept
 	{
@@ -200,6 +202,7 @@ namespace cxxlens::sdk::detail
 	};
 
 	[[nodiscard]] constexpr bool is_sqlite_shm_reader_session_reservation_transition(
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): ordered reservation edge
 		const sqlite_shm_reader_session_reservation_phase origin,
 		const sqlite_shm_reader_session_reservation_phase destination) noexcept
 	{
@@ -337,6 +340,7 @@ namespace cxxlens::sdk::detail
 	};
 
 	[[nodiscard]] constexpr bool is_sqlite_shm_reader_attachment_group_transition(
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): ordered group edge
 		const sqlite_shm_reader_attachment_group_phase origin,
 		const sqlite_shm_reader_attachment_group_phase destination) noexcept
 	{
@@ -375,6 +379,7 @@ namespace cxxlens::sdk::detail
 	};
 
 	[[nodiscard]] constexpr bool is_sqlite_shm_reader_logical_ack_transition(
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): ordered acknowledgement edge
 		const sqlite_shm_reader_logical_ack_phase origin,
 		const sqlite_shm_reader_logical_ack_phase destination) noexcept
 	{
@@ -408,6 +413,7 @@ namespace cxxlens::sdk::detail
 	};
 
 	[[nodiscard]] constexpr bool is_sqlite_shm_reader_late_close_drain_transition(
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): ordered drain edge
 		const sqlite_shm_reader_late_close_drain_phase origin,
 		const sqlite_shm_reader_late_close_drain_phase destination) noexcept
 	{
@@ -448,6 +454,7 @@ namespace cxxlens::sdk::detail
 	};
 
 	[[nodiscard]] constexpr bool is_sqlite_shm_reader_connection_close_transition(
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): ordered close edge
 		const sqlite_shm_reader_connection_close_phase origin,
 		const sqlite_shm_reader_connection_close_phase destination) noexcept
 	{
@@ -530,9 +537,10 @@ namespace cxxlens::sdk::detail
 		sqlite_shm_reader_cut_phase::terminal_quarantined,
 	};
 
-	[[nodiscard]] constexpr bool
-	is_sqlite_shm_reader_cut_transition(const sqlite_shm_reader_cut_phase origin,
-										const sqlite_shm_reader_cut_phase destination) noexcept
+	[[nodiscard]] constexpr bool is_sqlite_shm_reader_cut_transition(
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): ordered cut edge
+		const sqlite_shm_reader_cut_phase origin,
+		const sqlite_shm_reader_cut_phase destination) noexcept
 	{
 		using phase = sqlite_shm_reader_cut_phase;
 		switch (origin)

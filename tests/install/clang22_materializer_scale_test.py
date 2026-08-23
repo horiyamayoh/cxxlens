@@ -271,6 +271,8 @@ def bind_installed_request(
         raise ScaleTestError("installed occurrence manifest lacks tool and worker files")
     bound = copy.deepcopy(request)
     bound["tool"].update(
+        source_revision=occurrence["source_revision"],
+        source_tree=occurrence["source_tree"],
         installed_executable_digest=files[0]["digest"],
         occurrence_manifest_digest=oracle.content_digest(occurrence_bytes),
     )

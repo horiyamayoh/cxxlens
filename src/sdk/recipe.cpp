@@ -107,9 +107,13 @@ namespace cxxlens::recipes
 					return sdk::unexpected(std::move(row.error()));
 				++matches;
 				const auto target = row->values.find("output.target");
-				if (target != row->values.end() && target->second.value)
-					if (const auto* value = std::get_if<std::string>(&*target->second.value))
-						targets.insert(*value);
+				if (target != row->values.end())
+				{
+					const auto& value = target->second.value;
+					if (value)
+						if (const auto* text = std::get_if<std::string>(&*value))
+							targets.insert(*text);
+				}
 			}
 			if (targets.size() > 1U)
 				return call_search_state::ambiguous;

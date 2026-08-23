@@ -382,10 +382,6 @@ namespace cxxlens::sdk
 				owner->abandon();
 		}
 
-		void abandon_scope_owner(
-			const std::shared_ptr<sqlite_shm_reader_lifecycle_identity_scope_control>&
-				control) noexcept;
-
 		void
 		quarantine_scope(const std::shared_ptr<sqlite_shm_reader_lifecycle_identity_scope_control>&
 							 control) noexcept
@@ -438,6 +434,12 @@ namespace cxxlens::sdk
 			: public std::enable_shared_from_this<sqlite_shm_process_identity_issuer_state>
 		{
 		  public:
+			struct counter_seed
+			{
+				std::uint64_t incarnation{};
+				std::uint64_t first_sequence{};
+			};
+
 			sqlite_shm_process_identity_issuer_state(
 				std::weak_ptr<void> registry_state,
 				std::shared_ptr<std::atomic<std::uint64_t>> process_epoch,
@@ -445,15 +447,14 @@ namespace cxxlens::sdk
 				std::shared_ptr<std::atomic_bool> registry_issuer_owner_latch,
 				const std::uint64_t expected_process_epoch,
 				sqlite_backend_opaque_identity process_instance,
-				const std::uint64_t incarnation,
-				const std::uint64_t first_sequence) noexcept
+				const counter_seed counters) noexcept
 				: registry_state_{std::move(registry_state)},
 				  process_epoch_{std::move(process_epoch)},
 				  registry_quarantine_latch_{std::move(registry_quarantine_latch)},
 				  registry_issuer_owner_latch_{std::move(registry_issuer_owner_latch)},
 				  expected_process_epoch_{expected_process_epoch},
-				  process_instance_{std::move(process_instance)}, incarnation_{incarnation},
-				  next_sequence_{first_sequence}
+				  process_instance_{std::move(process_instance)},
+				  incarnation_{counters.incarnation}, next_sequence_{counters.first_sequence}
 			{
 			}
 
@@ -1031,6 +1032,9 @@ namespace cxxlens::sdk
 
 			[[nodiscard]] sqlite_shm_lease_result<
 				sqlite_shm_reader_zero_effect_identity_validation_capability>
+			// Each error() call is guarded by !result on a freshly returned two-alternative
+			// result, so bad_variant_access is unreachable without changing result semantics.
+			// NOLINTNEXTLINE(bugprone-exception-escape)
 			validate_zero_effect_identity_for_registry(
 				const sqlite_shm_reader_lifecycle_identity_scope& scope,
 				const sqlite_shm_issued_reader_callback_identity& callback,
@@ -1062,6 +1066,9 @@ namespace cxxlens::sdk
 
 			[[nodiscard]] sqlite_shm_lease_result<
 				sqlite_shm_reader_mapped_effect_identity_validation_capability>
+			// Each error() call is guarded by !result on a freshly returned two-alternative
+			// result, so bad_variant_access is unreachable without changing result semantics.
+			// NOLINTNEXTLINE(bugprone-exception-escape)
 			validate_mapped_effect_identity_for_registry(
 				const sqlite_shm_reader_lifecycle_identity_scope& scope,
 				const sqlite_shm_issued_reader_callback_identity& callback,
@@ -1175,9 +1182,11 @@ namespace cxxlens::sdk
 			}
 
 			[[nodiscard]] sqlite_shm_lease_result<void>
+			// error() is used only after !validated on a fresh two-alternative result.
+			// NOLINTNEXTLINE(bugprone-exception-escape)
 			retire_callback(const sqlite_shm_reader_lifecycle_identity_scope& scope,
 							sqlite_shm_issued_reader_callback_identity& callback,
-							const sqlite_shm_reader_callback_identity_role role) noexcept
+							const sqlite_shm_reader_callback_identity_role role) const noexcept
 			{
 				const auto control = callback.control_;
 				if (!control)
@@ -1216,10 +1225,12 @@ namespace cxxlens::sdk
 			}
 
 			[[nodiscard]] sqlite_shm_lease_result<void>
+			// error() is used only after !validated on a fresh two-alternative result.
+			// NOLINTNEXTLINE(bugprone-exception-escape)
 			retire_effect(const sqlite_shm_reader_lifecycle_identity_scope& scope,
 						  const sqlite_shm_issued_reader_callback_identity& callback,
 						  sqlite_shm_issued_reader_effect_identity& effect,
-						  const sqlite_shm_reader_effect_identity_role role) noexcept
+						  const sqlite_shm_reader_effect_identity_role role) const noexcept
 			{
 				const auto validated = validate_effect(scope, callback, effect, role);
 				if (!validated)
@@ -1243,10 +1254,12 @@ namespace cxxlens::sdk
 				return {};
 			}
 
+			// error() is used only after !validated on a fresh two-alternative result.
+			// NOLINTNEXTLINE(bugprone-exception-escape)
 			[[nodiscard]] sqlite_shm_lease_result<void> retire_session_terminal(
 				const sqlite_shm_reader_lifecycle_identity_scope& scope,
 				sqlite_shm_issued_reader_session_terminal_identity& terminal,
-				const sqlite_shm_reader_session_terminal_identity_role role) noexcept
+				const sqlite_shm_reader_session_terminal_identity_role role) const noexcept
 			{
 				const auto validated = validate_session_terminal(scope, terminal, role);
 				if (!validated)
@@ -1573,29 +1586,26 @@ namespace cxxlens::sdk
 
 		std::shared_ptr<sqlite_shm_process_identity_issuer_state>
 		make_identity_issuer_state_for_registry(
-			std::weak_ptr<void> registry_state,
-			std::shared_ptr<std::atomic<std::uint64_t>> process_epoch,
-			std::shared_ptr<std::atomic_bool> registry_quarantine_latch,
-			std::shared_ptr<std::atomic_bool> registry_issuer_owner_latch,
-			const std::uint64_t expected_process_epoch,
+			sqlite_shm_identity_issuer_registry_bindings bindings,
 			const sqlite_backend_opaque_identity& process_instance,
 			const std::uint64_t first_sequence)
 		{
 			const auto incarnation = allocate_issuer_incarnation();
 			if (!incarnation)
 				return {};
-			const auto stale_child_epoch = process_epoch;
+			const auto stale_child_epoch = bindings.process_epoch;
 			return std::shared_ptr<sqlite_shm_process_identity_issuer_state>{
-				new sqlite_shm_process_identity_issuer_state{std::move(registry_state),
-															 std::move(process_epoch),
-															 std::move(registry_quarantine_latch),
-															 std::move(registry_issuer_owner_latch),
-															 expected_process_epoch,
-															 process_instance,
-															 *incarnation,
-															 first_sequence},
-				[stale_child_epoch,
-				 expected_process_epoch](sqlite_shm_process_identity_issuer_state* state) noexcept
+				new sqlite_shm_process_identity_issuer_state{
+					std::move(bindings.registry_state),
+					std::move(bindings.process_epoch),
+					std::move(bindings.registry_quarantine_latch),
+					std::move(bindings.registry_issuer_owner_latch),
+					bindings.expected_process_epoch,
+					process_instance,
+					sqlite_shm_process_identity_issuer_state::counter_seed{*incarnation,
+																		   first_sequence}},
+				[stale_child_epoch, expected_process_epoch = bindings.expected_process_epoch](
+					sqlite_shm_process_identity_issuer_state* state) noexcept
 				{
 					// Match the registry state's qualified-fork destruction discipline: once the
 					// process-port hook invalidates the epoch, a child leaks its inherited state

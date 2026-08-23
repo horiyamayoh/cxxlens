@@ -52,7 +52,7 @@ namespace cxxlens::detail::clang22::materialization
 			}
 		};
 
-		[[nodiscard]] sdk::error identity_error(std::string)
+		[[nodiscard]] sdk::error identity_error(std::string_view)
 		{
 			return materialization_admission_no_response();
 		}
@@ -109,7 +109,7 @@ namespace cxxlens::detail::clang22::materialization
 			{
 				std::array<std::byte, 8U> encoded{};
 				for (std::size_t index{}; index < encoded.size(); ++index)
-					encoded[index] = static_cast<std::byte>(
+					encoded.at(index) = static_cast<std::byte>(
 						(value >> ((encoded.size() - 1U - index) * 8U)) & 0xffU);
 				return write(encoded);
 			}
@@ -152,7 +152,7 @@ namespace cxxlens::detail::clang22::materialization
 					buffer_offset_ = 0U;
 					buffer_size_ = *read;
 				}
-				const auto value = std::to_integer<unsigned char>(buffer_[buffer_offset_++]);
+				const auto value = std::to_integer<unsigned char>(buffer_.at(buffer_offset_++));
 				++position_;
 				return static_cast<int>(value);
 			}
@@ -183,7 +183,7 @@ namespace cxxlens::detail::clang22::materialization
 				++decoded_size_;
 				if (output_ == nullptr)
 					return {};
-				buffer_[buffer_size_++] = static_cast<std::byte>(value);
+				buffer_.at(buffer_size_++) = static_cast<std::byte>(value);
 				if (buffer_size_ == buffer_.size())
 					return flush();
 				return {};
@@ -271,7 +271,7 @@ namespace cxxlens::detail::clang22::materialization
 				width = 4U;
 			}
 			for (std::size_t index{}; index < width; ++index)
-				if (auto pushed = output.push(encoded[index]); !pushed)
+				if (auto pushed = output.push(encoded.at(index)); !pushed)
 					return pushed;
 			return {};
 		}
@@ -335,7 +335,7 @@ namespace cxxlens::detail::clang22::materialization
 							constexpr std::string_view markers{"bfnrt"};
 							const auto index = markers.find(static_cast<char>(*escaped));
 							if (auto pushed =
-									output.push(static_cast<unsigned char>(decoded[index]));
+									output.push(static_cast<unsigned char>(decoded.at(index)));
 								!pushed)
 								return sdk::unexpected(std::move(pushed.error()));
 							break;
@@ -415,14 +415,14 @@ namespace cxxlens::detail::clang22::materialization
 						return sdk::unexpected(continuation
 												   ? identity_error("source-content-invalid-utf8")
 												   : std::move(continuation.error()));
-					encoded[index] = static_cast<unsigned char>(*continuation);
-					code_point = (code_point << 6U) | (encoded[index] & 0x3fU);
+					encoded.at(index) = static_cast<unsigned char>(*continuation);
+					code_point = (code_point << 6U) | (encoded.at(index) & 0x3fU);
 				}
 				if (code_point < minimum || code_point > 0x10ffffU ||
 					(code_point >= 0xd800U && code_point <= 0xdfffU))
 					return sdk::unexpected(identity_error("source-content-invalid-utf8"));
 				for (std::size_t index{}; index < width; ++index)
-					if (auto pushed = output.push(encoded[index]); !pushed)
+					if (auto pushed = output.push(encoded.at(index)); !pushed)
 						return sdk::unexpected(std::move(pushed.error()));
 			}
 		}
@@ -468,7 +468,7 @@ namespace cxxlens::detail::clang22::materialization
 				return length;
 			std::array<std::byte, 8U> encoded{};
 			for (std::size_t index{}; index < width; ++index)
-				encoded[index] =
+				encoded.at(index) =
 					static_cast<std::byte>((magnitude >> ((width - 1U - index) * 8U)) & 0xffU);
 			return output.write(std::span{encoded}.first(width));
 		}

@@ -1230,7 +1230,7 @@ namespace cxxlens::sdk
 			return unexpected(
 				error{"store.backend-unavailable", "sqlite", "source-shm-readonly-qualification"});
 		return sqlite_shm_writer_reader_borrow_mint_capability{
-			custody_, map_token, generation, holder_token};
+			custody_, sqlite_shm_writer_reader_borrow_tokens{map_token, generation, holder_token}};
 	}
 
 	void sqlite_writer_shm_generation_epoch_authority::invalidate_for_testing() noexcept
@@ -1321,11 +1321,9 @@ namespace cxxlens::sdk
 	sqlite_shm_writer_reader_borrow_mint_capability::
 		sqlite_shm_writer_reader_borrow_mint_capability(
 			std::shared_ptr<detail::sqlite_writer_shm_generation_epoch_custody> custody,
-			const std::uint64_t map_token,
-			const std::uint64_t generation,
-			const std::uint64_t holder_token) noexcept
-		: custody_{std::move(custody)}, map_token_{map_token}, generation_{generation},
-		  holder_token_{holder_token}
+			const sqlite_shm_writer_reader_borrow_tokens tokens) noexcept
+		: custody_{std::move(custody)}, map_token_{tokens.map_token},
+		  generation_{tokens.generation}, holder_token_{tokens.holder_token}
 	{
 	}
 

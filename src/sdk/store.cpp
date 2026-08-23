@@ -239,7 +239,7 @@ namespace cxxlens::sdk
 				std::array<std::byte, 8U> encoded{};
 				std::size_t index{};
 				for (int shift = 56; shift >= 0; shift -= 8)
-					encoded[index++] = static_cast<std::byte>((value >> shift) & 0xffU);
+					encoded.at(index++) = static_cast<std::byte>((value >> shift) & 0xffU);
 				append(encoded);
 			}
 			void boolean(const bool value)
@@ -1902,7 +1902,7 @@ namespace cxxlens::sdk
 
 		  private:
 			std::unique_ptr<sqlite_bounded_byte_source> source_;
-			std::array<std::byte, 64U * 1024U> scratch_{};
+			std::array<std::byte, std::size_t{64U} * 1024U> scratch_{};
 			std::uint64_t expected_size_{};
 			std::uint64_t offset_{};
 		};
@@ -2291,7 +2291,7 @@ namespace cxxlens::sdk
 		constexpr int sqlite_wal_read_lock_base = 3;
 		constexpr int sqlite_wal_read_lock_count = 5;
 		constexpr unsigned int sqlite_prepare_persistent = 0x01U;
-		constexpr std::size_t sqlite_payload_chunk_maximum = 8U * 1024U * 1024U;
+		constexpr std::size_t sqlite_payload_chunk_maximum = std::size_t{8U} * 1024U * 1024U;
 		thread_local bool sqlite_source_shm_symbols_available_for_testing = true;
 
 		enum class sqlite_physical_format : std::uint8_t
@@ -2685,24 +2685,24 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool
 		confirmed_connection_close(const sqlite_connection_close_outcome& outcome) noexcept
 		{
-			if (!std::holds_alternative<sqlite_confirmed_close_token>(outcome))
+			const auto* token = std::get_if<sqlite_confirmed_close_token>(&outcome);
+			if (token == nullptr)
 				return false;
-			const auto& token = std::get<sqlite_confirmed_close_token>(outcome);
-			return token.valid() && token.kind() == sqlite_confirmed_close_kind::sqlite_ok &&
-				token.close_was_attempted();
+			return token->valid() && token->kind() == sqlite_confirmed_close_kind::sqlite_ok &&
+				token->close_was_attempted();
 		}
 
 		[[nodiscard]] bool
 		confirmed_failed_open_resolution(const sqlite_connection_close_outcome& outcome) noexcept
 		{
-			if (!std::holds_alternative<sqlite_confirmed_close_token>(outcome))
+			const auto* token = std::get_if<sqlite_confirmed_close_token>(&outcome);
+			if (token == nullptr)
 				return false;
-			const auto& token = std::get<sqlite_confirmed_close_token>(outcome);
-			return token.valid() &&
-				((token.kind() == sqlite_confirmed_close_kind::sqlite_ok &&
-				  token.close_was_attempted()) ||
-				 (token.kind() == sqlite_confirmed_close_kind::no_connection &&
-				  !token.close_was_attempted()));
+			return token->valid() &&
+				((token->kind() == sqlite_confirmed_close_kind::sqlite_ok &&
+				  token->close_was_attempted()) ||
+				 (token->kind() == sqlite_confirmed_close_kind::no_connection &&
+				  !token->close_was_attempted()));
 		}
 
 		class sqlite_statement
@@ -2770,7 +2770,10 @@ namespace cxxlens::sdk
 						store_error("store.sqlite-failure", "database", database_message()));
 				return {};
 			}
-			[[nodiscard]] result<void> bind_unsigned(const int index, const std::uint64_t value)
+			// Parameter order mirrors SQLite's bind API: ordinal first, encoded value second.
+			[[nodiscard]] result<void>
+			bind_unsigned(const int index, // NOLINT(bugprone-easily-swappable-parameters)
+						  const std::uint64_t value)
 			{
 				const auto encoded = std::bit_cast<std::int64_t>(value);
 				if (api_->bind_int64(statement_, index, encoded) != sqlite_ok)
@@ -2886,7 +2889,10 @@ namespace cxxlens::sdk
 			}
 
 		  private:
-			sqlite_statement(std::shared_ptr<sqlite_api> api, void* database, void* statement)
+			// The two opaque handles have distinct SQLite ownership roles.
+			sqlite_statement(std::shared_ptr<sqlite_api> api,
+							 void* database, // NOLINT(bugprone-easily-swappable-parameters)
+							 void* statement)
 				: api_{std::move(api)}, database_{database}, statement_{statement}
 			{
 			}
@@ -2897,6 +2903,8 @@ namespace cxxlens::sdk
 			}
 			[[nodiscard]] static void (*sqlite_transient())(void*)
 			{
+				// SQLite defines SQLITE_TRANSIENT as the never-invoked all-bits-one callback.
+				// NOLINTNEXTLINE(performance-no-int-to-ptr)
 				return reinterpret_cast<void (*)(void*)>(static_cast<std::intptr_t>(-1));
 			}
 
@@ -2909,8 +2917,10 @@ namespace cxxlens::sdk
 		{
 		  public:
 			[[nodiscard]] static result<std::unique_ptr<sqlite_blob_byte_source>>
+			// rowid selects the blob; expected_size bounds reads from that selection.
+			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 			open(sqlite_database& database,
-				 const std::int64_t rowid,
+				 const std::int64_t rowid, // NOLINT(bugprone-easily-swappable-parameters)
 				 const std::uint64_t expected_size)
 			{
 				if (expected_size > static_cast<std::uint64_t>(std::numeric_limits<int>::max()))
@@ -2932,7 +2942,15 @@ namespace cxxlens::sdk
 					(void)database.api()->blob_close(blob);
 				};
 				const auto byte_count = database.api()->blob_bytes(blob);
-				if (byte_count < 0 || static_cast<std::uint64_t>(byte_count) != expected_size)
+				if (byte_count < 0)
+				{
+					close_on_failure();
+					return unexpected(store_error("store.format-incompatible",
+												  "sqlite-physical-format",
+												  "v2-profile-mismatch"));
+				}
+				const auto observed_size = static_cast<std::uint64_t>(byte_count);
+				if (observed_size != expected_size)
 				{
 					close_on_failure();
 					return unexpected(store_error("store.format-incompatible",
@@ -2991,9 +3009,11 @@ namespace cxxlens::sdk
 		class sqlite_v2_payload_source final : public sqlite_replayable_byte_source
 		{
 		  public:
-			sqlite_v2_payload_source(sqlite_database& database,
-									 const std::int64_t rowid,
-									 const std::uint64_t byte_count)
+			// rowid identifies storage while byte_count establishes the read bound.
+			sqlite_v2_payload_source(
+				sqlite_database& database,
+				const std::int64_t rowid, // NOLINT(bugprone-easily-swappable-parameters)
+				const std::uint64_t byte_count)
 				: database_{&database}, rowid_{rowid}, byte_count_{byte_count}
 			{
 			}
@@ -3592,7 +3612,7 @@ namespace cxxlens::sdk
 					 })
 				{
 					if (!valid)
-						return unexpected(std::move(valid.error()));
+						return unexpected(valid.error());
 					if (!*valid)
 						return false;
 				}
@@ -3608,7 +3628,7 @@ namespace cxxlens::sdk
 				 })
 			{
 				if (!valid)
-					return unexpected(std::move(valid.error()));
+					return unexpected(valid.error());
 				if (!*valid)
 					return false;
 			}
@@ -3643,7 +3663,7 @@ namespace cxxlens::sdk
 				 })
 			{
 				if (!valid)
-					return unexpected(std::move(valid.error()));
+					return unexpected(valid.error());
 				if (!*valid)
 					return false;
 			}
@@ -4390,6 +4410,8 @@ namespace cxxlens::sdk
 		}
 
 		[[nodiscard]] result<sqlite_backend_opaque_identity>
+		// profile and path occupy distinct fields in the signed prerequisite encoding.
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 		make_effect_prerequisite(const std::string_view profile,
 								 const std::string_view path,
 								 const sqlite_backend_opaque_identity& capability_token,
@@ -4851,11 +4873,6 @@ namespace cxxlens::sdk
 						return std::nullopt;
 					route.mapped_route_seen = true;
 				}
-				else if (event.returned_status != sqlite_readonly_cantinit ||
-						 event.returned_mapping_nonnull)
-				{
-					return std::nullopt;
-				}
 				else
 				{
 					// READONLY/null normalization is part of the forwarding protocol, but it is
@@ -5110,8 +5127,8 @@ namespace cxxlens::sdk
 			{
 				auto header = read_active_wal_header(*source_wal->held_object);
 				if (!header)
-					return unexpected(std::move(header.error()));
-				anchor.wal_header = std::move(*header);
+					return unexpected(header.error());
+				anchor.wal_header = *header;
 			}
 			return anchor;
 		}
@@ -5153,10 +5170,6 @@ namespace cxxlens::sdk
 					return unexpected(sqlite_active_wal_source_changed());
 			}
 			else if (after->wal_header != before.wal_header)
-			{
-				return unexpected(sqlite_active_wal_source_changed());
-			}
-			else if (!before.wal_header && after->wal_header)
 			{
 				return unexpected(sqlite_active_wal_source_changed());
 			}
@@ -5576,6 +5589,8 @@ namespace cxxlens::sdk
 		}
 
 		[[nodiscard]] result<sqlite_backend_opaque_identity>
+		// profile and path occupy distinct fields in the signed prerequisite encoding.
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 		make_wal_coordination_prerequisite(const std::string_view profile,
 										   const std::string_view path,
 										   const sqlite_backend_opaque_identity& capability_token,
@@ -6344,7 +6359,7 @@ namespace cxxlens::sdk
 			auto builder = observation->create_private_snapshot();
 			if (!builder)
 				return unexpected(sqlite_quiescent_observation_failure());
-			std::array<std::byte, 64U * 1024U> scratch{};
+			std::array<std::byte, std::size_t{64U} * 1024U> scratch{};
 			auto private_snapshot = main->held_object->copy_exact(**builder, scratch);
 			if (!private_snapshot)
 				return unexpected(sqlite_quiescent_observation_failure());
@@ -6493,7 +6508,6 @@ namespace cxxlens::sdk
 		{
 			if (!observation)
 				return unexpected(sqlite_quiescent_observation_failure());
-			bool writer_epoch_armed{};
 			auto anchor_pin = sqlite_authority_anchor_pin(source_anchor);
 			if (!anchor_pin)
 			{
@@ -6515,7 +6529,7 @@ namespace cxxlens::sdk
 			// source anchor before opening the new main handle; the post-open fallback cannot
 			// safely do so once any native map has been observed.  This keeps the writer lease
 			// strictly before a same-process readonly reader can delegate its first map.
-			if (require_writer_epoch && requires_source_shm_writer_epoch && !writer_epoch_armed &&
+			if (require_writer_epoch && requires_source_shm_writer_epoch &&
 				!writer_target_namespace_epoch && !writer_sqlite_source_id)
 			{
 				const auto* wal = observed_entry(source_anchor.namespace_census,
@@ -6539,7 +6553,6 @@ namespace cxxlens::sdk
 							std::move(*target_epoch), std::move(*source_id_identity));
 						!armed)
 						return unexpected(std::move(armed.error()));
-					writer_epoch_armed = true;
 				}
 			}
 			if (writer_target_namespace_epoch || writer_sqlite_source_id)
@@ -6551,7 +6564,6 @@ namespace cxxlens::sdk
 						std::move(*writer_sqlite_source_id));
 					!armed)
 					return unexpected(std::move(armed.error()));
-				writer_epoch_armed = true;
 			}
 			auto database = open_database(
 				api,
@@ -6561,7 +6573,6 @@ namespace cxxlens::sdk
 				{api, backend_lifetime, observation, std::move(anchor_pin)});
 			if (!database)
 				return unexpected(std::move(database.error()));
-			writer_epoch_armed = effect->observation->writer_shm_mapping_epoch_armed();
 			if (auto valid =
 					validate_read_write_open_observation(*effect->observation, *observation);
 				!valid)
@@ -6606,7 +6617,8 @@ namespace cxxlens::sdk
 			{
 				return unexpected(std::move(armed.error()));
 			}
-			if (!writer_epoch_armed && require_writer_epoch && requires_source_shm_writer_epoch &&
+			if (!effect->observation->writer_shm_mapping_epoch_armed() && require_writer_epoch &&
+				requires_source_shm_writer_epoch &&
 				!effect->observation->native_shm_map_attempted())
 			{
 				if (auto symbols = require_source_shm_readonly_symbols(*api); !symbols)
@@ -6627,7 +6639,6 @@ namespace cxxlens::sdk
 						std::move(*target_epoch), *source_id_identity);
 					!epoch)
 					return unexpected(std::move(epoch.error()));
-				writer_epoch_armed = true;
 			}
 			if (requires_source_shm_writer_epoch)
 			{
@@ -6645,7 +6656,7 @@ namespace cxxlens::sdk
 		}
 
 		[[nodiscard]] result<observed_opened_sqlite_database> open_observed_store_database(
-			std::shared_ptr<sqlite_api> api,
+			const std::shared_ptr<sqlite_api>& api,
 			const std::string& path,
 			const std::string& vfs_name,
 			const std::shared_ptr<void>& backend_lifetime,
@@ -7103,7 +7114,7 @@ namespace cxxlens::sdk
 			auto builder = observation->create_private_snapshot();
 			if (!builder)
 				return unexpected(sqlite_quiescent_observation_failure());
-			std::array<std::byte, 64U * 1024U> scratch{};
+			std::array<std::byte, std::size_t{64U} * 1024U> scratch{};
 			auto private_snapshot = main->held_object->copy_exact(**builder, scratch);
 			if (!private_snapshot)
 				return unexpected(sqlite_quiescent_observation_failure());
@@ -7176,11 +7187,13 @@ namespace cxxlens::sdk
 				: 1U + static_cast<std::uint64_t>((byte_count - 1U) / sqlite_payload_chunk_maximum);
 		}
 
-		[[nodiscard]] result<void> insert_chunk_rows(sqlite_database& database,
-													 const std::string_view insert_sql,
-													 const std::string_view publication_id,
-													 const std::uint64_t generation,
-													 const std::span<const std::byte> payload)
+		// SQL text and publication identity are adjacent but semantically distinct inputs.
+		[[nodiscard]] result<void> insert_chunk_rows(
+			sqlite_database& database,
+			const std::string_view insert_sql, // NOLINT(bugprone-easily-swappable-parameters)
+			const std::string_view publication_id,
+			const std::uint64_t generation,
+			const std::span<const std::byte> payload)
 		{
 			auto insert = sqlite_statement::prepare(database, insert_sql, true);
 			if (!insert)
@@ -7227,10 +7240,13 @@ namespace cxxlens::sdk
 		{
 		  public:
 			[[nodiscard]] static result<std::unique_ptr<sqlite_chunk_insert_port>>
-			create(sqlite_database& database,
-				   const std::string_view insert_sql,
-				   const std::string_view publication_id,
-				   const std::uint64_t generation)
+			// SQL text and publication identity are adjacent but semantically distinct inputs.
+			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+			create(
+				sqlite_database& database,
+				const std::string_view insert_sql, // NOLINT(bugprone-easily-swappable-parameters)
+				const std::string_view publication_id,
+				const std::uint64_t generation)
 			{
 				auto insert = sqlite_statement::prepare(database, insert_sql, true);
 				if (!insert)
@@ -7329,10 +7345,13 @@ namespace cxxlens::sdk
 		{
 		  public:
 			[[nodiscard]] static result<std::unique_ptr<sqlite_statement_chunk_record_source>>
-			create(sqlite_database& database,
-				   const std::string_view select_sql,
-				   const std::string_view publication_id,
-				   const std::uint64_t generation)
+			// SQL text and publication identity are adjacent but semantically distinct inputs.
+			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+			create(
+				sqlite_database& database,
+				const std::string_view select_sql, // NOLINT(bugprone-easily-swappable-parameters)
+				const std::string_view publication_id,
+				const std::uint64_t generation)
 			{
 				auto selected = sqlite_statement::prepare(database, select_sql, true);
 				if (!selected)
@@ -7796,9 +7815,11 @@ namespace cxxlens::sdk
 		class sqlite_generation_rewrite_byte_source final : public sqlite_bounded_byte_source
 		{
 		  public:
+			// Size, byte offset, and replacement value form an ordered rewrite tuple.
+			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 			sqlite_generation_rewrite_byte_source(
 				std::unique_ptr<sqlite_bounded_byte_source> source,
-				const std::uint64_t expected_size,
+				const std::uint64_t expected_size, // NOLINT(bugprone-easily-swappable-parameters)
 				const std::uint64_t generation_offset,
 				const std::uint64_t generation) noexcept
 				: source_{std::move(source)}, expected_size_{expected_size},
@@ -7808,7 +7829,7 @@ namespace cxxlens::sdk
 				{
 					const auto shift =
 						static_cast<unsigned>((generation_bytes_.size() - 1U - index) * 8U);
-					generation_bytes_[index] =
+					generation_bytes_.at(index) =
 						static_cast<std::byte>((generation >> shift) & 0xffU);
 				}
 			}
@@ -7838,7 +7859,7 @@ namespace cxxlens::sdk
 					const auto position = generation_offset_ + index;
 					if (position >= begin && position < end)
 						output[static_cast<std::size_t>(position - begin)] =
-							generation_bytes_[index];
+							generation_bytes_.at(index);
 				}
 				offset_ = end;
 				return *read;
@@ -7856,10 +7877,13 @@ namespace cxxlens::sdk
 		{
 		  public:
 			[[nodiscard]] static result<std::shared_ptr<const sqlite_replayable_byte_source>>
-			create(std::shared_ptr<const sqlite_replayable_byte_source> source,
-				   const std::uint64_t expected_size,
-				   const std::uint64_t expected_generation,
-				   const std::uint64_t replacement_generation)
+			// Size and generations form an ordered validation/replacement tuple.
+			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+			create(
+				std::shared_ptr<const sqlite_replayable_byte_source> source,
+				const std::uint64_t expected_size, // NOLINT(bugprone-easily-swappable-parameters)
+				const std::uint64_t expected_generation,
+				const std::uint64_t replacement_generation)
 			{
 				if (!source || expected_size > std::numeric_limits<std::size_t>::max())
 					return unexpected(store_error("store.corrupt", "payload", "generation-source"));
@@ -7891,9 +7915,11 @@ namespace cxxlens::sdk
 			}
 
 		  private:
+			// Size, byte offset, and replacement generation form an ordered rewrite tuple.
+			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 			sqlite_generation_rewrite_payload_source(
 				std::shared_ptr<const sqlite_replayable_byte_source> source,
-				const std::uint64_t expected_size,
+				const std::uint64_t expected_size, // NOLINT(bugprone-easily-swappable-parameters)
 				const std::uint64_t generation_offset,
 				const std::uint64_t replacement_generation) noexcept
 				: source_{std::move(source)}, expected_size_{expected_size},
@@ -7911,9 +7937,11 @@ namespace cxxlens::sdk
 		class sqlite_window_rewrite_byte_source final : public sqlite_bounded_byte_source
 		{
 		  public:
+			// expected_size bounds the source while replacement_offset locates the edit.
+			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 			sqlite_window_rewrite_byte_source(
 				std::unique_ptr<sqlite_bounded_byte_source> source,
-				const std::uint64_t expected_size,
+				const std::uint64_t expected_size, // NOLINT(bugprone-easily-swappable-parameters)
 				const std::uint64_t replacement_offset,
 				std::shared_ptr<const std::vector<std::byte>> replacement)
 				: source_{std::move(source)}, expected_size_{expected_size},
@@ -7992,7 +8020,7 @@ namespace cxxlens::sdk
 				auto pass = source->open_pass();
 				if (!pass)
 					return unexpected(std::move(pass.error()));
-				std::array<std::byte, 64U * 1024U> scratch{};
+				std::array<std::byte, std::size_t{64U} * 1024U> scratch{};
 				std::uint64_t consumed{};
 				std::size_t matched{};
 				std::size_t found_count{};
@@ -8011,7 +8039,7 @@ namespace cxxlens::sdk
 						return unexpected(store_error("store.corrupt", "payload", "source-size"));
 					for (std::size_t index{}; index < *read && !found_offset; ++index)
 					{
-						const auto value = scratch[index];
+						const auto value = scratch.at(index);
 						while (matched != 0U && value != needle[matched])
 							matched = prefix[matched - 1U];
 						if (value == needle[matched])
@@ -8056,9 +8084,11 @@ namespace cxxlens::sdk
 			}
 
 		  private:
+			// expected_size bounds the source while replacement_offset locates the edit.
+			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 			sqlite_window_rewrite_payload_source(
 				std::shared_ptr<const sqlite_replayable_byte_source> source,
-				const std::uint64_t expected_size,
+				const std::uint64_t expected_size, // NOLINT(bugprone-easily-swappable-parameters)
 				const std::uint64_t replacement_offset,
 				std::shared_ptr<const std::vector<std::byte>> replacement)
 				: source_{std::move(source)}, expected_size_{expected_size},
@@ -8139,7 +8169,7 @@ namespace cxxlens::sdk
 				emitting_port = std::make_unique<sqlite_migration_fault_chunk_port>(
 					std::move(emitting_port), *migration_fault_ordinal, migration_fault_total);
 			sqlite_payload_chunk_framer framer{emitting_port.get()};
-			std::array<std::byte, 64U * 1024U> scratch{};
+			std::array<std::byte, std::size_t{64U} * 1024U> scratch{};
 			for (;;)
 			{
 				auto read = (*pass)->read(scratch);
@@ -8171,8 +8201,8 @@ namespace cxxlens::sdk
 				return unexpected(std::move(left_pass.error()));
 			if (!right_pass)
 				return unexpected(std::move(right_pass.error()));
-			std::array<std::byte, 64U * 1024U> left_bytes{};
-			std::array<std::byte, 64U * 1024U> right_bytes{};
+			std::array<std::byte, std::size_t{64U} * 1024U> left_bytes{};
+			std::array<std::byte, std::size_t{64U} * 1024U> right_bytes{};
 			std::uint64_t compared{};
 			for (;;)
 			{
@@ -8205,7 +8235,7 @@ namespace cxxlens::sdk
 			auto pass = source.open_pass();
 			if (!pass)
 				return unexpected(std::move(pass.error()));
-			std::array<std::byte, 64U * 1024U> scratch{};
+			std::array<std::byte, std::size_t{64U} * 1024U> scratch{};
 			sqlite_incremental_sha256 digest;
 			std::uint64_t consumed{};
 			for (;;)
@@ -8460,7 +8490,10 @@ namespace cxxlens::sdk
 		}
 
 		[[nodiscard]] result<std::vector<sqlite_persisted_publication>>
+		// Publication and chunk SQL statements have fixed, independently named roles.
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 		read_chunked_publications(sqlite_database& database,
+								  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 								  const std::string_view publication_select_sql,
 								  const std::string_view chunk_select_sql)
 		{
@@ -8710,7 +8743,8 @@ namespace cxxlens::sdk
 		receipt.pinned_underlying_vfs_identity = &underlying_vfs_identity;
 		receipt.pinned_underlying_vfs_app_data_identity = &underlying_vfs_app_data_identity;
 		sqlite_backend_connection_observation observation;
-		auto event = [&](const int page,
+		// page and native_status mirror distinct SQLite xShmMap callback fields.
+		auto event = [&](const int page, // NOLINT(bugprone-easily-swappable-parameters)
 						 const int native_status,
 						 const bool native_mapping_nonnull,
 						 const bool seen_before)
@@ -8748,7 +8782,8 @@ namespace cxxlens::sdk
 		receipt.pinned_underlying_vfs_identity = &underlying_vfs_identity;
 		receipt.pinned_underlying_vfs_app_data_identity = &underlying_vfs_app_data_identity;
 		sqlite_backend_connection_observation observation;
-		auto event = [&](const int page,
+		// page and native_status mirror distinct SQLite xShmMap callback fields.
+		auto event = [&](const int page, // NOLINT(bugprone-easily-swappable-parameters)
 						 const int native_status,
 						 const bool native_mapping_nonnull,
 						 const bool seen_before)
@@ -9250,7 +9285,7 @@ namespace cxxlens::sdk
 			auto pass = source.open_pass();
 			if (!pass)
 				return unexpected(std::move(pass.error()));
-			std::array<std::byte, 64U * 1024U> scratch{};
+			std::array<std::byte, std::size_t{64U} * 1024U> scratch{};
 			std::uint64_t consumed{};
 			for (;;)
 			{
@@ -10507,11 +10542,11 @@ namespace cxxlens::sdk
 					dispatch_fault(sqlite_store_fault_boundary::statement_finalize,
 								   sqlite_store_fault_timing::after);
 				if (finalize_before)
-					return unexpected(std::move(*finalize_before));
+					return unexpected(*finalize_before);
 				if (!finalized)
-					return unexpected(std::move(finalized.error()));
+					return unexpected(finalized.error());
 				if (finalize_after)
-					return unexpected(std::move(*finalize_after));
+					return unexpected(*finalize_after);
 				if (auto fault = dispatch_fault(sqlite_store_fault_boundary::format_marker,
 												sqlite_store_fault_timing::after);
 					fault)
@@ -11767,7 +11802,7 @@ namespace cxxlens::sdk
 		if (!api)
 			return unexpected(std::move(api.error()));
 		auto opened = open_observed_store_database(
-			std::move(*api), database_path, vfs_name, backend_lifetime, observation);
+			*api, database_path, vfs_name, backend_lifetime, observation);
 		if (!opened)
 			return unexpected(std::move(opened.error()));
 		auto implementation =
@@ -11776,8 +11811,8 @@ namespace cxxlens::sdk
 		implementation->sqlite_path = database_path;
 		implementation->sqlite_vfs_name = vfs_name;
 		implementation->sqlite_format = opened->format;
-		implementation->sqlite_observation = observation;
-		implementation->backend_lifetime = backend_lifetime;
+		implementation->sqlite_observation = std::move(observation);
+		implementation->backend_lifetime = std::move(backend_lifetime);
 		if (opened->source_anchor)
 			implementation->sqlite_source_anchor = *opened->source_anchor;
 		implementation->database = std::move(opened->database);
@@ -11788,7 +11823,8 @@ namespace cxxlens::sdk
 			if (!loaded)
 			{
 				auto failure = std::move(loaded.error());
-				if (auto stable = finish_private_read(*opened, database_path, *observation, false);
+				if (auto stable = finish_private_read(
+						*opened, database_path, *implementation->sqlite_observation, false);
 					!stable)
 					return unexpected(std::move(stable.error()));
 				return unexpected(std::move(failure));
@@ -11796,8 +11832,11 @@ namespace cxxlens::sdk
 			const bool handoff_to_current_writer =
 				opened->format == sqlite_physical_format::current_v3 && !opened->wal_only_capture &&
 				opened->active_wal_anchor.has_value();
-			if (auto stable = finish_private_read(
-					*opened, database_path, *observation, true, handoff_to_current_writer);
+			if (auto stable = finish_private_read(*opened,
+												  database_path,
+												  *implementation->sqlite_observation,
+												  true,
+												  handoff_to_current_writer);
 				!stable)
 				return unexpected(std::move(stable.error()));
 			if (!opened->source_anchor)
@@ -11845,8 +11884,8 @@ namespace cxxlens::sdk
 						opened->api,
 						database_path,
 						vfs_name,
-						backend_lifetime,
-						observation,
+						implementation->backend_lifetime,
+						implementation->sqlite_observation,
 						*implementation->sqlite_source_anchor,
 						handoff_to_current_writer ? opened->deferred_writer_target_namespace_epoch
 												  : nullptr,
@@ -11978,7 +12017,7 @@ namespace cxxlens::sdk
 					sql_quote(series_id);
 			else
 				return unexpected(store_error("store.corrupt", "test-series-head", "mutation"));
-			return store.implementation_->database->execute(std::move(sql));
+			return store.implementation_->database->execute(sql);
 		}
 		if (before == "test.duplicate-sequence")
 		{
@@ -12162,8 +12201,11 @@ namespace cxxlens::sdk
 			store, publication_id, "test.payload-schema", version_text, 0U);
 	}
 
+	// Publication identity and selected field are distinct test mutation coordinates.
 	result<void> rewrite_publication_identity_field_for_testing(
-		snapshot_store& store, const std::string_view publication_id, const std::string_view field)
+		snapshot_store& store,
+		const std::string_view publication_id, // NOLINT(bugprone-easily-swappable-parameters)
+		const std::string_view field)
 	{
 		std::scoped_lock lock{store.implementation_->mutex};
 		if (store.implementation_->database == nullptr)
@@ -12221,11 +12263,13 @@ namespace cxxlens::sdk
 			});
 	}
 
-	result<std::string> rewrite_snapshot_version_for_testing(snapshot_store& store,
-															 const std::string_view publication_id,
-															 const std::string_view component,
-															 const std::uint64_t wire_value,
-															 const std::uint32_t semantic_value)
+	// Named test coordinates and wire/semantic values intentionally preserve fixture order.
+	result<std::string> rewrite_snapshot_version_for_testing(
+		snapshot_store& store,
+		const std::string_view publication_id, // NOLINT(bugprone-easily-swappable-parameters)
+		const std::string_view component,
+		const std::uint64_t wire_value, // NOLINT(bugprone-easily-swappable-parameters)
+		const std::uint32_t semantic_value)
 	{
 		std::scoped_lock lock{store.implementation_->mutex};
 		if (store.implementation_->database == nullptr)
@@ -12374,10 +12418,12 @@ namespace cxxlens::sdk
 	}
 
 	result<std::string>
-	rewrite_publication_counters_for_testing(snapshot_store& store,
-											 const std::string_view publication_id,
-											 const std::uint64_t sequence,
-											 const std::uint64_t generation)
+	// sequence and generation are distinct persisted counters in fixture order.
+	rewrite_publication_counters_for_testing(
+		snapshot_store& store,
+		const std::string_view publication_id,
+		const std::uint64_t sequence, // NOLINT(bugprone-easily-swappable-parameters)
+		const std::uint64_t generation)
 	{
 		std::scoped_lock lock{store.implementation_->mutex};
 		const auto found = store.implementation_->publications.find(publication_id);

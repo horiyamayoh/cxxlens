@@ -1116,32 +1116,6 @@ def validate_vectors(
     return results
 
 
-def make_report(
-    contract: dict[str, Any], results: list[dict[str, Any]]
-) -> dict[str, Any]:
-    operators = sorted(contract["operator_profiles"], key=lambda row: row["id"])
-    comparisons = sum(int(row.get("backend_comparisons", 0)) for row in results)
-    public_results = [
-        {key: value for key, value in row.items() if key != "backend_comparisons"}
-        for row in results
-    ]
-    return {
-        "schema": "cxxlens.query-conformance-report.v1",
-        "contract_digest": digest(contract),
-        "operator_digests": [
-            {"id": row["id"], "digest": digest(row)} for row in operators
-        ],
-        "vector_results": public_results,
-        "backend_matrix": {
-            "backends": ["memory", "sqlite"],
-            "physical_orders": ["forward", "reverse", "seeded-shuffle"],
-            "comparisons": comparisons,
-            "all_equal": True,
-        },
-        "status": "green",
-    }
-
-
 def validate_design(root: pathlib.Path) -> None:
     design = (root / "docs/design/cxxlens_next_generation_integrated_design_ja.md").read_text(
         encoding="utf-8"
@@ -1194,10 +1168,9 @@ def main() -> int:
     args = arguments()
     root = args.root.resolve()
     contract, results = validate_all(root)
-    report = make_report(contract, results)
     print(
         f"verified {len(contract['operator_profiles'])} active query operators, "
-        f"{len(results)} vectors, contract {report['contract_digest']}"
+        f"{len(results)} vectors, contract {digest(contract)}"
     )
     return 0
 

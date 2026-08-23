@@ -287,8 +287,8 @@ namespace cxxlens::sdk
 			witness.residual_run_count = schedule.residual_run_count;
 			for (std::size_t index = 0U; index < schedule.residual_run_count; ++index)
 			{
-				witness.residual_runs[index] = schedule.residual_runs[index];
-				witness.residual_runs[index].format = residual_format;
+				witness.residual_runs.at(index) = schedule.residual_runs.at(index);
+				witness.residual_runs.at(index).format = residual_format;
 			}
 			witness.designated_final_edge = final_edge;
 			return witness;
@@ -299,8 +299,8 @@ namespace cxxlens::sdk
 		{
 			for (std::size_t index = 0U; index < witness.residual_run_count; ++index)
 			{
-				witness.residual_runs[index].format =
-					witness.residual_runs[index].population <= migration_population
+				witness.residual_runs.at(index).format =
+					witness.residual_runs.at(index).population <= migration_population
 					? sqlite_compaction_edge_format::legacy_v2
 					: sqlite_compaction_edge_format::current_v3;
 			}
@@ -663,7 +663,10 @@ namespace cxxlens::sdk
 		return left.size() == right.size() && std::equal(left.begin(), left.end(), right.begin());
 	}
 
+	// The exported solver preserves the established positional equation contract: delta,
+	// minimum population, then maximum population. Keep the labels in this order for callers.
 	sqlite_compaction_schedule solve_sqlite_compaction_residual(
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 		const std::uint64_t delta,
 		const std::uint64_t minimum_population,
 		const std::uint64_t maximum_population,
@@ -713,24 +716,26 @@ namespace cxxlens::sdk
 
 		if (lower_population_count != 0U)
 		{
-			result.residual_runs[result.residual_run_count++] = {
+			result.residual_runs.at(result.residual_run_count) = {
 				sqlite_compaction_edge_format::current_v3, base_population, lower_population_count};
+			++result.residual_run_count;
 		}
 		if (upper_population_count != 0U)
 		{
 			if (result.residual_run_count >= result.residual_runs.size())
 				return result;
-			result.residual_runs[result.residual_run_count++] = {
+			result.residual_runs.at(result.residual_run_count) = {
 				sqlite_compaction_edge_format::current_v3,
 				base_population + 1U,
 				upper_population_count};
+			++result.residual_run_count;
 		}
 
 		std::uint64_t reconstructed{};
 		for (std::size_t index = 0U; index < result.residual_run_count; ++index)
 		{
-			if (!checked_accumulate_product(result.residual_runs[index].population,
-											result.residual_runs[index].count,
+			if (!checked_accumulate_product(result.residual_runs.at(index).population,
+												result.residual_runs.at(index).count,
 											reconstructed))
 				return result;
 		}

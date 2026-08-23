@@ -511,7 +511,7 @@ namespace cxxlens::detail::clang22::materialization
 				seal_error("materialization.group-incomplete", "batches", "exact-six"));
 		for (std::size_t index{}; index < expected_descriptors.size(); ++index)
 		{
-			const auto& expected = *expected_descriptors[index];
+			const auto& expected = *expected_descriptors.at(index);
 			const auto& batch = batches[index];
 			if (batch.descriptor_id() != expected.id)
 				return sdk::unexpected(
@@ -744,7 +744,7 @@ namespace cxxlens::detail::clang22::materialization
 				seal_error("materialization.group-incomplete", "batches", "exact-six"));
 		for (std::size_t index{}; index < expected_descriptors.size(); ++index)
 		{
-			const auto& expected = *expected_descriptors[index];
+			const auto& expected = *expected_descriptors.at(index);
 			const auto& batch = batches[index];
 			if (batch.descriptor_id() != expected.id)
 				return sdk::unexpected(

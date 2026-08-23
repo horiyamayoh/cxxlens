@@ -70,10 +70,12 @@ namespace
 #if defined(CXXLENS_SANITIZER_INSTRUMENTED)
 	constexpr std::uint64_t timeout_grandchild_wall_budget_ms = 30'000U;
 	constexpr std::uint64_t timeout_grandchild_cpu_budget_ms = 30'000U;
+	constexpr std::uint64_t timeout_basic_elapsed_bound_seconds = 40U;
 	constexpr std::uint64_t timeout_grandchild_elapsed_bound_seconds = 40U;
 #else
 	constexpr std::uint64_t timeout_grandchild_wall_budget_ms = 5'000U;
 	constexpr std::uint64_t timeout_grandchild_cpu_budget_ms = 2'000U;
+	constexpr std::uint64_t timeout_basic_elapsed_bound_seconds = 10U;
 	constexpr std::uint64_t timeout_grandchild_elapsed_bound_seconds = 8U;
 #endif
 	// Readiness is an independent phase clock, but it cannot exceed the configured live
@@ -2333,7 +2335,8 @@ namespace
 		auto timeout_report = runtime.execute(timeout_request);
 		require(timeout_report && timeout_report->terminal == "provider.timeout",
 				"provider timeout regression lost the typed timeout terminal");
-		require(std::chrono::steady_clock::now() - timeout_started < std::chrono::seconds{10},
+		require(std::chrono::steady_clock::now() - timeout_started <
+					std::chrono::seconds{timeout_basic_elapsed_bound_seconds},
 				"provider timeout regression exceeded the hard anti-hang bound");
 
 #if defined(__linux__) && defined(__GLIBC__) && defined(SYS_pidfd_open) && \

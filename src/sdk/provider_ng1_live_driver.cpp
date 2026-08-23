@@ -226,11 +226,11 @@ namespace cxxlens::sdk::provider::detail
 	}
 
 	result<std::optional<ng1_live_frame_receipt>>
-	ng1_live_session_driver::receive_provider_frame(const std::stop_token cancellation)
+	ng1_live_session_driver::receive_provider_frame(std::stop_token cancellation)
 	{
 		if (auto open = ensure_open("receive_provider_frame"); !open)
 			return cxxlens::sdk::unexpected(std::move(open.error()));
-		auto value = process_->receive_frame(cancellation);
+		auto value = process_->receive_frame(std::move(cancellation));
 		if (!value)
 			return cxxlens::sdk::unexpected(std::move(value.error()));
 		if (!*value)
@@ -299,11 +299,11 @@ namespace cxxlens::sdk::provider::detail
 													 receipt.highest_observed_sequence_);
 	}
 
-	result<process_output> ng1_live_session_driver::finish(const std::stop_token cancellation)
+	result<process_output> ng1_live_session_driver::finish(std::stop_token cancellation)
 	{
 		if (auto open = ensure_open("finish"); !open)
 			return cxxlens::sdk::unexpected(std::move(open.error()));
-		auto output = process_->finish(cancellation);
+		auto output = process_->finish(std::move(cancellation));
 		if (!output)
 			return cxxlens::sdk::unexpected(std::move(output.error()));
 		ended_ = true;

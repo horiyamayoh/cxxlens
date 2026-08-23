@@ -54,7 +54,7 @@ namespace cxxlens::sdk
 		constexpr int sqlite_file_control_lock_state = 1;
 		constexpr int sqlite_file_control_powersafe_overwrite = 13;
 		constexpr int sqlite_file_control_has_moved = 20;
-		constexpr std::size_t copy_chunk_bytes = 64U * 1024U;
+		constexpr std::size_t copy_chunk_bytes = std::size_t{64U} * std::size_t{1024U};
 		constexpr std::uint64_t maximum_sha256_byte_count = sqlite_sha256_maximum_byte_count;
 		constexpr std::string_view private_path_prefix{"/cxxlens-sqlite-private-v1/"};
 
@@ -123,8 +123,8 @@ namespace cxxlens::sdk
 			std::size_t consumed{};
 			while (consumed < bytes.size())
 			{
-				const auto count = static_cast<long>(
-					::syscall(SYS_getrandom, bytes.data() + consumed, bytes.size() - consumed, 0U));
+				const auto count =
+					::syscall(SYS_getrandom, bytes.data() + consumed, bytes.size() - consumed, 0U);
 				if (count > 0)
 				{
 					consumed += static_cast<std::size_t>(count);
@@ -369,8 +369,9 @@ namespace cxxlens::sdk
 			std::string uri_;
 			sqlite3_vfs wrapper_{};
 			mutable std::mutex mutex_;
-			std::atomic<bool> sealed_{};
-			std::atomic<std::size_t> open_file_count_{};
+			// Value initialization is required: the state starts unsealed with no open files.
+			std::atomic<bool> sealed_{}; // NOLINT(readability-redundant-member-init)
+			std::atomic<std::size_t> open_file_count_{}; // NOLINT(readability-redundant-member-init)
 			std::uint64_t byte_count_{};
 			sqlite_backend_copy_receipt receipt_;
 			bool registered_{};
@@ -381,7 +382,7 @@ namespace cxxlens::sdk
 #if defined(__unix__) || defined(__APPLE__)
 			struct stat before{};
 			if (::fstat(descriptor_, &before) != 0 || before.st_size < 0 ||
-				static_cast<std::uint64_t>(before.st_size) != byte_count_)
+				std::cmp_not_equal(before.st_size, byte_count_))
 				return sqlite_private_snapshot_digest_failure::source_read;
 			sqlite_incremental_sha256 digest;
 			std::array<std::byte, copy_chunk_bytes> buffer{};
@@ -499,7 +500,7 @@ namespace cxxlens::sdk
 			auto* file = private_file(base);
 			auto* destination = static_cast<std::byte*>(output);
 			std::size_t consumed{};
-			while (consumed < static_cast<std::size_t>(count))
+			while (std::cmp_less(consumed, count))
 			{
 				const auto read_count =
 					::pread(file->descriptor,
@@ -573,11 +574,7 @@ namespace cxxlens::sdk
 			switch (operation)
 			{
 				case sqlite_file_control_lock_state:
-					*static_cast<int*>(output) = 0;
-					return sqlite_ok;
 				case sqlite_file_control_powersafe_overwrite:
-					*static_cast<int*>(output) = 0;
-					return sqlite_ok;
 				case sqlite_file_control_has_moved:
 					*static_cast<int*>(output) = 0;
 					return sqlite_ok;

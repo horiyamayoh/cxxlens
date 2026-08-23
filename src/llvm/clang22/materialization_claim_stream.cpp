@@ -142,6 +142,7 @@ namespace cxxlens::detail::clang22::materialization
 			projection_digest_builder& operator=(projection_digest_builder&&) noexcept = default;
 
 			[[nodiscard]] static sdk::result<projection_digest_builder>
+			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): domain and task identity are ordered digest fields
 			begin(const std::string_view domain,
 				  const std::string_view task_id,
 				  const std::uint64_t expected_count,
@@ -318,7 +319,7 @@ namespace cxxlens::detail::clang22::materialization
 			{
 				std::array<std::byte, 8U> bytes{};
 				for (std::size_t index{}; index < bytes.size(); ++index)
-					bytes[index] = static_cast<std::byte>(
+					bytes.at(index) = static_cast<std::byte>(
 						(value >> (56U - static_cast<unsigned>(index * 8U))) & 0xffU);
 				return update(bytes);
 			}
@@ -366,6 +367,7 @@ namespace cxxlens::detail::clang22::materialization
 
 		[[nodiscard]] sdk::result<stream_audit>
 		inspect_stream(materialization_replayable_spool& spool,
+					   // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): request and task identities are ordered stream bindings
 					   const std::string_view request_id,
 					   const std::string_view task_id)
 		{
@@ -405,7 +407,7 @@ namespace cxxlens::detail::clang22::materialization
 						if (auto valid = add_measurement(output.event, projection->size()); !valid)
 							return valid;
 						if (const auto component = component_index(kind))
-							if (auto valid = add_measurement(output.components[*component],
+							if (auto valid = add_measurement(output.components.at(*component),
 															 projection->size());
 								!valid)
 								return valid;
@@ -558,12 +560,12 @@ namespace cxxlens::detail::clang22::materialization
 						total_event_bytes, audit.event.projection_bytes, total_event_bytes))
 					return sdk::unexpected(stream_error("event", "census-overflow"));
 				for (std::size_t component{}; component < total_components.size(); ++component)
-					if (!checked_add(total_components[component].count,
-									 audit.components[component].count,
-									 total_components[component].count) ||
-						!checked_add(total_components[component].projection_bytes,
-									 audit.components[component].projection_bytes,
-									 total_components[component].projection_bytes))
+					if (!checked_add(total_components.at(component).count,
+									 audit.components.at(component).count,
+									 total_components.at(component).count) ||
+						!checked_add(total_components.at(component).projection_bytes,
+									 audit.components.at(component).projection_bytes,
+									 total_components.at(component).projection_bytes))
 						return sdk::unexpected(stream_error("event", "census-overflow"));
 			}
 			if (task.receipt.partition.count != audits.size() ||
@@ -581,14 +583,14 @@ namespace cxxlens::detail::clang22::materialization
 			std::array<projection_digest_builder, 4U> component_builders;
 			for (std::size_t component{}; component < component_builders.size(); ++component)
 			{
-				auto builder =
-					projection_digest_builder::begin(component_domains[component],
-													 task.receipt.task_id,
-													 total_components[component].count,
-													 total_components[component].projection_bytes);
+				auto builder = projection_digest_builder::begin(
+					component_domains.at(component),
+					task.receipt.task_id,
+					total_components.at(component).count,
+					total_components.at(component).projection_bytes);
 				if (!builder)
 					return sdk::unexpected(std::move(builder.error()));
-				component_builders[component] = std::move(*builder);
+				component_builders.at(component) = std::move(*builder);
 			}
 
 			std::vector<std::pair<std::string, std::string>> partition_digests;
@@ -621,7 +623,7 @@ namespace cxxlens::detail::clang22::materialization
 						if (auto valid = event_builder->append(*projection); !valid)
 							return valid;
 						if (const auto component = component_index(kind))
-							if (auto valid = component_builders[*component].append(*projection);
+							if (auto valid = component_builders.at(*component).append(*projection);
 								!valid)
 								return valid;
 						return partition_builder->append(*projection);
@@ -646,8 +648,8 @@ namespace cxxlens::detail::clang22::materialization
 			};
 			for (std::size_t component{}; component < component_builders.size(); ++component)
 			{
-				auto digest = std::move(component_builders[component]).finish();
-				if (!digest || *digest != *expected_digests[component])
+				auto digest = std::move(component_builders.at(component)).finish();
+				if (!digest || *digest != *expected_digests.at(component))
 					return sdk::unexpected(stream_error("receipt.component", "digest-mismatch"));
 			}
 

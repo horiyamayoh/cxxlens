@@ -396,6 +396,9 @@ namespace cxxlens::sdk::provider
 				field.second);
 		}
 
+		// The domain and schema are intentionally adjacent ordered components of
+		// the semantic digest contract; swapping them must remain visible here.
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 		[[nodiscard]] result<std::string>
 		semantic_fields_digest(const std::string_view domain,
 							   const std::string_view schema,
@@ -414,6 +417,7 @@ namespace cxxlens::sdk::provider
 			return semantic_tuple_digest(
 				domain, canonical_value::from_tuple(std::move(projection)), field);
 		}
+		// NOLINTEND(bugprone-easily-swappable-parameters)
 
 		struct semantic_control
 		{
@@ -1414,10 +1418,12 @@ namespace cxxlens::sdk::provider
 		{
 		  public:
 			explicit vector_input(const std::span<const std::byte> bytes) : bytes_{bytes} {}
+			[[nodiscard]]
 			result<std::uint64_t> size() const override
 			{
 				return bytes_.size();
 			}
+			[[nodiscard]]
 			result<std::size_t> read_at(const std::uint64_t offset,
 										const std::span<std::byte> output) const override
 			{

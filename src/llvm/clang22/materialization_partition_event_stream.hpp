@@ -91,7 +91,7 @@ namespace cxxlens::detail::clang22::materialization
 		~materialization_partition_event_stream();
 
 		[[nodiscard]] static sdk::result<materialization_partition_event_stream>
-		begin(std::string materialization_request_id,
+		begin(const std::string& materialization_request_id,
 			  std::uint64_t spool_index,
 			  materialization_event_ordinal first_event_ordinal,
 			  std::uint64_t declared_frame_count,

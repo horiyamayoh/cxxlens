@@ -491,13 +491,17 @@ namespace cxxlens::sdk
 #endif
 		}
 
+		// The descriptor and byte count have distinct roles; keep this private helper's ABI order.
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 		result<std::string> workspace_state::digest_exact(const int descriptor,
 														  const std::uint64_t byte_count) const
 		{
 #if defined(__unix__) || defined(__APPLE__)
 			struct stat before{};
-			if (::fstat(descriptor, &before) != 0 || before.st_size < 0 ||
-				static_cast<std::uint64_t>(before.st_size) != byte_count)
+			if (::fstat(descriptor, &before) != 0 || before.st_size < 0)
+				return unexpected(workspace_error("copy-read"));
+			const auto file_size = static_cast<std::uint64_t>(before.st_size);
+			if (file_size != byte_count)
 				return unexpected(workspace_error("copy-read"));
 			sqlite_incremental_sha256 digest;
 			std::array<std::byte, sqlite_wal_recovery_copy_buffer_bound> buffer{};
@@ -702,6 +706,7 @@ namespace cxxlens::sdk
 		{
 			if (output == nullptr || count < 0 || offset < 0)
 				return sqlite_io_error;
+			const auto requested_count = static_cast<std::size_t>(count);
 			const auto unsigned_offset = static_cast<std::uint64_t>(offset);
 			const auto maximum_offset =
 				static_cast<std::uint64_t>(std::numeric_limits<off_t>::max());
@@ -711,12 +716,12 @@ namespace cxxlens::sdk
 			auto* file = recovery_file(base);
 			auto* destination = static_cast<std::byte*>(output);
 			std::size_t consumed{};
-			while (consumed < static_cast<std::size_t>(count))
+			while (consumed < requested_count)
 			{
 				const auto read_count =
 					::pread(file->descriptor,
 							destination + consumed,
-							static_cast<std::size_t>(count) - consumed,
+							requested_count - consumed,
 							static_cast<off_t>(offset) + static_cast<off_t>(consumed));
 				if (read_count > 0)
 				{
@@ -727,7 +732,7 @@ namespace cxxlens::sdk
 					continue;
 				if (read_count < 0)
 					return sqlite_io_error;
-				std::memset(destination + consumed, 0, static_cast<std::size_t>(count) - consumed);
+				std::memset(destination + consumed, 0, requested_count - consumed);
 				return sqlite_io_error_short_read;
 			}
 			return sqlite_ok;
@@ -889,8 +894,10 @@ namespace cxxlens::sdk
 			*output = nullptr;
 			auto* file = recovery_file(base);
 			if (file->role != workspace_file_role::main_database || page < 0 || page_size <= 0 ||
-				(extend != 0 && extend != 1) || page_size > maximum_shm_region_bytes ||
-				static_cast<std::size_t>(page) >= maximum_shm_region_count)
+				(extend != 0 && extend != 1) || page_size > maximum_shm_region_bytes)
+				return sqlite_io_error;
+			const auto page_index = static_cast<std::size_t>(page);
+			if (page_index >= maximum_shm_region_count)
 				return sqlite_io_error;
 			try
 			{
@@ -905,7 +912,7 @@ namespace cxxlens::sdk
 				}
 				if (owner->shm_region_size_ != 0 && owner->shm_region_size_ != page_size)
 					return sqlite_io_error;
-				const auto index = static_cast<std::size_t>(page);
+				const auto index = page_index;
 				const auto exists =
 					owner->shm_regions_.size() > index && !owner->shm_regions_[index].empty();
 				if (!exists)
@@ -957,10 +964,12 @@ namespace cxxlens::sdk
 							  const int flags) noexcept
 		{
 			auto* file = recovery_file(base);
-			if (file->role != workspace_file_role::main_database || offset < 0 || count <= 0 ||
-				static_cast<std::size_t>(offset) >= sqlite_shm_lock_slot_count ||
-				static_cast<std::size_t>(count) >
-					sqlite_shm_lock_slot_count - static_cast<std::size_t>(offset))
+			if (file->role != workspace_file_role::main_database || offset < 0 || count <= 0)
+				return sqlite_io_error;
+			const auto lock_offset = static_cast<std::size_t>(offset);
+			const auto lock_count = static_cast<std::size_t>(count);
+			if (lock_offset >= sqlite_shm_lock_slot_count ||
+				lock_count > sqlite_shm_lock_slot_count - lock_offset)
 				return sqlite_io_error;
 			const auto action = flags & (sqlite_shm_lock | sqlite_shm_unlock);
 			const auto mode = flags & (sqlite_shm_shared | sqlite_shm_exclusive);
@@ -982,7 +991,7 @@ namespace cxxlens::sdk
 					invalidate_receipt_accounting(*owner);
 					return sqlite_io_error;
 				}
-				for (auto index = offset; index < offset + count; ++index)
+				for (auto index = lock_offset; index < lock_offset + lock_count; ++index)
 				{
 					auto& slot = owner->shm_locks_.at(static_cast<std::size_t>(index));
 					if (action == sqlite_shm_lock)

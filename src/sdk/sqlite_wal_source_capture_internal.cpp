@@ -80,10 +80,10 @@ namespace cxxlens::sdk
 					return 0U;
 				if (source_ == nullptr || output.empty() || offset_ > byte_count_)
 					return unexpected(capture_binding_error("source-read-state"));
-				const auto wanted = static_cast<std::size_t>(std::min<std::uint64_t>(
-					output.size(),
-					std::min<std::uint64_t>(sqlite_wal_source_capture_buffer_bound,
-											byte_count_ - offset_)));
+				const auto wanted = static_cast<std::size_t>(std::min<std::uint64_t>({
+					static_cast<std::uint64_t>(output.size()),
+					static_cast<std::uint64_t>(sqlite_wal_source_capture_buffer_bound),
+					byte_count_ - offset_}));
 				std::uint64_t next{};
 				if (wanted == 0U ||
 					!sqlite_checked_add_u64(offset_, static_cast<std::uint64_t>(wanted), next) ||

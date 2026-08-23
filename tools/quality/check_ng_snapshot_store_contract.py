@@ -1983,32 +1983,12 @@ def validate_all(
     return contract, results, comparisons
 
 
-def make_report(
-    contract: dict[str, Any], results: list[dict[str, Any]], comparisons: int
-) -> dict[str, Any]:
-    return {
-        "schema": "cxxlens.store-conformance-report.v1",
-        "contract_digest": document_digest(contract),
-        "vector_results": results,
-        "perturbation_matrix": {
-            "backends": ["memory", "sqlite"],
-            "roots": ["root-a", "root-b"],
-            "jobs": [1, 2, 8],
-            "orders": ["forward", "reverse", "seeded-shuffle"],
-            "comparisons": comparisons,
-            "all_equal": True,
-        },
-        "status": "green",
-    }
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("check",))
     parser.add_argument("--root", type=pathlib.Path, default=ROOT)
     args = parser.parse_args()
     contract, results, comparisons = validate_all(args.root.resolve())
-    report = make_report(contract, results, comparisons)
     print(
         "verified snapshot/store contract: "
         f"{len(results)} vectors, {comparisons} perturbations, "

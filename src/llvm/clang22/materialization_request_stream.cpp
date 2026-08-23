@@ -127,32 +127,46 @@ namespace cxxlens::detail::clang22::materialization
 			std::string_view phase_;
 		};
 
-		void append_utf8(std::string* output,
-						 const std::uint32_t code_point,
-						 const std::size_t maximum_capture_bytes)
+		struct utf8_append_request
 		{
+			std::uint32_t code_point;
+			std::size_t maximum_capture_bytes;
+		};
+
+		struct string_capture_limits
+		{
+			std::size_t maximum;
+			std::size_t maximum_capture_bytes;
+		};
+
+		void append_utf8(std::string* output, const utf8_append_request request)
+		{
+			const auto maximum_capture_bytes = request.maximum_capture_bytes;
 			if (output == nullptr || output->size() >= maximum_capture_bytes)
 				return;
 			const auto begin = output->size();
-			if (code_point <= 0x7fU)
-				output->push_back(static_cast<char>(code_point));
-			else if (code_point <= 0x7ffU)
+			if (request.code_point <= 0x7fU)
+				output->push_back(static_cast<char>(request.code_point));
+			else if (request.code_point <= 0x7ffU)
 			{
-				output->push_back(static_cast<char>(0xc0U | (code_point >> 6U)));
-				output->push_back(static_cast<char>(0x80U | (code_point & 0x3fU)));
+				output->push_back(static_cast<char>(0xc0U | (request.code_point >> 6U)));
+				output->push_back(static_cast<char>(0x80U | (request.code_point & 0x3fU)));
 			}
-			else if (code_point <= 0xffffU)
+			else if (request.code_point <= 0xffffU)
 			{
-				output->push_back(static_cast<char>(0xe0U | (code_point >> 12U)));
-				output->push_back(static_cast<char>(0x80U | ((code_point >> 6U) & 0x3fU)));
-				output->push_back(static_cast<char>(0x80U | (code_point & 0x3fU)));
+				output->push_back(static_cast<char>(0xe0U | (request.code_point >> 12U)));
+				output->push_back(static_cast<char>(0x80U |
+											((request.code_point >> 6U) & 0x3fU)));
+				output->push_back(static_cast<char>(0x80U | (request.code_point & 0x3fU)));
 			}
 			else
 			{
-				output->push_back(static_cast<char>(0xf0U | (code_point >> 18U)));
-				output->push_back(static_cast<char>(0x80U | ((code_point >> 12U) & 0x3fU)));
-				output->push_back(static_cast<char>(0x80U | ((code_point >> 6U) & 0x3fU)));
-				output->push_back(static_cast<char>(0x80U | (code_point & 0x3fU)));
+				output->push_back(static_cast<char>(0xf0U | (request.code_point >> 18U)));
+				output->push_back(static_cast<char>(0x80U |
+											((request.code_point >> 12U) & 0x3fU)));
+				output->push_back(static_cast<char>(0x80U |
+											((request.code_point >> 6U) & 0x3fU)));
+				output->push_back(static_cast<char>(0x80U | (request.code_point & 0x3fU)));
 			}
 			if (output->size() > maximum_capture_bytes)
 				output->resize(std::max(begin, maximum_capture_bytes));
@@ -270,7 +284,7 @@ namespace cxxlens::detail::clang22::materialization
 						significant = true;
 						all_zero = false;
 						coefficient_digits = 1U;
-						prefix[prefix_size++] = digit;
+						prefix.at(prefix_size++) = digit;
 						return;
 					}
 					if (digit == '0')
@@ -287,7 +301,7 @@ namespace cxxlens::detail::clang22::materialization
 					coefficient_digits += pending_trailing_zeros;
 					pending_trailing_zeros = 0U;
 					if (prefix_size < prefix.size())
-						prefix[prefix_size++] = digit;
+						prefix.at(prefix_size++) = digit;
 					++coefficient_digits;
 				}
 			};
@@ -316,7 +330,8 @@ namespace cxxlens::detail::clang22::materialization
 					auto consumed = cursor_.get();
 					if (!consumed)
 						return sdk::unexpected(std::move(consumed.error()));
-					if (*consumed != static_cast<unsigned char>(expected))
+					if (*consumed < 0 ||
+						static_cast<unsigned char>(*consumed) != static_cast<unsigned char>(expected))
 						return sdk::unexpected(materialization_admission_no_response());
 				}
 				return append(literal);
@@ -384,7 +399,7 @@ namespace cxxlens::detail::clang22::materialization
 					return sdk::unexpected(materialization_admission_no_response());
 				std::string encoded;
 				encoded.reserve(4U);
-				append_utf8(&encoded, code_point, 4U);
+				append_utf8(&encoded, utf8_append_request{code_point, 4U});
 				return append(encoded);
 			}
 
@@ -484,7 +499,7 @@ namespace cxxlens::detail::clang22::materialization
 				auto next = cursor_.peek();
 				if (!next)
 					return sdk::unexpected(std::move(next.error()));
-				if (*next != expected)
+				if (*next < 0 || static_cast<unsigned char>(*next) != expected)
 					return false;
 				auto consumed = cursor_.get();
 				if (!consumed)
@@ -858,7 +873,7 @@ namespace cxxlens::detail::clang22::materialization
 				auto value = cursor_.peek();
 				if (!value)
 					return sdk::unexpected(std::move(value.error()));
-				if (*value != expected)
+				if (*value < 0 || static_cast<unsigned char>(*value) != expected)
 					return false;
 				auto consumed = cursor_.get();
 				if (!consumed)
@@ -1136,7 +1151,9 @@ namespace cxxlens::detail::clang22::materialization
 					if (byte == '\\')
 					{
 						if (auto escaped = escape(
-								output, decoded_bytes, maximum_utf8_bytes, maximum_capture_bytes);
+								output,
+								decoded_bytes,
+								string_capture_limits{maximum_utf8_bytes, maximum_capture_bytes});
 							!escaped)
 							return escaped;
 						continue;
@@ -1146,14 +1163,17 @@ namespace cxxlens::detail::clang22::materialization
 						if (!append_byte(output,
 										 static_cast<char>(byte),
 										 decoded_bytes,
-										 maximum_utf8_bytes,
-										 maximum_capture_bytes))
+										 string_capture_limits{maximum_utf8_bytes,
+																maximum_capture_bytes}))
 							return sdk::unexpected(
 								scan_error("json-decode", "string-byte-limit", begin));
 						continue;
 					}
 					if (auto raw = raw_utf8(
-							byte, output, decoded_bytes, maximum_utf8_bytes, maximum_capture_bytes);
+							byte,
+							output,
+							decoded_bytes,
+							string_capture_limits{maximum_utf8_bytes, maximum_capture_bytes});
 						!raw)
 						return raw;
 				}
@@ -1162,22 +1182,20 @@ namespace cxxlens::detail::clang22::materialization
 			[[nodiscard]] bool append_byte(std::string* output,
 										   const char byte,
 										   std::size_t& decoded_bytes,
-										   const std::size_t maximum,
-										   const std::size_t maximum_capture_bytes) const
+										   const string_capture_limits limits) const
 			{
-				if (decoded_bytes >= maximum)
+				if (decoded_bytes >= limits.maximum)
 					return false;
 				++decoded_bytes;
-				if (output != nullptr && output->size() < maximum_capture_bytes)
+				if (output != nullptr && output->size() < limits.maximum_capture_bytes)
 					output->push_back(byte);
 				return true;
 			}
 
 			[[nodiscard]] sdk::result<void> raw_utf8(const unsigned char first,
-													 std::string* output,
-													 std::size_t& decoded_bytes,
-													 const std::size_t maximum,
-													 const std::size_t maximum_capture_bytes)
+																 std::string* output,
+																 std::size_t& decoded_bytes,
+																 const string_capture_limits limits)
 			{
 				std::size_t width{};
 				std::uint32_t code_point{};
@@ -1212,19 +1230,19 @@ namespace cxxlens::detail::clang22::materialization
 					if (*next < 0 || (static_cast<unsigned char>(*next) & 0xc0U) != 0x80U)
 						return sdk::unexpected(
 							scan_error("json-decode", "invalid-utf8", cursor_.position()));
-					bytes[index] = static_cast<unsigned char>(*next);
-					code_point = (code_point << 6U) | (bytes[index] & 0x3fU);
+					bytes.at(index) = static_cast<unsigned char>(*next);
+					code_point = (code_point << 6U) | (bytes.at(index) & 0x3fU);
 				}
 				if (code_point < minimum || code_point > 0x10ffffU ||
 					(code_point >= 0xd800U && code_point <= 0xdfffU) ||
-					width > maximum - std::min(maximum, decoded_bytes))
+					width > limits.maximum - std::min(limits.maximum, decoded_bytes))
 					return sdk::unexpected(scan_error(
 						"json-decode", "invalid-utf8-or-string-limit", cursor_.position()));
 				decoded_bytes += width;
 				if (output != nullptr)
 					for (std::size_t index{}; index < width; ++index)
-						if (output->size() < maximum_capture_bytes)
-							output->push_back(static_cast<char>(bytes[index]));
+						if (output->size() < limits.maximum_capture_bytes)
+							output->push_back(static_cast<char>(bytes.at(index)));
 				return {};
 			}
 
@@ -1256,9 +1274,8 @@ namespace cxxlens::detail::clang22::materialization
 			}
 
 			[[nodiscard]] sdk::result<void> escape(std::string* output,
-												   std::size_t& decoded_bytes,
-												   const std::size_t maximum,
-												   const std::size_t maximum_capture_bytes)
+														   std::size_t& decoded_bytes,
+														   const string_capture_limits limits)
 			{
 				auto next = cursor_.get();
 				if (!next)
@@ -1324,18 +1341,19 @@ namespace cxxlens::detail::clang22::materialization
 							: *code_point <= 0x7ffU				? 2U
 							: *code_point <= 0xffffU			? 3U
 																: 4U;
-						if (width > maximum - std::min(maximum, decoded_bytes))
+						if (width > limits.maximum - std::min(limits.maximum, decoded_bytes))
 							return sdk::unexpected(
 								scan_error("json-decode", "string-byte-limit", cursor_.position()));
 						decoded_bytes += width;
-						append_utf8(output, *code_point, maximum_capture_bytes);
+						append_utf8(output,
+										utf8_append_request{*code_point, limits.maximum_capture_bytes});
 						return {};
 					}
 					default:
 						return sdk::unexpected(scan_error(
 							"json-decode", "unsupported-escape", cursor_.position() - 1U));
 				}
-				if (!append_byte(output, decoded, decoded_bytes, maximum, maximum_capture_bytes))
+				if (!append_byte(output, decoded, decoded_bytes, limits))
 					return sdk::unexpected(
 						scan_error("json-decode", "string-byte-limit", cursor_.position()));
 				return {};
@@ -1349,7 +1367,8 @@ namespace cxxlens::detail::clang22::materialization
 					auto next = cursor_.get();
 					if (!next)
 						return sdk::unexpected(std::move(next.error()));
-					if (*next != static_cast<unsigned char>(byte))
+					if (*next < 0 || static_cast<unsigned char>(*next) !=
+						static_cast<unsigned char>(byte))
 						return sdk::unexpected(scan_error("json-decode", "literal", begin));
 				}
 				return {};
@@ -1373,7 +1392,7 @@ namespace cxxlens::detail::clang22::materialization
 						significant = true;
 						all_zero = false;
 						coefficient_digits = 1U;
-						prefix[prefix_size++] = digit;
+						prefix.at(prefix_size++) = digit;
 						return;
 					}
 					if (digit == '0')
@@ -1385,12 +1404,12 @@ namespace cxxlens::detail::clang22::materialization
 					while (pending_trailing_zeros != 0U)
 					{
 						if (prefix_size < prefix.size())
-							prefix[prefix_size++] = '0';
+							prefix.at(prefix_size++) = '0';
 						++coefficient_digits;
 						--pending_trailing_zeros;
 					}
 					if (prefix_size < prefix.size())
-						prefix[prefix_size++] = digit;
+						prefix.at(prefix_size++) = digit;
 					++coefficient_digits;
 				}
 			};
@@ -1639,7 +1658,7 @@ namespace cxxlens::detail::clang22::materialization
 		const auto encode = [&](const std::uint64_t value, const std::size_t begin)
 		{
 			for (std::size_t index{}; index < 8U; ++index)
-				record[begin + index] =
+				record.at(begin + index) =
 					static_cast<std::byte>((value >> ((7U - index) * 8U)) & 0xffU);
 		};
 		encode(value_offset, 0U);
@@ -1690,7 +1709,8 @@ namespace cxxlens::detail::clang22::materialization
 		{
 			std::uint64_t value{};
 			for (std::size_t offset{}; offset < 8U; ++offset)
-				value = (value << 8U) | std::to_integer<unsigned char>(record[begin + offset]);
+				value = (value << 8U) |
+					std::to_integer<unsigned char>(record.at(begin + offset));
 			return value;
 		};
 		const auto source_offset = decode(16U);
@@ -1864,7 +1884,7 @@ namespace cxxlens::detail::clang22::materialization
 			// including trust_policy.task_sandbox_requirements, own their exact maxItems contracts.
 			limits.max_array_elements = maximum_window_bytes;
 			limits.max_object_members = 4096U;
-			limits.max_string_bytes = 8U * 1024U * 1024U;
+			limits.max_string_bytes = static_cast<std::size_t>(8U) * 1024U * 1024U;
 			limits.max_total_string_bytes = maximum_window_bytes;
 			limits.max_total_values = maximum_window_bytes;
 			auto parsed = parse_json_object(std::move(replay), limits);
@@ -1946,9 +1966,9 @@ namespace cxxlens::detail::clang22::materialization
 			limits.max_depth = 64U;
 			limits.max_array_elements = 4096U;
 			limits.max_object_members = 4096U;
-			limits.max_string_bytes = 8U * 1024U * 1024U;
+			limits.max_string_bytes = static_cast<std::size_t>(8U) * 1024U * 1024U;
 			limits.max_total_string_bytes = maximum_window_bytes;
-			limits.max_total_values = 128U * 1024U;
+			limits.max_total_values = static_cast<std::size_t>(128U) * 1024U;
 			auto parsed = parse_json_object(std::move(replay), limits);
 			if (!parsed)
 				return sdk::unexpected(materialization_admission_no_response());
@@ -2116,7 +2136,7 @@ namespace cxxlens::detail::clang22::materialization
 					break;
 				if (padded || encoded_count >= 22369624U)
 					return sdk::unexpected(source_invalid("source-content-base64"));
-				characters[count] = *next;
+				characters.at(count) = *next;
 				++encoded_count;
 			}
 			if (count == 0U)

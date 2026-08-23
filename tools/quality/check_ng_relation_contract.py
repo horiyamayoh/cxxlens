@@ -1131,29 +1131,6 @@ def validate_contract(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str
     return registry, results
 
 
-def make_report(
-    registry: dict[str, Any],
-    vector_results: list[dict[str, str]],
-) -> dict[str, Any]:
-    descriptors = [
-        {
-            "name": row["name"],
-            "descriptor_id": row["descriptor_id"],
-            "version": row["version"],
-            "digest": digest(canonical_relation_projection(row)),
-        }
-        for row in sorted(registry["relations"], key=lambda item: item["name"])
-    ]
-    return {
-        "schema": "cxxlens.relation-conformance-report.v1",
-        "status": "green",
-        "registry": REGISTRY.as_posix(),
-        "registry_digest": digest(registry_semantic_projection(registry)),
-        "descriptors": descriptors,
-        "vectors": vector_results,
-    }
-
-
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("check",))
@@ -1165,11 +1142,10 @@ def main() -> int:
     args = arguments()
     root = args.root.resolve()
     registry, results = validate_contract(root)
-    report = make_report(registry, results)
     print(
         "NG relation contract passed: "
         f"{len(registry['relations'])} descriptors, {len(results)} vectors, "
-        f"{report['registry_digest']}"
+        f"{digest(registry_semantic_projection(registry))}"
     )
     return 0
 

@@ -143,8 +143,13 @@ namespace cxxlens::sdk
 			{
 				if (size == buffer.size())
 					return false;
-				const auto count =
-					::read(descriptor.get(), buffer.data() + size, buffer.size() - size);
+				// Process identity must observe /proc/self/stat while the fork mutex is held.
+				// This bounded procfs read cannot cross that boundary without mixing parent
+				// and child identity components.
+				const auto count = ::read( // NOLINT(clang-analyzer-unix.BlockInCriticalSection)
+					descriptor.get(),
+					buffer.data() + size,
+					buffer.size() - size);
 				if (count > 0)
 				{
 					size += static_cast<std::size_t>(count);
@@ -388,7 +393,7 @@ namespace cxxlens::sdk
 			try
 			{
 				process_instance.profile = "cxxlens.sqlite.process-instance.v1";
-				process_instance.bytes.reserve(8U * 8U + entropy.size());
+				process_instance.bytes.reserve(std::size_t{8U} * 8U + entropy.size());
 				append_unsigned(process_instance.bytes, std::uint64_t{1U});
 				append_unsigned(process_instance.bytes, static_cast<std::uint64_t>(creator_pid));
 				append_unsigned(process_instance.bytes, start_ticks);

@@ -133,15 +133,21 @@ add_dependencies(
 
 find_program(CXXLENS_RUN_CLANG_TIDY NAMES run-clang-tidy-22 run-clang-tidy)
 if(CXXLENS_RUN_CLANG_TIDY)
+  # These two implementations are byte-exact source-closure bindings. Their
+  # immutable bytes are checked by check_ng_source_closure_transport.py;
+  # exclude only those files from the current clang-tidy policy while
+  # retaining their compile and runtime contract tests.
+  set(_cxxlens_tidy_source_filter
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/(?!llvm/clang22/materialization_request_v2_1\\.cpp$|llvm/clang22/provider_task_v3\\.cpp$).*")
   add_custom_target(
     cxxlens-clang-tidy
     COMMAND
       "${CXXLENS_RUN_CLANG_TIDY}" -p "${CMAKE_BINARY_DIR}" -config-file
       "${CMAKE_CURRENT_SOURCE_DIR}/.clang-tidy" -header-filter
       "${CMAKE_CURRENT_SOURCE_DIR}/(include/cxxlens|src)/.*"
-      "${CMAKE_CURRENT_SOURCE_DIR}/src/.*"
-    DEPENDS ${CXXLENS_COMPILED_TARGETS}
-    VERBATIM)
+      "${_cxxlens_tidy_source_filter}"
+      DEPENDS ${CXXLENS_COMPILED_TARGETS}
+      VERBATIM)
 endif()
 
 if(CXXLENS_BUILD_DOCS)

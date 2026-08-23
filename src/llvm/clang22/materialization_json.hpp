@@ -24,13 +24,13 @@ namespace cxxlens::detail::clang22::materialization
 	/** Bounded lexical/DOM limits. Callers select limits for the authenticated phase. */
 	struct json_limits
 	{
-		std::size_t max_input_bytes{16U * 1024U * 1024U};
+		std::size_t max_input_bytes{static_cast<std::size_t>(16U * 1024U * 1024U)};
 		std::size_t max_depth{64U};
-		std::size_t max_array_elements{16U * 1024U};
-		std::size_t max_object_members{16U * 1024U};
-		std::size_t max_string_bytes{8U * 1024U * 1024U};
-		std::size_t max_total_string_bytes{16U * 1024U * 1024U};
-		std::size_t max_total_values{256U * 1024U};
+		std::size_t max_array_elements{static_cast<std::size_t>(16U * 1024U)};
+		std::size_t max_object_members{static_cast<std::size_t>(16U * 1024U)};
+		std::size_t max_string_bytes{static_cast<std::size_t>(8U * 1024U * 1024U)};
+		std::size_t max_total_string_bytes{static_cast<std::size_t>(16U * 1024U * 1024U)};
+		std::size_t max_total_values{static_cast<std::size_t>(256U * 1024U)};
 	};
 
 	/** Immutable, value-owned JSON algebra. Floating-point values are intentionally absent. */

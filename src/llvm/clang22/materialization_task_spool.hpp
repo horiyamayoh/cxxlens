@@ -8,8 +8,8 @@
 
 namespace cxxlens::detail::clang22::materialization
 {
-	inline constexpr std::uint64_t maximum_clang22_task_source_bytes = 16U * 1024U * 1024U;
-	inline constexpr std::uint64_t maximum_clang22_task_input_bytes = 64U * 1024U * 1024U;
+	inline constexpr std::uint64_t maximum_clang22_task_source_bytes = std::uint64_t{16U} * 1024U * 1024U;
+	inline constexpr std::uint64_t maximum_clang22_task_input_bytes = std::uint64_t{64U} * 1024U * 1024U;
 
 	/** Private append/seal/replay port for one exact canonical task.v3 occurrence. */
 	class clang22_task_input_spool : public clang22_task_input_sink,

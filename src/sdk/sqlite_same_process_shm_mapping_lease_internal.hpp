@@ -31,6 +31,14 @@ namespace cxxlens::sdk
 		class sqlite_shm_reader_identity_completion_control;
 		class sqlite_shm_reader_mapped_post_native_observation_minter;
 		struct sqlite_shm_reader_native_ok_projection_reservation_state;
+		struct sqlite_shm_identity_issuer_registry_bindings
+		{
+			std::weak_ptr<void> registry_state;
+			std::shared_ptr<std::atomic<std::uint64_t>> process_epoch;
+			std::shared_ptr<std::atomic_bool> registry_quarantine_latch;
+			std::shared_ptr<std::atomic_bool> registry_issuer_owner_latch;
+			std::uint64_t expected_process_epoch{};
+		};
 
 		struct sqlite_shm_lease_token_identity
 		{

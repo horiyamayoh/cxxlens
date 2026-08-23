@@ -4608,15 +4608,12 @@ def bind_provider_task_identities(request: dict[str, Any]) -> None:
         task["provider_task_id"] = expected_provider_task_id(request, task)
 
 
-def worker_task_v3_projection(
-    request: dict[str, Any],
-    task: dict[str, Any],
-) -> bytes:
-    """Encode the installed worker's full-catalog cxxlens.clang22.task.v3 input."""
+def _worker_task_v3_global_catalog_projection(request: dict[str, Any]) -> bytes:
+    """Encode the request-global task.v3 catalog once for a request."""
 
     project = request["project"]
     global_catalog = {
-        key: copy.deepcopy(project[key])
+        key: project[key]
         for key in (
             "catalog_id",
             "catalog_digest",
@@ -4625,6 +4622,19 @@ def worker_task_v3_projection(
             "catalog_compile_units",
         )
     }
+    return _canonical_projection_value(global_catalog)
+
+
+def worker_task_v3_projection(
+    request: dict[str, Any],
+    task: dict[str, Any],
+    *,
+    global_catalog_projection: bytes | None = None,
+) -> bytes:
+    """Encode the installed worker's full-catalog cxxlens.clang22.task.v3 input."""
+
+    if global_catalog_projection is None:
+        global_catalog_projection = _worker_task_v3_global_catalog_projection(request)
     per_tu_payload = copy.deepcopy(task)
     for field in (
         "provider_task_id",
@@ -4643,7 +4653,7 @@ def worker_task_v3_projection(
     return _canonical_tuple(
         (
             _canonical_string("cxxlens.clang22.task.v3"),
-            _canonical_projection_value(global_catalog),
+            global_catalog_projection,
             _canonical_string(task["selected_catalog_compile_unit_id"]),
             _canonical_string(task["compile_unit_id"]),
             _canonical_projection_value(per_tu_payload),
@@ -5324,8 +5334,16 @@ def maximum_worker_task_v3_projection_proof(
 def expected_task_input_digest(
     request: dict[str, Any],
     task: dict[str, Any],
+    *,
+    global_catalog_projection: bytes | None = None,
 ) -> str:
-    return content_digest(worker_task_v3_projection(request, task))
+    return content_digest(
+        worker_task_v3_projection(
+            request,
+            task,
+            global_catalog_projection=global_catalog_projection,
+        )
+    )
 
 
 def expected_provider_execution_id(
@@ -5350,8 +5368,13 @@ def expected_provider_execution_id(
 def bind_task_execution_identities(request: dict[str, Any]) -> None:
     """Bind fixture task-input and physical execution identities bottom-up."""
 
+    global_catalog_projection = _worker_task_v3_global_catalog_projection(request)
     for task in request["tasks"]:
-        task["task_input_digest"] = expected_task_input_digest(request, task)
+        task["task_input_digest"] = expected_task_input_digest(
+            request,
+            task,
+            global_catalog_projection=global_catalog_projection,
+        )
     for task in request["tasks"]:
         task["provider_execution_id"] = expected_provider_execution_id(request, task)
 

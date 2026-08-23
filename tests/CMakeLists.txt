@@ -49,8 +49,13 @@ target_link_libraries(cxxlens-unit-sdk-store PRIVATE cxxlens::kernel
 target_include_directories(cxxlens-unit-sdk-store
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME unit.sdk-store COMMAND cxxlens-unit-sdk-store)
+# The store suite deliberately exercises process-global SQLite/VFS lifecycle and a
+# set of fixed crash/tamper fixture paths.  Keep that one executable isolated from
+# install fixture preparation and other SQLite processes while allowing the rest of
+# the deterministic suite to run in parallel.
 set_tests_properties(unit.sdk-store PROPERTIES LABELS
-                                               "unit;sdk;store;transaction")
+                                               "unit;sdk;store;transaction"
+                     RUN_SERIAL TRUE)
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-disposable-qualification
                             unit/sdk/sqlite_disposable_qualification_test.cpp)
@@ -460,7 +465,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
   if(CXXLENS_ENABLE_ASAN
      OR CXXLENS_ENABLE_UBSAN
      OR CXXLENS_ENABLE_TSAN)
-    set(CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT 90)
+    set(CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT 180)
   else()
     set(CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT 30)
   endif()

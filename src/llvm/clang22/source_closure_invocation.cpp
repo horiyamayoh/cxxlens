@@ -1,6 +1,7 @@
 #include "source_closure_invocation.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <ranges>
 #include <string>
@@ -31,18 +32,18 @@ namespace cxxlens::detail::clang22
 			path_authority authority;
 		};
 
-		constexpr separate_path_option separate_options[]{
-			{"-I", path_authority::project_or_qualified},
-			{"-isystem", path_authority::project_or_qualified},
-			{"-iquote", path_authority::project_or_qualified},
-			{"-idirafter", path_authority::project_or_qualified},
-			{"-include", path_authority::project_or_qualified},
-			{"-imacros", path_authority::project_or_qualified},
-			{"-resource-dir", path_authority::qualified_only},
-			{"--sysroot", path_authority::qualified_only},
-			{"-isysroot", path_authority::qualified_only},
-			{"--gcc-toolchain", path_authority::qualified_only},
-			{"-gcc-toolchain", path_authority::qualified_only},
+		constexpr std::array<separate_path_option, 11U> separate_options{
+			separate_path_option{"-I", path_authority::project_or_qualified},
+			separate_path_option{"-isystem", path_authority::project_or_qualified},
+			separate_path_option{"-iquote", path_authority::project_or_qualified},
+			separate_path_option{"-idirafter", path_authority::project_or_qualified},
+			separate_path_option{"-include", path_authority::project_or_qualified},
+			separate_path_option{"-imacros", path_authority::project_or_qualified},
+			separate_path_option{"-resource-dir", path_authority::qualified_only},
+			separate_path_option{"--sysroot", path_authority::qualified_only},
+			separate_path_option{"-isysroot", path_authority::qualified_only},
+			separate_path_option{"--gcc-toolchain", path_authority::qualified_only},
+			separate_path_option{"-gcc-toolchain", path_authority::qualified_only},
 		};
 
 		[[nodiscard]] sdk::error
@@ -142,10 +143,11 @@ namespace cxxlens::detail::clang22
 
 		[[nodiscard]] bool unsupported_path_option(const std::string_view argument) noexcept
 		{
-			constexpr std::string_view exact[]{"-include-pch", "-ivfsoverlay"};
+			constexpr std::array exact{std::string_view{"-include-pch"},
+									 std::string_view{"-ivfsoverlay"}};
 			if (std::ranges::find(exact, argument) != std::end(exact))
 				return true;
-			constexpr std::string_view prefixes[]{
+			constexpr std::array<std::string_view, 6U> prefixes{
 				"-include-pch=",
 				"-ivfsoverlay=",
 				"-fmodule-file=",
@@ -196,18 +198,18 @@ namespace cxxlens::detail::clang22
 		rewrite_joined_option(const std::string_view argument,
 							  const std::span<const std::string> qualified_roots)
 		{
-			constexpr joined_option joined[]{
-				{"-resource-dir=", "", path_authority::qualified_only},
-				{"--sysroot=", "", path_authority::qualified_only},
-				{"--gcc-toolchain=", "", path_authority::qualified_only},
-				{"-gcc-toolchain=", "", path_authority::qualified_only},
-				{"-isystem", "", path_authority::project_or_qualified},
-				{"-iquote", "", path_authority::project_or_qualified},
-				{"-idirafter", "", path_authority::project_or_qualified},
-				{"-isysroot", "", path_authority::qualified_only},
-				{"-imacros", "", path_authority::project_or_qualified},
-				{"-include", "", path_authority::project_or_qualified},
-				{"-I", "", path_authority::project_or_qualified},
+			constexpr std::array<joined_option, 11U> joined{
+				joined_option{"-resource-dir=", "", path_authority::qualified_only},
+				joined_option{"--sysroot=", "", path_authority::qualified_only},
+				joined_option{"--gcc-toolchain=", "", path_authority::qualified_only},
+				joined_option{"-gcc-toolchain=", "", path_authority::qualified_only},
+				joined_option{"-isystem", "", path_authority::project_or_qualified},
+				joined_option{"-iquote", "", path_authority::project_or_qualified},
+				joined_option{"-idirafter", "", path_authority::project_or_qualified},
+				joined_option{"-isysroot", "", path_authority::qualified_only},
+				joined_option{"-imacros", "", path_authority::project_or_qualified},
+				joined_option{"-include", "", path_authority::project_or_qualified},
+				joined_option{"-I", "", path_authority::project_or_qualified},
 			};
 			for (const auto& option : joined)
 			{
@@ -228,7 +230,9 @@ namespace cxxlens::detail::clang22
 
 	sdk::result<source_closure_invocation>
 	prepare_source_closure_invocation(const std::span<const std::string> effective_arguments,
-									  const std::string_view main_logical_path,
+										  // ordered source path fields are distinct invocation bindings.
+										  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+										  const std::string_view main_logical_path,
 									  const std::string_view logical_working_directory,
 									  const std::span<const std::string> qualified_read_roots)
 	{

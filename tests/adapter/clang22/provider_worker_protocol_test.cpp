@@ -23,9 +23,11 @@ namespace
 	constexpr std::uint64_t provider_address_space_budget =
 		std::numeric_limits<std::uint64_t>::max();
 	constexpr std::uint64_t provider_subprocess_budget = 1024U;
+	constexpr std::uint64_t provider_execution_budget_ms = 30'000U;
 #else
 	constexpr std::uint64_t provider_address_space_budget = 512U * 1024U * 1024U;
 	constexpr std::uint64_t provider_subprocess_budget = 1U;
+	constexpr std::uint64_t provider_execution_budget_ms = 2'000U;
 #endif
 	void require(const bool condition, const std::string& message)
 	{
@@ -140,8 +142,8 @@ int main(const int argument_count, const char* const* arguments)
 	request.environment_digest =
 		"sha256:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef";
 	request.sandbox = {sandbox_assurance::enforced, sandbox_policy.policy_digest()};
-	request.budget.wall_ms = 2000U;
-	request.budget.cpu_ms = 2000U;
+	request.budget.wall_ms = provider_execution_budget_ms;
+	request.budget.cpu_ms = provider_execution_budget_ms;
 	request.budget.address_space_bytes = provider_address_space_budget;
 	request.budget.output_bytes = 8U * 1024U * 1024U;
 	request.budget.open_files = 128U;

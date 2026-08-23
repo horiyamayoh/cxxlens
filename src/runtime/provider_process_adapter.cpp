@@ -297,7 +297,8 @@ namespace cxxlens::sdk::provider
 			{
 				// One exact 64 MiB logical input plus the maximum bounded frame/control envelope.
 				// This is a transport safety bound only; the shared encoder owns semantic limits.
-				constexpr std::uint64_t maximum_wire_input_bytes = 72U * 1024U * 1024U;
+				constexpr std::uint64_t maximum_wire_input_bytes =
+					std::uint64_t{72U} * 1024U * 1024U;
 				if (bytes.size() > maximum_wire_input_bytes - written_)
 					return cxxlens::sdk::unexpected(
 						process_error("provider.process-request-invalid", "input-limit"));
@@ -831,6 +832,7 @@ namespace cxxlens::sdk::provider
 
 			[[nodiscard]] static std::uint64_t
 			read_big_endian(const std::span<const std::byte> input,
+				// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): wire offset and field width
 							const std::size_t offset,
 							const std::size_t width) noexcept
 			{
@@ -1186,7 +1188,7 @@ namespace cxxlens::sdk::provider
 			[[nodiscard]] result<process_output>
 			run_with_input(const process_invocation& invocation,
 						   InputFactory&& input_factory,
-						   const std::stop_token cancellation) const
+						   const std::stop_token& cancellation) const
 			{
 				if (auto valid = invocation.budget.validate(); !valid)
 					return cxxlens::sdk::unexpected(

@@ -236,7 +236,7 @@ namespace cxxlens::detail::clang22::materialization
 
 		materialization_bounded_task_claims(
 			materialization_bounded_task_factory_seal factory_seal,
-			const std::uint64_t canonical_task_index,
+			std::uint64_t canonical_task_index,
 			std::string sealed_request_entry_binding_digest,
 			std::string materializer_semantics_digest,
 			std::string direct_basis_digest,

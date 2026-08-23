@@ -1,6 +1,7 @@
 #include "materialization_json.hpp"
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <limits>
 #include <optional>
@@ -509,10 +510,10 @@ namespace cxxlens::detail::clang22::materialization
 
 		void append_hex_escape(std::string& output, const unsigned char byte)
 		{
-			constexpr char digits[] = "0123456789abcdef";
+			constexpr std::string_view digits = "0123456789abcdef";
 			output += "\\u00";
-			output.push_back(digits[(byte >> 4U) & 0x0fU]);
-			output.push_back(digits[byte & 0x0fU]);
+			output.push_back(digits.at((byte >> 4U) & 0x0fU));
+			output.push_back(digits.at(byte & 0x0fU));
 		}
 
 		void append_json_string(std::string& output, const std::string_view value)
@@ -557,9 +558,9 @@ namespace cxxlens::detail::clang22::materialization
 		template <class Integer>
 		void append_integer(std::string& output, const Integer value)
 		{
-			char buffer[std::numeric_limits<Integer>::digits10 + 4U]{};
-			const auto converted = std::to_chars(std::begin(buffer), std::end(buffer), value);
-			output.append(buffer, converted.ptr);
+			std::array<char, std::numeric_limits<Integer>::digits10 + 4U> buffer{};
+			const auto converted = std::to_chars(buffer.begin(), buffer.end(), value);
+			output.append(buffer.data(), converted.ptr);
 		}
 
 		void append_canonical_json(std::string& output, const json_value& value)

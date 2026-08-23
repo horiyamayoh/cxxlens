@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <bit>
 #include <cstring>
+#include <iterator>
 #include <limits>
 #include <new>
 #include <ranges>
@@ -245,7 +246,7 @@ namespace cxxlens::sdk
 			return unexpected(stream_state_error("sha256-finished"));
 		finished_ = true;
 		const auto bit_count = total_bytes_ * 8U;
-		pending_[pending_size_++] = std::byte{0x80U};
+		pending_.at(pending_size_++) = std::byte{0x80U};
 		if (pending_size_ > 56U)
 		{
 			std::fill(pending_.begin() + static_cast<std::ptrdiff_t>(pending_size_),
@@ -258,7 +259,7 @@ namespace cxxlens::sdk
 				  pending_.begin() + 56,
 				  std::byte{});
 		for (std::size_t index{}; index < 8U; ++index)
-			pending_[56U + index] = static_cast<std::byte>(
+			pending_.at(56U + index) = static_cast<std::byte>(
 				(bit_count >> (56U - static_cast<unsigned>(index * 8U))) & 0xffU);
 		transform(pending_);
 
@@ -270,7 +271,7 @@ namespace cxxlens::sdk
 			for (const auto word : state_)
 				for (std::uint32_t shift = 28U;; shift -= 4U)
 				{
-					output.push_back(digits[(word >> shift) & 0x0fU]);
+					output.push_back(digits.at((word >> shift) & 0x0fU));
 					if (shift == 0U)
 						break;
 				}
@@ -304,21 +305,26 @@ namespace cxxlens::sdk
 	void sqlite_incremental_sha256::transform(const std::span<const std::byte> block) noexcept
 	{
 		std::array<std::uint32_t, 64U> schedule{};
+		const auto block_byte = [&block](const std::size_t offset) noexcept -> std::byte
+		{
+			return *std::next(block.begin(), static_cast<std::ptrdiff_t>(offset));
+		};
 		for (std::size_t index{}; index < 16U; ++index)
 		{
 			const auto offset = index * 4U;
-			schedule[index] = (std::to_integer<std::uint32_t>(block[offset]) << 24U) |
-				(std::to_integer<std::uint32_t>(block[offset + 1U]) << 16U) |
-				(std::to_integer<std::uint32_t>(block[offset + 2U]) << 8U) |
-				std::to_integer<std::uint32_t>(block[offset + 3U]);
+			schedule.at(index) = (std::to_integer<std::uint32_t>(block_byte(offset)) << 24U) |
+				(std::to_integer<std::uint32_t>(block_byte(offset + 1U)) << 16U) |
+				(std::to_integer<std::uint32_t>(block_byte(offset + 2U)) << 8U) |
+				std::to_integer<std::uint32_t>(block_byte(offset + 3U));
 		}
 		for (std::size_t index = 16U; index < schedule.size(); ++index)
 		{
-			const auto small_zero = std::rotr(schedule[index - 15U], 7) ^
-				std::rotr(schedule[index - 15U], 18) ^ (schedule[index - 15U] >> 3U);
-			const auto small_one = std::rotr(schedule[index - 2U], 17) ^
-				std::rotr(schedule[index - 2U], 19) ^ (schedule[index - 2U] >> 10U);
-			schedule[index] = schedule[index - 16U] + small_zero + schedule[index - 7U] + small_one;
+			const auto small_zero = std::rotr(schedule.at(index - 15U), 7) ^
+				std::rotr(schedule.at(index - 15U), 18) ^ (schedule.at(index - 15U) >> 3U);
+			const auto small_one = std::rotr(schedule.at(index - 2U), 17) ^
+				std::rotr(schedule.at(index - 2U), 19) ^ (schedule.at(index - 2U) >> 10U);
+			schedule.at(index) =
+				schedule.at(index - 16U) + small_zero + schedule.at(index - 7U) + small_one;
 		}
 		auto [a, b, c, d, e, f, g, h] = state_;
 		for (std::size_t index{}; index < schedule.size(); ++index)
@@ -326,7 +332,7 @@ namespace cxxlens::sdk
 			const auto big_one = std::rotr(e, 6) ^ std::rotr(e, 11) ^ std::rotr(e, 25);
 			const auto choose = (e & f) ^ (~e & g);
 			const auto first =
-				h + big_one + choose + sha256_round_constants[index] + schedule[index];
+				h + big_one + choose + sha256_round_constants.at(index) + schedule.at(index);
 			const auto big_zero = std::rotr(a, 2) ^ std::rotr(a, 13) ^ std::rotr(a, 22);
 			const auto majority = (a & b) ^ (a & c) ^ (b & c);
 			const auto second = big_zero + majority;
@@ -339,14 +345,14 @@ namespace cxxlens::sdk
 			b = a;
 			a = first + second;
 		}
-		state_[0U] += a;
-		state_[1U] += b;
-		state_[2U] += c;
-		state_[3U] += d;
-		state_[4U] += e;
-		state_[5U] += f;
-		state_[6U] += g;
-		state_[7U] += h;
+		state_.at(0U) += a;
+		state_.at(1U) += b;
+		state_.at(2U) += c;
+		state_.at(3U) += d;
+		state_.at(4U) += e;
+		state_.at(5U) += f;
+		state_.at(6U) += g;
+		state_.at(7U) += h;
 	}
 
 	sqlite_payload_chunk_framer::sqlite_payload_chunk_framer(

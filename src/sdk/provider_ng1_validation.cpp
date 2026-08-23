@@ -44,7 +44,7 @@ namespace cxxlens::sdk::provider::detail
 				value.size() != semantic_digest_prefix.size() + 64U)
 				return false;
 			for (const auto byte : value.substr(semantic_digest_prefix.size()))
-				if (!((byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f')))
+				if ((byte < '0' || byte > '9') && (byte < 'a' || byte > 'f'))
 					return false;
 			return true;
 		}
@@ -55,11 +55,13 @@ namespace cxxlens::sdk::provider::detail
 				value.size() != manifest_content_digest_prefix.size() + 64U)
 				return false;
 			for (const auto byte : value.substr(manifest_content_digest_prefix.size()))
-				if (!((byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f')))
+				if ((byte < '0' || byte > '9') && (byte < 'a' || byte > 'f'))
 					return false;
 			return true;
 		}
 
+		// Validation helpers intentionally preserve the value/field/failure-code order.
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 		[[nodiscard]] result<void> valid_id(const std::string_view value,
 											const std::string_view field,
 											const std::string_view failure_code)
@@ -68,7 +70,9 @@ namespace cxxlens::sdk::provider::detail
 				return unexpected(ng1_error(failure_code, std::string{field}, "strong-id"));
 			return {};
 		}
+		// NOLINTEND(bugprone-easily-swappable-parameters)
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 		[[nodiscard]] result<void> valid_digest(const std::string_view value,
 												const std::string_view field,
 												const std::string_view failure_code)
@@ -77,7 +81,9 @@ namespace cxxlens::sdk::provider::detail
 				return unexpected(ng1_error(failure_code, std::string{field}, "semantic-v2"));
 			return {};
 		}
+		// NOLINTEND(bugprone-easily-swappable-parameters)
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 		[[nodiscard]] result<void>
 		valid_manifest_content_digest(const std::string_view value,
 									  const std::string_view field,
@@ -87,6 +93,7 @@ namespace cxxlens::sdk::provider::detail
 				return unexpected(ng1_error(failure_code, std::string{field}, "sha256"));
 			return {};
 		}
+		// NOLINTEND(bugprone-easily-swappable-parameters)
 
 		[[nodiscard]] result<std::uint64_t> checked_elapsed(const std::uint64_t current,
 															const std::uint64_t previous,
@@ -175,12 +182,14 @@ namespace cxxlens::sdk::provider::detail
 			return 9U;
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 		[[nodiscard]] result<std::uint64_t> cbor_text_bytes(const std::string_view value,
 															const std::string_view field)
 		{
 			const auto length = static_cast<std::uint64_t>(value.size());
 			return checked_spill_size_add(cbor_head_bytes(length), length, field);
 		}
+		// NOLINTEND(bugprone-easily-swappable-parameters)
 
 		[[nodiscard]] result<std::uint64_t> cbor_bytes_bytes(const std::span<const std::byte> value,
 															 const std::string_view field)
@@ -270,6 +279,7 @@ namespace cxxlens::sdk::provider::detail
 		};
 
 		/** Exact 64x64 -> 128 multiplication without compiler-specific integer types. */
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 		[[nodiscard]] ng1_u128 multiply_u64(const std::uint64_t left,
 											const std::uint64_t right) noexcept
 		{
@@ -290,6 +300,7 @@ namespace cxxlens::sdk::provider::detail
 				left_high * right_high + high_carry + (low_high_product >> 32U);
 			return {high, low};
 		}
+		// NOLINTEND(bugprone-easily-swappable-parameters)
 
 		[[nodiscard]] bool less_equal(const ng1_u128 left, const ng1_u128 right) noexcept
 		{
@@ -397,7 +408,7 @@ namespace cxxlens::sdk::provider::detail
 														 "heartbeat-clock-invalid",
 														 "host_receipt_time_ns");
 				if (!since_start)
-					return unexpected(std::move(since_start.error()));
+					return unexpected(since_start.error());
 				if (*since_start >= heartbeat_startup_grace_ns)
 					return unexpected(ng1_error(
 						"heartbeat-timeout", "host_receipt_time_ns", "startup-deadline-reached"));
@@ -409,7 +420,7 @@ namespace cxxlens::sdk::provider::detail
 														 "heartbeat-clock-invalid",
 														 "host_receipt_time_ns");
 				if (!since_probe)
-					return unexpected(std::move(since_probe.error()));
+					return unexpected(since_probe.error());
 				if (*since_probe >= heartbeat_timeout_ns)
 					return unexpected(ng1_error(
 						"heartbeat-timeout", "host_receipt_time_ns", "ack-deadline-reached"));
@@ -440,7 +451,7 @@ namespace cxxlens::sdk::provider::detail
 		const auto elapsed =
 			checked_elapsed(now_ns, started_at_ns_, "heartbeat-clock-invalid", "now_ns");
 		if (!elapsed)
-			return unexpected(std::move(elapsed.error()));
+			return unexpected(elapsed.error());
 		if (!last_valid_ack_received_ns_)
 		{
 			if (*elapsed >= heartbeat_startup_grace_ns)
@@ -453,7 +464,7 @@ namespace cxxlens::sdk::provider::detail
 			const auto since_probe = checked_elapsed(
 				now_ns, *last_probe_host_receipt_ns_, "heartbeat-clock-invalid", "now_ns");
 			if (!since_probe)
-				return unexpected(std::move(since_probe.error()));
+				return unexpected(since_probe.error());
 			if (*since_probe >= heartbeat_timeout_ns)
 				return unexpected(
 					ng1_error("heartbeat-timeout", "now_ns", "probe-deadline-reached"));
@@ -461,7 +472,7 @@ namespace cxxlens::sdk::provider::detail
 		const auto since_ack = checked_elapsed(
 			now_ns, *last_valid_ack_received_ns_, "heartbeat-clock-invalid", "now_ns");
 		if (!since_ack)
-			return unexpected(std::move(since_ack.error()));
+			return unexpected(since_ack.error());
 		if (*since_ack >= heartbeat_timeout_ns)
 			return unexpected(ng1_error("heartbeat-timeout", "now_ns", "ack-deadline-reached"));
 		return {};
@@ -540,7 +551,7 @@ namespace cxxlens::sdk::provider::detail
 													 "progress-rate",
 													 "host_receipt_time_ns");
 			if (!since_start)
-				return unexpected(std::move(since_start.error()));
+				return unexpected(since_start.error());
 			if (*since_start >= progress_startup_grace_ns)
 				return unexpected(
 					ng1_error("progress-rate", "host_receipt_time_ns", "startup-deadline-reached"));
@@ -557,7 +568,7 @@ namespace cxxlens::sdk::provider::detail
 												 "progress-rate",
 												 "host_receipt_time_ns");
 			if (!elapsed)
-				return unexpected(std::move(elapsed.error()));
+				return unexpected(elapsed.error());
 			if (*elapsed == 0U)
 				return unexpected(ng1_error("progress-rate", "sample_gap", "zero-elapsed"));
 			if (*elapsed > progress_maximum_sample_gap_ns)
@@ -570,14 +581,14 @@ namespace cxxlens::sdk::provider::detail
 													 "progress-rate",
 													 "host_receipt_time_ns");
 			if (!since_start)
-				return unexpected(std::move(since_start.error()));
+				return unexpected(since_start.error());
 			const bool after_grace = *since_start > progress_startup_grace_ns;
 			const auto checkpoint_elapsed = checked_elapsed(sample.host_receipt_time_ns,
 															*rate_checkpoint_receipt_ns_,
 															"progress-rate",
 															"host_receipt_time_ns");
 			if (!checkpoint_elapsed)
-				return unexpected(std::move(checkpoint_elapsed.error()));
+				return unexpected(checkpoint_elapsed.error());
 			const auto checkpoint_delta_units =
 				sample.completed_units - *rate_checkpoint_completed_units_;
 			if (after_grace && delta_units == 0U)

@@ -402,8 +402,8 @@ namespace cxxlens::sdk
 			sqlite_open_read_only | sqlite_open_uri | sqlite_open_main_database;
 		constexpr int fixture_write_flags = sqlite_open_read_write | sqlite_open_create |
 			sqlite_open_full_mutex | sqlite_open_private_cache;
-		constexpr std::uint64_t maximum_fixture_file_bytes = 64U * 1024U * 1024U;
-		constexpr std::size_t copy_buffer_bytes = 64U * 1024U;
+		constexpr std::uint64_t maximum_fixture_file_bytes = std::uint64_t{64U} * 1024U * 1024U;
+		constexpr std::size_t copy_buffer_bytes = std::size_t{64U} * 1024U;
 		constexpr off_t unix_shm_deadman_switch_offset = 128;
 		constexpr std::size_t maximum_source_id_bytes = 4096U;
 
@@ -670,28 +670,31 @@ namespace cxxlens::sdk
 				return unexpected(qualification_error());
 			struct stat before{};
 			if (::fstat(descriptor.get(), &before) != 0 || !S_ISREG(before.st_mode) ||
-				before.st_size < 0 ||
-				static_cast<std::uint64_t>(before.st_size) > maximum_fixture_file_bytes)
+				before.st_size < 0)
+				return unexpected(qualification_error());
+			const auto before_size = static_cast<std::uint64_t>(before.st_size);
+			if (before_size > maximum_fixture_file_bytes)
 				return unexpected(qualification_error());
 
 			sqlite_incremental_sha256 digest;
 			std::array<std::byte, copy_buffer_bytes> buffer{};
 			std::uint64_t offset{};
-			while (offset < static_cast<std::uint64_t>(before.st_size))
+			while (offset < before_size)
 			{
-				const auto requested = static_cast<std::size_t>(std::min<std::uint64_t>(
-					buffer.size(), static_cast<std::uint64_t>(before.st_size) - offset));
+				const auto requested = static_cast<std::size_t>(
+					std::min<std::uint64_t>(buffer.size(), before_size - offset));
 				ssize_t count{};
 				do
 				{
 					count = ::pread(
 						descriptor.get(), buffer.data(), requested, static_cast<off_t>(offset));
 				} while (count < 0 && errno == EINTR);
-				if (count <= 0 || static_cast<std::size_t>(count) > requested)
+				if (count <= 0)
 					return unexpected(qualification_error());
-				if (auto updated =
-						digest.update(std::span{buffer}.first(static_cast<std::size_t>(count)));
-					!updated)
+				const auto read_count = static_cast<std::size_t>(count);
+				if (read_count > requested)
+					return unexpected(qualification_error());
+				if (auto updated = digest.update(std::span{buffer}.first(read_count)); !updated)
 					return unexpected(qualification_error());
 				offset += static_cast<std::uint64_t>(count);
 			}
@@ -722,8 +725,10 @@ namespace cxxlens::sdk
 				return unexpected(qualification_error());
 			struct stat source_before{};
 			if (::fstat(source.get(), &source_before) != 0 || !S_ISREG(source_before.st_mode) ||
-				source_before.st_size < 0 ||
-				static_cast<std::uint64_t>(source_before.st_size) > maximum_fixture_file_bytes)
+				source_before.st_size < 0)
+				return unexpected(qualification_error());
+			const auto source_size = static_cast<std::uint64_t>(source_before.st_size);
+			if (source_size > maximum_fixture_file_bytes)
 				return unexpected(qualification_error());
 			owned_descriptor destination{
 				open_at(destination_parent,
@@ -734,27 +739,29 @@ namespace cxxlens::sdk
 				return unexpected(qualification_error());
 			std::array<std::byte, copy_buffer_bytes> buffer{};
 			std::uint64_t offset{};
-			while (offset < static_cast<std::uint64_t>(source_before.st_size))
+			while (offset < source_size)
 			{
-				const auto requested = static_cast<std::size_t>(std::min<std::uint64_t>(
-					buffer.size(), static_cast<std::uint64_t>(source_before.st_size) - offset));
+				const auto requested = static_cast<std::size_t>(
+					std::min<std::uint64_t>(buffer.size(), source_size - offset));
 				ssize_t count{};
 				do
 				{
 					count =
 						::pread(source.get(), buffer.data(), requested, static_cast<off_t>(offset));
 				} while (count < 0 && errno == EINTR);
-				if (count <= 0 || static_cast<std::size_t>(count) > requested)
+				if (count <= 0)
+					return unexpected(qualification_error());
+				const auto read_count = static_cast<std::size_t>(count);
+				if (read_count > requested)
 					return unexpected(qualification_error());
 				std::size_t written{};
-				while (written < static_cast<std::size_t>(count))
+				while (written < read_count)
 				{
 					ssize_t output{};
 					do
 					{
-						output = ::write(destination.get(),
-										 buffer.data() + written,
-										 static_cast<std::size_t>(count) - written);
+						output = ::write(
+							destination.get(), buffer.data() + written, read_count - written);
 					} while (output < 0 && errno == EINTR);
 					if (output <= 0)
 						return unexpected(qualification_error());
@@ -1430,6 +1437,9 @@ namespace cxxlens::sdk
 		{
 			static_assert(std::is_pointer_v<Function>);
 			static_assert(sizeof(Function) == sizeof(const void*));
+			// POSIX dladdr accepts an object pointer for a function address; preserve the
+			// exact function-pointer representation at this ABI boundary.
+			// NOLINTNEXTLINE(bugprone-bitwise-pointer-cast): required by the POSIX ABI.
 			return std::bit_cast<const void*>(function);
 		}
 
@@ -1510,6 +1520,7 @@ namespace cxxlens::sdk
 
 		struct origin_probe_file_node
 		{
+			// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 			origin_probe_file_node(const std::size_t storage_bytes,
 								   std::shared_ptr<void> runtime_pin,
 								   std::shared_ptr<void> backend_pin,
@@ -1518,7 +1529,8 @@ namespace cxxlens::sdk
 								   const void* runtime_image,
 								   const void* open_callback)
 				: storage_count{(storage_bytes + sizeof(std::max_align_t) - 1U) /
-								sizeof(std::max_align_t)},
+									sizeof(std::max_align_t)},
+				  // NOLINTNEXTLINE(modernize-avoid-c-arrays): SQLite requires variable-size aligned storage.
 				  storage{std::make_unique<std::max_align_t[]>(storage_count)},
 				  runtime_lifetime{std::move(runtime_pin)},
 				  backend_lifetime{std::move(backend_pin)}, underlying{underlying_vfs},
@@ -1528,13 +1540,15 @@ namespace cxxlens::sdk
 			{
 				std::memset(storage.get(), 0, storage_count * sizeof(std::max_align_t));
 			}
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 
-			[[nodiscard]] sqlite3_file* file() noexcept
+			[[nodiscard]] sqlite3_file* file() const noexcept
 			{
 				return reinterpret_cast<sqlite3_file*>(storage.get());
 			}
 
 			std::size_t storage_count{};
+			// NOLINTNEXTLINE(modernize-avoid-c-arrays): SQLite requires variable-size aligned storage.
 			std::unique_ptr<std::max_align_t[]> storage;
 			std::shared_ptr<void> runtime_lifetime;
 			std::shared_ptr<void> backend_lifetime;
@@ -1618,7 +1632,7 @@ namespace cxxlens::sdk
 		inspect_origin_methods(const origin_probe_file_node& node) noexcept
 		{
 			origin_method_inspection output{};
-			const auto* raw = const_cast<origin_probe_file_node&>(node).file();
+			const auto* raw = node.file();
 			const auto* methods = raw != nullptr ? raw->methods : nullptr;
 			if (!readable_range_bound_to_code(methods,
 											  sizeof(int),
@@ -1717,7 +1731,7 @@ namespace cxxlens::sdk
 										   const std::string& scratch_probe_path)
 		{
 			if (underlying.version < 1 ||
-				underlying.os_file_bytes < static_cast<int>(sizeof(sqlite3_file)) ||
+				std::cmp_less(underlying.os_file_bytes, sizeof(sqlite3_file)) ||
 				underlying.os_file_bytes > 1024 * 1024 || underlying.name == nullptr ||
 				underlying.name[0] == '\0' || underlying.app_data == nullptr ||
 				underlying.open == nullptr ||
@@ -1841,7 +1855,7 @@ namespace cxxlens::sdk
 			const std::string& locator,
 			const int flags,
 			const std::string& vfs_name,
-			std::shared_ptr<sqlite_backend_connection_observation_scope> observation = {})
+			const std::shared_ptr<sqlite_backend_connection_observation_scope>& observation = {})
 		{
 			sqlite_connection_lifecycle connection{
 				nullptr,
@@ -1858,20 +1872,16 @@ namespace cxxlens::sdk
 			return std::move(connection);
 		}
 
-		[[nodiscard]] result<void>
-		create_fixture(const sqlite_source_shm_runtime_binding& runtime,
-					   const std::shared_ptr<void>& backend_lifetime,
-					   const std::string& path,
-					   const std::string& vfs_name,
-					   sqlite_connection_lifecycle& output,
-					   std::shared_ptr<sqlite_backend_connection_observation_scope> observation)
+		[[nodiscard]] result<void> create_fixture(
+			const sqlite_source_shm_runtime_binding& runtime,
+			const std::shared_ptr<void>& backend_lifetime,
+			const std::string& path,
+			const std::string& vfs_name,
+			sqlite_connection_lifecycle& output,
+			const std::shared_ptr<sqlite_backend_connection_observation_scope>& observation)
 		{
-			auto opened = open_connection(runtime,
-										  backend_lifetime,
-										  path,
-										  fixture_write_flags,
-										  vfs_name,
-										  std::move(observation));
+			auto opened = open_connection(
+				runtime, backend_lifetime, path, fixture_write_flags, vfs_name, observation);
 			if (!opened)
 				return unexpected(qualification_error());
 			output = std::move(*opened);
@@ -2449,7 +2459,7 @@ namespace cxxlens::sdk
 			auto producer_family = capture_family(producer_directory->get());
 			if (!producer_family || producer_family->main.byte_count == 0U ||
 				producer_family->wal.byte_count <= 32U ||
-				producer_family->shm.byte_count < 32U * 1024U)
+				producer_family->shm.byte_count < std::uint64_t{32U} * 1024U)
 				return unexpected(
 					qualification_error("source-shm-readonly-qualification-producer-family"));
 			for (const auto destination : {cold_directory->get(), active_directory->get()})
@@ -2655,9 +2665,9 @@ namespace cxxlens::sdk
 					default:
 						return unexpected(qualification_error());
 				}
-				if (ordered_entries[role_index] != nullptr)
+				if (ordered_entries.at(role_index) != nullptr)
 					return unexpected(qualification_error());
-				ordered_entries[role_index] = &entry;
+				ordered_entries.at(role_index) = &entry;
 
 				const auto active = role_index != 3U;
 				const auto absent_shared_memory =

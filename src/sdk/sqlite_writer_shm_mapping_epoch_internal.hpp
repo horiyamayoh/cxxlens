@@ -31,6 +31,13 @@ namespace cxxlens::sdk
 	class sqlite_shm_writer_reader_borrow_mint_capability;
 	class sqlite_writer_shm_generation_epoch_authority;
 
+	struct sqlite_shm_writer_reader_borrow_tokens
+	{
+		std::uint64_t map_token{};
+		std::uint64_t generation{};
+		std::uint64_t holder_token{};
+	};
+
 	/**
 	 * Closed role of one native lifetime retained across a writer mapping epoch.
 	 *
@@ -502,9 +509,7 @@ namespace cxxlens::sdk
 		friend class sqlite_writer_shm_generation_epoch_authority;
 		explicit sqlite_shm_writer_reader_borrow_mint_capability(
 			std::shared_ptr<detail::sqlite_writer_shm_generation_epoch_custody> custody,
-			std::uint64_t map_token,
-			std::uint64_t generation,
-			std::uint64_t holder_token) noexcept;
+			sqlite_shm_writer_reader_borrow_tokens tokens) noexcept;
 		[[nodiscard]] result<sqlite_source_shm_target_namespace_epoch_reader_borrow>
 		mint(const sqlite_shm_reader_native_ok_projection_reservation& reservation);
 		void disarm() noexcept;

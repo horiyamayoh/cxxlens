@@ -71,8 +71,8 @@
     "suite": "llvm-toolchain-noble-22"
   },
   "local_workflows": {
-    ".github/workflows/quality.yml": "c6f7d4fa1f396288afadae8fda783c009a52e9f42c3bf6057bdc9db0827f8da3",
-    ".github/workflows/release.yml": "942a8b12eb18536f6a3a2a6161fff6eb3c718bddb7fbb46ed410865ae0ad3873"
+    ".github/workflows/quality.yml": "bc66179d80abf941249c02a7e0a6b417cbf2407954edaff6d1952c83077b643c",
+    ".github/workflows/release.yml": "e2ef4ee6b06dfa2521bb00ba82e8600e22b31e16154f7f9fa74eced8fd9b05ba"
   },
   "package_cache": {
     "correctness_role": "transport-optimization-only",

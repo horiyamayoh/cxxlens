@@ -803,7 +803,7 @@ namespace cxxlens::detail::sqlite_qualification
 					if (count >= 0 || errno != EINTR)
 						break;
 				}
-				if (count <= 0 || static_cast<std::size_t>(count) > requested)
+				if (count <= 0 || std::cmp_greater(count, requested))
 					return cxxlens::sdk::unexpected(raw_family_error("raw-file-short-read"));
 				const auto count_size = static_cast<std::size_t>(count);
 				if (auto updated = digest.update(std::span<const std::byte>{
@@ -843,7 +843,7 @@ namespace cxxlens::detail::sqlite_qualification
 					if (count >= 0 || errno != EINTR)
 						break;
 				}
-				if (count <= 0 || static_cast<std::size_t>(count) > requested)
+				if (count <= 0 || std::cmp_greater(count, requested))
 					return cxxlens::sdk::unexpected(raw_family_error("raw-file-short-read"));
 				offset += static_cast<std::uint64_t>(count);
 			}
@@ -1116,7 +1116,7 @@ namespace cxxlens::detail::sqlite_qualification
 		owned_descriptor creator_process{open_self_process_instance()};
 		if (process_identity == 0U || !creator_process ||
 			!process_instance_live(creator_process.get()) ||
-			static_cast<std::uint64_t>(::getpid()) != process_identity)
+			std::cmp_not_equal(::getpid(), process_identity))
 			return cxxlens::sdk::unexpected(qualification_error("creator-process-instance"));
 
 		if (::mkdirat(retained_parent.get(), leaf.c_str(), 0700) != 0)
@@ -1199,7 +1199,7 @@ namespace cxxlens::detail::sqlite_qualification
 		if (state == nullptr || !state->active)
 			return sqlite_disposable_qualification_verdict::capability_revoked_or_stale;
 #if defined(__linux__) && defined(STATX_MNT_ID)
-		if (static_cast<std::uint64_t>(::getpid()) != state->creator_process_identity ||
+		if (std::cmp_not_equal(::getpid(), state->creator_process_identity) ||
 			!process_instance_live(state->creator_process.get()) ||
 			request.creator_process_identity != state->creator_process_identity)
 			return sqlite_disposable_qualification_verdict::wrong_creator_process;

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <iomanip>
 #include <map>
+#include <optional>
 #include <ranges>
 #include <set>
 #include <sstream>
@@ -24,6 +25,12 @@ namespace cxxlens::sdk::query
 		[[nodiscard]] std::string json_string(const std::string_view value)
 		{
 			return cxxlens::sdk::detail::canonical_json_string(value);
+		}
+
+		template <class type>
+		[[nodiscard]] const type& checked_optional_value(const std::optional<type>& value)
+		{
+			return value.value();
 		}
 
 		[[nodiscard]] std::string column_json(const column_ref& column)
@@ -62,7 +69,7 @@ namespace cxxlens::sdk::query
 			auto present_type = cell.type;
 			present_type.optional = false;
 			return "{\"type\":" + json_string(present_type.canonical_name()) +
-				",\"value\":" + scalar_json(*cell.value) + "}";
+				",\"value\":" + scalar_json(checked_optional_value(cell.value)) + "}";
 		}
 
 		[[nodiscard]] std::string plain_digest(const std::string& value)
@@ -136,14 +143,15 @@ namespace cxxlens::sdk::query
 			switch (predicate.kind)
 			{
 				case predicate_kind::equals_present:
-					return "{\"column\":" + column_json(*predicate.column) +
+					return "{\"column\":" + column_json(checked_optional_value(predicate.column)) +
 						R"(,"kind":"equals_present","literal":{"type":)" +
-						json_string(predicate.literal_value->type) +
-						",\"value\":" + scalar_json(predicate.literal_value->value) + "}}";
+						json_string(checked_optional_value(predicate.literal_value).type) +
+						",\"value\":" +
+						scalar_json(checked_optional_value(predicate.literal_value).value) + "}}";
 				case predicate_kind::column_equals_present:
 					return R"({"kind":"column_equals_present","left":)" +
-						column_json(*predicate.left) +
-						",\"right\":" + column_json(*predicate.right) + "}";
+						column_json(checked_optional_value(predicate.left)) +
+						",\"right\":" + column_json(checked_optional_value(predicate.right)) + "}";
 				case predicate_kind::is_present:
 				case predicate_kind::is_absent:
 				case predicate_kind::is_unknown:
@@ -151,7 +159,7 @@ namespace cxxlens::sdk::query
 					const auto kind = predicate.kind == predicate_kind::is_present ? "is_present"
 						: predicate.kind == predicate_kind::is_absent			   ? "is_absent"
 																				   : "is_unknown";
-					return "{\"column\":" + column_json(*predicate.column) +
+					return "{\"column\":" + column_json(checked_optional_value(predicate.column)) +
 						",\"kind\":" + json_string(kind) + "}";
 				}
 				case predicate_kind::all:
@@ -1277,7 +1285,7 @@ namespace cxxlens::sdk::query
 		for (const auto& node : ir_.nodes)
 			if (node.operator_id == "query.scan.v1")
 			{
-				const auto decoded = decode_arguments(node);
+				auto decoded = decode_arguments(node);
 				if (!decoded)
 					return cxxlens::sdk::unexpected(std::move(decoded.error()));
 				const auto& scan = std::get<scan_arguments>(*decoded);
@@ -1288,7 +1296,7 @@ namespace cxxlens::sdk::query
 		{
 			if (node.operator_id == "query.scan.v1")
 			{
-				const auto decoded = decode_arguments(node);
+				auto decoded = decode_arguments(node);
 				if (!decoded)
 					return cxxlens::sdk::unexpected(std::move(decoded.error()));
 				const auto& scan = std::get<scan_arguments>(*decoded);

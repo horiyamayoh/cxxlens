@@ -88,6 +88,7 @@ def check(root: pathlib.Path) -> None:
     require_job_markers(
         quality,
         "contract-and-docs",
+        "cmake --build --preset docs\n",
         "--target cxxlens-quality\n",
         "ctest --test-dir build/docs",
         "quality|security|docs",
@@ -96,7 +97,7 @@ def check(root: pathlib.Path) -> None:
         quality,
         "installed-consumers",
         "ctest --preset install-check",
-        "^install\\\\.",
+        "^install$",
         'shared: ["OFF", "ON"]',
     )
     require_job_markers(
@@ -131,6 +132,7 @@ def check(root: pathlib.Path) -> None:
     require_job_markers(
         release,
         "contract-and-docs",
+        "cmake --build --preset docs\n",
         "--target cxxlens-quality\n",
         "ctest --test-dir build/docs",
         "quality|security|docs",
@@ -151,8 +153,7 @@ def check(root: pathlib.Path) -> None:
         release,
         "real-projects",
         "ctest --test-dir build/install-check --label-regex",
-        "install",
-        "integration",
+        "'^(install|integration)$'",
     )
     for job in ("maximum-scale", "real-projects"):
         if 'shared: ["OFF", "ON"]' not in job_body(release, job):

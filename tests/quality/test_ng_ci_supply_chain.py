@@ -88,6 +88,15 @@ class CiWorkflowTest(unittest.TestCase):
             with self.assertRaises(CiSupplyChainError):
                 check(ROOT)
 
+    def test_real_projects_selects_both_ctest_labels(self) -> None:
+        with self._temporary_release(
+            lambda text: text.replace(
+                "'^(install|integration)$'", "'^(install|integration)\\\\.'", 1
+            )
+        ):
+            with self.assertRaises(CiSupplyChainError):
+                check(ROOT)
+
 
 if __name__ == "__main__":
     unittest.main()

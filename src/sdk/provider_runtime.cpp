@@ -195,7 +195,7 @@ namespace cxxlens::sdk::provider
 			[[nodiscard]] std::string finish() noexcept
 			{
 				const auto bit_count = total_bytes_ * 8U;
-				pending_[pending_size_++] = std::byte{0x80U};
+				pending_.at(pending_size_++) = std::byte{0x80U};
 				if (pending_size_ > 56U)
 				{
 					std::fill(pending_.begin() + pending_size_, pending_.end(), std::byte{});
@@ -204,7 +204,7 @@ namespace cxxlens::sdk::provider
 				}
 				std::fill(pending_.begin() + pending_size_, pending_.begin() + 56U, std::byte{});
 				for (std::size_t index{}; index < 8U; ++index)
-					pending_[56U + index] = static_cast<std::byte>(
+					pending_.at(56U + index) = static_cast<std::byte>(
 						(bit_count >> (56U - static_cast<unsigned>(index * 8U))) & 0xffU);
 				transform(pending_);
 				constexpr std::string_view digits{"0123456789abcdef"};
@@ -239,22 +239,27 @@ namespace cxxlens::sdk::provider
 			void transform(const std::span<const std::byte> block) noexcept
 			{
 				std::array<std::uint32_t, 64U> schedule{};
+				const auto block_byte = [&](const std::size_t index)
+				{
+					return *std::next(block.begin(), static_cast<std::ptrdiff_t>(index));
+				};
 				for (std::size_t index{}; index < 16U; ++index)
 				{
 					const auto offset = index * 4U;
-					schedule[index] = (std::to_integer<std::uint32_t>(block[offset]) << 24U) |
-						(std::to_integer<std::uint32_t>(block[offset + 1U]) << 16U) |
-						(std::to_integer<std::uint32_t>(block[offset + 2U]) << 8U) |
-						std::to_integer<std::uint32_t>(block[offset + 3U]);
+					schedule.at(index) =
+						(std::to_integer<std::uint32_t>(block_byte(offset)) << 24U) |
+						(std::to_integer<std::uint32_t>(block_byte(offset + 1U)) << 16U) |
+						(std::to_integer<std::uint32_t>(block_byte(offset + 2U)) << 8U) |
+						std::to_integer<std::uint32_t>(block_byte(offset + 3U));
 				}
 				for (std::size_t index = 16U; index < schedule.size(); ++index)
 				{
-					const auto small_zero = std::rotr(schedule[index - 15U], 7) ^
-						std::rotr(schedule[index - 15U], 18) ^ (schedule[index - 15U] >> 3U);
-					const auto small_one = std::rotr(schedule[index - 2U], 17) ^
-						std::rotr(schedule[index - 2U], 19) ^ (schedule[index - 2U] >> 10U);
-					schedule[index] =
-						schedule[index - 16U] + small_zero + schedule[index - 7U] + small_one;
+					const auto small_zero = std::rotr(schedule.at(index - 15U), 7) ^
+						std::rotr(schedule.at(index - 15U), 18) ^ (schedule.at(index - 15U) >> 3U);
+					const auto small_one = std::rotr(schedule.at(index - 2U), 17) ^
+						std::rotr(schedule.at(index - 2U), 19) ^ (schedule.at(index - 2U) >> 10U);
+					schedule.at(index) =
+						schedule.at(index - 16U) + small_zero + schedule.at(index - 7U) + small_one;
 				}
 				auto [a, b, c, d, e, f, g, h] = state_;
 				for (std::size_t index{}; index < schedule.size(); ++index)
@@ -262,7 +267,7 @@ namespace cxxlens::sdk::provider
 					const auto big_one = std::rotr(e, 6) ^ std::rotr(e, 11) ^ std::rotr(e, 25);
 					const auto choose = (e & f) ^ (~e & g);
 					const auto first =
-						h + big_one + choose + round_constants[index] + schedule[index];
+						h + big_one + choose + round_constants.at(index) + schedule.at(index);
 					const auto big_zero = std::rotr(a, 2) ^ std::rotr(a, 13) ^ std::rotr(a, 22);
 					const auto majority = (a & b) ^ (a & c) ^ (b & c);
 					const auto second = big_zero + majority;
@@ -319,9 +324,11 @@ namespace cxxlens::sdk::provider
 			return output;
 		}
 
-		void append_host_cbor_head(std::vector<std::byte>& output,
-								   const std::uint8_t major,
-								   const std::uint64_t value)
+		void append_host_cbor_head(
+			std::vector<std::byte>& output,
+			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): protocol fields
+			const std::uint8_t major,
+			const std::uint64_t value)
 		{
 			const auto prefix = static_cast<std::uint8_t>(major << 5U);
 			if (value < 24U)
@@ -828,8 +835,8 @@ namespace cxxlens::sdk::provider
 			return canonical_value::from_tuple(std::move(output));
 		}
 
-		[[nodiscard]] result<std::string> runtime_projection_digest(const std::string_view domain,
-																	canonical_value projection)
+		[[nodiscard]] result<std::string>
+		runtime_projection_digest(const std::string_view domain, const canonical_value& projection)
 		{
 			auto encoded = canonical_binary(projection);
 			if (!encoded)
@@ -845,7 +852,7 @@ namespace cxxlens::sdk::provider
 			if (!value.starts_with(prefix) || value.size() != prefix.size() + 64U)
 				return false;
 			for (const auto byte : value.substr(prefix.size()))
-				if (!((byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f')))
+				if ((byte < '0' || byte > '9') && (byte < 'a' || byte > 'f'))
 					return false;
 			return true;
 		}
@@ -993,6 +1000,7 @@ namespace cxxlens::sdk::provider
 		provider_runtime_receipt::provider_runtime_receipt(
 			const std::uint64_t raw_stdout_byte_count,
 			std::string raw_stdout_sha256,
+			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): protocol fields
 			const std::uint64_t decoded_frame_count,
 			const std::uint64_t first_frame_sequence,
 			std::string frame_transcript_digest,
@@ -1073,13 +1081,14 @@ namespace cxxlens::sdk::provider
 			return {};
 		}
 
-		result<provider_runtime_receipt>
-		make_provider_runtime_receipt(const std::uint64_t raw_stdout_byte_count,
-									  std::string raw_stdout_sha256,
-									  const std::span<const frame> frames,
-									  const std::string_view task_id,
-									  const std::string_view terminal,
-									  const sealed_provider_transcript& sealed)
+		result<provider_runtime_receipt> make_provider_runtime_receipt(
+			const std::uint64_t raw_stdout_byte_count,
+			std::string raw_stdout_sha256,
+			const std::span<const frame> frames,
+			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): protocol fields
+			const std::string_view task_id,
+			const std::string_view terminal,
+			const sealed_provider_transcript& sealed)
 		{
 			provider_runtime_provenance provenance;
 			provenance.task_id = task_id;
@@ -1134,8 +1143,7 @@ namespace cxxlens::sdk::provider
 						"provider.protocol-state-invalid", "runtime-receipt", "batch-binding"));
 			}
 			else if (!provenance.dependency_group_id.empty() ||
-					 provenance.atomic_output_group_id.size() != 0U ||
-					 provenance.batch_id.size() != 0U)
+					 !provenance.atomic_output_group_id.empty() || !provenance.batch_id.empty())
 			{
 				return cxxlens::sdk::unexpected(runtime_error("provider.protocol-state-invalid",
 															  "runtime-receipt",
@@ -1178,14 +1186,16 @@ namespace cxxlens::sdk::provider
 			return {};
 		}
 
-		sealed_host_input::sealed_host_input(open_task_metadata task,
-											 protocol_credit credit,
-											 const std::uint16_t protocol_major,
-											 const std::uint16_t protocol_minor,
-											 const std::uint64_t total_bytes,
-											 const std::uint64_t chunk_bytes,
-											 std::vector<std::string> ordered_chunk_digests,
-											 std::string ordered_chunk_digest_set_digest)
+		sealed_host_input::sealed_host_input(
+			open_task_metadata task,
+			protocol_credit credit,
+			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): protocol fields
+			const std::uint16_t protocol_major,
+			const std::uint16_t protocol_minor,
+			const std::uint64_t total_bytes,
+			const std::uint64_t chunk_bytes,
+			std::vector<std::string> ordered_chunk_digests,
+			std::string ordered_chunk_digest_set_digest)
 			: task_{std::move(task)}, credit_{credit}, protocol_major_{protocol_major},
 			  protocol_minor_{protocol_minor}, total_bytes_{total_bytes}, chunk_bytes_{chunk_bytes},
 			  ordered_chunk_digests_{std::move(ordered_chunk_digests)},
@@ -1625,12 +1635,14 @@ namespace cxxlens::sdk::provider
 		}
 
 		result<sealed_provider_transcript>
-		rehydrate_provider_transcript(std::string task_id,
-									  const std::span<const relation_descriptor> output_descriptors,
-									  std::vector<sealed_provider_batch_replay> batches,
-									  std::vector<coverage_unit> coverage,
-									  std::vector<unresolved_item> unresolved,
-									  std::vector<evidence_item> evidence)
+		// Rehydration adopts the validated identifier across replay batches.
+		rehydrate_provider_transcript(
+			std::string task_id, // NOLINT(performance-unnecessary-value-param)
+			std::span<const relation_descriptor> output_descriptors,
+			std::vector<sealed_provider_batch_replay> batches,
+			std::vector<coverage_unit> coverage,
+			std::vector<unresolved_item> unresolved,
+			std::vector<evidence_item> evidence)
 		{
 			const auto fail = [&](std::string field, std::string detail = {})
 			{
@@ -2515,12 +2527,12 @@ namespace cxxlens::sdk::provider
 		{
 		  public:
 			explicit vector_host_input(const std::span<const std::byte> bytes) : bytes_{bytes} {}
-			result<std::uint64_t> size() const override
+			[[nodiscard]] result<std::uint64_t> size() const override
 			{
 				return bytes_.size();
 			}
-			result<std::size_t> read_at(const std::uint64_t offset,
-										const std::span<std::byte> output) const override
+			[[nodiscard]] result<std::size_t>
+			read_at(const std::uint64_t offset, const std::span<std::byte> output) const override
 			{
 				if (offset > bytes_.size())
 					return cxxlens::sdk::unexpected(

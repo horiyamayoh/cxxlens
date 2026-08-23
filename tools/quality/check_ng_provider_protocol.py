@@ -1252,24 +1252,12 @@ def validate_all(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, Any
     return contract, results, comparisons, fuzz_cases
 
 
-def make_report(contract: dict[str, Any], results: list[dict[str, Any]], comparisons: int, fuzz_cases: int) -> dict[str, Any]:
-    return {
-        "schema": "cxxlens.provider-conformance-report.v1",
-        "contract_digest": digest(contract),
-        "vector_results": results,
-        "fuzz": {"cases": fuzz_cases, "stable_rejections": fuzz_cases, "crashes": 0, "hangs": 0, "unbounded_allocations": 0},
-        "surface_matrix": {"surfaces": ["in_process", "out_of_process"], "orders": ["forward", "reverse", "seeded-shuffle"], "comparisons": comparisons, "all_equal": True},
-        "status": "green",
-    }
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("check",))
     parser.add_argument("--root", type=pathlib.Path, default=ROOT)
     args = parser.parse_args()
     contract, results, comparisons, fuzz_cases = validate_all(args.root.resolve())
-    report = make_report(contract, results, comparisons, fuzz_cases)
     print(f"verified provider protocol: {len(results)} vectors, {fuzz_cases} fuzz cases, {comparisons} surface comparisons, {digest(contract)}")
     return 0
 

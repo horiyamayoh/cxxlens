@@ -1359,16 +1359,22 @@ namespace cxxlens::sdk
 		auto expected = derive_domain_identity(descriptor, row);
 		if (!expected)
 			return cxxlens::sdk::unexpected(std::move(expected.error()));
-		const auto& result_column = *descriptor.domain_identity.result_column;
-		const auto found = row.cells.find(result_column);
-		if (found == row.cells.end() || found->second.state != cell_state::present ||
-			!found->second.value)
+		const auto& result_column = descriptor.domain_identity.result_column;
+		if (!result_column)
 			return cxxlens::sdk::unexpected(
-				relation_error("sdk.domain-identity-missing", result_column));
-		const auto* actual = std::get_if<std::string>(&*found->second.value);
+				relation_error("sdk.domain-identity-unavailable", descriptor.id));
+		const auto found = row.cells.find(*result_column);
+		if (found == row.cells.end() || found->second.state != cell_state::present)
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.domain-identity-missing", *result_column));
+		const auto& value = found->second.value;
+		if (!value)
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.domain-identity-missing", *result_column));
+		const auto* actual = std::get_if<std::string>(&*value);
 		if (actual == nullptr || *actual != *expected)
 			return cxxlens::sdk::unexpected(
-				relation_error("sdk.domain-identity-mismatch", result_column));
+				relation_error("sdk.domain-identity-mismatch", *result_column));
 		return {};
 	}
 

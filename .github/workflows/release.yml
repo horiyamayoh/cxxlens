@@ -54,6 +54,7 @@ jobs:
           CXX: clang++-22
         run: |
           cmake --preset docs -DCXXLENS_CLANG_ADAPTER=ON
+          cmake --build --preset docs
           cmake --build --preset docs --target cxxlens-quality
           ctest --test-dir build/docs --label-regex 'quality|security|docs' \
             --output-on-failure
@@ -194,7 +195,7 @@ jobs:
             -DCXXLENS_BUILD_SHARED=${{ matrix.shared }}
           cmake --build --preset install-check
           ctest --test-dir build/install-check --label-regex \
-            '^(install|integration)\\.' --output-on-failure
+            '^(install|integration)$' --output-on-failure
 
   package:
     name: Package after every release test

@@ -1166,7 +1166,7 @@ namespace cxxlens::detail::clang22
 		for (std::size_t index{}; index < plan.size(); ++index)
 		{
 			const auto& actual = plan[index];
-			const auto& expected = exact_output_plan[index];
+			const auto& expected = exact_output_plan.at(index);
 			if (actual.slot != expected.slot || actual.descriptor_id != expected.descriptor_id)
 				return sdk::unexpected(provider_error(
 					"provider.output-plan-invalid", "descriptor", "membership-or-order"));
@@ -1270,7 +1270,7 @@ namespace cxxlens::detail::clang22
 		output.equivalence_limitations = std::move(invocation_limitations);
 		const auto derived_toolchain = sdk::semantic_digest("toolchain-context", toolchain_digest);
 		if (!derived_toolchain)
-			return sdk::unexpected(std::move(derived_toolchain.error()));
+				return sdk::unexpected(derived_toolchain.error());
 		const auto toolchain =
 			toolchain_context_id.empty() ? *derived_toolchain : std::string{toolchain_context_id};
 		if (!sdk::validate_strong_id(toolchain))

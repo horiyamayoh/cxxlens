@@ -939,22 +939,31 @@ namespace cxxlens::sdk
 					ssize_t count{};
 					do
 					{
+						// The event queue is drained while holding the observation mutex so
+						// that the read and the namespace recheck remain one ordered
+						// observation.  This is a non-blocking descriptor; EINTR and
+						// EAGAIN/EWOULDBLOCK are handled below.
+						// NOLINTNEXTLINE(clang-analyzer-unix.BlockInCriticalSection)
 						count = ::read(event_queue_.get(), buffer.data(), buffer.size());
 					} while (count < 0 && errno == EINTR);
 					if (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
-						return expected_create ? result<void>{}
-											   : unexpected(observation_io_error());
+					{
+						if (expected_create)
+							return {};
+						return unexpected(observation_io_error());
+					}
 					if (count <= 0)
 						return unexpected(observation_io_error());
+					const auto count_size = static_cast<std::size_t>(count);
 					std::size_t offset{};
-					while (offset < static_cast<std::size_t>(count))
+					while (offset < count_size)
 					{
-						if (static_cast<std::size_t>(count) - offset < sizeof(inotify_event))
+						if (count_size - offset < sizeof(inotify_event))
 							return unexpected(observation_io_error());
 						const auto* event =
 							reinterpret_cast<const inotify_event*>(buffer.data() + offset);
 						const auto event_size = sizeof(inotify_event) + event->len;
-						if (event_size > static_cast<std::size_t>(count) - offset)
+						if (event_size > count_size - offset)
 							return unexpected(observation_io_error());
 						constexpr std::uint32_t unconditional =
 							IN_DELETE_SELF | IN_MOVE_SELF | IN_IGNORED | IN_UNMOUNT | IN_Q_OVERFLOW;
@@ -1006,21 +1015,27 @@ namespace cxxlens::sdk
 					ssize_t count{};
 					do
 					{
+						// Keep the drain under the observation mutex: a successful empty
+						// check must be ordered with the namespace checks that follow it.
+						// The descriptor is non-blocking and all transient outcomes are
+						// handled below.
+						// NOLINTNEXTLINE(clang-analyzer-unix.BlockInCriticalSection)
 						count = ::read(event_queue_.get(), buffer.data(), buffer.size());
 					} while (count < 0 && errno == EINTR);
 					if (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
 						return {};
 					if (count <= 0)
 						return unexpected(observation_io_error());
+					const auto count_size = static_cast<std::size_t>(count);
 					std::size_t offset{};
-					while (offset < static_cast<std::size_t>(count))
+					while (offset < count_size)
 					{
-						if (static_cast<std::size_t>(count) - offset < sizeof(inotify_event))
+						if (count_size - offset < sizeof(inotify_event))
 							return unexpected(observation_io_error());
 						const auto* event =
 							reinterpret_cast<const inotify_event*>(buffer.data() + offset);
 						const auto event_size = sizeof(inotify_event) + event->len;
-						if (event_size > static_cast<std::size_t>(count) - offset)
+						if (event_size > count_size - offset)
 							return unexpected(observation_io_error());
 						constexpr std::uint32_t unconditional =
 							IN_DELETE_SELF | IN_MOVE_SELF | IN_IGNORED | IN_UNMOUNT | IN_Q_OVERFLOW;

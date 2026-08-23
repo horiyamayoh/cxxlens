@@ -715,8 +715,8 @@ namespace cxxlens::detail::clang22::materialization
 			bindings.reserve(authority.authority_bindings.size());
 			for (std::size_t index{}; index < authority_paths.size(); ++index)
 			{
-				const auto& binding = authority.authority_bindings[index];
-				if (binding.path != authority_paths[index])
+				const auto& binding = authority.authority_bindings.at(index);
+				if (binding.path != authority_paths.at(index))
 					return sdk::unexpected(claim_error("materialization.identity-mismatch",
 													   "producer-authority.bindings",
 													   "missing-extra-duplicate-or-order"));
@@ -778,8 +778,8 @@ namespace cxxlens::detail::clang22::materialization
 			bindings.reserve(authority.authority_bindings.size());
 			for (std::size_t index{}; index < authority_paths.size(); ++index)
 			{
-				const auto& binding = authority.authority_bindings[index];
-				if (binding.path != authority_paths[index])
+				const auto& binding = authority.authority_bindings.at(index);
+				if (binding.path != authority_paths.at(index))
 					return sdk::unexpected(claim_error("materialization.identity-mismatch",
 													   "producer-authority.bindings",
 													   "missing-extra-duplicate-or-order"));
@@ -943,6 +943,7 @@ namespace cxxlens::detail::clang22::materialization
 			auto admitted_descriptors = request.engine.descriptors();
 			std::ranges::sort(admitted_descriptors, {}, &sdk::relation_descriptor::id);
 			std::vector<sdk::canonical_value> descriptors;
+			descriptors.reserve(admitted_descriptors.size());
 			for (const auto& descriptor : admitted_descriptors)
 				descriptors.push_back(object({
 					{"descriptor_id", text(descriptor.id)},
@@ -1044,6 +1045,7 @@ namespace cxxlens::detail::clang22::materialization
 			auto admitted_descriptors = engine.descriptors();
 			std::ranges::sort(admitted_descriptors, {}, &sdk::relation_descriptor::id);
 			std::vector<sdk::canonical_value> descriptors;
+			descriptors.reserve(admitted_descriptors.size());
 			for (const auto& descriptor : admitted_descriptors)
 				descriptors.push_back(object({
 					{"descriptor_id", text(descriptor.id)},
@@ -1134,12 +1136,17 @@ namespace cxxlens::detail::clang22::materialization
 												   "provider.coverage",
 												   "transport-task-plus-exact-three"));
 			for (std::size_t index{}; index < kinds.size(); ++index)
-				if (coverage[index].kind != kinds[index] ||
-					coverage[index].id != request.provider_task_id ||
-					coverage[index].state != "covered" || !coverage[index].reason.empty())
+			{
+				// The span is already bounded by the size check and loop condition above.
+				// NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
+				const auto& coverage_unit = coverage[index];
+				if (coverage_unit.kind != kinds.at(index) ||
+					coverage_unit.id != request.provider_task_id ||
+					coverage_unit.state != "covered" || !coverage_unit.reason.empty())
 					return sdk::unexpected(claim_error("materialization.coverage-incomplete",
 													   "provider.coverage",
 													   "canonical-balanced-covered"));
+			}
 			if (!result.provider_seal().unresolved().empty())
 				return sdk::unexpected(claim_error("materialization.coverage-incomplete",
 												   "provider.unresolved",
@@ -2153,14 +2160,18 @@ namespace cxxlens::detail::clang22::materialization
 												   "canonical-order-or-execution-binding"));
 			if (auto valid = validate_task_side_channels(task, result); !valid)
 				return sdk::unexpected(std::move(valid.error()));
-			const auto& context = contexts[task_index];
+			const auto& context = contexts.at(task_index);
 			const auto batches = result.provider_seal().batches();
 			for (std::size_t batch_index{}; batch_index < batches.size(); ++batch_index)
 			{
+				// The span is bounded by the loop condition above.
+				// NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
 				const auto rows = batches[batch_index].rows();
-				output_nonempty[task_index][batch_index] = !rows.empty();
+				output_nonempty.at(task_index).at(batch_index) = !rows.empty();
 				for (std::size_t row_index{}; row_index < rows.size(); ++row_index)
 				{
+					// The span is bounded by the loop condition above.
+					// NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
 					const auto& row = rows[row_index];
 					const auto row_digest = digest_text(row.canonical_form());
 					auto provenance = worker_provenance(row.descriptor_id, context, row_digest);
@@ -2212,8 +2223,10 @@ namespace cxxlens::detail::clang22::materialization
 					claim_error("materialization.claim-invalid", "base-rows", "exact-five"));
 			for (std::size_t index{}; index < base_rows.size(); ++index)
 			{
+				// The span is bounded by the loop condition above.
+				// NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
 				const auto& row = base_rows[index];
-				if (row.descriptor_id != base_descriptor_ids[index])
+				if (row.descriptor_id != base_descriptor_ids.at(index))
 					return sdk::unexpected(claim_error(
 						"materialization.claim-invalid", "base-rows", "dependency-order"));
 				auto row_digest = base_row_digest(request.engine, row);
@@ -2406,7 +2419,7 @@ namespace cxxlens::detail::clang22::materialization
 			for (std::size_t descriptor_index{}; descriptor_index < output_descriptor_ids.size();
 				 ++descriptor_index)
 			{
-				if (output_nonempty[task_index][descriptor_index])
+				if (output_nonempty.at(task_index).at(descriptor_index))
 					continue;
 				const bool canonical = descriptor_index < 3U;
 				const std::string producer =
@@ -2414,14 +2427,14 @@ namespace cxxlens::detail::clang22::materialization
 				const std::string transform = canonical ? basis->canonical_transform : producer;
 				const auto condition = condition_for(context);
 				auto empty_basis = empty_partition_basis(basis->direct_basis,
-														 output_descriptor_ids[descriptor_index],
+														 output_descriptor_ids.at(descriptor_index),
 														 condition,
 														 context.interpretation_domain,
 														 producer,
 														 transform);
 				if (!empty_basis)
 					return sdk::unexpected(std::move(empty_basis.error()));
-				auto partition = partition_for(output_descriptor_ids[descriptor_index],
+				auto partition = partition_for(output_descriptor_ids.at(descriptor_index),
 											   context,
 											   producer,
 											   std::move(*empty_basis),
@@ -3069,11 +3082,15 @@ namespace cxxlens::detail::clang22::materialization
 			const auto batches = result.provider_seal().batches();
 			for (std::size_t batch_index{}; batch_index < batches.size(); ++batch_index)
 			{
+				// The span is bounded by the loop condition above.
+				// NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
 				const auto rows = batches[batch_index].rows();
 				if (batch_index < output_nonempty.size())
-					output_nonempty[batch_index] = !rows.empty();
+					output_nonempty.at(batch_index) = !rows.empty();
 				for (std::size_t row_index{}; row_index < rows.size(); ++row_index)
 				{
+					// The span is bounded by the loop condition above.
+					// NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
 					const auto& row = rows[row_index];
 					const auto row_digest = digest_text(row.canonical_form());
 					auto provenance = worker_provenance(row.descriptor_id, context, row_digest);
@@ -3124,8 +3141,10 @@ namespace cxxlens::detail::clang22::materialization
 					claim_error("materialization.claim-invalid", "base-rows", "exact-five"));
 			for (std::size_t index{}; index < base_rows.size(); ++index)
 			{
+				// The span is bounded by the loop condition above.
+				// NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
 				const auto& row = base_rows[index];
-				if (row.descriptor_id != base_descriptor_ids[index])
+				if (row.descriptor_id != base_descriptor_ids.at(index))
 					return sdk::unexpected(claim_error(
 						"materialization.claim-invalid", "base-rows", "dependency-order"));
 				auto row_digest = base_row_digest(request.engine, row);
@@ -3207,21 +3226,21 @@ namespace cxxlens::detail::clang22::materialization
 			for (std::size_t descriptor_index{}; descriptor_index < output_descriptor_ids.size();
 				 ++descriptor_index)
 			{
-				if (output_nonempty[descriptor_index])
+				if (output_nonempty.at(descriptor_index))
 					continue;
 				const bool canonical = descriptor_index < 3U;
 				const std::string producer =
 					canonical ? basis->materializer_semantics : worker_semantics;
 				const std::string transform = canonical ? basis->canonical_transform : producer;
 				auto empty_basis = empty_partition_basis(basis->direct_basis,
-														 output_descriptor_ids[descriptor_index],
+														 output_descriptor_ids.at(descriptor_index),
 														 condition_for(context),
 														 context.interpretation_domain,
 														 producer,
 														 transform);
 				if (!empty_basis)
 					return sdk::unexpected(std::move(empty_basis.error()));
-				if (auto partition = partition_for(output_descriptor_ids[descriptor_index],
+				if (auto partition = partition_for(output_descriptor_ids.at(descriptor_index),
 												   context,
 												   producer,
 												   std::move(*empty_basis),
@@ -3773,8 +3792,8 @@ namespace cxxlens::detail::clang22::materialization
 				auto binding = request.task_metadata_binding(index);
 				if (!binding)
 					return sdk::unexpected(std::move(binding.error()));
-				if (binding->metadata.task_index != index || binding->input.source.size() != 0U ||
-					binding->input.source_content_base64.size() != 0U ||
+				if (binding->metadata.task_index != index || !binding->input.source.empty() ||
+					!binding->input.source_content_base64.empty() ||
 					binding->input.project != admitted.project_id())
 					return sdk::unexpected(claim_error("materialization.task-binding-mismatch",
 													   "task-metadata",

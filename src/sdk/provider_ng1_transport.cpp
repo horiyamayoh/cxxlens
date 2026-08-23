@@ -48,7 +48,8 @@ namespace cxxlens::sdk::provider::detail
 		using decoded_cbor_map = std::map<std::string, cbor_scalar, std::less<>>;
 
 		void append_big_endian(std::vector<std::byte>& output,
-							   const std::uint64_t value,
+			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): wire value and byte width
+								   const std::uint64_t value,
 							   const std::size_t width)
 		{
 			for (std::size_t index = width; index > 0U; --index)
@@ -191,7 +192,7 @@ namespace cxxlens::sdk::provider::detail
 			if (offset >= input.size())
 				return unexpected(transport_error("cbor", "truncated"));
 			const auto initial = std::to_integer<std::uint8_t>(input[offset]);
-			const auto major = initial >> 5U;
+			const auto major = static_cast<std::uint8_t>(initial >> 5U);
 			if (major != static_cast<std::uint8_t>(cbor_major::unsigned_integer) &&
 				major != static_cast<std::uint8_t>(cbor_major::text))
 				return unexpected(transport_error("cbor", "scalar-type"));
@@ -290,6 +291,7 @@ namespace cxxlens::sdk::provider::detail
 		}
 
 		[[nodiscard]] result<std::uint32_t>
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): text and diagnostic field
 		parse_semantic_version_component(const std::string_view text, const std::string_view field)
 		{
 			if (text.empty() || (text.size() > 1U && text.front() == '0'))
@@ -322,7 +324,7 @@ namespace cxxlens::sdk::provider::detail
 																  "provider_version");
 				if (!component)
 					return unexpected(std::move(component.error()));
-				components[index] = *component;
+				components.at(index) = *component;
 				begin = end + 1U;
 			}
 			if (text.find('.', begin) != std::string_view::npos)
@@ -382,11 +384,12 @@ namespace cxxlens::sdk::provider::detail
 				value.size() != semantic_digest_prefix.size() + 64U)
 				return false;
 			for (const auto byte : value.substr(semantic_digest_prefix.size()))
-				if (!((byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f')))
+				if ((byte < '0' || byte > '9') && (byte < 'a' || byte > 'f'))
 					return false;
 			return true;
 		}
 
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): digest and diagnostic field
 		[[nodiscard]] result<void> validate_digest(const std::string_view value,
 												   const std::string_view field)
 		{
@@ -395,6 +398,7 @@ namespace cxxlens::sdk::provider::detail
 			return {};
 		}
 
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): identifier and diagnostic field
 		[[nodiscard]] result<void> validate_id(const std::string_view value,
 											   const std::string_view field)
 		{

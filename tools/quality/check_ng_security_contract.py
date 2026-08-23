@@ -641,19 +641,6 @@ def validate_all(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, Any
     return profile, results, counts
 
 
-def report(profile: dict[str, Any], results: list[dict[str, Any]], counts: dict[str, int]) -> dict[str, Any]:
-    return {
-        "schema": "cxxlens.security-conformance-report.v1",
-        "status": "green",
-        "contract_digest": digest(profile),
-        "vector_count": len(results),
-        "accepted": sum(row["decision"] == "accepted" for row in results),
-        "rejected": sum(row["decision"] == "rejected" for row in results),
-        "reason_codes": sorted({row["reason_code"] for row in results}),
-        "registry_counts": counts,
-    }
-
-
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("check",))
@@ -665,12 +652,13 @@ def main() -> int:
     args = arguments()
     root = args.root.resolve()
     profile, results, counts = validate_all(root)
-    value = report(profile, results, counts)
+    accepted = sum(row["decision"] == "accepted" for row in results)
+    rejected = sum(row["decision"] == "rejected" for row in results)
     print(
         "security contract passed: "
-        f"{len(results)} vectors, {value['accepted']} accepted, {value['rejected']} rejected, "
+        f"{len(results)} vectors, {accepted} accepted, {rejected} rejected, "
         f"{counts['namespaces']} namespaces, {counts['support_tuples']} support tuples, "
-        f"digest {value['contract_digest']}"
+        f"digest {digest(profile)}"
     )
     return 0
 

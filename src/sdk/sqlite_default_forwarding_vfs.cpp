@@ -194,6 +194,9 @@ namespace cxxlens::sdk
 		{
 			static_assert(std::is_pointer_v<Function>);
 			static_assert(sizeof(Function) == sizeof(const void*));
+			// The native VFS identity is intentionally the address of a callback image.  POSIX
+			// guarantees that dladdr accepts this representation on the supported platform.
+			// NOLINTNEXTLINE(bugprone-bitwise-pointer-cast)
 			return std::bit_cast<const void*>(function);
 		}
 
@@ -489,6 +492,10 @@ namespace cxxlens::sdk
 			const sqlite_backend_opaque_identity* registration_epoch{};
 		};
 
+		// This node mirrors sqlite3_file's ABI storage and keeps several independent lifetime
+		// domains adjacent. Reordering it to satisfy a padding heuristic would obscure those
+		// ownership boundaries and does not change the externally allocated file layout.
+		// NOLINTNEXTLINE(clang-analyzer-optin.performance.Padding)
 		struct native_file_node
 		{
 			native_file_node(const std::size_t storage_bytes,
@@ -497,11 +504,15 @@ namespace cxxlens::sdk
 							 std::shared_ptr<default_connection_observation> observation_pin,
 							 std::shared_ptr<sqlite_source_shm_target_namespace_epoch> epoch_pin,
 							 sqlite3_vfs* underlying_vfs,
+							 // NOLINTBEGIN(bugprone-easily-swappable-parameters): ordered native
+							 // identity fields.
 							 const void* underlying_app_data,
 							 const void* underlying_image,
 							 const void* underlying_open_callback)
+				// NOLINTEND(bugprone-easily-swappable-parameters)
 				: storage_count{(storage_bytes + sizeof(std::max_align_t) - 1U) /
 								sizeof(std::max_align_t)},
+				  // NOLINTNEXTLINE(modernize-avoid-c-arrays): aligned raw SQLite ABI storage.
 				  storage{std::make_unique<std::max_align_t[]>(storage_count)},
 				  owner{std::move(owner_pin)}, runtime_lifetime{std::move(runtime_pin)},
 				  observation{std::move(observation_pin)},
@@ -512,17 +523,19 @@ namespace cxxlens::sdk
 				  underlying_image_identity{underlying_image},
 				  underlying_open_callback_address{underlying_open_callback},
 				  underlying_full_pathname_callback_address{
-					  function_address(underlying_vfs->full_pathname)}
+					  underlying_vfs != nullptr ? function_address(underlying_vfs->full_pathname)
+												: nullptr}
 			{
 				std::memset(storage.get(), 0, storage_count * sizeof(std::max_align_t));
 			}
 
-			[[nodiscard]] sqlite3_file* file() noexcept
+			[[nodiscard]] sqlite3_file* file() const noexcept
 			{
 				return reinterpret_cast<sqlite3_file*>(storage.get());
 			}
 
 			std::size_t storage_count{};
+			// NOLINTNEXTLINE(modernize-avoid-c-arrays): aligned raw sqlite3_file ABI storage.
 			std::unique_ptr<std::max_align_t[]> storage;
 			std::shared_ptr<default_forwarding_state> owner;
 			std::shared_ptr<void> runtime_lifetime;
@@ -894,13 +907,13 @@ namespace cxxlens::sdk
 		[[nodiscard]] std::optional<native_lifetime_receipts>
 		make_native_lifetime_receipts(const default_forwarding_state& owner,
 									  const native_file_node& node,
-									  const sqlite_backend_file_role role,
-									  const std::size_t event_index,
-									  const int input_flags,
-									  const int delegated_flags,
-									  const int returned_flags,
+									  sqlite_backend_file_role role,
+									  std::size_t event_index,
+									  int input_flags,
+									  int delegated_flags,
+									  int returned_flags,
 									  const opened_object_identities& identities,
-									  const std::uint64_t lifetime_sequence) noexcept;
+									  std::uint64_t lifetime_sequence) noexcept;
 
 		[[nodiscard]] bool source_shm_runtime_receipt_present(
 			const sqlite_source_shm_runtime_binding& runtime) noexcept
@@ -968,7 +981,7 @@ namespace cxxlens::sdk
 					return unexpected(forwarding_error("forwarding-vfs-lifetime"));
 				auto* underlying = static_cast<sqlite3_vfs*>(registry.pinned_default_vfs);
 				if (underlying->version < 1 ||
-					underlying->os_file_bytes < static_cast<int>(sizeof(sqlite3_file)) ||
+					std::cmp_less(underlying->os_file_bytes, sizeof(sqlite3_file)) ||
 					underlying->maximum_pathname <= 0 ||
 					std::cmp_greater(underlying->maximum_pathname, maximum_pathname_bytes) ||
 					underlying->name == nullptr || underlying->name[0] == '\0' ||
@@ -1034,6 +1047,9 @@ namespace cxxlens::sdk
 					std::terminate();
 			}
 
+			// Result's error accessor is guarded by the preceding success check. The noexcept
+			// boundary is deliberate: a retiring lease must remain queued, never escape cleanup.
+			// NOLINTNEXTLINE(bugprone-exception-escape)
 			[[nodiscard]] bool finalize_lifetime() noexcept
 			{
 				if (open_file_count_.load(std::memory_order_acquire) != 0U)
@@ -1340,13 +1356,15 @@ namespace cxxlens::sdk
 						sqlite_backend_file_role::shared_memory,
 						sqlite_backend_file_role::rollback_journal,
 					};
-					for (std::size_t index{}; index < family_roles.size(); ++index)
+					auto family_entry = family_entries.begin();
+					for (const auto family_role : family_roles)
 					{
-						auto retained = plan.qualification.target_namespace_epoch->retained_entry(
-							family_roles[index]);
+						auto retained =
+							plan.qualification.target_namespace_epoch->retained_entry(family_role);
 						if (!retained)
 							return unexpected(forwarding_error("source-shm-readonly-arm"));
-						family_entries[index] = std::move(*retained);
+						*family_entry = std::move(*retained);
+						++family_entry;
 					}
 					auto exact_file_family = seal_sqlite_source_shm_exact_file_family(
 						plan.canonical_vfs_locator,
@@ -1553,13 +1571,16 @@ namespace cxxlens::sdk
 
 					constexpr std::array expected_keys{"mode", "cache", "readonly_shm"};
 					constexpr std::array expected_values{"ro", "private", "1"};
-					for (std::size_t index{}; index < expected_keys.size(); ++index)
+					for (auto key = expected_keys.begin(), value = expected_values.begin();
+						 key != expected_keys.end();
+						 ++key, ++value)
 					{
-						const auto* key = runtime.uri_key(name, static_cast<int>(index));
-						const auto* value = runtime.uri_parameter(name, expected_keys[index]);
-						if (key == nullptr || value == nullptr ||
-							std::string_view{key} != expected_keys[index] ||
-							std::string_view{value} != expected_values[index])
+						const auto* returned_key =
+							runtime.uri_key(name, static_cast<int>(key - expected_keys.begin()));
+						const auto* returned_value = runtime.uri_parameter(name, *key);
+						if (returned_key == nullptr || returned_value == nullptr ||
+							std::string_view{returned_key} != *key ||
+							std::string_view{returned_value} != *value)
 							return reject();
 					}
 					if (runtime.uri_key(name, static_cast<int>(expected_keys.size())) != nullptr ||
@@ -2049,11 +2070,14 @@ namespace cxxlens::sdk
 					application_generated_uri == strict_source_shm_uri(canonical_locator);
 			}
 
-			default_forwarding_state(sqlite_private_snapshot_registry_binding registry,
-									 sqlite3_vfs* underlying,
-									 const void* underlying_app_data_identity,
-									 const void* underlying_image_identity,
-									 const std::size_t file_offset)
+			default_forwarding_state(
+				sqlite_private_snapshot_registry_binding registry,
+				sqlite3_vfs* underlying,
+				// NOLINTBEGIN(bugprone-easily-swappable-parameters): authenticated ABI order.
+				const void* underlying_app_data_identity,
+				const void* underlying_image_identity,
+				const std::size_t file_offset)
+				// NOLINTEND(bugprone-easily-swappable-parameters)
 				: registry_{std::move(registry)}, underlying_{underlying},
 				  underlying_app_data_identity_{underlying_app_data_identity},
 				  underlying_image_identity_{underlying_image_identity},
@@ -2204,12 +2228,16 @@ namespace cxxlens::sdk
 								observation->source_shm_open_plan->delegated_vfs_locator;
 							source_ready = observation->source_shm_target_fullpath_projected;
 						}
+						// These qualification states intentionally share the same readiness
+						// projection, while the fullpath fixture state between them must remain
+						// false. NOLINTBEGIN(bugprone-branch-clone)
 						else if (observation->source_shm_qualification_open_plan)
 							source_ready = observation->source_shm_qualification_fullpath_preserved;
 						else if (observation->source_shm_qualification_fixture_fullpath_plan)
 							source_ready = false;
 						else if (observation->source_shm_qualification_fixture_pending_open_plan)
 							source_ready = observation->source_shm_qualification_fullpath_preserved;
+						// NOLINTEND(bugprone-branch-clone)
 						const auto consumed_fixture_retry =
 							observation->source_shm_qualification_fixture_main_accepted &&
 							expected_path == path;
@@ -2419,6 +2447,9 @@ namespace cxxlens::sdk
 
 		[[nodiscard]] deferred_forwarding_state_queue& deferred_forwarding_states() noexcept
 		{
+			// This queue intentionally lives until process exit so deferred VFS teardown can never
+			// race static destruction. Allocation failure is unrecoverable at this boundary.
+			// NOLINTNEXTLINE(bugprone-unhandled-exception-at-new)
 			static auto* queue = new deferred_forwarding_state_queue;
 			return *queue;
 		}
@@ -2666,7 +2697,7 @@ namespace cxxlens::sdk
 				if (!node)
 					return unexpected(forwarding_error("source-shm-writer-pending-promotion"));
 				std::unique_lock lifecycle_lock{node->writer_lifecycle_mutex, std::try_to_lock};
-				if (!lifecycle_lock.owns_lock() || node->writer_holders.size() != 0U)
+				if (!lifecycle_lock.owns_lock() || !node->writer_holders.empty())
 					return unexpected(forwarding_error("source-shm-writer-pending-promotion"));
 				if (node->writer_pending.empty())
 					return {};
@@ -2762,7 +2793,7 @@ namespace cxxlens::sdk
 					if (attach_to_open_connection)
 					{
 						if (observation.main_handle_read_only ||
-							observation.shm_map_events.size() != 0U ||
+							!observation.shm_map_events.empty() ||
 							!observation.main_native_file_receipt ||
 							!observation.main_native_xopen_receipt ||
 							!observation.main_callback_cohort || !observation.main_open_epoch ||
@@ -2902,12 +2933,14 @@ namespace cxxlens::sdk
 					sqlite_backend_file_role::rollback_journal,
 				};
 				std::array<sqlite_backend_entry_observation, roles.size()> entries;
-				for (std::size_t index{}; index < roles.size(); ++index)
+				auto entry = entries.begin();
+				for (const auto role : roles)
 				{
-					auto retained = target_namespace_epoch.retained_entry(roles[index]);
+					auto retained = target_namespace_epoch.retained_entry(role);
 					if (!retained)
 						return unexpected(forwarding_error("source-shm-writer-family"));
-					entries[index] = std::move(*retained);
+					*entry = std::move(*retained);
+					++entry;
 				}
 				auto exact_file_family = seal_sqlite_source_shm_exact_file_family(
 					canonical_locator_,
@@ -3446,6 +3479,9 @@ namespace cxxlens::sdk
 					wrapper->name == nullptr ||
 					std::string_view{wrapper->name} != node.owner->registered_vfs_name() ||
 					registry.find == nullptr ||
+					// registered_vfs_name() is a view into the owning std::string, whose backing
+					// storage is kept alive by node.owner for this check.
+					// NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage)
 					registry.find(node.owner->registered_vfs_name().data()) != wrapper ||
 					wrapper->open != forwarding_vfs_open ||
 					wrapper->full_pathname != forwarding_vfs_full_pathname ||
@@ -3492,24 +3528,22 @@ namespace cxxlens::sdk
 							 : nullptr))
 					return false;
 
-				const auto* raw = const_cast<native_file_node&>(node).file();
+				const auto* raw = node.file();
 				if (raw == nullptr)
 					return false;
 				const auto* methods = raw->methods;
 				if (methods == nullptr)
 					return allow_closed_file;
 				const auto inspected = inspect_native_methods(node);
-				if (methods != node.underlying_methods_identity ||
-					methods->version != node.underlying_methods_version ||
-					methods->close != node.trusted_methods.close ||
-					methods->close != node.trusted_close ||
-					inspected.forwarding_methods == nullptr ||
-					methods->shm_map != node.trusted_methods.shm_map ||
-					methods->shm_lock != node.trusted_methods.shm_lock ||
-					methods->shm_barrier != node.trusted_methods.shm_barrier ||
-					methods->shm_unmap != node.trusted_methods.shm_unmap)
-					return false;
-				return true;
+				return methods == node.underlying_methods_identity &&
+					methods->version == node.underlying_methods_version &&
+					methods->close == node.trusted_methods.close &&
+					methods->close == node.trusted_close &&
+					inspected.forwarding_methods != nullptr &&
+					methods->shm_map == node.trusted_methods.shm_map &&
+					methods->shm_lock == node.trusted_methods.shm_lock &&
+					methods->shm_barrier == node.trusted_methods.shm_barrier &&
+					methods->shm_unmap == node.trusted_methods.shm_unmap;
 			}
 			catch (...)
 			{
@@ -3589,9 +3623,11 @@ namespace cxxlens::sdk
 				quarantine_native_file(node);
 				return status;
 			}
+			// The native close callback may throw; its result is deliberately converted into a
+			// quarantine outcome below, so this catch must remain empty.
+			// NOLINTNEXTLINE(bugprone-empty-catch)
 			catch (...)
 			{
-				// A throwing callback has an unknown cleanup outcome and cannot be retried.
 			}
 			quarantine_native_file(node);
 			return sqlite_io_error;
@@ -4158,7 +4194,7 @@ namespace cxxlens::sdk
 				if (!issuer.valid())
 					return false;
 
-				sqlite_shm_reader_session_terminal_identity_role role;
+				sqlite_shm_reader_session_terminal_identity_role role{};
 				switch (kind)
 				{
 					case sqlite_shm_reader_session_terminal_kind::success:
@@ -4202,7 +4238,7 @@ namespace cxxlens::sdk
 		}
 
 		[[nodiscard]] int forwarding_source_shm_unmap(forwarding_file& file,
-													  const int remove_file) noexcept;
+													  int remove_file) noexcept;
 
 		[[nodiscard]] std::optional<sqlite_shm_callback_execution_receipt>
 		make_source_reader_callback(default_forwarding_state& owner,
@@ -4210,9 +4246,9 @@ namespace cxxlens::sdk
 		{
 			try
 			{
-				const auto thread_identity =
+				auto thread_identity =
 					make_source_reader_identity(owner, node, "reader-callback-thread");
-				const auto invocation_token =
+				auto invocation_token =
 					make_source_reader_identity(owner, node, "reader-callback-invocation");
 				if (!thread_identity || !invocation_token)
 					return std::nullopt;
@@ -4276,14 +4312,12 @@ namespace cxxlens::sdk
 		{
 			try
 			{
-				const auto target_identity = observe_source_reader_target_identity(file);
-				const auto callback = make_source_reader_callback(owner, node);
-				const auto transaction =
+				auto target_identity = observe_source_reader_target_identity(file);
+				auto callback = make_source_reader_callback(owner, node);
+				auto transaction =
 					make_source_reader_identity(owner, node, "reader-transaction-epoch");
-				const auto decode =
-					make_source_reader_identity(owner, node, "reader-decode-attempt");
-				const auto authority =
-					make_source_reader_identity(owner, node, "reader-authority-read");
+				auto decode = make_source_reader_identity(owner, node, "reader-decode-attempt");
+				auto authority = make_source_reader_identity(owner, node, "reader-authority-read");
 				if (!callback || !transaction || !decode || !authority ||
 					context.family_binding == nullptr || context.alias_lifetime == nullptr ||
 					context.registration_epoch == nullptr)
@@ -4610,6 +4644,9 @@ namespace cxxlens::sdk
 					int returned_status = native_status;
 					volatile void* returned_mapping = native_mapping;
 					bool protocol_violation{};
+					// These branches deliberately normalize each native result class to one
+					// fail-closed protocol outcome; the repeated assignments are part of that
+					// matrix. NOLINTBEGIN(bugprone-branch-clone)
 					if (native_status == sqlite_ok)
 					{
 						protocol_violation = true;
@@ -4648,6 +4685,7 @@ namespace cxxlens::sdk
 						returned_status = sqlite_io_error;
 						returned_mapping = nullptr;
 					}
+					// NOLINTEND(bugprone-branch-clone)
 
 					if (!file.target_namespace_epoch->recheck())
 					{
@@ -4719,7 +4757,7 @@ namespace cxxlens::sdk
 				}
 				auto issuer = sqlite_shm_reader_lifecycle_production_factory::identity_issuer(
 					*context->registry);
-				const auto thread_identity =
+				auto thread_identity =
 					make_source_reader_identity(*file.owner, *node, "reader-map-thread");
 				if (!thread_identity)
 				{
@@ -5099,11 +5137,12 @@ namespace cxxlens::sdk
 			}
 		}
 
-		[[nodiscard]] std::optional<sqlite_backend_opaque_identity>
-		make_writer_identity(default_forwarding_state& owner,
-							 const native_file_node& node,
-							 const std::string_view purpose,
-							 const std::string_view profile) noexcept
+		[[nodiscard]] std::optional<sqlite_backend_opaque_identity> make_writer_identity(
+			default_forwarding_state& owner,
+			const native_file_node& node,
+			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): fixed identity order.
+			const std::string_view purpose,
+			const std::string_view profile) noexcept
 		{
 			try
 			{
@@ -5471,7 +5510,10 @@ namespace cxxlens::sdk
 				*context.family, cleanup, callback, outcome));
 		}
 
+		// This fail-closed cleanup boundary intentionally converts any variant/lifecycle
+		// exception into terminal quarantine; it must not escape a native callback.
 		[[nodiscard]] int
+		// NOLINTNEXTLINE(bugprone-exception-escape): terminal native cleanup boundary.
 		fail_writer_post_native(forwarding_file& file,
 								const source_shm_reader_registry_context& context,
 								sqlite_shm_writer_post_native_mapping& post_native,
@@ -5506,7 +5548,10 @@ namespace cxxlens::sdk
 			return sqlite_io_error;
 		}
 
+		// This fail-closed cleanup boundary intentionally converts any variant/lifecycle
+		// exception into terminal quarantine; it must not escape a native callback.
 		[[nodiscard]] int
+		// NOLINTNEXTLINE(bugprone-exception-escape): terminal native cleanup boundary.
 		fail_writer_pending(forwarding_file& file,
 							const source_shm_reader_registry_context& context,
 							sqlite_shm_pending_mapping& pending,
@@ -5829,6 +5874,9 @@ namespace cxxlens::sdk
 						{
 							(void)methods->shm_unmap(raw, 0);
 						}
+						// Native cleanup has no recoverable action here; the failure is recorded by
+						// the quarantine transition below.
+						// NOLINTNEXTLINE(bugprone-empty-catch)
 						catch (...)
 						{
 						}
@@ -6308,6 +6356,9 @@ namespace cxxlens::sdk
 					int returned_status = native_status;
 					volatile void* returned_mapping = native_mapping;
 					bool protocol_violation{};
+					// The native status matrix is intentionally explicit so every impossible
+					// mapping/result combination becomes a terminal protocol violation.
+					// NOLINTBEGIN(bugprone-branch-clone)
 					if (native_status == sqlite_ok)
 					{
 						protocol_violation = true;
@@ -6346,6 +6397,7 @@ namespace cxxlens::sdk
 						returned_status = sqlite_io_error;
 						returned_mapping = nullptr;
 					}
+					// NOLINTEND(bugprone-branch-clone)
 
 					bool observed_identity{};
 					if (!file->source_shm_qualification_candidate)
@@ -6367,7 +6419,6 @@ namespace cxxlens::sdk
 							 !record_shared_memory_identity(file->connection_observation,
 															*expected_identity))
 					{
-						protocol_violation = true;
 						returned_status = sqlite_io_error;
 						returned_mapping = nullptr;
 						(void)release_native_mapping();
@@ -6716,6 +6767,7 @@ namespace cxxlens::sdk
 						return sqlite_io_error;
 					node->reader_handoff.reset();
 					auto live_close = std::move(*begun);
+					// NOLINTNEXTLINE(bugprone-exception-escape): no-throw quarantine conversion.
 					const auto quarantine_live_close_unmap = [&]() noexcept
 					{
 						auto terminal = sqlite_shm_reader_lifecycle_production_factory::
@@ -6859,6 +6911,7 @@ namespace cxxlens::sdk
 						unmapped->kind() !=
 							sqlite_shm_reader_unmap_terminal_kind::retired_confirmed)
 						return sqlite_io_error;
+					// NOLINTNEXTLINE(bugprone-exception-escape): no-throw quarantine conversion.
 					const auto quarantine_live_close = [&]() noexcept
 					{
 						auto terminal = sqlite_shm_reader_lifecycle_production_factory::
@@ -6996,6 +7049,7 @@ namespace cxxlens::sdk
 				if (!begun)
 					return sqlite_io_error;
 				auto close = std::move(*begun);
+				// NOLINTNEXTLINE(bugprone-exception-escape): no-throw quarantine conversion.
 				const auto quarantine_close = [&]() noexcept
 				{
 					auto terminal =
@@ -7030,9 +7084,8 @@ namespace cxxlens::sdk
 						*node->reader_open_authority,
 						close,
 						close_callback_identity->receipt());
-					if (!(cut &&
-						  cut->progress ==
-							  sqlite_shm_reader_close_cut_progress::native_effect_ready))
+					if (!cut ||
+						cut->progress != sqlite_shm_reader_close_cut_progress::native_effect_ready)
 					{
 						if (cut)
 							(void)context->registry->fail_reader_close_cut_wait(
@@ -7217,6 +7270,7 @@ namespace cxxlens::sdk
 				}
 				file.native->reader_handoff.reset();
 				auto unmap = std::move(*begun);
+				// NOLINTNEXTLINE(bugprone-exception-escape): no-throw quarantine conversion.
 				const auto quarantine_unmap = [&]() noexcept
 				{
 					auto terminal =

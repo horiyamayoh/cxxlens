@@ -27,6 +27,9 @@ namespace cxxlens::detail::clang22
 			const auto input_size = static_cast<std::int32_t>(value.size());
 			UErrorCode status = U_ZERO_ERROR;
 			std::int32_t utf16_size{};
+			// ICU receives the explicit byte count; this view is intentionally not required
+			// to be NUL-terminated.
+			// NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage)
 			u_strFromUTF8(nullptr, 0, &utf16_size, value.data(), input_size, &status);
 			if (status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status))
 				return sdk::unexpected(unicode_error("invalid-utf8"));
@@ -34,8 +37,18 @@ namespace cxxlens::detail::clang22
 			status = U_ZERO_ERROR;
 			std::vector<UChar> utf16(static_cast<std::size_t>(utf16_size));
 			std::int32_t converted_size{};
+			// ICU receives the explicit byte count; this view is intentionally not required
+			// to be NUL-terminated.
+			// NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage)
 			u_strFromUTF8(
-				utf16.data(), utf16_size, &converted_size, value.data(), input_size, &status);
+				// NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage)
+				utf16.data(),
+				utf16_size,
+				&converted_size,
+				// NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage)
+				value.data(),
+				input_size,
+				&status);
 			if (U_FAILURE(status) || converted_size != utf16_size)
 				return sdk::unexpected(unicode_error("utf8-conversion"));
 			return utf16;

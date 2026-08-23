@@ -1150,6 +1150,9 @@ namespace cxxlens::detail::clang22::materialization
 					if (!cleanup_failure)
 						cleanup_failure.emplace(std::move(failure));
 				}
+				// Cleanup is best-effort here because this guard itself is noexcept; the
+				// failure is retained by record_cleanup_failure when possible.
+				// NOLINTNEXTLINE(bugprone-empty-catch)
 				catch (...)
 				{
 				}

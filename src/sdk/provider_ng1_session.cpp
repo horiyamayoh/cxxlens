@@ -15,7 +15,7 @@ namespace cxxlens::sdk::provider::detail
 				value.size() != semantic_digest_prefix.size() + 64U)
 				return false;
 			for (const auto byte : value.substr(semantic_digest_prefix.size()))
-				if (!((byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f')))
+				if ((byte < '0' || byte > '9') && (byte < 'a' || byte > 'f'))
 					return false;
 			return true;
 		}
@@ -25,7 +25,7 @@ namespace cxxlens::sdk::provider::detail
 			if (!value.starts_with("sha256:") || value.size() != 71U)
 				return false;
 			for (const auto byte : value.substr(7U))
-				if (!((byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f')))
+				if ((byte < '0' || byte > '9') && (byte < 'a' || byte > 'f'))
 					return false;
 			return true;
 		}
@@ -168,7 +168,7 @@ namespace cxxlens::sdk::provider::detail
 		if (!bindings_match(configuration))
 			return unexpected(session_error("binding", "cross-surface-mismatch"));
 
-		const auto task_id = configuration.heartbeat_binding.task_id;
+		auto task_id = configuration.heartbeat_binding.task_id;
 		auto heartbeat = ng1_heartbeat_state::create(configuration.heartbeat_binding,
 													 configuration.host_started_at_ns);
 		if (!heartbeat)
@@ -198,7 +198,7 @@ namespace cxxlens::sdk::provider::detail
 		  heartbeat_{std::move(other.heartbeat_)}, progress_{std::move(other.progress_)},
 		  recovery_{std::move(other.recovery_)}, spill_{std::move(other.spill_)},
 		  latest_fsync_receipt_{std::move(other.latest_fsync_receipt_)},
-		  last_host_receipt_time_ns_{std::move(other.last_host_receipt_time_ns_)},
+		  last_host_receipt_time_ns_{other.last_host_receipt_time_ns_},
 		  replay_output_digest_{std::move(other.replay_output_digest_)},
 		  replay_frame_transcript_digest_{std::move(other.replay_frame_transcript_digest_)},
 		  task_accepted_{std::exchange(other.task_accepted_, true)},
@@ -309,6 +309,9 @@ namespace cxxlens::sdk::provider::detail
 		return poison(std::move(original_error));
 	}
 
+	// The timestamp and sequence are an ordered protocol observation pair; their types and
+	// order are intentionally identical to the provider heartbeat contract.
+	// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 	result<void>
 	ng1_session_coordinator::observe_heartbeat(const ng1_heartbeat_control& control,
 											   const ng1_heartbeat_kind expected_kind,
@@ -334,6 +337,7 @@ namespace cxxlens::sdk::provider::detail
 		last_host_receipt_time_ns_ = host_receipt_time_ns;
 		return {};
 	}
+	// NOLINTEND(bugprone-easily-swappable-parameters)
 
 	result<void>
 	ng1_session_coordinator::observe_host_probe(const ng1_heartbeat_control& control,

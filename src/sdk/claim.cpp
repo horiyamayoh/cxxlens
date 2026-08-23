@@ -548,7 +548,7 @@ namespace cxxlens::sdk
 			if (!sha256_digest(direct->basis_digest))
 				return unexpected(claim_error("sdk.claim-basis-invalid", "direct"));
 			const std::array fields{canonical_value::from_string(direct->basis_digest)};
-			const auto typed = canonical_identity_digest("producer-input-direct", fields);
+			auto typed = canonical_identity_digest("producer-input-direct", fields);
 			if (!typed)
 				return unexpected(std::move(typed.error()));
 			return typed->substr(typed->find(':') + 1U);
@@ -577,7 +577,7 @@ namespace cxxlens::sdk
 			canonical_value::from_tuple(std::move(consumed)),
 			canonical_value::from_string(derived.transform_semantics),
 		};
-		const auto typed = canonical_identity_digest("producer-input-derived", fields);
+		auto typed = canonical_identity_digest("producer-input-derived", fields);
 		if (!typed)
 			return unexpected(std::move(typed.error()));
 		return typed->substr(typed->find(':') + 1U);

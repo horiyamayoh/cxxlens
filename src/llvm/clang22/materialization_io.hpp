@@ -11,8 +11,8 @@
 namespace cxxlens::detail::clang22::materialization
 {
 	inline constexpr std::uint64_t maximum_raw_request_bytes = 1U << 30U;
-	inline constexpr std::size_t default_stream_chunk_bytes = 64U * 1024U;
-	inline constexpr std::size_t maximum_stream_chunk_bytes = 1024U * 1024U;
+	inline constexpr std::size_t default_stream_chunk_bytes = std::size_t{64U} * 1024U;
+	inline constexpr std::size_t maximum_stream_chunk_bytes = std::size_t{1024U} * 1024U;
 
 	/** Closed failure classes retained entirely inside the private materializer boundary. */
 	enum class materialization_io_failure_kind : std::uint8_t

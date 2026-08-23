@@ -339,12 +339,6 @@ function(cxxlens_configure_clang22 target)
           "The exact Clang 22 boundary requires the packaged clang-cpp shared target"
       )
     endif()
-    if(NOT TARGET LLVM)
-      message(
-        FATAL_ERROR
-          "The exact Clang 22 boundary requires the packaged LLVM shared target"
-      )
-    endif()
     get_target_property(_cxxlens_clang_cpp_type clang-cpp TYPE)
     if(NOT _cxxlens_clang_cpp_type STREQUAL "SHARED_LIBRARY")
       message(
@@ -352,17 +346,23 @@ function(cxxlens_configure_clang22 target)
           "The exact Clang 22 boundary requires clang-cpp to be a shared library target"
       )
     endif()
-    get_target_property(_cxxlens_llvm_type LLVM TYPE)
-    if(NOT _cxxlens_llvm_type STREQUAL "SHARED_LIBRARY")
-      message(
-        FATAL_ERROR
-          "The exact Clang 22 boundary requires LLVM to be a shared library target"
-      )
+    # LLVM publishes two supported shared layouts: distribution archives may
+    # export LLVM symbols directly from the monolithic clang-cpp DSO, while
+    # distribution packages split those symbols into a separate LLVM DSO. In
+    # the split layout, link LLVM explicitly because a transitive DT_NEEDED
+    # entry from clang-cpp is not sufficient for direct references under GNU
+    # ld. In the monolithic layout, clang-cpp is the complete shared boundary.
+    target_link_libraries(${target} PRIVATE clang-cpp)
+    if(TARGET LLVM)
+      get_target_property(_cxxlens_llvm_type LLVM TYPE)
+      if(NOT _cxxlens_llvm_type STREQUAL "SHARED_LIBRARY")
+        message(
+          FATAL_ERROR
+            "The exact Clang 22 boundary requires LLVM to be a shared library target when the package exports an LLVM target"
+        )
+      endif()
+      target_link_libraries(${target} PRIVATE LLVM)
     endif()
-    # Adapter objects call inline LLVM helpers whose out-of-line symbols live
-    # in libLLVM.  Link both DSOs explicitly; a transitive DT_NEEDED entry
-    # from clang-cpp is not sufficient for direct references under GNU ld.
-    target_link_libraries(${target} PRIVATE clang-cpp LLVM)
     if(UNIX AND CXXLENS_ENABLE_ASAN)
       set(CXXLENS_CLANG22_ASAN_SHARED_BOUNDARY
           TRUE

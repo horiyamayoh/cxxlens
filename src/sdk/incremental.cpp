@@ -152,6 +152,7 @@ namespace cxxlens::sdk::incremental
 		[[nodiscard]] result<std::string> digest_closure(const closure_result& value)
 		{
 			std::vector<canonical_value> rows;
+			rows.reserve(value.rows.size());
 			for (const auto& row : value.rows)
 				rows.push_back(
 					canonical_value::from_tuple({canonical_value::from_string(row.root),
@@ -160,6 +161,7 @@ namespace cxxlens::sdk::incremental
 												 canonical_value::from_string(row.interpretation),
 												 strings(row.evidence)}));
 			std::vector<canonical_value> unresolved;
+			unresolved.reserve(value.unresolved.size());
 			for (const auto& item : value.unresolved)
 				unresolved.push_back(
 					canonical_value::from_tuple({canonical_value::from_string(item.code),
@@ -402,18 +404,17 @@ namespace cxxlens::sdk::incremental
 		for (const auto& row : rows)
 			if (!validate_strong_id(row.root) || !validate_strong_id(row.target) ||
 				row.condition_fragments.empty() || !validate_strong_id(row.interpretation) ||
-				row.evidence.empty())
-				return unexpected(make_error("sdk.closure-row-incomplete", row.root, row.target));
-			else if (std::ranges::any_of(row.condition_fragments,
-										 [](const std::string& value)
-										 {
-											 return !validate_strong_id(value);
-										 }) ||
-					 std::ranges::any_of(row.evidence,
-										 [](const std::string& value)
-										 {
-											 return !validate_strong_id(value);
-										 }))
+				row.evidence.empty() ||
+				std::ranges::any_of(row.condition_fragments,
+									[](const std::string& value)
+									{
+										return !validate_strong_id(value);
+									}) ||
+				std::ranges::any_of(row.evidence,
+									[](const std::string& value)
+									{
+										return !validate_strong_id(value);
+									}))
 				return unexpected(make_error("sdk.closure-row-incomplete", row.root, row.target));
 		for (const auto& item : unresolved)
 			if ((item.code != "sdk.closure-edge-budget" || item.field != "max_edges") &&

@@ -149,7 +149,7 @@ namespace cxxlens::sdk
 			if (values.size() > stages.size())
 				return false;
 			for (std::size_t index{}; index < values.size(); ++index)
-				if (values[index].stage != stages[index])
+				if (values[index].stage != stages.at(index))
 					return false;
 			for (std::size_t index{}; index + 1U < values.size(); ++index)
 				if (values[index].result != sqlite_shm_writer_gate_stage_result::passed)
@@ -160,7 +160,7 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool failure_matches(const std::size_t index,
 										   const sqlite_shm_writer_gate_failure value) noexcept
 		{
-			return index < failures.size() && failures[index] == value;
+			return index < failures.size() && failures.at(index) == value;
 		}
 
 	} // namespace
@@ -269,7 +269,7 @@ namespace cxxlens::sdk
 				sqlite_shm_writer_gate_outcome{kind,
 											   std::move(owner.binding_),
 											   std::move(stages_value),
-											   std::move(failure),
+											   failure,
 											   terminal_reason,
 											   terminal_locus}};
 		}
@@ -292,9 +292,8 @@ namespace cxxlens::sdk
 		std::optional<sqlite_shm_writer_gate_failure> failure,
 		std::optional<sqlite_shm_writer_gate_terminal_reason> terminal_reason,
 		std::optional<sqlite_shm_writer_gate_terminal_locus> terminal_locus)
-		: kind_{kind}, binding_{std::move(binding)}, stages_{std::move(stages)},
-		  failure_{std::move(failure)}, terminal_reason_{terminal_reason},
-		  terminal_locus_{std::move(terminal_locus)}
+		: kind_{kind}, binding_{std::move(binding)}, stages_{std::move(stages)}, failure_{failure},
+		  terminal_reason_{terminal_reason}, terminal_locus_{terminal_locus}
 	{
 	}
 

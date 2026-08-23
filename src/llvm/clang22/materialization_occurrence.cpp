@@ -150,7 +150,9 @@ namespace cxxlens::detail::clang22::materialization
 		};
 
 		[[nodiscard]] sdk::result<std::vector<std::byte>>
-		read_fd_bounded(const int descriptor, const std::uint64_t maximum)
+		// The byte limit and descriptor are intentionally ordered as the bounded-read contract.
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+		read_fd_bounded(const std::uint64_t maximum, const int descriptor)
 		{
 			auto identity = materialization_fd_identity(descriptor, true);
 			if (!identity || identity->size_bytes > maximum ||
@@ -198,7 +200,7 @@ namespace cxxlens::detail::clang22::materialization
 			{
 				return sdk::unexpected(occurrence_error(std::string{role}, "allocation"));
 			}
-			std::array<std::byte, 64U * 1024U> buffer{};
+			std::array<std::byte, std::size_t{64U} * 1024U> buffer{};
 			std::uint64_t offset{};
 			while (offset < before->size_bytes)
 			{
@@ -229,8 +231,10 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] sdk::result<materialization_owned_fd>
 		immutable_verified_snapshot(const int source,
 									const materialization_file_identity& expected_identity,
-									const std::string_view expected_digest,
-									const std::string_view role)
+									// The role labels the following digest and is intentionally separate from it.
+									// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+									const std::string_view role,
+									const std::string_view expected_digest)
 		{
 #if defined(__linux__) && defined(SYS_memfd_create) && defined(F_ADD_SEALS) && \
 	defined(F_GET_SEALS) && defined(F_SEAL_WRITE) && defined(F_SEAL_GROW) && \
@@ -257,7 +261,7 @@ namespace cxxlens::detail::clang22::materialization
 			{
 				return sdk::unexpected(occurrence_error(std::string{role}, "allocation"));
 			}
-			std::array<std::byte, 64U * 1024U> buffer{};
+			std::array<std::byte, std::size_t{64U} * 1024U> buffer{};
 			std::uint64_t offset{};
 			while (offset < before->size_bytes)
 			{
@@ -335,7 +339,7 @@ namespace cxxlens::detail::clang22::materialization
 			if (!measured)
 				return sdk::unexpected(std::move(measured.error()));
 			auto snapshot = immutable_verified_snapshot(
-				opened->get(), measured->identity, authority.digest, authority.role);
+				opened->get(), measured->identity, authority.role, authority.digest);
 			auto rebound = open_materialization_beneath(prefix, authority.path, O_RDONLY);
 			auto rebound_identity = rebound
 				? materialization_fd_identity(rebound->get(), true)
@@ -363,13 +367,13 @@ namespace cxxlens::detail::clang22::materialization
 	parse_materialization_occurrence_manifest(const std::span<const std::byte> bytes,
 											  const std::string_view expected_configuration)
 	{
-		if (bytes.size() > 1024U * 1024U)
+		if (bytes.size() > std::size_t{1024U} * 1024U)
 			return sdk::unexpected(occurrence_error("manifest", "maximum-bytes"));
 		std::string raw{reinterpret_cast<const char*>(bytes.data()), bytes.size()};
 		json_limits limits;
-		limits.max_input_bytes = 1024U * 1024U;
+		limits.max_input_bytes = std::size_t{1024U} * 1024U;
 		limits.max_string_bytes = 4095U;
-		limits.max_total_string_bytes = 256U * 1024U;
+		limits.max_total_string_bytes = std::size_t{256U} * 1024U;
 		limits.max_array_elements = 19U;
 		limits.max_object_members = 7U;
 		limits.max_total_values = 84U;
@@ -422,14 +426,14 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::unexpected(occurrence_error("files", "entry"));
 			if (index < static_roles.size())
 			{
-				if (*role != static_roles[index] || *path != static_paths[index])
+				if (*role != static_roles.at(index) || *path != static_paths.at(index))
 					return sdk::unexpected(occurrence_error("files", "static-order"));
 			}
 			else
 			{
 				const auto shared_index = index - static_roles.size();
-				if (*configuration != "shared" || *role != shared_roles[shared_index] ||
-					!shared_library_path(*path, shared_stems[shared_index]))
+				if (*configuration != "shared" || *role != shared_roles.at(shared_index) ||
+					!shared_library_path(*path, shared_stems.at(shared_index)))
 					return sdk::unexpected(occurrence_error("files", "shared-order"));
 			}
 			if (*path == materialization_occurrence_manifest_path)
@@ -570,7 +574,7 @@ namespace cxxlens::detail::clang22::materialization
 		auto manifest_identity = materialization_fd_identity(manifest_fd->get(), true);
 		if (!manifest_identity)
 			return sdk::unexpected(std::move(manifest_identity.error()));
-		auto manifest_bytes = read_fd_bounded(manifest_fd->get(), 1024U * 1024U);
+		auto manifest_bytes = read_fd_bounded(std::uint64_t{1024U} * 1024U, manifest_fd->get());
 		if (!manifest_bytes)
 			return sdk::unexpected(std::move(manifest_bytes.error()));
 		auto rebound_manifest = open_materialization_beneath(

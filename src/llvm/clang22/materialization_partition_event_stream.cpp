@@ -295,7 +295,11 @@ namespace cxxlens::detail::clang22::materialization
 		}
 
 		[[nodiscard]] sdk::result<void>
+		// Event kind, key, and payload are positional fields of the canonical event tuple.
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 		validate_event_projection(const materialization_partition_event_kind kind,
+								  // Key and payload are positional fields of the canonical event tuple.
+								  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 								  const std::span<const std::byte> key,
 								  const std::span<const std::byte> payload)
 		{
@@ -396,8 +400,8 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(event_error("event", "unknown-kind"));
 		}
 
-		[[nodiscard]] std::array<std::byte, 32U> parse_raw_digest(const std::string_view digest,
-																  const std::string_view field)
+		[[nodiscard]] std::array<std::byte, 32U>
+		parse_raw_digest(const std::string_view digest)
 		{
 			std::array<std::byte, 32U> output{};
 			if (!digest.starts_with("sha256:") || digest.size() != 71U)
@@ -418,9 +422,8 @@ namespace cxxlens::detail::clang22::materialization
 				const auto low_value = nibble(low);
 				if (high_value < 0 || low_value < 0)
 					return {};
-				output[index] = static_cast<std::byte>((high_value << 4) | low_value);
+				output.at(index) = static_cast<std::byte>((high_value << 4) | low_value);
 			}
-			(void)field;
 			return output;
 		}
 
@@ -437,7 +440,7 @@ namespace cxxlens::detail::clang22::materialization
 			append_u64(input, static_cast<std::uint64_t>(projection.size()));
 			input.insert(input.end(), projection.begin(), projection.end());
 			const auto digest = sdk::content_digest(input);
-			return parse_raw_digest(digest, "digest");
+			return parse_raw_digest(digest);
 		}
 
 		class digest_writer
@@ -469,7 +472,7 @@ namespace cxxlens::detail::clang22::materialization
 				auto digest = accumulator_->finish();
 				if (!digest)
 					return sdk::unexpected(spool_error("digest", "finish"));
-				return parse_raw_digest(*digest, "digest");
+				return parse_raw_digest(*digest);
 			}
 
 		  private:
@@ -525,9 +528,13 @@ namespace cxxlens::detail::clang22::materialization
 		}
 
 		[[nodiscard]] sdk::result<void>
+		// Began and ended are distinct ordered state-machine flags, not interchangeable values.
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 		validate_frame_shape(const std::span<const std::byte> frame,
-							 const std::uint64_t ordinal,
-							 bool& began,
+								 const std::uint64_t ordinal,
+								 // Began and ended are distinct ordered state-machine flags.
+								 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+								 bool& began,
 							 bool& ended,
 							 std::vector<std::byte>& previous_order_key)
 		{
@@ -585,8 +592,12 @@ namespace cxxlens::detail::clang22::materialization
 		}
 
 		[[nodiscard]] sdk::result<std::array<std::byte, 32U>>
+		// The digest framing contract orders body end, spool index, frame count, and body bytes.
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 		digest_frames(materialization_replayable_spool& spool,
-					  const std::uint64_t body_end,
+						  // Digest framing preserves the canonical body-end/spool-index order.
+						  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+						  const std::uint64_t body_end,
 					  const std::uint64_t spool_index,
 					  const std::uint64_t frame_count,
 					  const std::uint64_t body_bytes)
@@ -627,8 +638,12 @@ namespace cxxlens::detail::clang22::materialization
 		}
 
 		[[nodiscard]] sdk::result<std::array<std::byte, 32U>>
+		// The prefix digest framing contract orders body end, spool index, and census fields.
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 		digest_prefix(materialization_replayable_spool& spool,
-					  const std::uint64_t body_end,
+						  // Digest framing preserves the canonical body-end/spool-index order.
+						  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+						  const std::uint64_t body_end,
 					  const std::uint64_t spool_index,
 					  const std::uint64_t frame_count,
 					  const std::uint64_t body_bytes,
@@ -803,7 +818,7 @@ namespace cxxlens::detail::clang22::materialization
 
 	sdk::result<materialization_partition_event_stream>
 	materialization_partition_event_stream::begin(
-		std::string materialization_request_id,
+		const std::string& materialization_request_id,
 		const std::uint64_t spool_index,
 		const materialization_event_ordinal first_event_ordinal,
 		const std::uint64_t declared_frame_count,

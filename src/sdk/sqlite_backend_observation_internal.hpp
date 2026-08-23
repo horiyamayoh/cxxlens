@@ -692,6 +692,7 @@ namespace cxxlens::sdk
 		[[nodiscard]] virtual result<sqlite_backend_connection_observation> snapshot() const = 0;
 		/** Older observation profiles fail closed and cannot arm this source-only profile. */
 		[[nodiscard]] virtual result<void>
+		// NOLINTNEXTLINE(performance-unnecessary-value-param): the override consumes this plan.
 		arm_source_shm_readonly_profile(sqlite_source_shm_qualified_open_plan)
 		{
 			return error{"store.backend-unavailable",
@@ -700,6 +701,7 @@ namespace cxxlens::sdk
 		}
 		/** Only a dedicated scratch qualification scope may accept this provisional tuple. */
 		[[nodiscard]] virtual result<void>
+		// NOLINTNEXTLINE(performance-unnecessary-value-param): the override consumes this plan.
 		arm_source_shm_readonly_qualification_candidate(sqlite_source_shm_qualification_open_plan)
 		{
 			return error{"store.backend-unavailable",
@@ -708,6 +710,7 @@ namespace cxxlens::sdk
 		}
 		/** One exact producer main pathname may bypass host canonicalization exactly once. */
 		[[nodiscard]] virtual result<void> arm_source_shm_qualification_fixture_fullpath(
+			// NOLINTNEXTLINE(performance-unnecessary-value-param): the override consumes this plan.
 			sqlite_source_shm_qualification_fixture_fullpath_plan)
 		{
 			return error{"store.backend-unavailable",
@@ -738,7 +741,10 @@ namespace cxxlens::sdk
 		}
 		/** Retain the qualified source namespace epoch for the following current-v3 writer. */
 		[[nodiscard]] virtual result<void> arm_writer_shm_mapping_epoch(
+			// NOLINTNEXTLINE(performance-unnecessary-value-param): the override consumes the epoch.
 			std::shared_ptr<sqlite_source_shm_target_namespace_epoch> target_namespace_epoch,
+			// NOLINTNEXTLINE(performance-unnecessary-value-param): the override consumes the
+			// identity.
 			sqlite_backend_opaque_identity sqlite_source_id)
 		{
 			(void)target_namespace_epoch;
