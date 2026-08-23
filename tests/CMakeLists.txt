@@ -1519,6 +1519,11 @@ add_dependencies(
   cxxlens-sdk-negative-provider_no_credit
   cxxlens-g5-runtime)
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_dependencies(cxxlens-ng-test-binaries
+                   cxxlens-unit-sdk-provider-process-channel)
+endif()
+
 if(CXXLENS_ENABLE_ASAN OR CXXLENS_ENABLE_UBSAN)
   add_dependencies(cxxlens-ng-test-binaries cxxlens-sanitizer-canary)
 endif()
