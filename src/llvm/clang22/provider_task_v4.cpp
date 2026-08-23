@@ -263,21 +263,25 @@ namespace cxxlens::detail::clang22
 			});
 		}
 
+		/**
+		 * The task-v4 semantic identity uses the same closure reference as the
+		 * source-closure transport codec.  Member/blob counts remain validated
+		 * transport metadata on source_closure_summary; they are redundant with
+		 * the authenticated manifest digest and must not create a second task
+		 * identity projection.
+		 */
 		[[nodiscard]] sdk::result<json_value>
-		closure_summary_projection(const source_closure_summary& summary)
+		closure_reference_projection(const source_closure_summary& summary)
 		{
-			auto id = json_string(summary.source_closure_id, "source_closure_id");
-			auto digest = json_string(summary.source_closure_digest, "source_closure_digest");
-			auto manifest = json_string(summary.manifest_digest, "manifest_digest");
+			auto id = json_string(summary.source_closure_id, "source_closure.id");
+			auto digest = json_string(summary.source_closure_digest, "source_closure.digest");
+			auto manifest = json_string(summary.manifest_digest, "source_closure.manifest_digest");
 			if (!id || !digest || !manifest)
 				return sdk::unexpected(invalid("source_closure", "invalid-utf8"));
 			return json_object({
-				{"blob_count", json_value::unsigned_integer(summary.blob_count)},
+				{"digest", std::move(*digest)},
+				{"id", std::move(*id)},
 				{"manifest_digest", std::move(*manifest)},
-				{"member_count", json_value::unsigned_integer(summary.member_count)},
-				{"source_closure_digest", std::move(*digest)},
-				{"source_closure_id", std::move(*id)},
-				{"unique_blob_bytes", json_value::unsigned_integer(summary.unique_blob_bytes)},
 			});
 		}
 
@@ -311,7 +315,7 @@ namespace cxxlens::detail::clang22
 			if (!schema || !base_provider || !base_digest || !main_path || !workdir)
 				return sdk::unexpected(invalid("task", "invalid-utf8"));
 			auto open = open_task_projection(task.open_task);
-			auto closure = closure_summary_projection(task.source_closure);
+			auto closure = closure_reference_projection(task.source_closure);
 			if (!open || !closure)
 				return sdk::unexpected(invalid("task", "projection"));
 			return json_object({
