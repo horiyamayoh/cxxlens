@@ -1011,9 +1011,8 @@ cxxlens_add_test_executable(
 target_link_libraries(cxxlens-clang22-source-closure-task-v4-worker
                       PRIVATE cxxlens_clang22_worker_core)
 if(CXXLENS_BUILD_SHARED)
-  target_sources(
-    cxxlens-clang22-source-closure-task-v4-worker
-    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+  target_sources(cxxlens-clang22-source-closure-task-v4-worker
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
 endif()
 if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG22_LIBRARY_DIRS)
   # The positive worker path must invoke the exact packaged compiler selected by

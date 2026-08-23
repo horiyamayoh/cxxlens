@@ -70,8 +70,6 @@ namespace cxxlens::sdk
 		constexpr std::string_view workspace_path_prefix{"/cxxlens-sqlite-wal-recovery-v1/"};
 		constexpr std::string_view workspace_profile{
 			"cxxlens.sqlite-wal-only-private-recovery-workspace.v1"};
-		std::atomic<std::uint64_t> workspace_builder_attempt_count_for_testing{};
-
 		using sqlite3_file = sqlite_vfs_abi::file;
 		using sqlite3_io_methods = sqlite_vfs_abi::io_methods;
 		using sqlite3_vfs = sqlite_vfs_abi::vfs;
@@ -1357,10 +1355,9 @@ namespace cxxlens::sdk
 
 	result<std::shared_ptr<sqlite_wal_recovery_workspace_builder>>
 	make_sqlite_wal_recovery_workspace_builder(
-		sqlite_backend_opaque_identity source_capability_token,
-		sqlite_private_snapshot_registry_binding registry)
+	sqlite_backend_opaque_identity source_capability_token,
+	sqlite_private_snapshot_registry_binding registry)
 	{
-		workspace_builder_attempt_count_for_testing.fetch_add(1U, std::memory_order_relaxed);
 		if (source_capability_token.profile.empty() || source_capability_token.bytes.empty())
 			return unexpected(workspace_error("source-binding"));
 		auto runtime = bind_runtime(std::move(registry));
@@ -1411,8 +1408,4 @@ namespace cxxlens::sdk
 #endif
 	}
 
-	std::uint64_t sqlite_wal_recovery_workspace_builder_attempt_count_for_testing() noexcept
-	{
-		return workspace_builder_attempt_count_for_testing.load(std::memory_order_relaxed);
-	}
 } // namespace cxxlens::sdk

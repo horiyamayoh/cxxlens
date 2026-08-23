@@ -129,6 +129,4 @@ namespace cxxlens::sdk
 		sqlite_backend_opaque_identity source_capability_token,
 		sqlite_private_snapshot_registry_binding registry);
 
-	[[nodiscard]] std::uint64_t
-	sqlite_wal_recovery_workspace_builder_attempt_count_for_testing() noexcept;
 } // namespace cxxlens::sdk
