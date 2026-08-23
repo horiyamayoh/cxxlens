@@ -897,7 +897,8 @@ target_link_libraries(
   cxxlens-clang22-materialization-v4-store-positive
   PRIVATE cxxlens_clang22_materializer_safety_support
           cxxlens_clang22_materializer_v4_claims
-          cxxlens_clang22_materializer_v4_ingress)
+          cxxlens_clang22_materializer_v4_ingress
+          cxxlens_clang22_materializer_v4_store_source)
 add_test(NAME adapter.clang22-materialization-v4-store-positive
          COMMAND cxxlens-clang22-materialization-v4-store-positive)
 set_tests_properties(
@@ -1186,6 +1187,21 @@ set_tests_properties(
   adapter.clang22-provider-worker-v4
   PROPERTIES LABELS
              "adapter;provider;clang22;source-closure;task;v4;worker;security")
+
+cxxlens_add_test_executable(
+  cxxlens-clang22-provider-worker-v4-claim-bridge
+  adapter/clang22/provider_worker_v4_claim_bridge_test.cpp)
+target_link_libraries(
+  cxxlens-clang22-provider-worker-v4-claim-bridge
+  PRIVATE cxxlens_clang22_worker_v4_claim_bridge
+          cxxlens_clang22_materializer_v4_claims
+          cxxlens_clang22_materializer_v4_ingress)
+add_test(NAME adapter.clang22-provider-worker-v4-claim-bridge
+         COMMAND cxxlens-clang22-provider-worker-v4-claim-bridge)
+set_tests_properties(
+  adapter.clang22-provider-worker-v4-claim-bridge
+  PROPERTIES LABELS
+             "adapter;provider;clang22;materialization;worker;v4;claim;security")
 
 cxxlens_add_test_executable(cxxlens-clang22-provider-worker-channel
                             adapter/clang22/provider_worker_channel_test.cpp)

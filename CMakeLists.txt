@@ -488,6 +488,22 @@ target_compile_features(cxxlens_clang22_materializer_v4_ingress
 cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_ingress)
 cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_ingress)
 
+# Typed task-v4 replay source for the Store handoff.  It consumes only sealed
+# v4 translations plus explicit output authority; no legacy request/task graph
+# or inferred publication metadata is permitted at this boundary.
+add_library(cxxlens_clang22_materializer_v4_store_source STATIC EXCLUDE_FROM_ALL
+            src/llvm/clang22/materialization_v4_store_source.cpp)
+target_link_libraries(
+  cxxlens_clang22_materializer_v4_store_source
+  PUBLIC cxxlens::base
+  PRIVATE cxxlens::kernel cxxlens_clang22_materializer_v4_ingress)
+target_include_directories(cxxlens_clang22_materializer_v4_store_source
+                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_clang22_materializer_v4_store_source
+                        PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_store_source)
+cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_store_source)
+
 # Request-v2.2 admission is kept in a standalone source-private boundary.  The
 # legacy pipeline remains available only to the retained safety implementation;
 # v2.2 tests and consumers do not pull that graph merely to issue a task token.
@@ -570,6 +586,22 @@ if(CXXLENS_ENABLE_UBSAN AND NOT MSVC)
   set_source_files_properties(src/llvm/clang22/provider_worker_v2_2.cpp
                               PROPERTIES COMPILE_OPTIONS "-frtti")
 endif()
+
+# Source-private production bridge for the explicit task-v4 detached-claim
+# handoff.  It consumes only the worker core and the independently validating
+# v4 ingress; it does not open or mutate a Store.
+add_library(
+  cxxlens_clang22_worker_v4_claim_bridge STATIC
+  src/llvm/clang22/provider_worker_v4_claim_bridge.cpp)
+target_link_libraries(
+  cxxlens_clang22_worker_v4_claim_bridge
+  PUBLIC cxxlens::base
+  PRIVATE cxxlens_clang22_worker_core cxxlens_clang22_materializer_v4_ingress)
+target_include_directories(cxxlens_clang22_worker_v4_claim_bridge
+                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_clang22_worker_v4_claim_bridge PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens_clang22_worker_v4_claim_bridge)
+cxxlens_enable_sanitizers(cxxlens_clang22_worker_v4_claim_bridge)
 
 if(BUILD_TESTING)
   # Source-private safety support for retained Store/SQLite/receipt tests. This
@@ -656,6 +688,7 @@ add_executable(cxxlens-clang-worker-22
                src/llvm/clang22/provider_worker_main.cpp)
 target_link_libraries(
   cxxlens-clang-worker-22 PRIVATE cxxlens_clang22_worker_core
+                                  cxxlens_clang22_worker_v4_claim_bridge
                                   cxxlens_clang22_materialization_codecs)
 if(CXXLENS_BUILD_SHARED)
   # The worker SDK is a static private closure when the public SDK is shared.
@@ -693,6 +726,7 @@ set(CXXLENS_COMPILED_TARGETS
     cxxlens_clang22_provider_sdk
     cxxlens_clang22_materialization_codecs
     cxxlens_clang22_worker_core
+    cxxlens_clang22_worker_v4_claim_bridge
     cxxlens_clang22_materializer_ingress)
 
 if(CXXLENS_ENABLE_CLANG_TIDY)
