@@ -44,6 +44,7 @@ namespace cxxlens::detail::clang22
 									 input.effective_arguments.end()},
 			std::vector<std::string>{input.qualified_read_roots.begin(),
 									 input.qualified_read_roots.end()},
+			{},
 		};
 		if (auto result =
 				with_source_closure_translation_unit(native_input, std::move(input.callback));
