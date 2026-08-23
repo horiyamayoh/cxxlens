@@ -1006,8 +1006,7 @@ if(UNIX)
     adapter.clang22-source-closure-fd
     PROPERTIES
       LABELS
-      "adapter;provider;clang22;source-closure;fd;transport;security;bounded"
-  )
+      "adapter;provider;clang22;source-closure;fd;transport;security;bounded")
 endif()
 
 cxxlens_add_test_executable(cxxlens-clang22-source-closure-task-v4
@@ -1048,8 +1047,8 @@ if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG22_LIBRARY_DIRS)
       OUTPUT_VARIABLE _cxxlens_worker_test_resource_dir
       OUTPUT_STRIP_TRAILING_WHITESPACE)
     target_include_directories(
-      cxxlens-clang22-source-closure-task-v4-worker
-      SYSTEM PRIVATE "${_cxxlens_worker_test_llvm_root}/include")
+      cxxlens-clang22-source-closure-task-v4-worker SYSTEM
+      PRIVATE "${_cxxlens_worker_test_llvm_root}/include")
     target_compile_definitions(
       cxxlens-clang22-source-closure-task-v4-worker
       PRIVATE
