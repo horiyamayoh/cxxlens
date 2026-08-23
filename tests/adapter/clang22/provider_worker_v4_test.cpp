@@ -123,7 +123,12 @@ int main()
 	// Source bytes are served only from the authenticated closure; the qualified root is the
 	// explicit toolchain input used by the native VFS.
 	const auto expected_task_id = metadata.identity.task_id;
+	const auto expected_task_v4_digest = metadata.identity.task_v4_digest;
+	const auto expected_task_v4_input_digest = metadata.identity.task_v4_input_digest;
 	const auto expected_closure_id = closure.snapshot_id;
+	const auto* expected_main = closure.find_member("project://src/main.cpp");
+	require(expected_main != nullptr, "worker-v4 fixture lost its authenticated main member");
+	const auto expected_main_file_id = expected_main->file_id;
 	auto exact_arguments = std::vector<std::string>{
 		CXXLENS_TEST_CLANGXX22_PATH,
 		"-std=c++23",
@@ -153,10 +158,21 @@ int main()
 				  << exact.error().detail << '\n';
 	require(exact.has_value(), "worker-v4 did not execute exact Clang 22");
 	require(callback_ran, "worker-v4 callback did not run");
+	require(exact->schema == provider_worker_v4_receipt_schema,
+			"worker-v4 receipt schema identity drifted");
 	require(exact->translation_unit_executed, "worker-v4 receipt did not attest execution");
 	require(exact->task_id == expected_task_id, "worker-v4 receipt task identity drifted");
+	require(exact->task_v4_digest == expected_task_v4_digest,
+			"worker-v4 receipt task-v4 digest drifted");
+	require(exact->task_v4_input_digest == expected_task_v4_input_digest,
+			"worker-v4 receipt task-v4 input digest drifted");
 	require(exact->source_closure_id == expected_closure_id,
 			"worker-v4 receipt closure identity drifted");
+	require(exact->main_file_id == expected_main_file_id,
+			"worker-v4 receipt main file identity drifted");
+	require(exact->output_state == "translation-unit-executed",
+			"worker-v4 receipt execution state drifted");
+	require(exact->validate().has_value(), "worker-v4 positive receipt failed self-validation");
 	require(exact->missing_output.size() == 3U,
 			"worker-v4 receipt omitted exact missing output data");
 	require(exact->missing_output[0].field == "provider-output.analysis-recipe" &&
