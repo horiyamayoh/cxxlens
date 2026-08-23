@@ -2,11 +2,8 @@
 
 // Product-only capability diagnosis used by cxxlens-sdk-doctor.
 //
-// This header deliberately contains no repository, Git, issue, work-unit, revision, or
-// source-byte authority.  It consumes only product values supplied by a project document and
-// descriptors compiled into the SDK.  The implementation is header-only so that the installed
-// tool can be wired into the existing CMake target without adding a second target or an
-// operational code-generation step.
+// It consumes product values supplied by a project document and descriptors compiled into the
+// SDK. The implementation is header-only so the installed tool can use the existing target.
 
 #include <algorithm>
 #include <array>

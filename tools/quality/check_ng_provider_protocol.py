@@ -491,7 +491,6 @@ def cbor_decode(data: bytes) -> Any:
 def _wire_flag(name: str) -> int:
     """Return the Protocol 2 wire flag assignment."""
 
-    # These values are wire-format facts, not implementation-byte bindings.
     return {
         "required_extension": 1,
         "optional_extension": 2,
@@ -792,7 +791,7 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
 
 
 def validate_ng1_v2_contract(contract: dict[str, Any]) -> None:
-    """Check NG1 product invariants without a repository-operation census."""
+    """Check NG1 product invariants."""
 
     ng1 = contract.get("ng1")
     if not isinstance(ng1, dict):

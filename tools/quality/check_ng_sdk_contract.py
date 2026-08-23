@@ -390,8 +390,7 @@ def validate_generation_and_negatives(root: pathlib.Path, compiler: str) -> None
                 expect_success=True,
                 label=f"relation IDL permutation generation {name}",
             )
-            # The generated artifact is compiled and its semantic tags are checked
-            # below; repository source bytes are not an authority for the contract.
+            # Compile the generated artifact and check its semantic tags below.
             if not permuted_generated.is_file():
                 fail(f"relation IDL generation produced no artifact: {name}")
 

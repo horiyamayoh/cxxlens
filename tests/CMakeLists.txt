@@ -40,6 +40,10 @@ target_sources(cxxlens-unit-sdk
 if(CXXLENS_BUILD_SHARED)
   target_sources(cxxlens-unit-sdk
                  PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+  target_sources(
+    cxxlens-unit-sdk
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
+  target_link_libraries(cxxlens-unit-sdk PRIVATE cxxlens_protocol_v2)
 endif()
 target_link_libraries(cxxlens-unit-sdk PRIVATE cxxlens::clang22_provider_sdk)
 set(cxxlens_sdk_cases

@@ -11666,9 +11666,8 @@ def validate_raw_input_observation(
 def _v2_2_task_projection(extension: dict[str, Any]) -> dict[str, Any]:
     """Return the source-free task.v4 identity projection.
 
-    The two derived identity fields are deliberately excluded.  This mirrors
-    the product codec's recursion-free projection and keeps this checker
-    independent of source-closure bytes or repository metadata.
+    The two derived identity fields are deliberately excluded. This mirrors
+    the product codec's recursion-free projection.
     """
 
     return {
@@ -11973,10 +11972,8 @@ def _validate_v2_2_task_extensions(
 def validate_request(root: pathlib.Path, request: dict[str, Any]) -> None:
     """Validate the current product request.v2.2/task.v4 authority.
 
-    This gate intentionally validates metadata and typed identities only.  Source
-    members are closure summaries whose bytes arrive over Protocol 2.0; no source
-    payload, implementation-byte identity, or repository-operation metadata is
-    accepted here.
+    This gate validates metadata and typed identities. Source members are closure
+    summaries whose bytes arrive over Protocol 2.0.
     """
 
     _validate_v2_2_schema(root, request)
@@ -13583,13 +13580,10 @@ def _semantic_matrix_projection(request: dict[str, Any]) -> dict[str, Any]:
 
 
 def validate_v2_2_documents(root: pathlib.Path) -> dict[str, Any]:
-    """Validate the current product schemas without repository-byte gates.
+    """Validate the current product schemas and Protocol 2.0 bindings.
 
     Request 2.2 carries task metadata and source-closure identities; source
-    bytes arrive through the authenticated closure transport.  This entrypoint
-    intentionally does not inspect repository-operation metadata or
-    implementation source text.  Those were development-operation checks, not
-    product semantics.
+    bytes arrive through the authenticated closure transport.
     """
 
     contract = load(root / CONTRACT)
@@ -13681,8 +13675,7 @@ def validate_v2_2_documents(root: pathlib.Path) -> dict[str, Any]:
     for name in ("control_bytes", "payload_bytes", "closure_chunk_bytes"):
         if not isinstance(wire_limits.get(name), int) or wire_limits[name] <= 0:
             fail("materialization.request-invalid", f"Protocol 2 wire limit: {name}")
-    # Preserve the product resource and security boundary without asserting a
-    # fixed source inventory or a generated report cardinality.
+    # Preserve the product resource and security boundary.
     resource_limits = request_schema.get("properties", {}).get("tasks", {}).get(
         "items", {}
     )

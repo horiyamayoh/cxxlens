@@ -74,7 +74,7 @@ class ProviderProtocol2Tests(unittest.TestCase):
         with self.assertRaisesRegex(ProviderContractError, "invalid-frame-flags"):
             decode_frame(self.contract, encode_frame({}, flags=4))
 
-    def test_contract_mutation_is_rejected_without_fixed_cardinality_assertions(self) -> None:
+    def test_protocol_resource_limit_mutation_is_rejected(self) -> None:
         changed = copy.deepcopy(self.contract)
         changed["wire"]["limits"]["payload_bytes"] += 1
         with self.assertRaises(ProviderContractError):

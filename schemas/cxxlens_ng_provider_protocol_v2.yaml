@@ -99,10 +99,8 @@ message_types:
     - {id: 28, reserved_for: source_closure_ack}
     - {id: 29, reserved_for: source_closure_reject}
 
-# This state machine is a product contract: process and logical transcript
-# consumers must apply the same typed validation rules before adoption.  It
-# deliberately contains no repository-operation or implementation-byte
-# authority.
+# Process and logical transcript consumers apply the same typed validation
+# rules before adoption.
 state_machine_validation:
   validator_bypass: forbidden
   implementation: single-shared-typed-validator

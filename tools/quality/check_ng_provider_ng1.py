@@ -678,7 +678,7 @@ def validate_ng1_contract(
     protocol: dict[str, Any] | None = None,
     hardening: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Validate the NG1 product contract without repository-operation authority."""
+    """Validate the NG1 product contract."""
 
     if hardening is None:
         hardening = load_yaml(root / CONTRACT)

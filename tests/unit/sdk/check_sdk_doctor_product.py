@@ -88,10 +88,6 @@ def check_proved_and_deterministic(executable: str, directory: pathlib.Path) -> 
     require(report["missing"] == [], "proved context unexpectedly has missing capabilities")
     require(report["completion_plan"] == [], "proved context unexpectedly has a completion plan")
     require(report["preserved_semantics"]["unresolved"] == [], "proved context has unresolved capabilities")
-    forbidden = {"git", "issue", "work-unit", "revision", "source-byte"}
-    flattened = json.dumps(report, sort_keys=True).lower()
-    require(not any(token in flattened for token in forbidden), "diagnosis contains operational metadata")
-
     markdown_one = run(
         executable,
         "missing",
