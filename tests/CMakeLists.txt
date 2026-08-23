@@ -995,6 +995,21 @@ set_tests_properties(
     "adapter;provider;clang22;source-closure;receiver;protocol;security;bounded"
 )
 
+if(UNIX)
+  cxxlens_add_test_executable(cxxlens-clang22-source-closure-fd
+                              adapter/clang22/source_closure_fd_test.cpp)
+  target_link_libraries(cxxlens-clang22-source-closure-fd
+                        PRIVATE cxxlens_clang22_materialization_codecs)
+  add_test(NAME adapter.clang22-source-closure-fd
+           COMMAND cxxlens-clang22-source-closure-fd)
+  set_tests_properties(
+    adapter.clang22-source-closure-fd
+    PROPERTIES
+      LABELS
+      "adapter;provider;clang22;source-closure;fd;transport;security;bounded"
+  )
+endif()
+
 cxxlens_add_test_executable(cxxlens-clang22-source-closure-task-v4
                             adapter/clang22/source_closure_task_v4_test.cpp)
 target_link_libraries(cxxlens-clang22-source-closure-task-v4
