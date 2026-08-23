@@ -538,6 +538,7 @@ endif()
 add_library(
   cxxlens_clang22_worker_core STATIC
   src/llvm/clang22/provider_worker.cpp
+  src/llvm/clang22/provider_worker_channel.cpp
   src/llvm/clang22/provider_worker_v2_2.cpp
   src/llvm/clang22/source_closure_native.cpp
   src/llvm/clang22/provider_worker_v4.cpp

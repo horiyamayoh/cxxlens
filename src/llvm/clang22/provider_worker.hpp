@@ -178,4 +178,17 @@ namespace cxxlens::detail::clang22
 
 	/** Run the worker from a bounded-read host stream; the stream is never materialized. */
 	[[nodiscard]] int run_provider_worker(std::istream& input, std::ostream& output);
+
+	/**
+	 * Run the explicit Protocol 2.0 task-v4/source-closure ingress.
+	 *
+	 * The task envelope is read from `input`; source bytes are accepted only from the separately
+	 * inherited closure channel.  A successful Clang translation still ends in `task_failed` until
+	 * a recipe/output/publication authority is supplied, so this entrypoint cannot manufacture a
+	 * Store result from execution alone.
+	 */
+	[[nodiscard]] int run_provider_worker_v4_source_closure(std::istream& input,
+															std::ostream& output,
+															int read_descriptor,
+															int write_descriptor);
 } // namespace cxxlens::detail::clang22

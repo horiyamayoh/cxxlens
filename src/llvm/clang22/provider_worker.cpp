@@ -62,10 +62,10 @@ namespace cxxlens::detail::clang22
 		};
 
 		/**
-		 * The installed executable has no task-v3 decoder.  This sink lets the shared v2 host
-		 * transcript validator consume and authenticate the bounded logical input without retaining
-		 * source bytes in this fail-closed adapter.  The Protocol 2.0 dispatcher will replace this
-		 * boundary with a task-v4/closure receiver when it is connected.
+		 * Legacy stdin transcript mode consumes only the bounded host-input shape and never retains
+		 * source bytes.  The explicit task-v4/source-closure mode is selected by the inherited
+		 * channel boundary in provider_worker_channel.cpp; metadata and source bytes are never
+		 * mixed.
 		 */
 		class rejected_input_sink final : public sdk::provider::detail::host_input_chunk_sink
 		{
@@ -168,9 +168,9 @@ namespace cxxlens::detail::clang22
 			!writer.send(message_type::schema_negotiate, *schema))
 			return EXIT_FAILURE;
 
-		// A v3 payload is never decoded, interpreted, or passed to Clang.  Keeping the established
-		// structured failure makes old callers fail closed while the protocol-v2 runtime adapter is
-		// integrated; there is no silent fallback or dual-protocol acceptance.
+		// A legacy stdin payload is never decoded, interpreted, or passed to Clang.  The explicit
+		// task-v4/source-closure mode is the only worker path that can reach the compiler, so there
+		// is no silent fallback or dual-protocol acceptance.
 		const auto control =
 			sdk::provider::encode_task_failed_metadata({"provider.frontend-request-invalid",
 														std::string{validated->task().task_id},

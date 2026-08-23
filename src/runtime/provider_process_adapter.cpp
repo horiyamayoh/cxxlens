@@ -95,11 +95,14 @@ namespace cxxlens::sdk::provider
 			append_process_environment(const process_invocation& invocation,
 									   std::vector<std::string>& storage)
 			{
-				constexpr std::array<std::string_view, 7U> channel_names{
+				constexpr std::array<std::string_view, 10U> channel_names{
+					"CXXLENS_PROVIDER_INGRESS_MODE",
 					"CXXLENS_PROVIDER_SOURCE_CLOSURE_READ_FD",
 					"CXXLENS_PROVIDER_SOURCE_CLOSURE_WRITE_FD",
 					"CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_ID",
 					"CXXLENS_PROVIDER_SOURCE_CLOSURE_SESSION_ID",
+					"CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_V4_DIGEST",
+					"CXXLENS_PROVIDER_SOURCE_CLOSURE_ID",
 					"CXXLENS_PROVIDER_SOURCE_CLOSURE_DIGEST",
 					"CXXLENS_PROVIDER_SOURCE_CLOSURE_TRANSFER_DIGEST",
 					"CXXLENS_PROVIDER_SOURCE_CLOSURE_BINDING_DIGEST"};
@@ -132,6 +135,11 @@ namespace cxxlens::sdk::provider
 					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_SESSION_ID=" +
 										 binding.session_id);
 					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_DIGEST=" +
+										 binding.closure_digest);
+					storage.emplace_back("CXXLENS_PROVIDER_INGRESS_MODE=task-v4-source-closure-v2");
+					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_V4_DIGEST=" +
+										 binding.task_id.substr(5U));
+					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_ID=source-closure:" +
 										 binding.closure_digest);
 					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_TRANSFER_DIGEST=" +
 										 binding.transfer_digest);
