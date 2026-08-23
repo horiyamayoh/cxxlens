@@ -313,7 +313,7 @@ namespace
 		require(!invalid_outer.begin_manifest(manifest_descriptor(outer, manifest.size()), 0U) &&
 					invalid_outer.state() == source_closure_transfer_state::rejected &&
 					invalid_authority.calls == 1U && invalid_sink.manifest_begin_calls == 0U,
-				"inherited task-v2.1/task-v4 authority was not revalidated before bytes");
+				"inherited task-v2.2/task-v4 authority was not revalidated before bytes");
 	}
 
 	void exercise_bounds_chunks_and_rejects()

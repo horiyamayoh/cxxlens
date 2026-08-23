@@ -34,7 +34,7 @@ base ingestion だけでも `source.span` を作れない。従って既存 obse
 Clang 22 の installed end-to-end materialization authority を provider-owned executable
 `cxxlens-clang22-materialize` に置く。tool は strict versioned JSON の
 `cxxlens.clang22-materialization-request.v2_2` を受け、
-`cxxlens.clang22-materialization-report.v2_2` response を返す。両者と tool semantics の machine authority は
+`cxxlens.clang22-materialization-report.v2` response を返す（`report_version` は `2.2.0`）。両者と tool semantics の machine authority は
 `cxxlens.clang22-materialization-contract.v2` とし、machine contract document、`tool.interface_version`、request、report の exact version はいずれも
 `2.2.0` とする。
 transport は stdin 上の一つの JSON request と stdout 上の一つの JSON response に固定し、stderr は diagnostic-only とする。shell command

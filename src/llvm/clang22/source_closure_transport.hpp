@@ -188,7 +188,7 @@ namespace cxxlens::detail::clang22
 		worker_crashed,
 	};
 
-	/** Outer task-v4 adapter; revalidation must cover inherited v2.1 authority before frame 24. */
+	/** Outer task-v4 adapter; revalidation must cover inherited v2.2 authority before frame 24. */
 	class source_closure_task_v4_authority
 	{
 	  public:

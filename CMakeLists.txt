@@ -384,7 +384,6 @@ add_library(
   cxxlens_clang22_materialization_codecs STATIC
   src/llvm/clang22/materialization_json.cpp
   src/llvm/clang22/provider_task_v4.cpp
-  src/llvm/clang22/provider_task_v3.cpp
   src/llvm/clang22/observation_v2.cpp
   src/llvm/clang22/source_closure.cpp
   src/llvm/clang22/source_closure_task_v4.cpp
@@ -408,6 +407,10 @@ cxxlens_enable_sanitizers(cxxlens_clang22_materialization_codecs)
 add_library(
   cxxlens_clang22_worker_core STATIC
   src/llvm/clang22/provider_worker.cpp
+  # The broad canonicalization test support still has a source-private legacy
+  # decoder.  It is deliberately kept out of the installed materializer codec
+  # archive; the v2.2 ingress below never links this support path.
+  src/llvm/clang22/provider_task_v3.cpp
   src/llvm/clang22/source_closure_native.cpp
   src/llvm/clang22/source_closure_task_v4_worker.cpp
   src/llvm/clang22/materialization_io.cpp
@@ -453,6 +456,7 @@ add_library(
   src/llvm/clang22/materialization_request_identity.cpp
   src/llvm/clang22/materialization_request_stream.cpp
   src/llvm/clang22/materialization_request_v2_1.cpp
+  src/llvm/clang22/provider_task_v3.cpp
   src/llvm/clang22/materialization_task_spool.cpp
   src/llvm/clang22/materialization_seal.cpp
   src/llvm/clang22/materialization_partition_event_stream.cpp
