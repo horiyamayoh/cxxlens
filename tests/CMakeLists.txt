@@ -20,6 +20,20 @@ target_include_directories(
 cxxlens_set_project_warnings(cxxlens-test-sdk-support)
 cxxlens_enable_sanitizers(cxxlens-test-sdk-support)
 
+# The production Store links an unconditional no-op dispatch implementation.
+# Only the two tests that exercise typed fault directives receive the private
+# thread-local scope implementation.
+add_library(
+  cxxlens-test-sqlite-store-fault-injection-support OBJECT
+  "${PROJECT_SOURCE_DIR}/src/sdk/sqlite_store_fault_injection_internal.cpp")
+target_compile_features(cxxlens-test-sqlite-store-fault-injection-support
+                        PRIVATE cxx_std_23)
+target_include_directories(
+  cxxlens-test-sqlite-store-fault-injection-support
+  PRIVATE "${PROJECT_SOURCE_DIR}/include" "${PROJECT_SOURCE_DIR}/src")
+cxxlens_set_project_warnings(cxxlens-test-sqlite-store-fault-injection-support)
+cxxlens_enable_sanitizers(cxxlens-test-sqlite-store-fault-injection-support)
+
 cxxlens_add_test_executable(cxxlens-unit-sdk unit/sdk/sdk_test.cpp)
 target_sources(cxxlens-unit-sdk
                PRIVATE $<TARGET_OBJECTS:cxxlens-test-sdk-support>)
@@ -59,6 +73,9 @@ set_tests_properties(unit.sdk.registration PROPERTIES LABELS
                                                       "unit;sdk;registration")
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-store unit/sdk/store_test.cpp)
+target_sources(
+  cxxlens-unit-sdk-store
+  PRIVATE $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
 target_link_libraries(cxxlens-unit-sdk-store PRIVATE cxxlens::kernel
                                                      "${CMAKE_DL_LIBS}")
 target_include_directories(cxxlens-unit-sdk-store
@@ -370,6 +387,9 @@ set_tests_properties(
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-store-fault-injection
                             unit/sdk/sqlite_store_fault_injection_test.cpp)
+target_sources(
+  cxxlens-unit-sdk-sqlite-store-fault-injection
+  PRIVATE $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
 target_link_libraries(cxxlens-unit-sdk-sqlite-store-fault-injection
                       PRIVATE cxxlens::kernel)
 target_include_directories(cxxlens-unit-sdk-sqlite-store-fault-injection
