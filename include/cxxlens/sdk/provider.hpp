@@ -56,7 +56,29 @@ namespace cxxlens::sdk::provider
 		task_failed = 21,
 		close = 22,
 		heartbeat = 23,
+		source_closure_manifest = 24,
+		source_closure_blob = 25,
+		source_closure_chunk = 26,
+		source_closure_seal = 27,
+		source_closure_ack = 28,
+		source_closure_reject = 29,
 	};
+
+	/** @brief Whether a message belongs to the Protocol 2.0 source-closure transport. */
+	[[nodiscard]] constexpr bool is_source_closure_message(const message_type value) noexcept
+	{
+		const auto id = static_cast<std::uint16_t>(value);
+		return id >= static_cast<std::uint16_t>(message_type::source_closure_manifest) &&
+			id <= static_cast<std::uint16_t>(message_type::source_closure_reject);
+	}
+
+	/** @brief Whether a wire message ID is a registered Protocol 2.0 message. */
+	[[nodiscard]] constexpr bool is_known_message_type(const message_type value) noexcept
+	{
+		const auto id = static_cast<std::uint16_t>(value);
+		return id >= static_cast<std::uint16_t>(message_type::hello) &&
+			id <= static_cast<std::uint16_t>(message_type::source_closure_reject);
+	}
 
 	namespace detail
 	{

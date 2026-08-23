@@ -843,6 +843,8 @@ namespace cxxlens::sdk::provider
 				provider_error("provider.oversized-payload", "payload"));
 		const auto type = static_cast<std::uint16_t>(value.type);
 		const bool reserved_ng1_heartbeat = type == ng1_heartbeat_wire_type;
+		const bool known_message = type >= static_cast<std::uint16_t>(message_type::hello) &&
+			type <= static_cast<std::uint16_t>(message_type::source_closure_reject);
 		const bool optional_extension = has_flag(value.flags, frame_flag::optional_extension);
 		if (value.protocol_major != limits.protocol_major)
 			return cxxlens::sdk::unexpected(
@@ -860,7 +862,7 @@ namespace cxxlens::sdk::provider
 		if ((value.flags & ~known_flag_mask) != 0U ||
 			(has_flag(value.flags, frame_flag::required_extension) && optional_extension) ||
 			(optional_extension && has_flag(value.flags, frame_flag::end_of_stream)) ||
-			(optional_extension && type <= static_cast<std::uint16_t>(message_type::close)))
+			(optional_extension && known_message))
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.invalid-frame-flags", "flags"));
 		if (has_flag(value.flags, frame_flag::required_extension))
@@ -873,9 +875,7 @@ namespace cxxlens::sdk::provider
 			(limits.supported_flags & end_of_stream_flag) == 0U)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.invalid-frame-flags", "end-of-stream"));
-		if (type == 0U ||
-			(type > static_cast<std::uint16_t>(message_type::close) && !optional_extension &&
-			 !reserved_ng1_heartbeat))
+		if (type == 0U || (!known_message && !optional_extension))
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.unknown-message-type", "type"));
 
@@ -975,7 +975,8 @@ namespace cxxlens::sdk::provider
 		if (type == 0U)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.unknown-message-type", "type"));
-		const bool known_type = type <= static_cast<std::uint16_t>(message_type::close);
+		const bool known_type = type >= static_cast<std::uint16_t>(message_type::hello) &&
+			type <= static_cast<std::uint16_t>(message_type::source_closure_reject);
 		if (optional_extension && known_type)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.invalid-frame-flags", "optional-known-type"));

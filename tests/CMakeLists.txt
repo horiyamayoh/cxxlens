@@ -796,6 +796,16 @@ add_test(NAME sdk.protocol-v2 COMMAND cxxlens-protocol-v2)
 set_tests_properties(sdk.protocol-v2 PROPERTIES LABELS
                                                 "sdk;protocol;v2;security")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-provider-protocol-v2-adapter
+                            unit/sdk/provider_protocol_v2_adapter_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-provider-protocol-v2-adapter
+                      PRIVATE cxxlens::provider_sdk)
+add_test(NAME unit.sdk-provider-protocol-v2-adapter
+         COMMAND cxxlens-unit-sdk-provider-protocol-v2-adapter)
+set_tests_properties(
+  unit.sdk-provider-protocol-v2-adapter
+  PROPERTIES LABELS "unit;sdk;protocol;v2;source-closure;security")
+
 cxxlens_add_test_executable(
   cxxlens-clang22-materialization-pipeline-v2-2
   adapter/clang22/materialization_pipeline_v2_2_test.cpp)
@@ -1064,7 +1074,7 @@ cxxlens_add_test_executable(cxxlens-r2-vertical-slice
 target_sources(cxxlens-r2-vertical-slice
                PRIVATE $<TARGET_OBJECTS:cxxlens-test-sdk-support>)
 target_link_libraries(cxxlens-r2-vertical-slice
-                      PRIVATE cxxlens_clang22_worker_core)
+                      PRIVATE cxxlens_clang22_worker_legacy_support)
 target_include_directories(cxxlens-r2-vertical-slice
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME integration.r2-vertical-slice COMMAND cxxlens-r2-vertical-slice)

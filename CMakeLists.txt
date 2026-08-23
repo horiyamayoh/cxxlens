@@ -289,7 +289,8 @@ add_library(
   src/sdk/provider_ng1_recovery.cpp
   src/sdk/provider_ng1_spill_port_internal.cpp
   src/sdk/provider_ng1_session.cpp
-  src/sdk/provider_ng1_live_driver.cpp)
+  src/sdk/provider_ng1_live_driver.cpp
+  src/sdk/provider_protocol_v2_adapter.cpp)
 add_library(cxxlens::provider_sdk ALIAS cxxlens_provider_sdk)
 cxxlens_configure_component(cxxlens_provider_sdk provider_sdk)
 target_link_libraries(cxxlens_provider_sdk PUBLIC cxxlens::cxxlens
@@ -302,11 +303,13 @@ add_library(
   cxxlens_protocol_v2 STATIC src/protocol_v2/cbor.cpp src/protocol_v2/codec.cpp
                              src/protocol_v2/closure.cpp)
 target_link_libraries(cxxlens_protocol_v2 PUBLIC cxxlens::base)
-target_include_directories(cxxlens_protocol_v2
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_include_directories(
+  cxxlens_protocol_v2
+  PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
 target_compile_features(cxxlens_protocol_v2 PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens_protocol_v2)
 cxxlens_enable_sanitizers(cxxlens_protocol_v2)
+target_link_libraries(cxxlens_provider_sdk PUBLIC cxxlens_protocol_v2)
 
 add_library(cxxlens_clang22_provider_sdk ${CXXLENS_LIBRARY_TYPE}
                                          src/llvm/clang22/provider_sdk.cpp)
@@ -451,15 +454,10 @@ cxxlens_enable_sanitizers(cxxlens_clang22_materializer_bounded_support)
 add_library(
   cxxlens_clang22_worker_core STATIC
   src/llvm/clang22/provider_worker.cpp
-  # The broad canonicalization test support still has a source-private legacy
-  # decoder.  It is deliberately kept out of the installed materializer codec
-  # archive; the v2.2 ingress below never links this support path.
-  src/llvm/clang22/provider_task_v3.cpp
+  src/llvm/clang22/provider_worker_v2_2.cpp
   src/llvm/clang22/source_closure_native.cpp
   src/llvm/clang22/provider_worker_v4.cpp
-  src/llvm/clang22/source_closure_task_v4_worker.cpp
-  src/llvm/clang22/materialization_io.cpp
-  src/llvm/clang22/materialization_task_spool.cpp)
+  src/llvm/clang22/source_closure_task_v4_worker.cpp)
 target_link_libraries(
   cxxlens_clang22_worker_core
   PUBLIC cxxlens::clang22_provider_sdk
@@ -479,6 +477,37 @@ cxxlens_configure_clang22(cxxlens_clang22_worker_core)
 # blocks), so compiling only this translation unit with an RTTI-disabled
 # override makes UBSan observe invalid vtables when the exact provider is
 # enabled.
+if(CXXLENS_ENABLE_UBSAN AND NOT MSVC)
+  set_source_files_properties(src/llvm/clang22/provider_worker_v2_2.cpp
+                              PROPERTIES COMPILE_OPTIONS "-frtti")
+endif()
+
+# Legacy canonicalization and task.v3 decoding remain available only to the
+# source-private R2 regression fixture.  This target is intentionally separate
+# from both the installed worker and its static closure, so an installed worker
+# cannot acquire a v3 decoder merely by linking worker_core.
+add_library(
+  cxxlens_clang22_worker_legacy_support STATIC EXCLUDE_FROM_ALL
+  src/llvm/clang22/provider_worker_legacy.cpp
+  src/llvm/clang22/provider_task_v3.cpp
+  src/llvm/clang22/source_closure_native.cpp
+  src/llvm/clang22/materialization_io.cpp
+  src/llvm/clang22/materialization_task_spool.cpp)
+target_link_libraries(
+  cxxlens_clang22_worker_legacy_support
+  PUBLIC cxxlens::clang22_provider_sdk
+  PRIVATE cxxlens_clang22_materialization_codecs)
+if(CXXLENS_BUILD_SHARED)
+  target_sources(cxxlens_clang22_worker_legacy_support
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
+target_include_directories(cxxlens_clang22_worker_legacy_support
+                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_clang22_worker_legacy_support
+                        PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens_clang22_worker_legacy_support)
+cxxlens_enable_sanitizers(cxxlens_clang22_worker_legacy_support)
+cxxlens_configure_clang22(cxxlens_clang22_worker_legacy_support)
 if(CXXLENS_ENABLE_UBSAN AND NOT MSVC)
   set_source_files_properties(
     src/llvm/clang22/materialization_io.cpp
@@ -636,8 +665,13 @@ endif()
 # below remains available with BUILD_TESTING=OFF and contains only product
 # libraries, tools, headers, schemas, and documentation.
 install(
-  TARGETS cxxlens_base cxxlens_kernel cxxlens_query cxxlens_cpp cxxlens_recipes
+  TARGETS cxxlens_base
+          cxxlens_kernel
+          cxxlens_query
+          cxxlens_cpp
+          cxxlens_recipes
           cxxlens
+          cxxlens_protocol_v2
   EXPORT cxxlensTargets
   ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"

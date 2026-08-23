@@ -2321,6 +2321,12 @@ namespace cxxlens::sdk::provider
 					case message_type::resume:
 					case message_type::close:
 					case message_type::heartbeat:
+					case message_type::source_closure_manifest:
+					case message_type::source_closure_blob:
+					case message_type::source_closure_chunk:
+					case message_type::source_closure_seal:
+					case message_type::source_closure_ack:
+					case message_type::source_closure_reject:
 						return fail(
 							"provider.protocol-state-invalid", request.task_id, "unsupported");
 				}
