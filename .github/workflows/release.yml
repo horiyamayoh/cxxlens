@@ -41,7 +41,7 @@ jobs:
             --output-on-failure
 
   contract-and-docs:
-    name: Contract, security, and documentation tests
+    name: Documentation tests
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -49,13 +49,15 @@ jobs:
         with:
           profile: developer
           documentation: "true"
-      - name: Build and run contract assertions
+      - name: Build and run documentation assertions
         env:
           CXX: clang++-22
         run: |
           cmake --preset docs -DCXXLENS_CLANG_ADAPTER=ON
           cmake --build --preset docs
-          ctest --test-dir build/docs --label-regex 'quality|security|docs' \
+          # Main tests already own every quality/security test. Keep this
+          # docs-enabled configuration focused on the documentation fixture.
+          ctest --test-dir build/docs --label-regex '^docs' \
             --output-on-failure
 
   gcc-public-headers:
