@@ -284,7 +284,7 @@ int main()
 			"task-v4 receipt set lost claim counts");
 	require(!incremental->complete, "partial task-v4 receipt set was marked complete");
 	require(validate_materialization_v4_incremental_receipt(value, *incremental, sealed_tasks)
-			.has_value(),
+				.has_value(),
 			"task-v4 receipt set did not replay");
 
 	std::vector<const materialization_v4_claim_sealed*> over_limit(
