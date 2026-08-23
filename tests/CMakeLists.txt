@@ -828,6 +828,14 @@ cxxlens_add_test_executable(cxxlens-unit-sdk-provider-protocol-v2-adapter
                             unit/sdk/provider_protocol_v2_adapter_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-provider-protocol-v2-adapter
                       PRIVATE cxxlens::provider_sdk)
+if(CXXLENS_BUILD_SHARED)
+  target_sources(
+    cxxlens-unit-sdk-provider-protocol-v2-adapter
+    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
+  target_link_libraries(cxxlens-unit-sdk-provider-protocol-v2-adapter
+                        PRIVATE cxxlens_protocol_v2)
+endif()
 add_test(NAME unit.sdk-provider-protocol-v2-adapter
          COMMAND cxxlens-unit-sdk-provider-protocol-v2-adapter)
 set_tests_properties(
