@@ -1154,6 +1154,17 @@ cxxlens_add_test_executable(cxxlens-clang22-provider-worker-channel
 target_link_libraries(
   cxxlens-clang22-provider-worker-channel
   PRIVATE cxxlens_clang22_materialization_codecs cxxlens::provider_sdk)
+if(CXXLENS_BUILD_SHARED)
+  # The channel launch helper is source-private and intentionally hidden from
+  # the installed provider SDK. Embed its runtime object closure for this
+  # process-boundary fixture, matching the worker executable.
+  target_sources(
+    cxxlens-clang22-provider-worker-channel
+    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
+  target_link_libraries(cxxlens-clang22-provider-worker-channel
+                        PRIVATE cxxlens_protocol_v2)
+endif()
 if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG22_LIBRARY_DIRS)
   list(GET CXXLENS_CLANG22_LIBRARY_DIRS 0 _cxxlens_worker_channel_lib_dir)
   get_filename_component(_cxxlens_worker_channel_llvm_root

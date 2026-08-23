@@ -653,8 +653,9 @@ cxxlens_configure_installed_tool(cxxlens-sdk-doctor)
 
 add_executable(cxxlens-clang-worker-22
                src/llvm/clang22/provider_worker_main.cpp)
-target_link_libraries(cxxlens-clang-worker-22
-                      PRIVATE cxxlens_clang22_worker_core)
+target_link_libraries(
+  cxxlens-clang-worker-22 PRIVATE cxxlens_clang22_worker_core
+                                  cxxlens_clang22_materialization_codecs)
 if(CXXLENS_BUILD_SHARED)
   # The worker SDK is a static private closure when the public SDK is shared.
   # Its provider implementation references the hidden runtime objects.  Put
