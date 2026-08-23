@@ -83,9 +83,10 @@ namespace
 	{
 	  public:
 		source_closure_manifest_summary summary;
-		source_closure_ack_credentials credentials{
-			typed("spool-receipt:semantic-v2:", 'a'), typed("cleanup-owner:semantic-v2:", 'b'), {}};
-		std::string cleanup_receipt{typed("cleanup-receipt:semantic-v2:", 'c')};
+		source_closure_ack_credentials credentials{typed("spool-receipt:semantic-v2:sha256:", 'a'),
+												   typed("cleanup-owner:semantic-v2:sha256:", 'b'),
+												   {}};
+		std::string cleanup_receipt{typed("cleanup-receipt:semantic-v2:sha256:", 'c')};
 		std::uint64_t manifest_begin_calls{};
 		std::uint64_t manifest_append_calls{};
 		std::uint64_t blob_begin_calls{};
@@ -275,7 +276,7 @@ namespace
 											 outer.task_id,
 											 outer.closure_digest,
 											 *transfer_digest,
-											 typed("spool-receipt:semantic-v2:", 'f'),
+											 typed("spool-receipt:semantic-v2:sha256:", 'f'),
 											 sink.credentials.cleanup_owner};
 		require(!validator.acknowledge(forged_ack, 5U) &&
 					validator.state() == source_closure_transfer_state::closure_sealed &&

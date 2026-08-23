@@ -656,6 +656,14 @@ namespace cxxlens::detail::clang22
 		return snapshot_;
 	}
 
+	sdk::result<source_closure_ack_credentials> source_closure_spool::ack_credentials() const
+	{
+		if (state_ != state::closure_sealed)
+			return sdk::unexpected(
+				failure("source-closure.protocol-state-invalid", "ack-credentials", "not-sealed"));
+		return credentials_;
+	}
+
 	std::uint64_t source_closure_spool::retained_bytes() const noexcept
 	{
 		std::uint64_t total = manifest_bytes_.size() + current_blob_bytes_.size();

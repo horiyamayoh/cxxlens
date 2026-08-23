@@ -38,6 +38,8 @@ namespace cxxlens::detail::clang22
 
 		/** Return the immutable snapshot after a successful closure seal. */
 		[[nodiscard]] sdk::result<source_closure_snapshot> snapshot() const;
+		/** Return credentials issued by this spool for the outbound Protocol 2.0 ACK. */
+		[[nodiscard]] sdk::result<source_closure_ack_credentials> ack_credentials() const;
 		/** Return bytes currently retained by this task-local spool. */
 		[[nodiscard]] std::uint64_t retained_bytes() const noexcept;
 		/** Return whether the closure has been sealed and not cleaned up. */

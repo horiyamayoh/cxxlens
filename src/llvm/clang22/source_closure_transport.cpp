@@ -661,7 +661,7 @@ namespace cxxlens::detail::clang22
 		auto receipt = sink_->cleanup();
 		if (!receipt)
 			return sdk::unexpected(std::move(receipt.error()));
-		if (!valid_spool_id(*receipt, "cleanup-receipt:semantic-v2:"))
+		if (!valid_spool_id(*receipt, "cleanup-receipt:semantic-v2:sha256:"))
 			return sdk::unexpected(failure("source-closure.cleanup-failed", "cleanup-receipt"));
 		cleanup_done_ = true;
 		cleanup_receipt_ = *receipt;
@@ -934,8 +934,8 @@ namespace cxxlens::detail::clang22
 		auto credentials = sink_->finish_closure(value.transfer_digest);
 		if (!credentials)
 			return fail("source-closure.spool-io", "closure", credentials.error().detail);
-		if (!valid_spool_id(credentials->spool_receipt, "spool-receipt:semantic-v2:") ||
-			!valid_spool_id(credentials->cleanup_owner, "cleanup-owner:semantic-v2:") ||
+		if (!valid_spool_id(credentials->spool_receipt, "spool-receipt:semantic-v2:sha256:") ||
+			!valid_spool_id(credentials->cleanup_owner, "cleanup-owner:semantic-v2:sha256:") ||
 			credentials->transfer_digest != value.transfer_digest)
 			return fail("source-closure.spool-io", "ack-credentials", "issuer-binding");
 		transfer_digest_ = value.transfer_digest;
@@ -968,7 +968,7 @@ namespace cxxlens::detail::clang22
 	{
 		if (!valid_binding(binding_) || value.session_id != binding_.session_id ||
 			value.task_id != binding_.task_id ||
-			!valid_spool_id(value.cleanup_receipt, "cleanup-receipt:semantic-v2:"))
+			!valid_spool_id(value.cleanup_receipt, "cleanup-receipt:semantic-v2:sha256:"))
 			return sdk::unexpected(failure("source-closure.task-binding-mismatch", "reject"));
 		const auto phase = phase_name(state_);
 		if (value.failure_phase != phase)
