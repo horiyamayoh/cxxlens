@@ -85,16 +85,9 @@ def main() -> int:
             qualified_name = text(member.find("qualifiedname")) or text(member.find("name"))
             location = member.find("location")
             location_file = "" if location is None else (location.get("file") or "")
-            matching_ng_headers = {
-                header for header in ng_headers if location_file.endswith(header)
-            }
-            if matching_ng_headers:
-                for header in matching_ng_headers:
+            for header in ng_headers:
+                if location_file.endswith(header):
                     observed_ng_headers[header] += 1
-                # The sibling public_callable_inventory.py check-doxygen command
-                # enforces the exact one-callable-per-row bijection. This checker
-                # retains the independent documentation-quality obligation.
-                continue
             if qualified_name in planned_contracts:
                 observed_planned[qualified_name] += 1
                 continue

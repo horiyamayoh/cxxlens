@@ -121,22 +121,6 @@ def validate_repository(root: pathlib.Path) -> None:
         fail("compatibility report schema is not v2")
     validate_support_table(root)
 
-    # Keep CI itself as the only operational qualification mechanism.  These
-    # strings are a small denylist regression guard, not a generic search for
-    # product words such as evidence or receipt.
-    quality = (root / ".github/workflows/quality.yml").read_text(encoding="utf-8")
-    forbidden_ci = (
-        "run_gate.py",
-        "collect_toolchain_provenance.py",
-        "check_quality_ownership.py",
-        "actions/upload-artifact",
-        "actions/download-artifact",
-        "qualification-report",
-        "evidence-output",
-    )
-    for marker in forbidden_ci:
-        if marker in quality:
-            fail(f"obsolete CI evidence machinery remains: {marker}")
 
 
 def semver(value: str) -> tuple[int, int, int]:

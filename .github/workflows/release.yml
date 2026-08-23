@@ -143,9 +143,7 @@ jobs:
         run: |
           cmake --preset ci-quick -DCXXLENS_CLANG_ADAPTER=ON
           cmake --build --preset ci-quick
-          ctest --test-dir build/ci-quick --repeat until-pass:3 \
-            --parallel "${CTEST_PARALLEL_LEVEL}" --output-on-failure
-          ctest --test-dir build/ci-quick --repeat until-pass:2 \
+          ctest --test-dir build/ci-quick --repeat until-fail:3 \
             --parallel "${CTEST_PARALLEL_LEVEL}" --output-on-failure
 
   maximum-scale:
