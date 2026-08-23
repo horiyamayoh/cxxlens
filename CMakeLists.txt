@@ -396,28 +396,27 @@ target_compile_features(cxxlens_clang22_materialization_codecs
 cxxlens_set_project_warnings(cxxlens_clang22_materialization_codecs)
 cxxlens_enable_sanitizers(cxxlens_clang22_materialization_codecs)
 
-# Source-private materialization primitives are split by ownership.  The
-# bounded Store candidate and the v2.2 request validator are consumed by
-# focused product tests and by the legacy safety support below, but neither
-# target is part of the installed materializer or worker production graph.
-# Keeping these sources in their own archives prevents a v2.1 safety test from
-# accidentally becoming the link-time owner of the v2.2 primitives.
-add_library(
-  cxxlens_clang22_materialization_io_support STATIC EXCLUDE_FROM_ALL
-  src/llvm/clang22/materialization_io.cpp)
+# Source-private materialization primitives are split by ownership.  The bounded
+# Store candidate and the v2.2 request validator are consumed by focused product
+# tests and by the legacy safety support below, but neither target is part of
+# the installed materializer or worker production graph. Keeping these sources
+# in their own archives prevents a v2.1 safety test from accidentally becoming
+# the link-time owner of the v2.2 primitives.
+add_library(cxxlens_clang22_materialization_io_support STATIC EXCLUDE_FROM_ALL
+            src/llvm/clang22/materialization_io.cpp)
 target_link_libraries(
   cxxlens_clang22_materialization_io_support
   PUBLIC cxxlens::base
   PRIVATE cxxlens::provider_sdk)
 target_include_directories(cxxlens_clang22_materialization_io_support
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_materialization_io_support PRIVATE cxx_std_23)
+target_compile_features(cxxlens_clang22_materialization_io_support
+                        PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens_clang22_materialization_io_support)
 cxxlens_enable_sanitizers(cxxlens_clang22_materialization_io_support)
 
-add_library(
-  cxxlens_clang22_materialization_request_v2_2_support STATIC EXCLUDE_FROM_ALL
-  src/llvm/clang22/materialization_request_v2_2.cpp)
+add_library(cxxlens_clang22_materialization_request_v2_2_support STATIC
+            EXCLUDE_FROM_ALL src/llvm/clang22/materialization_request_v2_2.cpp)
 target_link_libraries(
   cxxlens_clang22_materialization_request_v2_2_support
   PUBLIC cxxlens::base
@@ -426,7 +425,8 @@ target_include_directories(cxxlens_clang22_materialization_request_v2_2_support
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(cxxlens_clang22_materialization_request_v2_2_support
                         PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_clang22_materialization_request_v2_2_support)
+cxxlens_set_project_warnings(
+  cxxlens_clang22_materialization_request_v2_2_support)
 cxxlens_enable_sanitizers(cxxlens_clang22_materialization_request_v2_2_support)
 
 add_library(
@@ -441,7 +441,8 @@ target_link_libraries(
   PRIVATE cxxlens::provider_sdk cxxlens_clang22_materialization_io_support)
 target_include_directories(cxxlens_clang22_materializer_bounded_support
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_materializer_bounded_support PRIVATE cxx_std_23)
+target_compile_features(cxxlens_clang22_materializer_bounded_support
+                        PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens_clang22_materializer_bounded_support)
 cxxlens_enable_sanitizers(cxxlens_clang22_materializer_bounded_support)
 
@@ -519,7 +520,8 @@ add_library(
 target_link_libraries(
   cxxlens_clang22_materializer_safety_support
   PUBLIC cxxlens::base
-  PRIVATE cxxlens::kernel cxxlens::provider_sdk
+  PRIVATE cxxlens::kernel
+          cxxlens::provider_sdk
           cxxlens_clang22_materialization_codecs
           cxxlens_clang22_materialization_io_support
           cxxlens_clang22_materialization_request_v2_2_support
@@ -530,7 +532,8 @@ if(CXXLENS_BUILD_SHARED)
 endif()
 target_include_directories(cxxlens_clang22_materializer_safety_support
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_materializer_safety_support PRIVATE cxx_std_23)
+target_compile_features(cxxlens_clang22_materializer_safety_support
+                        PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens_clang22_materializer_safety_support)
 cxxlens_enable_sanitizers(cxxlens_clang22_materializer_safety_support)
 

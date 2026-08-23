@@ -269,22 +269,23 @@ namespace
 	};
 
 	[[nodiscard]] cxxlens::sdk::provider::task make_lock_task(lock_provider& implementation,
-														project_catalog project)
+															  project_catalog project)
 	{
 		const auto descriptor = company::relations::lock_acquire::descriptor();
-		auto task = cxxlens::sdk::provider::task::make({std::string{implementation.id()},
-										  implementation.version(),
-										  std::string{implementation.semantic_contract_digest()},
-										  {descriptor},
-										  {},
-										  {"cxxlens.clang22"},
-										  "observation",
-										  "assertion"},
-										 std::move(project),
-										 {descriptor},
-										 "condition:all",
-										 "cxxlens.clang22",
-										 {"calls"});
+		auto task = cxxlens::sdk::provider::task::make(
+			{std::string{implementation.id()},
+			 implementation.version(),
+			 std::string{implementation.semantic_contract_digest()},
+			 {descriptor},
+			 {},
+			 {"cxxlens.clang22"},
+			 "observation",
+			 "assertion"},
+			std::move(project),
+			{descriptor},
+			"condition:all",
+			"cxxlens.clang22",
+			{"calls"});
 		require(task.has_value(), "vertical-slice provider task was rejected");
 		return std::move(*task);
 	}

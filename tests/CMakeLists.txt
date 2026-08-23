@@ -768,8 +768,9 @@ set_tests_properties(
 cxxlens_add_test_executable(
   cxxlens-clang22-materialization-request-v2-2
   adapter/clang22/materialization_request_v2_2_test.cpp)
-target_link_libraries(cxxlens-clang22-materialization-request-v2-2
-                      PRIVATE cxxlens_clang22_materialization_request_v2_2_support)
+target_link_libraries(
+  cxxlens-clang22-materialization-request-v2-2
+  PRIVATE cxxlens_clang22_materialization_request_v2_2_support)
 add_test(NAME adapter.clang22-materialization-request-v2-2
          COMMAND cxxlens-clang22-materialization-request-v2-2)
 set_tests_properties(
@@ -1000,7 +1001,8 @@ add_test(NAME adapter.clang22-provider-worker-v4
          COMMAND cxxlens-clang22-provider-worker-v4)
 set_tests_properties(
   adapter.clang22-provider-worker-v4
-  PROPERTIES LABELS "adapter;provider;clang22;source-closure;task;v4;worker;security")
+  PROPERTIES LABELS
+             "adapter;provider;clang22;source-closure;task;v4;worker;security")
 
 # The native bridge test needs a real compiler binary/resource-dir/root,
 # resolved from the exact LLVM/Clang 22 package `find_package(LLVM 22.1 CONFIG)`
