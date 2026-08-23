@@ -8444,20 +8444,37 @@ namespace cxxlens::sdk
 			return publication->expect_done();
 		}
 
-		[[nodiscard]] result<std::vector<sqlite_persisted_publication>>
-		read_sqlite_publications(sqlite_database& database, const sqlite_physical_format format)
+		[[nodiscard]] result<std::vector<sqlite_persisted_publication>> read_sqlite_publications(
+			sqlite_database& database,
+			const sqlite_physical_format format,
+			const std::optional<std::string_view> publication_filter = std::nullopt)
 		{
 			const auto sql = format == sqlite_physical_format::predecessor_v2
-				? "SELECT publication_id,series_id,snapshot_id,sequence,generation,parent,state,"
-				  "checksum,length(payload),typeof(payload),rowid FROM cxxlens_ng_publication "
-				  "ORDER BY series_id,sequence,publication_id"
-				: "SELECT publication_id,series_id,snapshot_id,sequence,generation,parent,state,"
-				  "payload_checksum,payload_byte_count,payload_chunk_count FROM "
-				  "cxxlens_ng_publication ORDER BY series_id,sequence,publication_id";
+				? (publication_filter
+					   ? "SELECT "
+						 "publication_id,series_id,snapshot_id,sequence,generation,parent,state,"
+						 "checksum,length(payload),typeof(payload),rowid FROM "
+						 "cxxlens_ng_publication WHERE publication_id=?1"
+					   : "SELECT "
+						 "publication_id,series_id,snapshot_id,sequence,generation,parent,state,"
+						 "checksum,length(payload),typeof(payload),rowid FROM "
+						 "cxxlens_ng_publication ORDER BY series_id,sequence,publication_id")
+				: (publication_filter
+					   ? "SELECT "
+						 "publication_id,series_id,snapshot_id,sequence,generation,parent,state,"
+						 "payload_checksum,payload_byte_count,payload_chunk_count FROM "
+						 "cxxlens_ng_publication WHERE publication_id=?1"
+					   : "SELECT "
+						 "publication_id,series_id,snapshot_id,sequence,generation,parent,state,"
+						 "payload_checksum,payload_byte_count,payload_chunk_count FROM "
+						 "cxxlens_ng_publication ORDER BY series_id,sequence,publication_id");
 			auto selected = sqlite_statement::prepare(
 				database, sql, format == sqlite_physical_format::current_v3);
 			if (!selected)
 				return unexpected(std::move(selected.error()));
+			if (publication_filter)
+				if (auto bound = selected->bind_text(1, *publication_filter); !bound)
+					return unexpected(std::move(bound.error()));
 			std::vector<sqlite_persisted_publication> output;
 			for (;;)
 			{
@@ -10719,6 +10736,9 @@ namespace cxxlens::sdk
 				return unexpected(store_error(
 					"store.corrupt", record.publication_id, "duplicate-publication-id"));
 			}
+			std::string expected_payload_checksum;
+			std::uint64_t expected_payload_byte_count{};
+			std::uint64_t expected_payload_chunk_count{};
 			if (sqlite_format == sqlite_physical_format::current_v3)
 			{
 				auto receipt = insert_streamed_snapshot_chunks(*database,
@@ -10731,6 +10751,9 @@ namespace cxxlens::sdk
 					rollback();
 					return unexpected(std::move(receipt.error()));
 				}
+				expected_payload_checksum = receipt->full_checksum;
+				expected_payload_byte_count = receipt->byte_count;
+				expected_payload_chunk_count = receipt->chunk_count;
 				if (auto row = insert_v3_publication_row(*database,
 														 record,
 														 receipt->full_checksum,
@@ -10753,6 +10776,8 @@ namespace cxxlens::sdk
 					rollback();
 					return unexpected(std::move(inserted.error()));
 				}
+				expected_payload_checksum = checksum;
+				expected_payload_byte_count = payload.size();
 			}
 
 			if (sqlite_format == sqlite_physical_format::current_v3)
@@ -10845,6 +10870,73 @@ namespace cxxlens::sdk
 					rollback();
 					return unexpected(std::move(updated.error()));
 				}
+			}
+			// Re-read only the candidate row and its payload chunks through the SQLite
+			// authority cursor while the write transaction is still uncommitted. The
+			// writer-side value is an independent semantic projection; treating it as the
+			// physical projection would allow a malformed chunk or publication row to pass
+			// the pre-publication boundary. A same-connection cursor sees the transaction's
+			// writes without exposing them to other Store readers, so a mismatch rolls back
+			// before any partial publication can become visible.
+			auto physical_rows =
+				read_sqlite_publications(*database, sqlite_format, record.publication_id);
+			if (!physical_rows)
+			{
+				rollback();
+				return unexpected(std::move(physical_rows.error()));
+			}
+			if (physical_rows->size() != 1U)
+			{
+				rollback();
+				return unexpected(
+					store_error("store.corrupt", "sqlite-physical-cursor", "candidate-mismatch"));
+			}
+			const auto& physical_candidate = physical_rows->front();
+			const auto physical_checksum = physical_candidate.payload_source
+				? replayable_payload_checksum(*physical_candidate.payload_source,
+											  physical_candidate.payload_byte_count)
+				: result<std::string>{unexpected(
+					  store_error("store.corrupt", "sqlite-physical-cursor", "payload-source"))};
+			if (!physical_checksum || physical_candidate.record != record ||
+				physical_candidate.checksum != expected_payload_checksum ||
+				physical_candidate.payload_byte_count != expected_payload_byte_count ||
+				physical_candidate.payload_chunk_count != expected_payload_chunk_count ||
+				*physical_checksum != expected_payload_checksum)
+			{
+				rollback();
+				return unexpected(
+					store_error("store.corrupt", "sqlite-physical-cursor", "candidate-mismatch"));
+			}
+			auto physical_head =
+				sqlite_statement::prepare(*database,
+										  "SELECT current_publication,sequence FROM "
+										  "cxxlens_ng_series_head WHERE series_id=?1",
+										  true);
+			if (!physical_head)
+			{
+				rollback();
+				return unexpected(std::move(physical_head.error()));
+			}
+			if (auto bound = physical_head->bind_text(1, record.series_id); !bound)
+			{
+				rollback();
+				return unexpected(std::move(bound.error()));
+			}
+			if (physical_head->step() != sqlite_row)
+			{
+				rollback();
+				return unexpected(
+					store_error("store.corrupt", "sqlite-physical-cursor", "head-missing"));
+			}
+			auto physical_head_id = physical_head->column_text(0);
+			auto physical_head_sequence = physical_head->column_unsigned(1);
+			if (!physical_head_id || !physical_head_sequence ||
+				*physical_head_id != record.publication_id ||
+				*physical_head_sequence != record.sequence || physical_head->step() != sqlite_done)
+			{
+				rollback();
+				return unexpected(
+					store_error("store.corrupt", "sqlite-physical-cursor", "head-mismatch"));
 			}
 			auto committed_value = std::make_shared<snapshot_handle::data>(value);
 			census->records.emplace(record.publication_id, record);
