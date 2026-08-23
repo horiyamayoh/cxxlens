@@ -647,7 +647,7 @@ set_tests_properties(
 cxxlens_add_test_executable(cxxlens-clang22-materialization-json
                             adapter/clang22/materialization_json_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-json
-                      PRIVATE cxxlens_clang22_materializer_core)
+                      PRIVATE cxxlens_clang22_materialization_codecs)
 add_test(NAME adapter.clang22-materialization-json
          COMMAND cxxlens-clang22-materialization-json)
 set_tests_properties(
@@ -657,7 +657,7 @@ set_tests_properties(
 cxxlens_add_test_executable(cxxlens-clang22-materialization-identity
                             adapter/clang22/materialization_identity_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-identity
-                      PRIVATE cxxlens_clang22_materializer_core)
+                      PRIVATE cxxlens_clang22_materializer_safety_support)
 add_test(NAME adapter.clang22-materialization-identity
          COMMAND cxxlens-clang22-materialization-identity)
 set_tests_properties(
@@ -678,7 +678,7 @@ set_tests_properties(
 cxxlens_add_test_executable(cxxlens-clang22-materialization-io
                             adapter/clang22/materialization_io_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-io
-                      PRIVATE cxxlens_clang22_materializer_core)
+                      PRIVATE cxxlens_clang22_materialization_io_support)
 add_test(NAME adapter.clang22-materialization-io
          COMMAND cxxlens-clang22-materialization-io)
 set_tests_properties(
@@ -704,7 +704,7 @@ cxxlens_add_test_executable(cxxlens-clang22-materialization-store
                             adapter/clang22/materialization_store_test.cpp)
 target_link_libraries(
   cxxlens-clang22-materialization-store
-  PRIVATE cxxlens_clang22_materializer_core "${CMAKE_DL_LIBS}")
+  PRIVATE cxxlens_clang22_materializer_safety_support "${CMAKE_DL_LIBS}")
 add_test(NAME adapter.clang22-materialization-store
          COMMAND cxxlens-clang22-materialization-store)
 set_tests_properties(
@@ -717,7 +717,7 @@ cxxlens_add_test_executable(
   cxxlens-clang22-materialization-store-candidate
   adapter/clang22/materialization_store_candidate_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-store-candidate
-                      PRIVATE cxxlens_clang22_materializer_core)
+                      PRIVATE cxxlens_clang22_materializer_bounded_support)
 add_test(NAME adapter.clang22-materialization-store-candidate
          COMMAND cxxlens-clang22-materialization-store-candidate)
 set_tests_properties(
@@ -730,7 +730,7 @@ cxxlens_add_test_executable(
   cxxlens-clang22-materialization-store-projection
   adapter/clang22/materialization_store_projection_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-store-projection
-                      PRIVATE cxxlens_clang22_materializer_core)
+                      PRIVATE cxxlens_clang22_materializer_bounded_support)
 add_test(NAME adapter.clang22-materialization-store-projection
          COMMAND cxxlens-clang22-materialization-store-projection)
 set_tests_properties(
@@ -744,7 +744,7 @@ cxxlens_add_test_executable(
   cxxlens-clang22-materialization-store-candidate-bridge
   adapter/clang22/materialization_store_candidate_bridge_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-store-candidate-bridge
-                      PRIVATE cxxlens_clang22_materializer_core)
+                      PRIVATE cxxlens_clang22_materializer_bounded_support)
 add_test(NAME adapter.clang22-materialization-store-candidate-bridge
          COMMAND cxxlens-clang22-materialization-store-candidate-bridge)
 set_tests_properties(
@@ -757,7 +757,7 @@ cxxlens_add_test_executable(
   cxxlens-clang22-materialization-store-outcome
   adapter/clang22/materialization_store_outcome_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-store-outcome
-                      PRIVATE cxxlens_clang22_materializer_core)
+                      PRIVATE cxxlens_clang22_materializer_safety_support)
 add_test(NAME adapter.clang22-materialization-store-outcome
          COMMAND cxxlens-clang22-materialization-store-outcome)
 set_tests_properties(
@@ -769,7 +769,7 @@ cxxlens_add_test_executable(
   cxxlens-clang22-materialization-request-v2-2
   adapter/clang22/materialization_request_v2_2_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-request-v2-2
-                      PRIVATE cxxlens_clang22_materializer_core)
+                      PRIVATE cxxlens_clang22_materialization_request_v2_2_support)
 add_test(NAME adapter.clang22-materialization-request-v2-2
          COMMAND cxxlens-clang22-materialization-request-v2-2)
 set_tests_properties(
@@ -781,7 +781,7 @@ set_tests_properties(
 cxxlens_add_test_executable(cxxlens-clang22-provider-task-v4
                             adapter/clang22/provider_task_v4_test.cpp)
 target_link_libraries(cxxlens-clang22-provider-task-v4
-                      PRIVATE cxxlens_clang22_materializer_core)
+                      PRIVATE cxxlens_clang22_materialization_codecs)
 add_test(NAME adapter.clang22-provider-task-v4
          COMMAND cxxlens-clang22-provider-task-v4)
 set_tests_properties(
@@ -799,7 +799,7 @@ cxxlens_add_test_executable(
   cxxlens-clang22-materialization-pipeline-v2-2
   adapter/clang22/materialization_pipeline_v2_2_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-pipeline-v2-2
-                      PRIVATE cxxlens_clang22_materializer_core)
+                      PRIVATE cxxlens_clang22_materializer_safety_support)
 add_test(NAME adapter.clang22-materialization-pipeline-v2-2
          COMMAND cxxlens-clang22-materialization-pipeline-v2-2)
 set_tests_properties(
@@ -810,7 +810,7 @@ set_tests_properties(
 cxxlens_add_test_executable(cxxlens-clang22-materialization-rooted-vfs
                             adapter/clang22/materialization_rooted_vfs_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-rooted-vfs
-                      PRIVATE cxxlens_clang22_materializer_core)
+                      PRIVATE cxxlens_clang22_materializer_safety_support)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   target_compile_definitions(cxxlens-clang22-materialization-rooted-vfs
                              PRIVATE CXXLENS_TEST_WRAP_ROOTED_VFS_EFFECTS=1)
@@ -828,7 +828,7 @@ set_tests_properties(
 cxxlens_add_test_executable(cxxlens-clang22-materialization-occurrence
                             adapter/clang22/materialization_occurrence_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-occurrence
-                      PRIVATE cxxlens_clang22_materializer_core)
+                      PRIVATE cxxlens_clang22_materializer_safety_support)
 add_test(NAME adapter.clang22-materialization-occurrence
          COMMAND cxxlens-clang22-materialization-occurrence)
 set_tests_properties(
