@@ -1,3 +1,5 @@
+#include "llvm/clang22/materialization_pipeline_v2_2.hpp"
+
 #include <array>
 #include <cassert>
 #include <map>
@@ -5,7 +7,6 @@
 #include <string>
 #include <vector>
 
-#include "llvm/clang22/materialization_pipeline.hpp"
 #include "llvm/clang22/source_closure.hpp"
 
 namespace

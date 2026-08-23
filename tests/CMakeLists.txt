@@ -873,7 +873,7 @@ cxxlens_add_test_executable(
   cxxlens-clang22-materialization-pipeline-v2-2
   adapter/clang22/materialization_pipeline_v2_2_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-pipeline-v2-2
-                      PRIVATE cxxlens_clang22_materializer_safety_support)
+                      PRIVATE cxxlens_clang22_materializer_v2_2_pipeline_support)
 add_test(NAME adapter.clang22-materialization-pipeline-v2-2
          COMMAND cxxlens-clang22-materialization-pipeline-v2-2)
 set_tests_properties(

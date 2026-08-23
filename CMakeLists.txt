@@ -470,6 +470,24 @@ target_compile_features(cxxlens_clang22_materializer_v4_claims
 cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_claims)
 cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_claims)
 
+# Request-v2.2 admission is kept in a standalone source-private boundary.  The
+# legacy pipeline remains available only to the retained safety implementation;
+# v2.2 tests and consumers do not pull that graph merely to issue a task token.
+add_library(
+  cxxlens_clang22_materializer_v2_2_pipeline_support STATIC EXCLUDE_FROM_ALL
+  src/llvm/clang22/materialization_pipeline_v2_2.cpp)
+target_link_libraries(
+  cxxlens_clang22_materializer_v2_2_pipeline_support
+  PUBLIC cxxlens::base
+  PRIVATE cxxlens::provider_sdk cxxlens_clang22_materialization_codecs
+          cxxlens_clang22_materialization_request_v2_2_support)
+target_include_directories(cxxlens_clang22_materializer_v2_2_pipeline_support
+                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_clang22_materializer_v2_2_pipeline_support
+                        PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens_clang22_materializer_v2_2_pipeline_support)
+cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v2_2_pipeline_support)
+
 # Worker/parser implementation stays out of the installed Clang 22 SDK DSO. It
 # is linked only by provider-owned executables and source-private tests.
 add_library(
