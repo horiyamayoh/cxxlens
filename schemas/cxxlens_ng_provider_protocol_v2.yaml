@@ -1,0 +1,190 @@
+schema: cxxlens.provider-protocol.v2
+document_version: 2.0.0
+maturity: accepted-for-implementation
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md#18-provider-protocol
+  decision_adr: docs/design/adr/0107-provider-protocol-2-cutover.md
+  implementation_issues: ['#183', '#261']
+  supersedes:
+    - schemas/cxxlens_ng_provider_protocol.yaml
+    - schemas/cxxlens_ng_source_closure_transport.yaml
+
+compatibility:
+  version_axis: provider-protocol
+  protocol_major: 2
+  protocol_minor: 0
+  accepted_major: 2
+  accepted_minor: 0
+  downgrade: reject
+  implicit_legacy_fallback: forbidden
+  legacy_protocol_1: rejected-before-payload
+  legacy_request_2_1_task_v3: rejected-before-payload
+  implementation_byte_identity: non-authoritative
+  implementation_byte_sha256: forbidden
+  product_content_digest: retained
+
+wire:
+  magic_ascii: CXXP
+  fixed_header_bytes: 104
+  byte_order: big-endian
+  fixed_header_fields:
+    - {name: magic, type: bytes, bytes: 4}
+    - {name: protocol_major, type: uint16, bytes: 2}
+    - {name: protocol_minor, type: uint16, bytes: 2}
+    - {name: message_type, type: uint16, bytes: 2}
+    - {name: flags, type: uint16, bytes: 2}
+    - {name: stream_id, type: uint64, bytes: 8}
+    - {name: sequence, type: uint64, bytes: 8}
+    - {name: control_length, type: uint32, bytes: 4}
+    - {name: payload_length, type: uint64, bytes: 8}
+    - {name: control_sha256, type: bytes, bytes: 32}
+    - {name: payload_sha256, type: bytes, bytes: 32}
+  limits:
+    control_bytes: 65536
+    payload_bytes: 16777216
+    closure_chunk_bytes: 1048576
+  allocation: validate-header-and-negotiated-limits-before-allocation
+  checksums: independent-full-sha256
+  control_encoding:
+    standard: RFC-8949
+    mode: deterministic-closed-subset
+    map_key_order: encoded-length-then-lexicographic
+    shortest_integer_and_length: required
+    duplicate_map_key: reject
+    indefinite_length: reject
+    floats: reject
+    tags: reject
+    invalid_utf8: reject
+    normalization: forbidden-byte-preserving
+  flags:
+    supported: [end-of-stream]
+    reserved: reject
+    unknown_required_extension: reject
+    unknown_optional_extension: checksum-length-credit-account-then-skip
+    end_of_stream: final-task-complete-or-task-failed-only
+
+message_types:
+  unknown_required: reject
+  unknown_optional: skip-and-account
+  registry:
+    - {id: 1, name: hello, direction: provider-to-host, profile: NG0}
+    - {id: 2, name: hello_ack, direction: host-to-provider, profile: NG0}
+    - {id: 3, name: schema_negotiate, direction: bidirectional, profile: NG0}
+    - {id: 4, name: open_task, direction: host-to-provider, profile: NG0}
+    - {id: 5, name: task_accepted, direction: provider-to-host, profile: NG0}
+    - {id: 6, name: input_descriptor, direction: host-to-provider, profile: NG0}
+    - {id: 7, name: input_chunk, direction: host-to-provider, profile: NG0}
+    - {id: 8, name: credit, direction: host-to-provider, profile: NG0}
+    - {id: 9, name: batch_begin, direction: provider-to-host, profile: NG0}
+    - {id: 10, name: column_chunk, direction: provider-to-host, profile: NG0}
+    - {id: 11, name: batch_end, direction: provider-to-host, profile: NG0}
+    - {id: 12, name: batch_ack, direction: host-to-provider, profile: NG0}
+    - {id: 13, name: batch_reject, direction: host-to-provider, profile: NG0}
+    - {id: 14, name: coverage_chunk, direction: provider-to-host, profile: NG0}
+    - {id: 15, name: unresolved_chunk, direction: provider-to-host, profile: NG0}
+    - {id: 16, name: closure_candidate, direction: provider-to-host, profile: NG0}
+    - {id: 17, name: progress, direction: provider-to-host, profile: NG1}
+    - {id: 18, name: cancel, direction: host-to-provider, profile: NG0}
+    - {id: 19, name: resume, direction: bidirectional, profile: NG1}
+    - {id: 20, name: task_complete, direction: provider-to-host, profile: NG0}
+    - {id: 21, name: task_failed, direction: provider-to-host, profile: NG0}
+    - {id: 22, name: close, direction: bidirectional, profile: NG0}
+    - {id: 23, name: heartbeat, direction: bidirectional, profile: NG1}
+    - {id: 24, name: source_closure_manifest, direction: host-to-provider, profile: NG0}
+    - {id: 25, name: source_closure_blob, direction: host-to-provider, profile: NG0}
+    - {id: 26, name: source_closure_chunk, direction: host-to-provider, profile: NG0}
+    - {id: 27, name: source_closure_seal, direction: host-to-provider, profile: NG0}
+    - {id: 28, name: source_closure_ack, direction: provider-to-host, profile: NG0}
+    - {id: 29, name: source_closure_reject, direction: provider-to-host, profile: NG0}
+  identity_rules:
+    - {id: 23, reserved_for: heartbeat, resume_alias: forbidden}
+    - {id: 24, reserved_for: source_closure_manifest}
+    - {id: 25, reserved_for: source_closure_blob}
+    - {id: 26, reserved_for: source_closure_chunk}
+    - {id: 27, reserved_for: source_closure_seal}
+    - {id: 28, reserved_for: source_closure_ack}
+    - {id: 29, reserved_for: source_closure_reject}
+
+capabilities:
+  task-input-chunks-v1: required
+  task-source-closure-v1: required-for-task-v4
+  durable-resume-token: required-for-NG1
+  heartbeat: required-for-NG1
+  progress-rate-enforcement: required-for-NG1
+  spill-staging: required-for-NG1
+  long-run-fault-qualification: required-for-NG1
+  absence_action: typed-reject-before-payload
+
+request_task:
+  request_schema: cxxlens.clang22-materialization-request.v2_2
+  request_version: 2.2.0
+  task_schema: cxxlens.clang22.task.v4
+  task_id_domain: task:semantic-v2:sha256:<64-lower-hex>
+  source_closure_id_domain: source-closure:semantic-v2:sha256:<64-lower-hex>
+  source_bytes_in_request: forbidden
+  content_base64: forbidden
+  v3_digest_as_authority: forbidden
+  task_v4_authority:
+    - task_input_digest
+    - normalized_invocation_digest
+    - toolchain_digest
+    - environment_digest
+    - source_closure_id
+    - source_closure_digest
+    - manifest_digest
+    - main_logical_path
+  main_member_cross_binding: exact-file-id-path-content-size-encoding-read-only
+
+source_closure_transport:
+  manifest: [kind, session_id, task_id, task_v4_digest, closure_id, closure_digest, manifest_digest, total_bytes, chunk_bytes, chunk_count]
+  manifest_chunk: [kind, session_id, task_id, manifest_digest, chunk_index, offset, byte_count]
+  blob: [session_id, task_id, closure_digest, blob_ordinal, blob_digest, total_bytes, chunk_bytes, chunk_count]
+  blob_chunk: [session_id, task_id, blob_ordinal, blob_digest, chunk_index, offset, byte_count]
+  seal: [session_id, task_id, task_v4_digest, manifest_digest, blob_receipts_digest, blob_count, total_bytes, closure_digest, transfer_digest]
+  ack: [session_id, task_id, closure_digest, transfer_digest, spool_receipt, cleanup_owner]
+  reject: [session_id, task_id, failure_phase, reason_code, observed_counters, cleanup_receipt]
+  control_policy: deterministic-closed-cbor-no-extra-fields
+  sequence: contiguous-single-session-stream
+  success_path: [task-v4-sealed, manifest-open, manifest-streaming, manifest-validated, blob-open, blob-streaming, blob-sealed, closure-sealed, closure-acknowledged, task-accepted]
+  repeated_blob_path: [blob-open, blob-streaming, blob-sealed]
+  cancel: every-nonterminal-state
+  replay: full-manifest-first-transfer-only
+  ack_is_compiler_success: false
+  ambient_filesystem_fallback: forbidden
+  bounds:
+    members: 4096
+    unique_blobs: 4096
+    logical_path_utf8_bytes: 4096
+    blob_bytes: 16777216
+    unique_blob_bytes: 50331648
+    manifest_bytes: 41943040
+    chunk_bytes: 1048576
+    task_spool_bytes: 92274688
+    resident_transport_bytes: 1310720
+  complete_closure_memory_copy: forbidden
+
+ng1:
+  heartbeat_message_id: 23
+  heartbeat_clock: host-injected-monotonic-only
+  heartbeat_timeout_ns: 5000000000
+  progress_authority: host-receipt-time
+  resume_token_authority: fsynced-spill-frontier-and-exact-task-binding
+  resume_token_cross_use: forbidden
+  stale_or_foreign_token: typed-reject
+  worker_crash: kill-process-group-cleanup-private-spool-no-publication
+
+product_boundary:
+  retained:
+    - claim-provenance
+    - coverage-closure-unresolved
+    - provider-signature-binary-identity-revocation
+    - sandbox-policy
+    - canonical-semantic-certification
+    - digest-addressed-source-content
+    - bounded-resource-and-crash-safety
+  removed:
+    - implementation-byte-sha-ledger
+    - legacy-bindings
+    - exact-source-byte-authority
+    - qualification-report
+    - issue-checkpoint
