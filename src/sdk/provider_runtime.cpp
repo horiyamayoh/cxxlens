@@ -2634,6 +2634,14 @@ namespace cxxlens::sdk::provider
 				return cxxlens::sdk::unexpected(std::move(valid.error()));
 			if (request.output_credit.bytes == 0U || request.output_credit.frames == 0U)
 				return cxxlens::sdk::unexpected(runtime_error("provider.task-invalid", "budget"));
+			if (request.inherited_channel)
+			{
+				if (auto valid = request.inherited_channel->validate(); !valid)
+					return cxxlens::sdk::unexpected(std::move(valid.error()));
+				if (request.inherited_channel->task_id != request.task_id)
+					return cxxlens::sdk::unexpected(
+						runtime_error("provider.process-channel-foreign", request.task_id, "task"));
+			}
 			auto session_limits = negotiated_limits(request);
 			if (!session_limits)
 				return cxxlens::sdk::unexpected(std::move(session_limits.error()));
@@ -2685,6 +2693,7 @@ namespace cxxlens::sdk::provider
 			invocation.budget = request.budget;
 			invocation.sandbox = *sandbox;
 			invocation.expected_binary_digest = provider.provider_binary_digest;
+			invocation.inherited_channel = request.inherited_channel;
 			return prepared_provider_process{*session_limits,
 											 *std::move(sandbox),
 											 std::move(identity),

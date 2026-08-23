@@ -1033,6 +1033,13 @@ namespace cxxlens::sdk::provider
 		protocol_limits limits;
 		protocol_credit output_credit{67108864U, 65536U};
 		std::stop_token cancellation;
+		/**
+		 * Optional authenticated source-closure channel inherited by the selected provider.
+		 * The runtime validates the binding against this task before launch and passes the
+		 * same opaque authority to the process port; no descriptor number or closure identity
+		 * is reconstructed from the task payload or ambient environment.
+		 */
+		std::shared_ptr<const detail::process_inherited_channel_binding> inherited_channel;
 	};
 
 	/** @brief Structured process-provider execution report with validated transcript. */
