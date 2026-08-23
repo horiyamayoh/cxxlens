@@ -483,89 +483,88 @@ if(CXXLENS_ENABLE_UBSAN AND NOT MSVC)
                               PROPERTIES COMPILE_OPTIONS "-frtti")
 endif()
 
-# Legacy canonicalization and task.v3 decoding remain available only to the
-# source-private R2 regression fixture.  This target is intentionally separate
-# from both the installed worker and its static closure, so an installed worker
-# cannot acquire a v3 decoder merely by linking worker_core.
-add_library(
-  cxxlens_clang22_worker_legacy_support STATIC EXCLUDE_FROM_ALL
-  src/llvm/clang22/provider_worker_legacy.cpp
-  src/llvm/clang22/provider_task_v3.cpp
-  src/llvm/clang22/source_closure_native.cpp
-  src/llvm/clang22/materialization_io.cpp
-  src/llvm/clang22/materialization_task_spool.cpp)
-target_link_libraries(
-  cxxlens_clang22_worker_legacy_support
-  PUBLIC cxxlens::clang22_provider_sdk
-  PRIVATE cxxlens_clang22_materialization_codecs)
-if(CXXLENS_BUILD_SHARED)
-  target_sources(cxxlens_clang22_worker_legacy_support
-                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
-endif()
-target_include_directories(cxxlens_clang22_worker_legacy_support
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_worker_legacy_support
-                        PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_clang22_worker_legacy_support)
-cxxlens_enable_sanitizers(cxxlens_clang22_worker_legacy_support)
-cxxlens_configure_clang22(cxxlens_clang22_worker_legacy_support)
-if(CXXLENS_ENABLE_UBSAN AND NOT MSVC)
-  set_source_files_properties(
+if(BUILD_TESTING)
+  # Legacy canonicalization and task.v3 decoding remain available only to the
+  # source-private R2 regression fixture. The target does not exist in a
+  # BUILD_TESTING=OFF production configuration.
+  add_library(
+    cxxlens_clang22_worker_legacy_support STATIC EXCLUDE_FROM_ALL
+    src/llvm/clang22/provider_worker_legacy.cpp
+    src/llvm/clang22/provider_task_v3.cpp
+    src/llvm/clang22/source_closure_native.cpp
     src/llvm/clang22/materialization_io.cpp
-    src/llvm/clang22/materialization_task_spool.cpp PROPERTIES COMPILE_OPTIONS
-                                                               "-frtti")
-endif()
+    src/llvm/clang22/materialization_task_spool.cpp)
+  target_link_libraries(
+    cxxlens_clang22_worker_legacy_support
+    PUBLIC cxxlens::clang22_provider_sdk
+    PRIVATE cxxlens_clang22_materialization_codecs)
+  if(CXXLENS_BUILD_SHARED)
+    target_sources(cxxlens_clang22_worker_legacy_support
+                   PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+  endif()
+  target_include_directories(cxxlens_clang22_worker_legacy_support
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_worker_legacy_support
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_clang22_worker_legacy_support)
+  cxxlens_enable_sanitizers(cxxlens_clang22_worker_legacy_support)
+  cxxlens_configure_clang22(cxxlens_clang22_worker_legacy_support)
+  if(CXXLENS_ENABLE_UBSAN AND NOT MSVC)
+    set_source_files_properties(
+      src/llvm/clang22/materialization_io.cpp
+      src/llvm/clang22/materialization_task_spool.cpp PROPERTIES COMPILE_OPTIONS
+                                                                 "-frtti")
+  endif()
 
-# Source-private safety support for retained Store/SQLite/receipt tests.  This
-# target is deliberately not a production dependency: no headers, symbols, or
-# CMake target are exported to SDK consumers.  The installed v2.2 ingress below
-# is the only production materializer path.
-add_library(
-  cxxlens_clang22_materializer_safety_support STATIC EXCLUDE_FROM_ALL
-  src/llvm/clang22/materialization_identity.cpp
-  src/llvm/clang22/materialization_claims.cpp
-  src/llvm/clang22/materialization_streaming_claims.cpp
-  src/llvm/clang22/materialization_request.cpp
-  src/llvm/clang22/materialization_request_identity.cpp
-  src/llvm/clang22/materialization_request_stream.cpp
-  src/llvm/clang22/materialization_request_v2_1.cpp
-  src/llvm/clang22/provider_task_v3.cpp
-  src/llvm/clang22/materialization_task_spool.cpp
-  src/llvm/clang22/materialization_seal.cpp
-  src/llvm/clang22/materialization_partition_event_stream.cpp
-  src/llvm/clang22/materialization_incremental_coordinator.cpp
-  src/llvm/clang22/materialization_incremental_receipt.cpp
-  src/llvm/clang22/materialization_incremental_ingress.cpp
-  src/llvm/clang22/materialization_prior_artifact.cpp
-  src/llvm/clang22/materialization_claim_stream.cpp
-  src/llvm/clang22/materialization_bounded_claim_source.cpp
-  src/llvm/clang22/materialization_store.cpp
-  src/llvm/clang22/materialization_store_outcome.cpp
-  src/llvm/clang22/materialization_rooted_vfs.cpp
-  src/llvm/clang22/materialization_occurrence.cpp
-  src/llvm/clang22/materialization_execution_journal.cpp
-  src/llvm/clang22/materialization_report.cpp
-  src/llvm/clang22/materialization_public_report.cpp
-  src/llvm/clang22/materialization_pipeline.cpp)
-target_link_libraries(
-  cxxlens_clang22_materializer_safety_support
-  PUBLIC cxxlens::base
-  PRIVATE cxxlens::kernel
-          cxxlens::provider_sdk
-          cxxlens_clang22_materialization_codecs
-          cxxlens_clang22_materialization_io_support
-          cxxlens_clang22_materialization_request_v2_2_support
-          cxxlens_clang22_materializer_bounded_support)
-if(CXXLENS_BUILD_SHARED)
-  target_sources(cxxlens_clang22_materializer_safety_support
-                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+  # Source-private safety support for retained Store/SQLite/receipt tests. This
+  # target also does not exist in production or install configurations.
+  add_library(
+    cxxlens_clang22_materializer_safety_support STATIC EXCLUDE_FROM_ALL
+    src/llvm/clang22/materialization_identity.cpp
+    src/llvm/clang22/materialization_claims.cpp
+    src/llvm/clang22/materialization_streaming_claims.cpp
+    src/llvm/clang22/materialization_request.cpp
+    src/llvm/clang22/materialization_request_identity.cpp
+    src/llvm/clang22/materialization_request_stream.cpp
+    src/llvm/clang22/materialization_request_v2_1.cpp
+    src/llvm/clang22/provider_task_v3.cpp
+    src/llvm/clang22/materialization_task_spool.cpp
+    src/llvm/clang22/materialization_seal.cpp
+    src/llvm/clang22/materialization_partition_event_stream.cpp
+    src/llvm/clang22/materialization_incremental_coordinator.cpp
+    src/llvm/clang22/materialization_incremental_receipt.cpp
+    src/llvm/clang22/materialization_incremental_ingress.cpp
+    src/llvm/clang22/materialization_prior_artifact.cpp
+    src/llvm/clang22/materialization_claim_stream.cpp
+    src/llvm/clang22/materialization_bounded_claim_source.cpp
+    src/llvm/clang22/materialization_store.cpp
+    src/llvm/clang22/materialization_store_outcome.cpp
+    src/llvm/clang22/materialization_rooted_vfs.cpp
+    src/llvm/clang22/materialization_occurrence.cpp
+    src/llvm/clang22/materialization_execution_journal.cpp
+    src/llvm/clang22/materialization_report.cpp
+    src/llvm/clang22/materialization_public_report.cpp
+    src/llvm/clang22/materialization_pipeline.cpp)
+  target_link_libraries(
+    cxxlens_clang22_materializer_safety_support
+    PUBLIC cxxlens::base
+    PRIVATE cxxlens::kernel
+            cxxlens::provider_sdk
+            cxxlens_clang22_materialization_codecs
+            cxxlens_clang22_materialization_io_support
+            cxxlens_clang22_materialization_request_v2_2_support
+            cxxlens_clang22_materializer_bounded_support)
+  if(CXXLENS_BUILD_SHARED)
+    target_sources(cxxlens_clang22_materializer_safety_support
+                   PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+  endif()
+  target_include_directories(cxxlens_clang22_materializer_safety_support
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_materializer_safety_support
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_clang22_materializer_safety_support)
+  cxxlens_enable_sanitizers(cxxlens_clang22_materializer_safety_support)
 endif()
-target_include_directories(cxxlens_clang22_materializer_safety_support
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_materializer_safety_support
-                        PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_clang22_materializer_safety_support)
-cxxlens_enable_sanitizers(cxxlens_clang22_materializer_safety_support)
 
 # The installed materializer boundary deliberately links only the v2.2 ingress
 # and metadata validator.  Keeping the test-support core out of the production

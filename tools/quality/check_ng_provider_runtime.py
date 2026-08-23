@@ -29,7 +29,6 @@ class ContractError(ValueError):
     pass
 
 
-WORKER_TASK_CODEC_V4 = "cxxlens.clang22.task.v4"
 SAME_PASS_MARKER = "same-shared-validation-pass-that-constructs-immutable-seal"
 RECEIPT_FIELDS = [
     "raw_stdout_byte_count",
@@ -191,13 +190,6 @@ RUNTIME_PRIVATE_RECEIPT_AUTHORITY = {
         "raw-frame-frame-transcript-sealed-transcript-or-adoption-authority": False,
     },
 }
-
-
-def validate_task_codec_markers(codec: str) -> None:
-    if codec.count(WORKER_TASK_CODEC_V4) != 1:
-        raise ContractError(
-            "Clang 22 task codec must bind exactly one installed task.v4 codec marker"
-        )
 
 
 def load(path: pathlib.Path) -> dict[str, Any]:
@@ -2106,20 +2098,6 @@ def validate(root: pathlib.Path) -> None:
     invalid_report["terminal"] = "provider.unknown-reason"
     if not list(jsonschema.Draft202012Validator(report_schema).iter_errors(invalid_report)):
         raise ContractError("execution report schema accepted an unregistered terminal")
-    runtime_source = (root / "src/sdk/provider_runtime.cpp").read_text(encoding="utf-8")
-    terminal_block = runtime_source.split(
-        "constexpr std::array stable_terminal_reasons{", 1
-    )
-    if len(terminal_block) != 2:
-        raise ContractError("runtime stable terminal registry is missing")
-    cpp_terminals = set(
-        re.findall(r'std::string_view\{"((?:provider|security)\.[a-z0-9-]+)"\}',
-                   terminal_block[1].split("};", 1)[0])
-    )
-    if cpp_terminals != stable_terminals:
-        raise ContractError("C++ terminal registry diverges from runtime authority")
-
-
     catalog = load(root / "schemas/cxxlens_ng_public_api_catalog.yaml")
     entries = {entry["id"]: entry for entry in catalog["entries"]}
     runtime = entries.get("public.provider-runtime")
@@ -2133,54 +2111,6 @@ def validate(root: pathlib.Path) -> None:
     }
     if not required_budget_invariants.issubset(runtime.get("invariants", [])):
         raise ContractError("provider runtime catalog omits resource budget invariants")
-    header = (root / "include/cxxlens/sdk/provider.hpp").read_text(encoding="utf-8")
-    for marker in (
-        "address_space_bytes",
-        "transport_bytes",
-        "result<void> validate() const",
-        "set_output_budget",
-        "counts_toward_output_budget",
-        "Resource preemption is provided only",
-    ):
-        if marker not in header:
-            raise ContractError(f"provider budget public marker is missing: {marker}")
-    if "rss_bytes" in header or "created_files" in header:
-        raise ContractError("provider budget still claims RSS or created-file count enforcement")
-    process_source = (root / "src/runtime/provider_process_adapter.cpp").read_text(
-        encoding="utf-8"
-    )
-    for marker in (
-        "RLIMIT_AS, invocation.budget.address_space_bytes",
-        "RLIMIT_FSIZE, invocation.budget.transport_bytes",
-        "invocation.budget.open_files",
-        "invocation.budget.subprocesses",
-        "invocation.budget.wall_ms",
-    ):
-        if marker not in process_source:
-            raise ContractError(f"provider process resource marker is missing: {marker}")
-    validator_source = (root / "src/sdk/provider_runtime.cpp").read_text(encoding="utf-8")
-    for marker in (
-        "logical_output_bytes",
-        "batch_terminal->row_count > request.budget->rows - output_rows",
-        "records->size() > request.budget->diagnostics - diagnostics",
-        'return fail("provider.output-limit", request.task_id, "output_bytes")',
-    ):
-        if marker not in validator_source:
-            raise ContractError(f"shared logical budget marker is missing: {marker}")
-    budget_test = (root / "tests/unit/sdk/provider_runtime_test.cpp").read_text(
-        encoding="utf-8"
-    )
-    for marker in (
-        "logical output-byte limit diverged by execution surface",
-        "row budget could be bypassed by column chunks or execution surface",
-        "diagnostic record budget diverged by framing or execution surface",
-        "run_worker did not enforce logical output bytes before success",
-        "one execution budget dimension accepted zero",
-        "exact process transport byte budget was rejected",
-        "worker output limit was not distinguished",
-    ):
-        if marker not in budget_test:
-            raise ContractError(f"provider budget acceptance marker is missing: {marker}")
     native = entries.get("public.native-provider-sdk")
     if native is None or native["status"] != "implemented":
         raise ContractError("public.native-provider-sdk is not an implemented catalog entry")

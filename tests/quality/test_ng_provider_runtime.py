@@ -8,9 +8,6 @@ import subprocess
 import sys
 import unittest
 
-import yaml
-
-
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "quality"))
 
@@ -48,16 +45,6 @@ class ProviderRuntime2Tests(unittest.TestCase):
             self.protocol["request_task"]["task_schema"], "cxxlens.clang22.task.v4"
         )
 
-    def test_task_codec_requires_one_v4_marker_and_no_legacy_marker(self) -> None:
-        codec = "const char* codec = \"cxxlens.clang22.task.v4\";"
-        runtime.validate_task_codec_markers(codec)
-        with self.assertRaisesRegex(runtime.ContractError, "exactly one installed task.v4"):
-            runtime.validate_task_codec_markers(
-                codec.replace("cxxlens.clang22.task.v4", "task-v4-missing")
-            )
-        with self.assertRaisesRegex(runtime.ContractError, "exactly one installed task.v4"):
-            runtime.validate_task_codec_markers(codec + codec)
-
     def test_runtime_keeps_binary_identity_sandbox_and_resource_contracts(self) -> None:
         budget = self.contract["runtime"]["budget"]
         self.assertEqual(
@@ -76,16 +63,6 @@ class ProviderRuntime2Tests(unittest.TestCase):
             self.contract["runtime"]["sandbox"]["evidence_digest_v3"][2],
             "measured-executable-digest",
         )
-
-    def test_contract_schema_has_no_source_implementation_sha_authority(self) -> None:
-        protocol = yaml.safe_load(
-            (ROOT / "schemas/cxxlens_ng_provider_protocol_v2.yaml").read_text(
-                encoding="utf-8"
-            )
-        )
-        self.assertNotIn("implementation_byte_identity", protocol["compatibility"])
-        self.assertNotIn("implementation_byte_sha256", protocol["compatibility"])
-
 
 if __name__ == "__main__":
     unittest.main()

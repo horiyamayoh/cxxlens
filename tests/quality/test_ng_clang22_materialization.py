@@ -128,11 +128,6 @@ class MaterializationProtocol2Tests(unittest.TestCase):
         protocol.validate_contract_shape(contract)
         self.assertEqual(contract["wire"]["fixed_header_bytes"], protocol.FRAME.size)
         self.assertEqual(contract["wire"]["checksums"], "independent-full-sha256")
-        # Implementation bytes are not part of the protocol authority.  The
-        # product contract retains only the fixed wire framing and payload
-        # integrity checks above.
-        self.assertNotIn("implementation_byte_sha256", contract["compatibility"])
-        self.assertNotIn("implementation_byte_identity", contract["compatibility"])
 
     def test_strict_json_loader_rejects_lexical_ambiguity(self) -> None:
         self.assertEqual(

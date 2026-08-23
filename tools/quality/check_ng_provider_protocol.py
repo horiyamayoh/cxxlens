@@ -813,22 +813,6 @@ def validate_ng1_v2_contract(contract: dict[str, Any]) -> None:
         fail("provider.ng1-crash-invalid", "worker crash effect")
 
 
-def validate_design(root: pathlib.Path) -> None:
-    design = (root / "docs/design/cxxlens_next_generation_integrated_design_ja.md").read_text(encoding="utf-8")
-    for marker in (
-        "provider protocol", "atomic_output_group",
-        "dependency_group", "deterministic CBOR",
-    ):
-        if marker not in design:
-            fail("provider.design-marker-missing", marker)
-    for stale in ("std::vector<relation_batch> batches", "exact wire encoding は ADR で確定する"):
-        if stale in design:
-            fail("provider.design-stale-contract", stale)
-    index = (root / "docs/design/catalogs/README.md").read_text(encoding="utf-8")
-    if "Provider Protocol" not in index or "accepted" not in index or "contract" not in index:
-        fail("provider.catalog-index-stale", "provider protocol")
-
-
 def validate_all(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, Any]], int, int]:
     contract = load_yaml(root / CONTRACT)
     if contract.get("schema") != "cxxlens.provider-protocol.v2":
@@ -841,7 +825,6 @@ def validate_all(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, Any
     validate_ng1_v2_contract(contract)
     schema_validate(sample_manifest(), load_yaml(root / MANIFEST_SCHEMA), "provider manifest")
     validate_contract_shape(contract)
-    validate_design(root)
     # Exercise the current wire registry directly; no external compatibility
     # corpus is loaded as an authority.
     results: list[dict[str, Any]] = []

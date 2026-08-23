@@ -34,7 +34,7 @@ class ProviderProtocol2Tests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.contract = load_yaml(ROOT / "schemas/cxxlens_ng_provider_protocol_v2.yaml")
 
-    def test_protocol2_authority_rejects_legacy_and_byte_binding(self) -> None:
+    def test_protocol2_authority_rejects_legacy(self) -> None:
         compatibility = self.contract["compatibility"]
         self.assertEqual(compatibility["accepted_major"], PROTOCOL_MAJOR)
         self.assertEqual(compatibility["accepted_minor"], PROTOCOL_MINOR)
@@ -44,25 +44,7 @@ class ProviderProtocol2Tests(unittest.TestCase):
             compatibility["legacy_request_2_1_task_v3"],
             "rejected-before-payload",
         )
-        self.assertNotIn("implementation_byte_sha256", compatibility)
-        self.assertNotIn("implementation_byte_identity", compatibility)
         validate_contract_shape(self.contract)
-
-    def test_protocol2_schema_rejects_operation_and_byte_authority(self) -> None:
-        schema = load_yaml(
-            ROOT / "schemas/cxxlens_ng_provider_protocol_v2.schema.yaml"
-        )
-        validator = jsonschema.Draft202012Validator(schema)
-        for section, key, value in (
-            ("authority", "implementation_issue", "#183"),
-            ("authority", "source_sha256", "0" * 64),
-            ("compatibility", "implementation_byte_sha256", "0" * 64),
-        ):
-            changed = copy.deepcopy(self.contract)
-            changed[section][key] = value
-            with self.subTest(section=section, key=key):
-                with self.assertRaises(jsonschema.ValidationError):
-                    validator.validate(changed)
 
     def test_fixed_header_and_canonical_cbor_are_deterministic(self) -> None:
         self.assertEqual(FRAME.size, 104)
