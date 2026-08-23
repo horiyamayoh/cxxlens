@@ -64,6 +64,11 @@ function(cxxlens_create_clang22_worker_static_closure)
     src/sdk/sqlite_terminal_reclassifier_internal.cpp)
   cxxlens_configure_clang22_worker_static_component(
     cxxlens_clang22_worker_kernel_internal)
+  if(BUILD_TESTING)
+    target_sources(
+      cxxlens_clang22_worker_kernel_internal
+      PRIVATE src/sdk/sqlite_store_fault_injection_noop_internal.cpp)
+  endif()
   target_link_libraries(
     cxxlens_clang22_worker_kernel_internal
     PUBLIC cxxlens_clang22_worker_base_internal

@@ -203,6 +203,8 @@ if(BUILD_TESTING)
   target_compile_definitions(
     cxxlens_kernel PRIVATE CXXLENS_SQLITE_TEST_SUPPORT=1
                            CXXLENS_STORE_FAULT_TEST_SUPPORT=1)
+  target_sources(cxxlens_kernel
+                 PRIVATE src/sdk/sqlite_store_fault_injection_noop_internal.cpp)
 endif()
 
 if(BUILD_TESTING)
