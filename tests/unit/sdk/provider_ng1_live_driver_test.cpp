@@ -376,6 +376,48 @@ namespace
 					1U,
 					0U};
 		}
+
+		[[nodiscard]] ng1_spill_record spill_record(const std::string_view payload_text) const
+		{
+			ng1_spill_record output;
+			output.task_id = spill.task_id;
+			output.dependency_group_id = spill.dependency_group_id;
+			output.atomic_output_group_id = spill.atomic_output_group_id;
+			output.batch_id = spill.batch_id;
+			output.stream_id = spill.stream_id;
+			output.payload_bytes.reserve(payload_text.size());
+			for (const auto byte : payload_text)
+				output.payload_bytes.push_back(
+					static_cast<std::byte>(static_cast<unsigned char>(byte)));
+			auto payload_digest = ng1_spill_payload_digest(output.payload_bytes);
+			require(payload_digest, "live-driver spill payload digest construction failed");
+			output.payload_digest = *payload_digest;
+			auto record_digest = ng1_spill_record_digest(output);
+			require(record_digest, "live-driver spill record digest construction failed");
+			output.record_digest = *record_digest;
+			return output;
+		}
+
+		[[nodiscard]] ng1_resume_control resume_control(const std::uint64_t generation = 1U) const
+		{
+			ng1_resume_control output;
+			output.kind = ng1_resume_kind::accepted;
+			output.binding = resume;
+			output.highest_contiguous_acked_sequence = 0U;
+			output.staged_digest = digest("staged");
+			output.token_generation = generation;
+			ng1_resume_token token{output.schema,
+								   output.kind,
+								   output.binding,
+								   output.highest_contiguous_acked_sequence,
+								   output.staged_digest,
+								   output.token_generation,
+								   {}};
+			auto token_digest = ng1_resume_token_digest(token);
+			require(token_digest, "live-driver resume token digest construction failed");
+			output.token_digest = *token_digest;
+			return output;
+		}
 	};
 
 	[[nodiscard]] std::vector<frame> clean_transcript_frames(const fixture& values)
@@ -491,6 +533,142 @@ namespace
 		require(driver->session().state() == ng1_recovery_state::completed,
 				"clean transcript did not reach the completed recovery state");
 		require(driver->cleanup(), "clean-seal fixture cleanup failed");
+	}
+
+	void test_live_control_handoff_carries_controls_to_replay_frontier()
+	{
+		fixture values;
+		auto clock = std::make_shared<clock_state>();
+		auto observation = std::make_shared<observation_state>();
+		auto process = std::make_shared<process_state>();
+		auto configuration = values.configuration(clock, observation, process);
+		auto handoff = ng1_live_control_handoff::create(std::move(configuration.session));
+		require(handoff, "NG1 control handoff creation failed");
+
+		require(handoff->observe_task_accepted(
+					task_accepted_metadata{values.heartbeat.provider_id,
+										   values.heartbeat.provider_version.string(),
+										   values.heartbeat.task_id},
+					2'000U),
+				"NG1 control handoff task acceptance failed");
+		require(handoff->observe_host_probe(
+					values.heartbeat_control(ng1_heartbeat_kind::probe, 0U, 2'000U),
+					2'000U,
+					0U,
+					digest("staged")),
+				"NG1 control handoff heartbeat probe failed");
+		require(handoff->observe_provider_ack(
+					values.heartbeat_control(ng1_heartbeat_kind::ack, 0U, 2'001U),
+					2'001U,
+					0U,
+					digest("staged")),
+				"NG1 control handoff heartbeat ACK failed");
+
+		require(
+			handoff->observe_progress(ng1_progress_control{"cxxlens.provider-control.progress.v2",
+														   "task:test",
+														   "dependency:test",
+														   0U,
+														   2'001U,
+														   0U,
+														   10U},
+									  2'001U),
+			"NG1 control handoff initial progress failed");
+		require(
+			handoff->observe_progress(ng1_progress_control{"cxxlens.provider-control.progress.v2",
+														   "task:test",
+														   "dependency:test",
+														   1U,
+														   5'000'002'001U,
+														   5U,
+														   10U},
+									  5'000'002'001U),
+			"NG1 control handoff progress checkpoint failed");
+
+		require(handoff->append_spill(values.spill_record("first")),
+				"NG1 control handoff spill append failed");
+		auto receipt = handoff->fsync_spill(0U, 0U, digest("staged"), 1U);
+		require(receipt, "NG1 control handoff spill fsync failed");
+
+		require(
+			handoff->observe_progress(ng1_progress_control{"cxxlens.provider-control.progress.v2",
+														   "task:test",
+														   "dependency:test",
+														   2U,
+														   10'000'002'001U,
+														   10U,
+														   10U},
+									  10'000'002'001U,
+									  true),
+			"NG1 control handoff terminal progress failed");
+
+		require(handoff->observe_heartbeat_timeout(),
+				"NG1 control handoff hang observation failed");
+		require(handoff->state() == ng1_recovery_state::heartbeat_timeout,
+				"NG1 control handoff did not retain the heartbeat-timeout state");
+		require(handoff->confirm_worker_kill(),
+				"NG1 control handoff worker-kill confirmation failed");
+		require(handoff->state() == ng1_recovery_state::worker_killed,
+				"NG1 control handoff did not reach worker-killed");
+		require(handoff->accept_durable_resume(values.resume_control(), *receipt, false, false, 0U),
+				"NG1 control handoff durable resume failed");
+		auto replay_start = handoff->replay_start_sequence();
+		require(replay_start && *replay_start == 1U,
+				"NG1 control handoff replay frontier was not ack-plus-one");
+		require(handoff->accept_replay_frontier(*replay_start),
+				"NG1 control handoff replay frontier was rejected");
+		require(handoff->state() == ng1_recovery_state::resumed,
+				"NG1 control handoff did not enter resumed state");
+		auto rejected = handoff->reject_output();
+		require(!rejected && handoff->state() == ng1_recovery_state::failed,
+				"NG1 control handoff allowed unvalidated replay output");
+		require(handoff->cleanup(), "NG1 control handoff cleanup failed");
+	}
+
+	void test_live_control_handoff_cancellation_and_faults()
+	{
+		fixture values;
+		auto clock = std::make_shared<clock_state>();
+		auto observation = std::make_shared<observation_state>();
+		auto process = std::make_shared<process_state>();
+		auto configuration = values.configuration(clock, observation, process);
+		auto handoff = ng1_live_control_handoff::create(std::move(configuration.session));
+		require(handoff, "NG1 cancellation handoff creation failed");
+		auto out_of_order_ack = handoff->acknowledge_cancel();
+		require(!out_of_order_ack && out_of_order_ack.error().code == "provider.recovery-failed" &&
+					handoff->state() == ng1_recovery_state::running,
+				"NG1 cancellation accepted an acknowledgement before a request");
+		require(handoff->request_cancel(), "NG1 cancellation request was rejected");
+		require(handoff->acknowledge_cancel(), "NG1 cancellation acknowledgement was not terminal");
+		require(handoff->state() == ng1_recovery_state::failed,
+				"NG1 acknowledged cancellation did not fail closed");
+		require(handoff->cleanup(), "NG1 acknowledged cancellation cleanup failed");
+
+		auto timeout_configuration = values.configuration(std::make_shared<clock_state>(),
+														  std::make_shared<observation_state>(),
+														  std::make_shared<process_state>());
+		auto timeout_handoff =
+			ng1_live_control_handoff::create(std::move(timeout_configuration.session));
+		require(timeout_handoff, "NG1 cancellation-timeout handoff creation failed");
+		require(timeout_handoff->append_spill(values.spill_record("cancelled-prefix")),
+				"NG1 cancellation-timeout spill append failed");
+		auto receipt = timeout_handoff->fsync_spill(0U, 0U, digest("staged"), 1U);
+		require(receipt, "NG1 cancellation-timeout spill fsync failed");
+		require(timeout_handoff->request_cancel(), "NG1 cancellation-timeout request was rejected");
+		require(timeout_handoff->timeout_cancel(),
+				"NG1 cancellation timeout did not require worker kill");
+		require(timeout_handoff->state() == ng1_recovery_state::worker_killed,
+				"NG1 cancellation timeout did not reach worker-killed");
+
+		auto corrupted_receipt = *receipt;
+		corrupted_receipt.spill_digest = digest("corrupted-spill");
+		auto rejected_resume = timeout_handoff->accept_durable_resume(
+			values.resume_control(), corrupted_receipt, false, false, 0U);
+		require(!rejected_resume &&
+					rejected_resume.error().code == "provider.resume-replay-invalid" &&
+					timeout_handoff->state() == ng1_recovery_state::failed,
+				"NG1 cancellation recovery accepted a corrupted durable frontier");
+		require(timeout_handoff->cleanup(), "NG1 cancellation-timeout cleanup failed");
 	}
 
 	void test_live_driver_non_clean_finish_remains_fail_closed()
@@ -878,6 +1056,8 @@ namespace
 
 int main()
 {
+	test_live_control_handoff_carries_controls_to_replay_frontier();
+	test_live_control_handoff_cancellation_and_faults();
 	test_live_driver_clean_finish_remains_sealable();
 	test_live_driver_non_clean_finish_remains_fail_closed();
 	test_live_driver_timeout_remains_unsealable();

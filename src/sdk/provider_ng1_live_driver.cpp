@@ -36,6 +36,155 @@ namespace cxxlens::sdk::provider::detail
 		}
 	} // namespace
 
+	result<ng1_live_control_handoff>
+	ng1_live_control_handoff::create(ng1_session_configuration configuration)
+	{
+		auto session = ng1_session_coordinator::create(std::move(configuration));
+		if (!session)
+			return cxxlens::sdk::unexpected(std::move(session.error()));
+		return ng1_live_control_handoff{std::move(*session)};
+	}
+
+	ng1_live_control_handoff::ng1_live_control_handoff(ng1_live_control_handoff&& other) noexcept
+		: session_{std::move(other.session_)}
+	{
+	}
+
+	result<void>
+	ng1_live_control_handoff::observe_task_accepted(const task_accepted_metadata& metadata,
+													const std::uint64_t host_receipt_time_ns)
+	{
+		return session_.observe_task_accepted(metadata, host_receipt_time_ns);
+	}
+
+	result<void>
+	ng1_live_control_handoff::observe_host_probe(const ng1_heartbeat_control& control,
+												 const std::uint64_t host_receipt_time_ns,
+												 const std::uint64_t highest_observed_sequence,
+												 const std::string_view host_staged_digest)
+	{
+		return session_.observe_host_probe(
+			control, host_receipt_time_ns, highest_observed_sequence, host_staged_digest);
+	}
+
+	result<void>
+	ng1_live_control_handoff::observe_provider_ack(const ng1_heartbeat_control& control,
+												   const std::uint64_t host_receipt_time_ns,
+												   const std::uint64_t highest_observed_sequence,
+												   const std::string_view host_staged_digest)
+	{
+		return session_.observe_provider_ack(
+			control, host_receipt_time_ns, highest_observed_sequence, host_staged_digest);
+	}
+
+	result<void>
+	ng1_live_control_handoff::observe_progress(const ng1_progress_control& control,
+											   const std::uint64_t host_receipt_time_ns,
+											   const bool terminal_sample)
+	{
+		return session_.observe_progress(control, host_receipt_time_ns, terminal_sample);
+	}
+
+	result<void> ng1_live_control_handoff::check_liveness(const std::uint64_t now_ns)
+	{
+		return session_.check_liveness(now_ns);
+	}
+
+	result<void> ng1_live_control_handoff::append_spill(const ng1_spill_record& record)
+	{
+		return session_.append_spill(record);
+	}
+
+	result<ng1_spill_fsync_receipt>
+	ng1_live_control_handoff::fsync_spill(const std::uint64_t highest_contiguous_acked_sequence,
+										  const std::uint64_t highest_observed_sequence,
+										  std::string staged_digest,
+										  const std::uint64_t resume_generation)
+	{
+		return session_.fsync_spill(highest_contiguous_acked_sequence,
+									highest_observed_sequence,
+									std::move(staged_digest),
+									resume_generation);
+	}
+
+	result<void> ng1_live_control_handoff::observe_worker_exit()
+	{
+		return session_.observe_worker_exit();
+	}
+
+	result<void> ng1_live_control_handoff::observe_heartbeat_timeout()
+	{
+		return session_.observe_heartbeat_timeout();
+	}
+
+	result<void> ng1_live_control_handoff::observe_progress_rate_failure()
+	{
+		return session_.observe_progress_rate_failure();
+	}
+
+	result<void> ng1_live_control_handoff::request_cancel()
+	{
+		return session_.request_cancel();
+	}
+
+	result<void> ng1_live_control_handoff::acknowledge_cancel()
+	{
+		return session_.acknowledge_cancel();
+	}
+
+	result<void> ng1_live_control_handoff::timeout_cancel()
+	{
+		return session_.timeout_cancel();
+	}
+
+	result<void> ng1_live_control_handoff::confirm_worker_kill()
+	{
+		return session_.confirm_worker_kill();
+	}
+
+	result<void>
+	ng1_live_control_handoff::accept_durable_resume(const ng1_resume_control& control,
+													const ng1_spill_fsync_receipt& receipt,
+													const bool open_dependency_group,
+													const bool terminal,
+													const std::uint64_t highest_observed_sequence)
+	{
+		return session_.accept_durable_resume(
+			control, receipt, open_dependency_group, terminal, highest_observed_sequence);
+	}
+
+	result<void>
+	ng1_live_control_handoff::restore_durable_resume(const ng1_resume_control& control,
+													 const ng1_spill_fsync_receipt& receipt,
+													 const bool open_dependency_group,
+													 const bool terminal,
+													 const std::uint64_t highest_observed_sequence)
+	{
+		return session_.restore_durable_resume(
+			control, receipt, open_dependency_group, terminal, highest_observed_sequence);
+	}
+
+	result<std::uint64_t> ng1_live_control_handoff::replay_start_sequence() const
+	{
+		return session_.replay_start_sequence();
+	}
+
+	result<void>
+	ng1_live_control_handoff::accept_replay_frontier(const std::uint64_t first_sequence)
+	{
+		return session_.accept_replay_frontier(first_sequence);
+	}
+
+	result<void> ng1_live_control_handoff::reject_output()
+	{
+		return session_.reject_output();
+	}
+
+	result<void> ng1_live_control_handoff::cleanup()
+	{
+		return session_.cleanup();
+	}
+
 	result<ng1_live_session_driver>
 	ng1_live_session_driver::start(ng1_live_driver_configuration configuration,
 								   const std::stop_token cancellation)

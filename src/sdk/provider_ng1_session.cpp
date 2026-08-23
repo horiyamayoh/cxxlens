@@ -461,6 +461,27 @@ namespace cxxlens::sdk::provider::detail
 		return recovery_.observe_progress_rate_failure();
 	}
 
+	result<void> ng1_session_coordinator::request_cancel()
+	{
+		if (auto open = ensure_open("cancel-request"); !open)
+			return open;
+		return recovery_.request_cancel();
+	}
+
+	result<void> ng1_session_coordinator::acknowledge_cancel()
+	{
+		if (auto open = ensure_open("cancel-acknowledged"); !open)
+			return open;
+		return recovery_.acknowledge_cancel();
+	}
+
+	result<void> ng1_session_coordinator::timeout_cancel()
+	{
+		if (auto open = ensure_open("cancel-timeout"); !open)
+			return open;
+		return recovery_.timeout_cancel();
+	}
+
 	result<void> ng1_session_coordinator::confirm_worker_kill()
 	{
 		if (auto open = ensure_open("worker-kill"); !open)
@@ -543,6 +564,15 @@ namespace cxxlens::sdk::provider::detail
 		if (auto open = ensure_open("replay"); !open)
 			return unexpected(std::move(open.error()));
 		return recovery_.replay_start_sequence();
+	}
+
+	result<void> ng1_session_coordinator::accept_replay_frontier(const std::uint64_t first_sequence)
+	{
+		if (auto open = ensure_open("replay-frontier"); !open)
+			return open;
+		if (recovery_.state() != ng1_recovery_state::resume_replay)
+			return unexpected(recovery_error("state", "replay-not-pending"));
+		return recovery_.accept_replay_validated(first_sequence);
 	}
 
 	result<void>

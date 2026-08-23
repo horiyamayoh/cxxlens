@@ -17,6 +17,100 @@
 
 namespace cxxlens::sdk::provider::detail
 {
+	/**
+	 * Source-private typed NG1 control handoff for an integrator that owns process effects.
+	 *
+	 * This seam validates host-receipted heartbeat/progress, durable spill/resume frontiers, replay
+	 * boundaries, and crash/hang/cancellation transitions without launching a worker or publishing
+	 * provider output. The integrating runtime remains responsible for wire/process effects and for
+	 * shared transcript/output certification.
+	 */
+	class CXXLENS_PROVIDER_DETAIL_HIDDEN ng1_live_control_handoff
+	{
+	  public:
+		[[nodiscard]] static result<ng1_live_control_handoff>
+		create(ng1_session_configuration configuration);
+
+		ng1_live_control_handoff(const ng1_live_control_handoff&) = delete;
+		ng1_live_control_handoff& operator=(const ng1_live_control_handoff&) = delete;
+		ng1_live_control_handoff(ng1_live_control_handoff&& other) noexcept;
+		ng1_live_control_handoff& operator=(ng1_live_control_handoff&&) = delete;
+		~ng1_live_control_handoff() noexcept = default;
+
+		[[nodiscard]] ng1_recovery_state state() const noexcept
+		{
+			return session_.state();
+		}
+		[[nodiscard]] bool poisoned() const noexcept
+		{
+			return session_.poisoned();
+		}
+		[[nodiscard]] bool cleaned() const noexcept
+		{
+			return session_.cleaned();
+		}
+
+		/** Admit typed controls after the host has captured the ingress receipt. */
+		[[nodiscard]] result<void> observe_task_accepted(const task_accepted_metadata& metadata,
+														 std::uint64_t host_receipt_time_ns);
+		[[nodiscard]] result<void> observe_host_probe(const ng1_heartbeat_control& control,
+													  std::uint64_t host_receipt_time_ns,
+													  std::uint64_t highest_observed_sequence,
+													  std::string_view host_staged_digest);
+		[[nodiscard]] result<void> observe_provider_ack(const ng1_heartbeat_control& control,
+														std::uint64_t host_receipt_time_ns,
+														std::uint64_t highest_observed_sequence,
+														std::string_view host_staged_digest);
+		[[nodiscard]] result<void> observe_progress(const ng1_progress_control& control,
+													std::uint64_t host_receipt_time_ns,
+													bool terminal_sample = false);
+		[[nodiscard]] result<void> check_liveness(std::uint64_t now_ns);
+
+		/** Stage and durably checkpoint the exact spill prefix. */
+		[[nodiscard]] result<void> append_spill(const ng1_spill_record& record);
+		[[nodiscard]] result<ng1_spill_fsync_receipt>
+		fsync_spill(std::uint64_t highest_contiguous_acked_sequence,
+					std::uint64_t highest_observed_sequence,
+					std::string staged_digest,
+					std::uint64_t resume_generation);
+
+		/** Record worker/cancellation outcomes in the explicit recovery matrix. */
+		[[nodiscard]] result<void> observe_worker_exit();
+		[[nodiscard]] result<void> observe_heartbeat_timeout();
+		[[nodiscard]] result<void> observe_progress_rate_failure();
+		[[nodiscard]] result<void> request_cancel();
+		[[nodiscard]] result<void> acknowledge_cancel();
+		[[nodiscard]] result<void> timeout_cancel();
+		[[nodiscard]] result<void> confirm_worker_kill();
+
+		/** Rehydrate and accept a durable frontier after worker termination. */
+		[[nodiscard]] result<void> accept_durable_resume(const ng1_resume_control& control,
+														 const ng1_spill_fsync_receipt& receipt,
+														 bool open_dependency_group,
+														 bool terminal,
+														 std::uint64_t highest_observed_sequence);
+		[[nodiscard]] result<void> restore_durable_resume(const ng1_resume_control& control,
+														  const ng1_spill_fsync_receipt& receipt,
+														  bool open_dependency_group,
+														  bool terminal,
+														  std::uint64_t highest_observed_sequence);
+		[[nodiscard]] result<std::uint64_t> replay_start_sequence() const;
+		/** Admit only the exact first sequence; output validation remains external. */
+		[[nodiscard]] result<void> accept_replay_frontier(std::uint64_t first_sequence);
+
+		/** Reject output when external validation fails, then permit spill cleanup. */
+		[[nodiscard]] result<void> reject_output();
+		[[nodiscard]] result<void> cleanup();
+
+	  private:
+		explicit ng1_live_control_handoff(ng1_session_coordinator session) noexcept
+			: session_{std::move(session)}
+		{
+		}
+
+		ng1_session_coordinator session_;
+	};
+
 	/** Host-owned monotonic receipt source required by the NG1 lifecycle authority. */
 	class CXXLENS_PROVIDER_DETAIL_HIDDEN ng1_monotonic_clock_port
 	{

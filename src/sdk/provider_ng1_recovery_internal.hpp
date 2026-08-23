@@ -33,6 +33,12 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] result<void> observe_heartbeat_timeout();
 		/** Observe a progress-rate failure before the host confirms worker termination. */
 		[[nodiscard]] result<void> observe_progress_rate_failure();
+		/** Record a host cancellation request before sending the wire control. */
+		[[nodiscard]] result<void> request_cancel();
+		/** Record a provider cancellation acknowledgement as a terminal failure. */
+		[[nodiscard]] result<void> acknowledge_cancel();
+		/** Record that cancellation did not complete and the worker was killed. */
+		[[nodiscard]] result<void> timeout_cancel();
 		/** Confirm that the failed worker/process group is no longer running. */
 		[[nodiscard]] result<void> confirm_worker_kill();
 		/** Fail closed when the negotiated heartbeat clock is invalid. */

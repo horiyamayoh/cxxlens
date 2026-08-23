@@ -210,6 +210,10 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] result<void> observe_worker_exit();
 		[[nodiscard]] result<void> observe_heartbeat_timeout();
 		[[nodiscard]] result<void> observe_progress_rate_failure();
+		/** Record host cancellation control outcomes without sending a process effect. */
+		[[nodiscard]] result<void> request_cancel();
+		[[nodiscard]] result<void> acknowledge_cancel();
+		[[nodiscard]] result<void> timeout_cancel();
 		[[nodiscard]] result<void> confirm_worker_kill();
 		/**
 		 * Close a session whose worker was never created because the process port rejected launch.
@@ -236,6 +240,12 @@ namespace cxxlens::sdk::provider::detail
 														  bool terminal,
 														  std::uint64_t highest_observed_sequence);
 		[[nodiscard]] result<std::uint64_t> replay_start_sequence() const;
+		/**
+		 * Admit only the durable replay frontier. Output transcript validation and output sealing
+		 * stay with the integrating provider validator; this method does not manufacture either
+		 * receipt.
+		 */
+		[[nodiscard]] result<void> accept_replay_frontier(std::uint64_t first_sequence);
 		[[nodiscard]] result<void>
 		accept_replay(const ng1_replay_validation_receipt& replay_receipt);
 
