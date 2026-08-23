@@ -492,7 +492,6 @@ if(BUILD_TESTING)
     cxxlens_clang22_materializer_safety_support STATIC EXCLUDE_FROM_ALL
     src/llvm/clang22/materialization_identity.cpp
     src/llvm/clang22/materialization_claims.cpp
-    src/llvm/clang22/materialization_streaming_claims.cpp
     src/llvm/clang22/materialization_request.cpp
     src/llvm/clang22/materialization_request_identity.cpp
     src/llvm/clang22/materialization_request_stream.cpp

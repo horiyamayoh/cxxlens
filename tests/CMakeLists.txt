@@ -37,6 +37,10 @@ cxxlens_enable_sanitizers(cxxlens-test-sqlite-store-fault-injection-support)
 cxxlens_add_test_executable(cxxlens-unit-sdk unit/sdk/sdk_test.cpp)
 target_sources(cxxlens-unit-sdk
                PRIVATE $<TARGET_OBJECTS:cxxlens-test-sdk-support>)
+if(CXXLENS_BUILD_SHARED)
+  target_sources(cxxlens-unit-sdk
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
 target_link_libraries(cxxlens-unit-sdk PRIVATE cxxlens::clang22_provider_sdk)
 set(cxxlens_sdk_cases
     scalar-value-validation

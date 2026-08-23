@@ -126,6 +126,7 @@ namespace
 															const provider_task_v4_base_task& base,
 															const provider_task_v4& task)
 	{
+		static_cast<void>(manifest);
 		assert(manifest.closure_id == task.source_closure.source_closure_id);
 		materialization_request_v2_2 request;
 		request.materialization_request_id = "materialization-authority:v2_2-test";
