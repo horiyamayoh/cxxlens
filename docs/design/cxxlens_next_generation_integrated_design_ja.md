@@ -5305,9 +5305,7 @@ recipe、analysis module を現在の kernel 上へ追加する。
 
 開発・release の運用証跡は保持しない。独立 review は任意であり、高リスク変更でも
 仕様/ADR と positive・negative・fault test の成功だけを必須条件とする。Compatibility
-request/report は v2 の `os`、`architecture`、`toolchain`、`linkage` を照合し、v1 の
-`runtime_qualified`、`evidence_refs`、`qualification_state`、
-`compat.release-not-qualified` を持たない。対応環境は
+request/report は product environment axes のみを扱う。対応環境は
 `schemas/cxxlens_support_matrix.yaml` に掲載された version/surface/environment の
 組合せだけであり、未掲載環境と Windows/MSVC は `unsupported` である。
 

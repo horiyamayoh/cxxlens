@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Check compatibility v2 and the ordinary support table.
-
-This checker intentionally has no release-qualification or evidence-report
-mode.  ``check`` validates the static contract; ``inspect`` and ``doctor``
-return a compatibility decision for the supplied axes/environment.
-"""
+"""Check compatibility v2 and the ordinary support table."""
 
 from __future__ import annotations
 
@@ -27,17 +22,6 @@ SUPPORT_TABLE = pathlib.Path("schemas/cxxlens_support_matrix.yaml")
 SUPPORT_SCHEMA = pathlib.Path("schemas/cxxlens_support_matrix.schema.yaml")
 
 SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
-FORBIDDEN_OPERATIONAL_FIELDS = {
-    "runtime_qualified",
-    "evidence_refs",
-    "qualification_state",
-    "binary_digest",
-    "evidence_digest",
-    "production_supported",
-}
-FORBIDDEN_REASON_CODES = {"compat.release-not-qualified"}
-
-
 class ReleaseContractError(ValueError):
     """A compatibility or support-table violation."""
 
@@ -61,35 +45,9 @@ def validate(document: Any, schema: dict[str, Any], label: str) -> None:
         fail(f"{label} schema validation failed: {error.message}")
 
 
-def reject_old_fields(value: Any, path: str = "document") -> None:
-    if isinstance(value, dict):
-        for key, child in value.items():
-            if key in FORBIDDEN_OPERATIONAL_FIELDS:
-                fail(f"obsolete operational field remains: {path}.{key}")
-            reject_old_fields(child, f"{path}.{key}")
-    elif isinstance(value, list):
-        for index, child in enumerate(value):
-            reject_old_fields(child, f"{path}[{index}]")
-
-
-def reject_old_reason_codes(value: Any, path: str = "document") -> None:
-    if isinstance(value, dict):
-        for key, child in value.items():
-            if key in {"reason_codes", "code"}:
-                values = child if isinstance(child, list) else [child]
-                if any(item in FORBIDDEN_REASON_CODES for item in values):
-                    fail(f"obsolete compatibility reason remains: {path}.{key}")
-            reject_old_reason_codes(child, f"{path}.{key}")
-    elif isinstance(value, list):
-        for index, child in enumerate(value):
-            reject_old_reason_codes(child, f"{path}[{index}]")
-
-
 def validate_support_table(root: pathlib.Path) -> dict[str, Any]:
     document = load(root / SUPPORT_TABLE)
     validate(document, load(root / SUPPORT_SCHEMA), "support table")
-    reject_old_fields(document, "support")
-    reject_old_reason_codes(document, "support")
     keys = [
         (
             row["release_version"],

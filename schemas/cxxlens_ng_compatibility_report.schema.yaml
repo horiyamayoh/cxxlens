@@ -88,7 +88,6 @@ properties:
         code:
           type: string
           pattern: '^compat\.[a-z][a-z-]+$'
-          not: {const: compat.release-not-qualified}
         severity:
           enum: [info, warning, blocker]
         message:
@@ -110,4 +109,3 @@ $defs:
     items:
       type: string
       pattern: '^compat\.[a-z][a-z-]+$'
-      not: {const: compat.release-not-qualified}

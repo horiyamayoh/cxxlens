@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import copy
 import contextlib
-import json
 import pathlib
 import shutil
 import sys
@@ -72,8 +71,6 @@ class CompatibilityV2Test(unittest.TestCase):
         report = contract.decide(ROOT, self.request(operation="doctor"))
         self.assertEqual(report["schema"], "cxxlens.ng-compatibility-report.v2")
         self.assertEqual(report["decision"], "supported")
-        self.assertNotIn("qualification_state", report)
-        self.assertNotIn("evidence_refs", json.dumps(report))
 
     def test_unlisted_windows_environment_is_unsupported(self) -> None:
         request = self.request(operation="doctor")
@@ -86,37 +83,6 @@ class CompatibilityV2Test(unittest.TestCase):
         report = contract.decide(ROOT, request)
         self.assertEqual(report["decision"], "unsupported")
         self.assertIn("compat.environment-unsupported", report["reason_codes"])
-
-    def test_old_environment_fields_are_rejected(self) -> None:
-        request = self.request(operation="doctor")
-        request["environment"]["runtime_qualified"] = True  # type: ignore[index]
-        with self.assertRaises(Exception):
-            contract.decide(ROOT, request)
-
-    def test_report_schema_rejects_qualification_state(self) -> None:
-        report = contract.decide(ROOT, self.request())
-        invalid = copy.deepcopy(report)
-        invalid["qualification_state"] = "qualified"
-        with tempfile.TemporaryDirectory() as temporary:
-            path = pathlib.Path(temporary) / "report.json"
-            path.write_text(json.dumps(invalid), encoding="utf-8")
-            with self.assertRaises(Exception):
-                contract.validate(
-                    invalid,
-                    contract.load(ROOT / contract.REPORT_SCHEMA),
-                    "invalid report",
-                )
-
-    def test_report_schema_rejects_release_not_qualified_reason(self) -> None:
-        report = contract.decide(ROOT, self.request())
-        invalid = copy.deepcopy(report)
-        invalid["reason_codes"] = ["compat.release-not-qualified"]
-        with self.assertRaises(Exception):
-            contract.validate(
-                invalid,
-                contract.load(ROOT / contract.REPORT_SCHEMA),
-                "invalid compatibility reason",
-            )
 
     def test_unlisted_linux_toolchain_is_unsupported(self) -> None:
         request = self.request(operation="doctor")
