@@ -1084,6 +1084,20 @@ if(UNIX)
     PROPERTIES
       LABELS
       "adapter;provider;clang22;source-closure;fd;transport;security;bounded")
+
+  cxxlens_add_test_executable(
+    cxxlens-clang22-installed-materializer-source-closure
+    adapter/clang22/installed_materializer_source_closure_test.cpp)
+  target_link_libraries(
+    cxxlens-clang22-installed-materializer-source-closure
+    PRIVATE cxxlens_clang22_materializer_ingress
+            cxxlens_clang22_materialization_codecs)
+  add_test(NAME adapter.clang22-installed-materializer-source-closure
+           COMMAND cxxlens-clang22-installed-materializer-source-closure)
+  set_tests_properties(
+    adapter.clang22-installed-materializer-source-closure
+    PROPERTIES LABELS
+               "adapter;provider;clang22;source-closure;fd;materializer;security;bounded")
 endif()
 
 cxxlens_add_test_executable(cxxlens-clang22-source-closure-task-v4

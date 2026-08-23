@@ -659,7 +659,8 @@ endif()
 add_library(
   cxxlens_clang22_materializer_ingress STATIC
   src/llvm/clang22/materialization_io.cpp
-  src/llvm/clang22/materialization_request_v2_2.cpp)
+  src/llvm/clang22/materialization_request_v2_2.cpp
+  src/llvm/clang22/installed_materializer_source_closure.cpp)
 target_link_libraries(
   cxxlens_clang22_materializer_ingress
   PUBLIC cxxlens::base cxxlens::provider_sdk
