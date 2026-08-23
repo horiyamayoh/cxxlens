@@ -8,17 +8,7 @@
 #include <utility>
 
 #include "sqlite_store_fixture.hpp"
-
-namespace cxxlens::sdk
-{
-	result<void> rewrite_publication_payload_schema_for_testing(snapshot_store& store,
-																std::string_view publication_id,
-																std::uint8_t payload_version);
-	result<std::string>
-	insert_noncommitted_publication_for_testing(snapshot_store& store,
-												std::string_view source_publication_id,
-												std::uint8_t payload_version);
-} // namespace cxxlens::sdk
+#include "sdk_store_faults.hpp"
 
 namespace cxxlens::test::sqlite_v3_scenario
 {
