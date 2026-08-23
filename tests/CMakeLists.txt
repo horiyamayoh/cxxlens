@@ -916,6 +916,37 @@ cxxlens_add_test_executable(
   adapter/clang22/source_closure_task_v4_worker_test.cpp)
 target_link_libraries(cxxlens-clang22-source-closure-task-v4-worker
                       PRIVATE cxxlens_clang22_worker_core)
+if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG22_LIBRARY_DIRS)
+  # The positive worker path must invoke the exact packaged compiler selected by
+  # the adapter, with the same admitted root and resource directory as the
+  # native source-closure fixture. Keep the test bounded to that package; it
+  # must never silently fall back to a host clang++.
+  list(GET CXXLENS_CLANG22_LIBRARY_DIRS 0 _cxxlens_worker_test_lib_dir)
+  get_filename_component(_cxxlens_worker_test_llvm_root
+                         "${_cxxlens_worker_test_lib_dir}" DIRECTORY)
+  find_program(
+    _cxxlens_worker_test_clangxx
+    NAMES clang++-22 clang++
+    PATHS "${_cxxlens_worker_test_llvm_root}/bin"
+    NO_DEFAULT_PATH NO_CACHE)
+  if(_cxxlens_worker_test_clangxx)
+    execute_process(
+      COMMAND "${_cxxlens_worker_test_clangxx}" -print-resource-dir
+      OUTPUT_VARIABLE _cxxlens_worker_test_resource_dir
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    target_compile_definitions(
+      cxxlens-clang22-source-closure-task-v4-worker
+      PRIVATE
+        CXXLENS_TEST_CLANG22_ROOT="${_cxxlens_worker_test_llvm_root}"
+        CXXLENS_TEST_CLANGXX22_PATH="${_cxxlens_worker_test_clangxx}"
+        CXXLENS_TEST_CLANG22_RESOURCE_DIR="${_cxxlens_worker_test_resource_dir}"
+    )
+  endif()
+  unset(_cxxlens_worker_test_lib_dir)
+  unset(_cxxlens_worker_test_llvm_root)
+  unset(_cxxlens_worker_test_clangxx)
+  unset(_cxxlens_worker_test_resource_dir)
+endif()
 add_test(NAME adapter.clang22-source-closure-task-v4-worker
          COMMAND cxxlens-clang22-source-closure-task-v4-worker)
 set_tests_properties(

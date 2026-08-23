@@ -55,6 +55,23 @@ namespace
 		input.logical_working_directory = "project://src";
 		return input;
 	}
+
+#if defined(CXXLENS_TEST_CLANGXX22_PATH)
+	[[nodiscard]] std::vector<std::string> exact_clang_arguments()
+	{
+		std::vector<std::string> arguments{
+			CXXLENS_TEST_CLANGXX22_PATH,
+			"-std=c++23",
+			"-nostdinc",
+			"-nostdinc++",
+#if defined(CXXLENS_TEST_CLANG22_RESOURCE_DIR)
+			"-resource-dir=" CXXLENS_TEST_CLANG22_RESOURCE_DIR,
+#endif
+			"project://src/main.cpp",
+		};
+		return arguments;
+	}
+#endif
 } // namespace
 
 int main()
@@ -93,6 +110,44 @@ int main()
 	});
 	require(!result && result.error().code == "source-closure.task-v4-input-digest-mismatch",
 			"worker candidate accepted a payload with a foreign outer input digest");
+
+#if defined(CXXLENS_TEST_CLANGXX22_PATH)
+	// A complete task-v4 payload must reach the real, exact Clang 22 callback through the
+	// closure-exclusive VFS. The callback deliberately only observes the borrowed lifetime;
+	// all compiler-owned state must be detached by the worker before this receipt is returned.
+	const auto exact_arguments = exact_clang_arguments();
+	const std::vector<std::string> qualified_read_roots{CXXLENS_TEST_CLANG22_ROOT};
+	bool callback_ran = false;
+	result = execute_source_closure_task_v4_candidate({
+		identity->input_payload,
+		input.closure,
+		identity->base_task_digest,
+		identity->task_v4_input_digest,
+		exact_arguments,
+		qualified_read_roots,
+		[&callback_ran](cxxlens::provider::clang22::borrowed_translation_unit& unit)
+			-> cxxlens::sdk::result<void>
+		{
+			callback_ran = true;
+			(void)unit.ast();
+			(void)unit.source_manager();
+			return {};
+		},
+	});
+	if (!result)
+		std::cerr << "exact Clang 22 task-v4 execution failed: " << result.error().code << " / "
+				  << result.error().detail << '\n';
+	require(result.has_value(), "exact Clang 22 task-v4 candidate did not execute successfully");
+	require(callback_ran, "exact Clang 22 task-v4 callback did not run");
+	require(result->task_id == identity->task_id,
+			"task-v4 worker receipt returned a foreign task identity");
+	require(result->task_v4_digest == identity->task_v4_digest,
+			"task-v4 worker receipt returned a foreign task digest");
+	require(result->task_v4_input_digest == identity->task_v4_input_digest,
+			"task-v4 worker receipt returned a foreign input digest");
+	require(result->closure_id == input.closure.snapshot_id,
+			"task-v4 worker receipt returned a foreign closure identity");
+#endif
 
 	return 0;
 }
