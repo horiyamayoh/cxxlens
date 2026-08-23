@@ -579,6 +579,14 @@ add_executable(cxxlens-clang-worker-22
                src/llvm/clang22/provider_worker_main.cpp)
 target_link_libraries(cxxlens-clang-worker-22
                       PRIVATE cxxlens_clang22_worker_core)
+if(CXXLENS_BUILD_SHARED)
+  # The worker SDK is a static private closure when the public SDK is shared.
+  # Its provider implementation references the hidden runtime objects.  Put
+  # those objects on the final executable as well as in worker_core so archive
+  # ordering cannot leave the incremental transcript symbols unresolved.
+  target_sources(cxxlens-clang-worker-22
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
 target_include_directories(cxxlens-clang-worker-22
                            PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(cxxlens-clang-worker-22 PRIVATE cxx_std_23)

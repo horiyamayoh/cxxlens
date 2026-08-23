@@ -902,6 +902,10 @@ cxxlens_add_test_executable(cxxlens-clang22-observation-v2
                             adapter/clang22/observation_v2_test.cpp)
 target_link_libraries(cxxlens-clang22-observation-v2
                       PRIVATE cxxlens_clang22_worker_core)
+if(CXXLENS_BUILD_SHARED)
+  target_sources(cxxlens-clang22-observation-v2
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
 add_test(NAME adapter.clang22-observation-v2
          COMMAND cxxlens-clang22-observation-v2)
 set_tests_properties(
@@ -912,6 +916,10 @@ cxxlens_add_test_executable(cxxlens-clang22-unicode-nfc
                             adapter/clang22/unicode_nfc_test.cpp)
 target_link_libraries(cxxlens-clang22-unicode-nfc
                       PRIVATE cxxlens_clang22_worker_core)
+if(CXXLENS_BUILD_SHARED)
+  target_sources(cxxlens-clang22-unicode-nfc
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
 add_test(NAME adapter.clang22-unicode-nfc COMMAND cxxlens-clang22-unicode-nfc)
 set_tests_properties(
   adapter.clang22-unicode-nfc
@@ -1002,6 +1010,11 @@ cxxlens_add_test_executable(
   adapter/clang22/source_closure_task_v4_worker_test.cpp)
 target_link_libraries(cxxlens-clang22-source-closure-task-v4-worker
                       PRIVATE cxxlens_clang22_worker_core)
+if(CXXLENS_BUILD_SHARED)
+  target_sources(
+    cxxlens-clang22-source-closure-task-v4-worker
+    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
 if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG22_LIBRARY_DIRS)
   # The positive worker path must invoke the exact packaged compiler selected by
   # the adapter, with the same admitted root and resource directory as the
@@ -1044,6 +1057,10 @@ cxxlens_add_test_executable(cxxlens-clang22-provider-worker-v4
                             adapter/clang22/provider_worker_v4_test.cpp)
 target_link_libraries(cxxlens-clang22-provider-worker-v4
                       PRIVATE cxxlens_clang22_worker_core)
+if(CXXLENS_BUILD_SHARED)
+  target_sources(cxxlens-clang22-provider-worker-v4
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
 if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG22_LIBRARY_DIRS)
   list(GET CXXLENS_CLANG22_LIBRARY_DIRS 0 _cxxlens_worker_v4_test_lib_dir)
   get_filename_component(_cxxlens_worker_v4_test_llvm_root
