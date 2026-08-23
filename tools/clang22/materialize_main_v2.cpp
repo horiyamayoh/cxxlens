@@ -14,6 +14,7 @@
 #include <string_view>
 
 #include "llvm/clang22/materialization_admission_error.hpp"
+#include "llvm/clang22/installed_materializer_source_closure.hpp"
 #include "llvm/clang22/materialization_io.hpp"
 #include "llvm/clang22/materialization_json.hpp"
 #include "llvm/clang22/materialization_request_v2_2.hpp"
@@ -21,6 +22,7 @@
 namespace
 {
 	using namespace cxxlens;
+	using namespace cxxlens::detail::clang22;
 	using namespace cxxlens::detail::clang22::materialization;
 
 	[[nodiscard]] sdk::result<json_value> text_value(const std::string_view value)
@@ -325,6 +327,25 @@ int main(const int argc, char**)
 		if (failure.code == "materialization.request-v2_2-invalid")
 			failure.code = "materialization.request-invalid";
 		return emit_failure(*observed, failure.code, "request-schema", "request", failure.detail);
+	}
+	// A source-closure channel is an explicit process-boundary authority.  When it is supplied,
+	// consume and authenticate the complete Protocol 2.0 transfer before reporting the next
+	// missing product authority.  The receiver intentionally stops before worker launch and Store
+	// mutation; no metadata field or ambient descriptor can manufacture those authorities.
+	if (std::getenv("CXXLENS_PROVIDER_INGRESS_MODE") != nullptr)
+	{
+		auto received = receive_installed_materializer_source_closure(ingress->root);
+		if (!received)
+			return emit_failure(*observed,
+								received.error().code,
+								"source-closure",
+								received.error().field,
+								received.error().detail);
+		return emit_failure(*observed,
+							"provider.output-authority-missing",
+							"worker-output",
+							"publication",
+							"source-closure-received-but-claim-output-authority-required");
 	}
 	return emit_failure(*observed,
 						"materialization.request-invalid",
