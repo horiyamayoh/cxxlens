@@ -900,8 +900,7 @@ cxxlens_add_test_executable(
   adapter/clang22/materialization_v4_store_positive_min_test.cpp)
 target_link_libraries(
   cxxlens-clang22-materialization-v4-store-positive
-  PRIVATE cxxlens_clang22_materializer_safety_support
-          cxxlens_clang22_materializer_v4_claims
+  PRIVATE cxxlens_clang22_materializer_v4_claims
           cxxlens_clang22_materializer_v4_ingress
           cxxlens_clang22_materializer_v4_store_source)
 add_test(NAME adapter.clang22-materialization-v4-store-positive
