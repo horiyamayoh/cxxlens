@@ -931,8 +931,10 @@ add_test(NAME adapter.clang22-source-closure-receiver
          COMMAND cxxlens-clang22-source-closure-receiver)
 set_tests_properties(
   adapter.clang22-source-closure-receiver
-  PROPERTIES LABELS
-             "adapter;provider;clang22;source-closure;receiver;protocol;security;bounded")
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;source-closure;receiver;protocol;security;bounded"
+)
 
 cxxlens_add_test_executable(cxxlens-clang22-source-closure-task-v4
                             adapter/clang22/source_closure_task_v4_test.cpp)
