@@ -4,11 +4,6 @@
     "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
     "actions/setup-python": "5fda3b95a4ea91299a34e894583c3862153e4b97"
   },
-  "authority": {
-    "adr": "docs/design/adr/0072-ci-supply-chain-provenance.md",
-    "issue": "#141",
-    "owner": "steward.ci-supply-chain"
-  },
   "document_version": "1.6.0",
   "documentation": {
     "architecture": "amd64",
@@ -69,10 +64,6 @@
       "url": "https://apt.llvm.org/llvm-snapshot.gpg.key"
     },
     "suite": "llvm-toolchain-noble-22"
-  },
-  "local_workflows": {
-    ".github/workflows/quality.yml": "bc66179d80abf941249c02a7e0a6b417cbf2407954edaff6d1952c83077b643c",
-    ".github/workflows/release.yml": "e2ef4ee6b06dfa2521bb00ba82e8600e22b31e16154f7f9fa74eced8fd9b05ba"
   },
   "package_cache": {
     "correctness_role": "transport-optimization-only",

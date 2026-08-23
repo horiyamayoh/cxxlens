@@ -82,7 +82,6 @@ def load_lock(root: pathlib.Path = ROOT) -> dict[str, Any]:
     python = lock.get("python")
     runner = lock.get("runner")
     actions = lock.get("actions")
-    local_workflows = lock.get("local_workflows")
     package_cache = lock.get("package_cache")
     if not all(
         isinstance(value, dict)
@@ -92,10 +91,9 @@ def load_lock(root: pathlib.Path = ROOT) -> dict[str, Any]:
             python,
             runner,
             actions,
-            local_workflows,
             package_cache,
         )
-    ) or not local_workflows:
+    ):
         raise SupplyChainError("supply-chain lock sections are missing")
     expected_package_cache = {
         "directory": "~/.cache/cxxlens/packages",
@@ -172,24 +170,6 @@ def load_lock(root: pathlib.Path = ROOT) -> dict[str, Any]:
             or any(character not in "0123456789abcdef" for character in revision)
         ):
             raise SupplyChainError(f"action is not pinned to a commit: {name}")
-    for relative_name, digest in local_workflows.items():
-        if not isinstance(relative_name, str):
-            raise SupplyChainError(f"local workflow lock entry is invalid: {relative_name}")
-        relative_path = pathlib.PurePosixPath(relative_name)
-        if (
-            relative_path.is_absolute()
-            or relative_path.as_posix() != relative_name
-            or not relative_name.startswith(".github/workflows/")
-            or ".." in relative_path.parts
-            or not isinstance(digest, str)
-            or len(digest) != 64
-            or any(character not in "0123456789abcdef" for character in digest)
-        ):
-            raise SupplyChainError(f"local workflow lock entry is invalid: {relative_name}")
-        workflow_path = root / relative_path
-        if not workflow_path.is_file():
-            raise SupplyChainError(f"locked local workflow is missing: {relative_name}")
-        verify_bytes(workflow_path.read_bytes(), digest, f"local workflow {relative_name}")
     requirements = root / python.get("requirements", "")
     if not requirements.is_file():
         raise SupplyChainError("locked Python requirements are missing")
