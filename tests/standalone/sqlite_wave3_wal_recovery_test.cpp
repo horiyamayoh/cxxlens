@@ -1,10 +1,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "sqlite_payload_streaming_internal.hpp"
 #include "sqlite_wave3_wal_recovery_internal.hpp"
 
 namespace
@@ -26,13 +28,25 @@ namespace
 		return std::string(64, marker);
 	}
 
+	std::string prefix_digest(const std::size_t count, const std::byte value)
+	{
+		std::vector<std::byte> bytes(count, value);
+		sqlite_incremental_sha256 checksum;
+		if (!checksum.update(bytes))
+			throw std::runtime_error{"prefix digest update failed"};
+		auto finished = checksum.finish();
+		if (!finished)
+			throw std::runtime_error{"prefix digest finish failed"};
+		return finished->substr(7U);
+	}
+
 	sqlite_wave3_wal_recovery_input active_input()
 	{
 		return {source(),
 				4096,
 				7,
 				digest('a'),
-				digest('b'),
+				prefix_digest(7U, std::byte{0x5a}),
 				sqlite_wave3_wal_state::valid_nonzero,
 				0,
 				true,
@@ -99,6 +113,12 @@ namespace
 		require(mapped_plan.has_value() &&
 					mapped_plan->route == sqlite_wave3_wal_recovery_route::native_readonly_mapping,
 				"native read-only mapping route failed");
+		auto out_of_range_lock = mapped;
+		out_of_range_lock.read_lock_index = 5;
+		auto out_of_range_plan = plan_sqlite_wave3_wal_recovery(out_of_range_lock);
+		require(!out_of_range_plan &&
+					out_of_range_plan.error().detail == "native-mapping-lock-missing",
+				"out-of-range native mapping lock was accepted");
 
 		sqlite_wave3_wal_recovery_input main_only{source(),
 												  4096,
@@ -158,6 +178,14 @@ namespace
 		auto oversized_result = plan_sqlite_wave3_wal_recovery(oversized);
 		require(!oversized_result && oversized_result.error().detail == "copy-bound-exceeded",
 				"copy bound was ignored");
+
+		auto prefix_session_result = sqlite_wave3_wal_recovery_session::open(active_input());
+		require(prefix_session_result.has_value(), "prefix digest setup failed");
+		auto prefix_session = std::move(prefix_session_result.value());
+		std::vector<std::byte> tampered_prefix(7, std::byte{0x5b});
+		auto tampered = prefix_session.seal_prefix(tampered_prefix);
+		require(!tampered && tampered.error().detail == "prefix-digest-mismatch",
+				"tampered WAL prefix was accepted");
 
 		auto quarantine_result = sqlite_wave3_wal_recovery_session::open(active_input());
 		require(quarantine_result.has_value(), "quarantine setup failed");

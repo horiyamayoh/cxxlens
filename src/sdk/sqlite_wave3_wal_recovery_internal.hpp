@@ -13,6 +13,9 @@
 
 namespace cxxlens::sdk
 {
+	/** SQLite's WAL index exposes five read-lock slots, numbered 0 through 4. */
+	inline constexpr std::int32_t sqlite_wave3_wal_read_lock_maximum = 4;
+
 	/** Source identity available before an outer active-WAL read opens SQLite. */
 	struct sqlite_wave3_wal_source_identity
 	{

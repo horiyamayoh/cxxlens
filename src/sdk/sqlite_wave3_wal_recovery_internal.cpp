@@ -2,8 +2,11 @@
 
 #include <algorithm>
 #include <limits>
+#include <new>
 #include <string_view>
 #include <utility>
+
+#include "sqlite_payload_streaming_internal.hpp"
 
 namespace cxxlens::sdk
 {
@@ -62,6 +65,22 @@ namespace cxxlens::sdk
 		{
 			return fail("invalid-source-identity");
 		}
+		return {};
+	}
+
+	[[nodiscard]] result<void> validate_prefix_digest(const std::span<const std::byte> bytes,
+													  const std::string_view expected)
+	{
+		if (!valid_digest(expected))
+			return fail("invalid-prefix-digest");
+		sqlite_incremental_sha256 digest;
+		if (auto updated = digest.update(bytes); !updated)
+			return fail("prefix-digest");
+		auto finished = digest.finish();
+		if (!finished)
+			return fail("prefix-digest");
+		if (finished->size() != 71U || finished->substr(7U) != expected)
+			return fail("prefix-digest-mismatch");
 		return {};
 	}
 
@@ -137,7 +156,11 @@ namespace cxxlens::sdk
 				}
 				else if (input.native_readonly_mapping)
 				{
-					if (input.read_lock_index < 0)
+					// SQLite WAL reserves five read-lock slots (0..4).  A positive
+					// value outside that closed range is not an authenticated lock
+					// receipt and must not select the native mapping route.
+					if (input.read_lock_index < 0 ||
+						input.read_lock_index > sqlite_wave3_wal_read_lock_maximum)
 					{
 						return unexpected(recovery_error("native-mapping-lock-missing"));
 					}
@@ -245,7 +268,22 @@ namespace cxxlens::sdk
 		{
 			return fail("prefix-size-mismatch");
 		}
-		sealed_prefix_.assign(bytes.begin(), bytes.end());
+		// An absent WAL has no digest field by contract.  A present zero-byte WAL,
+		// by contrast, carries the canonical digest of the empty byte sequence and
+		// therefore still goes through the same binding check.
+		if (!(bytes.empty() && plan_.authoritative_prefix_bytes == 0U && plan_.wal_digest.empty()))
+		{
+			if (auto digest = validate_prefix_digest(bytes, plan_.wal_digest); !digest)
+				return digest;
+		}
+		try
+		{
+			sealed_prefix_.assign(bytes.begin(), bytes.end());
+		}
+		catch (const std::bad_alloc&)
+		{
+			return fail("prefix-allocation");
+		}
 		phase_ = sqlite_wave3_wal_recovery_phase::prefix_sealed;
 		return {};
 	}

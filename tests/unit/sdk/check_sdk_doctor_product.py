@@ -140,6 +140,29 @@ def check_missing_and_completion_plan(executable: str, directory: pathlib.Path) 
     require(store["state"] == "disproved", "unsupported store was not disproved")
     require(store["reason_code"] == "doctor.unsupported-tuple", "unsupported store reason changed")
 
+    unsupported_protocol = valid_project()
+    unsupported_protocol["project"]["provider"]["protocol_major"] = 1
+    protocol_path = write_project(directory, "unsupported-protocol.json", unsupported_protocol)
+    completed = run(executable, "missing", "--project", str(protocol_path), "--use-case", USE_CASE)
+    require(completed.returncode == 1, "unsupported protocol should not be successful")
+    report = json.loads(completed.stdout)
+    require(report["result"]["state"] == "disproved", "unsupported protocol was not disproved")
+    protocol = next(
+        item for item in report["capability_path"] if item["id"] == "provider.protocol.v2"
+    )
+    require(
+        protocol["state"] == "disproved" and protocol["reason_code"] == "doctor.unsupported-tuple",
+        "unsupported protocol reason changed",
+    )
+    closure = next(
+        item for item in report["capability_path"] if item["id"] == "provider.source-closure.v1"
+    )
+    require(
+        closure["state"] == "disproved"
+        and closure["reason_code"] == "doctor.disproved-dependency",
+        "disproved dependency was collapsed to unknown",
+    )
+
 
 def check_strict_and_fault_inputs(executable: str, directory: pathlib.Path) -> None:
     duplicate = (

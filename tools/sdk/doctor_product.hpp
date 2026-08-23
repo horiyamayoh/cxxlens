@@ -1101,7 +1101,7 @@ namespace cxxlens::sdk::doctor
 			if (found == prior.end() || found->second.state == "conflicting")
 				return {"unknown", "doctor.missing-capability"};
 			if (found->second.state == "disproved")
-				return {"unknown", "doctor.missing-capability"};
+				return {"disproved", "doctor.disproved-dependency"};
 			if (found->second.state != "proved")
 				return {"partial", "doctor.missing-capability"};
 		}
@@ -1213,26 +1213,27 @@ namespace cxxlens::sdk::doctor
 													   {
 														   return item.state == "disproved";
 													   });
-		const bool any_nonproved = std::ranges::any_of(output.capability_path,
-													   [](const capability_result& item)
-													   {
-														   return item.state != "proved";
-													   });
 		const bool any_proved = std::ranges::any_of(output.capability_path,
 													[](const capability_result& item)
 													{
 														return item.state == "proved";
 													});
+		const bool any_unresolved =
+			std::ranges::any_of(output.capability_path,
+								[](const capability_result& item)
+								{
+									return item.state == "unknown" || item.state == "partial";
+								});
 		if (any_conflict)
 			output.state = "conflicting", output.reason_code = "doctor.conflicting-capability";
-		else if (!any_nonproved)
-			output.state = "proved", output.reason_code = "doctor.none";
-		else if (any_proved)
+		else if (any_unresolved && any_proved)
 			output.state = "partial", output.reason_code = output.missing.front().reason_code;
+		else if (any_unresolved)
+			output.state = "unknown", output.reason_code = output.missing.front().reason_code;
 		else if (any_disproved)
 			output.state = "disproved", output.reason_code = output.missing.front().reason_code;
 		else
-			output.state = "unknown", output.reason_code = output.missing.front().reason_code;
+			output.state = "proved", output.reason_code = "doctor.none";
 		return output;
 	}
 
