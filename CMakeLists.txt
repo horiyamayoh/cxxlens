@@ -197,6 +197,13 @@ target_link_libraries(
   cxxlens_kernel
   PUBLIC cxxlens::base
   PRIVATE "${CMAKE_DL_LIBS}")
+if(BUILD_TESTING)
+  # Store mutation/fault fixtures are compiled only into the test configuration.
+  # The installed product has neither the friend declarations nor the
+  # corresponding symbols.
+  target_compile_definitions(cxxlens_kernel
+                             PRIVATE CXXLENS_STORE_FAULT_TEST_SUPPORT=1)
+endif()
 
 if(BUILD_TESTING)
   # Qualification-only authority implementation. This target is intentionally

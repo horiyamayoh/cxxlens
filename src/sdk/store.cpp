@@ -1193,6 +1193,7 @@ namespace cxxlens::sdk
 			return std::move(writer).finish();
 		}
 
+#if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
 		[[nodiscard]] std::vector<std::byte>
 		encode_snapshot(const snapshot_handle::data& value,
 						const snapshot_payload_schema payload_schema)
@@ -1201,6 +1202,7 @@ namespace cxxlens::sdk
 			encode_snapshot(writer, value, payload_schema);
 			return std::move(writer).finish();
 		}
+#endif
 
 		[[nodiscard]] result<void> encode_snapshot(const snapshot_handle::data& value,
 												   sqlite_bounded_byte_sink& sink)
@@ -7230,13 +7232,16 @@ namespace cxxlens::sdk
 			return output;
 		}
 
+#if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
 		[[nodiscard]] std::uint64_t payload_chunk_count(const std::size_t byte_count)
 		{
 			return byte_count == 0U
 				? 0U
 				: 1U + static_cast<std::uint64_t>((byte_count - 1U) / sqlite_payload_chunk_maximum);
 		}
+#endif
 
+#if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
 		// SQL text and publication identity are adjacent but semantically distinct inputs.
 		[[nodiscard]] result<void> insert_chunk_rows(
 			sqlite_database& database,
@@ -7277,6 +7282,7 @@ namespace cxxlens::sdk
 			}
 			return {};
 		}
+#endif
 
 		constexpr std::string_view v3_chunk_insert_sql =
 			"INSERT INTO cxxlens_ng_payload_chunk(publication_id,generation,chunk_ordinal,"
@@ -7373,6 +7379,7 @@ namespace cxxlens::sdk
 			return receipt;
 		}
 
+#if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
 		[[nodiscard]] result<void> insert_v3_chunks(sqlite_database& database,
 													const std::string_view publication_id,
 													const std::uint64_t generation,
@@ -7381,6 +7388,7 @@ namespace cxxlens::sdk
 			return insert_chunk_rows(
 				database, v3_chunk_insert_sql, publication_id, generation, payload);
 		}
+#endif
 
 		constexpr std::string_view v3_chunk_select_sql =
 			"SELECT chunk_ordinal,byte_offset,byte_count,checksum,payload FROM "
@@ -7635,6 +7643,7 @@ namespace cxxlens::sdk
 			return update->expect_done();
 		}
 
+#if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
 		[[nodiscard]] result<void>
 		update_v2_series_head_for_replacement(sqlite_database& database,
 											  const std::string_view prior_publication_id,
@@ -7657,6 +7666,7 @@ namespace cxxlens::sdk
 				return bound;
 			return update->expect_done();
 		}
+#endif
 
 		[[nodiscard]] result<void> delete_v3_chunks(sqlite_database& database,
 													const std::string_view publication_id,
@@ -7675,6 +7685,7 @@ namespace cxxlens::sdk
 			return deleted->expect_done();
 		}
 
+#if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
 		[[nodiscard]] result<void>
 		replace_v3_publication_payload(sqlite_database& database,
 									   const publication_record& old_record,
@@ -7734,7 +7745,9 @@ namespace cxxlens::sdk
 					return deleted;
 			return {};
 		}
+#endif
 
+#if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
 		[[nodiscard]] result<void> replace_v3_publication(sqlite_database& database,
 														  const publication_record& old_record,
 														  const snapshot_handle::data& replacement)
@@ -7795,6 +7808,7 @@ namespace cxxlens::sdk
 					return deleted;
 			return {};
 		}
+#endif
 
 		struct sqlite_persisted_publication
 		{
@@ -8323,6 +8337,7 @@ namespace cxxlens::sdk
 			return *checksum == expected_checksum;
 		}
 
+#if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
 		[[nodiscard]] result<void>
 		rewrite_v3_payload_window_in_place(sqlite_database& database,
 										   const sqlite_persisted_publication& row,
@@ -8443,6 +8458,7 @@ namespace cxxlens::sdk
 				return bound;
 			return publication->expect_done();
 		}
+#endif
 
 		[[nodiscard]] result<std::vector<sqlite_persisted_publication>> read_sqlite_publications(
 			sqlite_database& database,
@@ -8763,6 +8779,9 @@ namespace cxxlens::sdk
 		}
 	} // namespace
 
+	// These deterministic source-SHM/WAL probes are test fixtures. They remain in this translation
+	// unit only for BUILD_TESTING, so no product configuration emits their symbols.
+#if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
 	bool
 	sqlite_source_shm_map_event_read_lock_valid_for_testing(const bool native_cantinit_heap_route,
 															const bool native_mapping_nonnull,
@@ -8933,6 +8952,7 @@ namespace cxxlens::sdk
 	{
 		return retained_active_wal_epoch_entries_match_source(epoch, source);
 	}
+#endif
 
 	struct snapshot_store::implementation
 	{
@@ -12068,6 +12088,10 @@ namespace cxxlens::sdk
 		return snapshot_store{std::move(implementation)};
 	}
 
+	// Persisted corruption and counter mutation fixtures are test support only. Keeping the
+	// implementation beside the private Store representation preserves the exact memory/SQLite
+	// parity and serialization invariants while excluding every hook from BUILD_TESTING=OFF.
+#if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
 	result<void> mark_publication_corrupt_for_testing(snapshot_store& store,
 													  const std::string_view publication_id)
 	{
@@ -12691,6 +12715,7 @@ namespace cxxlens::sdk
 				return delete_head->expect_done();
 			});
 	}
+#endif
 
 	snapshot_builder::snapshot_builder(relation_registry registry) : registry_{std::move(registry)}
 	{
