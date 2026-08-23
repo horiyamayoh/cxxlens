@@ -4,6 +4,7 @@
 #include <array>
 #include <limits>
 #include <map>
+#include <memory>
 #include <ranges>
 #include <span>
 #include <string_view>
@@ -90,130 +91,122 @@ namespace cxxlens::detail::clang22::materialization
 											const sdk::snapshot_manifest& manifest,
 											const bool derive_from_physical_order)
 		{
-			std::vector<bounded_store_record> records;
-			try
-			{
-				records.reserve(1U + manifest.partitions.size() * 8U + manifest.closure_ids.size());
-			}
-			catch (const std::bad_alloc&)
-			{
+			// Both projections must already be in the physical key order selected by their
+			// authority. Sorting a resident copy here would make the advertised 512 MiB bound
+			// dependent on the number of partitions. Rejecting an unordered source keeps the
+			// comparison streaming and makes an invalid physical cursor fail before publication.
+			const auto order_detail =
+				derive_from_physical_order ? "physical-key-order" : "manifest-order";
+			if (!std::ranges::is_sorted(
+					manifest.partitions, {}, &sdk::partition_manifest::partition_id))
 				return sdk::unexpected(
-					sdk::error{"store.resource-limit", "candidate-projection", "allocation"});
-			}
+					sdk::error{"store.corrupt", "candidate-projection", order_detail});
+			if (std::ranges::adjacent_find(
+					manifest.partitions, {}, &sdk::partition_manifest::partition_id) !=
+				manifest.partitions.end())
+				return sdk::unexpected(
+					sdk::error{"store.corrupt", "candidate-projection", "duplicate-partition-id"});
+			if (!std::ranges::is_sorted(manifest.closure_ids))
+				return sdk::unexpected(
+					sdk::error{"store.corrupt", "candidate-projection", "closure-order"});
+			if (std::ranges::adjacent_find(manifest.closure_ids) != manifest.closure_ids.end())
+				return sdk::unexpected(
+					sdk::error{"store.corrupt", "candidate-projection", "duplicate-closure-id"});
 
-			auto add = [&](const bounded_store_record_kind kind,
-						   std::string key,
-						   sdk::result<std::vector<std::byte>> payload) -> sdk::result<void>
+			auto append = [&](const bounded_store_record_kind kind,
+							  std::string key,
+							  sdk::result<std::vector<std::byte>> payload) -> sdk::result<void>
 			{
 				if (!payload)
 					return sdk::unexpected(std::move(payload.error()));
-				records.push_back({kind, std::move(key), std::move(*payload)});
+				return output.append({kind, std::move(key), std::move(*payload)});
+			};
+			auto append_partition_records = [&](const bounded_store_record_kind kind,
+												const std::string_view suffix,
+												const auto& payload_for) -> sdk::result<void>
+			{
+				for (const auto& partition : manifest.partitions)
+				{
+					std::string key{"partition/"};
+					key.append(partition.partition_id);
+					key.append(suffix);
+					if (auto appended = append(kind, std::move(key), payload_for(partition));
+						!appended)
+						return sdk::unexpected(std::move(appended.error()));
+				}
 				return {};
 			};
-
-			auto global_payload = candidate_manifest_payload(manifest);
-			if (auto added = add(bounded_store_record_kind::global_identity,
-								 "snapshot",
-								 std::move(global_payload));
-				!added)
-				return sdk::unexpected(std::move(added.error()));
-
-			// Expected projection follows the immutable manifest order. The actual projection uses
-			// an independently keyed physical order below; both are compared as full framed bytes.
-			std::vector<sdk::partition_manifest> physical_partitions;
-			if (derive_from_physical_order)
+			const auto full_partition = [](const sdk::partition_manifest& partition)
 			{
-				try
-				{
-					physical_partitions = manifest.partitions;
-					std::ranges::sort(
-						physical_partitions, {}, &sdk::partition_manifest::partition_id);
-				}
-				catch (const std::bad_alloc&)
-				{
-					return sdk::unexpected(
-						sdk::error{"store.resource-limit", "candidate-projection", "allocation"});
-				}
-				for (std::size_t index{}; index < physical_partitions.size(); ++index)
-					if (index != 0U &&
-						physical_partitions[index - 1U].partition_id ==
-							physical_partitions[index].partition_id)
-						return sdk::unexpected(sdk::error{
-							"store.corrupt", "candidate-projection", "duplicate-partition-id"});
-			}
-			const auto& partitions =
-				derive_from_physical_order ? physical_partitions : manifest.partitions;
-			for (const auto& partition : partitions)
-			{
-				auto partition_payload = candidate_partition_payload(partition);
-				if (!partition_payload)
-					return sdk::unexpected(std::move(partition_payload.error()));
-				const auto prefix = std::string{"partition/"} + partition.partition_id;
-				if (auto added = add(bounded_store_record_kind::partition_begin,
-									 prefix,
-									 candidate_partition_payload(partition));
-					!added)
-					return sdk::unexpected(std::move(added.error()));
-				if (auto added = add(bounded_store_record_kind::semantic_key,
-									 prefix + "/identity",
-									 candidate_partition_payload(partition));
-					!added)
-					return sdk::unexpected(std::move(added.error()));
-				if (auto added = add(bounded_store_record_kind::claim_full_projection,
-									 prefix + "/content",
-									 candidate_partition_payload(partition));
-					!added)
-					return sdk::unexpected(std::move(added.error()));
-				if (auto added =
-						add(bounded_store_record_kind::coverage,
-							prefix + "/coverage",
-							candidate_payload({candidate_text(partition.coverage_digest)}));
-					!added)
-					return sdk::unexpected(std::move(added.error()));
-				if (auto added =
-						add(bounded_store_record_kind::provenance,
-							prefix + "/input",
-							candidate_payload({candidate_text(partition.input_basis_digest)}));
-					!added)
-					return sdk::unexpected(std::move(added.error()));
-				if (auto added = add(bounded_store_record_kind::guarantee,
-									 prefix + "/complete",
-									 candidate_payload(
-										 {sdk::canonical_value::from_boolean(partition.complete)}));
-					!added)
-					return sdk::unexpected(std::move(added.error()));
-				if (auto added = add(bounded_store_record_kind::partition_census,
-									 prefix + "/census",
-									 candidate_payload({sdk::canonical_value::from_integer(
-										 static_cast<std::int64_t>(partition.claim_count))}));
-					!added)
-					return sdk::unexpected(std::move(added.error()));
-				if (auto added = add(bounded_store_record_kind::partition_end,
-									 prefix,
-									 candidate_partition_payload(partition));
-					!added)
-					return sdk::unexpected(std::move(added.error()));
-			}
+				return candidate_partition_payload(partition);
+			};
+			if (auto appended = append_partition_records(
+					bounded_store_record_kind::partition_begin, "", full_partition);
+				!appended)
+				return sdk::unexpected(std::move(appended.error()));
+			if (auto appended = append_partition_records(
+					bounded_store_record_kind::semantic_key, "/identity", full_partition);
+				!appended)
+				return sdk::unexpected(std::move(appended.error()));
+			if (auto appended = append_partition_records(
+					bounded_store_record_kind::claim_full_projection, "/content", full_partition);
+				!appended)
+				return sdk::unexpected(std::move(appended.error()));
+			if (auto appended = append_partition_records(
+					bounded_store_record_kind::coverage,
+					"/coverage",
+					[](const sdk::partition_manifest& partition)
+					{
+						return candidate_payload({candidate_text(partition.coverage_digest)});
+					});
+				!appended)
+				return sdk::unexpected(std::move(appended.error()));
 			for (const auto& closure : manifest.closure_ids)
 			{
-				if (auto added = add(bounded_store_record_kind::closure_binding,
-									 "closure/" + closure,
-									 candidate_payload({candidate_text(closure)}));
-					!added)
-					return sdk::unexpected(std::move(added.error()));
-			}
-
-			std::ranges::sort(
-				records,
-				[](const bounded_store_record& left, const bounded_store_record& right)
-				{
-					const auto left_kind = static_cast<std::uint8_t>(left.kind);
-					const auto right_kind = static_cast<std::uint8_t>(right.kind);
-					return left_kind == right_kind ? left.key < right.key : left_kind < right_kind;
-				});
-			for (const auto& record : records)
-				if (auto appended = output.append(record); !appended)
+				if (auto appended = append(bounded_store_record_kind::closure_binding,
+										   "closure/" + closure,
+										   candidate_payload({candidate_text(closure)}));
+					!appended)
 					return sdk::unexpected(std::move(appended.error()));
+			}
+			if (auto appended = append_partition_records(
+					bounded_store_record_kind::provenance,
+					"/input",
+					[](const sdk::partition_manifest& partition)
+					{
+						return candidate_payload({candidate_text(partition.input_basis_digest)});
+					});
+				!appended)
+				return sdk::unexpected(std::move(appended.error()));
+			if (auto appended = append_partition_records(
+					bounded_store_record_kind::guarantee,
+					"/complete",
+					[](const sdk::partition_manifest& partition)
+					{
+						return candidate_payload(
+							{sdk::canonical_value::from_boolean(partition.complete)});
+					});
+				!appended)
+				return sdk::unexpected(std::move(appended.error()));
+			if (auto appended = append_partition_records(
+					bounded_store_record_kind::partition_census,
+					"/census",
+					[](const sdk::partition_manifest& partition)
+					{
+						return candidate_payload({sdk::canonical_value::from_integer(
+							static_cast<std::int64_t>(partition.claim_count))});
+					});
+				!appended)
+				return sdk::unexpected(std::move(appended.error()));
+			if (auto appended = append_partition_records(
+					bounded_store_record_kind::partition_end, "", full_partition);
+				!appended)
+				return sdk::unexpected(std::move(appended.error()));
+			if (auto appended = append(bounded_store_record_kind::global_identity,
+									   "snapshot",
+									   candidate_manifest_payload(manifest));
+				!appended)
+				return sdk::unexpected(std::move(appended.error()));
 			return {};
 		}
 
@@ -222,48 +215,43 @@ namespace cxxlens::detail::clang22::materialization
 									   const validated_publication_request& publication)
 		{
 			bounded_store_limits limits;
-			std::vector<std::vector<std::byte>> task_payloads;
+			if (manifest.partitions.empty() || manifest.partitions.size() > limits.max_tasks)
+				return sdk::unexpected(
+					sdk::error{"store.resource-limit", "candidate-input", "task-count"});
+			std::shared_ptr<const sdk::snapshot_manifest> immutable_manifest;
 			try
 			{
-				task_payloads.reserve(manifest.partitions.size());
+				immutable_manifest = std::make_shared<const sdk::snapshot_manifest>(manifest);
 			}
 			catch (const std::bad_alloc&)
 			{
 				return sdk::unexpected(
 					sdk::error{"store.resource-limit", "candidate-input", "allocation"});
 			}
-			for (const auto& partition : manifest.partitions)
-			{
-				auto payload = candidate_partition_payload(partition);
-				if (!payload)
-					return sdk::unexpected(std::move(payload.error()));
-				task_payloads.push_back(std::move(*payload));
-			}
-			if (task_payloads.empty() || task_payloads.size() > limits.max_tasks)
-				return sdk::unexpected(
-					sdk::error{"store.resource-limit", "candidate-input", "task-count"});
 
 			auto digest = make_materialization_sha256_accumulator();
 			if (!digest)
 				return sdk::unexpected(
 					sdk::error{"store.hash-failure", "candidate-input", "accumulator"});
 			std::uint64_t input_bytes{};
-			for (std::size_t index{}; index < task_payloads.size(); ++index)
+			for (std::size_t index{}; index < immutable_manifest->partitions.size(); ++index)
 			{
-				const auto& payload = task_payloads[index];
-				if (payload.size() > limits.max_aggregate_bytes ||
-					input_bytes > limits.max_aggregate_bytes - payload.size())
+				auto payload = candidate_partition_payload(immutable_manifest->partitions[index]);
+				if (!payload)
+					return sdk::unexpected(std::move(payload.error()));
+				if (payload->size() > limits.max_aggregate_bytes ||
+					input_bytes > limits.max_aggregate_bytes - payload->size())
 					return sdk::unexpected(
 						sdk::error{"store.resource-limit", "candidate-input", "bytes"});
 				const bounded_store_record record{
-					bounded_store_record_kind::task_result, std::to_string(index), payload};
+					bounded_store_record_kind::task_result, std::to_string(index), *payload};
 				auto encoded = encode_bounded_store_record(record, limits);
 				if (!encoded)
 					return sdk::unexpected(std::move(encoded.error()));
 				if (auto updated = digest->update(*encoded); !updated)
 					return sdk::unexpected(
 						sdk::error{"store.hash-failure", "candidate-input", "update"});
-				input_bytes += static_cast<std::uint64_t>(payload.size());
+				input_bytes += static_cast<std::uint64_t>(payload->size());
 			}
 			auto input_digest = digest->finish();
 			if (!input_digest)
@@ -273,28 +261,31 @@ namespace cxxlens::detail::clang22::materialization
 			materialization_store_candidate_bridge_request request;
 			request.staging_session_id = "store/" + manifest.id;
 			request.expected_head = publication.expected_parent_publication.value_or("genesis");
-			request.external_census = {static_cast<std::uint64_t>(task_payloads.size()),
-									   input_bytes,
-									   std::move(*input_digest)};
-			request.replay_tasks =
-				[payloads = std::move(task_payloads)](const auto& consumer) -> sdk::result<void>
+			request.external_census = {
+				static_cast<std::uint64_t>(immutable_manifest->partitions.size()),
+				input_bytes,
+				std::move(*input_digest)};
+			request.replay_tasks = [immutable_manifest](const auto& consumer) -> sdk::result<void>
 			{
-				for (const auto& payload : payloads)
-					if (auto consumed = consumer(payload); !consumed)
+				for (const auto& partition : immutable_manifest->partitions)
+				{
+					auto payload = candidate_partition_payload(partition);
+					if (!payload)
+						return sdk::unexpected(std::move(payload.error()));
+					if (auto consumed = consumer(*payload); !consumed)
 						return consumed;
+				}
 				return {};
 			};
-			const auto expected_manifest = manifest;
 			request.build_expected_projection =
-				[expected_manifest](bounded_store_record_spool& output) -> sdk::result<void>
+				[immutable_manifest](bounded_store_record_spool& output) -> sdk::result<void>
 			{
-				return append_candidate_projection_records(output, expected_manifest, false);
+				return append_candidate_projection_records(output, *immutable_manifest, false);
 			};
-			const auto actual_manifest = manifest;
 			request.build_actual_projection =
-				[actual_manifest](bounded_store_record_spool& output) -> sdk::result<void>
+				[immutable_manifest](bounded_store_record_spool& output) -> sdk::result<void>
 			{
-				return append_candidate_projection_records(output, actual_manifest, true);
+				return append_candidate_projection_records(output, *immutable_manifest, true);
 			};
 			request.write_publication_independent_report =
 				[](bounded_store_report_writer& report) -> sdk::result<void>
