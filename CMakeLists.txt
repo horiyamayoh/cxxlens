@@ -473,9 +473,8 @@ cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_claims)
 # Request-v2.2 admission is kept in a standalone source-private boundary.  The
 # legacy pipeline remains available only to the retained safety implementation;
 # v2.2 tests and consumers do not pull that graph merely to issue a task token.
-add_library(
-  cxxlens_clang22_materializer_v2_2_pipeline_support STATIC EXCLUDE_FROM_ALL
-  src/llvm/clang22/materialization_pipeline_v2_2.cpp)
+add_library(cxxlens_clang22_materializer_v2_2_pipeline_support STATIC
+            EXCLUDE_FROM_ALL src/llvm/clang22/materialization_pipeline_v2_2.cpp)
 target_link_libraries(
   cxxlens_clang22_materializer_v2_2_pipeline_support
   PUBLIC cxxlens::base
