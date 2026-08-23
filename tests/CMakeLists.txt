@@ -547,6 +547,12 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
     unit.sdk-provider-runtime-timeout
     PROPERTIES LABELS
                "unit;sdk;provider;process;budget;cancellation;regression"
+               # The fixture asserts a five-second wall-clock readiness bound.
+               # Run it without unrelated CTest processes competing for that
+               # scheduler interval; its explicit contention variant still
+               # exercises the product under CPU pressure.
+               RUN_SERIAL
+               TRUE
                TIMEOUT
                ${CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT}
                SKIP_RETURN_CODE
@@ -558,6 +564,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
       "unit;sdk;provider;process;budget;cancellation;regression;contention"
       ENVIRONMENT
       "CXXLENS_PROVIDER_TIMEOUT_CONTENTION=1"
+      RUN_SERIAL
+      TRUE
       TIMEOUT
       ${CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT}
       SKIP_RETURN_CODE
