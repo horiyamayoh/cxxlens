@@ -57,6 +57,23 @@ function(run_installed_tools label)
   run_clean(
     0 "${install_prefix}/bin/cxxlens-sdk-doctor${install_executable_suffix}"
     relation-presence build.project.v1 cc.call_site.v1 source.span.v1)
+  # Exercise the product-only capability resolver through the installed
+  # executable.  The fixture contains only product authority values; it does not
+  # encode repository or development-operation metadata.
+  set(doctor_project "${test_root}/doctor-project-${label}.json")
+  file(
+    WRITE "${doctor_project}"
+    [=[
+{"schema":"cxxlens.sdk-doctor-project.v1","document_version":"1.0.0","project":{"project_id":"installed.example","catalog_id":"catalog.example","catalog_digest":"catalog-digest","logical_root":"project://installed","environment_digest":"environment-digest","source_input":{"source_snapshot_id":"snapshot.example","compilation_database_id":"compdb.example"},"provider":{"provider_id":"provider.example","provider_version":"2.0.0","protocol_major":2,"protocol_minor":0,"offered_relations":["cc.call_site.v1","cc.entity.v1"],"features":["task-source-closure-v2"],"interpretation_domains":["cc.canonical-1"],"sandbox_minimum":"enforced"},"store":{"backend":"memory","format":"cxxlens.snapshot.v3"}}}
+]=])
+  run_clean(
+    0
+    "${install_prefix}/bin/cxxlens-sdk-doctor${install_executable_suffix}"
+    missing
+    --project
+    "${doctor_project}"
+    --use-case
+    cxxlens.clang22.materialize-and-query.v1)
   run_clean(
     1
     "${install_prefix}/bin/cxxlens-clang-worker-22${install_executable_suffix}")

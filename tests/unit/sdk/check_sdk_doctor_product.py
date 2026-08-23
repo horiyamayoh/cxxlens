@@ -126,6 +126,21 @@ def check_missing_and_completion_plan(executable: str, directory: pathlib.Path) 
     require("provider.protocol.v2" in plan_ids, "completion plan omits provider protocol")
     require(report["preserved_semantics"]["unresolved"], "unknown capability was collapsed")
 
+    # Completion steps are emitted in the capability DAG's declared order.  A
+    # consumer can therefore apply the plan without reimplementing a planner
+    # or depending on input-object ordering.
+    path_positions = {
+        item["id"]: position for position, item in enumerate(report["capability_path"])
+    }
+    plan_positions = [path_positions[item["unlocks"]] for item in report["completion_plan"]]
+    require(plan_positions == sorted(plan_positions), "completion plan is not dependency ordered")
+    for item in report["completion_plan"]:
+        unlock_position = path_positions[item["unlocks"]]
+        require(
+            all(path_positions[dependency] < unlock_position for dependency in item["requires"]),
+            f"completion step {item['unlocks']} depends on a later capability",
+        )
+
     unsupported_store = valid_project()
     unsupported_store["project"]["store"] = {"backend": "filesystem", "format": "old.snapshot"}
     unsupported = write_project(directory, "unsupported-store.json", unsupported_store)
@@ -193,6 +208,20 @@ def check_strict_and_fault_inputs(executable: str, directory: pathlib.Path) -> N
 
     completed = run(executable, "missing", "--use-case", USE_CASE)
     require(completed.returncode == 2 and "doctor.project-required" in completed.stderr, "missing project option was not typed")
+
+    oversized = directory / "oversized.json"
+    oversized.write_text("{" + "\"x\":" + ("\"value\"," * 250000)[:-1] + "}", encoding="utf-8")
+    completed = run(executable, "missing", "--project", str(oversized), "--use-case", USE_CASE)
+    require(completed.returncode == 2, "oversized project was not rejected")
+    require("doctor.project-invalid" in completed.stderr and "byte-limit" in completed.stderr,
+            "oversized project did not report the resource bound")
+
+    too_deep = directory / "too-deep.json"
+    too_deep.write_text("[" * 65 + "0" + "]" * 65, encoding="utf-8")
+    completed = run(executable, "missing", "--project", str(too_deep), "--use-case", USE_CASE)
+    require(completed.returncode == 2, "deep project was not rejected")
+    require("doctor.project-invalid" in completed.stderr and "depth-limit" in completed.stderr,
+            "deep project did not report the parser resource bound")
 
 
 def check_relation_presence(executable: str) -> None:
