@@ -26,6 +26,31 @@ def require(condition: bool, message: str) -> None:
         raise SystemExit(f"check_sdk_doctor_product: {message}")
 
 
+OPERATIONAL_FIELDS = {
+    "git",
+    "issue",
+    "work_unit",
+    "work-unit",
+    "checkpoint",
+    "source_revision",
+    "source_tree",
+    "qualification_state",
+    "evidence_refs",
+}
+
+
+def require_product_only_projection(value: Any) -> None:
+    """Doctor documents must not expose repository-operation metadata."""
+    if isinstance(value, dict):
+        forbidden = OPERATIONAL_FIELDS.intersection(value)
+        require(not forbidden, f"operational metadata leaked into doctor output: {sorted(forbidden)}")
+        for child in value.values():
+            require_product_only_projection(child)
+    elif isinstance(value, list):
+        for child in value:
+            require_product_only_projection(child)
+
+
 def valid_project(*, provider: bool = True) -> dict[str, Any]:
     project: dict[str, Any] = {
         "project_id": "project.example",
@@ -83,6 +108,7 @@ def check_proved_and_deterministic(executable: str, directory: pathlib.Path) -> 
     require(second_run.returncode == 0, f"reordered resolver exited {second_run.returncode}: {second_run.stderr}")
     require(first_run.stdout == second_run.stdout, "JSON projection depends on input object order")
     report = json.loads(first_run.stdout)
+    require_product_only_projection(report)
     require(report["schema"] == "cxxlens.sdk-doctor-resolution.v1", "resolution schema mismatch")
     require(report["result"]["state"] == "proved", "valid context was not proved")
     require(report["missing"] == [], "proved context unexpectedly has missing capabilities")
@@ -118,6 +144,7 @@ def check_missing_and_completion_plan(executable: str, directory: pathlib.Path) 
     completed = run(executable, "missing", "--project", str(missing_provider), "--use-case", USE_CASE)
     require(completed.returncode == 1, f"missing provider exit code was {completed.returncode}")
     report = json.loads(completed.stdout)
+    require_product_only_projection(report)
     require(report["result"]["state"] == "partial", "missing provider did not remain partial")
     require(report["result"]["reason_code"] == "doctor.missing-capability", "missing provider reason changed")
     missing_ids = {item["capability_id"] for item in report["missing"]}
@@ -147,6 +174,7 @@ def check_missing_and_completion_plan(executable: str, directory: pathlib.Path) 
     completed = run(executable, "missing", "--project", str(unsupported), "--use-case", USE_CASE)
     require(completed.returncode == 1, "unsupported store should not be successful")
     report = json.loads(completed.stdout)
+    require_product_only_projection(report)
     store = next(item for item in report["capability_path"] if item["id"] == "store.snapshot.v3")
     require(store["state"] == "disproved", "unsupported store was not disproved")
     require(store["reason_code"] == "doctor.unsupported-tuple", "unsupported store reason changed")
@@ -157,6 +185,7 @@ def check_missing_and_completion_plan(executable: str, directory: pathlib.Path) 
     completed = run(executable, "missing", "--project", str(protocol_path), "--use-case", USE_CASE)
     require(completed.returncode == 1, "unsupported protocol should not be successful")
     report = json.loads(completed.stdout)
+    require_product_only_projection(report)
     require(report["result"]["state"] == "disproved", "unsupported protocol was not disproved")
     protocol = next(
         item for item in report["capability_path"] if item["id"] == "provider.protocol.v2"
@@ -173,6 +202,17 @@ def check_missing_and_completion_plan(executable: str, directory: pathlib.Path) 
         and closure["reason_code"] == "doctor.disproved-dependency",
         "disproved dependency was collapsed to unknown",
     )
+
+
+def check_operational_input_is_rejected(executable: str, directory: pathlib.Path) -> None:
+    """Repository metadata is not a doctor product-input compatibility surface."""
+    for field in sorted(OPERATIONAL_FIELDS):
+        project = valid_project()
+        project["project"][field] = "forbidden"
+        path = write_project(directory, f"forbidden-{field.replace('-', '_')}.json", project)
+        completed = run(executable, "missing", "--project", str(path), "--use-case", USE_CASE)
+        require(completed.returncode == 2, f"forbidden project field {field} was accepted")
+        require("unknown-field" in completed.stderr, f"forbidden project field {field} was not typed")
 
 
 def check_strict_and_fault_inputs(executable: str, directory: pathlib.Path) -> None:
@@ -241,21 +281,27 @@ def check_relation_presence(executable: str) -> None:
     )
     require(completed.returncode == 0, f"relation presence exited {completed.returncode}: {completed.stderr}")
     report = json.loads(completed.stdout)
+    require_product_only_projection(report)
     require(report["schema"] == "cxxlens.sdk-doctor-relation-presence.v1", "relation schema mismatch")
     require(report["state"] == "proved" and report["missing"] == 0, "known relations were not proved")
 
     completed = run(executable, "relation-presence", "cc.call_site.v1", "cc.does_not_exist.v1")
     require(completed.returncode == 1, "unknown relation should return incomplete")
     report = json.loads(completed.stdout)
+    require_product_only_projection(report)
     absent = next(item for item in report["components"] if item["id"] == "cc.does_not_exist.v1")
     require(absent["state"] == "unknown" and absent["reason_code"] == "sdk.relation-not-found", "unknown relation reason changed")
 
     completed = run(executable, "relation-presence", "cc.call_site.v2")
     require(completed.returncode == 1, "relation major mismatch should be incomplete")
-    require(json.loads(completed.stdout)["components"][0]["reason_code"] == "sdk.relation-major-mismatch", "major mismatch reason changed")
+    mismatch_report = json.loads(completed.stdout)
+    require_product_only_projection(mismatch_report)
+    require(mismatch_report["components"][0]["reason_code"] == "sdk.relation-major-mismatch", "major mismatch reason changed")
 
     completed = run(executable, "relation-presence", "cc.call_site.v1", "cc.call_site.v1")
-    require(completed.returncode == 0 and json.loads(completed.stdout)["requested"] == 2, "duplicate relation requests were not projected independently")
+    duplicate_report = json.loads(completed.stdout)
+    require_product_only_projection(duplicate_report)
+    require(completed.returncode == 0 and duplicate_report["requested"] == 2, "duplicate relation requests were not projected independently")
 
     completed = run(executable, "relation-presence", "cc.call_site.vX")
     require(completed.returncode == 2 and completed.stdout == "", "malformed relation ID did not fail closed")
@@ -270,6 +316,7 @@ def main() -> int:
         directory = pathlib.Path(raw_directory)
         check_proved_and_deterministic(args.executable, directory)
         check_missing_and_completion_plan(args.executable, directory)
+        check_operational_input_is_rejected(args.executable, directory)
         check_strict_and_fault_inputs(args.executable, directory)
     check_relation_presence(args.executable)
     return 0
