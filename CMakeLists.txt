@@ -570,6 +570,7 @@ add_library(
   src/llvm/clang22/provider_worker_v2_2.cpp
   src/llvm/clang22/source_closure_native.cpp
   src/llvm/clang22/provider_worker_v4.cpp
+  src/llvm/clang22/provider_worker_v4_ast_observer.cpp
   src/llvm/clang22/source_closure_task_v4_worker.cpp)
 target_link_libraries(
   cxxlens_clang22_worker_core
