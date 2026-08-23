@@ -17,12 +17,12 @@
 #include <cxxlens/sdk.hpp>
 
 #include "../../../src/sdk/sqlite_backend_observation_internal.hpp"
+#include "../../../src/sdk/sqlite_store_fault_injection_internal.hpp"
 #include "../../../src/sdk/sqlite_wal_recovery_workspace_internal.hpp"
 #include "../../support/sqlite_store_fixture.hpp"
 
 namespace cxxlens::sdk
 {
-	void set_sqlite_source_shm_symbols_available_for_testing(bool) noexcept;
 	[[nodiscard]] bool
 	sqlite_source_shm_map_event_read_lock_valid_for_testing(bool native_cantinit_heap_route,
 															bool native_mapping_nonnull,
@@ -383,18 +383,26 @@ namespace
 		// Keep this a real capability fault after the production native-OK route is enabled:
 		// disabling the source-SHM symbols must fail before xOpen and must not fall through to
 		// WAL-only recovery in the same attempt.
-		sdk::set_sqlite_source_shm_symbols_available_for_testing(false);
-		auto rejected = sdk::open_sqlite_snapshot_store(path.string(), value);
-		sdk::set_sqlite_source_shm_symbols_available_for_testing(true);
-		require_error(rejected,
-					  {"store.backend-unavailable", "sqlite", "source-shm-readonly-qualification"},
-					  "active WAL+SHM qualification fault did not fail closed");
-		require(
-			sdk::sqlite_wal_recovery_workspace_builder_attempt_count_for_testing() ==
-				recovery_workspace_attempts_before_fault,
-			"active WAL+SHM qualification failure entered WAL-only recovery in the same attempt");
-		require(capture_files(path) == before_fault,
-				"active WAL+SHM qualification fault changed the source family");
+		{
+			sdk::sqlite_store_fault_scope fault{
+				{{sdk::sqlite_store_operation::fresh_initialization,
+				  sdk::sqlite_store_fault_boundary::source_shm_symbol_resolution,
+				  sdk::sqlite_store_fault_timing::before,
+				  1U,
+				  1U},
+				 sdk::sqlite_store_fault_action::report_failure}};
+			auto rejected = sdk::open_sqlite_snapshot_store(path.string(), value);
+			require_error(
+				rejected,
+				{"store.backend-unavailable", "sqlite", "source-shm-readonly-qualification"},
+				"active WAL+SHM qualification fault did not fail closed");
+			require(sdk::sqlite_wal_recovery_workspace_builder_attempt_count_for_testing() ==
+						recovery_workspace_attempts_before_fault,
+					"active WAL+SHM qualification failure entered WAL-only recovery in the same "
+					"attempt");
+			require(capture_files(path) == before_fault,
+					"active WAL+SHM qualification fault changed the source family");
+		}
 
 		// A failed active-WAL attempt must not close-and-reopen into a private copy or silently
 		// select the SHM-absent route. Only this explicit fixture transition makes the next
@@ -788,14 +796,21 @@ namespace
 		write_file(active.path(), bytes);
 		const auto before = capture_files(active.path());
 
-		sdk::set_sqlite_source_shm_symbols_available_for_testing(false);
-		auto opened = sdk::open_sqlite_snapshot_store(active.path().string(), value);
-		sdk::set_sqlite_source_shm_symbols_available_for_testing(true);
-		require_error(opened,
-					  {"store.sqlite-failure", "sqlite-journal-mode", "expected-wal"},
-					  "non-WAL main header did not precede active-branch qualification");
-		require(capture_files(active.path()) == before,
-				"non-WAL active-pair classification changed the target source family");
+		{
+			sdk::sqlite_store_fault_scope fault{
+				{{sdk::sqlite_store_operation::fresh_initialization,
+				  sdk::sqlite_store_fault_boundary::source_shm_symbol_resolution,
+				  sdk::sqlite_store_fault_timing::before,
+				  1U,
+				  1U},
+				 sdk::sqlite_store_fault_action::report_failure}};
+			auto opened = sdk::open_sqlite_snapshot_store(active.path().string(), value);
+			require_error(opened,
+						  {"store.sqlite-failure", "sqlite-journal-mode", "expected-wal"},
+						  "non-WAL main header did not precede active-branch qualification");
+			require(capture_files(active.path()) == before,
+					"non-WAL active-pair classification changed the target source family");
+		}
 #endif
 	}
 

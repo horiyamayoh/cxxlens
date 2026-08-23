@@ -139,6 +139,9 @@ set_tests_properties(
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-store-wal-routing
                             unit/sdk/sqlite_store_wal_routing_test.cpp)
+target_sources(
+  cxxlens-unit-sdk-sqlite-store-wal-routing
+  PRIVATE $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
 target_link_libraries(cxxlens-unit-sdk-sqlite-store-wal-routing
                       PRIVATE cxxlens::kernel "${CMAKE_DL_LIBS}")
 add_test(NAME unit.sdk-sqlite-store-wal-routing

@@ -2292,7 +2292,6 @@ namespace cxxlens::sdk
 		constexpr int sqlite_wal_read_lock_count = 5;
 		constexpr unsigned int sqlite_prepare_persistent = 0x01U;
 		constexpr std::size_t sqlite_payload_chunk_maximum = std::size_t{8U} * 1024U * 1024U;
-		thread_local bool sqlite_source_shm_symbols_available_for_testing = true;
 
 		enum class sqlite_physical_format : std::uint8_t
 		{
@@ -2422,7 +2421,13 @@ namespace cxxlens::sdk
 		{
 			if (api.source_shm_readonly_symbols_ready)
 				return {};
-			if (!sqlite_source_shm_symbols_available_for_testing)
+			const auto fault = dispatch_sqlite_store_fault(
+				{sqlite_store_operation::fresh_initialization,
+				 sqlite_store_fault_boundary::source_shm_symbol_resolution,
+				 sqlite_store_fault_timing::before,
+				 1U,
+				 1U});
+			if (fault.issued)
 				return unexpected(store_error("store.backend-unavailable", "sqlite", "symbols"));
 			sqlite_api::sourceid_fn sourceid{};
 			sqlite_api::uri_parameter_fn uri_parameter{};
@@ -8740,12 +8745,6 @@ namespace cxxlens::sdk
 			return heads;
 		}
 	} // namespace
-
-	// Source-private test seam for proving the active-WAL-only symbol gate and its precedence.
-	void set_sqlite_source_shm_symbols_available_for_testing(const bool available) noexcept
-	{
-		sqlite_source_shm_symbols_available_for_testing = available;
-	}
 
 	bool
 	sqlite_source_shm_map_event_read_lock_valid_for_testing(const bool native_cantinit_heap_route,

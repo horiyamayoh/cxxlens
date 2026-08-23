@@ -24,6 +24,7 @@ namespace cxxlens::sdk
 		terminal_namespace_census,
 		terminal_reopen,
 		terminal_validation,
+		source_shm_symbol_resolution,
 	};
 
 	enum class sqlite_store_fault_timing : std::uint8_t
@@ -132,6 +133,7 @@ namespace cxxlens::sdk
 				case sqlite_store_fault_boundary::terminal_namespace_census:
 				case sqlite_store_fault_boundary::terminal_reopen:
 				case sqlite_store_fault_boundary::terminal_validation:
+				case sqlite_store_fault_boundary::source_shm_symbol_resolution:
 					return true;
 			}
 			return false;

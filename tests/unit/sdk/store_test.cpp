@@ -44,7 +44,6 @@ namespace cxxlens::sdk
 																 std::uint64_t);
 	result<void>
 	poison_rejected_generation_for_testing(snapshot_store&, std::string_view, std::uint64_t);
-	void set_sqlite_source_shm_symbols_available_for_testing(bool) noexcept;
 } // namespace cxxlens::sdk
 
 namespace
@@ -2558,10 +2557,15 @@ namespace
 			const auto path = directory.path() / "process crash % authority.sqlite";
 			(void)make_exact_v2_fixture(path, relation_engine, false);
 			{
-				set_sqlite_source_shm_symbols_available_for_testing(false);
+				sqlite_store_fault_scope fault{
+					{{sqlite_store_operation::fresh_initialization,
+					  sqlite_store_fault_boundary::source_shm_symbol_resolution,
+					  sqlite_store_fault_timing::before,
+					  1U,
+					  1U},
+					 sqlite_store_fault_action::report_failure}};
 				auto quiescent_without_source_shm_symbols =
 					open_sqlite_snapshot_store(path.string(), relation_engine);
-				set_sqlite_source_shm_symbols_available_for_testing(true);
 				require(
 					quiescent_without_source_shm_symbols &&
 						quiescent_without_source_shm_symbols->compatibility().migration_required,
@@ -2609,17 +2613,24 @@ namespace
 					"migration crash fixture did not retain an authentic raw "
 					"main/WAL/SHM remnant");
 
-			set_sqlite_source_shm_symbols_available_for_testing(false);
-			auto unavailable = open_sqlite_snapshot_store(path.string(), relation_engine);
-			set_sqlite_source_shm_symbols_available_for_testing(true);
-			require(!unavailable && unavailable.error().code == "store.backend-unavailable" &&
-						unavailable.error().field == "sqlite" &&
-						unavailable.error().detail == "source-shm-readonly-qualification",
-					"active WAL+SHM did not apply its branch-local required-symbol gate");
-			require(
-				capture_sqlite_source_file_family_state(path) == crash_remnant,
-				"active source-SHM symbol failure opened, changed, or privately fell back from the "
-				"raw post-crash active-v2 source");
+			{
+				sqlite_store_fault_scope fault{
+					{{sqlite_store_operation::fresh_initialization,
+					  sqlite_store_fault_boundary::source_shm_symbol_resolution,
+					  sqlite_store_fault_timing::before,
+					  1U,
+					  1U},
+					 sqlite_store_fault_action::report_failure}};
+				auto unavailable = open_sqlite_snapshot_store(path.string(), relation_engine);
+				require(!unavailable && unavailable.error().code == "store.backend-unavailable" &&
+							unavailable.error().field == "sqlite" &&
+							unavailable.error().detail == "source-shm-readonly-qualification",
+						"active WAL+SHM did not apply its branch-local required-symbol gate");
+				require(capture_sqlite_source_file_family_state(path) == crash_remnant,
+						"active source-SHM symbol failure opened, changed, or privately fell back "
+						"from the "
+						"raw post-crash active-v2 source");
+			}
 
 			auto second_attempt = open_sqlite_snapshot_store(path.string(), relation_engine);
 #if defined(__linux__) && defined(F_OFD_SETLK)
