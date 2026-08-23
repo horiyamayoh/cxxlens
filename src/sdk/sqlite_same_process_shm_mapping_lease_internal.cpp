@@ -15,6 +15,56 @@
 #include "sqlite_same_process_shm_mapping_registry_internal.hpp"
 #include "sqlite_writer_shm_mapping_epoch_internal.hpp"
 
+#if !defined(CXXLENS_SQLITE_TEST_SUPPORT)
+namespace
+{
+	struct sqlite_test_fault_disabled
+	{
+		constexpr operator bool() const noexcept
+		{
+			return false;
+		}
+		constexpr sqlite_test_fault_disabled& operator=(bool) noexcept
+		{
+			return *this;
+		}
+		constexpr bool exchange(bool, std::memory_order = std::memory_order_seq_cst) noexcept
+		{
+			return false;
+		}
+		constexpr void store(bool, std::memory_order = std::memory_order_seq_cst) noexcept {}
+		constexpr bool load(std::memory_order = std::memory_order_seq_cst) const noexcept
+		{
+			return false;
+		}
+	};
+	inline sqlite_test_fault_disabled sqlite_test_fault_disabled_instance;
+} // namespace
+#define fail_next_writer_attachment_registration_for_testing_ sqlite_test_fault_disabled_instance
+#define fail_next_registry_writer_incoming_liveness_for_testing_ sqlite_test_fault_disabled_instance
+#define fail_next_registry_writer_existing_liveness_for_testing_ sqlite_test_fault_disabled_instance
+#define fail_next_writer_native_transition_for_testing_ sqlite_test_fault_disabled_instance
+#define fail_next_writer_attachment_seal_for_testing_ sqlite_test_fault_disabled_instance
+#define fail_next_registry_writer_pending_liveness_for_testing_ sqlite_test_fault_disabled_instance
+#define fail_next_writer_completion_transition_for_testing_ sqlite_test_fault_disabled_instance
+#define fail_next_reader_operation_mutex_acquire_for_testing_ sqlite_test_fault_disabled_instance
+#define fail_next_reader_unmap_begin_preparation_for_testing_ sqlite_test_fault_disabled_instance
+#define fail_next_reader_close_begin_preparation_for_testing_ sqlite_test_fault_disabled_instance
+#define fail_next_reader_recovery_mutex_reacquire_for_testing_ sqlite_test_fault_disabled_instance
+#define fail_next_reader_close_post_receipt_state_for_testing_ sqlite_test_fault_disabled_instance
+#define fail_next_reader_close_terminal_commit_for_testing_ sqlite_test_fault_disabled_instance
+#define fail_next_reader_mapped_validation_allocation_for_testing_ \
+	sqlite_test_fault_disabled_instance
+#define fail_next_reader_map_terminal_commit_for_testing_ sqlite_test_fault_disabled_instance
+#define fail_next_reader_unmap_terminal_commit_for_testing_ sqlite_test_fault_disabled_instance
+#define fail_next_reader_unpublished_cleanup_terminal_commit_for_testing_ \
+	sqlite_test_fault_disabled_instance
+#define fail_next_reader_logical_ack_commit_for_testing_ sqlite_test_fault_disabled_instance
+#define fail_next_reader_session_terminal_commit_for_testing_ sqlite_test_fault_disabled_instance
+#define fail_next_reader_unmap_post_receipt_state_for_testing_ sqlite_test_fault_disabled_instance
+#define fail_next_reader_coarse_unmap_terminal_for_testing_ sqlite_test_fault_disabled_instance
+#endif
+
 namespace cxxlens::sdk
 {
 	namespace detail
@@ -2521,6 +2571,7 @@ namespace cxxlens::sdk
 			return output;
 		}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 		void exhaust() noexcept
 		{
 			try
@@ -2538,6 +2589,7 @@ namespace cxxlens::sdk
 		{
 			unavailable.store(true, std::memory_order_release);
 		}
+#endif
 
 		mutable std::mutex mutex;
 		std::uint64_t next{};
@@ -2559,16 +2611,24 @@ namespace cxxlens::sdk
 	sqlite_shm_reader_lifecycle_sequence_source::~sqlite_shm_reader_lifecycle_sequence_source() =
 		default;
 
-	const void* sqlite_shm_reader_lifecycle_sequence_source::identity_for_testing() const noexcept
+	const void* sqlite_shm_reader_lifecycle_sequence_source::identity() const noexcept
 	{
 		return state_.get();
 	}
+
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
+	const void* sqlite_shm_reader_lifecycle_sequence_source::identity_for_testing() const noexcept
+	{
+		return identity();
+	}
+#endif
 
 	std::uint64_t sqlite_shm_reader_lifecycle_sequence_source::observed_last_issued() const noexcept
 	{
 		return state_ ? state_->observed_last_issued() : 0U;
 	}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 	std::uint64_t
 	sqlite_shm_reader_lifecycle_sequence_source::last_issued_for_testing() const noexcept
 	{
@@ -2586,6 +2646,7 @@ namespace cxxlens::sdk
 		if (state_)
 			state_->make_unavailable();
 	}
+#endif
 
 	namespace detail
 	{
@@ -3017,9 +3078,11 @@ namespace cxxlens::sdk
 					}
 					try
 					{
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 						if (std::exchange(fail_next_writer_attachment_registration_for_testing_,
 										  false))
 							throw std::bad_alloc{};
+#endif
 						register_attachment_member_locked(
 							request.attachment, *token, authority != nullptr);
 					}
@@ -3050,6 +3113,7 @@ namespace cxxlens::sdk
 								sqlite_shm_lease_rejection_reason::receipt_mismatch,
 								sqlite_shm_lease_recovery_action::deny_before_native_map));
 						}
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 						if (std::exchange(fail_next_registry_writer_incoming_liveness_for_testing_,
 										  false))
 							authority->invalidate_epoch_for_testing();
@@ -3068,6 +3132,7 @@ namespace cxxlens::sdk
 							if (existing != writers_.end())
 								existing->member_authority->invalidate_epoch_for_testing();
 						}
+#endif
 						const auto existing_liveness_lost = std::ranges::any_of(
 							writers_,
 							[token](const writer_record& writer)
@@ -3280,9 +3345,11 @@ namespace cxxlens::sdk
 						return sqlite_shm_unexpected(ambiguous());
 					}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 					if (std::exchange(fail_next_registry_writer_pending_liveness_for_testing_,
 									  false))
 						found->member_authority->invalidate_epoch_for_testing();
+#endif
 					authority = found->member_authority->validate_pending_authority(
 						family, found->request, receipt);
 					if (authority != detail::sqlite_shm_writer_pending_authority_status::exact)
@@ -3706,9 +3773,11 @@ namespace cxxlens::sdk
 						candidate.value = generation;
 					}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 					if (std::exchange(fail_next_registry_writer_pending_liveness_for_testing_,
 									  false))
 						writer->member_authority->invalidate_epoch_for_testing();
+#endif
 					const auto final_gate =
 						find_by_token(eligibilities_, writer->positive_gate_token);
 					authority = writer->member_authority->validate_pending_authority(
@@ -4075,9 +4144,11 @@ namespace cxxlens::sdk
 						candidate.value = generation;
 					}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 					if (std::exchange(fail_next_registry_writer_pending_liveness_for_testing_,
 									  false))
 						selected_writers.back()->member_authority->invalidate_epoch_for_testing();
+#endif
 					const auto final_liveness_exact = std::ranges::all_of(
 						selected_writers,
 						[&family](const std::list<writer_record>::iterator writer)
@@ -14965,14 +15036,12 @@ namespace cxxlens::sdk
 				return output;
 			}
 
-			[[nodiscard]] sqlite_shm_reader_lifecycle_test_view
-			reader_lifecycle_view_for_testing() const
+			[[nodiscard]] sqlite_shm_reader_lifecycle_test_view reader_lifecycle_view() const
 			{
 				std::scoped_lock lock{mutex_};
 				sqlite_shm_reader_lifecycle_test_view output;
-				output.sequence_source_identity = reader_lifecycle_sequences_
-					? reader_lifecycle_sequences_->identity_for_testing()
-					: nullptr;
+				output.sequence_source_identity =
+					reader_lifecycle_sequences_ ? reader_lifecycle_sequences_->identity() : nullptr;
 				output.last_issued_sequence = reader_lifecycle_sequences_
 					? reader_lifecycle_sequences_->observed_last_issued()
 					: 0U;
@@ -16185,7 +16254,7 @@ namespace cxxlens::sdk
 			}
 
 			[[nodiscard]] std::optional<sqlite_shm_reader_open_epoch_test_view>
-			reader_open_epoch_view_for_testing(
+			reader_open_epoch_view(
 				const std::uint64_t registry_open_token,
 				const std::shared_ptr<sqlite_shm_reader_open_lineage_seal>& seal) const noexcept
 			{
@@ -16222,6 +16291,7 @@ namespace cxxlens::sdk
 				}
 			}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 			void exhaust_reader_lifecycle_sequence_source_for_testing() noexcept
 			{
 				if (reader_lifecycle_sequences_)
@@ -16364,12 +16434,15 @@ namespace cxxlens::sdk
 					emergency_quarantine_.store(true, std::memory_order_release);
 				}
 			}
+#endif
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 			void inject_reader_recovery_mutex_reacquire_failure_for_testing() noexcept
 			{
 				fail_next_reader_recovery_mutex_reacquire_for_testing_.store(
 					true, std::memory_order_release);
 			}
+#endif
 
 			// The token/generation pair is an ordered identity coordinate tuple; changing the
 			// parameter types or order would alter the lifecycle contract.
@@ -16424,6 +16497,7 @@ namespace cxxlens::sdk
 				}
 			}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 			void inject_reader_operation_mutex_acquire_failure_for_testing() noexcept
 			{
 				fail_next_reader_operation_mutex_acquire_for_testing_.store(
@@ -16598,6 +16672,7 @@ namespace cxxlens::sdk
 			{
 				mutex_.unlock();
 			}
+#endif
 
 			void abandon(const lease_token_kind kind, const std::uint64_t token) noexcept
 			{
@@ -18564,8 +18639,10 @@ namespace cxxlens::sdk
 
 				try
 				{
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 					if (std::exchange(fail_next_writer_attachment_seal_for_testing_, false))
 						throw writer_attachment_seal_injected_failure{};
+#endif
 					if (!attachment_has_native_mapping_locked(*attachment))
 						return fail_closed();
 
@@ -18851,8 +18928,12 @@ namespace cxxlens::sdk
 					return std::ranges::find(replay.callback_invocation_tokens, invocation) !=
 						replay.callback_invocation_tokens.end();
 				};
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 				return (reader_callback_replay_for_testing_ &&
 						*reader_callback_replay_for_testing_ == invocation) ||
+#else
+				return false ||
+#endif
 					std::ranges::any_of(
 						   writers_,
 						   [&invocation, excluded_writer_token](const writer_record& writer)
@@ -23703,7 +23784,9 @@ namespace cxxlens::sdk
 			std::list<reader_close_terminal_record> reader_close_terminals_;
 			std::vector<sqlite_shm_reader_open_epoch_close_tombstone> reader_open_close_tombstones_;
 			std::vector<reader_custody_record> reader_custodies_;
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 			std::optional<sqlite_backend_opaque_identity> reader_callback_replay_for_testing_;
+#endif
 			std::optional<generation_record> generation_;
 			// A first registry writer reserves the canonical controller before native
 			// mapping.  Joiners reference this cell; they never contribute their own
@@ -23714,6 +23797,7 @@ namespace cxxlens::sdk
 			bool token_exhausted_{};
 			bool alive_{true};
 			bool quarantined_{};
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 			bool fail_next_writer_native_transition_for_testing_{};
 			bool fail_next_writer_attachment_seal_for_testing_{};
 			bool fail_next_writer_completion_transition_for_testing_{};
@@ -23731,14 +23815,17 @@ namespace cxxlens::sdk
 			std::atomic_bool fail_next_reader_mapped_validation_allocation_for_testing_{false};
 			std::atomic_bool fail_next_reader_operation_mutex_acquire_for_testing_{false};
 			std::atomic_bool fail_next_reader_recovery_mutex_reacquire_for_testing_{false};
+#endif
 			inline static thread_local projection_borrow_release_batch*
 				active_projection_borrow_release_batch_{};
 			bool registry_member_admission_blocked_{};
 			bool registry_member_sticky_quarantine_{};
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 			bool fail_next_registry_writer_incoming_liveness_for_testing_{};
 			bool fail_next_registry_writer_existing_liveness_for_testing_{};
 			bool fail_next_registry_writer_pending_liveness_for_testing_{};
 			bool fail_next_writer_attachment_registration_for_testing_{};
+#endif
 			std::atomic_bool emergency_quarantine_{false};
 		};
 
@@ -25990,9 +26077,24 @@ namespace cxxlens::sdk
 	}
 
 	sqlite_shm_reader_lifecycle_test_view
+	sqlite_same_process_shm_mapping_lease_coordinator::reader_lifecycle_view() const
+	{
+		return state_->reader_lifecycle_view();
+	}
+
+	std::optional<sqlite_shm_reader_open_epoch_test_view>
+	sqlite_same_process_shm_mapping_lease_coordinator::reader_open_epoch_view(
+		const std::uint64_t registry_open_token,
+		const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal) const noexcept
+	{
+		return state_->reader_open_epoch_view(registry_open_token, seal);
+	}
+
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
+	sqlite_shm_reader_lifecycle_test_view
 	sqlite_same_process_shm_mapping_lease_coordinator::reader_lifecycle_view_for_testing() const
 	{
-		return state_->reader_lifecycle_view_for_testing();
+		return reader_lifecycle_view();
 	}
 
 	std::optional<sqlite_shm_reader_open_epoch_test_view>
@@ -26000,8 +26102,9 @@ namespace cxxlens::sdk
 		const std::uint64_t registry_open_token,
 		const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal) const noexcept
 	{
-		return state_->reader_open_epoch_view_for_testing(registry_open_token, seal);
+		return reader_open_epoch_view(registry_open_token, seal);
 	}
+#endif
 
 	sqlite_shm_lease_result<sqlite_shm_writer_release>
 	sqlite_same_process_shm_mapping_lease_coordinator::release_writer_holder(
@@ -26034,6 +26137,7 @@ namespace cxxlens::sdk
 		return state_->snapshot();
 	}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 	void sqlite_same_process_shm_mapping_lease_coordinator::
 		inject_writer_native_transition_failure_for_testing() noexcept
 	{
@@ -26203,4 +26307,5 @@ namespace cxxlens::sdk
 		if (state_)
 			state_->unlock_state_mutex_for_fork_testing();
 	}
+#endif
 } // namespace cxxlens::sdk

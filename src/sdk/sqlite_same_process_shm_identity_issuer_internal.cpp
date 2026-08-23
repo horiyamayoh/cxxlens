@@ -590,8 +590,10 @@ namespace cxxlens::sdk
 									  sqlite_shm_lease_recovery_action::quarantine_no_retry);
 					}
 					scope_counted = true;
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 					pause_for_testing(sqlite_shm_identity_issuer_pause_point_for_testing::
 										  reserve_after_scope_count);
+#endif
 					if (!scope_matches_control(scope_control))
 					{
 						const auto accounted =
@@ -704,8 +706,10 @@ namespace cxxlens::sdk
 												  std::memory_order_release);
 					return reject(sqlite_shm_lease_rejection_reason::stale_token);
 				}
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 				pause_for_testing(sqlite_shm_identity_issuer_pause_point_for_testing::
 									  effect_after_callback_phase);
+#endif
 				const auto callback_role =
 					static_cast<sqlite_shm_reader_callback_identity_role>(callback_control->role);
 				if (!claim_effect_role(callback_control->issued_effect_roles, callback_role, role))
@@ -1308,6 +1312,7 @@ namespace cxxlens::sdk
 				return {};
 			}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 			void exhaust_for_testing() noexcept
 			{
 				auto observed = next_sequence_.load(std::memory_order_acquire);
@@ -1346,6 +1351,7 @@ namespace cxxlens::sdk
 					std::memory_order_release);
 				test_pause_release_.store(true, std::memory_order_release);
 			}
+#endif
 
 			[[nodiscard]] const std::shared_ptr<std::atomic<std::uint64_t>>&
 			process_epoch() const noexcept
@@ -1359,6 +1365,7 @@ namespace cxxlens::sdk
 			}
 
 		  private:
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 			void pause_for_testing(
 				const sqlite_shm_identity_issuer_pause_point_for_testing point) noexcept
 			{
@@ -1369,6 +1376,7 @@ namespace cxxlens::sdk
 				while (!test_pause_release_.load(std::memory_order_acquire))
 					std::this_thread::yield();
 			}
+#endif
 
 			[[nodiscard]] bool
 			scope_matches(const sqlite_shm_reader_lifecycle_identity_scope& scope) const noexcept
@@ -1555,10 +1563,12 @@ namespace cxxlens::sdk
 			sqlite_backend_opaque_identity process_instance_;
 			std::uint64_t incarnation_{};
 			std::atomic<std::uint64_t> next_sequence_{1U};
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 			std::atomic<std::uint8_t> test_pause_point_{static_cast<std::uint8_t>(
 				sqlite_shm_identity_issuer_pause_point_for_testing::none)};
 			std::atomic_bool test_pause_entered_{false};
 			std::atomic_bool test_pause_release_{true};
+#endif
 			// Non-owning link for the process-lifetime stale-epoch root. The custom deleter
 			// never destroys an issuer state after fork/epoch loss.
 			sqlite_shm_process_identity_issuer_state* quarantine_next_{};
@@ -1740,12 +1750,14 @@ namespace cxxlens::sdk
 			return state ? state->make_qualified_completion(scope, callback) : nullptr;
 		}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 		void exhaust_identity_issuer_for_registry(
 			const std::shared_ptr<sqlite_shm_process_identity_issuer_state>& state) noexcept
 		{
 			if (state)
 				state->exhaust_for_testing();
 		}
+#endif
 	} // namespace detail
 
 	bool sqlite_shm_reader_lifecycle_identity_scope::valid() const noexcept
@@ -1987,6 +1999,7 @@ namespace cxxlens::sdk
 			registry_issuer_owner_latch_->load(std::memory_order_acquire);
 	}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 	void sqlite_shm_process_global_identity_issuer::set_scope_live_records_for_testing(
 		const sqlite_shm_reader_lifecycle_identity_scope& scope, const std::size_t value) noexcept
 	{
@@ -2041,6 +2054,7 @@ namespace cxxlens::sdk
 		if (const auto state = state_.lock())
 			state->release_pause_for_testing();
 	}
+#endif
 
 	bool sqlite_shm_process_global_identity_issuer::valid() const noexcept
 	{

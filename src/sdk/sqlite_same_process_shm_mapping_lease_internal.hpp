@@ -2176,10 +2176,13 @@ namespace cxxlens::sdk
 		friend class detail::sqlite_shm_mapping_registry_state;
 		friend class sqlite_same_process_shm_lease_test_peer;
 		[[nodiscard]] std::uint64_t observed_last_issued() const noexcept;
+		[[nodiscard]] const void* identity() const noexcept;
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 		[[nodiscard]] const void* identity_for_testing() const noexcept;
 		[[nodiscard]] std::uint64_t last_issued_for_testing() const noexcept;
 		void exhaust_for_testing() noexcept;
 		void make_unavailable_for_testing() noexcept;
+#endif
 		struct state;
 		std::shared_ptr<state> state_;
 	};
@@ -3579,6 +3582,12 @@ namespace cxxlens::sdk
 		check_registry_reader_open_epoch_close_tombstone(
 			std::uint64_t registry_open_token,
 			const sqlite_shm_reader_open_epoch_binding& binding) const noexcept;
+		[[nodiscard]] sqlite_shm_reader_lifecycle_test_view reader_lifecycle_view() const;
+		[[nodiscard]] std::optional<sqlite_shm_reader_open_epoch_test_view>
+		reader_open_epoch_view(std::uint64_t registry_open_token,
+							   const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>&
+								   seal) const noexcept;
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 		[[nodiscard]] sqlite_shm_reader_lifecycle_test_view
 		reader_lifecycle_view_for_testing() const;
 		[[nodiscard]] std::optional<sqlite_shm_reader_open_epoch_test_view>
@@ -3615,6 +3624,7 @@ namespace cxxlens::sdk
 		void inject_writer_attachment_registration_failure_for_testing() noexcept;
 		void lock_state_mutex_for_fork_testing();
 		void unlock_state_mutex_for_fork_testing() noexcept;
+#endif
 
 		std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state_;
 	};

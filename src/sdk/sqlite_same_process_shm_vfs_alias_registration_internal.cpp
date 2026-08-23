@@ -787,6 +787,7 @@ namespace cxxlens::sdk
 		}
 	}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 	void sqlite_same_process_shm_vfs_alias_registration_port::
 		exhaust_lifecycle_sequence_for_testing() noexcept
 	{
@@ -795,4 +796,5 @@ namespace cxxlens::sdk
 		next_alias_lifecycle_sequence.store(std::numeric_limits<std::uint64_t>::max(),
 											std::memory_order_release);
 	}
+#endif
 } // namespace cxxlens::sdk

@@ -434,7 +434,9 @@ namespace cxxlens::sdk
 		reserve_reader_borrow_mint(std::uint64_t map_token,
 								   std::uint64_t generation,
 								   std::uint64_t holder_token) const;
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 		void invalidate_for_testing() noexcept;
+#endif
 
 		std::shared_ptr<detail::sqlite_writer_shm_mapping_epoch_state> state_;
 		std::shared_ptr<detail::sqlite_writer_shm_generation_epoch_custody> custody_;
@@ -480,7 +482,9 @@ namespace cxxlens::sdk
 								   std::uint64_t holder_token) const;
 		[[nodiscard]] sqlite_writer_shm_generation_epoch_authority
 		make_generation_authority() const noexcept;
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 		void invalidate_for_testing() noexcept;
+#endif
 
 		std::shared_ptr<detail::sqlite_writer_shm_mapping_epoch_state> state_;
 	};

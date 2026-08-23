@@ -762,11 +762,13 @@ namespace cxxlens::sdk
 					other.request_.shm_native_attachment.control_.get();
 			}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 			void invalidate_for_testing() noexcept
 			{
 				if (liveness_)
 					liveness_->live.store(false, std::memory_order_release);
 			}
+#endif
 
 			[[nodiscard]] bool observation_available() const noexcept
 			{
@@ -1233,11 +1235,13 @@ namespace cxxlens::sdk
 			custody_, sqlite_shm_writer_reader_borrow_tokens{map_token, generation, holder_token}};
 	}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 	void sqlite_writer_shm_generation_epoch_authority::invalidate_for_testing() noexcept
 	{
 		if (state_)
 			state_->invalidate_for_testing();
 	}
+#endif
 
 	sqlite_writer_shm_mapping_epoch_arm::sqlite_writer_shm_mapping_epoch_arm(
 		std::shared_ptr<detail::sqlite_writer_shm_mapping_epoch_state> state) noexcept
@@ -1355,11 +1359,13 @@ namespace cxxlens::sdk
 		custody_.reset();
 	}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 	void sqlite_writer_shm_mapping_epoch_arm::invalidate_for_testing() noexcept
 	{
 		if (state_)
 			state_->invalidate_for_testing();
 	}
+#endif
 
 	sqlite_writer_shm_mapping_epoch_observer::sqlite_writer_shm_mapping_epoch_observer(
 		std::weak_ptr<detail::sqlite_writer_shm_mapping_epoch_state> state) noexcept

@@ -201,8 +201,9 @@ if(BUILD_TESTING)
   # Store mutation/fault fixtures are compiled only into the test configuration.
   # The installed product has neither the friend declarations nor the
   # corresponding symbols.
-  target_compile_definitions(cxxlens_kernel
-                             PRIVATE CXXLENS_STORE_FAULT_TEST_SUPPORT=1)
+  target_compile_definitions(
+    cxxlens_kernel PRIVATE CXXLENS_SQLITE_TEST_SUPPORT=1
+                           CXXLENS_STORE_FAULT_TEST_SUPPORT=1)
 endif()
 
 if(BUILD_TESTING)
@@ -227,6 +228,8 @@ if(BUILD_TESTING)
                POSITION_INDEPENDENT_CODE ON)
   cxxlens_set_project_warnings(cxxlens-sqlite-disposable-qualification-internal)
   cxxlens_enable_sanitizers(cxxlens-sqlite-disposable-qualification-internal)
+  target_compile_definitions(cxxlens-sqlite-disposable-qualification-internal
+                             PRIVATE CXXLENS_SQLITE_TEST_SUPPORT=1)
 endif()
 
 add_library(

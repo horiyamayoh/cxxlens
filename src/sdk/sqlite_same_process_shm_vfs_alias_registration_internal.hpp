@@ -206,6 +206,8 @@ namespace cxxlens::sdk
 		friend class sqlite_same_process_shm_vfs_alias_registration_test_peer;
 		[[nodiscard]] static sqlite_shm_lease_result<void>
 		unregister_alias(sqlite_shm_registered_vfs_alias& alias) noexcept;
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 		static void exhaust_lifecycle_sequence_for_testing() noexcept;
+#endif
 	};
 } // namespace cxxlens::sdk

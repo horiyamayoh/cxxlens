@@ -30,6 +30,7 @@ namespace cxxlens::sdk
 			determinate_mismatch,
 			lifecycle_ambiguous,
 		};
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 		enum class sqlite_shm_registry_counter_for_testing : std::uint8_t
 		{
 			alias_token,
@@ -40,6 +41,7 @@ namespace cxxlens::sdk
 			reader_attachment_epoch,
 			reader_lifecycle_sequence,
 		};
+#endif
 	} // namespace detail
 
 	class sqlite_same_process_shm_registry_test_peer;
@@ -471,7 +473,9 @@ namespace cxxlens::sdk
 		explicit sqlite_shm_reader_open_authority(
 			std::weak_ptr<detail::sqlite_shm_mapping_registry_state> state,
 			std::shared_ptr<detail::sqlite_shm_reader_open_control> control) noexcept;
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 		void publish_abandonment_lineage_for_testing() noexcept;
+#endif
 		void disarm() noexcept;
 
 		std::weak_ptr<detail::sqlite_shm_mapping_registry_state> state_;
@@ -842,7 +846,9 @@ namespace cxxlens::sdk
 		generation_epoch_authority() const noexcept;
 		void bind_generation_epoch_authority(
 			sqlite_writer_shm_generation_epoch_authority authority) noexcept;
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 		void invalidate_epoch_for_testing() noexcept;
+#endif
 		[[nodiscard]] sqlite_shm_lease_result<void> release_activity() noexcept;
 
 		std::unique_ptr<detail::sqlite_shm_writer_member_authority_state> state_;
@@ -889,7 +895,9 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool validate_active_authority(
 			const sqlite_shm_registry_family_pin& family,
 			const sqlite_shm_reader_attachment_reservation_identity& attachment) const noexcept;
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 		void invalidate_activity_for_testing() noexcept;
+#endif
 		[[nodiscard]] sqlite_shm_lease_result<void> release_activity() noexcept;
 
 		std::unique_ptr<detail::sqlite_shm_reader_attachment_authority_state> state_;
@@ -953,7 +961,9 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool retains_exact_owned_terminal_lifetimes(
 			const void* process_registry_instance,
 			const sqlite_shm_reader_attachment_map_request& request) const noexcept;
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 		void invalidate_activity_for_testing() noexcept;
+#endif
 		[[nodiscard]] sqlite_shm_lease_result<void> release_activity() noexcept;
 
 		std::unique_ptr<detail::sqlite_shm_reader_map_predelegate_authority_state> state_;
@@ -1376,14 +1386,21 @@ namespace cxxlens::sdk
 
 		[[nodiscard]] static sqlite_shm_lease_result<
 			std::unique_ptr<sqlite_same_process_shm_mapping_registry>>
+		create_with_generation(sqlite_shm_registry_process_owner owner,
+							   std::uint64_t first_mapping_generation);
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
+		[[nodiscard]] static sqlite_shm_lease_result<
+			std::unique_ptr<sqlite_same_process_shm_mapping_registry>>
 		create_with_generation_for_testing(sqlite_shm_registry_process_owner owner,
 										   std::uint64_t first_mapping_generation);
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_open_authority>
 		acquire_reader_open_for_testing(sqlite_shm_registry_family_pin& family,
 										const sqlite_shm_reader_open_binding& binding);
+#endif
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_reader_open_authority>
 		acquire_reader_open_for_production(sqlite_shm_registry_family_pin& family,
 										   const sqlite_shm_reader_open_binding& binding) noexcept;
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 		void invalidate_process_instance_for_testing() noexcept;
 		void lock_registry_mutex_for_fork_testing();
 		void unlock_registry_mutex_for_fork_testing() noexcept;
@@ -1430,6 +1447,7 @@ namespace cxxlens::sdk
 		void unlock_state_mutex_for_testing();
 		[[nodiscard]] sqlite_shm_process_global_identity_issuer
 		identity_issuer_for_testing() const noexcept;
+#endif
 		[[nodiscard]] sqlite_shm_process_global_identity_issuer
 		identity_issuer_for_production() const noexcept;
 		[[nodiscard]] sqlite_shm_reader_lifecycle_identity_scope
@@ -1444,6 +1462,7 @@ namespace cxxlens::sdk
 		[[nodiscard]] sqlite_shm_registry_reader_open_epoch_test_view
 		reader_open_epoch_view_for_production(
 			const sqlite_shm_reader_open_authority& open) const noexcept;
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 		[[nodiscard]] sqlite_shm_reader_lifecycle_identity_scope
 		seal_reader_lifecycle_identity_scope_for_testing(
 			const sqlite_shm_registry_family_pin& family,
@@ -1456,6 +1475,7 @@ namespace cxxlens::sdk
 		void exhaust_identity_issuer_for_testing() noexcept;
 		[[nodiscard]] std::size_t reader_map_identity_phase_count_for_testing(
 			const sqlite_shm_lease_family_binding& family) const noexcept;
+#endif
 
 		std::shared_ptr<detail::sqlite_shm_mapping_registry_state> state_;
 		std::shared_ptr<std::atomic_bool> identity_issuer_owner_latch_;

@@ -5549,8 +5549,7 @@ namespace cxxlens::sdk
 					output.phase = singleton->phase;
 					output.lookup_visible = true;
 					output.coordinator = singleton->coordinator->snapshot();
-					const auto reader_lifecycle =
-						singleton->coordinator->reader_lifecycle_view_for_testing();
+					const auto reader_lifecycle = singleton->coordinator->reader_lifecycle_view();
 					output.reader_lifecycle_compact_tombstone_count =
 						reader_lifecycle.compact_tombstone_count;
 					output.reader_open_epoch_close_tombstone_count =
@@ -5708,6 +5707,7 @@ namespace cxxlens::sdk
 				}
 			}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 			void lock_mutex_for_fork_testing()
 			{
 				mutex_.lock();
@@ -5916,6 +5916,7 @@ namespace cxxlens::sdk
 			{
 				return current(process_epoch_) ? generations_.get() : nullptr;
 			}
+#endif
 
 			[[nodiscard]] sqlite_shm_registry_reader_open_epoch_test_view
 			reader_open_epoch_view(const sqlite_shm_reader_open_authority& open) noexcept
@@ -5955,9 +5956,8 @@ namespace cxxlens::sdk
 					if (alias != nullptr && family != nullptr && exact_family_drain_visible &&
 						family->coordinator && exact_record->control->lineage_seal)
 					{
-						output.lease_open_epoch =
-							family->coordinator->reader_open_epoch_view_for_testing(
-								exact_record->token, exact_record->control->lineage_seal);
+						output.lease_open_epoch = family->coordinator->reader_open_epoch_view(
+							exact_record->token, exact_record->control->lineage_seal);
 						if (output.lease_open_epoch)
 							output.lease_binding_matches =
 								output.lease_open_epoch->registry_open_token ==
@@ -5980,6 +5980,7 @@ namespace cxxlens::sdk
 				}
 			}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 			[[nodiscard]] const void* reader_lifecycle_sequence_source_identity() const noexcept
 			{
 				return current(process_epoch_) ? reader_lifecycle_sequences_->identity_for_testing()
@@ -6119,6 +6120,7 @@ namespace cxxlens::sdk
 			{
 				mutex_.unlock();
 			}
+#endif
 
 			[[nodiscard]] sqlite_shm_lease_result<
 				sqlite_shm_reader_candidate_authority_minter::candidate>
@@ -7600,11 +7602,13 @@ namespace cxxlens::sdk
 		return control_ && control_->authority_valid_now();
 	}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 	void sqlite_shm_reader_open_authority::publish_abandonment_lineage_for_testing() noexcept
 	{
 		if (control_ && control_->lineage_seal)
 			control_->lineage_seal->authority_valid.store(false, std::memory_order_release);
 	}
+#endif
 
 	void sqlite_shm_reader_open_authority::disarm() noexcept
 	{
@@ -7804,11 +7808,13 @@ namespace cxxlens::sdk
 		return status::exact;
 	}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 	void sqlite_shm_writer_member_authority::invalidate_epoch_for_testing() noexcept
 	{
 		if (state_ && state_->local_epoch_arm)
 			state_->local_epoch_arm->invalidate_for_testing();
 	}
+#endif
 
 	sqlite_shm_lease_result<void> sqlite_shm_writer_member_authority::release_activity() noexcept
 	{
@@ -7982,11 +7988,13 @@ namespace cxxlens::sdk
 			state_->audit_seal->valid();
 	}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 	void sqlite_shm_reader_attachment_authority::invalidate_activity_for_testing() noexcept
 	{
 		if (state_ && state_->activity && state_->activity->control_)
 			state_->activity->control_->authority_valid.store(false, std::memory_order_release);
 	}
+#endif
 
 	sqlite_shm_lease_result<void>
 	sqlite_shm_reader_attachment_authority::release_activity() noexcept
@@ -8226,11 +8234,13 @@ namespace cxxlens::sdk
 			binding.callback_cohort == attachment.callback_cohort();
 	}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 	void sqlite_shm_reader_map_predelegate_authority::invalidate_activity_for_testing() noexcept
 	{
 		if (state_ && state_->activity && state_->activity->control_)
 			state_->activity->control_->authority_valid.store(false, std::memory_order_release);
 	}
+#endif
 
 	sqlite_shm_lease_result<void>
 	sqlite_shm_reader_map_predelegate_authority::release_activity() noexcept
@@ -8733,11 +8743,11 @@ namespace cxxlens::sdk
 	sqlite_shm_lease_result<std::unique_ptr<sqlite_same_process_shm_mapping_registry>>
 	sqlite_same_process_shm_mapping_registry::create(sqlite_shm_registry_process_owner owner)
 	{
-		return create_with_generation_for_testing(std::move(owner), 1U);
+		return create_with_generation(std::move(owner), 1U);
 	}
 
 	sqlite_shm_lease_result<std::unique_ptr<sqlite_same_process_shm_mapping_registry>>
-	sqlite_same_process_shm_mapping_registry::create_with_generation_for_testing(
+	sqlite_same_process_shm_mapping_registry::create_with_generation(
 		sqlite_shm_registry_process_owner owner, const std::uint64_t first_mapping_generation)
 	{
 		if (!valid_identity(owner.process_instance_) || !owner.seal_ ||
@@ -8762,6 +8772,15 @@ namespace cxxlens::sdk
 		return std::unique_ptr<sqlite_same_process_shm_mapping_registry>{
 			new sqlite_same_process_shm_mapping_registry{std::move(state)}};
 	}
+
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
+	sqlite_shm_lease_result<std::unique_ptr<sqlite_same_process_shm_mapping_registry>>
+	sqlite_same_process_shm_mapping_registry::create_with_generation_for_testing(
+		sqlite_shm_registry_process_owner owner, const std::uint64_t first_mapping_generation)
+	{
+		return create_with_generation(std::move(owner), first_mapping_generation);
+	}
+#endif
 
 	sqlite_shm_lease_result<sqlite_shm_registry_alias_pin>
 	sqlite_same_process_shm_mapping_registry::reserve_alias(
@@ -9415,6 +9434,7 @@ namespace cxxlens::sdk
 		return state_ && state_->process_instance_live_from_process_port();
 	}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 	void
 	sqlite_same_process_shm_mapping_registry::invalidate_process_instance_for_testing() noexcept
 	{
@@ -9428,6 +9448,7 @@ namespace cxxlens::sdk
 	{
 		return state_->acquire_reader_open(family, binding);
 	}
+#endif
 
 	sqlite_shm_lease_result<sqlite_shm_reader_open_authority>
 	sqlite_same_process_shm_mapping_registry::acquire_reader_open_for_production(
@@ -9746,6 +9767,7 @@ namespace cxxlens::sdk
 			family, inflight, scope, callback, effect, std::move(observation));
 	}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 	void sqlite_same_process_shm_mapping_registry::lock_registry_mutex_for_fork_testing()
 	{
 		state_->lock_mutex_for_fork_testing();
@@ -9899,6 +9921,7 @@ namespace cxxlens::sdk
 			identity_issuer_owner_latch_,
 			state_->process_epoch_for_identity_issuer()};
 	}
+#endif
 
 	sqlite_shm_process_global_identity_issuer
 	sqlite_same_process_shm_mapping_registry::identity_issuer_for_production() const noexcept
@@ -9910,6 +9933,7 @@ namespace cxxlens::sdk
 			state_ ? state_->process_epoch_for_identity_issuer() : 0U};
 	}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 	sqlite_shm_reader_lifecycle_identity_scope
 	sqlite_same_process_shm_mapping_registry::seal_reader_lifecycle_identity_scope_for_testing(
 		const sqlite_shm_registry_family_pin& family,
@@ -9936,6 +9960,7 @@ namespace cxxlens::sdk
 			request_seal,
 			{registry_open_token, owner_kind, lifecycle_owner_token, writer_mapping_generation});
 	}
+#endif
 
 	sqlite_shm_reader_lifecycle_identity_scope
 	sqlite_same_process_shm_mapping_registry::seal_reader_lifecycle_identity_scope_for_production(
@@ -9973,6 +9998,7 @@ namespace cxxlens::sdk
 					  : sqlite_shm_registry_reader_open_epoch_test_view{};
 	}
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 	void sqlite_same_process_shm_mapping_registry::exhaust_identity_issuer_for_testing() noexcept
 	{
 		detail::exhaust_identity_issuer_for_registry(identity_issuer_state_);
@@ -9984,4 +10010,5 @@ namespace cxxlens::sdk
 	{
 		return state_ ? state_->reader_map_identity_phase_count(family) : 0U;
 	}
+#endif
 } // namespace cxxlens::sdk

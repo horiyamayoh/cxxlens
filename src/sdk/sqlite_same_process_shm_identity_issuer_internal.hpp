@@ -85,6 +85,7 @@ namespace cxxlens::sdk
 		inactive,
 	};
 
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 	/** Deterministic concurrency cut points exposed only through the registry test peer. */
 	enum class sqlite_shm_identity_issuer_pause_point_for_testing : std::uint8_t
 	{
@@ -92,6 +93,7 @@ namespace cxxlens::sdk
 		reserve_after_scope_count,
 		effect_after_callback_phase,
 	};
+#endif
 
 	/** Closed lifecycle owner class asserted when the U1 issuer-core test scope is sealed. */
 	enum class sqlite_shm_reader_lifecycle_owner_kind : std::uint8_t
@@ -421,6 +423,7 @@ namespace cxxlens::sdk
 			std::shared_ptr<std::atomic_bool> registry_issuer_owner_latch,
 			std::uint64_t expected_process_epoch) noexcept;
 		[[nodiscard]] bool current_before_state_lock() const noexcept;
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 		void
 		set_scope_live_records_for_testing(const sqlite_shm_reader_lifecycle_identity_scope& scope,
 										   std::size_t value) noexcept;
@@ -435,6 +438,7 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool pause_entered_for_testing(
 			sqlite_shm_identity_issuer_pause_point_for_testing point) const noexcept;
 		void release_pause_for_testing() noexcept;
+#endif
 
 		std::weak_ptr<detail::sqlite_shm_process_identity_issuer_state> state_;
 		std::shared_ptr<std::atomic<std::uint64_t>> process_epoch_;
