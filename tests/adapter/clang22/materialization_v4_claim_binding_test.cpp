@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "llvm/clang22/materialization_v4_incremental_ingress.hpp"
 #include "llvm/clang22/source_closure.hpp"
@@ -283,14 +284,31 @@ int main()
 			"task-v4 receipt set lost claim counts");
 	require(!incremental->complete, "partial task-v4 receipt set was marked complete");
 	require(validate_materialization_v4_incremental_receipt(value, *incremental, sealed_tasks)
-				.has_value(),
+			.has_value(),
 			"task-v4 receipt set did not replay");
+
+	std::vector<const materialization_v4_claim_sealed*> over_limit(
+		materialization_v4_incremental_max_tasks + 1U, &*first);
+	const auto bounded = make_materialization_v4_incremental_receipt(value, over_limit);
+	require(!bounded && bounded.error().code == "materialization.v4-incremental-invalid" &&
+				bounded.error().field == "sealed-tasks",
+			"task-v4 receipt assembly crossed its maximum task bound");
 
 	const auto unavailable =
 		admit_materialization_v4_store_ingress(value, *incremental, sealed_tasks, std::nullopt);
 	require(!unavailable &&
 				unavailable.error().code == "materialization.v4-store-authority-missing",
 			"task-v4 Store ingress did not fail closed without worker output authority");
+
+	const materialization_v4_store_publication_authority explicit_authority{
+		"semantic-v2:sha256:" + std::string(64U, '9'),
+		"semantic-v2:sha256:" + std::string(64U, 'a'),
+		"publication-target:v4-test"};
+	const auto incomplete_with_authority = admit_materialization_v4_store_ingress(
+		value, *incremental, sealed_tasks, explicit_authority);
+	require(!incomplete_with_authority &&
+				incomplete_with_authority.error().code == "materialization.v4-store-incomplete",
+			"explicit recipe/output/publication authority promoted a partial task-v4 receipt");
 
 	auto reordered = sealed_tasks;
 	std::swap(reordered[0], reordered[1]);
