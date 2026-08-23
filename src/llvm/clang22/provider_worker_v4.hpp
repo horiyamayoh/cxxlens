@@ -12,6 +12,7 @@
 #include <cxxlens/provider/clang22.hpp>
 #include <cxxlens/sdk/common.hpp>
 
+#include "provider_task_v4.hpp"
 #include "source_closure.hpp"
 #include "source_closure_task_v4.hpp"
 
@@ -73,8 +74,7 @@ namespace cxxlens::detail::clang22
 	{
 		source_closure_task_v4_decoded metadata;
 		source_closure_snapshot closure;
-		std::span<const std::string> effective_arguments;
-		std::span<const std::string> qualified_read_roots;
+		provider_task_v4_input_authority input_authority;
 		provider::clang22::translation_unit_callback callback;
 	};
 

@@ -34,6 +34,31 @@ namespace cxxlens::detail::clang22
 		std::uint64_t maximum_unique_blob_bytes{48U * 1024U * 1024U};
 	};
 
+	/**
+	 * The validated invocation authority supplied by the request owner to a task-v4 worker.
+	 *
+	 * The task-v4 payload carries the invocation digest, while the outer v2.2 task authority
+	 * supplies the ordered argv and the explicitly admitted toolchain roots.  Keeping these values
+	 * in one typed object prevents a worker from accidentally reconstructing them from ambient
+	 * process state or from an unbound string span.  Read roots are runtime inputs and are not part
+	 * of the effective-invocation semantic digest; they are nevertheless required to be explicit,
+	 * absolute, canonical, and duplicate-free before the compiler is entered.
+	 */
+	struct provider_task_v4_input_authority
+	{
+		std::string normalized_invocation_digest;
+		std::string logical_working_directory;
+		std::vector<std::string> effective_arguments;
+		std::vector<std::string> qualified_read_roots;
+
+		/** Validate and bind all invocation fields to the decoded task-v4 metadata. */
+		[[nodiscard]] sdk::result<void> validate(std::string_view main_logical_path,
+												 std::string_view expected_working_directory,
+												 std::string_view expected_invocation_digest) const;
+
+		[[nodiscard]] bool operator==(const provider_task_v4_input_authority&) const = default;
+	};
+
 	/** One source-closure member's metadata; source bytes are deliberately absent. */
 	struct source_closure_manifest_member
 	{
@@ -99,6 +124,11 @@ namespace cxxlens::detail::clang22
 		[[nodiscard]] sdk::result<void> validate(provider_task_v4_limits limits = {}) const;
 		[[nodiscard]] bool operator==(const provider_task_v4_source&) const = default;
 	};
+
+	/** Derive the exact effective-invocation semantic digest from ordered argv and workdir. */
+	[[nodiscard]] sdk::result<std::string> derive_provider_task_v4_effective_invocation_digest(
+		std::string_view logical_working_directory,
+		std::span<const std::string> effective_arguments);
 
 	/** The exact open-task fields cross-bound into task v4. */
 	struct provider_task_v4_open_task
@@ -184,6 +214,7 @@ namespace cxxlens::detail::clang22::materialization
 {
 	using ::cxxlens::detail::clang22::provider_task_v4;
 	using ::cxxlens::detail::clang22::provider_task_v4_base_task;
+	using ::cxxlens::detail::clang22::provider_task_v4_input_authority;
 	using ::cxxlens::detail::clang22::provider_task_v4_limits;
 	using ::cxxlens::detail::clang22::provider_task_v4_open_task;
 	using ::cxxlens::detail::clang22::provider_task_v4_source;

@@ -7,6 +7,7 @@
 
 #include <cxxlens/provider/clang22.hpp>
 
+#include "provider_task_v4.hpp"
 #include "source_closure.hpp"
 
 namespace cxxlens::detail::clang22
@@ -22,8 +23,7 @@ namespace cxxlens::detail::clang22
 		const source_closure_snapshot& closure;
 		std::string_view expected_base_task_digest;
 		std::string_view expected_task_v4_input_digest;
-		std::span<const std::string> effective_arguments;
-		std::span<const std::string> qualified_read_roots;
+		provider_task_v4_input_authority input_authority;
 		provider::clang22::translation_unit_callback callback;
 	};
 

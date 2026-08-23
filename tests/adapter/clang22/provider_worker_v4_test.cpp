@@ -28,6 +28,33 @@ namespace
 		return std::make_shared<const std::string>(std::move(value));
 	}
 
+	[[nodiscard]] std::vector<std::string> effective_arguments()
+	{
+#if defined(CXXLENS_TEST_CLANGXX22_PATH)
+		return {
+			CXXLENS_TEST_CLANGXX22_PATH,
+			"-std=c++23",
+			"-nostdinc",
+			"-nostdinc++",
+#if defined(CXXLENS_TEST_CLANG22_RESOURCE_DIR)
+			"-resource-dir=" CXXLENS_TEST_CLANG22_RESOURCE_DIR,
+#endif
+			"project://src/main.cpp",
+		};
+#else
+		return {"/usr/bin/clang++", "-nostdinc", "-nostdinc++", "project://src/main.cpp"};
+#endif
+	}
+
+	[[nodiscard]] std::vector<std::string> qualified_read_roots()
+	{
+#if defined(CXXLENS_TEST_CLANGXX22_PATH)
+		return {CXXLENS_TEST_CLANG22_ROOT};
+#else
+		return {"/usr"};
+#endif
+	}
+
 	[[nodiscard]] source_closure_task_v4_input task_input()
 	{
 		auto closure = make_source_closure_snapshot({
@@ -45,12 +72,16 @@ namespace
 			std::as_bytes(std::span{base_projection.data(), base_projection.size()});
 		input.base_task_projection = {base_bytes.begin(), base_bytes.end()};
 		input.task_input_digest = "sha256:" + std::string(64U, '2');
-		input.normalized_invocation_digest = "semantic-v2:sha256:" + std::string(64U, '3');
+		input.logical_working_directory = "project://src";
+		const auto arguments = effective_arguments();
+		auto invocation = derive_provider_task_v4_effective_invocation_digest(
+			input.logical_working_directory, arguments);
+		require(invocation.has_value(), "worker-v4 invocation digest could not be derived");
+		input.normalized_invocation_digest = std::move(*invocation);
 		input.toolchain_digest = "semantic-v2:sha256:" + std::string(64U, '4');
 		input.environment_digest = "sha256:" + std::string(64U, '5');
 		input.closure = std::move(*closure);
 		input.main_logical_path = "project://src/main.cpp";
-		input.logical_working_directory = "project://src";
 		return input;
 	}
 
@@ -62,9 +93,17 @@ namespace
 		return {std::move(input), std::move(*identity)};
 	}
 
-	[[nodiscard]] std::vector<std::string> arguments()
+	[[nodiscard]] provider_task_v4_input_authority
+	authority(const source_closure_task_v4_input& input)
 	{
-		return {"/usr/bin/clang++", "-nostdinc", "-nostdinc++", "project://src/main.cpp"};
+		auto arguments = effective_arguments();
+		auto digest = derive_provider_task_v4_effective_invocation_digest(
+			input.logical_working_directory, arguments);
+		require(digest.has_value(), "worker-v4 authority digest could not be derived");
+		return {std::move(*digest),
+				input.logical_working_directory,
+				std::move(arguments),
+				qualified_read_roots()};
 	}
 } // namespace
 
@@ -72,15 +111,35 @@ int main()
 {
 	auto metadata = decoded_fixture();
 	auto closure = metadata.input.closure;
-	auto effective_arguments = arguments();
-	const std::vector<std::string> roots{"/usr"};
+	auto input_authority = authority(metadata.input);
 
-	// The typed boundary rejects an absent callback before any native invocation.
+	// Invocation identity and read-root admission are part of the typed worker boundary.  A
+	// caller cannot replace either with a digest-only value or an ambient/relative executable.
+	auto stale_authority = input_authority;
+	stale_authority.normalized_invocation_digest.back() =
+		stale_authority.normalized_invocation_digest.back() == '0' ? '1' : '0';
 	auto rejected =
 		execute_provider_worker_v4({metadata,
 									closure,
-									effective_arguments,
-									roots,
+									stale_authority,
+									cxxlens::provider::clang22::translation_unit_callback{}});
+	require(!rejected && rejected.error().code == "materialization.identity-mismatch",
+			"worker-v4 accepted an invocation authority with a foreign digest");
+	auto ambient_authority = input_authority;
+	ambient_authority.effective_arguments.front() = "clang++";
+	rejected =
+		execute_provider_worker_v4({metadata,
+									closure,
+									std::move(ambient_authority),
+									cxxlens::provider::clang22::translation_unit_callback{}});
+	require(!rejected && rejected.error().code == "source-closure.toolchain-input-unqualified",
+			"worker-v4 accepted an ambient executable path");
+
+	// The typed boundary rejects an absent callback before any native invocation.
+	rejected =
+		execute_provider_worker_v4({metadata,
+									closure,
+									input_authority,
 									cxxlens::provider::clang22::translation_unit_callback{}});
 	require(!rejected && rejected.error().code == "provider-worker-v4.input-invalid",
 			"worker-v4 accepted a missing callback");
@@ -99,8 +158,7 @@ int main()
 	rejected =
 		execute_provider_worker_v4({std::move(foreign_metadata),
 									std::move(*foreign_closure),
-									effective_arguments,
-									roots,
+									input_authority,
 									cxxlens::provider::clang22::translation_unit_callback{}});
 	require(!rejected && rejected.error().code == "source-closure.task-v4-binding-mismatch",
 			"worker-v4 accepted a foreign source closure");
@@ -112,8 +170,7 @@ int main()
 	rejected =
 		execute_provider_worker_v4({std::move(tampered),
 									closure,
-									effective_arguments,
-									roots,
+									input_authority,
 									cxxlens::provider::clang22::translation_unit_callback{}});
 	require(!rejected && rejected.error().code == "source-closure.task-v4-binding-mismatch",
 			"worker-v4 accepted tampered decoded identity");
@@ -129,22 +186,12 @@ int main()
 	const auto* expected_main = closure.find_member("project://src/main.cpp");
 	require(expected_main != nullptr, "worker-v4 fixture lost its authenticated main member");
 	const auto expected_main_file_id = expected_main->file_id;
-	auto exact_arguments = std::vector<std::string>{
-		CXXLENS_TEST_CLANGXX22_PATH,
-		"-std=c++23",
-		"-nostdinc",
-		"-nostdinc++",
-#if defined(CXXLENS_TEST_CLANG22_RESOURCE_DIR)
-		"-resource-dir=" CXXLENS_TEST_CLANG22_RESOURCE_DIR,
-#endif
-		"project://src/main.cpp",
-	};
+	auto exact_authority = authority(metadata.input);
 	bool callback_ran = false;
 	auto exact = execute_provider_worker_v4(
 		{std::move(metadata),
 		 std::move(closure),
-		 exact_arguments,
-		 std::vector<std::string>{CXXLENS_TEST_CLANG22_ROOT},
+		 exact_authority,
 		 [&callback_ran](cxxlens::provider::clang22::borrowed_translation_unit& unit)
 			 -> cxxlens::sdk::result<void>
 		 {

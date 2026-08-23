@@ -229,7 +229,7 @@ properties:
             predefined_macros_digest: {$ref: '#/$defs/content_digest'}
             include_search_digest: {$ref: '#/$defs/content_digest'}
             semantic_flags_digest: {$ref: '#/$defs/content_digest'}
-        normalized_invocation_digest: {$ref: '#/$defs/content_digest'}
+        normalized_invocation_digest: {$ref: '#/$defs/semantic_digest'}
         environment_digest: {$ref: '#/$defs/content_digest'}
         language: {$ref: '#/$defs/strong_id'}
         working_directory: {$ref: '#/$defs/logical_path'}

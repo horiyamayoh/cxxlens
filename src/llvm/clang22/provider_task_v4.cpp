@@ -11,6 +11,7 @@
 
 #include "materialization_json.hpp"
 #include "source_closure.hpp"
+#include "source_closure_invocation.hpp"
 #include "unicode_nfc.hpp"
 
 namespace cxxlens::detail::clang22
@@ -410,6 +411,66 @@ namespace cxxlens::detail::clang22
 			return {};
 		}
 	} // namespace
+
+	sdk::result<std::string> derive_provider_task_v4_effective_invocation_digest(
+		const std::string_view logical_working_directory,
+		const std::span<const std::string> effective_arguments)
+	{
+		return canonical_bytes_digest(
+			"cxxlens.clang22.effective-invocation.v1",
+			sdk::canonical_value::from_tuple({
+				sdk::canonical_value::from_string("cxxlens.clang22.effective-invocation.v1"),
+				sdk::canonical_value::from_string(std::string{logical_working_directory}),
+				sdk::canonical_value::from_tuple(
+					[&]
+					{
+						std::vector<sdk::canonical_value> values;
+						values.reserve(effective_arguments.size());
+						for (const auto& argument : effective_arguments)
+							values.push_back(sdk::canonical_value::from_string(argument));
+						return values;
+					}()),
+			}));
+	}
+
+	sdk::result<void> provider_task_v4_input_authority::validate(
+		const std::string_view main_logical_path,
+		const std::string_view expected_working_directory,
+		const std::string_view expected_invocation_digest) const
+	{
+		if (logical_working_directory != expected_working_directory)
+			return sdk::unexpected(
+				mismatch("input-authority.logical_working_directory", logical_working_directory));
+		if (effective_arguments.empty())
+			return sdk::unexpected(invalid("input-authority.effective_arguments", "empty"));
+		if (qualified_read_roots.empty())
+			return sdk::unexpected(invalid("input-authority.qualified_read_roots", "empty"));
+		if (!semantic_digest_grammar(normalized_invocation_digest) ||
+			!semantic_digest_grammar(expected_invocation_digest))
+			return sdk::unexpected(
+				invalid("input-authority.normalized_invocation_digest", "grammar"));
+
+		// This is the single admission point for path-bearing argv and toolchain roots.  It rejects
+		// relative/ambient paths, response files, unsupported overlays/modules, malformed roots,
+		// and a main source that is not the final argv item.
+		auto prepared = prepare_source_closure_invocation(effective_arguments,
+														  main_logical_path,
+														  logical_working_directory,
+														  qualified_read_roots);
+		if (!prepared)
+			return sdk::unexpected(std::move(prepared.error()));
+		if (prepared->qualified_read_roots != qualified_read_roots)
+			return sdk::unexpected(
+				invalid("input-authority.qualified_read_roots", "noncanonical-order-or-duplicate"));
+
+		auto expected = derive_provider_task_v4_effective_invocation_digest(
+			logical_working_directory, effective_arguments);
+		if (!expected || *expected != normalized_invocation_digest ||
+			*expected != expected_invocation_digest)
+			return sdk::unexpected(digest_mismatch("input-authority.normalized_invocation_digest",
+												   normalized_invocation_digest));
+		return {};
+	}
 
 	sdk::result<void> source_closure_manifest::validate(const provider_task_v4_limits limits) const
 	{

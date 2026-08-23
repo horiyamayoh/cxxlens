@@ -37,6 +37,33 @@ namespace
 		return std::make_shared<const std::string>(std::move(value));
 	}
 
+	[[nodiscard]] std::vector<std::string> authority_arguments()
+	{
+#if defined(CXXLENS_TEST_CLANGXX22_PATH)
+		return {
+			CXXLENS_TEST_CLANGXX22_PATH,
+			"-std=c++23",
+			"-nostdinc",
+			"-nostdinc++",
+#if defined(CXXLENS_TEST_CLANG22_RESOURCE_DIR)
+			"-resource-dir=" CXXLENS_TEST_CLANG22_RESOURCE_DIR,
+#endif
+			"project://src/main.cpp",
+		};
+#else
+		return {"/usr/bin/clang++", "-nostdinc", "-nostdinc++", "project://src/main.cpp"};
+#endif
+	}
+
+	[[nodiscard]] std::vector<std::string> authority_roots()
+	{
+#if defined(CXXLENS_TEST_CLANGXX22_PATH)
+		return {CXXLENS_TEST_CLANG22_ROOT};
+#else
+		return {"/usr"};
+#endif
+	}
+
 	[[nodiscard]] source_closure_task_v4_input fixture()
 	{
 		auto result = make_source_closure_snapshot({
@@ -54,13 +81,30 @@ namespace
 			std::as_bytes(std::span{base_projection.data(), base_projection.size()});
 		input.base_task_projection = {base_bytes.begin(), base_bytes.end()};
 		input.task_input_digest = "sha256:" + std::string(64U, '2');
-		input.normalized_invocation_digest = "semantic-v2:sha256:" + std::string(64U, '3');
+		input.logical_working_directory = "project://src";
+		const auto arguments = authority_arguments();
+		auto invocation = derive_provider_task_v4_effective_invocation_digest(
+			input.logical_working_directory, arguments);
+		require(invocation.has_value(), "worker task-v4 invocation digest could not be derived");
+		input.normalized_invocation_digest = std::move(*invocation);
 		input.toolchain_digest = "semantic-v2:sha256:" + std::string(64U, '4');
 		input.environment_digest = "sha256:" + std::string(64U, '5');
 		input.closure = std::move(*result);
 		input.main_logical_path = "project://src/main.cpp";
-		input.logical_working_directory = "project://src";
 		return input;
+	}
+
+	[[nodiscard]] provider_task_v4_input_authority
+	make_input_authority(const source_closure_task_v4_input& input)
+	{
+		auto arguments = authority_arguments();
+		auto digest = derive_provider_task_v4_effective_invocation_digest(
+			input.logical_working_directory, arguments);
+		require(digest.has_value(), "worker task-v4 authority digest could not be derived");
+		return {std::move(*digest),
+				input.logical_working_directory,
+				std::move(arguments),
+				authority_roots()};
 	}
 
 	class closure_authority final : public provider_worker_v2_2_closure_authority
@@ -113,21 +157,6 @@ namespace
 	};
 
 #if defined(CXXLENS_TEST_CLANGXX22_PATH)
-	[[nodiscard]] std::vector<std::string> exact_clang_arguments()
-	{
-		std::vector<std::string> arguments{
-			CXXLENS_TEST_CLANGXX22_PATH,
-			"-std=c++23",
-			"-nostdinc",
-			"-nostdinc++",
-#if defined(CXXLENS_TEST_CLANG22_RESOURCE_DIR)
-			"-resource-dir=" CXXLENS_TEST_CLANG22_RESOURCE_DIR,
-#endif
-			"project://src/main.cpp",
-		};
-		return arguments;
-	}
-
 	class frame_source final : public source_closure_frame_source
 	{
 	  public:
@@ -369,14 +398,12 @@ namespace
 					ack->sequence == 5U,
 				"receiver emitted an invalid source-closure ACK");
 
-		const auto exact_arguments = exact_clang_arguments();
-		const std::vector<std::string> qualified_read_roots{CXXLENS_TEST_CLANG22_ROOT};
+		const auto input_authority = make_input_authority(input);
 		bool callback_ran = false;
 		auto receipt = execute_provider_worker_v4(
 			{source_closure_task_v4_decoded{input, identity},
 			 std::move(received->snapshot),
-			 exact_arguments,
-			 qualified_read_roots,
+			 input_authority,
 			 [&callback_ran](cxxlens::provider::clang22::borrowed_translation_unit& unit)
 				 -> cxxlens::sdk::result<void>
 			 {
@@ -409,8 +436,7 @@ int main()
 	auto input = fixture();
 	auto identity = derive_source_closure_task_v4_identity(input);
 	require(identity.has_value(), "worker task-v4 fixture could not derive identity");
-	const std::vector<std::string> arguments{"clang++", "project://src/main.cpp"};
-	const std::vector<std::string> roots{"/usr/include"};
+	const auto input_authority = make_input_authority(input);
 
 	// A complete, bound payload reaches the candidate's explicit callback gate.  No compiler is
 	// launched on this host because the callback is absent; the callback gate remains fail-closed
@@ -420,8 +446,7 @@ int main()
 		input.closure,
 		identity->base_task_digest,
 		identity->task_v4_input_digest,
-		arguments,
-		roots,
+		input_authority,
 		cxxlens::provider::clang22::translation_unit_callback{},
 	});
 	require(!result && result.error().code == "source-closure.worker-input-invalid",
@@ -434,8 +459,7 @@ int main()
 		input.closure,
 		identity->base_task_digest,
 		wrong_input_digest,
-		arguments,
-		roots,
+		input_authority,
 		cxxlens::provider::clang22::translation_unit_callback{},
 	});
 	require(!result && result.error().code == "source-closure.task-v4-input-digest-mismatch",
@@ -445,16 +469,14 @@ int main()
 	// A complete task-v4 payload must reach the real, exact Clang 22 callback through the
 	// closure-exclusive VFS. The callback deliberately only observes the borrowed lifetime;
 	// all compiler-owned state must be detached by the worker before this receipt is returned.
-	const auto exact_arguments = exact_clang_arguments();
-	const std::vector<std::string> qualified_read_roots{CXXLENS_TEST_CLANG22_ROOT};
+	const auto exact_authority = make_input_authority(input);
 	bool callback_ran = false;
 	result = execute_source_closure_task_v4_candidate({
 		identity->input_payload,
 		input.closure,
 		identity->base_task_digest,
 		identity->task_v4_input_digest,
-		exact_arguments,
-		qualified_read_roots,
+		exact_authority,
 		[&callback_ran](cxxlens::provider::clang22::borrowed_translation_unit& unit)
 			-> cxxlens::sdk::result<void>
 		{
@@ -493,8 +515,7 @@ int main()
 			 input.closure,
 			 identity->base_task_digest,
 			 identity->task_v4_input_digest,
-			 exact_arguments,
-			 qualified_read_roots,
+			 exact_authority,
 			 [&events](cxxlens::provider::clang22::borrowed_translation_unit& unit)
 				 -> cxxlens::sdk::result<void>
 			 {

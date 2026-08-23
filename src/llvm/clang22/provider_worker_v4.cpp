@@ -117,12 +117,12 @@ namespace cxxlens::detail::clang22
 			return sdk::unexpected(std::move(valid.error()));
 		if (auto valid = validate_closure_binding(input.metadata, input.closure); !valid)
 			return sdk::unexpected(std::move(valid.error()));
-		if (input.effective_arguments.empty())
-			return sdk::unexpected(
-				failure("provider-worker-v4.input-invalid", "effective_arguments", "empty"));
-		if (input.qualified_read_roots.empty())
-			return sdk::unexpected(
-				failure("provider-worker-v4.input-invalid", "qualified_read_roots", "empty"));
+		if (auto valid =
+				input.input_authority.validate(input.metadata.input.main_logical_path,
+											   input.metadata.input.logical_working_directory,
+											   input.metadata.input.normalized_invocation_digest);
+			!valid)
+			return sdk::unexpected(std::move(valid.error()));
 		if (!input.callback)
 			return sdk::unexpected(failure("provider-worker-v4.input-invalid", "callback"));
 
@@ -132,10 +132,8 @@ namespace cxxlens::detail::clang22
 			input.closure,
 			metadata_input.main_logical_path,
 			metadata_input.logical_working_directory,
-			std::vector<std::string>{input.effective_arguments.begin(),
-									 input.effective_arguments.end()},
-			std::vector<std::string>{input.qualified_read_roots.begin(),
-									 input.qualified_read_roots.end()},
+			input.input_authority.effective_arguments,
+			input.input_authority.qualified_read_roots,
 			{},
 		};
 		auto callback =

@@ -23,12 +23,6 @@ namespace cxxlens::detail::clang22
 		if (!input.task_accepted)
 			return sdk::unexpected(provider_error(
 				"source-closure.worker-input-invalid", "task-accepted", "callback-missing"));
-		if (input.task.effective_arguments.empty())
-			return sdk::unexpected(provider_error(
-				"source-closure.worker-input-invalid", "effective-arguments", "empty"));
-		if (input.task.qualified_read_roots.empty())
-			return sdk::unexpected(provider_error(
-				"source-closure.worker-input-invalid", "qualified-read-roots", "empty"));
 		if (!input.task.callback)
 			return sdk::unexpected(provider_error(
 				"source-closure.worker-input-invalid", "compiler-callback", "missing"));
@@ -62,6 +56,12 @@ namespace cxxlens::detail::clang22
 			decoded->input.closure.closure_digest != authority.closure_digest())
 			return sdk::unexpected(provider_error(
 				"source-closure.task-binding-mismatch", "closure-authority", "identity"));
+		if (auto valid =
+				input.task.input_authority.validate(decoded->input.main_logical_path,
+													decoded->input.logical_working_directory,
+													decoded->input.normalized_invocation_digest);
+			!valid)
+			return sdk::unexpected(std::move(valid.error()));
 
 		// No task-accepted notification is possible until the complete closure ACK and every
 		// source-free task binding have been checked.  Native Clang is still not entered here.
