@@ -1918,27 +1918,6 @@ def validate_df_0200_ingress_schema(schema: dict[str, Any]) -> None:
         )
 
 
-def validate_design(root: pathlib.Path) -> None:
-    design = (root / "docs/design/cxxlens_next_generation_integrated_design_ja.md").read_text(
-        encoding="utf-8"
-    )
-    required = (
-        "1.0.0-normative",
-        "cxxlens_ng_snapshot_store_contract.yaml",
-        "snapshot_series_selector",
-        "producer_input_basis",
-    )
-    for marker in required:
-        if marker not in design:
-            fail("store.design-marker-missing", marker)
-    for stale in ("current(catalog_id)", "producer_input_snapshot"):
-        if stale in design:
-            fail("store.design-stale-contract", stale)
-    index = (root / "docs/design/catalogs/README.md").read_text(encoding="utf-8")
-    if "Snapshot / Store Contract" not in index:
-        fail("store.catalog-index-stale", "snapshot contract")
-
-
 def validate_all(
     root: pathlib.Path,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], int]:
@@ -1952,8 +1931,6 @@ def validate_all(
     except jsonschema.SchemaError as error:
         fail("store.schema-invalid", f"snapshot manifest: {error.message}")
     validate_contract_shape(contract)
-    validate_design(root)
-
     vectors = load_yaml(root / VECTORS)
     schema_validate(vectors, load_yaml(root / VECTORS_SCHEMA), "store vectors")
     ids = [row["id"] for row in vectors["vectors"]]

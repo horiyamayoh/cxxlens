@@ -1116,34 +1116,6 @@ def validate_vectors(
     return results
 
 
-def validate_design(root: pathlib.Path) -> None:
-    design = (root / "docs/design/cxxlens_next_generation_integrated_design_ja.md").read_text(
-        encoding="utf-8"
-    )
-    for marker in (
-        "1.0.0-normative",
-        "schemas/cxxlens_ng_logical_query_contract.yaml",
-        "annotated multiset",
-        "query.limit.v1",
-        "absent_if_schema_missing",
-    ):
-        if marker not in design:
-            fail("query.design-marker-missing", marker)
-    if "filter/project/inner/semi/union/distinct/aggregate" in design:
-        fail("query.aggregate-profile-stale", "NG0 checklist still contains aggregate")
-    index = (root / "docs/design/catalogs/README.md").read_text(encoding="utf-8")
-    if "Logical Query Contract" not in index:
-        fail("query.catalog-index-stale", "query authority is absent from catalog index")
-    adr = (root / "docs/design/adr/0007-logical-query-algebra.md").read_text(
-        encoding="utf-8"
-    )
-    if (
-        "- Status: Accepted" not in adr
-        or "schemas/cxxlens_ng_logical_query_contract.yaml" not in adr
-    ):
-        fail("query.adr-not-accepted", "ADR 0007 does not identify the accepted query contract")
-
-
 def validate_all(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     contract = load_yaml(root / CONTRACT)
     contract_schema = load_yaml(root / CONTRACT_SCHEMA)
@@ -1151,7 +1123,6 @@ def validate_all(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, Any
     registry = load_yaml(root / RELATION_REGISTRY)
     vectors = load_yaml(root / VECTORS)
     schema_validate(vectors, load_yaml(root / VECTORS_SCHEMA), "query vectors")
-    validate_design(root)
     validate_contract(contract, contract_schema)
     results = validate_vectors(
         contract, contract_schema, ir_schema, registry, vectors

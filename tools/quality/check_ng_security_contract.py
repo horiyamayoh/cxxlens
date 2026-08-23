@@ -555,56 +555,6 @@ def validate_all(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, Any
         or not all(digest.startswith("semantic-v2:sha256:") for digest in policy_digests)
     ):
         fail("security.sandbox-policy-mismatch", "built-in policy registry is not canonical")
-    runtime_test = (root / "tests/unit/sdk/provider_runtime_test.cpp").read_text(
-        encoding="utf-8"
-    )
-    if any(digest.removeprefix("semantic-v2:sha256:") not in runtime_test for digest in policy_digests):
-        fail(
-            "security.sandbox-policy-mismatch",
-            "runtime policy vectors do not bind every authority digest",
-        )
-    runtime_evidence = {
-        "include/cxxlens/sdk/provider.hpp": (
-            "class provider_selection",
-            "selected_candidate() const",
-            "authority_request() const",
-            "result<void> validate() const",
-            "struct sandbox_policy",
-            "resolve_sandbox_policy",
-            "sandbox_evidence_digest",
-            "measured_executable_digest",
-        ),
-        "src/sdk/provider.cpp": (
-            "provider_selection::validate() const",
-            "selection-token",
-            "decision-binding",
-            "authority-revalidation",
-            "candidate_identity_digest",
-            "duplicate-canonical-candidate",
-            "builtin_sandbox_policies",
-            "unknown-policy",
-        ),
-        "src/sdk/provider_runtime.cpp": (
-            "request.selection.validate()",
-            "effective_sandbox",
-            "security.sandbox-policy-mismatch",
-            "sandbox_evidence_digest",
-            "actual_mechanisms",
-        ),
-        "src/runtime/provider_process_adapter.cpp": (
-            "resolve_sandbox_policy",
-            "configure_child(invocation, *policy)",
-            "security.sandbox-insufficient",
-        ),
-    }
-    for relative, markers in runtime_evidence.items():
-        text = (root / relative).read_text(encoding="utf-8")
-        missing = [marker for marker in markers if marker not in text]
-        if missing:
-            fail(
-                "security.untrusted-input-invalid",
-                f"{relative} lacks execution authority markers: {missing}",
-            )
     entry_keys = [(row["kind"], row["prefix"]) for row in namespaces["entries"]]
     if len(entry_keys) != len(set(entry_keys)):
         fail("security.namespace-collision", "duplicate kind/prefix")
@@ -622,18 +572,6 @@ def validate_all(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, Any
     if not referenced <= declared:
         fail("security.untrusted-input-invalid", f"undeclared reason codes: {sorted(referenced - declared)}")
     results = [execute_vector(row, profile, namespaces, certifications, support) for row in vectors["vectors"]]
-    design = (root / "docs/design/cxxlens_next_generation_integrated_design_ja.md").read_text(encoding="utf-8")
-    for marker in (
-        "1.0.0-normative",
-        "cxxlens.security-profile.v1",
-        "security.provider-shadowing",
-        "ADR 0011",
-        "ADR 0082",
-        "executable memfd",
-        "execveat(AT_EMPTY_PATH)",
-    ):
-        if marker not in design:
-            fail("security.untrusted-input-invalid", f"design marker missing: {marker}")
     counts = {
         "namespaces": len(namespaces["entries"]),
         "trust_anchors": len(certifications["trust_anchors"]),

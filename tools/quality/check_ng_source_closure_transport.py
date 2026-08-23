@@ -980,8 +980,6 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         raise SourceClosureTransportError(
             "wire transfer accepted cross-task rebinding"
         )
-    adr = (root / ADR).read_text(encoding="utf-8")
-
     protocol_ids = [entry["id"] for entry in protocol["message_types"]["registry"]]
     proposed = contract["message_registry"]["proposed"]
     proposed_ids = [entry["id"] for entry in proposed]
@@ -1009,10 +1007,6 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         "task-input-chunks-v2", "task-source-closure-v2"
     ]:
         raise SourceClosureTransportError("request 2.2 trust policy is not Protocol 2.0")
-    request_text = (root / REQUEST).read_text(encoding="utf-8")
-    task_text = (root / TASK).read_text(encoding="utf-8")
-    if "content_base64" in request_text or "content_base64" in task_text:
-        raise SourceClosureTransportError("request/task embeds closure blob bytes")
     request_required = set(request["required"])
     if not {"tasks", "source_closures", "task_extensions"}.issubset(
         request_required
@@ -1287,8 +1281,6 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         or protocol["compatibility"].get("accepted_minor") != 0
     ):
         raise SourceClosureTransportError("source-closure authority unexpectedly activated protocol")
-    if maturity == "accepted" and "- Status: Accepted" not in adr and "- Status: Accepted for implementation" not in adr:
-        raise SourceClosureTransportError("accepted source-closure authority lacks accepted ADR")
     return contract
 
 

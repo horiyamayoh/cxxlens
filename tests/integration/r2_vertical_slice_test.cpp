@@ -29,19 +29,11 @@
 #include <cxxlens/sdk.hpp>
 #include <cxxlens/sdk/testing.hpp>
 
-#include "llvm/clang22/provider_worker.hpp"
-
 namespace
 {
 	using namespace cxxlens;
 	using namespace cxxlens::sdk;
 	namespace query = cxxlens::sdk::query;
-	using cxxlens::detail::clang22::canonicalized_provider_batch;
-	using cxxlens::detail::clang22::detached_observation;
-	using cxxlens::detail::clang22::observation_batch;
-	using cxxlens::detail::clang22::observation_kind;
-	using cxxlens::detail::clang22::materialization::observation_v2_primary_span;
-	using cxxlens::detail::clang22::materialization::observation_v2_task_authority;
 
 	constexpr std::string_view clang_contract{
 		"sha256:1111111111111111111111111111111111111111111111111111111111111111"};
@@ -88,6 +80,29 @@ namespace
 				std::nullopt};
 	}
 
+	[[nodiscard]] detached_cell
+	symbol_cell(scalar_kind kind, std::string parameter, std::string value)
+	{
+		return {{kind, std::move(parameter), false},
+				cell_state::present,
+				scalar_value{std::move(value)},
+				std::nullopt};
+	}
+
+	[[nodiscard]] detached_cell optional_utf8(std::string value)
+	{
+		auto output = detached_cell::utf8(std::move(value));
+		output.type.optional = true;
+		return output;
+	}
+
+	[[nodiscard]] detached_cell optional_bytes(std::vector<std::byte> value)
+	{
+		auto output = detached_cell::bytes(std::move(value));
+		output.type.optional = true;
+		return output;
+	}
+
 	[[nodiscard]] std::string string_cell(const detached_row& row, const std::string& column)
 	{
 		const auto found = row.cells.find(column);
@@ -98,100 +113,105 @@ namespace
 		return *value;
 	}
 
-	[[nodiscard]] detached_observation entity_observation(std::string semantic_key,
-														  std::string qualified_name,
-														  const char source_suffix)
+	struct canonical_rows
 	{
-		detached_observation value;
-		value.kind = observation_kind::entity;
-		value.compile_unit = "cu-" + std::string(64U, 'a');
-		value.semantic_key = std::move(semantic_key);
-		const auto begin = static_cast<std::uint64_t>(source_suffix - '0') * 10U;
-		auto span = source_span_identity(
-			"source-snapshot:integration", "file:integration", begin, begin + 8U, "declaration");
-		require(span.has_value(), "integration entity source span identity failed");
-		value.primary_span = observation_v2_primary_span{std::move(*span),
-														 "source-snapshot:integration",
-														 "file:integration",
-														 begin,
-														 begin + 8U,
-														 "declaration",
-														 false};
-		value.payload.emplace("symbol.kind", "function");
-		value.payload.emplace("symbol.qualified_name", std::move(qualified_name));
-		value.payload.emplace("symbol.signature", "void ()");
-		return value;
+		std::vector<detached_row> entities;
+		std::vector<detached_row> call_sites;
+		std::vector<detached_row> direct_targets;
+	};
+
+	[[nodiscard]] detached_row entity_row(const std::string& qualified_name,
+										  const std::string& local_key)
+	{
+		using relation = cc::relations::entity;
+		relation::builder builder;
+		auto toolchain = semantic_digest("toolchain-context", clang_contract);
+		auto signature = semantic_digest("cc.entity.structural-signature.v1", "void ()");
+		require(toolchain && signature, "integration entity identity digest failed");
+		for (auto result : {
+				 builder.set<relation::entity_column>(
+					 detached_cell::typed("cc_entity_id", "pending")),
+				 builder.set<relation::canonicalization>(symbol_cell(
+					 scalar_kind::closed_symbol, "cc.canonicalization-state/1", "canonicalized")),
+				 builder.set<relation::kind>(open_symbol("cc.entity-kind/1", "function")),
+				 builder.set<relation::structural_signature_digest>(
+					 symbol_cell(scalar_kind::digest, {}, std::move(*signature))),
+				 builder.set<relation::toolchain>(
+					 optional_typed("toolchain_context_id", std::move(*toolchain))),
+				 builder.set<relation::provider_local_key>(optional_bytes(std::vector<std::byte>{
+					 reinterpret_cast<const std::byte*>(local_key.data()),
+					 reinterpret_cast<const std::byte*>(local_key.data()) + local_key.size()})),
+				 builder.set<relation::qualified_name>(optional_utf8(qualified_name)),
+			 })
+			require(result.has_value(), "integration entity row column rejected");
+		auto row = std::move(builder).finish();
+		require(row.has_value(), "integration entity row rejected");
+		auto identity = derive_domain_identity(relation::descriptor(), *row);
+		require(identity.has_value(), "integration entity identity derivation failed");
+		row->cells.at("cc.entity.v1.entity") =
+			detached_cell::typed("cc_entity_id", std::move(*identity));
+		require(validate_domain_identity(relation::descriptor(), *row).has_value(),
+				"integration entity identity validation failed");
+		return std::move(*row);
 	}
 
-	[[nodiscard]] detached_observation
-	call_observation(std::string semantic_key, std::string callee, const char source_suffix)
+	[[nodiscard]] canonical_rows clang_rows(const std::string& qualified_name, const bool ambiguous)
 	{
-		detached_observation value;
-		value.kind = observation_kind::call;
-		value.compile_unit = "cu-" + std::string(64U, 'a');
-		value.semantic_key = std::move(semantic_key);
-		const auto begin = static_cast<std::uint64_t>(source_suffix - '0') * 10U;
-		auto span = source_span_identity(
-			"source-snapshot:integration", "file:integration", begin, begin + 8U, "expression");
-		require(span.has_value(), "integration call source span identity failed");
-		value.primary_span = observation_v2_primary_span{std::move(*span),
-														 "source-snapshot:integration",
-														 "file:integration",
-														 begin,
-														 begin + 8U,
-														 "expression",
-														 false};
-		value.payload.emplace("call.kind", "direct_function");
-		value.payload.emplace("call.caller", callee);
-		value.payload.emplace("call.direct_callee", std::move(callee));
-		value.payload.emplace("call.direct_callee_kind", "function");
-		value.payload.emplace("call.direct_callee_signature", "void ()");
-		return value;
-	}
-
-	[[nodiscard]] canonicalized_provider_batch clang_rows(const std::string& qualified_name,
-														  const bool ambiguous)
-	{
-		observation_batch entity_batch;
-		entity_batch.unit = "cu-" + std::string(64U, 'a');
-		entity_batch.variant = "variant-" + std::string(64U, 'b');
-		entity_batch.materialization_authority = observation_v2_task_authority{
-			entity_batch.unit, "source-snapshot:integration", "file:integration", 1024U};
-		entity_batch.observations.push_back(
-			entity_observation("clang-usr:target-a", qualified_name, '1'));
-		observation_batch call_batch;
-		call_batch.unit = "cu-" + std::string(64U, 'c');
-		call_batch.variant = entity_batch.variant;
-		call_batch.materialization_authority = observation_v2_task_authority{
-			call_batch.unit, "source-snapshot:integration", "file:integration", 1024U};
-		auto first_call = call_observation("call:caller:1", "clang-usr:target-a", '1');
-		first_call.compile_unit = call_batch.unit;
-		call_batch.observations.push_back(std::move(first_call));
+		canonical_rows output;
+		output.entities.push_back(entity_row(qualified_name, "clang-usr:target-a"));
 		if (ambiguous)
+			output.entities.push_back(entity_row(qualified_name, "clang-usr:target-b"));
+		const auto unit = "cu-" + std::string(64U, 'c');
+		const auto make_call = [&](const std::string& entity_key,
+								   const std::uint64_t begin,
+								   const std::uint64_t ordinal)
 		{
-			entity_batch.observations.push_back(
-				entity_observation("clang-usr:target-b", qualified_name, '2'));
-			auto second_call = call_observation("call:caller:2", "clang-usr:target-b", '2');
-			second_call.compile_unit = call_batch.unit;
-			call_batch.observations.push_back(std::move(second_call));
-		}
-		require(entity_batch.validate().has_value() && call_batch.validate().has_value(),
-				"cross-TU Clang observation batches rejected");
-		auto normalized_entities = detail::clang22::canonicalize_provider_batch(
-			entity_batch, std::string{clang_contract}, true);
-		auto normalized_calls = detail::clang22::canonicalize_provider_batch(
-			call_batch, std::string{clang_contract}, true);
-		require(normalized_entities && normalized_calls && normalized_calls->entities.empty() &&
-					normalized_calls->direct_targets.size() == call_batch.observations.size() &&
-					normalized_calls->unresolved.empty() &&
-					string_cell(normalized_calls->direct_targets.front(),
-								"cc.call_direct_target.v1.target") ==
-						string_cell(normalized_entities->entities.front(), "cc.entity.v1.entity"),
-				"cross-TU Clang direct target canonicalization failed");
-		normalized_entities->call_observations = std::move(normalized_calls->call_observations);
-		normalized_entities->call_sites = std::move(normalized_calls->call_sites);
-		normalized_entities->direct_targets = std::move(normalized_calls->direct_targets);
-		return std::move(*normalized_entities);
+			auto target =
+				string_cell(output.entities.at(entity_key.ends_with("target-a") ? 0U : 1U),
+							"cc.entity.v1.entity");
+			auto span = source_span_identity(
+				"source-snapshot:integration", "file:integration", begin, begin + 8U, "expression");
+			require(span.has_value(), "integration call source span identity failed");
+			using relation = cc::relations::call_site;
+			relation::builder builder;
+			for (auto result : {
+					 builder.set<relation::call>(detached_cell::typed("cc_call_id", "pending")),
+					 builder.set<relation::compile_unit>(
+						 detached_cell::typed("compile_unit_id", unit)),
+					 builder.set<relation::kind>(open_symbol("cc.call-kind/1", "direct_function")),
+					 builder.set<relation::source>(detached_cell::typed("source_span_id", *span)),
+					 builder.set<relation::caller>(optional_typed("cc_entity_id", target)),
+					 builder.set<relation::ordinal>(detached_cell::unsigned_integer(ordinal)),
+				 })
+				require(result.has_value(), "integration call row column rejected");
+			auto row = std::move(builder).finish();
+			require(row.has_value(), "integration call row rejected");
+			auto identity = derive_domain_identity(relation::descriptor(), *row);
+			require(identity.has_value(), "integration call identity derivation failed");
+			const auto call_id = *identity;
+			row->cells.at("cc.call_site.v1.call") =
+				detached_cell::typed("cc_call_id", std::move(*identity));
+			require(validate_domain_identity(relation::descriptor(), *row).has_value(),
+					"integration call identity validation failed");
+			output.call_sites.push_back(*row);
+			using direct = cc::relations::call_direct_target;
+			direct::builder direct_builder;
+			for (auto result : {
+					 direct_builder.set<direct::call>(detached_cell::typed("cc_call_id", call_id)),
+					 direct_builder.set<direct::target>(
+						 detached_cell::typed("cc_entity_id", target)),
+					 direct_builder.set<direct::resolution>(
+						 open_symbol("cc.direct-target-resolution/1", "syntactic_direct")),
+				 })
+				require(result.has_value(), "integration direct-target column rejected");
+			auto direct_row = std::move(direct_builder).finish();
+			require(direct_row.has_value(), "integration direct-target row rejected");
+			output.direct_targets.push_back(std::move(*direct_row));
+		};
+		make_call("clang-usr:target-a", 10U, 0U);
+		if (ambiguous)
+			make_call("clang-usr:target-b", 20U, 0U);
+		return output;
 	}
 
 	[[nodiscard]] detached_row lock_row(std::string acquire, std::string function, std::string mode)

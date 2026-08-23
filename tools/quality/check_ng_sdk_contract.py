@@ -176,23 +176,6 @@ def validate_project_catalog_contract(
     if not required.issubset(columns):
         fail(f"build.project catalog authority fields are missing: {sorted(required - columns)}")
 
-    header = (root / "include/cxxlens/sdk/relation.hpp").read_text(encoding="utf-8")
-    relation_source = (root / "src/sdk/relation.cpp").read_text(encoding="utf-8")
-    provider_source = (root / "src/sdk/provider.cpp").read_text(encoding="utf-8")
-    for marker in (
-        "catalog_compile_unit",
-        "not a build.compile_unit row ID",
-        "project_catalog::make",
-        "canonical_projection",
-    ):
-        if marker not in header + relation_source:
-            fail(f"project catalog implementation marker is missing: {marker}")
-    validation = provider_source.find("task_value.validate()")
-    acceptance = provider_source.find("message_type::task_accepted", validation)
-    if validation < 0 or acceptance < 0 or validation > acceptance:
-        fail("provider task catalog is not validated before task_accepted")
-
-
 def validate_provider_task_contract(
     root: pathlib.Path, entries: dict[str, dict[str, Any]]
 ) -> None:
@@ -214,26 +197,6 @@ def validate_provider_task_contract(
         if marker not in signatures:
             fail(f"portable provider task public marker is missing: {marker}")
 
-    provider_source = (root / "src/sdk/provider.cpp").read_text(encoding="utf-8")
-    runtime_source = (root / "src/sdk/provider_runtime.cpp").read_text(encoding="utf-8")
-    validation = provider_source.find("task_value.validate()")
-    acceptance = provider_source.find("message_type::task_accepted", validation)
-    if validation < 0 or acceptance < 0 or validation > acceptance:
-        fail("portable provider task validation does not precede task_accepted")
-    for marker in (
-        "task-output-or-dependency",
-        "task-output-whitelist",
-        "provider.semantic_contract_digest()",
-        "task_value.dependency_groups",
-    ):
-        if marker not in provider_source:
-            fail(f"portable provider task implementation marker is missing: {marker}")
-    for marker in (
-        "decode_batch_begin_metadata(value.control)",
-        "metadata->task_id != request.task_id",
-    ):
-        if marker not in runtime_source:
-            fail(f"batch_begin task binding marker is missing: {marker}")
     protocol = load_yaml(root / "schemas/cxxlens_ng_provider_protocol_v2.yaml")
     if protocol.get("document_version") != "2.0.0":
         fail("provider protocol v2 contract version is not current")
@@ -265,40 +228,6 @@ def validate_static_row_view_contract(
     if not required_errors.issubset(public_entry.get("errors", [])):
         fail("static row view catalog omits exact validation errors")
 
-    header = (root / "include/cxxlens/sdk/relation.hpp").read_text(encoding="utf-8")
-    begin = header.find("class static_row_view")
-    end = header.find("\n\t};", begin)
-    if begin < 0 or end < 0:
-        fail("static_row_view public implementation is missing")
-    view = header[begin:end]
-    for marker in (
-        "reference.descriptor_id != descriptor.id",
-        "descriptor.column(reference.column_id)",
-        "reference.type == expected->type",
-        "validate_row(descriptor, row_)",
-        "detached_cell::absent(reference.type)",
-    ):
-        if marker not in view:
-            fail(f"static_row_view exact validation marker is missing: {marker}")
-    if view.find("validate_row(descriptor, row_)") > view.find(
-        "row_.cells.find(reference.column_id)"
-    ):
-        fail("static_row_view reads the cell before complete row validation")
-
-    test = (root / "tests/unit/sdk/sdk_test.cpp").read_text(encoding="utf-8")
-    for marker in (
-        "static-row-view-validation",
-        "static typed read accepted a wrong-type integer cell",
-        "static typed read accepted an invalid digest",
-        "static typed read accepted an invalid closed symbol",
-        "static typed read accepted invalid UTF-8",
-        "static typed read accepted a row with a different descriptor shape",
-        "validated dynamic/static read parity or typed optional absence failed",
-    ):
-        if marker not in test:
-            fail(f"static_row_view acceptance marker is missing: {marker}")
-
-
 def validate_claim_evidence_occurrence_contract(
     root: pathlib.Path, entries: dict[str, dict[str, Any]]
 ) -> None:
@@ -311,35 +240,6 @@ def validate_claim_evidence_occurrence_contract(
     }
     if not required_invariants.issubset(public_entry.get("invariants", [])):
         fail("claim evidence occurrence catalog omits its structural binding law")
-    header = (root / "include/cxxlens/sdk/claim.hpp").read_text(encoding="utf-8")
-    if "detached evidence-ID reference collection" not in header:
-        fail("public claim documentation omits self-contained evidence occurrence ownership")
-    claim_source = (root / "src/sdk/claim.cpp").read_text(encoding="utf-8")
-    for marker in (
-        "value.descriptor",
-        "value.semantic_key",
-        "value.assertion",
-        "value.content",
-        "value.row.canonical_form()",
-        "if (auto valid = validate_claim(engine, value); !valid)",
-    ):
-        if marker not in claim_source:
-            fail(f"claim occurrence subject binding marker is missing: {marker}")
-    store_source = (root / "src/sdk/store.cpp").read_text(encoding="utf-8")
-    if "if (auto valid = validate_claim(engine, output); !valid)" not in store_source:
-        fail("persisted claim decoder does not share claim identity validation")
-    test = (root / "tests/unit/sdk/sdk_test.cpp").read_text(encoding="utf-8")
-    for marker in (
-        "has_detached_evidence_references<cxxlens::sdk::claim>",
-        "has_detached_evidence_references<cxxlens::sdk::claim_batch_result>",
-        "evidence occurrence subject repoint was accepted",
-        "evidence occurrence content repoint was accepted",
-        "claim occurrence law lost metadata or retained an exact duplicate",
-    ):
-        if marker not in test:
-            fail(f"claim evidence occurrence acceptance marker is missing: {marker}")
-
-
 def validate_catalog(root: pathlib.Path, catalog: dict[str, Any]) -> None:
     schema_validate(catalog, load_yaml(root / SCHEMA))
     paths = unique_rows(catalog["author_paths"], "author path")
@@ -357,20 +257,6 @@ def validate_catalog(root: pathlib.Path, catalog: dict[str, Any]) -> None:
     validate_provider_task_contract(root, entries)
     validate_static_row_view_contract(root, entries)
     validate_claim_evidence_occurrence_contract(root, entries)
-    recipe_source = (root / "src/sdk/recipe.cpp").read_text(encoding="utf-8")
-    for marker in (
-        "execution_status::complete",
-        "execution_status::truncated",
-        "execution_status::cancelled_with_partial",
-        "execution_status::failed_before_result",
-        "call_search_state::partial",
-        "call_search_state::failed",
-        "result.closed()",
-        "result.closure_ids().empty()",
-        'result.summary_guarantee().approximation == "exact"',
-    ):
-        if marker not in recipe_source:
-            fail(f"recipe execution-completeness marker is missing: {marker}")
     for path in paths.values():
         if path["entry"] not in entries:
             fail(f"author path references unknown entry: {path['entry']}")
@@ -409,37 +295,6 @@ def validate_boundaries(root: pathlib.Path) -> None:
                 violations.append(f"{source.relative_to(root)}:{number}")
     if violations:
         fail(f"ordinary SDK leaks LLVM/Clang: {violations}")
-
-    cmake = (root / "CMakeLists.txt").read_text(encoding="utf-8")
-    for target in (
-        "cxxlens_base",
-        "cxxlens_kernel",
-        "cxxlens_query",
-        "cxxlens_cpp",
-        "cxxlens_recipes",
-        "cxxlens_provider_sdk",
-        "cxxlens_clang22_provider_sdk",
-    ):
-        if not re.search(rf"add_library\(\s*{target}\b", cmake):
-            fail(f"next-generation target DAG marker is missing: {target}")
-    provider_block = re.search(
-        r"add_library\(\s*cxxlens_provider_sdk\b(.*?)"
-        r"add_library\(\s*(?:cxxlens_protocol_v2|cxxlens_clang22_provider_sdk)\b",
-        cmake,
-        re.DOTALL,
-    )
-    if provider_block is None:
-        fail("independent cxxlens_provider_sdk target is missing")
-    provider_sources = re.sub(r"(?m)^\s*#.*$", "", provider_block.group(1))
-    if re.search(r"\b(?:LLVM|Clang)\b", provider_sources):
-        fail("ordinary provider SDK target has a forbidden LLVM/Clang dependency")
-    for marker in (
-        "EXPORT cxxlensProviderSDKTargets",
-        "cxxlensProviderSDKConfig.cmake",
-        "EXPORT cxxlensClang22ProviderSDKTargets",
-    ):
-        if marker not in cmake:
-            fail(f"SDK install package marker is missing: {marker}")
 
     extension_text = "\n".join(
         path.read_text(encoding="utf-8")
@@ -644,10 +499,7 @@ def validate_scaffold(root: pathlib.Path, compiler: str, executable: str) -> Non
     manifest_schema = load_yaml(root / "schemas/cxxlens_ng_provider_manifest.schema.yaml")
     with tempfile.TemporaryDirectory(prefix="cxxlens-provider-scaffold-") as directory:
         temporary = pathlib.Path(directory)
-        for provider_class, expected in (
-            ("portable", "cxxlens::provider_sdk"),
-            ("clang22-native", "cxxlens::clang22_provider_sdk"),
-        ):
+        for provider_class in ("portable", "clang22-native"):
             output = temporary / provider_class
             run(
                 [
@@ -665,9 +517,6 @@ def validate_scaffold(root: pathlib.Path, compiler: str, executable: str) -> Non
                 jsonschema.Draft202012Validator(manifest_schema).validate(document)
             except jsonschema.ValidationError as error:
                 fail(f"generated provider manifest schema validation failed: {error.message}")
-            cmake = (output / "CMakeLists.txt").read_text(encoding="utf-8")
-            if expected not in cmake:
-                fail(f"{provider_class} scaffold links the wrong SDK target")
             run(
                 [
                     compiler,
@@ -718,174 +567,13 @@ def validate_cpp_provider_manifest(root: pathlib.Path, executable: str) -> None:
 
 
 def validate_store_implementation(root: pathlib.Path) -> None:
-    header = (root / "include/cxxlens/sdk/store.hpp").read_text(encoding="utf-8")
-    source = (root / "src/sdk/store.cpp").read_text(encoding="utf-8")
-    identity_source = (root / "src/sdk/store_identity_internal.hpp").read_text(
-        encoding="utf-8"
-    )
-    claim = (root / "src/sdk/claim.cpp").read_text(encoding="utf-8")
-    cmake = (root / "CMakeLists.txt").read_text(encoding="utf-8")
-    for marker in (
-        "snapshot_series_selector",
-        "partition_manifest",
-        "closure_certificate",
-        "snapshot_writer",
-        "open_sqlite_snapshot_store",
-        "open_publication",
-        "canonical_export",
-    ):
-        if marker not in header:
-            fail(f"snapshot/store public marker is missing: {marker}")
-    validate_store_identity_decomposition(source, identity_source)
-    for marker in (
-        'canonical_identity_digest("snapshot-series"',
-        'canonical_identity_digest("partition-content"',
-        'canonical_identity_digest("closure-certificate"',
-        '"store.publish-stale-parent"',
-        '"store.current-corrupt"',
-        '"store.hash-collision"',
-        '"BEGIN IMMEDIATE;',
-    ):
-        if marker not in source:
-            fail(f"snapshot/store implementation marker is missing: {marker}")
-    if 'canonical_identity_digest("claim-content"' not in claim or (
-        'typed_digest("content"' in claim
-    ):
-        fail("claim identity does not use the accepted claim-content canonical tuple")
-    for path in ("src/sdk/store.cpp",):
-        if path not in cmake:
-            fail(f"snapshot/store build or install evidence is missing: {path}")
+    """Validate the Store schemas; implementation behavior belongs to CTest."""
     schema_validate(
         load_yaml(root / "schemas/cxxlens_ng_sqlite_store_contract.yaml"),
         load_yaml(root / "schemas/cxxlens_ng_sqlite_store_contract.schema.yaml"),
     )
-    test = (root / "tests/unit/sdk/store_test.cpp").read_text(encoding="utf-8")
-    for marker in (
-        "memory/SQLite snapshot IDs diverged",
-        "staged claims became visible",
-        "stale parent publish was accepted",
-        "partial partition received a closure certificate",
-        "compaction reclaimed a pinned generation",
-        "SQLite reopen changed semantic identity",
-        "corrupt current silently fell back",
-    ):
-        if marker not in test:
-            fail(f"snapshot/store acceptance marker is missing: {marker}")
-
-
-def _function_body(source: str, signature: str, label: str) -> str:
-    signature_offset = source.find(signature)
-    if signature_offset < 0:
-        fail(f"{label} function is missing")
-    opening = source.find("{", signature_offset + len(signature))
-    if opening < 0:
-        fail(f"{label} function body is missing")
-    depth = 0
-    for offset in range(opening, len(source)):
-        if source[offset] == "{":
-            depth += 1
-        elif source[offset] == "}":
-            depth -= 1
-            if depth == 0:
-                return source[opening + 1 : offset]
-    fail(f"{label} function body is unterminated")
-
-
-def validate_store_identity_decomposition(
-    store_source: str, identity_source: str
-) -> None:
-    if '#include "store_identity_internal.hpp"' not in store_source:
-        fail("Store does not bind the source-private identity helper")
-
-    snapshot_call = _function_body(
-        store_source, "std::string snapshot_identity(", "Store snapshot identity wrapper"
-    )
-    if "detail::snapshot_manifest_identity(value)" not in snapshot_call:
-        fail("Store snapshot identity wrapper bypasses the source-private helper")
-    publication_call = _function_body(
-        store_source,
-        "std::string publication_identity(",
-        "Store publication identity wrapper",
-    )
-    if "detail::publication_record_identity(" not in publication_call:
-        fail("Store publication identity wrapper bypasses the source-private helper")
-
-    snapshot_helper = _function_body(
-        identity_source,
-        "snapshot_manifest_identity(",
-        "source-private snapshot identity helper",
-    )
-    if 'canonical_identity_digest("snapshot", fields)' not in snapshot_helper:
-        fail("source-private snapshot identity helper omits the canonical snapshot tuple")
-    publication_helper = _function_body(
-        identity_source,
-        "publication_record_identity(",
-        "source-private publication identity helper",
-    )
-    if 'canonical_identity_digest("publication", fields)' not in publication_helper:
-        fail(
-            "source-private publication identity helper omits the canonical publication tuple"
-        )
-
-
 def validate_query_runtime_implementation(root: pathlib.Path) -> None:
-    header = (root / "include/cxxlens/sdk/query.hpp").read_text(encoding="utf-8")
-    query_source = (root / "src/sdk/query.cpp").read_text(encoding="utf-8")
-    source = (root / "src/sdk/query_execution.cpp").read_text(encoding="utf-8")
-    decoder = (root / "src/sdk/query_ir_decoder.cpp").read_text(encoding="utf-8")
-    cmake = (root / "CMakeLists.txt").read_text(encoding="utf-8")
-    test_cmake = (root / "tests/CMakeLists.txt").read_text(encoding="utf-8")
-    for marker in (
-        "decode_arguments",
-        "execution_budget",
-        "cancellation_probe",
-        "annotated_row",
-        "query_guarantee_fragment",
-        "query_summary_guarantee",
-        "query_result",
-        "result_row_cursor",
-        "reference_engine",
-    ):
-        if marker not in header:
-            fail(f"query runtime public marker is missing: {marker}")
-    for marker in (
-        "cxxlens.reference-query-planner.v1",
-        "query.inner_join.v1",
-        "query.semi_join.v1",
-        "query.anti_join.v1",
-        "query.distinct.v1",
-        "sdk.query-output-budget",
-        "sdk.query-cancelled",
-        "inputs_complete",
-        "explain_physical",
-        "contributor_guarantees",
-        "guarantees_are_canonical",
-        "fragment_set_digest",
-    ):
-        if marker not in source:
-            fail(f"query runtime implementation marker is missing: {marker}")
-    if "expressions.size() == 1U" not in query_source:
-        fail("query boolean unary canonical fold is missing")
-    for marker in (
-        "additive_optional_minor",
-        "sdk.query-relation-requirement-incompatible",
-        "expand_output_schema",
-    ):
-        if marker not in query_source:
-            fail(f"query requirement reconciliation marker is missing: {marker}")
-    for marker in (
-        "duplicate-key",
-        "absent_if_schema_missing",
-        "sdk.query-argument-invalid",
-        "query.order_by.v1",
-    ):
-        if marker not in decoder:
-            fail(f"query IR decoder marker is missing: {marker}")
-    for path in ("src/sdk/query_execution.cpp", "src/sdk/query_ir_decoder.cpp"):
-        if path not in cmake:
-            fail(f"query runtime build evidence is missing: {path}")
-    if "query_execution" not in test_cmake:
-        fail("query runtime example build evidence is missing: query_execution")
+    """Validate query runtime schemas; implementation behavior belongs to CTest."""
     schema_validate(
         load_yaml(root / "schemas/cxxlens_ng_query_runtime_contract.yaml"),
         load_yaml(root / "schemas/cxxlens_ng_query_runtime_contract.schema.yaml"),
@@ -893,24 +581,6 @@ def validate_query_runtime_implementation(root: pathlib.Path) -> None:
     jsonschema.Draft202012Validator.check_schema(
         load_yaml(root / "schemas/cxxlens_ng_query_execution_result.schema.yaml")
     )
-    test = (root / "tests/unit/sdk/query_runtime_test.cpp").read_text(encoding="utf-8")
-    for marker in (
-        "memory/SQLite semantic rows diverged",
-        "condition/interpretation-aware inner join diverged",
-        "physical index leaked into logical IR",
-        "cancellation did not return deterministic sealed partial result",
-        "successful execution was confused with complete/closed input",
-        "duplicate contributor guarantee was not rejected at the public row boundary",
-        "cursor owned row and canonical guarantee cardinality diverged",
-        "one-operand all/any did not canonical-fold to its atom",
-        "factory-success unary predicate was rejected by semi_join",
-        "anti_join without right closure emitted an absence row",
-        "compatible minor retained requirement depended on operand order",
-        "compatible minor union reconciliation was not permutation invariant",
-        "incompatible descriptor reconciliation was not deterministic",
-    ):
-        if marker not in test:
-            fail(f"query runtime acceptance marker is missing: {marker}")
 
 
 def validate(

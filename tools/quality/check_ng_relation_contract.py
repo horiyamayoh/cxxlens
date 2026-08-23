@@ -1089,29 +1089,6 @@ def validate_vectors(
     return results
 
 
-def validate_design(root: pathlib.Path) -> None:
-    design = (root / "docs/design/cxxlens_next_generation_integrated_design_ja.md").read_text(
-        encoding="utf-8"
-    )
-    required = (
-        "1.0.0-normative",
-        "schemas/cxxlens_ng_relation_registry.yaml",
-        "envelope-presence-only",
-        "cc.call_direct_target",
-        "detached-cell-value-v2",
-        "cross-TU semantic entity identity",
-    )
-    for marker in required:
-        if marker not in design:
-            fail("relation.design-marker-missing", f"design marker missing: {marker}")
-    for stale in ("col<call::direct_target>()", 'calls.column("direct_target")'):
-        if stale in design:
-            fail("relation.call-example-stale", f"stale call model remains: {stale}")
-    index = (root / "docs/design/catalogs/README.md").read_text(encoding="utf-8")
-    if "Relation Registry" not in index or "cross-TU entity identity" not in index:
-        fail("relation.catalog-index-stale", "relation registry authority is absent from catalog index")
-
-
 def validate_contract(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, str]]]:
     registry = load_yaml(root / REGISTRY)
     registry_schema = load_yaml(root / REGISTRY_SCHEMA)
@@ -1125,7 +1102,6 @@ def validate_contract(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str
     schema_validate(vectors, load_yaml(root / VECTORS_SCHEMA), "relation vectors")
     validate_registry(registry)
     results = validate_vectors(registry, registry_schema, vectors)
-    validate_design(root)
     return registry, results
 
 

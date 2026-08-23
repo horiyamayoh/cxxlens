@@ -486,38 +486,6 @@ if(CXXLENS_ENABLE_UBSAN AND NOT MSVC)
 endif()
 
 if(BUILD_TESTING)
-  # Legacy canonicalization and task.v3 decoding remain available only to the
-  # source-private R2 regression fixture. The target does not exist in a
-  # BUILD_TESTING=OFF production configuration.
-  add_library(
-    cxxlens_clang22_worker_legacy_support STATIC EXCLUDE_FROM_ALL
-    src/llvm/clang22/provider_worker_legacy.cpp
-    src/llvm/clang22/provider_task_v3.cpp
-    src/llvm/clang22/source_closure_native.cpp
-    src/llvm/clang22/materialization_io.cpp
-    src/llvm/clang22/materialization_task_spool.cpp)
-  target_link_libraries(
-    cxxlens_clang22_worker_legacy_support
-    PUBLIC cxxlens::clang22_provider_sdk
-    PRIVATE cxxlens_clang22_materialization_codecs)
-  if(CXXLENS_BUILD_SHARED)
-    target_sources(cxxlens_clang22_worker_legacy_support
-                   PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
-  endif()
-  target_include_directories(cxxlens_clang22_worker_legacy_support
-                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-  target_compile_features(cxxlens_clang22_worker_legacy_support
-                          PRIVATE cxx_std_23)
-  cxxlens_set_project_warnings(cxxlens_clang22_worker_legacy_support)
-  cxxlens_enable_sanitizers(cxxlens_clang22_worker_legacy_support)
-  cxxlens_configure_clang22(cxxlens_clang22_worker_legacy_support)
-  if(CXXLENS_ENABLE_UBSAN AND NOT MSVC)
-    set_source_files_properties(
-      src/llvm/clang22/materialization_io.cpp
-      src/llvm/clang22/materialization_task_spool.cpp PROPERTIES COMPILE_OPTIONS
-                                                                 "-frtti")
-  endif()
-
   # Source-private safety support for retained Store/SQLite/receipt tests. This
   # target also does not exist in production or install configurations.
   add_library(

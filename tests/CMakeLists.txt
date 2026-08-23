@@ -1106,10 +1106,7 @@ cxxlens_add_test_executable(cxxlens-r2-vertical-slice
                             integration/r2_vertical_slice_test.cpp)
 target_sources(cxxlens-r2-vertical-slice
                PRIVATE $<TARGET_OBJECTS:cxxlens-test-sdk-support>)
-target_link_libraries(cxxlens-r2-vertical-slice
-                      PRIVATE cxxlens_clang22_worker_legacy_support)
-target_include_directories(cxxlens-r2-vertical-slice
-                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_link_libraries(cxxlens-r2-vertical-slice PRIVATE cxxlens::provider_sdk)
 add_test(NAME integration.r2-vertical-slice COMMAND cxxlens-r2-vertical-slice)
 set_tests_properties(
   integration.r2-vertical-slice
