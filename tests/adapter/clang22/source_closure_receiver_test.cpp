@@ -13,14 +13,14 @@
 #include <vector>
 
 #include "llvm/clang22/materialization_json.hpp"
-#include "sdk/provider_protocol_v2_adapter.hpp"
+#include "protocol_v2/closure.hpp"
 
 namespace
 {
 	using namespace cxxlens::detail::clang22;
 	using cxxlens::sdk::provider::frame;
 	using cxxlens::sdk::provider::message_type;
-	namespace provider_detail = ::cxxlens::sdk::provider::detail;
+	namespace protocol = ::cxxlens::protocol_v2;
 
 	void require(const bool condition, const std::string_view message)
 	{
@@ -169,14 +169,16 @@ namespace
 		output.binding.closure_digest = output.closure.closure_digest;
 		output.binding.manifest_digest = *manifest_digest;
 
-		const auto limits = provider_detail::provider_protocol_v2_closure_limits{};
+		const auto limits = protocol::closure_limits{};
 		std::uint64_t sequence{};
 		auto append = [&](const message_type type,
-						  provider_detail::provider_protocol_v2_control control,
+						  protocol::closure_control control,
 						  std::span<const std::byte> payload = {})
 		{
-			auto encoded =
-				provider_detail::encode_provider_protocol_v2_closure_control(type, control, limits);
+			auto encoded = protocol::encode_closure_control(
+				static_cast<protocol::message_type>(static_cast<std::uint16_t>(type)),
+				control,
+				limits);
 			require_result(encoded, "receiver fixture control encoding failed");
 			frame value;
 			value.type = type;
@@ -190,7 +192,7 @@ namespace
 		};
 
 		append(message_type::source_closure_manifest,
-			   provider_detail::provider_protocol_v2_manifest_descriptor{
+			   protocol::source_closure_manifest_descriptor{
 				   cxxlens::protocol_v2::manifest_kind::descriptor,
 				   output.binding.session_id,
 				   output.binding.task_id,
@@ -202,33 +204,32 @@ namespace
 				   output.manifest_bytes.size(),
 				   1U});
 		append(message_type::source_closure_manifest,
-			   provider_detail::provider_protocol_v2_manifest_chunk{
-				   cxxlens::protocol_v2::manifest_kind::chunk,
-				   output.binding.session_id,
-				   output.binding.task_id,
-				   output.binding.manifest_digest,
-				   0U,
-				   0U,
-				   output.manifest_bytes.size()},
+			   protocol::source_closure_manifest_chunk{cxxlens::protocol_v2::manifest_kind::chunk,
+													   output.binding.session_id,
+													   output.binding.task_id,
+													   output.binding.manifest_digest,
+													   0U,
+													   0U,
+													   output.manifest_bytes.size()},
 			   bytes(output.manifest_bytes));
 		const auto& blob = output.closure.blobs.front();
 		append(message_type::source_closure_blob,
-			   provider_detail::provider_protocol_v2_blob{output.binding.session_id,
-														  output.binding.task_id,
-														  output.binding.closure_digest,
-														  0U,
-														  blob.content_digest,
-														  blob.size_bytes,
-														  blob.size_bytes,
-														  1U});
+			   protocol::source_closure_blob_descriptor{output.binding.session_id,
+														output.binding.task_id,
+														output.binding.closure_digest,
+														0U,
+														blob.content_digest,
+														blob.size_bytes,
+														blob.size_bytes,
+														1U});
 		append(message_type::source_closure_chunk,
-			   provider_detail::provider_protocol_v2_chunk{output.binding.session_id,
-														   output.binding.task_id,
-														   0U,
-														   blob.content_digest,
-														   0U,
-														   0U,
-														   blob.size_bytes},
+			   protocol::source_closure_chunk{output.binding.session_id,
+											  output.binding.task_id,
+											  0U,
+											  blob.content_digest,
+											  0U,
+											  0U,
+											  blob.size_bytes},
 			   bytes(*blob.content));
 		const std::array receipts{
 			source_closure_blob_receipt{0U, blob.content_digest, blob.size_bytes}};
@@ -238,15 +239,15 @@ namespace
 			source_closure_transfer_digest(output.binding, *receipts_digest, 1U, blob.size_bytes);
 		require_result(transfer_digest, "receiver fixture transfer digest failed");
 		append(message_type::source_closure_seal,
-			   provider_detail::provider_protocol_v2_seal{output.binding.session_id,
-														  output.binding.task_id,
-														  output.binding.task_v4_digest,
-														  output.binding.manifest_digest,
-														  *receipts_digest,
-														  1U,
-														  blob.size_bytes,
-														  output.binding.closure_digest,
-														  *transfer_digest});
+			   protocol::source_closure_seal{output.binding.session_id,
+											 output.binding.task_id,
+											 output.binding.task_v4_digest,
+											 output.binding.manifest_digest,
+											 *receipts_digest,
+											 1U,
+											 blob.size_bytes,
+											 output.binding.closure_digest,
+											 *transfer_digest});
 		return output;
 	}
 
@@ -272,10 +273,10 @@ namespace
 		require_result(ack, "receiver ACK was not a valid provider frame");
 		require(ack->type == message_type::source_closure_ack && ack->sequence == 5U,
 				"receiver ACK had the wrong sequence");
-		auto decoded =
-			provider_detail::decode_provider_protocol_v2_closure_control(ack->type, ack->control);
+		auto decoded = protocol::decode_closure_control(protocol::message_type::source_closure_ack,
+														ack->control);
 		require_result(decoded, "receiver ACK control was not canonical");
-		const auto* value = std::get_if<provider_detail::provider_protocol_v2_ack>(&*decoded);
+		const auto* value = std::get_if<protocol::source_closure_ack>(&*decoded);
 		require(value != nullptr && value->spool_receipt == result->credentials.spool_receipt &&
 					value->cleanup_owner == result->credentials.cleanup_owner &&
 					value->transfer_digest == result->transfer_digest,

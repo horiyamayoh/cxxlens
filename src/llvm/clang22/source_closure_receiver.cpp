@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-#include "sdk/provider_protocol_v2_adapter.hpp"
+#include "protocol_v2/closure.hpp"
 #include "source_closure_spool.hpp"
 
 namespace cxxlens::detail::clang22
@@ -21,7 +21,7 @@ namespace cxxlens::detail::clang22
 	{
 		using sdk::provider::frame;
 		using sdk::provider::message_type;
-		namespace provider_detail = ::cxxlens::sdk::provider::detail;
+		namespace protocol = ::cxxlens::protocol_v2;
 
 		constexpr std::size_t wire_header_bytes = 104U;
 
@@ -115,7 +115,7 @@ namespace cxxlens::detail::clang22
 			}
 		}
 
-		[[nodiscard]] sdk::result<provider_detail::provider_protocol_v2_closure_limits>
+		[[nodiscard]] sdk::result<protocol::closure_limits>
 		protocol_limits(const source_closure_transport_limits& limits)
 		{
 			const auto fits = [](const std::uint64_t value) noexcept
@@ -132,7 +132,7 @@ namespace cxxlens::detail::clang22
 				!fits(limits.maximum_resident_transport_bytes))
 				return sdk::unexpected(
 					failure("source-closure.limit-exceeded", "limits", "size-type"));
-			provider_detail::provider_protocol_v2_closure_limits output;
+			protocol::closure_limits output;
 			output.maximum_members = static_cast<std::size_t>(limits.maximum_members);
 			output.maximum_blobs = static_cast<std::size_t>(limits.maximum_unique_blobs);
 			output.maximum_manifest_bytes = static_cast<std::size_t>(limits.maximum_manifest_bytes);
@@ -184,7 +184,7 @@ namespace cxxlens::detail::clang22
 		}
 
 		[[nodiscard]] source_closure_manifest_descriptor
-		manifest_descriptor(const provider_detail::provider_protocol_v2_manifest_descriptor& value)
+		manifest_descriptor(const protocol::source_closure_manifest_descriptor& value)
 		{
 			return {value.session_id,
 					value.task_id,
@@ -198,7 +198,7 @@ namespace cxxlens::detail::clang22
 		}
 
 		[[nodiscard]] source_closure_manifest_chunk
-		manifest_chunk(const provider_detail::provider_protocol_v2_manifest_chunk& value)
+		manifest_chunk(const protocol::source_closure_manifest_chunk& value)
 		{
 			return {value.session_id,
 					value.task_id,
@@ -209,7 +209,7 @@ namespace cxxlens::detail::clang22
 		}
 
 		[[nodiscard]] source_closure_blob_descriptor
-		blob_descriptor(const provider_detail::provider_protocol_v2_blob& value)
+		blob_descriptor(const protocol::source_closure_blob_descriptor& value)
 		{
 			return {value.session_id,
 					value.task_id,
@@ -222,7 +222,7 @@ namespace cxxlens::detail::clang22
 		}
 
 		[[nodiscard]] source_closure_blob_chunk
-		blob_chunk(const provider_detail::provider_protocol_v2_chunk& value)
+		blob_chunk(const protocol::source_closure_chunk& value)
 		{
 			return {value.session_id,
 					value.task_id,
@@ -233,8 +233,7 @@ namespace cxxlens::detail::clang22
 					value.byte_count};
 		}
 
-		[[nodiscard]] source_closure_seal
-		seal(const provider_detail::provider_protocol_v2_seal& value)
+		[[nodiscard]] source_closure_seal seal(const protocol::source_closure_seal& value)
 		{
 			return {value.session_id,
 					value.task_id,
@@ -266,8 +265,8 @@ namespace cxxlens::detail::clang22
 		[[nodiscard]] sdk::result<void>
 		accept_typed_frame(const frame& value,
 						   source_closure_transfer_validator& validator,
-						   provider_detail::provider_protocol_v2_closure_state& protocol_state,
-						   const provider_detail::provider_protocol_v2_closure_limits& limits,
+						   protocol::closure_transfer& protocol_state,
+						   const protocol::closure_limits& limits,
 						   bool& sealed)
 		{
 			if (!sdk::provider::is_source_closure_message(value.type))
@@ -277,33 +276,42 @@ namespace cxxlens::detail::clang22
 					static_cast<std::uint16_t>(value.type), value.flags);
 				!valid)
 				return valid;
-			auto decoded = provider_detail::decode_provider_protocol_v2_closure_control(
-				value.type, value.control, limits);
+			const auto protocol_message =
+				static_cast<protocol::message_type>(static_cast<std::uint16_t>(value.type));
+			auto decoded =
+				protocol::decode_closure_control(protocol_message, value.control, limits);
 			if (!decoded)
 				return sdk::unexpected(std::move(decoded.error()));
-			if (auto valid = provider_detail::validate_provider_protocol_v2_closure_payload(
-					value.type, *decoded, value.payload, limits);
+			if (auto valid = protocol::validate_closure_payload(
+					protocol_message, *decoded, value.payload, limits);
 				!valid)
 				return valid;
-			if (auto valid = protocol_state.accept(value); !valid)
+			protocol::frame protocol_frame;
+			protocol_frame.type = protocol_message;
+			protocol_frame.protocol_major = value.protocol_major;
+			protocol_frame.protocol_minor = value.protocol_minor;
+			protocol_frame.flags = value.flags;
+			protocol_frame.stream_id = value.stream_id;
+			protocol_frame.sequence = value.sequence;
+			protocol_frame.control = value.control;
+			protocol_frame.payload = value.payload;
+			if (auto valid = protocol_state.accept(protocol_frame); !valid)
 				return valid;
 
 			const auto type = value.type;
 			if (type == message_type::source_closure_manifest)
 			{
-				const auto* manifest =
-					std::get_if<provider_detail::provider_protocol_v2_manifest>(&*decoded);
+				const auto* manifest = std::get_if<protocol::source_closure_manifest>(&*decoded);
 				if (manifest == nullptr)
 					return sdk::unexpected(
 						failure("source-closure.protocol-state-invalid", "manifest", "type"));
 				if (const auto* descriptor =
-						std::get_if<provider_detail::provider_protocol_v2_manifest_descriptor>(
-							manifest);
+						std::get_if<protocol::source_closure_manifest_descriptor>(manifest);
 					descriptor != nullptr)
 					return validator.begin_manifest(manifest_descriptor(*descriptor),
 													value.sequence);
 				if (const auto* chunk =
-						std::get_if<provider_detail::provider_protocol_v2_manifest_chunk>(manifest);
+						std::get_if<protocol::source_closure_manifest_chunk>(manifest);
 					chunk != nullptr)
 					return validator.manifest_chunk(
 						manifest_chunk(*chunk), value.payload, value.sequence);
@@ -313,7 +321,7 @@ namespace cxxlens::detail::clang22
 			if (type == message_type::source_closure_blob)
 			{
 				const auto* descriptor =
-					std::get_if<provider_detail::provider_protocol_v2_blob>(&*decoded);
+					std::get_if<protocol::source_closure_blob_descriptor>(&*decoded);
 				if (descriptor == nullptr)
 					return sdk::unexpected(
 						failure("source-closure.protocol-state-invalid", "blob", "variant"));
@@ -321,8 +329,7 @@ namespace cxxlens::detail::clang22
 			}
 			if (type == message_type::source_closure_chunk)
 			{
-				const auto* chunk =
-					std::get_if<provider_detail::provider_protocol_v2_chunk>(&*decoded);
+				const auto* chunk = std::get_if<protocol::source_closure_chunk>(&*decoded);
 				if (chunk == nullptr)
 					return sdk::unexpected(
 						failure("source-closure.protocol-state-invalid", "blob-chunk", "variant"));
@@ -330,8 +337,7 @@ namespace cxxlens::detail::clang22
 			}
 			if (type == message_type::source_closure_seal)
 			{
-				const auto* value_seal =
-					std::get_if<provider_detail::provider_protocol_v2_seal>(&*decoded);
+				const auto* value_seal = std::get_if<protocol::source_closure_seal>(&*decoded);
 				if (value_seal == nullptr)
 					return sdk::unexpected(
 						failure("source-closure.protocol-state-invalid", "seal", "variant"));
@@ -344,8 +350,7 @@ namespace cxxlens::detail::clang22
 				return sdk::unexpected(
 					failure("source-closure.protocol-state-invalid", "ack", "receiver-owns-ack"));
 
-			const auto* value_reject =
-				std::get_if<provider_detail::provider_protocol_v2_reject>(&*decoded);
+			const auto* value_reject = std::get_if<protocol::source_closure_reject>(&*decoded);
 			if (value_reject == nullptr)
 				return sdk::unexpected(
 					failure("source-closure.protocol-state-invalid", "reject", "variant"));
@@ -382,7 +387,7 @@ namespace cxxlens::detail::clang22
 			return sdk::unexpected(
 				failure("source-closure.task-binding-mismatch", "receiver-options", "digest"));
 
-		provider_detail::provider_protocol_v2_session session;
+		protocol::closure_session session;
 		session.session_id = options.binding.session_id;
 		session.task_id = options.binding.task_id;
 		session.task_v4_digest = options.binding.task_v4_digest;
@@ -391,8 +396,7 @@ namespace cxxlens::detail::clang22
 		session.stream_id = options.stream_id;
 		session.initial_credit = {*byte_credit, *frame_credit};
 		session.limits = *closure_limits;
-		auto protocol_state =
-			provider_detail::provider_protocol_v2_closure_state::create(std::move(session));
+		auto protocol_state = protocol::closure_transfer::create(std::move(session));
 		if (!protocol_state)
 			return sdk::unexpected(std::move(protocol_state.error()));
 
@@ -435,16 +439,16 @@ namespace cxxlens::detail::clang22
 			auto credentials = spool.ack_credentials();
 			if (!credentials)
 				return fail_with_cleanup(spool, std::move(credentials.error()));
-			provider_detail::provider_protocol_v2_ack ack_value{options.binding.session_id,
-																options.binding.task_id,
-																options.binding.closure_digest,
-																credentials->transfer_digest,
-																credentials->spool_receipt,
-																credentials->cleanup_owner};
-			auto ack_control = provider_detail::encode_provider_protocol_v2_closure_control(
-				message_type::source_closure_ack,
-				provider_detail::provider_protocol_v2_control{std::move(ack_value)},
-				*closure_limits);
+			protocol::source_closure_ack ack_value{options.binding.session_id,
+												   options.binding.task_id,
+												   options.binding.closure_digest,
+												   credentials->transfer_digest,
+												   credentials->spool_receipt,
+												   credentials->cleanup_owner};
+			auto ack_control =
+				protocol::encode_closure_control(protocol::message_type::source_closure_ack,
+												 protocol::closure_control{std::move(ack_value)},
+												 *closure_limits);
 			if (!ack_control)
 				return fail_with_cleanup(spool, std::move(ack_control.error()));
 			frame ack_frame;
