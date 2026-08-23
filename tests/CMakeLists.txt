@@ -1,9 +1,10 @@
 find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
 
-# SQLite lifecycle fault peers are private test support.  Keep their
+# SQLite lifecycle and Store fault peers are private test support. Keep their
 # declarations visible to deterministic tests while production targets are
 # compiled without the corresponding symbols.
-add_compile_definitions(CXXLENS_SQLITE_TEST_SUPPORT=1)
+add_compile_definitions(CXXLENS_SQLITE_TEST_SUPPORT=1
+                        CXXLENS_STORE_FAULT_TEST_SUPPORT=1)
 
 function(cxxlens_add_test_executable target source)
   add_executable(${target} ${source})
@@ -25,9 +26,9 @@ target_include_directories(
 cxxlens_set_project_warnings(cxxlens-test-sdk-support)
 cxxlens_enable_sanitizers(cxxlens-test-sdk-support)
 
-# The production Store links an unconditional no-op dispatch implementation.
-# Only the two tests that exercise typed fault directives receive the private
-# thread-local scope implementation.
+# Only the tests that exercise typed fault directives receive the private
+# thread-local scope implementation. Production Store call sites use the
+# header's inert inline dispatcher and do not link a fault entry point.
 add_library(
   cxxlens-test-sqlite-store-fault-injection-support OBJECT
   "${PROJECT_SOURCE_DIR}/src/sdk/sqlite_store_fault_injection_internal.cpp")

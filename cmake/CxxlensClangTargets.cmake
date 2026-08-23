@@ -60,10 +60,6 @@ function(cxxlens_create_clang22_worker_static_closure)
     src/sdk/sqlite_default_observation.cpp
     src/sdk/sqlite_source_shm_readonly_preflight_internal.cpp
     src/sdk/sqlite_default_forwarding_vfs.cpp
-    # The sealed shared worker is a production closure.  It must use the same
-    # inert dispatcher as the installed kernel; the thread-local fault scope is
-    # source-private test support and must not enter the shipped image.
-    src/sdk/sqlite_store_fault_injection_noop_internal.cpp
     src/sdk/sqlite_store_terminal_internal.cpp
     src/sdk/sqlite_terminal_reclassifier_internal.cpp)
   cxxlens_configure_clang22_worker_static_component(

@@ -71,18 +71,29 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool operator==(const sqlite_store_fault_directive&) const = default;
 	};
 
-	/** Production no-op unless a BUILD_TESTING scope owns the calling thread. */
-#if defined(__GNUC__) || defined(__clang__)
-	// The test dispatcher is intentionally interposable by the private test object library.  The
-	// production no-op remains source-private so it cannot become an installed testing surface.
+	/**
+	 * The dispatcher exists only in the test Store build. Production call sites use the
+	 * allocation-free inert implementation below, so the shipped kernel and worker do not carry a
+	 * test override symbol or an exported fault-injection entry point.
+	 */
 #if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
+#if defined(__GNUC__) || defined(__clang__)
 	[[nodiscard]] __attribute__((visibility("default")))
-#else
-	[[nodiscard]] __attribute__((visibility("hidden")))
-#endif
 #else
 	[[nodiscard]]
 #endif
 	sqlite_store_fault_directive
 	dispatch_sqlite_store_fault(const sqlite_store_fault_event& event) noexcept;
+#else
+#if defined(__GNUC__) || defined(__clang__)
+	[[nodiscard]] __attribute__((always_inline)) static inline
+#else
+	[[nodiscard]] static inline
+#endif
+		sqlite_store_fault_directive
+		dispatch_sqlite_store_fault(const sqlite_store_fault_event& event) noexcept
+	{
+		return {event, sqlite_store_fault_action::none, false};
+	}
+#endif
 } // namespace cxxlens::sdk

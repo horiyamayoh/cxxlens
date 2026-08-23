@@ -188,7 +188,6 @@ add_library(
   src/sdk/sqlite_default_observation.cpp
   src/sdk/sqlite_source_shm_readonly_preflight_internal.cpp
   src/sdk/sqlite_default_forwarding_vfs.cpp
-  src/sdk/sqlite_store_fault_injection_noop_internal.cpp
   src/sdk/sqlite_store_terminal_internal.cpp
   src/sdk/sqlite_terminal_reclassifier_internal.cpp)
 add_library(cxxlens::kernel ALIAS cxxlens_kernel)
