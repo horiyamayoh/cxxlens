@@ -91,6 +91,56 @@ namespace cxxlens::sdk::provider
 				return {std::move(code), std::move(field), std::move(detail)};
 			}
 
+			[[nodiscard]] result<void>
+			append_process_environment(const process_invocation& invocation,
+									   std::vector<std::string>& storage)
+			{
+				constexpr std::array<std::string_view, 7U> channel_names{
+					"CXXLENS_PROVIDER_SOURCE_CLOSURE_READ_FD",
+					"CXXLENS_PROVIDER_SOURCE_CLOSURE_WRITE_FD",
+					"CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_ID",
+					"CXXLENS_PROVIDER_SOURCE_CLOSURE_SESSION_ID",
+					"CXXLENS_PROVIDER_SOURCE_CLOSURE_DIGEST",
+					"CXXLENS_PROVIDER_SOURCE_CLOSURE_TRANSFER_DIGEST",
+					"CXXLENS_PROVIDER_SOURCE_CLOSURE_BINDING_DIGEST"};
+				for (const auto& [name, value] : invocation.environment)
+				{
+					if (name.empty() || name.contains('=') || name.contains('\0') ||
+						value.contains('\0'))
+						return cxxlens::sdk::unexpected(
+							process_error("provider.process-request-invalid", "environment"));
+					if (invocation.inherited_channel &&
+						std::ranges::contains(channel_names, std::string_view{name}))
+						return cxxlens::sdk::unexpected(
+							process_error("provider.process-request-invalid",
+										  "environment",
+										  "reserved-channel-name"));
+					std::string entry{name};
+					entry += '=';
+					entry += value;
+					storage.push_back(std::move(entry));
+				}
+				if (invocation.inherited_channel)
+				{
+					const auto& binding = *invocation.inherited_channel;
+					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_READ_FD=" +
+										 std::to_string(binding.read_descriptor));
+					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_WRITE_FD=" +
+										 std::to_string(binding.write_descriptor));
+					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_ID=" +
+										 binding.task_id);
+					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_SESSION_ID=" +
+										 binding.session_id);
+					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_DIGEST=" +
+										 binding.closure_digest);
+					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_TRANSFER_DIGEST=" +
+										 binding.transfer_digest);
+					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_BINDING_DIGEST=" +
+										 binding.binding_digest);
+				}
+				return {};
+			}
+
 			constexpr std::string_view semantic_digest_prefix{"semantic-v2:sha256:"};
 			constexpr std::string_view task_digest_prefix{"task:semantic-v2:sha256:"};
 			constexpr std::string_view session_digest_prefix{"provider-session:sha256:"};
@@ -1310,17 +1360,10 @@ namespace cxxlens::sdk::provider
 				environment_storage.reserve(invocation.environment.size() + 2U);
 				environment_storage.emplace_back("LANG=C");
 				environment_storage.emplace_back("LC_ALL=C");
-				for (const auto& [name, value] : invocation.environment)
-				{
-					if (name.empty() || name.contains('=') || contains_nul(name) ||
-						contains_nul(value))
-						return cxxlens::sdk::unexpected(
-							process_error("provider.process-request-invalid", "environment"));
-					std::string entry{name};
-					entry += '=';
-					entry += value;
-					environment_storage.push_back(std::move(entry));
-				}
+				if (auto environment =
+						detail::append_process_environment(invocation, environment_storage);
+					!environment)
+					return cxxlens::sdk::unexpected(std::move(environment.error()));
 				auto arguments_storage = invocation.argv;
 				auto arguments = pointers(arguments_storage);
 				auto environment = pointers(environment_storage);
@@ -1504,17 +1547,10 @@ namespace cxxlens::sdk::provider
 				environment_storage.reserve(invocation.environment.size() + 2U);
 				environment_storage.emplace_back("LANG=C");
 				environment_storage.emplace_back("LC_ALL=C");
-				for (const auto& [name, value] : invocation.environment)
-				{
-					if (name.empty() || name.contains('=') || contains_nul(name) ||
-						contains_nul(value))
-						return cxxlens::sdk::unexpected(
-							process_error("provider.process-request-invalid", "environment"));
-					std::string entry{name};
-					entry += '=';
-					entry += value;
-					environment_storage.push_back(std::move(entry));
-				}
+				if (auto environment =
+						detail::append_process_environment(invocation, environment_storage);
+					!environment)
+					return cxxlens::sdk::unexpected(std::move(environment.error()));
 				auto arguments_storage = invocation.argv;
 				auto arguments = pointers(arguments_storage);
 				auto environment = pointers(environment_storage);

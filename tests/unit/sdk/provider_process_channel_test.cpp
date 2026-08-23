@@ -217,6 +217,23 @@ namespace
 		const auto write_fd = std::to_string(fixture.write.get());
 		const std::string script = "r=" + read_fd + "; w=" + write_fd +
 			"; test -e /proc/self/fd/$r || exit 10; test -e /proc/self/fd/$w || exit 11; "
+			"test \"$CXXLENS_PROVIDER_SOURCE_CLOSURE_READ_FD\" = \"" +
+			read_fd + "\" || exit 13; test \"$CXXLENS_PROVIDER_SOURCE_CLOSURE_WRITE_FD\" = \"" +
+			write_fd +
+			"\" || exit 14; "
+			"test \"$CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_ID\" = \"" +
+			binding->task_id +
+			"\" || exit 15; test \"$CXXLENS_PROVIDER_SOURCE_CLOSURE_SESSION_ID\" = \"" +
+			binding->session_id +
+			"\" || exit 16; "
+			"test \"$CXXLENS_PROVIDER_SOURCE_CLOSURE_DIGEST\" = \"" +
+			binding->closure_digest +
+			"\" || exit 17; test \"$CXXLENS_PROVIDER_SOURCE_CLOSURE_TRANSFER_DIGEST\" = \"" +
+			binding->transfer_digest +
+			"\" || exit 18; "
+			"test \"$CXXLENS_PROVIDER_SOURCE_CLOSURE_BINDING_DIGEST\" = \"" +
+			binding->binding_digest +
+			"\" || exit 19; "
 			"i=4; while [ $i -lt 64 ]; do "
 			"if [ $i -ne $r ] && [ $i -ne $w ] && [ -e /proc/self/fd/$i ]; then exit 12; fi; "
 			"i=$((i+1)); done";
