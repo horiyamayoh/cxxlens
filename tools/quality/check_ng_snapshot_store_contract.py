@@ -23,7 +23,7 @@ CONTRACT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_snapshot_store_contract.schema.yaml"
 )
 EXPECTED_SCHEMA_DIGEST = (
-    "sha256:a7ec1d727689e9719d9e220b6ab22c116ccfbe23e5b02bcb22bfa4d12d314e73"
+    "sha256:59a759d22c7cd676b62f11806bd9168aa6d0ea820941815a62387897058b3253"
 )
 MANIFEST_SCHEMA = pathlib.Path("schemas/cxxlens_ng_snapshot_manifest.schema.yaml")
 VECTORS = pathlib.Path("schemas/cxxlens_ng_store_conformance_vectors.yaml")
@@ -32,19 +32,19 @@ VECTORS_SCHEMA = pathlib.Path(
 )
 
 EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST = (
-    "sha256:3961e3d6eff4ffb2b3cb887c7b4d2e4ed145028ee5b5b101ebbe20a320666fb5"
+    "sha256:d535c36235eb953f45944783a4193cceefbc930a61a7bc4af2b88102cbf42242"
 )
 EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
-    "sha256:47b4c9adee53a9ba6948b143d95dba4eed97efd253e5a3096b5783fba865874c"
+    "sha256:604a0d32f72aec4dd8aed8eee74178254b9e1fe0c24efc7fa9ff413e02bb39f4"
 )
 EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
-    "sha256:df86801ae255c6fe55059309ecb4616643e9f55f50b80db3387ab268824e93a9"
+    "sha256:c19750290f1e512b1d1e01d4d4d0d8d7d4fa8de12571c164cd2dfd062d64e530"
 )
 EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST = (
-    "sha256:148ecbea8da36516d7d0c8c900706088a91d73f10d14ccb8049968c0cea7b2b3"
+    "sha256:16a0b4bb6d8cfc73b8cd9b9912d1d2a65129d7b4fed27ec870eabafd00b960fa"
 )
 EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST = (
-    "sha256:3e821c512969418f381e4a95023e2b02c13b62673c063d37745dfa537f53be9a"
+    "sha256:c0f05dee2c7c35bd67869ed81b05c1ce5a4124b7562721b176ac7622586a80d0"
 )
 
 SELECTOR_FIELDS = (
@@ -1561,15 +1561,6 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
                 "transaction.fresh_v3_initialization.guards.filesystem."
                 "precreate_census.preauthority_sidecar_candidate."
                 "accepted_empty_original_normalization.receiptless_crash_profile_draft"
-            ),
-            "activation": (
-                "direct-positive-negative-fault-determinism-and-resource-tests-"
-                "must-pass-for-the-named-SQLite-profile-and-canonical-or-production-"
-                "activation-remains-gated-with-no-static-SQLite-runtime-inference"
-            ),
-            "production_activation": (
-                "blocked-until-direct-positive-negative-fault-determinism-and-"
-                "resource-tests-pass-and-accepted-profile-replacement"
             ),
             "family_partition": [
                 "F0-exact-pre-no-sidecar",

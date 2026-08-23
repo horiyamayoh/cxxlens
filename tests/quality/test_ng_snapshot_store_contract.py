@@ -90,11 +90,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
             EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
         )
         self.assertEqual(
-            attachment["authorization"]["before_independent_acceptance"],
-            "direct-positive-negative-fault-determinism-and-resource-tests-are-"
-            "required-before-attachment-group-runtime-or-production-binding",
-        )
-        self.assertEqual(
             attachment["generation_fresh_reader_page_set"],
             "union-of-page-support-from-exact-live-attachment-groups-recomputed-"
             "atomically-after-nonlast-cleanup",
@@ -190,12 +185,7 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 "failure_exact_mapped_existing_group"
             ],
         )
-        self.assertEqual(
-            reader_attachment["authorization"]["before_independent_acceptance"],
-            "direct-positive-negative-fault-determinism-and-resource-tests-are-"
-            "required-before-reader-group-runtime-cleanup-production-binding-or-"
-            "native-OK-projection",
-        )
+        self.assertEqual(reader_attachment["public_api"], "unchanged")
         self.assertGreater(
             len(reader_attachment["fail_closed_matrix"]["required"]), 0
         )
@@ -208,16 +198,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         self.assertEqual(
             document_digest(late_close),
             EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST,
-        )
-        self.assertIn(
-            "internal-reader-late-close-cleanup-owner-seal-provenance-drain-"
-            "ack-state-machine",
-            late_close["authorization"]["after_acceptance"],
-        )
-        self.assertIn(
-            "blocked-until-direct-positive-negative-fault-determinism-and-"
-            "resource-tests-pass-for-the-distinct-exact-implementation-complete",
-            late_close["authorization"]["production_activation"],
         )
         self.assertEqual(
             late_close["drain_subledger"]["retained_pins"],
@@ -274,7 +254,7 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         )
         self.assertIn(
             "does-not-authorize-any-reader-writer-close-group",
-            late_close["authorization"]["transitive_authorization"],
+            late_close["scope_boundary"]["transitive_authorization"],
         )
         gate_outcome = lease[
             "writer_gate_outcome_evidence_amendment_proposal"
@@ -510,18 +490,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 fragment,
             )
         self.assertEqual(
-            gate_outcome["authorization"]["production_activation"],
-            "blocked-until-direct-positive-negative-fault-determinism-and-"
-            "resource-tests-pass-for-the-exact-implementation-complete-"
-            "counterexample-matrix-and-production-VFS-public-projection",
-        )
-        self.assertEqual(
-            lease["authorization"]["production_activation"],
-            "blocked-until-direct-positive-negative-fault-determinism-and-"
-            "resource-tests-pass-for-the-exact-implementation-and-complete-"
-            "counterexample-matrix",
-        )
-        self.assertEqual(
             self.contract["format_compatibility"][
                 "sqlite_source_shm_readonly_capability"
             ]["shm_map_state_machine"]["any_native_ok"],
@@ -546,13 +514,13 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
             (
                 "current-rejection",
                 lambda value: value.__setitem__(
-                    "current_rule_before_acceptance",
+                    "unadmitted_native_projection",
                     "allow-native-OK-before-review",
                 ),
             ),
             (
                 "projection",
-                lambda value: value["post_acceptance_native_projection"].__setitem__(
+                lambda value: value["admitted_native_projection"].__setitem__(
                     "outward_result", "exact-SQLITE_OK-plus-pointer"
                 ),
             ),
@@ -567,31 +535,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 "attachment-amendment",
                 lambda value: value.pop(
                     "writer_native_attachment_amendment_proposal"
-                ),
-            ),
-            (
-                "attachment-status-regressed",
-                lambda value: value[
-                    "writer_native_attachment_amendment_proposal"
-                ].__setitem__(
-                    "status", "proposed-unqualified-non-authorizing"
-                ),
-            ),
-            (
-                "attachment-pre-review-implementation-authorized",
-                lambda value: value[
-                    "writer_native_attachment_amendment_proposal"
-                ]["authorization"].__setitem__(
-                    "before_independent_acceptance",
-                    "attachment-group-implementation-authorized",
-                ),
-            ),
-            (
-                "attachment-production-self-authorized",
-                lambda value: value[
-                    "writer_native_attachment_amendment_proposal"
-                ]["authorization"].__setitem__(
-                    "production_activation", "allowed"
                 ),
             ),
             (
@@ -706,12 +649,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 "reader-attachment-proposal-removed",
                 lambda value: value.pop(
                     "reader_native_attachment_amendment_proposal"
-                ),
-            ),
-            (
-                "reader-attachment-status-regressed",
-                lambda value: reader_native_attachment(value).__setitem__(
-                    "status", "proposed-unqualified-non-authorizing"
                 ),
             ),
             (
@@ -838,28 +775,10 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
-                "reader-attachment-production-self-authorized",
-                lambda value: reader_native_attachment(value)[
-                    "authorization"
-                ].__setitem__("production_activation", "allowed"),
-            ),
-            (
                 "reader-late-close-cleanup-proposal-removed",
                 lambda value: value.pop(
                     "reader_late_close_cleanup_amendment_proposal"
                 ),
-            ),
-            (
-                "reader-late-close-cleanup-status-regressed",
-                lambda value: reader_late_close_cleanup(value).__setitem__(
-                    "status", "proposed-unqualified-non-authorizing"
-                ),
-            ),
-            (
-                "reader-late-close-cleanup-production-self-authorized",
-                lambda value: reader_late_close_cleanup(value)[
-                    "authorization"
-                ].__setitem__("production_activation", "allowed"),
             ),
             (
                 "reader-late-close-cleanup-outer-ack-open-ended",
@@ -948,12 +867,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 "gate-outcome-proposal-removed",
                 lambda value: value.pop(
                     "writer_gate_outcome_evidence_amendment_proposal"
-                ),
-            ),
-            (
-                "gate-outcome-status-regressed",
-                lambda value: writer_gate_outcome(value).__setitem__(
-                    "status", "proposed-unqualified-non-authorizing"
                 ),
             ),
             (
@@ -1227,12 +1140,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
-                "gate-outcome-production-self-authorized",
-                lambda value: writer_gate_outcome(value)["authorization"].__setitem__(
-                    "production_activation", "allowed"
-                ),
-            ),
-            (
                 "attachment-untrusted-platform-mints",
                 lambda value: value["two_stage_writer_authority"].__setitem__(
                     "writer_mapping_epoch_failure",
@@ -1244,13 +1151,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 lambda value: value["generation_and_races"].__setitem__(
                     "successor_while_handoff_live",
                     "allow-successor-when-pointer-matches",
-                ),
-            ),
-            (
-                "production-activation",
-                lambda value: value["authorization"].__setitem__(
-                    "production_activation",
-                    "allowed",
                 ),
             ),
         ]
