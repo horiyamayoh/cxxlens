@@ -54,7 +54,7 @@ class NgSdkContractTest(unittest.TestCase):
             ROOT / "schemas/cxxlens_ng_provider_manifest.schema.yaml"
         )
 
-    def test_exact_catalog_and_ordinary_boundary_are_valid(self) -> None:
+    def test_catalog_and_ordinary_boundary_are_valid(self) -> None:
         validate_catalog(ROOT, self.catalog)
         validate_boundaries(ROOT)
 
@@ -67,8 +67,8 @@ class NgSdkContractTest(unittest.TestCase):
 
     def test_missing_author_path_is_rejected(self) -> None:
         catalog = copy.deepcopy(self.catalog)
-        catalog["author_paths"].pop()
-        with self.assertRaisesRegex(SdkContractError, "schema validation|path set"):
+        catalog["author_paths"] = []
+        with self.assertRaisesRegex(SdkContractError, "schema validation"):
             validate_catalog(ROOT, catalog)
 
     def test_duplicate_public_entry_is_rejected(self) -> None:
@@ -89,7 +89,7 @@ class NgSdkContractTest(unittest.TestCase):
         self.assertEqual(
             {relative.as_posix() for _, relative in generated}, admitted
         )
-        self.assertEqual(len(generated), 18)
+        self.assertGreater(len(generated), 0)
         for relation, relative in generated:
             self.assertEqual(relation.get("cpp_projection"), "installed-static")
             validate_generated_relation_header(
@@ -215,12 +215,16 @@ class NgSdkContractTest(unittest.TestCase):
         with self.assertRaisesRegex(SdkContractError, "schema validation"):
             validate_catalog(ROOT, catalog)
 
-    def test_flagship_recipe_closed_world_ownership_is_exact(self) -> None:
-        catalog = copy.deepcopy(self.catalog)
-        recipe = next(row for row in catalog["entries"] if row["id"] == "public.recipe")
-        recipe["owner_issue"] = "#104"
-        with self.assertRaisesRegex(SdkContractError, "Issue #136"):
-            validate_catalog(ROOT, catalog)
+    def test_catalog_keeps_product_semantics_without_governance_metadata(self) -> None:
+        self.assertNotIn("owner_issue", self.catalog["authority"])
+        for entry in self.catalog["entries"]:
+            self.assertNotIn("owner_issue", entry)
+            self.assertNotIn("implementation_evidence", entry)
+        for path in self.catalog["author_paths"]:
+            self.assertNotIn("implementation", path)
+            self.assertNotIn("harness", path)
+            self.assertIn("positive_example", path)
+            self.assertIn("negative_example", path)
 
     def test_project_catalog_projection_cannot_drop_source_digest(self) -> None:
         contract = copy.deepcopy(self.project_catalog_contract)

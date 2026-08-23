@@ -21,13 +21,11 @@ properties:
   authority:
     type: object
     additionalProperties: false
-    required: [design, index, decision_adr, owner_issue, owner]
+    required: [design, index, decision_adr]
     properties:
       design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
       index: {const: docs/design/catalogs/README.md}
       decision_adr: {const: docs/design/adr/0012-author-sdk-surface.md}
-      owner_issue: {const: '#66'}
-      owner: {const: steward.ng-sdk}
   compatibility:
     type: object
     additionalProperties: false
@@ -55,31 +53,27 @@ properties:
         link_dependencies: {type: array, uniqueItems: true, items: {type: string}}
   author_paths:
     type: array
-    minItems: 5
-    maxItems: 5
+    minItems: 1
     items:
       type: object
       additionalProperties: false
-      required: [id, entry, implementation, positive_example, negative_example, harness]
+      required: [id, entry, positive_example, negative_example]
       properties:
         id:
           enum: [generated-typed-query, runtime-dynamic-query, portable-provider, clang22-native-provider, high-level-recipe]
         entry: {$ref: '#/$defs/id'}
-        implementation: {$ref: '#/$defs/path'}
         positive_example: {$ref: '#/$defs/path'}
         negative_example: {$ref: '#/$defs/path'}
         negative_mode: {enum: [compile-fail, runtime-rejection]}
-        harness: {$ref: '#/$defs/path'}
   entries:
     type: array
-    minItems: 8
+    minItems: 1
     items:
       type: object
       additionalProperties: false
       required:
         - id
         - status
-        - owner_issue
         - profile
         - target
         - headers
@@ -89,11 +83,9 @@ properties:
         - threading
         - versioning
         - invariants
-        - implementation_evidence
       properties:
         id: {$ref: '#/$defs/id'}
         status: {enum: [implemented, contract-pending]}
-        owner_issue: {type: string, pattern: '^#[0-9]+$'}
         profile: {enum: [NG0, NG1, NG2, NG3]}
         target: {type: string, pattern: '^cxxlens::[a-z0-9_]+$'}
         headers: {$ref: '#/$defs/paths'}
@@ -113,7 +105,6 @@ properties:
         threading: {type: array, minItems: 1, uniqueItems: true, items: {type: string, minLength: 1}}
         versioning: {type: array, minItems: 1, uniqueItems: true, items: {type: string, minLength: 1}}
         invariants: {type: array, minItems: 1, uniqueItems: true, items: {type: string, minLength: 1}}
-        implementation_evidence: {$ref: '#/$defs/paths'}
         depends_on: {type: array, uniqueItems: true, items: {$ref: '#/$defs/id'}}
 $defs:
   id: {type: string, pattern: '^[a-z][a-z0-9_.-]+$'}

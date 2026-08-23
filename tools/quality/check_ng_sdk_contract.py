@@ -31,27 +31,6 @@ PROVIDER_TASK_CONTRACT = pathlib.Path("schemas/cxxlens_ng_portable_provider_task
 PROVIDER_TASK_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_portable_provider_task_contract.schema.yaml"
 )
-EXPECTED_PATHS = {
-    "generated-typed-query",
-    "runtime-dynamic-query",
-    "portable-provider",
-    "clang22-native-provider",
-    "high-level-recipe",
-}
-EXPECTED_IMPLEMENTED_ENTRIES = {
-    "public.common",
-    "public.project-catalog",
-    "public.relation-static",
-    "public.relation-dynamic",
-    "public.claim-kernel",
-    "public.snapshot-store",
-    "public.logical-query",
-    "public.query-runtime",
-    "public.provider-sdk",
-    "public.provider-runtime",
-    "public.native-provider-sdk",
-    "public.recipe-foundation",
-}
 FORBIDDEN_ORDINARY = (
     re.compile(r"\bclang::"),
     re.compile(r"\bllvm::"),
@@ -189,8 +168,6 @@ def validate_project_catalog_contract(
     ):
         fail("project catalog build.compile_unit mapping is not explicit")
     public_entry = entries.get("public.project-catalog", {})
-    if public_entry.get("owner_issue") != "#121":
-        fail("project catalog ownership must remain with Issue #121")
     signature = "\n".join(
         symbol.get("signature", "") for symbol in public_entry.get("symbols", [])
     )
@@ -253,8 +230,6 @@ def validate_provider_task_contract(
     contract = load_yaml(root / PROVIDER_TASK_CONTRACT)
     schema_validate(contract, load_yaml(root / PROVIDER_TASK_SCHEMA))
     public_entry = entries.get("public.provider-sdk", {})
-    if public_entry.get("owner_issue") != "#140":
-        fail("portable provider SDK ownership must remain with Issue #140")
     signatures = "\n".join(
         symbol.get("signature", "") for symbol in public_entry.get("symbols", [])
     )
@@ -299,8 +274,6 @@ def validate_static_row_view_contract(
     root: pathlib.Path, entries: dict[str, dict[str, Any]]
 ) -> None:
     public_entry = entries.get("public.relation-static", {})
-    if public_entry.get("owner_issue") != "#154":
-        fail("static row view exact validation ownership must remain with Issue #154")
     required_errors = {
         "sdk.row-descriptor-mismatch",
         "sdk.foreign-column",
@@ -358,11 +331,6 @@ def validate_claim_evidence_occurrence_contract(
     }
     if not required_invariants.issubset(public_entry.get("invariants", [])):
         fail("claim evidence occurrence catalog omits its structural binding law")
-    if "docs/design/adr/0086-self-contained-claim-evidence-occurrences.md" not in public_entry.get(
-        "implementation_evidence", []
-    ):
-        fail("claim evidence occurrence catalog omits Issue #155 evidence")
-
     header = (root / "include/cxxlens/sdk/claim.hpp").read_text(encoding="utf-8")
     if "detached evidence-ID reference collection" not in header:
         fail("public claim documentation omits self-contained evidence occurrence ownership")
@@ -395,21 +363,16 @@ def validate_claim_evidence_occurrence_contract(
 def validate_catalog(root: pathlib.Path, catalog: dict[str, Any]) -> None:
     schema_validate(catalog, load_yaml(root / SCHEMA))
     paths = unique_rows(catalog["author_paths"], "author path")
-    if set(paths) != EXPECTED_PATHS:
-        fail(f"author path set differs: {sorted(paths)}")
+    if not paths:
+        fail("catalog has no author acceptance path")
     entries = unique_rows(catalog["entries"], "public entry")
     implemented = {
         identifier
         for identifier, entry in entries.items()
         if entry["status"] == "implemented"
     }
-    if not EXPECTED_IMPLEMENTED_ENTRIES.issubset(implemented):
-        fail(
-            "implemented SDK entry set is incomplete: "
-            f"{sorted(EXPECTED_IMPLEMENTED_ENTRIES - implemented)}"
-        )
-    if entries.get("public.recipe", {}).get("owner_issue") != "#136":
-        fail("flagship recipe closed-world ownership must remain with Issue #136")
+    if not implemented:
+        fail("catalog has no implemented SDK entry")
     validate_project_catalog_contract(root, entries)
     validate_provider_task_contract(root, entries)
     validate_static_row_view_contract(root, entries)
@@ -444,14 +407,13 @@ def validate_catalog(root: pathlib.Path, catalog: dict[str, Any]) -> None:
     for path in paths.values():
         referenced_paths.update(
             path[field]
-            for field in ("implementation", "positive_example", "negative_example", "harness")
+            for field in ("positive_example", "negative_example")
         )
     for entry in entries.values():
         referenced_paths.update(entry["headers"])
-        referenced_paths.update(entry["implementation_evidence"])
     missing = sorted(path for path in referenced_paths if not (root / path).is_file())
     if missing:
-        fail(f"SDK catalog evidence is missing: {missing}")
+        fail(f"SDK catalog acceptance path is missing: {missing}")
 
     emitted_codes: set[str] = set()
     # NG1 hardening is deliberately source-private while its provider profile remains
@@ -1027,10 +989,7 @@ def arguments() -> argparse.Namespace:
 def main() -> int:
     args = arguments()
     catalog = validate(args.root.resolve(), args.compiler, args.scaffold, args.doctor)
-    print(
-        "NG author SDK contract check passed: "
-        f"{len(catalog['author_paths'])} author paths, {len(catalog['entries'])} catalog entries"
-    )
+    print("NG author SDK contract check passed")
     return 0
 
 

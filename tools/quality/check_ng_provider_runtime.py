@@ -2347,8 +2347,8 @@ def validate(root: pathlib.Path) -> None:
     catalog = load(root / "schemas/cxxlens_ng_public_api_catalog.yaml")
     entries = {entry["id"]: entry for entry in catalog["entries"]}
     runtime = entries.get("public.provider-runtime")
-    if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#151":
-        raise ContractError("public.provider-runtime is not an implemented Issue #151 entry")
+    if runtime is None or runtime["status"] != "implemented":
+        raise ContractError("public.provider-runtime is not an implemented catalog entry")
     required_budget_invariants = {
         "shared-validator-enforces-logical-output-bytes-rows-and-diagnostic-records-before-success-adoption",
         "process-port-separately-enforces-wall-cpu-address-space-transport-open-file-and-subprocess-resources",
@@ -2357,11 +2357,6 @@ def validate(root: pathlib.Path) -> None:
     }
     if not required_budget_invariants.issubset(runtime.get("invariants", [])):
         raise ContractError("provider runtime catalog omits Issue #123 budget invariants")
-    if "docs/design/adr/0087-provider-budget-surface-parity.md" not in runtime.get(
-        "implementation_evidence", []
-    ):
-        raise ContractError("provider runtime catalog omits Issue #123 evidence")
-
     header = (root / "include/cxxlens/sdk/provider.hpp").read_text(encoding="utf-8")
     for marker in (
         "address_space_bytes",
@@ -2411,8 +2406,8 @@ def validate(root: pathlib.Path) -> None:
         if marker not in budget_test:
             raise ContractError(f"provider budget acceptance marker is missing: {marker}")
     native = entries.get("public.native-provider-sdk")
-    if native is None or native["status"] != "implemented" or native["owner_issue"] != "#153":
-        raise ContractError("public.native-provider-sdk is not an implemented Issue #153 entry")
+    if native is None or native["status"] != "implemented":
+        raise ContractError("public.native-provider-sdk is not an implemented catalog entry")
 
     namespaces = load(root / "schemas/cxxlens_ng_namespace_registry.yaml")
     if not any(
