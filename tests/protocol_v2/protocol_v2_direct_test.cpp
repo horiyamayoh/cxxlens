@@ -165,6 +165,71 @@ namespace
 		unknown[8U] = byte{0x00};
 		unknown[9U] = byte{0x7f};
 		require_error(cxxlens::protocol_v2::decode_frame(unknown), "unknown message rejected");
+
+		frame optional = input;
+		optional.type = static_cast<message_type>(65'000U);
+		optional.flags = cxxlens::protocol_v2::flag_optional_extension;
+		optional.control = {byte{0x61}, byte{'a'}};
+		optional.payload = payload("optional-payload");
+		auto optional_wire = cxxlens::protocol_v2::encode_frame(optional);
+		require_ok(optional_wire, "canonical unknown optional frame encoding");
+		auto optional_decoded = cxxlens::protocol_v2::decode_frame(*optional_wire);
+		require_ok(optional_decoded, "canonical unknown optional frame decoding");
+		auto optional_stream = cxxlens::protocol_v2::decode_frame_stream(*optional_wire);
+		require_ok(optional_stream, "canonical unknown optional stream decoding");
+		require(static_cast<std::uint16_t>(optional_decoded->type) == 65'000U &&
+					optional_decoded->flags == cxxlens::protocol_v2::flag_optional_extension,
+				"unknown optional identity retained for skip accounting");
+		require(optional_stream->size() == 1U &&
+					static_cast<std::uint16_t>(optional_stream->front().type) == 65'000U,
+				"stream codec did not retain unknown optional frame for accounting");
+
+		auto optional_tampered = *optional_wire;
+		optional_tampered.back() ^= byte{0x01};
+		auto optional_digest_failure = cxxlens::protocol_v2::decode_frame(optional_tampered);
+		require_error(optional_digest_failure, "tampered unknown optional frame rejected");
+		require(optional_digest_failure.error().code == "protocol-v2.digest-mismatch",
+				"unknown optional checksum rejection reason");
+
+		auto noncanonical_optional = *optional_wire;
+		noncanonical_optional[cxxlens::protocol_v2::fixed_header_bytes] = byte{0x78};
+		noncanonical_optional[cxxlens::protocol_v2::fixed_header_bytes + 1U] = byte{0x00};
+		const auto noncanonical_digest =
+			cxxlens::protocol_v2::sha256(std::span<const byte>{noncanonical_optional}.subspan(
+				cxxlens::protocol_v2::fixed_header_bytes, 2U));
+		std::copy(noncanonical_digest.begin(),
+				  noncanonical_digest.end(),
+				  noncanonical_optional.begin() + 40);
+		auto noncanonical_direct = cxxlens::protocol_v2::decode_frame(noncanonical_optional);
+		auto noncanonical_stream = cxxlens::protocol_v2::decode_frame_stream(noncanonical_optional);
+		require_error(noncanonical_direct, "noncanonical unknown optional control rejected");
+		require_error(noncanonical_stream, "stream rejected noncanonical unknown optional control");
+		require(noncanonical_direct.error() == noncanonical_stream.error() &&
+					noncanonical_direct.error().code == "protocol-v2.cbor-invalid",
+				"direct and stream codecs returned the same stable canonical-CBOR reason");
+		auto noncanonical_value = optional;
+		noncanonical_value.control = {byte{0x78}, byte{0x00}};
+		require_error(cxxlens::protocol_v2::encode_frame(noncanonical_value),
+					  "encoder accepted noncanonical unknown optional control");
+
+		auto known_optional = input;
+		known_optional.flags = cxxlens::protocol_v2::flag_optional_extension;
+		require_error(cxxlens::protocol_v2::encode_frame(known_optional),
+					  "known message with optional flag rejected");
+		auto unknown_required = optional;
+		unknown_required.flags = cxxlens::protocol_v2::flag_required_extension;
+		auto required_failure = cxxlens::protocol_v2::encode_frame(unknown_required);
+		require_error(required_failure, "unknown required extension rejected");
+		require(required_failure.error().code == "protocol-v2.unknown-required-extension",
+				"unknown required extension reason");
+		auto compressed = optional;
+		compressed.flags = cxxlens::protocol_v2::flag_compressed_payload;
+		require_error(cxxlens::protocol_v2::encode_frame(compressed),
+					  "compressed unknown frame rejected");
+		auto reserved = optional;
+		reserved.flags = 0x10U;
+		require_error(cxxlens::protocol_v2::encode_frame(reserved),
+					  "reserved frame flags rejected");
 		auto extension = *encoded;
 		extension[10U] = byte{0x80};
 		extension[11U] = byte{0x00};
@@ -174,13 +239,31 @@ namespace
 		cxxlens::protocol_v2::sequence_guard sequence;
 		require_ok(sequence.accept(*decoded), "sequence zero accepted");
 		require_error(sequence.accept(*decoded), "replayed sequence rejected");
+		auto foreign_stream = *decoded;
+		foreign_stream.stream_id = 2U;
+		foreign_stream.sequence = 1U;
+		require_error(sequence.accept(foreign_stream), "cross-stream frame rejected");
 		auto gap = *decoded;
 		gap.sequence = 2U;
 		require_error(sequence.accept(gap), "sequence gap rejected");
-		cxxlens::protocol_v2::credit_window credit{
-			{input.control.size() + input.payload.size(), 1U}};
+		auto next = *decoded;
+		next.sequence = 1U;
+		require_ok(sequence.accept(next),
+				   "failed replay/gap/cross-stream checks did not advance state");
+
+		const auto original_wire_bytes =
+			cxxlens::protocol_v2::fixed_header_bytes + input.control.size() + input.payload.size();
+		cxxlens::protocol_v2::credit_window credit{{original_wire_bytes, 1U}};
 		require_ok(credit.consume(*decoded), "credit consumed");
 		require_error(credit.consume(*decoded), "credit exhaustion rejected");
+		cxxlens::protocol_v2::credit_window short_credit{{optional_wire->size() - 1U, 1U}};
+		require_error(short_credit.consume(*optional_decoded),
+					  "unknown optional frame rejected at exact encoded-byte boundary");
+		cxxlens::protocol_v2::credit_window exact_credit{{optional_wire->size(), 1U}};
+		require_ok(exact_credit.consume(*optional_decoded),
+				   "unknown optional frame accounted with its 104-byte header");
+		require(exact_credit.available().bytes == 0U && exact_credit.available().frames == 0U,
+				"unknown optional credit account was exact");
 	}
 
 	frame closure_frame(const message_type type,
@@ -233,6 +316,24 @@ namespace
 			session, task, task_digest, closure_digest, manifest_digest, 1U};
 		auto transfer = cxxlens::protocol_v2::closure_transfer::create(session_config);
 		require_ok(transfer, "closure transfer creation");
+		auto wrong_stream =
+			closure_frame(message_type::source_closure_manifest, 0U, descriptor_control);
+		wrong_stream.stream_id = 2U;
+		require_error(transfer->accept(wrong_stream), "cross-stream closure descriptor rejected");
+		auto foreign_session_descriptor = descriptor;
+		foreign_session_descriptor.session_id = "provider-session:sha256:" + std::string(64U, '9');
+		require_error(transfer->accept(closure_frame(
+						  message_type::source_closure_manifest,
+						  0U,
+						  closure_control{source_closure_manifest{foreign_session_descriptor}})),
+					  "cross-session closure descriptor rejected");
+		auto foreign_task_descriptor = descriptor;
+		foreign_task_descriptor.task_id = "task:semantic-v2:sha256:" + std::string(64U, '9');
+		require_error(transfer->accept(closure_frame(
+						  message_type::source_closure_manifest,
+						  0U,
+						  closure_control{source_closure_manifest{foreign_task_descriptor}})),
+					  "cross-task closure descriptor rejected");
 		require_ok(transfer->accept(closure_frame(
 					   message_type::source_closure_manifest, 0U, descriptor_control)),
 				   "manifest descriptor accepted");

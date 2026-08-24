@@ -1,5 +1,6 @@
 #include "sdk/provider_protocol_v2_adapter.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -44,6 +45,113 @@ namespace
 	std::string semantic(const char fill)
 	{
 		return "semantic-v2:sha256:" + std::string(64U, fill);
+	}
+
+	void test_single_codec_facade()
+	{
+		frame optional{static_cast<message_type>(65'000U),
+					   7U,
+					   11U,
+					   {std::byte{0x61}, std::byte{'a'}},
+					   {std::byte{'p'}},
+					   protocol_v2_major,
+					   protocol_v2_minor,
+					   static_cast<std::uint16_t>(frame_flag::optional_extension)};
+		auto public_wire = encode_frame(optional);
+		require(public_wire.has_value(), "public facade encoded canonical unknown optional frame");
+
+		cxxlens::protocol_v2::frame native;
+		native.type = static_cast<cxxlens::protocol_v2::message_type>(65'000U);
+		native.stream_id = optional.stream_id;
+		native.sequence = optional.sequence;
+		native.control = optional.control;
+		native.payload = optional.payload;
+		native.flags = cxxlens::protocol_v2::flag_optional_extension;
+		auto native_wire = cxxlens::protocol_v2::encode_frame(native);
+		require(native_wire && *native_wire == *public_wire,
+				"public facade wire bytes diverged from the sole Protocol 2 codec");
+
+		auto decoded = decode_frame(*public_wire);
+		auto decoded_stream = decode_frame_stream(*public_wire);
+		require(decoded && static_cast<std::uint16_t>(decoded->type) == 65'000U &&
+					decoded->stream_id == optional.stream_id &&
+					decoded->sequence == optional.sequence &&
+					decoded->control == optional.control && decoded->payload == optional.payload,
+				"public facade did not retain unknown optional accounting fields");
+		require(decoded_stream && decoded_stream->size() == 1U &&
+					static_cast<std::uint16_t>(decoded_stream->front().type) == 65'000U,
+				"public stream facade did not preserve unknown optional skip accounting");
+		auto zero_frame_limit = decode_frame_stream(*public_wire, {}, 0U);
+		require(!zero_frame_limit && zero_frame_limit.error().code == "provider.stream-invalid",
+				"public facade changed the zero transcript-frame limit reason");
+
+		auto tampered = *public_wire;
+		tampered.back() ^= std::byte{0x01};
+		auto tamper_failure = decode_frame(tampered);
+		require(!tamper_failure && tamper_failure.error().code == "provider.checksum-mismatch",
+				"public facade skipped checksum validation for unknown optional frame");
+
+		auto noncanonical = *public_wire;
+		noncanonical[cxxlens::protocol_v2::fixed_header_bytes] = std::byte{0x78};
+		noncanonical[cxxlens::protocol_v2::fixed_header_bytes + 1U] = std::byte{0x00};
+		const auto digest =
+			cxxlens::protocol_v2::sha256(std::span<const std::byte>{noncanonical}.subspan(
+				cxxlens::protocol_v2::fixed_header_bytes, 2U));
+		std::copy(digest.begin(), digest.end(), noncanonical.begin() + 40);
+		auto direct_failure = decode_frame(noncanonical);
+		auto stream_failure = decode_frame_stream(noncanonical);
+		require(!direct_failure && !stream_failure &&
+					direct_failure.error() == stream_failure.error() &&
+					direct_failure.error().code == "provider.malformed-frame",
+				"public direct/stream facade did not share the canonical-CBOR rejection reason");
+		auto noncanonical_value = optional;
+		noncanonical_value.control = {std::byte{0x78}, std::byte{0x00}};
+		auto encode_canonical_failure = encode_frame(noncanonical_value);
+		require(!encode_canonical_failure &&
+					encode_canonical_failure.error().code == "provider.malformed-frame",
+				"public encoder accepted noncanonical unknown optional control");
+
+		auto known_optional = optional;
+		known_optional.type = message_type::hello;
+		require(!encode_frame(known_optional), "public facade accepted known optional message");
+		auto required = optional;
+		required.flags = static_cast<std::uint16_t>(frame_flag::required_extension);
+		auto required_failure = encode_frame(required);
+		require(!required_failure &&
+					required_failure.error().code == "provider.unknown-required-extension",
+				"public facade changed unknown-required rejection");
+		auto compressed = optional;
+		compressed.flags = static_cast<std::uint16_t>(frame_flag::compressed_payload);
+		auto compressed_failure = encode_frame(compressed);
+		require(!compressed_failure &&
+					compressed_failure.error().code == "provider.unsupported-compression",
+				"public facade accepted compressed payload");
+		auto reserved = optional;
+		reserved.flags = 0x10U;
+		auto reserved_failure = encode_frame(reserved);
+		require(!reserved_failure &&
+					reserved_failure.error().code == "provider.invalid-frame-flags",
+				"public facade accepted reserved flags");
+
+		protocol_limits small;
+		small.max_payload_bytes = 1U;
+		auto oversized = optional;
+		oversized.payload.push_back(std::byte{'q'});
+		auto encode_bound_failure = encode_frame(oversized, small);
+		require(!encode_bound_failure &&
+					encode_bound_failure.error().code == "provider.oversized-payload",
+				"public facade did not reject payload before wire allocation");
+
+		auto declared_oversized = *public_wire;
+		std::fill(declared_oversized.begin() + 32, declared_oversized.begin() + 40, std::byte{});
+		declared_oversized[36U] = std::byte{0x01};
+		declared_oversized[39U] = std::byte{0x01};
+		auto decode_bound_failure = decode_frame(declared_oversized);
+		auto stream_bound_failure = decode_frame_stream(declared_oversized);
+		require(!decode_bound_failure && !stream_bound_failure &&
+					decode_bound_failure.error() == stream_bound_failure.error() &&
+					decode_bound_failure.error().code == "provider.oversized-frame",
+				"declared oversized payload was not rejected consistently before allocation");
 	}
 
 	void test_registry_and_heartbeat()
@@ -344,6 +452,7 @@ namespace
 
 int main()
 {
+	test_single_codec_facade();
 	test_registry_and_heartbeat();
 	test_closure_state();
 	test_runtime_closure_channel();

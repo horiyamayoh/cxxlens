@@ -9,6 +9,19 @@ namespace cxxlens::protocol_v2
 {
 	namespace
 	{
+		struct decoded_header
+		{
+			std::uint16_t major{};
+			std::uint16_t minor{};
+			std::uint16_t type_id{};
+			std::uint16_t flags{};
+			std::uint64_t stream_id{};
+			std::uint64_t sequence{};
+			std::size_t control_size{};
+			std::size_t payload_size{};
+			std::size_t total_size{};
+		};
+
 		[[nodiscard]] sdk::error failure(const std::string_view field,
 										 const std::string_view detail,
 										 const std::string_view code = "protocol-v2.header-invalid")
@@ -41,67 +54,97 @@ namespace cxxlens::protocol_v2
 									   });
 		}
 
-		[[nodiscard]] bool valid_minor(const std::uint16_t minor, const limits bound) noexcept
+		[[nodiscard]] sdk::result<void> validate_limits(const limits bound)
 		{
-			return minor >= bound.minimum_minor && minor <= bound.maximum_minor;
+			if (bound.minimum_minor != 0U || bound.maximum_minor != 0U)
+				return sdk::unexpected(failure(
+					"protocol_minor", "protocol-2.0-only", "protocol-v2.downgrade-rejected"));
+			if (bound.max_control_bytes == 0U || bound.max_payload_bytes == 0U ||
+				bound.max_frame_bytes < fixed_header_bytes ||
+				bound.max_control_bytes > max_control_bytes ||
+				bound.max_payload_bytes > max_payload_bytes ||
+				bound.max_frame_bytes > max_frame_bytes)
+				return sdk::unexpected(
+					failure("limits", "outside-protocol-2-bounds", "protocol-v2.resource-limit"));
+			if ((bound.supported_flags & static_cast<std::uint16_t>(~flag_end_of_stream)) != 0U)
+				return sdk::unexpected(
+					failure("flags", "unsupported-negotiation", "protocol-v2.unknown-extension"));
+			return {};
 		}
 
-		[[nodiscard]] sdk::result<void> validate_header_values(const frame& value,
+		[[nodiscard]] sdk::result<void> validate_header_values(const std::uint16_t major,
+															   const std::uint16_t minor,
+															   const std::uint16_t type_id,
+															   const std::uint16_t flags,
+															   const std::size_t control_size,
+															   const std::size_t payload_size,
 															   const limits bound)
 		{
-			if (value.protocol_major != protocol_major)
+			if (auto valid = validate_limits(bound); !valid)
+				return valid;
+			if (major != protocol_major)
 				return sdk::unexpected(failure("protocol_major",
 											   "downgrade-or-unsupported",
 											   "protocol-v2.downgrade-rejected"));
-			if (value.protocol_minor < bound.minimum_minor ||
-				value.protocol_minor > bound.maximum_minor)
+			if (minor != 0U)
 				return sdk::unexpected(failure("protocol_minor",
 											   "downgrade-or-unnegotiated",
 											   "protocol-v2.downgrade-rejected"));
-			if (!is_known_message_type(value.type))
-				return sdk::unexpected(
-					failure("message_type", "unknown", "protocol-v2.unknown-message"));
-			if ((value.flags & static_cast<std::uint16_t>(~known_flags)) != 0U)
+			const auto known_type = is_known_message_id(type_id);
+			const auto required_extension = (flags & flag_required_extension) != 0U;
+			const auto optional_extension = (flags & flag_optional_extension) != 0U;
+			const auto compressed_payload = (flags & flag_compressed_payload) != 0U;
+			const auto end_of_stream = (flags & flag_end_of_stream) != 0U;
+			if (required_extension)
+				return sdk::unexpected(failure(
+					"flags", "required-extension", "protocol-v2.unknown-required-extension"));
+			if ((flags & static_cast<std::uint16_t>(~known_flags)) != 0U)
 				return sdk::unexpected(
 					failure("flags", "reserved-bit", "protocol-v2.unknown-extension"));
-			if ((value.flags & static_cast<std::uint16_t>(~bound.supported_flags)) != 0U)
-				return sdk::unexpected(
-					failure("flags", "not-negotiated", "protocol-v2.unknown-extension"));
-			if ((value.flags & flag_compressed_payload) != 0U)
+			if (compressed_payload)
 				return sdk::unexpected(failure(
 					"flags", "compression-unimplemented", "protocol-v2.unsupported-compression"));
-			if ((value.flags & (flag_required_extension | flag_optional_extension)) != 0U)
+			if (optional_extension && (known_type || end_of_stream))
+				return sdk::unexpected(failure(
+					"flags", known_type ? "optional-known-type" : "optional-end-of-stream"));
+			if (type_id == 0U || (!known_type && !optional_extension))
 				return sdk::unexpected(
-					failure("flags", "extension-unimplemented", "protocol-v2.unknown-extension"));
-			if ((value.flags & flag_end_of_stream) != 0U &&
-				value.type != message_type::task_complete &&
-				value.type != message_type::task_failed)
+					failure("message_type", "unknown", "protocol-v2.unknown-message"));
+			if (end_of_stream && (bound.supported_flags & flag_end_of_stream) == 0U)
+				return sdk::unexpected(failure(
+					"flags", "end-of-stream-not-negotiated", "protocol-v2.unknown-extension"));
+			if (end_of_stream &&
+				type_id != static_cast<std::uint16_t>(message_type::task_complete) &&
+				type_id != static_cast<std::uint16_t>(message_type::task_failed))
 				return sdk::unexpected(
 					failure("flags", "end-of-stream-message", "protocol-v2.header-invalid"));
-			if (value.control.empty())
+			if (control_size == 0U)
 				return sdk::unexpected(failure("control", "empty", "protocol-v2.cbor-invalid"));
-			if (value.control.size() > bound.max_control_bytes ||
-				value.payload.size() > bound.max_payload_bytes)
+			if (control_size > bound.max_control_bytes)
 				return sdk::unexpected(
-					failure("length", "limit-exceeded", "protocol-v2.resource-limit"));
-			if (value.control.size() > std::numeric_limits<std::uint32_t>::max())
+					failure("control", "limit-exceeded", "protocol-v2.resource-limit"));
+			if (payload_size > bound.max_payload_bytes)
+				return sdk::unexpected(
+					failure("payload", "limit-exceeded", "protocol-v2.resource-limit"));
+			if (control_size > std::numeric_limits<std::uint32_t>::max())
 				return sdk::unexpected(
 					failure("control", "wire-length-overflow", "protocol-v2.resource-limit"));
-			if (value.control.size() >
-				std::numeric_limits<std::size_t>::max() - value.payload.size() - fixed_header_bytes)
+			if (payload_size > std::numeric_limits<std::size_t>::max() - fixed_header_bytes ||
+				control_size >
+					std::numeric_limits<std::size_t>::max() - fixed_header_bytes - payload_size)
 				return sdk::unexpected(failure("length", "overflow", "protocol-v2.resource-limit"));
-			const auto total = fixed_header_bytes + value.control.size() + value.payload.size();
+			const auto total = fixed_header_bytes + control_size + payload_size;
 			if (total > bound.max_frame_bytes)
 				return sdk::unexpected(
 					failure("frame", "limit-exceeded", "protocol-v2.resource-limit"));
-			if (value.type == message_type::heartbeat && !value.payload.empty())
+			if (type_id == heartbeat_message_id && payload_size != 0U)
 				return sdk::unexpected(
 					failure("payload", "heartbeat-must-be-empty", "protocol-v2.header-invalid"));
 			return {};
 		}
 
-		[[nodiscard]] sdk::result<void> validate_canonical_control(const bytes& control,
-																   const limits bound)
+		[[nodiscard]] sdk::result<void>
+		validate_canonical_control(const std::span<const byte> control, const limits bound)
 		{
 			cbor::limits cbor_bound;
 			cbor_bound.max_bytes = bound.max_control_bytes;
@@ -113,7 +156,8 @@ namespace cxxlens::protocol_v2
 				return sdk::unexpected(
 					failure("control", decoded.error().detail, "protocol-v2.cbor-invalid"));
 			auto encoded = cbor::encode(*decoded, cbor_bound);
-			if (!encoded || *encoded != control)
+			if (!encoded || encoded->size() != control.size() ||
+				!std::ranges::equal(*encoded, control))
 				return sdk::unexpected(
 					failure("control", "non-canonical", "protocol-v2.cbor-invalid"));
 			return {};
@@ -125,24 +169,49 @@ namespace cxxlens::protocol_v2
 		}
 
 		[[nodiscard]] sdk::result<void> check_digest(const std::span<const byte> actual,
-													 const digest32& expected,
+													 const std::span<const byte> expected,
 													 const std::string_view field)
 		{
-			if (!digest_equal(sha256(actual), expected))
+			const auto digest = sha256(actual);
+			if (expected.size() != digest.size() || !std::ranges::equal(digest, expected))
 				return sdk::unexpected(failure(field, "mismatch", "protocol-v2.digest-mismatch"));
 			return {};
 		}
 
-		[[nodiscard]] std::size_t frame_size_from_header(const std::span<const byte> input)
+		[[nodiscard]] sdk::result<decoded_header> inspect_header(const std::span<const byte> input,
+																 const limits bound)
 		{
+			if (input.size() < fixed_header_bytes)
+				return sdk::unexpected(failure("header", "truncated"));
+			if (input[0] != byte{'C'} || input[1] != byte{'X'} || input[2] != byte{'X'} ||
+				input[3] != byte{'P'})
+				return sdk::unexpected(failure("magic", "mismatch"));
+			decoded_header output;
+			output.major = static_cast<std::uint16_t>(read_be(input, 4U, 2U));
+			output.minor = static_cast<std::uint16_t>(read_be(input, 6U, 2U));
+			output.type_id = static_cast<std::uint16_t>(read_be(input, 8U, 2U));
+			output.flags = static_cast<std::uint16_t>(read_be(input, 10U, 2U));
+			output.stream_id = read_be(input, 12U, 8U);
+			output.sequence = read_be(input, 20U, 8U);
 			const auto control_length = read_be(input, 28U, 4U);
 			const auto payload_length = read_be(input, 32U, 8U);
-			if (control_length > std::numeric_limits<std::size_t>::max() ||
+			if (control_length > std::numeric_limits<std::size_t>::max() - fixed_header_bytes ||
 				payload_length > std::numeric_limits<std::size_t>::max() - fixed_header_bytes -
 						static_cast<std::size_t>(control_length))
-				return std::numeric_limits<std::size_t>::max();
-			return fixed_header_bytes + static_cast<std::size_t>(control_length) +
-				static_cast<std::size_t>(payload_length);
+				return sdk::unexpected(failure("length", "overflow", "protocol-v2.resource-limit"));
+			output.control_size = static_cast<std::size_t>(control_length);
+			output.payload_size = static_cast<std::size_t>(payload_length);
+			output.total_size = fixed_header_bytes + output.control_size + output.payload_size;
+			if (auto valid = validate_header_values(output.major,
+													output.minor,
+													output.type_id,
+													output.flags,
+													output.control_size,
+													output.payload_size,
+													bound);
+				!valid)
+				return sdk::unexpected(valid.error());
+			return output;
 		}
 
 		// FIPS 180-4 SHA-256, kept local so this bounded slice does not depend on
@@ -294,7 +363,14 @@ namespace cxxlens::protocol_v2
 
 	sdk::result<bytes> encode_frame(const frame& value, const limits bound)
 	{
-		if (auto valid = validate_header_values(value, bound); !valid)
+		if (auto valid = validate_header_values(value.protocol_major,
+												value.protocol_minor,
+												static_cast<std::uint16_t>(value.type),
+												value.flags,
+												value.control.size(),
+												value.payload.size(),
+												bound);
+			!valid)
 			return sdk::unexpected(valid.error());
 		if (auto valid = validate_canonical_control(value.control, bound); !valid)
 			return sdk::unexpected(valid.error());
@@ -328,76 +404,34 @@ namespace cxxlens::protocol_v2
 
 	sdk::result<frame> decode_frame(const std::span<const byte> input, const limits bound)
 	{
-		if (input.size() < fixed_header_bytes)
-			return sdk::unexpected(failure("header", "truncated"));
-		if (input[0] != byte{'C'} || input[1] != byte{'X'} || input[2] != byte{'X'} ||
-			input[3] != byte{'P'})
-			return sdk::unexpected(failure("magic", "mismatch"));
-		const auto major = read_be(input, 4U, 2U);
-		if (major != protocol_major)
-			return sdk::unexpected(failure("protocol_major",
-										   major < protocol_major ? "downgrade" : "unsupported",
-										   "protocol-v2.downgrade-rejected"));
-		const auto minor = static_cast<std::uint16_t>(read_be(input, 6U, 2U));
-		if (!valid_minor(minor, bound))
-			return sdk::unexpected(failure(
-				"protocol_minor", "downgrade-or-unnegotiated", "protocol-v2.downgrade-rejected"));
-		const auto type_id = static_cast<std::uint16_t>(read_be(input, 8U, 2U));
-		if (!is_known_message_id(type_id))
-			return sdk::unexpected(
-				failure("message_type", "unknown", "protocol-v2.unknown-message"));
-		const auto flags = static_cast<std::uint16_t>(read_be(input, 10U, 2U));
-		if ((flags & static_cast<std::uint16_t>(~known_flags)) != 0U ||
-			(flags & static_cast<std::uint16_t>(~bound.supported_flags)) != 0U)
-			return sdk::unexpected(
-				failure("flags", "unknown-or-not-negotiated", "protocol-v2.unknown-extension"));
-		if ((flags & flag_compressed_payload) != 0U)
-			return sdk::unexpected(failure(
-				"flags", "compression-unimplemented", "protocol-v2.unsupported-compression"));
-		if ((flags & (flag_required_extension | flag_optional_extension)) != 0U)
-			return sdk::unexpected(
-				failure("flags", "extension-unimplemented", "protocol-v2.unknown-extension"));
-		const auto control_length = read_be(input, 28U, 4U);
-		const auto payload_length = read_be(input, 32U, 8U);
-		if (control_length > bound.max_control_bytes || payload_length > bound.max_payload_bytes ||
-			control_length > std::numeric_limits<std::size_t>::max() ||
-			payload_length > std::numeric_limits<std::size_t>::max())
-			return sdk::unexpected(
-				failure("length", "limit-exceeded", "protocol-v2.resource-limit"));
-		const auto control_size = static_cast<std::size_t>(control_length);
-		const auto payload_size = static_cast<std::size_t>(payload_length);
-		if (control_size >
-			std::numeric_limits<std::size_t>::max() - fixed_header_bytes - payload_size)
-			return sdk::unexpected(failure("length", "overflow", "protocol-v2.resource-limit"));
-		const auto total = fixed_header_bytes + control_size + payload_size;
-		if (total > bound.max_frame_bytes || total != input.size())
-			return sdk::unexpected(
-				failure("frame", "length-mismatch", "protocol-v2.resource-limit"));
+		auto header = inspect_header(input, bound);
+		if (!header)
+			return sdk::unexpected(header.error());
+		if (header->total_size != input.size())
+			return sdk::unexpected(failure("frame", "length-mismatch"));
+		const auto control = input.subspan(fixed_header_bytes, header->control_size);
+		const auto payload =
+			input.subspan(fixed_header_bytes + header->control_size, header->payload_size);
+		if (auto valid = check_digest(control, input.subspan(40U, 32U), "control"); !valid)
+			return sdk::unexpected(valid.error());
+		if (auto valid = check_digest(payload, input.subspan(72U, 32U), "payload"); !valid)
+			return sdk::unexpected(valid.error());
+		if (auto valid = validate_canonical_control(control, bound); !valid)
+			return sdk::unexpected(valid.error());
+
 		frame output;
-		output.protocol_major = static_cast<std::uint16_t>(major);
-		output.protocol_minor = minor;
-		output.type = static_cast<message_type>(type_id);
-		output.flags = flags;
-		output.stream_id = read_be(input, 12U, 8U);
-		output.sequence = read_be(input, 20U, 8U);
-		output.control.assign(input.begin() + static_cast<std::ptrdiff_t>(fixed_header_bytes),
-							  input.begin() +
-								  static_cast<std::ptrdiff_t>(fixed_header_bytes + control_size));
-		output.payload.assign(input.begin() +
-								  static_cast<std::ptrdiff_t>(fixed_header_bytes + control_size),
-							  input.end());
+		output.protocol_major = header->major;
+		output.protocol_minor = header->minor;
+		output.type = static_cast<message_type>(header->type_id);
+		output.flags = header->flags;
+		output.stream_id = header->stream_id;
+		output.sequence = header->sequence;
+		output.control.assign(control.begin(), control.end());
+		output.payload.assign(payload.begin(), payload.end());
 		std::copy_n(
 			input.begin() + 40, output.control_digest.size(), output.control_digest.begin());
 		std::copy_n(
 			input.begin() + 72, output.payload_digest.size(), output.payload_digest.begin());
-		if (auto valid = validate_header_values(output, bound); !valid)
-			return sdk::unexpected(valid.error());
-		if (auto valid = check_digest(output.control, output.control_digest, "control"); !valid)
-			return sdk::unexpected(valid.error());
-		if (auto valid = check_digest(output.payload, output.payload_digest, "payload"); !valid)
-			return sdk::unexpected(valid.error());
-		if (auto valid = validate_canonical_control(output.control, bound); !valid)
-			return sdk::unexpected(valid.error());
 		return output;
 	}
 
@@ -405,26 +439,30 @@ namespace cxxlens::protocol_v2
 														const limits bound,
 														const std::uint64_t maximum_frames)
 	{
+		if (auto valid = validate_limits(bound); !valid)
+			return sdk::unexpected(valid.error());
 		if (input.empty())
 			return sdk::unexpected(failure("transcript", "empty"));
+		if (maximum_frames == 0U)
+			return sdk::unexpected(failure("maximum_frames", "zero", "protocol-v2.resource-limit"));
 		std::vector<frame> output;
 		output.reserve(std::min<std::size_t>(static_cast<std::size_t>(maximum_frames), 16U));
 		std::size_t offset{};
 		while (offset < input.size())
 		{
-			if (output.size() >= maximum_frames || input.size() - offset < fixed_header_bytes)
-				return sdk::unexpected(failure(
-					"transcript", "frame-count-or-truncation", "protocol-v2.resource-limit"));
-			const auto frame_size = frame_size_from_header(input.subspan(offset));
-			if (frame_size == std::numeric_limits<std::size_t>::max() ||
-				frame_size < fixed_header_bytes || frame_size > input.size() - offset)
+			if (output.size() >= maximum_frames)
 				return sdk::unexpected(
-					failure("transcript", "frame-length", "protocol-v2.resource-limit"));
-			auto decoded = decode_frame(input.subspan(offset, frame_size), bound);
+					failure("transcript", "frame-count", "protocol-v2.resource-limit"));
+			auto header = inspect_header(input.subspan(offset), bound);
+			if (!header)
+				return sdk::unexpected(header.error());
+			if (header->total_size > input.size() - offset)
+				return sdk::unexpected(failure("frame", "length-mismatch"));
+			auto decoded = decode_frame(input.subspan(offset, header->total_size), bound);
 			if (!decoded)
 				return sdk::unexpected(decoded.error());
 			output.push_back(std::move(*decoded));
-			offset += frame_size;
+			offset += header->total_size;
 		}
 		return output;
 	}
@@ -463,11 +501,14 @@ namespace cxxlens::protocol_v2
 		if (available_.frames == 0U)
 			return sdk::unexpected(
 				failure("credit.frames", "exceeded", "protocol-v2.credit-exceeded"));
-		if (value.control.size() > std::numeric_limits<std::uint64_t>::max() - value.payload.size())
+		if (value.payload.size() > std::numeric_limits<std::uint64_t>::max() - fixed_header_bytes ||
+			value.control.size() > std::numeric_limits<std::uint64_t>::max() - fixed_header_bytes -
+					value.payload.size())
 			return sdk::unexpected(
 				failure("credit.bytes", "overflow", "protocol-v2.credit-exceeded"));
-		const auto bytes_used =
-			static_cast<std::uint64_t>(value.control.size() + value.payload.size());
+		const auto bytes_used = static_cast<std::uint64_t>(fixed_header_bytes) +
+			static_cast<std::uint64_t>(value.control.size()) +
+			static_cast<std::uint64_t>(value.payload.size());
 		if (bytes_used > available_.bytes)
 			return sdk::unexpected(
 				failure("credit.bytes", "exceeded", "protocol-v2.credit-exceeded"));

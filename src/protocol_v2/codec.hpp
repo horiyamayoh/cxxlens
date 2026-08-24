@@ -6,8 +6,9 @@
  *
  * Protocol 2 intentionally lives beside, rather than inside, the existing
  * provider runtime.  Its wire contract is fixed at a 104-byte big-endian
- * header and exact major 2.  A caller must explicitly provide a non-zero
- * negotiated minor range when accepting anything other than minor zero.
+ * header and exact version 2.0. Unknown optional message IDs are decoded only
+ * after their complete frame has passed bounds, checksum, and canonical-CBOR
+ * validation so callers can account and skip them without a second codec.
  */
 
 #include <array>
@@ -165,7 +166,7 @@ namespace cxxlens::protocol_v2
 		std::uint64_t next_sequence_{};
 	};
 
-	/** @brief Provider-output credit measured in control+payload bytes and frames. */
+	/** @brief Wire credit measured in complete encoded bytes (104-byte header included). */
 	struct credit
 	{
 		std::uint64_t bytes{};

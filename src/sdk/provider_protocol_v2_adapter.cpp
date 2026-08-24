@@ -6,6 +6,12 @@ namespace cxxlens::sdk::provider::detail
 {
 	namespace
 	{
+		enum class codec_operation : std::uint8_t
+		{
+			encode,
+			decode,
+		};
+
 		[[nodiscard]] error adapter_error(std::string field, std::string detail)
 		{
 			return {"provider.protocol-v2-invalid", std::move(field), std::move(detail)};
@@ -33,7 +39,145 @@ namespace cxxlens::sdk::provider::detail
 			output.payload = value.payload;
 			return output;
 		}
+
+		[[nodiscard]] frame from_protocol_frame(protocol_v2::frame value)
+		{
+			frame output;
+			output.type = static_cast<message_type>(static_cast<std::uint16_t>(value.type));
+			output.stream_id = value.stream_id;
+			output.sequence = value.sequence;
+			output.control = std::move(value.control);
+			output.payload = std::move(value.payload);
+			output.protocol_major = value.protocol_major;
+			output.protocol_minor = value.protocol_minor;
+			output.flags = value.flags;
+			return output;
+		}
+
+		[[nodiscard]] result<protocol_v2::limits>
+		protocol_limits_for_codec(const protocol_limits limits)
+		{
+			if (limits.protocol_major != protocol_v2_major)
+				return cxxlens::sdk::unexpected(
+					error{"provider.protocol-major-mismatch", "major", {}});
+			if (limits.minimum_minor != protocol_v2_minor ||
+				limits.maximum_minor != protocol_v2_minor)
+				return cxxlens::sdk::unexpected(
+					error{"provider.protocol-minor-mismatch", "minor", "protocol-2.0-only"});
+			if (limits.max_control_bytes == 0U || limits.max_payload_bytes == 0U ||
+				limits.max_control_bytes > protocol_v2::max_control_bytes ||
+				limits.max_payload_bytes > protocol_v2::max_payload_bytes)
+				return cxxlens::sdk::unexpected(error{
+					"provider.protocol-state-invalid", "limits", "outside-protocol-2-bounds"});
+			const auto end_of_stream = static_cast<std::uint16_t>(frame_flag::end_of_stream);
+			if ((limits.supported_flags & static_cast<std::uint16_t>(~end_of_stream)) != 0U)
+				return cxxlens::sdk::unexpected(error{
+					"provider.invalid-frame-flags", "supported_flags", "unsupported-negotiation"});
+
+			protocol_v2::limits output;
+			output.minimum_minor = protocol_v2_minor;
+			output.maximum_minor = protocol_v2_minor;
+			output.supported_flags = limits.supported_flags;
+			output.max_control_bytes = limits.max_control_bytes;
+			output.max_payload_bytes = static_cast<std::size_t>(limits.max_payload_bytes);
+			output.max_frame_bytes = protocol_v2::fixed_header_bytes + output.max_control_bytes +
+				output.max_payload_bytes;
+			return output;
+		}
+
+		[[nodiscard]] error map_codec_error(error failure, const codec_operation operation)
+		{
+			if (failure.code == "protocol-v2.downgrade-rejected")
+				return {failure.field == "protocol_major" ? "provider.protocol-major-mismatch"
+														  : "provider.protocol-minor-mismatch",
+						failure.field == "protocol_major" ? "major" : "minor",
+						std::move(failure.detail)};
+			if (failure.code == "protocol-v2.digest-mismatch")
+				return {"provider.checksum-mismatch", "digest", std::move(failure.detail)};
+			if (failure.code == "protocol-v2.cbor-invalid")
+				return {"provider.malformed-frame", "control", std::move(failure.detail)};
+			if (failure.code == "protocol-v2.unknown-required-extension")
+				return {"provider.unknown-required-extension", "flags", std::move(failure.detail)};
+			if (failure.code == "protocol-v2.unsupported-compression")
+				return {"provider.unsupported-compression", "flags", std::move(failure.detail)};
+			if (failure.code == "protocol-v2.unknown-message")
+				return {"provider.unknown-message-type", "type", std::move(failure.detail)};
+			if (failure.code == "protocol-v2.unknown-extension")
+				return {"provider.invalid-frame-flags", "flags", std::move(failure.detail)};
+			if (failure.code == "protocol-v2.resource-limit")
+			{
+				if (failure.field == "limits")
+					return {"provider.protocol-state-invalid", "limits", std::move(failure.detail)};
+				if (failure.field == "maximum_frames")
+					return {"provider.stream-invalid", "maximum_frames", std::move(failure.detail)};
+				if (operation == codec_operation::encode && failure.field == "control")
+					return {"provider.oversized-control", "control", std::move(failure.detail)};
+				if (operation == codec_operation::encode && failure.field == "payload")
+					return {"provider.oversized-payload", "payload", std::move(failure.detail)};
+				return {"provider.oversized-frame", failure.field, std::move(failure.detail)};
+			}
+			if (failure.code == "protocol-v2.header-invalid")
+			{
+				if (failure.field == "header" || failure.field == "frame" ||
+					failure.field == "transcript")
+					return {"provider.truncated-stream", failure.field, std::move(failure.detail)};
+				if (failure.field == "flags")
+					return {"provider.invalid-frame-flags", "flags", std::move(failure.detail)};
+				if (failure.field == "payload")
+					return {
+						"provider.protocol-state-invalid", "heartbeat", std::move(failure.detail)};
+				return {"provider.malformed-frame", failure.field, std::move(failure.detail)};
+			}
+			return {"provider.protocol-v2-invalid",
+					std::move(failure.field),
+					std::move(failure.detail)};
+		}
 	} // namespace
+
+	result<std::vector<std::byte>> encode_provider_protocol_v2_frame(const frame& value,
+																	 const protocol_limits limits)
+	{
+		auto native_limits = protocol_limits_for_codec(limits);
+		if (!native_limits)
+			return cxxlens::sdk::unexpected(std::move(native_limits.error()));
+		auto encoded = protocol_v2::encode_frame(to_protocol_frame(value), *native_limits);
+		if (!encoded)
+			return cxxlens::sdk::unexpected(
+				map_codec_error(std::move(encoded.error()), codec_operation::encode));
+		return std::move(*encoded);
+	}
+
+	result<frame> decode_provider_protocol_v2_frame(const std::span<const std::byte> input,
+													const protocol_limits limits)
+	{
+		auto native_limits = protocol_limits_for_codec(limits);
+		if (!native_limits)
+			return cxxlens::sdk::unexpected(std::move(native_limits.error()));
+		auto decoded = protocol_v2::decode_frame(input, *native_limits);
+		if (!decoded)
+			return cxxlens::sdk::unexpected(
+				map_codec_error(std::move(decoded.error()), codec_operation::decode));
+		return from_protocol_frame(std::move(*decoded));
+	}
+
+	result<std::vector<frame>>
+	decode_provider_protocol_v2_frame_stream(const std::span<const std::byte> input,
+											 const protocol_limits limits,
+											 const std::uint64_t maximum_frames)
+	{
+		auto native_limits = protocol_limits_for_codec(limits);
+		if (!native_limits)
+			return cxxlens::sdk::unexpected(std::move(native_limits.error()));
+		auto decoded = protocol_v2::decode_frame_stream(input, *native_limits, maximum_frames);
+		if (!decoded)
+			return cxxlens::sdk::unexpected(
+				map_codec_error(std::move(decoded.error()), codec_operation::decode));
+		std::vector<frame> output;
+		output.reserve(decoded->size());
+		for (auto& value : *decoded)
+			output.push_back(from_protocol_frame(std::move(value)));
+		return output;
+	}
 
 	result<void> provider_protocol_v2_session::validate() const
 	{
