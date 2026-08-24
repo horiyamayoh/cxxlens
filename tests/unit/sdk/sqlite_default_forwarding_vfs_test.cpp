@@ -154,7 +154,8 @@ namespace
 		};
 		sqlite_connection_lifecycle owner{
 			&connection, successful_close, {{}, {}, {}, std::move(anchor)}};
-		owner.mark_logical_read_exact_empty();
+		if (!owner.mark_logical_read_exact_empty(source_census))
+			return std::nullopt;
 		auto closed = owner.close_exactly_once();
 		if (!std::holds_alternative<sqlite_confirmed_close_token>(closed))
 			return std::nullopt;

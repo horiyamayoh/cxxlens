@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -177,6 +178,51 @@ namespace
 		census.entries[1].role = sqlite_backend_file_role::write_ahead_log;
 		census.entries[2].role = sqlite_backend_file_role::shared_memory;
 		census.entries[3].role = sqlite_backend_file_role::rollback_journal;
+		class test_guard final : public sqlite_source_shm_namespace_guard
+		{
+		  public:
+			explicit test_guard(const sqlite_backend_namespace_census& census)
+				: entries_{census.entries}, identity_{census.parent_namespace_identity}
+			{
+			}
+			[[nodiscard]] std::string_view logical_main_locator() const noexcept override
+			{
+				return "test://main";
+			}
+			[[nodiscard]] std::string_view anchored_main_locator() const noexcept override
+			{
+				return "test://main";
+			}
+			[[nodiscard]] const sqlite_backend_opaque_identity& identity() const noexcept override
+			{
+				return identity_;
+			}
+			[[nodiscard]] result<sqlite_backend_entry_observation>
+			retained_entry(const sqlite_backend_file_role role) const override
+			{
+				for (const auto& entry : entries_)
+					if (entry.role == role)
+						return entry;
+				return unexpected(error{"test.guard", "role", "missing"});
+			}
+			[[nodiscard]] result<void> recheck() const override
+			{
+				return {};
+			}
+			[[nodiscard]] result<void> claim_target_epoch() override
+			{
+				return {};
+			}
+			[[nodiscard]] result<void> finish() override
+			{
+				return {};
+			}
+
+		  private:
+			std::array<sqlite_backend_entry_observation, 4U> entries_;
+			sqlite_backend_opaque_identity identity_;
+		};
+		census.source_shm_guard = std::make_shared<test_guard>(census);
 		return census;
 	}
 
@@ -388,7 +434,8 @@ namespace
 		sqlite_connection_lifecycle owner{&connection,
 										  &successful_close_for_receipt,
 										  {{}, {}, {}, std::static_pointer_cast<const void>(held)}};
-		owner.mark_logical_read_exact_empty();
+		require(owner.mark_logical_read_exact_empty(census),
+				"logical-read classifier did not bind authenticated census");
 		auto close_outcome = owner.close_exactly_once();
 		require(std::holds_alternative<sqlite_confirmed_close_token>(close_outcome),
 				"logical-read test could not obtain a lifecycle close token");
@@ -412,7 +459,8 @@ namespace
 			&replay_connection,
 			&successful_close_for_receipt,
 			{{}, {}, {}, std::static_pointer_cast<const void>(held)}};
-		replay_owner.mark_logical_read_exact_empty();
+		require(replay_owner.mark_logical_read_exact_empty(census),
+				"logical-read replay classifier did not bind authenticated census");
 		auto replay_closed = replay_owner.close_exactly_once();
 		auto replay_token = std::get<sqlite_confirmed_close_token>(std::move(replay_closed));
 		auto replay_terminal = sqlite_logical_read_terminal_issuer::issue(replay_token, census);

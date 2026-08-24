@@ -11,6 +11,7 @@ namespace cxxlens::sdk
 {
 	class store_operation_port;
 	struct sqlite_backend_namespace_census;
+	class sqlite_source_shm_namespace_guard;
 	class sqlite_authenticated_logical_read_terminal;
 	class sqlite_logical_read_receipt;
 
@@ -53,15 +54,22 @@ namespace cxxlens::sdk
 		friend std::optional<class sqlite_logical_read_receipt>
 		seal_sqlite_logical_read_receipt(sqlite_confirmed_close_token&&,
 										 sqlite_authenticated_logical_read_terminal&&) noexcept;
-		explicit sqlite_confirmed_close_token(sqlite_confirmed_close_kind kind,
-											  std::shared_ptr<const void> authority_anchor_pin = {},
-											  std::shared_ptr<const void> lifecycle_identity = {},
-											  bool logical_read_exact_empty = false) noexcept;
+		explicit sqlite_confirmed_close_token(
+			sqlite_confirmed_close_kind kind,
+			std::shared_ptr<const void> authority_anchor_pin = {},
+			std::shared_ptr<const void> lifecycle_identity = {},
+			bool logical_read_exact_empty = false,
+			std::shared_ptr<const void> logical_read_namespace_guard = {},
+			std::shared_ptr<const void> logical_read_capability_token = {},
+			std::shared_ptr<const void> logical_read_parent_identity = {}) noexcept;
 
 		sqlite_confirmed_close_kind kind_{sqlite_confirmed_close_kind::no_connection};
 		std::shared_ptr<const void> authority_anchor_pin_;
 		std::shared_ptr<const void> lifecycle_identity_;
 		bool logical_read_exact_empty_{};
+		std::shared_ptr<const void> logical_read_namespace_guard_;
+		std::shared_ptr<const void> logical_read_capability_token_;
+		std::shared_ptr<const void> logical_read_parent_identity_;
 		bool valid_{true};
 	};
 
@@ -139,10 +147,16 @@ namespace cxxlens::sdk
 
 		sqlite_authenticated_logical_read_terminal(
 			std::shared_ptr<const void> source_anchor_pin,
-			std::shared_ptr<const void> lifecycle_identity) noexcept;
+			std::shared_ptr<const void> lifecycle_identity,
+			std::shared_ptr<const void> logical_read_namespace_guard,
+			std::shared_ptr<const void> logical_read_capability_token,
+			std::shared_ptr<const void> logical_read_parent_identity) noexcept;
 
 		std::shared_ptr<const void> source_anchor_pin_;
 		std::shared_ptr<const void> lifecycle_identity_;
+		std::shared_ptr<const void> logical_read_namespace_guard_;
+		std::shared_ptr<const void> logical_read_capability_token_;
+		std::shared_ptr<const void> logical_read_parent_identity_;
 		bool valid_{true};
 	};
 
@@ -233,7 +247,8 @@ namespace cxxlens::sdk
 		 */
 		[[nodiscard]] void** open_handle_out_parameter() noexcept;
 		/** Mark the currently-open private read as semantically exact-empty before close. */
-		void mark_logical_read_exact_empty() noexcept;
+		[[nodiscard]] bool mark_logical_read_exact_empty(
+			const sqlite_backend_namespace_census& source_census) noexcept;
 		[[nodiscard]] sqlite_connection_close_outcome close_exactly_once() noexcept;
 		/**
 		 * The same one-shot close routed through the neutral Store operation port.  An injected or

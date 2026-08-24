@@ -74,4 +74,15 @@ namespace cxxlens::detail::clang22
 	[[nodiscard]] sdk::result<provider_worker_protocol_v2_launch_envelope>
 	decode_provider_worker_protocol_v2_input(
 		std::istream& input, const sdk::provider::host_transcript_expectation& expected);
+
+	/**
+	 * Read one host transcript from a live pipe and stop at the authenticated close frame.
+	 *
+	 * A process host keeps stdin open while it observes provider output, so waiting for EOF at
+	 * this boundary is a deadlock.  This variant uses the same 104-byte codec and validation as the
+	 * bounded-buffer overload, but treats the validated close frame as the logical input boundary.
+	 */
+	[[nodiscard]] sdk::result<provider_worker_protocol_v2_launch_envelope>
+	decode_provider_worker_protocol_v2_input_until_close(
+		std::istream& input, const sdk::provider::host_transcript_expectation& expected);
 } // namespace cxxlens::detail::clang22

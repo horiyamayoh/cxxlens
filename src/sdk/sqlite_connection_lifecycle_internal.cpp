@@ -25,6 +25,9 @@ namespace cxxlens::sdk
 		std::shared_ptr<state> quarantine_self;
 		std::atomic_bool quarantine_enqueued{false};
 		bool logical_read_exact_empty{};
+		std::shared_ptr<const sqlite_source_shm_namespace_guard> logical_read_namespace_guard;
+		std::shared_ptr<const sqlite_backend_opaque_identity> logical_read_capability_token;
+		std::shared_ptr<const sqlite_backend_opaque_identity> logical_read_parent_identity;
 		// Non-owning link; quarantine_self remains the owner for process lifetime.
 		state* quarantine_next{};
 	};
@@ -39,9 +42,15 @@ namespace cxxlens::sdk
 
 	sqlite_authenticated_logical_read_terminal::sqlite_authenticated_logical_read_terminal(
 		std::shared_ptr<const void> source_anchor_pin,
-		std::shared_ptr<const void> lifecycle_identity) noexcept
+		std::shared_ptr<const void> lifecycle_identity,
+		std::shared_ptr<const void> logical_read_namespace_guard,
+		std::shared_ptr<const void> logical_read_capability_token,
+		std::shared_ptr<const void> logical_read_parent_identity) noexcept
 		: source_anchor_pin_{std::move(source_anchor_pin)},
-		  lifecycle_identity_{std::move(lifecycle_identity)}
+		  lifecycle_identity_{std::move(lifecycle_identity)},
+		  logical_read_namespace_guard_{std::move(logical_read_namespace_guard)},
+		  logical_read_capability_token_{std::move(logical_read_capability_token)},
+		  logical_read_parent_identity_{std::move(logical_read_parent_identity)}
 	{
 	}
 
@@ -49,6 +58,9 @@ namespace cxxlens::sdk
 		sqlite_authenticated_logical_read_terminal&& other) noexcept
 		: source_anchor_pin_{std::move(other.source_anchor_pin_)},
 		  lifecycle_identity_{std::move(other.lifecycle_identity_)},
+		  logical_read_namespace_guard_{std::move(other.logical_read_namespace_guard_)},
+		  logical_read_capability_token_{std::move(other.logical_read_capability_token_)},
+		  logical_read_parent_identity_{std::move(other.logical_read_parent_identity_)},
 		  valid_{std::exchange(other.valid_, false)}
 	{
 	}
@@ -61,13 +73,18 @@ namespace cxxlens::sdk
 			return *this;
 		source_anchor_pin_ = std::move(other.source_anchor_pin_);
 		lifecycle_identity_ = std::move(other.lifecycle_identity_);
+		logical_read_namespace_guard_ = std::move(other.logical_read_namespace_guard_);
+		logical_read_capability_token_ = std::move(other.logical_read_capability_token_);
+		logical_read_parent_identity_ = std::move(other.logical_read_parent_identity_);
 		valid_ = std::exchange(other.valid_, false);
 		return *this;
 	}
 
 	bool sqlite_authenticated_logical_read_terminal::valid() const noexcept
 	{
-		return valid_ && source_anchor_pin_ != nullptr && lifecycle_identity_ != nullptr;
+		return valid_ && source_anchor_pin_ != nullptr && lifecycle_identity_ != nullptr &&
+			logical_read_namespace_guard_ != nullptr && logical_read_capability_token_ != nullptr &&
+			logical_read_parent_identity_ != nullptr;
 	}
 
 	bool sqlite_authenticated_logical_read_terminal::exact_empty() const noexcept
@@ -106,10 +123,25 @@ namespace cxxlens::sdk
 	{
 		if (!close_token.valid() || !close_token.close_was_attempted() ||
 			!close_token.logical_read_exact_empty_ || !close_token.authority_anchor_pin_ ||
-			close_token.lifecycle_identity_ == nullptr)
+			close_token.lifecycle_identity_ == nullptr ||
+			close_token.logical_read_namespace_guard_ == nullptr ||
+			close_token.logical_read_capability_token_ == nullptr ||
+			close_token.logical_read_parent_identity_ == nullptr ||
+			source_census.source_shm_guard == nullptr ||
+			close_token.logical_read_namespace_guard_ !=
+				std::static_pointer_cast<const void>(source_census.source_shm_guard))
 			return std::nullopt;
 		try
 		{
+			const auto* capability = static_cast<const sqlite_backend_opaque_identity*>(
+				close_token.logical_read_capability_token_.get());
+			const auto* parent = static_cast<const sqlite_backend_opaque_identity*>(
+				close_token.logical_read_parent_identity_.get());
+			if (capability == nullptr || parent == nullptr ||
+				*capability != source_census.capability_token ||
+				*parent != source_census.parent_namespace_identity ||
+				!source_census.source_shm_guard->recheck())
+				return std::nullopt;
 			const sqlite_backend_entry_observation* main{};
 			const sqlite_backend_entry_observation* wal{};
 			const sqlite_backend_entry_observation* shm{};
@@ -137,8 +169,12 @@ namespace cxxlens::sdk
 					close_token.authority_anchor_pin_)
 				return std::nullopt;
 			return std::optional<sqlite_authenticated_logical_read_terminal>{
-				sqlite_authenticated_logical_read_terminal{close_token.authority_anchor_pin_,
-														   close_token.lifecycle_identity_}};
+				sqlite_authenticated_logical_read_terminal{
+					close_token.authority_anchor_pin_,
+					close_token.lifecycle_identity_,
+					close_token.logical_read_namespace_guard_,
+					close_token.logical_read_capability_token_,
+					close_token.logical_read_parent_identity_}};
 		}
 		catch (...)
 		{
@@ -229,7 +265,10 @@ namespace cxxlens::sdk
 			!terminal.exact_empty() || terminal.live_custody_count() != 0U ||
 			!terminal.zero_effect_callback_receipt() ||
 			close_token.authority_anchor_pin_ != terminal.source_anchor_pin_ ||
-			close_token.lifecycle_identity_ != terminal.lifecycle_identity_)
+			close_token.lifecycle_identity_ != terminal.lifecycle_identity_ ||
+			close_token.logical_read_namespace_guard_ != terminal.logical_read_namespace_guard_ ||
+			close_token.logical_read_capability_token_ != terminal.logical_read_capability_token_ ||
+			close_token.logical_read_parent_identity_ != terminal.logical_read_parent_identity_)
 			return std::nullopt;
 		const auto exact_empty = terminal.exact_empty();
 		const auto live_custody_count = terminal.live_custody_count();
@@ -256,10 +295,16 @@ namespace cxxlens::sdk
 		const sqlite_confirmed_close_kind kind,
 		std::shared_ptr<const void> authority_anchor_pin,
 		std::shared_ptr<const void> lifecycle_identity,
-		const bool logical_read_exact_empty) noexcept
+		const bool logical_read_exact_empty,
+		std::shared_ptr<const void> logical_read_namespace_guard,
+		std::shared_ptr<const void> logical_read_capability_token,
+		std::shared_ptr<const void> logical_read_parent_identity) noexcept
 		: kind_{kind}, authority_anchor_pin_{std::move(authority_anchor_pin)},
 		  lifecycle_identity_{lifecycle_identity},
-		  logical_read_exact_empty_{logical_read_exact_empty}
+		  logical_read_exact_empty_{logical_read_exact_empty},
+		  logical_read_namespace_guard_{std::move(logical_read_namespace_guard)},
+		  logical_read_capability_token_{std::move(logical_read_capability_token)},
+		  logical_read_parent_identity_{std::move(logical_read_parent_identity)}
 	{
 	}
 
@@ -268,6 +313,9 @@ namespace cxxlens::sdk
 		: kind_{other.kind_}, authority_anchor_pin_{std::move(other.authority_anchor_pin_)},
 		  lifecycle_identity_{other.lifecycle_identity_},
 		  logical_read_exact_empty_{other.logical_read_exact_empty_},
+		  logical_read_namespace_guard_{std::move(other.logical_read_namespace_guard_)},
+		  logical_read_capability_token_{std::move(other.logical_read_capability_token_)},
+		  logical_read_parent_identity_{std::move(other.logical_read_parent_identity_)},
 		  valid_{std::exchange(other.valid_, false)}
 	{
 	}
@@ -281,6 +329,9 @@ namespace cxxlens::sdk
 		authority_anchor_pin_ = std::move(other.authority_anchor_pin_);
 		lifecycle_identity_ = other.lifecycle_identity_;
 		logical_read_exact_empty_ = other.logical_read_exact_empty_;
+		logical_read_namespace_guard_ = std::move(other.logical_read_namespace_guard_);
+		logical_read_capability_token_ = std::move(other.logical_read_capability_token_);
+		logical_read_parent_identity_ = std::move(other.logical_read_parent_identity_);
 		valid_ = std::exchange(other.valid_, false);
 		return *this;
 	}
@@ -397,10 +448,57 @@ namespace cxxlens::sdk
 		return state_ != nullptr && state_->connection == nullptr ? &state_->connection : nullptr;
 	}
 
-	void sqlite_connection_lifecycle::mark_logical_read_exact_empty() noexcept
+	bool sqlite_connection_lifecycle::mark_logical_read_exact_empty(
+		const sqlite_backend_namespace_census& source_census) noexcept
 	{
-		if (state_ != nullptr && state_->connection != nullptr)
+		if (state_ == nullptr || state_->connection == nullptr || source_census.profile.empty() ||
+			source_census.capability_token.bytes.empty() ||
+			source_census.parent_namespace_identity.bytes.empty() ||
+			source_census.source_shm_guard == nullptr || !state_->pins.authority_anchor)
+			return false;
+		try
+		{
+			const sqlite_backend_entry_observation* main{};
+			const sqlite_backend_entry_observation* wal{};
+			const sqlite_backend_entry_observation* shm{};
+			const sqlite_backend_entry_observation* journal{};
+			for (const auto& entry : source_census.entries)
+			{
+				const auto** selected = entry.role == sqlite_backend_file_role::main_database
+					? &main
+					: entry.role == sqlite_backend_file_role::write_ahead_log  ? &wal
+					: entry.role == sqlite_backend_file_role::shared_memory	   ? &shm
+					: entry.role == sqlite_backend_file_role::rollback_journal ? &journal
+																			   : nullptr;
+				if (selected == nullptr || *selected != nullptr)
+					return false;
+				*selected = &entry;
+			}
+			if (main == nullptr || wal == nullptr || shm == nullptr || journal == nullptr ||
+				main->state != sqlite_backend_entry_state::held_regular || !main->held_object ||
+				!main->direct_regular_entry || !main->object_identity ||
+				!main->directory_entry_identity ||
+				wal->state != sqlite_backend_entry_state::absent ||
+				shm->state != sqlite_backend_entry_state::absent ||
+				journal->state != sqlite_backend_entry_state::absent ||
+				std::static_pointer_cast<const void>(main->held_object) !=
+					state_->pins.authority_anchor ||
+				!source_census.source_shm_guard->recheck())
+				return false;
+			state_->logical_read_namespace_guard = source_census.source_shm_guard;
+			state_->logical_read_capability_token =
+				std::make_shared<const sqlite_backend_opaque_identity>(
+					source_census.capability_token);
+			state_->logical_read_parent_identity =
+				std::make_shared<const sqlite_backend_opaque_identity>(
+					source_census.parent_namespace_identity);
 			state_->logical_read_exact_empty = true;
+			return true;
+		}
+		catch (...)
+		{
+			return false;
+		}
 	}
 
 	sqlite_connection_close_outcome sqlite_connection_lifecycle::close_exactly_once() noexcept
@@ -426,11 +524,20 @@ namespace cxxlens::sdk
 				auto anchor = owned->pins.authority_anchor;
 				const auto identity = owned->lifecycle_identity;
 				const auto exact_empty = owned->logical_read_exact_empty;
+				const auto namespace_guard =
+					std::static_pointer_cast<const void>(owned->logical_read_namespace_guard);
+				const auto capability =
+					std::static_pointer_cast<const void>(owned->logical_read_capability_token);
+				const auto parent =
+					std::static_pointer_cast<const void>(owned->logical_read_parent_identity);
 				release_known_safe(owned);
 				return sqlite_confirmed_close_token{sqlite_confirmed_close_kind::sqlite_ok,
 													std::move(anchor),
 													identity,
-													exact_empty};
+													exact_empty,
+													std::move(namespace_guard),
+													std::move(capability),
+													std::move(parent)};
 			}
 			return quarantine(owned, sqlite_connection_quarantine_reason::close_non_ok, code);
 		}
@@ -466,9 +573,20 @@ namespace cxxlens::sdk
 			auto anchor = owned->pins.authority_anchor;
 			const auto identity = owned->lifecycle_identity;
 			const auto exact_empty = owned->logical_read_exact_empty;
+			const auto namespace_guard =
+				std::static_pointer_cast<const void>(owned->logical_read_namespace_guard);
+			const auto capability =
+				std::static_pointer_cast<const void>(owned->logical_read_capability_token);
+			const auto parent =
+				std::static_pointer_cast<const void>(owned->logical_read_parent_identity);
 			release_known_safe(owned);
-			return sqlite_confirmed_close_token{
-				sqlite_confirmed_close_kind::sqlite_ok, std::move(anchor), identity, exact_empty};
+			return sqlite_confirmed_close_token{sqlite_confirmed_close_kind::sqlite_ok,
+												std::move(anchor),
+												identity,
+												exact_empty,
+												std::move(namespace_guard),
+												std::move(capability),
+												std::move(parent)};
 		}
 		return quarantine(owned,
 						  sqlite_connection_quarantine_reason::close_non_ok,

@@ -1025,9 +1025,10 @@ namespace cxxlens::sdk
 			{
 				return connection_.get();
 			}
-			void mark_logical_read_exact_empty() noexcept
+			[[nodiscard]] bool mark_logical_read_exact_empty(
+				const sqlite_backend_namespace_census& source_census) noexcept
 			{
-				connection_.mark_logical_read_exact_empty();
+				return connection_.mark_logical_read_exact_empty(source_census);
 			}
 			[[nodiscard]] const std::shared_ptr<sqlite_api>& api() const noexcept
 			{
@@ -4775,7 +4776,11 @@ namespace cxxlens::sdk
 			}
 			if (!*classification)
 			{
-				output.database->mark_logical_read_exact_empty();
+				if (!output.source_anchor)
+					return unexpected(sqlite_quiescent_observation_failure());
+				if (!output.database->mark_logical_read_exact_empty(
+						output.source_anchor->namespace_census))
+					return unexpected(sqlite_effect_gate_failure());
 				if (auto stable = finish_private_read(output, path, *observation, true); !stable)
 					return unexpected(std::move(stable.error()));
 				return unexpected(sqlite_wal_only_unrecognized());
@@ -5625,7 +5630,9 @@ namespace cxxlens::sdk
 			{
 				if (!output.source_anchor)
 					return unexpected(sqlite_quiescent_observation_failure());
-				output.database->mark_logical_read_exact_empty();
+				if (!output.database->mark_logical_read_exact_empty(
+						output.source_anchor->namespace_census))
+					return unexpected(sqlite_effect_gate_failure());
 				if (auto stable = finish_private_read(output, path, *observation, true); !stable)
 					return unexpected(std::move(stable.error()));
 				if (!output.private_read_close_token)
