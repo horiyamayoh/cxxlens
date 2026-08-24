@@ -102,6 +102,21 @@ add_test(NAME unit.sdk-store COMMAND cxxlens-unit-sdk-store)
 set_tests_properties(
   unit.sdk-store PROPERTIES LABELS "unit;sdk;store;transaction" RUN_SERIAL TRUE)
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-store-operation-port
+                            unit/sdk/store_operation_port_test.cpp)
+target_sources(cxxlens-unit-sdk-store-operation-port
+               PRIVATE support/store_operation_test_adapter.cpp)
+target_link_libraries(cxxlens-unit-sdk-store-operation-port
+                      PRIVATE cxxlens::kernel)
+target_include_directories(
+  cxxlens-unit-sdk-store-operation-port
+  PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/tests/support")
+add_test(NAME unit.sdk-store-operation-port
+         COMMAND cxxlens-unit-sdk-store-operation-port)
+set_tests_properties(
+  unit.sdk-store-operation-port
+  PROPERTIES LABELS "unit;sdk;store;operation-port;fault;determinism")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-disposable-qualification
                             unit/sdk/sqlite_disposable_qualification_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-sqlite-disposable-qualification
@@ -524,6 +539,22 @@ set_tests_properties(
     LABELS
     "unit;sdk;provider;process;sandbox;security;budget;cancellation;slow"
     PROCESSORS 2)
+
+cxxlens_add_test_executable(
+  cxxlens-unit-sdk-provider-expected-output-validator
+  unit/sdk/provider_expected_output_validator_test.cpp)
+target_link_libraries(
+  cxxlens-unit-sdk-provider-expected-output-validator
+  PRIVATE cxxlens_provider_expected_output_validator_internal)
+target_include_directories(cxxlens-unit-sdk-provider-expected-output-validator
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-provider-expected-output-validator
+         COMMAND cxxlens-unit-sdk-provider-expected-output-validator)
+set_tests_properties(
+  unit.sdk-provider-expected-output-validator
+  PROPERTIES
+    LABELS
+    "unit;sdk;provider;protocol;expected-output;validation;security;bounded")
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
    AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD_WAITID)
   # The regression exercises several fork/watcher/cleanup sequences whose own
@@ -830,8 +861,10 @@ set_tests_properties(
 cxxlens_add_test_executable(
   cxxlens-clang22-materialization-store-outcome
   adapter/clang22/materialization_store_outcome_test.cpp)
-target_link_libraries(cxxlens-clang22-materialization-store-outcome
-                      PRIVATE cxxlens_clang22_materializer_store_outcome_support)
+target_link_libraries(
+  cxxlens-clang22-materialization-store-outcome
+  PRIVATE cxxlens_clang22_materializer_store_outcome_support
+          cxxlens_clang22_materializer_v4_reuse_support)
 add_test(NAME adapter.clang22-materialization-store-outcome
          COMMAND cxxlens-clang22-materialization-store-outcome)
 set_tests_properties(
@@ -1249,6 +1282,51 @@ set_tests_properties(
 )
 
 cxxlens_add_test_executable(
+  cxxlens-clang22-provider-worker-v4-output-normalizer
+  adapter/clang22/provider_worker_v4_output_normalizer_test.cpp)
+target_link_libraries(cxxlens-clang22-provider-worker-v4-output-normalizer
+                      PRIVATE cxxlens_clang22_worker_core)
+if(CXXLENS_BUILD_SHARED)
+  target_sources(cxxlens-clang22-provider-worker-v4-output-normalizer
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
+if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG22_LIBRARY_DIRS)
+  list(GET CXXLENS_CLANG22_LIBRARY_DIRS 0 _cxxlens_v4_normalizer_lib_dir)
+  get_filename_component(_cxxlens_v4_normalizer_llvm_root
+                         "${_cxxlens_v4_normalizer_lib_dir}" DIRECTORY)
+  find_program(
+    _cxxlens_v4_normalizer_clangxx
+    NAMES clang++-22 clang++
+    PATHS "${_cxxlens_v4_normalizer_llvm_root}/bin"
+    NO_DEFAULT_PATH NO_CACHE)
+  if(_cxxlens_v4_normalizer_clangxx)
+    execute_process(
+      COMMAND "${_cxxlens_v4_normalizer_clangxx}" -print-resource-dir
+      OUTPUT_VARIABLE _cxxlens_v4_normalizer_resource_dir
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    target_compile_definitions(
+      cxxlens-clang22-provider-worker-v4-output-normalizer
+      PRIVATE
+        CXXLENS_TEST_CLANG22_ROOT="${_cxxlens_v4_normalizer_llvm_root}"
+        CXXLENS_TEST_CLANGXX22_PATH="${_cxxlens_v4_normalizer_clangxx}"
+        CXXLENS_TEST_CLANG22_RESOURCE_DIR="${_cxxlens_v4_normalizer_resource_dir}"
+    )
+  endif()
+  unset(_cxxlens_v4_normalizer_lib_dir)
+  unset(_cxxlens_v4_normalizer_llvm_root)
+  unset(_cxxlens_v4_normalizer_clangxx)
+  unset(_cxxlens_v4_normalizer_resource_dir)
+endif()
+add_test(NAME adapter.clang22-provider-worker-v4-output-normalizer
+         COMMAND cxxlens-clang22-provider-worker-v4-output-normalizer)
+set_tests_properties(
+  adapter.clang22-provider-worker-v4-output-normalizer
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;task;v4;worker;output;normalization;security;bounded"
+)
+
+cxxlens_add_test_executable(
   cxxlens-clang22-provider-worker-v4-claim-bridge
   adapter/clang22/provider_worker_v4_claim_bridge_test.cpp)
 target_link_libraries(
@@ -1539,6 +1617,16 @@ foreach(
                        PROPERTIES LABELS "quality;ng;contract")
 endforeach()
 
+# This focused test exercises the production-boundary checker itself. The full
+# BUILD_TESTING=ON/OFF build/install comparison is orchestrated once by the
+# static installed-consumer workflow and is intentionally not recursive CTest.
+add_test(
+  NAME quality.production-boundary-self-test
+  COMMAND "${Python3_EXECUTABLE}"
+          "${PROJECT_SOURCE_DIR}/tests/quality/test_production_boundary.py")
+set_tests_properties(quality.production-boundary-self-test
+                     PROPERTIES LABELS "quality;security;production-boundary")
+
 add_test(
   NAME sdk.doctor-product
   COMMAND
@@ -1642,6 +1730,7 @@ add_dependencies(
   cxxlens-clang22-source-closure-native
   cxxlens-clang22-provider-worker-v4
   cxxlens-clang22-provider-worker-v4-ast-observer
+  cxxlens-clang22-provider-worker-v4-output-normalizer
   cxxlens-clang22-provider-worker-v4-claim-bridge
   cxxlens-clang22-provider-worker-channel
   cxxlens-r2-vertical-slice
@@ -1652,6 +1741,7 @@ add_dependencies(
   cxxlens-public-header-sdk
   cxxlens-unit-sdk
   cxxlens-unit-sdk-provider-runtime
+  cxxlens-unit-sdk-provider-expected-output-validator
   cxxlens-unit-sdk-provider-ng1-validation
   cxxlens-unit-sdk-provider-ng1-spill-port
   cxxlens-unit-sdk-provider-ng1-transport
@@ -1681,6 +1771,7 @@ add_dependencies(
   cxxlens-unit-sdk-sqlite-wal-recovery-workspace
   cxxlens-unit-sdk-sqlite-wal-receipt
   cxxlens-unit-sdk-store
+  cxxlens-unit-sdk-store-operation-port
   cxxlens-unit-sdk-sqlite-writer-gate-outcome
   cxxlens-df0200-claim-batch-corpus
   cxxlens-sdk-example-typed_query
