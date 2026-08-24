@@ -2361,23 +2361,108 @@ namespace
 			{"company.example.provider", "portable", "company.example.relation"});
 		auto native = cxxlens::sdk::provider::make_scaffold(
 			{"company.example.native", "clang22-native", "company.example.relation"});
-		require(portable && native && portable->size() == 5U && native->size() == 5U,
-				"provider scaffold is incomplete");
-		const auto portable_manifest =
-			std::ranges::find(*portable,
-							  std::string{"provider-manifest.json"},
-							  &cxxlens::sdk::provider::scaffold_file::relative_path);
-		const auto native_cmake =
-			std::ranges::find(*native,
-							  std::string{"CMakeLists.txt"},
-							  &cxxlens::sdk::provider::scaffold_file::relative_path);
-		require(portable_manifest != portable->end() &&
-					portable_manifest->content.contains("cxxlens.provider-manifest.v1") &&
-					portable_manifest->content.contains(R"("provider_version":"1.0.0")") &&
-					!portable_manifest->content.contains(R"("provider_version":"0.)") &&
-					native_cmake != native->end() &&
-					native_cmake->content.contains("cxxlens::clang22_provider_sdk"),
-				"provider scaffold package/runtime-valid manifest contract diverged");
+		require(portable && native, "provider scaffold generation failed");
+		const auto find_scaffold_file =
+			[](const std::vector<cxxlens::sdk::provider::scaffold_file>& files,
+			   const std::string_view path)
+			-> std::vector<cxxlens::sdk::provider::scaffold_file>::const_iterator
+		{
+			return std::ranges::find(
+				files, path, &cxxlens::sdk::provider::scaffold_file::relative_path);
+		};
+		const auto require_scaffold_shape = [&](const auto& files, const std::string_view label)
+		{
+			// These are the files needed to build and inspect a provider. Additional generated
+			// files remain forward-compatible and must not make this check fail.
+			const std::array required_files{std::string_view{"CMakeLists.txt"},
+											std::string_view{"provider-manifest.json"},
+											std::string_view{"src/main.cpp"},
+											std::string_view{"tests/provider_test.cpp"},
+											std::string_view{"README.md"}};
+			for (const auto path : required_files)
+			{
+				const auto first = find_scaffold_file(files, path);
+				require(first != files.end(),
+						std::string{label} + " scaffold is missing " + std::string{path});
+				require(std::ranges::count(
+							files, path, &cxxlens::sdk::provider::scaffold_file::relative_path) ==
+							1,
+						std::string{label} + " scaffold duplicates " + std::string{path});
+			}
+		};
+		require_scaffold_shape(*portable, "portable");
+		require_scaffold_shape(*native, "native");
+
+		const auto portable_cmake = find_scaffold_file(*portable, "CMakeLists.txt");
+		const auto portable_manifest = find_scaffold_file(*portable, "provider-manifest.json");
+		const auto portable_main = find_scaffold_file(*portable, "src/main.cpp");
+		const auto portable_test = find_scaffold_file(*portable, "tests/provider_test.cpp");
+		const auto portable_readme = find_scaffold_file(*portable, "README.md");
+		const auto native_cmake = find_scaffold_file(*native, "CMakeLists.txt");
+		const auto native_manifest = find_scaffold_file(*native, "provider-manifest.json");
+		const auto native_main = find_scaffold_file(*native, "src/main.cpp");
+		const auto native_test = find_scaffold_file(*native, "tests/provider_test.cpp");
+		const auto native_readme = find_scaffold_file(*native, "README.md");
+		const auto check_common_content = [&](const auto cmake,
+											  const auto manifest_file,
+											  const auto main_file,
+											  const auto test_file,
+											  const auto readme_file,
+											  const std::string_view provider_id,
+											  const std::string_view relation_name)
+		{
+			require(
+				cmake->content.contains("cmake_minimum_required(VERSION 3.25)") &&
+					cmake->content.contains("LANGUAGES CXX") &&
+					cmake->content.contains("add_executable(provider src/main.cpp)") &&
+					cmake->content.contains("target_compile_features(provider PRIVATE cxx_std_23)"),
+				"provider scaffold build contract diverged");
+			require(
+				manifest_file->content.ends_with('\n') &&
+					manifest_file->content.contains(
+						"\"schema\":\"cxxlens.provider-manifest.v1\"") &&
+					manifest_file->content.contains("\"provider_id\":\"" +
+													std::string{provider_id} + "\"") &&
+					manifest_file->content.contains(R"("provider_version":"1.0.0")") &&
+					manifest_file->content.contains(R"("protocol_range":{"major":2)") &&
+					manifest_file->content.contains(
+						R"("required_features":["credit-backpressure","task-input-chunks-v2"])") &&
+					manifest_file->content.contains("\"offered_relations\":[\"" +
+													std::string{relation_name} + "\"]") &&
+					manifest_file->content.contains(
+						R"("task_stage":{"input":"observation","output":"assertion"})"),
+				"provider scaffold manifest semantics diverged");
+			require(main_file->content.contains("#include ") &&
+						main_file->content.contains("run_worker") &&
+						main_file->content.contains("framing, credit, and checksums are SDK-owned"),
+					"provider scaffold runtime entrypoint contract diverged");
+			require(test_file->content.contains("#include <cxxlens/sdk/provider.hpp>") &&
+						test_file->content.contains("int main()"),
+					"provider scaffold test entrypoint contract diverged");
+			require(readme_file->content.contains(std::string{provider_id}) &&
+						readme_file->content.contains(std::string{"`"} +
+													  std::string{relation_name} + "`"),
+					"provider scaffold documentation contract diverged");
+		};
+		check_common_content(portable_cmake,
+							 portable_manifest,
+							 portable_main,
+							 portable_test,
+							 portable_readme,
+							 "company.example.provider",
+							 "company.example.relation");
+		check_common_content(native_cmake,
+							 native_manifest,
+							 native_main,
+							 native_test,
+							 native_readme,
+							 "company.example.native",
+							 "company.example.relation");
+		require(portable_cmake->content.contains("cxxlens::provider_sdk") &&
+					portable_main->content.contains("<cxxlens/sdk.hpp>") &&
+					native_cmake->content.contains("cxxlens::clang22_provider_sdk") &&
+					native_main->content.contains("<cxxlens/provider/clang22.hpp>"),
+				"provider scaffold package/runtime adapter contract diverged");
 
 		coverage_provider implementation;
 		auto task = make_provider_task(implementation,
