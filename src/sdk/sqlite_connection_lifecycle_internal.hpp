@@ -10,6 +10,9 @@
 namespace cxxlens::sdk
 {
 	class store_operation_port;
+	struct sqlite_backend_namespace_census;
+	class sqlite_authenticated_logical_read_terminal;
+	class sqlite_logical_read_receipt;
 
 	using sqlite_close_v2_callback = int (*)(void*);
 
@@ -40,14 +43,25 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool valid() const noexcept;
 		[[nodiscard]] sqlite_confirmed_close_kind kind() const noexcept;
 		[[nodiscard]] bool close_was_attempted() const noexcept;
+		[[nodiscard]] bool logical_read_exact_empty() const noexcept;
 		/** Consume this one-shot close proof at the next authenticated handoff boundary. */
 		[[nodiscard]] bool consume() noexcept;
 
 	  private:
 		friend class sqlite_connection_lifecycle;
-		explicit sqlite_confirmed_close_token(sqlite_confirmed_close_kind kind) noexcept;
+		friend class sqlite_logical_read_terminal_issuer;
+		friend std::optional<class sqlite_logical_read_receipt>
+		seal_sqlite_logical_read_receipt(sqlite_confirmed_close_token&&,
+										 sqlite_authenticated_logical_read_terminal&&) noexcept;
+		explicit sqlite_confirmed_close_token(sqlite_confirmed_close_kind kind,
+											  std::shared_ptr<const void> authority_anchor_pin = {},
+											  std::shared_ptr<const void> lifecycle_identity = {},
+											  bool logical_read_exact_empty = false) noexcept;
 
 		sqlite_confirmed_close_kind kind_{sqlite_confirmed_close_kind::no_connection};
+		std::shared_ptr<const void> authority_anchor_pin_;
+		std::shared_ptr<const void> lifecycle_identity_;
+		bool logical_read_exact_empty_{};
 		bool valid_{true};
 	};
 
@@ -123,15 +137,12 @@ namespace cxxlens::sdk
 		seal_sqlite_logical_read_receipt(sqlite_confirmed_close_token&&,
 										 sqlite_authenticated_logical_read_terminal&&) noexcept;
 
-		sqlite_authenticated_logical_read_terminal(std::shared_ptr<const void> source_anchor_pin,
-												   bool exact_empty,
-												   std::size_t live_custody_count,
-												   bool zero_effect_callback_receipt) noexcept;
+		sqlite_authenticated_logical_read_terminal(
+			std::shared_ptr<const void> source_anchor_pin,
+			std::shared_ptr<const void> lifecycle_identity) noexcept;
 
 		std::shared_ptr<const void> source_anchor_pin_;
-		bool exact_empty_{};
-		std::size_t live_custody_count_{};
-		bool zero_effect_callback_receipt_{};
+		std::shared_ptr<const void> lifecycle_identity_;
 		bool valid_{true};
 	};
 
@@ -140,10 +151,8 @@ namespace cxxlens::sdk
 	{
 	  public:
 		[[nodiscard]] static std::optional<sqlite_authenticated_logical_read_terminal>
-		issue(std::shared_ptr<const void> source_anchor_pin,
-			  bool exact_empty,
-			  std::size_t live_custody_count,
-			  bool zero_effect_callback_receipt) noexcept;
+		issue(const sqlite_confirmed_close_token& close_token,
+			  const sqlite_backend_namespace_census& source_census) noexcept;
 	};
 
 	/**
@@ -223,6 +232,8 @@ namespace cxxlens::sdk
 		 * Construct the lifecycle before calling SQLite so even a non-OK/non-null result is owned.
 		 */
 		[[nodiscard]] void** open_handle_out_parameter() noexcept;
+		/** Mark the currently-open private read as semantically exact-empty before close. */
+		void mark_logical_read_exact_empty() noexcept;
 		[[nodiscard]] sqlite_connection_close_outcome close_exactly_once() noexcept;
 		/**
 		 * The same one-shot close routed through the neutral Store operation port.  An injected or

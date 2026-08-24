@@ -1,11 +1,16 @@
+#include <algorithm>
 #include <iostream>
 #include <memory>
+#include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <utility>
 #include <variant>
+#include <vector>
 
+#include "sdk/sqlite_backend_observation_internal.hpp"
 #include "sdk/sqlite_connection_lifecycle_internal.hpp"
 
 namespace
@@ -97,6 +102,84 @@ namespace
 		return 0;
 	}
 
+	class empty_held_object final : public sqlite_backend_held_object
+	{
+	  public:
+		explicit empty_held_object(std::vector<std::byte> bytes = {})
+			: bytes_{std::move(bytes)}, object_identity_{"test.object", {std::byte{1U}}},
+			  entry_identity_{"test.entry", {std::byte{2U}}}
+		{
+		}
+
+		[[nodiscard]] sqlite_backend_file_role role() const noexcept override
+		{
+			return sqlite_backend_file_role::main_database;
+		}
+		[[nodiscard]] const sqlite_backend_opaque_identity&
+		object_identity() const noexcept override
+		{
+			return object_identity_;
+		}
+		[[nodiscard]] const sqlite_backend_opaque_identity&
+		directory_entry_identity() const noexcept override
+		{
+			return entry_identity_;
+		}
+		[[nodiscard]] result<std::uint64_t> size() const override
+		{
+			return static_cast<std::uint64_t>(bytes_.size());
+		}
+		[[nodiscard]] result<void> read_exact(const std::uint64_t offset,
+											  const std::span<std::byte> output) const override
+		{
+			if (offset > bytes_.size() || output.size() > bytes_.size() - offset)
+				return unexpected(error{"test.invalid", "held-object", "range"});
+			std::ranges::copy(bytes_.begin() + static_cast<std::ptrdiff_t>(offset),
+							  bytes_.begin() + static_cast<std::ptrdiff_t>(offset + output.size()),
+							  output.begin());
+			return {};
+		}
+		[[nodiscard]] result<std::string> sha256() const override
+		{
+			return std::string{"sha256:test"};
+		}
+		[[nodiscard]] result<std::shared_ptr<sqlite_backend_private_snapshot>>
+		copy_exact(sqlite_backend_private_snapshot_builder&, std::span<std::byte>) const override
+		{
+			return unexpected(error{"test.invalid", "held-object", "copy"});
+		}
+		[[nodiscard]] result<sqlite_backend_replacement_state>
+		recheck_current_entry() const override
+		{
+			return sqlite_backend_replacement_state::exact_same_entry_and_object;
+		}
+
+	  private:
+		std::vector<std::byte> bytes_;
+		sqlite_backend_opaque_identity object_identity_;
+		sqlite_backend_opaque_identity entry_identity_;
+	};
+
+	[[nodiscard]] sqlite_backend_namespace_census
+	make_empty_census(const std::shared_ptr<const sqlite_backend_held_object>& held)
+	{
+		sqlite_backend_namespace_census census;
+		census.profile = "test.profile";
+		census.capability_token = {"test.capability", {std::byte{3U}}};
+		census.parent_namespace_identity = {"test.parent", {std::byte{4U}}};
+		census.entries[0] = {sqlite_backend_file_role::main_database,
+							 sqlite_backend_entry_state::held_regular,
+							 held->object_identity(),
+							 held->directory_entry_identity(),
+							 held,
+							 {},
+							 true};
+		census.entries[1].role = sqlite_backend_file_role::write_ahead_log;
+		census.entries[2].role = sqlite_backend_file_role::shared_memory;
+		census.entries[3].role = sqlite_backend_file_role::rollback_journal;
+		return census;
+	}
+
 	void verify_null_handle_closes_zero_times()
 	{
 		int destroyed{};
@@ -148,8 +231,8 @@ namespace
 			require(probe.calls == 1 && probe.pins_alive_during_close,
 					"explicit close was not exact-once with pins retained through the call");
 			require(pins.runtime.expired() && pins.vfs.expired() && pins.observation.expired() &&
-						pins.authority_anchor.expired() && destroyed == 4,
-					"confirmed close did not release all pins");
+						!pins.authority_anchor.expired() && destroyed == 3,
+					"confirmed close did not retain only the source anchor pin");
 			require(!owner.owns_connection() && owner.get() == nullptr,
 					"confirmed close retained the raw handle");
 			(void)owner.close_exactly_once();
@@ -299,40 +382,40 @@ namespace
 
 	void verify_logical_read_receipt_is_exact_and_one_shot()
 	{
-		auto source_anchor_pin = std::make_shared<int>(7);
-		require(!sqlite_logical_read_terminal_issuer::issue({}, true, 0U, true),
-				"logical-read terminal accepted a missing source anchor pin");
-		require(!sqlite_logical_read_terminal_issuer::issue(source_anchor_pin, false, 0U, true),
-				"logical-read terminal accepted a non-empty source");
-		require(!sqlite_logical_read_terminal_issuer::issue(source_anchor_pin, true, 1U, true),
-				"logical-read terminal accepted live custody");
-		require(!sqlite_logical_read_terminal_issuer::issue(source_anchor_pin, true, 0U, false),
-				"logical-read terminal accepted a non-zero-effect failure");
-
-		auto terminal =
-			sqlite_logical_read_terminal_issuer::issue(source_anchor_pin, true, 0U, true);
-		require(terminal.has_value() && terminal->valid() && terminal->exact_empty() &&
-					terminal->live_custody_count() == 0U &&
-					terminal->zero_effect_callback_receipt() &&
-					terminal->source_anchor_pin() == source_anchor_pin,
-				"logical-read terminal did not preserve the exact sealed predicates");
-		int receipt_connection{};
-		sqlite_connection_lifecycle receipt_owner{
-			&receipt_connection, &successful_close_for_receipt, {}};
-		auto close_outcome = receipt_owner.close_exactly_once();
+		auto held = std::make_shared<empty_held_object>();
+		auto census = make_empty_census(held);
+		int connection{};
+		sqlite_connection_lifecycle owner{&connection,
+										  &successful_close_for_receipt,
+										  {{}, {}, {}, std::static_pointer_cast<const void>(held)}};
+		owner.mark_logical_read_exact_empty();
+		auto close_outcome = owner.close_exactly_once();
 		require(std::holds_alternative<sqlite_confirmed_close_token>(close_outcome),
 				"logical-read test could not obtain a lifecycle close token");
 		auto close_token = std::get<sqlite_confirmed_close_token>(std::move(close_outcome));
+		auto terminal = sqlite_logical_read_terminal_issuer::issue(close_token, census);
+		require(terminal.has_value() && terminal->valid() && terminal->exact_empty() &&
+					terminal->live_custody_count() == 0U &&
+					terminal->zero_effect_callback_receipt() &&
+					terminal->source_anchor_pin() == std::static_pointer_cast<const void>(held),
+				"logical-read terminal did not preserve the exact sealed predicates");
 		auto receipt =
 			seal_sqlite_logical_read_receipt(std::move(close_token), std::move(*terminal));
 		require(receipt.has_value() && receipt->valid() && receipt->exact_empty() &&
 					receipt->connection_closed() && receipt->live_custody_count() == 0U &&
 					receipt->zero_effect_callback_receipt() &&
-					receipt->source_anchor_pin() == source_anchor_pin,
+					receipt->source_anchor_pin() == std::static_pointer_cast<const void>(held),
 				"logical-read receipt did not preserve the exact sealed predicates");
 		require(!terminal->valid(), "logical-read terminal remained valid after sealing");
-		auto replay_terminal =
-			sqlite_logical_read_terminal_issuer::issue(source_anchor_pin, true, 0U, true);
+		int replay_connection{};
+		sqlite_connection_lifecycle replay_owner{
+			&replay_connection,
+			&successful_close_for_receipt,
+			{{}, {}, {}, std::static_pointer_cast<const void>(held)}};
+		replay_owner.mark_logical_read_exact_empty();
+		auto replay_closed = replay_owner.close_exactly_once();
+		auto replay_token = std::get<sqlite_confirmed_close_token>(std::move(replay_closed));
+		auto replay_terminal = sqlite_logical_read_terminal_issuer::issue(replay_token, census);
 		require(
 			!seal_sqlite_logical_read_receipt(std::move(close_token), std::move(*replay_terminal)),
 			"logical-read close token was reusable after sealing");

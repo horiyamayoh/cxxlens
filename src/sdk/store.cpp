@@ -1025,6 +1025,10 @@ namespace cxxlens::sdk
 			{
 				return connection_.get();
 			}
+			void mark_logical_read_exact_empty() noexcept
+			{
+				connection_.mark_logical_read_exact_empty();
+			}
 			[[nodiscard]] const std::shared_ptr<sqlite_api>& api() const noexcept
 			{
 				return api_;
@@ -4744,11 +4748,12 @@ namespace cxxlens::sdk
 			const std::string private_uri{(*private_snapshot)->application_generated_uri()};
 			const std::string private_vfs_name{(*private_snapshot)->registered_vfs_name()};
 			constexpr auto private_full = sqlite_open_privatecache | sqlite_open_fullmutex;
-			auto database = open_database(api,
-										  private_uri,
-										  private_vfs_name.c_str(),
-										  sqlite_open_readonly | sqlite_open_uri | private_full,
-										  {api, *private_snapshot, observation, {}});
+			auto database = open_database(
+				api,
+				private_uri,
+				private_vfs_name.c_str(),
+				sqlite_open_readonly | sqlite_open_uri | private_full,
+				{api, *private_snapshot, observation, sqlite_authority_anchor_pin(anchor)});
 			if (!database)
 				return unexpected(std::move(database.error()));
 			if (auto begun = (*database)->execute("BEGIN;"); !begun)
@@ -4770,6 +4775,7 @@ namespace cxxlens::sdk
 			}
 			if (!*classification)
 			{
+				output.database->mark_logical_read_exact_empty();
 				if (auto stable = finish_private_read(output, path, *observation, true); !stable)
 					return unexpected(std::move(stable.error()));
 				return unexpected(sqlite_wal_only_unrecognized());
@@ -5589,11 +5595,12 @@ namespace cxxlens::sdk
 				return unexpected(sqlite_quiescent_observation_failure());
 			const std::string private_uri{(*private_snapshot)->application_generated_uri()};
 			const std::string private_vfs_name{(*private_snapshot)->registered_vfs_name()};
-			auto database = open_database(api,
-										  private_uri,
-										  private_vfs_name.c_str(),
-										  sqlite_open_readonly | sqlite_open_uri | private_full,
-										  {api, *private_snapshot, observation, {}});
+			auto database = open_database(
+				api,
+				private_uri,
+				private_vfs_name.c_str(),
+				sqlite_open_readonly | sqlite_open_uri | private_full,
+				{api, *private_snapshot, observation, sqlite_authority_anchor_pin(anchor)});
 			if (!database)
 				return unexpected(std::move(database.error()));
 			if (auto begun = (*database)->execute("BEGIN;"); !begun)
@@ -5617,19 +5624,13 @@ namespace cxxlens::sdk
 			{
 				if (!output.source_anchor)
 					return unexpected(sqlite_quiescent_observation_failure());
-				const auto source_anchor_pin = sqlite_authority_anchor_pin(*output.source_anchor);
-				if (!source_anchor_pin)
-					return unexpected(sqlite_effect_gate_failure());
+				output.database->mark_logical_read_exact_empty();
 				if (auto stable = finish_private_read(output, path, *observation, true); !stable)
 					return unexpected(std::move(stable.error()));
 				if (!output.private_read_close_token)
 					return unexpected(sqlite_effect_gate_failure());
 				auto terminal = sqlite_logical_read_terminal_issuer::issue(
-					source_anchor_pin,
-					true,
-					0U,
-					output.active_observation == nullptr && !output.active_wal_anchor &&
-						!output.wal_only_capture);
+					*output.private_read_close_token, output.source_anchor->namespace_census);
 				if (!terminal)
 					return unexpected(sqlite_effect_gate_failure());
 				auto logical_read_receipt = seal_sqlite_logical_read_receipt(
