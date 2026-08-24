@@ -307,6 +307,29 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_GLIBC_DLMOPEN_DLVSYM)
   endif()
 endif()
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_executable(
+    cxxlens-unit-sdk-sqlite-202-crash-recovery
+    unit/sdk/sqlite_202_crash_recovery_test.cpp
+    support/sqlite202_crash_recovery_harness.cpp)
+  target_compile_features(cxxlens-unit-sdk-sqlite-202-crash-recovery
+                          PRIVATE cxx_std_23)
+  target_link_libraries(cxxlens-unit-sdk-sqlite-202-crash-recovery
+                        PRIVATE "${CMAKE_DL_LIBS}")
+  target_include_directories(
+    cxxlens-unit-sdk-sqlite-202-crash-recovery
+    PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/tests/support")
+  cxxlens_set_project_warnings(cxxlens-unit-sdk-sqlite-202-crash-recovery)
+  cxxlens_enable_sanitizers(cxxlens-unit-sdk-sqlite-202-crash-recovery)
+  add_test(NAME unit.sdk-sqlite-202-crash-recovery
+           COMMAND cxxlens-unit-sdk-sqlite-202-crash-recovery)
+  set_tests_properties(
+    unit.sdk-sqlite-202-crash-recovery
+    PROPERTIES LABELS
+               "unit;sdk;store;sqlite;normalization;crash;recovery;fault"
+               TIMEOUT 60)
+endif()
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-limit-length-precedence
                             unit/sdk/sqlite_limit_length_precedence_test.cpp)
 target_link_libraries(
@@ -1944,6 +1967,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
                    cxxlens-unit-sdk-provider-process-channel)
   add_dependencies(cxxlens-ng-test-binaries cxxlens-clang22-source-closure-fd
                    cxxlens-clang22-installed-materializer-source-closure)
+  add_dependencies(cxxlens-ng-test-binaries
+                   cxxlens-unit-sdk-sqlite-202-crash-recovery)
   if(CXXLENS_TEST_HAS_GLIBC_DLMOPEN_DLVSYM)
     add_dependencies(
       cxxlens-ng-test-binaries cxxlens-unit-sdk-sqlite-migration-outcomes
