@@ -1084,6 +1084,13 @@ namespace cxxlens::test
 			return ::close(value) == 0;
 		}
 
+		[[nodiscard]] bool close_descriptor_pair(int (&descriptors)[2]) noexcept
+		{
+			const bool first_closed = close_descriptor(descriptors[0]);
+			const bool second_closed = close_descriptor(descriptors[1]);
+			return first_closed && second_closed;
+		}
+
 		[[nodiscard]] int open_pidfd(const pid_t child) noexcept
 		{
 			const auto result = ::syscall(SYS_pidfd_open, child, 0U);
@@ -1120,45 +1127,42 @@ namespace cxxlens::test
 			}
 		}
 
+		/**
+		 * Reap a child without ever entering a blocking waitpid call.
+		 *
+		 * A pidfd poll is only an observation of process exit; it is not a
+		 * substitute for collecting the child.  In particular, a timeout or a
+		 * pidfd error must not be followed by a blocking wait, because a lost
+		 * exit notification would then turn test cleanup into an unbounded wait.
+		 * Keep probing with WNOHANG until the same bounded deadline used by the
+		 * child lifecycle.  The zero-fd poll is a short, EINTR-tolerant yield and
+		 * does not create another blocking process wait.
+		 */
 		[[nodiscard]] bool
-		poll_liveness_pipe_until(const int read_fd,
-								 const std::chrono::steady_clock::time_point deadline) noexcept
-		{
-			for (;;)
-			{
-				pollfd descriptor{read_fd, POLLIN, 0};
-				const auto polled = ::poll(&descriptor, 1, remaining_milliseconds(deadline));
-				if (polled < 0 && errno == EINTR)
-					continue;
-				if (polled <= 0 || (descriptor.revents & (POLLERR | POLLNVAL)) != 0)
-					return false;
-				return (descriptor.revents & POLLHUP) != 0;
-			}
-		}
-
-		[[nodiscard]] bool reap_child_nonblocking(const pid_t child, int& status) noexcept
+		reap_child_until(const pid_t child,
+						 int& status,
+						 const std::chrono::steady_clock::time_point deadline) noexcept
 		{
 			for (;;)
 			{
 				const auto waited = ::waitpid(child, &status, WNOHANG);
 				if (waited == child)
 					return true;
-				if (waited < 0 && errno == EINTR)
-					continue;
-				return false;
-			}
-		}
+				if (waited < 0)
+				{
+					if (errno == EINTR)
+						continue;
+					return false;
+				}
+				if (std::chrono::steady_clock::now() >= deadline)
+					return false;
 
-		[[nodiscard]] bool reap_child_after_exit_event(const pid_t child, int& status) noexcept
-		{
-			for (;;)
-			{
-				const auto waited = ::waitpid(child, &status, 0);
-				if (waited == child)
-					return true;
-				if (waited < 0 && errno == EINTR)
-					continue;
-				return false;
+				// Limit every yield to one millisecond so cleanup remains bounded
+				// even when the child does not observe SIGKILL promptly.
+				const auto remaining = remaining_milliseconds(deadline);
+				const auto yield_milliseconds = std::min(remaining, 1);
+				if (::poll(nullptr, 0, yield_milliseconds) < 0 && errno != EINTR)
+					return false;
 			}
 		}
 
@@ -1174,19 +1178,13 @@ namespace cxxlens::test
 			}
 		}
 
-		[[nodiscard]] bool
-		kill_and_reap(const pid_t child, const int pidfd, const int liveness_read_fd) noexcept
+		[[nodiscard]] bool kill_and_reap(const pid_t child) noexcept
 		{
 			const bool killed = send_sigkill(child);
 			const auto deadline = std::chrono::steady_clock::now() + child_deadline;
-			const bool became_ready = pidfd >= 0
-				? poll_pidfd_until(pidfd, deadline)
-				: poll_liveness_pipe_until(liveness_read_fd, deadline);
 			int status{};
-			const bool reaped = became_ready ? reap_child_after_exit_event(child, status)
-											 : reap_child_nonblocking(child, status);
-			return killed && became_ready && reaped && WIFSIGNALED(status) &&
-				WTERMSIG(status) == SIGKILL;
+			const bool reaped = reap_child_until(child, status, deadline);
+			return killed && reaped && WIFSIGNALED(status) && WTERMSIG(status) == SIGKILL;
 		}
 
 		[[nodiscard]] bool
@@ -1244,8 +1242,8 @@ namespace cxxlens::test
 			const auto fd_written = std::snprintf(fd_text, sizeof(fd_text), "%d", pipe_fds[1]);
 			if (fd_written < 0 || static_cast<std::size_t>(fd_written) >= sizeof(fd_text))
 			{
-				(void)close_descriptor(pipe_fds[0]);
-				(void)close_descriptor(pipe_fds[1]);
+				if (!close_descriptor_pair(pipe_fds))
+					std::fprintf(stderr, "sqlite202: child-boundary pipe cleanup failed\n");
 				return false;
 			}
 			const auto child = ::fork();
@@ -1266,8 +1264,8 @@ namespace cxxlens::test
 			}
 			if (child < 0)
 			{
-				(void)close_descriptor(pipe_fds[0]);
-				(void)close_descriptor(pipe_fds[1]);
+				if (!close_descriptor_pair(pipe_fds))
+					std::fprintf(stderr, "sqlite202: fork-failure pipe cleanup failed\n");
 				return false;
 			}
 			const auto parent_write_closed = close_descriptor(pipe_fds[1]);
@@ -1276,7 +1274,7 @@ namespace cxxlens::test
 				wait_for_boundary_marker(pipe_fds[0],
 										 pidfd,
 										 std::chrono::steady_clock::now() + callback_deadline);
-			const bool killed_and_reaped = kill_and_reap(child, pidfd, pipe_fds[0]);
+			const bool killed_and_reaped = kill_and_reap(child);
 			const bool read_closed = close_descriptor(pipe_fds[0]);
 			const bool pidfd_closed = close_descriptor(pidfd);
 			return marker && read_closed && killed_and_reaped && pidfd_closed;
@@ -1302,15 +1300,15 @@ namespace cxxlens::test
 			}
 			if (child < 0)
 			{
-				(void)close_descriptor(liveness_pipe[0]);
-				(void)close_descriptor(liveness_pipe[1]);
+				if (!close_descriptor_pair(liveness_pipe))
+					std::fprintf(stderr, "sqlite202: verification fork cleanup failed\n");
 				return false;
 			}
 			const bool writer_closed = close_descriptor(liveness_pipe[1]);
 			int pidfd = open_pidfd(child);
 			if (!writer_closed || pidfd < 0)
 			{
-				const bool cleaned = kill_and_reap(child, pidfd, liveness_pipe[0]);
+				const bool cleaned = kill_and_reap(child);
 				const bool pipe_closed = close_descriptor(liveness_pipe[0]);
 				const bool pidfd_closed = close_descriptor(pidfd);
 				if (!cleaned || !pipe_closed || !pidfd_closed)
@@ -1321,7 +1319,7 @@ namespace cxxlens::test
 				poll_pidfd_until(pidfd, std::chrono::steady_clock::now() + child_deadline);
 			if (!exited)
 			{
-				const bool cleaned = kill_and_reap(child, pidfd, liveness_pipe[0]);
+				const bool cleaned = kill_and_reap(child);
 				const bool pipe_closed = close_descriptor(liveness_pipe[0]);
 				const bool pidfd_closed = close_descriptor(pidfd);
 				if (!cleaned || !pipe_closed || !pidfd_closed)
@@ -1329,7 +1327,8 @@ namespace cxxlens::test
 				return false;
 			}
 			int status{};
-			const bool reaped = reap_child_after_exit_event(child, status);
+			const bool reaped =
+				reap_child_until(child, status, std::chrono::steady_clock::now() + child_deadline);
 			const bool pipe_closed = close_descriptor(liveness_pipe[0]);
 			const bool pidfd_closed = close_descriptor(pidfd);
 			return reaped && pipe_closed && pidfd_closed && WIFEXITED(status) &&
