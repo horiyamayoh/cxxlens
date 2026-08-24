@@ -881,30 +881,6 @@ namespace cxxlens::detail::clang22
 			return {};
 		}
 
-		[[nodiscard]] sdk::result<std::string>
-		registry_digest(const provider_task_v4_registry_authority& value)
-		{
-			std::vector<std::pair<std::string_view, std::string_view>> sorted;
-			sorted.reserve(value.base_descriptors.size() + value.descriptors.size());
-			for (const auto& binding : value.base_descriptors)
-				sorted.emplace_back(binding.descriptor_id, binding.runtime_descriptor_digest);
-			for (const auto& binding : value.descriptors)
-				sorted.emplace_back(binding.descriptor_id, binding.runtime_descriptor_digest);
-			std::ranges::sort(sorted,
-							  [](const auto& left, const auto& right)
-							  {
-								  return byte_less(left.first, right.first);
-							  });
-			std::string payload;
-			for (const auto& [id, digest] : sorted)
-			{
-				payload.append(id);
-				payload.push_back('=');
-				payload.append(digest);
-				payload.push_back('\n');
-			}
-			return sdk::semantic_digest("cxxlens.relation-registry.v1", payload);
-		}
 	} // namespace
 
 	sdk::result<std::string> derive_provider_task_v4_effective_invocation_digest(
@@ -1091,8 +1067,8 @@ namespace cxxlens::detail::clang22
 	{
 		if (path != task_v4_registry_path)
 			return sdk::unexpected(authority_invalid("registry.path", "unsupported"));
-		if (auto valid = authority_semantic_digest(authority_registry_digest,
-												   "registry.authority_registry_digest");
+		if (auto valid = authority_content_digest(authority_registry_digest,
+												  "registry.authority_registry_digest");
 			!valid)
 			return valid;
 		if (base_descriptors.size() != task_v4_base_descriptor_ids.size() ||
@@ -1113,9 +1089,10 @@ namespace cxxlens::detail::clang22
 			if (auto valid = descriptors[index].validate(); !valid)
 				return valid;
 		}
-		auto expected = registry_digest(*this);
-		if (!expected || *expected != authority_registry_digest)
-			return sdk::unexpected(authority_mismatch("registry.authority_registry_digest"));
+		// The full accepted registry document is an independent content authority.  This
+		// value cannot be reconstructed from the twelve descriptors admitted by this
+		// materializer, so only its content-digest grammar is checked here.  The engine
+		// inventory below has its own semantic digest and must never alias this value.
 		return {};
 	}
 
@@ -1450,8 +1427,6 @@ namespace cxxlens::detail::clang22
 			return valid;
 		if (tasks.empty() || tasks.size() > provider_task_v4_limits{}.maximum_members)
 			return sdk::unexpected(authority_invalid("tasks", "count"));
-		if (engine.engine_registry_digest != registry.authority_registry_digest)
-			return sdk::unexpected(authority_mismatch("engine.registry"));
 		if (worker.provider_id != trust_policy.provider_id ||
 			worker.provider_version != trust_policy.provider_version ||
 			worker.semantic_contract_digest != trust_policy.semantic_contract_digest ||
@@ -1478,7 +1453,7 @@ namespace cxxlens::detail::clang22
 		if (publication.selector.catalog_id != project.catalog.catalog_id ||
 			publication.selector.engine_generation_id != engine.engine_generation_id ||
 			publication.selector.condition_universe_id != first.condition_universe_id ||
-			publication.selector.relation_registry_digest != registry.authority_registry_digest ||
+			publication.selector.relation_registry_digest != engine.engine_registry_digest ||
 			publication.selector.interpretation_policy_digest !=
 				interpretation_policy.interpretation_policy_digest ||
 			publication.selector.trust_policy_digest != trust_policy.trust_policy_digest)

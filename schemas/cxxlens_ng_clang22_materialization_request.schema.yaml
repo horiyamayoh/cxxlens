@@ -334,6 +334,17 @@ properties:
           minItems: 1
           maxItems: 4096
           items: {$ref: '#/$defs/strong_id'}
+        qualified_read_roots:
+          type: array
+          minItems: 1
+          maxItems: 4096
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 4096
+            x-cxxlens-max-utf8-bytes: 4096
+            pattern: '^/(?!.*//)(?!.*(?:^|/)\.{1,2}(?:/|$))(?!.*\\)[^\u0000-\u001f\u007f]+$'
         requested_descriptor_ids: {const: [cc.call_direct_target.v1, cc.call_site.v1, cc.entity.v1, frontend.clang22.call_observation.v2, frontend.clang22.entity_observation.v2, frontend.clang22.type_observation.v2]}
         dependency_groups: {const: [canonical, observation]}
         budget:
@@ -360,7 +371,7 @@ properties:
   publication:
     type: object
     additionalProperties: false
-    required: [backend, selector, series_id, genesis, expected_parent_publication, sqlite_path, partial_policy, transaction_count, reopen_before_success]
+    required: [backend, selector, series_id, genesis, expected_parent_publication, sqlite_path, partial_policy, transaction_count, reopen_before_success, recipe_id, recipe_digest, output_plan_digest, publication_target]
     properties:
       backend: {enum: [memory, sqlite]}
       selector: {$ref: '#/$defs/series_selector'}
@@ -381,6 +392,10 @@ properties:
       partial_policy: {const: forbid}
       transaction_count: {const: 1}
       reopen_before_success: {const: true}
+      recipe_id: {$ref: '#/$defs/strong_id'}
+      recipe_digest: {$ref: '#/$defs/semantic_digest'}
+      output_plan_digest: {$ref: '#/$defs/semantic_digest'}
+      publication_target: {$ref: '#/$defs/strong_id'}
     allOf:
       - if:
           properties: {backend: {const: sqlite}}

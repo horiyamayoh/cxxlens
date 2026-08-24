@@ -35,10 +35,10 @@ namespace cxxlens::detail::clang22::materialization
 	/**
 	 * Request v2.2 metadata model.
 	 *
-	 * `inherited_authority` is the complete source-free authority projection. It is retained
-	 * as typed JSON only so the request identity can cover fields owned by the existing admission
-	 * admission path. The validator rejects `content_base64` and source-byte members recursively;
-	 * no byte payload is represented by the C++ task/closure types.
+	 * `inherited_authority` is the decoded transport document retained only until the typed
+	 * authority handoff is complete. It is never used as worker authority: callers must pass it
+	 * through decode_provider_task_v4_request_authority(), which rejects source bytes and returns
+	 * the value-owned request authority.
 	 */
 	struct materialization_request_v2_2
 	{
@@ -63,6 +63,7 @@ namespace cxxlens::detail::clang22::materialization
 	struct validated_materialization_request_v2_2
 	{
 		materialization_request_v2_2 request;
+		provider_task_v4_request_authority authority;
 		std::vector<std::string> negotiated_features;
 		std::uint64_t unique_blob_bytes{};
 
@@ -71,6 +72,18 @@ namespace cxxlens::detail::clang22::materialization
 			return request;
 		}
 	};
+
+	/**
+	 * Decode the complete source-free request authority from the v2.2 JSON document.
+	 *
+	 * The decoder accepts the top-level request document (and the equivalent authority object
+	 * retained by the current ingress parser), maps schema `effective_argv` to the typed
+	 * `effective_arguments` field, requires per-task qualified read roots, and validates all
+	 * cross-field identities. Publication recipe/output/target fields remain host authority; they
+	 * are retained in the typed model but are never copied into the worker task payload.
+	 */
+	[[nodiscard]] sdk::result<provider_task_v4_request_authority>
+	decode_provider_task_v4_request_authority(const json_value& root);
 
 	/** Negotiate Protocol 2.0 and the two required request capabilities. */
 	[[nodiscard]] sdk::result<std::vector<std::string>>
@@ -82,15 +95,14 @@ namespace cxxlens::detail::clang22::materialization
 	 * Validate the JSON metadata envelope before a closure transport is opened.
 	 *
 	 * The installed materializer receives the request document before Protocol 2.0 source-closure
-	 * frames.  This structural gate deliberately does not manufacture a typed request from JSON
-	 * (the inherited authority remains owned by its producer); it checks the closed v2.2 shape,
-	 * required metadata arrays, and the absence of source bytes so malformed input cannot reach a
-	 * worker or Store effect while the transport handoff is pending.
+	 * frames.  The gate decodes the source-free authority into value-owned typed fields and checks
+	 * the closed v2.2 shape, required metadata arrays, and the absence of source bytes so malformed
+	 * input cannot reach a worker or Store effect while the transport handoff is pending.
 	 */
 	[[nodiscard]] sdk::result<void>
 	validate_materialization_request_v2_2_document(const json_value& root);
 
-	/** Derive request identity over source-free inherited authority and v4 extensions. */
+	/** Derive request identity over typed source-free authority and v4 extensions. */
 	[[nodiscard]] sdk::result<std::string>
 	derive_materialization_request_v2_2_digest(const materialization_request_v2_2& request);
 

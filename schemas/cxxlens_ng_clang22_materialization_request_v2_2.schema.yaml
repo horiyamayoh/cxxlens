@@ -162,7 +162,7 @@ $defs:
   base_task_without_source_bytes:
     type: object
     additionalProperties: false
-    required: [provider_task_id, provider_execution_id, task_input_digest, project_id, catalog_id, catalog_digest, selected_catalog_compile_unit_id, compile_unit_id, build_variant_id, toolchain_context_id, toolchain_digest, toolchain, variant, normalized_invocation_digest, environment_digest, language, working_directory, condition_universe_id, condition_id, interpretation_domain, source, effective_argv, requested_descriptor_ids, dependency_groups, budget, sandbox]
+    required: [provider_task_id, provider_execution_id, task_input_digest, project_id, catalog_id, catalog_digest, selected_catalog_compile_unit_id, compile_unit_id, build_variant_id, toolchain_context_id, toolchain_digest, toolchain, variant, normalized_invocation_digest, environment_digest, language, working_directory, condition_universe_id, condition_id, interpretation_domain, source, effective_argv, qualified_read_roots, requested_descriptor_ids, dependency_groups, budget, sandbox]
     properties:
       provider_task_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/provider_task_id}
       provider_execution_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/provider_execution_id}
@@ -198,6 +198,7 @@ $defs:
           line_index_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/line_index_id}
           read_only: {const: true}
       effective_argv: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/effective_argv}
+      qualified_read_roots: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/qualified_read_roots}
       requested_descriptor_ids: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/requested_descriptor_ids}
       dependency_groups: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/dependency_groups}
       budget: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/budget}
