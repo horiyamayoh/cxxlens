@@ -1116,10 +1116,16 @@ namespace cxxlens::test
 		{
 			for (;;)
 			{
+				if (std::chrono::steady_clock::now() >= deadline)
+					return false;
 				pollfd descriptor{pidfd, POLLIN, 0};
 				const auto polled = ::poll(&descriptor, 1, remaining_milliseconds(deadline));
-				if (polled < 0 && errno == EINTR)
+				if (polled < 0)
+				{
+					if (errno != EINTR || std::chrono::steady_clock::now() >= deadline)
+						return false;
 					continue;
+				}
 				if (polled <= 0)
 					return false;
 				return (descriptor.revents & POLLIN) != 0 &&
@@ -1145,12 +1151,14 @@ namespace cxxlens::test
 		{
 			for (;;)
 			{
+				if (std::chrono::steady_clock::now() >= deadline)
+					return false;
 				const auto waited = ::waitpid(child, &status, WNOHANG);
 				if (waited == child)
 					return true;
 				if (waited < 0)
 				{
-					if (errno == EINTR)
+					if (errno == EINTR && std::chrono::steady_clock::now() < deadline)
 						continue;
 					return false;
 				}
@@ -1161,18 +1169,25 @@ namespace cxxlens::test
 				// even when the child does not observe SIGKILL promptly.
 				const auto remaining = remaining_milliseconds(deadline);
 				const auto yield_milliseconds = std::min(remaining, 1);
-				if (::poll(nullptr, 0, yield_milliseconds) < 0 && errno != EINTR)
-					return false;
+				if (::poll(nullptr, 0, yield_milliseconds) < 0)
+				{
+					if (errno != EINTR || std::chrono::steady_clock::now() >= deadline)
+						return false;
+				}
 			}
 		}
 
-		[[nodiscard]] bool send_sigkill(const pid_t child) noexcept
+		[[nodiscard]] bool
+		send_sigkill(const pid_t child,
+					 const std::chrono::steady_clock::time_point deadline) noexcept
 		{
 			for (;;)
 			{
+				if (std::chrono::steady_clock::now() >= deadline)
+					return false;
 				if (::kill(child, SIGKILL) == 0)
 					return true;
-				if (errno == EINTR)
+				if (errno == EINTR && std::chrono::steady_clock::now() < deadline)
 					continue;
 				return false;
 			}
@@ -1180,8 +1195,8 @@ namespace cxxlens::test
 
 		[[nodiscard]] bool kill_and_reap(const pid_t child) noexcept
 		{
-			const bool killed = send_sigkill(child);
 			const auto deadline = std::chrono::steady_clock::now() + child_deadline;
+			const bool killed = send_sigkill(child, deadline);
 			int status{};
 			const bool reaped = reap_child_until(child, status, deadline);
 			return killed && reaped && WIFSIGNALED(status) && WTERMSIG(status) == SIGKILL;
@@ -1194,12 +1209,18 @@ namespace cxxlens::test
 		{
 			for (;;)
 			{
+				if (std::chrono::steady_clock::now() >= deadline)
+					return false;
 				std::array<pollfd, 2U> descriptors{pollfd{read_fd, POLLIN, 0},
 												   pollfd{pidfd, POLLIN, 0}};
 				const auto polled = ::poll(
 					descriptors.data(), descriptors.size(), remaining_milliseconds(deadline));
-				if (polled < 0 && errno == EINTR)
+				if (polled < 0)
+				{
+					if (errno != EINTR || std::chrono::steady_clock::now() >= deadline)
+						return false;
 					continue;
+				}
 				if (polled <= 0 || (descriptors[1U].revents & POLLIN) != 0 ||
 					(descriptors[0U].revents & (POLLERR | POLLNVAL)) != 0 ||
 					(descriptors[1U].revents & (POLLERR | POLLNVAL)) != 0)
@@ -1208,10 +1229,16 @@ namespace cxxlens::test
 				{
 					for (;;)
 					{
+						if (std::chrono::steady_clock::now() >= deadline)
+							return false;
 						char marker{};
 						const auto count = ::read(read_fd, &marker, sizeof(marker));
-						if (count < 0 && errno == EINTR)
+						if (count < 0)
+						{
+							if (errno != EINTR || std::chrono::steady_clock::now() >= deadline)
+								return false;
 							continue;
+						}
 						return count == static_cast<ssize_t>(sizeof(marker)) && marker == 'S';
 					}
 				}
