@@ -396,6 +396,26 @@ class SourceClosureTransportTest(unittest.TestCase):
             "file:sha256:83e065cbf0d8f742fe73a01155b02057c0de0fbe747f88b35ea5e96efe8faf06",
         )
 
+    def test_closure_digest_uses_the_clang22_content_domain_golden(self) -> None:
+        payload = b"int main() { return 0; }\n"
+        content = "sha256:" + hashlib.sha256(payload).hexdigest()
+        member = {
+            "file_id": source_closure_file_id("project://src/main.cpp"),
+            "logical_path": "project://src/main.cpp",
+            "role": "main",
+            "encoding": "utf8",
+            "size_bytes": len(payload),
+            "content_digest": content,
+            "read_only": True,
+        }
+        self.assertEqual(
+            closure_digest(
+                [member],
+                [{"content_digest": content, "size_bytes": len(payload)}],
+            ),
+            "semantic-v2:sha256:ea94f38e8a9bdf7250f07769c3b902378c78c3d98dd36858904b3172f94962c9",
+        )
+
     def test_manifest_semantic_tamper_and_orphan_are_rejected(self) -> None:
         schema = yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text(encoding="utf-8"))
         content = "sha256:" + "2" * 64

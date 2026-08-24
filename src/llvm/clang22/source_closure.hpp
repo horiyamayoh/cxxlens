@@ -88,6 +88,16 @@ namespace cxxlens::detail::clang22
 	/** Derive the canonical source.file identity for one admitted logical path. */
 	[[nodiscard]] sdk::result<std::string> source_closure_file_id(std::string_view logical_path);
 
+	/**
+	 * Derive the authenticated byte line-index identity for the closure's unique main blob.
+	 *
+	 * The offsets are byte offsets for the first line and for the byte after every LF.  A trailing
+	 * LF therefore contributes the EOF offset, while the bytes and their content digest remain the
+	 * authority for the result.
+	 */
+	[[nodiscard]] sdk::result<std::string>
+	source_closure_main_line_index_id(const source_closure_snapshot& snapshot);
+
 	/** Construct, sort, deduplicate, identify, and fully validate one source closure. */
 	[[nodiscard]] sdk::result<source_closure_snapshot>
 	make_source_closure_snapshot(std::vector<source_closure_file_input> files);

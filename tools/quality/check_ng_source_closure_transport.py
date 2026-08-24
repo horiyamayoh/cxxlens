@@ -118,12 +118,12 @@ def closure_digest(members: list[dict[str, Any]], blobs: list[dict[str, Any]]) -
         for blob in blobs
     ]
     projection = _canonical_tuple([
-        _canonical_string("cxxlens.source-closure.v1"),
+        _canonical_string("cxxlens.clang22.source-closure.v1"),
         _canonical_string("unicode-default-casefold-then-nfc"),
         _canonical_tuple(encoded_members),
         _canonical_tuple(encoded_blobs),
     ])
-    return semantic_digest_bytes("cxxlens.source-closure.v1", projection)
+    return semantic_digest_bytes("cxxlens.clang22.source-closure.v1", projection)
 
 
 def _validated_logical_path(value: Any, *, subject: str = "logical path") -> str:

@@ -18,6 +18,8 @@
 
 namespace cxxlens::detail::clang22
 {
+	struct source_closure_snapshot;
+
 	inline constexpr std::string_view provider_task_v4_schema = "cxxlens.clang22.task.v4";
 	inline constexpr std::string_view source_closure_manifest_schema =
 		"cxxlens.source-closure-manifest.v1";
@@ -532,6 +534,18 @@ namespace cxxlens::detail::clang22
 	bind_provider_task_v4_main_member(const provider_task_v4_base_task& base,
 									  const provider_task_v4& task,
 									  const source_closure_manifest& manifest,
+									  provider_task_v4_limits limits = {});
+
+	/**
+	 * Validate the main member against the authenticated transferred source closure as well as
+	 * its metadata manifest.  This overload is the pre-acceptance boundary for line-index binding;
+	 * the manifest-only overload cannot authenticate source bytes and must not be used for it.
+	 */
+	[[nodiscard]] sdk::result<void>
+	bind_provider_task_v4_main_member(const provider_task_v4_base_task& base,
+									  const provider_task_v4& task,
+									  const source_closure_manifest& manifest,
+									  const source_closure_snapshot& snapshot,
 									  provider_task_v4_limits limits = {});
 } // namespace cxxlens::detail::clang22
 

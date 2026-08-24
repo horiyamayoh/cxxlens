@@ -209,6 +209,65 @@ namespace
 		assert(*provider_digest == closure_identity->task_v4_digest);
 	}
 
+	void authenticated_main_line_index_binding()
+	{
+		auto snapshot = make_source_closure_snapshot({
+			{"project://src/main.cpp",
+			 source_closure_role::main,
+			 source_closure_encoding::utf8,
+			 std::make_shared<const std::string>("int main() { return 0; }\n")},
+		});
+		assert(snapshot);
+		assert(
+			snapshot->closure_digest ==
+			"semantic-v2:sha256:ea94f38e8a9bdf7250f07769c3b902378c78c3d98dd36858904b3172f94962c9");
+		const auto& main = snapshot->members.front();
+
+		source_closure_manifest manifest;
+		manifest.members = {{main.file_id,
+							 main.logical_path,
+							 "main",
+							 "utf8",
+							 main.size_bytes,
+							 main.content_digest,
+							 true}};
+		manifest.blobs = {{main.content_digest, main.size_bytes}};
+		auto closure_digest = derive_source_closure_digest(manifest);
+		assert(closure_digest && *closure_digest == snapshot->closure_digest);
+		manifest.closure_digest = *closure_digest;
+		manifest.closure_id = "source-closure:" + *closure_digest;
+		auto manifest_digest = derive_source_closure_manifest_digest(manifest);
+		assert(manifest_digest);
+		manifest.manifest_digest = *manifest_digest;
+		assert(manifest.validate());
+
+		provider_task_v4_base_task base;
+		base.provider_task_id = "task:semantic-v2:sha256:" + std::string(64U, 'c');
+		base.provider_execution_id = "provider-execution:line-index";
+		base.canonical_base_task_digest = content('d');
+		base.task_input_digest = content('e');
+		base.normalized_invocation_digest = semantic('f');
+		base.toolchain_digest = semantic('1');
+		base.environment_digest = content('2');
+		base.working_directory = "project://src";
+		auto line_index = source_closure_main_line_index_id(*snapshot);
+		assert(line_index);
+		base.source = {snapshot->snapshot_id,
+					   main.file_id,
+					   main.logical_path,
+					   main.content_digest,
+					   main.size_bytes,
+					   "utf8",
+					   *line_index,
+					   true};
+		auto task = make_task(manifest, base);
+		assert(bind_provider_task_v4_main_member(base, task, manifest, *snapshot));
+
+		auto stale = base;
+		stale.source.line_index_id = "line-index:sha256:" + std::string(64U, '0');
+		assert(!bind_provider_task_v4_main_member(stale, task, manifest, *snapshot));
+	}
+
 	[[nodiscard]] std::string bytes_digest(const std::string_view domain,
 										   const cxxlens::sdk::canonical_value& value)
 	{
@@ -497,6 +556,7 @@ int main()
 	positive_manifest_task_binding();
 	negative_identity_and_binding();
 	closure_and_provider_codecs_share_identity();
+	authenticated_main_line_index_binding();
 	positive_typed_authority();
 	negative_typed_authority();
 }

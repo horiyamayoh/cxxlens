@@ -1731,4 +1731,23 @@ namespace cxxlens::detail::clang22
 			return sdk::unexpected(mismatch("manifest.main", base.source.logical_path));
 		return {};
 	}
+
+	sdk::result<void> bind_provider_task_v4_main_member(const provider_task_v4_base_task& base,
+														const provider_task_v4& task,
+														const source_closure_manifest& manifest,
+														const source_closure_snapshot& snapshot,
+														const provider_task_v4_limits limits)
+	{
+		if (auto valid = bind_provider_task_v4_main_member(base, task, manifest, limits); !valid)
+			return valid;
+		if (snapshot.closure_digest != manifest.closure_digest ||
+			snapshot.snapshot_id != "source-closure:" + snapshot.closure_digest)
+			return sdk::unexpected(mismatch("source_closure.snapshot", base.source.logical_path));
+		auto line_index = source_closure_main_line_index_id(snapshot);
+		if (!line_index)
+			return sdk::unexpected(std::move(line_index.error()));
+		if (*line_index != base.source.line_index_id)
+			return sdk::unexpected(mismatch("source.line_index_id", base.source.logical_path));
+		return {};
+	}
 } // namespace cxxlens::detail::clang22
