@@ -577,9 +577,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
                RUN_SERIAL
                TRUE
                TIMEOUT
-               ${CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT}
-               SKIP_RETURN_CODE
-               77)
+               ${CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT})
   set_tests_properties(
     unit.sdk-provider-runtime-timeout-contention
     PROPERTIES
@@ -590,9 +588,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
       RUN_SERIAL
       TRUE
       TIMEOUT
-      ${CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT}
-      SKIP_RETURN_CODE
-      77)
+      ${CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT})
 endif()
 set_tests_properties(unit.sdk-provider-runtime-sealed
                      PROPERTIES LABELS "unit;sdk;provider;sealed;adoption")
@@ -1420,28 +1416,33 @@ if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG22_LIBRARY_DIRS)
     execute_process(
       COMMAND "${_cxxlens_native_test_clangxx}" -print-resource-dir
       OUTPUT_VARIABLE _cxxlens_native_test_resource_dir
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-    target_compile_definitions(
-      cxxlens-clang22-source-closure-native
-      PRIVATE
-        CXXLENS_TEST_CLANG22_ROOT="${_cxxlens_native_test_llvm_root}"
-        CXXLENS_TEST_CLANGXX22_PATH="${_cxxlens_native_test_clangxx}"
-        CXXLENS_TEST_CLANG22_RESOURCE_DIR="${_cxxlens_native_test_resource_dir}"
-    )
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      RESULT_VARIABLE _cxxlens_native_test_resource_result)
+    if(_cxxlens_native_test_resource_result EQUAL 0
+       AND IS_DIRECTORY "${_cxxlens_native_test_resource_dir}")
+      target_compile_definitions(
+        cxxlens-clang22-source-closure-native
+        PRIVATE
+          CXXLENS_TEST_CLANG22_ROOT="${_cxxlens_native_test_llvm_root}"
+          CXXLENS_TEST_CLANGXX22_PATH="${_cxxlens_native_test_clangxx}"
+          CXXLENS_TEST_CLANG22_RESOURCE_DIR="${_cxxlens_native_test_resource_dir}"
+      )
+      add_test(NAME adapter.clang22-source-closure-native
+               COMMAND cxxlens-clang22-source-closure-native)
+      set_tests_properties(
+        adapter.clang22-source-closure-native
+        PROPERTIES
+          LABELS
+          "adapter;provider;clang22;source-closure;vfs;native;security;contract"
+      )
+    endif()
   endif()
   unset(_cxxlens_native_test_lib_dir)
   unset(_cxxlens_native_test_llvm_root)
   unset(_cxxlens_native_test_clangxx)
   unset(_cxxlens_native_test_resource_dir)
+  unset(_cxxlens_native_test_resource_result)
 endif()
-add_test(NAME adapter.clang22-source-closure-native
-         COMMAND cxxlens-clang22-source-closure-native)
-set_tests_properties(
-  adapter.clang22-source-closure-native
-  PROPERTIES
-    LABELS
-    "adapter;provider;clang22;source-closure;vfs;native;security;contract"
-    SKIP_RETURN_CODE 77)
 
 cxxlens_add_test_executable(cxxlens-r2-vertical-slice
                             integration/r2_vertical_slice_test.cpp)
