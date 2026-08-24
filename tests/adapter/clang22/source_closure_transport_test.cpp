@@ -136,7 +136,8 @@ namespace
 		{
 			++closure_finish_calls;
 			credentials.transfer_digest = transfer_digest;
-			return credentials;
+			return source_closure_ack_credentials{
+				credentials.spool_receipt, credentials.cleanup_owner, credentials.transfer_digest};
 		}
 
 		[[nodiscard]] result<std::string> cleanup() override
@@ -278,18 +279,19 @@ namespace
 											 *transfer_digest,
 											 typed("spool-receipt:semantic-v2:sha256:", 'f'),
 											 sink.credentials.cleanup_owner};
-		require(!validator.acknowledge(forged_ack, 5U) &&
+		require(!validator.prepare_acknowledgement(forged_ack, 5U) &&
 					validator.state() == source_closure_transfer_state::closure_sealed &&
 					validator.next_sequence() == 5U,
 				"forged spool issuer was accepted or consumed a sequence");
-		require(validator.acknowledge({outer.session_id,
-									   outer.task_id,
-									   outer.closure_digest,
-									   *transfer_digest,
-									   sink.credentials.spool_receipt,
-									   sink.credentials.cleanup_owner},
-									  5U),
-				"valid source-closure acknowledgement was rejected");
+		auto prepared = validator.prepare_acknowledgement({outer.session_id,
+														   outer.task_id,
+														   outer.closure_digest,
+														   *transfer_digest,
+														   sink.credentials.spool_receipt,
+														   sink.credentials.cleanup_owner},
+														  5U);
+		require(prepared, "valid source-closure acknowledgement was rejected");
+		validator.commit_acknowledgement(std::move(*prepared));
 		require(validator.state() == source_closure_transfer_state::closure_acknowledged,
 				"valid transfer did not reach acknowledgement");
 		require(authority.calls == 1U, "outer task authority was not revalidated before transfer");

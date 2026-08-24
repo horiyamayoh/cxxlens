@@ -803,7 +803,7 @@ namespace cxxlens::detail::clang22
 			credentials_ = {*spool_receipt, *cleanup_owner, std::string{transfer_digest}};
 			transfer_digest_ = transfer_digest;
 			state_ = state::closure_sealed;
-			return credentials_;
+			return std::move(credentials_);
 		}
 		catch (const std::bad_alloc&)
 		{
@@ -875,14 +875,6 @@ namespace cxxlens::detail::clang22
 				failure("source-closure.limit-exceeded", "snapshot", "task-local-spool"));
 		}
 		return output;
-	}
-
-	sdk::result<source_closure_ack_credentials> source_closure_spool::ack_credentials() const
-	{
-		if (state_ != state::closure_sealed)
-			return sdk::unexpected(
-				failure("source-closure.protocol-state-invalid", "ack-credentials", "not-sealed"));
-		return credentials_;
 	}
 
 	std::uint64_t source_closure_spool::retained_bytes() const noexcept

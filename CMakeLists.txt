@@ -719,6 +719,43 @@ target_compile_features(cxxlens_clang22_materializer_v4_store_source
 cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_store_source)
 cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_store_source)
 
+# Complete task-v4 orchestration and report sealing.  This source-private
+# boundary owns the admission/worker/claim/Store/report ordering; it is kept
+# separate from the legacy materializer graph and is explicitly exercised by
+# the coordinator contract tests.
+add_library(
+  cxxlens_clang22_materializer_v4_coordinator STATIC EXCLUDE_FROM_ALL
+  src/llvm/clang22/materialization_report2_2_builder.cpp
+  src/llvm/clang22/materialization_v4_coordinator.cpp)
+target_link_libraries(
+  cxxlens_clang22_materializer_v4_coordinator
+  PUBLIC cxxlens::base
+  PRIVATE cxxlens::kernel cxxlens::provider_sdk
+          cxxlens_clang22_materialization_codecs
+          cxxlens_clang22_materialization_request_v2_2_support
+          cxxlens_clang22_materializer_v4_claims
+          cxxlens_clang22_materializer_v4_ingress
+          cxxlens_clang22_materializer_v4_reuse_support
+          cxxlens_clang22_materializer_bounded_support)
+target_include_directories(cxxlens_clang22_materializer_v4_coordinator
+                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_clang22_materializer_v4_coordinator
+                        PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_coordinator)
+cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_coordinator)
+if(CXXLENS_BUILD_SHARED)
+  # The provider runtime keeps its implementation symbols hidden in shared
+  # builds.  Embed the same source-private runtime closure used by the worker
+  # and retained materializer safety path so this coordinator remains a
+  # linkable source-private component without exporting implementation ABI.
+  target_sources(
+    cxxlens_clang22_materializer_v4_coordinator
+    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
+  target_link_libraries(cxxlens_clang22_materializer_v4_coordinator
+                        PRIVATE cxxlens_protocol_v2)
+endif()
+
 # Request-v2.2 admission is kept in a standalone source-private boundary.  The
 # legacy pipeline remains available only to the retained safety implementation;
 # v2.2 tests and consumers do not pull that graph merely to issue a task token.

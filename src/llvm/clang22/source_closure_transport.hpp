@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <string>
 #include <string_view>
@@ -269,10 +270,18 @@ namespace cxxlens::detail::clang22
 	class source_closure_transfer_validator
 	{
 	  public:
+		class prepared_ack_transition;
+
 		source_closure_transfer_validator(source_closure_transfer_binding binding,
 										  source_closure_task_v4_authority& authority,
 										  source_closure_transfer_sink& sink,
 										  source_closure_transport_limits limits = {});
+		source_closure_transfer_validator(const source_closure_transfer_validator&) = default;
+		source_closure_transfer_validator&
+		operator=(const source_closure_transfer_validator&) = default;
+		source_closure_transfer_validator(source_closure_transfer_validator&&) noexcept = default;
+		source_closure_transfer_validator&
+		operator=(source_closure_transfer_validator&&) noexcept = default;
 
 		[[nodiscard]] sdk::result<void>
 		begin_manifest(const source_closure_manifest_descriptor& descriptor,
@@ -287,8 +296,11 @@ namespace cxxlens::detail::clang22
 												   std::uint64_t sequence);
 		[[nodiscard]] sdk::result<void> seal(const source_closure_seal& value,
 											 std::uint64_t sequence);
-		[[nodiscard]] sdk::result<void> acknowledge(const source_closure_ack& value,
-													std::uint64_t sequence);
+		/** Validate an ACK without changing the live transfer or sequence frontier. */
+		[[nodiscard]] sdk::result<prepared_ack_transition>
+		prepare_acknowledgement(const source_closure_ack& value, std::uint64_t sequence) const;
+		/** Commit only the transition prepared by this validator, after wire emission. */
+		void commit_acknowledgement(prepared_ack_transition&& transition) noexcept;
 		[[nodiscard]] sdk::result<void> reject(const source_closure_reject& value,
 											   std::uint64_t sequence);
 		[[nodiscard]] sdk::result<source_closure_reject> cancel();
@@ -316,6 +328,9 @@ namespace cxxlens::detail::clang22
 		{
 			return transfer_digest_;
 		}
+		/** Consume the sole ACK credential capability after the inbound seal. */
+		[[nodiscard]] sdk::result<source_closure_ack_credentials> ack_credentials() const;
+		[[nodiscard]] sdk::result<source_closure_ack_credentials> take_ack_credentials();
 		[[nodiscard]] source_closure_local_terminal local_terminal() const noexcept
 		{
 			return local_terminal_;
@@ -336,6 +351,8 @@ namespace cxxlens::detail::clang22
 		[[nodiscard]] sdk::result<void>
 		fail(std::string code, std::string field, std::string detail = {});
 		[[nodiscard]] sdk::result<void> validate_reject(const source_closure_reject& value) const;
+		[[nodiscard]] sdk::result<void> validate_acknowledgement(const source_closure_ack& value,
+																 std::uint64_t sequence) const;
 		[[nodiscard]] sdk::result<std::string> cleanup_once();
 		[[nodiscard]] sdk::result<source_closure_reject> make_terminal_reject(std::string reason);
 		[[nodiscard]] std::vector<std::pair<std::string, std::uint64_t>> phase_counters() const;
@@ -371,5 +388,28 @@ namespace cxxlens::detail::clang22
 		std::array<std::byte, 64U> blob_hash_buffer_{};
 		std::size_t blob_hash_buffer_size_{};
 		std::uint64_t blob_hash_total_bytes_{};
+	};
+
+	/** Move-only capability proving one ACK against one exact validator state. */
+	class source_closure_transfer_validator::prepared_ack_transition final
+	{
+	  public:
+		prepared_ack_transition(const prepared_ack_transition&) = delete;
+		prepared_ack_transition& operator=(const prepared_ack_transition&) = delete;
+		prepared_ack_transition(prepared_ack_transition&&) noexcept = default;
+		prepared_ack_transition& operator=(prepared_ack_transition&&) noexcept = default;
+		~prepared_ack_transition() noexcept = default;
+
+	  private:
+		friend class source_closure_transfer_validator;
+		prepared_ack_transition(const source_closure_transfer_validator* owner,
+								std::unique_ptr<source_closure_transfer_validator> next)
+			: owner_{owner}, next_{std::move(next)}
+		{
+		}
+
+		const source_closure_transfer_validator* owner_{};
+		std::unique_ptr<source_closure_transfer_validator> next_;
+		bool consumed_{};
 	};
 } // namespace cxxlens::detail::clang22

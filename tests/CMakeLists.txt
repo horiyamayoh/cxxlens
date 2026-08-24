@@ -1196,6 +1196,38 @@ set_tests_properties(
 )
 
 cxxlens_add_test_executable(
+  cxxlens-clang22-materialization-report-v2-2-builder
+  adapter/clang22/materialization_report2_2_builder_test.cpp)
+target_link_libraries(
+  cxxlens-clang22-materialization-report-v2-2-builder
+  PRIVATE cxxlens_clang22_materializer_v4_coordinator)
+target_include_directories(
+  cxxlens-clang22-materialization-report-v2-2-builder
+  PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME adapter.clang22-materialization-report-v2-2-builder
+         COMMAND cxxlens-clang22-materialization-report-v2-2-builder)
+set_tests_properties(
+  adapter.clang22-materialization-report-v2-2-builder
+  PROPERTIES LABELS
+             "adapter;provider;clang22;materialization;report;v2.2;bounded;security")
+
+cxxlens_add_test_executable(
+  cxxlens-clang22-materialization-v4-coordinator
+  adapter/clang22/materialization_v4_coordinator_test.cpp)
+target_link_libraries(
+  cxxlens-clang22-materialization-v4-coordinator
+  PRIVATE cxxlens_clang22_materializer_v4_coordinator)
+target_include_directories(
+  cxxlens-clang22-materialization-v4-coordinator
+  PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME adapter.clang22-materialization-v4-coordinator
+         COMMAND cxxlens-clang22-materialization-v4-coordinator)
+set_tests_properties(
+  adapter.clang22-materialization-v4-coordinator
+  PROPERTIES LABELS
+             "adapter;provider;clang22;materialization;coordinator;task;v4;bounded;security")
+
+cxxlens_add_test_executable(
   cxxlens-clang22-materialization-store-v6-typed-ingress
   adapter/clang22/materialization_store_v6_typed_ingress_test.cpp)
 target_link_libraries(
@@ -1981,6 +2013,8 @@ add_dependencies(
   cxxlens-clang22-provider-worker-ingress-decoder
   cxxlens-clang22-materialization-v4-claim-binding
   cxxlens-clang22-materialization-v4-store-positive
+  cxxlens-clang22-materialization-report-v2-2-builder
+  cxxlens-clang22-materialization-v4-coordinator
   cxxlens-clang22-materialization-store-v6-typed-ingress
   cxxlens-protocol-v2
   cxxlens-unit-sdk-provider-protocol-v2-adapter

@@ -481,6 +481,29 @@ namespace cxxlens::detail::clang22
 			if (value_reject == nullptr)
 				return sdk::unexpected(
 					failure("source-closure.protocol-state-invalid", "reject", "variant"));
+			std::vector<std::pair<std::string, std::uint64_t>> counters;
+			counters.reserve(value_reject->observed_counters.size());
+			for (const auto& [key, raw] : value_reject->observed_counters)
+			{
+				if (const auto* unsigned_value = std::get_if<std::uint64_t>(&raw.data);
+					unsigned_value != nullptr)
+					counters.emplace_back(key, *unsigned_value);
+				else if (const auto* signed_value = std::get_if<std::int64_t>(&raw.data);
+						 signed_value != nullptr && *signed_value >= 0)
+					counters.emplace_back(key, static_cast<std::uint64_t>(*signed_value));
+				else
+					return sdk::unexpected(failure(
+						"source-closure.protocol-state-invalid", "reject-counters", "unsigned"));
+			}
+			if (auto validated = validator.reject({value_reject->session_id,
+												   value_reject->task_id,
+												   value_reject->failure_phase,
+												   value_reject->reason_code,
+												   std::move(counters),
+												   value_reject->cleanup_receipt},
+												  protocol_frame.sequence);
+				!validated)
+				return sdk::unexpected(std::move(validated.error()));
 			return sdk::unexpected(
 				failure("source-closure.remote-reject", "reject", value_reject->reason_code));
 		}
@@ -535,8 +558,7 @@ namespace cxxlens::detail::clang22
 		if (options.authority == nullptr)
 			return sdk::unexpected(
 				failure("source-closure.worker-input-invalid", "authority", "missing"));
-		if (options.stream_id == 0U || options.maximum_frames == 0U ||
-			options.binding.first_sequence != 0U)
+		if (options.stream_id == 0U || options.maximum_frames == 0U)
 			return sdk::unexpected(
 				failure("source-closure.protocol-state-invalid", "receiver-options", "sequence"));
 		auto closure_limits = protocol_limits(options.limits);
@@ -561,6 +583,7 @@ namespace cxxlens::detail::clang22
 		session.closure_digest = options.binding.closure_digest;
 		session.manifest_digest = options.binding.manifest_digest;
 		session.stream_id = options.stream_id;
+		session.first_sequence = options.binding.first_sequence;
 		session.initial_credit = {initial_credit->bytes, initial_credit->frames};
 		session.limits = *closure_limits;
 		auto protocol_state = protocol::closure_transfer::create(std::move(session));
@@ -640,7 +663,15 @@ namespace cxxlens::detail::clang22
 					*relay,
 					validator,
 					failure("source-closure.channel-cancelled", "transfer", "stop-requested"));
-			auto credentials = spool.ack_credentials();
+			// Snapshot construction and relay custody are fallible. Complete them before the
+			// authenticated ACK is emitted so that an ACK never advertises a result which the
+			// receiver cannot return or clean up deterministically.
+			auto snapshot = spool.snapshot();
+			if (!snapshot)
+				return fail_with_cleanup(*relay, std::move(snapshot.error()));
+			if (auto marked = relay->mark_sealed(); !marked)
+				return fail_with_cleanup(*relay, std::move(marked.error()));
+			auto credentials = validator.ack_credentials();
 			if (!credentials)
 				return fail_with_cleanup(*relay, std::move(credentials.error()));
 			protocol::source_closure_ack ack_value{options.binding.session_id,
@@ -649,31 +680,29 @@ namespace cxxlens::detail::clang22
 												   credentials->transfer_digest,
 												   credentials->spool_receipt,
 												   credentials->cleanup_owner};
-			auto ack_control =
-				protocol::encode_closure_control(protocol::message_type::source_closure_ack,
-												 protocol::closure_control{std::move(ack_value)},
-												 *closure_limits);
-			if (!ack_control)
-				return fail_with_cleanup(*relay, std::move(ack_control.error()));
-			frame ack_frame;
-			ack_frame.type = message_type::source_closure_ack;
-			ack_frame.stream_id = options.stream_id;
-			ack_frame.sequence = validator.next_sequence();
-			ack_frame.control = std::move(*ack_control);
-			auto encoded_ack = sdk::provider::encode_frame(ack_frame, wire_limits);
-			if (!encoded_ack)
-				return fail_with_cleanup(*relay, std::move(encoded_ack.error()));
-			if (auto emitted = sink.write(*encoded_ack); !emitted)
+			auto validator_ack = validator.prepare_acknowledgement({ack_value.session_id,
+																	ack_value.task_id,
+																	ack_value.closure_digest,
+																	ack_value.transfer_digest,
+																	ack_value.spool_receipt,
+																	ack_value.cleanup_owner},
+																   validator.next_sequence());
+			if (!validator_ack)
+				return fail_with_cleanup(*relay, std::move(validator_ack.error()));
+			auto protocol_ack =
+				protocol_state->prepare_acknowledgement(ack_value, validator.next_sequence());
+			if (!protocol_ack)
+				return fail_with_cleanup(*relay, std::move(protocol_ack.error()));
+			if (auto emitted = sink.write(protocol_ack->wire_bytes()); !emitted)
 				return fail_liveness(*relay, validator, std::move(emitted.error()));
-			auto snapshot = spool.snapshot();
-			if (!snapshot)
-				return fail_with_cleanup(*relay, std::move(snapshot.error()));
-			if (auto marked = relay->mark_sealed(); !marked)
-				return fail_with_cleanup(*relay, std::move(marked.error()));
-			const auto transfer_digest = credentials->transfer_digest;
-			auto credentials_value = std::move(*credentials);
+			validator.commit_acknowledgement(std::move(*validator_ack));
+			protocol_state->commit_acknowledgement(std::move(*protocol_ack));
+			auto credentials_value = validator.take_ack_credentials();
+			if (!credentials_value)
+				return fail_with_cleanup(*relay, std::move(credentials_value.error()));
+			const auto transfer_digest = credentials_value->transfer_digest;
 			return source_closure_receiver_result{std::move(*snapshot),
-												  std::move(credentials_value),
+												  std::move(*credentials_value),
 												  transfer_digest,
 												  std::move(relay)};
 		}
