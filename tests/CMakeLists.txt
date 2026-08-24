@@ -125,6 +125,22 @@ set_tests_properties(
   PROPERTIES LABELS
              "unit;sdk;store;bounded;memory;v6;e2e;fault;determinism;resource")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-bounded-store-v6-sqlite-backend
+                            unit/sdk/bounded_store_v6_sqlite_backend_test.cpp)
+target_link_libraries(
+  cxxlens-unit-sdk-bounded-store-v6-sqlite-backend
+  PRIVATE cxxlens_bounded_store_v6_sqlite_internal
+          cxxlens_bounded_store_v6_memory_internal)
+target_include_directories(cxxlens-unit-sdk-bounded-store-v6-sqlite-backend
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-bounded-store-v6-sqlite-backend
+         COMMAND cxxlens-unit-sdk-bounded-store-v6-sqlite-backend)
+set_tests_properties(
+  unit.sdk-bounded-store-v6-sqlite-backend
+  PROPERTIES
+    LABELS "unit;sdk;store;bounded;sqlite;v6;backend;fault;determinism;resource"
+    RUN_SERIAL TRUE)
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-snapshot-store-v5-codec
                             unit/sdk/snapshot_store_v5_codec_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-snapshot-store-v5-codec
@@ -2028,6 +2044,7 @@ add_dependencies(
   cxxlens-unit-sdk-store
   cxxlens-unit-sdk-store-operation-port
   cxxlens-unit-sdk-bounded-store-v6-memory-e2e
+  cxxlens-unit-sdk-bounded-store-v6-sqlite-backend
   cxxlens-unit-sdk-snapshot-store-v5-codec
   cxxlens-unit-sdk-sqlite-writer-gate-outcome
   cxxlens-df0200-claim-batch-corpus

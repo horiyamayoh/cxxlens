@@ -231,6 +231,28 @@ set_target_properties(
 cxxlens_set_project_warnings(cxxlens_bounded_store_v6_memory_internal)
 cxxlens_enable_sanitizers(cxxlens_bounded_store_v6_memory_internal)
 
+# The SQLite physical Store v6 port is a separate source-private archive. It
+# reuses the phase core from the bounded Store target, while keeping the
+# physical backend out of the memory implementation and installed product.
+add_library(cxxlens_bounded_store_v6_sqlite_internal STATIC EXCLUDE_FROM_ALL
+            src/sdk/bounded_store_v6_sqlite_internal.cpp)
+target_link_libraries(
+  cxxlens_bounded_store_v6_sqlite_internal
+  PUBLIC cxxlens::base
+  PRIVATE cxxlens::kernel cxxlens_bounded_store_v6_memory_internal
+          "${CMAKE_DL_LIBS}")
+target_include_directories(cxxlens_bounded_store_v6_sqlite_internal
+                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_bounded_store_v6_sqlite_internal
+                        PRIVATE cxx_std_23)
+set_target_properties(
+  cxxlens_bounded_store_v6_sqlite_internal
+  PROPERTIES POSITION_INDEPENDENT_CODE ON
+             CXX_VISIBILITY_PRESET hidden
+             VISIBILITY_INLINES_HIDDEN YES)
+cxxlens_set_project_warnings(cxxlens_bounded_store_v6_sqlite_internal)
+cxxlens_enable_sanitizers(cxxlens_bounded_store_v6_sqlite_internal)
+
 if(BUILD_TESTING)
   # Qualification-only authority implementation. This target is intentionally
   # excluded from production components, installation, and export sets.
