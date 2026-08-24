@@ -6,7 +6,7 @@
 #include <cxxlens/sdk/common.hpp>
 
 #include "materialization_io.hpp"
-#include "materialization_prior_artifact.hpp"
+#include "materialization_prior_artifact_limits.hpp"
 #include "materialization_rooted_vfs.hpp"
 
 namespace cxxlens::detail::clang22::materialization

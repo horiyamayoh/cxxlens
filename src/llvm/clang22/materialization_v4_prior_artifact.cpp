@@ -14,7 +14,7 @@
 #include <fcntl.h>
 
 #include "materialization_io.hpp"
-#include "materialization_prior_artifact.hpp"
+#include "materialization_v4_prior_artifact.hpp"
 #include "materialization_prior_artifact_storage_internal.hpp"
 #include "materialization_rooted_vfs.hpp"
 

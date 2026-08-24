@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "llvm/clang22/materialization_execution_journal.hpp"
-#include "llvm/clang22/materialization_prior_artifact.hpp"
+#include "llvm/clang22/materialization_v4_prior_artifact.hpp"
 
 namespace
 {
