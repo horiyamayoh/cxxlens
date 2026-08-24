@@ -66,6 +66,8 @@ namespace cxxlens::sdk::doctor
 				return std::nullopt;
 		std::uint32_t major{};
 		const auto digits = id.substr(marker + 2U);
+		if (digits.size() > 1U && digits.front() == '0')
+			return std::nullopt;
 		if (!std::ranges::all_of(digits,
 								 [](const char byte)
 								 {
@@ -78,6 +80,8 @@ namespace cxxlens::sdk::doctor
 		if (parsed.ec == std::errc::result_out_of_range)
 			return parsed_relation_id{name, std::nullopt};
 		if (parsed.ec != std::errc{})
+			return std::nullopt;
+		if (major == 0U)
 			return std::nullopt;
 		return parsed_relation_id{name, major};
 	}
@@ -95,12 +99,16 @@ namespace cxxlens::sdk::doctor
 									return id.size() > maximum_json_string_bytes;
 								}))
 			return product_error{"doctor.relation-request-invalid", "relation", "byte-limit"};
+		std::vector<std::string_view> ordered_ids{relation_ids.begin(), relation_ids.end()};
+		std::ranges::sort(ordered_ids);
+		if (std::ranges::adjacent_find(ordered_ids) != ordered_ids.end())
+			return product_error{"doctor.relation-request-invalid", "relation", "duplicate-id"};
 		auto registry = known_relation_registry();
 		if (!registry)
 			return product_error{registry.error().code, "relation", registry.error().detail};
 		std::vector<relation_check> output;
 		output.reserve(relation_ids.size());
-		for (const auto id : relation_ids)
+		for (const auto id : ordered_ids)
 		{
 			const auto parsed = split_relation_id(id);
 			if (!parsed)

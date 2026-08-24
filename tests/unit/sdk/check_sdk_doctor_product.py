@@ -2124,6 +2124,12 @@ def check_relation_presence(executable: str) -> None:
         and all(component["state"] == "proved" for component in yaml_report["components"]),
         "known relation registry diverged from the YAML installed-static projection",
     )
+    permuted = run(executable, "relation-presence", *reversed(expected_ids))
+    require(permuted.returncode == 0, "permuted known relation request was not proved")
+    require(
+        json.loads(permuted.stdout) == yaml_report,
+        "relation-presence JSON depended on relation argument order",
+    )
     markdown = run(executable, "relation-presence", *expected_ids, "--format", "markdown")
     require(markdown.returncode == 0, "known relation Markdown projection failed")
     require(
@@ -2139,19 +2145,43 @@ def check_relation_presence(executable: str) -> None:
     registry = yaml.safe_load(
         (ROOT / "schemas" / "cxxlens_ng_relation_registry.yaml").read_text(encoding="utf-8")
     )
-    dynamic_only = next(
-        relation
+    dynamic_ids = sorted(
+        f"{relation['name']}.v{relation['semantic_major']}"
         for relation in registry["relations"]
-        if relation.get("cpp_projection") != "installed-static"
+        if relation.get("cpp_projection") == "dynamic-only"
     )
-    dynamic_id = f"{dynamic_only['name']}.v{dynamic_only['semantic_major']}"
-    completed = run(executable, "relation-presence", dynamic_id)
-    require(completed.returncode == 1, "dynamic-only relation leaked into installed static registry")
-    dynamic_report = json.loads(completed.stdout)
+    require(dynamic_ids, "relation registry has no dynamic-only projection to audit")
+    for dynamic_id in dynamic_ids:
+        completed = run(executable, "relation-presence", dynamic_id)
+        require(
+            completed.returncode == 1,
+            f"dynamic-only relation {dynamic_id} leaked into installed static registry",
+        )
+        dynamic_report = json.loads(completed.stdout)
+        require(
+            dynamic_report["components"][0]["state"] == "unknown"
+            and dynamic_report["components"][0]["reason_code"] == "sdk.relation-not-found",
+            f"dynamic-only relation {dynamic_id} did not remain an unknown product capability",
+        )
+    dynamic_report = json.loads(run(executable, "relation-presence", *dynamic_ids).stdout)
+    dynamic_permuted = run(executable, "relation-presence", *reversed(dynamic_ids))
+    require(dynamic_permuted.returncode == 1, "permuted dynamic relation request changed exit code")
     require(
-        dynamic_report["components"][0]["state"] == "unknown"
-        and dynamic_report["components"][0]["reason_code"] == "sdk.relation-not-found",
-        "dynamic-only relation did not remain an unknown product capability",
+        json.loads(dynamic_permuted.stdout) == dynamic_report,
+        "dynamic relation JSON depended on relation argument order",
+    )
+    dynamic_markdown = run(
+        executable, "relation-presence", *dynamic_ids, "--format", "markdown"
+    )
+    require(dynamic_markdown.returncode == 1, "dynamic relation Markdown changed exit code")
+    dynamic_markdown_report = json.loads(
+        dynamic_markdown.stdout[
+            len("# cxxlens SDK capability diagnosis\n\n```json\n") : -len("\n```\n")
+        ]
+    )
+    require(
+        dynamic_markdown_report == dynamic_report,
+        "dynamic relation JSON and Markdown projections diverged",
     )
 
     completed = run(executable, "relation-presence", "cc.call_site.v1", "cc.does_not_exist.v1")
@@ -2169,9 +2199,20 @@ def check_relation_presence(executable: str) -> None:
     require(mismatch_report["components"][0]["reason_code"] == "sdk.relation-major-mismatch", "major mismatch reason changed")
 
     completed = run(executable, "relation-presence", "cc.call_site.v1", "cc.call_site.v1")
-    duplicate_report = json.loads(completed.stdout)
-    require_product_only_projection(duplicate_report)
-    require(completed.returncode == 0 and duplicate_report["requested"] == 2, "duplicate relation requests were not projected independently")
+    require(completed.returncode == 2 and completed.stdout == "", "duplicate relation IDs were accepted")
+    require("duplicate-id" in completed.stderr, "duplicate relation reason missing")
+
+    for noncanonical_id in ("cc.call_site.v0", "cc.call_site.v01"):
+        completed = run(executable, "relation-presence", noncanonical_id)
+        require(
+            completed.returncode == 2 and completed.stdout == "",
+            f"noncanonical relation ID {noncanonical_id} did not fail closed",
+        )
+        require(
+            "doctor.relation-request-invalid" in completed.stderr
+            and "malformed-id" in completed.stderr,
+            f"noncanonical relation reason missing for {noncanonical_id}",
+        )
 
     completed = run(executable, "relation-presence", "cc.call_site.vX")
     require(completed.returncode == 2 and completed.stdout == "", "malformed relation ID did not fail closed")
@@ -2197,9 +2238,16 @@ def check_relation_presence(executable: str) -> None:
     require(completed.returncode == 2, "513-byte relation ID was accepted")
     require("byte-limit" in completed.stderr, "relation byte bound reason missing")
 
-    completed = run(executable, "relation-presence", *(["cc.call_site.v1"] * 128))
-    require(completed.returncode == 0, "exact 128-relation boundary was rejected")
-    require(json.loads(completed.stdout)["requested"] == 128, "128 relation requests were truncated")
+    unique_ids = [f"unknown.relation_{index}.v1" for index in range(128)]
+    completed = run(executable, "relation-presence", *unique_ids)
+    require(completed.returncode == 1, "exact 128-relation boundary was rejected")
+    boundary_report = json.loads(completed.stdout)
+    require(
+        boundary_report["requested"] == 128
+        and [component["id"] for component in boundary_report["components"]]
+        == sorted(unique_ids),
+        "128 relation requests were truncated or not canonically ordered",
+    )
 
     completed = run(executable, "relation-presence", *(["cc.call_site.v1"] * 129))
     require(completed.returncode == 2, "129 relation requests were accepted")
