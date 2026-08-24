@@ -403,11 +403,81 @@ namespace
 		return output;
 	}
 
-	void set_channel_environment(const fixture& value, const int descriptor)
+	struct socket_channel_endpoints
+	{
+		int child_read{-1};
+		int host_write{-1};
+		int child_write{-1};
+		int host_read{-1};
+
+		socket_channel_endpoints()
+		{
+			int input[2]{};
+			int ack[2]{};
+			if (::socketpair(AF_UNIX, SOCK_STREAM, 0, input) != 0)
+				std::abort();
+			if (::socketpair(AF_UNIX, SOCK_STREAM, 0, ack) != 0)
+			{
+				(void)::close(input[0]);
+				(void)::close(input[1]);
+				std::abort();
+			}
+			child_read = input[0];
+			host_write = input[1];
+			child_write = ack[0];
+			host_read = ack[1];
+			prepare_child_endpoint(child_read);
+			prepare_child_endpoint(child_write);
+		}
+
+		socket_channel_endpoints(const socket_channel_endpoints&) = delete;
+		socket_channel_endpoints& operator=(const socket_channel_endpoints&) = delete;
+
+		~socket_channel_endpoints()
+		{
+			for (const auto descriptor : {child_read, host_write, child_write, host_read})
+			{
+				if (descriptor >= 0)
+					(void)::close(descriptor);
+			}
+		}
+
+	  private:
+		static void prepare_child_endpoint(int& descriptor)
+		{
+			if (descriptor < 4)
+			{
+				const auto inherited = ::fcntl(descriptor, F_DUPFD, 4);
+				if (inherited < 4)
+					std::abort();
+				const auto closed = ::close(descriptor);
+				if (closed != 0)
+				{
+					(void)::close(inherited);
+					std::abort();
+				}
+				descriptor = inherited;
+			}
+			const auto status_flags = ::fcntl(descriptor, F_GETFL);
+			if (status_flags < 0 || ::fcntl(descriptor, F_SETFL, status_flags | O_NONBLOCK) != 0)
+				std::abort();
+			const auto descriptor_flags = ::fcntl(descriptor, F_GETFD);
+			if (descriptor_flags < 0 ||
+				::fcntl(descriptor, F_SETFD, descriptor_flags & ~FD_CLOEXEC) != 0)
+				std::abort();
+		}
+	};
+
+	void set_channel_environment(const fixture& value,
+								 const int read_descriptor,
+								 const int write_descriptor)
 	{
 		setenv("CXXLENS_PROVIDER_INGRESS_MODE", "task-v4-source-closure-v2", 1);
-		setenv("CXXLENS_PROVIDER_SOURCE_CLOSURE_READ_FD", std::to_string(descriptor).c_str(), 1);
-		setenv("CXXLENS_PROVIDER_SOURCE_CLOSURE_WRITE_FD", std::to_string(descriptor).c_str(), 1);
+		setenv(
+			"CXXLENS_PROVIDER_SOURCE_CLOSURE_READ_FD", std::to_string(read_descriptor).c_str(), 1);
+		setenv("CXXLENS_PROVIDER_SOURCE_CLOSURE_WRITE_FD",
+			   std::to_string(write_descriptor).c_str(),
+			   1);
 		setenv("CXXLENS_PROVIDER_SOURCE_CLOSURE_SESSION_ID", value.session.c_str(), 1);
 		setenv("CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_ID",
 			   value.request.task_extensions.front().task_id.c_str(),
@@ -448,80 +518,64 @@ namespace
 	void positive_fd_receiver()
 	{
 		auto value = make_fixture();
-		int pair[2]{};
-		assert(::socketpair(AF_UNIX, SOCK_STREAM, 0, pair) == 0);
-		if (pair[0] < 4)
-		{
-			const auto inherited = ::fcntl(pair[0], F_DUPFD, 4);
-			assert(inherited >= 4);
-			assert(::close(pair[0]) == 0);
-			pair[0] = inherited;
-		}
-		const auto status_flags = ::fcntl(pair[0], F_GETFL);
-		assert(status_flags >= 0);
-		assert(::fcntl(pair[0], F_SETFL, status_flags | O_NONBLOCK) == 0);
-		for (const auto descriptor : pair)
-		{
-			const auto flags = ::fcntl(descriptor, F_GETFD);
-			assert(flags >= 0);
-			assert(::fcntl(descriptor, F_SETFD, flags & ~FD_CLOEXEC) == 0);
-		}
-		set_channel_environment(value, pair[0]);
-		write_all(pair[1], value.transcript);
+		socket_channel_endpoints channel;
+		set_channel_environment(value, channel.child_read, channel.child_write);
+		write_all(channel.host_write, value.transcript);
 		auto received = receive_installed_materializer_source_closure(value.root);
-		assert(received);
-		assert(received->request.request.request_digest == value.request.request_digest);
-		assert(received->receiver.snapshot.snapshot_id == value.manifest.closure_id);
+		if (!received)
+		{
+			std::cerr << received.error().code << ':' << received.error().field << ':'
+					  << received.error().detail << '\n';
+			std::abort();
+		}
+		if (received->request.request.request_digest != value.request.request_digest ||
+			received->receiver.snapshot.snapshot_id != value.manifest.closure_id)
+			std::abort();
 		std::array<std::byte, 4096U> ack_bytes{};
-		const auto ack_size = ::read(pair[1], ack_bytes.data(), ack_bytes.size());
-		assert(ack_size > 0);
+		const auto ack_size = ::read(channel.host_read, ack_bytes.data(), ack_bytes.size());
+		if (ack_size <= 0)
+			std::abort();
 		clear_channel_environment();
-		(void)::close(pair[0]);
-		(void)::close(pair[1]);
 	}
 
 	void disconnected_is_explicit()
 	{
 		clear_channel_environment();
 		auto result = receive_installed_materializer_source_closure(json_value::null());
-		assert(!result && result.error().code == "source-closure.channel-required");
+		if (result || result.error().code != "source-closure.channel-required")
+			std::abort();
+	}
+
+	void duplicate_channel_custody_is_rejected()
+	{
+		auto value = make_fixture();
+		socket_channel_endpoints channel;
+		set_channel_environment(value, channel.child_read, channel.child_read);
+		auto result = receive_installed_materializer_source_closure(value.root);
+		if (result || result.error().code != "source-closure.channel-invalid" ||
+			result.error().field != "descriptor" || result.error().detail != "duplicate")
+			std::abort();
+		clear_channel_environment();
 	}
 
 	void foreign_task_binding_is_rejected()
 	{
 		auto value = make_fixture();
-		int pair[2]{};
-		assert(::socketpair(AF_UNIX, SOCK_STREAM, 0, pair) == 0);
-		if (pair[0] < 4)
-		{
-			const auto inherited = ::fcntl(pair[0], F_DUPFD, 4);
-			assert(inherited >= 4);
-			assert(::close(pair[0]) == 0);
-			pair[0] = inherited;
-		}
-		const auto status_flags = ::fcntl(pair[0], F_GETFL);
-		assert(status_flags >= 0);
-		assert(::fcntl(pair[0], F_SETFL, status_flags | O_NONBLOCK) == 0);
-		for (const auto descriptor : pair)
-		{
-			const auto flags = ::fcntl(descriptor, F_GETFD);
-			assert(flags >= 0);
-			assert(::fcntl(descriptor, F_SETFD, flags & ~FD_CLOEXEC) == 0);
-		}
-		set_channel_environment(value, pair[0]);
+		socket_channel_endpoints channel;
+		set_channel_environment(value, channel.child_read, channel.child_write);
 		const auto foreign_task = "task:semantic-v2:sha256:" + std::string(64U, 'f');
 		setenv("CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_ID", foreign_task.c_str(), 1);
 		auto result = receive_installed_materializer_source_closure(value.root);
-		assert(!result && result.error().code == "source-closure.task-binding-mismatch");
+		if (result || result.error().code != "source-closure.task-binding-mismatch")
+			std::abort();
 		clear_channel_environment();
-		(void)::close(pair[0]);
-		(void)::close(pair[1]);
 	}
 } // namespace
 
 int main()
 {
 	disconnected_is_explicit();
+	duplicate_channel_custody_is_rejected();
 	foreign_task_binding_is_rejected();
 	positive_fd_receiver();
 	return 0;
