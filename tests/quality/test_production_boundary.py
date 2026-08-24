@@ -204,7 +204,7 @@ class ProductionBoundaryCheckerTest(unittest.TestCase):
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(ProductionBoundaryError, "test kernel target"):
-                check_product_target_graph(build)
+                check_product_target_graph(build, frozenset({"cxxlens_kernel"}))
 
     def test_nm_parser_keeps_demangled_names_and_ignores_archive_headers(self) -> None:
         output = "\n".join(

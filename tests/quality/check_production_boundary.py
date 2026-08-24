@@ -31,6 +31,7 @@ class CompileProfile:
     shared: bool
     sources: frozenset[str]
     definitions_by_source: tuple[tuple[str, tuple[str, ...]], ...]
+    product_targets: frozenset[str] = frozenset()
 
 
 @dataclasses.dataclass(frozen=True)
@@ -222,7 +223,8 @@ def _is_product_target(target: str | None) -> bool:
     return target is not None and target.startswith("cxxlens") and not _is_test_only_target(target)
 
 
-def _validate_product_compile_commands(document: Sequence[object]) -> None:
+def _validate_product_compile_commands(document: Sequence[object]) -> frozenset[str]:
+    entries_by_target: dict[str, list[Mapping[str, object]]] = {}
     for raw_entry in document:
         require(isinstance(raw_entry, dict), "compile database entry is not an object")
         output = raw_entry.get("output", "")
@@ -231,18 +233,43 @@ def _validate_product_compile_commands(document: Sequence[object]) -> None:
         target = _cmake_target(output)
         if not _is_product_target(target):
             continue
-        tokens = _command_tokens(raw_entry)
-        file_text = raw_entry.get("file")
-        require(isinstance(file_text, str), "product compile command has no source file")
-        require_no_forbidden_seams(
-            (target or "", file_text, *tokens),
-            f"production compile command for {target}",
-        )
-        normalized_source = file_text.replace("\\", "/")
+        entries_by_target.setdefault(target or "", []).append(raw_entry)
+
+    product_targets: set[str] = set()
+    for target, entries in entries_by_target.items():
+        sources = [entry.get("file") for entry in entries]
         require(
-            re.search(r"(?:^|/)tests?(?:/|$)", normalized_source, re.IGNORECASE) is None,
-            f"production target {target} compiles test source: {file_text}",
+            all(isinstance(source, str) for source in sources),
+            "product compile command has no source file",
         )
+        developer_target = target != "cxxlens_kernel" and any(
+            re.search(
+                r"(?:^|/)(?:tests?|examples)(?:/|$)",
+                str(source).replace("\\", "/"),
+                re.IGNORECASE,
+            )
+            is not None
+            for source in sources
+        )
+        if developer_target:
+            continue
+        product_targets.add(target)
+        for raw_entry in entries:
+            file_text = raw_entry.get("file")
+            require(isinstance(file_text, str), "product compile command has no source file")
+            normalized_source = file_text.replace("\\", "/")
+            tokens = _command_tokens(raw_entry)
+            require_no_forbidden_seams(
+                (target, file_text, *tokens),
+                f"production compile command for {target}",
+            )
+            require(
+                re.search(r"(?:^|/)tests?(?:/|$)", normalized_source, re.IGNORECASE)
+                is None,
+                f"production target {target} compiles test source: {file_text}",
+            )
+    require(product_targets, "compile database has no production targets")
+    return frozenset(product_targets)
 
 
 def _source_key(file: pathlib.Path, source_root: pathlib.Path, build: pathlib.Path) -> str:
@@ -273,7 +300,7 @@ def load_compile_profile(build_path: pathlib.Path, expected_testing: bool) -> Co
     require(database_path.is_file(), f"missing compile database: {database_path}")
     document = json.loads(database_path.read_text(encoding="utf-8"))
     require(isinstance(document, list), f"compile database is not an array: {database_path}")
-    _validate_product_compile_commands(document)
+    product_targets = _validate_product_compile_commands(document)
 
     definitions: dict[str, tuple[str, ...]] = {}
     for raw_entry in document:
@@ -307,6 +334,7 @@ def load_compile_profile(build_path: pathlib.Path, expected_testing: bool) -> Co
         shared=shared,
         sources=frozenset(definitions),
         definitions_by_source=tuple(sorted(definitions.items())),
+        product_targets=product_targets,
     )
 
 
@@ -324,6 +352,10 @@ def compare_compile_profiles(enabled: CompileProfile, disabled: CompileProfile) 
     require(
         enabled.definitions_by_source == disabled.definitions_by_source,
         "BUILD_TESTING changes cxxlens_kernel compile definitions",
+    )
+    require(
+        enabled.product_targets == disabled.product_targets,
+        "BUILD_TESTING changes the compiled product target set",
     )
 
 
@@ -374,26 +406,27 @@ def _ninja_output_targets(header: str) -> tuple[str, ...]:
     return tuple(targets)
 
 
-def _is_product_graph_output(output: str) -> bool:
-    if _is_product_target(output):
+def _is_product_graph_output(output: str, product_targets: frozenset[str]) -> bool:
+    if output in product_targets:
         return True
     name = pathlib.PurePosixPath(output).name
-    if _is_test_only_target(name):
-        return False
-    return (
-        re.fullmatch(r"libcxxlens[^/]*\.(?:a|dylib|so(?:\.[0-9.]+)?)", name) is not None
-        or name in {"cxxlens_kernel.lib", "cxxlens_kernel.dll"}
-        or name.startswith("cxxlens-")
-    )
+    for target in product_targets:
+        if name == target or name.startswith(f"lib{target}.") or name.startswith(f"{target}."):
+            return True
+    return False
 
 
-def check_product_target_graph(build: pathlib.Path) -> None:
+def check_product_target_graph(
+    build: pathlib.Path, product_targets: frozenset[str]
+) -> None:
     graph = build / "build.ninja"
     require(graph.is_file(), f"missing generated target graph: {graph}")
     product_blocks = 0
     for header, block in _ninja_build_blocks(graph.read_text(encoding="utf-8")):
         outputs = _ninja_output_targets(header)
-        if not any(_is_product_graph_output(output) for output in outputs):
+        if not any(
+            _is_product_graph_output(output, product_targets) for output in outputs
+        ):
             continue
         product_blocks += 1
         require_no_forbidden_seams(block, f"production target graph in {graph}")
@@ -572,7 +605,20 @@ def scan_defined_symbols(nm: str, artifact: pathlib.Path) -> None:
     require_no_forbidden_product_symbols(symbols, str(artifact))
 
 
-def product_library_artifacts(root: pathlib.Path) -> tuple[pathlib.Path, ...]:
+def _library_target_name(name: str) -> str:
+    target = name.removeprefix("lib")
+    if ".so" in target:
+        return target.split(".so", 1)[0]
+    for suffix in (".a", ".lib", ".dll", ".dylib"):
+        if target.endswith(suffix):
+            target = target.removesuffix(suffix)
+            return re.sub(r"\.[0-9.]+$", "", target)
+    return target
+
+
+def product_library_artifacts(
+    root: pathlib.Path, product_targets: frozenset[str]
+) -> tuple[pathlib.Path, ...]:
     resolved: dict[pathlib.Path, pathlib.Path] = {}
     for candidate in sorted(root.rglob("*")):
         if not (candidate.is_file() or candidate.is_symlink()):
@@ -588,6 +634,8 @@ def product_library_artifacts(root: pathlib.Path) -> tuple[pathlib.Path, ...]:
             or re.fullmatch(r"cxxlens[^/]*\.(?:lib|dll)", name)
         ):
             continue
+        if _library_target_name(name) not in product_targets:
+            continue
         target = candidate.resolve(strict=True)
         previous = resolved.get(target)
         if previous is None or len(relative.parts) < len(previous.relative_to(root).parts):
@@ -598,9 +646,12 @@ def product_library_artifacts(root: pathlib.Path) -> tuple[pathlib.Path, ...]:
 
 
 def scan_product_artifacts(
-    nm: str, root: pathlib.Path, executable_names: Sequence[str]
+    nm: str,
+    root: pathlib.Path,
+    product_targets: frozenset[str],
+    executable_names: Sequence[str],
 ) -> None:
-    for artifact in product_library_artifacts(root):
+    for artifact in product_library_artifacts(root, product_targets):
         scan_defined_symbols(nm, artifact)
     for name in executable_names:
         scan_defined_symbols(nm, find_product_executable(root, name))
@@ -665,8 +716,8 @@ def check(
     enabled_profile = load_compile_profile(enabled_build, expected_testing=True)
     disabled_profile = load_compile_profile(disabled_build, expected_testing=False)
     compare_compile_profiles(enabled_profile, disabled_profile)
-    check_product_target_graph(enabled_profile.build)
-    check_product_target_graph(disabled_profile.build)
+    check_product_target_graph(enabled_profile.build, enabled_profile.product_targets)
+    check_product_target_graph(disabled_profile.build, disabled_profile.product_targets)
 
     nm = find_nm(nm_executable)
     enabled_build_library = find_kernel_library(enabled_profile.build, enabled_profile.shared)
@@ -704,13 +755,13 @@ def check(
         executable_names == installed_executable_names(disabled_install),
         "BUILD_TESTING changes the installed product executable set",
     )
-    for root in (
-        enabled_profile.build,
-        disabled_profile.build,
-        enabled_install,
-        disabled_install,
+    for root, product_targets in (
+        (enabled_profile.build, enabled_profile.product_targets),
+        (disabled_profile.build, disabled_profile.product_targets),
+        (enabled_install, enabled_profile.product_targets),
+        (disabled_install, disabled_profile.product_targets),
     ):
-        scan_product_artifacts(nm, root, executable_names)
+        scan_product_artifacts(nm, root, product_targets, executable_names)
 
 
 def main(arguments: Sequence[str] | None = None) -> int:
