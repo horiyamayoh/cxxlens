@@ -832,15 +832,13 @@ set_tests_properties(
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-session
                             unit/sdk/provider_ng1_session_test.cpp)
-target_sources(
-  cxxlens-unit-sdk-provider-ng1-session
-  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_session.cpp"
-          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_recovery.cpp"
-          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp")
 if(NOT CXXLENS_BUILD_SHARED)
   target_sources(
     cxxlens-unit-sdk-provider-ng1-session
-    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_session.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_recovery.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
             "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
 endif()
 target_link_libraries(cxxlens-unit-sdk-provider-ng1-session
@@ -863,16 +861,14 @@ set_tests_properties(
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-live-driver
                             unit/sdk/provider_ng1_live_driver_test.cpp)
-target_sources(
-  cxxlens-unit-sdk-provider-ng1-live-driver
-  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_live_driver.cpp"
-          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_session.cpp"
-          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_recovery.cpp"
-          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp")
 if(NOT CXXLENS_BUILD_SHARED)
   target_sources(
     cxxlens-unit-sdk-provider-ng1-live-driver
-    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_live_driver.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_session.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_recovery.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
             "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
 endif()
 target_link_libraries(cxxlens-unit-sdk-provider-ng1-live-driver
@@ -1113,7 +1109,8 @@ if(CXXLENS_BUILD_SHARED)
   target_sources(
     cxxlens-unit-sdk-provider-protocol-v2-adapter
     PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_heartbeat_adapter.cpp")
   target_link_libraries(cxxlens-unit-sdk-provider-protocol-v2-adapter
                         PRIVATE cxxlens_protocol_v2)
 endif()

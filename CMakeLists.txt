@@ -271,7 +271,9 @@ add_library(
   cxxlens_provider_runtime_internal OBJECT
   EXCLUDE_FROM_ALL src/sdk/provider_runtime.cpp
   src/runtime/provider_process_adapter.cpp src/sdk/provider_ng1_transport.cpp
-  src/sdk/provider_ng1_validation.cpp)
+  src/sdk/provider_ng1_validation.cpp src/sdk/provider_ng1_recovery.cpp
+  src/sdk/provider_ng1_spill_port_internal.cpp src/sdk/provider_ng1_session.cpp
+  src/sdk/provider_ng1_live_driver.cpp)
 target_compile_definitions(cxxlens_provider_runtime_internal
                            PRIVATE CXXLENS_PROVIDER_RUNTIME_INTERNAL_ONLY=1)
 target_link_libraries(cxxlens_provider_runtime_internal
@@ -300,7 +302,8 @@ add_library(
   src/sdk/provider_ng1_spill_port_internal.cpp
   src/sdk/provider_ng1_session.cpp
   src/sdk/provider_ng1_live_driver.cpp
-  src/sdk/provider_protocol_v2_adapter.cpp)
+  src/sdk/provider_protocol_v2_adapter.cpp
+  src/sdk/provider_protocol_v2_heartbeat_adapter.cpp)
 add_library(cxxlens::provider_sdk ALIAS cxxlens_provider_sdk)
 cxxlens_configure_component(cxxlens_provider_sdk provider_sdk)
 target_link_libraries(cxxlens_provider_sdk PUBLIC cxxlens::cxxlens
@@ -317,8 +320,11 @@ target_include_directories(
   cxxlens_protocol_v2
   PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
 target_compile_features(cxxlens_protocol_v2 PRIVATE cxx_std_23)
-set_target_properties(cxxlens_protocol_v2 PROPERTIES POSITION_INDEPENDENT_CODE
-                                                     ON)
+set_target_properties(
+  cxxlens_protocol_v2
+  PROPERTIES POSITION_INDEPENDENT_CODE ON
+             CXX_VISIBILITY_PRESET hidden
+             VISIBILITY_INLINES_HIDDEN YES)
 cxxlens_set_project_warnings(cxxlens_protocol_v2)
 cxxlens_enable_sanitizers(cxxlens_protocol_v2)
 target_link_libraries(cxxlens_provider_sdk PUBLIC cxxlens_protocol_v2)
@@ -433,7 +439,13 @@ add_library(
 target_link_libraries(
   cxxlens_clang22_materialization_codecs
   PUBLIC cxxlens::provider_sdk
-  PRIVATE cxxlens_icu_static)
+  PRIVATE cxxlens_icu_static cxxlens_protocol_v2)
+# The provider SDK DSO keeps its Protocol 2 adapter definitions hidden. Give
+# the source-private codec archive its own frame/closure adapter object without
+# importing the heartbeat adapter's NG1 runtime dependency.
+target_sources(
+  cxxlens_clang22_materialization_codecs
+  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
 target_include_directories(cxxlens_clang22_materialization_codecs
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(cxxlens_clang22_materialization_codecs
