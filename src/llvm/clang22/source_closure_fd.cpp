@@ -211,11 +211,15 @@ namespace cxxlens::detail::clang22
 		write_without_sigpipe(const int descriptor, const void* bytes, const std::size_t size)
 		{
 			errno = 0;
+			iovec vector{const_cast<void*>(bytes), size};
+			msghdr message{};
+			message.msg_iov = &vector;
+			message.msg_iovlen = 1U;
 #if defined(MSG_NOSIGNAL)
-			const auto count = ::send(descriptor, bytes, size, MSG_NOSIGNAL);
+			const auto count = ::sendmsg(descriptor, &message, MSG_NOSIGNAL);
 #else
 			// SO_NOSIGPIPE is installed on the private write duplicate during admission.
-			const auto count = ::send(descriptor, bytes, size, 0);
+			const auto count = ::sendmsg(descriptor, &message, 0);
 #endif
 			return write_outcome{count, count < 0 ? errno : 0};
 		}
