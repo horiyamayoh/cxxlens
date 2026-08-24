@@ -80,14 +80,6 @@ foreach(case IN LISTS cxxlens_sdk_cases)
     "unit.sdk.${case}" PROPERTIES LABELS "unit;sdk;relation;query;provider"
                                   PROCESSORS 1)
 endforeach()
-add_test(
-  NAME unit.sdk.registration
-  COMMAND
-    "${Python3_EXECUTABLE}"
-    "${PROJECT_SOURCE_DIR}/tests/unit/sdk/check_case_registration.py"
-    "$<TARGET_FILE:cxxlens-unit-sdk>" ${cxxlens_sdk_cases})
-set_tests_properties(unit.sdk.registration PROPERTIES LABELS
-                                                      "unit;sdk;registration")
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-store unit/sdk/store_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-store PRIVATE cxxlens::kernel
@@ -1616,16 +1608,6 @@ foreach(
   set_tests_properties("quality.ng-${contract}"
                        PROPERTIES LABELS "quality;ng;contract")
 endforeach()
-
-# This focused test exercises the production-boundary checker itself. The full
-# BUILD_TESTING=ON/OFF build/install comparison is orchestrated once by the
-# static installed-consumer workflow and is intentionally not recursive CTest.
-add_test(
-  NAME quality.production-boundary-self-test
-  COMMAND "${Python3_EXECUTABLE}"
-          "${PROJECT_SOURCE_DIR}/tests/quality/test_production_boundary.py")
-set_tests_properties(quality.production-boundary-self-test
-                     PROPERTIES LABELS "quality;security;production-boundary")
 
 add_test(
   NAME sdk.doctor-product

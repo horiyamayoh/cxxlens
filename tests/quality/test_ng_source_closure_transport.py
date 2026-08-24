@@ -236,26 +236,26 @@ class SourceClosureTransportTest(unittest.TestCase):
         request, manifest = complete_request_witness(ROOT)
         self.assertEqual(request["request_version"], "2.2.0")
         self.assertNotIn("content_base64", request["tasks"][0]["source"])
-        request_schema = yaml.safe_load(
+        request_v2_2_schema = yaml.safe_load(
             (ROOT / REQUEST).read_text(encoding="utf-8")
         )
-        legacy_request_schema = yaml.safe_load(
+        request_schema = yaml.safe_load(
             (ROOT / "schemas/cxxlens_ng_clang22_materialization_request.schema.yaml").read_text(
                 encoding="utf-8"
             )
         )
         task_schema = yaml.safe_load((ROOT / TASK).read_text(encoding="utf-8"))
         schema_store = {
+            request_v2_2_schema["$id"]: request_v2_2_schema,
             request_schema["$id"]: request_schema,
-            legacy_request_schema["$id"]: legacy_request_schema,
             task_schema["$id"]: task_schema,
             "https://cxxlens.dev/schemas/cxxlens_ng_provider_task_v4.schema.yaml": task_schema,
         }
         resolver = jsonschema.RefResolver.from_schema(
-            request_schema, store=schema_store
+            request_v2_2_schema, store=schema_store
         )
         jsonschema.Draft202012Validator(
-            request_schema, resolver=resolver
+            request_v2_2_schema, resolver=resolver
         ).validate(request)
         validate_manifest(
             manifest, yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text())
