@@ -5,6 +5,7 @@
 #include <string_view>
 #include <utility>
 
+#include "../runtime/monotonic_clock_port_internal.hpp"
 #include "provider_ng1_live_driver_internal.hpp"
 #include "provider_runtime_internal.hpp"
 
@@ -18,7 +19,7 @@ namespace cxxlens::sdk::provider::detail
 			result<std::uint64_t> now_ns() const override
 			{
 				const auto count = std::chrono::duration_cast<std::chrono::nanoseconds>(
-									   std::chrono::steady_clock::now().time_since_epoch())
+									   cxxlens::runtime::monotonic_now().time_since_epoch())
 									   .count();
 				if (count < 0)
 					return cxxlens::sdk::unexpected(
