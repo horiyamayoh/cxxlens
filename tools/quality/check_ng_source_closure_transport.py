@@ -101,7 +101,7 @@ def manifest_digest(manifest: dict[str, Any]) -> str:
 
 
 def closure_digest(members: list[dict[str, Any]], blobs: list[dict[str, Any]]) -> str:
-    """Reproduce ADR 0101 / source_closure.cpp byte-for-byte."""
+    """Reproduce the ADR 0101 canonical source-closure projection."""
     encoded_members = []
     for member in members:
         encoded_members.append(_canonical_tuple([
@@ -130,7 +130,7 @@ def closure_digest(members: list[dict[str, Any]], blobs: list[dict[str, Any]]) -
 
 
 def _validated_logical_path(value: Any, *, subject: str = "logical path") -> str:
-    """Return the ADR 0101 relative path after applying source_closure.cpp rules."""
+    """Return the ADR 0101 canonical relative-path projection."""
 
     if not isinstance(value, str) or not value.startswith(PROJECT_PATH_PREFIX):
         raise SourceClosureTransportError(f"{subject} is not project-scoped")
@@ -161,7 +161,7 @@ def _validated_logical_path(value: Any, *, subject: str = "logical path") -> str
 
 
 def source_closure_file_id(logical_path: Any) -> str:
-    """Derive the file identity used by source_closure.cpp from a logical path."""
+    """Derive the ADR 0101 file identity from a logical path."""
 
     relative = _validated_logical_path(logical_path)
     projection = _canonical_tuple(
