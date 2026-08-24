@@ -346,6 +346,16 @@ class MaterializationProtocol2Tests(unittest.TestCase):
                 materialization.validate_primary_span_bundle(changed, source)
 
     def test_occurrence_manifest_is_closed_and_digest_bound(self) -> None:
+        def reseal(value: dict) -> None:
+            payload = {
+                key: copy.deepcopy(item)
+                for key, item in value.items()
+                if key != "occurrence_payload_digest"
+            }
+            value["occurrence_payload_digest"] = materialization.content_digest(
+                materialization.canonical_json(payload)
+            )
+
         manifest = materialization.fixture_occurrence_manifest(
             ROOT,
             source_revision="a" * 40,
@@ -368,6 +378,79 @@ class MaterializationProtocol2Tests(unittest.TestCase):
         )
         with self.assertRaises(materialization.MaterializationError):
             materialization.validate_occurrence_manifest(ROOT, changed_order)
+        reseal(changed_order)
+        materialization.validate_occurrence_manifest(ROOT, changed_order)
+
+        additional_artifact = copy.deepcopy(manifest)
+        additional_artifact["files"].append(
+            {
+                "role": "supplemental-contract",
+                "path": "share/cxxlens/schemas/supplemental-contract.yaml",
+                "digest": "sha256:" + "3" * 64,
+            }
+        )
+        reseal(additional_artifact)
+        materialization.validate_occurrence_manifest(ROOT, additional_artifact)
+
+        duplicate_role = copy.deepcopy(additional_artifact)
+        duplicate_role["files"].append(
+            {
+                "role": "supplemental-contract",
+                "path": "share/cxxlens/schemas/another-contract.yaml",
+                "digest": "sha256:" + "4" * 64,
+            }
+        )
+        reseal(duplicate_role)
+        with self.assertRaises(materialization.MaterializationError):
+            materialization.validate_occurrence_manifest(ROOT, duplicate_role)
+
+        duplicate_path = copy.deepcopy(additional_artifact)
+        duplicate_path["files"].append(
+            {
+                "role": "another-contract",
+                "path": "share/cxxlens/schemas/supplemental-contract.yaml",
+                "digest": "sha256:" + "4" * 64,
+            }
+        )
+        reseal(duplicate_path)
+        with self.assertRaises(materialization.MaterializationError):
+            materialization.validate_occurrence_manifest(ROOT, duplicate_path)
+
+        missing_required = copy.deepcopy(manifest)
+        missing_required["files"] = [
+            row
+            for row in missing_required["files"]
+            if row["role"] != "provider-protocol"
+        ]
+        reseal(missing_required)
+        with self.assertRaises(materialization.MaterializationError):
+            materialization.validate_occurrence_manifest(ROOT, missing_required)
+
+        static_runtime = copy.deepcopy(manifest)
+        static_runtime["files"].append(
+            {
+                "role": "supplemental-runtime",
+                "path": "lib/libcxxlens_supplemental.so.1",
+                "digest": "sha256:" + "5" * 64,
+            }
+        )
+        reseal(static_runtime)
+        with self.assertRaises(materialization.MaterializationError):
+            materialization.validate_occurrence_manifest(ROOT, static_runtime)
+
+        shared = materialization.fixture_occurrence_manifest(
+            ROOT,
+            source_revision="a" * 40,
+            source_tree="b" * 40,
+            configuration="shared",
+            tool_digest="sha256:" + "1" * 64,
+            worker_digest="sha256:" + "2" * 64,
+        )
+        materialization.validate_occurrence_manifest(ROOT, shared)
+        shared["files"] = [row for row in shared["files"] if row["role"] != "query"]
+        reseal(shared)
+        with self.assertRaises(materialization.MaterializationError):
+            materialization.validate_occurrence_manifest(ROOT, shared)
 
     def test_task_v4_resource_proof_is_schema_derived_and_deterministic(self) -> None:
         shared_schema_path = ROOT / "schemas/cxxlens_ng_clang22_materialization_request.schema.yaml"

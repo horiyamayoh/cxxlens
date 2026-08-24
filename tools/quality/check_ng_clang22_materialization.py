@@ -5418,7 +5418,7 @@ def validate_occurrence_manifest(
     root: pathlib.Path,
     manifest: dict[str, Any],
 ) -> None:
-    """Validate occurrence schema, closed inventory and both digest boundaries."""
+    """Validate dynamic occurrence closure and both digest boundaries."""
 
     validate_schema(
         manifest,
@@ -5430,11 +5430,45 @@ def validate_occurrence_manifest(
             "materialization.identity-mismatch",
             "occurrence manifest inventories its own bytes",
         )
-    authority_end = 2 + len(OCCURRENCE_AUTHORITY_FILES)
-    if manifest["files"][2:authority_end] != occurrence_authority_bindings(root):
+    files_by_role: dict[str, dict[str, str]] = {}
+    paths: set[str] = set()
+    for row in manifest["files"]:
+        if row["role"] in files_by_role or row["path"] in paths:
+            fail(
+                "materialization.identity-mismatch",
+                "occurrence roles and paths must each be unique",
+            )
+        files_by_role[row["role"]] = row
+        paths.add(row["path"])
+
+    required_paths = {
+        "materializer-executable": "bin/cxxlens-clang22-materialize",
+        "worker-executable": "bin/cxxlens-clang-worker-22",
+    }
+    for role, path in required_paths.items():
+        if files_by_role.get(role, {}).get("path") != path:
+            fail(
+                "materialization.identity-mismatch",
+                f"required occurrence role differs: {role}",
+            )
+    for expected in occurrence_authority_bindings(root):
+        if files_by_role.get(expected["role"]) != expected:
+            fail(
+                "materialization.identity-mismatch",
+                f"occurrence authority differs: {expected['role']}",
+            )
+
+    runtime_roles = {role for role, _ in SHARED_OCCURRENCE_RUNTIME_FILES}
+    present_runtime_roles = runtime_roles.intersection(files_by_role)
+    if manifest["package_configuration"] == "static" and present_runtime_roles:
         fail(
             "materialization.identity-mismatch",
-            "occurrence authority role/path/digest inventory differs",
+            "static occurrence inventories package runtime DSOs",
+        )
+    if manifest["package_configuration"] == "shared" and present_runtime_roles != runtime_roles:
+        fail(
+            "materialization.identity-mismatch",
+            "shared occurrence omits a required package runtime DSO",
         )
     payload = {
         key: copy.deepcopy(value)

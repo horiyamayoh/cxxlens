@@ -9,7 +9,10 @@ description: >-
   prefix checks are performed by direct quality/release tests and are not
   represented by a separate install-artifact witness.  Package-owned runtime
   DSOs are inventoried only for shared packages; external system libraries
-  remain toolchain/runtime inputs and are not occurrence-manifest entries.
+  remain toolchain/runtime inputs and are not occurrence-manifest entries. The
+  inventory length and tuple positions are not authority: required semantic
+  roles occur exactly once, while every additional installed artifact is bound
+  by a unique role, unique prefix-relative path, and full SHA-256 digest.
 type: object
 additionalProperties: false
 required:
@@ -28,8 +31,6 @@ properties:
   package_configuration: {enum: [static, shared]}
   files:
     type: array
-    minItems: 13
-    maxItems: 19
     uniqueItems: true
     items: {$ref: '#/$defs/file'}
   occurrence_payload_digest: {$ref: '#/$defs/digest'}
@@ -51,7 +52,7 @@ $defs:
     additionalProperties: false
     required: [role, path, digest]
     properties:
-      role: {type: string}
+      role: {type: string, pattern: '^[a-z][a-z0-9-]*$', maxLength: 128}
       path:
         type: string
         minLength: 1
@@ -191,49 +192,40 @@ $defs:
           role: {const: clang22-provider-sdk}
           path: {type: string, pattern: '^(?:lib|lib64)/libcxxlens_clang22_provider_sdk\.so(?:\.[0-9]+)*$'}
         required: [role, path]
+  required_semantic_files:
+    type: array
+    allOf:
+      - {contains: {$ref: '#/$defs/materializer'}, minContains: 1, maxContains: 1}
+      - {contains: {$ref: '#/$defs/worker'}, minContains: 1, maxContains: 1}
+      - {contains: {$ref: '#/$defs/relation_registry'}, minContains: 1, maxContains: 1}
+      - {contains: {$ref: '#/$defs/project_catalog_contract'}, minContains: 1, maxContains: 1}
+      - {contains: {$ref: '#/$defs/portable_provider_task_contract'}, minContains: 1, maxContains: 1}
+      - {contains: {$ref: '#/$defs/provider_protocol'}, minContains: 1, maxContains: 1}
+      - {contains: {$ref: '#/$defs/provider_runtime_contract'}, minContains: 1, maxContains: 1}
+      - {contains: {$ref: '#/$defs/snapshot_store_contract'}, minContains: 1, maxContains: 1}
+      - {contains: {$ref: '#/$defs/sqlite_store_contract'}, minContains: 1, maxContains: 1}
+      - {contains: {$ref: '#/$defs/materialization_contract'}, minContains: 1, maxContains: 1}
+      - {contains: {$ref: '#/$defs/materialization_contract_schema'}, minContains: 1, maxContains: 1}
+      - {contains: {$ref: '#/$defs/materialization_request_schema'}, minContains: 1, maxContains: 1}
+      - {contains: {$ref: '#/$defs/materialization_report_schema'}, minContains: 1, maxContains: 1}
+  required_runtime_files:
+    type: array
+    allOf:
+      - {contains: {$ref: '#/$defs/runtime_base'}, minContains: 1, maxContains: 1}
+      - {contains: {$ref: '#/$defs/runtime_kernel'}, minContains: 1, maxContains: 1}
+      - {contains: {$ref: '#/$defs/runtime_query'}, minContains: 1, maxContains: 1}
+      - {contains: {$ref: '#/$defs/runtime_recipes'}, minContains: 1, maxContains: 1}
+      - {contains: {$ref: '#/$defs/runtime_provider_sdk'}, minContains: 1, maxContains: 1}
+      - {contains: {$ref: '#/$defs/runtime_clang22_provider_sdk'}, minContains: 1, maxContains: 1}
   static_files:
-    type: array
-    minItems: 13
-    maxItems: 13
-    uniqueItems: true
-    prefixItems:
-      - {$ref: '#/$defs/materializer'}
-      - {$ref: '#/$defs/worker'}
-      - {$ref: '#/$defs/relation_registry'}
-      - {$ref: '#/$defs/project_catalog_contract'}
-      - {$ref: '#/$defs/portable_provider_task_contract'}
-      - {$ref: '#/$defs/provider_protocol'}
-      - {$ref: '#/$defs/provider_runtime_contract'}
-      - {$ref: '#/$defs/snapshot_store_contract'}
-      - {$ref: '#/$defs/sqlite_store_contract'}
-      - {$ref: '#/$defs/materialization_contract'}
-      - {$ref: '#/$defs/materialization_contract_schema'}
-      - {$ref: '#/$defs/materialization_request_schema'}
-      - {$ref: '#/$defs/materialization_report_schema'}
-    items: false
+    allOf:
+      - {$ref: '#/$defs/required_semantic_files'}
+      - not:
+          contains:
+            properties:
+              path: {pattern: '^(?:lib|lib64)/.*\.so(?:\.[0-9]+)*$'}
+            required: [path]
   shared_files:
-    type: array
-    minItems: 19
-    maxItems: 19
-    uniqueItems: true
-    prefixItems:
-      - {$ref: '#/$defs/materializer'}
-      - {$ref: '#/$defs/worker'}
-      - {$ref: '#/$defs/relation_registry'}
-      - {$ref: '#/$defs/project_catalog_contract'}
-      - {$ref: '#/$defs/portable_provider_task_contract'}
-      - {$ref: '#/$defs/provider_protocol'}
-      - {$ref: '#/$defs/provider_runtime_contract'}
-      - {$ref: '#/$defs/snapshot_store_contract'}
-      - {$ref: '#/$defs/sqlite_store_contract'}
-      - {$ref: '#/$defs/materialization_contract'}
-      - {$ref: '#/$defs/materialization_contract_schema'}
-      - {$ref: '#/$defs/materialization_request_schema'}
-      - {$ref: '#/$defs/materialization_report_schema'}
-      - {$ref: '#/$defs/runtime_base'}
-      - {$ref: '#/$defs/runtime_kernel'}
-      - {$ref: '#/$defs/runtime_query'}
-      - {$ref: '#/$defs/runtime_recipes'}
-      - {$ref: '#/$defs/runtime_provider_sdk'}
-      - {$ref: '#/$defs/runtime_clang22_provider_sdk'}
-    items: false
+    allOf:
+      - {$ref: '#/$defs/required_semantic_files'}
+      - {$ref: '#/$defs/required_runtime_files'}
