@@ -1,0 +1,1006 @@
+#include "materializer_worker_bridge.hpp"
+
+#include <algorithm>
+#include <array>
+#include <cerrno>
+#include <cstddef>
+#include <limits>
+#include <map>
+#include <memory>
+#include <ranges>
+#include <span>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <utility>
+#include <vector>
+
+#include <cxxlens/relations/build_compile_unit.hpp>
+#include <cxxlens/relations/build_project.hpp>
+#include <cxxlens/relations/build_toolchain_context.hpp>
+#include <cxxlens/relations/build_variant.hpp>
+#include <cxxlens/relations/cc_call_direct_target.hpp>
+#include <cxxlens/relations/cc_call_site.hpp>
+#include <cxxlens/relations/cc_entity.hpp>
+#include <cxxlens/relations/source_file.hpp>
+#include <cxxlens/relations/source_span.hpp>
+#include <fcntl.h>
+#include <poll.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include "materialization_json.hpp"
+#include "materialization_v4_claim_binding.hpp"
+#include "materialization_v4_incremental_ingress.hpp"
+#include "materialization_v4_store_source.hpp"
+#include "observation_v2.hpp"
+#include "provider_worker_v4.hpp"
+#include "provider_worker_v4_output_normalizer.hpp"
+#include "protocol_v2/closure.hpp"
+#include "provider_task_v4.hpp"
+#include "source_closure_task_v4.hpp"
+#include "source_closure_transport.hpp"
+
+namespace cxxlens::detail::clang22
+{
+	namespace
+	{
+		using materialization::json_value;
+		namespace protocol = ::cxxlens::protocol_v2;
+
+		[[nodiscard]] sdk::error
+		failure(std::string code, std::string field, std::string detail = {})
+		{
+			return {std::move(code), std::move(field), std::move(detail)};
+		}
+
+		[[nodiscard]] sdk::result<json_value> text(std::string_view value)
+		{
+			return json_value::string(std::string{value});
+		}
+
+		[[nodiscard]] sdk::result<json_value> object(json_value::object_type fields)
+		{
+			return json_value::object(std::move(fields));
+		}
+
+		[[nodiscard]] std::string role_name(source_closure_role value)
+		{
+			switch (value)
+			{
+				case source_closure_role::main:
+					return "main";
+				case source_closure_role::header:
+					return "header";
+				case source_closure_role::generated:
+					return "generated";
+				case source_closure_role::forced_include:
+					return "forced-include";
+				case source_closure_role::macro_file:
+					return "macro-file";
+			}
+			return {};
+		}
+
+		[[nodiscard]] std::string encoding_name(source_closure_encoding value)
+		{
+			switch (value)
+			{
+				case source_closure_encoding::utf8:
+					return "utf8";
+				case source_closure_encoding::utf16le:
+					return "utf16le";
+				case source_closure_encoding::utf16be:
+					return "utf16be";
+				case source_closure_encoding::locale_dependent:
+					return "locale_dependent";
+				case source_closure_encoding::binary_or_unknown:
+					return "binary_or_unknown";
+			}
+			return {};
+		}
+
+		[[nodiscard]] sdk::result<json_value>
+		manifest_value(const source_closure_snapshot& snapshot)
+		{
+			std::vector<json_value> members;
+			members.reserve(snapshot.members.size());
+			for (const auto& member : snapshot.members)
+			{
+				json_value::object_type fields;
+				fields.emplace("content_digest", text(member.content_digest).value());
+				fields.emplace("encoding", text(encoding_name(member.encoding)).value());
+				fields.emplace("file_id", text(member.file_id).value());
+				fields.emplace("logical_path", text(member.logical_path).value());
+				fields.emplace("read_only", json_value::boolean(member.read_only));
+				fields.emplace("role", text(role_name(member.role)).value());
+				fields.emplace("size_bytes", json_value::unsigned_integer(member.size_bytes));
+				members.push_back(object(std::move(fields)).value());
+			}
+			std::vector<json_value> blobs;
+			blobs.reserve(snapshot.blobs.size());
+			for (const auto& blob : snapshot.blobs)
+			{
+				json_value::object_type fields;
+				fields.emplace("content_digest", text(blob.content_digest).value());
+				fields.emplace("size_bytes", json_value::unsigned_integer(blob.size_bytes));
+				blobs.push_back(object(std::move(fields)).value());
+			}
+			json_value::object_type root;
+			root.emplace("blobs", json_value::array(std::move(blobs)));
+			root.emplace("closure_digest", text(snapshot.closure_digest).value());
+			root.emplace("closure_id", text(snapshot.snapshot_id).value());
+			root.emplace("members", json_value::array(std::move(members)));
+			root.emplace("schema", text(source_closure_manifest_schema).value());
+			return object(std::move(root));
+		}
+
+		[[nodiscard]] sdk::result<json_value>
+		base_task_value(const provider_task_v4_base_task& base)
+		{
+			json_value::object_type source;
+			source.emplace("content_digest", text(base.source.content_digest).value());
+			source.emplace("encoding", text(base.source.encoding).value());
+			source.emplace("file_id", text(base.source.file_id).value());
+			source.emplace("line_index_id", text(base.source.line_index_id).value());
+			source.emplace("logical_path", text(base.source.logical_path).value());
+			source.emplace("read_only", json_value::boolean(base.source.read_only));
+			source.emplace("size_bytes", json_value::unsigned_integer(base.source.size_bytes));
+			source.emplace("source_snapshot_id", text(base.source.source_snapshot_id).value());
+			return object({
+				{"environment_digest", text(base.environment_digest).value()},
+				{"normalized_invocation_digest", text(base.normalized_invocation_digest).value()},
+				{"provider_execution_id", text(base.provider_execution_id).value()},
+				{"provider_task_id", text(base.provider_task_id).value()},
+				{"source", object(std::move(source)).value()},
+				{"task_input_digest", text(base.task_input_digest).value()},
+				{"toolchain_digest", text(base.toolchain_digest).value()},
+				{"working_directory", text(base.working_directory).value()},
+			});
+		}
+
+		[[nodiscard]] sdk::result<json_value>
+		array_strings(const std::span<const std::string> values)
+		{
+			std::vector<json_value> encoded;
+			encoded.reserve(values.size());
+			for (const auto& value : values)
+				encoded.push_back(text(value).value());
+			return json_value::array(std::move(encoded));
+		}
+
+		[[nodiscard]] sdk::result<json_value>
+		closure_binding_value(const source_closure_transfer_binding& binding,
+							  const std::string_view transfer,
+							  const std::uint64_t stream_id)
+		{
+			return object({
+				{"closure_digest", text(binding.closure_digest).value()},
+				{"closure_id", text(binding.closure_id).value()},
+				{"expected_transfer_digest", text(transfer).value()},
+				{"first_sequence", json_value::unsigned_integer(binding.first_sequence)},
+				{"manifest_digest", text(binding.manifest_digest).value()},
+				{"session_id", text(binding.session_id).value()},
+				{"stream_id", json_value::unsigned_integer(stream_id)},
+				{"task_id", text(binding.task_id).value()},
+				{"task_v4_digest", text(binding.task_v4_digest).value()},
+			});
+		}
+
+		[[nodiscard]] std::array<const sdk::relation_descriptor*, 6U> output_descriptors()
+		{
+			return {&cc::relations::call_direct_target::descriptor(),
+					&cc::relations::call_site::descriptor(),
+					&cc::relations::entity::descriptor(),
+					&materialization::call_observation_v2_descriptor(),
+					&materialization::entity_observation_v2_descriptor(),
+					&materialization::type_observation_v2_descriptor()};
+		}
+
+		[[nodiscard]] sdk::result<json_value>
+		worker_output_value(const provider_task_v4_task_authority& task,
+							const sdk::provider::manifest& manifest,
+							const std::string_view semantic_contract_digest,
+							const std::array<const sdk::relation_descriptor*, 6U>& descriptors)
+		{
+			std::vector<json_value> descriptor_ids;
+			std::vector<json_value> descriptor_digests;
+			for (const auto& id : task_v4_output_descriptor_ids)
+				descriptor_ids.push_back(text(id).value());
+			for (const auto* descriptor : descriptors)
+				descriptor_digests.push_back(text(descriptor->descriptor_digest).value());
+			std::vector<json_value> groups;
+			for (const auto& group : task_v4_dependency_groups)
+				groups.push_back(text(group).value());
+			const auto maximum_rows = std::min<std::uint64_t>(task.budget.rows, 100000U);
+			const auto maximum_bytes =
+				std::min<std::uint64_t>(task.budget.output_bytes, 16U * 1024U * 1024U);
+			return object({
+				{"compile_unit_id", text(task.compile_unit_id).value()},
+				{"dependency_groups", json_value::array(std::move(groups))},
+				{"descriptor_digests", json_value::array(std::move(descriptor_digests))},
+				{"maximum_output_bytes", json_value::unsigned_integer(maximum_bytes)},
+				{"maximum_rows", json_value::unsigned_integer(maximum_rows)},
+				{"provider_id", text(manifest.provider_id).value()},
+				{"provider_version", text(manifest.provider_version.string()).value()},
+				{"requested_descriptor_ids", json_value::array(std::move(descriptor_ids))},
+				{"semantic_contract_digest", text(semantic_contract_digest).value()},
+				{"toolchain_context_id", text(task.toolchain_context_id).value()},
+			});
+		}
+
+		[[nodiscard]] sdk::result<std::vector<std::byte>>
+		closure_transcript(const source_closure_transfer_binding& binding,
+						   const source_closure_snapshot& snapshot,
+						   const std::string_view transfer,
+						   const std::uint64_t stream_id)
+		{
+			auto manifest = manifest_value(snapshot);
+			if (!manifest)
+				return sdk::unexpected(std::move(manifest.error()));
+			const auto manifest_bytes = materialization::canonical_json(*manifest);
+			const auto limits = protocol::closure_limits{};
+			if (manifest_bytes.empty() || manifest_bytes.size() > limits.maximum_manifest_bytes)
+				return sdk::unexpected(failure("source-closure.limit-exceeded", "manifest"));
+			std::vector<std::byte> output;
+			std::uint64_t sequence{};
+			auto append = [&](const sdk::provider::message_type type,
+							  protocol::closure_control control,
+							  const std::span<const std::byte> payload) -> sdk::result<void>
+			{
+				auto encoded = protocol::encode_closure_control(
+					static_cast<protocol::message_type>(static_cast<std::uint16_t>(type)),
+					std::move(control),
+					limits);
+				if (!encoded)
+					return sdk::unexpected(std::move(encoded.error()));
+				sdk::provider::frame frame;
+				frame.type = type;
+				frame.stream_id = stream_id;
+				frame.sequence = sequence++;
+				frame.control = std::move(*encoded);
+				frame.payload.assign(payload.begin(), payload.end());
+				auto wire = sdk::provider::encode_frame(frame);
+				if (!wire)
+					return sdk::unexpected(std::move(wire.error()));
+				output.insert(output.end(), wire->begin(), wire->end());
+				return {};
+			};
+			const auto manifest_chunk_bytes =
+				std::min<std::size_t>(limits.maximum_chunk_payload_bytes, manifest_bytes.size());
+			const auto manifest_chunks =
+				(manifest_bytes.size() + manifest_chunk_bytes - 1U) / manifest_chunk_bytes;
+			auto descriptor =
+				protocol::source_closure_manifest_descriptor{protocol::manifest_kind::descriptor,
+															 binding.session_id,
+															 binding.task_id,
+															 binding.task_v4_digest,
+															 binding.closure_id,
+															 binding.closure_digest,
+															 binding.manifest_digest,
+															 manifest_bytes.size(),
+															 manifest_chunk_bytes,
+															 manifest_chunks};
+			if (auto result =
+					append(sdk::provider::message_type::source_closure_manifest, descriptor, {});
+				!result)
+				return sdk::unexpected(std::move(result.error()));
+			for (std::size_t index{}; index < manifest_chunks; ++index)
+			{
+				const auto offset = index * manifest_chunk_bytes;
+				const auto count = std::min(manifest_chunk_bytes, manifest_bytes.size() - offset);
+				auto control =
+					protocol::source_closure_manifest_chunk{protocol::manifest_kind::chunk,
+															binding.session_id,
+															binding.task_id,
+															binding.manifest_digest,
+															index,
+															offset,
+															count};
+				if (auto result =
+						append(sdk::provider::message_type::source_closure_manifest,
+							   control,
+							   std::as_bytes(std::span{manifest_bytes.data() + offset, count}));
+					!result)
+					return sdk::unexpected(std::move(result.error()));
+			}
+			std::vector<source_closure_blob_receipt> receipts;
+			receipts.reserve(snapshot.blobs.size());
+			std::uint64_t total_bytes{};
+			for (std::size_t ordinal{}; ordinal < snapshot.blobs.size(); ++ordinal)
+			{
+				const auto& blob = snapshot.blobs[ordinal];
+				if (!blob.content || blob.content->size() != blob.size_bytes ||
+					blob.size_bytes == 0U || blob.size_bytes > limits.maximum_blob_bytes)
+					return sdk::unexpected(failure("source-closure.blob-invalid", "content"));
+				const auto chunk_bytes =
+					std::min<std::size_t>(limits.maximum_chunk_payload_bytes, blob.content->size());
+				const auto chunks = (blob.content->size() + chunk_bytes - 1U) / chunk_bytes;
+				auto blob_control = protocol::source_closure_blob_descriptor{binding.session_id,
+																			 binding.task_id,
+																			 binding.closure_digest,
+																			 ordinal,
+																			 blob.content_digest,
+																			 blob.size_bytes,
+																			 chunk_bytes,
+																			 chunks};
+				if (auto result =
+						append(sdk::provider::message_type::source_closure_blob, blob_control, {});
+					!result)
+					return sdk::unexpected(std::move(result.error()));
+				for (std::size_t index{}; index < chunks; ++index)
+				{
+					const auto offset = index * chunk_bytes;
+					const auto count = std::min(chunk_bytes, blob.content->size() - offset);
+					auto control = protocol::source_closure_chunk{binding.session_id,
+																  binding.task_id,
+																  ordinal,
+																  blob.content_digest,
+																  index,
+																  offset,
+																  count};
+					if (auto result =
+							append(sdk::provider::message_type::source_closure_chunk,
+								   control,
+								   std::as_bytes(std::span{blob.content->data() + offset, count}));
+						!result)
+						return sdk::unexpected(std::move(result.error()));
+				}
+				receipts.push_back({ordinal, blob.content_digest, blob.size_bytes});
+				if (total_bytes > std::numeric_limits<std::uint64_t>::max() - blob.size_bytes)
+					return sdk::unexpected(failure("source-closure.limit-exceeded", "blob-bytes"));
+				total_bytes += blob.size_bytes;
+			}
+			auto receipt_digest = source_closure_blob_receipts_digest(receipts);
+			if (!receipt_digest)
+				return sdk::unexpected(std::move(receipt_digest.error()));
+			auto expected = source_closure_transfer_digest(
+				binding, *receipt_digest, receipts.size(), total_bytes);
+			if (!expected || *expected != transfer)
+				return sdk::unexpected(failure("source-closure.digest-mismatch", "transfer"));
+			auto seal = protocol::source_closure_seal{binding.session_id,
+													  binding.task_id,
+													  binding.task_v4_digest,
+													  binding.manifest_digest,
+													  *receipt_digest,
+													  receipts.size(),
+													  total_bytes,
+													  binding.closure_digest,
+													  std::string{transfer}};
+			if (auto result = append(sdk::provider::message_type::source_closure_seal, seal, {});
+				!result)
+				return sdk::unexpected(std::move(result.error()));
+			return output;
+		}
+
+		struct channel_endpoints
+		{
+			int child_read{-1};
+			int host_write{-1};
+			int child_write{-1};
+			int host_read{-1};
+
+			channel_endpoints() = default;
+			channel_endpoints(const int child_read,
+							  const int host_write,
+							  const int child_write,
+							  const int host_read) noexcept
+				: child_read{child_read},
+				  host_write{host_write},
+				  child_write{child_write},
+				  host_read{host_read}
+			{
+			}
+			channel_endpoints(const channel_endpoints&) = delete;
+			channel_endpoints& operator=(const channel_endpoints&) = delete;
+			channel_endpoints(channel_endpoints&& other) noexcept
+				: child_read{std::exchange(other.child_read, -1)},
+				  host_write{std::exchange(other.host_write, -1)},
+				  child_write{std::exchange(other.child_write, -1)},
+				  host_read{std::exchange(other.host_read, -1)}
+			{
+			}
+			channel_endpoints& operator=(channel_endpoints&& other) noexcept
+			{
+				if (this != &other)
+				{
+					for (const auto descriptor : {child_read, host_write, child_write, host_read})
+						if (descriptor >= 0)
+							(void)::close(descriptor);
+					child_read = std::exchange(other.child_read, -1);
+					host_write = std::exchange(other.host_write, -1);
+					child_write = std::exchange(other.child_write, -1);
+					host_read = std::exchange(other.host_read, -1);
+				}
+				return *this;
+			}
+
+			~channel_endpoints()
+			{
+				for (const auto descriptor : {child_read, host_write, child_write, host_read})
+					if (descriptor >= 0)
+						(void)::close(descriptor);
+			}
+		};
+
+		[[nodiscard]] sdk::result<channel_endpoints> make_channels()
+		{
+			int input[2]{-1, -1};
+			int output[2]{-1, -1};
+			if (::socketpair(AF_UNIX, SOCK_STREAM, 0, input) != 0 ||
+				::socketpair(AF_UNIX, SOCK_STREAM, 0, output) != 0)
+			{
+				for (const auto descriptor : {input[0], input[1], output[0], output[1]})
+					if (descriptor >= 0)
+						(void)::close(descriptor);
+				return sdk::unexpected(failure("provider.process-channel-invalid", "socketpair"));
+			}
+			channel_endpoints result{input[0], input[1], output[0], output[1]};
+			for (int* endpoint : {&result.child_read, &result.child_write, &result.host_read})
+			{
+				if (*endpoint < 4)
+				{
+					const auto duplicated = ::fcntl(*endpoint, F_DUPFD, 4);
+					if (duplicated < 4)
+						return sdk::unexpected(
+							failure("provider.process-channel-invalid", "descriptor", "duplicate"));
+					(void)::close(*endpoint);
+					*endpoint = duplicated;
+				}
+				const auto flags = ::fcntl(*endpoint, F_GETFL);
+				const auto descriptor_flags = ::fcntl(*endpoint, F_GETFD);
+				if (flags < 0 || descriptor_flags < 0 ||
+					::fcntl(*endpoint, F_SETFL, flags | O_NONBLOCK) != 0 ||
+					::fcntl(*endpoint, F_SETFD, descriptor_flags & ~FD_CLOEXEC) != 0)
+					return sdk::unexpected(
+						failure("provider.process-channel-invalid", "descriptor", "flags"));
+			}
+			return std::move(result);
+		}
+
+		[[nodiscard]] sdk::result<void> write_all(const int descriptor,
+												  const std::span<const std::byte> bytes)
+		{
+			std::size_t offset{};
+			while (offset < bytes.size())
+			{
+				const auto count =
+					::write(descriptor, bytes.data() + offset, bytes.size() - offset);
+				if (count > 0)
+				{
+					offset += static_cast<std::size_t>(count);
+					continue;
+				}
+				if (count < 0 && errno == EINTR)
+					continue;
+				if (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+				{
+					struct pollfd poll_value{descriptor, POLLOUT, 0};
+					if (::poll(&poll_value, 1, 5000) > 0)
+						continue;
+				}
+				return sdk::unexpected(failure("provider.process-channel-io", "write"));
+			}
+			return {};
+		}
+
+		void drain(const int descriptor) noexcept
+		{
+			std::array<std::byte, 4096U> buffer{};
+			for (;;)
+			{
+				const auto count = ::read(descriptor, buffer.data(), buffer.size());
+				if (count > 0)
+					continue;
+				if (count < 0 && errno == EINTR)
+					continue;
+				break;
+			}
+		}
+
+		[[nodiscard]] sdk::result<sdk::provider::manifest>
+		make_manifest(const provider_task_v4_worker_authority& authority)
+		{
+			constexpr std::string_view semantic_prefix{"semantic-v2:"};
+			sdk::provider::manifest manifest;
+			manifest.provider_id = authority.provider_id;
+			if (!manifest.provider_id.contains('.'))
+				std::ranges::replace(manifest.provider_id, ':', '.');
+			manifest.provider_version = authority.provider_version;
+			manifest.package_identity = authority.provider_id + ".package";
+			manifest.publisher = "cxxlens";
+			manifest.license = "Apache-2.0";
+			manifest.protocol = {authority.protocol_major,
+								 authority.protocol_minor,
+								 authority.protocol_minor,
+								 authority.required_features,
+								 {}};
+			manifest.platform_tuples = {"linux-glibc"};
+			manifest.provider_binary_digest = authority.installed_binary_digest;
+			// The provider runtime identity uses the wire-level sha256 spelling, while task-v4
+			// authority retains the semantic-v2 domain prefix.  Both spellings carry the same
+			// digest; the envelope keeps the authority spelling for the worker-side cross-bind.
+			manifest.provider_semantic_contract_digest =
+				authority.semantic_contract_digest.starts_with(semantic_prefix)
+					? authority.semantic_contract_digest.substr(semantic_prefix.size())
+					: authority.semantic_contract_digest;
+			manifest.offered_relations = {
+				"cc.call_direct_target@1",
+				"cc.call_site@1",
+				"cc.entity@1",
+				"frontend.clang22.call_observation@2",
+				"frontend.clang22.entity_observation@2",
+				"frontend.clang22.type_observation@2",
+			};
+			manifest.interpretation_domains = {"cc.clang22-canonical-1"};
+			manifest.invalidation_contract = "sha256:" + std::string(64U, '5');
+			manifest.determinism_contract = "sha256:" + std::string(64U, '7');
+			manifest.resource_class = "provider.clang22";
+			manifest.sandbox_minimum = "enforced";
+			manifest.requested_qualifications = {
+				"canonical-semantic-qualified", "sandbox-qualified", "schema-conformant"};
+			if (auto valid = manifest.validate(); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			return manifest;
+		}
+
+		[[nodiscard]] sdk::result<sdk::relation_engine>
+		make_materializer_relation_engine(const provider_task_v4_request_authority& authority)
+		{
+			sdk::relation_registry registry;
+			const std::array<const sdk::relation_descriptor*, 12U> descriptors{
+				&build::relations::project::descriptor(),
+				&build::relations::toolchain_context::descriptor(),
+				&build::relations::variant::descriptor(),
+				&build::relations::compile_unit::descriptor(),
+				&source::relations::file::descriptor(),
+				&source::relations::span::descriptor(),
+				&cc::relations::call_direct_target::descriptor(),
+				&cc::relations::call_site::descriptor(),
+				&cc::relations::entity::descriptor(),
+				&materialization::call_observation_v2_descriptor(),
+				&materialization::entity_observation_v2_descriptor(),
+				&materialization::type_observation_v2_descriptor(),
+			};
+			for (const auto* descriptor : descriptors)
+				if (auto added = registry.add(*descriptor); !added)
+					return sdk::unexpected(std::move(added.error()));
+			auto engine = registry.build(authority.engine.engine_generation_id);
+			if (!engine)
+				return sdk::unexpected(std::move(engine.error()));
+			if (engine->registry_digest() != authority.engine.engine_registry_digest)
+				return sdk::unexpected(failure("materialization.relation-engine",
+												 "registry-digest",
+												 "authority-mismatch"));
+			return std::move(*engine);
+		}
+
+		[[nodiscard]] sdk::result<materialization::source_closure_manifest>
+		make_materializer_manifest(const source_closure_snapshot& snapshot)
+		{
+			auto digest = source_closure_manifest_digest(snapshot);
+			if (!digest)
+				return sdk::unexpected(std::move(digest.error()));
+			materialization::source_closure_manifest manifest;
+			manifest.closure_id = snapshot.snapshot_id;
+			manifest.closure_digest = snapshot.closure_digest;
+			manifest.manifest_digest = *digest;
+			manifest.members.reserve(snapshot.members.size());
+			for (const auto& member : snapshot.members)
+				manifest.members.push_back({member.file_id,
+											member.logical_path,
+											role_name(member.role),
+											encoding_name(member.encoding),
+											member.size_bytes,
+											member.content_digest,
+											member.read_only});
+			manifest.blobs.reserve(snapshot.blobs.size());
+			for (const auto& blob : snapshot.blobs)
+				manifest.blobs.push_back({blob.content_digest, blob.size_bytes});
+			if (auto valid = manifest.validate(); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			return manifest;
+		}
+
+		[[nodiscard]] sdk::result<materialization::materialization_v4_claim_sealed>
+		make_worker_claim(const materializer_worker_execution& execution,
+						  const sdk::relation_engine& engine,
+						  const provider_task_v4_task_authority& task,
+						  const provider_task_v4_base_task& base,
+						  const provider_task_v4& extension,
+						  const materialization::source_closure_manifest& manifest)
+		{
+			if (!execution.outcome.sealed || !execution.outcome.runtime_receipt)
+				return sdk::unexpected(failure("provider.transcript-invalid", "receipt"));
+			const auto& transcript = *execution.outcome.sealed;
+			const auto batches = transcript.batches();
+			const sdk::provider::detail::sealed_provider_batch* selected = nullptr;
+			for (const auto& batch : batches)
+				if (batch.descriptor_id() == cc::relations::call_direct_target::descriptor().id)
+				{
+					selected = &batch;
+					break;
+				}
+			if (selected == nullptr)
+				return sdk::unexpected(failure("provider.transcript-invalid", "entity-batch"));
+
+			materialization::materialization_v4_claim_binding binding;
+			binding.materialization_request_id =
+				execution.ingress.request.request.materialization_request_id;
+			binding.task_index = extension.base_task_index;
+			binding.base_task = base;
+			binding.task = extension;
+			binding.manifest = manifest;
+			binding.provider_id = execution.ingress.request.authority.worker.provider_id;
+			binding.provider_semantic_contract_digest =
+				execution.ingress.request.authority.worker.semantic_contract_digest;
+			binding.materializer_id = "cxxlens.clang22.materializer";
+			binding.materializer_semantic_contract_digest =
+				execution.ingress.request.authority.tool.occurrence_manifest_digest;
+			binding.canonical_adoption_transform_digest =
+				execution.ingress.request.authority.publication.output_plan_digest;
+			binding.base_ingestion_transform_digest =
+				execution.ingress.request.authority.publication.recipe_digest;
+			binding.guarantee = {"under_approximation",
+									"partition",
+									"assumptions:none",
+									{"runtime_sealed", "schema_validated"}};
+			binding.assumption_set_id = binding.guarantee.assumptions;
+			binding.relation_descriptor_id = std::string{selected->descriptor_id()};
+			binding.scope = task.compile_unit_id;
+			binding.interpretation = task.interpretation_domain;
+			binding.precision_profile = "under_approximation";
+
+			sdk::claim_batch claim_batch;
+			for (const auto& row : selected->rows())
+			{
+				sdk::observation observation{
+					row,
+					{task.condition_universe_id, {task.condition_id}},
+					task.interpretation_domain,
+					{binding.provider_id, binding.provider_semantic_contract_digest},
+					{std::string{execution.outcome.runtime_receipt->raw_stdout_sha256()}},
+					std::string{execution.outcome.runtime_receipt->sealed_transcript_digest()},
+					binding.guarantee};
+				auto claim = sdk::make_assertion(engine, std::move(observation));
+				if (!claim)
+					return sdk::unexpected(std::move(claim.error()));
+				if (auto added = claim_batch.add(std::move(*claim)); !added)
+					return sdk::unexpected(std::move(added.error()));
+			}
+			auto committed = std::move(claim_batch).commit(engine);
+			if (!committed)
+				return sdk::unexpected(std::move(committed.error()));
+			if (!committed->claims.empty())
+			{
+				auto basis = sdk::claim_input_basis_digest(committed->claims.front().input_basis);
+				if (!basis)
+					return sdk::unexpected(std::move(basis.error()));
+				binding.direct_basis_digest = *basis;
+			}
+			else
+				binding.direct_basis_digest =
+					std::string{execution.outcome.runtime_receipt->raw_stdout_sha256()};
+
+			materialization::materialization_v4_claim_translation translation{
+				binding,
+				std::move(*committed),
+				{binding.relation_descriptor_id,
+				 binding.scope,
+				 {task.condition_universe_id, {task.condition_id}},
+				 binding.interpretation,
+				 binding.provider_semantic_contract_digest,
+				 binding.direct_basis_digest,
+				 binding.precision_profile,
+				 binding.assumption_set_id,
+				 {},
+				 {{"compile-unit", binding.scope, "covered", {}}},
+				 {}}};
+			translation.partition.claims = translation.batch.claims;
+			translation.partition.unresolved = translation.batch.unresolved;
+			return materialization::seal_materialization_v4_claim_translation(
+				engine, std::move(translation));
+		}
+
+		[[nodiscard]] sdk::result<std::vector<std::byte>>
+		make_worker_envelope(const installed_materializer_source_closure_result& ingress,
+							 const std::size_t task_index,
+							 const sdk::provider::manifest& manifest,
+							 const std::uint64_t stream_id,
+							 const std::string_view transfer)
+		{
+			const auto& request = ingress.request.request;
+			const auto& authority = ingress.request.authority;
+			if (task_index >= request.base_tasks.size() || task_index >= authority.tasks.size())
+				return sdk::unexpected(failure("provider.worker-v4-input-invalid", "task-index"));
+			const auto& base = request.base_tasks[task_index];
+			const auto& extension = request.task_extensions[task_index];
+			const auto& task = authority.tasks[task_index];
+			if (extension.source_closure.source_closure_id != ingress.binding.closure_id)
+				return sdk::unexpected(
+					failure("source-closure.task-binding-mismatch", "task", "closure"));
+			auto base_value = base_task_value(base);
+			if (!base_value)
+				return sdk::unexpected(std::move(base_value.error()));
+			const auto base_text = materialization::canonical_json(*base_value);
+			const auto base_digest =
+				sdk::content_digest(std::as_bytes(std::span{base_text.data(), base_text.size()}));
+			if (base_digest != extension.base_task_digest)
+				return sdk::unexpected(
+					failure("source-closure.task-v4-binding-mismatch", "base-task-projection"));
+			source_closure_task_v4_input input;
+			input.base_task_index = extension.base_task_index;
+			input.base_provider_task_id = extension.base_provider_task_id;
+			input.base_task_projection = std::vector<std::byte>{
+				std::as_bytes(std::span{base_text.data(), base_text.size()}).begin(),
+				std::as_bytes(std::span{base_text.data(), base_text.size()}).end()};
+			input.task_input_digest = task.task_input_digest;
+			input.normalized_invocation_digest = task.normalized_invocation_digest;
+			input.toolchain_digest = task.toolchain_digest;
+			input.environment_digest = task.environment_digest;
+			input.closure = ingress.receiver.snapshot;
+			input.main_logical_path = extension.main_logical_path;
+			input.logical_working_directory = extension.logical_working_directory;
+			auto identity = derive_source_closure_task_v4_identity(input);
+			if (!identity)
+				return sdk::unexpected(std::move(identity.error()));
+			if (identity->task_id != extension.task_id ||
+				identity->task_v4_digest != extension.task_v4_digest ||
+				identity->base_task_digest != extension.base_task_digest)
+				return sdk::unexpected(
+					failure("source-closure.task-v4-binding-mismatch", "identity"));
+			auto task_document = materialization::parse_json_object(
+				std::string{reinterpret_cast<const char*>(identity->input_payload.data()),
+							identity->input_payload.size()});
+			if (!task_document)
+				return sdk::unexpected(std::move(task_document.error()));
+			auto authority_value = object({
+				{"effective_arguments",
+				 array_strings(task.input_authority.effective_arguments).value()},
+				{"logical_working_directory", text(task.working_directory).value()},
+				{"normalized_invocation_digest", text(task.normalized_invocation_digest).value()},
+				{"qualified_read_roots",
+				 array_strings(task.input_authority.qualified_read_roots).value()},
+			});
+			auto output_value = worker_output_value(task,
+																 manifest,
+																 authority.worker.semantic_contract_digest,
+																 output_descriptors());
+			if (!authority_value || !output_value)
+				return sdk::unexpected(!authority_value ? std::move(authority_value.error())
+														: std::move(output_value.error()));
+			auto base_document = materialization::parse_json_object(base_text);
+			if (!base_document)
+				return sdk::unexpected(std::move(base_document.error()));
+			auto closure_value = closure_binding_value(ingress.binding, transfer, stream_id);
+			if (!closure_value)
+				return sdk::unexpected(std::move(closure_value.error()));
+			auto root = object({
+				{"base_task_projection", base_document->root()},
+				{"closure_binding", std::move(*closure_value)},
+				{"expected_base_task_digest", text(extension.base_task_digest).value()},
+				{"expected_task_v4_input_digest", text(identity->task_v4_input_digest).value()},
+				{"input_authority", std::move(*authority_value)},
+				{"output_authority", std::move(*output_value)},
+				{"stream_id", json_value::unsigned_integer(stream_id)},
+				{"task_v4_payload", task_document->root()},
+				{"schema", text("cxxlens.clang22.worker-ingress.v4").value()},
+			});
+			if (!root)
+				return sdk::unexpected(std::move(root.error()));
+			const auto encoded = materialization::canonical_json(*root);
+			return std::vector<std::byte>{
+				std::as_bytes(std::span{encoded.data(), encoded.size()}).begin(),
+				std::as_bytes(std::span{encoded.data(), encoded.size()}).end()};
+		}
+	} // namespace
+
+	sdk::result<materializer_worker_execution>
+	run_materializer_worker(installed_materializer_source_closure_result ingress)
+	{
+		if (ingress.request.authority.tasks.empty())
+			return sdk::unexpected(failure("provider.worker-v4-input-invalid", "tasks", "empty"));
+		const auto& task = ingress.request.authority.tasks.front();
+		auto manifest = make_manifest(ingress.request.authority.worker);
+		if (!manifest)
+			return sdk::unexpected(std::move(manifest.error()));
+		const auto stream_id = 1U;
+		const auto transfer = ingress.receiver.credentials.transfer_digest;
+		auto closure =
+			closure_transcript(ingress.binding, ingress.receiver.snapshot, transfer, stream_id);
+		if (!closure)
+			return sdk::unexpected(std::move(closure.error()));
+		auto envelope = make_worker_envelope(ingress, 0U, *manifest, stream_id, transfer);
+		if (!envelope)
+			return sdk::unexpected(std::move(envelope.error()));
+		auto channels = make_channels();
+		if (!channels)
+			return sdk::unexpected(std::move(channels.error()));
+		const auto binding = sdk::provider::detail::make_process_inherited_channel_binding(
+			channels->child_read,
+			channels->child_write,
+			ingress.binding.task_id,
+			ingress.binding.session_id,
+			ingress.binding.task_v4_digest,
+			ingress.binding.closure_id,
+			ingress.binding.closure_digest,
+			ingress.binding.manifest_digest,
+			transfer,
+			stream_id,
+			ingress.binding.first_sequence);
+		if (!binding)
+			return sdk::unexpected(std::move(binding.error()));
+		sdk::provider::provider_candidate candidate;
+		candidate.description = *manifest;
+		candidate.source = sdk::provider::discovery_source::explicit_path;
+		candidate.executable_argv = {ingress.request.authority.worker.executable};
+		candidate.authoritative_path = true;
+		candidate.trust_valid = true;
+		candidate.certification_valid = true;
+		candidate.certified_qualifications = candidate.description.requested_qualifications;
+		auto policy = sdk::provider::resolve_sandbox_policy(
+			ingress.request.authority.worker.sandbox_policy_digest);
+		if (!policy)
+			return sdk::unexpected(std::move(policy.error()));
+		candidate.sandbox = {"linux-glibc",
+							 policy->mechanisms,
+							 sdk::provider::sandbox_assurance::enforced,
+							 ingress.request.authority.worker.sandbox_policy_digest,
+							 "sha256:" + std::string(64U, '9')};
+		sdk::provider::provider_selection_request selection_request{
+			candidate.description.provider_id,
+			candidate.description.provider_version,
+			candidate.description.provider_binary_digest,
+			candidate.description.provider_semantic_contract_digest,
+			{sdk::provider::sandbox_assurance::enforced,
+			 ingress.request.authority.worker.sandbox_policy_digest},
+			true,
+			std::nullopt};
+		auto selection =
+			sdk::provider::select_provider(selection_request, std::span{&candidate, 1U});
+		if (!selection)
+			return sdk::unexpected(std::move(selection.error()));
+		const auto descriptors = output_descriptors();
+		std::vector<sdk::relation_descriptor> descriptor_values;
+		descriptor_values.reserve(descriptors.size());
+		for (const auto* descriptor : descriptors)
+			descriptor_values.push_back(*descriptor);
+		const auto envelope_digest = sdk::content_digest(*envelope);
+		sdk::provider::process_task_request request;
+		request.selection = std::move(*selection);
+		request.output_descriptors = std::move(descriptor_values);
+		request.task_id = ingress.binding.task_id;
+		request.payload = std::move(*envelope);
+		request.task_input_digest = envelope_digest;
+		request.normalized_invocation_digest = task.normalized_invocation_digest;
+		request.toolchain_digest = task.toolchain_digest;
+		request.environment_digest = task.environment_digest;
+		request.sandbox = {sdk::provider::sandbox_assurance::enforced,
+						   ingress.request.authority.worker.sandbox_policy_digest};
+		request.budget = task.budget;
+		request.limits.protocol_major = ingress.request.request.protocol_major;
+		request.limits.minimum_minor = ingress.request.request.protocol_minor;
+		request.limits.maximum_minor = ingress.request.request.protocol_minor;
+		request.output_credit = {64U * 1024U * 1024U, 65536U};
+		request.inherited_channel = std::move(*binding);
+		const auto sender_bytes = std::move(*closure);
+		const auto sender_descriptor = channels->host_write;
+		std::thread sender(
+			[sender_descriptor, sender_bytes]()
+			{
+				(void)write_all(sender_descriptor, sender_bytes);
+				(void)::close(sender_descriptor);
+			});
+		auto process_port = sdk::provider::make_system_provider_process_port();
+		if (!process_port)
+		{
+			sender.join();
+			return sdk::unexpected(failure("provider.runtime-unavailable", "process-port"));
+		}
+		auto outcome = sdk::provider::detail::execute_provider_process(*process_port, request);
+		sender.join();
+		drain(channels->host_read);
+		if (!outcome)
+			return sdk::unexpected(std::move(outcome.error()));
+		if (!outcome->succeeded())
+			return sdk::unexpected(
+				failure("provider.transcript-invalid", "worker", outcome->terminal));
+		return materializer_worker_execution{std::move(ingress), std::move(*outcome)};
+	}
+
+	sdk::result<materializer_store_execution>
+	publish_materializer_worker(materializer_worker_execution execution)
+	{
+		if (!execution.outcome.succeeded() || !execution.outcome.sealed ||
+			!execution.outcome.runtime_receipt)
+			return sdk::unexpected(failure("materialization.transcript-invalid", "worker"));
+		auto& request = execution.ingress.request.request;
+		auto& authority = execution.ingress.request.authority;
+		if (request.task_extensions.size() != 1U || authority.tasks.size() != 1U)
+			return sdk::unexpected(
+				failure("materialization.task-census-invalid", "tasks", "one-task-ingress"));
+		auto engine = make_materializer_relation_engine(authority);
+		if (!engine)
+			return sdk::unexpected(std::move(engine.error()));
+		auto manifest = make_materializer_manifest(execution.ingress.receiver.snapshot);
+		if (!manifest)
+			return sdk::unexpected(std::move(manifest.error()));
+		const auto& base = request.base_tasks.front();
+		const auto& extension = request.task_extensions.front();
+		const auto& task = authority.tasks.front();
+		auto claim = make_worker_claim(execution,
+									 *engine,
+									 task,
+									 base,
+									 extension,
+									 *manifest);
+		if (!claim)
+			return sdk::unexpected(std::move(claim.error()));
+		const std::array<const materialization::materialization_v4_claim_sealed*, 1U> sealed_tasks{
+			&*claim};
+		auto receipt = materialization::make_materialization_v4_incremental_receipt(
+			*engine, sealed_tasks);
+		if (!receipt)
+			return sdk::unexpected(std::move(receipt.error()));
+		if (auto valid = materialization::validate_materialization_v4_incremental_receipt(
+				*engine, *receipt, sealed_tasks);
+			!valid)
+			return sdk::unexpected(std::move(valid.error()));
+
+		materialization::materialization_v4_provider_output_authority output;
+		output.materialization_request_id = request.materialization_request_id;
+		output.publication = {authority.publication.recipe_digest,
+							  authority.publication.output_plan_digest,
+							  authority.publication.publication_target};
+		output.snapshot = {authority.publication.selector,
+						   {1U, 0U, 0U},
+						   authority.project.catalog.catalog_digest,
+						   authority.publication.expected_parent_publication};
+		sdk::closure_candidate closure;
+		closure.relation_descriptor_id = claim->translation.partition.relation_descriptor_id;
+		closure.subject_partition_id = claim->partition_manifest.partition_id;
+		closure.partition_content_digest = claim->partition_manifest.content_digest;
+		closure.coverage_digest = claim->partition_manifest.coverage_digest;
+		auto key_domain = sdk::semantic_digest(
+			"cxxlens.clang22.materializer-key-domain.v1", task.compile_unit_id);
+		if (!key_domain)
+			return sdk::unexpected(std::move(key_domain.error()));
+		closure.key_domain_digest = *key_domain;
+		closure.condition = claim->partition_binding.condition;
+		closure.interpretation = claim->partition_binding.interpretation;
+		closure.assumption_set_id = claim->partition_binding.assumption_set_id;
+		closure.closure_kind = "relation-key-enumeration";
+		closure.producer_semantics = claim->partition_binding.producer_semantics;
+		closure.evidence_digest = std::string{execution.outcome.runtime_receipt->raw_stdout_sha256()};
+		output.closures.push_back(std::move(closure));
+
+		auto source = materialization::make_materialization_v4_store_source(
+			*engine, *receipt, sealed_tasks, std::move(output));
+		if (!source)
+			return sdk::unexpected(std::move(source.error()));
+		const auto publication_engine = *engine;
+		sdk::result<sdk::snapshot_store> store = sdk::unexpected(sdk::error{
+			"materialization.store-open-failed", "backend", "unsupported"});
+		if (authority.publication.backend == "sqlite")
+		{
+			if (!authority.publication.sqlite_path)
+				return sdk::unexpected(
+					failure("materialization.store-open-failed", "sqlite_path", "missing"));
+			store = sdk::open_sqlite_snapshot_store(*authority.publication.sqlite_path,
+												std::move(*engine));
+		}
+		else if (authority.publication.backend == "memory")
+			store = sdk::make_in_memory_snapshot_store(std::move(*engine));
+		else
+			return sdk::unexpected(
+				failure("materialization.store-open-failed", "backend", "unsupported"));
+		if (!store)
+			return sdk::unexpected(std::move(store.error()));
+		auto publication = materialization::publish_materialization_v4_store_source(
+			publication_engine, *store, std::move(*source));
+		if (!publication)
+			return sdk::unexpected(std::move(publication.error()));
+		return materializer_store_execution{
+			std::move(execution), std::move(*claim), std::move(*receipt), std::move(*publication)};
+	}
+} // namespace cxxlens::detail::clang22

@@ -17,6 +17,7 @@ namespace cxxlens::detail::clang22
 	struct installed_materializer_source_closure_result
 	{
 		materialization::validated_materialization_request_v2_2 request;
+		source_closure_transfer_binding binding;
 		source_closure_receiver_result receiver;
 	};
 

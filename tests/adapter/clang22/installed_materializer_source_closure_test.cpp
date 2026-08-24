@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -14,11 +15,23 @@
 #include <utility>
 #include <vector>
 
+#include <cxxlens/relations/build_compile_unit.hpp>
+#include <cxxlens/relations/build_project.hpp>
+#include <cxxlens/relations/build_toolchain_context.hpp>
+#include <cxxlens/relations/build_variant.hpp>
+#include <cxxlens/relations/cc_call_direct_target.hpp>
+#include <cxxlens/relations/cc_call_site.hpp>
+#include <cxxlens/relations/cc_entity.hpp>
+#include <cxxlens/relations/source_file.hpp>
+#include <cxxlens/relations/source_span.hpp>
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 #include "llvm/clang22/materialization_json.hpp"
+#include "llvm/clang22/materializer_worker_bridge.hpp"
+#include "materialization_request_v2_2_fixture.hpp"
+#include "llvm/clang22/observation_v2.hpp"
 #include "llvm/clang22/source_closure.hpp"
 #include "llvm/clang22/source_closure_transport.hpp"
 #include "protocol_v2/closure.hpp"
@@ -29,16 +42,6 @@ namespace
 	using namespace cxxlens::detail::clang22;
 	using namespace cxxlens::detail::clang22::materialization;
 	namespace protocol = ::cxxlens::protocol_v2;
-
-	[[nodiscard]] std::string semantic(const char digit)
-	{
-		return "semantic-v2:sha256:" + std::string(64U, digit);
-	}
-
-	[[nodiscard]] std::string content(const char digit)
-	{
-		return "sha256:" + std::string(64U, digit);
-	}
 
 	[[nodiscard]] json_value text(const std::string_view value)
 	{
@@ -52,21 +55,6 @@ namespace
 		auto encoded = json_value::object(std::move(fields));
 		assert(encoded);
 		return *encoded;
-	}
-
-	[[nodiscard]] json_value source_json(const source_closure_manifest& manifest)
-	{
-		const auto& member = manifest.members.front();
-		return object({
-			{"content_digest", text(member.content_digest)},
-			{"encoding", text(member.encoding)},
-			{"file_id", text(member.file_id)},
-			{"line_index_id", text("line-index:sha256:" + std::string(64U, '4'))},
-			{"logical_path", text(member.logical_path)},
-			{"read_only", json_value::boolean(true)},
-			{"size_bytes", json_value::unsigned_integer(member.size_bytes)},
-			{"source_snapshot_id", text("source-snapshot:installed-receiver")},
-		});
 	}
 
 	[[nodiscard]] source_closure_manifest make_manifest()
@@ -124,32 +112,6 @@ namespace
 		}));
 	}
 
-	[[nodiscard]] provider_task_v4_base_task make_base(const source_closure_manifest& manifest,
-													   const json_value& base_json)
-	{
-		const auto& source = manifest.members.front();
-		const auto canonical = canonical_json(base_json);
-		provider_task_v4_base_task base;
-		base.provider_task_id = "task:semantic-v2:sha256:" + std::string(64U, 'a');
-		base.provider_execution_id = "provider-execution:installed-receiver";
-		base.canonical_base_task_digest =
-			sdk::content_digest(std::as_bytes(std::span{canonical.data(), canonical.size()}));
-		base.task_input_digest = content('b');
-		base.normalized_invocation_digest = semantic('c');
-		base.toolchain_digest = semantic('d');
-		base.environment_digest = content('e');
-		base.working_directory = "project://src";
-		base.source = {"source-snapshot:installed-receiver",
-					   source.file_id,
-					   source.logical_path,
-					   source.content_digest,
-					   source.size_bytes,
-					   source.encoding,
-					   "line-index:sha256:" + std::string(64U, '4'),
-					   true};
-		return base;
-	}
-
 	[[nodiscard]] provider_task_v4 make_task(const source_closure_manifest& manifest,
 											 const provider_task_v4_base_task& base)
 	{
@@ -173,20 +135,6 @@ namespace
 		task.task_id = "task:" + task.task_v4_digest;
 		assert(validate_provider_task_v4_identity(task));
 		return task;
-	}
-
-	[[nodiscard]] json_value base_task_json(const source_closure_manifest& manifest)
-	{
-		return object({
-			{"environment_digest", text(content('e'))},
-			{"normalized_invocation_digest", text(semantic('c'))},
-			{"provider_execution_id", text("provider-execution:installed-receiver")},
-			{"provider_task_id", text("task:semantic-v2:sha256:" + std::string(64U, 'a'))},
-			{"source", source_json(manifest)},
-			{"task_input_digest", text(content('b'))},
-			{"toolchain_digest", text(semantic('d'))},
-			{"working_directory", text("project://src")},
-		});
 	}
 
 	[[nodiscard]] json_value summary_json(const source_closure_manifest& manifest)
@@ -239,16 +187,160 @@ namespace
 		std::vector<std::byte> transcript;
 	};
 
+	[[nodiscard]] sdk::relation_engine runtime_engine()
+	{
+		sdk::relation_registry registry;
+		const std::array<const sdk::relation_descriptor*, 12U> descriptors{
+			&build::relations::project::descriptor(),
+			&build::relations::toolchain_context::descriptor(),
+			&build::relations::variant::descriptor(),
+			&build::relations::compile_unit::descriptor(),
+			&source::relations::file::descriptor(),
+			&source::relations::span::descriptor(),
+			&cc::relations::call_direct_target::descriptor(),
+			&cc::relations::call_site::descriptor(),
+			&cc::relations::entity::descriptor(),
+			&materialization::call_observation_v2_descriptor(),
+			&materialization::entity_observation_v2_descriptor(),
+			&materialization::type_observation_v2_descriptor(),
+		};
+		for (const auto* descriptor : descriptors)
+		{
+			auto added = registry.add(*descriptor);
+			assert(added);
+		}
+		auto engine = registry.build("installed-materializer-source-closure-test");
+		assert(engine);
+		return std::move(*engine);
+	}
+
+	void bind_runtime_engine_authority(provider_task_v4_request_authority& authority)
+	{
+		auto engine = runtime_engine();
+		const auto descriptors = engine.descriptors();
+		authority.engine.admitted_descriptors.clear();
+		for (const auto id : task_v4_engine_descriptor_ids)
+		{
+			const auto found = std::ranges::find_if(
+				descriptors,
+				[id](const auto& descriptor) { return descriptor.id == id; });
+			assert(found != descriptors.end());
+			authority.engine.admitted_descriptors.push_back(
+				{found->id, found->descriptor_digest});
+		}
+		authority.engine.engine_registry_digest = std::string{engine.registry_digest()};
+		authority.publication.selector.relation_registry_digest =
+			authority.engine.engine_registry_digest;
+		authority.publication.series_id = authority.publication.selector.id();
+	}
+
 	[[nodiscard]] fixture make_fixture()
 	{
 		const auto manifest = make_manifest();
-		const auto base_shape = base_task_json(manifest);
-		const auto base = make_base(manifest, base_shape);
+		auto root = cxxlens_test_materialization_request_v2_2_complete_document();
+		assert(root.as_object() != nullptr);
+		auto authority_seed = decode_provider_task_v4_request_authority(root);
+		assert(authority_seed && authority_seed->tasks.size() == 1U);
+		const auto& member = manifest.members.front();
+		const auto& seed_unit = authority_seed->project.catalog.compile_units.front();
+		auto catalog = sdk::project_catalog::make(
+			authority_seed->project.catalog.logical_root,
+			authority_seed->project.catalog.environment_digest,
+			{{seed_unit.compile_unit_id,
+			  seed_unit.effective_invocation_digest,
+			  member.content_digest,
+			  seed_unit.environment_digest}});
+		assert(catalog);
+		{
+			auto root_fields = *root.as_object();
+			auto project_fields = *root_fields.at("project").as_object();
+			project_fields.insert_or_assign("catalog_id", text(catalog->catalog_id));
+			project_fields.insert_or_assign("catalog_digest", text(catalog->catalog_digest));
+			auto units = *project_fields.at("catalog_compile_units").as_array();
+			assert(units.size() == 1U);
+			auto unit_fields = *units.front().as_object();
+			unit_fields.insert_or_assign("source_digest", text(member.content_digest));
+			units.front() = object(std::move(unit_fields));
+			project_fields.insert_or_assign("catalog_compile_units",
+										 json_value::array(std::move(units)));
+			root_fields.insert_or_assign("project", object(std::move(project_fields)));
+
+			auto tasks = *root_fields.at("tasks").as_array();
+			auto task_fields = *tasks.front().as_object();
+			task_fields.insert_or_assign("catalog_id", text(catalog->catalog_id));
+			task_fields.insert_or_assign("catalog_digest", text(catalog->catalog_digest));
+			auto source_fields = *task_fields.at("source").as_object();
+			source_fields.insert_or_assign("source_snapshot_id", text(manifest.closure_id));
+			source_fields.insert_or_assign("file_id", text(member.file_id));
+			source_fields.insert_or_assign("logical_path", text(member.logical_path));
+			source_fields.insert_or_assign("content_digest", text(member.content_digest));
+			source_fields.insert_or_assign("size_bytes",
+									 json_value::unsigned_integer(member.size_bytes));
+			source_fields.insert_or_assign("encoding", text(member.encoding));
+			source_fields.insert_or_assign(
+				"line_index_id", text("line-index:sha256:" + std::string(64U, '4')));
+			task_fields.insert_or_assign("source", object(std::move(source_fields)));
+			tasks.front() = object(std::move(task_fields));
+			root_fields.insert_or_assign("tasks", json_value::array(std::move(tasks)));
+
+			auto publication_fields = *root_fields.at("publication").as_object();
+			auto selector_fields = *publication_fields.at("selector").as_object();
+			selector_fields.insert_or_assign("catalog_id", text(catalog->catalog_id));
+			publication_fields.insert_or_assign("selector", object(std::move(selector_fields)));
+			auto selector = authority_seed->publication.selector;
+			selector.catalog_id = catalog->catalog_id;
+			publication_fields.insert_or_assign("series_id", text(selector.id()));
+			root_fields.insert_or_assign("publication", object(std::move(publication_fields)));
+			root = object(std::move(root_fields));
+		}
+		auto authority = decode_provider_task_v4_request_authority(root);
+		assert(authority && authority->tasks.size() == 1U);
+		bind_runtime_engine_authority(*authority);
+		const auto* authority_tasks = root.member("tasks");
+		assert(authority_tasks != nullptr && authority_tasks->as_array() != nullptr &&
+			   authority_tasks->as_array()->size() == 1U);
+		constexpr std::array<std::string_view, 8U> base_fields{
+			"environment_digest",
+			"normalized_invocation_digest",
+			"provider_execution_id",
+			"provider_task_id",
+			"source",
+			"task_input_digest",
+			"toolchain_digest",
+			"working_directory"};
+		json_value::object_type base_projection_fields;
+		for (const auto name : base_fields)
+		{
+			const auto* value = authority_tasks->as_array()->front().member(name);
+			assert(value != nullptr);
+			base_projection_fields.emplace(std::string{name}, *value);
+		}
+		const auto base_projection_value = json_value::object(std::move(base_projection_fields));
+		assert(base_projection_value);
+		const auto base_projection = canonical_json(*base_projection_value);
+		const auto& authority_task = authority->tasks.front();
+		provider_task_v4_base_task base;
+		base.provider_task_id = authority_task.provider_task_id;
+		base.provider_execution_id = authority_task.provider_execution_id;
+		base.canonical_base_task_digest = sdk::content_digest(
+			std::as_bytes(std::span{base_projection.data(), base_projection.size()}));
+		base.task_input_digest = authority_task.task_input_digest;
+		base.normalized_invocation_digest = authority_task.normalized_invocation_digest;
+		base.toolchain_digest = authority_task.toolchain_digest;
+		base.environment_digest = authority_task.environment_digest;
+		base.working_directory = authority_task.working_directory;
+		base.source = authority_task.source;
+		assert(base.canonical_base_task_digest.starts_with("sha256:"));
 		const auto task = make_task(manifest, base);
 		materialization_request_v2_2 request;
-		request.materialization_request_id = "materialization-authority:installed-receiver";
-		request.semantic_request_digest = semantic('f');
+		const auto* materialization_id = root.member("materialization_request_id");
+		const auto* semantic_digest = root.member("semantic_request_digest");
+		assert(materialization_id != nullptr && materialization_id->as_string() != nullptr &&
+			   semantic_digest != nullptr && semantic_digest->as_string() != nullptr);
+		request.materialization_request_id = *materialization_id->as_string();
+		request.semantic_request_digest = *semantic_digest->as_string();
 		request.required_features = materialization_request_v2_2_required_features();
+		request.inherited_authority = root;
 		request.base_tasks = {base};
 		request.source_closures = {{manifest.closure_id,
 									manifest.closure_digest,
@@ -257,61 +349,57 @@ namespace
 									1U,
 									manifest.blobs.front().size_bytes}};
 		request.task_extensions = {task};
-		std::map<std::string, json_value, utf8_byte_less> inherited;
-		for (const auto name : {"engine",
-								"group_topology",
-								"interpretation_policy",
-								"publication",
-								"project",
-								"registry",
-								"tool",
-								"trust_policy"})
-			inherited.emplace(name, json_value::null());
-		inherited.emplace("materialization_request_id", text(request.materialization_request_id));
-		inherited.emplace("semantic_request_digest", text(request.semantic_request_digest));
-		inherited.emplace("tasks", json_value::array({base_shape}));
-		inherited.emplace("worker",
-						  object({
-							  {"protocol_major", json_value::unsigned_integer(2U)},
-							  {"protocol_minor", json_value::unsigned_integer(0U)},
-						  }));
-		request.inherited_authority = object(std::move(inherited));
 		request.request_digest = *derive_materialization_request_v2_2_digest(request);
 		request.request_id = "materialization-request:" + request.request_digest;
 
-		const auto base_value = base_shape;
 		const auto extension_value = extension_json(task);
-		const auto worker_value = object({
-			{"protocol_major", json_value::unsigned_integer(2U)},
-			{"protocol_minor", json_value::unsigned_integer(0U)},
-		});
-		std::map<std::string, json_value, utf8_byte_less> root_fields;
-		for (const auto name : {"engine",
-								"group_topology",
-								"interpretation_policy",
-								"publication",
-								"project",
-								"registry",
-								"tool",
-								"trust_policy"})
-			root_fields.emplace(name, json_value::null());
-		root_fields.emplace("materialization_request_id", text(request.materialization_request_id));
-		root_fields.emplace("semantic_request_digest", text(request.semantic_request_digest));
-		root_fields.emplace("worker", worker_value);
-		root_fields.emplace("schema", text(std::string{materialization_request_v2_2_schema}));
-		root_fields.emplace("request_version",
-							text(std::string{materialization_request_v2_2_version}));
-		root_fields.emplace("request_digest", text(request.request_digest));
-		root_fields.emplace("request_id", text(request.request_id));
-		root_fields.emplace(
-			"required_features",
-			json_value::array({text("task-input-chunks-v2"), text("task-source-closure-v2")}));
-		root_fields.emplace("tasks", json_value::array({base_value}));
-		root_fields.emplace("source_closures", json_value::array({summary_json(manifest)}));
-		root_fields.emplace("task_extensions", json_value::array({extension_value}));
+		auto root_fields = *root.as_object();
+		{
+			auto engine_fields = *root_fields.at("engine").as_object();
+			engine_fields.insert_or_assign(
+				"engine_registry_digest", text(authority->engine.engine_registry_digest));
+			auto admitted = *engine_fields.at("admitted_descriptors").as_array();
+			assert(admitted.size() == authority->engine.admitted_descriptors.size());
+			for (std::size_t index{}; index < admitted.size(); ++index)
+			{
+				auto fields = *admitted[index].as_object();
+				fields.insert_or_assign(
+					"runtime_descriptor_digest",
+					text(authority->engine.admitted_descriptors[index].runtime_descriptor_digest));
+				admitted[index] = object(std::move(fields));
+			}
+			engine_fields.insert_or_assign("admitted_descriptors",
+										 json_value::array(std::move(admitted)));
+			root_fields.insert_or_assign("engine", object(std::move(engine_fields)));
+			auto publication_fields = *root_fields.at("publication").as_object();
+			auto selector_fields = *publication_fields.at("selector").as_object();
+			selector_fields.insert_or_assign(
+				"relation_registry_digest", text(authority->publication.selector.relation_registry_digest));
+			publication_fields.insert_or_assign("selector", object(std::move(selector_fields)));
+			publication_fields.insert_or_assign("series_id", text(authority->publication.series_id));
+			root_fields.insert_or_assign("publication", object(std::move(publication_fields)));
+		}
+		root_fields.insert_or_assign("request_digest", text(request.request_digest));
+		root_fields.insert_or_assign("request_id", text(request.request_id));
+		root_fields.insert_or_assign("required_features",
+								  json_value::array({text("task-input-chunks-v2"),
+														 text("task-source-closure-v2")}));
+		root_fields.insert_or_assign("source_closures", json_value::array({summary_json(manifest)}));
+		root_fields.insert_or_assign("task_extensions", json_value::array({extension_value}));
 
+		auto normalized_root = object(std::move(root_fields));
+		request.inherited_authority = normalized_root;
+		auto normalized_digest = derive_materialization_request_v2_2_digest(request);
+		assert(normalized_digest);
+		request.request_digest = *normalized_digest;
+		request.request_id = "materialization-request:" + request.request_digest;
+		auto final_root_fields = *normalized_root.as_object();
+		final_root_fields.insert_or_assign("request_digest", text(request.request_digest));
+		final_root_fields.insert_or_assign("request_id", text(request.request_id));
+		normalized_root = object(std::move(final_root_fields));
+		request.inherited_authority = normalized_root;
 		fixture output{std::move(request),
-					   object(std::move(root_fields)),
+					   std::move(normalized_root),
 					   manifest,
 					   "provider-session:sha256:" + std::string(64U, '1'),
 					   {},
@@ -485,9 +573,14 @@ namespace
 		setenv("CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_V4_DIGEST",
 			   value.request.task_extensions.front().task_v4_digest.c_str(),
 			   1);
-		setenv("CXXLENS_PROVIDER_SOURCE_CLOSURE_ID", value.manifest.closure_id.c_str(), 1);
-		setenv("CXXLENS_PROVIDER_SOURCE_CLOSURE_DIGEST", value.manifest.closure_digest.c_str(), 1);
-		setenv("CXXLENS_PROVIDER_SOURCE_CLOSURE_TRANSFER_DIGEST", value.transfer_digest.c_str(), 1);
+	setenv("CXXLENS_PROVIDER_SOURCE_CLOSURE_ID", value.manifest.closure_id.c_str(), 1);
+	setenv("CXXLENS_PROVIDER_SOURCE_CLOSURE_DIGEST", value.manifest.closure_digest.c_str(), 1);
+	setenv("CXXLENS_PROVIDER_SOURCE_CLOSURE_MANIFEST_DIGEST",
+		   value.manifest.manifest_digest.c_str(),
+		   1);
+	setenv("CXXLENS_PROVIDER_SOURCE_CLOSURE_TRANSFER_DIGEST", value.transfer_digest.c_str(), 1);
+	setenv("CXXLENS_PROVIDER_SOURCE_CLOSURE_STREAM_ID", "1", 1);
+	setenv("CXXLENS_PROVIDER_SOURCE_CLOSURE_FIRST_SEQUENCE", "0", 1);
 	}
 
 	void clear_channel_environment()
@@ -500,7 +593,10 @@ namespace
 								"CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_V4_DIGEST",
 								"CXXLENS_PROVIDER_SOURCE_CLOSURE_ID",
 								"CXXLENS_PROVIDER_SOURCE_CLOSURE_DIGEST",
-								"CXXLENS_PROVIDER_SOURCE_CLOSURE_TRANSFER_DIGEST"})
+								"CXXLENS_PROVIDER_SOURCE_CLOSURE_MANIFEST_DIGEST",
+								"CXXLENS_PROVIDER_SOURCE_CLOSURE_TRANSFER_DIGEST",
+								"CXXLENS_PROVIDER_SOURCE_CLOSURE_STREAM_ID",
+								"CXXLENS_PROVIDER_SOURCE_CLOSURE_FIRST_SEQUENCE"})
 			unsetenv(name);
 	}
 
@@ -515,7 +611,17 @@ namespace
 		}
 	}
 
-	void positive_fd_receiver()
+	[[nodiscard]] std::string executable_digest(const std::string_view path)
+	{
+		std::ifstream input{std::string{path}, std::ios::binary};
+		assert(input.good());
+		const std::string bytes{std::istreambuf_iterator<char>{input},
+									std::istreambuf_iterator<char>{}};
+		assert(!input.bad());
+		return sdk::content_digest(std::as_bytes(std::span{bytes.data(), bytes.size()}));
+	}
+
+	void positive_fd_receiver(const std::string_view worker_path)
 	{
 		auto value = make_fixture();
 		socket_channel_endpoints channel;
@@ -531,6 +637,44 @@ namespace
 		if (received->request.request.request_digest != value.request.request_digest ||
 			received->receiver.snapshot.snapshot_id != value.manifest.closure_id)
 			std::abort();
+		if (!worker_path.empty())
+		{
+			received->request.authority.worker.executable = std::string{worker_path};
+			received->request.authority.worker.installed_binary_digest =
+				executable_digest(worker_path);
+			const auto& member = received->receiver.snapshot.members.front();
+			received->request.authority.tasks.front().source = {
+				received->receiver.snapshot.snapshot_id,
+				member.file_id,
+				member.logical_path,
+				member.content_digest,
+				member.size_bytes,
+				"utf8",
+				"line-index:sha256:" + std::string(64U, '4'),
+				true};
+			received->request.request.base_tasks.front().source =
+				received->request.authority.tasks.front().source;
+			auto execution = run_materializer_worker(std::move(*received));
+			if (!execution || !execution->outcome.succeeded())
+			{
+				if (!execution)
+					std::cerr << execution.error().code << ':' << execution.error().field << ':'
+							  << execution.error().detail << '\n';
+				else
+					std::cerr << execution->outcome.terminal << ':'
+							  << execution->outcome.exit_code << '\n';
+				std::abort();
+			}
+			auto published = publish_materializer_worker(std::move(*execution));
+			if (!published)
+			{
+				std::cerr << published.error().code << ':' << published.error().field << ':'
+						  << published.error().detail << '\n';
+				std::abort();
+			}
+			if (published->publication.snapshot.id().empty())
+				std::abort();
+		}
 		std::array<std::byte, 4096U> ack_bytes{};
 		const auto ack_size = ::read(channel.host_read, ack_bytes.data(), ack_bytes.size());
 		if (ack_size <= 0)
@@ -572,11 +716,11 @@ namespace
 	}
 } // namespace
 
-int main()
+int main(const int argc, char** argv)
 {
 	disconnected_is_explicit();
 	duplicate_channel_custody_is_rejected();
 	foreign_task_binding_is_rejected();
-	positive_fd_receiver();
+	positive_fd_receiver(argc == 2 ? argv[1] : std::string_view{});
 	return 0;
 }

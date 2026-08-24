@@ -826,19 +826,21 @@ target_compile_features(cxxlens_clang22_materializer_store_v6_typed_ingress
 cxxlens_set_project_warnings(cxxlens_clang22_materializer_store_v6_typed_ingress)
 cxxlens_enable_sanitizers(cxxlens_clang22_materializer_store_v6_typed_ingress)
 
-# The installed materializer boundary deliberately links only the v2.2 ingress
-# and metadata validator.  Keeping the test-support core out of the production
-# graph prevents dormant implementations from entering the shipped executable
-# while preserving direct tests for the product safety primitives.
+# The installed materializer boundary owns the v2.2 ingress, Protocol 2.0 worker
+# handoff, and typed v4 Store publication.  Legacy request/task support remains
+# outside this production graph.
 add_library(
   cxxlens_clang22_materializer_ingress STATIC
   src/llvm/clang22/materialization_io.cpp
   src/llvm/clang22/materialization_request_v2_2.cpp
-  src/llvm/clang22/installed_materializer_source_closure.cpp)
+  src/llvm/clang22/installed_materializer_source_closure.cpp
+  src/llvm/clang22/materializer_worker_bridge.cpp)
 target_link_libraries(
   cxxlens_clang22_materializer_ingress
   PUBLIC cxxlens::base cxxlens::provider_sdk
-  PRIVATE cxxlens_clang22_materialization_codecs cxxlens_icu_static)
+  PRIVATE cxxlens_clang22_materialization_codecs cxxlens_icu_static
+          cxxlens_clang22_worker_core
+          cxxlens_clang22_materializer_v4_store_source)
 target_include_directories(cxxlens_clang22_materializer_ingress
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(cxxlens_clang22_materializer_ingress PRIVATE cxx_std_23)

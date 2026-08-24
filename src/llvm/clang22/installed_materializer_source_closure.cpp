@@ -109,7 +109,27 @@ namespace cxxlens::detail::clang22
 
 		[[nodiscard]] sdk::result<std::string> base_task_digest(const json_value& task)
 		{
-			const auto canonical = materialization::canonical_json(task);
+			constexpr std::array<std::string_view, 8U> fields{
+				"environment_digest",
+				"normalized_invocation_digest",
+				"provider_execution_id",
+				"provider_task_id",
+				"source",
+				"task_input_digest",
+				"toolchain_digest",
+				"working_directory"};
+			json_value::object_type projection;
+			for (const auto name : fields)
+			{
+				const auto* value = task.member(name);
+				if (value == nullptr)
+					return sdk::unexpected(invalid("tasks", "missing:" + std::string{name}));
+				projection.emplace(std::string{name}, *value);
+			}
+			auto encoded = json_value::object(std::move(projection));
+			if (!encoded)
+				return sdk::unexpected(std::move(encoded.error()));
+			const auto canonical = materialization::canonical_json(*encoded);
 			return sdk::content_digest(
 				std::as_bytes(std::span{canonical.data(), canonical.size()}));
 		}
@@ -369,7 +389,10 @@ namespace cxxlens::detail::clang22
 			std::string task_v4_digest;
 			std::string closure_id;
 			std::string closure_digest;
+			std::string manifest_digest;
 			std::string transfer_digest;
+			std::uint64_t stream_id{};
+			std::uint64_t first_sequence{};
 		};
 
 		[[nodiscard]] std::optional<std::string> environment(const char* name)
@@ -408,15 +431,42 @@ namespace cxxlens::detail::clang22
 			const auto task_digest = environment("CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_V4_DIGEST");
 			const auto closure = environment("CXXLENS_PROVIDER_SOURCE_CLOSURE_ID");
 			const auto closure_digest = environment("CXXLENS_PROVIDER_SOURCE_CLOSURE_DIGEST");
+			const auto manifest_digest =
+				environment("CXXLENS_PROVIDER_SOURCE_CLOSURE_MANIFEST_DIGEST");
 			const auto transfer = environment("CXXLENS_PROVIDER_SOURCE_CLOSURE_TRANSFER_DIGEST");
+			const auto stream = environment("CXXLENS_PROVIDER_SOURCE_CLOSURE_STREAM_ID");
+			const auto first = environment("CXXLENS_PROVIDER_SOURCE_CLOSURE_FIRST_SEQUENCE");
 			if (!read || !write || !session || !task || !task_digest || !closure ||
-				!closure_digest || !transfer || session->empty() || task->empty() ||
-				task_digest->empty() || closure->empty() || closure_digest->empty() ||
-				transfer->empty())
+				!closure_digest || !manifest_digest || !transfer || !stream || !first ||
+				session->empty() || task->empty() || task_digest->empty() || closure->empty() ||
+				closure_digest->empty() || manifest_digest->empty() || transfer->empty() ||
+				stream->empty() || first->empty())
 				return sdk::unexpected(
 					failure("source-closure.channel-invalid", "environment", "binding-missing"));
-			return channel_environment{
-				*read, *write, *session, *task, *task_digest, *closure, *closure_digest, *transfer};
+			std::uint64_t stream_id{};
+			std::uint64_t first_sequence{};
+			const auto stream_result =
+				std::from_chars(stream->data(), stream->data() + stream->size(), stream_id);
+			const auto first_result =
+				std::from_chars(first->data(), first->data() + first->size(), first_sequence);
+			if (stream_result.ec != std::errc{} ||
+				stream_result.ptr != stream->data() + stream->size() ||
+				first_result.ec != std::errc{} ||
+				first_result.ptr != first->data() + first->size() || stream_id == 0U ||
+				first_sequence != 0U)
+				return sdk::unexpected(
+					failure("source-closure.channel-invalid", "environment", "sequence"));
+			return channel_environment{*read,
+									   *write,
+									   *session,
+									   *task,
+									   *task_digest,
+									   *closure,
+									   *closure_digest,
+									   *manifest_digest,
+									   *transfer,
+									   stream_id,
+									   first_sequence};
 		}
 
 		class request_authority final : public source_closure_task_v4_authority
@@ -463,6 +513,7 @@ namespace cxxlens::detail::clang22
 		auto channel = channel_from_environment();
 		if (!channel)
 			return sdk::unexpected(std::move(channel.error()));
+
 		auto request = parse_request(request_root);
 		if (!request)
 			return sdk::unexpected(std::move(request.error()));
@@ -484,6 +535,9 @@ namespace cxxlens::detail::clang22
 		if (found == validated->request.task_extensions.end())
 			return sdk::unexpected(failure(
 				"source-closure.task-binding-mismatch", "environment", "request-task-closure"));
+		if (found->source_closure.manifest_digest != channel->manifest_digest)
+			return sdk::unexpected(
+				failure("source-closure.digest-mismatch", "manifest_digest", "environment"));
 		const auto task_index =
 			static_cast<std::size_t>(found - validated->request.task_extensions.begin());
 		source_closure_transfer_binding binding{channel->session_id,
@@ -492,7 +546,8 @@ namespace cxxlens::detail::clang22
 												channel->closure_id,
 												channel->closure_digest,
 												found->source_closure.manifest_digest,
-												0U};
+												channel->first_sequence};
+		auto result_binding = binding;
 		request_authority authority{*validated, task_index};
 		auto fd_channel = source_closure_fd_channel::create(
 			{{channel->read_descriptor, source_closure_fd_ownership::borrowed},
@@ -507,7 +562,7 @@ namespace cxxlens::detail::clang22
 		if (received->credentials.transfer_digest != channel->transfer_digest)
 			return sdk::unexpected(
 				failure("source-closure.digest-mismatch", "transfer_digest", "environment"));
-		return installed_materializer_source_closure_result{std::move(*validated),
-															std::move(*received)};
+		return installed_materializer_source_closure_result{
+			std::move(*validated), std::move(result_binding), std::move(*received)};
 	}
 } // namespace cxxlens::detail::clang22

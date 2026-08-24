@@ -13,11 +13,12 @@
 #include <string>
 #include <string_view>
 
-#include "llvm/clang22/materialization_admission_error.hpp"
 #include "llvm/clang22/installed_materializer_source_closure.hpp"
+#include "llvm/clang22/materialization_admission_error.hpp"
 #include "llvm/clang22/materialization_io.hpp"
 #include "llvm/clang22/materialization_json.hpp"
 #include "llvm/clang22/materialization_request_v2_2.hpp"
+#include "llvm/clang22/materializer_worker_bridge.hpp"
 
 namespace
 {
@@ -329,9 +330,10 @@ int main(const int argc, char**)
 		return emit_failure(*observed, failure.code, "request-schema", "request", failure.detail);
 	}
 	// A source-closure channel is an explicit process-boundary authority.  When it is supplied,
-	// consume and authenticate the complete Protocol 2.0 transfer before reporting the next
-	// missing product authority.  The receiver intentionally stops before worker launch and Store
-	// mutation; no metadata field or ambient descriptor can manufacture those authorities.
+	// consume and authenticate the complete Protocol 2.0 transfer, execute the authority-selected
+	// worker, and cross the typed Store boundary.  No metadata field or ambient descriptor can
+	// manufacture those authorities.  Report serialization remains a separate, schema-validated
+	// phase after the publication terminal has been observed.
 	if (std::getenv("CXXLENS_PROVIDER_INGRESS_MODE") != nullptr)
 	{
 		auto received = receive_installed_materializer_source_closure(ingress->root);
@@ -341,11 +343,25 @@ int main(const int argc, char**)
 								"source-closure",
 								received.error().field,
 								received.error().detail);
+		auto worker = run_materializer_worker(std::move(*received));
+		if (!worker)
+			return emit_failure(*observed,
+								worker.error().code,
+								"worker-launch",
+								worker.error().field,
+								worker.error().detail);
+		auto published = publish_materializer_worker(std::move(*worker));
+		if (!published)
+			return emit_failure(*observed,
+								published.error().code,
+								"store-stage",
+								published.error().field,
+								published.error().detail);
 		return emit_failure(*observed,
-							"provider.output-authority-missing",
-							"worker-output",
-							"publication",
-							"source-closure-received-but-claim-output-authority-required");
+						"materialization.report-construction",
+						"report-construction",
+						"report",
+						"published-store-terminal-requires-detailed-report-projection");
 	}
 	return emit_failure(*observed,
 						"materialization.request-invalid",

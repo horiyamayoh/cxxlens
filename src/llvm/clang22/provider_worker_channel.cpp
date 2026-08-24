@@ -275,8 +275,13 @@ namespace cxxlens::detail::clang22
 			if (auto ended = relation.end(); !ended)
 				return reject("batch-end");
 		}
+		callback_context.coverage().request("task", observer_metadata.identity.task_id);
 		callback_context.coverage().request("source-closure",
 											observer_metadata.input.closure.snapshot_id);
+		if (auto classified = callback_context.coverage().classify(
+				{"task", observer_metadata.identity.task_id, "covered", "translation-unit-executed"});
+			!classified)
+			return reject("coverage");
 		if (auto classified = callback_context.coverage().classify(
 				{"source-closure",
 				 observer_metadata.input.closure.snapshot_id,

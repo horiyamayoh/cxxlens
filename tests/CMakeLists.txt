@@ -1091,6 +1091,21 @@ cxxlens_add_test_executable(
 target_link_libraries(
   cxxlens-clang22-materialization-request-v2-2
   PRIVATE cxxlens_clang22_materialization_request_v2_2_support)
+
+# Reuse the complete typed request document as a normal test fixture.  The fixture build omits
+# the executable's main and exports only the source-free document factory; production targets do
+# not link test code.
+add_library(cxxlens_clang22_materialization_request_v2_2_fixture STATIC EXCLUDE_FROM_ALL
+            adapter/clang22/materialization_request_v2_2_test.cpp)
+target_compile_definitions(
+  cxxlens_clang22_materialization_request_v2_2_fixture
+  PRIVATE CXXLENS_MATERIALIZATION_REQUEST_V2_2_FIXTURE_ONLY)
+target_link_libraries(
+  cxxlens_clang22_materialization_request_v2_2_fixture
+  PRIVATE cxxlens_clang22_materialization_request_v2_2_support)
+target_include_directories(cxxlens_clang22_materialization_request_v2_2_fixture
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+
 add_test(NAME adapter.clang22-materialization-request-v2-2
          COMMAND cxxlens-clang22-materialization-request-v2-2)
 set_tests_properties(
@@ -1399,11 +1414,16 @@ if(UNIX)
     cxxlens-clang22-installed-materializer-source-closure
     adapter/clang22/installed_materializer_source_closure_test.cpp)
   target_link_libraries(
-    cxxlens-clang22-installed-materializer-source-closure
-    PRIVATE cxxlens_clang22_materializer_ingress
-            cxxlens_clang22_materialization_codecs)
-  add_test(NAME adapter.clang22-installed-materializer-source-closure
-           COMMAND cxxlens-clang22-installed-materializer-source-closure)
+  cxxlens-clang22-installed-materializer-source-closure
+  PRIVATE cxxlens_clang22_materializer_ingress
+            cxxlens_clang22_materialization_codecs
+            cxxlens_clang22_materialization_request_v2_2_fixture
+            cxxlens_clang22_materializer_v4_store_source)
+add_test(NAME adapter.clang22-installed-materializer-source-closure
+           COMMAND cxxlens-clang22-installed-materializer-source-closure
+                   "$<TARGET_FILE:cxxlens-clang-worker-22>")
+add_dependencies(cxxlens-clang22-installed-materializer-source-closure
+                 cxxlens-clang-worker-22)
   set_tests_properties(
     adapter.clang22-installed-materializer-source-closure
     PROPERTIES

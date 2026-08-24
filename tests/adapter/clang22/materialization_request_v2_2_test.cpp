@@ -919,6 +919,13 @@ namespace
 	}
 } // namespace
 
+#ifdef CXXLENS_MATERIALIZATION_REQUEST_V2_2_FIXTURE_ONLY
+cxxlens::detail::clang22::materialization::json_value
+cxxlens_test_materialization_request_v2_2_complete_document()
+{
+	return document_shape(false, false, true);
+}
+#else
 int main()
 {
 	positive_and_manifest_cross_binding();
@@ -927,3 +934,4 @@ int main()
 	document_ingress_is_closed_before_transport();
 	typed_authority_decoder_is_source_free_and_deterministic();
 }
+#endif
