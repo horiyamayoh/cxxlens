@@ -22,12 +22,14 @@
 
 #include <cxxlens/sdk/store.hpp>
 
+#include "../../support/sqlite_disposable_fixture.hpp"
 #include "sdk/sqlite_disposable_normalization_internal.hpp"
 #include "sdk/sqlite_disposable_qualification_internal.hpp"
 
 namespace
 {
 	using namespace cxxlens::detail::sqlite_qualification;
+	using cxxlens::test::sqlite_disposable_fixture;
 
 	using capability = sqlite_disposable_qualification_capability;
 	using entry_function = decltype(&enter_sqlite_disposable_qualification);
@@ -253,6 +255,8 @@ namespace
 		require(enter_sqlite_disposable_qualification(moved, first_request) ==
 					sqlite_disposable_qualification_verdict::capability_revoked_or_stale,
 				"revoked capability rejected");
+		require(moved.no_effect_request().qualification_run_id == 0U,
+				"revoked capability cannot reproduce a live request binding");
 		require(parent.entry_absent("qualification-root"), "revoke removed exact empty root");
 
 		auto second = mint(parent, "qualification-root-two");
@@ -439,24 +443,6 @@ namespace
 		require(retry.has_value(), "rolled-back leaf is fresh for the next mint");
 	}
 
-	void exercise_process_instance_invalidation()
-	{
-		test_parent parent;
-		auto minted = mint(parent, "qualification-root");
-		require(minted.has_value(), "mint process-instance capability");
-		const auto exact = minted->no_effect_request();
-		invalidate_sqlite_disposable_process_instance_for_testing(*minted);
-		require(enter_sqlite_disposable_qualification(*minted, exact) ==
-					sqlite_disposable_qualification_verdict::wrong_creator_process,
-				"lost process-instance proof rejects entry even when PID still matches");
-		const auto revoked = minted->revoke();
-		require(!revoked && revoked.error().detail == "revoke-wrong-process",
-				"lost process-instance proof cannot clean by PID alone");
-		require(!parent.entry_absent("qualification-root"),
-				"process-instance failure preserves creator root");
-		parent.remove_directory("qualification-root");
-	}
-
 	void exercise_effect_denial_and_contamination()
 	{
 		test_parent parent;
@@ -472,7 +458,7 @@ namespace
 			request.requested_effect = effect;
 			require(enter_sqlite_disposable_qualification(*minted, request) ==
 						sqlite_disposable_qualification_verdict::effect_not_authorized,
-					"slice one rejects source effect");
+					"qualification entry rejects source effect");
 		}
 		auto unknown_effect = exact;
 		unknown_effect.requested_effect = static_cast<sqlite_disposable_requested_effect>(255U);
@@ -514,42 +500,6 @@ namespace
 		parent.remove_directory("renamed-original");
 	}
 
-	struct unlink_boundary_swap
-	{
-		int parent{-1};
-		int rename_status{-1};
-		int create_status{-1};
-	};
-
-	void swap_root_at_unlink_boundary(void* context) noexcept
-	{
-		auto& swap = *static_cast<unlink_boundary_swap*>(context);
-		swap.rename_status =
-			::renameat(swap.parent, "rebound-root", swap.parent, "renamed-original");
-		swap.create_status = ::mkdirat(swap.parent, "rebound-root", 0700);
-	}
-
-	void exercise_unlink_boundary_rebind()
-	{
-		test_parent parent;
-		auto minted = mint(parent, "rebound-root");
-		require(minted.has_value(), "mint unlink-boundary capability");
-		unlink_boundary_swap swap{parent.descriptor()};
-		set_sqlite_disposable_pre_remove_signal_for_testing(
-			*minted, swap_root_at_unlink_boundary, &swap);
-		const auto revoked = minted->revoke();
-		require(!revoked, "unlink-boundary replacement never reports cleanup success");
-		require(revoked.error().detail == "revoke-remove-identity-opaque",
-				"unlink-boundary replacement is post-effect identity opaque");
-		require(swap.rename_status == 0 && swap.create_status == 0,
-				"unlink-boundary swap executed");
-		require(parent.entry_absent("rebound-root"),
-				"replacement path effect is observed but not treated as exact cleanup");
-		require(!parent.entry_absent("renamed-original"),
-				"held original remains preserved after unlink-boundary swap");
-		parent.remove_directory("renamed-original");
-	}
-
 	void exercise_retained_parent_lifetime_and_destructor()
 	{
 		test_parent parent;
@@ -565,6 +515,46 @@ namespace
 		parent.reopen();
 		require(parent.entry_absent("qualification-root"),
 				"capability destructor closes and removes unchanged empty root");
+	}
+
+	void exercise_fixture_adapter_capability_liveness()
+	{
+		{
+			test_parent parent;
+			auto minted = mint(parent, "qualification-root");
+			require(minted.has_value(), "mint revoked fixture capability");
+			const auto setup = minted->no_effect_request();
+			sqlite_disposable_fixture fixture{
+				*minted, parent.descriptor(), "qualification-root", setup};
+			require(minted->revoke().has_value(), "revoke fixture capability");
+			require(!fixture.write(setup, "main", {}),
+					"fixture adapter rejects a revoked capability");
+			require(parent.entry_absent("qualification-root"),
+					"revoked fixture adapter cannot recreate its removed root");
+		}
+
+		{
+			test_parent parent;
+			auto minted = mint(parent, "qualification-root");
+			require(minted.has_value(), "mint forked fixture capability");
+			const auto setup = minted->no_effect_request();
+			sqlite_disposable_fixture fixture{
+				*minted, parent.descriptor(), "qualification-root", setup};
+			const auto child = ::fork();
+			require(child >= 0, "fork fixture adapter probe");
+			if (child == 0)
+				::_exit(!fixture.write(setup, "main", {}) ? 0 : 1);
+			int child_status{};
+			require(::waitpid(child, &child_status, 0) == child, "wait fixture adapter fork probe");
+			require(WIFEXITED(child_status) && WEXITSTATUS(child_status) == 0,
+					"forked fixture adapter cannot use creator capability");
+			const auto root = parent.open_directory("qualification-root");
+			struct stat absent{};
+			errno = 0;
+			require(::fstatat(root, "main", &absent, AT_SYMLINK_NOFOLLOW) != 0 && errno == ENOENT,
+					"forked fixture adapter leaves creator root unchanged");
+			require(::close(root) == 0, "close forked fixture adapter root");
+		}
 	}
 
 	[[nodiscard]] std::vector<std::byte> canonical_empty_main(const std::uint8_t header_version)
@@ -606,10 +596,18 @@ namespace
 			auto minted = mint(parent, "qualification-root");
 			require(minted.has_value(), "mint F0 raw capability");
 			auto setup = minted->no_effect_request();
+			sqlite_disposable_fixture fixture{
+				*minted, parent.descriptor(), "qualification-root", setup};
+			auto wrong_setup = setup;
+			++wrong_setup.qualification_run_id;
+			require(!fixture.write(wrong_setup, "main", {}),
+					"fixture adapter rejects a different qualification run");
+			require(!fixture.write(setup, "../main", {}),
+					"fixture adapter rejects a multi-component leaf");
+			require(!fixture.write(setup, "oversized", std::vector<std::byte>(65'537U)),
+					"fixture adapter rejects oversized bytes");
 			const auto main = canonical_empty_main(2U);
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main", main)),
-					"write F0 main fixture");
+			require(static_cast<bool>(fixture.write(setup, "main", main)), "write F0 main fixture");
 			auto classify = setup;
 			classify.requested_effect = sqlite_disposable_requested_effect::classify_source;
 			auto observed = observe_sqlite_disposable_raw_empty_family(*minted, classify);
@@ -643,8 +641,7 @@ namespace
 			{
 				auto mutated = main;
 				mutated[18U] = std::byte{3U};
-				require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-							*minted, setup, "main", mutated)),
+				require(static_cast<bool>(fixture.write(setup, "main", mutated)),
 						"write invalid F0 header");
 				return observe_sqlite_disposable_raw_empty_family(*minted, classify);
 			}();
@@ -657,12 +654,11 @@ namespace
 			auto minted = mint(parent, "qualification-root");
 			require(minted.has_value(), "mint FZ raw capability");
 			auto setup = minted->no_effect_request();
+			sqlite_disposable_fixture fixture{
+				*minted, parent.descriptor(), "qualification-root", setup};
 			const auto main = canonical_empty_main(2U);
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main", main)),
-					"write FZ main fixture");
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main-wal", {})),
+			require(static_cast<bool>(fixture.write(setup, "main", main)), "write FZ main fixture");
+			require(static_cast<bool>(fixture.write(setup, "main-wal", {})),
 					"write zero-byte FZ WAL fixture");
 			auto classify = setup;
 			classify.requested_effect = sqlite_disposable_requested_effect::classify_source;
@@ -673,9 +669,9 @@ namespace
 						observed->family.phase == sqlite_disposable_family_phase::pre &&
 						observed->wal && observed->wal->byte_count == 0U,
 					"FZ-pre raw family");
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main-wal", std::array{std::byte{0x01U}})),
-					"write nonzero WAL mutation");
+			require(
+				static_cast<bool>(fixture.write(setup, "main-wal", std::array{std::byte{0x01U}})),
+				"write nonzero WAL mutation");
 			const auto rejected = observe_sqlite_disposable_raw_empty_family(*minted, classify);
 			require(!rejected && rejected.error().detail == "raw-nonzero-wal-unresolved",
 					"nonzero WAL is not silently classified");
@@ -686,12 +682,12 @@ namespace
 			auto minted = mint(parent, "qualification-root");
 			require(minted.has_value(), "mint FZ-post raw capability");
 			auto setup = minted->no_effect_request();
+			sqlite_disposable_fixture fixture{
+				*minted, parent.descriptor(), "qualification-root", setup};
 			const auto main = canonical_empty_main(1U);
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main", main)),
+			require(static_cast<bool>(fixture.write(setup, "main", main)),
 					"write FZ-post main fixture");
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main-wal", {})),
+			require(static_cast<bool>(fixture.write(setup, "main-wal", {})),
 					"write FZ-post zero-byte WAL fixture");
 			auto classify = setup;
 			classify.requested_effect = sqlite_disposable_requested_effect::classify_source;
@@ -719,10 +715,10 @@ namespace
 			auto minted = mint(parent, "qualification-root");
 			require(minted.has_value(), "mint FO raw capability");
 			auto setup = minted->no_effect_request();
+			sqlite_disposable_fixture fixture{
+				*minted, parent.descriptor(), "qualification-root", setup};
 			const auto main = canonical_empty_main(1U);
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main", main)),
-					"write FO main fixture");
+			require(static_cast<bool>(fixture.write(setup, "main", main)), "write FO main fixture");
 			auto classify = setup;
 			classify.requested_effect = sqlite_disposable_requested_effect::classify_source;
 			auto observed = observe_sqlite_disposable_raw_empty_family(*minted, classify);
@@ -738,13 +734,14 @@ namespace
 			auto minted = mint(parent, "qualification-root");
 			require(minted.has_value(), "mint mixed raw capability");
 			auto setup = minted->no_effect_request();
+			sqlite_disposable_fixture fixture{
+				*minted, parent.descriptor(), "qualification-root", setup};
 			const auto main = canonical_empty_main(2U);
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main", main)),
+			require(static_cast<bool>(fixture.write(setup, "main", main)),
 					"write mixed main fixture");
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "unexpected", std::array{std::byte{0x01U}})),
-					"write unexpected sidecar fixture");
+			require(
+				static_cast<bool>(fixture.write(setup, "unexpected", std::array{std::byte{0x01U}})),
+				"write unexpected sidecar fixture");
 			auto classify = setup;
 			classify.requested_effect = sqlite_disposable_requested_effect::classify_source;
 			const auto mixed = observe_sqlite_disposable_raw_empty_family(*minted, classify);
@@ -757,8 +754,9 @@ namespace
 			auto minted = mint(parent, "qualification-root");
 			require(minted.has_value(), "mint orphan raw capability");
 			auto setup = minted->no_effect_request();
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main-wal", {})),
+			sqlite_disposable_fixture fixture{
+				*minted, parent.descriptor(), "qualification-root", setup};
+			require(static_cast<bool>(fixture.write(setup, "main-wal", {})),
 					"write orphan WAL fixture");
 			auto classify = setup;
 			classify.requested_effect = sqlite_disposable_requested_effect::classify_source;
@@ -810,6 +808,24 @@ namespace
 		swap.create_status = ::close(replacement);
 	}
 
+	struct main_byte_drift
+	{
+		int root{-1};
+		ssize_t write_count{-1};
+		int close_status{-1};
+	};
+
+	void mutate_main_bytes_before_cleanup(void* context) noexcept
+	{
+		auto& drift = *static_cast<main_byte_drift*>(context);
+		const auto main = ::openat(drift.root, "main", O_WRONLY | O_NOFOLLOW | O_CLOEXEC);
+		if (main < 0)
+			return;
+		const std::byte invalid_header_version{3U};
+		drift.write_count = ::pwrite(main, &invalid_header_version, 1U, 18);
+		drift.close_status = ::close(main);
+	}
+
 	void exercise_fz_post_fixture_cleanup()
 	{
 		{
@@ -817,19 +833,19 @@ namespace
 			auto minted = mint(parent, "qualification-root");
 			require(minted.has_value(), "mint FZ-post normalization capability");
 			const auto setup = minted->no_effect_request();
+			sqlite_disposable_fixture fixture{
+				*minted, parent.descriptor(), "qualification-root", setup};
 			auto normalize = setup;
 			normalize.requested_effect = sqlite_disposable_requested_effect::normalize_source;
 			require(enter_sqlite_disposable_qualification(*minted, normalize) ==
 						sqlite_disposable_qualification_verdict::effect_not_authorized,
 					"general qualification gate still rejects source normalization");
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main", canonical_empty_main(1U))),
+			require(static_cast<bool>(fixture.write(setup, "main", canonical_empty_main(1U))),
 					"write FZ-post main fixture");
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main-wal", {})),
+			require(static_cast<bool>(fixture.write(setup, "main-wal", {})),
 					"write FZ-post zero-byte WAL fixture");
 
-			auto cleaned = cleanup_sqlite_disposable_fz_post_wal_for_testing(*minted, normalize);
+			auto cleaned = fixture.cleanup_fz_post_wal(normalize);
 			require(cleaned.has_value(),
 					"FZ-post fixture cleanup succeeds only after exact checks");
 			require(cleaned->before.family.family ==
@@ -842,10 +858,24 @@ namespace
 						cleaned->after.family.phase == sqlite_disposable_family_phase::post &&
 						!cleaned->after.wal && cleaned->after.main == cleaned->before.main,
 					"FZ-post cleanup returns a stable rollback-empty anchor observation");
-			const auto repeated =
-				cleanup_sqlite_disposable_fz_post_wal_for_testing(*minted, normalize);
+			const auto repeated = fixture.cleanup_fz_post_wal(normalize);
 			require(!repeated && repeated.error().detail == "normalization-capability-consumed",
 					"successful cleanup consumes the normalization capability");
+			sqlite_disposable_fixture second_fixture{
+				*minted, parent.descriptor(), "qualification-root", setup};
+			require(static_cast<bool>(second_fixture.write(setup, "main-wal", {})),
+					"recreate zero WAL to probe cross-adapter replay");
+			const auto cross_adapter_replay = second_fixture.cleanup_fz_post_wal(normalize);
+			require(!cross_adapter_replay &&
+						cross_adapter_replay.error().detail == "normalization-capability-consumed",
+					"qualification run remains consumed across fixture adapters");
+			const auto revoked = minted->revoke();
+			require(!revoked && revoked.error().detail == "revoke-root-not-empty",
+					"revocation closes a consumed capability while fixture files remain");
+			const auto replay_after_revoke = second_fixture.cleanup_fz_post_wal(normalize);
+			require(!replay_after_revoke &&
+						replay_after_revoke.error().detail == "normalization-capability-revoked",
+					"revoked capability takes precedence over consumed fixture state");
 		}
 
 		{
@@ -853,21 +883,19 @@ namespace
 			auto minted = mint(parent, "qualification-root");
 			require(minted.has_value(), "mint parent-sync fault capability");
 			const auto setup = minted->no_effect_request();
+			sqlite_disposable_fixture fixture{
+				*minted, parent.descriptor(), "qualification-root", setup};
 			auto normalize = setup;
 			normalize.requested_effect = sqlite_disposable_requested_effect::normalize_source;
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main", canonical_empty_main(1U))),
+			require(static_cast<bool>(fixture.write(setup, "main", canonical_empty_main(1U))),
 					"write parent-sync fault main fixture");
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main-wal", {})),
+			require(static_cast<bool>(fixture.write(setup, "main-wal", {})),
 					"write parent-sync fault zero-byte WAL fixture");
-			set_sqlite_disposable_parent_sync_failure_for_testing(*minted, true);
-			const auto rejected =
-				cleanup_sqlite_disposable_fz_post_wal_for_testing(*minted, normalize);
+			fixture.fail_cleanup_sync();
+			const auto rejected = fixture.cleanup_fz_post_wal(normalize);
 			require(!rejected && rejected.error().detail == "normalization-parent-sync-uncertain",
 					"parent sync failure is an opaque post-effect result");
-			const auto repeated =
-				cleanup_sqlite_disposable_fz_post_wal_for_testing(*minted, normalize);
+			const auto repeated = fixture.cleanup_fz_post_wal(normalize);
 			require(!repeated && repeated.error().detail == "normalization-capability-consumed",
 					"parent sync uncertainty cannot be retried");
 		}
@@ -877,16 +905,15 @@ namespace
 			auto minted = mint(parent, "qualification-root");
 			require(minted.has_value(), "mint FZ-pre normalization negative capability");
 			const auto setup = minted->no_effect_request();
+			sqlite_disposable_fixture fixture{
+				*minted, parent.descriptor(), "qualification-root", setup};
 			auto normalize = setup;
 			normalize.requested_effect = sqlite_disposable_requested_effect::normalize_source;
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main", canonical_empty_main(2U))),
+			require(static_cast<bool>(fixture.write(setup, "main", canonical_empty_main(2U))),
 					"write FZ-pre normalization negative main");
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main-wal", {})),
+			require(static_cast<bool>(fixture.write(setup, "main-wal", {})),
 					"write FZ-pre normalization negative WAL");
-			const auto rejected =
-				cleanup_sqlite_disposable_fz_post_wal_for_testing(*minted, normalize);
+			const auto rejected = fixture.cleanup_fz_post_wal(normalize);
 			require(!rejected && rejected.error().detail == "normalization-fz-post-required",
 					"FZ-pre never enters the FZ-post cleanup edge");
 			auto classify = setup;
@@ -902,16 +929,16 @@ namespace
 			auto minted = mint(parent, "qualification-root");
 			require(minted.has_value(), "mint nonzero WAL normalization negative capability");
 			const auto setup = minted->no_effect_request();
+			sqlite_disposable_fixture fixture{
+				*minted, parent.descriptor(), "qualification-root", setup};
 			auto normalize = setup;
 			normalize.requested_effect = sqlite_disposable_requested_effect::normalize_source;
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main", canonical_empty_main(1U))),
+			require(static_cast<bool>(fixture.write(setup, "main", canonical_empty_main(1U))),
 					"write nonzero WAL normalization negative main");
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main-wal", std::array{std::byte{0x01U}})),
-					"write nonzero WAL normalization negative WAL");
-			const auto rejected =
-				cleanup_sqlite_disposable_fz_post_wal_for_testing(*minted, normalize);
+			require(
+				static_cast<bool>(fixture.write(setup, "main-wal", std::array{std::byte{0x01U}})),
+				"write nonzero WAL normalization negative WAL");
+			const auto rejected = fixture.cleanup_fz_post_wal(normalize);
 			require(!rejected && rejected.error().detail == "raw-nonzero-wal-unresolved",
 					"nonzero WAL never enters the cleanup edge");
 		}
@@ -921,19 +948,18 @@ namespace
 			auto minted = mint(parent, "qualification-root");
 			require(minted.has_value(), "mint mixed topology normalization negative capability");
 			const auto setup = minted->no_effect_request();
+			sqlite_disposable_fixture fixture{
+				*minted, parent.descriptor(), "qualification-root", setup};
 			auto normalize = setup;
 			normalize.requested_effect = sqlite_disposable_requested_effect::normalize_source;
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main", canonical_empty_main(1U))),
+			require(static_cast<bool>(fixture.write(setup, "main", canonical_empty_main(1U))),
 					"write mixed topology normalization negative main");
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main-wal", {})),
+			require(static_cast<bool>(fixture.write(setup, "main-wal", {})),
 					"write mixed topology normalization negative WAL");
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "unexpected", std::array{std::byte{0x01U}})),
-					"write mixed topology normalization negative sidecar");
-			const auto rejected =
-				cleanup_sqlite_disposable_fz_post_wal_for_testing(*minted, normalize);
+			require(
+				static_cast<bool>(fixture.write(setup, "unexpected", std::array{std::byte{0x01U}})),
+				"write mixed topology normalization negative sidecar");
+			const auto rejected = fixture.cleanup_fz_post_wal(normalize);
 			require(!rejected && rejected.error().detail == "raw-family-unresolved-topology",
 					"mixed topology never enters the cleanup edge");
 		}
@@ -943,17 +969,16 @@ namespace
 			auto minted = mint(parent, "qualification-root");
 			require(minted.has_value(), "mint binding normalization negative capability");
 			const auto setup = minted->no_effect_request();
+			sqlite_disposable_fixture fixture{
+				*minted, parent.descriptor(), "qualification-root", setup};
 			auto normalize = setup;
 			normalize.requested_effect = sqlite_disposable_requested_effect::normalize_source;
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main", canonical_empty_main(1U))),
+			require(static_cast<bool>(fixture.write(setup, "main", canonical_empty_main(1U))),
 					"write binding normalization negative main");
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main-wal", {})),
+			require(static_cast<bool>(fixture.write(setup, "main-wal", {})),
 					"write binding normalization negative WAL");
 			normalize.exact_profile_digest = digest('4');
-			const auto rejected =
-				cleanup_sqlite_disposable_fz_post_wal_for_testing(*minted, normalize);
+			const auto rejected = fixture.cleanup_fz_post_wal(normalize);
 			require(!rejected && rejected.error().detail == "normalization-capability-binding",
 					"binding drift prevents any normalization effect");
 			auto classify = setup;
@@ -967,20 +992,18 @@ namespace
 			auto minted = mint(parent, "qualification-root");
 			require(minted.has_value(), "mint unlink-boundary normalization negative capability");
 			const auto setup = minted->no_effect_request();
+			sqlite_disposable_fixture fixture{
+				*minted, parent.descriptor(), "qualification-root", setup};
 			auto normalize = setup;
 			normalize.requested_effect = sqlite_disposable_requested_effect::normalize_source;
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main", canonical_empty_main(1U))),
+			require(static_cast<bool>(fixture.write(setup, "main", canonical_empty_main(1U))),
 					"write unlink-boundary normalization main");
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main-wal", {})),
+			require(static_cast<bool>(fixture.write(setup, "main-wal", {})),
 					"write unlink-boundary normalization WAL");
 			wal_unlink_boundary_swap swap;
 			swap.root = parent.open_directory("qualification-root");
-			set_sqlite_disposable_pre_remove_signal_for_testing(
-				*minted, swap_wal_at_unlink_boundary, &swap);
-			const auto rejected =
-				cleanup_sqlite_disposable_fz_post_wal_for_testing(*minted, normalize);
+			fixture.signal_before_cleanup(swap_wal_at_unlink_boundary, &swap);
+			const auto rejected = fixture.cleanup_fz_post_wal(normalize);
 			struct stat renamed_wal = {};
 			require(::fstatat(swap.root, "renamed-wal", &renamed_wal, AT_SYMLINK_NOFOLLOW) == 0,
 					"renamed WAL remains observable after pre-effect rejection");
@@ -994,8 +1017,7 @@ namespace
 			const auto unresolved = observe_sqlite_disposable_raw_empty_family(*minted, classify);
 			require(!unresolved && unresolved.error().detail == "raw-family-unresolved-topology",
 					"pre-effect WAL rebind remains explicitly unresolved without retry");
-			const auto repeated =
-				cleanup_sqlite_disposable_fz_post_wal_for_testing(*minted, normalize);
+			const auto repeated = fixture.cleanup_fz_post_wal(normalize);
 			require(!repeated && repeated.error().detail == "normalization-capability-consumed",
 					"WAL drift consumes the normalization capability without retry");
 		}
@@ -1005,20 +1027,18 @@ namespace
 			auto minted = mint(parent, "qualification-root");
 			require(minted.has_value(), "mint unlink-boundary main drift capability");
 			const auto setup = minted->no_effect_request();
+			sqlite_disposable_fixture fixture{
+				*minted, parent.descriptor(), "qualification-root", setup};
 			auto normalize = setup;
 			normalize.requested_effect = sqlite_disposable_requested_effect::normalize_source;
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main", canonical_empty_main(1U))),
+			require(static_cast<bool>(fixture.write(setup, "main", canonical_empty_main(1U))),
 					"write unlink-boundary main drift fixture");
-			require(static_cast<bool>(write_sqlite_disposable_fixture_file_for_testing(
-						*minted, setup, "main-wal", {})),
+			require(static_cast<bool>(fixture.write(setup, "main-wal", {})),
 					"write unlink-boundary main drift WAL");
 			main_unlink_boundary_swap swap;
 			swap.root = parent.open_directory("qualification-root");
-			set_sqlite_disposable_pre_remove_signal_for_testing(
-				*minted, swap_main_at_unlink_boundary, &swap);
-			const auto rejected =
-				cleanup_sqlite_disposable_fz_post_wal_for_testing(*minted, normalize);
+			fixture.signal_before_cleanup(swap_main_at_unlink_boundary, &swap);
+			const auto rejected = fixture.cleanup_fz_post_wal(normalize);
 			struct stat renamed_main = {};
 			struct stat preserved_wal = {};
 			require(::fstatat(swap.root, "renamed-main", &renamed_main, AT_SYMLINK_NOFOLLOW) == 0 &&
@@ -1029,10 +1049,39 @@ namespace
 					"main replacement is rejected before unlinking the WAL");
 			require(swap.rename_status == 0 && swap.create_status == 0,
 					"main rebind negative signal executed");
-			const auto repeated =
-				cleanup_sqlite_disposable_fz_post_wal_for_testing(*minted, normalize);
+			const auto repeated = fixture.cleanup_fz_post_wal(normalize);
 			require(!repeated && repeated.error().detail == "normalization-capability-consumed",
 					"main drift consumes the normalization capability without retry");
+		}
+
+		{
+			test_parent parent;
+			auto minted = mint(parent, "qualification-root");
+			require(minted.has_value(), "mint same-size main drift capability");
+			const auto setup = minted->no_effect_request();
+			sqlite_disposable_fixture fixture{
+				*minted, parent.descriptor(), "qualification-root", setup};
+			auto normalize = setup;
+			normalize.requested_effect = sqlite_disposable_requested_effect::normalize_source;
+			require(static_cast<bool>(fixture.write(setup, "main", canonical_empty_main(1U))),
+					"write same-size main drift fixture");
+			require(static_cast<bool>(fixture.write(setup, "main-wal", {})),
+					"write same-size main drift WAL");
+			main_byte_drift drift;
+			drift.root = parent.open_directory("qualification-root");
+			fixture.signal_before_cleanup(mutate_main_bytes_before_cleanup, &drift);
+			const auto rejected = fixture.cleanup_fz_post_wal(normalize);
+			struct stat wal = {};
+			require(::fstatat(drift.root, "main-wal", &wal, AT_SYMLINK_NOFOLLOW) == 0,
+					"same-size main drift preserves the WAL");
+			require(::close(drift.root) == 0, "close same-size main drift root");
+			require(drift.write_count == 1 && drift.close_status == 0,
+					"same-size main byte drift executed");
+			require(!rejected && rejected.error().detail == "normalization-main-drift",
+					"same-size main byte drift is phase-authentic");
+			const auto repeated = fixture.cleanup_fz_post_wal(normalize);
+			require(!repeated && repeated.error().detail == "normalization-capability-consumed",
+					"same-size main drift consumes the normalization capability");
 		}
 	}
 
@@ -1210,11 +1259,10 @@ int main()
 	exercise_new_leaf_requirement();
 	exercise_binding_rejections();
 	exercise_binding_input_validation();
-	exercise_process_instance_invalidation();
 	exercise_effect_denial_and_contamination();
 	exercise_root_rebind();
-	exercise_unlink_boundary_rebind();
 	exercise_retained_parent_lifetime_and_destructor();
+	exercise_fixture_adapter_capability_liveness();
 	exercise_raw_empty_family_observation();
 	exercise_fz_post_fixture_cleanup();
 	exercise_receiptless_family_partition_and_routes();

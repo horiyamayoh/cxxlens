@@ -428,12 +428,6 @@ namespace cxxlens::detail::sqlite_qualification
 		std::string effect_fault_schedule_digest;
 		sqlite_disposable_cleanup_policy cleanup_policy{
 			sqlite_disposable_cleanup_policy::retain_private_root};
-		void (*pre_remove_signal)(void*) noexcept {};
-		void* pre_remove_signal_context{};
-		bool parent_sync_failure_for_testing{};
-		// Once a normalization boundary is entered, the capability is terminal for every
-		// subsequent normalization or handoff attempt, including an opaque syscall failure.
-		bool normalization_attempted{};
 		bool active{true};
 	};
 
@@ -527,10 +521,6 @@ namespace cxxlens::detail::sqlite_qualification
 				return live == live_root_status::nonempty ? revoke_status::root_not_empty
 														  : revoke_status::root_drift;
 			}
-			const auto signal = std::exchange(state.pre_remove_signal, nullptr);
-			auto* const signal_context = std::exchange(state.pre_remove_signal_context, nullptr);
-			if (signal != nullptr)
-				signal(signal_context);
 			if (::unlinkat(state.parent.get(), state.private_leaf.c_str(), AT_REMOVEDIR) != 0)
 			{
 				close_state_descriptors(state);
@@ -1021,8 +1011,14 @@ namespace cxxlens::detail::sqlite_qualification
 	sqlite_disposable_qualification_request
 	sqlite_disposable_qualification_capability::no_effect_request() const
 	{
-		if (!state_)
+		if (!live_in_current_process())
 			return {};
+#if defined(__linux__) && defined(STATX_MNT_ID)
+		if (!revalidate_live_root_objects(*state_))
+			return {};
+#else
+		return {};
+#endif
 		return {
 			state_->creator_process_identity,
 			state_->qualification_run_id,
@@ -1035,6 +1031,18 @@ namespace cxxlens::detail::sqlite_qualification
 			state_->cleanup_policy,
 			sqlite_disposable_requested_effect::no_effect,
 		};
+	}
+
+	bool sqlite_disposable_qualification_capability::live_in_current_process() const noexcept
+	{
+		if (!state_ || !state_->active)
+			return false;
+#if defined(__linux__) && defined(STATX_MNT_ID)
+		return std::cmp_equal(::getpid(), state_->creator_process_identity) &&
+			process_instance_live(state_->creator_process.get());
+#else
+		return false;
+#endif
 	}
 
 	cxxlens::sdk::result<void> sqlite_disposable_qualification_capability::revoke()
@@ -1234,32 +1242,6 @@ namespace cxxlens::detail::sqlite_qualification
 #endif
 	}
 
-	void set_sqlite_disposable_pre_remove_signal_for_testing(
-		sqlite_disposable_qualification_capability& capability,
-		void (*signal)(void*) noexcept,
-		void* context) noexcept
-	{
-		if (capability.state_ == nullptr || !capability.state_->active)
-			return;
-		capability.state_->pre_remove_signal = signal;
-		capability.state_->pre_remove_signal_context = context;
-	}
-
-	void set_sqlite_disposable_parent_sync_failure_for_testing(
-		sqlite_disposable_qualification_capability& capability, const bool enabled) noexcept
-	{
-		if (capability.state_ == nullptr || !capability.state_->active)
-			return;
-		capability.state_->parent_sync_failure_for_testing = enabled;
-	}
-
-	void invalidate_sqlite_disposable_process_instance_for_testing(
-		sqlite_disposable_qualification_capability& capability) noexcept
-	{
-		if (capability.state_ != nullptr)
-			capability.state_->creator_process.reset();
-	}
-
 	cxxlens::sdk::result<sqlite_disposable_raw_family_observation>
 	observe_sqlite_disposable_raw_empty_family(
 		sqlite_disposable_qualification_capability& capability,
@@ -1268,164 +1250,4 @@ namespace cxxlens::detail::sqlite_qualification
 		return sqlite_disposable_raw_family_observer::observe(capability, request);
 	}
 
-	cxxlens::sdk::result<sqlite_disposable_fz_post_cleanup_result>
-	cleanup_sqlite_disposable_fz_post_wal_for_testing(
-		sqlite_disposable_qualification_capability& capability,
-		const sqlite_disposable_qualification_request& request) noexcept
-	{
-#if defined(__linux__) && defined(STATX_MNT_ID)
-		try
-		{
-			auto* const state = capability.state_.get();
-			if (state == nullptr || !state->active)
-				return cxxlens::sdk::unexpected(
-					raw_family_error("normalization-capability-revoked"));
-			if (state->normalization_attempted)
-				return cxxlens::sdk::unexpected(
-					raw_family_error("normalization-capability-consumed"));
-			if (request.requested_effect != sqlite_disposable_requested_effect::normalize_source)
-				return cxxlens::sdk::unexpected(
-					raw_family_error("normalization-effect-not-authorized"));
-			if (!raw_request_matches(*state, request))
-				return cxxlens::sdk::unexpected(
-					raw_family_error("normalization-capability-binding"));
-
-			auto classify_request = request;
-			classify_request.requested_effect = sqlite_disposable_requested_effect::classify_source;
-			auto before =
-				sqlite_disposable_raw_family_observer::observe(capability, classify_request);
-			if (!before)
-				return cxxlens::sdk::unexpected(std::move(before.error()));
-			if (before->family.family !=
-					sqlite_disposable_empty_family::exact_pre_or_post_zero_wal ||
-				before->family.phase != sqlite_disposable_family_phase::post || !before->wal ||
-				before->wal->byte_count != 0U)
-				return cxxlens::sdk::unexpected(raw_family_error("normalization-fz-post-required"));
-
-			auto plan = plan_sqlite_disposable_empty_normalization(before->observation);
-			if (!plan)
-				return cxxlens::sdk::unexpected(std::move(plan.error()));
-			if (plan->family != before->family ||
-				plan->route !=
-					sqlite_disposable_normalization_route::establish_rollback_empty_anchor ||
-				plan->uses_existing_zero_byte_wal ||
-				plan->may_handoff_to_ordinary_fresh_initialization)
-				return cxxlens::sdk::unexpected(
-					raw_family_error("normalization-route-not-authorized"));
-
-			if (!revalidate_live_root_objects(*state))
-				return cxxlens::sdk::unexpected(raw_family_error("normalization-anchor-drift"));
-
-			// The test signal models an actor that races between the initial census and the
-			// mutation boundary. Re-read both source leaves after that point and reject any
-			// identity, size, metadata, or byte drift before unlinking either object.
-			state->normalization_attempted = true;
-			const auto signal = std::exchange(state->pre_remove_signal, nullptr);
-			auto* const signal_context = std::exchange(state->pre_remove_signal_context, nullptr);
-			if (signal != nullptr)
-				signal(signal_context);
-			auto current_main = read_raw_regular_file(state->root.get(), "main");
-			if (!current_main || current_main->observation != before->main)
-				return cxxlens::sdk::unexpected(raw_family_error("normalization-main-drift"));
-			auto current_wal = read_raw_regular_file(state->root.get(), "main-wal");
-			if (!current_wal || current_wal->observation.byte_count != 0U ||
-				current_wal->observation != *before->wal)
-				return cxxlens::sdk::unexpected(raw_family_error("normalization-wal-drift"));
-			if (!revalidate_live_root_objects(*state))
-				return cxxlens::sdk::unexpected(raw_family_error("normalization-anchor-drift"));
-
-			// This is the only mutation boundary. The terminal state above is deliberately
-			// recorded before either unlink, so a failure below cannot be retried.
-			if (::unlinkat(state->root.get(), "main-wal", 0) != 0)
-				return cxxlens::sdk::unexpected(
-					raw_family_error("normalization-wal-unlink-uncertain"));
-			if (state->parent_sync_failure_for_testing || !fsync_exact(state->root.get()))
-				return cxxlens::sdk::unexpected(
-					raw_family_error("normalization-parent-sync-uncertain"));
-
-			auto after =
-				sqlite_disposable_raw_family_observer::observe(capability, classify_request);
-			if (!after)
-				return cxxlens::sdk::unexpected(std::move(after.error()));
-			if (after->family.family !=
-					sqlite_disposable_empty_family::complete_rollback_empty_no_sidecar ||
-				after->family.phase != sqlite_disposable_family_phase::post || after->wal ||
-				after->main != before->main)
-				return cxxlens::sdk::unexpected(
-					raw_family_error("normalization-anchor-not-established"));
-
-			return sqlite_disposable_fz_post_cleanup_result{std::move(*before), std::move(*after)};
-		}
-		catch (const std::bad_alloc&)
-		{
-			return cxxlens::sdk::unexpected(raw_family_error("normalization-allocation"));
-		}
-		catch (...)
-		{
-			return cxxlens::sdk::unexpected(raw_family_error("normalization-exception"));
-		}
-#else
-		(void)capability;
-		(void)request;
-		return cxxlens::sdk::unexpected(raw_family_error("normalization-unsupported-platform"));
-#endif
-	}
-
-	cxxlens::sdk::result<void> write_sqlite_disposable_fixture_file_for_testing(
-		sqlite_disposable_qualification_capability& capability,
-		const sqlite_disposable_qualification_request& request,
-		const std::string_view leaf,
-		const std::span<const std::byte> bytes) noexcept
-	{
-#if defined(__linux__) && defined(STATX_MNT_ID)
-		auto* const state = capability.state_.get();
-		if (state == nullptr || !state->active)
-			return cxxlens::sdk::unexpected(qualification_error("fixture-capability-revoked"));
-		if (request.requested_effect != sqlite_disposable_requested_effect::no_effect ||
-			!raw_request_matches(*state, request))
-			return cxxlens::sdk::unexpected(qualification_error("fixture-capability-binding"));
-		if (!valid_leaf(leaf) || bytes.size() > 65'536U)
-			return cxxlens::sdk::unexpected(qualification_error("fixture-file"));
-
-		std::string leaf_copy;
-		try
-		{
-			leaf_copy = leaf;
-		}
-		catch (const std::bad_alloc&)
-		{
-			return cxxlens::sdk::unexpected(qualification_error("fixture-allocation"));
-		}
-
-		owned_descriptor file{::openat(state->root.get(),
-									   leaf_copy.c_str(),
-									   O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC,
-									   0600)};
-		if (!file)
-			return cxxlens::sdk::unexpected(qualification_error("fixture-file-open"));
-		std::size_t offset{};
-		while (offset < bytes.size())
-		{
-			ssize_t count{};
-			for (;;)
-			{
-				count = ::write(file.get(), bytes.data() + offset, bytes.size() - offset);
-				if (count >= 0 || errno != EINTR)
-					break;
-			}
-			if (count <= 0 || static_cast<std::size_t>(count) > bytes.size() - offset)
-				return cxxlens::sdk::unexpected(qualification_error("fixture-file-write"));
-			offset += static_cast<std::size_t>(count);
-		}
-		if (!fsync_exact(file.get()) || !fsync_exact(state->root.get()))
-			return cxxlens::sdk::unexpected(qualification_error("fixture-file-sync"));
-		return {};
-#else
-		(void)capability;
-		(void)request;
-		(void)leaf;
-		(void)bytes;
-		return cxxlens::sdk::unexpected(qualification_error("unsupported-platform"));
-#endif
-	}
 } // namespace cxxlens::detail::sqlite_qualification

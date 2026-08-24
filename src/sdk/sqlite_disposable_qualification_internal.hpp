@@ -1,9 +1,7 @@
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <span>
 #include <string>
 #include <string_view>
 
@@ -20,7 +18,6 @@ namespace cxxlens::detail::sqlite_qualification
 	class sqlite_disposable_qualification_capability;
 	enum class sqlite_disposable_qualification_verdict : std::uint8_t;
 	class sqlite_disposable_raw_family_observer;
-	struct sqlite_disposable_fz_post_cleanup_result;
 
 	/** Exact opened-object identity retained by the disposable qualification harness. */
 	struct sqlite_disposable_object_identity
@@ -138,6 +135,9 @@ namespace cxxlens::detail::sqlite_qualification
 		/** Produce a request receipt for the currently bound no-effect gate. */
 		[[nodiscard]] sqlite_disposable_qualification_request no_effect_request() const;
 
+		/** Whether this process still owns the live, non-revoked capability instance. */
+		[[nodiscard]] bool live_in_current_process() const noexcept;
+
 		/** Revoke authority, safely remove an unchanged empty root when requested, and close FDs.
 		 */
 		[[nodiscard]] cxxlens::sdk::result<void> revoke();
@@ -154,23 +154,6 @@ namespace cxxlens::detail::sqlite_qualification
 			std::string_view private_leaf,
 			sqlite_disposable_qualification_bindings bindings);
 		friend sqlite_disposable_qualification_verdict enter_sqlite_disposable_qualification(
-			sqlite_disposable_qualification_capability& capability,
-			const sqlite_disposable_qualification_request& request) noexcept;
-		friend void set_sqlite_disposable_pre_remove_signal_for_testing(
-			sqlite_disposable_qualification_capability& capability,
-			void (*signal)(void*) noexcept,
-			void* context) noexcept;
-		friend void set_sqlite_disposable_parent_sync_failure_for_testing(
-			sqlite_disposable_qualification_capability& capability, bool enabled) noexcept;
-		friend void invalidate_sqlite_disposable_process_instance_for_testing(
-			sqlite_disposable_qualification_capability& capability) noexcept;
-		friend cxxlens::sdk::result<void> write_sqlite_disposable_fixture_file_for_testing(
-			sqlite_disposable_qualification_capability& capability,
-			const sqlite_disposable_qualification_request& request,
-			std::string_view leaf,
-			std::span<const std::byte> bytes) noexcept;
-		friend cxxlens::sdk::result<sqlite_disposable_fz_post_cleanup_result>
-		cleanup_sqlite_disposable_fz_post_wal_for_testing(
 			sqlite_disposable_qualification_capability& capability,
 			const sqlite_disposable_qualification_request& request) noexcept;
 		friend class sqlite_disposable_raw_family_observer;
@@ -211,48 +194,13 @@ namespace cxxlens::detail::sqlite_qualification
 			sqlite_disposable_qualification_bindings bindings);
 
 	/**
-	 * Qualification-only entry gate. Slice 1 accepts only `no_effect` and returns
+	 * Qualification-only entry gate. It accepts only `no_effect` and returns
 	 * `effects_denied_ready`; every source-effect request remains rejected.
 	 */
 	[[nodiscard]] CXXLENS_SQLITE_QUALIFICATION_HIDDEN sqlite_disposable_qualification_verdict
 	enter_sqlite_disposable_qualification(
 		sqlite_disposable_qualification_capability& capability,
 		const sqlite_disposable_qualification_request& request) noexcept;
-
-	/**
-	 * Deterministic internal test signal at the final-check-to-unlink boundary. It discloses no
-	 * retained descriptor, locator, leaf, or binding; a test must use its own fixture authority.
-	 * This seam is not linked into any production component.
-	 */
-	CXXLENS_SQLITE_QUALIFICATION_HIDDEN void set_sqlite_disposable_pre_remove_signal_for_testing(
-		sqlite_disposable_qualification_capability& capability,
-		void (*signal)(void* context) noexcept,
-		void* context) noexcept;
-
-	/**
-	 * Inject the retained-parent sync failure that follows the fixture-only unlink boundary.
-	 * This is a one-way fault-harness control; it never exposes a descriptor or enables a retry.
-	 */
-	CXXLENS_SQLITE_QUALIFICATION_HIDDEN void set_sqlite_disposable_parent_sync_failure_for_testing(
-		sqlite_disposable_qualification_capability& capability, bool enabled) noexcept;
-
-	/** Invalidate only the retained creator-process proof for a focused fail-closed test. */
-	CXXLENS_SQLITE_QUALIFICATION_HIDDEN void
-	invalidate_sqlite_disposable_process_instance_for_testing(
-		sqlite_disposable_qualification_capability& capability) noexcept;
-
-	/**
-	 * Test-harness setup only. Write one direct regular file below the capability's retained root;
-	 * the production Store and VFS do not link this BUILD_TESTING-only target. The helper accepts
-	 * no pathname outside the already authenticated root and is never a classification or success
-	 * authority.
-	 */
-	[[nodiscard]] CXXLENS_SQLITE_QUALIFICATION_HIDDEN cxxlens::sdk::result<void>
-	write_sqlite_disposable_fixture_file_for_testing(
-		sqlite_disposable_qualification_capability& capability,
-		const sqlite_disposable_qualification_request& request,
-		std::string_view leaf,
-		std::span<const std::byte> bytes) noexcept;
 } // namespace cxxlens::detail::sqlite_qualification
 
 #undef CXXLENS_SQLITE_QUALIFICATION_HIDDEN
