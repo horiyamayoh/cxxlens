@@ -1,3 +1,5 @@
+#include "materialization_v4_execution_journal.hpp"
+
 #include <array>
 #include <cstddef>
 #include <limits>
@@ -6,8 +8,6 @@
 #include <string_view>
 #include <utility>
 #include <vector>
-
-#include "materialization_execution_journal.hpp"
 
 namespace cxxlens::detail::clang22::materialization
 {
