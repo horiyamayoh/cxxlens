@@ -6,6 +6,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -51,6 +52,235 @@ namespace cxxlens::sdk::provider::detail
 											   std::string session_id,
 											   std::string closure_digest,
 											   std::string transfer_digest);
+
+	struct process_source_closure_generation_state;
+
+	/**
+	 * One-shot descriptor view issued by the host source-closure launch lease.
+	 *
+	 * The view owns the private descriptors transferred by the lease.  It has no public
+	 * descriptor access; the process adapter consumes it through the narrow friend below.
+	 */
+	class CXXLENS_PROVIDER_DETAIL_HIDDEN process_source_closure_launch_view final
+	{
+	  public:
+		process_source_closure_launch_view(const process_source_closure_launch_view&) = delete;
+		process_source_closure_launch_view&
+		operator=(const process_source_closure_launch_view&) = delete;
+		process_source_closure_launch_view(process_source_closure_launch_view&& other) noexcept;
+		process_source_closure_launch_view&
+		operator=(process_source_closure_launch_view&&) = delete;
+		~process_source_closure_launch_view() noexcept;
+
+	  private:
+		process_source_closure_launch_view(
+			int read_descriptor,
+			int write_descriptor,
+			std::string task_id,
+			std::string session_id,
+			std::string task_v4_digest,
+			std::string closure_id,
+			std::string closure_digest,
+			std::string manifest_digest,
+			std::string transfer_digest,
+			std::string binding_digest,
+			std::uint64_t stream_id,
+			std::uint64_t first_sequence,
+			std::uint64_t read_device,
+			std::uint64_t read_inode,
+			std::uint32_t read_mode,
+			std::uint64_t write_device,
+			std::uint64_t write_inode,
+			std::uint32_t write_mode,
+			std::unique_ptr<process_source_closure_generation_state> state) noexcept;
+
+		int read_descriptor_{-1};
+		int write_descriptor_{-1};
+		std::string task_id_;
+		std::string session_id_;
+		std::string task_v4_digest_;
+		std::string closure_id_;
+		std::string closure_digest_;
+		std::string manifest_digest_;
+		std::string transfer_digest_;
+		std::string binding_digest_;
+		std::uint64_t stream_id_{};
+		std::uint64_t first_sequence_{};
+		std::uint64_t read_device_{};
+		std::uint64_t read_inode_{};
+		std::uint32_t read_mode_{};
+		std::uint64_t write_device_{};
+		std::uint64_t write_inode_{};
+		std::uint32_t write_mode_{};
+		std::unique_ptr<process_source_closure_generation_state> state_;
+		std::uint64_t generation_{};
+		bool adapter_accessed_{};
+
+		friend class process_source_closure_launch;
+		friend struct process_source_closure_launch_adapter_access;
+	};
+
+	/**
+	 * Source-private host launch lease for one authenticated source-closure channel.
+	 *
+	 * The lease owns private F_DUPFD_CLOEXEC descriptors and is the only issuer of the
+	 * measured channel state.  A successful rvalue claim consumes the lease and returns one
+	 * move-only descriptor view for the process adapter.
+	 */
+	class CXXLENS_PROVIDER_DETAIL_HIDDEN process_source_closure_launch final
+	{
+	  public:
+		process_source_closure_launch(const process_source_closure_launch&) = delete;
+		process_source_closure_launch& operator=(const process_source_closure_launch&) = delete;
+		process_source_closure_launch(process_source_closure_launch&& other) noexcept;
+		process_source_closure_launch& operator=(process_source_closure_launch&&) = delete;
+		~process_source_closure_launch() noexcept;
+
+		[[nodiscard]] result<void> validate() const;
+		[[nodiscard]] result<process_source_closure_launch_view> claim_launch() &&;
+		[[nodiscard]] bool validate_live_endpoint_identity() const noexcept;
+		void invalidate() const noexcept;
+		[[nodiscard]] std::string_view task_id() const noexcept
+		{
+			return task_id_;
+		}
+		[[nodiscard]] std::string_view session_id() const noexcept
+		{
+			return session_id_;
+		}
+		[[nodiscard]] std::string_view task_v4_digest() const noexcept
+		{
+			return task_v4_digest_;
+		}
+		[[nodiscard]] std::string_view closure_id() const noexcept
+		{
+			return closure_id_;
+		}
+		[[nodiscard]] std::string_view closure_digest() const noexcept
+		{
+			return closure_digest_;
+		}
+		[[nodiscard]] std::string_view manifest_digest() const noexcept
+		{
+			return manifest_digest_;
+		}
+		[[nodiscard]] std::string_view transfer_digest() const noexcept
+		{
+			return transfer_digest_;
+		}
+		[[nodiscard]] std::string_view binding_digest() const noexcept
+		{
+			return binding_digest_;
+		}
+		[[nodiscard]] std::uint64_t stream_id() const noexcept
+		{
+			return stream_id_;
+		}
+		[[nodiscard]] std::uint64_t first_sequence() const noexcept
+		{
+			return first_sequence_;
+		}
+		[[nodiscard]] std::uint64_t launch_generation() const noexcept
+		{
+			return generation_;
+		}
+
+	  private:
+		process_source_closure_launch(
+			int read_descriptor,
+			int write_descriptor,
+			std::string task_id,
+			std::string session_id,
+			std::string task_v4_digest,
+			std::string closure_id,
+			std::string closure_digest,
+			std::string manifest_digest,
+			std::string transfer_digest,
+			std::string binding_digest,
+			std::uint64_t stream_id,
+			std::uint64_t first_sequence,
+			std::uint64_t read_device,
+			std::uint64_t read_inode,
+			std::uint32_t read_mode,
+			std::uint64_t write_device,
+			std::uint64_t write_inode,
+			std::uint32_t write_mode,
+			std::unique_ptr<process_source_closure_generation_state> state) noexcept;
+
+		int read_descriptor_{-1};
+		int write_descriptor_{-1};
+		std::string task_id_;
+		std::string session_id_;
+		std::string task_v4_digest_;
+		std::string closure_id_;
+		std::string closure_digest_;
+		std::string manifest_digest_;
+		std::string transfer_digest_;
+		std::string binding_digest_;
+		std::uint64_t stream_id_{};
+		std::uint64_t first_sequence_{};
+		std::uint64_t read_device_{};
+		std::uint64_t read_inode_{};
+		std::uint32_t read_mode_{};
+		std::uint64_t write_device_{};
+		std::uint64_t write_inode_{};
+		std::uint32_t write_mode_{};
+		std::unique_ptr<process_source_closure_generation_state> state_;
+		std::uint64_t generation_{};
+
+		friend result<process_source_closure_launch>
+		make_process_source_closure_launch(int,
+										   int,
+										   std::string,
+										   std::string,
+										   std::string,
+										   std::string,
+										   std::string,
+										   std::string,
+										   std::string,
+										   std::uint64_t,
+										   std::uint64_t);
+	};
+
+	/** Narrow source-private projection consumed once by the process adapter. */
+	struct CXXLENS_PROVIDER_DETAIL_HIDDEN process_source_closure_launch_adapter_access
+	{
+		struct descriptor_projection final
+		{
+			explicit descriptor_projection(int read = -1, int write = -1) noexcept
+				: read_descriptor{read}, write_descriptor{write}
+			{
+			}
+			descriptor_projection(const descriptor_projection&) = delete;
+			descriptor_projection& operator=(const descriptor_projection&) = delete;
+			descriptor_projection(descriptor_projection&& other) noexcept
+				: read_descriptor{std::exchange(other.read_descriptor, -1)},
+				  write_descriptor{std::exchange(other.write_descriptor, -1)}
+			{
+			}
+			descriptor_projection& operator=(descriptor_projection&&) = delete;
+
+			int read_descriptor{-1};
+			int write_descriptor{-1};
+		};
+
+		[[nodiscard]] static result<descriptor_projection>
+		consume(process_source_closure_launch_view&& value);
+	};
+
+	/** Issue one validated, move-only host launch lease. */
+	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<process_source_closure_launch>
+	make_process_source_closure_launch(int read_descriptor,
+									   int write_descriptor,
+									   std::string task_id,
+									   std::string session_id,
+									   std::string task_v4_digest,
+									   std::string closure_id,
+									   std::string closure_digest,
+									   std::string manifest_digest,
+									   std::string transfer_digest,
+									   std::uint64_t stream_id,
+									   std::uint64_t first_sequence);
 
 	/**
 	 * Independent Protocol 2.0 source-closure channel owned by the provider runtime.
