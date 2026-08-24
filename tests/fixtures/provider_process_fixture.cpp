@@ -734,8 +734,12 @@ int main(const int argument_count, const char* const* arguments)
 		: std::uint16_t{};
 	auto complete_control =
 		encode_task_complete_metadata({mode == "wrong-complete-task" ? "other-task" : task_id});
+	// Protocol 2 requires every control value to be canonical CBOR.  Use a canonical empty map to
+	// exercise a task_complete occurrence with no typed completion fields; an empty byte span would
+	// be rejected by the encoder before the malformed provider transcript reaches the host.
+	constexpr std::array missing_complete_control{std::byte{0xa0}};
 	const std::span<const std::byte> final_control = mode == "missing-complete-control"
-		? std::span<const std::byte>{}
+		? std::span<const std::byte>{missing_complete_control}
 		: std::span<const std::byte>{*complete_control};
 	if (!coverage_control || !unresolved_control || !evidence_control || !complete_control ||
 		!writer.send(message_type::coverage_chunk, *coverage_control) ||
