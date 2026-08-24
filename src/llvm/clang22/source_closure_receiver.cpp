@@ -700,11 +700,14 @@ namespace cxxlens::detail::clang22
 			auto credentials_value = validator.take_ack_credentials();
 			if (!credentials_value)
 				return fail_with_cleanup(*relay, std::move(credentials_value.error()));
-			const auto transfer_digest = credentials_value->transfer_digest;
-			return source_closure_receiver_result{std::move(*snapshot),
-												  std::move(*credentials_value),
-												  transfer_digest,
-												  std::move(relay)};
+			// After the wire ACK has been emitted, only move-only ownership transfers are allowed.
+			// In particular, do not copy the transfer digest or rebuild any result-side allocation.
+			source_closure_receiver_result result;
+			result.snapshot = std::move(*snapshot);
+			result.transfer_digest = std::move(credentials_value->transfer_digest);
+			result.credentials = std::move(*credentials_value);
+			result.relay = std::move(relay);
+			return result;
 		}
 	}
 } // namespace cxxlens::detail::clang22
