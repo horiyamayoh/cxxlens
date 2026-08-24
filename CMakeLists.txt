@@ -435,6 +435,61 @@ target_compile_features(cxxlens_clang22_materialization_io_support
 cxxlens_set_project_warnings(cxxlens_clang22_materialization_io_support)
 cxxlens_enable_sanitizers(cxxlens_clang22_materialization_io_support)
 
+# Rooted SQLite VFS is a product safety primitive, not a dependency of the
+# retained legacy materialization test graph. Keep its implementation in a
+# source-private archive so focused VFS tests and the legacy prior-artifact
+# path share one implementation without pulling unrelated request/task code.
+add_library(cxxlens_clang22_materializer_rooted_vfs_support STATIC EXCLUDE_FROM_ALL
+            src/llvm/clang22/materialization_rooted_vfs.cpp)
+target_link_libraries(
+  cxxlens_clang22_materializer_rooted_vfs_support
+  PUBLIC cxxlens::base
+  PRIVATE cxxlens::kernel cxxlens::provider_sdk
+          cxxlens_clang22_materialization_codecs
+          cxxlens_clang22_materialization_io_support)
+target_include_directories(cxxlens_clang22_materializer_rooted_vfs_support
+                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_clang22_materializer_rooted_vfs_support
+                        PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens_clang22_materializer_rooted_vfs_support)
+cxxlens_enable_sanitizers(cxxlens_clang22_materializer_rooted_vfs_support)
+
+# Store outcome classification is likewise a source-private product boundary.
+# It is consumed by its direct contract test and can be connected by the v4
+# publication path without inheriting the legacy safety archive.
+add_library(cxxlens_clang22_materializer_store_outcome_support STATIC EXCLUDE_FROM_ALL
+            src/llvm/clang22/materialization_store_outcome.cpp)
+target_link_libraries(
+  cxxlens_clang22_materializer_store_outcome_support
+  PUBLIC cxxlens::base
+  PRIVATE cxxlens::kernel)
+target_include_directories(cxxlens_clang22_materializer_store_outcome_support
+                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_clang22_materializer_store_outcome_support
+                        PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens_clang22_materializer_store_outcome_support)
+cxxlens_enable_sanitizers(cxxlens_clang22_materializer_store_outcome_support)
+
+# Installed occurrence identity is an artifact-integrity contract. Its
+# implementation is independent of the legacy materializer pipeline and is
+# therefore kept in its own source-private archive for the focused test and
+# future installed-consumer binding.
+add_library(cxxlens_clang22_materializer_occurrence_support STATIC EXCLUDE_FROM_ALL
+            src/llvm/clang22/materialization_occurrence.cpp)
+target_link_libraries(
+  cxxlens_clang22_materializer_occurrence_support
+  PUBLIC cxxlens::base
+  PRIVATE cxxlens::kernel cxxlens::provider_sdk
+          cxxlens_clang22_materialization_codecs
+          cxxlens_clang22_materialization_io_support
+          cxxlens_clang22_materializer_rooted_vfs_support)
+target_include_directories(cxxlens_clang22_materializer_occurrence_support
+                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_clang22_materializer_occurrence_support
+                        PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens_clang22_materializer_occurrence_support)
+cxxlens_enable_sanitizers(cxxlens_clang22_materializer_occurrence_support)
+
 add_library(cxxlens_clang22_materialization_request_v2_2_support STATIC
             EXCLUDE_FROM_ALL src/llvm/clang22/materialization_request_v2_2.cpp)
 target_link_libraries(
@@ -630,9 +685,6 @@ if(BUILD_TESTING)
     src/llvm/clang22/materialization_claim_stream.cpp
     src/llvm/clang22/materialization_bounded_claim_source.cpp
     src/llvm/clang22/materialization_store.cpp
-    src/llvm/clang22/materialization_store_outcome.cpp
-    src/llvm/clang22/materialization_rooted_vfs.cpp
-    src/llvm/clang22/materialization_occurrence.cpp
     src/llvm/clang22/materialization_execution_journal.cpp
     src/llvm/clang22/materialization_report.cpp
     src/llvm/clang22/materialization_public_report.cpp
@@ -646,6 +698,7 @@ if(BUILD_TESTING)
             cxxlens_clang22_materialization_io_support
             cxxlens_clang22_materialization_request_v2_2_support
             cxxlens_clang22_materializer_bounded_support
+            cxxlens_clang22_materializer_rooted_vfs_support
             cxxlens_clang22_materializer_legacy_request_support)
   if(CXXLENS_BUILD_SHARED)
     target_sources(
