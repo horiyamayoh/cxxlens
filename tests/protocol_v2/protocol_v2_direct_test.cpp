@@ -219,6 +219,21 @@ namespace
 		known_optional.flags = cxxlens::protocol_v2::flag_optional_extension;
 		require_error(cxxlens::protocol_v2::encode_frame(known_optional),
 					  "known message with optional flag rejected");
+		auto heartbeat = input;
+		heartbeat.type = cxxlens::protocol_v2::message_type::heartbeat;
+		heartbeat.flags = cxxlens::protocol_v2::flag_optional_extension;
+		auto heartbeat_flags = cxxlens::protocol_v2::encode_frame(heartbeat);
+		require_error(heartbeat_flags, "heartbeat with optional flag rejected");
+		require(heartbeat_flags.error().code == "protocol-v2.header-invalid" &&
+					heartbeat_flags.error().field == "payload" &&
+					heartbeat_flags.error().detail == "heartbeat-flags-or-payload",
+				"heartbeat flag rejection reason");
+		heartbeat.flags = 0U;
+		heartbeat.payload.push_back(byte{0x01});
+		auto heartbeat_payload = cxxlens::protocol_v2::encode_frame(heartbeat);
+		require_error(heartbeat_payload, "heartbeat with payload rejected");
+		require(heartbeat_payload.error() == heartbeat_flags.error(),
+				"heartbeat flags and payload share one exact failure contract");
 		auto unknown_required = optional;
 		unknown_required.flags = cxxlens::protocol_v2::flag_required_extension;
 		auto required_failure = cxxlens::protocol_v2::encode_frame(unknown_required);

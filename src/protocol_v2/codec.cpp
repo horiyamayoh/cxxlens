@@ -96,6 +96,13 @@ namespace cxxlens::protocol_v2
 			const auto optional_extension = (flags & flag_optional_extension) != 0U;
 			const auto compressed_payload = (flags & flag_compressed_payload) != 0U;
 			const auto end_of_stream = (flags & flag_end_of_stream) != 0U;
+			// Heartbeat is a reserved core message, not an extension carrier.  Keep its
+			// exact zero-flags/empty-payload contract ahead of the generic extension
+			// checks so SDK callers receive the stable heartbeat state error for every
+			// prohibited flag spelling.
+			if (type_id == heartbeat_message_id && (flags != 0U || payload_size != 0U))
+				return sdk::unexpected(
+					failure("payload", "heartbeat-flags-or-payload", "protocol-v2.header-invalid"));
 			if (required_extension)
 				return sdk::unexpected(failure(
 					"flags", "required-extension", "protocol-v2.unknown-required-extension"));
@@ -138,9 +145,6 @@ namespace cxxlens::protocol_v2
 			if (total > bound.max_frame_bytes)
 				return sdk::unexpected(
 					failure("frame", "limit-exceeded", "protocol-v2.resource-limit"));
-			if (type_id == heartbeat_message_id && payload_size != 0U)
-				return sdk::unexpected(
-					failure("payload", "heartbeat-must-be-empty", "protocol-v2.header-invalid"));
 			return {};
 		}
 

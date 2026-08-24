@@ -305,6 +305,13 @@ namespace
 													 heartbeat.stream_id};
 		require(validate_provider_protocol_v2_heartbeat(wire, &binding).has_value(),
 				"typed heartbeat validation");
+		wire.flags = static_cast<std::uint16_t>(frame_flag::optional_extension);
+		auto prohibited_flags = encode_frame(wire);
+		require(!prohibited_flags &&
+					prohibited_flags.error().code == "provider.protocol-state-invalid" &&
+					prohibited_flags.error().field == "heartbeat",
+				"reserved heartbeat flags use the stable state failure");
+		wire.flags = 0U;
 		wire.payload.push_back(std::byte{0x01});
 		require(!validate_provider_protocol_v2_heartbeat(wire, &binding),
 				"heartbeat payload is rejected");
