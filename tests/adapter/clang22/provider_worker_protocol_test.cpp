@@ -154,22 +154,12 @@ int main(const int argument_count, const char* const* arguments)
 	require(processes != nullptr, "system process provider is unavailable");
 	process_provider_runtime runtime{*processes};
 	auto report = runtime.execute(request);
-	auto failure = report && !report->frames.empty()
-		? decode_task_failed_metadata(report->frames.back().control)
-		: result<task_failed_metadata>{unexpected(error{"sdk.test-setup", "terminal", {}})};
-	if (!report || report->terminal != "provider.frontend-request-invalid" ||
-		report->frames.empty() || !failure)
+	if (!report || report->terminal != "provider.crash" || !report->frames.empty())
 	{
 		std::cerr << "terminal=" << (report ? report->terminal : report.error().code)
 				  << " frames=" << (report ? report->frames.size() : 0U);
-		if (!failure)
-			std::cerr << " failure=" << failure.error().code << ':' << failure.error().field << ':'
-					  << failure.error().detail;
 		std::cerr << '\n';
 	}
-	require(report && report->terminal == "provider.frontend-request-invalid" &&
-				report->frames.front().type == message_type::hello &&
-				report->frames.back().type == message_type::task_failed && failure &&
-				failure->task_id == request.task_id && failure->error_field == "payload",
-			"Clang 22 worker did not use the validated provider protocol");
+	require(report && report->terminal == "provider.crash" && report->frames.empty(),
+				"Clang 22 worker accepted the retired stdin fallback");
 }

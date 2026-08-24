@@ -38,5 +38,8 @@ int main()
 		return cxxlens::detail::clang22::run_provider_worker_v4_source_closure(
 			std::cin, std::cout, read_descriptor, write_descriptor);
 	}
-	return cxxlens::detail::clang22::run_provider_worker(std::cin, std::cout);
+	// The worker has one supported ingress contract. Do not fall back to the
+	// retired stdin transcript path when the authenticated source-closure
+	// boundary is absent.
+	return EXIT_FAILURE;
 }

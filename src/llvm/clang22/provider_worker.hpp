@@ -176,9 +176,6 @@ namespace cxxlens::detail::clang22
 	[[nodiscard]] sdk::result<source_closure_task_v4_worker_receipt>
 	run_provider_worker_v2_2(provider_worker_v2_2_dispatch_input input);
 
-	/** Run the worker from a bounded-read host stream; the stream is never materialized. */
-	[[nodiscard]] int run_provider_worker(std::istream& input, std::ostream& output);
-
 	/**
 	 * Run the explicit Protocol 2.0 task-v4/source-closure ingress.
 	 *
