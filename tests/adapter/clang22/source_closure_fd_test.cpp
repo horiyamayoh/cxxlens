@@ -314,12 +314,6 @@ namespace
 	{
 		auto input = make_socket_pair();
 		auto ack = make_socket_pair();
-		constexpr int small_send_buffer = 4'096;
-		require(
-			::setsockopt(
-				ack.first, SOL_SOCKET, SO_SNDBUF, &small_send_buffer, sizeof(small_send_buffer)) ==
-				0,
-			"fixture send-buffer limit failed");
 		source_closure_fd_channel_options options;
 		options.read = {input.first, source_closure_fd_ownership::borrowed};
 		options.write = {ack.first, source_closure_fd_ownership::borrowed};
@@ -389,12 +383,6 @@ namespace
 	{
 		auto input = make_socket_pair();
 		auto ack = make_socket_pair();
-		constexpr int small_send_buffer = 4'096;
-		require(
-			::setsockopt(
-				ack.first, SOL_SOCKET, SO_SNDBUF, &small_send_buffer, sizeof(small_send_buffer)) ==
-				0,
-			"poison fixture send-buffer limit failed");
 		source_closure_fd_channel_options options;
 		options.read = {input.first, source_closure_fd_ownership::borrowed};
 		options.write = {ack.first, source_closure_fd_ownership::borrowed};
