@@ -11,8 +11,8 @@
 #include <cxxlens/sdk/incremental.hpp>
 #include <cxxlens/sdk/store.hpp>
 
-#include "materialization_prior_artifact_limits.hpp"
 #include "materialization_incremental_coordinator.hpp"
+#include "materialization_prior_artifact_limits.hpp"
 #include "materialization_report.hpp"
 #include "materialization_seal.hpp"
 
