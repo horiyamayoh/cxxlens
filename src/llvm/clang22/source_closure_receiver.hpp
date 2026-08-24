@@ -65,6 +65,23 @@ namespace cxxlens::detail::clang22
 		std::uint64_t progress_timeout_ns{source_closure_default_progress_timeout_ns};
 	};
 
+	/** Exact initial wire credit reserved for a bounded source-closure transcript. */
+	struct source_closure_receiver_credit
+	{
+		std::uint64_t bytes{};
+		std::uint64_t frames{};
+	};
+
+	/**
+	 * Compute receiver credit using the same complete-frame byte unit as Protocol 2.
+	 *
+	 * This source-private product helper deliberately includes the fixed 104-byte
+	 * header for every possible frame.  The caller remains responsible for first
+	 * rejecting limits which exceed the fixed source-closure contract.
+	 */
+	[[nodiscard]] sdk::result<source_closure_receiver_credit>
+	source_closure_receiver_initial_credit(const source_closure_transport_limits& limits);
+
 	/** The only source-derived value exposed after a complete ACK. */
 	struct source_closure_receiver_result
 	{

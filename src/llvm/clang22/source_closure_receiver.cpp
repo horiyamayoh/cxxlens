@@ -184,13 +184,16 @@ namespace cxxlens::detail::clang22
 		checked_credit_bytes(const source_closure_transport_limits& limits,
 							 const std::uint64_t frame_count)
 		{
-			constexpr std::uint64_t maximum_control_bytes = 65'536U;
+			constexpr auto maximum_control_bytes =
+				static_cast<std::uint64_t>(protocol::max_control_bytes);
+			constexpr auto maximum_frame_overhead =
+				maximum_control_bytes + static_cast<std::uint64_t>(wire_header_bytes);
 			if (frame_count >
 				(std::numeric_limits<std::uint64_t>::max() - limits.maximum_task_spool_bytes) /
-					maximum_control_bytes)
+					maximum_frame_overhead)
 				return sdk::unexpected(
 					failure("source-closure.limit-exceeded", "credit.bytes", "overflow"));
-			return limits.maximum_task_spool_bytes + frame_count * maximum_control_bytes;
+			return limits.maximum_task_spool_bytes + frame_count * maximum_frame_overhead;
 		}
 
 		[[nodiscard]] source_closure_manifest_descriptor
@@ -441,6 +444,18 @@ namespace cxxlens::detail::clang22
 		}
 	} // namespace
 
+	sdk::result<source_closure_receiver_credit>
+	source_closure_receiver_initial_credit(const source_closure_transport_limits& limits)
+	{
+		auto frames = checked_credit_frames(limits);
+		if (!frames)
+			return sdk::unexpected(std::move(frames.error()));
+		auto bytes = checked_credit_bytes(limits, *frames);
+		if (!bytes)
+			return sdk::unexpected(std::move(bytes.error()));
+		return source_closure_receiver_credit{*bytes, *frames};
+	}
+
 	sdk::result<source_closure_receiver_result>
 	receive_source_closure_frames(source_closure_frame_source& source,
 								  source_closure_frame_sink& sink,
@@ -456,13 +471,12 @@ namespace cxxlens::detail::clang22
 		auto closure_limits = protocol_limits(options.limits);
 		if (!closure_limits)
 			return sdk::unexpected(std::move(closure_limits.error()));
-		auto frame_credit = checked_credit_frames(options.limits);
-		if (!frame_credit || *frame_credit > options.maximum_frames)
+		auto initial_credit = source_closure_receiver_initial_credit(options.limits);
+		if (!initial_credit)
+			return sdk::unexpected(std::move(initial_credit.error()));
+		if (initial_credit->frames > options.maximum_frames)
 			return sdk::unexpected(
 				failure("source-closure.limit-exceeded", "receiver-options", "frame-credit"));
-		auto byte_credit = checked_credit_bytes(options.limits, *frame_credit);
-		if (!byte_credit)
-			return sdk::unexpected(std::move(byte_credit.error()));
 		if (!options.binding.task_v4_digest.starts_with("semantic-v2:sha256:") ||
 			!options.binding.closure_digest.starts_with("semantic-v2:sha256:") ||
 			!options.binding.manifest_digest.starts_with("semantic-v2:sha256:"))
@@ -476,7 +490,7 @@ namespace cxxlens::detail::clang22
 		session.closure_digest = options.binding.closure_digest;
 		session.manifest_digest = options.binding.manifest_digest;
 		session.stream_id = options.stream_id;
-		session.initial_credit = {*byte_credit, *frame_credit};
+		session.initial_credit = {initial_credit->bytes, initial_credit->frames};
 		session.limits = *closure_limits;
 		auto protocol_state = protocol::closure_transfer::create(std::move(session));
 		if (!protocol_state)

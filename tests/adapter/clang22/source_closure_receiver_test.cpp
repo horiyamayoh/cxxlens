@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <span>
 #include <string>
@@ -456,6 +457,52 @@ namespace
 				"partial final-owned frame body did not fail closed");
 	}
 
+	void initial_credit_counts_every_wire_header()
+	{
+		constexpr source_closure_transport_limits limits{};
+		auto credit = source_closure_receiver_initial_credit(limits);
+		require_result(credit, "receiver initial credit calculation failed");
+		constexpr std::uint64_t expected_frames = 8'282U;
+		constexpr std::uint64_t expected_missing_headers =
+			expected_frames * protocol::fixed_header_bytes;
+		constexpr std::uint64_t expected_bytes = limits.maximum_task_spool_bytes +
+			expected_frames * (protocol::max_control_bytes + protocol::fixed_header_bytes);
+		require(credit->frames == expected_frames && credit->bytes == expected_bytes &&
+					expected_missing_headers == 861'328U,
+				"receiver credit omitted complete-frame header bytes");
+
+		protocol::credit_window generic{{credit->bytes, credit->frames}};
+		protocol::frame maximum_frame;
+		maximum_frame.control.resize(protocol::max_control_bytes);
+		const auto payload_per_frame = limits.maximum_task_spool_bytes / expected_frames;
+		const auto payload_remainder = limits.maximum_task_spool_bytes % expected_frames;
+		maximum_frame.payload.resize(static_cast<std::size_t>(payload_per_frame));
+		for (std::uint64_t index = 0U; index < expected_frames; ++index)
+		{
+			maximum_frame.payload.resize(static_cast<std::size_t>(
+				payload_per_frame + (index + 1U == expected_frames ? payload_remainder : 0U)));
+			auto consumed = generic.consume(maximum_frame);
+			require_result(consumed, "generic Protocol 2 credit rejected receiver bound");
+		}
+		require(generic.available().bytes == 0U && generic.available().frames == 0U,
+				"receiver and generic Protocol 2 credit units diverged");
+
+		auto frame_overflow = limits;
+		frame_overflow.maximum_manifest_chunks = std::numeric_limits<std::uint64_t>::max();
+		auto rejected_frames = source_closure_receiver_initial_credit(frame_overflow);
+		require(!rejected_frames &&
+					rejected_frames.error().code == "source-closure.limit-exceeded" &&
+					rejected_frames.error().field == "credit.frames",
+				"receiver did not reject frame-credit arithmetic overflow");
+
+		auto byte_overflow = limits;
+		byte_overflow.maximum_task_spool_bytes = std::numeric_limits<std::uint64_t>::max();
+		auto rejected_bytes = source_closure_receiver_initial_credit(byte_overflow);
+		require(!rejected_bytes && rejected_bytes.error().code == "source-closure.limit-exceeded" &&
+					rejected_bytes.error().field == "credit.bytes",
+				"receiver did not reject byte-credit arithmetic overflow");
+	}
+
 	void liveness_and_connection_terminals()
 	{
 		auto input = make_fixture();
@@ -509,6 +556,7 @@ int main()
 	truncated_transfer();
 	frame_header_authority_precedes_body_allocation_and_read();
 	resident_contract_is_hard_and_body_is_read_once();
+	initial_credit_counts_every_wire_header();
 	liveness_and_connection_terminals();
 	return 0;
 }
