@@ -42,7 +42,38 @@ x-cxxlens-installed-ingress-contract:
     transfer_digest: semantic-v2-digest
     stream_id: uint64-canonical-decimal
     first_sequence: {encoding: uint64-canonical-decimal, exact: 0}
-    binding_digest: semantic-v2-digest
+    binding_digest:
+      type: process-channel-sha256
+      prefix: "process-channel:sha256:"
+      hash: sha256
+      identity_domain: process-channel
+      projection_encoding: cxxlens-canonical-tuple-v1
+      fields:
+        - {name: mode, kind: utf8_string, exact: task-v4-source-closure-v2}
+        - {name: task_id, kind: utf8_string, encoding: task-id}
+        - {name: session_id, kind: utf8_string, encoding: provider-session-id}
+        - {name: task_v4_digest, kind: utf8_string, encoding: semantic-v2-digest}
+        - {name: closure_id, kind: utf8_string, encoding: source-closure-id}
+        - {name: closure_digest, kind: utf8_string, encoding: semantic-v2-digest}
+        - {name: manifest_digest, kind: utf8_string, encoding: semantic-v2-digest}
+        - {name: transfer_digest, kind: utf8_string, encoding: semantic-v2-digest}
+        - {name: stream_id, kind: utf8_string, encoding: uint64-canonical-decimal}
+        - {name: first_sequence, kind: utf8_string, encoding: uint64-canonical-decimal}
+        - {name: read_descriptor, kind: canonical_integer}
+        - {name: write_descriptor, kind: canonical_integer}
+        - {name: read_device, kind: utf8_string, encoding: uint64-canonical-decimal}
+        - {name: read_inode, kind: utf8_string, encoding: uint64-canonical-decimal}
+        - {name: read_mode, kind: utf8_string, encoding: uint32-canonical-decimal}
+        - {name: write_device, kind: utf8_string, encoding: uint64-canonical-decimal}
+        - {name: write_inode, kind: utf8_string, encoding: uint64-canonical-decimal}
+        - {name: write_mode, kind: utf8_string, encoding: uint32-canonical-decimal}
+      endpoint_identity:
+        read:
+          descriptor_environment: CXXLENS_PROVIDER_SOURCE_CLOSURE_READ_FD
+          fstat_fields: [read_device, read_inode, read_mode]
+        write:
+          descriptor_environment: CXXLENS_PROVIDER_SOURCE_CLOSURE_WRITE_FD
+          fstat_fields: [write_device, write_inode, write_mode]
   fallback: forbidden
   caller_override: forbidden
   frame_binding:

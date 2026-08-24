@@ -87,6 +87,58 @@ class MaterializationProtocol2Tests(unittest.TestCase):
                 ingress["binding_environment_encoding"]["first_sequence"],
                 {"encoding": "uint64-canonical-decimal", "exact": 0},
             )
+            binding_encoding = ingress["binding_environment_encoding"]["binding_digest"]
+            self.assertEqual(binding_encoding["type"], "process-channel-sha256")
+            self.assertEqual(binding_encoding["prefix"], "process-channel:sha256:")
+            self.assertEqual(binding_encoding["hash"], "sha256")
+            self.assertEqual(binding_encoding["identity_domain"], "process-channel")
+            self.assertEqual(
+                binding_encoding["projection_encoding"], "cxxlens-canonical-tuple-v1"
+            )
+            self.assertEqual(
+                [
+                    (
+                        field["name"],
+                        field["kind"],
+                        field.get("encoding"),
+                        field.get("exact"),
+                    )
+                    for field in binding_encoding["fields"]
+                ],
+                [
+                    ("mode", "utf8_string", None, "task-v4-source-closure-v2"),
+                    ("task_id", "utf8_string", "task-id", None),
+                    ("session_id", "utf8_string", "provider-session-id", None),
+                    ("task_v4_digest", "utf8_string", "semantic-v2-digest", None),
+                    ("closure_id", "utf8_string", "source-closure-id", None),
+                    ("closure_digest", "utf8_string", "semantic-v2-digest", None),
+                    ("manifest_digest", "utf8_string", "semantic-v2-digest", None),
+                    ("transfer_digest", "utf8_string", "semantic-v2-digest", None),
+                    ("stream_id", "utf8_string", "uint64-canonical-decimal", None),
+                    ("first_sequence", "utf8_string", "uint64-canonical-decimal", None),
+                    ("read_descriptor", "canonical_integer", None, None),
+                    ("write_descriptor", "canonical_integer", None, None),
+                    ("read_device", "utf8_string", "uint64-canonical-decimal", None),
+                    ("read_inode", "utf8_string", "uint64-canonical-decimal", None),
+                    ("read_mode", "utf8_string", "uint32-canonical-decimal", None),
+                    ("write_device", "utf8_string", "uint64-canonical-decimal", None),
+                    ("write_inode", "utf8_string", "uint64-canonical-decimal", None),
+                    ("write_mode", "utf8_string", "uint32-canonical-decimal", None),
+                ],
+            )
+            self.assertEqual(
+                binding_encoding["endpoint_identity"],
+                {
+                    "read": {
+                        "descriptor_environment": "CXXLENS_PROVIDER_SOURCE_CLOSURE_READ_FD",
+                        "fstat_fields": ["read_device", "read_inode", "read_mode"],
+                    },
+                    "write": {
+                        "descriptor_environment": "CXXLENS_PROVIDER_SOURCE_CLOSURE_WRITE_FD",
+                        "fstat_fields": ["write_device", "write_inode", "write_mode"],
+                    },
+                },
+            )
             self.assertEqual(ingress["fallback"], "forbidden")
             self.assertEqual(ingress["caller_override"], "forbidden")
             self.assertEqual(
