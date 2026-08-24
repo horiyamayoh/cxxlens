@@ -118,7 +118,7 @@ namespace
 		root.emplace("closure_digest", json_value::string(closure.closure_digest).value());
 		root.emplace("closure_id", json_value::string(closure.snapshot_id).value());
 		root.emplace("members", json_value::array(std::move(members)));
-		root.emplace("schema", json_value::string("cxxlens.source-closure-manifest.v1").value());
+		root.emplace("schema", json_value::string(std::string{source_closure_manifest_schema}).value());
 		return canonical_json(json_value::object(std::move(root)).value());
 	}
 
@@ -166,7 +166,7 @@ namespace
 		using cxxlens::sdk::provider::encode_frame;
 		const auto manifest = manifest_bytes(output.input.closure);
 		auto manifest_digest =
-			cxxlens::sdk::semantic_digest("cxxlens.source-closure-manifest.v1", manifest);
+			cxxlens::sdk::semantic_digest(source_closure_manifest_digest_domain, manifest);
 		require(manifest_digest && *manifest_digest == output.identity.manifest_digest,
 				"worker channel manifest digest diverged");
 		const auto closure_id = output.input.closure.snapshot_id;

@@ -10,6 +10,20 @@
 
 namespace cxxlens::detail::clang22
 {
+	/**
+	 * Product identity domains for the Protocol 2.0 source-closure boundary.
+	 *
+	 * The closure digest is the identity of the authenticated Clang 22 source snapshot.  The
+	 * manifest schema/digest are deliberately separate because they bind the canonical JSON wire
+	 * projection and must not be confused with the source-content identity.
+	 */
+	inline constexpr std::string_view source_closure_digest_domain =
+		"cxxlens.clang22.source-closure.v1";
+	inline constexpr std::string_view source_closure_manifest_schema =
+		"cxxlens.source-closure-manifest.v1";
+	inline constexpr std::string_view source_closure_manifest_digest_domain =
+		"cxxlens.source-closure-manifest.v1";
+
 	/** Closed semantic role of one compiler-visible source-closure member. */
 	enum class source_closure_role : std::uint8_t
 	{

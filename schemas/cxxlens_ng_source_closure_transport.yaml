@@ -137,6 +137,7 @@ identity:
     member_encoding_enum: [utf8, utf16le, utf16be, locale_dependent, binary_or_unknown]
     blob_exact_fields: [content_digest, size_bytes]
     blob_order: content_digest-byte-order
+    closure_digest_domain: cxxlens.clang22.source-closure.v1
     domain: cxxlens.source-closure-manifest.v1
     digest: semantic-digest-of-canonical-complete-manifest
   blob_receipts:

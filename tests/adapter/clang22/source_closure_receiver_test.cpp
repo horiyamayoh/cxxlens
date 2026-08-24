@@ -176,7 +176,7 @@ namespace
 		root.emplace("closure_digest", json_value::string(closure.closure_digest).value());
 		root.emplace("closure_id", json_value::string(closure.snapshot_id).value());
 		root.emplace("members", json_value::array(std::move(members)));
-		root.emplace("schema", json_value::string("cxxlens.source-closure-manifest.v1").value());
+		root.emplace("schema", json_value::string(std::string{source_closure_manifest_schema}).value());
 		return canonical_json(json_value::object(std::move(root)).value());
 	}
 
@@ -190,8 +190,8 @@ namespace
 		require_result(closure, "receiver fixture closure failed");
 		fixture output{std::move(*closure), {}, {}, {}};
 		output.manifest_bytes = manifest(output.closure);
-		auto manifest_digest = cxxlens::sdk::semantic_digest("cxxlens.source-closure-manifest.v1",
-															 output.manifest_bytes);
+		auto manifest_digest = cxxlens::sdk::semantic_digest(source_closure_manifest_digest_domain,
+																 output.manifest_bytes);
 		require_result(manifest_digest, "receiver fixture manifest digest failed");
 		output.binding.session_id = typed("provider-session:sha256:", '1');
 		output.binding.task_v4_digest = typed("semantic-v2:sha256:", '2');

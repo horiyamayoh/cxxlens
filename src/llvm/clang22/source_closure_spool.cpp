@@ -32,8 +32,6 @@ namespace cxxlens::detail::clang22
 	{
 		using materialization::json_value;
 
-		constexpr std::string_view manifest_schema{"cxxlens.source-closure-manifest.v1"};
-		constexpr std::string_view manifest_domain{"cxxlens.source-closure-manifest.v1"};
 		constexpr std::string_view semantic_prefix{"semantic-v2:sha256:"};
 		constexpr std::string_view content_prefix{"sha256:"};
 		constexpr std::size_t invalid_blob_ordinal = std::numeric_limits<std::size_t>::max();
@@ -555,7 +553,8 @@ namespace cxxlens::detail::clang22
 			if (materialization::canonical_json(parsed->root()) != parsed->raw_bytes())
 				return sdk::unexpected(
 					failure("source-closure.manifest-invalid", "manifest", "noncanonical"));
-			auto observed_digest = sdk::semantic_digest(manifest_domain, parsed->raw_bytes());
+			auto observed_digest =
+				sdk::semantic_digest(source_closure_manifest_digest_domain, parsed->raw_bytes());
 			if (!observed_digest || *observed_digest != manifest_digest)
 				return sdk::unexpected(
 					failure("source-closure.digest-mismatch", "manifest_digest"));
@@ -568,7 +567,8 @@ namespace cxxlens::detail::clang22
 			auto closure_id = string_member(parsed->root(), "closure_id", "manifest.closure_id");
 			auto closure_digest =
 				string_member(parsed->root(), "closure_digest", "manifest.closure_digest");
-			if (!schema || !closure_id || !closure_digest || *schema != manifest_schema ||
+			if (!schema || !closure_id || !closure_digest ||
+				*schema != source_closure_manifest_schema ||
 				*closure_id != manifest_descriptor_.closure_id ||
 				*closure_digest != manifest_descriptor_.closure_digest ||
 				!valid_semantic_id(*closure_digest, semantic_prefix) ||

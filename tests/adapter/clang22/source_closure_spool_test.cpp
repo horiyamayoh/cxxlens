@@ -104,7 +104,7 @@ namespace
 		root.emplace("closure_digest", json_value::string(snapshot.closure_digest).value());
 		root.emplace("closure_id", json_value::string(snapshot.snapshot_id).value());
 		root.emplace("members", json_value::array(std::move(members)));
-		root.emplace("schema", json_value::string("cxxlens.source-closure-manifest.v1").value());
+		root.emplace("schema", json_value::string(std::string{source_closure_manifest_schema}).value());
 		return json_value::object(std::move(root)).value();
 	}
 
@@ -133,7 +133,7 @@ namespace
 		const auto manifest_bytes =
 			cxxlens::detail::clang22::materialization::canonical_json(manifest_value);
 		auto manifest_digest =
-			cxxlens::sdk::semantic_digest("cxxlens.source-closure-manifest.v1", manifest_bytes);
+			cxxlens::sdk::semantic_digest(source_closure_manifest_digest_domain, manifest_bytes);
 		require_result(manifest_digest, "manifest fixture digest failed");
 
 		transfer_fixture output{std::move(*snapshot), {}, manifest_bytes, {}};

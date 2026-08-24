@@ -23,7 +23,6 @@ namespace cxxlens::detail::clang22
 		constexpr std::uint64_t maximum_blob_bytes = std::uint64_t{16U} * 1024U * 1024U;
 		constexpr std::uint64_t maximum_unique_blob_bytes = std::uint64_t{48U} * 1024U * 1024U;
 		constexpr std::string_view project_prefix{"project://"};
-		constexpr std::string_view closure_domain{"cxxlens.clang22.source-closure.v1"};
 
 		[[nodiscard]] sdk::error
 		failure(std::string code, std::string field, std::string detail = {})
@@ -145,7 +144,7 @@ namespace cxxlens::detail::clang22
 			}
 
 			auto projection = sdk::canonical_binary(sdk::canonical_value::from_tuple({
-				sdk::canonical_value::from_string(std::string{closure_domain}),
+				sdk::canonical_value::from_string(std::string{source_closure_digest_domain}),
 				sdk::canonical_value::from_string("unicode-default-casefold-then-nfc"),
 				sdk::canonical_value::from_tuple(std::move(member_values)),
 				sdk::canonical_value::from_tuple(std::move(blob_values)),
@@ -156,7 +155,7 @@ namespace cxxlens::detail::clang22
 			encoded.reserve(projection->size());
 			for (const auto byte : *projection)
 				encoded.push_back(static_cast<char>(std::to_integer<unsigned char>(byte)));
-			return sdk::semantic_digest(closure_domain, encoded);
+			return sdk::semantic_digest(source_closure_digest_domain, encoded);
 		}
 	} // namespace
 

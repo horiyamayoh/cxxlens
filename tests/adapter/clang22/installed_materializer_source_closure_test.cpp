@@ -120,7 +120,7 @@ namespace
 			{"closure_digest", text(manifest.closure_digest)},
 			{"closure_id", text(manifest.closure_id)},
 			{"members", json_value::array(std::move(members))},
-			{"schema", text("cxxlens.source-closure-manifest.v1")},
+			{"schema", text(source_closure_manifest_schema)},
 		}));
 	}
 

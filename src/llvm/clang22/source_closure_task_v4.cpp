@@ -21,9 +21,7 @@ namespace cxxlens::detail::clang22
 		using materialization::json_value;
 
 		constexpr std::string_view task_v4_schema{"cxxlens.clang22.task.v4"};
-		constexpr std::string_view manifest_schema{"cxxlens.source-closure-manifest.v1"};
 		constexpr std::string_view task_v4_domain{"cxxlens.clang22.task.v4"};
-		constexpr std::string_view manifest_domain{"cxxlens.source-closure-manifest.v1"};
 		constexpr std::string_view task_id_prefix{"task:semantic-v2:sha256:"};
 		constexpr std::string_view semantic_prefix{"semantic-v2:sha256:"};
 		constexpr std::string_view content_prefix{"sha256:"};
@@ -205,7 +203,8 @@ namespace cxxlens::detail::clang22
 			root.emplace("closure_digest", json_value::string(closure.closure_digest).value());
 			root.emplace("closure_id", json_value::string(closure.snapshot_id).value());
 			root.emplace("members", json_value::array(std::move(members)));
-			root.emplace("schema", json_value::string(std::string{manifest_schema}).value());
+			root.emplace("schema",
+						 json_value::string(std::string{source_closure_manifest_schema}).value());
 			auto output = json_value::object(std::move(root));
 			if (!output)
 				return sdk::unexpected(failure("source-closure.manifest-invalid", "manifest"));
@@ -404,7 +403,8 @@ namespace cxxlens::detail::clang22
 		auto manifest = manifest_value(closure);
 		if (!manifest)
 			return sdk::unexpected(std::move(manifest.error()));
-		return sdk::semantic_digest(manifest_domain, materialization::canonical_json(*manifest));
+		return sdk::semantic_digest(source_closure_manifest_digest_domain,
+									materialization::canonical_json(*manifest));
 	}
 
 	sdk::result<source_closure_task_v4_identity>
