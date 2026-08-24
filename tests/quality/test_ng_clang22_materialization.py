@@ -50,6 +50,44 @@ class MaterializationProtocol2Tests(unittest.TestCase):
         self.assertEqual(worker["protocol_major"]["const"], 2)
         self.assertEqual(worker["protocol_minor"]["const"], 0)
 
+    def test_request_schema_shape_is_closed_and_bounded(self) -> None:
+        request = yaml.safe_load(
+            (ROOT / materialization.REQUEST_SCHEMA).read_text(encoding="utf-8")
+        )
+        materialization.validate_request_schema_shape(request)
+
+        missing = copy.deepcopy(request)
+        missing["required"].remove("worker")
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "request schema required fields"
+        ):
+            materialization.validate_request_schema_shape(missing)
+
+        unbounded = copy.deepcopy(request)
+        unbounded["properties"]["tasks"]["maxItems"] = 0
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "task count bound"
+        ):
+            materialization.validate_request_schema_shape(unbounded)
+
+        open_source = copy.deepcopy(request)
+        open_source["$defs"]["base_task_without_source_bytes"]["properties"][
+            "source"
+        ]["additionalProperties"] = True
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "source metadata schema is not closed"
+        ):
+            materialization.validate_request_schema_shape(open_source)
+
+        raw_bytes = copy.deepcopy(request)
+        raw_bytes["$defs"]["base_task_without_source_bytes"]["properties"][
+            "source"
+        ]["properties"]["content_base64"] = {"type": "string"}
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "source metadata field census"
+        ):
+            materialization.validate_request_schema_shape(raw_bytes)
+
     def test_materializer_semantics_uses_product_source_identity(self) -> None:
         request = self.request()
         direct_basis = materialization.expected_direct_basis(request)

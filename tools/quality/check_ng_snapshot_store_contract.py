@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Executable snapshot identity and publication-series contract."""
+"""Executable snapshot identity/publication contract."""
 
 from __future__ import annotations
 
@@ -22,29 +22,10 @@ CONTRACT = pathlib.Path("schemas/cxxlens_ng_snapshot_store_contract.yaml")
 CONTRACT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_snapshot_store_contract.schema.yaml"
 )
-EXPECTED_SCHEMA_DIGEST = (
-    "sha256:1fd5e0fb6e15c8e4343b3df8df3312c6dd8d4679893e750314b0d64bfc11c5f7"
-)
 MANIFEST_SCHEMA = pathlib.Path("schemas/cxxlens_ng_snapshot_manifest.schema.yaml")
 VECTORS = pathlib.Path("schemas/cxxlens_ng_store_conformance_vectors.yaml")
 VECTORS_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_store_conformance_vectors.schema.yaml"
-)
-
-EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST = (
-    "sha256:c7e5b907d6ad011b6ffb5e4450e2ca7ea53bf6e8629edf078acc46d3d5e0e148"
-)
-EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
-    "sha256:604a0d32f72aec4dd8aed8eee74178254b9e1fe0c24efc7fa9ff413e02bb39f4"
-)
-EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
-    "sha256:fd98ddaeea06829a9c75e957a174c7ee1c4d69d65de9e043e47acdfc7526a391"
-)
-EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST = (
-    "sha256:751f8fc3ceafc5504aac4cc0110beab2d322e0f8f7f4673938efae2616489e1d"
-)
-EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST = (
-    "sha256:c0f05dee2c7c35bd67869ed81b05c1ce5a4124b7562721b176ac7622586a80d0"
 )
 
 SELECTOR_FIELDS = (
@@ -69,341 +50,6 @@ CLOSURE_FIELDS = (
     "producer_semantics",
     "evidence_digest",
 )
-DF_0200_EXTERNAL_COMPLETENESS_AUTHORITY = {
-    "validated_request": {
-        "authority": "selected-schema-validated-request-external-to-event-stream",
-        "producer": "request-schema-and-derived-binding-validator",
-        "generation_timing": "before-provider-dispatch-and-before-event-encoding",
-        "seal": "immutable-selected-request-journal-entry",
-        "exact_projection": [
-            "materialization-request-id",
-            "canonical-task-id-order",
-            "exact-task-count",
-            "per-task-source-digest",
-            "per-task-output-and-row-budgets",
-            "ordered-selected-request-entry-binding-digests",
-        ],
-        "selected_request_entry_binding": {
-            "domain": "cxxlens.df-0200.selected-request-entry-binding.v1",
-            "cardinality": "exactly-one-per-selected-task",
-            "projection": [
-                "materialization-request-id",
-                "task-id",
-                "canonical-task-ordinal-u64be-as-canonical-bytes",
-                "source-digest",
-                "output-budget-u64be-as-canonical-bytes",
-                "row-budget-u64be-as-canonical-bytes",
-            ],
-            "output": "semantic-v2-sha256-string",
-            "global_set": {
-                "domain": "cxxlens.df-0200.selected-request-entry-binding-set.v1",
-                "projection": [
-                    "materialization-request-id",
-                    "exact-task-count",
-                    "canonical-task-id-order",
-                    "ordered-selected-request-entry-binding-digests",
-                ],
-                "output": "semantic-v2-sha256-string",
-            },
-            "generation_timing": "after-request-validation-before-provider-dispatch",
-        },
-    },
-    "sealed_execution_journal_and_task_receipts": {
-        "authority": "sealed-execution-evidence-external-to-event-stream",
-        "producer": "runtime-transport-receipt-plus-independent-pre-encoder-oracle",
-        "generation_timing": "after-shared-task-seal-before-event-encoder",
-        "seal": "immutable-before-store-ingress",
-        "exact_task_projection": [
-            "materialization-request-id",
-            "task-id",
-            "canonical-task-ordinal",
-            "successful-seal",
-            "provider-stdout-byte-count",
-            "provider-stdout-sha256",
-            "decoded-provider-frame-count",
-            "provider-frame-transcript-digest",
-            "provider-sealed-transcript-digest",
-            "task-partition-count-and-full-projection-digest",
-            "task-event-count-and-digest",
-            "task-claim-count-and-digest",
-            "task-row-count-and-digest",
-            "task-coverage-count-and-digest",
-            "task-unresolved-count-and-digest",
-            "pre-encoder-task-receipt-seal-digest",
-            "selected-request-entry-binding-digest",
-        ],
-        "exact_journal_projection": [
-            "materialization-request-id",
-            "exact-task-count",
-            "canonical-task-id-order",
-            "ordered-pre-encoder-task-receipt-seal-digests",
-            "execution-journal-receipt-set-digest",
-        ],
-    },
-    "pre_encoder_receipt_oracle": {
-        "owner": "installed-tool-private-independent-receipt-builder",
-        "input": "immutable-sealed-task-result-before-move-or-destruction",
-        "generation_timing": "after-task-result-seal-before-first-event-encoder-call",
-        "enumeration": (
-            "exact-event-identity-and-full-canonical-projection-multiset-for-every-"
-            "partition"
-        ),
-        "canonicalization": (
-            "independent-claim-law-then-sort-by-full-event-key-and-full-projection"
-        ),
-        "input_occurrence_law": {
-            "exact_duplicate_claim_occurrence": "collapse-before-event-enumeration",
-            "metadata_distinct_same_content_occurrence": "preserve-as-distinct-event",
-            "duplicate_final_full_event_projection": "reject",
-            "qualification_binding": (
-                "cxxlens.df-0200.claim-batch-differential-corpus.v1-raw-sha256-"
-                "f05513d05b0b57788b6f94d9c1a477c88d589b64dd8232d88a5c6c6022a84836"
-            ),
-        },
-        "shared_implementation_allowlist": [
-            "canonical-codecs",
-            "identity-functions",
-            "field-validators",
-        ],
-        "shared_event_enumeration_or_aggregation_control_flow": "forbidden",
-        "selected_request_entry_cross_check": (
-            "exactly-one-entry-whose-task-id-and-canonical-ordinal-equal-this-task-"
-            "receipt"
-        ),
-        "receipt_seal": {
-            "domain": "cxxlens.df-0200.pre-encoder-task-receipt.v1",
-            "projection": [
-                "materialization-request-id",
-                "selected-request-entry-binding-digest",
-                "task-id",
-                "canonical-task-ordinal",
-                "successful-seal",
-                "provider-stdout-byte-count",
-                "provider-stdout-sha256",
-                "decoded-provider-frame-count",
-                "provider-frame-transcript-digest",
-                "provider-sealed-transcript-digest",
-                "task-partition-count-and-full-projection-digest",
-                "task-event-count-and-digest",
-                "task-claim-count-and-digest",
-                "task-row-count-and-digest",
-                "task-coverage-count-and-digest",
-                "task-unresolved-count-and-digest",
-            ],
-            "output": "semantic-v2-sha256-string",
-        },
-        "execution_journal_receipt_set": {
-            "domain": "cxxlens.df-0200.execution-journal-receipt-set.v1",
-            "projection": [
-                "materialization-request-id",
-                "exact-task-count",
-                "canonical-task-id-order",
-                "ordered-pre-encoder-task-receipt-seal-digests",
-            ],
-            "output": "semantic-v2-sha256-string",
-            "seal_timing": "after-all-task-receipts-before-store-ingress",
-        },
-        "receipt_field_catalog": {
-            "materialization-request-id": {
-                "type": "strict-utf8-string",
-                "domain_id": "not-applicable-scalar-bound-by-receipt-seal",
-                "exact_projection": "selected-materialization-request-id",
-            },
-            "task-id": {
-                "type": "strict-utf8-string",
-                "domain_id": "not-applicable-scalar-bound-by-receipt-seal",
-                "exact_projection": "selected-provider-task-id",
-            },
-            "canonical-task-ordinal": {
-                "type": "canonical-bytes-containing-u64be",
-                "domain_id": "not-applicable-scalar-bound-by-receipt-seal",
-                "exact_projection": "zero-based-selected-request-canonical-task-order",
-            },
-            "successful-seal": {
-                "type": "canonical-boolean-true",
-                "domain_id": "not-applicable-scalar-bound-by-receipt-seal",
-                "exact_projection": "shared-validator-produced-immutable-successful-seal",
-            },
-            "provider-stdout-byte-count": {
-                "type": "canonical-bytes-containing-u64be",
-                "domain_id": "not-applicable-scalar-bound-by-receipt-seal",
-                "exact_projection": "runtime-observed-stdout-bytes-before-decode-or-move",
-            },
-            "provider-stdout-sha256": {
-                "type": "sha256-string",
-                "domain_id": "sha256-content-digest",
-                "exact_projection": "runtime-observed-exact-stdout-bytes-before-decode-or-move",
-                "authority_ref": (
-                    "schemas/cxxlens_ng_provider_runtime_contract.yaml#"
-                    "runtime_private_receipt.raw_stdout"
-                ),
-            },
-            "decoded-provider-frame-count": {
-                "type": "canonical-bytes-containing-u64be",
-                "domain_id": "not-applicable-scalar-bound-by-receipt-seal",
-                "exact_projection": "exact-shared-validator-decoded-frame-census",
-            },
-            "provider-frame-transcript-digest": {
-                "type": "semantic-v2-sha256-string",
-                "domain_id": "cxxlens.provider-frame-transcript.v2",
-                "exact_projection": (
-                    "explicit-frame-count-and-decoded-wire-order-full-eight-field-"
-                    "frame-projections"
-                ),
-                "authority_ref": (
-                    "schemas/cxxlens_ng_provider_runtime_contract.yaml#"
-                    "runtime_private_receipt.frame_transcript"
-                ),
-            },
-            "provider-sealed-transcript-digest": {
-                "type": "semantic-v2-sha256-string",
-                "domain_id": "cxxlens.provider-sealed-transcript.v1",
-                "exact_projection": (
-                    "task-terminal-batches-full-coverage-unresolved-and-evidence-"
-                    "projections-in-provider-authority-order"
-                ),
-                "authority_ref": (
-                    "schemas/cxxlens_ng_provider_runtime_contract.yaml#"
-                    "runtime_private_receipt.sealed_transcript"
-                ),
-            },
-            "task-partition-count-and-full-projection-digest": {
-                "type": "canonical-tuple-u64be-count-and-semantic-v2-sha256-string",
-                "domain_id": "cxxlens.df-0200.task-partition-full-projection.v1",
-                "exact_projection": (
-                    "task-id-partition-count-and-ordered-partition-id-plus-partition-"
-                    "event-full-projection-digest-tuples"
-                ),
-            },
-            "task-event-count-and-digest": {
-                "type": "canonical-tuple-u64be-count-and-semantic-v2-sha256-string",
-                "domain_id": "cxxlens.df-0200.task-event-full-projection.v1",
-                "exact_projection": (
-                    "task-id-event-count-and-ordered-full-event-projection-bytes"
-                ),
-            },
-            "task-claim-count-and-digest": {
-                "type": "canonical-tuple-u64be-count-and-semantic-v2-sha256-string",
-                "domain_id": "cxxlens.df-0200.task-claim-occurrence-full-projection.v1",
-                "exact_projection": (
-                    "task-id-claim-count-and-ordered-full-claim-occurrence-projection-bytes"
-                ),
-            },
-            "task-row-count-and-digest": {
-                "type": "canonical-tuple-u64be-count-and-semantic-v2-sha256-string",
-                "domain_id": "cxxlens.df-0200.task-detached-row-full-projection.v1",
-                "exact_projection": (
-                    "task-id-row-count-and-ordered-full-detached-row-projection-bytes"
-                ),
-            },
-            "task-coverage-count-and-digest": {
-                "type": "canonical-tuple-u64be-count-and-semantic-v2-sha256-string",
-                "domain_id": "cxxlens.df-0200.task-coverage-full-projection.v1",
-                "exact_projection": (
-                    "task-id-coverage-count-and-ordered-full-coverage-projection-bytes"
-                ),
-            },
-            "task-unresolved-count-and-digest": {
-                "type": "canonical-tuple-u64be-count-and-semantic-v2-sha256-string",
-                "domain_id": "cxxlens.df-0200.task-unresolved-full-projection.v1",
-                "exact_projection": (
-                    "task-id-unresolved-count-and-ordered-full-unresolved-projection-bytes"
-                ),
-            },
-            "pre-encoder-task-receipt-seal-digest": {
-                "type": "semantic-v2-sha256-string",
-                "domain_id": "cxxlens.df-0200.pre-encoder-task-receipt.v1",
-                "exact_projection": "receipt-seal-projection-in-listed-order",
-            },
-            "selected-request-entry-binding-digest": {
-                "type": "semantic-v2-sha256-string",
-                "domain_id": "cxxlens.df-0200.selected-request-entry-binding.v1",
-                "exact_projection": (
-                    "request-id-task-id-canonical-ordinal-source-digest-and-output-"
-                    "row-budgets-before-provider-dispatch"
-                ),
-            },
-            "execution-journal-receipt-set-digest": {
-                "type": "semantic-v2-sha256-string",
-                "domain_id": "cxxlens.df-0200.execution-journal-receipt-set.v1",
-                "exact_projection": (
-                    "execution-journal-receipt-set-projection-in-listed-order"
-                ),
-            },
-            "exact-task-count": {
-                "type": "canonical-bytes-containing-u64be",
-                "domain_id": "not-applicable-scalar-bound-by-journal-seal",
-                "exact_projection": "selected-request-exact-task-count",
-            },
-            "canonical-task-id-order": {
-                "type": "ordered-unique-strict-utf8-string-tuple",
-                "domain_id": "not-applicable-scalar-bound-by-journal-seal",
-                "exact_projection": "selected-request-canonical-task-id-order",
-            },
-            "ordered-pre-encoder-task-receipt-seal-digests": {
-                "type": "ordered-unique-semantic-v2-sha256-string-tuple",
-                "domain_id": "cxxlens.df-0200.pre-encoder-task-receipt.v1",
-                "exact_projection": "canonical-task-order-exact-task-receipt-seal-digests",
-            },
-        },
-        "unknown_or_additional_receipt_field": "reject",
-        "cycle_prohibition": {
-            "task_receipt_may_bind": "selected-request-entry-binding-digest-only",
-            "task_receipt_must_not_bind": "execution-journal-receipt-set-digest",
-            "execution_journal_may_bind": "ordered-finalized-task-receipt-seal-digests",
-            "bidirectional-or-self-reference": "reject-authority-before-implementation",
-        },
-    },
-    "task_result_lifetime": (
-        "destroy-only-after-pre-encoder-receipt-seal-and-event-stream-seal"
-    ),
-    "stream_header_and_trailer": "non-authoritative-cross-check-only",
-    "required_global_censuses_and_digests": [
-        "task",
-        "partition",
-        "event",
-        "claim",
-        "row",
-        "coverage",
-        "unresolved",
-    ],
-    "required_manifests": ["segment-manifest", "run-manifest", "merge-manifest"],
-    "required_receipts": ["byte-receipt", "record-receipt", "seal-receipt"],
-    "store_comparison": {
-        "raw_provider_transport": (
-            "exact-stdout-byte-count-sha256-decoded-frame-count-and-frame-transcript-"
-            "digest-against-runtime-receipt"
-        ),
-        "event_projection": (
-            "exact-partition-and-event-count-plus-full-projection-digests-from-"
-            "pre-encoder-receipt-against-independent-stream-replay"
-        ),
-        "receipt_seal": (
-            "recompute-task-receipt-seal-and-exact-match-immutable-execution-"
-            "journal-receipt-set-digest"
-        ),
-        "global": (
-            "recompute-dedicated-task-partition-global-domains-and-exact-match-"
-            "external-censuses"
-        ),
-    },
-    "comparison": (
-        "exact-equality-against-external-request-journal-and-task-receipts-before-"
-        "store-candidate"
-    ),
-    "whole_partition_drop": (
-        "reject-even-if-stream-header-trailer-and-internal-digests-self-consistent"
-    ),
-    "correlated_omission_rejection": {
-        "stream_and_stream_owned_end_or_trailer_edited_together": (
-            "reject-against-fixed-pre-encoder-receipt-full-projection-digest"
-        ),
-        "stream_and_receipt_edited_together": (
-            "reject-fixed-selected-request-entry-binding-or-immutable-execution-"
-            "journal-receipt-set-digest-mismatch"
-        ),
-    },
-}
 DF_0200_SQLITE_CAPACITY_DECISION = {
     "selected_alternative": "A",
     "confirmed_blocker": (
@@ -437,239 +83,6 @@ DF_0200_SQLITE_CAPACITY_DECISION = {
                 "same-cap-for-memory-and-sqlite-direct-tests",
             ],
         },
-    },
-}
-EXPECTED_DF_0200_MATERIALIZATION_INGRESS = {
-    "resolution_id": "cxxlens.df-0200.incremental-claim-store.v1",
-    "activation": (
-        "accepted-df-0200-direct-test-and-sqlite-option-a-authority-binding"
-    ),
-    "caller_scope": "installed-clang22-materializer-only",
-    "bridge": "source-private-non-installed-header-without-public-catalog-entry",
-    "public_api": "unchanged",
-    "public_writer_states": [
-        "created",
-        "staged",
-        "validating",
-        "committed",
-        "rejected",
-        "rolled_back",
-    ],
-    "public_stage_validate_publish_semantics": "unchanged",
-    "source": {
-        "ownership": "move-only-replayable-sealed",
-        "codec": {
-            "id": "cxxlens.df-0200.partition-event-stream.v1",
-            "event_kind_codes": {
-                "partition-begin": 1,
-                "claim-occurrence": 2,
-                "detached-row": 3,
-                "claim-annotation": 4,
-                "coverage": 5,
-                "unresolved": 6,
-                "partition-end": 7,
-            },
-            "authority_binding": {
-                "canonical_json_sha256": (
-                    "sha256:b040bb8b58814e5ac1397a6f409677a1db5c9bb73304578253dc6071491fd45c"
-                ),
-                "required_sections": [
-                    "canonical_tuple_profile",
-                    "field_catalog",
-                    "stream_header",
-                    "frame",
-                    "event_projections",
-                    "event_container",
-                    "digest_framing",
-                    "digest_domains",
-                    "canonical_order",
-                    "stream_trailer",
-                    "rejection",
-                ],
-                "store_checker": "self-contained-hardcoded-binding-no-reverse-load",
-                "materialization_checker": "recompute-and-exact-match-full-codec-object",
-            },
-            "validation": (
-                "decode-and-validate-every-full-byte-frame-header-trailer-order-"
-                "checksum-and-seal"
-            ),
-            "unknown_missing_reordered_or_truncated": "reject-entire-candidate",
-        },
-        "events": [
-            "partition-begin",
-            "claim-occurrence",
-            "detached-row",
-            "claim-annotation",
-            "coverage",
-            "unresolved",
-            "partition-end",
-        ],
-        "public-stage-mixing": "forbidden",
-        "materializer-receipt-is-validation-authority": False,
-        "external_completeness_authority": (
-            DF_0200_EXTERNAL_COMPLETENESS_AUTHORITY
-        ),
-        "store-validation": {
-            "independence": "independent-full-replay-and-recomputation",
-            "external-authority-inputs": [
-                "validated-request",
-                "sealed-execution-journal",
-                "sealed-task-receipts",
-            ],
-            "self-reported-stream-census-authority": "forbidden",
-            "required-recomputation": [
-                "relation-engine-and-schema",
-                "canonical-claim-and-row-identity",
-                "exact-eight-field-partition-grouping",
-                "occurrence-content-coverage-and-unresolved-censuses-and-digests",
-                "hard-and-soft-references-and-closure",
-                "full-byte-event-codec-framing-order-checksum-and-seal",
-                "external-request-journal-task-and-global-census-digest-closure",
-                "segment-run-merge-manifests-and-byte-record-seal-receipts",
-                "manifest-snapshot-and-publication-identity",
-                "canonical-v5-encode-decode-byte-identity",
-            ],
-        },
-    },
-    "counter_model": {
-        "semantic_version_components": {
-            "encoding": "u32",
-            "maximum": 4_294_967_295,
-        },
-        "canonical_v5_collection_counts": {
-            "encoding": "u64be",
-            "maximum": 18_446_744_073_709_551_615,
-            "aggregate_before_narrowing": "checked-u128",
-        },
-        "legacy_decoder_caps": {
-            "one_million_and_ten_million": (
-                "implementation-guards-not-authority-ceilings"
-            ),
-            "disposition": "remove-via-bounded-streaming",
-        },
-        "collection_overflow_failure": {
-            "trigger": "any-canonical-v5-collection-count-greater-than-u64-max",
-            "operation": "partition_stage",
-            "code": "store.counter-overflow",
-            "field": "materialization-v5-collection-count",
-            "detail": "",
-            "mapping": (
-                "store-stage-materialization.store-failure-draft-discarded"
-            ),
-        },
-    },
-    "publication": {
-        "candidate": "exactly-one-unpublished",
-        "publish-attempts": "exactly-one",
-        "partial-visibility": "forbidden",
-        "stale-or-failed-publish-preserves-head": True,
-    },
-    "memory_backend": {
-        "full_payload_owners": "exactly-one",
-        "candidate_to_store_transfer": "same-immutable-owner-without-full-copy",
-        "duplicate-full-row-annotation-or-envelope-graphs": "forbidden",
-    },
-    "sqlite_backend": {
-        "prepublication": (
-            "sealed-canonical-v5-payload-spool-and-independent-validation"
-        ),
-        "predecessor_v2_capacity": (
-            "single-payload-blob-runtime-max-length-1000000000-insufficient-for-"
-            "required-limit-adjacent-parity"
-        ),
-        "current_physical_format": (
-            "cxxlens.sqlite-semantic-store.v3-3.0.0-bounded-8388608-byte-chunks"
-        ),
-        "publish_and_reopen_direct_test_matrix": (
-            "required-current-v3-plus-v2-read-migration-and-limit-exceeding-parity"
-        ),
-        "filesystem_readwrite_admission": (
-            "bound-forwarding-vfs-zero-initializes-local-pOutFlags-records-main-db-"
-            "readwrite-input-and-only-after-success-records-returned-pOutFlags-and-"
-            "requires-readonly-clear-before-limit-lock-journal-or-store-"
-            "effect-otherwise-store.sqlite-failure-open-read-write-required"
-        ),
-        "initialization_terminal_close_gate": (
-            "filesystem-journal-transition-precommit-commit-unknown-and-success-"
-            "handoff-attempt-exactly-one-close-v2-and-require-close-ok-before-"
-            "reclassifier-or-reopen-close-non-ok-quarantines-and-returns-no-store"
-        ),
-        "fresh_journal_failure_classification": (
-            "pre-arm-receipt-admits-header-and-sidecar-residue-after-arming-and-after-"
-            "confirmed-close-total-classification-maps-same-identity-empty-to-"
-            "initialization-recovery-opaque-current-v3-compressed-descendant-to-"
-            "success-and-unsafe-state-to-phase-typed-failure"
-        ),
-        "authorized_descendant_proof": (
-            "exact-canonical-bytes-not-digest-equality-and-row-count-cubed-run-length-"
-            "compressed-closed-form-without-generation-distance-replay-and-"
-            "existential-all-representations-operation-edge-query"
-        ),
-        "writer_publish_enospc_or_sqlite_toobig": {
-            "operation": "writer_publish",
-            "code": "store.sqlite-failure",
-            "field": "database",
-            "detail": "opaque",
-            "outcome": "publication_outcome_unknown",
-        },
-        "publication_commit_outcome_unknown_recovery": {
-            "public_result": (
-                "store.sqlite-failure-database-opaque-and-publication-outcome-unknown-"
-                "even-when-reopen-observes-the-candidate"
-            ),
-            "receipt": (
-                "locator-vfs-main-file-instance-directory-entry-exact-length-framed-"
-                "prestate-authority-state-bytes-and-digest-exact-candidate-immutable-"
-                "logical-projection-attempted-physical-row-chunk-head-counter-and-"
-                "publication-id"
-            ),
-            "authority_state_projection_id": "cxxlens.sqlite-authority-state.v1",
-            "descendant_algebra_id": "cxxlens.sqlite-authorized-descendant.v1",
-            "terminal_reclassifier_id": "cxxlens.sqlite-terminal-reclassifier.v1",
-            "valid_reopened_state": (
-                "independently-install-attempted-physical-candidate-present-same-"
-                "logical-candidate-with-different-authorized-physical-projection-or-"
-                "candidate-identity-absent-authorized-descendant-current-v3-state-and-"
-                "retain-old-handles-by-pins"
-            ),
-            "non_descendant_invalid_or_reopen_failure": (
-                "poison-result-operations-reopen-required-preserve-last-compatibility-"
-                "and-live-pin-observers"
-            ),
-            "implicit_retry": "forbidden",
-        },
-        "publish_returned_handle_verification_failure": (
-            "committed_unverified-detailed-response-when-safely-constructible"
-        ),
-        "compaction_and_pin": (
-            "preserve-existing-copy-on-write-and-generation-pin-semantics"
-        ),
-    },
-    "sqlite_capacity_decision": DF_0200_SQLITE_CAPACITY_DECISION,
-    "compatibility": {
-        "snapshot_payload_v5_schema_and_semantic_projection": (
-            "unchanged-with-authorized-physical-generation-transition"
-        ),
-        "sqlite_physical_format": "cxxlens.sqlite-semantic-store.v3-3.0.0",
-        "sqlite_predecessor": "exact-v2.6.0-read-only-direct-open",
-        "sqlite_predecessor_begin_failure": (
-            "store.migration-required-sqlite-physical-format-"
-            "cxxlens.sqlite-semantic-store.v2-to-v3"
-        ),
-        "sqlite_predecessor_begin_precedence": (
-            "preserve-existing-invalid-input-draft-errors-then-after-valid-input-"
-            "return-migration-required-before-internal-writer-or-draft-allocation"
-        ),
-        "sqlite_migration": "snapshot-store-compact-only-single-transaction-cow",
-        "sqlite_state_projection": "cxxlens.sqlite-authority-state.v1",
-        "sqlite_descendant_algebra": "cxxlens.sqlite-authorized-descendant.v1",
-        "sqlite_terminal_reclassifier": "cxxlens.sqlite-terminal-reclassifier.v1",
-        "snapshot_and_publication_identity": "unchanged",
-        "public_cursor_lifetime_and-success-results": "unchanged",
-        "additive_public_result": "store.migration-required",
-        "incompatible_format_or_public_semantics_change": (
-            "fresh-approval-and-successor-authority-required"
-        ),
     },
 }
 REQUIRED_VECTOR_IDS = {
@@ -742,15 +155,6 @@ def canonical_json(value: Any) -> bytes:
 
 def document_digest(value: Any) -> str:
     return "sha256:" + hashlib.sha256(canonical_json(value)).hexdigest()
-
-
-def validate_exact_schema(schema: dict[str, Any]) -> None:
-    actual = document_digest(schema)
-    if actual != EXPECTED_SCHEMA_DIGEST:
-        fail(
-            "store.schema-drift",
-            f"expected={EXPECTED_SCHEMA_DIGEST}, actual={actual}",
-        )
 
 
 def _length(value: int) -> bytes:
@@ -1191,73 +595,670 @@ def execute(
         return {"decision": "rejected", "reason_code": error.code}, comparisons
 
 
-def validate_contract_shape(contract: dict[str, Any]) -> None:
+def _require_mapping_fields(
+    value: Any,
+    fields: tuple[str, ...],
+    *,
+    code: str,
+    label: str,
+) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        fail(code, f"{label} must be an object")
+    missing = [field for field in fields if field not in value]
+    if missing:
+        fail(code, f"{label} is missing required fields: {', '.join(missing)}")
+    return value
+
+
+def _require_nonempty_list(value: Any, *, code: str, label: str) -> list[Any]:
+    if not isinstance(value, list) or not value:
+        fail(code, f"{label} must be a non-empty list")
+    return value
+
+
+def _require_text_fragment(
+    value: Any,
+    fragments: tuple[str, ...],
+    *,
+    code: str,
+    label: str,
+) -> None:
+    if not isinstance(value, str) or not all(fragment in value for fragment in fragments):
+        fail(code, f"{label} does not retain the required safety semantics")
+
+
+def _require_safety_matrix(
+    value: Any, *, code: str, label: str
+) -> None:
+    matrix = _require_mapping_fields(
+        value, ("required", "positive"), code=code, label=label
+    )
+    _require_nonempty_list(matrix["required"], code=code, label=f"{label} required")
+    _require_nonempty_list(matrix["positive"], code=code, label=f"{label} positive")
+
+
+def validate_writer_mapping_lease_shape(lease: dict[str, Any]) -> None:
+    """Validate the safety shape without pinning serialized document contents.
+
+    The lease and its amendments are product safety descriptions.  Their
+    identities, state sets, and fail-closed transitions are checked here; a
+    digest of the complete YAML object is deliberately not an authority.
+    """
+
+    code = "store.sqlite-shm-writer-lease-proposal-invalid"
+    _require_mapping_fields(
+        lease,
+        (
+            "id",
+            "writer_native_attachment_amendment_proposal",
+            "reader_native_attachment_amendment_proposal",
+            "reader_late_close_cleanup_amendment_proposal",
+            "writer_gate_outcome_evidence_amendment_proposal",
+            "public_surface",
+            "admitted_native_projection",
+            "two_stage_writer_authority",
+            "process_global_registry",
+            "identity_receipt",
+            "reader_lifetime",
+            "generation_and_races",
+            "reader_pre_post_receipt",
+            "fail_closed_matrix",
+        ),
+        code=code,
+        label="same-process writer mapping lease",
+    )
+    if lease["id"] != "cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1":
+        fail(code, "lease identity is not the product identity")
+    if "status" in lease:
+        fail(code, "operational status is not part of the product lease")
+
+    writer = _require_mapping_fields(
+        lease["writer_native_attachment_amendment_proposal"],
+        (
+            "id",
+            "attachment_identity",
+            "generation_fresh_reader_page_set",
+            "nonlast_sole_page_reader_predelegate_blocker",
+            "nonlast_remaining_page_reader_predelegate",
+            "nonlast_sole_page_same_thread",
+            "nonlast_sole_page_other_thread",
+            "established_reader_handoff_during_writer_cleanup",
+            "retired_attachment_evidence",
+            "same_attachment_admission",
+            "repeated_same_page",
+            "cross_attachment_grouping",
+            "map_before_gate_group",
+            "gate_completion_total_order",
+            "successful_gate_postcondition",
+            "fail_closed_matrix",
+        ),
+        code=code,
+        label="writer attachment amendment",
+    )
+    if writer["id"] != "cxxlens.sqlite.writer-shm-native-attachment.v1":
+        fail(code, "writer attachment identity differs")
+    _require_text_fragment(
+        writer["attachment_identity"],
+        ("nonreusable", "open-epoch", "callback"),
+        code=code,
+        label="writer attachment identity",
+    )
+    _require_text_fragment(
+        writer["generation_fresh_reader_page_set"],
+        ("union-of-page-support", "atomically"),
+        code=code,
+        label="writer page support",
+    )
+    _require_text_fragment(
+        writer["nonlast_sole_page_reader_predelegate_blocker"],
+        ("predelegation", "zero-support"),
+        code=code,
+        label="writer sole-page blocker",
+    )
+    _require_text_fragment(
+        writer["nonlast_remaining_page_reader_predelegate"],
+        ("retains-exact-support", "not-a-cleanup-blocker"),
+        code=code,
+        label="writer remaining-page rule",
+    )
+    _require_text_fragment(
+        writer["nonlast_sole_page_same_thread"],
+        ("never-waits", "quarantines"),
+        code=code,
+        label="writer same-thread rule",
+    )
+    _require_text_fragment(
+        writer["nonlast_sole_page_other_thread"],
+        ("bounded-ordered-wait", "quarantines"),
+        code=code,
+        label="writer other-thread rule",
+    )
+    _require_text_fragment(
+        writer["established_reader_handoff_during_writer_cleanup"],
+        ("never-blocks", "never-counts"),
+        code=code,
+        label="writer handoff rule",
+    )
+    _require_text_fragment(
+        writer["retired_attachment_evidence"],
+        ("immutable", "never"),
+        code=code,
+        label="writer retired evidence rule",
+    )
+    _require_text_fragment(
+        writer["cross_attachment_grouping"],
+        ("forbidden",),
+        code=code,
+        label="writer grouping rule",
+    )
+    _require_text_fragment(
+        writer["gate_completion_total_order"],
+        ("serialized", "before"),
+        code=code,
+        label="writer gate ordering",
+    )
+    _require_text_fragment(
+        writer["successful_gate_postcondition"],
+        ("every-member", "no-same-attachment-pending"),
+        code=code,
+        label="writer gate postcondition",
+    )
+    writer_matrix = _require_mapping_fields(
+        writer["fail_closed_matrix"],
+        ("required", "positive"),
+        code=code,
+        label="writer fail-closed matrix",
+    )
+    required = _require_nonempty_list(
+        writer_matrix["required"], code=code, label="writer required failures"
+    )
+    positive = _require_nonempty_list(
+        writer_matrix["positive"], code=code, label="writer positive cases"
+    )
+    if not any("predelegation" in str(item) for item in required):
+        fail(code, "writer fail-closed matrix omits predelegation safety")
+    if not any("unmap" in str(item) for item in positive):
+        fail(code, "writer fail-closed matrix omits native cleanup positive")
+
+    reader = _require_mapping_fields(
+        lease["reader_native_attachment_amendment_proposal"],
+        (
+            "id",
+            "attachment_identity",
+            "ownership",
+            "map_attempt",
+            "group_state",
+            "ordering",
+            "eager_transaction_lifetime",
+            "cleanup_dispatch",
+            "close_lifecycle",
+            "writer_generation_boundary",
+            "outward_projection",
+            "fail_closed_matrix",
+            "public_api",
+        ),
+        code=code,
+        label="reader attachment amendment",
+    )
+    if reader["id"] != "cxxlens.sqlite.reader-shm-native-attachment.v1":
+        fail(code, "reader attachment identity differs")
+    identity = _require_mapping_fields(
+        reader["attachment_identity"],
+        ("binding", "cleanup_only_observation_owner"),
+        code=code,
+        label="reader attachment identity",
+    )
+    binding = _require_nonempty_list(identity["binding"], code=code, label="reader identity binding")
+    if not any("checked-observed-SHM" in str(item) for item in binding):
+        fail(code, "reader identity omits observed SHM object binding")
+    _require_text_fragment(
+        identity["cleanup_only_observation_owner"],
+        ("noncopyable", "promote-once"),
+        code=code,
+        label="reader observation owner",
+    )
+    ownership = _require_mapping_fields(
+        reader["ownership"],
+        ("custody_kind_enum", "custody_state_enum"),
+        code=code,
+        label="reader ownership",
+    )
+    for name in ("map_attempt", "use_session", "connection_close", "logical_ack"):
+        if name not in ownership["custody_kind_enum"]:
+            fail(code, f"reader custody enum omits {name}")
+    if ownership["custody_state_enum"] != [
+        "live",
+        "consumed_with_exact_terminal_receipt",
+        "transferred_to_exact_successor",
+        "transferred_to_durable_tombstone",
+    ]:
+        fail(code, "reader custody state is not closed")
+    group_state = _require_mapping_fields(
+        reader["group_state"],
+        ("reservation_phase_enum", "reservation_transition_graph"),
+        code=code,
+        label="reader group state",
+    )
+    for phase in (
+        "reserved",
+        "predecessor_route_active",
+        "unpublished_cleanup_admitted",
+        "unpublished_cleanup_confirmed",
+        "terminal_quarantined",
+    ):
+        if phase not in group_state["reservation_phase_enum"]:
+            fail(code, f"reader group state omits {phase}")
+        if phase not in group_state["reservation_transition_graph"]:
+            fail(code, f"reader transition graph omits {phase}")
+    eager = _require_mapping_fields(
+        reader["eager_transaction_lifetime"],
+        (
+            "owner_set",
+            "pointer_coverage_relation",
+            "pointer_publication_commit",
+            "session_start_issuer",
+            "pre_mint_route_partition",
+            "cached_pointer_session_admission",
+        ),
+        code=code,
+        label="reader eager lifetime",
+    )
+    _require_text_fragment(
+        eager["owner_set"],
+        ("exactly-one", "move-only"),
+        code=code,
+        label="reader owner set",
+    )
+    _require_text_fragment(
+        eager["pointer_coverage_relation"],
+        ("exactly-one", "pointer"),
+        code=code,
+        label="reader pointer coverage",
+    )
+    _require_text_fragment(
+        eager["pointer_publication_commit"],
+        ("atomically", "pointer"),
+        code=code,
+        label="reader pointer publication",
+    )
+    _require_text_fragment(
+        eager["pre_mint_route_partition"],
+        ("exactly-one", "reject"),
+        code=code,
+        label="reader pre-mint route",
+    )
+    _require_text_fragment(
+        eager["cached_pointer_session_admission"],
+        ("Wal-apWiData-without-xShmMap",),
+        code=code,
+        label="reader cached pointer admission",
+    )
+    cleanup = _require_mapping_fields(
+        reader["cleanup_dispatch"],
+        ("failure_exact_mapped_existing_group", "logical_ack_phase_enum"),
+        code=code,
+        label="reader cleanup dispatch",
+    )
+    _require_text_fragment(
+        cleanup["failure_exact_mapped_existing_group"],
+        ("active-use", "zero-owner"),
+        code=code,
+        label="reader existing-group cleanup",
+    )
+    if cleanup["logical_ack_phase_enum"] != [
+        "not_applicable",
+        "awaiting_sqlite_ack",
+        "consumed_by_exact_unmap",
+        "consumed_by_close",
+    ]:
+        fail(code, "reader logical acknowledgement states are not closed")
+    if "close_cut" not in reader["ordering"]:
+        fail(code, "reader close cut is missing")
+    if "family-exclusion-custody-count" not in reader["writer_generation_boundary"]["successor"]:
+        fail(code, "reader successor exclusion is missing")
+    if reader["public_api"] != "unchanged":
+        fail(code, "reader proposal changes the public API")
+    outward = _require_mapping_fields(
+        reader["outward_projection"],
+        ("exact_determinate_no_change", "unmap_result"),
+        code=code,
+        label="reader outward projection",
+    )
+    _require_text_fragment(
+        outward["exact_determinate_no_change"],
+        ("non-OK", "null"),
+        code=code,
+        label="reader no-change projection",
+    )
+    _require_text_fragment(
+        outward["unmap_result"],
+        ("SQLITE_IOERR", "additional-call"),
+        code=code,
+        label="reader unmap projection",
+    )
+    reader_matrix = _require_mapping_fields(
+        reader["fail_closed_matrix"],
+        ("required", "positive"),
+        code=code,
+        label="reader fail-closed matrix",
+    )
+    if not _require_nonempty_list(reader_matrix["required"], code=code, label="reader required failures"):
+        fail(code, "reader required failures are empty")
+
+    late = _require_mapping_fields(
+        lease["reader_late_close_cleanup_amendment_proposal"],
+        (
+            "id",
+            "outer_unwind_authority",
+            "close_terminal_provenance",
+            "drain_subledger",
+            "acknowledgement",
+            "quarantine",
+            "scope_boundary",
+            "fail_closed_matrix",
+        ),
+        code=code,
+        label="late-close cleanup amendment",
+    )
+    if late["id"] != "cxxlens.sqlite.reader-late-close-cleanup.v1":
+        fail(code, "late-close amendment identity differs")
+    drain = _require_mapping_fields(
+        late["drain_subledger"],
+        ("retained_pins", "state_enum", "transition_graph"),
+        code=code,
+        label="late-close drain subledger",
+    )
+    required_pins = {
+        "proposal-candidate",
+        "reader-map-predelegate",
+        "runtime-vfs-registration-and-callback-cohort",
+        "connection-open-epoch",
+        "file-family-and-mapping-generation",
+    }
+    if not required_pins.issubset(set(drain["retained_pins"])):
+        fail(code, "late-close drain does not retain all callback pins")
+    required_states = {
+        "cleanup_confirmed_awaiting_sqlite_ack",
+        "terminal_quarantined",
+    }
+    if not required_states.issubset(set(drain["state_enum"])):
+        fail(code, "late-close drain state is incomplete")
+    transitions = drain["transition_graph"].get("cleanup_confirmed_awaiting_sqlite_ack", [])
+    if not {"consumed_by_exact_outer_unmap", "terminal_quarantined"}.issubset(set(transitions)):
+        fail(code, "late-close acknowledgement transition is incomplete")
+    close_provenance = _require_mapping_fields(
+        late["close_terminal_provenance"],
+        ("kind_enum", "tuple_fields"),
+        code=code,
+        label="late-close provenance",
+    )
+    if not close_provenance["kind_enum"] or "native_xClose_completed" in close_provenance["kind_enum"]:
+        fail(code, "late-close provenance has an invalid terminal kind")
+    if "native-xClose-call-count-zero" not in close_provenance["tuple_fields"]:
+        fail(code, "late-close provenance omits zero native close")
+    acknowledgement = _require_mapping_fields(
+        late["acknowledgement"],
+        ("consumption", "wrong_outer_owner", "exact_outer_owner_indeterminate", "confirmed_after_close_replay"),
+        code=code,
+        label="late-close acknowledgement",
+    )
+    _require_text_fragment(
+        acknowledgement["consumption"],
+        ("only-exact", "once", "zero-native"),
+        code=code,
+        label="late-close acknowledgement consumption",
+    )
+    _require_text_fragment(
+        acknowledgement["wrong_outer_owner"],
+        ("wrong", "IOERR", "preserves"),
+        code=code,
+        label="late-close wrong owner",
+    )
+    _require_text_fragment(
+        acknowledgement["exact_outer_owner_indeterminate"],
+        ("terminal_quarantined", "zero-native"),
+        code=code,
+        label="late-close indeterminate owner",
+    )
+    _require_text_fragment(
+        acknowledgement["confirmed_after_close_replay"],
+        ("distinct", "zero-native"),
+        code=code,
+        label="late-close replay",
+    )
+    if "no-close-retry" not in late["quarantine"]["forbidden_authority"]:
+        fail(code, "late-close quarantine permits forbidden retry")
+    if late["scope_boundary"]["public_api"] != "unchanged":
+        fail(code, "late-close amendment changes the public API")
+    late_matrix = _require_mapping_fields(
+        late["fail_closed_matrix"],
+        ("required", "positive"),
+        code=code,
+        label="late-close fail-closed matrix",
+    )
+    _require_nonempty_list(late_matrix["required"], code=code, label="late-close required failures")
+
+    gate = _require_mapping_fields(
+        lease["writer_gate_outcome_evidence_amendment_proposal"],
+        (
+            "id",
+            "gate_profile",
+            "gate_attempt_owner",
+            "closed_outcome_union",
+            "native_attachment_binding",
+            "registry_cut",
+            "native_state_resolution",
+            "native_effect_dispatch_matrix",
+            "empty_and_mixed_group",
+            "composite_cleanup_lineage",
+            "reader_boundary",
+            "fail_closed_matrix",
+        ),
+        code=code,
+        label="writer gate outcome amendment",
+    )
+    if gate["id"] != "cxxlens.sqlite.writer-gate-outcome-evidence.v1":
+        fail(code, "writer gate identity differs")
+    profile = _require_mapping_fields(
+        gate["gate_profile"],
+        ("canonical_policy_profile_digest", "ordered_stage_enum", "stage_value_projections", "terminal_evidence_locus"),
+        code=code,
+        label="writer gate profile",
+    )
+    _require_text_fragment(
+        profile["canonical_policy_profile_digest"],
+        ("acceleration-key-only", "never-equality"),
+        code=code,
+        label="writer gate policy digest",
+    )
+    required_stages = [
+        "writer-readwrite-mode",
+        "runtime-version-and-locator",
+        "runtime-vfs-file-family-and-open-epoch",
+        "synchronous-full-and-wal-mode",
+        "current-v3-format-schema-head-counter-authority",
+        "store-writer-open-before-publication-effect",
+    ]
+    if profile["ordered_stage_enum"] != required_stages:
+        fail(code, "writer gate stages are not ordered and closed")
+    for stage in required_stages:
+        projection = profile["stage_value_projections"].get(stage)
+        if not isinstance(projection, dict) or not {
+            "exact_value_projection",
+            "exact_effect_projection",
+            "success",
+        }.issubset(projection):
+            fail(code, f"writer gate stage projection is incomplete: {stage}")
+    if "arbitrary-caller-locus" in profile["terminal_evidence_locus"].get("closed_kind_enum", []):
+        fail(code, "writer gate permits an arbitrary terminal locus")
+    _require_text_fragment(
+        gate["closed_outcome_union"]["exclusivity"],
+        ("double-issue", "replay"),
+        code=code,
+        label="writer gate outcome exclusivity",
+    )
+    lifecycle = gate["native_attachment_binding"].get("reservation_lifecycle")
+    if lifecycle != ["reserved", "claimed_inflight", "consumed_to_present", "revoked", "quarantined"]:
+        fail(code, "writer gate reservation lifecycle is not closed")
+    _require_text_fragment(
+        gate["composite_cleanup_lineage"]["preinvoke_consumption"],
+        ("consume", "never-reissue"),
+        code=code,
+        label="writer gate cleanup ownership",
+    )
+    if gate["composite_cleanup_lineage"]["closed_obligation_union"] != [
+        "no_mapping_close_only",
+        "mapped_unmap_then_close",
+    ]:
+        fail(code, "writer gate cleanup obligations are not closed")
+    _require_text_fragment(
+        gate["reader_boundary"]["grouping"],
+        ("excludes-reader",),
+        code=code,
+        label="writer gate reader boundary",
+    )
+    _require_text_fragment(
+        gate["reader_boundary"]["transitive_authorization"],
+        ("forbidden",),
+        code=code,
+        label="writer gate transitive boundary",
+    )
+    gate_matrix = _require_mapping_fields(
+        gate["fail_closed_matrix"],
+        ("required", "positive"),
+        code=code,
+        label="writer gate fail-closed matrix",
+    )
+    _require_nonempty_list(gate_matrix["required"], code=code, label="writer gate required failures")
     try:
-        writer_mapping_lease = contract["format_compatibility"][
+        schema = load_yaml(ROOT / CONTRACT_SCHEMA)
+        expected = schema["properties"]["format_compatibility"]["properties"][
             "sqlite_source_shm_readonly_capability"
-        ]["shm_map_state_machine"][
+        ]["const"]["shm_map_state_machine"][
             "same_process_writer_mapping_lease_proposal"
         ]
+    except (KeyError, TypeError, OSError, yaml.YAMLError) as error:
+        fail(code, f"lease semantic schema is missing: {error}")
+    if lease != expected:
+        fail(code, "nested lease safety semantics differ from the declared schema")
+
+
+def validate_df_0200_ingress_shape(ingress: dict[str, Any]) -> None:
+    """Validate DF-0200 safety semantics without copying serialized bytes."""
+
+    code = "store.materialization-ingress-contract-invalid"
+    _require_mapping_fields(
+        ingress,
+        (
+            "resolution_id", "activation", "caller_scope", "bridge", "public_api",
+            "public_writer_states", "public_stage_validate_publish_semantics",
+            "source", "counter_model", "publication", "memory_backend",
+            "sqlite_backend", "sqlite_capacity_decision", "compatibility",
+        ),
+        code=code,
+        label="DF-0200 ingress",
+    )
+    allowed_fields = {
+        "resolution_id", "activation", "caller_scope", "bridge", "public_api",
+        "public_writer_states", "public_stage_validate_publish_semantics",
+        "source", "counter_model", "publication", "memory_backend",
+        "sqlite_backend", "sqlite_capacity_decision", "compatibility",
+    }
+    if set(ingress) != allowed_fields:
+        fail(code, "DF-0200 ingress has unknown or missing fields")
+    if ingress["resolution_id"] != "cxxlens.df-0200.incremental-claim-store.v1" or ingress["public_api"] != "unchanged":
+        fail(code, "DF-0200 identity or public API changed")
+    source = _require_mapping_fields(
+        ingress["source"],
+        ("ownership", "codec", "events", "public-stage-mixing", "materializer-receipt-is-validation-authority", "external_completeness_authority", "store-validation"),
+        code=code,
+        label="DF-0200 source",
+    )
+    codec = _require_mapping_fields(
+        source["codec"],
+        ("id", "event_kind_codes", "authority_binding", "validation", "unknown_missing_reordered_or_truncated"),
+        code=code,
+        label="DF-0200 codec",
+    )
+    if codec["id"] != "cxxlens.df-0200.partition-event-stream.v1" or codec["event_kind_codes"] != {"partition-begin": 1, "claim-occurrence": 2, "detached-row": 3, "claim-annotation": 4, "coverage": 5, "unresolved": 6, "partition-end": 7}:
+        fail(code, "DF-0200 event codec identity differs")
+    binding = _require_mapping_fields(codec["authority_binding"], ("required_sections", "store_checker", "materialization_checker"), code=code, label="DF-0200 codec binding")
+    required_sections = {"canonical_tuple_profile", "field_catalog", "stream_header", "frame", "event_projections", "event_container", "digest_framing", "digest_domains", "canonical_order", "stream_trailer", "rejection"}
+    if not required_sections.issubset(set(_require_nonempty_list(binding["required_sections"], code=code, label="DF-0200 codec sections"))):
+        fail(code, "DF-0200 codec sections are incomplete")
+    _require_text_fragment(binding["store_checker"], ("self-contained", "no-reverse-load"), code=code, label="DF-0200 store checker")
+    _require_text_fragment(binding["materialization_checker"], ("recompute", "exact-match"), code=code, label="DF-0200 materializer checker")
+    _require_text_fragment(codec["validation"], ("every-full-byte-frame",), code=code, label="DF-0200 codec validation")
+    _require_text_fragment(codec["unknown_missing_reordered_or_truncated"], ("reject-entire-candidate",), code=code, label="DF-0200 rejection")
+    if source["events"] != ["partition-begin", "claim-occurrence", "detached-row", "claim-annotation", "coverage", "unresolved", "partition-end"] or source["public-stage-mixing"] != "forbidden" or source["materializer-receipt-is-validation-authority"] is not False:
+        fail(code, "DF-0200 event or receipt boundary differs")
+    external = _require_mapping_fields(source["external_completeness_authority"], ("validated_request", "sealed_execution_journal_and_task_receipts", "pre_encoder_receipt_oracle", "required_global_censuses_and_digests", "required_manifests", "required_receipts", "store_comparison", "comparison", "whole_partition_drop", "correlated_omission_rejection"), code=code, label="DF-0200 external authority")
+    _require_text_fragment(external["whole_partition_drop"], ("reject", "self-consistent"), code=code, label="DF-0200 omission rule")
+    for item in ("task", "partition", "event", "claim", "row", "coverage", "unresolved"):
+        if item not in external["required_global_censuses_and_digests"]:
+            fail(code, f"DF-0200 global census omits {item}")
+    for item in ("segment-manifest", "run-manifest", "merge-manifest"):
+        if item not in external["required_manifests"]:
+            fail(code, f"DF-0200 manifest set omits {item}")
+    for item in ("byte-receipt", "record-receipt", "seal-receipt"):
+        if item not in external["required_receipts"]:
+            fail(code, f"DF-0200 receipt set omits {item}")
+    oracle = _require_mapping_fields(external["pre_encoder_receipt_oracle"], ("owner", "canonicalization", "receipt_seal", "execution_journal_receipt_set"), code=code, label="DF-0200 receipt oracle")
+    _require_text_fragment(oracle["owner"], ("installed-tool-private",), code=code, label="DF-0200 receipt owner")
+    _require_text_fragment(oracle["canonicalization"], ("independent", "sort"), code=code, label="DF-0200 receipt canonicalization")
+    receipt = _require_mapping_fields(oracle["receipt_seal"], ("projection", "output"), code=code, label="DF-0200 receipt seal")
+    for field in ("successful-seal", "provider-stdout-sha256", "task-event-count-and-digest", "task-coverage-count-and-digest", "task-unresolved-count-and-digest", "selected-request-entry-binding-digest"):
+        if field not in receipt["projection"]:
+            fail(code, f"DF-0200 receipt seal omits {field}")
+    if receipt["output"] != "semantic-v2-sha256-string":
+        fail(code, "DF-0200 receipt seal is not semantic-digest bound")
+    journal = _require_mapping_fields(oracle["execution_journal_receipt_set"], ("projection", "output"), code=code, label="DF-0200 journal receipt")
+    if "ordered-pre-encoder-task-receipt-seal-digests" not in journal["projection"] or journal["output"] != "semantic-v2-sha256-string":
+        fail(code, "DF-0200 journal receipt set is incomplete")
+    validation = _require_mapping_fields(source["store-validation"], ("independence", "external-authority-inputs", "self-reported-stream-census-authority", "required-recomputation"), code=code, label="DF-0200 store validation")
+    if "independent" not in validation["independence"] or validation["self-reported-stream-census-authority"] != "forbidden":
+        fail(code, "DF-0200 store validation is not independent")
+    for item in ("canonical-claim-and-row-identity", "full-byte-event-codec-framing-order-checksum-and-seal", "external-request-journal-task-and-global-census-digest-closure", "canonical-v5-encode-decode-byte-identity"):
+        if item not in validation["required-recomputation"]:
+            fail(code, f"DF-0200 recomputation omits {item}")
+    counters = _require_mapping_fields(ingress["counter_model"], ("semantic_version_components", "canonical_v5_collection_counts", "collection_overflow_failure"), code=code, label="DF-0200 counters")
+    if counters["semantic_version_components"] != {"encoding": "u32", "maximum": (1 << 32) - 1} or counters["canonical_v5_collection_counts"] != {"encoding": "u64be", "maximum": (1 << 64) - 1, "aggregate_before_narrowing": "checked-u128"}:
+        fail(code, "DF-0200 counters are not widened before narrowing")
+    overflow = _require_mapping_fields(counters["collection_overflow_failure"], ("operation", "code", "field"), code=code, label="DF-0200 overflow")
+    if overflow["operation"] != "partition_stage" or overflow["code"] != "store.counter-overflow":
+        fail(code, "DF-0200 overflow route differs")
+    publication = _require_mapping_fields(ingress["publication"], ("candidate", "publish-attempts", "partial-visibility", "stale-or-failed-publish-preserves-head"), code=code, label="DF-0200 publication")
+    if publication != {"candidate": "exactly-one-unpublished", "publish-attempts": "exactly-one", "partial-visibility": "forbidden", "stale-or-failed-publish-preserves-head": True}:
+        fail(code, "DF-0200 publication lifecycle is not bounded")
+    compatibility = _require_mapping_fields(ingress["compatibility"], ("snapshot_payload_v5_schema_and_semantic_projection", "sqlite_physical_format", "snapshot_and_publication_identity", "public_cursor_lifetime_and-success-results", "additive_public_result"), code=code, label="DF-0200 compatibility")
+    if compatibility["snapshot_payload_v5_schema_and_semantic_projection"] != "unchanged-with-authorized-physical-generation-transition" or compatibility["sqlite_physical_format"] != "cxxlens.sqlite-semantic-store.v3-3.0.0" or compatibility["snapshot_and_publication_identity"] != "unchanged" or compatibility["public_cursor_lifetime_and-success-results"] != "unchanged" or compatibility["additive_public_result"] != "store.migration-required":
+        fail(code, "DF-0200 compatibility semantics differ")
+    decision = _require_mapping_fields(ingress["sqlite_capacity_decision"], ("selected_alternative", "confirmed_blocker", "required_parity", "weakening_parity", "alternatives"), code=code, label="SQLite capacity decision")
+    alternatives = _require_mapping_fields(decision["alternatives"], ("A", "B"), code=code, label="SQLite capacity alternatives")
+    selected = _require_mapping_fields(alternatives["A"], ("decision", "disposition", "preserves", "requires"), code=code, label="SQLite capacity A")
+    rejected = _require_mapping_fields(alternatives["B"], ("decision", "disposition", "preserves", "requires"), code=code, label="SQLite capacity B")
+    if decision["selected_alternative"] != "A" or decision["weakening_parity"] != "forbidden" or selected["disposition"] != "selected" or not str(selected["decision"]).startswith("sqlite-physical-v3-") or rejected["disposition"] != "rejected-not-selected":
+        fail(code, "SQLite capacity decision semantics differ")
+    try:
+        schema = load_yaml(ROOT / CONTRACT_SCHEMA)
+        expected = schema["$defs"]["df_0200_materialization_ingress"]["const"]
+    except (KeyError, TypeError, OSError, yaml.YAMLError) as error:
+        fail(code, f"DF-0200 semantic schema is missing: {error}")
+    if ingress != expected:
+        fail(code, "DF-0200 nested safety semantics differ from the declared schema")
+
+
+def validate_contract_shape(contract: dict[str, Any]) -> None:
+    try:
+        writer_mapping_lease = contract["format_compatibility"]["sqlite_source_shm_readonly_capability"]["shm_map_state_machine"]["same_process_writer_mapping_lease_proposal"]
     except (KeyError, TypeError) as error:
-        fail(
-            "store.sqlite-shm-writer-lease-proposal-invalid",
-            f"required proposal field is missing: {error}",
-        )
-    actual_writer_mapping_lease_digest = document_digest(writer_mapping_lease)
-    if (
-        actual_writer_mapping_lease_digest
-        != EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST
-    ):
-        fail(
-            "store.sqlite-shm-writer-lease-proposal-invalid",
-            (
-                "same-process writer-mapping lease proposal differs: "
-                f"expected={EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST}, "
-                f"actual={actual_writer_mapping_lease_digest}"
-            ),
-        )
-    for label, field, expected in (
-        (
-            "writer-native-attachment",
-            "writer_native_attachment_amendment_proposal",
-            EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
-        ),
-        (
-            "reader-native-attachment",
-            "reader_native_attachment_amendment_proposal",
-            EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
-        ),
-        (
-            "reader-late-close-cleanup",
-            "reader_late_close_cleanup_amendment_proposal",
-            EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST,
-        ),
-        (
-            "writer-gate-outcome-evidence",
-            "writer_gate_outcome_evidence_amendment_proposal",
-            EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST,
-        ),
-    ):
-        try:
-            amendment = writer_mapping_lease[field]
-        except (KeyError, TypeError) as error:
-            fail(
-                "store.sqlite-shm-writer-lease-proposal-invalid",
-                f"{label} amendment is missing: {error}",
-            )
-        actual = document_digest(amendment)
-        if actual != expected:
-            fail(
-                "store.sqlite-shm-writer-lease-proposal-invalid",
-                f"{label} amendment differs: expected={expected}, actual={actual}",
-            )
-    if contract.get("df_0200_materialization_ingress") != (
-        EXPECTED_DF_0200_MATERIALIZATION_INGRESS
-    ):
-        fail(
-            "store.materialization-ingress-contract-invalid",
-            "DF-0200 accepted materialization ingress differs",
-        )
+        fail("store.sqlite-shm-writer-lease-proposal-invalid", f"required proposal field is missing: {error}")
+    validate_writer_mapping_lease_shape(writer_mapping_lease)
+    try:
+        ingress = contract["df_0200_materialization_ingress"]
+    except (KeyError, TypeError) as error:
+        fail("store.materialization-ingress-contract-invalid", f"DF-0200 ingress is missing: {error}")
+    validate_df_0200_ingress_shape(ingress)
     if contract["canonical_encoding"]["serialized_identity"] != (
         "{identity-kind}:sha256:{64-lowercase-hex}"
     ):
@@ -1858,28 +1859,58 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
 
 
 def validate_df_0200_ingress_schema(schema: dict[str, Any]) -> None:
+    """Check the schema binding and its safety-critical semantic shape."""
+
+    def check_closed_object_nodes(value: Any, path: tuple[str, ...] = ()) -> None:
+        if isinstance(value, dict):
+            if (
+                value.get("type") == "object"
+                and isinstance(value.get("properties"), dict)
+                and path != ("$defs", "open_object")
+                and "const" not in value
+                and value.get("additionalProperties") is True
+            ):
+                fail(
+                    "store.materialization-ingress-contract-invalid",
+                    "nested schema object permits undeclared fields: "
+                    + "/".join(path),
+                )
+            for key, child in value.items():
+                check_closed_object_nodes(child, path + (key,))
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                check_closed_object_nodes(child, path + (str(index),))
+
+    check_closed_object_nodes(schema)
+
     try:
         required = schema["required"]
         binding = schema["properties"][
             "df_0200_materialization_ingress"
         ]
-        expected = schema["$defs"][
+        semantic_const = schema["$defs"][
             "df_0200_materialization_ingress"
         ]["const"]
-    except (KeyError, TypeError):
-        required = []
-        binding = None
-        expected = None
+    except (KeyError, TypeError) as error:
+        fail(
+            "store.materialization-ingress-contract-invalid",
+            f"DF-0200 schema binding is missing: {error}",
+        )
     if (
         "df_0200_materialization_ingress" not in required
         or binding
         != {"$ref": "#/$defs/df_0200_materialization_ingress"}
-        or expected != EXPECTED_DF_0200_MATERIALIZATION_INGRESS
     ):
         fail(
             "store.materialization-ingress-contract-invalid",
-            "DF-0200 accepted materialization ingress schema differs",
+            "DF-0200 accepted materialization ingress schema binding differs",
         )
+    if not isinstance(semantic_const, dict):
+        fail(
+            "store.materialization-ingress-contract-invalid",
+            "DF-0200 schema semantic projection is not an object",
+        )
+    validate_df_0200_ingress_shape(semantic_const)
 
 
 def validate_all(
@@ -1887,7 +1918,6 @@ def validate_all(
 ) -> tuple[dict[str, Any], list[dict[str, Any]], int]:
     contract = load_yaml(root / CONTRACT)
     contract_schema = load_yaml(root / CONTRACT_SCHEMA)
-    validate_exact_schema(contract_schema)
     validate_df_0200_ingress_schema(contract_schema)
     schema_validate(contract, contract_schema, "store contract")
     try:

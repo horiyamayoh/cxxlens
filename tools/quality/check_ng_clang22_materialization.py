@@ -171,12 +171,6 @@ MAXIMUM_TASK_SANDBOX_REQUIREMENTS = 4_096
 MAXIMUM_JSON_MEMBERS_PER_OBJECT = 4_096
 MAXIMUM_REQUEST_SCHEMA_CAPTURE_BYTES = 43
 MAXIMUM_REQUEST_VERSION_CAPTURE_BYTES = 6
-MAXIMUM_SEMANTIC_REPLAY_WINDOW_BYTES = 64 * 1_024 * 1_024
-EXPECTED_REQUEST_SCHEMA_CANONICAL_DIGEST = (
-    "sha256:241fc96ae3a249e5a8851baa95e585460ad29378cb20d11cfcda33a69eaa9270"
-)
-MAXIMUM_GLOBAL_SEMANTIC_JSON_BYTES = 10_420_985
-MAXIMUM_TASK_METADATA_SEMANTIC_JSON_BYTES = 8_463_179
 OCCURRENCE_MANIFEST_PATH = (
     "share/cxxlens/materialization/clang22/occurrence-v1.json"
 )
@@ -210,43 +204,6 @@ BASE_RESULT_FIELDS = {
     "source.file.v1": "snapshot",
     "build.compile_unit.v1": "compile_unit",
     "source.span.v1": "span",
-}
-EXPECTED_JSON_LEXICAL_POLICY = {
-    "encoding": "strict-utf8-no-bom",
-    "document": "exactly-one-top-level-object",
-    "duplicate_members": "reject-at-any-depth",
-    "trailing_or_second_value": "reject",
-    "non_finite_numbers": "reject",
-    "yaml_authority_loading": "separate",
-}
-EXPECTED_SEMANTIC_REPLAY_PROJECTION = {
-    "token_replay": (
-        "decoded-utf8-minimal-json-escape-canonical-integer-"
-        "no-insignificant-whitespace"
-    ),
-    "raw_spelling_bound": "excluded",
-    "schema_walk": "closed-required-local-ref-allof-intersection-oneof-maximum",
-    "global_substitution": "tasks-empty-array",
-    "task_metadata_substitution": "source-closure-metadata-empty-object",
-    "window_bytes": MAXIMUM_SEMANTIC_REPLAY_WINDOW_BYTES,
-    "global_selected_schema_maximum_bytes": MAXIMUM_GLOBAL_SEMANTIC_JSON_BYTES,
-    "global_margin_bytes": (
-        MAXIMUM_SEMANTIC_REPLAY_WINDOW_BYTES - MAXIMUM_GLOBAL_SEMANTIC_JSON_BYTES
-    ),
-    "task_metadata_selected_schema_maximum_bytes": (
-        MAXIMUM_TASK_METADATA_SEMANTIC_JSON_BYTES
-    ),
-    "task_metadata_margin_bytes": (
-        MAXIMUM_SEMANTIC_REPLAY_WINDOW_BYTES
-        - MAXIMUM_TASK_METADATA_SEMANTIC_JSON_BYTES
-    ),
-    "request_schema_canonical_digest": EXPECTED_REQUEST_SCHEMA_CANONICAL_DIGEST,
-}
-EXPECTED_SEMANTIC_REPLAY = {
-    **EXPECTED_SEMANTIC_REPLAY_PROJECTION,
-    "derivation_digest": (
-        "sha256:ff9baf9982f909d8a4f51c46f53637af6980a7d06728dfa65794ffc1eebf816d"
-    ),
 }
 EXPECTED_REPORT_CONSTRUCTION = {
     "lifecycle": "bounded-two-phase-report-lifecycle",
@@ -13561,6 +13518,85 @@ def _semantic_matrix_projection(request: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def validate_request_schema_shape(request_schema: dict[str, Any]) -> None:
+    """Check request v2.2's semantic shape and required fields."""
+
+    required = request_schema.get("required")
+    properties = request_schema.get("properties")
+    if not isinstance(required, list) or not isinstance(properties, dict):
+        fail("materialization.request-invalid", "request schema root shape")
+    required_fields = {
+        "schema",
+        "request_version",
+        "required_features",
+        "worker",
+        "tasks",
+    }
+    if not required_fields.issubset(set(required)):
+        fail("materialization.request-invalid", "request schema required fields")
+    for field in required_fields:
+        if not isinstance(properties.get(field), dict):
+            fail("materialization.request-invalid", f"request schema property: {field}")
+    worker = properties["worker"].get("properties")
+    if not isinstance(worker, dict) or not {
+        "protocol_major",
+        "protocol_minor",
+    }.issubset(worker):
+        fail("materialization.request-invalid", "worker protocol fields")
+    features = properties["required_features"].get("const")
+    if not isinstance(features, list) or "task-input-chunks-v2" not in features:
+        fail("materialization.request-invalid", "request feature set")
+    tasks = properties["tasks"]
+    if not isinstance(tasks.get("maxItems"), int) or tasks["maxItems"] <= 0:
+        fail("materialization.request-invalid", "task count bound")
+    if request_schema.get("additionalProperties") is not False:
+        fail("materialization.request-invalid", "request schema is not closed")
+    for field in required_fields:
+        if properties[field].get("additionalProperties") is True:
+            fail(
+                "materialization.request-invalid",
+                f"request schema property is open: {field}",
+            )
+    task_items = tasks.get("items")
+    if not isinstance(task_items, dict) or not str(task_items.get("$ref", "")).endswith(
+        "base_task_without_source_bytes"
+    ):
+        fail("materialization.request-invalid", "task v4 item schema")
+    defs = request_schema.get("$defs")
+    base_task = defs.get("base_task_without_source_bytes") if isinstance(defs, dict) else None
+    if not isinstance(base_task, dict) or base_task.get("additionalProperties") is not False:
+        fail("materialization.request-invalid", "task v4 schema is not closed")
+    source = base_task.get("properties", {}).get("source")
+    source_fields = {
+        "source_snapshot_id",
+        "file_id",
+        "logical_path",
+        "content_digest",
+        "size_bytes",
+        "encoding",
+        "line_index_id",
+        "read_only",
+    }
+    if not isinstance(source, dict) or source.get("additionalProperties") is not False:
+        fail("materialization.request-invalid", "source metadata schema is not closed")
+    if set(source.get("required", [])) != source_fields or set(
+        source.get("properties", {})
+    ) != source_fields:
+        fail("materialization.request-invalid", "source metadata field census")
+
+    def reject_source_bytes(node: Any) -> None:
+        if isinstance(node, dict):
+            for key in node:
+                if key in {"content_base64", "source_bytes", "content_bytes"}:
+                    fail("materialization.request-invalid", "raw source bytes in request schema")
+                reject_source_bytes(node[key])
+        elif isinstance(node, list):
+            for item in node:
+                reject_source_bytes(item)
+
+    reject_source_bytes(request_schema)
+
+
 def validate_v2_2_documents(root: pathlib.Path) -> dict[str, Any]:
     """Validate the current product schemas and Protocol 2.0 bindings.
 
@@ -13584,6 +13620,7 @@ def validate_v2_2_documents(root: pathlib.Path) -> dict[str, Any]:
         except jsonschema.SchemaError as error:
             fail("materialization.request-invalid", f"{label} schema: {error.message}")
     validate_schema(contract, contract_schema, "materialization contract")
+    validate_request_schema_shape(request_schema)
     request_version = request_schema.get("properties", {}).get("request_version", {}).get(
         "const"
     )

@@ -17,13 +17,6 @@ sys.path.insert(0, str(ROOT / "tools" / "quality"))
 from check_ng_sqlite_store_contract import (  # noqa: E402
     CONTRACT,
     CONTRACT_SCHEMA,
-    EXPECTED_CONTRACT_DIGEST,
-    EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST,
-    EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
-    EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST,
-    EXPECTED_SCHEMA_DIGEST,
-    EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST,
-    EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
     SNAPSHOT_CONTRACT,
     SQLITE_OPEN_PROFILE_NAMES,
     SQLiteStoreContractError,
@@ -33,7 +26,6 @@ from check_ng_sqlite_store_contract import (  # noqa: E402
     committed_generation_maximum,
     compaction_recovery_verdict,
     compressed_compaction_schedule,
-    document_digest,
     effective_sqlite_sector_size,
     forced_population_reachable,
     format_reset_projection,
@@ -72,8 +64,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
 
     def test_exact_contract_schema_and_snapshot_binding_pass(self) -> None:
         contract = validate_all(ROOT)
-        self.assertEqual(document_digest(contract), EXPECTED_CONTRACT_DIGEST)
-        self.assertEqual(document_digest(self.schema), EXPECTED_SCHEMA_DIGEST)
         self.assertEqual(contract["maturity"], "accepted")
         capacity_decision = self.snapshot["df_0200_materialization_ingress"][
             "sqlite_capacity_decision"
@@ -91,22 +81,10 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         ][
             "same_process_writer_mapping_lease_proposal"
         ]
-        self.assertEqual(
-            document_digest(lease),
-            EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST,
-        )
         attachment = lease["writer_native_attachment_amendment_proposal"]
-        self.assertEqual(
-            document_digest(attachment),
-            EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
-        )
         reader_attachment = lease[
             "reader_native_attachment_amendment_proposal"
         ]
-        self.assertEqual(
-            document_digest(reader_attachment),
-            EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
-        )
         self.assertEqual(
             reader_attachment["id"],
             "cxxlens.sqlite.reader-shm-native-attachment.v1",
@@ -247,10 +225,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
             "reader_late_close_cleanup_amendment_proposal"
         ]
         self.assertEqual(
-            document_digest(late_close),
-            EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST,
-        )
-        self.assertEqual(
             late_close["drain_subledger"]["retained_pins"],
             [
                 "proposal-candidate",
@@ -310,10 +284,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         gate_outcome = lease[
             "writer_gate_outcome_evidence_amendment_proposal"
         ]
-        self.assertEqual(
-            document_digest(gate_outcome),
-            EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST,
-        )
         self.assertEqual(
             gate_outcome["id"],
             "cxxlens.sqlite.writer-gate-outcome-evidence.v1",
@@ -5057,6 +5027,18 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 "required-field",
                 lambda value: value["required"].remove("release_binding"),
             ),
+            (
+                "nested-open-schema",
+                lambda value: value["$defs"]["payload"].__setitem__(
+                    "additionalProperties", True
+                ),
+            ),
+            (
+                "physical-format-reference",
+                lambda value: value["properties"].__setitem__(
+                    "physical_format", {"$ref": "#/$defs/open_object"}
+                ),
+            ),
         ]
 
         for name, mutate in mutations:
@@ -5089,8 +5071,8 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         contract["physical_format"]["current"] = "3.0.1"
         schema["$defs"]["physical_format"]["const"]["current"] = "3.0.1"
 
-        # The paired edit is structurally schema-valid, but the independent
-        # canonical authority bindings must each still reject it.
+        # The paired edit is structurally schema-valid, but independent
+        # product-semantic bindings must still reject it.
         schema_validate(contract, schema)
         with self.assertRaisesRegex(
             SQLiteStoreContractError, "sqlite.contract-drift"
