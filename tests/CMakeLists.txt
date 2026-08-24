@@ -125,6 +125,18 @@ set_tests_properties(
   PROPERTIES LABELS
              "unit;sdk;store;bounded;memory;v6;e2e;fault;determinism;resource")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-snapshot-store-v5-codec
+                            unit/sdk/snapshot_store_v5_codec_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-snapshot-store-v5-codec
+                      PRIVATE cxxlens::kernel)
+target_include_directories(cxxlens-unit-sdk-snapshot-store-v5-codec
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-snapshot-store-v5-codec
+         COMMAND cxxlens-unit-sdk-snapshot-store-v5-codec)
+set_tests_properties(
+  unit.sdk-snapshot-store-v5-codec
+  PROPERTIES LABELS "unit;sdk;store;codec;fault;determinism;resource")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-disposable-qualification
                             unit/sdk/sqlite_disposable_qualification_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-sqlite-disposable-qualification
@@ -618,6 +630,20 @@ set_tests_properties(
   unit.sdk-sqlite-terminal-reclassifier
   PROPERTIES LABELS
              "unit;sdk;store;sqlite;terminal;reclassification;descendant")
+
+cxxlens_add_test_executable(
+  cxxlens-unit-sdk-sqlite-exact-empty-cold-reclassifier
+  unit/sdk/sqlite_exact_empty_cold_reclassifier_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-sqlite-exact-empty-cold-reclassifier
+                      PRIVATE cxxlens::kernel)
+target_include_directories(cxxlens-unit-sdk-sqlite-exact-empty-cold-reclassifier
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-sqlite-exact-empty-cold-reclassifier
+         COMMAND cxxlens-unit-sdk-sqlite-exact-empty-cold-reclassifier)
+set_tests_properties(
+  unit.sdk-sqlite-exact-empty-cold-reclassifier
+  PROPERTIES LABELS
+             "unit;sdk;store;sqlite;normalization;classifier;cold;security")
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-store-fault-injection
                             unit/sdk/sqlite_store_fault_injection_test.cpp)
@@ -1152,6 +1178,22 @@ set_tests_properties(
     LABELS
     "adapter;provider;clang22;materialization;claim;task;v4;store;positive;security"
 )
+
+cxxlens_add_test_executable(
+  cxxlens-clang22-materialization-store-v6-typed-ingress
+  adapter/clang22/materialization_store_v6_typed_ingress_test.cpp)
+target_link_libraries(
+  cxxlens-clang22-materialization-store-v6-typed-ingress
+  PRIVATE cxxlens_clang22_materializer_store_v6_typed_ingress)
+target_include_directories(
+  cxxlens-clang22-materialization-store-v6-typed-ingress
+  PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME adapter.clang22-materialization-store-v6-typed-ingress
+         COMMAND cxxlens-clang22-materialization-store-v6-typed-ingress)
+set_tests_properties(
+  adapter.clang22-materialization-store-v6-typed-ingress
+  PROPERTIES LABELS
+             "adapter;provider;clang22;materialization;store;v6;typed;ingress;bounded;security")
 
 cxxlens_add_test_executable(cxxlens-protocol-v2
                             protocol_v2/protocol_v2_direct_test.cpp)
@@ -1923,6 +1965,7 @@ add_dependencies(
   cxxlens-clang22-provider-worker-ingress-decoder
   cxxlens-clang22-materialization-v4-claim-binding
   cxxlens-clang22-materialization-v4-store-positive
+  cxxlens-clang22-materialization-store-v6-typed-ingress
   cxxlens-protocol-v2
   cxxlens-unit-sdk-provider-protocol-v2-adapter
   cxxlens-clang22-materialization-pipeline-v2-2
@@ -1977,6 +2020,7 @@ add_dependencies(
   cxxlens-unit-sdk-sqlite-store-fault-injection
   cxxlens-unit-sdk-sqlite-store-terminal
   cxxlens-unit-sdk-sqlite-terminal-reclassifier
+  cxxlens-unit-sdk-sqlite-exact-empty-cold-reclassifier
   cxxlens-unit-sdk-sqlite-store-wal-routing
   cxxlens-unit-sdk-sqlite-wal-source-capture
   cxxlens-unit-sdk-sqlite-wal-recovery-workspace
@@ -1984,6 +2028,7 @@ add_dependencies(
   cxxlens-unit-sdk-store
   cxxlens-unit-sdk-store-operation-port
   cxxlens-unit-sdk-bounded-store-v6-memory-e2e
+  cxxlens-unit-sdk-snapshot-store-v5-codec
   cxxlens-unit-sdk-sqlite-writer-gate-outcome
   cxxlens-df0200-claim-batch-corpus
   cxxlens-sdk-example-typed_query

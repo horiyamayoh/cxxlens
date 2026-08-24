@@ -169,6 +169,7 @@ add_library(
   src/sdk/relation.cpp
   src/sdk/claim.cpp
   src/sdk/store.cpp
+  src/sdk/snapshot_store_v5_codec_internal.cpp
   src/sdk/store_operation_port_internal.cpp
   src/sdk/sqlite_connection_lifecycle_internal.cpp
   src/runtime/monotonic_clock_port.cpp
@@ -190,7 +191,8 @@ add_library(
   src/sdk/sqlite_source_shm_readonly_preflight_internal.cpp
   src/sdk/sqlite_default_forwarding_vfs.cpp
   src/sdk/sqlite_store_terminal_internal.cpp
-  src/sdk/sqlite_terminal_reclassifier_internal.cpp)
+  src/sdk/sqlite_terminal_reclassifier_internal.cpp
+  src/sdk/sqlite_exact_empty_cold_reclassifier_internal.cpp)
 add_library(cxxlens::kernel ALIAS cxxlens_kernel)
 cxxlens_configure_component(cxxlens_kernel kernel)
 target_link_libraries(
@@ -795,6 +797,32 @@ target_compile_features(cxxlens_clang22_worker_v4_claim_bridge
                         PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens_clang22_worker_v4_claim_bridge)
 cxxlens_enable_sanitizers(cxxlens_clang22_worker_v4_claim_bridge)
+
+# Source-private typed Store v6 ingress. Keep the production binding separate
+# from the installed v2.2 boundary and the retained legacy safety archive.
+add_library(
+  cxxlens_clang22_materializer_store_v6_typed_ingress STATIC EXCLUDE_FROM_ALL
+  src/llvm/clang22/materialization_store_v6_typed_ingress.cpp)
+target_link_libraries(
+  cxxlens_clang22_materializer_store_v6_typed_ingress
+  PUBLIC cxxlens::base
+  PRIVATE cxxlens::kernel
+          cxxlens_bounded_store_v6_memory_internal
+          cxxlens::provider_sdk
+          cxxlens_clang22_materialization_codecs
+          cxxlens_clang22_materialization_io_support
+          cxxlens_clang22_materialization_request_v2_2_support
+          cxxlens_clang22_provider_task_v4_authority_internal
+          cxxlens_clang22_materializer_v4_claims
+          cxxlens_clang22_materializer_v4_ingress
+          cxxlens_clang22_materializer_v4_reuse_support
+          cxxlens_clang22_worker_core)
+target_include_directories(cxxlens_clang22_materializer_store_v6_typed_ingress
+                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_clang22_materializer_store_v6_typed_ingress
+                        PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens_clang22_materializer_store_v6_typed_ingress)
+cxxlens_enable_sanitizers(cxxlens_clang22_materializer_store_v6_typed_ingress)
 
 if(BUILD_TESTING)
   # Source-private safety support for retained Store/SQLite/receipt tests. This
