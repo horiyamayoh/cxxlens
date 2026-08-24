@@ -1,5 +1,6 @@
 #include "provider_protocol_v2_adapter.hpp"
 
+#include <new>
 #include <utility>
 
 namespace cxxlens::sdk::provider::detail
@@ -137,27 +138,43 @@ namespace cxxlens::sdk::provider::detail
 	result<std::vector<std::byte>> encode_provider_protocol_v2_frame(const frame& value,
 																	 const protocol_limits limits)
 	{
-		auto native_limits = protocol_limits_for_codec(limits);
-		if (!native_limits)
-			return cxxlens::sdk::unexpected(std::move(native_limits.error()));
-		auto encoded = protocol_v2::encode_frame(to_protocol_frame(value), *native_limits);
-		if (!encoded)
+		try
+		{
+			auto native_limits = protocol_limits_for_codec(limits);
+			if (!native_limits)
+				return cxxlens::sdk::unexpected(std::move(native_limits.error()));
+			auto encoded = protocol_v2::encode_frame(to_protocol_frame(value), *native_limits);
+			if (!encoded)
+				return cxxlens::sdk::unexpected(
+					map_codec_error(std::move(encoded.error()), codec_operation::encode));
+			return std::move(*encoded);
+		}
+		catch (const std::bad_alloc&)
+		{
 			return cxxlens::sdk::unexpected(
-				map_codec_error(std::move(encoded.error()), codec_operation::encode));
-		return std::move(*encoded);
+				error{"provider.oversized-frame", "frame", "allocation"});
+		}
 	}
 
 	result<frame> decode_provider_protocol_v2_frame(const std::span<const std::byte> input,
 													const protocol_limits limits)
 	{
-		auto native_limits = protocol_limits_for_codec(limits);
-		if (!native_limits)
-			return cxxlens::sdk::unexpected(std::move(native_limits.error()));
-		auto decoded = protocol_v2::decode_frame(input, *native_limits);
-		if (!decoded)
+		try
+		{
+			auto native_limits = protocol_limits_for_codec(limits);
+			if (!native_limits)
+				return cxxlens::sdk::unexpected(std::move(native_limits.error()));
+			auto decoded = protocol_v2::decode_frame(input, *native_limits);
+			if (!decoded)
+				return cxxlens::sdk::unexpected(
+					map_codec_error(std::move(decoded.error()), codec_operation::decode));
+			return from_protocol_frame(std::move(*decoded));
+		}
+		catch (const std::bad_alloc&)
+		{
 			return cxxlens::sdk::unexpected(
-				map_codec_error(std::move(decoded.error()), codec_operation::decode));
-		return from_protocol_frame(std::move(*decoded));
+				error{"provider.oversized-frame", "frame", "allocation"});
+		}
 	}
 
 	result<std::vector<frame>>
@@ -165,18 +182,101 @@ namespace cxxlens::sdk::provider::detail
 											 const protocol_limits limits,
 											 const std::uint64_t maximum_frames)
 	{
-		auto native_limits = protocol_limits_for_codec(limits);
-		if (!native_limits)
-			return cxxlens::sdk::unexpected(std::move(native_limits.error()));
-		auto decoded = protocol_v2::decode_frame_stream(input, *native_limits, maximum_frames);
-		if (!decoded)
+		try
+		{
+			auto native_limits = protocol_limits_for_codec(limits);
+			if (!native_limits)
+				return cxxlens::sdk::unexpected(std::move(native_limits.error()));
+			auto decoded = protocol_v2::decode_frame_stream(input, *native_limits, maximum_frames);
+			if (!decoded)
+				return cxxlens::sdk::unexpected(
+					map_codec_error(std::move(decoded.error()), codec_operation::decode));
+			std::vector<frame> output;
+			output.reserve(decoded->size());
+			for (auto& value : *decoded)
+				output.push_back(from_protocol_frame(std::move(value)));
+			return output;
+		}
+		catch (const std::bad_alloc&)
+		{
 			return cxxlens::sdk::unexpected(
-				map_codec_error(std::move(decoded.error()), codec_operation::decode));
-		std::vector<frame> output;
-		output.reserve(decoded->size());
-		for (auto& value : *decoded)
-			output.push_back(from_protocol_frame(std::move(value)));
-		return output;
+				error{"provider.oversized-frame", "frame", "allocation"});
+		}
+	}
+
+	std::size_t prepared_provider_protocol_v2_frame::control_bytes() const noexcept
+	{
+		return prepared_.control_bytes();
+	}
+
+	std::size_t prepared_provider_protocol_v2_frame::payload_bytes() const noexcept
+	{
+		return prepared_.payload_bytes();
+	}
+
+	std::size_t prepared_provider_protocol_v2_frame::body_resident_bytes() const noexcept
+	{
+		return prepared_.body_resident_bytes();
+	}
+
+	message_type prepared_provider_protocol_v2_frame::type() const noexcept
+	{
+		return static_cast<message_type>(static_cast<std::uint16_t>(prepared_.type()));
+	}
+
+	std::uint16_t prepared_provider_protocol_v2_frame::flags() const noexcept
+	{
+		return prepared_.flags();
+	}
+
+	std::uint64_t prepared_provider_protocol_v2_frame::stream_id() const noexcept
+	{
+		return prepared_.stream_id();
+	}
+
+	std::uint64_t prepared_provider_protocol_v2_frame::sequence() const noexcept
+	{
+		return prepared_.sequence();
+	}
+
+	result<frame> prepared_provider_protocol_v2_frame::finalize(std::vector<std::byte>&& control,
+																std::vector<std::byte>&& payload) &&
+	{
+		try
+		{
+			auto decoded = std::move(prepared_).finalize(std::move(control), std::move(payload));
+			if (!decoded)
+				return cxxlens::sdk::unexpected(
+					map_codec_error(std::move(decoded.error()), codec_operation::decode));
+			return from_protocol_frame(std::move(*decoded));
+		}
+		catch (const std::bad_alloc&)
+		{
+			return cxxlens::sdk::unexpected(
+				error{"provider.oversized-frame", "frame", "allocation"});
+		}
+	}
+
+	result<prepared_provider_protocol_v2_frame> prepare_provider_protocol_v2_frame(
+		const std::span<const std::byte, protocol_v2::fixed_header_bytes> header,
+		const protocol_limits limits)
+	{
+		try
+		{
+			auto native_limits = protocol_limits_for_codec(limits);
+			if (!native_limits)
+				return cxxlens::sdk::unexpected(std::move(native_limits.error()));
+			auto prepared = protocol_v2::prepare_frame_header(header, *native_limits);
+			if (!prepared)
+				return cxxlens::sdk::unexpected(
+					map_codec_error(std::move(prepared.error()), codec_operation::decode));
+			return prepared_provider_protocol_v2_frame{std::move(*prepared)};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return cxxlens::sdk::unexpected(
+				error{"provider.oversized-frame", "frame", "allocation"});
+		}
 	}
 
 	result<void> provider_protocol_v2_session::validate() const

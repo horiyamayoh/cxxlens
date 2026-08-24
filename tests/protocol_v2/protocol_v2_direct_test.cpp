@@ -1,8 +1,11 @@
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <string_view>
+#include <type_traits>
 
 #include "protocol_v2/cbor.hpp"
 #include "protocol_v2/closure.hpp"
@@ -266,6 +269,100 @@ namespace
 				"unknown optional credit account was exact");
 	}
 
+	void test_prepared_frame_decode()
+	{
+		static_assert(!std::is_copy_constructible_v<cxxlens::protocol_v2::prepared_frame_decode>);
+		frame input;
+		input.type = message_type::source_closure_chunk;
+		input.stream_id = 9U;
+		input.sequence = 17U;
+		input.control = hello_control();
+		input.payload.assign(1'048'576U, byte{0x5a});
+		auto wire = cxxlens::protocol_v2::encode_frame(input);
+		require_ok(wire, "prepared decode 1 MiB frame encoding");
+		std::array<byte, cxxlens::protocol_v2::fixed_header_bytes> header{};
+		std::copy_n(wire->begin(), header.size(), header.begin());
+		auto prepared = cxxlens::protocol_v2::prepare_frame_header(header);
+		require_ok(prepared, "prepared decode header validation");
+		require(
+			prepared->control_bytes() == input.control.size() &&
+				prepared->payload_bytes() == input.payload.size() &&
+				prepared->body_resident_bytes() == input.control.size() + input.payload.size() &&
+				prepared->type() == input.type && prepared->flags() == input.flags &&
+				prepared->stream_id() == input.stream_id && prepared->sequence() == input.sequence,
+			"prepared decode body accounting");
+
+		bytes control(wire->begin() + static_cast<std::ptrdiff_t>(header.size()),
+					  wire->begin() +
+						  static_cast<std::ptrdiff_t>(header.size() + input.control.size()));
+		bytes body(wire->begin() +
+					   static_cast<std::ptrdiff_t>(header.size() + input.control.size()),
+				   wire->end());
+		const auto* const body_allocation = body.data();
+		auto decoded = std::move(*prepared).finalize(std::move(control), std::move(body));
+		require_ok(decoded, "prepared decode body finalization");
+		require(decoded->payload.data() == body_allocation && decoded->payload == input.payload,
+				"prepared decode copied the caller-owned 1 MiB payload");
+
+		auto tampered_prepared = cxxlens::protocol_v2::prepare_frame_header(header);
+		require_ok(tampered_prepared, "tampered prepared decode setup");
+		control = input.control;
+		body = input.payload;
+		body.back() ^= byte{0x01};
+		auto tampered = std::move(*tampered_prepared).finalize(std::move(control), std::move(body));
+		require_error(tampered, "prepared decode accepted tampered payload");
+		require(tampered.error().code == "protocol-v2.digest-mismatch",
+				"prepared decode tamper reason");
+
+		auto short_prepared = cxxlens::protocol_v2::prepare_frame_header(header);
+		require_ok(short_prepared, "short prepared decode setup");
+		control = input.control;
+		body = input.payload;
+		body.pop_back();
+		auto short_body = std::move(*short_prepared).finalize(std::move(control), std::move(body));
+		require_error(short_body, "prepared decode accepted a short body");
+
+		auto invalid_flags_header = header;
+		invalid_flags_header[11U] = byte{cxxlens::protocol_v2::flag_optional_extension};
+		require_error(cxxlens::protocol_v2::prepare_frame_header(invalid_flags_header),
+					  "prepared decode accepted optional flag on a known message");
+		auto oversized_header = header;
+		std::fill(oversized_header.begin() + 32, oversized_header.begin() + 40, byte{});
+		oversized_header[36U] = byte{0x01};
+		oversized_header[39U] = byte{0x01};
+		require_error(cxxlens::protocol_v2::prepare_frame_header(oversized_header),
+					  "prepared decode accepted an oversized declared payload");
+
+		frame small = input;
+		small.control = {byte{0x61}, byte{'a'}};
+		small.payload = {byte{'b'}};
+		auto small_wire = cxxlens::protocol_v2::encode_frame(small);
+		require_ok(small_wire, "prepared one-shot setup encoding");
+		std::copy_n(small_wire->begin(), header.size(), header.begin());
+		auto move_source = cxxlens::protocol_v2::prepare_frame_header(header);
+		require_ok(move_source, "prepared one-shot header validation");
+		auto moved = std::move(*move_source);
+		auto moved_from =
+			std::move(*move_source).finalize(bytes{small.control}, bytes{small.payload});
+		require_error(moved_from, "moved-from prepared frame remained usable");
+		auto first = std::move(moved).finalize(bytes{small.control}, bytes{small.payload});
+		require_ok(first, "prepared frame first finalization");
+		auto duplicate = std::move(moved).finalize(bytes{small.control}, bytes{small.payload});
+		require_error(duplicate, "prepared frame finalized twice");
+
+		cxxlens::protocol_v2::sequence_guard maximum_sequence{
+			9U, std::numeric_limits<std::uint64_t>::max()};
+		frame terminal_sequence = small;
+		terminal_sequence.stream_id = 9U;
+		terminal_sequence.sequence = std::numeric_limits<std::uint64_t>::max();
+		require_ok(maximum_sequence.accept(terminal_sequence),
+				   "maximum sequence was not accepted once");
+		require_error(maximum_sequence.accept(terminal_sequence),
+					  "maximum sequence duplicate was accepted");
+		terminal_sequence.sequence = 0U;
+		require_error(maximum_sequence.accept(terminal_sequence), "sequence wrapped after maximum");
+	}
+
 	frame closure_frame(const message_type type,
 						const std::uint64_t sequence,
 						const closure_control& control,
@@ -405,6 +502,7 @@ int main()
 {
 	test_sha256_and_cbor();
 	test_frame_codec_and_guards();
+	test_prepared_frame_decode();
 	test_closure_codec_and_state();
 	std::cout << "protocol-v2 direct tests passed\n";
 }

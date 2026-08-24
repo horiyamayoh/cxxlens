@@ -125,11 +125,82 @@ namespace cxxlens::protocol_v2
 		[[nodiscard]] bool operator==(const frame&) const = default;
 	};
 
+	/**
+	 * @brief Move-only, header-validated decode state for direct body ownership.
+	 *
+	 * A transport first supplies the exact 104-byte header, allocates the two
+	 * final vectors at the validated sizes, and reads directly into them. The
+	 * rvalue-only finalizer verifies exact sizes, both digests, and canonical
+	 * control CBOR before moving those same buffers into the decoded frame.
+	 */
+	class prepared_frame_decode
+	{
+	  public:
+		prepared_frame_decode(const prepared_frame_decode&) = delete;
+		prepared_frame_decode& operator=(const prepared_frame_decode&) = delete;
+		prepared_frame_decode(prepared_frame_decode&& other) noexcept;
+		prepared_frame_decode& operator=(prepared_frame_decode&& other) noexcept;
+
+		[[nodiscard]] std::size_t control_bytes() const noexcept
+		{
+			return control_bytes_;
+		}
+		[[nodiscard]] std::size_t payload_bytes() const noexcept
+		{
+			return payload_bytes_;
+		}
+		[[nodiscard]] std::size_t body_resident_bytes() const noexcept
+		{
+			return control_bytes_ + payload_bytes_;
+		}
+		[[nodiscard]] std::size_t encoded_bytes() const noexcept
+		{
+			return fixed_header_bytes + body_resident_bytes();
+		}
+		[[nodiscard]] message_type type() const noexcept
+		{
+			return header_.type;
+		}
+		[[nodiscard]] std::uint16_t flags() const noexcept
+		{
+			return header_.flags;
+		}
+		[[nodiscard]] std::uint64_t stream_id() const noexcept
+		{
+			return header_.stream_id;
+		}
+		[[nodiscard]] std::uint64_t sequence() const noexcept
+		{
+			return header_.sequence;
+		}
+
+		[[nodiscard]] sdk::result<frame> finalize(bytes&& control, bytes&& payload) &&;
+
+	  private:
+		friend sdk::result<prepared_frame_decode>
+			prepare_frame_header(std::span<const byte, fixed_header_bytes>, limits);
+
+		prepared_frame_decode(frame header,
+							  std::size_t control_bytes,
+							  std::size_t payload_bytes,
+							  limits bound) noexcept;
+
+		frame header_;
+		std::size_t control_bytes_{};
+		std::size_t payload_bytes_{};
+		limits bound_{};
+		bool consumed_{};
+	};
+
 	/** @brief SHA-256 of exact bytes (without a semantic-domain prefix). */
 	[[nodiscard]] digest32 sha256(std::span<const byte> input) noexcept;
 
 	[[nodiscard]] bool digest_is_zero(const digest32& digest) noexcept;
 	[[nodiscard]] bool digest_equal(const digest32& left, const digest32& right) noexcept;
+
+	/** @brief Validate one exact wire header before any body allocation. */
+	[[nodiscard]] sdk::result<prepared_frame_decode>
+	prepare_frame_header(std::span<const byte, fixed_header_bytes> header, limits bound = {});
 
 	/** @brief Encode a canonical-control frame with independent full SHA-256 digests. */
 	[[nodiscard]] sdk::result<bytes> encode_frame(const frame& value, limits bound = {});
@@ -164,6 +235,7 @@ namespace cxxlens::protocol_v2
 	  private:
 		std::uint64_t stream_id_{};
 		std::uint64_t next_sequence_{};
+		bool exhausted_{};
 	};
 
 	/** @brief Wire credit measured in complete encoded bytes (104-byte header included). */

@@ -38,6 +38,46 @@ namespace cxxlens::sdk::provider::detail
 											 protocol_limits limits,
 											 std::uint64_t maximum_frames);
 
+	/** Header-validated, move-only frame awaiting direct reads into final body vectors. */
+	class CXXLENS_PROVIDER_DETAIL_HIDDEN prepared_provider_protocol_v2_frame
+	{
+	  public:
+		prepared_provider_protocol_v2_frame(const prepared_provider_protocol_v2_frame&) = delete;
+		prepared_provider_protocol_v2_frame&
+		operator=(const prepared_provider_protocol_v2_frame&) = delete;
+		prepared_provider_protocol_v2_frame(prepared_provider_protocol_v2_frame&&) noexcept =
+			default;
+		prepared_provider_protocol_v2_frame&
+		operator=(prepared_provider_protocol_v2_frame&&) noexcept = default;
+
+		[[nodiscard]] std::size_t control_bytes() const noexcept;
+		[[nodiscard]] std::size_t payload_bytes() const noexcept;
+		[[nodiscard]] std::size_t body_resident_bytes() const noexcept;
+		[[nodiscard]] message_type type() const noexcept;
+		[[nodiscard]] std::uint16_t flags() const noexcept;
+		[[nodiscard]] std::uint64_t stream_id() const noexcept;
+		[[nodiscard]] std::uint64_t sequence() const noexcept;
+		[[nodiscard]] result<frame> finalize(std::vector<std::byte>&& control,
+											 std::vector<std::byte>&& payload) &&;
+
+	  private:
+		friend result<prepared_provider_protocol_v2_frame> prepare_provider_protocol_v2_frame(
+			std::span<const std::byte, protocol_v2::fixed_header_bytes>, protocol_limits);
+
+		explicit prepared_provider_protocol_v2_frame(
+			protocol_v2::prepared_frame_decode prepared) noexcept
+			: prepared_{std::move(prepared)}
+		{
+		}
+
+		protocol_v2::prepared_frame_decode prepared_;
+	};
+
+	/** Validate the exact 104-byte header before the receiver allocates its final body vectors. */
+	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<prepared_provider_protocol_v2_frame>
+	prepare_provider_protocol_v2_frame(
+		std::span<const std::byte, protocol_v2::fixed_header_bytes> header, protocol_limits limits);
+
 	/** Source-closure values owned by the Protocol 2.0 implementation. */
 	using provider_protocol_v2_closure_limits = protocol_v2::closure_limits;
 	using provider_protocol_v2_manifest_kind = protocol_v2::manifest_kind;

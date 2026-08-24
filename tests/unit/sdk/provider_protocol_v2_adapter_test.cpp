@@ -1,10 +1,12 @@
 #include "sdk/provider_protocol_v2_adapter.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <type_traits>
 
 #include "sdk/provider_runtime_internal.hpp"
 #include "sdk/provider_validation_internal.hpp"
@@ -49,6 +51,8 @@ namespace
 
 	void test_single_codec_facade()
 	{
+		static_assert(!std::is_copy_constructible_v<
+					  cxxlens::sdk::provider::detail::prepared_provider_protocol_v2_frame>);
 		frame optional{static_cast<message_type>(65'000U),
 					   7U,
 					   11U,
@@ -71,6 +75,77 @@ namespace
 		require(native_wire && *native_wire == *public_wire,
 				"public facade wire bytes diverged from the sole Protocol 2 codec");
 
+		auto large = optional;
+		large.payload.assign(1'048'576U, std::byte{0x5a});
+		auto large_wire = encode_frame(large);
+		require(large_wire.has_value(), "prepared public facade 1 MiB frame encoding");
+		std::array<std::byte, cxxlens::protocol_v2::fixed_header_bytes> prepared_header{};
+		std::copy_n(large_wire->begin(), prepared_header.size(), prepared_header.begin());
+		auto prepared =
+			cxxlens::sdk::provider::detail::prepare_provider_protocol_v2_frame(prepared_header, {});
+		require(
+			prepared && prepared->control_bytes() == large.control.size() &&
+				prepared->payload_bytes() == large.payload.size() &&
+				prepared->body_resident_bytes() == large.control.size() + large.payload.size() &&
+				prepared->type() == large.type && prepared->flags() == large.flags &&
+				prepared->stream_id() == large.stream_id && prepared->sequence() == large.sequence,
+			"prepared public facade body accounting");
+		std::vector<std::byte> prepared_control(
+			large_wire->begin() + static_cast<std::ptrdiff_t>(prepared_header.size()),
+			large_wire->begin() +
+				static_cast<std::ptrdiff_t>(prepared_header.size() + large.control.size()));
+		std::vector<std::byte> prepared_payload(
+			large_wire->begin() +
+				static_cast<std::ptrdiff_t>(prepared_header.size() + large.control.size()),
+			large_wire->end());
+		const auto* const prepared_payload_allocation = prepared_payload.data();
+		auto prepared_decoded =
+			std::move(*prepared).finalize(std::move(prepared_control), std::move(prepared_payload));
+		require(prepared_decoded &&
+					prepared_decoded->payload.data() == prepared_payload_allocation &&
+					prepared_decoded->payload == large.payload,
+				"prepared public facade copied the caller-owned 1 MiB payload");
+		prepared_control = large.control;
+		prepared_payload = large.payload;
+		auto replayed_finalize =
+			std::move(*prepared).finalize(std::move(prepared_control), std::move(prepared_payload));
+		require(!replayed_finalize,
+				"prepared public facade allowed the one-shot token to be replayed");
+
+		auto tampered_prepared =
+			cxxlens::sdk::provider::detail::prepare_provider_protocol_v2_frame(prepared_header, {});
+		require(tampered_prepared.has_value(), "prepared public tamper setup");
+		prepared_control = large.control;
+		prepared_payload = large.payload;
+		prepared_payload.back() ^= std::byte{0x01};
+		auto tampered_prepared_result =
+			std::move(*tampered_prepared)
+				.finalize(std::move(prepared_control), std::move(prepared_payload));
+		require(!tampered_prepared_result &&
+					tampered_prepared_result.error().code == "provider.checksum-mismatch",
+				"prepared public facade accepted a tampered body");
+
+		auto invalid_prepared_header = prepared_header;
+		invalid_prepared_header[8U] = std::byte{};
+		invalid_prepared_header[9U] = std::byte{0x01};
+		auto invalid_prepared = cxxlens::sdk::provider::detail::prepare_provider_protocol_v2_frame(
+			invalid_prepared_header, {});
+		require(!invalid_prepared &&
+					invalid_prepared.error().code == "provider.invalid-frame-flags",
+				"prepared public facade accepted optional flag on a known message");
+		auto short_prepared =
+			cxxlens::sdk::provider::detail::prepare_provider_protocol_v2_frame(prepared_header, {});
+		require(short_prepared.has_value(), "prepared public short-body setup");
+		prepared_control = large.control;
+		prepared_payload = large.payload;
+		prepared_payload.pop_back();
+		auto short_prepared_result =
+			std::move(*short_prepared)
+				.finalize(std::move(prepared_control), std::move(prepared_payload));
+		require(!short_prepared_result &&
+					short_prepared_result.error().code == "provider.truncated-stream",
+				"prepared public facade accepted a short body");
+
 		auto decoded = decode_frame(*public_wire);
 		auto decoded_stream = decode_frame_stream(*public_wire);
 		require(decoded && static_cast<std::uint16_t>(decoded->type) == 65'000U &&
@@ -84,6 +159,9 @@ namespace
 		auto zero_frame_limit = decode_frame_stream(*public_wire, {}, 0U);
 		require(!zero_frame_limit && zero_frame_limit.error().code == "provider.stream-invalid",
 				"public facade changed the zero transcript-frame limit reason");
+		zero_frame_limit = decode_frame_stream({}, {}, 0U);
+		require(!zero_frame_limit && zero_frame_limit.error().code == "provider.stream-invalid",
+				"empty input bypassed the zero transcript-frame limit reason");
 
 		auto tampered = *public_wire;
 		tampered.back() ^= std::byte{0x01};
@@ -104,6 +182,23 @@ namespace
 					direct_failure.error() == stream_failure.error() &&
 					direct_failure.error().code == "provider.malformed-frame",
 				"public direct/stream facade did not share the canonical-CBOR rejection reason");
+		std::copy_n(noncanonical.begin(), prepared_header.size(), prepared_header.begin());
+		auto noncanonical_prepared =
+			cxxlens::sdk::provider::detail::prepare_provider_protocol_v2_frame(prepared_header, {});
+		require(noncanonical_prepared.has_value(),
+				"noncanonical prepared public header validation");
+		prepared_control.assign(
+			noncanonical.begin() + static_cast<std::ptrdiff_t>(prepared_header.size()),
+			noncanonical.begin() + static_cast<std::ptrdiff_t>(prepared_header.size() + 2U));
+		prepared_payload.assign(noncanonical.begin() +
+									static_cast<std::ptrdiff_t>(prepared_header.size() + 2U),
+								noncanonical.end());
+		auto noncanonical_finalize =
+			std::move(*noncanonical_prepared)
+				.finalize(std::move(prepared_control), std::move(prepared_payload));
+		require(!noncanonical_finalize &&
+					noncanonical_finalize.error().code == "provider.malformed-frame",
+				"prepared public facade skipped canonical-CBOR finalization");
 		auto noncanonical_value = optional;
 		noncanonical_value.control = {std::byte{0x78}, std::byte{0x00}};
 		auto encode_canonical_failure = encode_frame(noncanonical_value);
