@@ -27,13 +27,6 @@ namespace cxxlens::detail::clang22::materialization
 {
 	namespace
 	{
-		constexpr std::array<std::string_view, 5U> authority_paths{
-			"schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml",
-			"schemas/cxxlens_ng_clang22_materialization_contract.yaml",
-			"schemas/cxxlens_ng_clang22_materialization_report.schema.yaml",
-			"schemas/cxxlens_ng_clang22_materialization_request.schema.yaml",
-			"schemas/cxxlens_ng_relation_registry.yaml",
-		};
 		constexpr std::array<std::string_view, 6U> output_descriptor_ids{
 			"cc.call_direct_target.v1",
 			"cc.call_site.v1",
@@ -112,13 +105,6 @@ namespace cxxlens::detail::clang22::materialization
 										   return (character >= '0' && character <= '9') ||
 											   (character >= 'a' && character <= 'f');
 									   });
-		}
-
-		[[nodiscard]] bool content_digest(const std::string_view value) noexcept
-		{
-			constexpr std::string_view prefix{"sha256:"};
-			return value.size() == prefix.size() + 64U && value.starts_with(prefix) &&
-				lower_hex(value.substr(prefix.size()));
 		}
 
 		[[nodiscard]] bool semantic_digest_value(const std::string_view value) noexcept
@@ -706,27 +692,6 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::unexpected(claim_error("materialization.identity-mismatch",
 												   "producer-authority.source",
 												   "revision-grammar"));
-			if (authority.authority_bindings.size() != authority_paths.size())
-				return sdk::unexpected(claim_error("materialization.identity-mismatch",
-												   "producer-authority.bindings",
-												   "exact-five"));
-
-			std::vector<sdk::canonical_value> bindings;
-			bindings.reserve(authority.authority_bindings.size());
-			for (std::size_t index{}; index < authority_paths.size(); ++index)
-			{
-				const auto& binding = authority.authority_bindings.at(index);
-				if (binding.path != authority_paths.at(index))
-					return sdk::unexpected(claim_error("materialization.identity-mismatch",
-													   "producer-authority.bindings",
-													   "missing-extra-duplicate-or-order"));
-				if (!content_digest(binding.content_digest))
-					return sdk::unexpected(claim_error("materialization.identity-mismatch",
-													   "producer-authority.digest",
-													   binding.path));
-				bindings.push_back(sdk::canonical_value::from_tuple(
-					{text(binding.path), text(binding.content_digest)}));
-			}
 			return digest_projection("cxxlens.clang22-materializer-semantics.v1",
 									 sdk::canonical_value::from_tuple({
 										 text(authority.executable),
@@ -734,7 +699,6 @@ namespace cxxlens::detail::clang22::materialization
 										 text(authority.distribution_version),
 										 text(authority.source_revision),
 										 text(authority.source_tree),
-										 sdk::canonical_value::from_tuple(std::move(bindings)),
 									 }));
 		}
 
@@ -769,27 +733,6 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::unexpected(claim_error("materialization.identity-mismatch",
 												   "producer-authority.source",
 												   "revision-grammar"));
-			if (authority.authority_bindings.size() != authority_paths.size())
-				return sdk::unexpected(claim_error("materialization.identity-mismatch",
-												   "producer-authority.bindings",
-												   "exact-five"));
-
-			std::vector<sdk::canonical_value> bindings;
-			bindings.reserve(authority.authority_bindings.size());
-			for (std::size_t index{}; index < authority_paths.size(); ++index)
-			{
-				const auto& binding = authority.authority_bindings.at(index);
-				if (binding.path != authority_paths.at(index))
-					return sdk::unexpected(claim_error("materialization.identity-mismatch",
-													   "producer-authority.bindings",
-													   "missing-extra-duplicate-or-order"));
-				if (!content_digest(binding.content_digest))
-					return sdk::unexpected(claim_error("materialization.identity-mismatch",
-													   "producer-authority.digest",
-													   binding.path));
-				bindings.push_back(sdk::canonical_value::from_tuple(
-					{text(binding.path), text(binding.content_digest)}));
-			}
 			return digest_projection("cxxlens.clang22-materializer-semantics.v1",
 									 sdk::canonical_value::from_tuple({
 										 text(authority.executable),
@@ -797,7 +740,6 @@ namespace cxxlens::detail::clang22::materialization
 										 text(authority.distribution_version),
 										 text(authority.source_revision),
 										 text(authority.source_tree),
-										 sdk::canonical_value::from_tuple(std::move(bindings)),
 									 }));
 		}
 

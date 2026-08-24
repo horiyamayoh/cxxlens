@@ -4836,44 +4836,6 @@ namespace cxxlens::detail::clang22::materialization
 			});
 		}
 
-		[[nodiscard]] sdk::result<json_value>
-		authority_digests_json(const materialization_occurrence_receipt& receipt)
-		{
-			constexpr std::array<std::pair<std::string_view, std::string_view>, 5U> paths{
-				{{"schemas/cxxlens_ng_clang22_materialization_contract.yaml",
-				  "share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.yaml"},
-				 {"schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml",
-				  "share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml"},
-				 {"schemas/cxxlens_ng_clang22_materialization_request.schema.yaml",
-				  "share/cxxlens/schemas/cxxlens_ng_clang22_materialization_request.schema.yaml"},
-				 {"schemas/cxxlens_ng_clang22_materialization_report.schema.yaml",
-				  "share/cxxlens/schemas/cxxlens_ng_clang22_materialization_report.schema.yaml"},
-				 {"schemas/cxxlens_ng_relation_registry.yaml",
-				  "share/cxxlens/schemas/cxxlens_ng_relation_registry.yaml"}}};
-			json_value::array_type values;
-			values.reserve(paths.size());
-			for (const auto [source_path, installed_path] : paths)
-			{
-				const auto found =
-					std::ranges::find(receipt.files,
-									  installed_path,
-									  [](const auto& file)
-									  {
-										  return std::string_view{file.authority.path};
-									  });
-				if (found == receipt.files.end() || found->authority.digest.empty())
-					return sdk::unexpected(
-						{"materialization.report-invalid", "authority_digests", "missing"});
-				values.push_back(
-					make_object({
-									{"path", string(std::string{source_path}).value()},
-									{"digest", string(found->authority.digest).value()},
-								})
-						.value());
-			}
-			return json_value::array(std::move(values));
-		}
-
 		constexpr std::array<std::pair<std::string_view, bool>, 15U> required_supplemental{
 			{{"registry", true},
 			 {"engine", true},
@@ -4889,7 +4851,16 @@ namespace cxxlens::detail::clang22::materialization
 			 {"store", true},
 			 {"publication", true},
 			 {"semantic_verification", true},
-			 {"authority_digests", false}}};
+			 {"incremental_execution", true}}};
+
+		[[nodiscard]] bool supplemental_field(const std::string_view name) noexcept
+		{
+			return std::ranges::any_of(required_supplemental,
+									   [name](const auto& field)
+									   {
+										   return field.first == name;
+									   });
+		}
 	} // namespace
 
 	sdk::result<void> validate_materialization_public_report_occurrence_binding(
@@ -5308,11 +5279,17 @@ namespace cxxlens::detail::clang22::materialization
 			const bool has_task_reports =
 				input.task_reports != nullptr || input.task_report_spool != nullptr;
 			for (const auto& [name, _] : input.projections.values)
+			{
+				if (!supplemental_field(name))
+					return sdk::unexpected({"materialization.report-invalid",
+											"report.capacity",
+											"unknown-projection"});
 				if (name == "claim_stages" || name == "provenance" || name == "store" ||
 					name == "publication" || name == "semantic_verification")
 					return sdk::unexpected({"materialization.report-invalid",
 											"report.capacity",
 											"publication-dependent-input"});
+			}
 
 			const auto& request = input.request->request();
 			claim_report_source claims{input.bounded_claims};
@@ -5471,19 +5448,6 @@ namespace cxxlens::detail::clang22::materialization
 				if (auto copied = copy_global(name); !copied)
 					return sdk::unexpected(std::move(copied.error()));
 
-			auto authority_digests = authority_digests_json(*input.occurrence_receipt);
-			if (!authority_digests)
-				return sdk::unexpected(std::move(authority_digests.error()));
-			if (const auto supplied = input.projections.values.find("authority_digests");
-				supplied != input.projections.values.end())
-			{
-				if (supplied->second != *authority_digests)
-					return sdk::unexpected({"materialization.report-invalid",
-											"authority_digests",
-											"authority-mismatch"});
-			}
-			else
-				fields.emplace("authority_digests", std::move(*authority_digests));
 			for (const auto& [name, value] : input.projections.values)
 				if (!fields.emplace(name, value).second)
 					return sdk::unexpected(
@@ -5609,8 +5573,7 @@ namespace cxxlens::detail::clang22::materialization
 				   name == "base_claims" || name == "side_channels" || name == "claim_stages" ||
 				   name == "provenance")) &&
 				!(input.bounded_claims != nullptr && input.store != nullptr &&
-				  (name == "store" || name == "publication" || name == "semantic_verification")) &&
-				!(name == "authority_digests" && input.occurrence_receipt != nullptr))
+				  (name == "store" || name == "publication" || name == "semantic_verification")))
 				missing.emplace_back(std::string{name});
 		if (!missing.empty())
 			return sdk::unexpected(
@@ -5913,20 +5876,14 @@ namespace cxxlens::detail::clang22::materialization
 					return sdk::unexpected(std::move(copied.error()));
 			}
 		}
-		auto authority_digests = authority_digests_json(*input.occurrence_receipt);
-		if (!authority_digests)
-			return sdk::unexpected(std::move(authority_digests.error()));
-		if (const auto supplied = input.projections.values.find("authority_digests");
-			supplied != input.projections.values.end())
-		{
-			if (supplied->second != *authority_digests)
-				return sdk::unexpected(
-					{"materialization.report-invalid", "authority_digests", "authority-mismatch"});
-		}
-		else
-			fields.emplace("authority_digests", std::move(*authority_digests));
 		for (const auto& [name, value] : input.projections.values)
 		{
+			if (!supplemental_field(name))
+				return sdk::unexpected(
+					report_error({public_materialization_report_error_kind::invalid_projection,
+								  {},
+								  name,
+								  "unknown-field"}));
 			auto found = fields.find(name);
 			if (found != fields.end())
 			{

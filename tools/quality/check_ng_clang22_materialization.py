@@ -55,14 +55,7 @@ GENERIC_DEPENDENCIES = [
     SNAPSHOT_STORE,
     SQLITE_STORE,
 ]
-AUTHORITY_PATHS = [
-    CONTRACT,
-    CONTRACT_SCHEMA,
-    REQUEST_SCHEMA,
-    REPORT_SCHEMA,
-    REGISTRY,
-]
-OCCURRENCE_AUTHORITY_FILES = [
+OCCURRENCE_ARTIFACT_FILES = [
     (
         "relation-registry",
         "share/cxxlens/schemas/cxxlens_ng_relation_registry.yaml",
@@ -5344,22 +5337,14 @@ def validate_materialization_dependency_graph(
 
 
 @functools.lru_cache(maxsize=None)
-def authority_bindings(root: pathlib.Path) -> list[dict[str, str]]:
-    return [
-        {"path": path.as_posix(), "digest": content_digest((root / path).read_bytes())}
-        for path in AUTHORITY_PATHS
-    ]
-
-
-@functools.lru_cache(maxsize=None)
-def occurrence_authority_bindings(root: pathlib.Path) -> list[dict[str, str]]:
+def installed_occurrence_artifacts(root: pathlib.Path) -> list[dict[str, str]]:
     return [
         {
             "role": role,
             "path": installed_path,
             "digest": content_digest((root / source_path).read_bytes()),
         }
-        for role, installed_path, source_path in OCCURRENCE_AUTHORITY_FILES
+        for role, installed_path, source_path in OCCURRENCE_ARTIFACT_FILES
     ]
 
 
@@ -5386,7 +5371,7 @@ def fixture_occurrence_manifest(
             "path": "bin/cxxlens-clang-worker-22",
             "digest": worker_digest,
         },
-        *occurrence_authority_bindings(root),
+        *installed_occurrence_artifacts(root),
     ]
     if configuration == "shared":
         runtime_files = shared_runtime_files or [
@@ -5451,11 +5436,11 @@ def validate_occurrence_manifest(
                 "materialization.identity-mismatch",
                 f"required occurrence role differs: {role}",
             )
-    for expected in occurrence_authority_bindings(root):
+    for expected in installed_occurrence_artifacts(root):
         if files_by_role.get(expected["role"]) != expected:
             fail(
                 "materialization.identity-mismatch",
-                f"occurrence authority differs: {expected['role']}",
+                f"installed occurrence artifact differs: {expected['role']}",
             )
 
     runtime_roles = {role for role, _ in SHARED_OCCURRENCE_RUNTIME_FILES}
@@ -8425,40 +8410,23 @@ def materializer_transform_digest(
     )
 
 
-def expected_materializer_semantics_digest(
-    root: pathlib.Path,
-    request: dict[str, Any],
-) -> str:
-    tool = request["tool"]
-    projection = _canonical_tuple(
-        (
-            _canonical_string(tool["executable"]),
-            _canonical_string(tool["interface_version"]),
-            _canonical_string(tool["distribution_version"]),
-            _canonical_string(tool["source_revision"]),
-            _canonical_string(tool["source_tree"]),
-            _canonical_tuple(
-                _canonical_tuple(
-                    (
-                        _canonical_string(binding["path"]),
-                        _canonical_string(binding["digest"]),
-                    )
-                )
-                for binding in sorted(
-                    authority_bindings(root),
-                    key=lambda row: row["path"].encode("utf-8"),
-                )
-            ),
-        )
-    )
-    return semantic_digest("cxxlens.clang22-materializer-semantics.v1", projection)
-
-
 def expected_direct_basis(
-    root: pathlib.Path,
     request: dict[str, Any],
 ) -> dict[str, str]:
-    materializer_semantics = expected_materializer_semantics_digest(root, request)
+    tool = request["tool"]
+    materializer_semantics = semantic_digest(
+        "cxxlens.clang22-materializer-semantics.v1",
+        _canonical_tuple(
+            _canonical_string(tool[field])
+            for field in (
+                "executable",
+                "interface_version",
+                "distribution_version",
+                "source_revision",
+                "source_tree",
+            )
+        ),
+    )
     semantic_tasks = sorted(
         (
             {
@@ -8908,7 +8876,7 @@ def _compute_store_binding(
     dict[str, Any],
     dict[tuple[tuple[str, str, str], str, str], list[dict[str, Any]]],
 ]:
-    direct_basis = expected_direct_basis(root, request)
+    direct_basis = expected_direct_basis(request)
     materializer_semantics = direct_basis["materializer_semantics_digest"]
     worker_semantics = request["worker"]["semantic_contract_digest"]
     materializer = {
@@ -10877,7 +10845,6 @@ def sample_report(
             "failure": None,
         },
         "incremental_execution": incremental_execution,
-        "authority_digests": copy.deepcopy(authority_bindings(root)),
         "error": None,
     }
     rebind_report_digest_chain(root, request, report)
@@ -12400,8 +12367,6 @@ def validate_report(
         "tree": request["tool"]["source_tree"],
     }:
         fail("materialization.identity-mismatch", "report source revision/tree differs")
-    if report["authority_digests"] != authority_bindings(root):
-        fail("materialization.report-invalid", "materialization authority digests differ")
     if report["installation"]["requested"] != {
         "occurrence_manifest_digest": request["tool"]["occurrence_manifest_digest"]
     }:

@@ -19,14 +19,6 @@
 
 namespace cxxlens::detail::clang22::materialization
 {
-	/** One installed authority file measured at the active, possibly relocated, prefix. */
-	struct materialization_authority_binding
-	{
-		std::string path;
-		std::string content_digest;
-		[[nodiscard]] bool operator==(const materialization_authority_binding&) const = default;
-	};
-
 	/**
 	 * Explicit semantic producer authority supplied by the installation-binding phase.
 	 *
@@ -40,7 +32,6 @@ namespace cxxlens::detail::clang22::materialization
 		std::string distribution_version;
 		std::string source_revision;
 		std::string source_tree;
-		std::vector<materialization_authority_binding> authority_bindings;
 	};
 
 	/** Report-owned semantic guarantee inputs; no value is inferred from terminal prose. */

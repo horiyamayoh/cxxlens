@@ -383,8 +383,7 @@ relation_outputs:
   descriptor_fallback: forbidden
 registry_engine_binding:
   registry_identities:
-    raw_authority_file_digest: authority_digests-entry-sha256-of-exact-file-bytes
-    authority_registry_digest: sha256-of-canonical-json-full-21-relation-semantic-projection
+    authority_registry_digest: sha256-of-canonical-json-all-accepted-relations-semantic-projection
     engine_registry_digest: semantic-v2-exact-admitted-12-descriptor-inventory
     alias_or_substitution: forbidden
   admitted_descriptor_order:
@@ -1524,8 +1523,8 @@ claim_adoption:
 store_binding:
   materializer_semantics:
     digest_domain: cxxlens.clang22-materializer-semantics.v1
-    projection: [tool-executable, tool-interface-version, tool-distribution-version, source-revision, source-tree, sorted-materialization-authority-path-and-digest-tuples]
-    excludes: [installed-tool-digest, installed-worker-digest, package-configuration, occurrence-manifest-and-inventory-digests, backend, sqlite-path]
+    projection: [tool-executable, tool-interface-version, tool-distribution-version, source-revision, source-tree]
+    excludes: [repository-source-and-schema-paths-and-byte-digests, installed-tool-digest, installed-worker-digest, package-configuration, occurrence-manifest-and-inventory-digests, backend, sqlite-path]
   direct_basis:
     projection_version: cxxlens.clang22-direct-materialization-basis.v1
     digest_domain: cxxlens.clang22-direct-materialization-basis.v1
@@ -1966,11 +1965,11 @@ report:
   request_binding: exact-request-id-request-digest-and-semantic-request-digest
   required_bindings:
     - exact-source-revision-and-tree
-    - exact-materialization-authority-file-digests
+    - exact-installed-occurrence-role-artifact-digests
     - tool-and-worker-identity
     - exact-project-catalog-and-catalog-compile-unit-census
     - exact-registry-and-six-descriptor-digests
-    - exact-three-registry-identity-axes-and-twelve-descriptor-engine-inventory
+    - exact-two-registry-identity-axes-and-twelve-descriptor-engine-inventory
     - exact-engine-generation-interpretation-trust-and-seven-field-selector
     - every-task-logical-input-and-authenticated-chunk-transfer-receipt
     - every-task-raw-frame-frame-transcript-and-sealed-transcript-runtime-receipt
@@ -2194,7 +2193,7 @@ acceptance:
   - operation-first-exact-sdk-store-outcome-mapping
   - no-completed-report-or-fabricated-publication-values-before-publication
   - no-compact-downgrade-after-publication-attempt
-  - exact-three-registry-identity-axes
+  - exact-two-registry-identity-axes
   - descriptor-id-based-twelve-descriptor-engine
   - complete-seven-field-store-selector
   - sdk-authentic-claim-basis-and-partitions

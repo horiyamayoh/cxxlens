@@ -3248,8 +3248,8 @@ provenance と base-guarantee cross-binding まで bottom-up に再計算し、s
 Store publication と runtime adoption の前に拒否する。materialization report 自身が typed process outcome、runtime provenance、coverage、
 unresolved、guarantee、receipt を保持し、別の external report digest、execution receipt、report-set digest を生成しない。
 
-この契約により v2 request/report は Registry identity を raw authority-file digest、全 21 relation の
-`authority_registry_digest`、exact admitted 12 descriptor の `engine_registry_digest` に分離する。engine inventory は canonical descriptor ID と
+この契約により v2 request/report は Registry identity を accepted Registry の全 relation の semantic projection から導出する
+`authority_registry_digest` と、exact admitted 12 descriptor の `engine_registry_digest` に分離する。engine inventory は canonical descriptor ID と
 runtime descriptor digest の UTF-8 sorted rows、`cxxlens.relation-registry.v1` domain で導出し、relation name、duplicate ID、authority digest alias を
 拒否する。request は engine generation、named interpretation/trust policy、Store の exact seven-field selector と SDK-derived series ID を持ち、全 task
 を selector と同じ condition universe に限定する。named trust policy は protocol major/minor の直後に exact required feature list
@@ -3313,9 +3313,9 @@ plugin、variant language/standard/target/macro/include/semantic flags、source 
 project/main-source/variant/toolchain/effective-invocation/language/working-directory を caller ID から推測しない。`normalized_invocation_digest` は
 §17.4 の `cxxlens.clang22.effective-invocation.v1` ordered projection から再計算して
 `build.compile_unit.effective_invocation_digest` へ exact に写像し、各 domain identity、condition/interpretation/provenance/evidence/guarantee
-envelope と hard reference を bottom-up に再計算する。semantic producer identity は executable/interface/distribution/source revision/tree と accepted
-materialization authority digest census へ
-投影し、installed binary/configuration/measured occurrence は report installation/provider/authority evidence が別に bind する。従って static/shared の
+envelope と hard reference を bottom-up に再計算する。semantic producer identity は executable/interface/distribution/source revision/tree だけへ
+投影する。installed binary/configuration/measured occurrence は semantic identity に含めず、report の installation/provider と installed occurrence の
+measured artifact identity/integrity が別に bind する。従って static/shared の
 semantic base set と snapshot identity を一致させたまま physical producer occurrence を失わない。
 
 observation v2 の full primary-span bundle から host が `source.span` identity と row を独立再計算して canonical group の hard reference 検証より

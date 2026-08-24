@@ -50,6 +50,49 @@ class MaterializationProtocol2Tests(unittest.TestCase):
         self.assertEqual(worker["protocol_major"]["const"], 2)
         self.assertEqual(worker["protocol_minor"]["const"], 0)
 
+    def test_materializer_semantics_uses_product_source_identity(self) -> None:
+        request = self.request()
+        direct_basis = materialization.expected_direct_basis(request)
+        tool = request["tool"]
+        expected = materialization.semantic_digest(
+            "cxxlens.clang22-materializer-semantics.v1",
+            materialization._canonical_tuple(
+                materialization._canonical_string(tool[field])
+                for field in (
+                    "executable",
+                    "interface_version",
+                    "distribution_version",
+                    "source_revision",
+                    "source_tree",
+                )
+            ),
+        )
+        self.assertEqual(direct_basis["materializer_semantics_digest"], expected)
+
+        physical_occurrence = copy.deepcopy(request)
+        physical_occurrence["tool"]["installed_executable_digest"] = (
+            "sha256:" + "9" * 64
+        )
+        physical_occurrence["tool"]["occurrence_manifest_digest"] = (
+            "sha256:" + "8" * 64
+        )
+        physical_occurrence["tool"]["package_configuration"] = "shared"
+        self.assertEqual(
+            materialization.expected_direct_basis(physical_occurrence)[
+                "materializer_semantics_digest"
+            ],
+            expected,
+        )
+
+        different_source = copy.deepcopy(request)
+        different_source["tool"]["source_tree"] = "f" * 40
+        self.assertNotEqual(
+            materialization.expected_direct_basis(different_source)[
+                "materializer_semantics_digest"
+            ],
+            expected,
+        )
+
     def test_installed_ingress_contract_declares_all_process_binding_authority(self) -> None:
         schema_paths = (
             ROOT / materialization.REQUEST_SCHEMA,
