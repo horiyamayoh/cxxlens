@@ -80,6 +80,7 @@ properties:
           uniqueItems: true
           items: {$ref: '#/$defs/id'}
         action: {$ref: '#/$defs/nonempty_string'}
+        reason_code: {$ref: '#/$defs/reason_code'}
         unlocks: {$ref: '#/$defs/id'}
   preserved_semantics:
     type: object

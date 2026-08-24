@@ -27,6 +27,7 @@ namespace cxxlens::sdk::doctor
 		std::vector<std::string> dependencies;
 		std::string action;
 		std::string unlocks;
+		diagnosis_reason reason{diagnosis_reason::missing_capability};
 	};
 
 	struct conflict_result
@@ -883,14 +884,15 @@ namespace cxxlens::sdk::doctor
 											return found != by_id.end() &&
 												found->second.state == resolution_state::proved;
 										});
-				if (actionable && output.completion_plan.empty())
+				if (actionable)
 				{
 					if (!first_actionable_reason)
 						first_actionable_reason = result.reason;
 					output.completion_plan.push_back({"completion." + capability.id,
 													  capability.dependencies,
 													  capability.completion_action,
-													  capability.id});
+													  capability.id,
+													  result.reason});
 				}
 			}
 		}
@@ -980,12 +982,22 @@ namespace cxxlens::sdk::doctor
 				{"action", json_value::string_value(item.action)},
 				{"id", json_value::string_value(item.id)},
 				{"requires", json_value::array_value(std::move(dependencies))},
+				{"reason_code", json_value::string_value(std::string{reason_name(item.reason)})},
 				{"unlocks", json_value::string_value(item.unlocks)},
 			}));
 		}
+		// Derive preserved semantics from the sealed capability result every time the
+		// projection is built.  This keeps a projection faithful when a caller is
+		// inspecting a copied result and prevents stale summary fields from being
+		// mistaken for authority.
+		json_value::array_type coverage;
 		json_value::array_type unresolved;
-		for (const auto& item : value.unresolved)
-			unresolved.push_back(json_value::string_value(item));
+		for (const auto& item : value.capability_path)
+		{
+			coverage.push_back(json_value::string_value(item.id));
+			if (item.state == resolution_state::unknown || item.state == resolution_state::partial)
+				unresolved.push_back(json_value::string_value(item.id));
+		}
 		json_value::array_type conflicts;
 		for (const auto& item : value.conflicts)
 		{
@@ -1008,6 +1020,16 @@ namespace cxxlens::sdk::doctor
 						  {
 							  return left.string < right.string;
 						  });
+		json_value::array_type guarantees{
+			json_value::string_value("unknown-not-collapsed-to-empty-success"),
+			json_value::string_value("product-only-diagnosis"),
+		};
+		if (value.state == resolution_state::proved)
+			guarantees.push_back(json_value::string_value("all-capabilities-proved"));
+		else if (value.state == resolution_state::conflicting)
+			guarantees.push_back(json_value::string_value("conflict-preserved-no-fallback"));
+		else
+			guarantees.push_back(json_value::string_value("non-proved-state-preserved"));
 		return json_value::object_value({
 			{"catalog_binding",
 			 json_value::object_value({
@@ -1024,13 +1046,9 @@ namespace cxxlens::sdk::doctor
 					  {json_value::string_value(value.missing.empty() ? "dependency-graph-closed"
 																	  : "dependency-graph-open")})},
 				 {"conflict", json_value::array_value(std::move(conflicts))},
-				 {"coverage",
-				  json_value::array_value({json_value::string_value("capability-path")})},
+				 {"coverage", json_value::array_value(std::move(coverage))},
 				 {"differential_disagreement", json_value::array_value({})},
-				 {"guarantee",
-				  json_value::array_value(
-					  {json_value::string_value("unknown-not-collapsed-to-empty-success"),
-					   json_value::string_value("product-only-diagnosis")})},
+				 {"guarantee", json_value::array_value(std::move(guarantees))},
 				 {"logical_explain", json_value::array_value(unresolved)},
 				 {"physical_explain", json_value::array_value({})},
 				 {"provenance", json_value::array_value(std::move(provenance))},

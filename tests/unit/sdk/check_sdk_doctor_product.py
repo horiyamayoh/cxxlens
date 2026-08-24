@@ -138,6 +138,17 @@ def write_project(directory: pathlib.Path, name: str, document: Any) -> pathlib.
     return path
 
 
+def installed_static_relation_ids() -> list[str]:
+    registry = yaml.safe_load(
+        (ROOT / "schemas" / "cxxlens_ng_relation_registry.yaml").read_text(encoding="utf-8")
+    )
+    return sorted(
+        f"{relation['name']}.v{relation['semantic_major']}"
+        for relation in registry["relations"]
+        if relation.get("cpp_projection") == "installed-static"
+    )
+
+
 def check_direct_authenticated_resolver(executable: str, directory: pathlib.Path) -> None:
     """Compile one internal consumer to exercise the injected authority ports."""
     root = ROOT
@@ -152,6 +163,7 @@ def check_direct_authenticated_resolver(executable: str, directory: pathlib.Path
     source = directory / "doctor-authority-consumer.cpp"
     binary = directory / "doctor-authority-consumer"
     expected_catalog_projection = directory / "doctor-catalog-projection.json"
+    state_projection = directory / "doctor-state-projections.json"
     catalog_document = yaml.safe_load(
         (root / "schemas" / "cxxlens_ng_sdk_doctor_catalog.yaml").read_text(
             encoding="utf-8"
@@ -175,6 +187,7 @@ def check_direct_authenticated_resolver(executable: str, directory: pathlib.Path
             #include <type_traits>
 			#include <utility>
             #include <variant>
+			#include <vector>
 
             #include "doctor_product.hpp"
 
@@ -750,11 +763,61 @@ def check_direct_authenticated_resolver(executable: str, directory: pathlib.Path
                 return *found;
             }
 
+            void write_state_projections(const doctor::resolution& baseline,
+                                         const std::string_view path)
+            {
+                const auto make = [&](const doctor::resolution_state state,
+                                      const doctor::diagnosis_reason reason)
+                    -> doctor::resolution {
+                    auto sample = baseline;
+                    sample.state = state;
+                    sample.reason = reason;
+                    sample.completion_plan.clear();
+                    sample.conflicts.clear();
+                    for (auto& item : sample.capability_path)
+                    {
+                        item.state = state;
+                        item.reason = reason;
+                        item.candidate_ids.clear();
+                    }
+                    if (state == doctor::resolution_state::proved)
+                    {
+                        sample.missing.clear();
+                        sample.unresolved.clear();
+                    }
+                    if (state == doctor::resolution_state::conflicting)
+                        sample.conflicts.push_back(
+                            {"provider.protocol.v2", {semantic_digest('1'), semantic_digest('2')}});
+                    return sample;
+                };
+                std::vector<doctor::resolution> samples;
+                samples.push_back(make(doctor::resolution_state::proved,
+                                       doctor::diagnosis_reason::none));
+                samples.push_back(make(doctor::resolution_state::disproved,
+                                       doctor::diagnosis_reason::unsupported_tuple));
+                samples.push_back(make(doctor::resolution_state::unknown,
+                                       doctor::diagnosis_reason::catalog_unavailable));
+                samples.push_back(baseline);
+                samples.push_back(make(doctor::resolution_state::conflicting,
+                                       doctor::diagnosis_reason::conflicting_capability));
+                std::ofstream output{std::string{path}, std::ios::binary};
+                require(output.good(), "state projection output could not be opened");
+                output << '[';
+                for (std::size_t index = 0U; index < samples.size(); ++index)
+                {
+                    if (index != 0U)
+                        output << ',';
+                    output << doctor::canonical_json(doctor::to_json(samples[index]));
+                }
+                output << ']';
+                require(output.good(), "state projection output could not be written");
+            }
+
             int main(const int argc, char** argv)
             {
 				if (std::getenv("CXXLENS_PROVIDER_MANIFEST") != nullptr)
 					return run_provider_child();
-                require(argc == 3, "doctor executable/catalog projection path missing");
+                require(argc == 4, "doctor executable/catalog/state projection path missing");
 				provider_executable_path = std::filesystem::absolute(argv[0]).string();
                 const doctor::installed_product_catalog_loader loader;
                 auto loaded_catalog = loader.load();
@@ -801,6 +864,20 @@ def check_direct_authenticated_resolver(executable: str, directory: pathlib.Path
                             capability(proved, "store.snapshot.v3").reason ==
                                 doctor::diagnosis_reason::store_authority_unavailable,
                         "unavailable source/store authority reason changed");
+                const std::vector<std::string> expected_plan{
+                    "input.source-closure.v1", "store.snapshot.v3"};
+                require(
+                    std::ranges::equal(
+                        proved.completion_plan,
+                        expected_plan,
+                        [](const doctor::plan_step& step, const std::string& capability_id) {
+                            return step.unlocks == capability_id;
+                        }),
+                    "completion plan did not include every actionable capability in order");
+                for (const auto& step : proved.completion_plan)
+                    require(step.reason != doctor::diagnosis_reason::none,
+                            "completion plan omitted its typed reason");
+                write_state_projections(proved, argv[3]);
                 const auto& baseline_manifest = discovered(baseline_installation).description;
                 const std::vector<std::string> expected_provider_provenance{
                     "provider.id=" + baseline_manifest.provider_id,
@@ -872,9 +949,23 @@ def check_direct_authenticated_resolver(executable: str, directory: pathlib.Path
                 require(capability(partial, "provider.protocol.v2").reason ==
                             doctor::diagnosis_reason::missing_provider,
                         "missing provider reason changed");
-                require(partial.completion_plan.size() == 1U &&
-                            partial.completion_plan.front().unlocks == "input.source-closure.v1",
-                        "completion plan escaped first actionable frontier");
+                const std::vector<std::string> expected_missing_provider_plan{
+                    "input.source-closure.v1", "provider.protocol.v2", "store.snapshot.v3"};
+                require(
+                    std::ranges::equal(
+                        partial.completion_plan,
+                        expected_missing_provider_plan,
+                        [](const doctor::plan_step& step, const std::string& capability_id) {
+                            return step.unlocks == capability_id;
+                        }),
+                    "completion plan omitted an actionable capability");
+                require(partial.completion_plan[0].reason ==
+                                doctor::diagnosis_reason::source_closure_unavailable &&
+                            partial.completion_plan[1].reason ==
+                                doctor::diagnosis_reason::missing_provider &&
+                            partial.completion_plan[2].reason ==
+                                doctor::diagnosis_reason::store_authority_unavailable,
+                        "completion plan reason codes were not typed");
 
                 auto provider_absent = authority(catalog, {}, registry({}), crypto);
                 const auto unverified = resolved(baseline, provider_absent, catalog_token);
@@ -1587,12 +1678,47 @@ def check_direct_authenticated_resolver(executable: str, directory: pathlib.Path
             str(binary),
             str(pathlib.Path(executable).resolve()),
             str(expected_catalog_projection),
+            str(state_projection),
         ],
         capture_output=True,
         text=True,
         check=False,
     )
     require(completed.returncode == 0, f"direct resolver consumer failed: {completed.stderr}")
+    require(state_projection.exists(), "direct resolver did not emit state projections")
+    projections = json.loads(state_projection.read_text(encoding="utf-8"))
+    expected_states = ["proved", "disproved", "unknown", "partial", "conflicting"]
+    require(
+        [item["result"]["state"] for item in projections] == expected_states,
+        "resolver projection did not preserve all five product states",
+    )
+    expected_coverage = [item["id"] for item in projections[0]["capability_path"]]
+    for item in projections:
+        validate_product_schema("cxxlens_ng_sdk_doctor_resolution.schema.yaml", item)
+        require_product_only_projection(item)
+        semantics = item["preserved_semantics"]
+        require(semantics["coverage"] == expected_coverage, "coverage was not projected from the capability path")
+        require(semantics["provenance"], "resolver provenance was dropped from the projection")
+        require(
+            all(step.get("reason_code", "").startswith("doctor.") for step in item["completion_plan"]),
+            "completion plan projection omitted typed reason_code",
+        )
+    require(
+        projections[0]["preserved_semantics"]["closure"] == ["dependency-graph-closed"]
+        and not projections[0]["preserved_semantics"]["unresolved"],
+        "proved projection did not preserve closed semantics",
+    )
+    require(
+        projections[2]["preserved_semantics"]["unresolved"]
+        and projections[2]["preserved_semantics"]["closure"] == ["dependency-graph-open"],
+        "unknown projection collapsed unresolved semantics",
+    )
+    require(
+        projections[4]["preserved_semantics"]["conflict"]
+        and "conflict-preserved-no-fallback"
+        in projections[4]["preserved_semantics"]["guarantee"],
+        "conflicting projection dropped conflict semantics",
+    )
 
 
 def check_unverified_and_deterministic(executable: str, directory: pathlib.Path) -> None:
@@ -1636,6 +1762,10 @@ def check_unverified_and_deterministic(executable: str, directory: pathlib.Path)
         [item["unlocks"] for item in report["completion_plan"]]
         == ["input.project-catalog.v1"],
         "completion plan did not stop at the first actionable authority frontier",
+    )
+    require(
+        all(item["reason_code"].startswith("doctor.") for item in report["completion_plan"]),
+        "completion plan omitted typed reason codes",
     )
     require(report["preserved_semantics"]["unresolved"], "unknown capability was collapsed")
     markdown_one = run(
@@ -1684,6 +1814,10 @@ def check_missing_and_completion_plan(executable: str, directory: pathlib.Path) 
         [item["unlocks"] for item in report["completion_plan"]]
         == ["input.project-catalog.v1"],
         "completion plan escaped the first authority frontier",
+    )
+    require(
+        all(item["reason_code"].startswith("doctor.") for item in report["completion_plan"]),
+        "completion plan omitted typed reason codes",
     )
     require(report["preserved_semantics"]["unresolved"], "unknown capability was collapsed")
     markdown = run(
@@ -1978,6 +2112,47 @@ def check_relation_presence(executable: str) -> None:
     require_product_only_projection(report)
     require(report["schema"] == "cxxlens.sdk-doctor-relation-presence.v2", "relation schema mismatch")
     require(report["state"] == "proved" and report["missing"] == 0, "known relations were not proved")
+
+    expected_ids = installed_static_relation_ids()
+    completed = run(executable, "relation-presence", *expected_ids)
+    require(completed.returncode == 0, "YAML installed-static relation registry was not fully proved")
+    yaml_report = json.loads(completed.stdout)
+    validate_product_schema("cxxlens_ng_sdk_doctor_relation_presence.schema.yaml", yaml_report)
+    require_product_only_projection(yaml_report)
+    require(
+        [component["id"] for component in yaml_report["components"]] == expected_ids
+        and all(component["state"] == "proved" for component in yaml_report["components"]),
+        "known relation registry diverged from the YAML installed-static projection",
+    )
+    markdown = run(executable, "relation-presence", *expected_ids, "--format", "markdown")
+    require(markdown.returncode == 0, "known relation Markdown projection failed")
+    require(
+        markdown.stdout.startswith("# cxxlens SDK capability diagnosis\n\n```json\n")
+        and markdown.stdout.endswith("\n```\n"),
+        "relation Markdown envelope changed",
+    )
+    markdown_report = json.loads(
+        markdown.stdout[len("# cxxlens SDK capability diagnosis\n\n```json\n") : -len("\n```\n")]
+    )
+    require(markdown_report == yaml_report, "relation JSON and Markdown projections diverged")
+
+    registry = yaml.safe_load(
+        (ROOT / "schemas" / "cxxlens_ng_relation_registry.yaml").read_text(encoding="utf-8")
+    )
+    dynamic_only = next(
+        relation
+        for relation in registry["relations"]
+        if relation.get("cpp_projection") != "installed-static"
+    )
+    dynamic_id = f"{dynamic_only['name']}.v{dynamic_only['semantic_major']}"
+    completed = run(executable, "relation-presence", dynamic_id)
+    require(completed.returncode == 1, "dynamic-only relation leaked into installed static registry")
+    dynamic_report = json.loads(completed.stdout)
+    require(
+        dynamic_report["components"][0]["state"] == "unknown"
+        and dynamic_report["components"][0]["reason_code"] == "sdk.relation-not-found",
+        "dynamic-only relation did not remain an unknown product capability",
+    )
 
     completed = run(executable, "relation-presence", "cc.call_site.v1", "cc.does_not_exist.v1")
     require(completed.returncode == 1, "unknown relation should return incomplete")
