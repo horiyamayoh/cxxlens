@@ -17,6 +17,7 @@
 #include <vector>
 
 #include <dlfcn.h>
+#include <link.h>
 #include <spawn.h>
 
 #if defined(__linux__)
@@ -256,6 +257,14 @@ namespace
 			return value_;
 		}
 
+		[[nodiscard]] bool close() noexcept
+		{
+			if (value_ == nullptr)
+				return true;
+			auto* closing = std::exchange(value_, nullptr);
+			return ::dlclose(closing) == 0;
+		}
+
 	  private:
 		void* value_{};
 	};
@@ -298,11 +307,15 @@ namespace
 		try
 		{
 			void* sqlite_library{};
+			const char* sqlite_candidate{};
 			for (const auto* candidate : {"libsqlite3.so.0", "libsqlite3.so"})
 			{
 				sqlite_library = ::dlopen(candidate, RTLD_NOW | RTLD_GLOBAL);
 				if (sqlite_library != nullptr)
+				{
+					sqlite_candidate = candidate;
 					break;
+				}
 			}
 			if (sqlite_library == nullptr)
 			{
@@ -315,17 +328,57 @@ namespace
 				std::cerr << "source-SHM child blocked RTLD_DEFAULT before target capture\n";
 				return 9;
 			}
-			if (::dlsym(sqlite.get(), "sqlite3_libversion_number") == nullptr ||
-				::dlsym(sqlite.get(), "sqlite3_open_v2") == nullptr)
-			{
-				std::cerr << "source-SHM child lost an unrelated SQLite base symbol\n";
-				return 9;
-			}
-			for (const auto* symbol :
-				 {"sqlite3_sourceid", "sqlite3_uri_parameter", "sqlite3_uri_key"})
+			constexpr const char* control_symbols[]{"sqlite3_libversion_number", "sqlite3_open_v2"};
+			for (const auto* symbol : control_symbols)
+				if (::dlsym(sqlite.get(), symbol) == nullptr)
+				{
+					std::cerr << "source-SHM child lost SQLite control symbol " << symbol << '\n';
+					return 9;
+				}
+			constexpr const char* target_symbols[]{
+				"sqlite3_sourceid", "sqlite3_uri_parameter", "sqlite3_uri_key"};
+			for (const auto* symbol : target_symbols)
 				if (::dlsym(sqlite.get(), symbol) != nullptr)
 				{
 					std::cerr << "source-SHM child retained target symbol " << symbol << '\n';
+					return 9;
+				}
+			for (const auto* symbol : control_symbols)
+				if (::dlsym(sqlite.get(), symbol) == nullptr)
+				{
+					std::cerr << "source-SHM child blocked post-capture control " << symbol << '\n';
+					return 9;
+				}
+
+			owned_library foreign_sqlite{
+				::dlmopen(LM_ID_NEWLM, sqlite_candidate, RTLD_NOW | RTLD_LOCAL)};
+			if (foreign_sqlite.get() == nullptr || foreign_sqlite.get() == sqlite.get())
+			{
+				std::cerr << "source-SHM child could not create an independent SQLite runtime\n";
+				return 9;
+			}
+			for (const auto* symbol : control_symbols)
+				if (::dlsym(foreign_sqlite.get(), symbol) == nullptr)
+				{
+					std::cerr << "source-SHM child blocked foreign control " << symbol << '\n';
+					return 9;
+				}
+			for (const auto* symbol : target_symbols)
+				if (::dlsym(foreign_sqlite.get(), symbol) == nullptr)
+				{
+					std::cerr << "source-SHM child blocked foreign source symbol " << symbol
+							  << '\n';
+					return 9;
+				}
+			if (!foreign_sqlite.close())
+			{
+				std::cerr << "source-SHM child could not close the foreign SQLite runtime\n";
+				return 9;
+			}
+			for (const auto* symbol : target_symbols)
+				if (::dlsym(sqlite.get(), symbol) != nullptr)
+				{
+					std::cerr << "source-SHM child lost target scope after foreign close\n";
 					return 9;
 				}
 			if (::dlsym(RTLD_DEFAULT, "sqlite3_sourceid") == nullptr)
@@ -347,6 +400,11 @@ namespace
 				std::cerr << "source-SHM symbol absence returned " << error.code << '/'
 						  << error.field << '/' << error.detail << '\n';
 				return 11;
+			}
+			if (!sqlite.close())
+			{
+				std::cerr << "source-SHM child could not close its target SQLite runtime\n";
+				return 12;
 			}
 			return 0;
 		}
