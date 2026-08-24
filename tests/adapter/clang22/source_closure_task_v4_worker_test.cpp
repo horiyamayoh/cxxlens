@@ -266,7 +266,8 @@ namespace
 		root.emplace("closure_digest", json_value::string(closure.closure_digest).value());
 		root.emplace("closure_id", json_value::string(closure.snapshot_id).value());
 		root.emplace("members", json_value::array(std::move(members)));
-		root.emplace("schema", json_value::string(std::string{source_closure_manifest_schema}).value());
+		root.emplace("schema",
+					 json_value::string(std::string{source_closure_manifest_schema}).value());
 		return canonical_json(json_value::object(std::move(root)).value());
 	}
 
