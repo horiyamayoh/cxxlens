@@ -28,6 +28,7 @@
 #include <cxxlens/sdk/store.hpp>
 
 #include "claim_internal.hpp"
+#include "snapshot_store_v5_codec_internal.hpp"
 #include "sqlite_connection_lifecycle_internal.hpp"
 #include "sqlite_default_forwarding_vfs_internal.hpp"
 #include "sqlite_limit_length_control_internal.hpp"
@@ -44,6 +45,17 @@
 
 namespace cxxlens::sdk
 {
+	using detail::annotation_projection;
+	using detail::canonical_export_of;
+	using detail::decode_snapshot;
+	using detail::encode_snapshot;
+	using detail::payload_generation_offset;
+	using detail::sort_semantic_projections;
+	using detail::validate_semantic_graph;
+#if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
+	using detail::payload_schema_from_number;
+	using detail::snapshot_version_component_offset;
+#endif
 	namespace
 	{
 		[[nodiscard]] error
@@ -226,602 +238,6 @@ namespace cxxlens::sdk
 			return value + 1U;
 		}
 
-		[[nodiscard]] std::string canonical_export_of(const snapshot_handle::data& value);
-
-		class binary_writer
-		{
-		  public:
-			binary_writer() = default;
-			explicit binary_writer(sqlite_bounded_byte_sink& sink) noexcept : sink_{&sink} {}
-
-			void unsigned_value(std::uint64_t value)
-			{
-				std::array<std::byte, 8U> encoded{};
-				std::size_t index{};
-				for (int shift = 56; shift >= 0; shift -= 8)
-					encoded.at(index++) = static_cast<std::byte>((value >> shift) & 0xffU);
-				append(encoded);
-			}
-			void boolean(const bool value)
-			{
-				const std::array encoded{value ? std::byte{1} : std::byte{0}};
-				append(encoded);
-			}
-			void string(const std::string_view value)
-			{
-				unsigned_value(value.size());
-				if (!value.empty())
-					append(std::as_bytes(std::span{value.data(), value.size()}));
-			}
-			void raw(const std::span<const std::byte> value)
-			{
-				unsigned_value(value.size());
-				if (!value.empty())
-					append(value);
-			}
-			[[nodiscard]] std::vector<std::byte> finish() &&
-			{
-				return std::move(bytes_);
-			}
-			[[nodiscard]] result<void> finish_stream() const
-			{
-				if (sink_ == nullptr)
-					return unexpected(store_error("store.corrupt", "payload", "writer-mode"));
-				if (failure_)
-					return unexpected(*failure_);
-				return {};
-			}
-
-		  private:
-			void append(const std::span<const std::byte> value)
-			{
-				if (failure_)
-					return;
-				if (sink_ != nullptr)
-				{
-					auto appended = sink_->append(value);
-					if (!appended)
-						failure_ = std::move(appended.error());
-					return;
-				}
-				bytes_.insert(bytes_.end(), value.begin(), value.end());
-			}
-
-			sqlite_bounded_byte_sink* sink_{};
-			std::optional<error> failure_;
-			std::vector<std::byte> bytes_;
-		};
-
-		class binary_reader
-		{
-		  public:
-			explicit binary_reader(const std::span<const std::byte> bytes)
-				: bytes_{bytes}, expected_size_{bytes.size()}
-			{
-				static_assert(sizeof(std::size_t) <= sizeof(std::uint64_t));
-			}
-			binary_reader(sqlite_bounded_byte_source& source,
-						  const std::uint64_t expected_size) noexcept
-				: source_{&source}, expected_size_{expected_size}
-			{
-			}
-			[[nodiscard]] result<std::uint64_t> unsigned_value()
-			{
-				std::array<std::byte, 8U> encoded{};
-				auto read = read_exact(encoded);
-				if (!read)
-					return unexpected(std::move(read.error()));
-				if (!*read)
-					return unexpected(store_error("store.corrupt", "payload", "truncated-u64"));
-				std::uint64_t output{};
-				for (const auto byte : encoded)
-					output = (output << 8U) | std::to_integer<unsigned char>(byte);
-				return output;
-			}
-			[[nodiscard]] result<std::uint32_t> unsigned_32(const std::string_view field)
-			{
-				auto value = unsigned_value();
-				if (!value)
-					return unexpected(std::move(value.error()));
-				if (*value > std::numeric_limits<std::uint32_t>::max())
-					return unexpected(
-						store_error("store.corrupt", std::string{field}, "u32-overflow"));
-				return static_cast<std::uint32_t>(*value);
-			}
-			[[nodiscard]] result<bool> boolean()
-			{
-				std::array<std::byte, 1U> encoded{};
-				auto read = read_exact(encoded);
-				if (!read)
-					return unexpected(std::move(read.error()));
-				if (!*read || std::to_integer<unsigned char>(encoded.front()) > 1U)
-					return unexpected(store_error("store.corrupt", "payload", "invalid-bool"));
-				return std::to_integer<unsigned char>(encoded.front()) != 0U;
-			}
-			[[nodiscard]] result<std::string> string()
-			{
-				auto size = unsigned_value();
-				if (!size)
-					return unexpected(std::move(size.error()));
-				if (*size > remaining() || *size > std::numeric_limits<std::size_t>::max())
-					return unexpected(store_error("store.corrupt", "payload", "truncated-string"));
-				std::string output;
-				output.resize(static_cast<std::size_t>(*size));
-				if (!output.empty())
-				{
-					auto read =
-						read_exact(std::as_writable_bytes(std::span{output.data(), output.size()}));
-					if (!read)
-						return unexpected(std::move(read.error()));
-					if (!*read)
-						return unexpected(
-							store_error("store.corrupt", "payload", "truncated-string"));
-				}
-				return output;
-			}
-			[[nodiscard]] result<std::vector<std::byte>> raw()
-			{
-				auto size = unsigned_value();
-				if (!size)
-					return unexpected(std::move(size.error()));
-				if (*size > remaining() || *size > std::numeric_limits<std::size_t>::max())
-					return unexpected(store_error("store.corrupt", "payload", "truncated-bytes"));
-				std::vector<std::byte> output(static_cast<std::size_t>(*size));
-				if (!output.empty())
-				{
-					auto read = read_exact(output);
-					if (!read)
-						return unexpected(std::move(read.error()));
-					if (!*read)
-						return unexpected(
-							store_error("store.corrupt", "payload", "truncated-bytes"));
-				}
-				return output;
-			}
-			[[nodiscard]] result<bool> finished()
-			{
-				if (offset_ != expected_size_)
-					return false;
-				if (source_ == nullptr)
-					return offset_ == bytes_.size();
-				std::array<std::byte, 1U> extra{};
-				auto read = source_->read(extra);
-				if (!read)
-					return unexpected(std::move(read.error()));
-				return *read == 0U;
-			}
-			[[nodiscard]] std::size_t offset() const noexcept
-			{
-				return static_cast<std::size_t>(offset_);
-			}
-
-		  private:
-			[[nodiscard]] std::uint64_t remaining() const noexcept
-			{
-				return offset_ <= expected_size_ ? expected_size_ - offset_ : 0U;
-			}
-			[[nodiscard]] result<bool> read_exact(const std::span<std::byte> output)
-			{
-				if (output.size() > remaining())
-					return false;
-				if (output.empty())
-					return true;
-				if (source_ == nullptr)
-				{
-					std::memcpy(output.data(),
-								bytes_.data() + static_cast<std::size_t>(offset_),
-								output.size());
-					offset_ += output.size();
-					return true;
-				}
-				std::size_t copied{};
-				while (copied < output.size())
-				{
-					auto read = source_->read(output.subspan(copied));
-					if (!read)
-						return unexpected(std::move(read.error()));
-					if (*read == 0U)
-						return false;
-					if (*read > output.size() - copied)
-						return unexpected(store_error("store.corrupt", "payload", "source-window"));
-					copied += *read;
-					offset_ += *read;
-				}
-				return true;
-			}
-
-			std::span<const std::byte> bytes_;
-			sqlite_bounded_byte_source* source_{};
-			std::uint64_t expected_size_{};
-			std::uint64_t offset_{};
-		};
-
-		void encode_cell(binary_writer& writer, const detached_cell& cell)
-		{
-			writer.unsigned_value(static_cast<std::uint8_t>(cell.type.scalar));
-			writer.string(cell.type.parameter);
-			writer.boolean(cell.type.optional);
-			writer.unsigned_value(static_cast<std::uint8_t>(cell.state));
-			writer.boolean(cell.value.has_value());
-			if (cell.value)
-				std::visit(
-					[&](const auto& value)
-					{
-						using type = std::decay_t<decltype(value)>;
-						if constexpr (std::is_same_v<type, bool>)
-						{
-							writer.unsigned_value(0U);
-							writer.boolean(value);
-						}
-						else if constexpr (std::is_same_v<type, std::int64_t>)
-						{
-							writer.unsigned_value(1U);
-							writer.unsigned_value(static_cast<std::uint64_t>(value));
-						}
-						else if constexpr (std::is_same_v<type, std::uint64_t>)
-						{
-							writer.unsigned_value(2U);
-							writer.unsigned_value(value);
-						}
-						else if constexpr (std::is_same_v<type, std::string>)
-						{
-							writer.unsigned_value(3U);
-							writer.string(value);
-						}
-						else
-						{
-							writer.unsigned_value(4U);
-							writer.raw(value);
-						}
-					},
-					*cell.value);
-			writer.boolean(cell.unknown_reason.has_value());
-			if (cell.unknown_reason)
-				writer.string(*cell.unknown_reason);
-		}
-
-		[[nodiscard]] result<detached_cell> decode_cell(binary_reader& reader)
-		{
-			auto scalar = reader.unsigned_value();
-			auto parameter = reader.string();
-			auto optional = reader.boolean();
-			auto state = reader.unsigned_value();
-			auto has_value = reader.boolean();
-			if (!scalar || !parameter || !optional || !state || !has_value ||
-				*scalar > static_cast<std::uint8_t>(scalar_kind::interpretation_domain_id) ||
-				*state > static_cast<std::uint8_t>(cell_state::unknown))
-				return unexpected(store_error("store.corrupt", "cell", "invalid-header"));
-			detached_cell output;
-			output.type = {static_cast<scalar_kind>(*scalar), std::move(*parameter), *optional};
-			output.state = static_cast<cell_state>(*state);
-			if (*has_value)
-			{
-				auto tag = reader.unsigned_value();
-				if (!tag)
-					return unexpected(std::move(tag.error()));
-				switch (*tag)
-				{
-					case 0U:
-					{
-						auto value = reader.boolean();
-						if (!value)
-							return unexpected(std::move(value.error()));
-						output.value = scalar_value{*value};
-						break;
-					}
-					case 1U:
-					case 2U:
-					{
-						auto value = reader.unsigned_value();
-						if (!value)
-							return unexpected(std::move(value.error()));
-						output.value = *tag == 1U ? scalar_value{static_cast<std::int64_t>(*value)}
-												  : scalar_value{*value};
-						break;
-					}
-					case 3U:
-					{
-						auto value = reader.string();
-						if (!value)
-							return unexpected(std::move(value.error()));
-						output.value = scalar_value{std::move(*value)};
-						break;
-					}
-					case 4U:
-					{
-						auto value = reader.raw();
-						if (!value)
-							return unexpected(std::move(value.error()));
-						output.value = scalar_value{std::move(*value)};
-						break;
-					}
-					default:
-						return unexpected(
-							store_error("store.corrupt", "cell", "invalid-value-tag"));
-				}
-			}
-			auto has_reason = reader.boolean();
-			if (!has_reason)
-				return unexpected(std::move(has_reason.error()));
-			if (*has_reason)
-			{
-				auto reason = reader.string();
-				if (!reason)
-					return unexpected(std::move(reason.error()));
-				output.unknown_reason = std::move(*reason);
-			}
-			if (auto valid = output.validate(); !valid)
-				return unexpected(store_error("store.corrupt", "cell", valid.error().code));
-			return output;
-		}
-
-		void encode_row(binary_writer& writer, const detached_row& row)
-		{
-			writer.string(row.descriptor_id);
-			writer.unsigned_value(row.cells.size());
-			for (const auto& [column, cell] : row.cells)
-			{
-				writer.string(column);
-				encode_cell(writer, cell);
-			}
-		}
-
-		[[nodiscard]] result<detached_row> decode_row(binary_reader& reader)
-		{
-			auto descriptor = reader.string();
-			auto count = reader.unsigned_value();
-			if (!descriptor || !count || *count > 1'000'000U)
-				return unexpected(store_error("store.corrupt", "row", "invalid-header"));
-			detached_row output;
-			output.descriptor_id = std::move(*descriptor);
-			for (std::uint64_t index = 0U; index < *count; ++index)
-			{
-				auto column = reader.string();
-				auto cell = decode_cell(reader);
-				if (!column || !cell ||
-					!output.cells.emplace(std::move(*column), std::move(*cell)).second)
-					return unexpected(store_error("store.corrupt", "row", "duplicate-cell"));
-			}
-			return output;
-		}
-
-		void encode_strings(binary_writer& writer, const std::span<const std::string> values)
-		{
-			writer.unsigned_value(values.size());
-			for (const auto& value : values)
-				writer.string(value);
-		}
-
-		[[nodiscard]] result<std::vector<std::string>> decode_strings(binary_reader& reader,
-																	  const std::string_view field)
-		{
-			auto count = reader.unsigned_value();
-			if (!count || *count > 1'000'000U)
-				return unexpected(store_error("store.corrupt", std::string{field}, "count"));
-			std::vector<std::string> output;
-			output.reserve(static_cast<std::size_t>(*count));
-			for (std::uint64_t index = 0U; index < *count; ++index)
-			{
-				auto value = reader.string();
-				if (!value)
-					return unexpected(std::move(value.error()));
-				output.push_back(std::move(*value));
-			}
-			return output;
-		}
-
-		void encode_condition(binary_writer& writer, const claim_condition& condition)
-		{
-			writer.string(condition.universe);
-			encode_strings(writer, condition.fragments);
-		}
-
-		[[nodiscard]] result<claim_condition> decode_condition(binary_reader& reader)
-		{
-			auto universe = reader.string();
-			auto fragments = decode_strings(reader, "condition-fragments");
-			if (!universe || !fragments)
-				return unexpected(store_error("store.corrupt", "condition", "payload"));
-			claim_condition output{std::move(*universe), std::move(*fragments)};
-			if (auto valid = output.validate(); !valid)
-				return unexpected(store_error("store.corrupt", "condition", valid.error().code));
-			return output;
-		}
-
-		void encode_guarantee(binary_writer& writer, const claim_guarantee& guarantee)
-		{
-			writer.string(guarantee.approximation);
-			writer.string(guarantee.scope);
-			writer.string(guarantee.assumptions);
-			encode_strings(writer, guarantee.verification_modalities);
-		}
-
-		[[nodiscard]] result<claim_guarantee> decode_guarantee(binary_reader& reader)
-		{
-			auto approximation = reader.string();
-			auto scope = reader.string();
-			auto assumptions = reader.string();
-			auto modalities = decode_strings(reader, "guarantee-modalities");
-			if (!approximation || !scope || !assumptions || !modalities)
-				return unexpected(store_error("store.corrupt", "guarantee", "payload"));
-			claim_guarantee output{std::move(*approximation),
-								   std::move(*scope),
-								   std::move(*assumptions),
-								   std::move(*modalities)};
-			if (auto valid = output.validate(); !valid)
-				return unexpected(store_error("store.corrupt", "guarantee", valid.error().code));
-			return output;
-		}
-
-		void encode_annotation(binary_writer& writer,
-							   const snapshot_claim_annotation& value,
-							   const bool include_producer = true)
-		{
-			encode_row(writer, value.row);
-			encode_condition(writer, value.presence);
-			writer.string(value.interpretation);
-			writer.string(value.semantic_key);
-			writer.string(value.assertion);
-			writer.string(value.content);
-			if (include_producer)
-			{
-				writer.string(value.producer.id);
-				writer.string(value.producer.semantic_contract);
-			}
-			writer.string(value.provenance_root);
-			encode_guarantee(writer, value.guarantee);
-		}
-
-		[[nodiscard]] std::vector<std::byte>
-		annotation_projection(const snapshot_claim_annotation& value)
-		{
-			binary_writer writer;
-			encode_annotation(writer, value);
-			return std::move(writer).finish();
-		}
-
-		[[nodiscard]] result<snapshot_claim_annotation> decode_annotation(
-			binary_reader& reader, const relation_descriptor& descriptor, const bool has_producer)
-		{
-			auto row = decode_row(reader);
-			auto condition = decode_condition(reader);
-			auto interpretation = reader.string();
-			auto semantic_key = reader.string();
-			auto assertion = reader.string();
-			auto content = reader.string();
-			claim_producer producer{
-				"cxxlens.snapshot-legacy-unknown",
-				"sha256:0000000000000000000000000000000000000000000000000000000000000000"};
-			if (has_producer)
-			{
-				auto id = reader.string();
-				auto contract = reader.string();
-				if (!id || !contract || id->empty() || contract->empty())
-					return unexpected(store_error("store.corrupt", "claim-annotation", "producer"));
-				producer = {std::move(*id), std::move(*contract)};
-			}
-			auto provenance = reader.string();
-			auto guarantee = decode_guarantee(reader);
-			if (!row || !condition || !interpretation || !semantic_key || !assertion || !content ||
-				!provenance || !guarantee || !validate_row(descriptor, *row) ||
-				interpretation->empty() || semantic_key->empty() || assertion->empty() ||
-				content->empty() || provenance->empty())
-				return unexpected(store_error("store.corrupt", "claim-annotation", "validation"));
-			return snapshot_claim_annotation{std::move(*row),
-											 std::move(*condition),
-											 std::move(*interpretation),
-											 std::move(*semantic_key),
-											 std::move(*assertion),
-											 std::move(*content),
-											 std::move(producer),
-											 std::move(*provenance),
-											 std::move(*guarantee)};
-		}
-
-		void encode_claim(binary_writer& writer, const claim& value)
-		{
-			encode_row(writer, value.row);
-			writer.string(value.descriptor);
-			writer.string(value.semantic_key);
-			writer.string(value.assertion);
-			writer.string(value.content);
-			encode_condition(writer, value.presence);
-			writer.string(value.interpretation);
-			writer.unsigned_value(static_cast<std::uint8_t>(value.stage));
-			writer.string(value.producer.id);
-			writer.string(value.producer.semantic_contract);
-			if (const auto* direct = std::get_if<direct_claim_basis>(&value.input_basis))
-			{
-				writer.boolean(true);
-				writer.string(direct->basis_digest);
-			}
-			else
-			{
-				const auto& derived = std::get<derived_claim_basis>(value.input_basis);
-				writer.boolean(false);
-				writer.string(derived.input_snapshot);
-				encode_strings(writer, derived.consumed_partition_content_digests);
-				writer.string(derived.transform_semantics);
-			}
-			writer.string(value.provenance_root);
-			encode_guarantee(writer, value.guarantee);
-		}
-
-		[[nodiscard]] result<claim> decode_claim(binary_reader& reader,
-												 const relation_engine& engine)
-		{
-			auto row = decode_row(reader);
-			auto descriptor = reader.string();
-			auto semantic_key = reader.string();
-			auto assertion = reader.string();
-			auto content = reader.string();
-			auto condition = decode_condition(reader);
-			auto interpretation = reader.string();
-			auto stage = reader.unsigned_value();
-			auto producer_id = reader.string();
-			auto producer_semantics = reader.string();
-			auto direct_basis = reader.boolean();
-			if (!row || !descriptor || !semantic_key || !assertion || !content || !condition ||
-				!interpretation || !stage ||
-				*stage > static_cast<std::uint8_t>(claim_stage::derived_claim) || !producer_id ||
-				!producer_semantics || !direct_basis)
-				return unexpected(store_error("store.corrupt", "partition-envelope", "claim"));
-			claim_input_basis basis;
-			if (*direct_basis)
-			{
-				auto digest_value = reader.string();
-				if (!digest_value)
-					return unexpected(
-						store_error("store.corrupt", "partition-envelope", "direct-basis"));
-				basis = direct_claim_basis{std::move(*digest_value)};
-			}
-			else
-			{
-				auto input_snapshot = reader.string();
-				auto consumed = decode_strings(reader, "partition-envelope-derived-basis");
-				auto transform = reader.string();
-				if (!input_snapshot || !consumed || !transform)
-					return unexpected(
-						store_error("store.corrupt", "partition-envelope", "derived-basis"));
-				basis = derived_claim_basis{
-					std::move(*input_snapshot), std::move(*consumed), std::move(*transform)};
-			}
-			auto provenance = reader.string();
-			auto guarantee = decode_guarantee(reader);
-			if (!provenance || !guarantee)
-				return unexpected(store_error("store.corrupt", "partition-envelope", "claim-tail"));
-			claim output{std::move(*row),
-						 std::move(*descriptor),
-						 std::move(*semantic_key),
-						 std::move(*assertion),
-						 std::move(*content),
-						 std::move(*condition),
-						 std::move(*interpretation),
-						 static_cast<claim_stage>(*stage),
-						 {std::move(*producer_id), std::move(*producer_semantics)},
-						 std::move(basis),
-						 std::move(*provenance),
-						 std::move(*guarantee)};
-			if (auto valid = validate_claim(engine, output); !valid)
-				return unexpected(store_error(
-					"store.corrupt", "partition-envelope", std::move(valid.error().code)));
-			return output;
-		}
-
-		[[nodiscard]] std::string bytes_hex(const std::span<const std::byte> bytes)
-		{
-			static constexpr std::string_view digits{"0123456789abcdef"};
-			std::string output;
-			output.reserve(bytes.size() * 2U);
-			for (const auto byte : bytes)
-			{
-				const auto value = std::to_integer<unsigned char>(byte);
-				output.push_back(digits[value >> 4U]);
-				output.push_back(digits[value & 0x0fU]);
-			}
-			return output;
-		}
-
 		[[nodiscard]] std::string sql_quote(const std::string_view value)
 		{
 			std::string output{"'"};
@@ -843,24 +259,6 @@ namespace cxxlens::sdk
 			return "-" + std::to_string(magnitude);
 		}
 	} // namespace
-
-	struct snapshot_handle::data
-	{
-		snapshot_manifest semantic_manifest;
-		publication_record publication_record_value;
-		std::map<std::string, relation_descriptor, std::less<>> descriptors;
-		std::map<std::string, std::vector<detached_row>, std::less<>> rows;
-		std::map<std::string, std::vector<snapshot_claim_annotation>, std::less<>> annotations;
-		std::vector<snapshot_query_coverage> coverage;
-		std::vector<snapshot_partition_binding> partition_bindings;
-		std::map<std::string, partition_draft, std::less<>> partition_envelopes;
-		std::vector<closure_certificate> closure_certificates;
-		std::vector<std::string> claim_contents;
-		std::vector<unresolved_reference> unresolved;
-		std::string physical_backend;
-		bool query_annotations_available{};
-		std::shared_ptr<const std::uint64_t> generation_pin;
-	};
 
 	namespace
 	{
@@ -925,1018 +323,6 @@ namespace cxxlens::sdk
 			bool committed_{};
 		};
 
-		void encode_partition_envelopes(
-			binary_writer& writer,
-			const std::map<std::string, partition_draft, std::less<>>& envelopes)
-		{
-			writer.unsigned_value(envelopes.size());
-			for (const auto& [partition_id, draft] : envelopes)
-			{
-				auto claims = draft.claims;
-				std::ranges::sort(claims, detail::claim_occurrence_less);
-				auto coverage_values = draft.coverage;
-				std::ranges::sort(
-					coverage_values,
-					[](const snapshot_coverage_unit& left, const snapshot_coverage_unit& right)
-					{
-						return left.canonical_form() < right.canonical_form();
-					});
-				auto unresolved_values = draft.unresolved;
-				std::ranges::sort(
-					unresolved_values,
-					[](const unresolved_reference& left, const unresolved_reference& right)
-					{
-						return std::tie(left.source_assertion,
-										left.source_relation,
-										left.target_relation,
-										left.source_columns,
-										left.reason) < std::tie(right.source_assertion,
-																right.source_relation,
-																right.target_relation,
-																right.source_columns,
-																right.reason);
-					});
-				writer.string(partition_id);
-				writer.unsigned_value(claims.size());
-				for (const auto& value : claims)
-					encode_claim(writer, value);
-				writer.unsigned_value(coverage_values.size());
-				for (const auto& coverage : coverage_values)
-				{
-					writer.string(coverage.domain);
-					writer.string(coverage.key);
-					writer.string(coverage.state);
-					writer.string(coverage.reason);
-				}
-				writer.unsigned_value(unresolved_values.size());
-				for (const auto& unresolved : unresolved_values)
-				{
-					writer.string(unresolved.source_assertion);
-					writer.string(unresolved.source_relation);
-					writer.string(unresolved.target_relation);
-					encode_strings(writer, unresolved.source_columns);
-					writer.string(unresolved.reason);
-				}
-			}
-		}
-		[[nodiscard]] std::vector<std::byte>
-		semantic_projection_bytes(const snapshot_handle::data& value);
-
-		[[nodiscard]] std::string canonical_export_of(const snapshot_handle::data& value)
-		{
-			std::ostringstream output;
-			output << "schema=cxxlens.snapshot-export.v1\n";
-			output << "snapshot=" << value.semantic_manifest.id << '\n';
-			output << "semantics=" << value.semantic_manifest.snapshot_semantics_version.string()
-				   << '\n';
-			output << "catalog=" << value.semantic_manifest.catalog_semantic_digest << '\n';
-			output << "universe=" << value.semantic_manifest.condition_universe_id << '\n';
-			output << "registry=" << value.semantic_manifest.relation_registry_digest << '\n';
-			output << "interpretation-policy="
-				   << value.semantic_manifest.interpretation_policy_digest << '\n';
-			for (const auto& partition : value.semantic_manifest.partitions)
-				output << "partition=" << partition.partition_id << '|' << partition.content_digest
-					   << '|' << partition.coverage_digest << '|' << partition.claim_count << '|'
-					   << (partition.complete ? "complete" : "partial") << '\n';
-			for (const auto& closure : value.semantic_manifest.closure_ids)
-				output << "closure=" << closure << '\n';
-			for (const auto& claim : value.claim_contents)
-				output << "claim=" << claim << '\n';
-			for (const auto& [descriptor, rows] : value.rows)
-				for (const auto& row : rows)
-					output << "row=" << descriptor << '|' << row.canonical_form() << '\n';
-			for (const auto& unresolved : value.unresolved)
-				output << "unresolved=" << unresolved.source_assertion << '|'
-					   << unresolved.source_relation << '|' << unresolved.target_relation << '|'
-					   << unresolved.reason << '\n';
-			output << "semantic-projection=" << bytes_hex(semantic_projection_bytes(value)) << '\n';
-			binary_writer envelopes;
-			encode_partition_envelopes(envelopes, value.partition_envelopes);
-			output << "partition-envelopes=" << bytes_hex(std::move(envelopes).finish()) << '\n';
-			return output.str();
-		}
-
-		enum class snapshot_payload_schema : std::uint8_t
-		{
-			v1 = 1U,
-			v2 = 2U,
-			v3 = 3U,
-			v4 = 4U,
-			v5 = 5U,
-		};
-
-#if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
-		[[nodiscard]] constexpr std::optional<snapshot_payload_schema>
-		payload_schema_from_number(const std::uint8_t number) noexcept
-		{
-			switch (number)
-			{
-				case 1U:
-					return snapshot_payload_schema::v1;
-				case 2U:
-					return snapshot_payload_schema::v2;
-				case 3U:
-					return snapshot_payload_schema::v3;
-				case 4U:
-					return snapshot_payload_schema::v4;
-				case 5U:
-					return snapshot_payload_schema::v5;
-				default:
-					return std::nullopt;
-			}
-		}
-#endif
-
-		[[nodiscard]] constexpr std::string_view
-		payload_schema_magic(const snapshot_payload_schema schema) noexcept
-		{
-			switch (schema)
-			{
-				case snapshot_payload_schema::v1:
-					return "cxxlens.ng-snapshot-payload.v1";
-				case snapshot_payload_schema::v2:
-					return "cxxlens.ng-snapshot-payload.v2";
-				case snapshot_payload_schema::v3:
-					return "cxxlens.ng-snapshot-payload.v3";
-				case snapshot_payload_schema::v4:
-					return "cxxlens.ng-snapshot-payload.v4";
-				case snapshot_payload_schema::v5:
-					return "cxxlens.ng-snapshot-payload.v5";
-			}
-			return {};
-		}
-
-		void encode_snapshot(binary_writer& writer,
-							 const snapshot_handle::data& value,
-							 const snapshot_payload_schema payload_schema)
-		{
-			writer.string(payload_schema_magic(payload_schema));
-			const auto& manifest = value.semantic_manifest;
-			writer.string(manifest.schema);
-			writer.string(manifest.id);
-			writer.unsigned_value(manifest.snapshot_semantics_version.major);
-			writer.unsigned_value(manifest.snapshot_semantics_version.minor);
-			writer.unsigned_value(manifest.snapshot_semantics_version.patch);
-			writer.string(manifest.catalog_semantic_digest);
-			writer.string(manifest.condition_universe_id);
-			writer.string(manifest.relation_registry_digest);
-			writer.string(manifest.interpretation_policy_digest);
-			writer.unsigned_value(manifest.partitions.size());
-			for (const auto& partition : manifest.partitions)
-			{
-				writer.string(partition.partition_id);
-				writer.string(partition.relation_descriptor_id);
-				writer.string(partition.input_basis_digest);
-				writer.string(partition.claim_set_digest);
-				writer.string(partition.coverage_digest);
-				writer.string(partition.content_digest);
-				writer.unsigned_value(partition.claim_count);
-				writer.boolean(partition.complete);
-			}
-			writer.unsigned_value(manifest.closure_ids.size());
-			for (const auto& closure : manifest.closure_ids)
-				writer.string(closure);
-			const auto& publication = value.publication_record_value;
-			writer.string(publication.publication_id);
-			writer.string(publication.series_id);
-			writer.string(publication.snapshot_id);
-			writer.unsigned_value(publication.sequence);
-			writer.unsigned_value(publication.physical_generation);
-			writer.boolean(publication.parent_publication.has_value());
-			if (publication.parent_publication)
-				writer.string(*publication.parent_publication);
-			writer.unsigned_value(static_cast<std::uint8_t>(publication.state));
-			writer.boolean(publication.corrupt);
-			writer.unsigned_value(value.rows.size());
-			for (const auto& [descriptor, rows] : value.rows)
-			{
-				writer.string(descriptor);
-				writer.unsigned_value(rows.size());
-				for (const auto& row : rows)
-					encode_row(writer, row);
-			}
-			writer.unsigned_value(value.claim_contents.size());
-			for (const auto& content : value.claim_contents)
-				writer.string(content);
-			writer.unsigned_value(value.unresolved.size());
-			for (const auto& unresolved : value.unresolved)
-			{
-				writer.string(unresolved.source_assertion);
-				writer.string(unresolved.source_relation);
-				writer.string(unresolved.target_relation);
-				writer.unsigned_value(unresolved.source_columns.size());
-				for (const auto& column : unresolved.source_columns)
-					writer.string(column);
-				writer.string(unresolved.reason);
-			}
-			if (payload_schema >= snapshot_payload_schema::v2)
-			{
-				writer.boolean(value.query_annotations_available);
-				writer.unsigned_value(value.annotations.size());
-				for (const auto& [descriptor, annotations] : value.annotations)
-				{
-					writer.string(descriptor);
-					writer.unsigned_value(annotations.size());
-					for (const auto& annotation : annotations)
-						encode_annotation(
-							writer, annotation, payload_schema >= snapshot_payload_schema::v3);
-				}
-				writer.unsigned_value(value.coverage.size());
-				for (const auto& coverage : value.coverage)
-				{
-					writer.string(coverage.relation_descriptor_id);
-					writer.string(coverage.unit.domain);
-					writer.string(coverage.unit.key);
-					writer.string(coverage.unit.state);
-					writer.string(coverage.unit.reason);
-				}
-			}
-			if (payload_schema >= snapshot_payload_schema::v4)
-			{
-				writer.unsigned_value(value.partition_bindings.size());
-				for (const auto& binding : value.partition_bindings)
-				{
-					writer.string(binding.partition_id);
-					writer.string(binding.relation_descriptor_id);
-					writer.string(binding.scope);
-					encode_condition(writer, binding.condition);
-					writer.string(binding.interpretation);
-					writer.string(binding.producer_semantics);
-					writer.string(binding.producer_input_basis_digest);
-					writer.string(binding.precision_profile);
-					writer.string(binding.assumption_set_id);
-				}
-				writer.unsigned_value(value.closure_certificates.size());
-				for (const auto& certificate : value.closure_certificates)
-				{
-					writer.string(certificate.id);
-					const auto& subject = certificate.subject;
-					writer.string(subject.relation_descriptor_id);
-					writer.string(subject.subject_partition_id);
-					writer.string(subject.partition_content_digest);
-					writer.string(subject.coverage_digest);
-					writer.string(subject.key_domain_digest);
-					encode_condition(writer, subject.condition);
-					writer.string(subject.interpretation);
-					writer.string(subject.assumption_set_id);
-					writer.string(subject.closure_kind);
-					writer.string(subject.producer_semantics);
-					writer.string(subject.evidence_digest);
-				}
-			}
-			if (payload_schema == snapshot_payload_schema::v5)
-				encode_partition_envelopes(writer, value.partition_envelopes);
-		}
-
-		[[nodiscard]] std::vector<std::byte> encode_snapshot(const snapshot_handle::data& value)
-		{
-			binary_writer writer;
-			encode_snapshot(writer, value, snapshot_payload_schema::v5);
-			return std::move(writer).finish();
-		}
-
-#if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
-		[[nodiscard]] std::vector<std::byte>
-		encode_snapshot(const snapshot_handle::data& value,
-						const snapshot_payload_schema payload_schema)
-		{
-			binary_writer writer;
-			encode_snapshot(writer, value, payload_schema);
-			return std::move(writer).finish();
-		}
-#endif
-
-		[[nodiscard]] result<void> encode_snapshot(const snapshot_handle::data& value,
-												   sqlite_bounded_byte_sink& sink)
-		{
-			binary_writer writer{sink};
-			encode_snapshot(writer, value, snapshot_payload_schema::v5);
-			return writer.finish_stream();
-		}
-
-		void sort_semantic_projections(snapshot_handle::data& value)
-		{
-			std::ranges::sort(value.claim_contents);
-			value.claim_contents.erase(std::ranges::unique(value.claim_contents).begin(),
-									   value.claim_contents.end());
-			std::ranges::sort(
-				value.coverage,
-				[](const snapshot_query_coverage& left, const snapshot_query_coverage& right)
-				{
-					return std::tie(left.relation_descriptor_id,
-									left.unit.domain,
-									left.unit.key,
-									left.unit.state,
-									left.unit.reason) < std::tie(right.relation_descriptor_id,
-																 right.unit.domain,
-																 right.unit.key,
-																 right.unit.state,
-																 right.unit.reason);
-				});
-			std::ranges::sort(
-				value.unresolved,
-				[](const unresolved_reference& left, const unresolved_reference& right)
-				{
-					return std::tie(left.source_assertion,
-									left.source_relation,
-									left.target_relation,
-									left.source_columns,
-									left.reason) < std::tie(right.source_assertion,
-															right.source_relation,
-															right.target_relation,
-															right.source_columns,
-															right.reason);
-				});
-			std::ranges::sort(
-				value.partition_bindings, {}, &snapshot_partition_binding::partition_id);
-			for (auto& [descriptor, rows] : value.rows)
-			{
-				std::ranges::sort(rows,
-								  [](const detached_row& left, const detached_row& right)
-								  {
-									  return left.canonical_form() < right.canonical_form();
-								  });
-				const auto relation = value.descriptors.find(descriptor);
-				if (relation != value.descriptors.end() &&
-					relation->second.merge != merge_mode::multiset)
-					rows.erase(std::ranges::unique(
-								   rows,
-								   [](const detached_row& left, const detached_row& right)
-								   {
-									   return left.canonical_form() == right.canonical_form();
-								   })
-								   .begin(),
-							   rows.end());
-			}
-			for (auto& [descriptor, annotations] : value.annotations)
-			{
-				(void)descriptor;
-				std::ranges::sort(annotations,
-								  [](const snapshot_claim_annotation& left,
-									 const snapshot_claim_annotation& right)
-								  {
-									  return annotation_projection(left) <
-										  annotation_projection(right);
-								  });
-			}
-		}
-
-		[[nodiscard]] std::vector<std::byte>
-		semantic_projection_bytes(const snapshot_handle::data& value)
-		{
-			binary_writer writer;
-			writer.unsigned_value(value.rows.size());
-			for (const auto& [descriptor, rows] : value.rows)
-			{
-				writer.string(descriptor);
-				writer.unsigned_value(rows.size());
-				for (const auto& row : rows)
-					encode_row(writer, row);
-			}
-			encode_strings(writer, value.claim_contents);
-			writer.unsigned_value(value.unresolved.size());
-			for (const auto& unresolved : value.unresolved)
-			{
-				writer.string(unresolved.source_assertion);
-				writer.string(unresolved.source_relation);
-				writer.string(unresolved.target_relation);
-				encode_strings(writer, unresolved.source_columns);
-				writer.string(unresolved.reason);
-			}
-			writer.unsigned_value(value.annotations.size());
-			for (const auto& [descriptor, annotations] : value.annotations)
-			{
-				writer.string(descriptor);
-				writer.unsigned_value(annotations.size());
-				for (const auto& annotation : annotations)
-					encode_annotation(writer, annotation);
-			}
-			writer.unsigned_value(value.coverage.size());
-			for (const auto& coverage : value.coverage)
-			{
-				writer.string(coverage.relation_descriptor_id);
-				writer.string(coverage.unit.domain);
-				writer.string(coverage.unit.key);
-				writer.string(coverage.unit.state);
-				writer.string(coverage.unit.reason);
-			}
-			writer.unsigned_value(value.partition_bindings.size());
-			for (const auto& binding : value.partition_bindings)
-			{
-				writer.string(binding.partition_id);
-				writer.string(binding.relation_descriptor_id);
-				writer.string(binding.scope);
-				encode_condition(writer, binding.condition);
-				writer.string(binding.interpretation);
-				writer.string(binding.producer_semantics);
-				writer.string(binding.producer_input_basis_digest);
-				writer.string(binding.precision_profile);
-				writer.string(binding.assumption_set_id);
-			}
-			return std::move(writer).finish();
-		}
-
-		[[nodiscard]] result<void> validate_semantic_graph(snapshot_handle::data& value,
-														   const relation_engine& engine)
-		{
-			if (value.partition_envelopes.size() != value.semantic_manifest.partitions.size())
-				return unexpected(
-					store_error("store.corrupt", "partition-envelope", "manifest-count"));
-			snapshot_handle::data expected;
-			expected.query_annotations_available = true;
-			for (const auto& partition : value.semantic_manifest.partitions)
-			{
-				const auto envelope = value.partition_envelopes.find(partition.partition_id);
-				if (envelope == value.partition_envelopes.end())
-					return unexpected(
-						store_error("store.corrupt", "partition-envelope", "manifest-key"));
-				auto rebuilt = make_partition_manifest(engine, envelope->second);
-				if (!rebuilt || *rebuilt != partition)
-					return unexpected(
-						store_error("store.corrupt", "partition-envelope", "manifest"));
-				expected.partition_bindings.push_back(
-					partition_binding(partition.partition_id, envelope->second));
-				auto relation = engine.require_id(partition.relation_descriptor_id);
-				if (!relation)
-					return unexpected(std::move(relation.error()));
-				expected.descriptors.emplace(partition.relation_descriptor_id,
-											 relation->descriptor());
-				expected.rows.try_emplace(partition.relation_descriptor_id);
-				expected.annotations.try_emplace(partition.relation_descriptor_id);
-				for (const auto& coverage : envelope->second.coverage)
-					expected.coverage.push_back({partition.relation_descriptor_id, coverage});
-				for (const auto& claim_value : envelope->second.claims)
-				{
-					expected.rows[claim_value.descriptor].push_back(claim_value.row);
-					expected.annotations[claim_value.descriptor].push_back(
-						{claim_value.row,
-						 claim_value.presence,
-						 claim_value.interpretation,
-						 claim_value.semantic_key,
-						 claim_value.assertion,
-						 claim_value.content,
-						 claim_value.producer,
-						 claim_value.provenance_root,
-						 claim_value.guarantee});
-					expected.claim_contents.push_back(claim_value.content);
-				}
-				expected.unresolved.insert(expected.unresolved.end(),
-										   envelope->second.unresolved.begin(),
-										   envelope->second.unresolved.end());
-			}
-			sort_semantic_projections(expected);
-			sort_semantic_projections(value);
-			if (semantic_projection_bytes(expected) != semantic_projection_bytes(value))
-				return unexpected(store_error("store.corrupt", "partition-envelope", "projection"));
-			return {};
-		}
-
-		[[nodiscard]] result<std::shared_ptr<snapshot_handle::data>>
-		decode_snapshot(binary_reader& reader,
-						const relation_engine& engine,
-						const std::optional<std::span<const std::byte>> canonical_input,
-						bool* canonical_required = nullptr)
-		{
-			auto magic = reader.string();
-			if (!magic ||
-				(*magic != "cxxlens.ng-snapshot-payload.v1" &&
-				 *magic != "cxxlens.ng-snapshot-payload.v2" &&
-				 *magic != "cxxlens.ng-snapshot-payload.v3" &&
-				 *magic != "cxxlens.ng-snapshot-payload.v4" &&
-				 *magic != "cxxlens.ng-snapshot-payload.v5"))
-				return unexpected(store_error("store.corrupt", "payload", "format"));
-			const bool payload_has_annotations = *magic == "cxxlens.ng-snapshot-payload.v2" ||
-				*magic == "cxxlens.ng-snapshot-payload.v3" ||
-				*magic == "cxxlens.ng-snapshot-payload.v4" ||
-				*magic == "cxxlens.ng-snapshot-payload.v5";
-			const bool payload_has_producer = *magic == "cxxlens.ng-snapshot-payload.v3" ||
-				*magic == "cxxlens.ng-snapshot-payload.v4" ||
-				*magic == "cxxlens.ng-snapshot-payload.v5";
-			const bool payload_has_closure_subjects = *magic == "cxxlens.ng-snapshot-payload.v4" ||
-				*magic == "cxxlens.ng-snapshot-payload.v5";
-			const bool payload_has_partition_envelopes = *magic == "cxxlens.ng-snapshot-payload.v5";
-			if (canonical_required != nullptr)
-				*canonical_required = payload_has_partition_envelopes;
-			auto value = std::make_shared<snapshot_handle::data>();
-			auto& manifest = value->semantic_manifest;
-			auto schema = reader.string();
-			auto id = reader.string();
-			auto major = reader.unsigned_32("snapshot-version-major");
-			auto minor = reader.unsigned_32("snapshot-version-minor");
-			auto patch = reader.unsigned_32("snapshot-version-patch");
-			auto catalog = reader.string();
-			auto universe = reader.string();
-			auto registry = reader.string();
-			auto policy = reader.string();
-			auto partition_count = reader.unsigned_value();
-			if (!schema || !id || !major || !minor || !patch || !catalog || !universe ||
-				!registry || !policy || !partition_count || *partition_count > 1'000'000U)
-				return unexpected(store_error("store.corrupt", "manifest", "header"));
-			manifest.schema = std::move(*schema);
-			manifest.id = std::move(*id);
-			manifest.snapshot_semantics_version = {*major, *minor, *patch};
-			manifest.catalog_semantic_digest = std::move(*catalog);
-			manifest.condition_universe_id = std::move(*universe);
-			manifest.relation_registry_digest = std::move(*registry);
-			manifest.interpretation_policy_digest = std::move(*policy);
-			for (std::uint64_t index = 0U; index < *partition_count; ++index)
-			{
-				partition_manifest partition;
-				auto partition_id = reader.string();
-				auto descriptor = reader.string();
-				auto basis = reader.string();
-				auto claims = reader.string();
-				auto coverage = reader.string();
-				auto content = reader.string();
-				auto count = reader.unsigned_value();
-				auto complete = reader.boolean();
-				if (!partition_id || !descriptor || !basis || !claims || !coverage || !content ||
-					!count || !complete)
-					return unexpected(store_error("store.corrupt", "partition", "header"));
-				partition = {std::move(*partition_id),
-							 std::move(*descriptor),
-							 std::move(*basis),
-							 std::move(*claims),
-							 std::move(*coverage),
-							 std::move(*content),
-							 *count,
-							 *complete};
-				manifest.partitions.push_back(std::move(partition));
-			}
-			auto closure_count = reader.unsigned_value();
-			if (!closure_count || *closure_count > 1'000'000U)
-				return unexpected(store_error("store.corrupt", "closures", "count"));
-			for (std::uint64_t index = 0U; index < *closure_count; ++index)
-			{
-				auto closure = reader.string();
-				if (!closure)
-					return unexpected(std::move(closure.error()));
-				manifest.closure_ids.push_back(std::move(*closure));
-			}
-			if (payload_has_partition_envelopes &&
-				(!std::ranges::is_sorted(
-					 manifest.partitions, {}, &partition_manifest::partition_id) ||
-				 std::ranges::adjacent_find(
-					 manifest.partitions, {}, &partition_manifest::partition_id) !=
-					 manifest.partitions.end() ||
-				 !std::ranges::is_sorted(manifest.closure_ids) ||
-				 std::ranges::adjacent_find(manifest.closure_ids) != manifest.closure_ids.end()))
-				return unexpected(store_error("store.corrupt", "manifest", "noncanonical-order"));
-			auto& publication = value->publication_record_value;
-			auto publication_id = reader.string();
-			auto series = reader.string();
-			auto snapshot = reader.string();
-			auto sequence = reader.unsigned_value();
-			auto generation = reader.unsigned_value();
-			auto has_parent = reader.boolean();
-			if (!publication_id || !series || !snapshot || !sequence || !generation || !has_parent)
-				return unexpected(store_error("store.corrupt", "publication", "header"));
-			publication.publication_id = std::move(*publication_id);
-			publication.series_id = std::move(*series);
-			publication.snapshot_id = std::move(*snapshot);
-			publication.sequence = *sequence;
-			publication.physical_generation = *generation;
-			if (*has_parent)
-			{
-				auto parent = reader.string();
-				if (!parent)
-					return unexpected(std::move(parent.error()));
-				publication.parent_publication = std::move(*parent);
-			}
-			auto state = reader.unsigned_value();
-			auto corrupt = reader.boolean();
-			if (!state || !corrupt ||
-				*state > static_cast<std::uint8_t>(publication_state::rolled_back))
-				return unexpected(store_error("store.corrupt", "publication", "state"));
-			publication.state = static_cast<publication_state>(*state);
-			publication.corrupt = *corrupt;
-			if (auto valid = validate_publication_identity(publication); !valid)
-				return unexpected(std::move(valid.error()));
-			auto relation_count = reader.unsigned_value();
-			if (!relation_count || *relation_count > 1'000'000U)
-				return unexpected(store_error("store.corrupt", "rows", "relation-count"));
-			for (std::uint64_t index = 0U; index < *relation_count; ++index)
-			{
-				auto descriptor_id = reader.string();
-				auto row_count = reader.unsigned_value();
-				if (!descriptor_id || !row_count || *row_count > 10'000'000U)
-					return unexpected(store_error("store.corrupt", "rows", "header"));
-				auto relation = engine.require_id(*descriptor_id);
-				if (!relation)
-					return unexpected(store_error("store.registry-mismatch", *descriptor_id));
-				value->descriptors.emplace(*descriptor_id, relation->descriptor());
-				auto& rows = value->rows[*descriptor_id];
-				rows.reserve(static_cast<std::size_t>(*row_count));
-				for (std::uint64_t row_index = 0U; row_index < *row_count; ++row_index)
-				{
-					auto row = decode_row(reader);
-					if (!row || !validate_row(relation->descriptor(), *row))
-						return unexpected(store_error("store.corrupt", "row", "validation"));
-					rows.push_back(std::move(*row));
-				}
-			}
-			auto claim_count = reader.unsigned_value();
-			if (!claim_count || *claim_count > 10'000'000U)
-				return unexpected(store_error("store.corrupt", "claims", "count"));
-			for (std::uint64_t index = 0U; index < *claim_count; ++index)
-			{
-				auto claim = reader.string();
-				if (!claim)
-					return unexpected(std::move(claim.error()));
-				value->claim_contents.push_back(std::move(*claim));
-			}
-			auto unresolved_count = reader.unsigned_value();
-			if (!unresolved_count || *unresolved_count > 10'000'000U)
-				return unexpected(store_error("store.corrupt", "unresolved", "count"));
-			for (std::uint64_t index = 0U; index < *unresolved_count; ++index)
-			{
-				unresolved_reference unresolved;
-				auto assertion = reader.string();
-				auto source = reader.string();
-				auto target = reader.string();
-				auto columns = reader.unsigned_value();
-				if (!assertion || !source || !target || !columns || *columns > 1'000'000U)
-					return unexpected(store_error("store.corrupt", "unresolved", "header"));
-				unresolved.source_assertion = std::move(*assertion);
-				unresolved.source_relation = std::move(*source);
-				unresolved.target_relation = std::move(*target);
-				for (std::uint64_t column = 0U; column < *columns; ++column)
-				{
-					auto name = reader.string();
-					if (!name)
-						return unexpected(std::move(name.error()));
-					unresolved.source_columns.push_back(std::move(*name));
-				}
-				auto reason = reader.string();
-				if (!reason)
-					return unexpected(std::move(reason.error()));
-				unresolved.reason = std::move(*reason);
-				value->unresolved.push_back(std::move(unresolved));
-			}
-			if (payload_has_annotations)
-			{
-				auto annotations_available = reader.boolean();
-				auto annotation_relation_count = reader.unsigned_value();
-				if (!annotations_available || !annotation_relation_count ||
-					*annotation_relation_count > 1'000'000U)
-					return unexpected(store_error("store.corrupt", "claim-annotations", "header"));
-				value->query_annotations_available = *annotations_available;
-				std::vector<std::string> annotation_contents;
-				for (std::uint64_t index = 0U; index < *annotation_relation_count; ++index)
-				{
-					auto descriptor_id = reader.string();
-					auto annotation_count = reader.unsigned_value();
-					if (!descriptor_id || !annotation_count || *annotation_count > 10'000'000U)
-						return unexpected(
-							store_error("store.corrupt", "claim-annotations", "relation"));
-					const auto descriptor = value->descriptors.find(*descriptor_id);
-					if (descriptor == value->descriptors.end())
-						return unexpected(store_error("store.registry-mismatch", *descriptor_id));
-					auto& annotations = value->annotations[*descriptor_id];
-					annotations.reserve(static_cast<std::size_t>(*annotation_count));
-					for (std::uint64_t annotation = 0U; annotation < *annotation_count;
-						 ++annotation)
-					{
-						auto decoded =
-							decode_annotation(reader, descriptor->second, payload_has_producer);
-						if (!decoded || decoded->row.descriptor_id != *descriptor_id)
-							return unexpected(
-								store_error("store.corrupt", "claim-annotations", "value"));
-						annotation_contents.push_back(decoded->content);
-						annotations.push_back(std::move(*decoded));
-					}
-				}
-				auto coverage_count = reader.unsigned_value();
-				if (!coverage_count || *coverage_count > 10'000'000U)
-					return unexpected(store_error("store.corrupt", "coverage", "count"));
-				for (std::uint64_t index = 0U; index < *coverage_count; ++index)
-				{
-					auto descriptor = reader.string();
-					auto domain = reader.string();
-					auto key = reader.string();
-					auto state_value = reader.string();
-					auto reason = reader.string();
-					if (!descriptor || !domain || !key || !state_value || !reason ||
-						!value->descriptors.contains(*descriptor))
-						return unexpected(store_error("store.corrupt", "coverage", "value"));
-					snapshot_query_coverage coverage{std::move(*descriptor),
-													 {std::move(*domain),
-													  std::move(*key),
-													  std::move(*state_value),
-													  std::move(*reason)}};
-					if (auto valid = coverage.unit.validate(); !valid)
-						return unexpected(
-							store_error("store.corrupt", "coverage", valid.error().code));
-					value->coverage.push_back(std::move(coverage));
-				}
-				std::ranges::sort(annotation_contents);
-				annotation_contents.erase(std::ranges::unique(annotation_contents).begin(),
-										  annotation_contents.end());
-				if ((!value->query_annotations_available && !annotation_contents.empty()) ||
-					(value->query_annotations_available &&
-					 annotation_contents != value->claim_contents))
-					return unexpected(
-						store_error("store.corrupt", "claim-annotations", "content-set"));
-			}
-			if (payload_has_closure_subjects)
-			{
-				auto binding_count = reader.unsigned_value();
-				if (!binding_count || *binding_count != manifest.partitions.size())
-					return unexpected(store_error("store.corrupt", "partition-bindings", "count"));
-				for (std::uint64_t index = 0U; index < *binding_count; ++index)
-				{
-					auto partition_id = reader.string();
-					auto descriptor = reader.string();
-					auto scope = reader.string();
-					auto condition = decode_condition(reader);
-					auto interpretation = reader.string();
-					auto producer = reader.string();
-					auto basis = reader.string();
-					auto precision = reader.string();
-					auto assumptions = reader.string();
-					if (!partition_id || !descriptor || !scope || !condition || !interpretation ||
-						!producer || !basis || !precision || !assumptions)
-						return unexpected(
-							store_error("store.corrupt", "partition-bindings", "value"));
-					snapshot_partition_binding binding{std::move(*partition_id),
-													   std::move(*descriptor),
-													   std::move(*scope),
-													   std::move(*condition),
-													   std::move(*interpretation),
-													   std::move(*producer),
-													   std::move(*basis),
-													   std::move(*precision),
-													   std::move(*assumptions)};
-					const auto partition = std::ranges::find(manifest.partitions,
-															 binding.partition_id,
-															 &partition_manifest::partition_id);
-					const auto identity = identity_draft(binding);
-					if (partition == manifest.partitions.end() ||
-						partition->relation_descriptor_id != binding.relation_descriptor_id ||
-						partition_identity(identity) != binding.partition_id ||
-						binding.scope.empty() || binding.interpretation.empty() ||
-						!digest(binding.producer_semantics) ||
-						!digest(binding.producer_input_basis_digest) ||
-						binding.precision_profile.empty() || binding.assumption_set_id.empty())
-						return unexpected(
-							store_error("store.corrupt", "partition-bindings", "identity"));
-					value->partition_bindings.push_back(std::move(binding));
-				}
-				std::ranges::sort(
-					value->partition_bindings, {}, &snapshot_partition_binding::partition_id);
-				if (std::ranges::adjacent_find(
-						value->partition_bindings, {}, &snapshot_partition_binding::partition_id) !=
-					value->partition_bindings.end())
-					return unexpected(
-						store_error("store.corrupt", "partition-bindings", "duplicate"));
-
-				auto certificate_count = reader.unsigned_value();
-				if (!certificate_count || *certificate_count != manifest.closure_ids.size())
-					return unexpected(
-						store_error("store.corrupt", "closure-certificates", "count"));
-				for (std::uint64_t index = 0U; index < *certificate_count; ++index)
-				{
-					auto id_value = reader.string();
-					auto descriptor = reader.string();
-					auto partition_id = reader.string();
-					auto content = reader.string();
-					auto coverage = reader.string();
-					auto key_domain = reader.string();
-					auto condition = decode_condition(reader);
-					auto interpretation = reader.string();
-					auto assumptions = reader.string();
-					auto kind = reader.string();
-					auto producer = reader.string();
-					auto evidence = reader.string();
-					if (!id_value || !descriptor || !partition_id || !content || !coverage ||
-						!key_domain || !condition || !interpretation || !assumptions || !kind ||
-						!producer || !evidence)
-						return unexpected(
-							store_error("store.corrupt", "closure-certificates", "value"));
-					closure_candidate subject{std::move(*descriptor),
-											  std::move(*partition_id),
-											  std::move(*content),
-											  std::move(*coverage),
-											  std::move(*key_domain),
-											  std::move(*condition),
-											  std::move(*interpretation),
-											  std::move(*assumptions),
-											  std::move(*kind),
-											  std::move(*producer),
-											  std::move(*evidence)};
-					const auto partition = std::ranges::find(manifest.partitions,
-															 subject.subject_partition_id,
-															 &partition_manifest::partition_id);
-					const auto binding =
-						std::ranges::find(value->partition_bindings,
-										  subject.subject_partition_id,
-										  &snapshot_partition_binding::partition_id);
-					if (partition == manifest.partitions.end() ||
-						binding == value->partition_bindings.end() ||
-						subject.condition != binding->condition ||
-						subject.interpretation != binding->interpretation ||
-						subject.assumption_set_id != binding->assumption_set_id ||
-						subject.producer_semantics != binding->producer_semantics)
-						return unexpected(
-							store_error("store.corrupt", "closure-certificates", "binding"));
-					auto validation_subject =
-						make_partition_certificate_subject(*partition, *binding);
-					if (!validation_subject)
-						return unexpected(
-							store_error("store.corrupt", "closure-certificates", "subject"));
-					auto certificate =
-						make_closure_certificate(*validation_subject, std::move(subject));
-					if (!certificate || certificate->id != *id_value)
-						return unexpected(
-							store_error("store.corrupt", "closure-certificates", "identity"));
-					value->closure_certificates.push_back(std::move(*certificate));
-				}
-				std::ranges::sort(value->closure_certificates, {}, &closure_certificate::id);
-				if (std::ranges::adjacent_find(
-						value->closure_certificates, {}, &closure_certificate::id) !=
-						value->closure_certificates.end() ||
-					!std::ranges::equal(value->closure_certificates,
-										manifest.closure_ids,
-										{},
-										&closure_certificate::id,
-										std::identity{}))
-					return unexpected(
-						store_error("store.corrupt", "closure-certificates", "manifest"));
-			}
-			if (payload_has_partition_envelopes)
-			{
-				auto envelope_count = reader.unsigned_value();
-				if (!envelope_count || *envelope_count != manifest.partitions.size())
-					return unexpected(store_error("store.corrupt", "partition-envelope", "count"));
-				for (std::uint64_t index = 0U; index < *envelope_count; ++index)
-				{
-					auto partition_id = reader.string();
-					auto claim_count_value = reader.unsigned_value();
-					if (!partition_id || !claim_count_value || *claim_count_value > 10'000'000U)
-						return unexpected(
-							store_error("store.corrupt", "partition-envelope", "header"));
-					const auto binding =
-						std::ranges::find(value->partition_bindings,
-										  *partition_id,
-										  &snapshot_partition_binding::partition_id);
-					if (binding == value->partition_bindings.end())
-						return unexpected(
-							store_error("store.corrupt", "partition-envelope", "binding"));
-					auto draft = identity_draft(*binding);
-					draft.claims.reserve(static_cast<std::size_t>(*claim_count_value));
-					for (std::uint64_t claim_index = 0U; claim_index < *claim_count_value;
-						 ++claim_index)
-					{
-						auto claim_value = decode_claim(reader, engine);
-						if (!claim_value)
-							return unexpected(std::move(claim_value.error()));
-						draft.claims.push_back(std::move(*claim_value));
-					}
-					auto coverage_count_value = reader.unsigned_value();
-					if (!coverage_count_value || *coverage_count_value > 10'000'000U)
-						return unexpected(
-							store_error("store.corrupt", "partition-envelope", "coverage-count"));
-					for (std::uint64_t coverage_index = 0U; coverage_index < *coverage_count_value;
-						 ++coverage_index)
-					{
-						auto domain = reader.string();
-						auto key = reader.string();
-						auto coverage_state = reader.string();
-						auto reason = reader.string();
-						if (!domain || !key || !coverage_state || !reason)
-							return unexpected(
-								store_error("store.corrupt", "partition-envelope", "coverage"));
-						draft.coverage.push_back({std::move(*domain),
-												  std::move(*key),
-												  std::move(*coverage_state),
-												  std::move(*reason)});
-					}
-					auto unresolved_count_value = reader.unsigned_value();
-					if (!unresolved_count_value || *unresolved_count_value > 10'000'000U)
-						return unexpected(
-							store_error("store.corrupt", "partition-envelope", "unresolved-count"));
-					for (std::uint64_t unresolved_index = 0U;
-						 unresolved_index < *unresolved_count_value;
-						 ++unresolved_index)
-					{
-						auto assertion = reader.string();
-						auto source = reader.string();
-						auto target = reader.string();
-						auto columns = decode_strings(reader, "partition-envelope-unresolved");
-						auto reason = reader.string();
-						if (!assertion || !source || !target || !columns || !reason)
-							return unexpected(
-								store_error("store.corrupt", "partition-envelope", "unresolved"));
-						draft.unresolved.push_back({std::move(*assertion),
-													std::move(*source),
-													std::move(*target),
-													std::move(*columns),
-													std::move(*reason)});
-					}
-					if (!value->partition_envelopes.emplace(*partition_id, std::move(draft)).second)
-						return unexpected(
-							store_error("store.corrupt", "partition-envelope", "duplicate"));
-				}
-				if (auto valid = validate_semantic_graph(*value, engine); !valid)
-					return unexpected(std::move(valid.error()));
-			}
-			auto finished = reader.finished();
-			if (!finished || !*finished || manifest.schema != "cxxlens.snapshot-manifest.v1" ||
-				manifest.id != snapshot_identity(manifest) ||
-				publication.snapshot_id != manifest.id)
-				return unexpected(store_error("store.corrupt", "payload", "semantic-digest"));
-			if (payload_has_partition_envelopes && canonical_input)
-			{
-				const auto canonical = encode_snapshot(*value);
-				if (!std::ranges::equal(*canonical_input, canonical))
-					return unexpected(store_error("store.corrupt", "payload", "noncanonical"));
-			}
-			return value;
-		}
-
-		class sqlite_byte_comparison_sink final : public sqlite_bounded_byte_sink
-		{
-		  public:
-			sqlite_byte_comparison_sink(std::unique_ptr<sqlite_bounded_byte_source> source,
-										const std::uint64_t expected_size) noexcept
-				: source_{std::move(source)}, expected_size_{expected_size}
-			{
-			}
-
-			[[nodiscard]] result<void> append(const std::span<const std::byte> bytes) override
-			{
-				if (!source_ || offset_ > expected_size_ || bytes.size() > expected_size_ - offset_)
-					return unexpected(store_error("store.corrupt", "payload", "noncanonical-size"));
-				std::size_t compared{};
-				while (compared < bytes.size())
-				{
-					const auto count = std::min(scratch_.size(), bytes.size() - compared);
-					std::size_t copied{};
-					while (copied < count)
-					{
-						auto read = source_->read(std::span{scratch_}.first(count).subspan(copied));
-						if (!read)
-							return unexpected(std::move(read.error()));
-						if (*read == 0U || *read > count - copied)
-							return unexpected(
-								store_error("store.corrupt", "payload", "noncanonical-size"));
-						copied += *read;
-					}
-					if (!std::ranges::equal(std::span{scratch_}.first(count),
-											bytes.subspan(compared, count)))
-						return unexpected(store_error("store.corrupt", "payload", "noncanonical"));
-					compared += count;
-					offset_ += count;
-				}
-				return {};
-			}
-
-			[[nodiscard]] result<void> finish()
-			{
-				if (!source_ || offset_ != expected_size_)
-					return unexpected(store_error("store.corrupt", "payload", "noncanonical-size"));
-				std::array<std::byte, 1U> extra{};
-				auto read = source_->read(extra);
-				if (!read)
-					return unexpected(std::move(read.error()));
-				if (*read != 0U)
-					return unexpected(store_error("store.corrupt", "payload", "noncanonical-size"));
-				return {};
-			}
-
-		  private:
-			std::unique_ptr<sqlite_bounded_byte_source> source_;
-			std::array<std::byte, std::size_t{64U} * 1024U> scratch_{};
-			std::uint64_t expected_size_{};
-			std::uint64_t offset_{};
-		};
-
-		[[nodiscard]] result<std::shared_ptr<snapshot_handle::data>>
-		decode_snapshot(const sqlite_replayable_byte_source& source,
-						const std::uint64_t expected_size,
-						const relation_engine& engine)
-		{
-			auto first_pass = source.open_pass();
-			if (!first_pass)
-				return unexpected(std::move(first_pass.error()));
-			binary_reader reader{**first_pass, expected_size};
-			bool canonical_required{};
-			auto value = decode_snapshot(reader, engine, std::nullopt, &canonical_required);
-			if (!value)
-				return unexpected(std::move(value.error()));
-			if (!canonical_required)
-				return value;
-
-			auto comparison_pass = source.open_pass();
-			if (!comparison_pass)
-				return unexpected(std::move(comparison_pass.error()));
-			sqlite_byte_comparison_sink comparison{std::move(*comparison_pass), expected_size};
-			if (auto encoded = encode_snapshot(**value, comparison); !encoded)
-				return unexpected(std::move(encoded.error()));
-			if (auto compared = comparison.finish(); !compared)
-				return unexpected(std::move(compared.error()));
-			return value;
-		}
 	} // namespace
 
 	result<void> snapshot_series_selector::validate() const
@@ -2230,46 +616,6 @@ namespace cxxlens::sdk
 			claim_annotation_view{&(*values_)[index_++], generation_, *generation_}};
 	}
 } // namespace cxxlens::sdk
-
-namespace cxxlens::sdk::detail
-{
-	result<std::vector<std::byte>> encode_store_claim(const claim& value)
-	{
-		try
-		{
-			binary_writer writer;
-			encode_claim(writer, value);
-			return std::move(writer).finish();
-		}
-		catch (const std::bad_alloc&)
-		{
-			return unexpected(error{"store.allocation-failure", "claim-codec", "encode"});
-		}
-	}
-
-	result<claim> decode_store_claim(const std::span<const std::byte> bytes,
-									 const relation_engine& engine)
-	{
-		try
-		{
-			binary_reader reader{bytes};
-			auto value = decode_claim(reader, engine);
-			if (!value)
-				return unexpected(std::move(value.error()));
-			auto finished = reader.finished();
-			if (!finished)
-				return unexpected(finished ? error{"store.corrupt", "claim-codec", "trailing"}
-										   : std::move(finished.error()));
-			if (!*finished)
-				return unexpected(error{"store.corrupt", "claim-codec", "trailing"});
-			return std::move(*value);
-		}
-		catch (const std::bad_alloc&)
-		{
-			return unexpected(error{"store.allocation-failure", "claim-codec", "decode"});
-		}
-	}
-} // namespace cxxlens::sdk::detail
 
 namespace cxxlens::sdk
 {
@@ -7825,63 +6171,6 @@ namespace cxxlens::sdk
 			std::uint64_t payload_chunk_count{};
 		};
 
-		[[nodiscard]] result<std::size_t>
-		payload_generation_offset(binary_reader& reader, const std::uint64_t expected_generation)
-		{
-			auto magic = reader.string();
-			if (!magic ||
-				(*magic != "cxxlens.ng-snapshot-payload.v1" &&
-				 *magic != "cxxlens.ng-snapshot-payload.v2" &&
-				 *magic != "cxxlens.ng-snapshot-payload.v3" &&
-				 *magic != "cxxlens.ng-snapshot-payload.v4" &&
-				 *magic != "cxxlens.ng-snapshot-payload.v5"))
-				return unexpected(store_error("store.corrupt", "payload", "format"));
-			auto schema = reader.string();
-			auto snapshot_id = reader.string();
-			auto major = reader.unsigned_value();
-			auto minor = reader.unsigned_value();
-			auto patch = reader.unsigned_value();
-			auto catalog = reader.string();
-			auto universe = reader.string();
-			auto registry = reader.string();
-			auto policy = reader.string();
-			auto partition_count = reader.unsigned_value();
-			if (!schema || !snapshot_id || !major || !minor || !patch || !catalog || !universe ||
-				!registry || !policy || !partition_count || *partition_count > 1'000'000U)
-				return unexpected(store_error("store.corrupt", "payload", "manifest-header"));
-			for (std::uint64_t index = 0U; index < *partition_count; ++index)
-			{
-				auto partition_id = reader.string();
-				auto descriptor = reader.string();
-				auto basis = reader.string();
-				auto claims = reader.string();
-				auto coverage = reader.string();
-				auto content = reader.string();
-				auto claim_count = reader.unsigned_value();
-				auto complete = reader.boolean();
-				if (!partition_id || !descriptor || !basis || !claims || !coverage || !content ||
-					!claim_count || !complete)
-					return unexpected(store_error("store.corrupt", "payload", "partition-header"));
-			}
-			auto closure_count = reader.unsigned_value();
-			if (!closure_count || *closure_count > 1'000'000U)
-				return unexpected(store_error("store.corrupt", "payload", "closure-count"));
-			for (std::uint64_t index = 0U; index < *closure_count; ++index)
-				if (auto closure = reader.string(); !closure)
-					return unexpected(std::move(closure.error()));
-			auto publication_id = reader.string();
-			auto series_id = reader.string();
-			auto publication_snapshot_id = reader.string();
-			auto sequence = reader.unsigned_value();
-			if (!publication_id || !series_id || !publication_snapshot_id || !sequence)
-				return unexpected(store_error("store.corrupt", "payload", "publication-header"));
-			const auto generation_offset = reader.offset();
-			auto stored_generation = reader.unsigned_value();
-			if (!stored_generation || *stored_generation != expected_generation)
-				return unexpected(store_error("store.corrupt", "payload", "generation-mismatch"));
-			return generation_offset;
-		}
-
 		class sqlite_generation_rewrite_byte_source final : public sqlite_bounded_byte_source
 		{
 		  public:
@@ -7957,11 +6246,8 @@ namespace cxxlens::sdk
 			{
 				if (!source || expected_size > std::numeric_limits<std::size_t>::max())
 					return unexpected(store_error("store.corrupt", "payload", "generation-source"));
-				auto pass = source->open_pass();
-				if (!pass)
-					return unexpected(std::move(pass.error()));
-				binary_reader reader{**pass, expected_size};
-				auto offset = payload_generation_offset(reader, expected_generation);
+				auto offset =
+					payload_generation_offset(*source, expected_size, expected_generation);
 				if (!offset || *offset > expected_size || expected_size - *offset < 8U)
 					return unexpected(
 						offset ? store_error("store.corrupt", "payload", "truncated-generation")
@@ -9098,12 +7384,14 @@ namespace cxxlens::sdk
 				}
 				return {};
 			}
-			const auto payload = encode_snapshot(value);
-			const auto checksum = content_digest(payload);
+			auto payload = encode_snapshot(value);
+			if (!payload)
+				return unexpected(std::move(payload.error()));
+			const auto checksum = content_digest(*payload);
 			if (auto begun = database->execute("BEGIN IMMEDIATE;"); !begun)
 				return begun;
 			if (auto inserted =
-					insert_v2_publication_row(*database, record, checksum, payload, true);
+					insert_v2_publication_row(*database, record, checksum, *payload, true);
 				!inserted)
 			{
 				(void)database->execute("ROLLBACK;");
@@ -10793,17 +9081,22 @@ namespace cxxlens::sdk
 			}
 			else
 			{
-				const auto payload = encode_snapshot(value);
-				const auto checksum = content_digest(payload);
+				auto payload = encode_snapshot(value);
+				if (!payload)
+				{
+					rollback();
+					return unexpected(std::move(payload.error()));
+				}
+				const auto checksum = content_digest(*payload);
 				if (auto inserted =
-						insert_v2_publication_row(*database, record, checksum, payload, false);
+						insert_v2_publication_row(*database, record, checksum, *payload, false);
 					!inserted)
 				{
 					rollback();
 					return unexpected(std::move(inserted.error()));
 				}
 				expected_payload_checksum = checksum;
-				expected_payload_byte_count = payload.size();
+				expected_payload_byte_count = payload->size();
 			}
 
 			if (sqlite_format == sqlite_physical_format::current_v3)
@@ -11384,14 +9677,19 @@ namespace cxxlens::sdk
 			}
 			else
 			{
-				const auto payload = encode_snapshot(*replacement);
-				const auto checksum = content_digest(payload);
+				auto payload = encode_snapshot(*replacement);
+				if (!payload)
+				{
+					rollback();
+					return unexpected(std::move(payload.error()));
+				}
+				const auto checksum = content_digest(*payload);
 				const auto updated =
 					update_v2_publication_row(*implementation_->database,
 											  id,
 											  replacement->publication_record_value,
 											  checksum,
-											  payload);
+											  *payload);
 				if (!updated)
 				{
 					rollback();
@@ -12171,15 +10469,17 @@ namespace cxxlens::sdk
 				return unexpected(store_error("store.corrupt", "test-payload-schema", "version"));
 			const auto& value = *publication->second;
 			const auto& record = value.publication_record_value;
-			const auto payload = encode_snapshot(value, *schema);
-			const auto checksum = content_digest(payload);
+			auto payload = encode_snapshot(value, *schema);
+			if (!payload)
+				return unexpected(std::move(payload.error()));
+			const auto checksum = content_digest(*payload);
 			if (store.implementation_->sqlite_format == sqlite_physical_format::current_v3)
 				return with_immediate_transaction(
 					*store.implementation_->database,
 					[&]()
 					{
 						return replace_v3_publication_payload(
-							*store.implementation_->database, record, record, payload);
+							*store.implementation_->database, record, record, *payload);
 					});
 			return with_immediate_transaction(*store.implementation_->database,
 											  [&]()
@@ -12189,7 +10489,7 @@ namespace cxxlens::sdk
 													  publication_id,
 													  record,
 													  checksum,
-													  payload);
+													  *payload);
 											  });
 		}
 		if (before == "test.series-head")
@@ -12226,8 +10526,10 @@ namespace cxxlens::sdk
 				return unexpected(std::move(generation.error()));
 			record.physical_generation = *generation;
 			record.publication_id = publication_identity(record);
-			const auto payload = encode_snapshot(duplicate);
-			const auto checksum = content_digest(payload);
+			auto payload = encode_snapshot(duplicate);
+			if (!payload)
+				return unexpected(std::move(payload.error()));
+			const auto checksum = content_digest(*payload);
 			if (store.implementation_->sqlite_format == sqlite_physical_format::current_v3)
 				return with_immediate_transaction(
 					*store.implementation_->database,
@@ -12236,17 +10538,17 @@ namespace cxxlens::sdk
 						if (auto chunks = insert_v3_chunks(*store.implementation_->database,
 														   record.publication_id,
 														   record.physical_generation,
-														   payload);
+														   *payload);
 							!chunks)
 							return chunks;
 						return insert_v3_publication_row(*store.implementation_->database,
 														 record,
 														 checksum,
-														 payload.size(),
-														 payload_chunk_count(payload.size()));
+														 payload->size(),
+														 payload_chunk_count(payload->size()));
 					});
 			return insert_v2_publication_row(
-				*store.implementation_->database, record, checksum, payload, false);
+				*store.implementation_->database, record, checksum, *payload, false);
 		}
 		if (before == "test.reverse-manifest-partitions")
 		{
@@ -12272,8 +10574,10 @@ namespace cxxlens::sdk
 				"publication:sha256:"
 				"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
 			record.publication_id = publication_identity(record);
-			const auto payload = encode_snapshot(orphaned);
-			const auto checksum = content_digest(payload);
+			auto payload = encode_snapshot(orphaned);
+			if (!payload)
+				return unexpected(std::move(payload.error()));
+			const auto checksum = content_digest(*payload);
 			if (store.implementation_->sqlite_format == sqlite_physical_format::current_v3)
 				return with_immediate_transaction(
 					*store.implementation_->database,
@@ -12291,7 +10595,7 @@ namespace cxxlens::sdk
 																 publication_id,
 																 record,
 																 checksum,
-																 payload);
+																 *payload);
 						!updated)
 						return updated;
 					auto head = sqlite_statement::prepare(
@@ -12429,8 +10733,10 @@ namespace cxxlens::sdk
 		else
 			return unexpected(store_error("store.corrupt", "test-identity-rewrite", "field"));
 
-		const auto payload = encode_snapshot(rewritten);
-		const auto checksum = content_digest(payload);
+		auto payload = encode_snapshot(rewritten);
+		if (!payload)
+			return unexpected(std::move(payload.error()));
+		const auto checksum = content_digest(*payload);
 		if (store.implementation_->sqlite_format == sqlite_physical_format::current_v3)
 			return with_immediate_transaction(*store.implementation_->database,
 											  [&]()
@@ -12448,7 +10754,7 @@ namespace cxxlens::sdk
 															 publication_id,
 															 record,
 															 checksum,
-															 payload);
+															 *payload);
 					!updated)
 					return updated;
 				return update_v2_series_head_for_replacement(
@@ -12490,8 +10796,10 @@ namespace cxxlens::sdk
 			record.publication_id = publication_identity(record);
 			if (auto valid = validate_publication_identity(record); !valid)
 				return unexpected(std::move(valid.error()));
-			const auto payload = encode_snapshot(rejected, *schema);
-			const auto checksum = content_digest(payload);
+			auto payload = encode_snapshot(rejected, *schema);
+			if (!payload)
+				return unexpected(std::move(payload.error()));
+			const auto checksum = content_digest(*payload);
 			if (store.implementation_->sqlite_format == sqlite_physical_format::current_v3)
 			{
 				auto inserted = with_immediate_transaction(
@@ -12501,14 +10809,14 @@ namespace cxxlens::sdk
 						if (auto chunks = insert_v3_chunks(*store.implementation_->database,
 														   record.publication_id,
 														   record.physical_generation,
-														   payload);
+														   *payload);
 							!chunks)
 							return chunks;
 						return insert_v3_publication_row(*store.implementation_->database,
 														 record,
 														 checksum,
-														 payload.size(),
-														 payload_chunk_count(payload.size()));
+														 payload->size(),
+														 payload_chunk_count(payload->size()));
 					});
 				if (!inserted)
 					return unexpected(std::move(inserted.error()));
@@ -12519,7 +10827,7 @@ namespace cxxlens::sdk
 				[&]()
 				{
 					return insert_v2_publication_row(
-						*store.implementation_->database, record, checksum, payload, false);
+						*store.implementation_->database, record, checksum, *payload, false);
 				});
 			if (!inserted)
 				return unexpected(std::move(inserted.error()));
@@ -12548,22 +10856,19 @@ namespace cxxlens::sdk
 		record.publication_id = publication_identity(record);
 
 		auto payload = encode_snapshot(rewritten);
-		binary_reader reader{payload};
-		auto magic = reader.string();
-		auto schema = reader.string();
-		auto snapshot_id = reader.string();
-		if (!magic || !schema || !snapshot_id || *magic != "cxxlens.ng-snapshot-payload.v5")
-			return unexpected(store_error("store.corrupt", "test-version-rewrite", "payload"));
-		const auto component_offset = reader.offset() + component_index * 8U;
-		if (payload.size() - component_offset < 8U)
-			return unexpected(store_error("store.corrupt", "test-version-rewrite", "truncated"));
+		if (!payload)
+			return unexpected(std::move(payload.error()));
+		auto component_offset_value = snapshot_version_component_offset(*payload, component_index);
+		if (!component_offset_value)
+			return unexpected(std::move(component_offset_value.error()));
+		const auto component_offset = *component_offset_value;
 		for (std::size_t index = 0U; index < 8U; ++index)
 		{
 			const auto shift = static_cast<unsigned>((7U - index) * 8U);
-			payload[component_offset + index] =
+			(*payload)[component_offset + index] =
 				static_cast<std::byte>((wire_value >> shift) & 0xffU);
 		}
-		const auto checksum = content_digest(payload);
+		const auto checksum = content_digest(*payload);
 		if (store.implementation_->sqlite_format == sqlite_physical_format::current_v3)
 		{
 			auto replaced = with_immediate_transaction(
@@ -12573,7 +10878,7 @@ namespace cxxlens::sdk
 					return replace_v3_publication_payload(*store.implementation_->database,
 														  found->second->publication_record_value,
 														  record,
-														  payload);
+														  *payload);
 				});
 			if (!replaced)
 				return unexpected(std::move(replaced.error()));
@@ -12588,7 +10893,7 @@ namespace cxxlens::sdk
 												  publication_id,
 												  record,
 												  checksum,
-												  payload);
+												  *payload);
 					!publication_updated)
 					return publication_updated;
 				return update_v2_series_head_for_replacement(
@@ -12657,8 +10962,10 @@ namespace cxxlens::sdk
 			}
 			else
 			{
-				const auto payload = encode_snapshot(*replacement);
-				const auto checksum = content_digest(payload);
+				auto payload = encode_snapshot(*replacement);
+				if (!payload)
+					return unexpected(std::move(payload.error()));
+				const auto checksum = content_digest(*payload);
 				auto updated = with_immediate_transaction(
 					*store.implementation_->database,
 					[&]() -> result<void>
@@ -12668,7 +10975,7 @@ namespace cxxlens::sdk
 														  publication_id,
 														  record,
 														  checksum,
-														  payload);
+														  *payload);
 							!publication_updated)
 							return publication_updated;
 						return update_v2_series_head_for_replacement(
@@ -12724,8 +11031,10 @@ namespace cxxlens::sdk
 						return bound;
 					return delete_head->expect_done();
 				});
-		const auto payload = encode_snapshot(rejected);
-		const auto checksum = content_digest(payload);
+		auto payload = encode_snapshot(rejected);
+		if (!payload)
+			return unexpected(std::move(payload.error()));
+		const auto checksum = content_digest(*payload);
 		return with_immediate_transaction(
 			*store.implementation_->database,
 			[&]() -> result<void>
@@ -12734,7 +11043,7 @@ namespace cxxlens::sdk
 															 publication_id,
 															 record,
 															 checksum,
-															 payload);
+															 *payload);
 					!updated)
 					return updated;
 				auto delete_head = sqlite_statement::prepare(
