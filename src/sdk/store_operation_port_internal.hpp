@@ -2,7 +2,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <span>
+#include <string_view>
 
 namespace cxxlens::sdk
 {
@@ -85,6 +87,92 @@ namespace cxxlens::sdk
 		[[nodiscard]] constexpr bool operator==(const store_close_outcome&) const = default;
 	};
 
+	/** Product backends which traverse the same private observation boundary. */
+	enum class store_backend_kind : std::uint8_t
+	{
+		memory,
+		sqlite,
+	};
+
+	/** Closed Store phases; no candidate graph, writer, or native handle crosses this boundary. */
+	enum class store_backend_operation : std::uint8_t
+	{
+		stage_record,
+		seal_staging,
+		open_physical_cursor,
+		finish_physical_cursor,
+		compare_projection,
+		validate_current,
+		allocate_publication_sequence,
+		allocate_physical_generation,
+		publish_once,
+		reopen_factory,
+		lookup_current,
+		lookup_expected_parent,
+		lookup_publication,
+		lookup_snapshot,
+		canonical_export,
+		abort_staging,
+	};
+
+	/** Typed observation faults available only through an external tests/support decorator. */
+	enum class store_backend_observation_fault : std::uint8_t
+	{
+		none,
+		corrupt_current,
+		corrupt_publication,
+		snapshot_ambiguous,
+		publication_sequence_exhausted,
+		physical_generation_exhausted,
+		projection_mismatch,
+		backend_failure,
+		commit_outcome_unknown,
+	};
+
+	enum class store_backend_observation_point : std::uint8_t
+	{
+		before_operation,
+		after_operation,
+	};
+
+	/**
+	 * Borrowed identifiers are valid only for observe_backend_operation().  The event carries no
+	 * mutable candidate state and cannot authorize or perform a backend effect.
+	 */
+	struct store_backend_operation_event
+	{
+		store_backend_kind backend{store_backend_kind::memory};
+		store_backend_operation operation{store_backend_operation::stage_record};
+		store_backend_observation_point point{store_backend_observation_point::before_operation};
+		std::string_view backend_binding;
+		std::string_view staging_session_id;
+		std::string_view series_id;
+		std::string_view candidate_id;
+		std::string_view snapshot_id;
+		std::string_view publication_id;
+		std::uint64_t ordinal{};
+		std::uint64_t record_count{};
+		std::uint64_t framed_bytes{};
+		std::uint64_t publication_sequence{};
+		std::uint64_t physical_generation{};
+		bool operation_attempted{};
+		bool effect_may_have_occurred{};
+
+		[[nodiscard]] constexpr bool
+		operator==(const store_backend_operation_event&) const = default;
+	};
+
+	struct store_backend_operation_observation
+	{
+		store_backend_observation_fault fault{store_backend_observation_fault::none};
+		int native_code{};
+		bool operation_attempted{};
+		bool effect_may_have_occurred{};
+
+		[[nodiscard]] constexpr bool
+		operator==(const store_backend_operation_observation&) const = default;
+	};
+
 	enum class store_commit_state : std::uint8_t
 	{
 		committed,
@@ -145,6 +233,15 @@ namespace cxxlens::sdk
 		close_sqlite(store_sqlite_operation_binding binding) noexcept = 0;
 		[[nodiscard]] virtual store_commit_outcome
 		commit_sqlite(store_sqlite_operation_binding binding) noexcept = 0;
+		/**
+		 * Product-private observation boundary.  The default is inert so existing persistence ports
+		 * remain source-compatible; Store backends must still derive and perform every operation.
+		 */
+		[[nodiscard]] virtual store_backend_operation_observation
+		observe_backend_operation(const store_backend_operation_event&) noexcept
+		{
+			return {};
+		}
 	};
 
 	/**
@@ -162,5 +259,10 @@ namespace cxxlens::sdk
 		close_sqlite(store_sqlite_operation_binding binding) noexcept override;
 		[[nodiscard]] store_commit_outcome
 		commit_sqlite(store_sqlite_operation_binding binding) noexcept override;
+		[[nodiscard]] store_backend_operation_observation
+		observe_backend_operation(const store_backend_operation_event& event) noexcept override;
 	};
+
+	/** Owned production port retained by Store and every private phase token. */
+	[[nodiscard]] std::shared_ptr<store_operation_port> make_default_store_operation_port();
 } // namespace cxxlens::sdk

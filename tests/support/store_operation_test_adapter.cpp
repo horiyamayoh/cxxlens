@@ -1,12 +1,21 @@
 #include "store_operation_test_adapter.hpp"
 
+#include <stdexcept>
 #include <utility>
 
 namespace cxxlens::test
 {
 	store_operation_test_adapter::store_operation_test_adapter(
+		std::shared_ptr<sdk::store_operation_port> delegate)
+		: owned_delegate_(std::move(delegate)), delegate_(owned_delegate_.get())
+	{
+		if (delegate_ == nullptr)
+			throw std::invalid_argument{"Store operation delegate is required"};
+	}
+
+	store_operation_test_adapter::store_operation_test_adapter(
 		sdk::store_operation_port& delegate) noexcept
-		: delegate_(delegate)
+		: delegate_(&delegate)
 	{
 	}
 
@@ -40,6 +49,15 @@ namespace cxxlens::test
 		next_commit_ambiguity_ = ambiguity_plan{native_code, side};
 	}
 
+	void store_operation_test_adapter::inject_next_backend_fault(
+		const sdk::store_backend_operation operation,
+		const sdk::store_backend_observation_fault fault,
+		const store_operation_ambiguity_side side,
+		const int native_code) noexcept
+	{
+		next_backend_fault_ = backend_fault_plan{operation, fault, native_code, side};
+	}
+
 	std::size_t store_operation_test_adapter::write_call_count() const noexcept
 	{
 		return write_call_count_;
@@ -65,6 +83,11 @@ namespace cxxlens::test
 		return commit_call_count_;
 	}
 
+	std::size_t store_operation_test_adapter::backend_observation_call_count() const noexcept
+	{
+		return backend_observation_call_count_;
+	}
+
 	sdk::store_write_outcome
 	store_operation_test_adapter::write_exact(const int descriptor,
 											  const std::span<const std::byte> bytes) noexcept
@@ -75,7 +98,7 @@ namespace cxxlens::test
 			const auto code = *std::exchange(next_write_resource_exhaustion_, std::nullopt);
 			return {sdk::store_write_state::resource_exhausted, 0U, code, true, false};
 		}
-		return delegate_.write_exact(descriptor, bytes);
+		return delegate_->write_exact(descriptor, bytes);
 	}
 
 	sdk::store_sync_outcome
@@ -87,10 +110,10 @@ namespace cxxlens::test
 		{
 			const auto plan = *std::exchange(next_sync_ambiguity_, std::nullopt);
 			if (plan.side == store_operation_ambiguity_side::after_delegate)
-				(void)delegate_.synchronize(descriptor, target);
+				(void)delegate_->synchronize(descriptor, target);
 			return {target, sdk::store_sync_state::outcome_unknown, plan.native_code, true};
 		}
-		return delegate_.synchronize(descriptor, target);
+		return delegate_->synchronize(descriptor, target);
 	}
 
 	sdk::store_close_outcome
@@ -101,10 +124,10 @@ namespace cxxlens::test
 		{
 			const auto plan = *std::exchange(next_descriptor_close_ambiguity_, std::nullopt);
 			if (plan.side == store_operation_ambiguity_side::after_delegate)
-				(void)delegate_.close_descriptor(descriptor);
+				(void)delegate_->close_descriptor(descriptor);
 			return {sdk::store_close_state::outcome_unknown, plan.native_code, true};
 		}
-		return delegate_.close_descriptor(descriptor);
+		return delegate_->close_descriptor(descriptor);
 	}
 
 	sdk::store_close_outcome store_operation_test_adapter::close_sqlite(
@@ -115,10 +138,10 @@ namespace cxxlens::test
 		{
 			const auto plan = *std::exchange(next_sqlite_close_ambiguity_, std::nullopt);
 			if (plan.side == store_operation_ambiguity_side::after_delegate)
-				(void)delegate_.close_sqlite(binding);
+				(void)delegate_->close_sqlite(binding);
 			return {sdk::store_close_state::outcome_unknown, plan.native_code, true};
 		}
-		return delegate_.close_sqlite(binding);
+		return delegate_->close_sqlite(binding);
 	}
 
 	sdk::store_commit_outcome store_operation_test_adapter::commit_sqlite(
@@ -129,9 +152,40 @@ namespace cxxlens::test
 		{
 			const auto plan = *std::exchange(next_commit_ambiguity_, std::nullopt);
 			if (plan.side == store_operation_ambiguity_side::after_delegate)
-				(void)delegate_.commit_sqlite(binding);
+				(void)delegate_->commit_sqlite(binding);
 			return {sdk::store_commit_state::outcome_unknown, plan.native_code, true, true};
 		}
-		return delegate_.commit_sqlite(binding);
+		return delegate_->commit_sqlite(binding);
+	}
+
+	sdk::store_backend_operation_observation
+	store_operation_test_adapter::observe_backend_operation(
+		const sdk::store_backend_operation_event& event) noexcept
+	{
+		++backend_observation_call_count_;
+		if (next_backend_fault_ &&
+			next_backend_fault_->side == store_operation_ambiguity_side::before_delegate &&
+			next_backend_fault_->operation == event.operation &&
+			event.point == sdk::store_backend_observation_point::before_operation)
+		{
+			const auto plan = *std::exchange(next_backend_fault_, std::nullopt);
+			return {plan.fault,
+					plan.native_code,
+					event.operation_attempted,
+					event.effect_may_have_occurred};
+		}
+		const auto forwarded = delegate_->observe_backend_operation(event);
+		if (next_backend_fault_ &&
+			next_backend_fault_->side == store_operation_ambiguity_side::after_delegate &&
+			next_backend_fault_->operation == event.operation &&
+			event.point == sdk::store_backend_observation_point::after_operation)
+		{
+			const auto plan = *std::exchange(next_backend_fault_, std::nullopt);
+			return {plan.fault,
+					plan.native_code,
+					event.operation_attempted,
+					event.effect_may_have_occurred};
+		}
+		return forwarded;
 	}
 } // namespace cxxlens::test

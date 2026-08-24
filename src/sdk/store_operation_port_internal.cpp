@@ -4,6 +4,7 @@
 #include <cerrno>
 #include <cstddef>
 #include <limits>
+#include <memory>
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <unistd.h>
@@ -192,5 +193,16 @@ namespace cxxlens::sdk
 		{
 			return {store_commit_state::outcome_unknown, 0, true, true};
 		}
+	}
+
+	store_backend_operation_observation default_store_operation_port::observe_backend_operation(
+		const store_backend_operation_event&) noexcept
+	{
+		return {};
+	}
+
+	std::shared_ptr<store_operation_port> make_default_store_operation_port()
+	{
+		return std::make_shared<default_store_operation_port>();
 	}
 } // namespace cxxlens::sdk
