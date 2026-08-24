@@ -13,30 +13,8 @@
 #include <utility>
 #include <vector>
 
+#include "../../support/sqlite_writer_shm_native_lifetime.hpp"
 #include "sdk/sqlite_writer_shm_mapping_semantics_internal.hpp"
-
-namespace cxxlens::sdk
-{
-	class sqlite_writer_shm_mapping_epoch_test_peer
-	{
-	  public:
-		[[nodiscard]] static std::pair<sqlite_writer_shm_native_lifetime_revoker,
-									   sqlite_writer_shm_native_lifetime_source>
-		native_lifetime_source(sqlite_writer_shm_native_lifetime_role role,
-							   sqlite_backend_opaque_identity native_lifetime_identity,
-							   sqlite_backend_opaque_identity semantic_receipt,
-							   std::optional<sqlite_backend_opaque_identity> native_xopen_receipt,
-							   const std::shared_ptr<void>& retained_owner)
-		{
-			return sqlite_writer_shm_native_lifetime_test_factory::create_source(
-				role,
-				std::move(native_lifetime_identity),
-				std::move(semantic_receipt),
-				std::move(native_xopen_receipt),
-				retained_owner);
-		}
-	};
-} // namespace cxxlens::sdk
 
 namespace
 {
@@ -84,7 +62,7 @@ namespace
 	{
 		auto owner = std::make_shared<int>(marker);
 		auto weak_owner = std::weak_ptr<int>{owner};
-		auto lifetime = sqlite_writer_shm_mapping_epoch_test_peer::native_lifetime_source(
+		auto lifetime = test_support::make_sqlite_writer_shm_native_lifetime(
 			role,
 			identity("test.mapping-semantics.native-lifetime", marker),
 			semantic_receipt,

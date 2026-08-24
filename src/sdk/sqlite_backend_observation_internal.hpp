@@ -103,7 +103,6 @@ namespace cxxlens::sdk
 		friend class sqlite_shm_reader_native_ok_projection_permit;
 		friend class sqlite_shm_reader_handoff;
 		friend class detail::sqlite_shm_mapping_lease_state;
-		friend class sqlite_same_process_shm_lease_test_peer;
 
 		explicit sqlite_source_shm_target_namespace_epoch_reader_borrow(
 			std::unique_ptr<detail::sqlite_source_shm_target_namespace_epoch_reader_borrow_state>
@@ -144,7 +143,6 @@ namespace cxxlens::sdk
 		friend class sqlite_shm_writer_reader_borrow_mint_capability;
 		friend class detail::sqlite_writer_shm_mapping_epoch_state;
 		friend class detail::sqlite_writer_shm_generation_epoch_custody;
-		friend class sqlite_same_process_shm_lease_test_peer;
 		friend result<sqlite_source_shm_target_namespace_epoch_borrow_minter>
 		make_sqlite_source_shm_target_namespace_epoch_borrow_minter(
 			const std::shared_ptr<sqlite_source_shm_target_namespace_epoch>&);

@@ -15,30 +15,8 @@
 #include <utility>
 #include <vector>
 
+#include "../../support/sqlite_writer_shm_native_lifetime.hpp"
 #include "sdk/sqlite_writer_shm_mapping_epoch_internal.hpp"
-
-namespace cxxlens::sdk
-{
-	class sqlite_writer_shm_mapping_epoch_test_peer
-	{
-	  public:
-		[[nodiscard]] static std::pair<sqlite_writer_shm_native_lifetime_revoker,
-									   sqlite_writer_shm_native_lifetime_source>
-		native_lifetime_source(sqlite_writer_shm_native_lifetime_role role,
-							   sqlite_backend_opaque_identity native_lifetime_identity,
-							   sqlite_backend_opaque_identity semantic_receipt,
-							   std::optional<sqlite_backend_opaque_identity> native_xopen_receipt,
-							   const std::shared_ptr<void>& retained_owner)
-		{
-			return sqlite_writer_shm_native_lifetime_test_factory::create_source(
-				role,
-				std::move(native_lifetime_identity),
-				std::move(semantic_receipt),
-				std::move(native_xopen_receipt),
-				retained_owner);
-		}
-	};
-} // namespace cxxlens::sdk
 
 namespace
 {
@@ -121,7 +99,7 @@ namespace
 		auto destruction_count = std::make_shared<std::atomic_int>();
 		auto owner = std::make_shared<owner_probe>(destruction_count);
 		auto weak_owner = std::weak_ptr<owner_probe>{owner};
-		auto lifetime = sqlite_writer_shm_mapping_epoch_test_peer::native_lifetime_source(
+		auto lifetime = test_support::make_sqlite_writer_shm_native_lifetime(
 			role,
 			identity("test.epoch.native-lifetime", marker),
 			semantic_receipt,
@@ -826,30 +804,36 @@ namespace
 			auto supplied_xopen = test.missing ? std::optional<sqlite_backend_opaque_identity>{}
 											   : std::optional<sqlite_backend_opaque_identity>{
 													 identity("test.epoch.wrong-xopen", marker)};
+			if (test.missing)
+			{
+				auto destruction_count = std::make_shared<std::atomic_int>();
+				auto owner = std::make_shared<owner_probe>(destruction_count);
+				auto weak_owner = std::weak_ptr<owner_probe>{owner};
+				auto rejected = sqlite_writer_shm_native_lifetime_production_factory::create_source(
+					test.main ? sqlite_writer_shm_native_lifetime_role::main_database
+							  : sqlite_writer_shm_native_lifetime_role::write_ahead_log,
+					identity("test.epoch.native-lifetime",
+							 static_cast<std::uint8_t>(marker + 100U)),
+					semantic_receipt,
+					std::nullopt,
+					owner);
+				require(!rejected && fixture.port.arm_calls == 0U &&
+							fixture.port.preparation_order.empty() &&
+							fixture.observation->calls == 0U,
+						"MAIN/WAL source without xOpen minted a pin or reached the epoch port");
+				owner.reset();
+				require(weak_owner.expired() &&
+							destruction_count->load(std::memory_order_relaxed) == 1,
+						"malformed xOpen source released its native memory owner");
+				++marker;
+				continue;
+			}
 			auto replacement = make_native_lifetime(
 				test.main ? sqlite_writer_shm_native_lifetime_role::main_database
 						  : sqlite_writer_shm_native_lifetime_role::write_ahead_log,
 				semantic_receipt,
 				std::move(supplied_xopen),
 				static_cast<std::uint8_t>(marker + 100U));
-			if (test.missing)
-			{
-				auto missing_pin = replacement.source.mint_pin();
-				require(!replacement.source.valid() && !missing_pin &&
-							missing_pin.error().reason ==
-								sqlite_shm_lease_rejection_reason::invalid_identity &&
-							missing_pin.error().action ==
-								sqlite_shm_lease_recovery_action::deny_before_native_map &&
-							fixture.port.arm_calls == 0U &&
-							fixture.port.preparation_order.empty() &&
-							fixture.observation->calls == 0U,
-						"MAIN/WAL source without xOpen minted a pin or reached the epoch port");
-				replacement.retained_owner.reset();
-				require(replacement.owner.expired(),
-						"malformed xOpen source retained its native memory owner");
-				++marker;
-				continue;
-			}
 
 			auto request = resources.take_request();
 			auto replacement_pin = mint_pin(replacement, "mint wrong native xOpen pin");
@@ -901,19 +885,19 @@ namespace
 			  std::pair{sqlite_writer_shm_native_lifetime_role::shared_memory_attachment,
 						std::uint8_t{84U}}})
 		{
-			auto malformed = make_native_lifetime(role,
-												  identity("test.epoch.no-xopen-role", marker),
-												  identity("test.epoch.unexpected-xopen", marker),
-												  marker);
-			auto pin = malformed.source.mint_pin();
-			require(!malformed.source.valid() && !pin &&
-						pin.error().reason == sqlite_shm_lease_rejection_reason::invalid_identity &&
-						pin.error().action ==
-							sqlite_shm_lease_recovery_action::deny_before_native_map,
-					"parent or SHM lifetime source accepted an xOpen receipt");
-			malformed.retained_owner.reset();
-			require(malformed.owner.expired(),
-					"malformed native lifetime source retained its owner");
+			auto destruction_count = std::make_shared<std::atomic_int>();
+			auto owner = std::make_shared<owner_probe>(destruction_count);
+			auto weak_owner = std::weak_ptr<owner_probe>{owner};
+			auto malformed = sqlite_writer_shm_native_lifetime_production_factory::create_source(
+				role,
+				identity("test.epoch.no-xopen-role", marker),
+				identity("test.epoch.unexpected-xopen", marker),
+				identity("test.epoch.unexpected-xopen-receipt", marker),
+				owner);
+			require(!malformed, "parent or SHM lifetime source accepted an xOpen receipt");
+			owner.reset();
+			require(weak_owner.expired() && destruction_count->load(std::memory_order_relaxed) == 1,
+					"malformed native lifetime source released its owner");
 		}
 
 		auto resources = make_epoch_resources(85U);

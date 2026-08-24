@@ -39,7 +39,7 @@ namespace cxxlens::sdk
 	};
 
 	/**
-	 * Test-minted typed proof for one authenticated owned-forwarding writer route.
+	 * Typed proof for one authenticated owned-forwarding writer route.
 	 *
 	 * The private constructor is the authority boundary: this production-inert checkpoint has no
 	 * production minter. Every duplicated field is intentional cross-binding evidence rather than
@@ -61,7 +61,6 @@ namespace cxxlens::sdk
 
 	  private:
 		friend class sqlite_writer_shm_mapping_receipt_validator;
-		friend class sqlite_same_process_shm_registry_test_peer;
 		friend class sqlite_shm_writer_route_proof_production_factory;
 
 		sqlite_shm_verified_writer_route_proof(

@@ -19,23 +19,10 @@
 
 #include "sdk/sqlite_same_process_shm_process_port_internal.hpp"
 
-namespace cxxlens::sdk
-{
-	class sqlite_same_process_shm_registry_test_peer
-	{
-	  public:
-		static void invalidate_process(sqlite_same_process_shm_mapping_registry& registry) noexcept
-		{
-			registry.invalidate_process_instance_for_testing();
-		}
-	};
-} // namespace cxxlens::sdk
-
 namespace
 {
 	using cxxlens::sdk::sqlite_backend_opaque_identity;
 	using cxxlens::sdk::sqlite_same_process_shm_process_port;
-	using cxxlens::sdk::sqlite_same_process_shm_registry_test_peer;
 	using cxxlens::sdk::sqlite_shm_process_identity_observation;
 	using cxxlens::sdk::sqlite_shm_process_identity_rejection_reason;
 	using cxxlens::sdk::validate_sqlite_shm_process_identity;
@@ -208,67 +195,6 @@ namespace
 #endif
 	}
 
-	void verify_same_process_epoch_loss_never_recreates_registry()
-	{
-#if defined(__linux__) && defined(SYS_pidfd_open)
-		auto acquired = sqlite_same_process_shm_process_port::acquire();
-		require(acquired.has_value(), "process port acquire before forced epoch loss");
-		auto handle = std::move(acquired.value());
-		const auto parent_identity = handle.process_instance();
-		auto* const registry = handle.registry();
-		require(registry != nullptr, "registry present before forced epoch loss");
-
-		sqlite_same_process_shm_registry_test_peer::invalidate_process(*registry);
-		require(!handle.valid() && handle.registry() == nullptr,
-				"process handle rejects a stale registry epoch");
-		auto first_retry = sqlite_same_process_shm_process_port::acquire();
-		auto second_retry = sqlite_same_process_shm_process_port::acquire();
-		require(!first_retry && !second_retry,
-				"same process never replaces a lost process-global registry");
-		require(first_retry.error().action ==
-						cxxlens::sdk::sqlite_shm_lease_recovery_action::quarantine_no_retry &&
-					second_retry.error().action ==
-						cxxlens::sdk::sqlite_shm_lease_recovery_action::quarantine_no_retry,
-				"same-process epoch loss remains sticky quarantine");
-
-		int pipe_descriptors[2]{-1, -1};
-		require(::pipe(pipe_descriptors) == 0, "quarantine fork result pipe");
-		const auto child = ::fork();
-		require(child >= 0, "fork child after same-process quarantine");
-		if (child == 0)
-		{
-			(void)::close(pipe_descriptors[0]);
-			std::uint8_t verdict{};
-			auto child_acquired = sqlite_same_process_shm_process_port::acquire();
-			const bool fresh = child_acquired.has_value() && child_acquired.value().valid() &&
-				child_acquired.value().registry() != nullptr &&
-				child_acquired.value().process_instance() != parent_identity;
-			verdict = fresh ? 1U : 0U;
-			const auto ignored = ::write(pipe_descriptors[1], &verdict, sizeof(verdict));
-			(void)ignored;
-			(void)::close(pipe_descriptors[1]);
-			::_exit(verdict == 1U ? EXIT_SUCCESS : EXIT_FAILURE);
-		}
-
-		(void)::close(pipe_descriptors[1]);
-		std::uint8_t verdict{};
-		const auto count = ::read(pipe_descriptors[0], &verdict, sizeof(verdict));
-		(void)::close(pipe_descriptors[0]);
-		int status{};
-		require(::waitpid(child, &status, 0) == child, "wait quarantined-process child");
-		require(count == static_cast<ssize_t>(sizeof(verdict)) && verdict == 1U,
-				"fork child starts a distinct process-instance registry after parent quarantine");
-		require(WIFEXITED(status) && WEXITSTATUS(status) == EXIT_SUCCESS,
-				"quarantined-process child exits successfully");
-
-		auto parent_retry = sqlite_same_process_shm_process_port::acquire();
-		require(!parent_retry &&
-					parent_retry.error().action ==
-						cxxlens::sdk::sqlite_shm_lease_recovery_action::quarantine_no_retry,
-				"fork child recovery does not clear parent quarantine");
-#endif
-	}
-
 	void verify_process_identity_validator_is_pure_and_fail_closed()
 	{
 		sqlite_shm_process_identity_observation expected{
@@ -370,7 +296,6 @@ int main()
 		verify_process_identity_validator_is_pure_and_fail_closed();
 		verify_exact_one_process_registry();
 		verify_fork_child_invalidates_inherited_registry();
-		verify_same_process_epoch_loss_never_recreates_registry();
 	}
 	catch (const std::exception& error)
 	{

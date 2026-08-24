@@ -8,10 +8,10 @@
 namespace cxxlens::sdk::detail
 {
 	/**
-	 * The #201 outer zero-effect read success phases in the source-private state-only graph.
+	 * Outer zero-effect read success phases in the source-private state-only graph.
 	 *
-	 * This vocabulary mirrors the current Proposed ADR 0104 / DF-0201 state-and-test scope.  The
-	 * #205 mapping subprotocol or private heap WAL-index route is nested between the held WAL
+	 * This vocabulary implements the ADR 0104 / DF-0201 state-machine contract. The mapping
+	 * subprotocol or private heap WAL-index route is nested between the held WAL
 	 * prefix and eager decode.  The outer success graph deliberately has no generic quarantine
 	 * edge: failure/ambiguity is owned by the typed nested/teardown terminal routes and cannot be
 	 * converted into an outer receipt.  No phase or transition grants SQLite, VFS, mapping,
@@ -101,7 +101,7 @@ namespace cxxlens::sdk::detail
 	}
 
 	/**
-	 * Validate the complete #201 outer success path in the source-private state-only graph. The
+	 * Validate the complete outer success path in the source-private state-only graph. The
 	 * path has no generic failure state: a typed failure or quarantine terminal is not an outer
 	 * logical-read receipt candidate.
 	 */
@@ -280,7 +280,6 @@ namespace cxxlens::sdk::detail
 		presented_invalid,
 		peer_quarantine,
 		native_non_ok_or_unknown,
-		injected_commit_failure,
 		internal_failure,
 	};
 

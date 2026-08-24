@@ -85,17 +85,7 @@ namespace cxxlens::sdk
 		inactive,
 	};
 
-#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
-	/** Deterministic concurrency cut points exposed only through the registry test peer. */
-	enum class sqlite_shm_identity_issuer_pause_point_for_testing : std::uint8_t
-	{
-		none,
-		reserve_after_scope_count,
-		effect_after_callback_phase,
-	};
-#endif
-
-	/** Closed lifecycle owner class asserted when the U1 issuer-core test scope is sealed. */
+	/** Closed lifecycle owner class asserted when the U1 issuer-core scope is sealed. */
 	enum class sqlite_shm_reader_lifecycle_owner_kind : std::uint8_t
 	{
 		map,
@@ -110,12 +100,9 @@ namespace cxxlens::sdk
 	/**
 	 * Asserted coordinates for one reader lifecycle owner family.
 	 *
-	 * This aggregate is not authority. The U1 `_for_testing` seam remains an unqualified route: it
-	 * authenticates the exact registry and live family pin, then records these values in a private
-	 * scope control, but does not prove that the asserted owner/request exists or enforce one scope
-	 * per owner. U2a1a's separate registry-private reader-map gate performs that qualification;
-	 * copied coordinates do not convey it and cannot be presented to this issuer or validator by
-	 * themselves.
+	 * This aggregate is not authority. The registry binds these coordinates to the exact live
+	 * family pin and owner scope before presenting them to the issuer; copied coordinates do not
+	 * convey that qualification and cannot be presented to this issuer or validator by themselves.
 	 */
 	struct sqlite_shm_reader_lifecycle_owner_coordinates
 	{
@@ -135,9 +122,8 @@ namespace cxxlens::sdk
 	 *
 	 * It grants no callback or effect authority by itself. Only the process-global issuer can
 	 * consume it, and every validation checks exact private issuer/scope control provenance.
-	 * The U1 `_for_testing` registry seam remains unqualified and does not authenticate owner
-	 * existence or exact-one scope minting. U2a1a's registry-private reader-map gate is separate
-	 * and is not conveyed by this presenter alone. The presenter object itself must not be
+	 * The registry-private reader-map gate authenticates owner existence and exact-one scope
+	 * minting separately from this presenter. The presenter object itself must not be
 	 * concurrently moved or destroyed while an issuance call uses it. `retire_scope` is an atomic
 	 * control transition and may race issuance; one side wins the documented total order without
 	 * replacing the presenter's shared control. Independent scopes may issue concurrently. Any role
@@ -162,7 +148,6 @@ namespace cxxlens::sdk
 	  private:
 		friend class detail::sqlite_shm_process_identity_issuer_state;
 		friend class sqlite_same_process_shm_mapping_registry;
-		friend class sqlite_same_process_shm_registry_test_peer;
 		friend class sqlite_shm_process_global_identity_issuer;
 
 		explicit sqlite_shm_reader_lifecycle_identity_scope(
@@ -416,29 +401,12 @@ namespace cxxlens::sdk
 
 	  private:
 		friend class sqlite_same_process_shm_mapping_registry;
-		friend class sqlite_same_process_shm_registry_test_peer;
 		explicit sqlite_shm_process_global_identity_issuer(
 			std::weak_ptr<detail::sqlite_shm_process_identity_issuer_state> state,
 			std::shared_ptr<std::atomic<std::uint64_t>> process_epoch,
 			std::shared_ptr<std::atomic_bool> registry_issuer_owner_latch,
 			std::uint64_t expected_process_epoch) noexcept;
 		[[nodiscard]] bool current_before_state_lock() const noexcept;
-#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
-		void
-		set_scope_live_records_for_testing(const sqlite_shm_reader_lifecycle_identity_scope& scope,
-										   std::size_t value) noexcept;
-		[[nodiscard]] std::size_t scope_live_records_for_testing(
-			const sqlite_shm_reader_lifecycle_identity_scope& scope) const noexcept;
-		void set_callback_live_children_for_testing(
-			const sqlite_shm_issued_reader_callback_identity& callback, std::size_t value) noexcept;
-		[[nodiscard]] std::size_t callback_live_children_for_testing(
-			const sqlite_shm_issued_reader_callback_identity& callback) const noexcept;
-		void
-		arm_pause_for_testing(sqlite_shm_identity_issuer_pause_point_for_testing point) noexcept;
-		[[nodiscard]] bool pause_entered_for_testing(
-			sqlite_shm_identity_issuer_pause_point_for_testing point) const noexcept;
-		void release_pause_for_testing() noexcept;
-#endif
 
 		std::weak_ptr<detail::sqlite_shm_process_identity_issuer_state> state_;
 		std::shared_ptr<std::atomic<std::uint64_t>> process_epoch_;

@@ -762,14 +762,6 @@ namespace cxxlens::sdk
 					other.request_.shm_native_attachment.control_.get();
 			}
 
-#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
-			void invalidate_for_testing() noexcept
-			{
-				if (liveness_)
-					liveness_->live.store(false, std::memory_order_release);
-			}
-#endif
-
 			[[nodiscard]] bool observation_available() const noexcept
 			{
 				return lifetimes_valid() && !sealed_.load(std::memory_order_acquire);
@@ -1040,27 +1032,6 @@ namespace cxxlens::sdk
 			control_, std::move(retained_owner), std::move(pin_identity)};
 	}
 
-#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
-	std::pair<sqlite_writer_shm_native_lifetime_revoker, sqlite_writer_shm_native_lifetime_source>
-	sqlite_writer_shm_native_lifetime_test_factory::create_source(
-		const sqlite_writer_shm_native_lifetime_role role,
-		sqlite_backend_opaque_identity native_lifetime_identity,
-		sqlite_backend_opaque_identity semantic_receipt,
-		std::optional<sqlite_backend_opaque_identity> native_xopen_receipt,
-		const std::shared_ptr<void>& retained_owner)
-	{
-		auto control = std::make_shared<detail::sqlite_writer_shm_native_lifetime_control>();
-		control->role = role;
-		control->native_lifetime_identity = std::move(native_lifetime_identity);
-		control->semantic_receipt = std::move(semantic_receipt);
-		control->native_xopen_receipt = std::move(native_xopen_receipt);
-		return {
-			sqlite_writer_shm_native_lifetime_revoker{control},
-			sqlite_writer_shm_native_lifetime_source{std::move(control), retained_owner},
-		};
-	}
-#endif
-
 	sqlite_shm_lease_result<std::pair<sqlite_writer_shm_native_lifetime_revoker,
 									  sqlite_writer_shm_native_lifetime_source>>
 	sqlite_writer_shm_native_lifetime_production_factory::create_source(
@@ -1237,14 +1208,6 @@ namespace cxxlens::sdk
 			custody_, sqlite_shm_writer_reader_borrow_tokens{map_token, generation, holder_token}};
 	}
 
-#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
-	void sqlite_writer_shm_generation_epoch_authority::invalidate_for_testing() noexcept
-	{
-		if (state_)
-			state_->invalidate_for_testing();
-	}
-#endif
-
 	sqlite_writer_shm_mapping_epoch_arm::sqlite_writer_shm_mapping_epoch_arm(
 		std::shared_ptr<detail::sqlite_writer_shm_mapping_epoch_state> state) noexcept
 		: state_{std::move(state)}
@@ -1360,14 +1323,6 @@ namespace cxxlens::sdk
 		holder_token_ = 0U;
 		custody_.reset();
 	}
-
-#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
-	void sqlite_writer_shm_mapping_epoch_arm::invalidate_for_testing() noexcept
-	{
-		if (state_)
-			state_->invalidate_for_testing();
-	}
-#endif
 
 	sqlite_writer_shm_mapping_epoch_observer::sqlite_writer_shm_mapping_epoch_observer(
 		std::weak_ptr<detail::sqlite_writer_shm_mapping_epoch_state> state) noexcept
