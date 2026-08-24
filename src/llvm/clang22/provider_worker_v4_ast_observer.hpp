@@ -53,6 +53,7 @@ namespace cxxlens::detail::clang22
 		std::string compile_unit;
 		std::string source_snapshot;
 		std::string source_file;
+		std::uint64_t source_size_bytes{};
 		std::vector<provider_worker_v4_ast_observation> observations;
 		std::vector<sdk::detached_row> rows;
 		std::uint64_t failed_count{};

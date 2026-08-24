@@ -549,14 +549,66 @@ namespace cxxlens::detail::clang22
 		if (!valid_text(task_id) || !valid_text(task_v4_digest) || !valid_text(compile_unit) ||
 			!valid_text(source_snapshot) || !valid_text(source_file))
 			return sdk::unexpected(failure("provider-worker-v4.ast-batch-invalid", "identity"));
+		if (rows.size() != observations.size())
+			return sdk::unexpected(
+				failure("provider-worker-v4.ast-batch-invalid", "rows", "observation-cardinality"));
 		std::string previous;
-		for (const auto& observation : observations)
+		for (std::size_t index{}; index < observations.size(); ++index)
 		{
+			const auto& observation = observations[index];
 			if (auto valid = observation.validate(); !valid)
 				return valid;
 			if (observation.compile_unit != compile_unit)
 				return sdk::unexpected(
 					failure("provider-worker-v4.ast-batch-invalid", "compile-unit"));
+			const auto expected_descriptor = [&]() -> std::string_view
+			{
+				switch (observation.kind)
+				{
+					case provider_worker_v4_ast_observation_kind::entity:
+						return materialization::entity_observation_v2_descriptor().id;
+					case provider_worker_v4_ast_observation_kind::type:
+						return materialization::type_observation_v2_descriptor().id;
+					case provider_worker_v4_ast_observation_kind::call:
+						return materialization::call_observation_v2_descriptor().id;
+				}
+				return {};
+			}();
+			if (rows[index].descriptor_id != expected_descriptor)
+				return sdk::unexpected(
+					failure("provider-worker-v4.ast-batch-invalid", "rows", "descriptor-kind"));
+			auto descriptor = materialization::observation_v2_descriptor(
+				observation.kind == provider_worker_v4_ast_observation_kind::entity
+					? materialization::observation_v2_kind::entity
+					: observation.kind == provider_worker_v4_ast_observation_kind::type
+					? materialization::observation_v2_kind::type
+					: materialization::observation_v2_kind::call);
+			if (!descriptor)
+				return sdk::unexpected(std::move(descriptor.error()));
+			if (auto valid = sdk::validate_row(**descriptor, rows[index]); !valid)
+				return valid;
+			if (auto valid = sdk::validate_domain_identity(**descriptor, rows[index]); !valid)
+				return valid;
+			const materialization::observation_v2_task_authority authority{
+				compile_unit, source_snapshot, source_file, source_size_bytes};
+			auto decoded = materialization::decode_observation_v2_row(rows[index], authority);
+			if (!decoded)
+				return sdk::unexpected(std::move(decoded.error()));
+			const auto expected_kind =
+				observation.kind == provider_worker_v4_ast_observation_kind::entity
+				? materialization::observation_v2_kind::entity
+				: observation.kind == provider_worker_v4_ast_observation_kind::type
+				? materialization::observation_v2_kind::type
+				: materialization::observation_v2_kind::call;
+			if (decoded->kind != expected_kind ||
+				decoded->final_relation_compile_unit_id != observation.compile_unit ||
+				decoded->semantic_key != observation.semantic_key ||
+				decoded->primary_span != observation.primary_span ||
+				decoded->origin_chain != observation.origins ||
+				decoded->exact_equivalence != observation.exact_equivalence ||
+				decoded->limitation != observation.limitation)
+				return sdk::unexpected(failure(
+					"provider-worker-v4.ast-batch-invalid", "rows", "typed-observation-mismatch"));
 			const auto canonical = observation.canonical_form();
 			if (!previous.empty() && previous >= canonical)
 				return sdk::unexpected(
@@ -584,6 +636,7 @@ namespace cxxlens::detail::clang22
 			std::move(compile_unit),
 			metadata.input.closure.snapshot_id,
 			main->file_id,
+			main->size_bytes,
 			{},
 			{},
 			0U,
