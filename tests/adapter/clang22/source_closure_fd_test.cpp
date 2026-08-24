@@ -1,8 +1,10 @@
 #include "llvm/clang22/source_closure_fd.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cerrno>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -10,6 +12,8 @@
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <fcntl.h>
@@ -221,6 +225,39 @@ namespace
 		require_error(write, "source-closure.channel-cancelled", "write", "stop-requested");
 	}
 
+	class sequence_clock final : public cxxlens::detail::clang22::source_closure_monotonic_clock
+	{
+	  public:
+		explicit sequence_clock(std::vector<std::uint64_t> values) : values_{std::move(values)} {}
+
+		cxxlens::sdk::result<std::uint64_t> now_ns() const override
+		{
+			const auto index = std::min(index_, values_.size() - 1U);
+			++index_;
+			return values_[index];
+		}
+
+	  private:
+		std::vector<std::uint64_t> values_;
+		mutable std::size_t index_{};
+	};
+
+	void timeout_is_typed()
+	{
+		auto pair = make_pipe();
+		sequence_clock clock{{0U, 5U}};
+		source_closure_fd_channel_options options;
+		options.read = {pair.first, source_closure_fd_ownership::borrowed};
+		options.write = {pair.second, source_closure_fd_ownership::borrowed};
+		options.clock = &clock;
+		options.progress_timeout_ns = 5U;
+		auto channel = source_closure_fd_channel::create(options);
+		require(static_cast<bool>(channel), "timeout channel creation failed");
+		std::array<std::byte, 1> byte{};
+		auto result = channel->read(byte);
+		require_error(result, "source-closure.channel-timeout", "read", "progress-deadline");
+	}
+
 	void closed_peer_is_typed()
 	{
 		auto pair = make_socket_pair();
@@ -262,6 +299,7 @@ int main()
 	rejects_reserved_and_inherited_flags();
 	reads_bounded_and_writes_complete();
 	cancellation_is_typed();
+	timeout_is_typed();
 	closed_peer_is_typed();
 	owned_endpoint_closes_once();
 	return 0;

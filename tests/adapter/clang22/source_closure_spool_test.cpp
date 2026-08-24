@@ -276,6 +276,26 @@ namespace
 		limits.maximum_manifest_bytes = input.manifest_bytes.size() - 1U;
 		source_closure_spool bounded{limits};
 		require(!bounded.begin_manifest(input.manifest), "manifest bound was not enforced");
+
+		limits = source_closure_transport_limits{};
+		limits.maximum_task_spool_bytes = input.manifest_bytes.size();
+		source_closure_spool task_bounded{limits};
+		require_result(task_bounded.begin_manifest(input.manifest),
+					   "task-spool bound setup rejected manifest");
+		require_result(task_bounded.append_manifest(as_bytes(input.manifest_bytes)),
+					   "task-spool bound setup rejected manifest bytes");
+		require_result(task_bounded.finish_manifest(input.binding.manifest_digest),
+					   "task-spool bound setup rejected canonical manifest");
+		const auto& first_blob = input.snapshot.blobs.front();
+		require(!task_bounded.begin_blob({input.binding.session_id,
+										  input.binding.task_id,
+										  input.binding.closure_digest,
+										  0U,
+										  first_blob.content_digest,
+										  first_blob.size_bytes,
+										  first_blob.size_bytes,
+										  1U}),
+				"task-spool bound ignored manifest bytes");
 	}
 } // namespace
 

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -246,20 +247,72 @@ namespace cxxlens::detail::clang22
 					value.transfer_digest};
 		}
 
-		[[nodiscard]] sdk::result<void> cleanup(source_closure_spool& spool)
+		[[nodiscard]] sdk::result<void> cleanup(source_closure_spool_relay& relay)
 		{
-			auto receipt = spool.cleanup();
+			auto receipt = relay.cleanup();
 			if (!receipt)
 				return sdk::unexpected(std::move(receipt.error()));
 			return {};
 		}
 
 		[[nodiscard]] sdk::result<source_closure_receiver_result>
-		fail_with_cleanup(source_closure_spool& spool, sdk::error error)
+		fail_with_cleanup(source_closure_spool_relay& relay, sdk::error error)
 		{
-			if (auto cleaned = cleanup(spool); !cleaned)
+			if (auto cleaned = cleanup(relay); !cleaned)
 				return sdk::unexpected(std::move(cleaned.error()));
 			return sdk::unexpected(std::move(error));
+		}
+
+		[[nodiscard]] sdk::result<std::uint64_t> now_ns(const source_closure_monotonic_clock* clock)
+		{
+			if (clock != nullptr)
+				return clock->now_ns();
+			const auto now = std::chrono::steady_clock::now().time_since_epoch();
+			const auto count = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
+			if (count < 0)
+				return sdk::unexpected(
+					failure("source-closure.channel-clock-invalid", "clock", "negative"));
+			return static_cast<std::uint64_t>(count);
+		}
+
+		[[nodiscard]] sdk::result<source_closure_receiver_result>
+		fail_liveness(source_closure_spool_relay& relay,
+					  source_closure_transfer_validator& validator,
+					  sdk::error error)
+		{
+			const auto code = error.code;
+			if (code == "source-closure.channel-cancelled")
+			{
+				auto rejected = validator.cancel();
+				if (!rejected)
+					return sdk::unexpected(std::move(rejected.error()));
+				if (auto cleaned = relay.cleanup(); !cleaned)
+					return sdk::unexpected(std::move(cleaned.error()));
+				return sdk::unexpected(
+					failure("source-closure.cancelled", std::move(error.field), "stop-requested"));
+			}
+			if (code == "source-closure.channel-timeout")
+			{
+				auto rejected = validator.timeout();
+				if (!rejected)
+					return sdk::unexpected(std::move(rejected.error()));
+				if (auto cleaned = relay.cleanup(); !cleaned)
+					return sdk::unexpected(std::move(cleaned.error()));
+				return sdk::unexpected(failure("source-closure.transfer-timeout",
+											   std::move(error.field),
+											   "progress-deadline"));
+			}
+			if (code == "source-closure.channel-closed" ||
+				code == "source-closure.channel-invalid" || code == "source-closure.channel-io" ||
+				code == "source-closure.truncated-stream")
+			{
+				if (auto lost = validator.connection_lost(false); !lost)
+					return sdk::unexpected(std::move(lost.error()));
+				if (auto cleaned = relay.connection_lost(false); !cleaned)
+					return sdk::unexpected(std::move(cleaned.error()));
+				return sdk::unexpected(std::move(error));
+			}
+			return fail_with_cleanup(relay, std::move(error));
 		}
 
 		[[nodiscard]] sdk::result<void>
@@ -400,7 +453,8 @@ namespace cxxlens::detail::clang22
 		if (!protocol_state)
 			return sdk::unexpected(std::move(protocol_state.error()));
 
-		source_closure_spool spool{options.limits};
+		auto relay = std::make_shared<source_closure_spool_relay>(options.limits);
+		auto& spool = relay->sink();
 		source_closure_transfer_validator validator{
 			options.binding, *options.authority, spool, options.limits};
 		sdk::provider::protocol_limits wire_limits;
@@ -408,37 +462,82 @@ namespace cxxlens::detail::clang22
 			options.limits.maximum_chunk_payload_bytes, std::numeric_limits<std::uint64_t>::max());
 		if (wire_limits.max_payload_bytes > std::numeric_limits<std::size_t>::max())
 			return fail_with_cleanup(
-				spool, failure("source-closure.limit-exceeded", "limits", "payload-size"));
+				*relay, failure("source-closure.limit-exceeded", "limits", "payload-size"));
 		wire_limits.max_payload_bytes = std::min<std::uint64_t>(
 			wire_limits.max_payload_bytes, sdk::provider::protocol_limits{}.max_payload_bytes);
 
 		std::uint64_t frame_count{};
+		auto last_progress = now_ns(options.clock);
+		if (!last_progress)
+			return fail_with_cleanup(*relay,
+									 failure("source-closure.channel-clock-invalid",
+											 "clock",
+											 last_progress.error().detail));
 		for (;;)
 		{
+			if (options.cancellation.stop_requested())
+				return fail_liveness(
+					*relay,
+					validator,
+					failure("source-closure.channel-cancelled", "transfer", "stop-requested"));
+			if (options.progress_timeout_ns != 0U)
+			{
+				auto current = now_ns(options.clock);
+				if (!current)
+					return fail_with_cleanup(*relay,
+											 failure("source-closure.channel-clock-invalid",
+													 "clock",
+													 current.error().detail));
+				if (*current < *last_progress)
+					return fail_with_cleanup(
+						*relay,
+						failure("source-closure.channel-clock-invalid", "clock", "backwards"));
+				if (*current - *last_progress >= options.progress_timeout_ns)
+					return fail_liveness(
+						*relay,
+						validator,
+						failure("source-closure.channel-timeout", "transfer", "progress-deadline"));
+			}
 			if (frame_count >= options.maximum_frames)
 				return fail_with_cleanup(
-					spool, failure("source-closure.limit-exceeded", "frames", "maximum"));
+					*relay, failure("source-closure.limit-exceeded", "frames", "maximum"));
 			auto next = read_frame(source, wire_limits);
 			if (!next)
-				return fail_with_cleanup(spool, std::move(next.error()));
+				return fail_liveness(*relay, validator, std::move(next.error()));
 			if (!next->has_value())
-				return fail_with_cleanup(
-					spool, failure("source-closure.truncated-stream", "ack", "missing"));
+				return fail_liveness(*relay,
+									 validator,
+									 failure("source-closure.truncated-stream", "ack", "missing"));
 			++frame_count;
+			auto current = now_ns(options.clock);
+			if (!current)
+				return fail_with_cleanup(*relay,
+										 failure("source-closure.channel-clock-invalid",
+												 "clock",
+												 current.error().detail));
+			if (*current < *last_progress)
+				return fail_with_cleanup(
+					*relay, failure("source-closure.channel-clock-invalid", "clock", "backwards"));
+			last_progress = *current;
 			const auto& value = **next;
 			if (value.stream_id != options.stream_id)
 				return fail_with_cleanup(
-					spool, failure("source-closure.session-binding-mismatch", "stream-id"));
+					*relay, failure("source-closure.session-binding-mismatch", "stream-id"));
 			bool sealed{};
 			auto accepted =
 				accept_typed_frame(**next, validator, *protocol_state, *closure_limits, sealed);
 			if (!accepted)
-				return fail_with_cleanup(spool, std::move(accepted.error()));
+				return fail_with_cleanup(*relay, std::move(accepted.error()));
 			if (!sealed)
 				continue;
+			if (options.cancellation.stop_requested())
+				return fail_liveness(
+					*relay,
+					validator,
+					failure("source-closure.channel-cancelled", "transfer", "stop-requested"));
 			auto credentials = spool.ack_credentials();
 			if (!credentials)
-				return fail_with_cleanup(spool, std::move(credentials.error()));
+				return fail_with_cleanup(*relay, std::move(credentials.error()));
 			protocol::source_closure_ack ack_value{options.binding.session_id,
 												   options.binding.task_id,
 												   options.binding.closure_digest,
@@ -450,7 +549,7 @@ namespace cxxlens::detail::clang22
 												 protocol::closure_control{std::move(ack_value)},
 												 *closure_limits);
 			if (!ack_control)
-				return fail_with_cleanup(spool, std::move(ack_control.error()));
+				return fail_with_cleanup(*relay, std::move(ack_control.error()));
 			frame ack_frame;
 			ack_frame.type = message_type::source_closure_ack;
 			ack_frame.stream_id = options.stream_id;
@@ -458,16 +557,20 @@ namespace cxxlens::detail::clang22
 			ack_frame.control = std::move(*ack_control);
 			auto encoded_ack = sdk::provider::encode_frame(ack_frame, wire_limits);
 			if (!encoded_ack)
-				return fail_with_cleanup(spool, std::move(encoded_ack.error()));
+				return fail_with_cleanup(*relay, std::move(encoded_ack.error()));
 			if (auto emitted = sink.write(*encoded_ack); !emitted)
-				return fail_with_cleanup(spool, std::move(emitted.error()));
+				return fail_liveness(*relay, validator, std::move(emitted.error()));
 			auto snapshot = spool.snapshot();
 			if (!snapshot)
-				return fail_with_cleanup(spool, std::move(snapshot.error()));
+				return fail_with_cleanup(*relay, std::move(snapshot.error()));
+			if (auto marked = relay->mark_sealed(); !marked)
+				return fail_with_cleanup(*relay, std::move(marked.error()));
 			const auto transfer_digest = credentials->transfer_digest;
 			auto credentials_value = std::move(*credentials);
-			return source_closure_receiver_result{
-				std::move(*snapshot), std::move(credentials_value), transfer_digest};
+			return source_closure_receiver_result{std::move(*snapshot),
+												  std::move(credentials_value),
+												  transfer_digest,
+												  std::move(relay)};
 		}
 	}
 } // namespace cxxlens::detail::clang22

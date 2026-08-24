@@ -12,6 +12,7 @@
  */
 
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <stop_token>
 
@@ -61,13 +62,14 @@ namespace cxxlens::detail::clang22
 		source_closure_fd_descriptor read;
 		source_closure_fd_descriptor write;
 		std::stop_token cancellation;
+		const source_closure_monotonic_clock* clock{};
+		std::uint64_t progress_timeout_ns{source_closure_default_progress_timeout_ns};
 	};
 
 	/**
 	 * POSIX implementation of the source-closure frame source and sink ports.
 	 *
-	 * This class is intentionally source-private and is not connected to the
-	 * installed worker or materializer in this slice.  Its factory rejects
+	 * This class is source-private.  Its factory rejects
 	 * standard streams, descriptor 3, close-on-exec endpoints, blocking
 	 * endpoints, and invalid descriptors before any I/O occurs.
 	 */
@@ -96,5 +98,7 @@ namespace cxxlens::detail::clang22
 		bool owns_read_{false};
 		bool owns_write_{false};
 		std::stop_token cancellation_;
+		const source_closure_monotonic_clock* clock_{};
+		std::uint64_t progress_timeout_ns_{source_closure_default_progress_timeout_ns};
 	};
 } // namespace cxxlens::detail::clang22

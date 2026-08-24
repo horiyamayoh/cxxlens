@@ -12,7 +12,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <span>
+#include <stop_token>
 #include <string>
 
 #include <cxxlens/sdk/provider.hpp>
@@ -22,6 +24,18 @@
 
 namespace cxxlens::detail::clang22
 {
+	/** Host-injected monotonic clock used for deterministic pre-accept liveness tests. */
+	class source_closure_monotonic_clock
+	{
+	  public:
+		virtual ~source_closure_monotonic_clock() = default;
+		[[nodiscard]] virtual sdk::result<std::uint64_t> now_ns() const = 0;
+	};
+
+	inline constexpr std::uint64_t source_closure_default_progress_timeout_ns = 5'000'000'000ULL;
+
+	class source_closure_spool_relay;
+
 	/** Pull bytes from the authenticated Protocol 2.0 source-closure channel. */
 	class source_closure_frame_source
 	{
@@ -46,6 +60,9 @@ namespace cxxlens::detail::clang22
 		std::uint64_t stream_id{1U};
 		std::uint64_t maximum_frames{16'384U};
 		source_closure_transport_limits limits{};
+		std::stop_token cancellation{};
+		const source_closure_monotonic_clock* clock{};
+		std::uint64_t progress_timeout_ns{source_closure_default_progress_timeout_ns};
 	};
 
 	/** The only source-derived value exposed after a complete ACK. */
@@ -54,6 +71,8 @@ namespace cxxlens::detail::clang22
 		source_closure_snapshot snapshot;
 		source_closure_ack_credentials credentials;
 		std::string transfer_digest;
+		/** Cleanup/terminal ownership retained after ACK for worker crash or connection loss. */
+		std::shared_ptr<source_closure_spool_relay> relay;
 	};
 
 	/**

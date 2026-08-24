@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
@@ -13,6 +14,7 @@
 #include <vector>
 
 #include "llvm/clang22/materialization_json.hpp"
+#include "llvm/clang22/source_closure_spool.hpp"
 #include "protocol_v2/closure.hpp"
 
 namespace
@@ -78,6 +80,35 @@ namespace
 		}
 
 		std::vector<std::byte> output_;
+	};
+
+	class sequence_clock final : public source_closure_monotonic_clock
+	{
+	  public:
+		explicit sequence_clock(std::vector<std::uint64_t> values) : values_{std::move(values)} {}
+
+		cxxlens::sdk::result<std::uint64_t> now_ns() const override
+		{
+			if (values_.empty())
+				return std::uint64_t{};
+			const auto index = std::min(index_, values_.size() - 1U);
+			++index_;
+			return values_[index];
+		}
+
+	  private:
+		std::vector<std::uint64_t> values_;
+		mutable std::size_t index_{};
+	};
+
+	class failing_source final : public source_closure_frame_source
+	{
+	  public:
+		cxxlens::sdk::result<std::size_t> read(const std::span<std::byte>) override
+		{
+			return cxxlens::sdk::unexpected(
+				cxxlens::sdk::error{"source-closure.channel-closed", "read", "peer-closed"});
+		}
 	};
 
 	class authority final : public source_closure_task_v4_authority
@@ -281,6 +312,14 @@ namespace
 					value->cleanup_owner == result->credentials.cleanup_owner &&
 					value->transfer_digest == result->transfer_digest,
 				"receiver ACK was not bound to the sealed spool");
+		require(result->relay != nullptr &&
+					result->relay->terminal() == source_closure_relay_terminal::sealed,
+				"receiver did not retain sealed relay ownership after ACK");
+		auto crashed = result->relay->worker_crashed(false);
+		require_result(crashed, "worker-crash relay cleanup failed");
+		require(result->relay->terminal() == source_closure_relay_terminal::worker_crashed &&
+					!result->relay->cancel_observed(),
+				"worker-crash relay terminal was not recorded");
 	}
 
 	void truncated_transfer()
@@ -296,11 +335,58 @@ namespace
 				"truncated source closure did not fail closed");
 		require(sink.output_.empty(), "truncated source closure emitted an ACK");
 	}
+
+	void liveness_and_connection_terminals()
+	{
+		auto input = make_fixture();
+		memory_sink timeout_sink;
+		authority timeout_authority{input.binding.task_id, input.binding.task_v4_digest};
+		sequence_clock timeout_clock{{0U, 5U}};
+		memory_source stalled_source{std::vector<std::byte>{}};
+		auto timeout = receive_source_closure_frames(
+			stalled_source,
+			timeout_sink,
+			{input.binding, &timeout_authority, 7U, 16'384U, {}, {}, &timeout_clock, 5U});
+		require(!timeout && timeout.error().code == "source-closure.transfer-timeout" &&
+					timeout_sink.output_.empty(),
+				"stalled source closure did not produce a typed timeout without ACK");
+
+		memory_sink cancel_sink;
+		authority cancel_authority{input.binding.task_id, input.binding.task_v4_digest};
+		std::stop_source cancellation;
+		cancellation.request_stop();
+		memory_source cancelled_source{input.transcript};
+		auto cancelled = receive_source_closure_frames(cancelled_source,
+													   cancel_sink,
+													   {input.binding,
+														&cancel_authority,
+														7U,
+														16'384U,
+														{},
+														cancellation.get_token(),
+														nullptr,
+														5U});
+		require(!cancelled && cancelled.error().code == "source-closure.cancelled" &&
+					cancel_sink.output_.empty(),
+				"pre-cancelled source closure did not fail closed without ACK");
+
+		memory_sink connection_sink;
+		authority connection_authority{input.binding.task_id, input.binding.task_v4_digest};
+		failing_source disconnected_source;
+		auto disconnected =
+			receive_source_closure_frames(disconnected_source,
+										  connection_sink,
+										  {input.binding, &connection_authority, 7U, 16'384U});
+		require(!disconnected && disconnected.error().code == "source-closure.channel-closed" &&
+					connection_sink.output_.empty(),
+				"connection loss did not remain a local typed channel terminal");
+	}
 } // namespace
 
 int main()
 {
 	positive_transfer();
 	truncated_transfer();
+	liveness_and_connection_terminals();
 	return 0;
 }
