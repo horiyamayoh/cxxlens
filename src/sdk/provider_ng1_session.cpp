@@ -559,6 +559,63 @@ namespace cxxlens::sdk::provider::detail
 			control, receipt, open_dependency_group, terminal, highest_observed_sequence);
 	}
 
+	result<void>
+	ng1_session_coordinator::replace_spill_for_resume(ng1_spill_staging_session&& replacement,
+													  const ng1_spill_fsync_receipt& receipt,
+													  const std::uint64_t resume_generation)
+	{
+		if (auto open = ensure_open("spill-replacement"); !open)
+			return open;
+		if (recovery_.state() != ng1_recovery_state::worker_killed)
+			return unexpected(recovery_error("state", "spill-replacement-not-pending"));
+		if (!latest_fsync_receipt_)
+			return unexpected(error{"provider.resume-replay-invalid",
+									"fsync_receipt",
+									"coordinator-observation-missing"});
+		if (*latest_fsync_receipt_ != receipt)
+			return unexpected(
+				error{"provider.resume-replay-invalid", "fsync_receipt", "not-latest"});
+		if (auto valid = receipt.validate(); !valid)
+			return unexpected(std::move(valid.error()));
+
+		const ng1_spill_resume_frontier frontier{receipt, resume_generation};
+		if (auto valid = frontier.validate(); !valid)
+			return unexpected(std::move(valid.error()));
+		if (spill_.total_bytes() != receipt.total_bytes ||
+			spill_.total_records() != receipt.total_records ||
+			replacement.total_bytes() != receipt.total_bytes ||
+			replacement.total_records() != receipt.total_records)
+			return unexpected(
+				error{"provider.resume-replay-invalid", "spill_receipt", "prefix-size-mismatch"});
+
+		if (auto persisted = spill_.validate_persisted_frontier(receipt, resume_generation);
+			!persisted)
+			return unexpected(std::move(persisted.error()));
+		if (auto persisted = replacement.validate_persisted_frontier(receipt, resume_generation);
+			!persisted)
+			return unexpected(std::move(persisted.error()));
+
+		auto recovered = replacement.recover();
+		if (!recovered)
+			return unexpected(std::move(recovered.error()));
+		auto recovered_digest = recovered->spill_digest();
+		if (!recovered_digest)
+			return unexpected(std::move(recovered_digest.error()));
+		if (*recovered_digest != receipt.spill_digest ||
+			recovered->total_bytes() != receipt.total_bytes ||
+			recovered->total_records() != receipt.total_records)
+			return unexpected(
+				error{"provider.resume-replay-invalid", "spill_receipt", "prefix-mismatch"});
+
+		// The handoff performs its remaining binding/digest comparisons before its sole effect.
+		// A failed handoff leaves replacement owned by the caller. On success it retires the old
+		// descriptor without unlinking the durable names, making this move assignment noexcept.
+		if (auto handed_off = spill_.handoff_cleanup_custody_to(replacement); !handed_off)
+			return unexpected(std::move(handed_off.error()));
+		spill_ = std::move(replacement);
+		return {};
+	}
+
 	result<std::uint64_t> ng1_session_coordinator::replay_start_sequence() const
 	{
 		if (auto open = ensure_open("replay"); !open)

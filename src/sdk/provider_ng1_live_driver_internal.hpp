@@ -321,6 +321,26 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] result<void>
 		accept_provider_resume(const ng1_live_frame_receipt& receipt,
 							   const ng1_durable_spill_checkpoint& checkpoint);
+		/**
+		 * Make a separately reopened and receipt-restored spill transaction the active session
+		 * storage before the replacement process is launched. This transfers cleanup custody only;
+		 * the replacement resume frame remains the sole recovery-state transition.
+		 */
+		[[nodiscard]] result<void>
+		replace_durable_spill_for_resume(ng1_spill_staging_session&& replacement,
+										 const ng1_durable_spill_checkpoint& checkpoint);
+		/** Launch the one permitted replacement process while retaining the killed worker's
+		 * session. */
+		[[nodiscard]] result<void>
+		launch_replacement(const ng1_durable_spill_checkpoint& checkpoint,
+						   std::stop_token cancellation);
+		/**
+		 * Accept exactly one replacement-process resume handshake. No replay output may be read
+		 * through the ordinary receive path until this validates the latest durable checkpoint.
+		 */
+		[[nodiscard]] result<ng1_live_frame_receipt>
+		accept_replacement_resume(const ng1_durable_spill_checkpoint& checkpoint,
+								  std::stop_token cancellation);
 		/** Close the live channel and return the exact process outcome. */
 		[[nodiscard]] result<process_output> finish(std::stop_token cancellation);
 		/** Kill the process group and return the exact bounded cleanup outcome. */
@@ -340,10 +360,21 @@ namespace cxxlens::sdk::provider::detail
 		{
 			return provider_frames_;
 		}
+		[[nodiscard]] bool process_ended() const noexcept
+		{
+			return ended_;
+		}
+		[[nodiscard]] bool replay_process_active() const noexcept
+		{
+			return replay_process_active_;
+		}
 
 	  private:
 		ng1_live_session_driver(ng1_session_coordinator session,
 								std::unique_ptr<ng1_duplex_process> process,
+								std::unique_ptr<ng1_duplex_process_port> processes,
+								process_invocation invocation,
+								protocol_limits limits,
 								std::unique_ptr<ng1_monotonic_clock_port> clock,
 								std::unique_ptr<ng1_host_observation_port> observation,
 								ng1_resume_binding resume_binding,
@@ -371,12 +402,16 @@ namespace cxxlens::sdk::provider::detail
 		ng1_session_coordinator session_;
 		ng1_live_session_adapter adapter_;
 		std::unique_ptr<ng1_duplex_process> process_;
+		std::unique_ptr<ng1_duplex_process_port> processes_;
+		process_invocation invocation_;
+		protocol_limits limits_;
 		std::unique_ptr<ng1_monotonic_clock_port> clock_;
 		std::unique_ptr<ng1_host_observation_port> observation_;
 		ng1_resume_binding resume_binding_;
 		std::optional<ng1_durable_resume_authority> durable_resume_;
 		std::vector<frame> provider_frames_;
 		std::optional<ng1_live_frame_receipt> last_provider_receipt_;
+		std::optional<ng1_live_frame_receipt> published_resume_receipt_;
 		std::optional<ng1_durable_spill_checkpoint> latest_checkpoint_;
 		std::uint64_t maximum_retained_frames_{};
 		std::stop_token cancellation_;
@@ -386,5 +421,8 @@ namespace cxxlens::sdk::provider::detail
 		bool resume_token_published_{};
 		bool provider_terminal_observed_{};
 		bool ended_{};
+		bool replacement_attempted_{};
+		bool replacement_handshake_pending_{};
+		bool replay_process_active_{};
 	};
 } // namespace cxxlens::sdk::provider::detail

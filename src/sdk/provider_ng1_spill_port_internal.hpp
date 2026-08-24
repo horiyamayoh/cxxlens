@@ -32,6 +32,12 @@ namespace cxxlens::sdk::provider::detail
 		/** Read the port-owned latest resume-generation/fsync frontier. */
 		[[nodiscard]] virtual result<std::optional<ng1_spill_resume_frontier>>
 		read_resume_frontier() const = 0;
+		/** Reopen the same private durable object for restart/recovery validation when supported.
+		 */
+		[[nodiscard]] virtual result<std::unique_ptr<ng1_spill_storage_port>> reopen() const;
+		/** Transfer the sole unlink/rmdir custody to an exact reopened object. */
+		[[nodiscard]] virtual result<void>
+		transfer_cleanup_custody_to(ng1_spill_storage_port& replacement);
 		/** Persist one validated, strictly newer resume-generation/fsync frontier. */
 		[[nodiscard]] virtual result<void>
 		persist_resume_frontier(const ng1_spill_resume_frontier& frontier) = 0;
@@ -39,7 +45,7 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] virtual result<void> cleanup() = 0;
 	};
 
-	/** Create the Linux anonymous private spill port; unsupported platforms fail closed. */
+	/** Create the Linux private filesystem spill port; unsupported platforms fail closed. */
 	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<std::unique_ptr<ng1_spill_storage_port>>
 	make_system_ng1_spill_storage_port();
 
@@ -87,6 +93,9 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] result<void>
 		restore_from_fsync_receipt(const ng1_spill_fsync_receipt& receipt,
 								   std::uint64_t resume_generation);
+		/** Transfer cleanup custody after both sessions prove the same recovered prefix. */
+		[[nodiscard]] result<void>
+		handoff_cleanup_custody_to(ng1_spill_staging_session& replacement);
 
 		/** Cleanup after final report/token disposal or after recovery classification. */
 		[[nodiscard]] result<void> cleanup();

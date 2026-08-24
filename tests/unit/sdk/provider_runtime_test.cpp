@@ -43,6 +43,7 @@
 
 #include "../../fixtures/provider_timeout_readiness.hpp"
 #include "sdk/provider_ng1_process_internal.hpp"
+#include "sdk/provider_ng1_spill_port_internal.hpp"
 #include "sdk/provider_ng1_transport_internal.hpp"
 #include "sdk/provider_runtime_internal.hpp"
 #include "sdk/provider_validation_internal.hpp"
@@ -294,6 +295,20 @@ namespace
 
 	  private:
 		sandbox_assurance achieved_;
+	};
+
+	class counting_process_port final : public provider_process_port
+	{
+	  public:
+		[[nodiscard]] result<process_output> run(const process_invocation&,
+												 std::stop_token) const override
+		{
+			++calls;
+			return cxxlens::sdk::unexpected(
+				error{"sdk.test-process-run", "one-shot", "unexpected"});
+		}
+
+		mutable std::uint64_t calls{};
 	};
 
 	[[nodiscard]] std::string executable_digest(const std::string& executable)
@@ -640,6 +655,678 @@ namespace
 		return requested;
 	}
 
+	[[nodiscard]] std::optional<std::string> process_environment(const char* name)
+	{
+		const auto* value = std::getenv(name);
+		return value == nullptr ? std::nullopt : std::optional<std::string>{value};
+	}
+
+	[[nodiscard]] bool write_provider_frame(const frame& value)
+	{
+		protocol_limits limits;
+		limits.protocol_major = protocol_v2_major;
+		limits.minimum_minor = protocol_v2_minor;
+		limits.maximum_minor = protocol_v2_minor;
+		auto encoded = encode_frame(value, limits);
+		if (!encoded)
+			return false;
+		std::size_t offset{};
+		while (offset < encoded->size())
+		{
+			const auto written =
+				::write(STDOUT_FILENO, encoded->data() + offset, encoded->size() - offset);
+			if (written > 0)
+			{
+				offset += static_cast<std::size_t>(written);
+				continue;
+			}
+			if (written < 0 && errno == EINTR)
+				continue;
+			return false;
+		}
+		return true;
+	}
+
+	struct ng1_resume_fixture_identity
+	{
+		std::string provider_id;
+		std::string provider_manifest;
+		std::string provider_binary_digest;
+		std::string provider_semantic_contract_digest;
+		std::string protocol_session_id;
+		std::string task_id;
+		std::string semantic_task_input_digest;
+		std::string normalized_invocation_digest;
+		std::string toolchain_digest;
+		std::string environment_digest;
+		std::string sandbox_policy_digest;
+		std::string dependency_group_id;
+		std::string atomic_output_group_id;
+		std::string batch_id;
+		std::uint64_t stream_id{};
+	};
+
+	[[nodiscard]] result<std::uint64_t> ng1_fixture_unsigned_environment(const char* name)
+	{
+		auto value = process_environment(name);
+		if (!value)
+			return cxxlens::sdk::unexpected(error{"sdk.test-fixture", name, "missing"});
+		std::uint64_t output{};
+		const auto [end, parse_error] =
+			std::from_chars(value->data(), value->data() + value->size(), output);
+		if (parse_error != std::errc{} || end != value->data() + value->size())
+			return cxxlens::sdk::unexpected(error{"sdk.test-fixture", name, "invalid"});
+		return output;
+	}
+
+	[[nodiscard]] result<ng1_resume_fixture_identity> ng1_fixture_identity()
+	{
+		const std::array names{
+			"CXXLENS_PROVIDER_ID",
+			"CXXLENS_PROVIDER_MANIFEST",
+			"CXXLENS_PROVIDER_BINARY_DIGEST",
+			"CXXLENS_PROVIDER_SEMANTIC_CONTRACT_DIGEST",
+			"CXXLENS_PROVIDER_NG1_SESSION_ID",
+			"CXXLENS_PROVIDER_TASK_ID",
+			"CXXLENS_PROVIDER_NG1_TASK_INPUT_DIGEST",
+			"CXXLENS_PROVIDER_NORMALIZED_INVOCATION_DIGEST",
+			"CXXLENS_PROVIDER_TOOLCHAIN_DIGEST",
+			"CXXLENS_PROVIDER_ENVIRONMENT_DIGEST",
+			"CXXLENS_PROVIDER_NG1_SANDBOX_POLICY_DIGEST",
+			"CXXLENS_PROVIDER_NG1_DEPENDENCY_GROUP_ID",
+			"CXXLENS_PROVIDER_NG1_ATOMIC_OUTPUT_GROUP_ID",
+			"CXXLENS_PROVIDER_NG1_BATCH_ID",
+		};
+		std::array<std::string, names.size()> values;
+		for (std::size_t index{}; index < names.size(); ++index)
+		{
+			auto value = process_environment(names[index]);
+			if (!value)
+				return cxxlens::sdk::unexpected(error{"sdk.test-fixture", names[index], "missing"});
+			values[index] = std::move(*value);
+		}
+		auto stream_id = ng1_fixture_unsigned_environment("CXXLENS_PROVIDER_NG1_STREAM_ID");
+		auto provider_version = process_environment("CXXLENS_PROVIDER_NG1_PROVIDER_VERSION");
+		if (!stream_id || *stream_id == 0U || !provider_version || *provider_version != "1.0.0")
+			return cxxlens::sdk::unexpected(error{"sdk.test-fixture", "ng1-identity", "invalid"});
+		return ng1_resume_fixture_identity{std::move(values[0U]),
+										   std::move(values[1U]),
+										   std::move(values[2U]),
+										   std::move(values[3U]),
+										   std::move(values[4U]),
+										   std::move(values[5U]),
+										   std::move(values[6U]),
+										   std::move(values[7U]),
+										   std::move(values[8U]),
+										   std::move(values[9U]),
+										   std::move(values[10U]),
+										   std::move(values[11U]),
+										   std::move(values[12U]),
+										   std::move(values[13U]),
+										   *stream_id};
+	}
+
+	[[nodiscard]] detail::ng1_spill_binding
+	ng1_fixture_spill_binding(const ng1_resume_fixture_identity& identity)
+	{
+		return {identity.provider_id,
+				identity.protocol_session_id,
+				identity.task_id,
+				identity.dependency_group_id,
+				identity.atomic_output_group_id,
+				identity.batch_id,
+				identity.stream_id};
+	}
+
+	[[nodiscard]] detail::ng1_resume_binding
+	ng1_fixture_resume_binding(const ng1_resume_fixture_identity& identity)
+	{
+		return {identity.provider_id,
+				{1U, 0U, 0U},
+				identity.provider_binary_digest,
+				identity.provider_semantic_contract_digest,
+				identity.protocol_session_id,
+				identity.task_id,
+				identity.semantic_task_input_digest,
+				identity.normalized_invocation_digest,
+				identity.toolchain_digest,
+				identity.environment_digest,
+				identity.sandbox_policy_digest,
+				identity.dependency_group_id,
+				identity.atomic_output_group_id,
+				identity.batch_id,
+				identity.stream_id};
+	}
+
+	[[nodiscard]] result<std::string>
+	ng1_fixture_spill_digest(const ng1_resume_fixture_identity& identity,
+							 const std::span<const frame> frames)
+	{
+		auto prefix = detail::ng1_spill_prefix_state::create(ng1_fixture_spill_binding(identity));
+		if (!prefix)
+			return cxxlens::sdk::unexpected(std::move(prefix.error()));
+		protocol_limits limits;
+		limits.protocol_major = protocol_v2_major;
+		limits.minimum_minor = protocol_v2_minor;
+		limits.maximum_minor = protocol_v2_minor;
+		for (std::size_t index{}; index < frames.size(); ++index)
+		{
+			auto bytes = encode_frame(frames[index], limits);
+			if (!bytes)
+				return cxxlens::sdk::unexpected(std::move(bytes.error()));
+			detail::ng1_spill_record record;
+			record.record_ordinal = static_cast<std::uint64_t>(index);
+			record.task_id = identity.task_id;
+			record.dependency_group_id = identity.dependency_group_id;
+			record.atomic_output_group_id = identity.atomic_output_group_id;
+			record.batch_id = identity.batch_id;
+			record.stream_id = identity.stream_id;
+			record.sequence = frames[index].sequence;
+			record.payload_bytes = std::move(*bytes);
+			auto payload_digest = detail::ng1_spill_payload_digest(record.payload_bytes);
+			if (!payload_digest)
+				return cxxlens::sdk::unexpected(std::move(payload_digest.error()));
+			record.payload_digest = std::move(*payload_digest);
+			auto record_digest = detail::ng1_spill_record_digest(record);
+			if (!record_digest)
+				return cxxlens::sdk::unexpected(std::move(record_digest.error()));
+			record.record_digest = std::move(*record_digest);
+			if (auto appended = prefix->append(record); !appended)
+				return cxxlens::sdk::unexpected(std::move(appended.error()));
+		}
+		return prefix->spill_digest();
+	}
+
+	struct ng1_fixture_prefix
+	{
+		std::vector<frame> frames;
+		std::uint64_t durable_ack{};
+		std::string staged_digest;
+	};
+
+	[[nodiscard]] result<ng1_fixture_prefix>
+	make_ng1_fixture_prefix(const ng1_resume_fixture_identity& identity)
+	{
+		std::vector<frame> frames;
+		const auto append = [&](const message_type type,
+								std::vector<std::byte> control,
+								std::vector<std::byte> payload = {})
+		{
+			frames.push_back({type,
+							  identity.stream_id,
+							  static_cast<std::uint64_t>(frames.size()),
+							  std::move(control),
+							  std::move(payload),
+							  protocol_v2_major,
+							  protocol_v2_minor,
+							  0U});
+		};
+
+		auto hello = encode_control_text(identity.provider_manifest);
+		auto schema = encode_schema_negotiate_metadata(
+			schema_negotiate_metadata{"cxxlens.provider-protocol.v2", protocol_v2_minor});
+		auto accepted = encode_task_accepted_metadata(
+			task_accepted_metadata{identity.provider_id, "1.0.0", identity.task_id});
+		if (!hello || !schema || !accepted)
+			return cxxlens::sdk::unexpected(error{"sdk.test-fixture", "prefix", "control"});
+		append(message_type::hello, std::move(*hello));
+		append(message_type::schema_negotiate, std::move(*schema));
+		append(message_type::task_accepted, std::move(*accepted));
+
+		auto heartbeat_staged = ng1_fixture_spill_digest(identity, frames);
+		if (!heartbeat_staged)
+			return cxxlens::sdk::unexpected(std::move(heartbeat_staged.error()));
+		const auto now = std::chrono::steady_clock::now().time_since_epoch();
+		detail::ng1_heartbeat_control heartbeat;
+		heartbeat.kind = detail::ng1_heartbeat_kind::ack;
+		heartbeat.provider_id = identity.provider_id;
+		heartbeat.provider_version = {1U, 0U, 0U};
+		heartbeat.protocol_session_id = identity.protocol_session_id;
+		heartbeat.task_id = identity.task_id;
+		heartbeat.stream_id = identity.stream_id;
+		heartbeat.heartbeat_sequence = 0U;
+		heartbeat.monotonic_time_ns = static_cast<std::uint64_t>(
+			std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
+		heartbeat.highest_contiguous_acked_sequence = frames.back().sequence;
+		heartbeat.staged_digest = std::move(*heartbeat_staged);
+		auto heartbeat_control = detail::encode_ng1_heartbeat_control(heartbeat);
+		if (!heartbeat_control)
+			return cxxlens::sdk::unexpected(std::move(heartbeat_control.error()));
+		append(detail::ng1_heartbeat_message_type, std::move(*heartbeat_control));
+
+		const auto& descriptor = cxxlens::company::relations::lock_acquire::descriptor();
+		auto begin = encode_batch_begin_metadata({identity.task_id,
+												  descriptor.id,
+												  descriptor.descriptor_digest,
+												  identity.dependency_group_id,
+												  identity.atomic_output_group_id,
+												  identity.batch_id});
+		if (!begin)
+			return cxxlens::sdk::unexpected(std::move(begin.error()));
+		append(message_type::batch_begin, std::move(*begin));
+		const auto row = identity_valid_protocol_test_row();
+		std::vector<batch_column_summary> summaries;
+		std::vector<std::string> chunk_digests;
+		for (const auto& column : descriptor.columns)
+		{
+			const auto encoding = column.type.scalar == scalar_kind::boolean
+				? "fixed-width-bool-u8"
+				: (column.type.scalar == scalar_kind::signed_integer
+					   ? "fixed-width-i64-le"
+					   : (column.type.scalar == scalar_kind::unsigned_integer
+							  ? "fixed-width-u64-le"
+							  : ((column.type.scalar == scalar_kind::open_symbol ||
+								  column.type.scalar == scalar_kind::closed_symbol)
+									 ? "dictionary-index-u32-le"
+									 : ((column.type.scalar == scalar_kind::bytes ||
+										 column.type.scalar == scalar_kind::set)
+											? "bytes-offsets-u32-le"
+											: "utf8-offsets-u32-le"))));
+			const auto cell = row.cells.contains(column.id) ? row.cells.at(column.id)
+															: detached_cell::absent(column.type);
+			column_chunk_record chunk{identity.task_id,
+									  identity.dependency_group_id,
+									  identity.atomic_output_group_id,
+									  identity.batch_id,
+									  descriptor.id,
+									  descriptor.descriptor_digest,
+									  column.id,
+									  0U,
+									  1U,
+									  0U,
+									  encoding,
+									  {cell},
+									  {}};
+			auto encoded = encode_column_chunk(chunk, column);
+			if (!encoded)
+				return cxxlens::sdk::unexpected(std::move(encoded.error()));
+			summaries.push_back({column.id, encoded->payload.size(), 1U});
+			chunk_digests.push_back(encoded->chunk_digest);
+			append(message_type::column_chunk,
+				   std::move(encoded->control),
+				   std::move(encoded->payload));
+		}
+		columnar_batch_end terminal{identity.task_id,
+									identity.dependency_group_id,
+									identity.atomic_output_group_id,
+									identity.batch_id,
+									descriptor.id,
+									descriptor.descriptor_digest,
+									1U,
+									std::move(summaries),
+									std::move(chunk_digests),
+									{}};
+		terminal.batch_digest = columnar_batch_digest(terminal);
+		auto encoded_terminal = encode_columnar_batch_end(terminal);
+		if (!encoded_terminal)
+			return cxxlens::sdk::unexpected(std::move(encoded_terminal.error()));
+		append(message_type::batch_end,
+			   std::move(encoded_terminal->control),
+			   std::move(encoded_terminal->payload));
+		const auto durable_ack = frames.back().sequence;
+		auto staged_digest = ng1_fixture_spill_digest(identity, frames);
+		if (!staged_digest)
+			return cxxlens::sdk::unexpected(std::move(staged_digest.error()));
+		return ng1_fixture_prefix{std::move(frames), durable_ack, std::move(*staged_digest)};
+	}
+
+	[[nodiscard]] result<std::vector<std::byte>>
+	make_ng1_fixture_resume_control(const ng1_resume_fixture_identity& identity,
+									const std::uint64_t durable_ack,
+									std::string staged_digest,
+									const std::uint64_t generation,
+									const bool foreign)
+	{
+		detail::ng1_resume_control control;
+		control.kind = detail::ng1_resume_kind::accepted;
+		control.binding = ng1_fixture_resume_binding(identity);
+		if (foreign)
+			control.binding.task_id += "-foreign";
+		control.highest_contiguous_acked_sequence = durable_ack;
+		control.staged_digest = std::move(staged_digest);
+		control.token_generation = generation;
+		detail::ng1_resume_token token{control.schema,
+									   control.kind,
+									   control.binding,
+									   control.highest_contiguous_acked_sequence,
+									   control.staged_digest,
+									   control.token_generation,
+									   {}};
+		auto token_digest = detail::ng1_resume_token_digest(token);
+		if (!token_digest)
+			return cxxlens::sdk::unexpected(std::move(token_digest.error()));
+		control.token_digest = std::move(*token_digest);
+		return detail::encode_ng1_resume_control(control);
+	}
+
+	[[nodiscard]] bool append_ng1_fixture_attempt(const std::filesystem::path& marker,
+												  const std::uint64_t attempt)
+	{
+		const auto start_time = process_start_time(::getpid());
+		if (!start_time)
+			return false;
+		std::ofstream output{marker, std::ios::app};
+		return output.good() &&
+			static_cast<bool>(output << attempt << ' ' << ::getpid() << ' ' << *start_time << '\n');
+	}
+
+	[[nodiscard]] int run_ng1_resume_provider(const std::string_view scenario,
+											  const std::filesystem::path& attempt_marker,
+											  const std::filesystem::path& descendant_marker)
+	{
+		auto identity = ng1_fixture_identity();
+		auto attempt = ng1_fixture_unsigned_environment("CXXLENS_PROVIDER_NG1_ATTEMPT");
+		if (!identity || !attempt || *attempt > 1U ||
+			!append_ng1_fixture_attempt(attempt_marker, *attempt))
+			return 140;
+		if (*attempt == 0U)
+		{
+			auto prefix = make_ng1_fixture_prefix(*identity);
+			if (!prefix)
+				return 141;
+			for (const auto& value : prefix->frames)
+				if (!write_provider_frame(value))
+					return 142;
+			auto resume = make_ng1_fixture_resume_control(
+				*identity, prefix->durable_ack, prefix->staged_digest, 1U, false);
+			if (!resume ||
+				!write_provider_frame({message_type::resume,
+									   identity->stream_id,
+									   prefix->durable_ack + 1U,
+									   std::move(*resume),
+									   {},
+									   protocol_v2_major,
+									   protocol_v2_minor,
+									   0U}))
+				return 143;
+			if (scenario == "progress-rate")
+			{
+				const auto descendant = ::fork();
+				if (descendant < 0)
+					return 152;
+				if (descendant == 0)
+					for (;;)
+						(void)::pause();
+				const auto cleanup_descendant = [&]() noexcept
+				{
+					(void)::kill(descendant, SIGKILL);
+					while (::waitpid(descendant, nullptr, 0) < 0 && errno == EINTR)
+					{
+					}
+				};
+				const auto descendant_start = process_start_time(descendant);
+				if (!descendant_start)
+				{
+					cleanup_descendant();
+					return 153;
+				}
+				{
+					std::ofstream output{descendant_marker};
+					if (!output.good() ||
+						!(output << descendant << ' ' << *descendant_start << '\n'))
+					{
+						cleanup_descendant();
+						return 154;
+					}
+				}
+
+				const auto write_progress = [&](const std::uint64_t sequence,
+												const std::uint64_t completed_units) -> bool
+				{
+					detail::ng1_progress_control progress;
+					progress.task_id = identity->task_id;
+					progress.dependency_group_id = identity->dependency_group_id;
+					progress.progress_sequence = completed_units;
+					progress.monotonic_time_ns = static_cast<std::uint64_t>(
+						std::chrono::duration_cast<std::chrono::nanoseconds>(
+							std::chrono::steady_clock::now().time_since_epoch())
+							.count());
+					progress.completed_units = completed_units;
+					progress.total_units = 1U;
+					auto control = detail::encode_ng1_progress_control(progress);
+					return control &&
+						write_provider_frame({message_type::progress,
+											  identity->stream_id,
+											  sequence,
+											  std::move(*control),
+											  {},
+											  protocol_v2_major,
+											  protocol_v2_minor,
+											  0U});
+				};
+				if (!write_progress(prefix->durable_ack + 2U, 0U))
+				{
+					cleanup_descendant();
+					return 155;
+				}
+				std::this_thread::sleep_for(std::chrono::milliseconds{2'100});
+				if (!write_progress(prefix->durable_ack + 3U, 1U))
+				{
+					cleanup_descendant();
+					return 156;
+				}
+				for (;;)
+					(void)::pause();
+			}
+			const auto descendant = ::fork();
+			if (descendant < 0)
+				return 144;
+			if (descendant == 0)
+				for (;;)
+					(void)::pause();
+			const auto cleanup_descendant = [&]() noexcept
+			{
+				(void)::kill(descendant, SIGKILL);
+				while (::waitpid(descendant, nullptr, 0) < 0 && errno == EINTR)
+				{
+				}
+			};
+			const auto descendant_start = process_start_time(descendant);
+			if (!descendant_start)
+			{
+				cleanup_descendant();
+				return 145;
+			}
+			{
+				std::ofstream output{descendant_marker};
+				if (!output.good() || !(output << descendant << ' ' << *descendant_start << '\n'))
+				{
+					cleanup_descendant();
+					return 146;
+				}
+			}
+			std::this_thread::sleep_for(std::chrono::milliseconds{5'250});
+			// This optional frame only wakes a transport whose receive deadline lands just after
+			// the authenticated heartbeat deadline.  The host is also allowed to close the channel
+			// first; keep the worker hung in that race so it cannot masquerade as a clean crash.
+			(void)write_provider_frame(
+				{static_cast<message_type>(65000U),
+				 identity->stream_id,
+				 prefix->durable_ack + 2U,
+				 {},
+				 {},
+				 protocol_v2_major,
+				 protocol_v2_minor,
+				 static_cast<std::uint16_t>(frame_flag::optional_extension)});
+			for (;;)
+				(void)::pause();
+		}
+
+		auto durable_ack = ng1_fixture_unsigned_environment("CXXLENS_PROVIDER_NG1_RESUME_ACK");
+		auto generation =
+			ng1_fixture_unsigned_environment("CXXLENS_PROVIDER_NG1_RESUME_GENERATION");
+		auto staged_digest = process_environment("CXXLENS_PROVIDER_NG1_RESUME_STAGED_DIGEST");
+		if (!durable_ack || !generation || !staged_digest || *generation != 1U)
+			return 148;
+		auto resume = make_ng1_fixture_resume_control(
+			*identity, *durable_ack, *staged_digest, *generation, scenario == "foreign");
+		const auto resume_sequence = *durable_ack + (scenario == "handshake-gap" ? 2U : 1U);
+		if (!resume ||
+			!write_provider_frame({message_type::resume,
+								   identity->stream_id,
+								   resume_sequence,
+								   std::move(*resume),
+								   {},
+								   protocol_v2_major,
+								   protocol_v2_minor,
+								   0U}))
+			return 149;
+		std::uint64_t sequence = *durable_ack + 1U;
+		if (scenario == "gap")
+			++sequence;
+		else if (scenario == "duplicate")
+			--sequence;
+		if (scenario == "second-hang")
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds{5'250});
+			(void)write_provider_frame(
+				{static_cast<message_type>(65000U),
+				 identity->stream_id,
+				 sequence,
+				 {},
+				 {},
+				 protocol_v2_major,
+				 protocol_v2_minor,
+				 static_cast<std::uint16_t>(frame_flag::optional_extension)});
+			for (;;)
+				(void)::pause();
+		}
+		const std::array coverage{coverage_unit{"task", identity->task_id, "covered", {}}};
+		auto coverage_control = encode_coverage_metadata(coverage);
+		auto unresolved_control = encode_unresolved_metadata(std::span<const unresolved_item>{});
+		detail::ng1_progress_control progress;
+		progress.task_id = identity->task_id;
+		progress.dependency_group_id = identity->dependency_group_id;
+		progress.progress_sequence = 0U;
+		progress.monotonic_time_ns =
+			static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+										   std::chrono::steady_clock::now().time_since_epoch())
+										   .count());
+		progress.completed_units = 1U;
+		progress.total_units = 1U;
+		auto progress_control = detail::encode_ng1_progress_control(progress);
+		auto complete_control = encode_task_complete_metadata({identity->task_id});
+		if (!coverage_control || !unresolved_control || !progress_control || !complete_control ||
+			!write_provider_frame({message_type::coverage_chunk,
+								   identity->stream_id,
+								   sequence++,
+								   std::move(*coverage_control),
+								   {},
+								   protocol_v2_major,
+								   protocol_v2_minor,
+								   0U}) ||
+			!write_provider_frame({message_type::unresolved_chunk,
+								   identity->stream_id,
+								   sequence++,
+								   std::move(*unresolved_control),
+								   {},
+								   protocol_v2_major,
+								   protocol_v2_minor,
+								   0U}) ||
+			!write_provider_frame({message_type::progress,
+								   identity->stream_id,
+								   sequence++,
+								   std::move(*progress_control),
+								   {},
+								   protocol_v2_major,
+								   protocol_v2_minor,
+								   0U}) ||
+			!write_provider_frame({message_type::task_complete,
+								   identity->stream_id,
+								   sequence,
+								   std::move(*complete_control),
+								   {},
+								   protocol_v2_major,
+								   protocol_v2_minor,
+								   0U}))
+			return 151;
+		return 0;
+	}
+
+	[[nodiscard]] int run_ng1_heartbeat_hang_provider(const std::filesystem::path& marker)
+	{
+		auto identity = ng1_fixture_identity();
+		if (!identity)
+			return 120;
+
+		auto accepted_control = encode_task_accepted_metadata(
+			task_accepted_metadata{identity->provider_id, "1.0.0", identity->task_id});
+		if (!accepted_control)
+			return 122;
+		frame accepted{message_type::task_accepted,
+					   identity->stream_id,
+					   0U,
+					   std::move(*accepted_control),
+					   {},
+					   protocol_v2_major,
+					   protocol_v2_minor,
+					   0U};
+		const std::array accepted_prefix{accepted};
+		auto staged_digest = ng1_fixture_spill_digest(*identity, accepted_prefix);
+		if (!staged_digest)
+			return 121;
+		const auto now = std::chrono::steady_clock::now().time_since_epoch();
+		detail::ng1_heartbeat_control heartbeat;
+		heartbeat.kind = detail::ng1_heartbeat_kind::ack;
+		heartbeat.provider_id = identity->provider_id;
+		heartbeat.provider_version = {1U, 0U, 0U};
+		heartbeat.protocol_session_id = identity->protocol_session_id;
+		heartbeat.task_id = identity->task_id;
+		heartbeat.stream_id = identity->stream_id;
+		heartbeat.heartbeat_sequence = 0U;
+		heartbeat.monotonic_time_ns = static_cast<std::uint64_t>(
+			std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
+		heartbeat.highest_contiguous_acked_sequence = 0U;
+		heartbeat.staged_digest = std::move(*staged_digest);
+		auto heartbeat_control = detail::encode_ng1_heartbeat_control(heartbeat);
+		if (!heartbeat_control)
+			return 123;
+		frame heartbeat_frame{detail::ng1_heartbeat_message_type,
+							  identity->stream_id,
+							  1U,
+							  std::move(*heartbeat_control),
+							  {},
+							  protocol_v2_major,
+							  protocol_v2_minor,
+							  0U};
+		if (!write_provider_frame(accepted) || !write_provider_frame(heartbeat_frame))
+			return 124;
+
+		const auto descendant = ::fork();
+		if (descendant < 0)
+			return 125;
+		if (descendant == 0)
+		{
+			for (;;)
+				(void)::pause();
+		}
+		const auto descendant_start = process_start_time(descendant);
+		if (!descendant_start)
+			return 127;
+		{
+			std::ofstream output{marker};
+			if (!output.good())
+				return 128;
+			output << descendant << ' ' << *descendant_start << '\n';
+			if (!output.good())
+				return 129;
+		}
+
+		std::this_thread::sleep_for(std::chrono::milliseconds{5'500});
+		frame wakeup{static_cast<message_type>(65000U),
+					 identity->stream_id,
+					 2U,
+					 {},
+					 {},
+					 protocol_v2_major,
+					 protocol_v2_minor,
+					 static_cast<std::uint16_t>(frame_flag::optional_extension)};
+		if (!write_provider_frame(wakeup))
+			return 130;
+		for (;;)
+			(void)::pause();
+	}
+
 	void check_ng1_post_fork_guard_kills_group_without_ack()
 	{
 		if (!pidfd_runtime_available())
@@ -760,6 +1447,401 @@ namespace
 		require(selected.has_value(), "exact provider selection failed");
 		return std::move(*selected);
 	}
+
+	[[nodiscard]] std::vector<std::string> ng1_features()
+	{
+		return {"credit-backpressure",
+				"durable-resume-token",
+				"heartbeat",
+				"long-run-fault-recovery",
+				"progress-rate-enforcement",
+				"spill-staging",
+				"task-input-chunks-v2",
+				"task-source-closure-v2"};
+	}
+
+	[[nodiscard]] provider_selection ng1_selection(const std::string& executable,
+												   std::vector<std::string> arguments,
+												   std::vector<std::string> features)
+	{
+		auto value = candidate(executable, "--ng1-heartbeat-hang");
+		value.executable_argv = std::move(arguments);
+		value.description.protocol.required_features = std::move(features);
+		auto selected = select_provider(selection_request(executable), std::span{&value, 1U});
+		require(selected.has_value(), "NG1 provider selection failed");
+		return std::move(*selected);
+	}
+
+#if defined(__linux__) && defined(__GLIBC__) && defined(SYS_pidfd_open) && \
+	defined(SYS_pidfd_send_signal)
+	void bind_ng1_runtime_request(process_task_request& request,
+								  const std::string_view identity_suffix,
+								  std::array<int, 2U>& inherited,
+								  const std::stop_token cancellation = {})
+	{
+		auto task_identity = semantic_digest("test.ng1.task-v4", identity_suffix);
+		auto invocation = semantic_digest("test.ng1.invocation", identity_suffix);
+		auto toolchain = semantic_digest("test.ng1.toolchain", identity_suffix);
+		auto environment = semantic_digest("test.ng1.environment", identity_suffix);
+		auto session = semantic_digest("test.ng1.session", identity_suffix);
+		auto closure = semantic_digest("test.ng1.closure", identity_suffix);
+		auto transfer = semantic_digest("test.ng1.transfer", identity_suffix);
+		require(task_identity && invocation && toolchain && environment && session && closure &&
+					transfer,
+				"NG1 runtime identity setup failed");
+		request.task_id = "task:" + *task_identity;
+		request.task_input_digest = content_digest(request.payload);
+		request.normalized_invocation_digest = *invocation;
+		request.toolchain_digest = *toolchain;
+		request.environment_digest = *environment;
+		request.limits.protocol_major = protocol_v2_major;
+		request.limits.minimum_minor = protocol_v2_minor;
+		request.limits.maximum_minor = protocol_v2_minor;
+		request.budget.wall_ms = 12'000U;
+		request.budget.cpu_ms = 12'000U;
+		const auto subprocess_budget = descendant_fixture_subprocess_budget();
+		require(subprocess_budget.has_value(), "NG1 runtime subprocess budget unavailable");
+		request.budget.subprocesses = *subprocess_budget;
+		request.cancellation = cancellation;
+
+		const auto reserved = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
+		require(reserved >= 0, "NG1 runtime reserved descriptor setup failed");
+		require(::socketpair(AF_UNIX, SOCK_STREAM, 0, inherited.data()) == 0,
+				"NG1 runtime source-closure channel setup failed");
+		(void)::close(reserved);
+		for (const auto descriptor : inherited)
+		{
+			const auto flags = ::fcntl(descriptor, F_GETFL);
+			require(flags >= 0 && ::fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) == 0,
+					"NG1 runtime source-closure channel nonblocking setup failed");
+		}
+		auto inherited_binding = detail::make_process_inherited_channel_binding(
+			inherited[0],
+			inherited[1],
+			request.task_id,
+			"provider-session:" + session->substr(std::string_view{"semantic-v2:"}.size()),
+			*closure,
+			*transfer);
+		require(inherited_binding.has_value(),
+				"NG1 runtime source-closure binding failed: " +
+					(inherited_binding
+						 ? std::string{}
+						 : inherited_binding.error().code + ":" + inherited_binding.error().field +
+							 ":" + inherited_binding.error().detail));
+		request.inherited_channel = std::move(*inherited_binding);
+	}
+
+	struct ng1_attempt_observation
+	{
+		std::uint64_t attempt{};
+		pid_t pid{};
+		std::uint64_t start_time{};
+	};
+
+	[[nodiscard]] std::vector<ng1_attempt_observation>
+	read_ng1_attempts(const std::filesystem::path& marker)
+	{
+		std::ifstream input{marker};
+		std::vector<ng1_attempt_observation> output;
+		std::uint64_t attempt{};
+		long long raw_pid{};
+		std::uint64_t start_time{};
+		while (input >> attempt >> raw_pid >> start_time)
+			if (raw_pid > 0 && raw_pid <= std::numeric_limits<pid_t>::max())
+				output.push_back({attempt, static_cast<pid_t>(raw_pid), start_time});
+		return output;
+	}
+
+	void check_ng1_runtime_resume_scenario(const std::string& executable,
+										   const std::string_view scenario)
+	{
+		if (!pidfd_runtime_available())
+			return;
+		namespace fs = std::filesystem;
+		const auto prefix = "cxxlens-ng1-runtime-resume-" + std::string{scenario} + "-" +
+			std::to_string(::getpid());
+		const auto attempt_marker = fs::temp_directory_path() / (prefix + ".attempts");
+		const auto descendant_marker = fs::temp_directory_path() / (prefix + ".descendant");
+		std::error_code marker_error;
+		fs::remove(attempt_marker, marker_error);
+		require(!marker_error, "could not remove stale NG1 attempt marker");
+		marker_error.clear();
+		fs::remove(descendant_marker, marker_error);
+		require(!marker_error, "could not remove stale NG1 descendant marker");
+
+		auto selected = ng1_selection(executable,
+									  {executable,
+									   "--ng1-resume-fixture",
+									   std::string{scenario},
+									   attempt_marker.string(),
+									   descendant_marker.string()},
+									  ng1_features());
+		auto request = task(std::move(selected));
+		std::stop_source cancellation;
+		std::array<int, 2U> inherited{-1, -1};
+		bind_ng1_runtime_request(request, scenario, inherited, cancellation.get_token());
+		auto processes = make_system_provider_process_port();
+		require(processes != nullptr, "NG1 resume system process port unavailable");
+		const auto started = std::chrono::steady_clock::now();
+		auto execution =
+			std::async(std::launch::async,
+					   [&]()
+					   {
+						   return detail::execute_provider_process(*processes, request);
+					   });
+		std::optional<holder_observation> descendant;
+		const auto ready_deadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
+		while (std::chrono::steady_clock::now() < ready_deadline && !descendant)
+		{
+			descendant = observe_descendant(descendant_marker);
+			if (!descendant &&
+				execution.wait_for(std::chrono::milliseconds{0}) == std::future_status::ready)
+				break;
+			if (!descendant)
+				std::this_thread::sleep_for(std::chrono::milliseconds{1});
+		}
+		if (scenario == "cancel" && descendant)
+			cancellation.request_stop();
+		const bool alive_before_failure = descendant && !pidfd_exited(descendant->pidfd);
+		auto outcome = execution.get();
+		const auto elapsed = std::chrono::steady_clock::now() - started;
+		const bool descendant_exited =
+			descendant && wait_pidfd_exit(descendant->pidfd, std::chrono::seconds{1});
+		if (descendant && !descendant_exited)
+		{
+			(void)kill_pidfd(descendant->pidfd);
+			(void)wait_pidfd_exit(descendant->pidfd, std::chrono::seconds{2});
+		}
+		if (descendant)
+			(void)::close(descendant->pidfd);
+		(void)::close(inherited[0]);
+		(void)::close(inherited[1]);
+		const auto attempts = read_ng1_attempts(attempt_marker);
+		marker_error.clear();
+		fs::remove(attempt_marker, marker_error);
+		const bool attempt_removed = !marker_error;
+		marker_error.clear();
+		fs::remove(descendant_marker, marker_error);
+		const bool descendant_removed = !marker_error;
+
+		std::string detail_text = " scenario=" + std::string{scenario} +
+			" attempts=" + std::to_string(attempts.size()) + " elapsed-ms=" +
+			std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count());
+		if (outcome)
+		{
+			detail_text += " terminal=" + outcome->terminal +
+				" exit=" + std::to_string(outcome->exit_code) +
+				" signal=" + std::to_string(outcome->termination_signal);
+			for (const auto& diagnostic : outcome->diagnostics)
+				detail_text += " diagnostic=" + diagnostic.code + ":" + diagnostic.subject + ":" +
+					diagnostic.detail;
+		}
+		else
+			detail_text += " error=" + outcome.error().code + ":" + outcome.error().field + ":" +
+				outcome.error().detail;
+		detail_text += " descendant=" + std::string{descendant ? "true" : "false"} +
+			" alive-before=" + (alive_before_failure ? "true" : "false") +
+			" exited=" + (descendant_exited ? "true" : "false") +
+			" attempt-marker-removed=" + (attempt_removed ? "true" : "false") +
+			" descendant-marker-removed=" + (descendant_removed ? "true" : "false");
+		require(descendant.has_value() && alive_before_failure && descendant_exited &&
+					attempt_removed && descendant_removed,
+				"NG1 resume fixture did not clean the initial process group" + detail_text);
+		const auto expected_attempts = scenario == "cancel" ? 1U : 2U;
+		require(attempts.size() == expected_attempts && attempts.front().attempt == 0U &&
+					(expected_attempts == 1U ||
+					 (attempts.back().attempt == 1U &&
+					  (attempts.front().pid != attempts.back().pid ||
+					   attempts.front().start_time != attempts.back().start_time))),
+				"NG1 resume did not enforce the exact fresh-process attempt budget" + detail_text);
+
+		if (scenario == "success" || scenario == "progress-rate")
+		{
+			auto bound = outcome
+				? detail::validate_provider_process_runtime_binding(*outcome, request)
+				: result<void>{cxxlens::sdk::unexpected(outcome.error())};
+			require(
+				outcome && outcome->validated_transcript_success &&
+					outcome->terminal == "provider.success" && outcome->sealed &&
+					outcome->runtime_receipt && bound && outcome->frames.front().sequence == 0U &&
+					outcome->frames.back().type == message_type::task_complete &&
+					elapsed < std::chrono::seconds{25} &&
+					(scenario != "progress-rate" || elapsed >= std::chrono::seconds{2}),
+				"NG1 fresh-process durable resume did not reach one sealed terminal" + detail_text);
+		}
+		else if (scenario == "gap" || scenario == "duplicate")
+			require(!outcome && outcome.error().code == "provider.resume-replay-invalid" &&
+						outcome.error().field == "sequence" && elapsed < std::chrono::seconds{25},
+					"NG1 replacement admitted a replay gap/duplicate" + detail_text);
+		else if (scenario == "handshake-gap")
+			require(!outcome && outcome.error().code == "provider.resume-replay-invalid" &&
+						outcome.error().field == "sequence" && elapsed < std::chrono::seconds{25},
+					"NG1 replacement admitted a resume handshake gap" + detail_text);
+		else if (scenario == "foreign")
+			require(!outcome && outcome.error().code == "provider.resume-token-stale" &&
+						elapsed < std::chrono::seconds{25},
+					"NG1 replacement admitted a foreign resume handshake" + detail_text);
+		else if (scenario == "second-hang")
+			require(!outcome && outcome.error().code == "provider.timeout" &&
+						elapsed < std::chrono::seconds{35},
+					"NG1 replacement consumed a forbidden third attempt" + detail_text);
+		else if (scenario == "cancel")
+			require(!outcome && outcome.error().code == "provider.cancelled" &&
+						elapsed < std::chrono::seconds{5},
+					"NG1 cancellation launched a replacement or escaped fail-closed cleanup" +
+						detail_text);
+	}
+
+	void check_ng1_runtime_durable_resume_matrix(const std::string& executable)
+	{
+		for (const auto scenario : {"success",
+									"progress-rate",
+									"handshake-gap",
+									"gap",
+									"duplicate",
+									"foreign",
+									"second-hang",
+									"cancel"})
+			check_ng1_runtime_resume_scenario(executable, scenario);
+	}
+#endif
+
+	void check_ng1_feature_set_never_falls_back(const std::string& executable)
+	{
+		auto partial = ng1_selection(executable,
+									 {executable, "--ng1-heartbeat-hang", "unused"},
+									 {"credit-backpressure", "heartbeat", "task-input-chunks-v2"});
+		counting_process_port one_shot;
+		auto outcome = detail::execute_provider_process(one_shot, task(std::move(partial)));
+		require(!outcome && outcome.error().code == "provider.required-feature-missing" &&
+					one_shot.calls == 0U,
+				"partial NG1 capability set reached the one-shot process port");
+	}
+
+#if defined(__linux__) && defined(__GLIBC__) && defined(SYS_pidfd_open) && \
+	defined(SYS_pidfd_send_signal)
+	void check_ng1_runtime_heartbeat_timeout_kills_descendant(const std::string& executable)
+	{
+		if (!pidfd_runtime_available())
+			return;
+		namespace fs = std::filesystem;
+		const auto marker = fs::temp_directory_path() /
+			("cxxlens-ng1-runtime-heartbeat-" + std::to_string(::getpid()) + ".pid");
+		std::error_code marker_error;
+		fs::remove(marker, marker_error);
+		require(!marker_error, "could not remove stale NG1 runtime marker");
+
+		auto selected = ng1_selection(
+			executable, {executable, "--ng1-heartbeat-hang", marker.string()}, ng1_features());
+		auto request = task(std::move(selected));
+		auto task_identity = semantic_digest("test.ng1.task-v4", "heartbeat-hang");
+		auto invocation = semantic_digest("test.ng1.invocation", "heartbeat-hang");
+		auto toolchain = semantic_digest("test.ng1.toolchain", "heartbeat-hang");
+		auto environment = semantic_digest("test.ng1.environment", "heartbeat-hang");
+		auto session = semantic_digest("test.ng1.session", "heartbeat-hang");
+		auto closure = semantic_digest("test.ng1.closure", "heartbeat-hang");
+		auto transfer = semantic_digest("test.ng1.transfer", "heartbeat-hang");
+		require(task_identity && invocation && toolchain && environment && session && closure &&
+					transfer,
+				"NG1 runtime identity setup failed");
+		request.task_id = "task:" + *task_identity;
+		request.task_input_digest = content_digest(request.payload);
+		request.normalized_invocation_digest = *invocation;
+		request.toolchain_digest = *toolchain;
+		request.environment_digest = *environment;
+		request.limits.protocol_major = protocol_v2_major;
+		request.limits.minimum_minor = protocol_v2_minor;
+		request.limits.maximum_minor = protocol_v2_minor;
+		request.budget.wall_ms = 12'000U;
+		request.budget.cpu_ms = 12'000U;
+		const auto subprocess_budget = descendant_fixture_subprocess_budget();
+		require(subprocess_budget.has_value(), "NG1 runtime subprocess budget unavailable");
+		request.budget.subprocesses = *subprocess_budget;
+
+		const auto reserved = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
+		require(reserved >= 0, "NG1 runtime reserved descriptor setup failed");
+		std::array<int, 2U> inherited{-1, -1};
+		require(::socketpair(AF_UNIX, SOCK_STREAM, 0, inherited.data()) == 0,
+				"NG1 runtime source-closure channel setup failed");
+		(void)::close(reserved);
+		for (const auto descriptor : inherited)
+		{
+			const auto flags = ::fcntl(descriptor, F_GETFL);
+			require(flags >= 0 && ::fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) == 0,
+					"NG1 runtime source-closure channel nonblocking setup failed");
+		}
+		auto inherited_binding = detail::make_process_inherited_channel_binding(
+			inherited[0],
+			inherited[1],
+			request.task_id,
+			"provider-session:" + session->substr(std::string_view{"semantic-v2:"}.size()),
+			*closure,
+			*transfer);
+		require(inherited_binding.has_value(),
+				"NG1 runtime source-closure binding failed: " +
+					(inherited_binding
+						 ? std::string{}
+						 : inherited_binding.error().code + ":" + inherited_binding.error().field +
+							 ":" + inherited_binding.error().detail));
+		request.inherited_channel = std::move(*inherited_binding);
+
+		auto processes = make_system_provider_process_port();
+		require(processes != nullptr, "NG1 runtime system process port unavailable");
+		const auto started = std::chrono::steady_clock::now();
+		auto execution =
+			std::async(std::launch::async,
+					   [&]()
+					   {
+						   return detail::execute_provider_process(*processes, request);
+					   });
+		std::optional<holder_observation> descendant;
+		const auto ready_deadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
+		while (std::chrono::steady_clock::now() < ready_deadline && !descendant)
+		{
+			descendant = observe_descendant(marker);
+			if (!descendant &&
+				execution.wait_for(std::chrono::milliseconds{0}) == std::future_status::ready)
+				break;
+			if (!descendant)
+				std::this_thread::sleep_for(std::chrono::milliseconds{1});
+		}
+		const bool alive_before_timeout = descendant && !pidfd_exited(descendant->pidfd);
+		auto outcome = execution.get();
+		const auto elapsed = std::chrono::steady_clock::now() - started;
+		const bool exited_after_timeout =
+			descendant && wait_pidfd_exit(descendant->pidfd, std::chrono::seconds{1});
+		if (descendant && !exited_after_timeout)
+		{
+			(void)kill_pidfd(descendant->pidfd);
+			(void)wait_pidfd_exit(descendant->pidfd, std::chrono::seconds{2});
+		}
+		if (descendant)
+			(void)::close(descendant->pidfd);
+		(void)::close(inherited[0]);
+		(void)::close(inherited[1]);
+		std::ifstream marker_input{marker};
+		std::string marker_debug;
+		std::getline(marker_input, marker_debug);
+		fs::remove(marker, marker_error);
+
+		require(descendant.has_value(),
+				"NG1 runtime descendant was not observed marker=[" + marker_debug + "]: " +
+					(outcome ? std::string{"unexpected-outcome:"} + outcome->terminal
+							 : outcome.error().code + ":" + outcome.error().field + ":" +
+							 outcome.error().detail));
+		require(!outcome && outcome.error().code == "provider.heartbeat-timeout" &&
+					alive_before_timeout && exited_after_timeout &&
+					elapsed < std::chrono::milliseconds{request.budget.wall_ms} && !marker_error,
+				"NG1 heartbeat silence did not produce typed fail-closed process-group cleanup: " +
+					(outcome ? std::string{"unexpected-success:"} + outcome->terminal
+							 : outcome.error().code + ":" + outcome.error().field + ":" +
+							 outcome.error().detail) +
+					" alive-before=" + (alive_before_timeout ? "true" : "false") +
+					" exited-after=" + (exited_after_timeout ? "true" : "false") + " elapsed-ms=" +
+					std::to_string(
+						std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count()));
+	}
+#endif
 
 	void check_selection(const std::string& executable)
 	{
@@ -3028,6 +4110,57 @@ namespace
 
 int main(const int argument_count, const char* const* arguments)
 {
+	if (argument_count == 5 && std::string_view{arguments[1]} == "--ng1-resume-fixture")
+	{
+#if defined(__linux__) && defined(__GLIBC__) && defined(SYS_pidfd_open) && \
+	defined(SYS_pidfd_send_signal)
+		return run_ng1_resume_provider(arguments[2], arguments[3], arguments[4]);
+#else
+		return 77;
+#endif
+	}
+	if (argument_count == 3 && std::string_view{arguments[1]} == "--ng1-heartbeat-hang")
+	{
+#if defined(__linux__) && defined(__GLIBC__) && defined(SYS_pidfd_open) && \
+	defined(SYS_pidfd_send_signal)
+		return run_ng1_heartbeat_hang_provider(arguments[2]);
+#else
+		return 77;
+#endif
+	}
+	if (argument_count == 2 && std::string_view{arguments[1]} == "--ng1-runtime-only")
+	{
+		const auto runtime_executable = std::filesystem::absolute(arguments[0]).string();
+		check_ng1_feature_set_never_falls_back(runtime_executable);
+#if defined(__linux__) && defined(__GLIBC__) && defined(SYS_pidfd_open) && \
+	defined(SYS_pidfd_send_signal)
+		check_ng1_runtime_heartbeat_timeout_kills_descendant(runtime_executable);
+		check_ng1_runtime_durable_resume_matrix(runtime_executable);
+#endif
+		return 0;
+	}
+	if (argument_count == 3 && std::string_view{arguments[1]} == "--ng1-runtime-scenario")
+	{
+#if defined(__linux__) && defined(__GLIBC__) && defined(SYS_pidfd_open) && \
+	defined(SYS_pidfd_send_signal)
+		check_ng1_runtime_resume_scenario(std::filesystem::absolute(arguments[0]).string(),
+										  arguments[2]);
+		return 0;
+#else
+		return 77;
+#endif
+	}
+	if (argument_count == 2 && std::string_view{arguments[1]} == "--ng1-heartbeat-only")
+	{
+#if defined(__linux__) && defined(__GLIBC__) && defined(SYS_pidfd_open) && \
+	defined(SYS_pidfd_send_signal)
+		check_ng1_runtime_heartbeat_timeout_kills_descendant(
+			std::filesystem::absolute(arguments[0]).string());
+		return 0;
+#else
+		return 77;
+#endif
+	}
 	if (argument_count == 3 && std::string_view{arguments[1]} == "--host-only")
 	{
 		check_host_transcript_validator(arguments[2]);
@@ -3056,7 +4189,9 @@ int main(const int argument_count, const char* const* arguments)
 	}
 	require(argument_count == 2, "provider process fixture path missing");
 	const std::string executable{arguments[1]};
+	const auto runtime_executable = std::filesystem::absolute(arguments[0]).string();
 	check_selection(executable);
+	check_ng1_feature_set_never_falls_back(runtime_executable);
 	check_verified_executable_binding();
 	check_sandbox_closed_enum(executable);
 	check_host_transcript_validator(executable);
@@ -3065,6 +4200,8 @@ int main(const int argument_count, const char* const* arguments)
 #if defined(__linux__) && defined(__GLIBC__) && defined(SYS_pidfd_open) && \
 	defined(SYS_pidfd_send_signal)
 	check_ng1_post_fork_guard_kills_group_without_ack();
+	check_ng1_runtime_heartbeat_timeout_kills_descendant(runtime_executable);
+	check_ng1_runtime_durable_resume_matrix(runtime_executable);
 #endif
 	check_ng1_live_duplex_process();
 	check_process_faults(executable);

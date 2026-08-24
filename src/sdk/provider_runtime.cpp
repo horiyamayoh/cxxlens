@@ -3,10 +3,13 @@
 #include <bit>
 #include <cctype>
 #include <charconv>
+#include <chrono>
 #include <concepts>
 #include <iterator>
 #include <limits>
 #include <map>
+#include <memory>
+#include <optional>
 #include <ranges>
 #include <set>
 #include <sstream>
@@ -17,6 +20,8 @@
 #include <cxxlens/sdk/provider.hpp>
 
 #include "json_internal.hpp"
+#include "provider_ng1_live_driver_internal.hpp"
+#include "provider_ng1_spill_port_internal.hpp"
 #include "provider_ng1_transport_internal.hpp"
 #include "provider_protocol_v2_adapter.hpp"
 #include "provider_runtime_internal.hpp"
@@ -131,6 +136,46 @@ namespace cxxlens::sdk::provider
 		{
 			return reason != "provider.success" && reason.starts_with("provider.") &&
 				stable_terminal_reason(reason);
+		}
+
+		// NG1 is a single lifecycle contract.  Treating one of its controls as an ordinary
+		// completed-process feature would silently downgrade liveness, spill, or recovery to the
+		// one-shot provider port.  Keep this list local to the launch boundary so every caller gets
+		// the same all-or-none decision before an input transcript or process is created.
+		constexpr std::array ng1_required_features{
+			std::string_view{"durable-resume-token"},
+			std::string_view{"heartbeat"},
+			std::string_view{"progress-rate-enforcement"},
+			std::string_view{"spill-staging"},
+			std::string_view{"long-run-fault-recovery"},
+		};
+
+		[[nodiscard]] result<bool> classify_ng1_features(const manifest& value)
+		{
+			const auto present = std::ranges::count_if(
+				ng1_required_features,
+				[&](const std::string_view feature)
+				{
+					return std::ranges::find(value.protocol.required_features, feature) !=
+						value.protocol.required_features.end();
+				});
+			if (present != 0 && present != ng1_required_features.size())
+				return cxxlens::sdk::unexpected(runtime_error(
+					"provider.required-feature-missing", "protocol", "all-ng1-features-required"));
+			return present == ng1_required_features.size();
+		}
+
+		[[nodiscard]] bool semantic_digest_value(const std::string_view value)
+		{
+			constexpr std::string_view prefix{"semantic-v2:sha256:"};
+			if (!value.starts_with(prefix) || value.size() != prefix.size() + 64U)
+				return false;
+			return std::ranges::all_of(value.substr(prefix.size()),
+									   [](const char byte)
+									   {
+										   return (byte >= '0' && byte <= '9') ||
+											   (byte >= 'a' && byte <= 'f');
+									   });
 		}
 
 		[[nodiscard]] result<protocol_limits> negotiated_limits(const process_task_request& request)
@@ -2466,6 +2511,7 @@ namespace cxxlens::sdk::provider
 					{"provider.worker-stderr", request.task_id, std::move(output.standard_error)});
 			return report;
 		}
+
 	} // namespace
 
 #if !defined(CXXLENS_PROVIDER_RUNTIME_INTERNAL_ONLY)
@@ -2583,7 +2629,147 @@ namespace cxxlens::sdk::provider
 			detail::expected_provider_identity provider_identity;
 			detail::host_input_profile input_profile;
 			process_invocation invocation;
+			bool ng1_live{};
 		};
+
+		/**
+		 * The live driver asks for one host observation at every control ingress.  The process
+		 * request carries the authenticated source-closure identity, which is the only host-owned
+		 * digest available at this boundary.  The driver owns the durable spill frontier itself;
+		 * this adapter deliberately does not manufacture an in-memory or test spill implementation.
+		 */
+		class ng1_runtime_observation final : public detail::ng1_host_observation_port
+		{
+		  public:
+			explicit ng1_runtime_observation(std::string staged_digest)
+				: staged_digest_{std::move(staged_digest)}
+			{
+			}
+
+			[[nodiscard]] result<detail::ng1_host_observation> current() const override
+			{
+				return detail::ng1_host_observation{highest_observed_sequence_, staged_digest_};
+			}
+
+			void observe_frame(const detail::ng1_live_frame_receipt& receipt) noexcept
+			{
+				highest_observed_sequence_ =
+					std::max(highest_observed_sequence_, receipt.value().sequence);
+			}
+
+			void set_staged_digest(std::string digest) noexcept
+			{
+				staged_digest_ = std::move(digest);
+			}
+
+		  private:
+			std::uint64_t highest_observed_sequence_{};
+			std::string staged_digest_;
+		};
+
+		struct ng1_runtime_binding
+		{
+			detail::ng1_session_configuration session;
+			detail::ng1_durable_resume_authority durable_resume;
+			detail::ng1_resume_binding resume_binding;
+			detail::ng1_spill_binding spill_binding;
+			detail::ng1_spill_prefix_state spill_prefix;
+			std::unique_ptr<detail::ng1_monotonic_clock_port> clock;
+			std::unique_ptr<detail::ng1_host_observation_port> observation;
+			ng1_runtime_observation* observation_state{};
+			detail::ng1_session_binding validation_binding;
+		};
+
+		[[nodiscard]] result<ng1_runtime_binding>
+		make_ng1_runtime_binding(const process_task_request& request,
+								 const prepared_provider_process& prepared,
+								 const detail::sealed_host_input& input_seal,
+								 const std::uint64_t stream_id)
+		{
+			if (!request.inherited_channel)
+				return cxxlens::sdk::unexpected(runtime_error(
+					"provider.required-feature-missing", "source_closure", "binding-required"));
+			const auto& channel = *request.inherited_channel;
+			const auto semantic_task_input = input_seal.ordered_chunk_digest_set_digest();
+			if (input_seal.task().task_input_digest != request.task_input_digest ||
+				!semantic_digest_value(semantic_task_input) ||
+				!semantic_digest_value(channel.closure_digest) || channel.session_id.empty())
+				return cxxlens::sdk::unexpected(runtime_error("provider.required-feature-missing",
+															  "source_closure",
+															  "typed-binding-required"));
+			if (stream_id == 0U)
+				return cxxlens::sdk::unexpected(runtime_error(
+					"provider.required-feature-missing", "stream_id", "nonzero-required"));
+
+			// Task-v4 binds every current output descriptor to one canonical or observation group.
+			// The shared transcript validator remains authoritative for the emitted batch; these
+			// values only establish the lifecycle identity required before launch.
+			const auto& descriptor = request.output_descriptors.front();
+			const std::string dependency_group =
+				descriptor.id.starts_with("cc.") ? "canonical" : "observation";
+			const std::string atomic_output_group = "clang22-atomic";
+			const std::string batch_id = descriptor.id + "-batch";
+			detail::ng1_session_binding heartbeat_binding{
+				prepared.provider_identity.provider_id,
+				prepared.provider_identity.provider_version,
+				channel.session_id,
+				request.task_id,
+				stream_id};
+			detail::ng1_resume_binding resume_binding{
+				prepared.provider_identity.provider_id,
+				prepared.provider_identity.provider_version,
+				prepared.provider_identity.provider_binary_digest,
+				prepared.provider_identity.provider_semantic_contract_digest,
+				channel.session_id,
+				request.task_id,
+				std::string{semantic_task_input},
+				request.normalized_invocation_digest,
+				request.toolchain_digest,
+				request.environment_digest,
+				prepared.sandbox.policy_digest,
+				dependency_group,
+				atomic_output_group,
+				batch_id,
+				stream_id};
+			detail::ng1_spill_binding spill_binding{prepared.provider_identity.provider_id,
+													channel.session_id,
+													request.task_id,
+													dependency_group,
+													atomic_output_group,
+													batch_id,
+													stream_id};
+			auto spill_prefix = detail::ng1_spill_prefix_state::create(spill_binding);
+			if (!spill_prefix)
+				return cxxlens::sdk::unexpected(std::move(spill_prefix.error()));
+			auto empty_staged_digest = spill_prefix->spill_digest();
+			if (!empty_staged_digest)
+				return cxxlens::sdk::unexpected(std::move(empty_staged_digest.error()));
+			auto observation = std::make_unique<ng1_runtime_observation>(*empty_staged_digest);
+			auto* observation_state = observation.get();
+			auto clock = detail::make_system_ng1_monotonic_clock_port();
+			if (!clock)
+				return cxxlens::sdk::unexpected(
+					runtime_error("provider.runtime-unavailable", "ng1", "clock-port"));
+			auto started = clock->now_ns();
+			if (!started)
+				return cxxlens::sdk::unexpected(std::move(started.error()));
+			return ng1_runtime_binding{
+				detail::ng1_session_configuration{heartbeat_binding,
+												  dependency_group,
+												  resume_binding,
+												  spill_binding,
+												  *started,
+												  nullptr},
+				detail::ng1_durable_resume_authority{std::string{semantic_task_input},
+													 channel.closure_digest},
+				resume_binding,
+				spill_binding,
+				std::move(*spill_prefix),
+				std::move(clock),
+				std::move(observation),
+				observation_state,
+				heartbeat_binding};
+		}
 
 		[[nodiscard]] result<prepared_provider_process>
 		prepare_provider_process(const process_task_request& request)
@@ -2603,8 +2789,19 @@ namespace cxxlens::sdk::provider
 			const auto& provider = selected.description;
 			if (auto valid = provider.validate(); !valid)
 				return cxxlens::sdk::unexpected(std::move(valid.error()));
+			auto ng1_live = classify_ng1_features(provider);
+			if (!ng1_live)
+				return cxxlens::sdk::unexpected(std::move(ng1_live.error()));
 			static const std::set<std::string, std::less<>> supported_features{
-				"credit-backpressure", "task-input-chunks-v2"};
+				"credit-backpressure",
+				"task-input-chunks-v2",
+				"task-source-closure-v2",
+				"durable-resume-token",
+				"heartbeat",
+				"progress-rate-enforcement",
+				"spill-staging",
+				"long-run-fault-recovery",
+			};
 			if (std::ranges::any_of(provider.protocol.required_features,
 									[&](const std::string& feature)
 									{
@@ -2615,6 +2812,9 @@ namespace cxxlens::sdk::provider
 			if (request.output_descriptors.empty())
 				return cxxlens::sdk::unexpected(
 					runtime_error("provider.task-invalid", "output_descriptors"));
+			if (*ng1_live && request.output_descriptors.size() != 1U)
+				return cxxlens::sdk::unexpected(runtime_error(
+					"provider.required-feature-missing", "output_descriptors", "single-ng1-group"));
 			std::set<std::string, std::less<>> output_descriptor_ids;
 			for (const auto& descriptor : request.output_descriptors)
 			{
@@ -2698,14 +2898,16 @@ namespace cxxlens::sdk::provider
 											 *std::move(sandbox),
 											 std::move(identity),
 											 std::move(profile),
-											 std::move(invocation)};
+											 std::move(invocation),
+											 *ng1_live};
 		}
 
 		[[nodiscard]] result<detail::provider_process_validation_outcome>
 		finish_provider_process(const process_task_request& request,
 								prepared_provider_process prepared,
 								detail::sealed_host_input input_seal,
-								process_output output)
+								process_output output,
+								const detail::ng1_session_binding* ng1_binding = nullptr)
 		{
 			if (auto valid = output.sandbox.validate(); !valid)
 				return cxxlens::sdk::unexpected(std::move(valid.error()));
@@ -2776,6 +2978,9 @@ namespace cxxlens::sdk::provider
 				&request.budget,
 				true,
 				&prepared.provider_identity,
+				ng1_binding == nullptr ? 1U : ng1_binding->stream_id,
+				ng1_binding != nullptr,
+				ng1_binding,
 			};
 			auto terminal =
 				detail::validate_provider_transcript(validation, *frames, prepared.session_limits);
@@ -2804,7 +3009,21 @@ namespace cxxlens::sdk::provider
 				provenance.provider_binary_digest = selected_manifest.provider_binary_digest;
 				provenance.provider_semantic_contract_digest =
 					selected_manifest.provider_semantic_contract_digest;
+				if (ng1_binding != nullptr)
+				{
+					provenance.protocol_session_id = ng1_binding->protocol_session_id;
+					if (!report.sealed->batches().empty())
+					{
+						const auto& batch = report.sealed->batches().front();
+						provenance.dependency_group_id = std::string{batch.dependency_group_id()};
+						provenance.atomic_output_group_id =
+							std::string{batch.atomic_output_group_id()};
+						provenance.batch_id = std::string{batch.batch_id()};
+					}
+				}
 				provenance.task_id = request.task_id;
+				// The process outcome authenticates the raw bytes written to the child. Durable
+				// replay uses the independently sealed semantic input identity in its own receipt.
 				provenance.task_input_digest = request.task_input_digest;
 				provenance.normalized_invocation_digest = request.normalized_invocation_digest;
 				provenance.toolchain_digest = request.toolchain_digest;
@@ -2838,6 +3057,488 @@ namespace cxxlens::sdk::provider
 				report.diagnostics.push_back(
 					{"provider.worker-stderr", request.task_id, std::move(output.standard_error)});
 			return report;
+		}
+
+		class borrowed_ng1_duplex_process_port final : public detail::ng1_duplex_process_port
+		{
+		  public:
+			explicit borrowed_ng1_duplex_process_port(
+				const detail::ng1_duplex_process_port& processes) noexcept
+				: processes_{&processes}
+			{
+			}
+
+			[[nodiscard]] result<std::unique_ptr<detail::ng1_duplex_process>>
+			start(const process_invocation& invocation,
+				  const protocol_limits limits,
+				  const std::stop_token cancellation) const override
+			{
+				return processes_->start(invocation, limits, cancellation);
+			}
+
+		  private:
+			const detail::ng1_duplex_process_port* processes_{};
+		};
+
+		[[nodiscard]] process_status ng1_failure_process_status(const error& failure) noexcept
+		{
+			if (failure.code == "provider.cancelled")
+				return process_status::cancelled;
+			if (failure.code == "provider.timeout" ||
+				failure.code == "provider.heartbeat-timeout" ||
+				failure.code == "provider.progress-rate")
+				return process_status::timed_out;
+			if (failure.code == "provider.output-limit")
+				return process_status::output_limit;
+			return process_status::crashed;
+		}
+
+		[[nodiscard]] result<void> reject_and_cleanup_ng1(detail::ng1_live_session_driver& driver)
+		{
+			if (driver.session().cleaned())
+				return {};
+			if (driver.session().state() != detail::ng1_recovery_state::failed &&
+				driver.session().state() != detail::ng1_recovery_state::completed)
+			{
+				auto rejected = driver.session().reject_output();
+				if (!rejected && driver.session().state() != detail::ng1_recovery_state::failed)
+					return cxxlens::sdk::unexpected(std::move(rejected.error()));
+			}
+			return driver.cleanup();
+		}
+
+		[[nodiscard]] result<detail::provider_process_validation_outcome>
+		fail_ng1_process(detail::ng1_live_session_driver& driver, error failure)
+		{
+			if (driver.session().cleaned())
+				return cxxlens::sdk::unexpected(std::move(failure));
+			auto terminated = driver.terminate(ng1_failure_process_status(failure));
+			if (!terminated)
+				return cxxlens::sdk::unexpected(std::move(terminated.error()));
+			if (auto cleaned = reject_and_cleanup_ng1(driver); !cleaned)
+				return cxxlens::sdk::unexpected(std::move(cleaned.error()));
+			return cxxlens::sdk::unexpected(std::move(failure));
+		}
+
+		[[nodiscard]] result<detail::ng1_spill_record>
+		make_ng1_spill_record(const detail::ng1_spill_binding& binding,
+							  const std::uint64_t ordinal,
+							  const frame& value,
+							  const protocol_limits limits)
+		{
+			auto bytes = encode_frame(value, limits);
+			if (!bytes)
+				return cxxlens::sdk::unexpected(std::move(bytes.error()));
+			detail::ng1_spill_record record;
+			record.record_ordinal = ordinal;
+			record.task_id = binding.task_id;
+			record.dependency_group_id = binding.dependency_group_id;
+			record.atomic_output_group_id = binding.atomic_output_group_id;
+			record.batch_id = binding.batch_id;
+			record.stream_id = binding.stream_id;
+			record.sequence = value.sequence;
+			record.payload_bytes = std::move(*bytes);
+			auto payload_digest = detail::ng1_spill_payload_digest(record.payload_bytes);
+			if (!payload_digest)
+				return cxxlens::sdk::unexpected(std::move(payload_digest.error()));
+			record.payload_digest = std::move(*payload_digest);
+			auto record_digest = detail::ng1_spill_record_digest(record);
+			if (!record_digest)
+				return cxxlens::sdk::unexpected(std::move(record_digest.error()));
+			record.record_digest = std::move(*record_digest);
+			return record;
+		}
+
+		[[nodiscard]] result<std::vector<std::byte>>
+		encode_ng1_frame_sequence(const std::span<const frame> frames, const protocol_limits limits)
+		{
+			try
+			{
+				std::vector<std::byte> output;
+				for (const auto& value : frames)
+				{
+					auto encoded = encode_frame(value, limits);
+					if (!encoded)
+						return cxxlens::sdk::unexpected(std::move(encoded.error()));
+					if (encoded->size() > std::numeric_limits<std::size_t>::max() - output.size())
+						return cxxlens::sdk::unexpected(
+							runtime_error("provider.output-limit", "ng1-replay", "byte-overflow"));
+					output.insert(output.end(), encoded->begin(), encoded->end());
+				}
+				return output;
+			}
+			catch (const std::bad_alloc&)
+			{
+				return cxxlens::sdk::unexpected(
+					runtime_error("provider.output-limit", "ng1-replay", "allocation"));
+			}
+		}
+
+		[[nodiscard]] bool ng1_bound_batch_end(const frame& value,
+											   const detail::ng1_spill_binding& binding)
+		{
+			if (value.type != message_type::batch_end)
+				return false;
+			auto metadata = decode_columnar_batch_end(value.control, value.payload);
+			return metadata && metadata->task_id == binding.task_id &&
+				metadata->dependency_group_id == binding.dependency_group_id &&
+				metadata->atomic_output_group_id == binding.atomic_output_group_id &&
+				metadata->batch_id == binding.batch_id;
+		}
+
+		[[nodiscard]] result<detail::provider_process_validation_outcome>
+		execute_provider_process_ng1(const detail::ng1_duplex_process_port& processes,
+									 const process_task_request& request,
+									 prepared_provider_process prepared,
+									 detail::sealed_host_input input_seal,
+									 const std::span<const frame> host_frames)
+		{
+			if (host_frames.empty())
+				return cxxlens::sdk::unexpected(runtime_error(
+					"provider.protocol-state-invalid", request.task_id, "empty-host-transcript"));
+			const auto stream_id = host_frames.front().stream_id;
+			if (stream_id == 0U ||
+				std::ranges::any_of(host_frames,
+									[stream_id](const frame& value)
+									{
+										return value.stream_id != stream_id;
+									}))
+				return cxxlens::sdk::unexpected(runtime_error(
+					"provider.protocol-state-invalid", request.task_id, "host-stream-binding"));
+
+			auto binding = make_ng1_runtime_binding(request, prepared, input_seal, stream_id);
+			if (!binding)
+				return cxxlens::sdk::unexpected(std::move(binding.error()));
+			const auto validation_binding = binding->validation_binding;
+			const auto resume_binding = binding->resume_binding;
+			const auto spill_binding = binding->spill_binding;
+			const auto session_limits = prepared.session_limits;
+			auto spill_prefix = std::move(binding->spill_prefix);
+			auto* observation = binding->observation_state;
+
+			const auto add_environment = [&](std::string name, std::string value)
+			{
+				prepared.invocation.environment.emplace_back(std::move(name), std::move(value));
+			};
+			add_environment("CXXLENS_PROVIDER_NG1_SESSION_ID",
+							binding->validation_binding.protocol_session_id);
+			add_environment("CXXLENS_PROVIDER_NG1_PROVIDER_VERSION",
+							prepared.provider_identity.provider_version.string());
+			add_environment("CXXLENS_PROVIDER_NG1_STREAM_ID", std::to_string(stream_id));
+			add_environment("CXXLENS_PROVIDER_NG1_DEPENDENCY_GROUP_ID",
+							binding->spill_binding.dependency_group_id);
+			add_environment("CXXLENS_PROVIDER_NG1_ATOMIC_OUTPUT_GROUP_ID",
+							binding->spill_binding.atomic_output_group_id);
+			add_environment("CXXLENS_PROVIDER_NG1_BATCH_ID", binding->spill_binding.batch_id);
+			add_environment("CXXLENS_PROVIDER_NG1_TASK_INPUT_DIGEST",
+							binding->resume_binding.task_input_digest);
+			add_environment("CXXLENS_PROVIDER_NG1_SANDBOX_POLICY_DIGEST",
+							binding->resume_binding.sandbox_policy_digest);
+			add_environment("CXXLENS_PROVIDER_NG1_ATTEMPT", "0");
+			auto initial_observation = observation->current();
+			if (!initial_observation)
+				return cxxlens::sdk::unexpected(std::move(initial_observation.error()));
+			prepared.invocation.environment.emplace_back("CXXLENS_PROVIDER_NG1_STAGED_DIGEST",
+														 initial_observation->staged_digest);
+
+			if (request.budget.wall_ms < 2U || request.budget.cpu_ms < 2U ||
+				request.budget.transport_bytes < 2U)
+				return cxxlens::sdk::unexpected(
+					runtime_error("provider.process-request-invalid", "ng1", "two-attempt-budget"));
+			process_task_request process_request = request;
+			process_request.budget.wall_ms /= 2U;
+			process_request.budget.cpu_ms /= 2U;
+			process_request.budget.transport_bytes /= 2U;
+			prepared.invocation.budget = process_request.budget;
+
+			auto storage = detail::make_system_ng1_spill_storage_port();
+			if (!storage)
+				return cxxlens::sdk::unexpected(std::move(storage.error()));
+			auto* durable_storage = storage->get();
+			binding->session.spill_storage = std::move(*storage);
+			auto driver = detail::ng1_live_session_driver::start(
+				detail::ng1_live_driver_configuration{
+					std::move(binding->session),
+					std::move(prepared.invocation),
+					prepared.session_limits,
+					request.output_credit.frames,
+					std::move(binding->clock),
+					std::move(binding->observation),
+					std::make_unique<borrowed_ng1_duplex_process_port>(processes),
+					std::move(binding->durable_resume)},
+				process_request.cancellation);
+			if (!driver)
+				return cxxlens::sdk::unexpected(std::move(driver.error()));
+
+			for (const auto& value : host_frames)
+				if (auto sent = driver->send_host_frame(value); !sent)
+					return fail_ng1_process(*driver, std::move(sent.error()));
+
+			std::uint64_t spill_records{};
+			std::optional<detail::ng1_durable_spill_checkpoint> checkpoint;
+			bool resume_token_seen{};
+			bool provider_terminal_seen{};
+			bool restarted{};
+			std::uint64_t replay_start_sequence{};
+			std::optional<std::uint64_t> next_replay_sequence;
+			std::vector<frame> durable_wire_prefix;
+			const auto terminal_failure =
+				[&](error failure) -> result<detail::provider_process_validation_outcome>
+			{
+				if (!driver->process_ended())
+				{
+					auto terminated = driver->terminate(ng1_failure_process_status(failure));
+					if (!terminated)
+						failure = std::move(terminated.error());
+				}
+				if (auto cleaned = reject_and_cleanup_ng1(*driver); !cleaned)
+					failure = std::move(cleaned.error());
+				return cxxlens::sdk::unexpected(std::move(failure));
+			};
+
+			const auto try_one_restart = [&](const error& trigger) -> result<bool>
+			{
+				// The restart budget is deliberately narrower than generic process failure: only
+				// an authenticated liveness timeout may consume the single replacement attempt.
+				const bool recoverable = trigger.code == "provider.heartbeat-timeout" ||
+					trigger.code == "provider.progress-rate";
+				if (!recoverable || restarted || provider_terminal_seen ||
+					process_request.cancellation.stop_requested() || !checkpoint ||
+					!resume_token_seen)
+					return false;
+				auto terminated = driver->terminate(ng1_failure_process_status(trigger));
+				if (!terminated)
+					return cxxlens::sdk::unexpected(std::move(terminated.error()));
+				if (driver->session().state() != detail::ng1_recovery_state::worker_killed)
+					return cxxlens::sdk::unexpected(runtime_error(
+						"provider.recovery-failed", "restart", "worker-kill-not-confirmed"));
+
+				if (checkpoint->receipt().highest_contiguous_acked_sequence ==
+					std::numeric_limits<std::uint64_t>::max())
+					return cxxlens::sdk::unexpected(runtime_error(
+						"provider.resume-replay-invalid", "sequence", "terminal-frontier"));
+				replay_start_sequence =
+					checkpoint->receipt().highest_contiguous_acked_sequence + 1U;
+				durable_wire_prefix.clear();
+				for (const auto& value : driver->provider_frames())
+					if (value.type != message_type::resume &&
+						value.sequence < replay_start_sequence)
+						durable_wire_prefix.push_back(value);
+				if (durable_wire_prefix.size() != replay_start_sequence)
+					return cxxlens::sdk::unexpected(
+						runtime_error("provider.resume-replay-invalid", "sequence", "prefix-size"));
+				for (std::size_t index{}; index < durable_wire_prefix.size(); ++index)
+					if (durable_wire_prefix[index].sequence != index)
+						return cxxlens::sdk::unexpected(runtime_error(
+							"provider.resume-replay-invalid", "sequence", "prefix-gap"));
+
+				auto reopened = durable_storage->reopen();
+				if (!reopened)
+					return cxxlens::sdk::unexpected(std::move(reopened.error()));
+				auto recovered =
+					detail::ng1_spill_staging_session::create(spill_binding, std::move(*reopened));
+				if (!recovered)
+					return cxxlens::sdk::unexpected(std::move(recovered.error()));
+				if (auto restored = recovered->restore_from_fsync_receipt(
+						checkpoint->receipt(), checkpoint->resume_generation());
+					!restored)
+				{
+					auto failure = std::move(restored.error());
+					if (auto cleaned = recovered->cleanup(); !cleaned)
+						failure = std::move(cleaned.error());
+					return cxxlens::sdk::unexpected(std::move(failure));
+				}
+				if (auto handed_off = driver->replace_durable_spill_for_resume(
+						std::move(*recovered), *checkpoint);
+					!handed_off)
+				{
+					auto failure = std::move(handed_off.error());
+					if (auto cleaned = recovered->cleanup(); !cleaned)
+						failure = std::move(cleaned.error());
+					return cxxlens::sdk::unexpected(std::move(failure));
+				}
+
+				if (auto launched =
+						driver->launch_replacement(*checkpoint, process_request.cancellation);
+					!launched)
+					return cxxlens::sdk::unexpected(std::move(launched.error()));
+				for (const auto& value : host_frames)
+					if (auto sent = driver->send_host_frame(value); !sent)
+						return cxxlens::sdk::unexpected(std::move(sent.error()));
+				auto handshake =
+					driver->accept_replacement_resume(*checkpoint, process_request.cancellation);
+				if (!handshake)
+					return cxxlens::sdk::unexpected(std::move(handshake.error()));
+				auto replay_start = driver->session().replay_start_sequence();
+				if (!replay_start || *replay_start != replay_start_sequence)
+					return cxxlens::sdk::unexpected(runtime_error(
+						"provider.resume-replay-invalid", "sequence", "frontier-mismatch"));
+				restarted = true;
+				next_replay_sequence = replay_start_sequence;
+				return true;
+			};
+
+			for (;;)
+			{
+				auto received = driver->receive_provider_frame(process_request.cancellation);
+				if (!received)
+				{
+					auto receive_error = std::move(received.error());
+					if (!restarted)
+					{
+						// A transport timeout is only an observation trigger. Preserve an
+						// authenticated progress-rate or protocol error already produced by the
+						// live session instead of replacing it with a secondary state error.
+						if (receive_error.code == "provider.timeout")
+						{
+							auto liveness = driver->check_liveness();
+							if (!liveness)
+								receive_error = std::move(liveness.error());
+						}
+						auto recovery = try_one_restart(receive_error);
+						if (!recovery)
+							return terminal_failure(std::move(recovery.error()));
+						if (*recovery)
+							continue;
+					}
+					return terminal_failure(std::move(receive_error));
+				}
+				if (!*received)
+					break;
+
+				const auto& receipt = **received;
+				observation->observe_frame(receipt);
+				const auto& value = receipt.value();
+				if (restarted)
+				{
+					if (!next_replay_sequence || value.sequence != *next_replay_sequence)
+						return terminal_failure(runtime_error(
+							"provider.resume-replay-invalid", "sequence", "duplicate-or-gap"));
+					if (*next_replay_sequence == std::numeric_limits<std::uint64_t>::max())
+						next_replay_sequence.reset();
+					else
+						++*next_replay_sequence;
+				}
+				if (!restarted && !checkpoint && value.type != message_type::resume &&
+					value.type != message_type::task_complete &&
+					value.type != message_type::task_failed)
+				{
+					auto record = make_ng1_spill_record(
+						spill_binding, spill_records, value, prepared.session_limits);
+					if (!record)
+						return fail_ng1_process(*driver, std::move(record.error()));
+					if (auto appended = driver->append_durable_spill(*record); !appended)
+						return fail_ng1_process(*driver, std::move(appended.error()));
+					if (auto appended = spill_prefix.append(*record); !appended)
+						return fail_ng1_process(*driver, std::move(appended.error()));
+					++spill_records;
+					auto digest = spill_prefix.spill_digest();
+					if (!digest)
+						return fail_ng1_process(*driver, std::move(digest.error()));
+					observation->set_staged_digest(std::move(*digest));
+				}
+				if (!restarted && ng1_bound_batch_end(value, spill_binding))
+				{
+					auto durable = driver->checkpoint_durable_spill(value.sequence, 1U);
+					if (!durable)
+						return terminal_failure(std::move(durable.error()));
+					checkpoint = std::move(*durable);
+				}
+				if (value.type == message_type::resume)
+					resume_token_seen = true;
+				provider_terminal_seen = provider_terminal_seen ||
+					value.type == message_type::task_complete ||
+					value.type == message_type::task_failed;
+				if (!restarted)
+					if (auto live = driver->check_liveness(); !live)
+					{
+						auto failure = std::move(live.error());
+						auto recovery = try_one_restart(failure);
+						if (!recovery)
+							return terminal_failure(std::move(recovery.error()));
+						if (*recovery)
+							continue;
+						return terminal_failure(std::move(failure));
+					}
+			}
+
+			auto output = driver->finish(process_request.cancellation);
+			if (!output)
+				return terminal_failure(std::move(output.error()));
+			std::vector<frame> validation_frames;
+			std::vector<frame> replay_frames;
+			if (restarted)
+			{
+				validation_frames = durable_wire_prefix;
+				replay_frames.assign(driver->provider_frames().begin(),
+									 driver->provider_frames().end());
+				if (replay_frames.empty() ||
+					replay_frames.front().sequence != replay_start_sequence)
+					return terminal_failure(runtime_error(
+						"provider.resume-replay-invalid", "sequence", "first-replay-occurrence"));
+				validation_frames.insert(
+					validation_frames.end(), replay_frames.begin(), replay_frames.end());
+			}
+			else
+			{
+				for (const auto& value : driver->provider_frames())
+					if (value.type != message_type::resume)
+						validation_frames.push_back(value);
+			}
+			auto validation_bytes = encode_ng1_frame_sequence(validation_frames, session_limits);
+			if (!validation_bytes)
+				return terminal_failure(std::move(validation_bytes.error()));
+			output->standard_output = std::move(*validation_bytes);
+			auto outcome = finish_provider_process(process_request,
+												   std::move(prepared),
+												   std::move(input_seal),
+												   std::move(*output),
+												   &validation_binding);
+			if (!outcome)
+				return terminal_failure(std::move(outcome.error()));
+			if (outcome->validated_transcript_success && outcome->sealed)
+			{
+				auto receipt =
+					detail::make_ng1_output_validation_receipt(request.task_id, *outcome->sealed);
+				if (!receipt)
+					return terminal_failure(std::move(receipt.error()));
+				if (restarted)
+				{
+					if (!outcome->runtime_receipt)
+						return terminal_failure(runtime_error(
+							"provider.resume-replay-invalid", "runtime_receipt", "missing"));
+					auto replay_bytes = encode_ng1_frame_sequence(replay_frames, session_limits);
+					if (!replay_bytes)
+						return terminal_failure(std::move(replay_bytes.error()));
+					auto replay_provenance = outcome->runtime_receipt->provenance();
+					replay_provenance.task_input_digest = resume_binding.task_input_digest;
+					replay_provenance.normalized_invocation_digest =
+						resume_binding.normalized_invocation_digest;
+					replay_provenance.toolchain_digest = resume_binding.toolchain_digest;
+					replay_provenance.environment_digest = resume_binding.environment_digest;
+					replay_provenance.sandbox_policy_digest = resume_binding.sandbox_policy_digest;
+					auto replay_runtime = detail::make_provider_runtime_receipt(
+						static_cast<std::uint64_t>(replay_bytes->size()),
+						content_digest(*replay_bytes),
+						replay_frames,
+						std::move(replay_provenance),
+						outcome->terminal,
+						*outcome->sealed);
+					if (!replay_runtime)
+						return terminal_failure(std::move(replay_runtime.error()));
+					auto replay =
+						detail::make_ng1_replay_validation_receipt(*receipt, *replay_runtime);
+					if (!replay)
+						return terminal_failure(std::move(replay.error()));
+					if (auto accepted = driver->session().accept_replay(*replay); !accepted)
+						return terminal_failure(std::move(accepted.error()));
+				}
+				if (auto sealed = driver->session().seal_output(*receipt); !sealed)
+					return terminal_failure(std::move(sealed.error()));
+			}
+			if (auto cleaned = reject_and_cleanup_ng1(*driver); !cleaned)
+				return cxxlens::sdk::unexpected(std::move(cleaned.error()));
+			return outcome;
 		}
 	} // namespace
 
@@ -2964,6 +3665,22 @@ namespace cxxlens::sdk::provider
 			prepared->input_profile, request.output_credit, input, transcript);
 		if (!input_seal)
 			return cxxlens::sdk::unexpected(std::move(input_seal.error()));
+		if (prepared->ng1_live)
+		{
+			const auto* live_processes =
+				dynamic_cast<const detail::ng1_duplex_process_port*>(&processes);
+			if (live_processes == nullptr)
+				return cxxlens::sdk::unexpected(runtime_error(
+					"provider.runtime-unavailable", "ng1-live", "duplex-process-port-required"));
+			auto host_frames = decode_frame_stream(transcript.bytes_, prepared->session_limits);
+			if (!host_frames)
+				return cxxlens::sdk::unexpected(std::move(host_frames.error()));
+			return execute_provider_process_ng1(*live_processes,
+												request,
+												std::move(*prepared),
+												std::move(*input_seal),
+												*host_frames);
+		}
 		prepared->invocation.standard_input = std::move(transcript.bytes_);
 		auto launched = processes.run(prepared->invocation, request.cancellation);
 		if (!launched)
@@ -2980,6 +3697,9 @@ namespace cxxlens::sdk::provider
 		auto prepared = prepare_provider_process(request);
 		if (!prepared)
 			return cxxlens::sdk::unexpected(std::move(prepared.error()));
+		if (prepared->ng1_live)
+			return cxxlens::sdk::unexpected(runtime_error(
+				"provider.runtime-unavailable", "ng1-live", "replayable-duplex-port-required"));
 		std::optional<sealed_host_input> input_seal;
 		std::uint64_t writer_calls{};
 		auto launched = processes.run_replayable(

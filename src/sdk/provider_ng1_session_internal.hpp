@@ -239,6 +239,17 @@ namespace cxxlens::sdk::provider::detail
 														  bool open_dependency_group,
 														  bool terminal,
 														  std::uint64_t highest_observed_sequence);
+		/**
+		 * Replace the active coordinator's storage with a separately reopened and restored
+		 * durable prefix.  The replacement is admitted only while the original worker is
+		 * confirmed killed and only when its receipt is the coordinator's exact checkpoint.
+		 * Storage custody is transferred through the spill session's source-private handoff;
+		 * the old descriptor is made terminal without unlinking the durable names. This operation
+		 * does not accept a provider resume control or advance the recovery state.
+		 */
+		[[nodiscard]] result<void> replace_spill_for_resume(ng1_spill_staging_session&& replacement,
+															const ng1_spill_fsync_receipt& receipt,
+															std::uint64_t resume_generation);
 		[[nodiscard]] result<std::uint64_t> replay_start_sequence() const;
 		/**
 		 * Admit only the durable replay frontier. Output transcript validation and output sealing

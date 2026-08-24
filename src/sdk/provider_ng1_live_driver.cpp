@@ -236,6 +236,13 @@ namespace cxxlens::sdk::provider::detail
 		if (!clock || !processes)
 			return cxxlens::sdk::unexpected(
 				error{"provider.runtime-unavailable", "ng1-live", "system-port"});
+		if (!session.spill_storage)
+		{
+			auto spill = make_system_ng1_spill_storage_port();
+			if (!spill)
+				return cxxlens::sdk::unexpected(std::move(spill.error()));
+			session.spill_storage = std::move(*spill);
+		}
 		return start(ng1_live_driver_configuration{std::move(session),
 												   std::move(invocation),
 												   limits,
@@ -360,6 +367,9 @@ namespace cxxlens::sdk::provider::detail
 		}
 		return ng1_live_session_driver{std::move(*session),
 									   std::move(*process),
+									   std::move(configuration.processes),
+									   std::move(configuration.invocation),
+									   configuration.limits,
 									   std::move(configuration.clock),
 									   std::move(configuration.observation),
 									   std::move(resume_binding),
@@ -371,6 +381,9 @@ namespace cxxlens::sdk::provider::detail
 	ng1_live_session_driver::ng1_live_session_driver(
 		ng1_session_coordinator session,
 		std::unique_ptr<ng1_duplex_process> process,
+		std::unique_ptr<ng1_duplex_process_port> processes,
+		process_invocation invocation,
+		const protocol_limits limits,
 		std::unique_ptr<ng1_monotonic_clock_port> clock,
 		std::unique_ptr<ng1_host_observation_port> observation,
 		ng1_resume_binding resume_binding,
@@ -378,6 +391,7 @@ namespace cxxlens::sdk::provider::detail
 		const std::uint64_t maximum_retained_frames,
 		const std::stop_token cancellation) noexcept
 		: session_{std::move(session)}, adapter_{session_}, process_{std::move(process)},
+		  processes_{std::move(processes)}, invocation_{std::move(invocation)}, limits_{limits},
 		  clock_{std::move(clock)}, observation_{std::move(observation)},
 		  resume_binding_{std::move(resume_binding)}, durable_resume_{std::move(durable_resume)},
 		  maximum_retained_frames_{maximum_retained_frames}, cancellation_{cancellation}
@@ -424,12 +438,14 @@ namespace cxxlens::sdk::provider::detail
 
 	ng1_live_session_driver::ng1_live_session_driver(ng1_live_session_driver&& other) noexcept
 		: session_{std::move(other.session_)}, adapter_{session_},
-		  process_{std::move(other.process_)}, clock_{std::move(other.clock_)},
-		  observation_{std::move(other.observation_)},
+		  process_{std::move(other.process_)}, processes_{std::move(other.processes_)},
+		  invocation_{std::move(other.invocation_)}, limits_{other.limits_},
+		  clock_{std::move(other.clock_)}, observation_{std::move(other.observation_)},
 		  resume_binding_{std::move(other.resume_binding_)},
 		  durable_resume_{std::move(other.durable_resume_)},
 		  provider_frames_{std::move(other.provider_frames_)},
 		  last_provider_receipt_{std::move(other.last_provider_receipt_)},
+		  published_resume_receipt_{std::move(other.published_resume_receipt_)},
 		  latest_checkpoint_{std::move(other.latest_checkpoint_)},
 		  maximum_retained_frames_{other.maximum_retained_frames_},
 		  cancellation_{other.cancellation_},
@@ -437,7 +453,10 @@ namespace cxxlens::sdk::provider::detail
 		  bound_output_group_open_{other.bound_output_group_open_},
 		  bound_output_group_sealed_{other.bound_output_group_sealed_},
 		  resume_token_published_{other.resume_token_published_},
-		  provider_terminal_observed_{other.provider_terminal_observed_}, ended_{other.ended_}
+		  provider_terminal_observed_{other.provider_terminal_observed_}, ended_{other.ended_},
+		  replacement_attempted_{other.replacement_attempted_},
+		  replacement_handshake_pending_{other.replacement_handshake_pending_},
+		  replay_process_active_{other.replay_process_active_}
 	{
 		other.ended_ = true;
 	}
@@ -498,6 +517,12 @@ namespace cxxlens::sdk::provider::detail
 				return cxxlens::sdk::unexpected(error{"provider.resume-replay-invalid",
 													  "resume",
 													  "published-before-durable-frontier"});
+			if (latest_checkpoint_->receipt_.highest_contiguous_acked_sequence ==
+					std::numeric_limits<std::uint64_t>::max() ||
+				value.sequence !=
+					latest_checkpoint_->receipt_.highest_contiguous_acked_sequence + 1U)
+				return cxxlens::sdk::unexpected(
+					error{"provider.resume-replay-invalid", "sequence", "resume-not-ack-plus-one"});
 			if (value.protocol_major != protocol_v2_major ||
 				value.protocol_minor != protocol_v2_minor ||
 				value.stream_id != resume_binding_.stream_id || value.flags != 0U ||
@@ -548,7 +573,8 @@ namespace cxxlens::sdk::provider::detail
 				metadata->dependency_group_id != resume_binding_.dependency_group_id ||
 				metadata->atomic_output_group_id != resume_binding_.atomic_output_group_id ||
 				metadata->batch_id != resume_binding_.batch_id)
-				return {};
+				return cxxlens::sdk::unexpected(
+					error{"provider.task-binding-mismatch", "output-group", "batch-begin"});
 			if (bound_output_group_open_ || bound_output_group_sealed_)
 				return cxxlens::sdk::unexpected(
 					driver_error("output-group", "duplicate-or-reopened-batch"));
@@ -569,7 +595,8 @@ namespace cxxlens::sdk::provider::detail
 				metadata->dependency_group_id != resume_binding_.dependency_group_id ||
 				metadata->atomic_output_group_id != resume_binding_.atomic_output_group_id ||
 				metadata->batch_id != resume_binding_.batch_id)
-				return {};
+				return cxxlens::sdk::unexpected(
+					error{"provider.task-binding-mismatch", "output-group", "batch-end"});
 			if (!bound_output_group_open_ || bound_output_group_sealed_)
 				return cxxlens::sdk::unexpected(
 					driver_error("output-group", "batch-end-without-open"));
@@ -630,6 +657,9 @@ namespace cxxlens::sdk::provider::detail
 	{
 		if (auto open = ensure_open("receive_provider_frame"); !open)
 			return cxxlens::sdk::unexpected(std::move(open.error()));
+		if (replacement_handshake_pending_)
+			return cxxlens::sdk::unexpected(
+				error{"provider.recovery-failed", "resume", "handshake-required"});
 		if (!cancellation.stop_possible())
 			cancellation = cancellation_;
 		auto value = process_->receive_frame(std::move(cancellation));
@@ -651,11 +681,23 @@ namespace cxxlens::sdk::provider::detail
 			(void)session_.reject_output();
 			return cxxlens::sdk::unexpected(std::move(group.error()));
 		}
+		if (receipt->value_.type == message_type::resume)
+			published_resume_receipt_ = *receipt;
 
 		if (is_ng1_heartbeat_message(receipt->value_.type) ||
 			receipt->value_.type == message_type::progress ||
 			receipt->value_.type == message_type::task_accepted)
 		{
+			if (replay_process_active_)
+			{
+				if (receipt->value_.type == message_type::task_accepted)
+				{
+					(void)session_.reject_output();
+					return cxxlens::sdk::unexpected(
+						error{"provider.resume-replay-invalid", "task_accepted", "duplicate"});
+				}
+				return std::optional<ng1_live_frame_receipt>{std::move(*receipt)};
+			}
 			bool terminal_progress_sample = false;
 			if (receipt->value_.type == message_type::progress)
 			{
@@ -695,8 +737,8 @@ namespace cxxlens::sdk::provider::detail
 		if (!durable_resume_)
 			return cxxlens::sdk::unexpected(
 				error{"provider.recovery-failed", "durable_resume", "authority-missing"});
-		if (!bound_output_group_open_ || bound_output_group_sealed_ || provider_terminal_observed_)
-			return cxxlens::sdk::unexpected(driver_error("durable-spill", "output-group-not-open"));
+		if (latest_checkpoint_ || provider_terminal_observed_)
+			return cxxlens::sdk::unexpected(driver_error("durable-spill", "frontier-closed"));
 		return session_.append_spill(record);
 	}
 
@@ -756,6 +798,155 @@ namespace cxxlens::sdk::provider::detail
 													 false,
 													 false,
 													 checkpoint.highest_observed_sequence_);
+	}
+
+	result<void> ng1_live_session_driver::replace_durable_spill_for_resume(
+		ng1_spill_staging_session&& replacement, const ng1_durable_spill_checkpoint& checkpoint)
+	{
+		if (!ended_ || session_.state() != ng1_recovery_state::worker_killed)
+			return cxxlens::sdk::unexpected(
+				error{"provider.recovery-failed", "spill", "worker-not-terminated"});
+		if (replacement_attempted_ || replacement_handshake_pending_ || replay_process_active_)
+			return cxxlens::sdk::unexpected(
+				error{"provider.recovery-failed", "spill", "replacement-already-started"});
+		if (!durable_resume_ || !latest_checkpoint_ || checkpoint.binding_ != resume_binding_ ||
+			checkpoint.authority_ != *durable_resume_ || checkpoint != *latest_checkpoint_ ||
+			!published_resume_receipt_ || !resume_token_published_)
+			return reject_resume_checkpoint(
+				error{"provider.resume-token-stale", "spill", "checkpoint-or-token-missing"});
+		return session_.replace_spill_for_resume(
+			std::move(replacement), checkpoint.receipt_, checkpoint.resume_generation_);
+	}
+
+	result<void>
+	ng1_live_session_driver::launch_replacement(const ng1_durable_spill_checkpoint& checkpoint,
+												const std::stop_token cancellation)
+	{
+		if (!ended_ || process_ == nullptr || session_.state() != ng1_recovery_state::worker_killed)
+			return cxxlens::sdk::unexpected(
+				error{"provider.recovery-failed", "restart", "worker-not-terminated"});
+		if (replacement_attempted_ || replacement_handshake_pending_ || replay_process_active_)
+			return cxxlens::sdk::unexpected(
+				error{"provider.recovery-failed", "restart", "attempt-exhausted"});
+		if (!latest_checkpoint_ || checkpoint != *latest_checkpoint_ ||
+			!published_resume_receipt_ ||
+			published_resume_receipt_->value_.type != message_type::resume)
+			return reject_resume_checkpoint(
+				error{"provider.resume-token-stale", "restart", "checkpoint-or-token-missing"});
+		if (cancellation.stop_requested())
+		{
+			(void)session_.reject_output();
+			return cxxlens::sdk::unexpected(
+				error{"provider.cancelled", "restart", "before-launch"});
+		}
+
+		replacement_attempted_ = true;
+		result<std::unique_ptr<ng1_duplex_process>> replacement =
+			[&]() -> result<std::unique_ptr<ng1_duplex_process>>
+		{
+			try
+			{
+				bool replaced_attempt = false;
+				for (auto& [name, value] : invocation_.environment)
+					if (name == "CXXLENS_PROVIDER_NG1_ATTEMPT")
+					{
+						value = "1";
+						replaced_attempt = true;
+						break;
+					}
+				if (!replaced_attempt)
+					invocation_.environment.emplace_back("CXXLENS_PROVIDER_NG1_ATTEMPT", "1");
+				invocation_.environment.emplace_back(
+					"CXXLENS_PROVIDER_NG1_RESUME_ACK",
+					std::to_string(checkpoint.receipt_.highest_contiguous_acked_sequence));
+				invocation_.environment.emplace_back("CXXLENS_PROVIDER_NG1_RESUME_GENERATION",
+													 std::to_string(checkpoint.resume_generation_));
+				invocation_.environment.emplace_back("CXXLENS_PROVIDER_NG1_RESUME_STAGED_DIGEST",
+													 checkpoint.receipt_.staged_digest);
+				return processes_->start(invocation_, limits_, cancellation);
+			}
+			catch (const std::bad_alloc&)
+			{
+				return cxxlens::sdk::unexpected(
+					process_start_exception_error("replacement-port-allocation-failed"));
+			}
+			catch (const std::exception&)
+			{
+				return cxxlens::sdk::unexpected(
+					process_start_exception_error("replacement-port-exception"));
+			}
+			catch (...)
+			{
+				return cxxlens::sdk::unexpected(
+					process_start_exception_error("replacement-port-unknown-exception"));
+			}
+		}();
+		if (!replacement)
+		{
+			(void)session_.reject_output();
+			return cxxlens::sdk::unexpected(std::move(replacement.error()));
+		}
+		process_ = std::move(*replacement);
+		ended_ = false;
+		replacement_handshake_pending_ = true;
+		return {};
+	}
+
+	result<ng1_live_frame_receipt> ng1_live_session_driver::accept_replacement_resume(
+		const ng1_durable_spill_checkpoint& checkpoint, std::stop_token cancellation)
+	{
+		if (auto open = ensure_open("accept_replacement_resume"); !open)
+			return cxxlens::sdk::unexpected(std::move(open.error()));
+		if (!replacement_handshake_pending_ || replay_process_active_ ||
+			session_.state() != ng1_recovery_state::worker_killed || !published_resume_receipt_ ||
+			!latest_checkpoint_ || checkpoint != *latest_checkpoint_)
+			return cxxlens::sdk::unexpected(
+				error{"provider.recovery-failed", "resume", "handshake-state"});
+		if (!cancellation.stop_possible())
+			cancellation = cancellation_;
+		auto value = process_->receive_frame(std::move(cancellation));
+		if (!value)
+			return cxxlens::sdk::unexpected(std::move(value.error()));
+		if (!*value)
+			return cxxlens::sdk::unexpected(
+				error{"provider.recovery-failed", "resume", "handshake-eof"});
+		auto receipt = stamp_provider_frame(std::move(**value));
+		if (!receipt)
+			return cxxlens::sdk::unexpected(std::move(receipt.error()));
+		const auto& expected = published_resume_receipt_->value_;
+		const auto& actual = receipt->value_;
+		if (checkpoint.receipt_.highest_contiguous_acked_sequence ==
+				std::numeric_limits<std::uint64_t>::max() ||
+			actual.sequence != checkpoint.receipt_.highest_contiguous_acked_sequence + 1U)
+		{
+			(void)session_.reject_output();
+			return cxxlens::sdk::unexpected(
+				error{"provider.resume-replay-invalid", "sequence", "resume-not-ack-plus-one"});
+		}
+		if (actual.type != message_type::resume || actual.stream_id != expected.stream_id ||
+			actual.control != expected.control ||
+			actual.protocol_major != expected.protocol_major ||
+			actual.protocol_minor != expected.protocol_minor || actual.flags != expected.flags ||
+			!actual.payload.empty())
+		{
+			(void)session_.reject_output();
+			return cxxlens::sdk::unexpected(
+				error{"provider.resume-token-stale", "resume", "replacement-handshake"});
+		}
+		auto accepted =
+			adapter_.accept_provider_resume_frame(actual,
+												  receipt->host_receipt_time_ns_,
+												  checkpoint.receipt_,
+												  false,
+												  false,
+												  checkpoint.highest_observed_sequence_);
+		if (!accepted)
+			return cxxlens::sdk::unexpected(std::move(accepted.error()));
+		replacement_handshake_pending_ = false;
+		replay_process_active_ = true;
+		provider_frames_.clear();
+		last_provider_receipt_.reset();
+		return *receipt;
 	}
 
 	result<process_output> ng1_live_session_driver::finish(std::stop_token cancellation)
