@@ -208,6 +208,27 @@ if(BUILD_TESTING)
                  PRIVATE src/sdk/sqlite_store_fault_injection_noop_internal.cpp)
 endif()
 
+# The bounded Store v6 phase core and Memory backend are source-private product
+# components. Keep their implementation in one non-installed archive so direct
+# contract tests and the later production Store binding share exactly one copy.
+add_library(
+  cxxlens_bounded_store_v6_memory_internal STATIC EXCLUDE_FROM_ALL
+  src/sdk/bounded_store_v6_internal.cpp
+  src/sdk/bounded_store_v6_memory_internal.cpp)
+target_link_libraries(cxxlens_bounded_store_v6_memory_internal
+                      PRIVATE cxxlens::kernel)
+target_include_directories(cxxlens_bounded_store_v6_memory_internal
+                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_bounded_store_v6_memory_internal
+                        PRIVATE cxx_std_23)
+set_target_properties(
+  cxxlens_bounded_store_v6_memory_internal
+  PROPERTIES POSITION_INDEPENDENT_CODE ON
+             CXX_VISIBILITY_PRESET hidden
+             VISIBILITY_INLINES_HIDDEN YES)
+cxxlens_set_project_warnings(cxxlens_bounded_store_v6_memory_internal)
+cxxlens_enable_sanitizers(cxxlens_bounded_store_v6_memory_internal)
+
 if(BUILD_TESTING)
   # Qualification-only authority implementation. This target is intentionally
   # excluded from production components, installation, and export sets.
@@ -269,10 +290,14 @@ set_target_properties(cxxlens PROPERTIES EXPORT_NAME cxxlens)
 # and the target is neither installed nor exported.
 add_library(
   cxxlens_provider_runtime_internal OBJECT
-  EXCLUDE_FROM_ALL src/sdk/provider_runtime.cpp
-  src/runtime/provider_process_adapter.cpp src/sdk/provider_ng1_transport.cpp
-  src/sdk/provider_ng1_validation.cpp src/sdk/provider_ng1_recovery.cpp
-  src/sdk/provider_ng1_spill_port_internal.cpp src/sdk/provider_ng1_session.cpp
+  EXCLUDE_FROM_ALL
+  src/sdk/provider_runtime.cpp
+  src/runtime/provider_process_adapter.cpp
+  src/sdk/provider_ng1_transport.cpp
+  src/sdk/provider_ng1_validation.cpp
+  src/sdk/provider_ng1_recovery.cpp
+  src/sdk/provider_ng1_spill_port_internal.cpp
+  src/sdk/provider_ng1_session.cpp
   src/sdk/provider_ng1_live_driver.cpp)
 target_compile_definitions(cxxlens_provider_runtime_internal
                            PRIVATE CXXLENS_PROVIDER_RUNTIME_INTERNAL_ONLY=1)
@@ -328,6 +353,26 @@ set_target_properties(
 cxxlens_set_project_warnings(cxxlens_protocol_v2)
 cxxlens_enable_sanitizers(cxxlens_protocol_v2)
 target_link_libraries(cxxlens_provider_sdk PUBLIC cxxlens_protocol_v2)
+
+# The opaque task-v4 authority is a source-private product contract. It is not
+# installed or exported; the receiver/worker join can consume this archive
+# without duplicating its issuer implementation.
+add_library(cxxlens_clang22_provider_task_v4_authority_internal STATIC
+            EXCLUDE_FROM_ALL src/llvm/clang22/provider_task_v4_authority.cpp)
+target_link_libraries(cxxlens_clang22_provider_task_v4_authority_internal
+                      PUBLIC cxxlens::base)
+target_include_directories(cxxlens_clang22_provider_task_v4_authority_internal
+                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_clang22_provider_task_v4_authority_internal
+                        PRIVATE cxx_std_23)
+set_target_properties(
+  cxxlens_clang22_provider_task_v4_authority_internal
+  PROPERTIES POSITION_INDEPENDENT_CODE ON
+             CXX_VISIBILITY_PRESET hidden
+             VISIBILITY_INLINES_HIDDEN YES)
+cxxlens_set_project_warnings(
+  cxxlens_clang22_provider_task_v4_authority_internal)
+cxxlens_enable_sanitizers(cxxlens_clang22_provider_task_v4_authority_internal)
 
 # The host-side expected-output validator is a source-private product boundary.
 # Keep it independently linkable so direct contract tests and the provider host
@@ -440,8 +485,8 @@ target_link_libraries(
   cxxlens_clang22_materialization_codecs
   PUBLIC cxxlens::provider_sdk
   PRIVATE cxxlens_icu_static cxxlens_protocol_v2)
-# The provider SDK DSO keeps its Protocol 2 adapter definitions hidden. Give
-# the source-private codec archive its own frame/closure adapter object without
+# The provider SDK DSO keeps its Protocol 2 adapter definitions hidden. Give the
+# source-private codec archive its own frame/closure adapter object without
 # importing the heartbeat adapter's NG1 runtime dependency.
 target_sources(
   cxxlens_clang22_materialization_codecs

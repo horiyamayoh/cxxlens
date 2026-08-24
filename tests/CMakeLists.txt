@@ -109,6 +109,22 @@ set_tests_properties(
   unit.sdk-store-operation-port
   PROPERTIES LABELS "unit;sdk;store;operation-port;fault;determinism")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-bounded-store-v6-memory-e2e
+                            unit/sdk/bounded_store_v6_memory_e2e_test.cpp)
+target_sources(cxxlens-unit-sdk-bounded-store-v6-memory-e2e
+               PRIVATE support/store_operation_test_adapter.cpp)
+target_link_libraries(
+  cxxlens-unit-sdk-bounded-store-v6-memory-e2e
+  PRIVATE cxxlens_bounded_store_v6_memory_internal cxxlens::kernel)
+target_include_directories(cxxlens-unit-sdk-bounded-store-v6-memory-e2e
+                           PRIVATE "${PROJECT_SOURCE_DIR}/tests/support")
+add_test(NAME unit.sdk-bounded-store-v6-memory-e2e
+         COMMAND cxxlens-unit-sdk-bounded-store-v6-memory-e2e)
+set_tests_properties(
+  unit.sdk-bounded-store-v6-memory-e2e
+  PROPERTIES LABELS
+             "unit;sdk;store;bounded;memory;v6;e2e;fault;determinism;resource")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-disposable-qualification
                             unit/sdk/sqlite_disposable_qualification_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-sqlite-disposable-qualification
@@ -1079,6 +1095,20 @@ set_tests_properties(
   adapter.clang22-provider-task-v4
   PROPERTIES LABELS "adapter;provider;clang22;materialization;task;v4;security")
 
+cxxlens_add_test_executable(cxxlens-clang22-provider-task-v4-authority
+                            adapter/clang22/provider_task_v4_authority_test.cpp)
+target_link_libraries(
+  cxxlens-clang22-provider-task-v4-authority
+  PRIVATE cxxlens_clang22_provider_task_v4_authority_internal)
+add_test(NAME adapter.clang22-provider-task-v4-authority
+         COMMAND cxxlens-clang22-provider-task-v4-authority)
+set_tests_properties(
+  adapter.clang22-provider-task-v4-authority
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;materialization;task;v4;authority;security;bounded;downgrade;replay"
+)
+
 cxxlens_add_test_executable(
   cxxlens-clang22-provider-worker-ingress-decoder
   adapter/clang22/provider_worker_ingress_decoder_test.cpp)
@@ -1890,6 +1920,7 @@ add_dependencies(
   cxxlens-clang22-materialization-store-outcome
   cxxlens-clang22-materialization-request-v2-2
   cxxlens-clang22-provider-task-v4
+  cxxlens-clang22-provider-task-v4-authority
   cxxlens-clang22-provider-worker-ingress-decoder
   cxxlens-clang22-materialization-v4-claim-binding
   cxxlens-clang22-materialization-v4-store-positive
@@ -1953,6 +1984,7 @@ add_dependencies(
   cxxlens-unit-sdk-sqlite-wal-receipt
   cxxlens-unit-sdk-store
   cxxlens-unit-sdk-store-operation-port
+  cxxlens-unit-sdk-bounded-store-v6-memory-e2e
   cxxlens-unit-sdk-sqlite-writer-gate-outcome
   cxxlens-df0200-claim-batch-corpus
   cxxlens-sdk-example-typed_query
