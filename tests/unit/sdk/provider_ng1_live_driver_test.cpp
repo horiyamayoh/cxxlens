@@ -2,7 +2,9 @@
 #include <cstdint>
 #include <cstdlib>
 #include <deque>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <new>
 #include <optional>
@@ -59,6 +61,44 @@ namespace
 	[[nodiscard]] std::string manifest_digest(const char fill)
 	{
 		return std::string{"sha256:"} + std::string(64U, fill);
+	}
+
+	[[nodiscard]] std::string executable_digest(const std::string& executable)
+	{
+		std::ifstream input{executable, std::ios::binary};
+		require(input.good(), "NG1 system executable could not be opened");
+		const std::string bytes{std::istreambuf_iterator<char>{input},
+								std::istreambuf_iterator<char>{}};
+		require(!input.bad(), "NG1 system executable could not be read");
+		return content_digest(std::as_bytes(std::span{bytes}));
+	}
+
+	[[nodiscard]] process_invocation system_invocation(const std::string& executable)
+	{
+		auto policies = builtin_sandbox_policies();
+		require(policies.size() == 2U && policies.front().validate().has_value(),
+				"NG1 system sandbox policy registry is invalid");
+		process_invocation invocation;
+		invocation.argv = {executable};
+		invocation.budget.wall_ms = 3000U;
+		invocation.budget.cpu_ms = 3000U;
+		invocation.budget.address_space_bytes = 256U * 1024U * 1024U;
+		invocation.budget.transport_bytes = 1024U * 1024U;
+		invocation.budget.output_bytes = 1024U * 1024U;
+		invocation.budget.open_files = 64U;
+		invocation.budget.subprocesses = 1U;
+		invocation.sandbox = {sandbox_assurance::enforced, policies.front().policy_digest()};
+		invocation.expected_binary_digest = executable_digest(executable);
+		return invocation;
+	}
+
+	[[nodiscard]] protocol_limits system_protocol_limits()
+	{
+		protocol_limits limits;
+		limits.protocol_major = provider::protocol_v2_major;
+		limits.minimum_minor = provider::protocol_v2_minor;
+		limits.maximum_minor = provider::protocol_v2_minor;
+		return limits;
 	}
 
 	[[nodiscard]] process_output clean_process_output()
@@ -998,6 +1038,105 @@ namespace
 		require(driver->cleanup(), "process-effect failure fixture cleanup failed");
 	}
 
+	void test_system_live_driver_connects_clock_and_duplex_process()
+	{
+		fixture values;
+		auto observation = std::make_shared<observation_state>();
+		auto configuration = values.configuration(
+			std::make_shared<clock_state>(), observation, std::make_shared<process_state>());
+		const auto invocation = system_invocation("/bin/cat");
+		frame input;
+		input.type = message_type::input_chunk;
+		input.stream_id = values.heartbeat.stream_id;
+		input.sequence = 0U;
+		input.payload = {std::byte{0x41}, std::byte{0x42}, std::byte{0x43}};
+		input.protocol_major = provider::protocol_v2_major;
+		input.protocol_minor = provider::protocol_v2_minor;
+
+		auto driver =
+			ng1_live_session_driver::start_system(std::move(configuration.session),
+												  invocation,
+												  system_protocol_limits(),
+												  4U,
+												  std::make_unique<fake_observation>(observation),
+												  {});
+		require(driver, "NG1 system live driver could not start");
+		require(driver->send_host_frame(input), "NG1 system live driver could not send a frame");
+		auto echoed = driver->receive_provider_frame({});
+		require(echoed && echoed->has_value(), "NG1 system live driver did not receive an echo");
+		require(echoed->value().value().type == input.type &&
+					echoed->value().value().stream_id == input.stream_id &&
+					echoed->value().value().sequence == input.sequence &&
+					echoed->value().value().payload == input.payload &&
+					echoed->value().host_receipt_time_ns() != 0U,
+				"NG1 system live driver lost the framed duplex or host clock receipt");
+
+		auto finished = driver->finish({});
+		require(finished && finished->status == process_status::exited &&
+					finished->exit_code == 0 &&
+					finished->measured_executable_digest == invocation.expected_binary_digest,
+				"NG1 system live driver did not preserve process identity on finish");
+		auto rejected = driver->session().reject_output();
+		require(!rejected && driver->session().state() == ng1_recovery_state::failed,
+				"NG1 system live driver allowed unsealed output to remain publishable");
+		require(driver->cleanup(), "NG1 system live driver cleanup failed");
+	}
+
+	void test_system_live_driver_propagates_cancellation_and_cleans_spill()
+	{
+		fixture values;
+		auto observation = std::make_shared<observation_state>();
+		auto process_state_value = std::make_shared<process_state>();
+		auto spill = std::make_shared<spill_state>();
+		auto configuration = values.configuration(
+			std::make_shared<clock_state>(), observation, process_state_value, 4U, spill);
+		std::stop_source cancellation;
+		auto driver =
+			ng1_live_session_driver::start_system(std::move(configuration.session),
+												  system_invocation("/bin/cat"),
+												  system_protocol_limits(),
+												  4U,
+												  std::make_unique<fake_observation>(observation),
+												  cancellation.get_token());
+		require(driver, "NG1 system cancellation driver could not start");
+		cancellation.request_stop();
+		auto received = driver->receive_provider_frame({});
+		require(!received && received.error().code == "provider.cancelled",
+				"NG1 system live driver did not propagate its stop token");
+		auto finished = driver->finish({});
+		require(finished && finished->status == process_status::cancelled,
+				"NG1 system cancellation did not preserve process cleanup outcome");
+		require(driver->session().state() == ng1_recovery_state::worker_killed,
+				"NG1 system cancellation did not enter worker-killed state");
+		auto rejected = driver->session().reject_output();
+		require(!rejected && driver->cleanup(),
+				"NG1 system cancellation could not finish fail-closed cleanup");
+	}
+
+	void test_system_live_driver_destructor_cleans_unfinished_session()
+	{
+		fixture values;
+		auto observation = std::make_shared<observation_state>();
+		auto spill = std::make_shared<spill_state>();
+		{
+			auto configuration = values.configuration(std::make_shared<clock_state>(),
+													  observation,
+													  std::make_shared<process_state>(),
+													  4U,
+													  spill);
+			auto driver = ng1_live_session_driver::start_system(
+				std::move(configuration.session),
+				system_invocation("/bin/cat"),
+				system_protocol_limits(),
+				4U,
+				std::make_unique<fake_observation>(observation),
+				{});
+			require(driver, "NG1 destructor cleanup driver could not start");
+		}
+		require(spill->cleaned,
+				"NG1 live driver destructor did not clean the unfinished private spill session");
+	}
+
 	void test_shared_validator_accepts_explicit_ng1_controls()
 	{
 		fixture values;
@@ -1123,6 +1262,9 @@ int main()
 	test_live_driver_cleans_session_when_process_start_throws();
 	test_live_driver_rebases_task_timers_at_acceptance();
 	test_live_driver_does_not_sync_failed_process_effects();
+	test_system_live_driver_connects_clock_and_duplex_process();
+	test_system_live_driver_propagates_cancellation_and_cleans_spill();
+	test_system_live_driver_destructor_cleans_unfinished_session();
 	test_shared_validator_accepts_explicit_ng1_controls();
 	return 0;
 }

@@ -1,3 +1,4 @@
+#include <chrono>
 #include <exception>
 #include <limits>
 #include <new>
@@ -10,6 +11,25 @@ namespace cxxlens::sdk::provider::detail
 {
 	namespace
 	{
+		class system_ng1_monotonic_clock final : public ng1_monotonic_clock_port
+		{
+		  public:
+			result<std::uint64_t> now_ns() const override
+			{
+				const auto count = std::chrono::duration_cast<std::chrono::nanoseconds>(
+									   std::chrono::steady_clock::now().time_since_epoch())
+									   .count();
+				if (count < 0)
+					return cxxlens::sdk::unexpected(
+						error{"provider.heartbeat-clock-invalid", "clock", "negative"});
+				if (static_cast<unsigned long long>(count) >
+					std::numeric_limits<std::uint64_t>::max())
+					return cxxlens::sdk::unexpected(
+						error{"provider.heartbeat-clock-invalid", "clock", "overflow"});
+				return static_cast<std::uint64_t>(count);
+			}
+		};
+
 		[[nodiscard]] error driver_error(std::string field, std::string detail)
 		{
 			return {"provider.protocol-state-invalid", std::move(field), std::move(detail)};
@@ -35,6 +55,11 @@ namespace cxxlens::sdk::provider::detail
 				output.sandbox.validate().has_value();
 		}
 	} // namespace
+
+	std::unique_ptr<ng1_monotonic_clock_port> make_system_ng1_monotonic_clock_port()
+	{
+		return std::make_unique<system_ng1_monotonic_clock>();
+	}
 
 	result<ng1_live_control_handoff>
 	ng1_live_control_handoff::create(ng1_session_configuration configuration)
@@ -186,6 +211,29 @@ namespace cxxlens::sdk::provider::detail
 	}
 
 	result<ng1_live_session_driver>
+	ng1_live_session_driver::start_system(ng1_session_configuration session,
+										  process_invocation invocation,
+										  protocol_limits limits,
+										  const std::uint64_t maximum_retained_frames,
+										  std::unique_ptr<ng1_host_observation_port> observation,
+										  const std::stop_token cancellation)
+	{
+		auto clock = make_system_ng1_monotonic_clock_port();
+		auto processes = make_system_ng1_duplex_process_port();
+		if (!clock || !processes)
+			return cxxlens::sdk::unexpected(
+				error{"provider.runtime-unavailable", "ng1-live", "system-port"});
+		return start(ng1_live_driver_configuration{std::move(session),
+												   std::move(invocation),
+												   limits,
+												   maximum_retained_frames,
+												   std::move(clock),
+												   std::move(observation),
+												   std::move(processes)},
+					 cancellation);
+	}
+
+	result<ng1_live_session_driver>
 	ng1_live_session_driver::start(ng1_live_driver_configuration configuration,
 								   const std::stop_token cancellation)
 	{
@@ -263,7 +311,8 @@ namespace cxxlens::sdk::provider::detail
 									   std::move(*process),
 									   std::move(configuration.clock),
 									   std::move(configuration.observation),
-									   configuration.maximum_retained_frames};
+									   configuration.maximum_retained_frames,
+									   cancellation};
 	}
 
 	ng1_live_session_driver::ng1_live_session_driver(
@@ -271,11 +320,50 @@ namespace cxxlens::sdk::provider::detail
 		std::unique_ptr<ng1_duplex_process> process,
 		std::unique_ptr<ng1_monotonic_clock_port> clock,
 		std::unique_ptr<ng1_host_observation_port> observation,
-		const std::uint64_t maximum_retained_frames) noexcept
+		const std::uint64_t maximum_retained_frames,
+		const std::stop_token cancellation) noexcept
 		: session_{std::move(session)}, adapter_{session_}, process_{std::move(process)},
 		  clock_{std::move(clock)}, observation_{std::move(observation)},
-		  maximum_retained_frames_{maximum_retained_frames}
+		  maximum_retained_frames_{maximum_retained_frames}, cancellation_{cancellation}
 	{
+	}
+
+	ng1_live_session_driver::~ng1_live_session_driver() noexcept
+	{
+		try
+		{
+			if (process_)
+			{
+				if (!ended_)
+				{
+					auto terminated = process_->terminate(process_status::cancelled);
+					if (terminated)
+					{
+						ended_ = true;
+						(void)synchronize_process_outcome(*terminated);
+					}
+				}
+				// Reset even when the process port returned an effect error.  The concrete system
+				// process destructor owns the final process-group kill/reap fallback.
+				process_.reset();
+				ended_ = true;
+			}
+
+			if (!session_.cleaned())
+			{
+				if (session_.state() != ng1_recovery_state::completed &&
+					session_.state() != ng1_recovery_state::failed)
+					(void)session_.reject_output();
+				if (session_.state() == ng1_recovery_state::completed ||
+					session_.state() == ng1_recovery_state::failed)
+					(void)session_.cleanup();
+			}
+		}
+		catch (...)
+		{
+			// Destruction is a last-resort fail-closed boundary.  The process object has already
+			// been given an opportunity to kill/reap, and no exception may escape this path.
+		}
 	}
 
 	ng1_live_session_driver::ng1_live_session_driver(ng1_live_session_driver&& other) noexcept
@@ -284,7 +372,8 @@ namespace cxxlens::sdk::provider::detail
 		  observation_{std::move(other.observation_)},
 		  provider_frames_{std::move(other.provider_frames_)},
 		  last_provider_receipt_{std::move(other.last_provider_receipt_)},
-		  maximum_retained_frames_{other.maximum_retained_frames_}, ended_{other.ended_}
+		  maximum_retained_frames_{other.maximum_retained_frames_},
+		  cancellation_{other.cancellation_}, ended_{other.ended_}
 	{
 		other.ended_ = true;
 	}
@@ -380,6 +469,8 @@ namespace cxxlens::sdk::provider::detail
 	{
 		if (auto open = ensure_open("receive_provider_frame"); !open)
 			return cxxlens::sdk::unexpected(std::move(open.error()));
+		if (!cancellation.stop_possible())
+			cancellation = cancellation_;
 		auto value = process_->receive_frame(std::move(cancellation));
 		if (!value)
 			return cxxlens::sdk::unexpected(std::move(value.error()));
@@ -453,6 +544,8 @@ namespace cxxlens::sdk::provider::detail
 	{
 		if (auto open = ensure_open("finish"); !open)
 			return cxxlens::sdk::unexpected(std::move(open.error()));
+		if (!cancellation.stop_possible())
+			cancellation = cancellation_;
 		auto output = process_->finish(std::move(cancellation));
 		if (!output)
 			return cxxlens::sdk::unexpected(std::move(output.error()));

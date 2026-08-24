@@ -119,6 +119,10 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] virtual result<std::uint64_t> now_ns() const = 0;
 	};
 
+	/** Create the host monotonic clock used by the system NG1 live driver. */
+	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN std::unique_ptr<ng1_monotonic_clock_port>
+	make_system_ng1_monotonic_clock_port();
+
 	/** Host observation supplied alongside each NG1 control receipt. */
 	struct CXXLENS_PROVIDER_DETAIL_HIDDEN ng1_host_observation
 	{
@@ -217,11 +221,25 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] static result<ng1_live_session_driver>
 		start(ng1_live_driver_configuration configuration, std::stop_token cancellation);
 
+		/**
+		 * Start the source-private driver with the real host clock and duplex process port.
+		 *
+		 * The observation port remains caller-owned because its durable sequence and staged digest
+		 * are host authority.  No provider capability is negotiated or advertised by this helper.
+		 */
+		[[nodiscard]] static result<ng1_live_session_driver>
+		start_system(ng1_session_configuration session,
+					 process_invocation invocation,
+					 protocol_limits limits,
+					 std::uint64_t maximum_retained_frames,
+					 std::unique_ptr<ng1_host_observation_port> observation,
+					 std::stop_token cancellation);
+
 		ng1_live_session_driver(const ng1_live_session_driver&) = delete;
 		ng1_live_session_driver& operator=(const ng1_live_session_driver&) = delete;
 		ng1_live_session_driver(ng1_live_session_driver&& other) noexcept;
 		ng1_live_session_driver& operator=(ng1_live_session_driver&&) = delete;
-		~ng1_live_session_driver() noexcept = default;
+		~ng1_live_session_driver() noexcept;
 
 		/** Stamp and validate an NG1 host control before sending it to the provider. */
 		[[nodiscard]] result<void> send_host_frame(const frame& value);
@@ -262,7 +280,8 @@ namespace cxxlens::sdk::provider::detail
 								std::unique_ptr<ng1_duplex_process> process,
 								std::unique_ptr<ng1_monotonic_clock_port> clock,
 								std::unique_ptr<ng1_host_observation_port> observation,
-								std::uint64_t maximum_retained_frames) noexcept;
+								std::uint64_t maximum_retained_frames,
+								std::stop_token cancellation) noexcept;
 
 		[[nodiscard]] result<void> ensure_open(std::string_view operation) const;
 		/**
@@ -287,6 +306,7 @@ namespace cxxlens::sdk::provider::detail
 		std::vector<frame> provider_frames_;
 		std::optional<ng1_live_frame_receipt> last_provider_receipt_;
 		std::uint64_t maximum_retained_frames_{};
+		std::stop_token cancellation_;
 		bool ended_{};
 	};
 } // namespace cxxlens::sdk::provider::detail
