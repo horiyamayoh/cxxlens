@@ -23,6 +23,7 @@
 
 #include "sqlite_backend_effect_gate_internal.hpp"
 #include "sqlite_default_forwarding_vfs_internal.hpp"
+#include "sqlite_exact_empty_normalization_effect_internal.hpp"
 #include "sqlite_same_process_shm_identity_issuer_internal.hpp"
 #include "sqlite_same_process_shm_vfs_alias_registration_internal.hpp"
 #include "sqlite_source_shm_readonly_preflight_internal.hpp"
@@ -32,6 +33,123 @@
 
 namespace cxxlens::sdk
 {
+	sqlite_exact_empty_normalization_completed_edge::
+		sqlite_exact_empty_normalization_completed_edge(
+			sqlite_backend_opaque_identity operation_token,
+			sqlite_exact_empty_effect_device_profile device_profile,
+			std::vector<sqlite_exact_empty_effect_callback> callbacks,
+			std::vector<std::byte> callback_payload,
+			std::vector<std::byte> pre_main,
+			std::vector<std::byte> expected_post_main,
+			const bool confirmed_close,
+			const bool exact_projection,
+			const bool sidecars_absent,
+			const bool custody_drained)
+		: operation_token_{std::move(operation_token)}, device_profile_{std::move(device_profile)},
+		  callbacks_{std::move(callbacks)}, callback_payload_{std::move(callback_payload)},
+		  pre_main_{std::move(pre_main)}, expected_post_main_{std::move(expected_post_main)},
+		  confirmed_close_{confirmed_close}, exact_projection_{exact_projection},
+		  sidecars_absent_{sidecars_absent}, custody_drained_{custody_drained}
+	{
+	}
+
+	const sqlite_backend_opaque_identity&
+	sqlite_exact_empty_normalization_completed_edge::operation_token() const noexcept
+	{
+		return operation_token_;
+	}
+
+	const sqlite_exact_empty_effect_device_profile&
+	sqlite_exact_empty_normalization_completed_edge::device_profile() const noexcept
+	{
+		return device_profile_;
+	}
+
+	std::span<const sqlite_exact_empty_effect_callback>
+	sqlite_exact_empty_normalization_completed_edge::callbacks() const noexcept
+	{
+		return callbacks_;
+	}
+
+	std::span<const std::byte>
+	sqlite_exact_empty_normalization_completed_edge::callback_payload() const noexcept
+	{
+		return callback_payload_;
+	}
+
+	std::span<const std::byte>
+	sqlite_exact_empty_normalization_completed_edge::pre_main_bytes() const noexcept
+	{
+		return pre_main_;
+	}
+
+	std::span<const std::byte>
+	sqlite_exact_empty_normalization_completed_edge::expected_post_main_bytes() const noexcept
+	{
+		return expected_post_main_;
+	}
+
+	bool sqlite_exact_empty_normalization_completed_edge::confirmed_close() const noexcept
+	{
+		return confirmed_close_;
+	}
+
+	bool
+	sqlite_exact_empty_normalization_completed_edge::post_close_exact_projection() const noexcept
+	{
+		return exact_projection_;
+	}
+
+	bool sqlite_exact_empty_normalization_completed_edge::post_close_logical_empty() const noexcept
+	{
+		return logical_empty_;
+	}
+
+	bool
+	sqlite_exact_empty_normalization_completed_edge::post_close_sidecars_absent() const noexcept
+	{
+		return sidecars_absent_;
+	}
+
+	bool sqlite_exact_empty_normalization_completed_edge::custody_drained() const noexcept
+	{
+		return custody_drained_;
+	}
+
+	struct sqlite_exact_empty_normalization_edge_factory
+	{
+		[[nodiscard]] static std::shared_ptr<sqlite_exact_empty_normalization_completed_edge>
+		make(sqlite_backend_opaque_identity operation_token,
+			 sqlite_exact_empty_effect_device_profile device_profile,
+			 std::vector<sqlite_exact_empty_effect_callback> callbacks,
+			 std::vector<std::byte> callback_payload,
+			 std::vector<std::byte> pre_main,
+			 std::vector<std::byte> expected_post_main,
+			 const bool confirmed_close,
+			 const bool exact_projection,
+			 const bool sidecars_absent,
+			 const bool custody_drained)
+		{
+			return std::shared_ptr<sqlite_exact_empty_normalization_completed_edge>(
+				new sqlite_exact_empty_normalization_completed_edge(std::move(operation_token),
+																	std::move(device_profile),
+																	std::move(callbacks),
+																	std::move(callback_payload),
+																	std::move(pre_main),
+																	std::move(expected_post_main),
+																	confirmed_close,
+																	exact_projection,
+																	sidecars_absent,
+																	custody_drained));
+		}
+
+		static void
+		seal_logical_empty(sqlite_exact_empty_normalization_completed_edge& edge) noexcept
+		{
+			edge.logical_empty_ = true;
+		}
+	};
+
 	namespace
 	{
 		constexpr int sqlite_ok = 0;
@@ -54,6 +172,12 @@ namespace cxxlens::sdk
 		constexpr int sqlite_open_write_ahead_log = 0x00080000;
 		constexpr int sqlite_open_file_type_mask = 0x000fff00;
 		constexpr int sqlite_file_control_has_moved = 20;
+		constexpr int sqlite_file_control_persist_wal = 10;
+		constexpr int sqlite_file_control_pragma = 14;
+		constexpr int sqlite_file_control_mmap_size = 18;
+		constexpr int sqlite_file_control_sync = 21;
+		constexpr int sqlite_file_control_commit_phase_two = 22;
+		constexpr int sqlite_iocap_powersafe_overwrite = 0x00001000;
 		constexpr int sqlite_lock_exclusive = 4;
 		constexpr std::array effectful_file_controls{
 			5,	// SQLITE_FCNTL_SIZE_HINT
@@ -318,6 +442,61 @@ namespace cxxlens::sdk
 
 		class default_forwarding_state;
 		struct native_file_node;
+		[[nodiscard]] bool accepts_exact_empty_normalization_runtime(
+			const std::shared_ptr<default_forwarding_state>&,
+			const sqlite_exact_empty_normalization_runtime&) noexcept;
+
+		enum class exact_empty_live_phase : std::uint8_t
+		{
+			profile_armed,
+			coordination_pending,
+			coordination_armed,
+			wal_observed,
+			full_pending,
+			fully_armed,
+			connection_closed,
+			completed,
+			failed,
+		};
+
+		struct exact_empty_normalization_state
+		{
+			mutable std::mutex mutex;
+			sqlite_exact_empty_normalization_runtime runtime;
+			std::shared_ptr<sqlite_source_shm_namespace_guard> namespace_guard;
+			std::shared_ptr<store_operation_port> operation_port;
+			std::shared_ptr<const sqlite_backend_held_object> held_main;
+			sqlite_backend_opaque_identity source_capability_token;
+			sqlite_backend_opaque_identity connection_token;
+			sqlite_backend_opaque_identity operation_token;
+			sqlite_backend_opaque_identity main_object_identity;
+			sqlite_backend_opaque_identity main_entry_identity;
+			std::string canonical_locator;
+			std::vector<std::byte> pre_main;
+			std::vector<std::byte> expected_post_main;
+			std::vector<std::byte> journal_image;
+			std::optional<sqlite_backend_normalization_sidecar_observation> wal_observation;
+			std::optional<sqlite_backend_normalization_sidecar_observation> journal_observation;
+			sqlite_exact_empty_effect_device_profile device_profile;
+			std::vector<sqlite_exact_empty_effect_callback> callbacks;
+			std::vector<std::byte> callback_payload;
+			exact_empty_live_phase phase{exact_empty_live_phase::profile_armed};
+			std::uint64_t next_callback_sequence{1U};
+			std::size_t journal_sync_count{};
+			std::size_t main_sync_count{};
+			std::size_t wal_delete_count{};
+			std::size_t journal_delete_count{};
+			bool coordination_wal_initially_present{};
+			bool journal_parent_synced{};
+			bool wal_parent_synced{};
+			bool journal_parent_delete_synced{};
+			bool main_close_confirmed{};
+			bool wal_close_confirmed{};
+			bool journal_close_confirmed{};
+			bool sector_observed{};
+			bool device_characteristics_observed{};
+			bool invalid{};
+		};
 
 		struct default_connection_observation final : sqlite_backend_connection_observation_scope
 		{
@@ -350,9 +529,11 @@ namespace cxxlens::sdk
 			std::optional<sqlite_backend_opaque_identity> writer_effect_gate_receipt;
 			std::optional<sqlite_backend_opaque_identity> writer_effect_receipt;
 			std::optional<sqlite_shm_writer_eligibility> writer_eligibility;
+			std::shared_ptr<exact_empty_normalization_state> exact_empty_normalization;
 			std::weak_ptr<default_forwarding_state> owner;
 			std::weak_ptr<native_file_node> main_native_node;
 			std::weak_ptr<native_file_node> wal_native_node;
+			std::weak_ptr<native_file_node> journal_native_node;
 			std::string profile;
 			bool complete{};
 			bool invalid{};
@@ -404,6 +585,15 @@ namespace cxxlens::sdk
 			{
 				return effect_gate.get();
 			}
+
+			[[nodiscard]] result<void> arm_exact_empty_normalization_profile(
+				sqlite_logical_read_receipt&& receipt,
+				const sqlite_exact_empty_normalization_input& input) override;
+			[[nodiscard]] result<void>
+			install_exact_empty_normalization_coordination_arm() override;
+			[[nodiscard]] result<
+				std::shared_ptr<const sqlite_exact_empty_normalization_completed_edge>>
+			finish_exact_empty_normalization_profile() override;
 
 			[[nodiscard]] bool requires_source_shm_writer_mapping_epoch() const noexcept override
 			{
@@ -481,6 +671,87 @@ namespace cxxlens::sdk
 			sqlite_backend_opaque_identity object;
 			sqlite_backend_opaque_identity entry;
 		};
+
+		[[nodiscard]] std::shared_ptr<exact_empty_normalization_state> exact_empty_state(
+			const std::shared_ptr<default_connection_observation>& observation) noexcept
+		{
+			if (!observation)
+				return {};
+			try
+			{
+				std::scoped_lock lock{observation->mutex};
+				return observation->exact_empty_normalization;
+			}
+			catch (...)
+			{
+				return {};
+			}
+		}
+
+		void fail_exact_empty_state(
+			const std::shared_ptr<exact_empty_normalization_state>& state) noexcept
+		{
+			if (!state)
+				return;
+			try
+			{
+				std::scoped_lock lock{state->mutex};
+				state->invalid = true;
+				state->phase = exact_empty_live_phase::failed;
+			}
+			catch (...)
+			{
+			}
+		}
+
+		[[nodiscard]] bool
+		record_exact_empty_callback(const std::shared_ptr<exact_empty_normalization_state>& state,
+									const sqlite_exact_empty_effect_callback_kind kind,
+									const sqlite_backend_file_role role,
+									const std::int64_t offset,
+									const std::uint64_t byte_count,
+									const int argument,
+									const int result_code,
+									const int output,
+									const std::span<const std::byte> payload = {}) noexcept
+		{
+			if (!state)
+				return true;
+			try
+			{
+				std::scoped_lock lock{state->mutex};
+				if (state->invalid || state->phase == exact_empty_live_phase::failed ||
+					state->next_callback_sequence == std::numeric_limits<std::uint64_t>::max() ||
+					state->callbacks.size() == state->callbacks.capacity() ||
+					payload.size() >
+						state->callback_payload.capacity() - state->callback_payload.size())
+				{
+					state->invalid = true;
+					state->phase = exact_empty_live_phase::failed;
+					return false;
+				}
+				const auto payload_offset = state->callback_payload.size();
+				state->callback_payload.insert(
+					state->callback_payload.end(), payload.begin(), payload.end());
+				state->callbacks.push_back(sqlite_exact_empty_effect_callback{
+					state->next_callback_sequence++,
+					kind,
+					role,
+					offset,
+					byte_count,
+					argument,
+					result_code,
+					output,
+					static_cast<std::uint64_t>(payload_offset),
+				});
+				return true;
+			}
+			catch (...)
+			{
+				fail_exact_empty_state(state);
+				return false;
+			}
+		}
 
 		/** Stable source-private view of the installed family while one VFS owner is alive. */
 		struct source_shm_reader_registry_context
@@ -840,6 +1111,18 @@ namespace cxxlens::sdk
 			bool rejected{};
 		};
 
+		struct exact_empty_delete_target
+		{
+			std::shared_ptr<exact_empty_normalization_state> state;
+			sqlite_backend_file_role role{sqlite_backend_file_role::write_ahead_log};
+		};
+
+		struct exact_empty_delete_lookup
+		{
+			std::optional<exact_empty_delete_target> target;
+			bool reject{};
+		};
+
 		enum class qualification_full_path_result : std::uint8_t
 		{
 			delegate,
@@ -927,6 +1210,1263 @@ namespace cxxlens::sdk
 				runtime.source_id != nullptr || runtime.uri_parameter != nullptr ||
 				runtime.uri_key != nullptr || runtime.vfs_find != nullptr ||
 				runtime.vfs_register != nullptr || runtime.vfs_unregister != nullptr;
+		}
+
+		[[nodiscard]] const sqlite_backend_entry_observation*
+		exact_empty_census_entry(const sqlite_backend_namespace_census& census,
+								 const sqlite_backend_file_role role) noexcept
+		{
+			const sqlite_backend_entry_observation* found{};
+			for (const auto& entry : census.entries)
+			{
+				if (entry.role != role)
+					continue;
+				if (found != nullptr)
+					return nullptr;
+				found = &entry;
+			}
+			return found;
+		}
+
+		[[nodiscard]] std::uint32_t read_be_u32(const std::span<const std::byte> bytes,
+												const std::size_t offset) noexcept
+		{
+			return (std::to_integer<std::uint32_t>(bytes[offset]) << 24U) |
+				(std::to_integer<std::uint32_t>(bytes[offset + 1U]) << 16U) |
+				(std::to_integer<std::uint32_t>(bytes[offset + 2U]) << 8U) |
+				std::to_integer<std::uint32_t>(bytes[offset + 3U]);
+		}
+
+		void write_be_u32(const std::span<std::byte> bytes,
+						  const std::size_t offset,
+						  const std::uint32_t value) noexcept
+		{
+			bytes[offset] = static_cast<std::byte>((value >> 24U) & 0xffU);
+			bytes[offset + 1U] = static_cast<std::byte>((value >> 16U) & 0xffU);
+			bytes[offset + 2U] = static_cast<std::byte>((value >> 8U) & 0xffU);
+			bytes[offset + 3U] = static_cast<std::byte>(value & 0xffU);
+		}
+
+		[[nodiscard]] std::optional<std::uint32_t>
+		decode_sqlite_page_size(const std::span<const std::byte> bytes) noexcept
+		{
+			if (bytes.size() < 100U)
+				return std::nullopt;
+			const auto encoded = (std::to_integer<std::uint32_t>(bytes[16U]) << 8U) |
+				std::to_integer<std::uint32_t>(bytes[17U]);
+			const auto page_size = encoded == 1U ? 65536U : encoded;
+			if (page_size < 512U || page_size > 65536U || !std::has_single_bit(page_size))
+				return std::nullopt;
+			return page_size;
+		}
+
+		[[nodiscard]] bool exact_empty_main_matches(
+			const std::shared_ptr<exact_empty_normalization_state>& state) noexcept
+		{
+			if (!state || !state->held_main)
+				return false;
+			try
+			{
+				auto replacement = state->held_main->recheck_current_entry();
+				auto size = state->held_main->size();
+				if (!replacement ||
+					*replacement != sqlite_backend_replacement_state::exact_same_entry_and_object ||
+					!size || *size != state->pre_main.size())
+					return false;
+				std::array<std::byte, std::size_t{64U} * 1024U> buffer{};
+				std::size_t offset{};
+				while (offset < state->pre_main.size())
+				{
+					const auto count = std::min(buffer.size(), state->pre_main.size() - offset);
+					auto window = std::span{buffer}.first(count);
+					if (auto read = state->held_main->read_exact(offset, window); !read ||
+						!std::ranges::equal(window,
+											std::span{state->pre_main}.subspan(offset, count)))
+						return false;
+					offset += count;
+				}
+				return static_cast<bool>(
+					state->namespace_guard->recheck_exact_empty_normalization_epoch());
+			}
+			catch (...)
+			{
+				return false;
+			}
+		}
+
+		class exact_empty_arm_authority final : public sqlite_backend_effect_arm_authority
+		{
+		  public:
+			exact_empty_arm_authority(std::weak_ptr<exact_empty_normalization_state> state,
+									  const sqlite_backend_effect_stage target,
+									  const exact_empty_live_phase required,
+									  const exact_empty_live_phase sealed)
+				: state_{std::move(state)}, target_{target}, required_{required}, sealed_{sealed}
+			{
+			}
+
+			[[nodiscard]] result<sqlite_backend_opaque_identity> recheck_and_seal(
+				const sqlite_backend_effect_arm_request& request,
+				const sqlite_backend_connection_observation_scope& connection) const override
+			{
+				auto state = state_.lock();
+				if (!state)
+					return unexpected(forwarding_error("exact-empty-normalization-arm"));
+				{
+					std::scoped_lock lock{state->mutex};
+					if (state->invalid || state->phase != required_ ||
+						request.target_stage != target_ ||
+						request.capability_token != state->source_capability_token ||
+						request.connection_token != state->connection_token ||
+						request.canonical_vfs_locator != state->canonical_locator ||
+						request.prerequisite_receipt != state->operation_token ||
+						connection.token() != state->connection_token ||
+						(required_ == exact_empty_live_phase::full_pending &&
+						 (!state->wal_observation || state->wal_observation->byte_count != 0U)))
+						return unexpected(forwarding_error("exact-empty-normalization-arm"));
+				}
+				auto snapshot = connection.snapshot();
+				if (!snapshot || !snapshot->complete || !snapshot->main_handle_open ||
+					snapshot->capability_token != state->source_capability_token ||
+					snapshot->connection_token != state->connection_token ||
+					!exact_empty_main_matches(state))
+					return unexpected(forwarding_error("exact-empty-normalization-arm"));
+				try
+				{
+					sqlite_backend_opaque_identity validation{
+						"default-forwarding-vfs-v1.exact-empty-normalization-arm.v1", {}};
+					append_opaque_identity(validation.bytes, state->operation_token);
+					append_u64(validation.bytes, static_cast<std::uint64_t>(target_));
+					{
+						std::scoped_lock lock{state->mutex};
+						if (state->phase != required_)
+							return unexpected(forwarding_error("exact-empty-normalization-arm"));
+						state->phase = sealed_;
+					}
+					return validation;
+				}
+				catch (...)
+				{
+					fail_exact_empty_state(state);
+					return unexpected(forwarding_error("exact-empty-normalization-arm"));
+				}
+			}
+
+		  private:
+			std::weak_ptr<exact_empty_normalization_state> state_;
+			sqlite_backend_effect_stage target_{sqlite_backend_effect_stage::denied};
+			exact_empty_live_phase required_{exact_empty_live_phase::failed};
+			exact_empty_live_phase sealed_{exact_empty_live_phase::failed};
+		};
+
+		[[nodiscard]] sqlite_backend_effect_arm_request
+		exact_empty_arm_request(const std::shared_ptr<exact_empty_normalization_state>& state,
+								const sqlite_backend_effect_stage stage,
+								const exact_empty_live_phase required,
+								const exact_empty_live_phase sealed)
+		{
+			return sqlite_backend_effect_arm_request{
+				stage,
+				state->source_capability_token,
+				state->connection_token,
+				state->canonical_locator,
+				state->operation_token,
+				std::make_shared<exact_empty_arm_authority>(state, stage, required, sealed),
+			};
+		}
+
+		[[nodiscard]] bool
+		refresh_exact_empty_device_profile(exact_empty_normalization_state& state) noexcept
+		{
+			if (!state.sector_observed || !state.device_characteristics_observed ||
+				state.device_profile.raw_sector_size <= 0 || state.device_profile.page_size == 0U ||
+				(state.device_profile.device_characteristics != 0 &&
+				 state.device_profile.device_characteristics != sqlite_iocap_powersafe_overwrite))
+				return false;
+			const auto raw = state.device_profile.raw_sector_size;
+			const auto effective = (state.device_profile.device_characteristics &
+									sqlite_iocap_powersafe_overwrite) != 0
+				? 512
+				: raw < 32	  ? 512
+				: raw > 65536 ? 65536
+							  : raw;
+			if (effective < 32 || effective > 65536 ||
+				!std::has_single_bit(static_cast<unsigned>(effective)))
+				return false;
+			state.device_profile.effective_sector_size = static_cast<std::uint32_t>(effective);
+			const auto quotient = effective > static_cast<int>(state.device_profile.page_size)
+				? static_cast<std::uint32_t>(effective) / state.device_profile.page_size
+				: 1U;
+			const auto count = std::min(state.device_profile.database_page_count, quotient);
+			state.device_profile.journal_record_pages.clear();
+			for (std::uint32_t page = 1U; page <= count; ++page)
+				state.device_profile.journal_record_pages.push_back(page);
+			return !state.device_profile.journal_record_pages.empty();
+		}
+
+		result<void> default_connection_observation::arm_exact_empty_normalization_profile(
+			sqlite_logical_read_receipt&& receipt,
+			const sqlite_exact_empty_normalization_input& input)
+		{
+			const auto fail = []() -> result<void>
+			{
+				return unexpected(forwarding_error("exact-empty-normalization-profile"));
+			};
+			try
+			{
+				auto owner_pin = owner.lock();
+				const auto* main = exact_empty_census_entry(
+					input.source_census, sqlite_backend_file_role::main_database);
+				const auto* wal = exact_empty_census_entry(
+					input.source_census, sqlite_backend_file_role::write_ahead_log);
+				const auto* shm = exact_empty_census_entry(input.source_census,
+														   sqlite_backend_file_role::shared_memory);
+				const auto* journal = exact_empty_census_entry(
+					input.source_census, sqlite_backend_file_role::rollback_journal);
+				if (!accepts_exact_empty_normalization_runtime(owner_pin, input.runtime) ||
+					input.canonical_vfs_locator != canonical_locator || !input.operation_port ||
+					input.source_census.capability_token != capability_token_value ||
+					!input.source_census.source_shm_guard || main == nullptr || wal == nullptr ||
+					shm == nullptr || journal == nullptr ||
+					main->state != sqlite_backend_entry_state::held_regular || !main->held_object ||
+					!main->object_identity || !main->directory_entry_identity ||
+					(shm->state != sqlite_backend_entry_state::absent) ||
+					journal->state != sqlite_backend_entry_state::absent ||
+					(wal->state != sqlite_backend_entry_state::absent &&
+					 wal->state != sqlite_backend_entry_state::held_regular) ||
+					input.maximum_main_bytes == 0U ||
+					input.maximum_main_bytes > std::uint64_t{512U} * 1024U * 1024U ||
+					!receipt.valid() || !receipt.exact_empty() || !receipt.connection_closed() ||
+					receipt.live_custody_count() != 0U || !receipt.zero_effect_callback_receipt() ||
+					receipt.source_anchor_pin() !=
+						std::static_pointer_cast<const void>(main->held_object))
+					return fail();
+				{
+					std::scoped_lock lock{mutex};
+					auto denied =
+						effect_gate != nullptr ? effect_gate->latest_receipt() : std::nullopt;
+					if (invalid || main_claimed || main_handle_open || exact_empty_normalization ||
+						effect_gate == nullptr || !denied ||
+						denied->stage != sqlite_backend_effect_stage::denied ||
+						denied->sequence != 1U ||
+						effect_gate->stage() != sqlite_backend_effect_stage::denied)
+						return fail();
+				}
+				if (auto checked = input.source_census.source_shm_guard->recheck(); !checked)
+					return fail();
+				auto byte_count = main->held_object->size();
+				if (!byte_count || *byte_count < 100U || *byte_count > input.maximum_main_bytes ||
+					*byte_count > std::numeric_limits<std::size_t>::max())
+					return fail();
+				std::vector<std::byte> pre(static_cast<std::size_t>(*byte_count));
+				if (auto read = main->held_object->read_exact(0U, pre); !read)
+					return fail();
+				constexpr std::array<std::byte, 16U> sqlite_magic{std::byte{'S'},
+																  std::byte{'Q'},
+																  std::byte{'L'},
+																  std::byte{'i'},
+																  std::byte{'t'},
+																  std::byte{'e'},
+																  std::byte{' '},
+																  std::byte{'f'},
+																  std::byte{'o'},
+																  std::byte{'r'},
+																  std::byte{'m'},
+																  std::byte{'a'},
+																  std::byte{'t'},
+																  std::byte{' '},
+																  std::byte{'3'},
+																  std::byte{0U}};
+				const auto page_size = decode_sqlite_page_size(pre);
+				const auto page_count = read_be_u32(pre, 28U);
+				if (!std::ranges::equal(sqlite_magic, std::span{pre}.first(sqlite_magic.size())) ||
+					!page_size || page_count == 0U ||
+					static_cast<std::uint64_t>(*page_size) * page_count != pre.size() ||
+					pre[18U] != std::byte{2U} || pre[19U] != std::byte{2U} ||
+					read_be_u32(pre, 68U) != 0U)
+					return fail();
+				const auto version = input.runtime.libversion_number();
+				const auto* source_id_raw = input.runtime.sqlite.source_id();
+				if (version <= 0 || source_id_raw == nullptr || source_id_raw[0] == '\0')
+					return fail();
+				const std::string source_id{source_id_raw};
+				if (source_id.size() > 4096U)
+					return fail();
+				std::vector<std::string> build_options;
+				build_options.reserve(128U);
+				bool options_terminated{};
+				for (int index{}; index < 4096; ++index)
+				{
+					const auto* option = input.runtime.compile_option_get(index);
+					if (option == nullptr)
+					{
+						options_terminated = true;
+						break;
+					}
+					const std::string_view value{option};
+					if (value.empty() || value.size() > 4096U || value.contains('\0'))
+						return fail();
+					build_options.emplace_back(value);
+				}
+				if (!options_terminated || build_options.empty())
+					return fail();
+				std::ranges::sort(build_options);
+				if (std::ranges::adjacent_find(build_options) != build_options.end())
+					return fail();
+
+				auto post = pre;
+				post[18U] = std::byte{1U};
+				post[19U] = std::byte{1U};
+				const auto change_counter = read_be_u32(pre, 24U);
+				if (change_counter == std::numeric_limits<std::uint32_t>::max())
+					return fail();
+				const auto next_change_counter = change_counter + 1U;
+				write_be_u32(post, 24U, next_change_counter);
+				write_be_u32(post, 92U, next_change_counter);
+				write_be_u32(post, 96U, static_cast<std::uint32_t>(version));
+
+				auto state = std::make_shared<exact_empty_normalization_state>();
+				state->runtime = input.runtime;
+				state->namespace_guard = input.source_census.source_shm_guard;
+				state->operation_port = input.operation_port;
+				state->held_main = main->held_object;
+				state->source_capability_token = capability_token_value;
+				state->connection_token = connection_token_value;
+				state->main_object_identity = *main->object_identity;
+				state->main_entry_identity = *main->directory_entry_identity;
+				state->canonical_locator = input.canonical_vfs_locator;
+				state->pre_main = std::move(pre);
+				state->expected_post_main = std::move(post);
+				state->coordination_wal_initially_present =
+					wal->state == sqlite_backend_entry_state::held_regular;
+				state->device_profile.page_size = *page_size;
+				state->device_profile.database_page_count = page_count;
+				state->device_profile.vfs_backend_token = capability_token_value;
+				state->device_profile.sqlite_source_id = source_id;
+				state->device_profile.sqlite_build_options = std::move(build_options);
+				state->device_profile.journal_record_pages.reserve(128U);
+				state->callbacks.reserve(2048U);
+				constexpr std::size_t maximum_trace_payload =
+					std::size_t{2U} * 128U * 65536U + std::size_t{4U} * 65536U;
+				state->callback_payload.reserve(maximum_trace_payload);
+				state->journal_image.reserve(std::size_t{128U} * (65536U + 8U) + 65536U);
+				state->operation_token.profile =
+					"default-forwarding-vfs-v1.exact-empty-normalization-operation.v1";
+				append_pointer(state->operation_token.bytes, owner_pin.get());
+				append_pointer(state->operation_token.bytes, state.get());
+				append_pointer(state->operation_token.bytes, input.operation_port.get());
+				append_opaque_identity(state->operation_token.bytes, capability_token_value);
+				append_opaque_identity(state->operation_token.bytes, connection_token_value);
+				append_opaque_identity(state->operation_token.bytes, *main->object_identity);
+				append_opaque_identity(state->operation_token.bytes,
+									   *main->directory_entry_identity);
+				append_bytes(state->operation_token.bytes, source_id);
+				if (auto claimed = state->namespace_guard->claim_exact_empty_normalization_epoch();
+					!claimed || !receipt.consume())
+					return fail();
+				{
+					std::scoped_lock lock{mutex};
+					if (invalid || main_claimed || main_handle_open || exact_empty_normalization)
+						return fail();
+					exact_empty_normalization = std::move(state);
+				}
+				return {};
+			}
+			catch (...)
+			{
+				return fail();
+			}
+		}
+
+		result<void>
+		default_connection_observation::install_exact_empty_normalization_coordination_arm()
+		{
+			std::shared_ptr<exact_empty_normalization_state> state;
+			{
+				std::scoped_lock lock{mutex};
+				state = exact_empty_normalization;
+			}
+			auto main_node = main_native_node.lock();
+			if (!state || effect_gate == nullptr || !main_node ||
+				!main_node->trusted_methods_ready || main_node->observation.get() != this ||
+				main_node->trusted_methods.sector_size == nullptr ||
+				main_node->trusted_methods.device_characteristics == nullptr)
+				return unexpected(forwarding_error("exact-empty-normalization-arm"));
+			try
+			{
+				const auto raw_sector = main_node->trusted_methods.sector_size(main_node->file());
+				const auto device_characteristics =
+					main_node->trusted_methods.device_characteristics(main_node->file());
+				{
+					std::scoped_lock lock{state->mutex};
+					if (state->invalid || state->phase != exact_empty_live_phase::profile_armed ||
+						raw_sector <= 0 ||
+						(device_characteristics != 0 &&
+						 device_characteristics != sqlite_iocap_powersafe_overwrite))
+						return unexpected(forwarding_error("exact-empty-normalization-arm"));
+					state->device_profile.raw_sector_size = raw_sector;
+					state->device_profile.device_characteristics = device_characteristics;
+					state->sector_observed = true;
+					state->device_characteristics_observed = true;
+					if (!refresh_exact_empty_device_profile(*state))
+						return unexpected(forwarding_error("exact-empty-normalization-arm"));
+					state->phase = exact_empty_live_phase::coordination_pending;
+				}
+				if (!record_exact_empty_callback(
+						state,
+						sqlite_exact_empty_effect_callback_kind::sector_size,
+						sqlite_backend_file_role::main_database,
+						0,
+						0U,
+						0,
+						sqlite_ok,
+						raw_sector) ||
+					!record_exact_empty_callback(
+						state,
+						sqlite_exact_empty_effect_callback_kind::device_characteristics,
+						sqlite_backend_file_role::main_database,
+						0,
+						0U,
+						0,
+						sqlite_ok,
+						device_characteristics))
+				{
+					fail_exact_empty_state(state);
+					return unexpected(forwarding_error("exact-empty-normalization-arm"));
+				}
+				auto installed = effect_gate->install_arm_on_exclusive_lock(
+					exact_empty_arm_request(state,
+											sqlite_backend_effect_stage::wal_shm_coordination_only,
+											exact_empty_live_phase::coordination_pending,
+											exact_empty_live_phase::coordination_armed));
+				if (!installed)
+				{
+					fail_exact_empty_state(state);
+					return installed;
+				}
+				return {};
+			}
+			catch (...)
+			{
+				fail_exact_empty_state(state);
+				return unexpected(forwarding_error("exact-empty-normalization-arm"));
+			}
+		}
+
+		[[nodiscard]] bool exact_empty_open_completed(
+			const std::shared_ptr<default_connection_observation>& observation,
+			const sqlite_backend_file_role role,
+			const int input_flags,
+			const int returned_flags,
+			const std::optional<opened_object_identities>& native_identities) noexcept
+		{
+			auto state = exact_empty_state(observation);
+			if (!state)
+				return true;
+			if (!record_exact_empty_callback(state,
+											 sqlite_exact_empty_effect_callback_kind::open,
+											 role,
+											 0,
+											 0U,
+											 input_flags,
+											 sqlite_ok,
+											 returned_flags))
+				return false;
+			if (role == sqlite_backend_file_role::main_database)
+				return input_flags == (sqlite_open_read_write | sqlite_open_main_database) &&
+					native_identities && native_identities->object == state->main_object_identity &&
+					native_identities->entry == state->main_entry_identity;
+			if (role != sqlite_backend_file_role::write_ahead_log &&
+				role != sqlite_backend_file_role::rollback_journal)
+			{
+				fail_exact_empty_state(state);
+				return false;
+			}
+			try
+			{
+				auto sidecar =
+					state->namespace_guard->observe_exact_empty_normalization_sidecar(role);
+				if (!sidecar || !native_identities ||
+					native_identities->object != sidecar->object_identity ||
+					native_identities->entry != sidecar->directory_entry_identity)
+				{
+					fail_exact_empty_state(state);
+					return false;
+				}
+				if (role == sqlite_backend_file_role::write_ahead_log)
+				{
+					{
+						std::scoped_lock lock{state->mutex};
+						if (state->invalid ||
+							state->phase != exact_empty_live_phase::coordination_armed ||
+							input_flags !=
+								(sqlite_open_read_write | sqlite_open_create |
+								 sqlite_open_write_ahead_log) ||
+							sidecar->byte_count != 0U || state->wal_observation)
+						{
+							state->invalid = true;
+							state->phase = exact_empty_live_phase::failed;
+							return false;
+						}
+						state->wal_observation = *sidecar;
+						state->phase = exact_empty_live_phase::full_pending;
+					}
+					auto* gate = observation != nullptr ? observation->effect_gate.get() : nullptr;
+					if (gate == nullptr)
+					{
+						fail_exact_empty_state(state);
+						return false;
+					}
+					auto installed = gate->install_arm_on_exclusive_lock(
+						exact_empty_arm_request(state,
+												sqlite_backend_effect_stage::fully_armed,
+												exact_empty_live_phase::full_pending,
+												exact_empty_live_phase::fully_armed));
+					if (!installed)
+					{
+						fail_exact_empty_state(state);
+						return false;
+					}
+					return true;
+				}
+				std::scoped_lock lock{state->mutex};
+				if (state->invalid || state->phase != exact_empty_live_phase::fully_armed ||
+					input_flags !=
+						(sqlite_open_read_write | sqlite_open_create | sqlite_open_main_journal) ||
+					sidecar->byte_count != 0U || state->journal_observation)
+				{
+					state->invalid = true;
+					state->phase = exact_empty_live_phase::failed;
+					return false;
+				}
+				state->journal_observation = *sidecar;
+				state->journal_image.clear();
+				return true;
+			}
+			catch (...)
+			{
+				fail_exact_empty_state(state);
+				return false;
+			}
+		}
+
+		[[nodiscard]] std::span<const std::byte>
+		exact_empty_callback_payload(const exact_empty_normalization_state& state,
+									 const sqlite_exact_empty_effect_callback& callback) noexcept
+		{
+			if (callback.payload_offset > state.callback_payload.size() ||
+				callback.byte_count > state.callback_payload.size() - callback.payload_offset)
+				return {};
+			return std::span{state.callback_payload}.subspan(
+				static_cast<std::size_t>(callback.payload_offset),
+				static_cast<std::size_t>(callback.byte_count));
+		}
+
+		[[nodiscard]] std::uint32_t pager_record_checksum(const std::span<const std::byte> page,
+														  const std::uint32_t nonce) noexcept
+		{
+			auto checksum = nonce;
+			if (page.size() < 200U)
+				return checksum;
+			for (std::size_t index = page.size() - 200U; index > 0U;)
+			{
+				checksum += std::to_integer<std::uint32_t>(page[index]);
+				if (index <= 200U)
+					break;
+				index -= 200U;
+			}
+			return checksum;
+		}
+
+		[[nodiscard]] bool
+		validate_exact_empty_journal_image(const exact_empty_normalization_state& state,
+										   const std::span<const std::byte> journal) noexcept
+		{
+			const auto page_size = state.device_profile.page_size;
+			const auto sector_size = state.device_profile.effective_sector_size;
+			const auto& pages = state.device_profile.journal_record_pages;
+			if (page_size == 0U || sector_size == 0U || pages.empty() ||
+				journal.size() !=
+					static_cast<std::size_t>(sector_size) +
+						pages.size() * (static_cast<std::size_t>(page_size) + 8U))
+				return false;
+			constexpr std::array<std::byte, 8U> magic{std::byte{0xd9U},
+													  std::byte{0xd5U},
+													  std::byte{0x05U},
+													  std::byte{0xf9U},
+													  std::byte{0x20U},
+													  std::byte{0xa1U},
+													  std::byte{0x63U},
+													  std::byte{0xd7U}};
+			if (!std::ranges::equal(magic, journal.first(magic.size())) ||
+				read_be_u32(journal, 8U) != pages.size() ||
+				read_be_u32(journal, 16U) != state.device_profile.database_page_count ||
+				read_be_u32(journal, 20U) != sector_size || read_be_u32(journal, 24U) != page_size)
+				return false;
+			const auto nonce = read_be_u32(journal, 12U);
+			for (std::size_t index{}; index < pages.size(); ++index)
+			{
+				const auto record = static_cast<std::size_t>(sector_size) +
+					index * (static_cast<std::size_t>(page_size) + 8U);
+				const auto page = pages[index];
+				if (read_be_u32(journal, record) != page)
+					return false;
+				const auto image = journal.subspan(record + 4U, page_size);
+				const auto source_offset = static_cast<std::size_t>(page - 1U) * page_size;
+				if (!std::ranges::equal(
+						image, std::span{state.pre_main}.subspan(source_offset, page_size)) ||
+					read_be_u32(journal, record + 4U + page_size) !=
+						pager_record_checksum(image, nonce))
+					return false;
+			}
+			return true;
+		}
+
+		[[nodiscard]] bool validate_exact_empty_callback_grammar_details(
+			const exact_empty_normalization_state& state) noexcept
+		{
+			std::vector<std::size_t> locks;
+			std::vector<std::size_t> unlocks;
+			std::vector<std::size_t> has_moved;
+			std::vector<std::size_t> mmap_size;
+			std::vector<std::size_t> pragma;
+			std::vector<std::size_t> journal_syncs;
+			std::vector<std::size_t> journal_parent_syncs;
+			std::vector<std::size_t> journal_writes;
+			std::vector<std::size_t> main_writes;
+			std::optional<std::size_t> main_open;
+			std::optional<std::size_t> wal_open;
+			std::optional<std::size_t> wal_close;
+			std::optional<std::size_t> wal_delete;
+			std::optional<std::size_t> wal_parent_sync;
+			std::optional<std::size_t> journal_open;
+			std::optional<std::size_t> main_sync;
+			std::optional<std::size_t> sync_control;
+			std::optional<std::size_t> commit_control;
+			std::optional<std::size_t> journal_close;
+			std::optional<std::size_t> journal_delete;
+			std::optional<std::size_t> main_close;
+			std::size_t persist_wal_count{};
+			std::size_t sector_count{};
+			std::size_t characteristics_count{};
+			try
+			{
+				locks.reserve(3U);
+				unlocks.reserve(2U);
+				has_moved.reserve(4U);
+				mmap_size.reserve(8U);
+				pragma.reserve(16U);
+				journal_syncs.reserve(4U);
+				journal_parent_syncs.reserve(2U);
+				journal_writes.reserve(state.device_profile.journal_record_pages.size() * 3U +
+									   130U);
+				main_writes.reserve(state.device_profile.journal_record_pages.size());
+				for (std::size_t index{}; index < state.callbacks.size(); ++index)
+				{
+					const auto& callback = state.callbacks[index];
+					const auto claim_once = [index](std::optional<std::size_t>& slot)
+					{
+						if (slot)
+							return false;
+						slot = index;
+						return true;
+					};
+					switch (callback.kind)
+					{
+						case sqlite_exact_empty_effect_callback_kind::open:
+						{
+							std::optional<std::size_t>* slot{};
+							int exact_flags{};
+							if (callback.role == sqlite_backend_file_role::main_database)
+							{
+								slot = &main_open;
+								exact_flags = sqlite_open_read_write | sqlite_open_main_database;
+							}
+							else if (callback.role == sqlite_backend_file_role::write_ahead_log)
+							{
+								slot = &wal_open;
+								exact_flags = sqlite_open_read_write | sqlite_open_create |
+									sqlite_open_write_ahead_log;
+							}
+							else if (callback.role == sqlite_backend_file_role::rollback_journal)
+							{
+								slot = &journal_open;
+								exact_flags = sqlite_open_read_write | sqlite_open_create |
+									sqlite_open_main_journal;
+							}
+							if (slot == nullptr || !claim_once(*slot) ||
+								callback.argument != exact_flags ||
+								callback.output != exact_flags || callback.result != sqlite_ok ||
+								callback.offset != 0 || callback.byte_count != 0U)
+								return false;
+							break;
+						}
+						case sqlite_exact_empty_effect_callback_kind::write:
+							if (callback.result != sqlite_ok || callback.offset < 0 ||
+								exact_empty_callback_payload(state, callback).size() !=
+									callback.byte_count)
+								return false;
+							if (callback.role == sqlite_backend_file_role::main_database)
+								main_writes.push_back(index);
+							else if (callback.role == sqlite_backend_file_role::rollback_journal)
+								journal_writes.push_back(index);
+							else
+								return false;
+							break;
+						case sqlite_exact_empty_effect_callback_kind::sync:
+							if (callback.result != sqlite_ok || callback.offset != 0 ||
+								callback.byte_count != 0U)
+								return false;
+							if (callback.role == sqlite_backend_file_role::main_database)
+							{
+								if (!claim_once(main_sync) || callback.argument != 2)
+									return false;
+							}
+							else if (callback.role == sqlite_backend_file_role::rollback_journal)
+								journal_syncs.push_back(index);
+							else
+								return false;
+							break;
+						case sqlite_exact_empty_effect_callback_kind::lock:
+							if (callback.role != sqlite_backend_file_role::main_database ||
+								callback.result != sqlite_ok)
+								return false;
+							locks.push_back(index);
+							break;
+						case sqlite_exact_empty_effect_callback_kind::unlock:
+							if (callback.role != sqlite_backend_file_role::main_database ||
+								callback.result != sqlite_ok)
+								return false;
+							unlocks.push_back(index);
+							break;
+						case sqlite_exact_empty_effect_callback_kind::file_control:
+							if (callback.role != sqlite_backend_file_role::main_database)
+								return false;
+							switch (callback.argument)
+							{
+								case sqlite_file_control_persist_wal:
+									if (callback.result != sqlite_ok || ++persist_wal_count != 1U)
+										return false;
+									break;
+								case sqlite_file_control_mmap_size:
+									if (callback.result != sqlite_ok)
+										return false;
+									mmap_size.push_back(index);
+									break;
+								case sqlite_file_control_has_moved:
+									if (callback.result != sqlite_ok || callback.output != 0)
+										return false;
+									has_moved.push_back(index);
+									break;
+								case sqlite_file_control_sync:
+									if (callback.result != sqlite_not_found ||
+										!claim_once(sync_control))
+										return false;
+									break;
+								case sqlite_file_control_commit_phase_two:
+									if (callback.result != sqlite_not_found ||
+										!claim_once(commit_control))
+										return false;
+									break;
+								case sqlite_file_control_pragma:
+									if (callback.result != sqlite_not_found)
+										return false;
+									pragma.push_back(index);
+									break;
+								case 15: // SQLITE_FCNTL_BUSYHANDLER
+								case 30: // SQLITE_FCNTL_PDB
+									if (callback.result != sqlite_not_found)
+										return false;
+									break;
+								default:
+									return false;
+							}
+							break;
+						case sqlite_exact_empty_effect_callback_kind::close:
+						{
+							std::optional<std::size_t>* slot =
+								callback.role == sqlite_backend_file_role::main_database
+								? &main_close
+								: callback.role == sqlite_backend_file_role::write_ahead_log
+								? &wal_close
+								: callback.role == sqlite_backend_file_role::rollback_journal
+								? &journal_close
+								: nullptr;
+							if (slot == nullptr || !claim_once(*slot) ||
+								callback.result != sqlite_ok)
+								return false;
+							break;
+						}
+						case sqlite_exact_empty_effect_callback_kind::delete_relative:
+						{
+							auto* slot = callback.role == sqlite_backend_file_role::write_ahead_log
+								? &wal_delete
+								: callback.role == sqlite_backend_file_role::rollback_journal
+								? &journal_delete
+								: nullptr;
+							if (slot == nullptr || !claim_once(*slot) ||
+								callback.result != sqlite_ok || callback.argument != 0)
+								return false;
+							break;
+						}
+						case sqlite_exact_empty_effect_callback_kind::parent_sync:
+							if (callback.result != sqlite_ok)
+								return false;
+							if (callback.role == sqlite_backend_file_role::write_ahead_log)
+							{
+								if (!claim_once(wal_parent_sync))
+									return false;
+							}
+							else if (callback.role == sqlite_backend_file_role::rollback_journal)
+								journal_parent_syncs.push_back(index);
+							else
+								return false;
+							break;
+						case sqlite_exact_empty_effect_callback_kind::sector_size:
+							if (callback.role != sqlite_backend_file_role::main_database ||
+								callback.result != sqlite_ok ||
+								callback.output != state.device_profile.raw_sector_size ||
+								++sector_count != 1U)
+								return false;
+							break;
+						case sqlite_exact_empty_effect_callback_kind::device_characteristics:
+							if ((callback.role != sqlite_backend_file_role::main_database &&
+								 callback.role != sqlite_backend_file_role::rollback_journal) ||
+								callback.result != sqlite_ok ||
+								callback.output != state.device_profile.device_characteristics)
+								return false;
+							++characteristics_count;
+							break;
+						case sqlite_exact_empty_effect_callback_kind::truncate:
+						case sqlite_exact_empty_effect_callback_kind::shm_effect:
+							return false;
+					}
+				}
+			}
+			catch (...)
+			{
+				return false;
+			}
+
+			if (!main_open || !wal_open || !wal_close || !wal_delete || !wal_parent_sync ||
+				!journal_open || !main_sync || !sync_control || !commit_control || !journal_close ||
+				!journal_delete || !main_close || persist_wal_count != 1U || sector_count != 1U ||
+				characteristics_count == 0U || locks.size() != 3U || unlocks.size() != 2U ||
+				has_moved.size() != 4U || mmap_size.empty() || pragma.empty() ||
+				journal_syncs.size() != 4U || journal_parent_syncs.size() != 2U ||
+				main_writes.size() != state.device_profile.journal_record_pages.size())
+				return false;
+			if (state.callbacks[locks[0U]].argument != 1 ||
+				state.callbacks[locks[1U]].argument != sqlite_lock_exclusive ||
+				state.callbacks[locks[2U]].argument != sqlite_lock_exclusive ||
+				state.callbacks[unlocks[0U]].argument != 1 ||
+				state.callbacks[unlocks[1U]].argument != 0 ||
+				state.callbacks[journal_syncs[0U]].argument != 2 ||
+				state.callbacks[journal_syncs[1U]].argument != 2 ||
+				state.callbacks[journal_syncs[2U]].argument != 18 ||
+				state.callbacks[journal_syncs[3U]].argument != 2)
+				return false;
+
+			const auto page_size = state.device_profile.page_size;
+			const auto sector_size = state.device_profile.effective_sector_size;
+			const auto header_chunk_size = std::min(page_size, sector_size);
+			const auto header_chunk_count =
+				(static_cast<std::size_t>(sector_size) + header_chunk_size - 1U) /
+				header_chunk_size;
+			const auto expected_journal_writes =
+				header_chunk_count + state.device_profile.journal_record_pages.size() * 3U + 2U;
+			if (journal_writes.size() != expected_journal_writes)
+				return false;
+			std::size_t write_cursor{};
+			std::size_t header_offset{};
+			std::uint32_t nonce{};
+			for (std::size_t chunk{}; chunk < header_chunk_count; ++chunk)
+			{
+				const auto& callback = state.callbacks[journal_writes[write_cursor++]];
+				const auto expected_size = std::min<std::size_t>(
+					header_chunk_size, static_cast<std::size_t>(sector_size) - header_offset);
+				const auto payload = exact_empty_callback_payload(state, callback);
+				if (callback.offset != static_cast<std::int64_t>(header_offset) ||
+					callback.byte_count != expected_size || payload.size() != expected_size)
+					return false;
+				if (chunk == 0U)
+				{
+					if (payload.size() < 28U ||
+						!std::ranges::all_of(payload.first(8U),
+											 [](const std::byte value)
+											 {
+												 return value == std::byte{};
+											 }))
+						return false;
+					nonce = read_be_u32(payload, 12U);
+				}
+				header_offset += expected_size;
+			}
+			for (const auto page : state.device_profile.journal_record_pages)
+			{
+				const auto record = static_cast<std::size_t>(sector_size) +
+					(static_cast<std::size_t>(page) - 1U) *
+						(static_cast<std::size_t>(page_size) + 8U);
+				const auto& number = state.callbacks[journal_writes[write_cursor++]];
+				const auto& image = state.callbacks[journal_writes[write_cursor++]];
+				const auto& checksum = state.callbacks[journal_writes[write_cursor++]];
+				const auto number_payload = exact_empty_callback_payload(state, number);
+				const auto image_payload = exact_empty_callback_payload(state, image);
+				const auto checksum_payload = exact_empty_callback_payload(state, checksum);
+				const auto source = std::span{state.pre_main}.subspan(
+					(static_cast<std::size_t>(page) - 1U) * page_size, page_size);
+				if (number.offset != static_cast<std::int64_t>(record) || number.byte_count != 4U ||
+					number_payload.size() != 4U || read_be_u32(number_payload, 0U) != page ||
+					image.offset != static_cast<std::int64_t>(record + 4U) ||
+					image.byte_count != page_size || !std::ranges::equal(image_payload, source) ||
+					checksum.offset != static_cast<std::int64_t>(record + 4U + page_size) ||
+					checksum.byte_count != 4U || checksum_payload.size() != 4U ||
+					read_be_u32(checksum_payload, 0U) != pager_record_checksum(source, nonce))
+					return false;
+			}
+			const auto valid_header_index = journal_writes[write_cursor++];
+			const auto invalid_header_index = journal_writes[write_cursor++];
+			const auto& valid_header = state.callbacks[valid_header_index];
+			const auto& invalid_header = state.callbacks[invalid_header_index];
+			const auto valid_payload = exact_empty_callback_payload(state, valid_header);
+			const auto invalid_payload = exact_empty_callback_payload(state, invalid_header);
+			constexpr std::array<std::byte, 8U> journal_magic{std::byte{0xd9U},
+															  std::byte{0xd5U},
+															  std::byte{0x05U},
+															  std::byte{0xf9U},
+															  std::byte{0x20U},
+															  std::byte{0xa1U},
+															  std::byte{0x63U},
+															  std::byte{0xd7U}};
+			if (valid_header.offset != 0 || valid_header.byte_count != 12U ||
+				valid_payload.size() != 12U ||
+				!std::ranges::equal(journal_magic, valid_payload.first(8U)) ||
+				read_be_u32(valid_payload, 8U) !=
+					state.device_profile.journal_record_pages.size() ||
+				invalid_header.offset != 0 || invalid_header.byte_count != 28U ||
+				invalid_payload.size() != 28U ||
+				!std::ranges::all_of(invalid_payload,
+									 [](const std::byte value)
+									 {
+										 return value == std::byte{};
+									 }))
+				return false;
+
+			for (std::size_t index{}; index < main_writes.size(); ++index)
+			{
+				const auto& callback = state.callbacks[main_writes[index]];
+				const auto page = state.device_profile.journal_record_pages[index];
+				if (callback.offset !=
+						static_cast<std::int64_t>((static_cast<std::size_t>(page) - 1U) *
+												  page_size) ||
+					callback.byte_count != page_size)
+					return false;
+			}
+			return *main_open < locks[0U] && locks[0U] < locks[1U] && locks[1U] < has_moved[0U] &&
+				has_moved[0U] < *wal_open && *wal_open < locks[2U] && locks[2U] < has_moved[1U] &&
+				has_moved[1U] < *wal_close && *wal_close < *wal_delete &&
+				*wal_delete < *wal_parent_sync && *wal_parent_sync < mmap_size.back() &&
+				mmap_size.back() < has_moved[2U] && has_moved[2U] < *journal_open &&
+				*journal_open < journal_writes.front() &&
+				journal_writes[header_chunk_count +
+							   state.device_profile.journal_record_pages.size() * 3U - 1U] <
+				journal_syncs[0U] &&
+				journal_syncs[0U] < journal_parent_syncs[0U] &&
+				journal_parent_syncs[0U] < valid_header_index &&
+				valid_header_index < journal_syncs[1U] && journal_syncs[1U] < main_writes.front() &&
+				main_writes.back() < *sync_control && *sync_control < *main_sync &&
+				*main_sync < invalid_header_index && invalid_header_index < journal_syncs[2U] &&
+				journal_syncs[2U] < *commit_control && *commit_control < pragma.back() &&
+				pragma.back() < has_moved[3U] && has_moved[3U] < journal_syncs[3U] &&
+				journal_syncs[3U] < *journal_close && *journal_close < *journal_delete &&
+				*journal_delete < journal_parent_syncs[1U] &&
+				journal_parent_syncs[1U] < unlocks[0U] && unlocks[0U] < unlocks[1U] &&
+				unlocks[1U] < *main_close;
+		}
+
+		[[nodiscard]] bool validate_exact_empty_callback_transcript(
+			const exact_empty_normalization_state& state) noexcept
+		{
+			if (state.callbacks.empty() || state.device_profile.raw_sector_size <= 0 ||
+				state.device_profile.effective_sector_size == 0U || !state.sector_observed ||
+				!state.device_characteristics_observed ||
+				(state.device_profile.device_characteristics != 0 &&
+				 state.device_profile.device_characteristics != sqlite_iocap_powersafe_overwrite) ||
+				state.device_profile.journal_record_pages.empty())
+				return false;
+			std::optional<std::size_t> main_open;
+			std::optional<std::size_t> wal_open;
+			std::optional<std::size_t> wal_close;
+			std::optional<std::size_t> wal_delete;
+			std::optional<std::size_t> journal_open;
+			std::optional<std::size_t> first_journal_sync;
+			std::optional<std::size_t> journal_create_parent_sync;
+			std::optional<std::size_t> first_main_write;
+			std::optional<std::size_t> main_sync;
+			std::optional<std::size_t> journal_close;
+			std::optional<std::size_t> journal_delete;
+			std::optional<std::size_t> main_close;
+			std::size_t persist_wal{};
+			std::size_t mmap_size{};
+			std::size_t has_moved{};
+			std::size_t sync_control{};
+			std::size_t commit_phase_two{};
+			std::size_t pragma_control{};
+			std::vector<std::uint32_t> main_write_pages;
+			std::vector<std::byte> journal_before_invalidation;
+			bool journal_invalidated{};
+			try
+			{
+				journal_before_invalidation.reserve(state.journal_image.capacity());
+				main_write_pages.reserve(state.device_profile.journal_record_pages.size());
+				for (std::size_t index{}; index < state.callbacks.size(); ++index)
+				{
+					const auto& callback = state.callbacks[index];
+					if (callback.sequence != index + 1U ||
+						(callback.result != sqlite_ok && callback.result != sqlite_not_found))
+						return false;
+					if (callback.kind == sqlite_exact_empty_effect_callback_kind::truncate ||
+						callback.kind == sqlite_exact_empty_effect_callback_kind::shm_effect)
+						return false;
+					if (callback.kind == sqlite_exact_empty_effect_callback_kind::open)
+					{
+						auto* slot = callback.role == sqlite_backend_file_role::main_database
+							? &main_open
+							: callback.role == sqlite_backend_file_role::write_ahead_log ? &wal_open
+							: callback.role == sqlite_backend_file_role::rollback_journal
+							? &journal_open
+							: nullptr;
+						if (slot == nullptr || *slot)
+							return false;
+						*slot = index;
+					}
+					if (callback.kind == sqlite_exact_empty_effect_callback_kind::write)
+					{
+						const auto payload = exact_empty_callback_payload(state, callback);
+						if (payload.size() != callback.byte_count || callback.offset < 0)
+							return false;
+						if (callback.role == sqlite_backend_file_role::main_database)
+						{
+							if (!first_main_write)
+								first_main_write = index;
+							if (callback.byte_count != state.device_profile.page_size ||
+								static_cast<std::uint64_t>(callback.offset) %
+										state.device_profile.page_size !=
+									0U)
+								return false;
+							main_write_pages.push_back(static_cast<std::uint32_t>(
+								static_cast<std::uint64_t>(callback.offset) /
+									state.device_profile.page_size +
+								1U));
+						}
+						else if (callback.role == sqlite_backend_file_role::rollback_journal)
+						{
+							const auto begin = static_cast<std::size_t>(callback.offset);
+							if (begin > journal_before_invalidation.capacity() ||
+								payload.size() > journal_before_invalidation.capacity() - begin)
+								return false;
+							if (journal_before_invalidation.size() < begin + payload.size())
+								journal_before_invalidation.resize(begin + payload.size(),
+																   std::byte{});
+							if (begin == 0U && payload.size() == 28U &&
+								std::ranges::all_of(payload,
+													[](const std::byte value)
+													{
+														return value == std::byte{};
+													}))
+								journal_invalidated = true;
+							else if (!journal_invalidated)
+								std::ranges::copy(payload,
+												  journal_before_invalidation.data() + begin);
+							else
+								return false;
+						}
+						else
+							return false;
+					}
+					if (callback.kind == sqlite_exact_empty_effect_callback_kind::sync)
+					{
+						if (callback.role == sqlite_backend_file_role::rollback_journal &&
+							!first_journal_sync)
+							first_journal_sync = index;
+						else if (callback.role == sqlite_backend_file_role::main_database)
+							main_sync = index;
+						else if (callback.role != sqlite_backend_file_role::rollback_journal)
+							return false;
+					}
+					if (callback.kind == sqlite_exact_empty_effect_callback_kind::parent_sync &&
+						callback.role == sqlite_backend_file_role::rollback_journal &&
+						!journal_create_parent_sync)
+						journal_create_parent_sync = index;
+					if (callback.kind == sqlite_exact_empty_effect_callback_kind::close)
+					{
+						auto* slot = callback.role == sqlite_backend_file_role::main_database
+							? &main_close
+							: callback.role == sqlite_backend_file_role::write_ahead_log
+							? &wal_close
+							: callback.role == sqlite_backend_file_role::rollback_journal
+							? &journal_close
+							: nullptr;
+						if (slot == nullptr || *slot)
+							return false;
+						*slot = index;
+					}
+					if (callback.kind == sqlite_exact_empty_effect_callback_kind::delete_relative)
+					{
+						auto* slot = callback.role == sqlite_backend_file_role::write_ahead_log
+							? &wal_delete
+							: callback.role == sqlite_backend_file_role::rollback_journal
+							? &journal_delete
+							: nullptr;
+						if (slot == nullptr || *slot)
+							return false;
+						*slot = index;
+					}
+					if (callback.kind == sqlite_exact_empty_effect_callback_kind::file_control)
+					{
+						switch (callback.argument)
+						{
+							case sqlite_file_control_persist_wal:
+								++persist_wal;
+								break;
+							case sqlite_file_control_mmap_size:
+								++mmap_size;
+								break;
+							case sqlite_file_control_has_moved:
+								if (callback.result != sqlite_ok || callback.output != 0)
+									return false;
+								++has_moved;
+								break;
+							case sqlite_file_control_sync:
+								++sync_control;
+								break;
+							case sqlite_file_control_commit_phase_two:
+								++commit_phase_two;
+								break;
+							case sqlite_file_control_pragma:
+								++pragma_control;
+								break;
+							default:
+								break;
+						}
+					}
+				}
+			}
+			catch (...)
+			{
+				return false;
+			}
+			const auto ordered = main_open && wal_open && wal_close && wal_delete && journal_open &&
+				first_journal_sync && journal_create_parent_sync && first_main_write && main_sync &&
+				journal_close && journal_delete && main_close && *main_open < *wal_open &&
+				*wal_open < *wal_close && *wal_close < *wal_delete && *wal_delete < *journal_open &&
+				*journal_open < *first_journal_sync &&
+				*first_journal_sync < *journal_create_parent_sync &&
+				*journal_create_parent_sync < *first_main_write && *first_main_write < *main_sync &&
+				*main_sync < *journal_close && *journal_close < *journal_delete &&
+				*journal_delete < *main_close;
+			return ordered && persist_wal >= 1U && mmap_size >= 1U && has_moved >= 4U &&
+				sync_control >= 1U && commit_phase_two >= 1U && pragma_control >= 1U &&
+				main_write_pages == state.device_profile.journal_record_pages &&
+				journal_invalidated &&
+				validate_exact_empty_journal_image(state, journal_before_invalidation) &&
+				validate_exact_empty_callback_grammar_details(state);
+		}
+
+		[[nodiscard]] bool
+		held_main_matches_post(const exact_empty_normalization_state& state) noexcept
+		{
+			if (!state.held_main || !state.namespace_guard)
+				return false;
+			auto replacement = state.held_main->recheck_current_entry();
+			auto size = state.held_main->size();
+			if (!replacement ||
+				*replacement != sqlite_backend_replacement_state::exact_same_entry_and_object ||
+				!size || *size != state.expected_post_main.size())
+				return false;
+			std::array<std::byte, std::size_t{64U} * 1024U> buffer{};
+			std::size_t offset{};
+			while (offset < state.expected_post_main.size())
+			{
+				const auto count =
+					std::min(buffer.size(), state.expected_post_main.size() - offset);
+				auto window = std::span{buffer}.first(count);
+				if (auto read = state.held_main->read_exact(offset, window); !read ||
+					!std::ranges::equal(window,
+										std::span{state.expected_post_main}.subspan(offset, count)))
+					return false;
+				offset += count;
+			}
+			return static_cast<bool>(
+				state.namespace_guard->recheck_exact_empty_normalization_epoch());
+		}
+
+		result<std::shared_ptr<const sqlite_exact_empty_normalization_completed_edge>>
+		default_connection_observation::finish_exact_empty_normalization_profile()
+		{
+			std::shared_ptr<exact_empty_normalization_state> state;
+			{
+				std::scoped_lock lock{mutex};
+				state = exact_empty_normalization;
+			}
+			if (!state || effect_gate == nullptr)
+				return unexpected(forwarding_error("exact-empty-normalization-finish"));
+			try
+			{
+				auto latest = effect_gate->latest_receipt();
+				{
+					std::scoped_lock lock{state->mutex};
+					if (state->invalid ||
+						state->phase != exact_empty_live_phase::connection_closed ||
+						!state->main_close_confirmed || !state->wal_close_confirmed ||
+						!state->journal_close_confirmed || state->wal_delete_count != 1U ||
+						state->journal_delete_count != 1U || !state->wal_parent_synced ||
+						!state->journal_parent_synced || !state->journal_parent_delete_synced ||
+						state->main_sync_count == 0U || state->wal_observation ||
+						state->journal_observation || !latest || latest->sequence != 3U ||
+						latest->stage != sqlite_backend_effect_stage::fully_armed ||
+						!latest->armed_after_underlying_exclusive_lock ||
+						!validate_exact_empty_callback_transcript(*state))
+						return unexpected(forwarding_error("exact-empty-normalization-finish"));
+				}
+				if (!held_main_matches_post(*state) ||
+					!state->namespace_guard->finish_exact_empty_normalization_epoch())
+					return unexpected(forwarding_error("exact-empty-normalization-finish"));
+				bool custody_drained{};
+				{
+					std::scoped_lock lock{mutex};
+					custody_drained = !main_handle_open && held_shm_locks.empty() &&
+						main_native_node.expired() && wal_native_node.expired() &&
+						journal_native_node.expired();
+					if (!custody_drained || exact_empty_normalization != state)
+						return unexpected(forwarding_error("exact-empty-normalization-finish"));
+				}
+				auto edge = sqlite_exact_empty_normalization_edge_factory::make(
+					std::move(state->operation_token),
+					std::move(state->device_profile),
+					std::move(state->callbacks),
+					std::move(state->callback_payload),
+					std::move(state->pre_main),
+					std::move(state->expected_post_main),
+					true,
+					true,
+					true,
+					custody_drained);
+				{
+					std::scoped_lock lock{mutex};
+					exact_empty_normalization.reset();
+				}
+				state->held_main.reset();
+				state->namespace_guard.reset();
+				state->phase = exact_empty_live_phase::completed;
+				return std::static_pointer_cast<
+					const sqlite_exact_empty_normalization_completed_edge>(std::move(edge));
+			}
+			catch (...)
+			{
+				fail_exact_empty_state(state);
+				return unexpected(forwarding_error("exact-empty-normalization-finish"));
+			}
 		}
 
 		[[nodiscard]] bool complete_source_shm_runtime_receipt(
@@ -1992,6 +3532,53 @@ namespace cxxlens::sdk
 				}
 			}
 
+			[[nodiscard]] exact_empty_delete_lookup
+			exact_empty_normalization_delete_target(const char* name) noexcept
+			{
+				if (name == nullptr)
+					return {};
+				try
+				{
+					const std::string_view path{name};
+					std::optional<exact_empty_delete_target> found;
+					std::scoped_lock owner_lock{connection_observations_mutex_};
+					for (auto iterator = connection_observations_.begin();
+						 iterator != connection_observations_.end();)
+					{
+						auto observation = iterator->lock();
+						if (!observation)
+						{
+							iterator = connection_observations_.erase(iterator);
+							continue;
+						}
+						++iterator;
+						std::shared_ptr<exact_empty_normalization_state> state;
+						{
+							std::scoped_lock lock{observation->mutex};
+							state = observation->exact_empty_normalization;
+							if (!state)
+								continue;
+							std::optional<sqlite_backend_file_role> role;
+							if (exact_suffix_path(path, observation->canonical_locator, wal_suffix))
+								role = sqlite_backend_file_role::write_ahead_log;
+							else if (exact_suffix_path(
+										 path, observation->canonical_locator, journal_suffix))
+								role = sqlite_backend_file_role::rollback_journal;
+							if (!role)
+								continue;
+							if (found)
+								return {{}, true};
+							found = exact_empty_delete_target{std::move(state), *role};
+						}
+					}
+					return {std::move(found), false};
+				}
+				catch (...)
+				{
+					return {{}, true};
+				}
+			}
+
 			[[nodiscard]] bool denies_logical_source_access(const char* name) noexcept
 			{
 				if (name == nullptr)
@@ -2037,6 +3624,21 @@ namespace cxxlens::sdk
 			void decrement_open_file_count() noexcept
 			{
 				open_file_count_.fetch_sub(1U, std::memory_order_acq_rel);
+			}
+
+			[[nodiscard]] bool accepts_exact_empty_normalization_runtime(
+				const sqlite_exact_empty_normalization_runtime& runtime) const noexcept
+			{
+				return valid_source_shm_runtime_binding(runtime.sqlite) &&
+					runtime.libversion_number != nullptr && runtime.compile_option_get != nullptr &&
+					runtime.db_readonly != nullptr &&
+					function_from_image(runtime.libversion_number,
+										runtime.sqlite.runtime_image_identity) &&
+					function_from_image(runtime.compile_option_get,
+										runtime.sqlite.runtime_image_identity) &&
+					function_from_image(runtime.db_readonly,
+										runtime.sqlite.runtime_image_identity) &&
+					runtime.sqlite.vfs_find(registered_name_.c_str()) == &wrapper_;
 			}
 
 		  private:
@@ -2219,7 +3821,8 @@ namespace cxxlens::sdk
 						const auto source_armed = observation->source_shm_open_plan ||
 							observation->source_shm_qualification_open_plan ||
 							observation->source_shm_qualification_fixture_fullpath_plan ||
-							observation->source_shm_qualification_fixture_pending_open_plan;
+							observation->source_shm_qualification_fixture_pending_open_plan ||
+							observation->exact_empty_normalization;
 						std::string_view expected_path = observation->canonical_locator;
 						bool source_ready = true;
 						if (observation->source_shm_open_plan)
@@ -2437,6 +4040,13 @@ namespace cxxlens::sdk
 			std::optional<sqlite_shm_lease_family_binding> source_shm_family_binding_;
 			bool registered_{};
 		};
+
+		[[nodiscard]] bool accepts_exact_empty_normalization_runtime(
+			const std::shared_ptr<default_forwarding_state>& owner,
+			const sqlite_exact_empty_normalization_runtime& runtime) noexcept
+		{
+			return owner && owner->accepts_exact_empty_normalization_runtime(runtime);
+		}
 
 		struct deferred_forwarding_state_queue
 		{
@@ -3812,6 +5422,100 @@ namespace cxxlens::sdk
 			return !file.source_shm_readonly_qualified || !file.source_shm_terminal_failure;
 		}
 
+		[[nodiscard]] bool
+		exact_empty_main_write_permitted(const exact_empty_normalization_state& state,
+										 const void* input,
+										 const int count,
+										 const long long offset) noexcept
+		{
+			if (input == nullptr || count <= 0 || offset < 0 ||
+				state.device_profile.page_size == 0U ||
+				count != static_cast<int>(state.device_profile.page_size) ||
+				static_cast<std::uint64_t>(offset) % state.device_profile.page_size != 0U)
+				return false;
+			const auto page =
+				static_cast<std::uint64_t>(offset) / state.device_profile.page_size + 1U;
+			if (page > std::numeric_limits<std::uint32_t>::max() ||
+				!std::ranges::contains(state.device_profile.journal_record_pages,
+									   static_cast<std::uint32_t>(page)))
+				return false;
+			const auto begin = static_cast<std::size_t>(offset);
+			if (begin > state.expected_post_main.size() ||
+				state.device_profile.page_size > state.expected_post_main.size() - begin)
+				return false;
+			const auto expected = page == 1U
+				? std::span{state.expected_post_main}.subspan(begin, state.device_profile.page_size)
+				: std::span{state.pre_main}.subspan(begin, state.device_profile.page_size);
+			return std::ranges::equal(
+				std::span{static_cast<const std::byte*>(input), static_cast<std::size_t>(count)},
+				expected);
+		}
+
+		[[nodiscard]] bool
+		prepare_exact_empty_write(const std::shared_ptr<exact_empty_normalization_state>& state,
+								  const sqlite_backend_file_role role,
+								  const void* input,
+								  const int count,
+								  const long long offset) noexcept
+		{
+			if (!state)
+				return true;
+			try
+			{
+				std::scoped_lock lock{state->mutex};
+				if (state->invalid || state->phase != exact_empty_live_phase::fully_armed ||
+					input == nullptr || count <= 0 || offset < 0)
+					return false;
+				if (role == sqlite_backend_file_role::write_ahead_log ||
+					role == sqlite_backend_file_role::shared_memory)
+					return false;
+				if (role == sqlite_backend_file_role::main_database)
+					return exact_empty_main_write_permitted(*state, input, count, offset);
+				if (role != sqlite_backend_file_role::rollback_journal ||
+					!state->journal_observation)
+					return false;
+				const auto begin = static_cast<std::size_t>(offset);
+				const auto size = static_cast<std::size_t>(count);
+				return begin <= state->journal_image.capacity() &&
+					size <= state->journal_image.capacity() - begin;
+			}
+			catch (...)
+			{
+				return false;
+			}
+		}
+
+		void apply_exact_empty_journal_write(
+			const std::shared_ptr<exact_empty_normalization_state>& state,
+			const void* input,
+			const int count,
+			const long long offset) noexcept
+		{
+			if (!state)
+				return;
+			try
+			{
+				std::scoped_lock lock{state->mutex};
+				const auto begin = static_cast<std::size_t>(offset);
+				const auto size = static_cast<std::size_t>(count);
+				if (begin > state->journal_image.capacity() ||
+					size > state->journal_image.capacity() - begin)
+				{
+					state->invalid = true;
+					state->phase = exact_empty_live_phase::failed;
+					return;
+				}
+				if (state->journal_image.size() < begin + size)
+					state->journal_image.resize(begin + size, std::byte{});
+				std::ranges::copy(std::span{static_cast<const std::byte*>(input), size},
+								  state->journal_image.data() + begin);
+			}
+			catch (...)
+			{
+				fail_exact_empty_state(state);
+			}
+		}
+
 		void mark_source_shm_terminal_failure(forwarding_file& file) noexcept
 		{
 			if (file.source_shm_readonly_qualified)
@@ -3833,6 +5537,9 @@ namespace cxxlens::sdk
 			file->base.methods = nullptr;
 			auto owner = file->owner;
 			auto observation = file->connection_observation;
+			auto exact_state = exact_empty_state(observation);
+			const auto role = file->role;
+			const auto main_handle = file->main_handle;
 			const auto close_callback = file->native ? file->native->trusted_close : nullptr;
 			if (file->main_handle && owner && observation)
 			{
@@ -3848,6 +5555,42 @@ namespace cxxlens::sdk
 				}
 			}
 			const auto status = close_native_file(file->native, close_callback);
+			if (!record_exact_empty_callback(exact_state,
+											 sqlite_exact_empty_effect_callback_kind::close,
+											 role,
+											 0,
+											 0U,
+											 0,
+											 status,
+											 0))
+			{
+				fail_exact_empty_state(exact_state);
+			}
+			if (exact_state && main_handle)
+			{
+				std::scoped_lock lock{exact_state->mutex};
+				if (status == sqlite_ok && !exact_state->invalid &&
+					exact_state->phase == exact_empty_live_phase::fully_armed)
+				{
+					exact_state->main_close_confirmed = true;
+					exact_state->phase = exact_empty_live_phase::connection_closed;
+				}
+				else
+				{
+					exact_state->invalid = true;
+					exact_state->phase = exact_empty_live_phase::failed;
+				}
+			}
+			else if (exact_state && status != sqlite_ok)
+				fail_exact_empty_state(exact_state);
+			else if (exact_state && status == sqlite_ok)
+			{
+				std::scoped_lock lock{exact_state->mutex};
+				if (role == sqlite_backend_file_role::write_ahead_log)
+					exact_state->wal_close_confirmed = true;
+				else if (role == sqlite_backend_file_role::rollback_journal)
+					exact_state->journal_close_confirmed = true;
+			}
 			if (file->main_handle && observation)
 			{
 				std::scoped_lock lock{observation->mutex};
@@ -3893,15 +5636,50 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				auto exact_state = exact_empty_state(file->connection_observation);
 				if (!native_operation_permitted(*file))
 					return sqlite_io_error;
 				if (!persistent_effect_permitted(*file))
 					return sqlite_readonly;
+				if (!prepare_exact_empty_write(exact_state, file->role, input, count, offset))
+				{
+					fail_exact_empty_state(exact_state);
+					(void)record_exact_empty_callback(
+						exact_state,
+						sqlite_exact_empty_effect_callback_kind::write,
+						file->role,
+						offset,
+						count > 0 ? static_cast<std::uint64_t>(count) : 0U,
+						0,
+						sqlite_readonly,
+						0);
+					return sqlite_readonly;
+				}
 				auto* raw = underlying_file(*file);
 				const auto* methods = underlying_methods(*file);
-				return raw != nullptr && methods != nullptr && methods->write != nullptr
+				const auto status =
+					raw != nullptr && methods != nullptr && methods->write != nullptr
 					? methods->write(raw, input, count, offset)
 					: sqlite_io_error;
+				const auto payload = input != nullptr && count > 0
+					? std::span{static_cast<const std::byte*>(input),
+								static_cast<std::size_t>(count)}
+					: std::span<const std::byte>{};
+				if (!record_exact_empty_callback(exact_state,
+												 sqlite_exact_empty_effect_callback_kind::write,
+												 file->role,
+												 offset,
+												 count > 0 ? static_cast<std::uint64_t>(count) : 0U,
+												 0,
+												 status,
+												 0,
+												 payload))
+					return sqlite_io_error;
+				if (status == sqlite_ok && file->role == sqlite_backend_file_role::rollback_journal)
+					apply_exact_empty_journal_write(exact_state, input, count, offset);
+				if (exact_state && status != sqlite_ok)
+					fail_exact_empty_state(exact_state);
+				return status;
 			}
 			catch (...)
 			{
@@ -3914,10 +5692,25 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				auto exact_state = exact_empty_state(file->connection_observation);
 				if (!native_operation_permitted(*file))
 					return sqlite_io_error;
 				if (!persistent_effect_permitted(*file))
 					return sqlite_readonly;
+				if (exact_state)
+				{
+					fail_exact_empty_state(exact_state);
+					(void)record_exact_empty_callback(
+						exact_state,
+						sqlite_exact_empty_effect_callback_kind::truncate,
+						file->role,
+						0,
+						size >= 0 ? static_cast<std::uint64_t>(size) : 0U,
+						0,
+						sqlite_readonly,
+						0);
+					return sqlite_readonly;
+				}
 				auto* raw = underlying_file(*file);
 				const auto* methods = underlying_methods(*file);
 				return raw != nullptr && methods != nullptr && methods->truncate != nullptr
@@ -3935,13 +5728,71 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				auto exact_state = exact_empty_state(file->connection_observation);
 				if (!native_operation_permitted(*file))
 					return sqlite_io_error;
+				if (exact_state &&
+					(file->role == sqlite_backend_file_role::write_ahead_log ||
+					 file->role == sqlite_backend_file_role::shared_memory))
+				{
+					fail_exact_empty_state(exact_state);
+					return sqlite_readonly;
+				}
 				auto* raw = underlying_file(*file);
 				const auto* methods = underlying_methods(*file);
-				return raw != nullptr && methods != nullptr && methods->sync != nullptr
+				const auto status = raw != nullptr && methods != nullptr && methods->sync != nullptr
 					? methods->sync(raw, flags)
 					: sqlite_io_error;
+				if (!record_exact_empty_callback(exact_state,
+												 sqlite_exact_empty_effect_callback_kind::sync,
+												 file->role,
+												 0,
+												 0U,
+												 flags,
+												 status,
+												 0))
+					return sqlite_io_error;
+				if (exact_state && status != sqlite_ok)
+				{
+					fail_exact_empty_state(exact_state);
+					return status;
+				}
+				if (exact_state && file->role == sqlite_backend_file_role::rollback_journal)
+				{
+					bool first{};
+					{
+						std::scoped_lock lock{exact_state->mutex};
+						first = exact_state->journal_sync_count++ == 0U;
+					}
+					if (first)
+					{
+						auto parent = exact_state->namespace_guard
+										  ->synchronize_exact_empty_normalization_parent(
+											  file->role, *exact_state->operation_port);
+						if (!parent ||
+							!record_exact_empty_callback(
+								exact_state,
+								sqlite_exact_empty_effect_callback_kind::parent_sync,
+								file->role,
+								0,
+								0U,
+								0,
+								sqlite_ok,
+								0))
+						{
+							fail_exact_empty_state(exact_state);
+							return sqlite_io_error;
+						}
+						std::scoped_lock lock{exact_state->mutex};
+						exact_state->journal_parent_synced = true;
+					}
+				}
+				else if (exact_state && file->role == sqlite_backend_file_role::main_database)
+				{
+					std::scoped_lock lock{exact_state->mutex};
+					++exact_state->main_sync_count;
+				}
+				return status;
 			}
 			catch (...)
 			{
@@ -3973,6 +5824,7 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				auto exact_state = exact_empty_state(file->connection_observation);
 				if (!native_operation_permitted(*file))
 					return sqlite_io_error;
 				auto* raw = underlying_file(*file);
@@ -3980,16 +5832,34 @@ namespace cxxlens::sdk
 				if (raw == nullptr || methods == nullptr || methods->lock == nullptr)
 					return sqlite_io_error;
 				const auto status = methods->lock(raw, level);
+				if (!record_exact_empty_callback(exact_state,
+												 sqlite_exact_empty_effect_callback_kind::lock,
+												 file->role,
+												 0,
+												 0U,
+												 level,
+												 status,
+												 0))
+					return sqlite_io_error;
 				if (status != sqlite_ok || level < sqlite_lock_exclusive || !file->main_handle ||
 					!file->connection_observation || !file->connection_observation->effect_gate ||
 					!file->connection_observation->effect_gate->has_pending_exclusive_arm())
 					return status;
 
-				int moved = 1;
-				if (methods->file_control == nullptr ||
-					methods->file_control(raw, sqlite_file_control_has_moved, &moved) !=
-						sqlite_ok ||
-					moved != 0)
+				int moved = exact_state ? 0 : 1;
+				const auto moved_status = methods->file_control != nullptr
+					? methods->file_control(raw, sqlite_file_control_has_moved, &moved)
+					: sqlite_not_found;
+				if (!record_exact_empty_callback(
+						exact_state,
+						sqlite_exact_empty_effect_callback_kind::file_control,
+						file->role,
+						0,
+						0U,
+						sqlite_file_control_has_moved,
+						moved_status,
+						moved) ||
+					moved_status != sqlite_ok || moved != 0)
 				{
 					mark_incomplete(file->connection_observation);
 					return sqlite_io_error;
@@ -4014,13 +5884,25 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				auto exact_state = exact_empty_state(file->connection_observation);
 				if (!native_operation_permitted(*file))
 					return sqlite_io_error;
 				auto* raw = underlying_file(*file);
 				const auto* methods = underlying_methods(*file);
-				return raw != nullptr && methods != nullptr && methods->unlock != nullptr
+				const auto status =
+					raw != nullptr && methods != nullptr && methods->unlock != nullptr
 					? methods->unlock(raw, level)
 					: sqlite_io_error;
+				if (!record_exact_empty_callback(exact_state,
+												 sqlite_exact_empty_effect_callback_kind::unlock,
+												 file->role,
+												 0,
+												 0U,
+												 level,
+												 status,
+												 0))
+					return sqlite_io_error;
+				return status;
 			}
 			catch (...)
 			{
@@ -4053,15 +5935,31 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				auto exact_state = exact_empty_state(file->connection_observation);
 				if (!native_operation_permitted(*file))
 					return sqlite_io_error;
 				if (effectful_file_control(operation) && !persistent_effect_permitted(*file))
 					return sqlite_readonly;
 				auto* raw = underlying_file(*file);
 				const auto* methods = underlying_methods(*file);
-				return raw != nullptr && methods != nullptr && methods->file_control != nullptr
+				const auto status =
+					raw != nullptr && methods != nullptr && methods->file_control != nullptr
 					? methods->file_control(raw, operation, value)
 					: sqlite_not_found;
+				const auto output = operation == sqlite_file_control_has_moved && value != nullptr
+					? *static_cast<int*>(value)
+					: 0;
+				if (!record_exact_empty_callback(
+						exact_state,
+						sqlite_exact_empty_effect_callback_kind::file_control,
+						file->role,
+						0,
+						0U,
+						operation,
+						status,
+						output))
+					return sqlite_io_error;
+				return status;
 			}
 			catch (...)
 			{
@@ -4074,13 +5972,47 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				auto exact_state = exact_empty_state(file->connection_observation);
 				if (!native_operation_permitted(*file))
 					return 0;
 				auto* raw = underlying_file(*file);
 				const auto* methods = underlying_methods(*file);
-				return raw != nullptr && methods != nullptr && methods->sector_size != nullptr
+				const auto value =
+					raw != nullptr && methods != nullptr && methods->sector_size != nullptr
 					? methods->sector_size(raw)
 					: 0;
+				if (!record_exact_empty_callback(
+						exact_state,
+						sqlite_exact_empty_effect_callback_kind::sector_size,
+						file->role,
+						0,
+						0U,
+						0,
+						sqlite_ok,
+						value))
+					return 0;
+				if (exact_state)
+				{
+					std::scoped_lock lock{exact_state->mutex};
+					if (value <= 0 ||
+						(exact_state->device_profile.raw_sector_size != 0 &&
+						 exact_state->device_profile.raw_sector_size != value))
+					{
+						exact_state->invalid = true;
+						exact_state->phase = exact_empty_live_phase::failed;
+						return 0;
+					}
+					exact_state->device_profile.raw_sector_size = value;
+					exact_state->sector_observed = true;
+					if (exact_state->device_characteristics_observed &&
+						!refresh_exact_empty_device_profile(*exact_state))
+					{
+						exact_state->invalid = true;
+						exact_state->phase = exact_empty_live_phase::failed;
+						return 0;
+					}
+				}
+				return value;
 			}
 			catch (...)
 			{
@@ -4093,14 +6025,50 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				auto exact_state = exact_empty_state(file->connection_observation);
 				if (!native_operation_permitted(*file))
 					return 0;
 				auto* raw = underlying_file(*file);
 				const auto* methods = underlying_methods(*file);
-				return raw != nullptr && methods != nullptr &&
+				const auto value = raw != nullptr && methods != nullptr &&
 						methods->device_characteristics != nullptr
 					? methods->device_characteristics(raw)
 					: 0;
+				if (!record_exact_empty_callback(
+						exact_state,
+						sqlite_exact_empty_effect_callback_kind::device_characteristics,
+						file->role,
+						0,
+						0U,
+						0,
+						sqlite_ok,
+						value))
+					return 0;
+				if (exact_state)
+				{
+					std::scoped_lock lock{exact_state->mutex};
+					// The pinned unix VFS matrix admits only the ordinary profile and SQLite's
+					// POWERSAFE_OVERWRITE profile. Every other bit needs a separate callback
+					// grammar.
+					if ((value != 0 && value != sqlite_iocap_powersafe_overwrite) ||
+						(exact_state->device_characteristics_observed &&
+						 exact_state->device_profile.device_characteristics != value))
+					{
+						exact_state->invalid = true;
+						exact_state->phase = exact_empty_live_phase::failed;
+						return 0;
+					}
+					exact_state->device_profile.device_characteristics = value;
+					exact_state->device_characteristics_observed = true;
+					if (exact_state->sector_observed &&
+						!refresh_exact_empty_device_profile(*exact_state))
+					{
+						exact_state->invalid = true;
+						exact_state->phase = exact_empty_live_phase::failed;
+						return 0;
+					}
+				}
+				return value;
 			}
 			catch (...)
 			{
@@ -6214,6 +8182,11 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				if (auto state = exact_empty_state(file->connection_observation))
+				{
+					fail_exact_empty_state(state);
+					return sqlite_readonly_cannot_initialize;
+				}
 				if (file->connection_observation)
 				{
 					std::scoped_lock lock{file->connection_observation->mutex};
@@ -6544,6 +8517,11 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				if (auto state = exact_empty_state(file->connection_observation))
+				{
+					fail_exact_empty_state(state);
+					return sqlite_readonly;
+				}
 				if (file->source_shm_readonly_qualified)
 					if (!native_operation_permitted(*file))
 						return sqlite_io_error;
@@ -7439,6 +9417,11 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				if (auto state = exact_empty_state(file->connection_observation))
+				{
+					fail_exact_empty_state(state);
+					return sqlite_readonly;
+				}
 				if (file->source_shm_readonly_qualified &&
 					!file->source_shm_qualification_candidate)
 				{
@@ -7874,6 +9857,17 @@ namespace cxxlens::sdk
 					file->~forwarding_file();
 					return sqlite_io_error;
 				}
+				if (!exact_empty_open_completed(association.observation,
+												association.role,
+												flags,
+												local_out_flags,
+												lifetime_identities))
+				{
+					mark_incomplete(association.observation);
+					cleanup_failed_forwarding_open(*file);
+					file->~forwarding_file();
+					return sqlite_io_error;
+				}
 				if (lifetime_identities && !association.qualification_fixture &&
 					(association.role == sqlite_backend_file_role::main_database ||
 					 association.role == sqlite_backend_file_role::write_ahead_log))
@@ -7975,6 +9969,12 @@ namespace cxxlens::sdk
 					std::scoped_lock lock{association.observation->mutex};
 					association.observation->wal_native_node = file->native;
 				}
+				if (association.observation &&
+					association.role == sqlite_backend_file_role::rollback_journal)
+				{
+					std::scoped_lock lock{association.observation->mutex};
+					association.observation->journal_native_node = file->native;
+				}
 				if (out_flags != nullptr)
 					*out_flags = local_out_flags;
 				owner->increment_open_file_count();
@@ -8017,6 +10017,94 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* owner = forwarding_owner(vfs);
+				if (owner != nullptr)
+				{
+					auto lookup = owner->exact_empty_normalization_delete_target(name);
+					if (lookup.reject)
+						return sqlite_io_error;
+					if (lookup.target)
+					{
+						auto& target = *lookup.target;
+						std::optional<sqlite_backend_normalization_sidecar_observation> observed;
+						std::span<const std::byte> expected_bytes;
+						{
+							std::scoped_lock lock{target.state->mutex};
+							if (target.state->invalid || sync_directory != 0 ||
+								target.state->phase != exact_empty_live_phase::fully_armed)
+							{
+								target.state->invalid = true;
+								target.state->phase = exact_empty_live_phase::failed;
+								return sqlite_io_error;
+							}
+							if (target.role == sqlite_backend_file_role::write_ahead_log)
+							{
+								if (!target.state->wal_observation ||
+									!target.state->wal_close_confirmed ||
+									target.state->wal_delete_count != 0U)
+									return sqlite_io_error;
+								observed = target.state->wal_observation;
+							}
+							else
+							{
+								if (!target.state->journal_observation ||
+									!target.state->journal_close_confirmed ||
+									target.state->journal_delete_count != 0U ||
+									!target.state->journal_parent_synced)
+									return sqlite_io_error;
+								observed = target.state->journal_observation;
+								expected_bytes = target.state->journal_image;
+							}
+						}
+						if (!observed)
+							return sqlite_io_error;
+						auto removed =
+							target.state->namespace_guard->delete_exact_empty_normalization_sidecar(
+								target.role,
+								observed->object_identity,
+								observed->directory_entry_identity,
+								expected_bytes,
+								*target.state->operation_port);
+						if (!removed ||
+							!record_exact_empty_callback(
+								target.state,
+								sqlite_exact_empty_effect_callback_kind::delete_relative,
+								target.role,
+								0,
+								expected_bytes.size(),
+								sync_directory,
+								sqlite_ok,
+								0) ||
+							!record_exact_empty_callback(
+								target.state,
+								sqlite_exact_empty_effect_callback_kind::parent_sync,
+								target.role,
+								0,
+								0U,
+								0,
+								sqlite_ok,
+								0))
+						{
+							fail_exact_empty_state(target.state);
+							return sqlite_io_error;
+						}
+						{
+							std::scoped_lock lock{target.state->mutex};
+							if (target.role == sqlite_backend_file_role::write_ahead_log)
+							{
+								++target.state->wal_delete_count;
+								target.state->wal_parent_synced = true;
+								target.state->wal_observation.reset();
+							}
+							else
+							{
+								++target.state->journal_delete_count;
+								target.state->journal_parent_delete_synced = true;
+								target.state->journal_observation.reset();
+							}
+						}
+						return sqlite_ok;
+					}
+				}
 				if (owner != nullptr && !owner->permits_path_effect(name))
 					return sqlite_readonly;
 				const auto status = owner != nullptr && owner->underlying()->remove != nullptr
@@ -8378,6 +10466,144 @@ namespace cxxlens::sdk
 				return unexpected(forwarding_error("forwarding-vfs-register"));
 			}
 		}
+
+		struct exact_single_value_query
+		{
+			std::string_view expected;
+			std::size_t row_count{};
+			bool valid{true};
+		};
+
+		int capture_exact_single_value(void* context,
+									   const int column_count,
+									   char** values,
+									   char**) noexcept
+		{
+			auto* query = static_cast<exact_single_value_query*>(context);
+			if (query == nullptr || !query->valid || query->row_count != 0U || column_count != 1 ||
+				values == nullptr || values[0] == nullptr ||
+				std::string_view{values[0]} != query->expected)
+			{
+				if (query != nullptr)
+					query->valid = false;
+				return 1;
+			}
+			++query->row_count;
+			return 0;
+		}
+
+		[[nodiscard]] bool
+		execute_exact_single_value(const sqlite_source_shm_runtime_binding& runtime,
+								   void* database,
+								   const char* sql,
+								   const std::string_view expected) noexcept
+		{
+			if (database == nullptr || sql == nullptr || runtime.exec == nullptr ||
+				runtime.free_memory == nullptr)
+				return false;
+			exact_single_value_query query{expected};
+			char* message{};
+			int status{sqlite_error};
+			try
+			{
+				status = runtime.exec(database, sql, capture_exact_single_value, &query, &message);
+			}
+			catch (...)
+			{
+				if (message != nullptr)
+					runtime.free_memory(message);
+				return false;
+			}
+			if (message != nullptr)
+			{
+				runtime.free_memory(message);
+			}
+			return status == sqlite_ok && query.valid && query.row_count == 1U;
+		}
+
+		[[nodiscard]] bool execute_no_result(const sqlite_source_shm_runtime_binding& runtime,
+											 void* database,
+											 const char* sql) noexcept
+		{
+			if (database == nullptr || sql == nullptr || runtime.exec == nullptr ||
+				runtime.free_memory == nullptr)
+				return false;
+			char* message{};
+			int status{sqlite_error};
+			try
+			{
+				status = runtime.exec(database, sql, nullptr, nullptr, &message);
+			}
+			catch (...)
+			{
+				if (message != nullptr)
+					runtime.free_memory(message);
+				return false;
+			}
+			if (message != nullptr)
+			{
+				runtime.free_memory(message);
+			}
+			return status == sqlite_ok;
+		}
+
+		[[nodiscard]] bool
+		confirmed_sqlite_close(const sqlite_connection_close_outcome& outcome) noexcept
+		{
+			const auto* confirmed = std::get_if<sqlite_confirmed_close_token>(&outcome);
+			return confirmed != nullptr && confirmed->valid() &&
+				confirmed->kind() == sqlite_confirmed_close_kind::sqlite_ok &&
+				confirmed->close_was_attempted();
+		}
+
+		[[nodiscard]] const sqlite_backend_entry_observation*
+		exact_census_role(const sqlite_backend_namespace_census& census,
+						  const sqlite_backend_file_role role) noexcept
+		{
+			const sqlite_backend_entry_observation* found{};
+			for (const auto& entry : census.entries)
+			{
+				if (entry.role != role)
+					continue;
+				if (found != nullptr)
+					return nullptr;
+				found = &entry;
+			}
+			return found;
+		}
+
+		[[nodiscard]] bool post_close_census_matches_edge(
+			const sqlite_backend_namespace_census& census,
+			const sqlite_exact_empty_normalization_completed_edge& edge) noexcept
+		{
+			const auto* main = exact_census_role(census, sqlite_backend_file_role::main_database);
+			const auto* wal = exact_census_role(census, sqlite_backend_file_role::write_ahead_log);
+			const auto* shm = exact_census_role(census, sqlite_backend_file_role::shared_memory);
+			const auto* journal =
+				exact_census_role(census, sqlite_backend_file_role::rollback_journal);
+			if (main == nullptr || wal == nullptr || shm == nullptr || journal == nullptr ||
+				main->state != sqlite_backend_entry_state::held_regular || !main->held_object ||
+				wal->state != sqlite_backend_entry_state::absent ||
+				shm->state != sqlite_backend_entry_state::absent ||
+				journal->state != sqlite_backend_entry_state::absent)
+				return false;
+			auto size = main->held_object->size();
+			const auto expected = edge.expected_post_main_bytes();
+			if (!size || *size != expected.size())
+				return false;
+			std::array<std::byte, std::size_t{64U} * 1024U> buffer{};
+			std::size_t offset{};
+			while (offset < expected.size())
+			{
+				const auto count = std::min(buffer.size(), expected.size() - offset);
+				auto window = std::span{buffer}.first(count);
+				if (!main->held_object->read_exact(offset, window) ||
+					!std::ranges::equal(window, expected.subspan(offset, count)))
+					return false;
+				offset += count;
+			}
+			return census.source_shm_guard && census.source_shm_guard->recheck();
+		}
 	} // namespace
 
 	bool sqlite_source_shm_native_ok_projection_production_activation_enabled() noexcept
@@ -8470,6 +10696,216 @@ namespace cxxlens::sdk
 		catch (const std::length_error&)
 		{
 			return unexpected(forwarding_error("forwarding-vfs-allocation"));
+		}
+	}
+
+	result<std::shared_ptr<const sqlite_exact_empty_normalization_completed_edge>>
+	run_sqlite_exact_empty_normalization_effect(
+		sqlite_logical_read_receipt logical_read_receipt,
+		const sqlite_exact_empty_normalization_input& input,
+		const std::shared_ptr<sqlite_backend_observation_capability>& observation)
+	{
+		const auto fail = [](std::string detail)
+			-> result<std::shared_ptr<const sqlite_exact_empty_normalization_completed_edge>>
+		{
+			return unexpected(forwarding_error(std::move(detail)));
+		};
+		try
+		{
+			if (!observation || !input.operation_port || input.canonical_vfs_locator.empty() ||
+				input.canonical_vfs_locator == ":memory:")
+				return fail("exact-empty-normalization-input");
+			const auto binding = observation->binding();
+			if (binding.observation_profile != filesystem_profile ||
+				binding.registered_vfs_name.empty() ||
+				binding.observation_capability_identity != observation.get() ||
+				binding.runtime_identity != input.runtime.sqlite.runtime_identity ||
+				binding.runtime_lifetime_identity !=
+					input.runtime.sqlite.runtime_lifetime_identity ||
+				input.runtime.sqlite.vfs_find == nullptr ||
+				input.runtime.sqlite.vfs_find(std::string{binding.registered_vfs_name}.c_str()) !=
+					binding.vfs_implementation_identity)
+				return fail("exact-empty-normalization-runtime-binding");
+
+			auto begun = observation->begin_connection_observation(input.canonical_vfs_locator);
+			if (!begun || !*begun)
+				return fail("exact-empty-normalization-observation");
+			auto scope = std::move(*begun);
+			auto* gate = scope->effect_gate_port();
+			if (gate == nullptr || !gate->enforcement_active() ||
+				gate->stage() != sqlite_backend_effect_stage::denied)
+				return fail("exact-empty-normalization-deny-gate");
+			auto denied = gate->activate_denied(
+				observation->capability_token(), scope->token(), input.canonical_vfs_locator);
+			if (!denied || denied->sequence != 1U ||
+				denied->stage != sqlite_backend_effect_stage::denied ||
+				denied->capability_token != observation->capability_token() ||
+				denied->connection_token != scope->token() ||
+				denied->canonical_vfs_locator != input.canonical_vfs_locator ||
+				gate->stage() != sqlite_backend_effect_stage::denied)
+				return fail("exact-empty-normalization-deny-gate");
+			if (auto armed = scope->arm_exact_empty_normalization_profile(
+					std::move(logical_read_receipt), input);
+				!armed)
+				return fail("exact-empty-normalization-entry");
+
+			auto source_anchor =
+				exact_census_role(input.source_census, sqlite_backend_file_role::main_database);
+			if (source_anchor == nullptr || !source_anchor->held_object)
+				return fail("exact-empty-normalization-source-anchor");
+			sqlite_connection_lifecycle connection{
+				nullptr,
+				input.runtime.sqlite.close_v2,
+				sqlite_connection_lifetime_pins{
+					input.runtime.sqlite.runtime_lifetime,
+					std::static_pointer_cast<void>(observation),
+					std::static_pointer_cast<void>(scope),
+					std::static_pointer_cast<const void>(source_anchor->held_object),
+				}};
+			constexpr int normalization_open_flags =
+				sqlite_open_read_write | sqlite_open_private_cache | sqlite_open_full_mutex;
+			const std::string vfs_name{binding.registered_vfs_name};
+			const auto open_status =
+				input.runtime.sqlite.open_v2(input.canonical_vfs_locator.c_str(),
+											 connection.open_handle_out_parameter(),
+											 normalization_open_flags,
+											 vfs_name.c_str());
+			if (open_status != sqlite_ok)
+			{
+				auto closed = connection.close_exactly_once(*input.operation_port);
+				const auto* token = std::get_if<sqlite_confirmed_close_token>(&closed);
+				if (token == nullptr || !token->valid())
+					return fail("exact-empty-normalization-open-close-opaque");
+				return fail("exact-empty-normalization-open");
+			}
+			if (!connection.owns_connection() ||
+				input.runtime.db_readonly(connection.get(), "main") != 0)
+			{
+				(void)connection.close_exactly_once(*input.operation_port);
+				return fail("exact-empty-normalization-read-write-profile");
+			}
+			if (!execute_exact_single_value(input.runtime.sqlite,
+											connection.get(),
+											"PRAGMA locking_mode=EXCLUSIVE;",
+											"exclusive"))
+			{
+				(void)connection.close_exactly_once(*input.operation_port);
+				return fail("exact-empty-normalization-locking-mode");
+			}
+			if (auto coordination = scope->install_exact_empty_normalization_coordination_arm();
+				!coordination)
+			{
+				(void)connection.close_exactly_once(*input.operation_port);
+				return fail("exact-empty-normalization-coordination-arm");
+			}
+			if (!execute_no_result(
+					input.runtime.sqlite, connection.get(), "PRAGMA synchronous=FULL;"))
+			{
+				(void)connection.close_exactly_once(*input.operation_port);
+				return fail("exact-empty-normalization-synchronous-set");
+			}
+			if (!execute_exact_single_value(
+					input.runtime.sqlite, connection.get(), "PRAGMA synchronous;", "2"))
+			{
+				(void)connection.close_exactly_once(*input.operation_port);
+				return fail("exact-empty-normalization-synchronous-confirm");
+			}
+			if (!execute_exact_single_value(input.runtime.sqlite,
+											connection.get(),
+											"PRAGMA journal_mode=DELETE;",
+											"delete"))
+			{
+				(void)connection.close_exactly_once(*input.operation_port);
+				return fail("exact-empty-normalization-transition");
+			}
+			if (!execute_exact_single_value(
+					input.runtime.sqlite, connection.get(), "PRAGMA journal_mode;", "delete"))
+			{
+				(void)connection.close_exactly_once(*input.operation_port);
+				return fail("exact-empty-normalization-transition-confirm");
+			}
+			auto closed = connection.close_exactly_once(*input.operation_port);
+			if (!confirmed_sqlite_close(closed))
+				return fail("exact-empty-normalization-close-opaque");
+			auto physical = scope->finish_exact_empty_normalization_profile();
+			if (!physical || !*physical || !(*physical)->confirmed_close() ||
+				!(*physical)->post_close_exact_projection() ||
+				(*physical)->post_close_logical_empty() ||
+				!(*physical)->post_close_sidecars_absent() || !(*physical)->custody_drained())
+				return fail("exact-empty-normalization-physical-edge");
+
+			// The physical edge remains internal until a separate read-only connection and a fresh
+			// retained-parent census independently classify the closed post-state.
+			auto classified =
+				observation->begin_connection_observation(input.canonical_vfs_locator);
+			if (!classified || !*classified)
+				return fail("exact-empty-normalization-post-classifier");
+			auto classifier_scope = std::move(*classified);
+			auto* classifier_gate = classifier_scope->effect_gate_port();
+			if (classifier_gate == nullptr || !classifier_gate->enforcement_active() ||
+				classifier_gate->stage() != sqlite_backend_effect_stage::denied ||
+				!classifier_gate->activate_denied(observation->capability_token(),
+												  classifier_scope->token(),
+												  input.canonical_vfs_locator))
+				return fail("exact-empty-normalization-post-classifier-gate");
+			sqlite_connection_lifecycle classifier{
+				nullptr,
+				input.runtime.sqlite.close_v2,
+				sqlite_connection_lifetime_pins{
+					input.runtime.sqlite.runtime_lifetime,
+					std::static_pointer_cast<void>(observation),
+					std::static_pointer_cast<void>(classifier_scope),
+					std::static_pointer_cast<const void>(*physical),
+				}};
+			constexpr int classifier_open_flags =
+				sqlite_open_read_only | sqlite_open_private_cache | sqlite_open_full_mutex;
+			const auto classifier_open =
+				input.runtime.sqlite.open_v2(input.canonical_vfs_locator.c_str(),
+											 classifier.open_handle_out_parameter(),
+											 classifier_open_flags,
+											 vfs_name.c_str());
+			if (classifier_open != sqlite_ok || !classifier.owns_connection() ||
+				input.runtime.db_readonly(classifier.get(), "main") != 1 ||
+				!execute_exact_single_value(
+					input.runtime.sqlite, classifier.get(), "PRAGMA journal_mode;", "delete") ||
+				!execute_exact_single_value(
+					input.runtime.sqlite, classifier.get(), "PRAGMA application_id;", "0") ||
+				!execute_exact_single_value(input.runtime.sqlite,
+											classifier.get(),
+											"SELECT count(*) FROM sqlite_schema;",
+											"0") ||
+				!execute_exact_single_value(
+					input.runtime.sqlite, classifier.get(), "PRAGMA quick_check(1);", "ok"))
+			{
+				(void)classifier.close_exactly_once(*input.operation_port);
+				return fail("exact-empty-normalization-post-classifier");
+			}
+			auto classifier_closed = classifier.close_exactly_once(*input.operation_port);
+			if (!confirmed_sqlite_close(classifier_closed))
+				return fail("exact-empty-normalization-post-classifier-close-opaque");
+			auto classifier_observation = classifier_scope->snapshot();
+			if (!classifier_observation || !classifier_observation->complete ||
+				classifier_observation->main_handle_open ||
+				classifier_observation->shared_memory_object_identity ||
+				classifier_observation->shared_memory_entry_identity ||
+				!classifier_observation->held_shm_locks.empty() ||
+				!classifier_observation->shm_map_events.empty())
+				return fail("exact-empty-normalization-post-classifier-custody");
+			auto post_census = observation->capture_namespace(input.canonical_vfs_locator);
+			if (!post_census || !post_close_census_matches_edge(*post_census, **physical))
+				return fail("exact-empty-normalization-post-census");
+			auto mutable_implementation =
+				std::const_pointer_cast<sqlite_exact_empty_normalization_completed_edge>(*physical);
+			sqlite_exact_empty_normalization_edge_factory::seal_logical_empty(
+				*mutable_implementation);
+			if (!mutable_implementation->post_close_logical_empty())
+				return fail("exact-empty-normalization-post-classifier-seal");
+			return std::static_pointer_cast<const sqlite_exact_empty_normalization_completed_edge>(
+				std::move(mutable_implementation));
+		}
+		catch (...)
+		{
+			return fail("exact-empty-normalization-exception");
 		}
 	}
 } // namespace cxxlens::sdk

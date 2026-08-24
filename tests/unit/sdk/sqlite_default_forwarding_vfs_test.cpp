@@ -1,6 +1,7 @@
 #include <array>
 #include <atomic>
 #include <bit>
+#include <cerrno>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -24,6 +25,7 @@
 
 #include "sdk/sqlite_backend_effect_gate_internal.hpp"
 #include "sdk/sqlite_default_forwarding_vfs_internal.hpp"
+#include "sdk/sqlite_exact_empty_normalization_effect_internal.hpp"
 #include "sdk/sqlite_private_snapshot_internal.hpp"
 #include "sdk/sqlite_source_shm_readonly_preflight_internal.hpp"
 #include "sdk/sqlite_vfs_abi_internal.hpp"
@@ -161,6 +163,44 @@ namespace
 
 	  private:
 		std::filesystem::path path_;
+	};
+
+	class sqlite_close_unknown_port final : public store_operation_port
+	{
+	  public:
+		[[nodiscard]] store_write_outcome
+		write_exact(const int descriptor, const std::span<const std::byte> bytes) noexcept override
+		{
+			return delegate_.write_exact(descriptor, bytes);
+		}
+		[[nodiscard]] store_sync_outcome
+		synchronize(const int descriptor, const store_sync_target target) noexcept override
+		{
+			return delegate_.synchronize(descriptor, target);
+		}
+		[[nodiscard]] store_close_outcome close_descriptor(const int descriptor) noexcept override
+		{
+			return delegate_.close_descriptor(descriptor);
+		}
+		[[nodiscard]] store_close_outcome
+		close_sqlite(store_sqlite_operation_binding) noexcept override
+		{
+			++sqlite_close_calls_;
+			return {store_close_state::outcome_unknown, EIO, true};
+		}
+		[[nodiscard]] store_commit_outcome
+		commit_sqlite(const store_sqlite_operation_binding binding) noexcept override
+		{
+			return delegate_.commit_sqlite(binding);
+		}
+		[[nodiscard]] std::size_t sqlite_close_calls() const noexcept
+		{
+			return sqlite_close_calls_;
+		}
+
+	  private:
+		default_store_operation_port delegate_;
+		std::size_t sqlite_close_calls_{};
 	};
 
 	[[nodiscard]] sqlite_backend_opaque_identity test_receipt(const std::string_view label)
@@ -1037,6 +1077,9 @@ namespace
 	using real_exec_function = int (*)(sqlite3*, const char*, real_exec_callback, void*, char**);
 	using real_file_control_function = int (*)(sqlite3*, const char*, int, void*);
 	using real_free_function = void (*)(void*);
+	using real_libversion_number_function = int (*)();
+	using real_compile_option_get_function = const char* (*)(int);
+	using real_db_readonly_function = int (*)(sqlite3*, const char*);
 
 	real_find_function real_find{};
 
@@ -1070,6 +1113,12 @@ namespace
 		const auto real_file_control =
 			load_function<real_file_control_function>(raw_library, "sqlite3_file_control");
 		const auto real_free = load_function<real_free_function>(raw_library, "sqlite3_free");
+		const auto real_libversion_number = load_function<real_libversion_number_function>(
+			raw_library, "sqlite3_libversion_number");
+		const auto real_compile_option_get = load_function<real_compile_option_get_function>(
+			raw_library, "sqlite3_compileoption_get");
+		const auto real_db_readonly =
+			load_function<real_db_readonly_function>(raw_library, "sqlite3_db_readonly");
 		const auto source_exec = load_function<sqlite_source_shm_runtime_binding::exec_function>(
 			raw_library, "sqlite3_exec");
 		const auto source_errmsg =
@@ -1111,6 +1160,200 @@ namespace
 
 		temporary_test_directory target_directory_guard{"default-forwarding-real"};
 		const std::string target_directory = target_directory_guard.path().string();
+		const std::string normalization_path =
+			(target_directory_guard.path() / "normalization.sqlite").string();
+		{
+			sqlite3* fixture{};
+			constexpr int fixture_flags = sqlite_open_read_write | sqlite_open_create |
+				sqlite_open_full_mutex | sqlite_open_private_cache;
+			require(real_open(normalization_path.c_str(), &fixture, fixture_flags, nullptr) ==
+						sqlite_ok,
+					"create exact-empty WAL normalization fixture");
+			char* message{};
+			const auto selected_wal =
+				real_exec(fixture, "PRAGMA journal_mode=WAL;", nullptr, nullptr, &message);
+			if (message != nullptr)
+				real_free(message);
+			require(selected_wal == sqlite_ok && real_close(fixture) == sqlite_ok,
+					"seal exact-empty WAL normalization fixture");
+		}
+		require(!std::filesystem::exists(normalization_path + "-shm") &&
+					!std::filesystem::exists(normalization_path + "-journal"),
+				"normalization fixture starts without SHM or rollback journal");
+		{
+			auto normalization_bundle = make_sqlite_default_forwarding_store_bundle(
+				normalization_path,
+				sqlite_private_snapshot_registry_binding{
+					raw_library,
+					real_default,
+					real_find_opaque,
+					real_register_opaque,
+					real_unregister_opaque,
+					library,
+					real_runtime,
+				});
+			require(normalization_bundle.has_value(), "normalization forwarding bundle");
+			auto census = normalization_bundle->observation->capture_namespace(normalization_path);
+			require(census.has_value() && census->source_shm_guard,
+					census ? std::string{"normalization retained-parent source census"}
+						   : std::string{"normalization retained-parent source census: "} +
+							census.error().field + '/' + census.error().detail);
+			std::shared_ptr<const sqlite_backend_held_object> held_main;
+			for (const auto& entry : census->entries)
+				if (entry.role == sqlite_backend_file_role::main_database)
+					held_main = entry.held_object;
+			require(held_main != nullptr, "normalization held main source anchor");
+			auto operation_port = std::make_shared<default_store_operation_port>();
+			auto input = sqlite_exact_empty_normalization_input{
+				sqlite_exact_empty_normalization_runtime{
+					real_runtime,
+					real_libversion_number,
+					real_compile_option_get,
+					std::bit_cast<sqlite_exact_empty_normalization_runtime::db_readonly_function>(
+						real_db_readonly),
+				},
+				std::move(*census),
+				normalization_path,
+				operation_port,
+			};
+			auto wrong_anchor = seal_sqlite_logical_read_receipt(
+				std::make_shared<const int>(7), true, true, 0U, true);
+			require(wrong_anchor.has_value(), "normalization wrong-anchor receipt fixture");
+			auto pre_negative_digest = held_main->sha256();
+			auto rejected = run_sqlite_exact_empty_normalization_effect(
+				std::move(*wrong_anchor), input, normalization_bundle->observation);
+			auto post_negative_digest = held_main->sha256();
+			require(!rejected &&
+						rejected.error() ==
+							error{"store.backend-unavailable",
+								  "sqlite",
+								  "exact-empty-normalization-entry"},
+					"wrong #201 anchor rejects before normalization arm");
+			require(pre_negative_digest && post_negative_digest &&
+						*post_negative_digest == *pre_negative_digest &&
+						!std::filesystem::exists(normalization_path + "-wal") &&
+						!std::filesystem::exists(normalization_path + "-journal") &&
+						!std::filesystem::exists(normalization_path + "-shm"),
+					"wrong #201 anchor is zero-effect");
+			auto logical_read = seal_sqlite_logical_read_receipt(
+				std::static_pointer_cast<const void>(held_main), true, true, 0U, true);
+			require(logical_read.has_value(), "normalization exact #201 logical-read receipt");
+			auto normalized = run_sqlite_exact_empty_normalization_effect(
+				std::move(*logical_read), input, normalization_bundle->observation);
+			require(normalized.has_value(),
+					normalized ? std::string{"real exact-empty normalization effect"}
+							   : std::string{"real exact-empty normalization effect: "} +
+							normalized.error().detail);
+			require(
+				(*normalized)->confirmed_close() && (*normalized)->post_close_exact_projection() &&
+					(*normalized)->post_close_logical_empty() &&
+					(*normalized)->post_close_sidecars_absent() && (*normalized)->custody_drained(),
+				"real normalization completed physical and logical edge");
+
+			auto cold_post =
+				normalization_bundle->observation->capture_namespace(normalization_path);
+			require(cold_post && cold_post->source_shm_guard,
+					"cold post-normalization retained-parent census");
+			std::shared_ptr<const sqlite_backend_held_object> cold_post_main;
+			for (const auto& entry : cold_post->entries)
+				if (entry.role == sqlite_backend_file_role::main_database)
+					cold_post_main = entry.held_object;
+			require(cold_post_main != nullptr, "cold post-normalization held main");
+			auto cold_post_digest = cold_post_main->sha256();
+			auto replay_receipt = seal_sqlite_logical_read_receipt(
+				std::static_pointer_cast<const void>(cold_post_main), true, true, 0U, true);
+			require(replay_receipt.has_value(), "cold replay receipt fixture");
+			auto replay_input = sqlite_exact_empty_normalization_input{
+				input.runtime,
+				std::move(*cold_post),
+				normalization_path,
+				operation_port,
+			};
+			auto replay = run_sqlite_exact_empty_normalization_effect(
+				std::move(*replay_receipt), replay_input, normalization_bundle->observation);
+			auto replay_post_digest = cold_post_main->sha256();
+			require(!replay && cold_post_digest && replay_post_digest &&
+						*replay_post_digest == *cold_post_digest &&
+						!std::filesystem::exists(normalization_path + "-wal") &&
+						!std::filesystem::exists(normalization_path + "-journal") &&
+						!std::filesystem::exists(normalization_path + "-shm"),
+					"cold FO replay remains zero-effect and cannot repeat normalization");
+		}
+		require(::unlink(normalization_path.c_str()) == 0,
+				"remove real exact-empty normalization fixture");
+
+		const std::string close_unknown_path =
+			(target_directory_guard.path() / "normalization-close-unknown.sqlite").string();
+		{
+			sqlite3* fixture{};
+			constexpr int fixture_flags = sqlite_open_read_write | sqlite_open_create |
+				sqlite_open_full_mutex | sqlite_open_private_cache;
+			require(real_open(close_unknown_path.c_str(), &fixture, fixture_flags, nullptr) ==
+						sqlite_ok,
+					"create close-unknown normalization fixture");
+			char* message{};
+			const auto selected_wal =
+				real_exec(fixture, "PRAGMA journal_mode=WAL;", nullptr, nullptr, &message);
+			if (message != nullptr)
+				real_free(message);
+			require(selected_wal == sqlite_ok && real_close(fixture) == sqlite_ok,
+					"seal close-unknown normalization fixture");
+
+			auto fault_bundle = make_sqlite_default_forwarding_store_bundle(
+				close_unknown_path,
+				sqlite_private_snapshot_registry_binding{
+					raw_library,
+					real_default,
+					real_find_opaque,
+					real_register_opaque,
+					real_unregister_opaque,
+					library,
+					real_runtime,
+				});
+			require(fault_bundle.has_value(), "close-unknown forwarding bundle");
+			auto census = fault_bundle->observation->capture_namespace(close_unknown_path);
+			require(census && census->source_shm_guard,
+					"close-unknown retained-parent source census");
+			std::shared_ptr<const sqlite_backend_held_object> held_main;
+			for (const auto& entry : census->entries)
+				if (entry.role == sqlite_backend_file_role::main_database)
+					held_main = entry.held_object;
+			require(held_main != nullptr, "close-unknown held main");
+			auto logical_read = seal_sqlite_logical_read_receipt(
+				std::static_pointer_cast<const void>(held_main), true, true, 0U, true);
+			require(logical_read.has_value(), "close-unknown #201 receipt");
+			auto fault_port = std::make_shared<sqlite_close_unknown_port>();
+			auto input = sqlite_exact_empty_normalization_input{
+				sqlite_exact_empty_normalization_runtime{
+					real_runtime,
+					real_libversion_number,
+					real_compile_option_get,
+					std::bit_cast<sqlite_exact_empty_normalization_runtime::db_readonly_function>(
+						real_db_readonly),
+				},
+				std::move(*census),
+				close_unknown_path,
+				fault_port,
+			};
+			auto faulted = run_sqlite_exact_empty_normalization_effect(
+				std::move(*logical_read), input, fault_bundle->observation);
+			require(!faulted &&
+						faulted.error() ==
+							error{"store.backend-unavailable",
+								  "sqlite",
+								  "exact-empty-normalization-close-opaque"} &&
+						fault_port->sqlite_close_calls() == 1U,
+					"ambiguous SQLite close is quarantined once with no completed edge");
+			require(!std::filesystem::exists(close_unknown_path + "-wal") &&
+						std::filesystem::is_regular_file(close_unknown_path + "-journal") &&
+						std::filesystem::file_size(close_unknown_path + "-journal") > 28U &&
+						!std::filesystem::exists(close_unknown_path + "-shm"),
+					"close ambiguity preserves an unresolved invalidated journal without success");
+		}
+		require(::unlink((close_unknown_path + "-journal").c_str()) == 0,
+				"unlink quarantined disposable close-unknown journal");
+		require(::unlink(close_unknown_path.c_str()) == 0,
+				"unlink quarantined disposable close-unknown fixture");
 		const std::string path = (target_directory_guard.path() / "main.sqlite").string();
 		const auto real_shm_path = path + "-shm";
 		create_file(path);

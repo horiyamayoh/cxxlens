@@ -9,6 +9,8 @@
 
 namespace cxxlens::sdk
 {
+	class store_operation_port;
+
 	using sqlite_close_v2_callback = int (*)(void*);
 
 	/** Pins which must remain alive until a SQLite connection is confirmed closed. */
@@ -168,6 +170,13 @@ namespace cxxlens::sdk
 		 */
 		[[nodiscard]] void** open_handle_out_parameter() noexcept;
 		[[nodiscard]] sqlite_connection_close_outcome close_exactly_once() noexcept;
+		/**
+		 * The same one-shot close routed through the neutral Store operation port.  An injected or
+		 * native ambiguous result transfers the handle and every pin to process-lifetime
+		 * quarantine; it is never retried and cannot mint a confirmed-close token.
+		 */
+		[[nodiscard]] sqlite_connection_close_outcome
+		close_exactly_once(store_operation_port& operation_port) noexcept;
 
 	  private:
 		struct state;

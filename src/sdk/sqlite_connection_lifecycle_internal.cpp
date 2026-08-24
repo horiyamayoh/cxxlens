@@ -3,6 +3,8 @@
 #include <type_traits>
 #include <utility>
 
+#include "store_operation_port_internal.hpp"
+
 namespace cxxlens::sdk
 {
 	struct sqlite_connection_lifecycle::state
@@ -282,6 +284,37 @@ namespace cxxlens::sdk
 			return quarantine(
 				owned, sqlite_connection_quarantine_reason::close_callback_threw, std::nullopt);
 		}
+	}
+
+	sqlite_connection_close_outcome
+	sqlite_connection_lifecycle::close_exactly_once(store_operation_port& operation_port) noexcept
+	{
+		auto owned = std::move(state_);
+		if (owned == nullptr)
+			return sqlite_confirmed_close_token{sqlite_confirmed_close_kind::no_connection};
+		if (owned->connection == nullptr)
+		{
+			release_known_safe(owned);
+			return sqlite_confirmed_close_token{sqlite_confirmed_close_kind::no_connection};
+		}
+		if (owned->close_v2 == nullptr)
+			return quarantine(
+				owned, sqlite_connection_quarantine_reason::close_callback_missing, std::nullopt);
+
+		const auto outcome = operation_port.close_sqlite(store_sqlite_operation_binding{
+			owned->connection,
+			owned->close_v2,
+			sqlite_ok,
+		});
+		if (outcome.confirmed())
+		{
+			release_known_safe(owned);
+			return sqlite_confirmed_close_token{sqlite_confirmed_close_kind::sqlite_ok};
+		}
+		return quarantine(owned,
+						  sqlite_connection_quarantine_reason::close_non_ok,
+						  outcome.operation_attempted ? std::optional<int>{outcome.native_code}
+													  : std::nullopt);
 	}
 
 	sqlite_quarantined_connection
