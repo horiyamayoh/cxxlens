@@ -87,6 +87,33 @@ class MaterializationProtocol2Tests(unittest.TestCase):
                 ingress["binding_environment_encoding"]["first_sequence"],
                 {"encoding": "uint64-canonical-decimal", "exact": 0},
             )
+            expected_role_encoding = {
+                "session_id": "provider-session-id",
+                "task_id": "task-id",
+                "task_v4_digest": "semantic-v2-digest",
+                "source_closure_id": "source-closure-id",
+                "source_closure_digest": "semantic-v2-digest",
+                "manifest_digest": "semantic-v2-digest",
+                "transfer_digest": "semantic-v2-digest",
+                "stream_id": "uint64-canonical-decimal",
+                "first_sequence": "uint64-canonical-decimal",
+            }
+            binding_environment_encoding = ingress["binding_environment_encoding"]
+            self.assertEqual(
+                set(binding_environment_encoding) - {"binding_digest"},
+                set(expected_role_encoding),
+            )
+            self.assertEqual(
+                {
+                    role: (
+                        binding_environment_encoding[role]["encoding"]
+                        if isinstance(binding_environment_encoding[role], dict)
+                        else binding_environment_encoding[role]
+                    )
+                    for role in expected_role_encoding
+                },
+                expected_role_encoding,
+            )
             binding_encoding = ingress["binding_environment_encoding"]["binding_digest"]
             self.assertEqual(binding_encoding["type"], "process-channel-sha256")
             self.assertEqual(binding_encoding["prefix"], "process-channel:sha256:")
@@ -110,8 +137,8 @@ class MaterializationProtocol2Tests(unittest.TestCase):
                     ("task_id", "utf8_string", "task-id", None),
                     ("session_id", "utf8_string", "provider-session-id", None),
                     ("task_v4_digest", "utf8_string", "semantic-v2-digest", None),
-                    ("closure_id", "utf8_string", "source-closure-id", None),
-                    ("closure_digest", "utf8_string", "semantic-v2-digest", None),
+                    ("source_closure_id", "utf8_string", "source-closure-id", None),
+                    ("source_closure_digest", "utf8_string", "semantic-v2-digest", None),
                     ("manifest_digest", "utf8_string", "semantic-v2-digest", None),
                     ("transfer_digest", "utf8_string", "semantic-v2-digest", None),
                     ("stream_id", "utf8_string", "uint64-canonical-decimal", None),
@@ -126,6 +153,72 @@ class MaterializationProtocol2Tests(unittest.TestCase):
                     ("write_mode", "utf8_string", "uint32-canonical-decimal", None),
                 ],
             )
+            projection_names = [field["name"] for field in binding_encoding["fields"]]
+            expected_projection_names = [
+                "mode",
+                "task_id",
+                "session_id",
+                "task_v4_digest",
+                "source_closure_id",
+                "source_closure_digest",
+                "manifest_digest",
+                "transfer_digest",
+                "stream_id",
+                "first_sequence",
+                "read_descriptor",
+                "write_descriptor",
+                "read_device",
+                "read_inode",
+                "read_mode",
+                "write_device",
+                "write_inode",
+                "write_mode",
+            ]
+            self.assertEqual(projection_names, expected_projection_names)
+            self.assertEqual(len(projection_names), len(set(projection_names)))
+            self.assertEqual(
+                set(projection_names) & (set(expected_environment) - {"binding_digest"}),
+                set(expected_environment) - {"binding_digest"},
+            )
+
+            def assert_projection_order(document: dict) -> None:
+                fields = document["x-cxxlens-installed-ingress-contract"][
+                    "binding_environment_encoding"
+                ]["binding_digest"]["fields"]
+                names = [field["name"] for field in fields]
+                if names != expected_projection_names or len(names) != len(set(names)):
+                    raise AssertionError("process-channel projection is not exact")
+
+            assert_projection_order(document)
+            missing = copy.deepcopy(document)
+            del missing["x-cxxlens-installed-ingress-contract"][
+                "binding_environment_encoding"
+            ]["binding_digest"]["fields"][0]
+            with self.assertRaises(AssertionError):
+                assert_projection_order(missing)
+            extra = copy.deepcopy(document)
+            extra["x-cxxlens-installed-ingress-contract"][
+                "binding_environment_encoding"
+            ]["binding_digest"]["fields"].append({"name": "unexpected"})
+            with self.assertRaises(AssertionError):
+                assert_projection_order(extra)
+            duplicate = copy.deepcopy(document)
+            duplicate["x-cxxlens-installed-ingress-contract"][
+                "binding_environment_encoding"
+            ]["binding_digest"]["fields"].append(
+                duplicate["x-cxxlens-installed-ingress-contract"][
+                    "binding_environment_encoding"
+                ]["binding_digest"]["fields"][0]
+            )
+            with self.assertRaises(AssertionError):
+                assert_projection_order(duplicate)
+            reordered = copy.deepcopy(document)
+            fields = reordered["x-cxxlens-installed-ingress-contract"][
+                "binding_environment_encoding"
+            ]["binding_digest"]["fields"]
+            fields[0], fields[1] = fields[1], fields[0]
+            with self.assertRaises(AssertionError):
+                assert_projection_order(reordered)
             self.assertEqual(
                 binding_encoding["endpoint_identity"],
                 {

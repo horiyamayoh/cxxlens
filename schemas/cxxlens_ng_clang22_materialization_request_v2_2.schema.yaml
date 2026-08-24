@@ -33,12 +33,12 @@ x-cxxlens-installed-ingress-contract:
     first_sequence: CXXLENS_PROVIDER_SOURCE_CLOSURE_FIRST_SEQUENCE
     binding_digest: CXXLENS_PROVIDER_SOURCE_CLOSURE_BINDING_DIGEST
   binding_environment_encoding:
-    session_id: strong-id
-    task_id: strong-id
+    session_id: provider-session-id
+    task_id: task-id
     task_v4_digest: semantic-v2-digest
-    source_closure_id: semantic-v2-digest
+    source_closure_id: source-closure-id
     source_closure_digest: semantic-v2-digest
-    manifest_digest: content-sha256-digest
+    manifest_digest: semantic-v2-digest
     transfer_digest: semantic-v2-digest
     stream_id: uint64-canonical-decimal
     first_sequence: {encoding: uint64-canonical-decimal, exact: 0}
@@ -53,8 +53,8 @@ x-cxxlens-installed-ingress-contract:
         - {name: task_id, kind: utf8_string, encoding: task-id}
         - {name: session_id, kind: utf8_string, encoding: provider-session-id}
         - {name: task_v4_digest, kind: utf8_string, encoding: semantic-v2-digest}
-        - {name: closure_id, kind: utf8_string, encoding: source-closure-id}
-        - {name: closure_digest, kind: utf8_string, encoding: semantic-v2-digest}
+        - {name: source_closure_id, kind: utf8_string, encoding: source-closure-id}
+        - {name: source_closure_digest, kind: utf8_string, encoding: semantic-v2-digest}
         - {name: manifest_digest, kind: utf8_string, encoding: semantic-v2-digest}
         - {name: transfer_digest, kind: utf8_string, encoding: semantic-v2-digest}
         - {name: stream_id, kind: utf8_string, encoding: uint64-canonical-decimal}
