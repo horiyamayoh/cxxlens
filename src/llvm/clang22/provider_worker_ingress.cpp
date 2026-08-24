@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <istream>
 #include <map>
 #include <new>
 #include <ranges>
@@ -11,6 +12,7 @@
 #include <utility>
 
 #include "materialization_json.hpp"
+#include "provider_worker_protocol_v2_input.hpp"
 #include "source_closure_task_v4.hpp"
 
 namespace cxxlens::detail::clang22
@@ -407,6 +409,125 @@ namespace cxxlens::detail::clang22
 		{
 			return sdk::unexpected(
 				failure("provider.worker-v4-input-invalid", "envelope", "allocation"));
+		}
+	}
+
+	namespace
+	{
+		[[nodiscard]] bool protocol_v2_json_prefix(const std::byte value) noexcept
+		{
+			const auto byte = std::to_integer<unsigned char>(value);
+			return byte == static_cast<unsigned char>('{') ||
+				byte == static_cast<unsigned char>('[') ||
+				byte == static_cast<unsigned char>('"') ||
+				byte == static_cast<unsigned char>(' ') ||
+				byte == static_cast<unsigned char>('\t') ||
+				byte == static_cast<unsigned char>('\r') ||
+				byte == static_cast<unsigned char>('\n');
+		}
+
+		[[nodiscard]] sdk::result<provider_worker_protocol_v2_launch_envelope>
+		decode_protocol_v2_input_bytes(const std::span<const std::byte> encoded,
+									   const sdk::provider::host_transcript_expectation& expected)
+		{
+			if (encoded.size() > provider_worker_protocol_v2_maximum_wire_bytes)
+				return sdk::unexpected(failure(
+					"provider.worker-protocol-v2-input-invalid", "stdin", "wire-size-limit"));
+			if (encoded.empty())
+				return sdk::unexpected(
+					failure("provider.worker-protocol-v2-input-invalid", "stdin", "empty"));
+			if (protocol_v2_json_prefix(encoded.front()))
+				return sdk::unexpected(failure(
+					"provider.worker-protocol-v2-input-invalid", "stdin", "json-input-forbidden"));
+
+			// The task-input-chunks-v2 profile binds exact SHA-256 content bytes.  A task-v4
+			// semantic digest is a different authority and must never be accepted as this field.
+			if (!typed_digest(expected.task.task_input_digest, "sha256:"))
+				return sdk::unexpected(failure("provider.worker-protocol-v2-input-invalid",
+											   "task_input_digest",
+											   "content-digest-required"));
+
+			auto frames = sdk::provider::decode_frame_stream(
+				encoded, expected.limits, provider_worker_protocol_v2_maximum_frames);
+			if (!frames)
+				return sdk::unexpected(std::move(frames.error()));
+			auto validated = sdk::provider::validate_host_transcript(*frames, expected);
+			if (!validated)
+				return sdk::unexpected(std::move(validated.error()));
+
+			const auto protocol_content_digest = sdk::content_digest(validated->payload);
+			if (protocol_content_digest != expected.task.task_input_digest)
+				return sdk::unexpected(failure("provider.worker-protocol-v2-input-invalid",
+											   "protocol_content_digest",
+											   "payload-mismatch"));
+
+			return provider_worker_protocol_v2_launch_envelope{
+				std::string{expected.provider_manifest},
+				std::move(validated->task),
+				validated->credit,
+				std::move(validated->payload),
+				protocol_content_digest,
+				1U,
+				sdk::provider::protocol_v2_major,
+				sdk::provider::protocol_v2_minor};
+		}
+	} // namespace
+
+	sdk::result<provider_worker_protocol_v2_launch_envelope>
+	decode_provider_worker_protocol_v2_input(
+		const std::span<const std::byte> encoded,
+		const sdk::provider::host_transcript_expectation& expected)
+	{
+		try
+		{
+			return decode_protocol_v2_input_bytes(encoded, expected);
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(
+				failure("provider.worker-protocol-v2-input-invalid", "stdin", "allocation"));
+		}
+	}
+
+	sdk::result<provider_worker_protocol_v2_launch_envelope>
+	decode_provider_worker_protocol_v2_input(
+		std::istream& input, const sdk::provider::host_transcript_expectation& expected)
+	{
+		try
+		{
+			std::vector<std::byte> encoded;
+			constexpr std::size_t read_buffer_bytes = 64U * 1024U;
+			std::array<char, read_buffer_bytes> buffer{};
+			for (;;)
+			{
+				input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+				const auto read_count = input.gcount();
+				if (read_count > 0)
+				{
+					const auto count = static_cast<std::size_t>(read_count);
+					if (count > provider_worker_protocol_v2_maximum_wire_bytes ||
+						encoded.size() > provider_worker_protocol_v2_maximum_wire_bytes - count)
+						return sdk::unexpected(failure("provider.worker-protocol-v2-input-invalid",
+													   "stdin",
+													   "wire-size-limit"));
+					const auto bytes = std::as_bytes(std::span{buffer.data(), count});
+					encoded.insert(encoded.end(), bytes.begin(), bytes.end());
+				}
+				if (input.bad())
+					return sdk::unexpected(failure(
+						"provider.worker-protocol-v2-input-invalid", "stdin", "read-failure"));
+				if (input.eof())
+					break;
+				if (input.fail())
+					return sdk::unexpected(failure(
+						"provider.worker-protocol-v2-input-invalid", "stdin", "read-failure"));
+			}
+			return decode_protocol_v2_input_bytes(encoded, expected);
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(
+				failure("provider.worker-protocol-v2-input-invalid", "stdin", "allocation"));
 		}
 	}
 } // namespace cxxlens::detail::clang22
