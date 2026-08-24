@@ -18,6 +18,7 @@ namespace
 	static_assert(noexcept(std::declval<sqlite_connection_lifecycle&>().close_exactly_once()));
 	static_assert(!std::is_copy_constructible_v<sqlite_confirmed_close_token>);
 	static_assert(!std::is_copy_constructible_v<sqlite_quarantined_connection>);
+	static_assert(!std::is_copy_constructible_v<sqlite_authenticated_logical_read_terminal>);
 
 	void require(const bool condition, const std::string& message)
 	{
@@ -89,6 +90,11 @@ namespace
 		probe.pins_alive_during_close =
 			probe.pin_destruction_count != nullptr && *probe.pin_destruction_count == 0;
 		throw std::runtime_error{"synthetic close exception"};
+	}
+
+	int successful_close_for_receipt(void*)
+	{
+		return 0;
 	}
 
 	void verify_null_handle_closes_zero_times()
@@ -294,23 +300,42 @@ namespace
 	void verify_logical_read_receipt_is_exact_and_one_shot()
 	{
 		auto source_anchor_pin = std::make_shared<int>(7);
-		require(!seal_sqlite_logical_read_receipt({}, true, true, 0U, true),
-				"logical-read receipt accepted a missing source anchor pin");
-		require(!seal_sqlite_logical_read_receipt(source_anchor_pin, false, true, 0U, true),
-				"logical-read receipt accepted a non-empty source");
-		require(!seal_sqlite_logical_read_receipt(source_anchor_pin, true, false, 0U, true),
-				"logical-read receipt accepted an unclosed connection");
-		require(!seal_sqlite_logical_read_receipt(source_anchor_pin, true, true, 1U, true),
-				"logical-read receipt accepted live custody");
-		require(!seal_sqlite_logical_read_receipt(source_anchor_pin, true, true, 0U, false),
-				"logical-read receipt accepted a non-zero-effect failure");
+		require(!sqlite_logical_read_terminal_issuer::issue({}, true, 0U, true),
+				"logical-read terminal accepted a missing source anchor pin");
+		require(!sqlite_logical_read_terminal_issuer::issue(source_anchor_pin, false, 0U, true),
+				"logical-read terminal accepted a non-empty source");
+		require(!sqlite_logical_read_terminal_issuer::issue(source_anchor_pin, true, 1U, true),
+				"logical-read terminal accepted live custody");
+		require(!sqlite_logical_read_terminal_issuer::issue(source_anchor_pin, true, 0U, false),
+				"logical-read terminal accepted a non-zero-effect failure");
 
-		auto receipt = seal_sqlite_logical_read_receipt(source_anchor_pin, true, true, 0U, true);
+		auto terminal =
+			sqlite_logical_read_terminal_issuer::issue(source_anchor_pin, true, 0U, true);
+		require(terminal.has_value() && terminal->valid() && terminal->exact_empty() &&
+					terminal->live_custody_count() == 0U &&
+					terminal->zero_effect_callback_receipt() &&
+					terminal->source_anchor_pin() == source_anchor_pin,
+				"logical-read terminal did not preserve the exact sealed predicates");
+		int receipt_connection{};
+		sqlite_connection_lifecycle receipt_owner{
+			&receipt_connection, &successful_close_for_receipt, {}};
+		auto close_outcome = receipt_owner.close_exactly_once();
+		require(std::holds_alternative<sqlite_confirmed_close_token>(close_outcome),
+				"logical-read test could not obtain a lifecycle close token");
+		auto close_token = std::get<sqlite_confirmed_close_token>(std::move(close_outcome));
+		auto receipt =
+			seal_sqlite_logical_read_receipt(std::move(close_token), std::move(*terminal));
 		require(receipt.has_value() && receipt->valid() && receipt->exact_empty() &&
 					receipt->connection_closed() && receipt->live_custody_count() == 0U &&
 					receipt->zero_effect_callback_receipt() &&
 					receipt->source_anchor_pin() == source_anchor_pin,
 				"logical-read receipt did not preserve the exact sealed predicates");
+		require(!terminal->valid(), "logical-read terminal remained valid after sealing");
+		auto replay_terminal =
+			sqlite_logical_read_terminal_issuer::issue(source_anchor_pin, true, 0U, true);
+		require(
+			!seal_sqlite_logical_read_receipt(std::move(close_token), std::move(*replay_terminal)),
+			"logical-read close token was reusable after sealing");
 		require(receipt->consume() && !receipt->valid() && !receipt->consume(),
 				"logical-read receipt was not a one-shot authority");
 	}

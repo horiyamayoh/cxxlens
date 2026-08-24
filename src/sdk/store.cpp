@@ -31,6 +31,7 @@
 #include "snapshot_store_v5_codec_internal.hpp"
 #include "sqlite_connection_lifecycle_internal.hpp"
 #include "sqlite_default_forwarding_vfs_internal.hpp"
+#include "sqlite_exact_empty_normalization_effect_internal.hpp"
 #include "sqlite_limit_length_control_internal.hpp"
 #include "sqlite_payload_streaming_internal.hpp"
 #include "sqlite_source_shm_readonly_preflight_internal.hpp"
@@ -684,6 +685,8 @@ namespace cxxlens::sdk
 			using column_bytes_fn = int (*)(void*, int);
 			using column_int64_fn = std::int64_t (*)(void*, int);
 			using libversion_number_fn = int (*)();
+			using compile_option_get_fn = const char* (*)(int);
+			using db_readonly_fn = int (*)(void*, const char*);
 			using sourceid_fn = const char* (*)();
 			using uri_parameter_fn = const char* (*)(const char*, const char*);
 			using uri_key_fn = const char* (*)(const char*, int);
@@ -719,6 +722,8 @@ namespace cxxlens::sdk
 			bind_blob64_fn bind_blob64{};
 			bind_null_fn bind_null{};
 			libversion_number_fn libversion_number{};
+			compile_option_get_fn compile_option_get{};
+			db_readonly_fn db_readonly{};
 			sourceid_fn sourceid{};
 			uri_parameter_fn uri_parameter{};
 			uri_key_fn uri_key{};
@@ -839,6 +844,8 @@ namespace cxxlens::sdk
 			if (api.v3_symbols_ready)
 				return {};
 			if (!resolve_sqlite(api.library, "sqlite3_libversion_number", api.libversion_number) ||
+				!resolve_sqlite(api.library, "sqlite3_compileoption_get", api.compile_option_get) ||
+				!resolve_sqlite(api.library, "sqlite3_db_readonly", api.db_readonly) ||
 				!resolve_sqlite(api.library, "sqlite3_limit", api.limit) ||
 				!resolve_sqlite(api.library, "sqlite3_prepare_v3", api.prepare_v3) ||
 				!resolve_sqlite(api.library, "sqlite3_reset", api.reset) ||
@@ -2428,6 +2435,8 @@ namespace cxxlens::sdk
 			std::shared_ptr<sqlite_backend_connection_observation_scope> active_observation;
 			std::optional<sqlite_backend_effect_arm_receipt> active_denied_receipt;
 			std::optional<sqlite_quiescent_source_anchor> source_anchor;
+			/** Close proof retained for the exact-empty #202 handoff only. */
+			std::optional<sqlite_confirmed_close_token> private_read_close_token;
 			std::optional<sqlite_active_wal_read_anchor> active_wal_anchor;
 			std::optional<sqlite_wal_source_capture> wal_only_capture;
 			sqlite_physical_format format{sqlite_physical_format::current_v3};
@@ -4583,6 +4592,9 @@ namespace cxxlens::sdk
 			if (!confirmed_connection_close(closed))
 				return unexpected(store_error(
 					"store.sqlite-failure", "sqlite-initialization-recovery", "opaque"));
+			if (auto* confirmed = std::get_if<sqlite_confirmed_close_token>(&closed);
+				confirmed != nullptr && confirmed->valid())
+				opened.private_read_close_token.emplace(std::move(*confirmed));
 			result<void> epoch_finished;
 			const bool preserve_writer_epoch = active_wal && defer_active_wal_epoch_for_writer &&
 				commit && !pre_end_failure && static_cast<bool>(ended);
@@ -4778,19 +4790,78 @@ namespace cxxlens::sdk
 		{
 			if (!observation)
 				return unexpected(sqlite_quiescent_observation_failure());
+			sqlite_quiescent_source_anchor effective_source_anchor = source_anchor;
 			if (!preinit_absent)
 			{
-				const auto source_anchor_pin = sqlite_authority_anchor_pin(source_anchor);
+				const auto source_anchor_pin = sqlite_authority_anchor_pin(effective_source_anchor);
 				if (!logical_read_receipt || !logical_read_receipt->valid() || !source_anchor_pin ||
 					logical_read_receipt->source_anchor_pin() != source_anchor_pin ||
 					!logical_read_receipt->exact_empty() ||
 					!logical_read_receipt->connection_closed() ||
 					logical_read_receipt->live_custody_count() != 0U ||
-					!logical_read_receipt->zero_effect_callback_receipt() ||
-					!logical_read_receipt->consume())
+					!logical_read_receipt->zero_effect_callback_receipt())
 					return unexpected(sqlite_effect_gate_failure());
+
+				auto runtime = bind_source_shm_readonly_runtime(api);
+				if (!runtime)
+					return unexpected(std::move(runtime.error()));
+				auto operation_port = make_default_store_operation_port();
+				if (!operation_port)
+					return unexpected(sqlite_effect_gate_failure());
+				auto normalized = run_sqlite_exact_empty_normalization_effect(
+					std::move(*logical_read_receipt),
+					sqlite_exact_empty_normalization_input{
+						sqlite_exact_empty_normalization_runtime{
+							std::move(*runtime),
+							api->libversion_number,
+							api->compile_option_get,
+							api->db_readonly,
+						},
+						effective_source_anchor.namespace_census,
+						path,
+						std::move(operation_port),
+					},
+					observation);
+				if (!normalized || !*normalized || !(*normalized)->confirmed_close() ||
+					!(*normalized)->post_close_exact_projection() ||
+					!(*normalized)->post_close_logical_empty() ||
+					!(*normalized)->post_close_sidecars_absent() ||
+					!(*normalized)->custody_drained())
+					return unexpected(normalized ? sqlite_effect_gate_failure()
+												 : std::move(normalized.error()));
+
+				// The effect owns and verifies the physical transition.  Re-capture the retained
+				// namespace before the ordinary fresh writer is opened so its anchor cannot point
+				// at the pre-normalization main object digest.
+				auto post_census = observation->capture_namespace(path);
+				if (!post_census)
+					return unexpected(std::move(post_census.error()));
+				if (auto valid = validate_namespace_census(*post_census, *observation); !valid)
+					return unexpected(std::move(valid.error()));
+				const auto* post_main =
+					observed_entry(*post_census, sqlite_backend_file_role::main_database);
+				const auto* post_wal =
+					observed_entry(*post_census, sqlite_backend_file_role::write_ahead_log);
+				const auto* post_shm =
+					observed_entry(*post_census, sqlite_backend_file_role::shared_memory);
+				const auto* post_journal =
+					observed_entry(*post_census, sqlite_backend_file_role::rollback_journal);
+				if (post_main == nullptr ||
+					post_main->state != sqlite_backend_entry_state::held_regular ||
+					!post_main->held_object || post_wal == nullptr || post_shm == nullptr ||
+					post_journal == nullptr ||
+					post_wal->state != sqlite_backend_entry_state::absent ||
+					post_shm->state != sqlite_backend_entry_state::absent ||
+					post_journal->state != sqlite_backend_entry_state::absent)
+					return unexpected(sqlite_effect_gate_failure());
+				auto post_byte_count = post_main->held_object->size();
+				auto post_sha256 = post_main->held_object->sha256();
+				if (!post_byte_count || !post_sha256)
+					return unexpected(sqlite_quiescent_observation_failure());
+				effective_source_anchor = sqlite_quiescent_source_anchor{
+					std::move(*post_census), *post_byte_count, std::move(*post_sha256)};
 			}
-			auto anchor_pin = sqlite_authority_anchor_pin(source_anchor);
+			auto anchor_pin = sqlite_authority_anchor_pin(effective_source_anchor);
 			if (!anchor_pin)
 				return unexpected(sqlite_effect_gate_failure());
 			auto effect = begin_effect_gated_connection(observation, path);
@@ -4825,7 +4896,7 @@ namespace cxxlens::sdk
 											path,
 											"cxxlens.sqlite-effect-prerequisite.fresh-init.v1",
 											sqlite_backend_effect_stage::fully_armed,
-											&source_anchor,
+											&effective_source_anchor,
 											false,
 											false);
 				if (!request)
@@ -4849,7 +4920,7 @@ namespace cxxlens::sdk
 											path,
 											"cxxlens.sqlite-effect-prerequisite.fresh-init.v1",
 											sqlite_backend_effect_stage::fully_armed,
-											&source_anchor,
+											&effective_source_anchor,
 											true,
 											false);
 				if (!request)
@@ -5551,13 +5622,18 @@ namespace cxxlens::sdk
 					return unexpected(sqlite_effect_gate_failure());
 				if (auto stable = finish_private_read(output, path, *observation, true); !stable)
 					return unexpected(std::move(stable.error()));
-				auto logical_read_receipt = seal_sqlite_logical_read_receipt(
+				if (!output.private_read_close_token)
+					return unexpected(sqlite_effect_gate_failure());
+				auto terminal = sqlite_logical_read_terminal_issuer::issue(
 					source_anchor_pin,
-					true,
 					true,
 					0U,
 					output.active_observation == nullptr && !output.active_wal_anchor &&
 						!output.wal_only_capture);
+				if (!terminal)
+					return unexpected(sqlite_effect_gate_failure());
+				auto logical_read_receipt = seal_sqlite_logical_read_receipt(
+					std::move(*output.private_read_close_token), std::move(*terminal));
 				if (!logical_read_receipt)
 					return unexpected(sqlite_effect_gate_failure());
 				if (auto symbols = require_v3_symbols(*api); !symbols)

@@ -135,6 +135,26 @@ namespace
 		}
 	}
 
+	[[nodiscard]] std::optional<sqlite_logical_read_receipt>
+	make_logical_read_receipt(std::shared_ptr<const void> source_anchor_pin)
+	{
+		auto terminal = sqlite_logical_read_terminal_issuer::issue(
+			std::move(source_anchor_pin), true, 0U, true);
+		if (!terminal)
+			return std::nullopt;
+		int connection{};
+		const auto successful_close = [](void*) -> int
+		{
+			return 0;
+		};
+		sqlite_connection_lifecycle owner{&connection, successful_close, {}};
+		auto closed = owner.close_exactly_once();
+		if (!std::holds_alternative<sqlite_confirmed_close_token>(closed))
+			return std::nullopt;
+		return seal_sqlite_logical_read_receipt(
+			std::move(std::get<sqlite_confirmed_close_token>(closed)), std::move(*terminal));
+	}
+
 	class temporary_test_directory
 	{
 	  public:
@@ -1216,8 +1236,8 @@ namespace
 			require(held_main != nullptr, "normalization held main source anchor");
 			auto operation_port = std::make_shared<default_store_operation_port>();
 			{
-				auto mixed_receipt = seal_sqlite_logical_read_receipt(
-					std::static_pointer_cast<const void>(mixed_main), true, true, 0U, true);
+				auto mixed_receipt =
+					make_logical_read_receipt(std::static_pointer_cast<const void>(mixed_main));
 				require(mixed_receipt.has_value(), "mixed census receipt fixture");
 				auto mixed_input = sqlite_exact_empty_normalization_input{
 					sqlite_exact_empty_normalization_runtime{
@@ -1253,8 +1273,7 @@ namespace
 				normalization_path,
 				operation_port,
 			};
-			auto wrong_anchor = seal_sqlite_logical_read_receipt(
-				std::make_shared<const int>(7), true, true, 0U, true);
+			auto wrong_anchor = make_logical_read_receipt(std::make_shared<const int>(7));
 			require(wrong_anchor.has_value(), "normalization wrong-anchor receipt fixture");
 			auto pre_negative_digest = held_main->sha256();
 			auto rejected = run_sqlite_exact_empty_normalization_effect(
@@ -1272,8 +1291,8 @@ namespace
 						!std::filesystem::exists(normalization_path + "-journal") &&
 						!std::filesystem::exists(normalization_path + "-shm"),
 					"wrong #201 anchor is zero-effect");
-			auto logical_read = seal_sqlite_logical_read_receipt(
-				std::static_pointer_cast<const void>(held_main), true, true, 0U, true);
+			auto logical_read =
+				make_logical_read_receipt(std::static_pointer_cast<const void>(held_main));
 			require(logical_read.has_value(), "normalization exact #201 logical-read receipt");
 			auto normalized = run_sqlite_exact_empty_normalization_effect(
 				std::move(*logical_read), input, normalization_bundle->observation);
@@ -1297,8 +1316,8 @@ namespace
 					cold_post_main = entry.held_object;
 			require(cold_post_main != nullptr, "cold post-normalization held main");
 			auto cold_post_digest = cold_post_main->sha256();
-			auto replay_receipt = seal_sqlite_logical_read_receipt(
-				std::static_pointer_cast<const void>(cold_post_main), true, true, 0U, true);
+			auto replay_receipt =
+				make_logical_read_receipt(std::static_pointer_cast<const void>(cold_post_main));
 			require(replay_receipt.has_value(), "cold replay receipt fixture");
 			auto replay_input = sqlite_exact_empty_normalization_input{
 				input.runtime,
@@ -1356,8 +1375,8 @@ namespace
 				if (entry.role == sqlite_backend_file_role::main_database)
 					held_main = entry.held_object;
 			require(held_main != nullptr, "close-unknown held main");
-			auto logical_read = seal_sqlite_logical_read_receipt(
-				std::static_pointer_cast<const void>(held_main), true, true, 0U, true);
+			auto logical_read =
+				make_logical_read_receipt(std::static_pointer_cast<const void>(held_main));
 			require(logical_read.has_value(), "close-unknown #201 receipt");
 			auto fault_port = std::make_shared<sqlite_close_unknown_port>();
 			auto input = sqlite_exact_empty_normalization_input{
