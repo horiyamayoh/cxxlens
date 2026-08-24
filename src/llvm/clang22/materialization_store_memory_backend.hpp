@@ -5,8 +5,8 @@
  * @brief Bounded process-local Store backend port for the #200 materializer slice.
  *
  * This is deliberately a provisional, source-private adapter.  The session owner supplies
- * task/receipt and semantic projection records through this narrow value port; no request JSON,
- * SDK snapshot writer, or legacy materializer state is reconstructed here.  A later session-core
+ * task/receipt and semantic projection records through this narrow value port; no request JSON or
+ * SDK snapshot writer is reconstructed here.  A later session-core
  * port can map the same staged-record/cursor/CAS operations to the production Store lifecycle.
  *
  * The memory implementation retains one immutable byte payload after sealing and decodes one

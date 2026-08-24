@@ -2,84 +2,15 @@
 
 #include <array>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
 #include <variant>
-#include <vector>
 
 #include "materialization_publication_types.hpp"
-#include "materialization_request_binding.hpp"
 
 namespace cxxlens::detail::clang22::materialization
 {
-	class materialization_claim_stream_source;
-	struct materialization_incremental_execution_journal_receipt;
-
-	/**
-	 * Source-private external completeness authority for the production streaming Store ingress.
-	 *
-	 * The typed partition replay source remains the Store input. This separate authority binds the
-	 * Store boundary to the sealed execution journal and the independently validated event-stream
-	 * census before a candidate can be opened or published. Neither pointer is retained after the
-	 * prepublication preparation call.
-	 */
-	struct materialization_store_external_authority
-	{
-		const materialization_claim_stream_source* claim_stream{};
-		const materialization_incremental_execution_journal_receipt* execution_journal{};
-		std::optional<materialization_claim_request_binding> expected_request_binding;
-	};
-
-	/** Fully prepared SDK transaction input. This boundary only consumes Store-ready values. */
-	struct prepared_store_transaction
-	{
-		sdk::snapshot_draft draft;
-		std::vector<sdk::partition_draft> partitions;
-		std::vector<sdk::closure_candidate> closures;
-	};
-
-	/**
-	 * One source-private replay callback used by the streaming Store adapter.
-	 *
-	 * A source must produce a fresh, byte-equivalent partition sequence on every replay and must
-	 * propagate a consumer error without continuing. The callback owns the partition after it
-	 * returns, so an adapter never retains the source's complete partition vector.
-	 */
-	using materialization_store_partition_consumer =
-		std::function<sdk::result<void>(sdk::partition_draft&&)>;
-
-	/**
-	 * Replayable source-private partition boundary for Store preparation.
-	 *
-	 * The first replay derives the exact manifest/index and the second replay stages one moved
-	 * partition at a time. Implementations are expected to be backed by a canonical spool or an
-	 * equivalent replayable source; a one-shot source is rejected by its own replay contract.
-	 */
-	class materialization_store_partition_replay_source
-	{
-	  public:
-		virtual ~materialization_store_partition_replay_source() = default;
-		[[nodiscard]] virtual sdk::result<void>
-		replay(const materialization_store_partition_consumer& consumer) = 0;
-	};
-
-	/**
-	 * Store metadata for the source-private streaming adapter. Unlike prepared_store_transaction,
-	 * this value has no resident partition vector; the replay source supplies each draft.
-	 */
-	struct streaming_prepared_store_transaction
-	{
-		sdk::snapshot_draft draft;
-		std::vector<sdk::closure_candidate> closures;
-		materialization_store_external_authority external_authority;
-	};
-
-	/** Validate the external journal/task census before Store candidate preparation. */
-	[[nodiscard]] sdk::result<void> validate_materialization_store_external_authority(
-		const materialization_store_external_authority& authority);
-
 	/** Exact operation ordering retained without mapping SDK failures to report outcomes. */
 	enum class materialization_store_operation : std::uint8_t
 	{
@@ -256,113 +187,4 @@ namespace cxxlens::detail::clang22::materialization
 		open_sqlite(const std::string& exact_path, sdk::relation_engine engine) = 0;
 	};
 
-	/**
-	 * Move-only prepublication Store state after `stage all -> validate` and before `publish()`.
-	 *
-	 * The observation is always available. `ready_for_publish()` is false when preparation ended
-	 * with a typed prepublication issue. A report layer may construct and validate its bounded
-	 * publication-independent projection while a ready value keeps the unpublished writer alive.
-	 */
-	class materialization_store_preparation
-	{
-	  public:
-		materialization_store_preparation(const materialization_store_preparation&) = delete;
-		materialization_store_preparation&
-		operator=(const materialization_store_preparation&) = delete;
-		materialization_store_preparation(materialization_store_preparation&&) noexcept;
-		materialization_store_preparation& operator=(materialization_store_preparation&&) noexcept;
-		~materialization_store_preparation();
-
-		[[nodiscard]] bool ready_for_publish() const noexcept;
-		[[nodiscard]] const materialization_store_observation& observation() const noexcept;
-
-	  private:
-		struct state;
-		explicit materialization_store_preparation(std::unique_ptr<state> state);
-		std::unique_ptr<state> state_;
-
-		friend materialization_store_preparation
-		prepare_materialization_store(const sdk::relation_engine& engine,
-									  const validated_publication_request& publication,
-									  prepared_store_transaction prepared);
-		friend materialization_store_preparation
-		prepare_materialization_store(const sdk::relation_engine& engine,
-									  const validated_publication_request& publication,
-									  prepared_store_transaction prepared,
-									  materialization_store_opener& opener);
-		friend materialization_store_preparation prepare_materialization_store_streaming(
-			const sdk::relation_engine& engine,
-			const validated_publication_request& publication,
-			streaming_prepared_store_transaction prepared,
-			materialization_store_partition_replay_source& source,
-			materialization_store_opener& opener);
-		friend materialization_store_preparation prepare_materialization_store_streaming(
-			const sdk::relation_engine& engine,
-			const validated_publication_request& publication,
-			streaming_prepared_store_transaction prepared,
-			materialization_store_partition_replay_source& source);
-		friend materialization_store_observation
-		publish_materialization_store(materialization_store_preparation&& prepared);
-	};
-
-	/** Prepare and independently validate one unpublished Store transaction. */
-	[[nodiscard]] materialization_store_preparation
-	prepare_materialization_store(const sdk::relation_engine& engine,
-								  const validated_publication_request& publication,
-								  prepared_store_transaction prepared);
-
-	/** Same prepublication boundary with an injected long-lived opener. */
-	[[nodiscard]] materialization_store_preparation
-	prepare_materialization_store(const sdk::relation_engine& engine,
-								  const validated_publication_request& publication,
-								  prepared_store_transaction prepared,
-								  materialization_store_opener& opener);
-
-	/** Prepare one replayable source without retaining all partition drafts in the transaction. */
-	[[nodiscard]] materialization_store_preparation
-	prepare_materialization_store_streaming(const sdk::relation_engine& engine,
-											const validated_publication_request& publication,
-											streaming_prepared_store_transaction prepared,
-											materialization_store_partition_replay_source& source);
-
-	/** Same streaming boundary with an injected private opener for deterministic failure tests. */
-	[[nodiscard]] materialization_store_preparation
-	prepare_materialization_store_streaming(const sdk::relation_engine& engine,
-											const validated_publication_request& publication,
-											streaming_prepared_store_transaction prepared,
-											materialization_store_partition_replay_source& source,
-											materialization_store_opener& opener);
-
-	/** Cross the irreversible boundary exactly once, then retain success verification or recovery.
-	 */
-	[[nodiscard]] materialization_store_observation
-	publish_materialization_store(materialization_store_preparation&& prepared);
-
-	/** Execute one prepared Store transaction and its fixed-order postcommit verification. */
-	[[nodiscard]] materialization_store_observation
-	execute_materialization_store(const sdk::relation_engine& engine,
-								  const validated_publication_request& publication,
-								  prepared_store_transaction prepared);
-
-	/** Same boundary with an injected private opener for deterministic failure verification. */
-	[[nodiscard]] materialization_store_observation
-	execute_materialization_store(const sdk::relation_engine& engine,
-								  const validated_publication_request& publication,
-								  prepared_store_transaction prepared,
-								  materialization_store_opener& opener);
-
-	/** Execute the source-private replayable Store adapter with the same observation contract. */
-	[[nodiscard]] materialization_store_observation
-	execute_materialization_store_streaming(const sdk::relation_engine& engine,
-											const validated_publication_request& publication,
-											streaming_prepared_store_transaction prepared,
-											materialization_store_partition_replay_source& source);
-
-	/** Same streaming execution boundary with an injected private opener. */
-	[[nodiscard]] materialization_store_observation
-	execute_materialization_store_streaming(const sdk::relation_engine& engine,
-											const validated_publication_request& publication,
-											streaming_prepared_store_transaction prepared,
-											materialization_store_partition_replay_source& source,
-											materialization_store_opener& opener);
 } // namespace cxxlens::detail::clang22::materialization

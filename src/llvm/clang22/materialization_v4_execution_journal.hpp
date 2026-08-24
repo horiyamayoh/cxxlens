@@ -3,7 +3,7 @@
 /** @file materialization_v4_execution_journal.hpp
  *  @brief Source-private task-v4 execution/reuse journal.
  *
- * This header intentionally contains only task-v4 dependencies. The legacy report journal remains
+ * This header intentionally contains only task-v4 dependencies. Report publication remains
  * separate, so a v4 consumer cannot accidentally acquire unrelated response-authority APIs
  * through this boundary.
  */
@@ -55,8 +55,8 @@ namespace cxxlens::detail::clang22::materialization
 	/**
 	 * Source-private journal for the task-v4 execution/reuse decision.
 	 *
-	 * This is deliberately separate from the legacy report journal. It has no legacy request/report
-	 * binding and it does not manufacture a result from counters: finalization compares every
+	 * This is deliberately separate from report publication. It has no request/report binding and
+	 * it does not manufacture a result from counters: finalization compares every
 	 * ordered task receipt and the recomputed incremental digest. Consequently stale, tampered, and
 	 * reordered prior artifacts fail before a provider/store effect is authorized.
 	 */

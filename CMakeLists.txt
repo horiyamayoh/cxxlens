@@ -498,9 +498,9 @@ cxxlens_enable_sanitizers(cxxlens_clang22_materialization_codecs)
 
 # Source-private materialization primitives are split by ownership.  The bounded
 # Store candidate and the v2.2 request validator are consumed by focused product
-# tests and by the legacy safety support below, but neither target is part of
-# the installed materializer or worker production graph. Keeping these sources
-# in their own archives prevents a source-private safety test from accidentally
+# tests and by the independent safety ports below, but neither target is part
+# of the installed materializer or worker production graph. Keeping these
+# sources in their own archives prevents a focused test from accidentally
 # becoming the link-time owner of the v2.2 primitives.
 add_library(cxxlens_clang22_materialization_io_support STATIC EXCLUDE_FROM_ALL
             src/llvm/clang22/materialization_io.cpp)
@@ -516,9 +516,9 @@ cxxlens_set_project_warnings(cxxlens_clang22_materialization_io_support)
 cxxlens_enable_sanitizers(cxxlens_clang22_materialization_io_support)
 
 # Rooted SQLite VFS is a product safety primitive, not a dependency of the
-# retained legacy materialization test graph. Keep its implementation in a
-# source-private archive so focused VFS tests and the legacy prior-artifact path
-# share one implementation without pulling unrelated request/task code.
+# installed materializer. Keep its implementation in a source-private archive
+# so focused VFS tests and prior-artifact reuse share one implementation without
+# pulling unrelated request/task code.
 add_library(cxxlens_clang22_materializer_rooted_vfs_support STATIC
             EXCLUDE_FROM_ALL src/llvm/clang22/materialization_rooted_vfs.cpp)
 target_link_libraries(
@@ -536,7 +536,7 @@ cxxlens_enable_sanitizers(cxxlens_clang22_materializer_rooted_vfs_support)
 
 # Store outcome classification is likewise a source-private product boundary. It
 # is consumed by its direct contract test and can be connected by the v4
-# publication path without inheriting the legacy safety archive.
+# publication path without importing unrelated safety implementations.
 add_library(cxxlens_clang22_materializer_store_outcome_support STATIC
             EXCLUDE_FROM_ALL src/llvm/clang22/materialization_store_outcome.cpp)
 target_link_libraries(
@@ -550,8 +550,8 @@ target_compile_features(cxxlens_clang22_materializer_store_outcome_support
 cxxlens_set_project_warnings(cxxlens_clang22_materializer_store_outcome_support)
 cxxlens_enable_sanitizers(cxxlens_clang22_materializer_store_outcome_support)
 
-# Prior-artifact sidecar I/O is shared by the retained legacy safety suite and
-# task-v4 reuse without making either implementation own the other.
+# Prior-artifact sidecar I/O is shared by the focused safety suite and task-v4
+# reuse without making either implementation own the other.
 add_library(
   cxxlens_clang22_materializer_prior_artifact_storage_support STATIC
   EXCLUDE_FROM_ALL
@@ -573,8 +573,8 @@ cxxlens_enable_sanitizers(
   cxxlens_clang22_materializer_prior_artifact_storage_support)
 
 # Task-v4 journal and prior-artifact reuse form their own source-private product
-# boundary. Focused v4 consumers must not regain the retained request-v2.1 /
-# task-v3 safety archive merely to validate or reuse an exact v4 artifact.
+# boundary. Focused v4 consumers must not pull obsolete request or task
+# implementations merely to validate or reuse an exact v4 artifact.
 add_library(
   cxxlens_clang22_materializer_v4_reuse_support STATIC EXCLUDE_FROM_ALL
   src/llvm/clang22/materialization_v4_execution_journal.cpp
@@ -593,7 +593,7 @@ cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_reuse_support)
 cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_reuse_support)
 
 # Installed occurrence identity is an artifact-integrity contract. Its
-# implementation is independent of the legacy materializer pipeline and is
+# implementation is independent of the materializer admission path and is
 # therefore kept in its own source-private archive for the focused test and
 # future installed-consumer binding.
 add_library(cxxlens_clang22_materializer_occurrence_support STATIC
@@ -646,8 +646,8 @@ cxxlens_enable_sanitizers(cxxlens_clang22_materializer_bounded_support)
 
 # The task-v4 claim boundary is source-private until the production Store
 # handoff is connected.  It is nevertheless built as a first-class typed
-# boundary so the v4 authority/receipt contract cannot depend on the legacy
-# request or task graph.
+# boundary so the v4 authority/receipt contract cannot depend on obsolete
+# request or task implementations.
 add_library(cxxlens_clang22_materializer_v4_claims STATIC EXCLUDE_FROM_ALL
             src/llvm/clang22/materialization_v4_claim_binding.cpp)
 target_link_libraries(
@@ -678,7 +678,7 @@ cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_ingress)
 cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_ingress)
 
 # Typed task-v4 replay source for the Store handoff.  It consumes only sealed v4
-# translations plus explicit output authority; no legacy request/task graph or
+# translations plus explicit output authority; no obsolete request/task graph or
 # inferred publication metadata is permitted at this boundary.
 add_library(cxxlens_clang22_materializer_v4_store_source STATIC EXCLUDE_FROM_ALL
             src/llvm/clang22/materialization_v4_store_source.cpp)
@@ -694,9 +694,8 @@ cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_store_source)
 cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_store_source)
 
 # Complete task-v4 orchestration and report sealing.  This source-private
-# boundary owns the admission/worker/claim/Store/report ordering; it is kept
-# separate from the legacy materializer graph and is explicitly exercised by
-# the coordinator contract tests.
+# boundary owns the admission/worker/claim/Store/report ordering and is
+# explicitly exercised by the coordinator contract tests.
 add_library(
   cxxlens_clang22_materializer_v4_coordinator STATIC EXCLUDE_FROM_ALL
   src/llvm/clang22/materialization_report2_2_builder.cpp
@@ -731,8 +730,8 @@ if(CXXLENS_BUILD_SHARED)
 endif()
 
 # Request-v2.2 admission is kept in a standalone source-private boundary.  The
-# legacy pipeline remains available only to the retained safety implementation;
-# v2.2 tests and consumers do not pull that graph merely to issue a task token.
+# v2.2 tests and consumers do not pull unrelated implementation merely to issue
+# a task token.
 add_library(cxxlens_clang22_materializer_v2_2_pipeline_support STATIC
             EXCLUDE_FROM_ALL src/llvm/clang22/materialization_pipeline_v2_2.cpp)
 target_link_libraries(
@@ -746,35 +745,6 @@ target_compile_features(cxxlens_clang22_materializer_v2_2_pipeline_support
                         PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens_clang22_materializer_v2_2_pipeline_support)
 cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v2_2_pipeline_support)
-
-if(BUILD_TESTING)
-  # The request/task-v3 implementation is retained only for the source-private
-  # safety path. Keep its complete translation-unit closure in a separately
-  # owned archive so request-v2.2, task-v4, and the installed worker cannot gain
-  # a transitive dependency on the old graph. This is a dependency boundary, not
-  # a compatibility facade: the legacy API remains available only to the safety
-  # target until its consumers are migrated to v4.
-  add_library(
-    cxxlens_clang22_materializer_legacy_request_support STATIC EXCLUDE_FROM_ALL
-    src/llvm/clang22/materialization_request.cpp
-    src/llvm/clang22/materialization_request_identity.cpp
-    src/llvm/clang22/materialization_request_stream.cpp
-    src/llvm/clang22/materialization_request_v2_1.cpp
-    src/llvm/clang22/provider_task_v3.cpp
-    src/llvm/clang22/materialization_task_spool.cpp)
-  target_link_libraries(
-    cxxlens_clang22_materializer_legacy_request_support
-    PUBLIC cxxlens::base
-    PRIVATE cxxlens::provider_sdk cxxlens_clang22_materialization_codecs
-            cxxlens_clang22_materialization_io_support)
-  target_include_directories(cxxlens_clang22_materializer_legacy_request_support
-                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-  target_compile_features(cxxlens_clang22_materializer_legacy_request_support
-                          PRIVATE cxx_std_23)
-  cxxlens_set_project_warnings(
-    cxxlens_clang22_materializer_legacy_request_support)
-  cxxlens_enable_sanitizers(cxxlens_clang22_materializer_legacy_request_support)
-endif()
 
 # Worker/parser implementation stays out of the installed Clang 22 SDK DSO. It
 # is linked only by provider-owned executables and source-private tests.
@@ -831,7 +801,7 @@ cxxlens_set_project_warnings(cxxlens_clang22_worker_v4_claim_bridge)
 cxxlens_enable_sanitizers(cxxlens_clang22_worker_v4_claim_bridge)
 
 # Source-private typed Store v6 ingress. Keep the production binding separate
-# from the installed v2.2 boundary and the retained legacy safety archive.
+# from the installed v2.2 boundary and the focused safety ports.
 add_library(
   cxxlens_clang22_materializer_store_v6_typed_ingress STATIC EXCLUDE_FROM_ALL
   src/llvm/clang22/materialization_store_v6_typed_ingress.cpp)
@@ -856,58 +826,10 @@ target_compile_features(cxxlens_clang22_materializer_store_v6_typed_ingress
 cxxlens_set_project_warnings(cxxlens_clang22_materializer_store_v6_typed_ingress)
 cxxlens_enable_sanitizers(cxxlens_clang22_materializer_store_v6_typed_ingress)
 
-if(BUILD_TESTING)
-  # Source-private safety support for retained Store/SQLite/receipt tests. This
-  # target also does not exist in production or install configurations.
-  add_library(
-    cxxlens_clang22_materializer_safety_support STATIC EXCLUDE_FROM_ALL
-    src/llvm/clang22/materialization_claims.cpp
-    src/llvm/clang22/materialization_seal.cpp
-    src/llvm/clang22/materialization_partition_event_stream.cpp
-    src/llvm/clang22/materialization_incremental_coordinator.cpp
-    src/llvm/clang22/materialization_incremental_receipt.cpp
-    src/llvm/clang22/materialization_incremental_ingress.cpp
-    src/llvm/clang22/materialization_prior_artifact.cpp
-    src/llvm/clang22/materialization_claim_stream.cpp
-    src/llvm/clang22/materialization_bounded_claim_source.cpp
-    src/llvm/clang22/materialization_store.cpp
-    src/llvm/clang22/materialization_execution_journal.cpp
-    src/llvm/clang22/materialization_report.cpp
-    src/llvm/clang22/materialization_public_report.cpp
-    src/llvm/clang22/materialization_pipeline.cpp)
-  target_link_libraries(
-    cxxlens_clang22_materializer_safety_support
-    PUBLIC cxxlens::base
-    PRIVATE cxxlens::kernel
-            cxxlens::provider_sdk
-            cxxlens_clang22_materialization_codecs
-            cxxlens_clang22_materialization_io_support
-            cxxlens_clang22_materialization_request_v2_2_support
-            cxxlens_clang22_materializer_bounded_support
-            cxxlens_clang22_materializer_rooted_vfs_support
-            cxxlens_clang22_materializer_prior_artifact_storage_support
-            cxxlens_clang22_materializer_legacy_request_support)
-  if(CXXLENS_BUILD_SHARED)
-    target_sources(
-      cxxlens_clang22_materializer_safety_support
-      PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
-              "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
-    target_link_libraries(cxxlens_clang22_materializer_safety_support
-                          PRIVATE cxxlens_protocol_v2)
-  endif()
-  target_include_directories(cxxlens_clang22_materializer_safety_support
-                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-  target_compile_features(cxxlens_clang22_materializer_safety_support
-                          PRIVATE cxx_std_23)
-  cxxlens_set_project_warnings(cxxlens_clang22_materializer_safety_support)
-  cxxlens_enable_sanitizers(cxxlens_clang22_materializer_safety_support)
-endif()
-
 # The installed materializer boundary deliberately links only the v2.2 ingress
 # and metadata validator.  Keeping the test-support core out of the production
-# graph prevents dormant compatibility implementations from entering the shipped
-# executable while preserving direct tests for the retained product safety
-# primitives.
+# graph prevents dormant implementations from entering the shipped executable
+# while preserving direct tests for the product safety primitives.
 add_library(
   cxxlens_clang22_materializer_ingress STATIC
   src/llvm/clang22/materialization_io.cpp

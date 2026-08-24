@@ -26,7 +26,7 @@
 
 #include <cxxlens/sdk/store.hpp>
 
-#include "materialization_claims.hpp"
+#include "materialization_semantic_types.hpp"
 #include "materialization_request_v2_2.hpp"
 #include "materialization_v4_execution_journal.hpp"
 #include "materialization_v4_store_source.hpp"

@@ -511,7 +511,7 @@ namespace cxxlens::detail::clang22
 		if (auto valid = require_exact_object(**closure_ref, closure_fields, "source_closure");
 			!valid)
 			return sdk::unexpected(std::move(valid.error()));
-		auto legacy_input_digest =
+		auto task_input_digest =
 			expected_string(**open, "task_input_digest", "open_task.task_input_digest");
 		auto invocation_digest = expected_string(
 			**open, "normalized_invocation_digest", "open_task.normalized_invocation_digest");
@@ -523,7 +523,7 @@ namespace cxxlens::detail::clang22
 		auto closure_digest = expected_string(**closure_ref, "digest", "source_closure.digest");
 		auto manifest_digest =
 			expected_string(**closure_ref, "manifest_digest", "source_closure.manifest_digest");
-		if (!legacy_input_digest || !invocation_digest || !toolchain_digest ||
+		if (!task_input_digest || !invocation_digest || !toolchain_digest ||
 			!environment_digest || !closure_id || !closure_digest || !manifest_digest)
 			return sdk::unexpected(failure("source-closure.task-v4-invalid", "authority"));
 		if (*closure_id != closure.snapshot_id || *closure_digest != closure.closure_digest)
@@ -535,7 +535,7 @@ namespace cxxlens::detail::clang22
 		source_closure_task_v4_input input;
 		input.base_task_index = *base_index;
 		input.base_provider_task_id = std::move(*base_provider);
-		input.task_input_digest = std::move(*legacy_input_digest);
+		input.task_input_digest = std::move(*task_input_digest);
 		input.normalized_invocation_digest = std::move(*invocation_digest);
 		input.toolchain_digest = std::move(*toolchain_digest);
 		input.environment_digest = std::move(*environment_digest);

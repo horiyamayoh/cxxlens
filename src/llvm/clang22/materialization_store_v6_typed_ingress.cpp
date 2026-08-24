@@ -2085,7 +2085,7 @@ namespace cxxlens::detail::clang22::materialization
 {
 	namespace
 	{
-		[[nodiscard]] std::string legacy_row_digest(const sdk::detached_row& value)
+		[[nodiscard]] std::string canonical_row_digest(const sdk::detached_row& value)
 		{
 			const auto form = value.canonical_form();
 			return sdk::content_digest(std::as_bytes(std::span{form.data(), form.size()}));
@@ -2380,7 +2380,7 @@ namespace cxxlens::detail::clang22::materialization
 				if (!expected || *expected != value.association_id ||
 					!association_ids.insert(value.association_id).second ||
 					found == claims_by_ref.end() ||
-					legacy_row_digest(worker_row) != value.sealed_row_digest ||
+					canonical_row_digest(worker_row) != value.sealed_row_digest ||
 					value.originating_task.provider_task_id != identity.provider_task_id ||
 					value.originating_task.task_input_digest != identity.task_input_digest ||
 					value.originating_task.selected_catalog_compile_unit_id !=

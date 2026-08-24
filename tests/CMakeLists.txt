@@ -1031,19 +1031,6 @@ set_tests_properties(
   adapter.clang22-claim-batch-differential
   PROPERTIES LABELS "adapter;provider;clang22;claim;differential;df0200")
 
-cxxlens_add_test_executable(cxxlens-clang22-materialization-store
-                            adapter/clang22/materialization_store_test.cpp)
-target_link_libraries(
-  cxxlens-clang22-materialization-store
-  PRIVATE cxxlens_clang22_materializer_safety_support "${CMAKE_DL_LIBS}")
-add_test(NAME adapter.clang22-materialization-store
-         COMMAND cxxlens-clang22-materialization-store)
-set_tests_properties(
-  adapter.clang22-materialization-store
-  PROPERTIES LABELS
-             "adapter;provider;clang22;materialization;store;transaction;sqlite"
-)
-
 cxxlens_add_test_executable(
   cxxlens-clang22-materialization-store-candidate
   adapter/clang22/materialization_store_candidate_test.cpp)
@@ -1987,7 +1974,6 @@ add_dependencies(
   cxxlens-clang22-materialization-json
   cxxlens-clang22-materialization-identity
   cxxlens-clang22-materialization-io
-  cxxlens-clang22-materialization-store
   cxxlens-clang22-materialization-store-candidate
   cxxlens-clang22-materialization-store-projection
   cxxlens-clang22-materialization-store-candidate-bridge

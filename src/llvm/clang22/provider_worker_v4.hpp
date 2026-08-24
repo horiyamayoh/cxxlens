@@ -68,7 +68,7 @@ namespace cxxlens::detail::clang22
 	 * `metadata` is the already decoded canonical task-v4 payload.  `closure` is supplied by the
 	 * separately authenticated source-closure transport and is checked against the metadata
 	 * before Clang is entered.  Compiler arguments and qualified roots are explicit dispatcher
-	 * inputs; there is no fallback to a host working directory, environment, or legacy decoder.
+	 * inputs; there is no fallback to a host working directory, environment, or obsolete decoder.
 	 */
 	struct provider_worker_v4_input
 	{
