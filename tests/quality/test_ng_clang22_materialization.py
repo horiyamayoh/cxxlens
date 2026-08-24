@@ -50,6 +50,57 @@ class MaterializationProtocol2Tests(unittest.TestCase):
         self.assertEqual(worker["protocol_major"]["const"], 2)
         self.assertEqual(worker["protocol_minor"]["const"], 0)
 
+    def test_installed_ingress_contract_declares_all_process_binding_authority(self) -> None:
+        schema_paths = (
+            ROOT / materialization.REQUEST_SCHEMA,
+            ROOT / "schemas" / "cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml",
+        )
+        expected_environment = {
+            "session_id": "CXXLENS_PROVIDER_SOURCE_CLOSURE_SESSION_ID",
+            "task_id": "CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_ID",
+            "task_v4_digest": "CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_V4_DIGEST",
+            "source_closure_id": "CXXLENS_PROVIDER_SOURCE_CLOSURE_ID",
+            "source_closure_digest": "CXXLENS_PROVIDER_SOURCE_CLOSURE_DIGEST",
+            "manifest_digest": "CXXLENS_PROVIDER_SOURCE_CLOSURE_MANIFEST_DIGEST",
+            "transfer_digest": "CXXLENS_PROVIDER_SOURCE_CLOSURE_TRANSFER_DIGEST",
+            "stream_id": "CXXLENS_PROVIDER_SOURCE_CLOSURE_STREAM_ID",
+            "first_sequence": "CXXLENS_PROVIDER_SOURCE_CLOSURE_FIRST_SEQUENCE",
+            "binding_digest": "CXXLENS_PROVIDER_SOURCE_CLOSURE_BINDING_DIGEST",
+        }
+        for schema_path in schema_paths:
+            document = yaml.safe_load(schema_path.read_text(encoding="utf-8"))
+            ingress = document["x-cxxlens-installed-ingress-contract"]
+            self.assertEqual(
+                ingress["mode_environment"], "CXXLENS_PROVIDER_INGRESS_MODE"
+            )
+            self.assertEqual(ingress["mode"], "task-v4-source-closure-v2")
+            self.assertEqual(ingress["fd_roles"]["read"]["environment"],
+                             "CXXLENS_PROVIDER_SOURCE_CLOSURE_READ_FD")
+            self.assertEqual(ingress["fd_roles"]["write"]["environment"],
+                             "CXXLENS_PROVIDER_SOURCE_CLOSURE_WRITE_FD")
+            self.assertEqual(ingress["binding_environment"], expected_environment)
+            self.assertEqual(
+                ingress["binding_environment_encoding"]["stream_id"],
+                "uint64-canonical-decimal",
+            )
+            self.assertEqual(
+                ingress["binding_environment_encoding"]["first_sequence"],
+                {"encoding": "uint64-canonical-decimal", "exact": 0},
+            )
+            self.assertEqual(ingress["fallback"], "forbidden")
+            self.assertEqual(ingress["caller_override"], "forbidden")
+            self.assertEqual(
+                ingress["id_binding"],
+                "exact-value-cross-check; substring-reconstruction-forbidden",
+            )
+            self.assertEqual(
+                document["x-cxxlens-identity-domains"],
+                {
+                    "inherited_request_v2": "cxxlens.clang22-materialization-request.v2",
+                    "base_claim_row_v1": "cxxlens.base-claim-row.v1",
+                },
+            )
+
     def test_task_v4_schema_has_metadata_only_source_binding(self) -> None:
         task = yaml.safe_load(
             (ROOT / materialization.TASK_V4_SCHEMA).read_text(encoding="utf-8")
