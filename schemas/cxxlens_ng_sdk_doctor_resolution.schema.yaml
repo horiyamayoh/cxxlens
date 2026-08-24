@@ -2,6 +2,7 @@ $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://cxxlens.dev/schemas/cxxlens_ng_sdk_doctor_resolution.schema.yaml
 title: cxxlens SDK doctor product capability resolution
 type: object
+maxProperties: 128
 additionalProperties: false
 required:
   - schema
@@ -24,6 +25,7 @@ properties:
   question: {$ref: '#/$defs/nonempty_string'}
   result:
     type: object
+    maxProperties: 128
     additionalProperties: false
     required: [state, reason_code, explanation, guarantee]
     properties:
@@ -34,8 +36,10 @@ properties:
   capability_path:
     type: array
     minItems: 1
+    maxItems: 128
     items:
       type: object
+      maxProperties: 128
       additionalProperties: false
       required: [id, kind, requires, state, reason_code]
       properties:
@@ -43,14 +47,17 @@ properties:
         kind: {enum: [input, provider, relation, query, store, recipe]}
         requires:
           type: array
+          maxItems: 128
           uniqueItems: true
           items: {$ref: '#/$defs/id'}
         state: {$ref: '#/$defs/state'}
         reason_code: {$ref: '#/$defs/reason_code'}
   missing:
     type: array
+    maxItems: 128
     items:
       type: object
+      maxProperties: 128
       additionalProperties: false
       required: [capability_id, reason_code, explanation]
       properties:
@@ -59,20 +66,24 @@ properties:
         explanation: {$ref: '#/$defs/nonempty_string'}
   completion_plan:
     type: array
+    maxItems: 128
     items:
       type: object
+      maxProperties: 128
       additionalProperties: false
       required: [id, requires, action, unlocks]
       properties:
         id: {$ref: '#/$defs/id'}
         requires:
           type: array
+          maxItems: 128
           uniqueItems: true
           items: {$ref: '#/$defs/id'}
         action: {$ref: '#/$defs/nonempty_string'}
         unlocks: {$ref: '#/$defs/id'}
   preserved_semantics:
     type: object
+    maxProperties: 128
     additionalProperties: false
     required:
       - closure
@@ -88,6 +99,7 @@ properties:
       closure: {$ref: '#/$defs/string_list'}
       conflict:
         type: array
+        maxItems: 128
         uniqueItems: true
         items: {$ref: '#/$defs/conflict'}
       coverage: {$ref: '#/$defs/string_list'}
@@ -120,6 +132,7 @@ allOf:
 $defs:
   catalog_binding:
     type: object
+    maxProperties: 128
     additionalProperties: false
     required: [id, document_version]
     properties:
@@ -127,24 +140,30 @@ $defs:
       document_version: {const: 1.0.0}
   id:
     type: string
+    maxLength: 512
     pattern: '^[a-z][a-z0-9_.-]+$'
   candidate_identity:
     type: string
+    maxLength: 512
     pattern: '^semantic-v2:sha256:[0-9a-f]{64}$'
   nonempty_string:
     type: string
     minLength: 1
+    maxLength: 512
   string_list:
     type: array
+    maxItems: 128
     uniqueItems: true
     items: {$ref: '#/$defs/nonempty_string'}
   state:
     enum: [proved, disproved, unknown, partial, conflicting]
   reason_code:
     type: string
+    maxLength: 512
     pattern: '^doctor\.[a-z0-9-]+$'
   conflict:
     type: object
+    maxProperties: 128
     additionalProperties: false
     required: [capability_id, candidate_ids, reason_code]
     properties:
@@ -152,6 +171,7 @@ $defs:
       candidate_ids:
         type: array
         minItems: 2
+        maxItems: 128
         uniqueItems: true
         items: {$ref: '#/$defs/candidate_identity'}
       reason_code: {const: doctor.conflicting-capability}

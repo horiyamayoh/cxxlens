@@ -16,6 +16,8 @@ import jsonschema
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+DOCTOR_MAX_TEXT_LENGTH = 512
+DOCTOR_MAX_COLLECTION_ITEMS = 128
 sys.path.insert(0, str(ROOT / "tools" / "quality"))
 
 from check_ng_sdk_contract import (  # noqa: E402
@@ -122,6 +124,66 @@ class NgSdkContractTest(unittest.TestCase):
                 "provider_candidates": [candidate],
                 "store": {"backend": "memory", "format": "cxxlens.snapshot.v3"},
             },
+        }
+
+    @staticmethod
+    def doctor_proved_resolution() -> dict[str, object]:
+        return {
+            "schema": "cxxlens.sdk-doctor-resolution.v2",
+            "document_version": "2.0.0",
+            "catalog_binding": {
+                "id": "cxxlens.sdk-doctor-catalog.v1",
+                "document_version": "1.0.0",
+            },
+            "use_case_id": "cxxlens.clang22.materialize-and-query.v1",
+            "consumer": "semantic-query-consumer",
+            "question": "Can this project be materialized?",
+            "result": {
+                "state": "proved",
+                "reason_code": "doctor.none",
+                "explanation": "Every capability is available.",
+                "guarantee": "The declared product context is sufficient.",
+            },
+            "capability_path": [
+                {
+                    "id": "input.project-catalog.v1",
+                    "kind": "input",
+                    "requires": [],
+                    "state": "proved",
+                    "reason_code": "doctor.none",
+                }
+            ],
+            "missing": [],
+            "completion_plan": [],
+            "preserved_semantics": {
+                "closure": ["dependency-graph-closed"],
+                "conflict": [],
+                "coverage": ["input.project-catalog.v1"],
+                "differential_disagreement": [],
+                "guarantee": ["declared-context-only"],
+                "logical_explain": ["input.project-catalog.v1"],
+                "physical_explain": [],
+                "provenance": ["cxxlens.sdk-doctor-catalog.v1"],
+                "unresolved": [],
+            },
+        }
+
+    @staticmethod
+    def doctor_relation_presence() -> dict[str, object]:
+        return {
+            "schema": "cxxlens.sdk-doctor-relation-presence.v2",
+            "document_version": "2.0.0",
+            "catalog_binding": {
+                "id": "cxxlens.sdk-doctor-catalog.v1",
+                "document_version": "1.0.0",
+            },
+            "mode": "relation-presence",
+            "requested": 1,
+            "missing": 0,
+            "state": "proved",
+            "components": [
+                {"id": "cc.entity.v1", "state": "proved", "reason_code": "none"}
+            ],
         }
 
     def test_catalog_and_ordinary_boundary_are_valid(self) -> None:
@@ -324,6 +386,217 @@ class NgSdkContractTest(unittest.TestCase):
             jsonschema.Draft202012Validator(self.doctor_catalog_schema).validate(
                 non_product
             )
+
+    def test_doctor_schemas_declare_runtime_resource_bounds(self) -> None:
+        schemas = {
+            "catalog": self.doctor_catalog_schema,
+            "project": self.doctor_project_schema,
+            "resolution": self.doctor_resolution_schema,
+            "relation-presence": self.doctor_relation_presence_schema,
+        }
+
+        def inspect(value: object, schema_name: str, path: str) -> None:
+            if isinstance(value, dict):
+                value_type = value.get("type")
+                with self.subTest(schema=schema_name, path=path):
+                    if value_type == "array":
+                        self.assertEqual(
+                            value.get("maxItems"), DOCTOR_MAX_COLLECTION_ITEMS
+                        )
+                    elif value_type == "object":
+                        self.assertEqual(
+                            value.get("maxProperties"),
+                            DOCTOR_MAX_COLLECTION_ITEMS,
+                        )
+                        self.assertIs(value.get("additionalProperties"), False)
+                    elif value_type == "string":
+                        if "maxLength" in value:
+                            self.assertLessEqual(
+                                value["maxLength"], DOCTOR_MAX_TEXT_LENGTH
+                            )
+                        elif isinstance(value.get("const"), str):
+                            self.assertLessEqual(
+                                len(value["const"]), DOCTOR_MAX_TEXT_LENGTH
+                            )
+                        else:
+                            enum_values = value.get("enum")
+                            self.assertIsInstance(enum_values, list)
+                            self.assertTrue(
+                                enum_values
+                                and all(
+                                    isinstance(item, str)
+                                    and len(item) <= DOCTOR_MAX_TEXT_LENGTH
+                                    for item in enum_values
+                                )
+                            )
+                for key, child in value.items():
+                    inspect(child, schema_name, f"{path}/{key}")
+            elif isinstance(value, list):
+                for index, child in enumerate(value):
+                    inspect(child, schema_name, f"{path}/{index}")
+
+        for schema_name, schema in schemas.items():
+            inspect(schema, schema_name, "$")
+
+    def test_doctor_project_schema_enforces_runtime_resource_boundaries(self) -> None:
+        validator = jsonschema.Draft202012Validator(self.doctor_project_schema)
+
+        maximum_text = self.doctor_project()
+        prefix = "project://"
+        maximum_text["project"]["logical_root"] = prefix + "x" * (
+            DOCTOR_MAX_TEXT_LENGTH - len(prefix)
+        )
+        validator.validate(maximum_text)
+        too_much_text = copy.deepcopy(maximum_text)
+        too_much_text["project"]["logical_root"] += "x"
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(too_much_text)
+
+        maximum_candidates = self.doctor_project()
+        candidate_template = maximum_candidates["project"]["provider_candidates"][0]
+        maximum_candidates["project"]["provider_candidates"] = []
+        for index in range(DOCTOR_MAX_COLLECTION_ITEMS):
+            candidate = copy.deepcopy(candidate_template)
+            candidate["candidate_id"] = (
+                "semantic-v2:sha256:" + f"{index:064x}"
+            )
+            maximum_candidates["project"]["provider_candidates"].append(candidate)
+        validator.validate(maximum_candidates)
+        too_many_candidates = copy.deepcopy(maximum_candidates)
+        extra_candidate = copy.deepcopy(candidate_template)
+        extra_candidate["candidate_id"] = (
+            "semantic-v2:sha256:"
+            + f"{DOCTOR_MAX_COLLECTION_ITEMS:064x}"
+        )
+        too_many_candidates["project"]["provider_candidates"].append(
+            extra_candidate
+        )
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(too_many_candidates)
+
+        maximum_features = self.doctor_project()
+        maximum_features["project"]["provider_candidates"][0]["features"] = [
+            f"feature.{index}" for index in range(DOCTOR_MAX_COLLECTION_ITEMS)
+        ]
+        validator.validate(maximum_features)
+        too_many_features = copy.deepcopy(maximum_features)
+        too_many_features["project"]["provider_candidates"][0]["features"].append(
+            f"feature.{DOCTOR_MAX_COLLECTION_ITEMS}"
+        )
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(too_many_features)
+
+    def test_doctor_catalog_schema_enforces_runtime_resource_boundaries(self) -> None:
+        validator = jsonschema.Draft202012Validator(self.doctor_catalog_schema)
+
+        maximum_question = copy.deepcopy(self.doctor_catalog)
+        maximum_question["use_cases"][0]["question"] = (
+            "x" * DOCTOR_MAX_TEXT_LENGTH
+        )
+        validator.validate(maximum_question)
+        too_much_question = copy.deepcopy(maximum_question)
+        too_much_question["use_cases"][0]["question"] += "x"
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(too_much_question)
+
+        maximum_use_cases = copy.deepcopy(self.doctor_catalog)
+        use_case_template = maximum_use_cases["use_cases"][0]
+        maximum_use_cases["use_cases"] = []
+        for index in range(DOCTOR_MAX_COLLECTION_ITEMS):
+            use_case = copy.deepcopy(use_case_template)
+            use_case["id"] = f"use.case.{index}"
+            maximum_use_cases["use_cases"].append(use_case)
+        validator.validate(maximum_use_cases)
+        too_many_use_cases = copy.deepcopy(maximum_use_cases)
+        extra_use_case = copy.deepcopy(use_case_template)
+        extra_use_case["id"] = f"use.case.{DOCTOR_MAX_COLLECTION_ITEMS}"
+        too_many_use_cases["use_cases"].append(extra_use_case)
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(too_many_use_cases)
+
+    def test_doctor_output_schemas_enforce_runtime_resource_boundaries(self) -> None:
+        resolution_validator = jsonschema.Draft202012Validator(
+            self.doctor_resolution_schema
+        )
+        maximum_resolution = self.doctor_proved_resolution()
+        maximum_resolution["question"] = "x" * DOCTOR_MAX_TEXT_LENGTH
+        maximum_resolution["capability_path"] = [
+            {
+                "id": f"capability.{index}",
+                "kind": "input",
+                "requires": [],
+                "state": "proved",
+                "reason_code": "doctor.none",
+            }
+            for index in range(DOCTOR_MAX_COLLECTION_ITEMS)
+        ]
+        maximum_resolution["preserved_semantics"]["coverage"] = [
+            f"capability.{index}" for index in range(DOCTOR_MAX_COLLECTION_ITEMS)
+        ]
+        resolution_validator.validate(maximum_resolution)
+
+        too_much_resolution_text = copy.deepcopy(maximum_resolution)
+        too_much_resolution_text["question"] += "x"
+        with self.assertRaises(jsonschema.ValidationError):
+            resolution_validator.validate(too_much_resolution_text)
+
+        too_many_capabilities = copy.deepcopy(maximum_resolution)
+        too_many_capabilities["capability_path"].append(
+            {
+                "id": f"capability.{DOCTOR_MAX_COLLECTION_ITEMS}",
+                "kind": "input",
+                "requires": [],
+                "state": "proved",
+                "reason_code": "doctor.none",
+            }
+        )
+        with self.assertRaises(jsonschema.ValidationError):
+            resolution_validator.validate(too_many_capabilities)
+
+        too_much_coverage = copy.deepcopy(maximum_resolution)
+        too_much_coverage["preserved_semantics"]["coverage"].append(
+            f"capability.{DOCTOR_MAX_COLLECTION_ITEMS}"
+        )
+        with self.assertRaises(jsonschema.ValidationError):
+            resolution_validator.validate(too_much_coverage)
+
+        relation_validator = jsonschema.Draft202012Validator(
+            self.doctor_relation_presence_schema
+        )
+        maximum_relations = self.doctor_relation_presence()
+        maximum_relations["requested"] = DOCTOR_MAX_COLLECTION_ITEMS
+        maximum_relations["components"] = [
+            {
+                "id": f"cc.entity_{index}.v1",
+                "state": "proved",
+                "reason_code": "none",
+            }
+            for index in range(DOCTOR_MAX_COLLECTION_ITEMS)
+        ]
+        relation_validator.validate(maximum_relations)
+
+        too_many_relation_components = copy.deepcopy(maximum_relations)
+        too_many_relation_components["components"].append(
+            {
+                "id": f"cc.entity_{DOCTOR_MAX_COLLECTION_ITEMS}.v1",
+                "state": "proved",
+                "reason_code": "none",
+            }
+        )
+        with self.assertRaises(jsonschema.ValidationError):
+            relation_validator.validate(too_many_relation_components)
+
+        too_many_requested_relations = copy.deepcopy(maximum_relations)
+        too_many_requested_relations["requested"] = (
+            DOCTOR_MAX_COLLECTION_ITEMS + 1
+        )
+        with self.assertRaises(jsonschema.ValidationError):
+            relation_validator.validate(too_many_requested_relations)
+
+        too_many_missing_relations = copy.deepcopy(maximum_relations)
+        too_many_missing_relations["missing"] = DOCTOR_MAX_COLLECTION_ITEMS + 1
+        with self.assertRaises(jsonschema.ValidationError):
+            relation_validator.validate(too_many_missing_relations)
 
     def test_doctor_project_accepts_zero_or_more_typed_provider_candidates(self) -> None:
         validator = jsonschema.Draft202012Validator(self.doctor_project_schema)

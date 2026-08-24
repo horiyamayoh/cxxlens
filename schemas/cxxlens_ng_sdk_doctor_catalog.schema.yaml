@@ -2,6 +2,7 @@ $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://cxxlens.dev/schemas/cxxlens_ng_sdk_doctor_catalog.schema.yaml
 title: cxxlens SDK doctor product capability catalog
 type: object
+maxProperties: 128
 additionalProperties: false
 required:
   - schema
@@ -17,9 +18,11 @@ properties:
   commands:
     type: array
     minItems: 1
+    maxItems: 128
     uniqueItems: true
     items:
       type: object
+      maxProperties: 128
       additionalProperties: false
       required: [id, consumer, output_schema, formats, exit_codes]
       properties:
@@ -29,10 +32,12 @@ properties:
         formats:
           type: array
           minItems: 1
+          maxItems: 128
           uniqueItems: true
           items: {enum: [json, markdown]}
         exit_codes:
           type: object
+          maxProperties: 128
           additionalProperties: false
           required: [proved, not_proved, invalid_request]
           properties:
@@ -42,9 +47,11 @@ properties:
   use_cases:
     type: array
     minItems: 1
+    maxItems: 128
     uniqueItems: true
     items:
       type: object
+      maxProperties: 128
       additionalProperties: false
       required: [id, consumer, question, capability_path]
       properties:
@@ -54,14 +61,17 @@ properties:
         capability_path:
           type: array
           minItems: 1
+          maxItems: 128
           uniqueItems: true
           items: {$ref: '#/$defs/id'}
   capabilities:
     type: array
     minItems: 1
+    maxItems: 128
     uniqueItems: true
     items:
       type: object
+      maxProperties: 128
       additionalProperties: false
       required: [id, kind, requires, consumers, completion_action]
       properties:
@@ -69,20 +79,24 @@ properties:
         kind: {enum: [input, provider, relation, query, store, recipe]}
         requires:
           type: array
+          maxItems: 128
           uniqueItems: true
           items: {$ref: '#/$defs/id'}
         consumers:
           type: array
           minItems: 1
+          maxItems: 128
           uniqueItems: true
           items: {$ref: '#/$defs/id'}
         completion_action: {$ref: '#/$defs/nonempty_string'}
         relation_ids:
           type: array
+          maxItems: 128
           uniqueItems: true
           items: {$ref: '#/$defs/relation_id'}
   provider_support:
     type: object
+    maxProperties: 128
     additionalProperties: false
     required:
       - protocol
@@ -98,6 +112,7 @@ properties:
     properties:
       protocol:
         type: object
+        maxProperties: 128
         additionalProperties: false
         required: [major, minor, downgrade]
         properties:
@@ -105,14 +120,21 @@ properties:
           minor: {const: 0}
           downgrade: {const: forbidden}
       required_features:
+        type: array
+        maxItems: 128
         const: [task-input-chunks-v2, task-source-closure-v2]
       required_relations:
+        type: array
+        maxItems: 128
         const: [cc.call_site.v1, cc.entity.v1]
       required_interpretations:
+        type: array
+        maxItems: 128
         const: [cc.clang22-canonical-1]
       sandbox_minimum: {const: enforced}
       trust:
         type: object
+        maxProperties: 128
         additionalProperties: false
         required: [manifest, binary, semantics, signature, certification, revocation]
         properties:
@@ -124,6 +146,7 @@ properties:
           revocation: {const: not-revoked-required}
       candidate_identity:
         type: object
+        maxProperties: 128
         additionalProperties: false
         required: [domain, encoding, producer, input_binding]
         properties:
@@ -132,6 +155,8 @@ properties:
           producer: {const: provider-discovery}
           input_binding: {const: unique-candidate-id-required}
       support_tuple_fields:
+        type: array
+        maxItems: 128
         const:
           - release_version
           - surface
@@ -142,10 +167,12 @@ properties:
       supported_tuples:
         type: array
         minItems: 1
+        maxItems: 128
         uniqueItems: true
         items: {$ref: '#/$defs/support_tuple'}
       conflict_policy:
         type: object
+        maxProperties: 128
         additionalProperties: false
         required:
           - subject
@@ -163,26 +190,32 @@ properties:
           fallback: {const: forbidden}
   store_support:
     type: object
+    maxProperties: 128
     additionalProperties: false
     required: [backends, format]
     properties:
-      backends: {const: [memory, sqlite]}
+      backends: {type: array, maxItems: 128, const: [memory, sqlite]}
       format: {const: cxxlens.snapshot.v3}
 $defs:
   id:
     type: string
+    maxLength: 512
     pattern: '^[a-z][a-z0-9_.-]+$'
   relation_id:
     type: string
+    maxLength: 512
     pattern: '^[a-z0-9_]+(?:\.[a-z0-9_]+)+\.v[0-9]+$'
   nonempty_string:
     type: string
     minLength: 1
+    maxLength: 512
   version:
     type: string
+    maxLength: 512
     pattern: '^[1-9][0-9]*\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
   support_tuple:
     type: object
+    maxProperties: 128
     additionalProperties: false
     required:
       - release_version
