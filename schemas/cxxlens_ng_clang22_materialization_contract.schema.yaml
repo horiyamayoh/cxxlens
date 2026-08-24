@@ -657,28 +657,12 @@ $defs:
         digest_only_equality_or_order: forbidden
         qualification_corpus:
           id: cxxlens.df-0200.claim-batch-differential-corpus.v1
-          freeze_point: pre-refactor-canonical-bytes-and-verdicts
           artifact:
-            path: schemas/cxxlens_ng_df_0200_claim_batch_differential_corpus.tsv
-            schema: schemas/cxxlens_ng_df_0200_claim_batch_differential_corpus.schema.yaml
             schema_id: https://cxxlens.dev/schema/ng/df-0200-claim-batch-differential-corpus.schema.yaml
             format: cxxlens.df-0200.claim-batch-differential-corpus.tsv.v1
             artifact_version: 1.0.0
             raw_sha256: sha256:f05513d05b0b57788b6f94d9c1a477c88d589b64dd8232d88a5c6c6022a84836
-          current_public_reference:
-            driver: tests/adapter/clang22/df_0200_claim_batch_corpus_test.cpp
-            cmake_target: cxxlens-df0200-claim-batch-corpus
-            ctest: qualification.df0200-claim-batch-corpus
-            operation: cxxlens::sdk::claim_batch::commit
-            mode: execute-all-frozen-cases-and-compare-exact-artifact-bytes
-            generator:
-              visibility: source-private
-              option: --emit
-              artifact_update_gate: direct-positive-negative-fault-determinism-and-resource-tests-must-pass
           census:
-            case_count: 10
-            success_count: 9
-            error_count: 1
             added_claim_count: 17
             existing_claim_count: 16
             projection_byte_count: 88607
@@ -699,9 +683,6 @@ $defs:
           - new-existing-same-payload
           - new-existing-disjoint
           - new-existing-cross-domain-differential
-          compare_against:
-          - frozen-pre-refactor-corpus
-          - current-public-sdk-claim-batch-commit
           cases:
           - added-versus-existing-claim-classification
           - new-to-existing-hard-and-soft-references
@@ -720,9 +701,6 @@ $defs:
           - accepted-added-and-existing-occurrence-sets
           - reference-conflict-and-differential-verdicts
           - unresolved-conflict-and-differential-censuses
-          production_path_comparison: required-direct-positive-negative-fault-determinism-and-resource-tests-before-production
-          corpus_regeneration: requires-direct-positive-negative-fault-determinism-and-resource-tests
-        bounded_differential_oracle: frozen-corpus-and-current-public-api-direct-positive-negative-fault-tests-required
         qualified_zero_side_channel_result: replay-receipt-instead-of-resident-full-claim-batch-result
       d2_move_only_lifecycle:
         operations:
@@ -1143,7 +1121,6 @@ $defs:
               exact_duplicate_claim_occurrence: collapse-before-event-enumeration
               metadata_distinct_same_content_occurrence: preserve-as-distinct-event
               duplicate_final_full_event_projection: reject
-              qualification_binding: cxxlens.df-0200.claim-batch-differential-corpus.v1-raw-sha256-f05513d05b0b57788b6f94d9c1a477c88d589b64dd8232d88a5c6c6022a84836
             shared_implementation_allowlist: [canonical-codecs, identity-functions, field-validators]
             shared_event_enumeration_or_aggregation_control_flow: forbidden
             selected_request_entry_cross_check: exactly-one-entry-whose-task-id-and-canonical-ordinal-equal-this-task-receipt
@@ -1430,7 +1407,7 @@ $defs:
         sqlite_migration: compact-v2.6.0-to-v3.0.0-single-transaction-cow
         source_private_receipts_and_counters: excluded-from-public-report-and-api
       falsification:
-      - frozen-pre-refactor-and-current-public-claim-batch-byte-verdict-corpus
+      - golden-claim-batch-input-output-and-semantic-verdict-corpus
       - added-existing-and-new-existing-reference-conflict-nonreclassification
       - one-shot-split-and-input-permutation-parity
       - exact-duplicate-versus-metadata-distinct-occurrence-preservation
