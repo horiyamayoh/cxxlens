@@ -1520,8 +1520,13 @@ namespace
 			inherited[1],
 			request.task_id,
 			"provider-session:" + session->substr(std::string_view{"semantic-v2:"}.size()),
+			request.task_id.substr(std::string_view{"task:"}.size()),
+			"source-closure:" + *closure,
 			*closure,
-			*transfer);
+			"semantic-v2:sha256:" + std::string(64U, 'e'),
+			*transfer,
+			1U,
+			0U);
 		require(inherited_binding.has_value(),
 				"NG1 runtime source-closure binding failed: " +
 					(inherited_binding
@@ -1775,8 +1780,13 @@ namespace
 			inherited[1],
 			request.task_id,
 			"provider-session:" + session->substr(std::string_view{"semantic-v2:"}.size()),
+			request.task_id.substr(std::string_view{"task:"}.size()),
+			"source-closure:" + *closure,
 			*closure,
-			*transfer);
+			"semantic-v2:sha256:" + std::string(64U, 'e'),
+			*transfer,
+			1U,
+			0U);
 		require(inherited_binding.has_value(),
 				"NG1 runtime source-closure binding failed: " +
 					(inherited_binding

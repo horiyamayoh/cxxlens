@@ -99,7 +99,7 @@ namespace cxxlens::sdk::provider
 			append_process_environment(const process_invocation& invocation,
 									   std::vector<std::string>& storage)
 			{
-				constexpr std::array<std::string_view, 10U> channel_names{
+				constexpr std::array<std::string_view, 14U> channel_names{
 					"CXXLENS_PROVIDER_INGRESS_MODE",
 					"CXXLENS_PROVIDER_SOURCE_CLOSURE_READ_FD",
 					"CXXLENS_PROVIDER_SOURCE_CLOSURE_WRITE_FD",
@@ -108,8 +108,11 @@ namespace cxxlens::sdk::provider
 					"CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_V4_DIGEST",
 					"CXXLENS_PROVIDER_SOURCE_CLOSURE_ID",
 					"CXXLENS_PROVIDER_SOURCE_CLOSURE_DIGEST",
+					"CXXLENS_PROVIDER_SOURCE_CLOSURE_MANIFEST_DIGEST",
 					"CXXLENS_PROVIDER_SOURCE_CLOSURE_TRANSFER_DIGEST",
-					"CXXLENS_PROVIDER_SOURCE_CLOSURE_BINDING_DIGEST"};
+					"CXXLENS_PROVIDER_SOURCE_CLOSURE_BINDING_DIGEST",
+					"CXXLENS_PROVIDER_SOURCE_CLOSURE_STREAM_ID",
+					"CXXLENS_PROVIDER_SOURCE_CLOSURE_FIRST_SEQUENCE"};
 				for (const auto& [name, value] : invocation.environment)
 				{
 					if (name.empty() || name.contains('=') || name.contains('\0') ||
@@ -138,17 +141,23 @@ namespace cxxlens::sdk::provider
 										 binding.task_id);
 					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_SESSION_ID=" +
 										 binding.session_id);
+					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_V4_DIGEST=" +
+										 binding.task_v4_digest);
+					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_ID=" +
+										 binding.closure_id);
 					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_DIGEST=" +
 										 binding.closure_digest);
+					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_MANIFEST_DIGEST=" +
+										 binding.manifest_digest);
 					storage.emplace_back("CXXLENS_PROVIDER_INGRESS_MODE=task-v4-source-closure-v2");
-					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_V4_DIGEST=" +
-										 binding.task_id.substr(5U));
-					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_ID=source-closure:" +
-										 binding.closure_digest);
 					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_TRANSFER_DIGEST=" +
 										 binding.transfer_digest);
 					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_BINDING_DIGEST=" +
 										 binding.binding_digest);
+					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_STREAM_ID=" +
+										 std::to_string(binding.stream_id));
+					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_FIRST_SEQUENCE=" +
+										 std::to_string(binding.first_sequence));
 				}
 				return {};
 			}
@@ -176,8 +185,13 @@ namespace cxxlens::sdk::provider
 					std::array{
 						canonical_value::from_string(value.task_id),
 						canonical_value::from_string(value.session_id),
+						canonical_value::from_string(value.task_v4_digest),
+						canonical_value::from_string(value.closure_id),
 						canonical_value::from_string(value.closure_digest),
+						canonical_value::from_string(value.manifest_digest),
 						canonical_value::from_string(value.transfer_digest),
+						canonical_value::from_string(std::to_string(value.stream_id)),
+						canonical_value::from_string(std::to_string(value.first_sequence)),
 						canonical_value::from_integer(value.read_descriptor),
 						canonical_value::from_integer(value.write_descriptor),
 						canonical_value::from_string(std::to_string(value.read_device)),
@@ -252,12 +266,24 @@ namespace cxxlens::sdk::provider
 			if (!valid_typed_digest(session_id, session_digest_prefix))
 				return cxxlens::sdk::unexpected(process_error(
 					"provider.process-channel-invalid", "session_id", "typed-digest"));
+			if (!valid_typed_digest(task_v4_digest, semantic_digest_prefix) ||
+				task_id != std::string{"task:"} + task_v4_digest)
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-foreign", "binding", "identity"));
+			if (!valid_typed_digest(closure_id, "source-closure:semantic-v2:sha256:") ||
+				closure_id != std::string{"source-closure:"} + closure_digest)
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-foreign", "binding", "identity"));
 			if (!valid_typed_digest(closure_digest, semantic_digest_prefix))
 				return cxxlens::sdk::unexpected(process_error(
 					"provider.process-channel-invalid", "closure_digest", "typed-digest"));
 			if (!valid_typed_digest(transfer_digest, semantic_digest_prefix))
 				return cxxlens::sdk::unexpected(process_error(
 					"provider.process-channel-invalid", "transfer_digest", "typed-digest"));
+			if (!valid_typed_digest(manifest_digest, semantic_digest_prefix) || stream_id == 0U ||
+				first_sequence != 0U)
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", "manifest_sequence", "typed-digest"));
 			if (read_descriptor < 4 || write_descriptor < 4)
 				return cxxlens::sdk::unexpected(process_error(
 					"provider.process-channel-invalid", "descriptor", "reserved-descriptor"));
@@ -297,8 +323,13 @@ namespace cxxlens::sdk::provider
 											   const int write_descriptor,
 											   std::string task_id,
 											   std::string session_id,
+											   std::string task_v4_digest,
+											   std::string closure_id,
 											   std::string closure_digest,
-											   std::string transfer_digest)
+											   std::string manifest_digest,
+											   std::string transfer_digest,
+											   const std::uint64_t stream_id,
+											   const std::uint64_t first_sequence)
 		{
 			if (read_descriptor == write_descriptor)
 				return cxxlens::sdk::unexpected(
@@ -308,8 +339,13 @@ namespace cxxlens::sdk::provider
 			value.write_descriptor = write_descriptor;
 			value.task_id = std::move(task_id);
 			value.session_id = std::move(session_id);
+			value.task_v4_digest = std::move(task_v4_digest);
+			value.closure_id = std::move(closure_id);
 			value.closure_digest = std::move(closure_digest);
+			value.manifest_digest = std::move(manifest_digest);
 			value.transfer_digest = std::move(transfer_digest);
+			value.stream_id = stream_id;
+			value.first_sequence = first_sequence;
 #if defined(__linux__) && defined(__GLIBC__)
 			auto read = inspect_channel_descriptor(read_descriptor, "read_descriptor", true);
 			if (!read)
@@ -524,8 +560,10 @@ namespace cxxlens::sdk::provider
 			if (::getsockopt(descriptor, SOL_SOCKET, SO_TYPE, &socket_type, &socket_type_size) !=
 					0 ||
 				socket_type_size != sizeof(socket_type) || socket_type != SOCK_STREAM)
+			{
 				return cxxlens::sdk::unexpected(process_error(
 					"provider.process-channel-invalid", std::string{field}, "socket-type"));
+			}
 			sockaddr_storage peer{};
 			socklen_t peer_size = sizeof(peer);
 			if (::getpeername(descriptor, reinterpret_cast<sockaddr*>(&peer), &peer_size) != 0)

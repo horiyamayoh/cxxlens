@@ -500,8 +500,13 @@ int main(const int argc, const char* const* argv)
 			descriptors.write_child,
 			task,
 			fixture.session_id,
+			fixture.identity.task_v4_digest,
+			"source-closure:" + fixture.input.closure.closure_digest,
 			fixture.input.closure.closure_digest,
-			fixture.expected_transfer);
+			fixture.identity.manifest_digest,
+			fixture.expected_transfer,
+			1U,
+			0U);
 		require(binding.has_value(), "worker channel process binding failed");
 		auto policies = cxxlens::sdk::provider::builtin_sandbox_policies();
 		require(!policies.empty(), "worker channel sandbox registry empty");

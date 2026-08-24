@@ -30,9 +30,14 @@ namespace cxxlens::sdk::provider::detail
 		int write_descriptor{-1};
 		std::string task_id;
 		std::string session_id;
+		std::string task_v4_digest;
+		std::string closure_id;
 		std::string closure_digest;
+		std::string manifest_digest;
 		std::string transfer_digest;
 		std::string binding_digest;
+		std::uint64_t stream_id{};
+		std::uint64_t first_sequence{};
 		std::uint64_t read_device{};
 		std::uint64_t read_inode{};
 		std::uint32_t read_mode{};
@@ -50,8 +55,13 @@ namespace cxxlens::sdk::provider::detail
 											   int write_descriptor,
 											   std::string task_id,
 											   std::string session_id,
+											   std::string task_v4_digest,
+											   std::string closure_id,
 											   std::string closure_digest,
-											   std::string transfer_digest);
+											   std::string manifest_digest,
+											   std::string transfer_digest,
+											   std::uint64_t stream_id,
+											   std::uint64_t first_sequence);
 
 	struct process_source_closure_generation_state;
 

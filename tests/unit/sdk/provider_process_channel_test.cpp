@@ -164,12 +164,21 @@ namespace
 	[[nodiscard]] result<process_source_closure_launch>
 	make_source_launch(const channel_fixture& fixture, const char fill)
 	{
+		const auto read_descriptor = ::fcntl(fixture.read.get(), F_DUPFD_CLOEXEC, 4);
+		const auto write_descriptor = ::fcntl(fixture.write.get(), F_DUPFD_CLOEXEC, 4);
+		require(read_descriptor >= 4 && write_descriptor >= 4,
+				"source launch descriptor promotion failed");
+		const auto close_inputs = [&]
+		{
+			(void)::close(read_descriptor);
+			(void)::close(write_descriptor);
+		};
 		const auto hex = std::string(64U, fill);
 		const auto task_v4_digest = "semantic-v2:sha256:" + hex;
 		const auto closure_digest = "semantic-v2:sha256:" + hex;
-		return make_process_source_closure_launch(
-			fixture.read.get(),
-			fixture.write.get(),
+		auto result = make_process_source_closure_launch(
+			read_descriptor,
+			write_descriptor,
 			"task:" + task_v4_digest,
 			"provider-session:sha256:" + hex,
 			task_v4_digest,
@@ -179,6 +188,8 @@ namespace
 			"semantic-v2:sha256:" + std::string(64U, static_cast<char>(fill + 2)),
 			23U,
 			0U);
+		close_inputs();
+		return result;
 	}
 
 	struct source_projection_operation_context
@@ -521,13 +532,36 @@ namespace
 		return invocation;
 	}
 
+	[[nodiscard]] auto make_test_binding(const int read_descriptor,
+										 const int write_descriptor,
+										 std::string task,
+										 std::string session,
+										 std::string closure,
+										 std::string transfer)
+	{
+		const auto task_v4_digest = task.substr(std::string_view{"task:"}.size());
+		const auto closure_id = std::string{"source-closure:"} + closure;
+		const auto manifest_digest = "semantic-v2:sha256:" + std::string(64U, 'e');
+		return make_process_inherited_channel_binding(read_descriptor,
+													  write_descriptor,
+													  std::move(task),
+													  std::move(session),
+													  task_v4_digest,
+													  closure_id,
+													  std::move(closure),
+													  manifest_digest,
+													  std::move(transfer),
+													  1U,
+													  0U);
+	}
+
 	void check_binding_validation(const channel_fixture& fixture,
 								  const std::string& task,
 								  const std::string& session,
 								  const std::string& closure,
 								  const std::string& transfer)
 	{
-		auto binding = make_process_inherited_channel_binding(
+		auto binding = make_test_binding(
 			fixture.read.get(), fixture.write.get(), task, session, closure, transfer);
 		require(binding.has_value(), "valid inherited channel binding was rejected");
 		require((*binding)->validate().has_value(), "valid inherited channel did not revalidate");
@@ -546,19 +580,18 @@ namespace
 					foreign_result.error().field == "binding",
 				"foreign task identity was accepted by an inherited channel binding");
 
-		auto duplicate = make_process_inherited_channel_binding(
+		auto duplicate = make_test_binding(
 			fixture.read.get(), fixture.read.get(), task, session, closure, transfer);
 		require(!duplicate && duplicate.error().detail == "duplicate",
 				"duplicate inherited descriptors were accepted");
-		auto reserved = make_process_inherited_channel_binding(
-			3, fixture.write.get(), task, session, closure, transfer);
+		auto reserved = make_test_binding(3, fixture.write.get(), task, session, closure, transfer);
 		require(!reserved && reserved.error().detail == "reserved-descriptor",
 				"reserved descriptor 3 was accepted");
 
 		const auto close_on_exec = ::fcntl(fixture.write.get(), F_DUPFD_CLOEXEC, 4);
 		require(close_on_exec >= 4, "CLOEXEC validation duplicate failed");
-		auto cloexec = make_process_inherited_channel_binding(
-			fixture.read.get(), close_on_exec, task, session, closure, transfer);
+		auto cloexec =
+			make_test_binding(fixture.read.get(), close_on_exec, task, session, closure, transfer);
 		(void)::close(close_on_exec);
 		require(!cloexec && cloexec.error().detail == "close-on-exec-set",
 				"CLOEXEC inherited descriptor was accepted");
@@ -568,8 +601,8 @@ namespace
 		const auto blocking_flags = ::fcntl(blocking, F_GETFL);
 		require(::fcntl(blocking, F_SETFL, blocking_flags & ~O_NONBLOCK) == 0,
 				"blocking validation setup failed");
-		auto blocking_result = make_process_inherited_channel_binding(
-			fixture.read.get(), blocking, task, session, closure, transfer);
+		auto blocking_result =
+			make_test_binding(fixture.read.get(), blocking, task, session, closure, transfer);
 		require(::fcntl(blocking, F_SETFL, blocking_flags) == 0,
 				"blocking validation restore failed");
 		(void)::close(blocking);
@@ -656,7 +689,7 @@ int main()
 	check_source_launch_core();
 	check_source_launch_rejections();
 	check_binding_validation(fixture, task, session, closure, transfer);
-	auto binding = make_process_inherited_channel_binding(
+	auto binding = make_test_binding(
 		fixture.read.get(), fixture.write.get(), task, session, closure, transfer);
 	if (!binding)
 		require(false,
