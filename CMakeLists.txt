@@ -230,8 +230,6 @@ if(BUILD_TESTING)
                POSITION_INDEPENDENT_CODE ON)
   cxxlens_set_project_warnings(cxxlens-sqlite-disposable-qualification-internal)
   cxxlens_enable_sanitizers(cxxlens-sqlite-disposable-qualification-internal)
-  target_compile_definitions(cxxlens-sqlite-disposable-qualification-internal
-                             PRIVATE CXXLENS_SQLITE_TEST_SUPPORT=1)
 endif()
 
 add_library(
