@@ -1926,7 +1926,13 @@ namespace cxxlens::sdk
 		bool quarantined{};
 	};
 
-	struct sqlite_shm_reader_open_epoch_test_view
+	/**
+	 * Read-only production view of one registry-authenticated reader open epoch.
+	 *
+	 * This value contains no owner, callback authority, or lifecycle control. It is used by the
+	 * native VFS bridge to validate the exact open binding before a callback transition.
+	 */
+	struct sqlite_shm_reader_open_epoch_view
 	{
 		std::uint64_t registry_open_token{};
 		sqlite_shm_reader_open_epoch_binding binding;
@@ -1943,6 +1949,14 @@ namespace cxxlens::sdk
 		std::uint64_t destination_sequence{};
 	};
 
+	/** Minimal production census retained by registry snapshots. */
+	struct sqlite_shm_reader_lifecycle_census
+	{
+		std::size_t compact_tombstone_count{};
+		std::size_t open_epoch_close_compact_tombstone_count{};
+	};
+
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 	struct sqlite_shm_reader_close_terminal_test_view
 	{
 		std::uint64_t registry_open_token{};
@@ -2114,7 +2128,7 @@ namespace cxxlens::sdk
 		std::vector<sqlite_shm_reader_session_reservation_test_view> session_reservations;
 		std::vector<sqlite_shm_reader_attachment_group_test_view> attachment_groups;
 		std::vector<sqlite_shm_reader_map_attempt_test_view> map_attempts;
-		std::vector<sqlite_shm_reader_open_epoch_test_view> open_epochs;
+		std::vector<sqlite_shm_reader_open_epoch_view> open_epochs;
 		std::vector<sqlite_shm_reader_close_terminal_test_view> close_terminals;
 		std::vector<sqlite_shm_reader_terminal_quarantine_test_view> terminal_quarantines;
 		std::vector<sqlite_shm_reader_zero_effect_terminal_test_view> zero_effect_terminals;
@@ -2123,6 +2137,7 @@ namespace cxxlens::sdk
 		std::vector<sqlite_shm_reader_predecessor_map_terminal_test_view> predecessor_map_terminals;
 		std::vector<sqlite_shm_reader_lifecycle_event_test_view> events;
 	};
+#endif
 
 	/**
 	 * Process-instance-wide checked monotonic generation source shared by family coordinators.
@@ -3582,15 +3597,15 @@ namespace cxxlens::sdk
 		check_registry_reader_open_epoch_close_tombstone(
 			std::uint64_t registry_open_token,
 			const sqlite_shm_reader_open_epoch_binding& binding) const noexcept;
-		[[nodiscard]] sqlite_shm_reader_lifecycle_test_view reader_lifecycle_view() const;
-		[[nodiscard]] std::optional<sqlite_shm_reader_open_epoch_test_view>
+		[[nodiscard]] sqlite_shm_reader_lifecycle_census reader_lifecycle_census() const noexcept;
+		[[nodiscard]] std::optional<sqlite_shm_reader_open_epoch_view>
 		reader_open_epoch_view(std::uint64_t registry_open_token,
 							   const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>&
 								   seal) const noexcept;
 #if defined(CXXLENS_SQLITE_TEST_SUPPORT)
 		[[nodiscard]] sqlite_shm_reader_lifecycle_test_view
 		reader_lifecycle_view_for_testing() const;
-		[[nodiscard]] std::optional<sqlite_shm_reader_open_epoch_test_view>
+		[[nodiscard]] std::optional<sqlite_shm_reader_open_epoch_view>
 		reader_open_epoch_view_for_testing(
 			std::uint64_t registry_open_token,
 			const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal)

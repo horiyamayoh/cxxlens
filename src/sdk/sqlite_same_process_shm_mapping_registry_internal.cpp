@@ -5549,7 +5549,7 @@ namespace cxxlens::sdk
 					output.phase = singleton->phase;
 					output.lookup_visible = true;
 					output.coordinator = singleton->coordinator->snapshot();
-					const auto reader_lifecycle = singleton->coordinator->reader_lifecycle_view();
+					const auto reader_lifecycle = singleton->coordinator->reader_lifecycle_census();
 					output.reader_lifecycle_compact_tombstone_count =
 						reader_lifecycle.compact_tombstone_count;
 					output.reader_open_epoch_close_tombstone_count =
@@ -5918,10 +5918,10 @@ namespace cxxlens::sdk
 			}
 #endif
 
-			[[nodiscard]] sqlite_shm_registry_reader_open_epoch_test_view
+			[[nodiscard]] sqlite_shm_registry_reader_open_epoch_view
 			reader_open_epoch_view(const sqlite_shm_reader_open_authority& open) noexcept
 			{
-				sqlite_shm_registry_reader_open_epoch_test_view output;
+				sqlite_shm_registry_reader_open_epoch_view output;
 				if (!current(process_epoch_) || !open.control_)
 					return output;
 				const auto owner_state = open.state_.lock();
@@ -9561,7 +9561,7 @@ namespace cxxlens::sdk
 						  handoff.generation_);
 	}
 
-	std::optional<sqlite_shm_reader_open_epoch_test_view>
+	std::optional<sqlite_shm_reader_open_epoch_view>
 	sqlite_shm_reader_lifecycle_production_factory::open_epoch_view(
 		sqlite_same_process_shm_mapping_registry& registry,
 		const sqlite_shm_reader_open_authority& open) noexcept
@@ -9803,12 +9803,12 @@ namespace cxxlens::sdk
 		return registry_state_destruction_count.load(std::memory_order_relaxed);
 	}
 
-	sqlite_shm_registry_reader_open_epoch_test_view
+	sqlite_shm_registry_reader_open_epoch_view
 	sqlite_same_process_shm_mapping_registry::reader_open_epoch_view_for_testing(
 		const sqlite_shm_reader_open_authority& open) const noexcept
 	{
 		return state_ ? state_->reader_open_epoch_view(open)
-					  : sqlite_shm_registry_reader_open_epoch_test_view{};
+					  : sqlite_shm_registry_reader_open_epoch_view{};
 	}
 
 	sqlite_shm_lease_result<sqlite_shm_registry_runtime_lifetime_pin>
@@ -9990,12 +9990,12 @@ namespace cxxlens::sdk
 			{registry_open_token, owner_kind, lifecycle_owner_token, writer_mapping_generation});
 	}
 
-	sqlite_shm_registry_reader_open_epoch_test_view
+	sqlite_shm_registry_reader_open_epoch_view
 	sqlite_same_process_shm_mapping_registry::reader_open_epoch_view_for_production(
 		const sqlite_shm_reader_open_authority& open) const noexcept
 	{
 		return state_ ? state_->reader_open_epoch_view(open)
-					  : sqlite_shm_registry_reader_open_epoch_test_view{};
+					  : sqlite_shm_registry_reader_open_epoch_view{};
 	}
 
 #if defined(CXXLENS_SQLITE_TEST_SUPPORT)

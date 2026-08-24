@@ -259,7 +259,7 @@ namespace cxxlens::sdk
 			return registry.acquire_reader_open_for_testing(family, binding);
 		}
 
-		[[nodiscard]] static sqlite_shm_registry_reader_open_epoch_test_view
+		[[nodiscard]] static sqlite_shm_registry_reader_open_epoch_view
 		reader_open_epoch_view(const sqlite_same_process_shm_mapping_registry& registry,
 							   const sqlite_shm_reader_open_authority& open) noexcept
 		{
@@ -917,6 +917,12 @@ namespace cxxlens::sdk
 		reader_lifecycle_view(const sqlite_same_process_shm_mapping_lease_coordinator& coordinator)
 		{
 			return coordinator.reader_lifecycle_view_for_testing();
+		}
+
+		[[nodiscard]] static sqlite_shm_reader_lifecycle_census reader_lifecycle_census(
+			const sqlite_same_process_shm_mapping_lease_coordinator& coordinator) noexcept
+		{
+			return coordinator.reader_lifecycle_census();
 		}
 
 		[[nodiscard]] static sqlite_shm_lease_result<
@@ -7549,7 +7555,7 @@ namespace
 			});
 		const auto open_epoch = std::ranges::find_if(
 			lifecycle_admitted.open_epochs,
-			[](const sqlite_shm_reader_open_epoch_test_view& candidate)
+			[](const sqlite_shm_reader_open_epoch_view& candidate)
 			{
 				return candidate.phase ==
 					detail::sqlite_shm_reader_connection_close_phase::close_admitted;
@@ -11520,6 +11526,8 @@ namespace
 				"commit registry no-map xClose");
 		const auto terminal =
 			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
+		const auto terminal_census =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_census(*coordinator);
 		require(terminal.open_epochs.size() == 1U &&
 					terminal.open_epochs.front().phase ==
 						detail::sqlite_shm_reader_connection_close_phase::closed &&
@@ -11529,18 +11537,27 @@ namespace
 										[](const std::size_t count)
 										{
 											return count == 0U;
-										}),
+										}) &&
+					terminal_census.compact_tombstone_count == terminal.compact_tombstone_count &&
+					terminal_census.open_epoch_close_compact_tombstone_count ==
+						terminal.open_epoch_close_compact_tombstone_count,
 				"exact close leaves all sixteen reader custody kinds at zero");
 		require(fixture.registry->release_reader_open(open).has_value() && !open.valid(),
 				"release registry authority only after exact close terminal");
 		const auto compacted = fixture.registry->snapshot();
 		const auto lease_compacted =
 			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_view(*coordinator);
+		const auto compacted_census =
+			sqlite_same_process_shm_lease_test_peer::reader_lifecycle_census(*coordinator);
 		require(
 			compacted.active_reader_open_count == 0U &&
 				compacted.retired_reader_open_epoch_close_tombstone_count == 0U &&
 				lease_compacted.open_epoch_close_compact_tombstone_count == 1U &&
 				lease_compacted.open_epochs.empty() && lease_compacted.close_terminals.empty() &&
+				compacted_census.compact_tombstone_count ==
+					lease_compacted.compact_tombstone_count &&
+				compacted_census.open_epoch_close_compact_tombstone_count ==
+					lease_compacted.open_epoch_close_compact_tombstone_count &&
 				sqlite_same_process_shm_registry_test_peer::
 						retired_reader_open_epoch_close_tombstone_count(*fixture.registry) == 0U,
 			"closed open compacts locally before registry active-open decrement");
@@ -13642,7 +13659,7 @@ namespace
 				drained.open_epoch_close_compact_tombstone_count == 1U &&
 					std::ranges::none_of(
 						drained.open_epochs,
-						[drain_owner](const sqlite_shm_reader_open_epoch_test_view& open)
+						[drain_owner](const sqlite_shm_reader_open_epoch_view& open)
 						{
 							return open.close_owner_token == drain_owner;
 						}) &&

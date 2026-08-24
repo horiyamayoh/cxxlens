@@ -13087,11 +13087,11 @@ namespace
 			const auto first_row =
 				std::ranges::find(terminal.open_epochs,
 								  first.registry_open_token,
-								  &sqlite_shm_reader_open_epoch_test_view::registry_open_token);
+								  &sqlite_shm_reader_open_epoch_view::registry_open_token);
 			const auto second_row =
 				std::ranges::find(terminal.open_epochs,
 								  second.registry_open_token,
-								  &sqlite_shm_reader_open_epoch_test_view::registry_open_token);
+								  &sqlite_shm_reader_open_epoch_view::registry_open_token);
 			require(
 				!replayed &&
 					replayed.error().reason ==

@@ -428,19 +428,19 @@ namespace cxxlens::sdk
 	};
 
 	/**
-	 * Read-only test projection of one exact registry-authenticated reader open route.
+	 * Read-only production view of one exact registry-authenticated reader open route.
 	 *
 	 * The copied binding and token are audit data only. They do not retain the registry record,
 	 * close owner, runtime pin, or callback authority and cannot be supplied to a lifecycle
 	 * operation. `lookup_visible` is true only for the exact live move-only open authority after
 	 * the registry has synchronized abandonment and transitive quarantine.
 	 */
-	struct sqlite_shm_registry_reader_open_epoch_test_view
+	struct sqlite_shm_registry_reader_open_epoch_view
 	{
 		std::size_t exact_record_match_count{};
 		std::uint64_t registry_open_token{};
 		sqlite_shm_reader_open_binding binding;
-		std::optional<sqlite_shm_reader_open_epoch_test_view> lease_open_epoch;
+		std::optional<sqlite_shm_reader_open_epoch_view> lease_open_epoch;
 		bool record_active{};
 		bool lease_binding_matches{};
 		bool lookup_visible{};
@@ -545,7 +545,7 @@ namespace cxxlens::sdk
 						   std::uint64_t registry_open_token,
 						   const sqlite_backend_opaque_identity& callback_cohort,
 						   const sqlite_backend_opaque_identity& request_seal);
-		[[nodiscard]] static std::optional<sqlite_shm_reader_open_epoch_test_view>
+		[[nodiscard]] static std::optional<sqlite_shm_reader_open_epoch_view>
 		open_epoch_view(sqlite_same_process_shm_mapping_registry& registry,
 						const sqlite_shm_reader_open_authority& open) noexcept;
 		[[nodiscard]] static sqlite_shm_reader_lifecycle_identity_scope
@@ -1410,8 +1410,7 @@ namespace cxxlens::sdk
 		void exhaust_registry_counter_for_testing(
 			detail::sqlite_shm_registry_counter_for_testing counter) noexcept;
 		[[nodiscard]] static std::uint64_t state_destruction_count_for_testing() noexcept;
-		[[nodiscard]] sqlite_shm_registry_reader_open_epoch_test_view
-		reader_open_epoch_view_for_testing(
+		[[nodiscard]] sqlite_shm_registry_reader_open_epoch_view reader_open_epoch_view_for_testing(
 			const sqlite_shm_reader_open_authority& open) const noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_registry_runtime_lifetime_pin>
 		adopt_runtime_lifetime_for_testing(sqlite_backend_opaque_identity identity,
@@ -1459,7 +1458,7 @@ namespace cxxlens::sdk
 			sqlite_shm_reader_lifecycle_owner_kind owner_kind,
 			std::uint64_t lifecycle_owner_token,
 			std::uint64_t writer_mapping_generation) const;
-		[[nodiscard]] sqlite_shm_registry_reader_open_epoch_test_view
+		[[nodiscard]] sqlite_shm_registry_reader_open_epoch_view
 		reader_open_epoch_view_for_production(
 			const sqlite_shm_reader_open_authority& open) const noexcept;
 #if defined(CXXLENS_SQLITE_TEST_SUPPORT)

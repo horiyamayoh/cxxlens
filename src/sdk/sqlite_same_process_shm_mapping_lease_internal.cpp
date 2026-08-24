@@ -15036,7 +15036,29 @@ namespace cxxlens::sdk
 				return output;
 			}
 
-			[[nodiscard]] sqlite_shm_reader_lifecycle_test_view reader_lifecycle_view() const
+			[[nodiscard]] sqlite_shm_reader_lifecycle_census
+			reader_lifecycle_census() const noexcept
+			{
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					return {static_cast<std::size_t>(std::ranges::count_if(
+								reader_attachment_groups_,
+								[](const reader_attachment_group_record& group)
+								{
+									return reader_reservation_is_compactable(group);
+								})),
+							reader_open_close_tombstones_.size()};
+				}
+				catch (...)
+				{
+					return {};
+				}
+			}
+
+#if defined(CXXLENS_SQLITE_TEST_SUPPORT)
+			[[nodiscard]] sqlite_shm_reader_lifecycle_test_view
+			reader_lifecycle_view_for_testing() const
 			{
 				std::scoped_lock lock{mutex_};
 				sqlite_shm_reader_lifecycle_test_view output;
@@ -15536,6 +15558,7 @@ namespace cxxlens::sdk
 					output.events.end());
 				return output;
 			}
+#endif
 
 			[[nodiscard]] sqlite_shm_lease_result<
 				std::vector<sqlite_shm_reader_lifecycle_compact_tombstone>>
@@ -16253,8 +16276,7 @@ namespace cxxlens::sdk
 				}
 			}
 
-			[[nodiscard]] std::optional<sqlite_shm_reader_open_epoch_test_view>
-			reader_open_epoch_view(
+			[[nodiscard]] std::optional<sqlite_shm_reader_open_epoch_view> reader_open_epoch_view(
 				const std::uint64_t registry_open_token,
 				const std::shared_ptr<sqlite_shm_reader_open_lineage_seal>& seal) const noexcept
 			{
@@ -16271,7 +16293,7 @@ namespace cxxlens::sdk
 					if (open == registry_reader_opens_.end() || !seal ||
 						open->seal.get() != seal.get())
 						return std::nullopt;
-					return sqlite_shm_reader_open_epoch_test_view{
+					return sqlite_shm_reader_open_epoch_view{
 						open->token,
 						open->binding,
 						open->close_owner_token,
@@ -26076,13 +26098,13 @@ namespace cxxlens::sdk
 																		binding);
 	}
 
-	sqlite_shm_reader_lifecycle_test_view
-	sqlite_same_process_shm_mapping_lease_coordinator::reader_lifecycle_view() const
+	sqlite_shm_reader_lifecycle_census
+	sqlite_same_process_shm_mapping_lease_coordinator::reader_lifecycle_census() const noexcept
 	{
-		return state_->reader_lifecycle_view();
+		return state_->reader_lifecycle_census();
 	}
 
-	std::optional<sqlite_shm_reader_open_epoch_test_view>
+	std::optional<sqlite_shm_reader_open_epoch_view>
 	sqlite_same_process_shm_mapping_lease_coordinator::reader_open_epoch_view(
 		const std::uint64_t registry_open_token,
 		const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal) const noexcept
@@ -26094,10 +26116,10 @@ namespace cxxlens::sdk
 	sqlite_shm_reader_lifecycle_test_view
 	sqlite_same_process_shm_mapping_lease_coordinator::reader_lifecycle_view_for_testing() const
 	{
-		return reader_lifecycle_view();
+		return state_->reader_lifecycle_view_for_testing();
 	}
 
-	std::optional<sqlite_shm_reader_open_epoch_test_view>
+	std::optional<sqlite_shm_reader_open_epoch_view>
 	sqlite_same_process_shm_mapping_lease_coordinator::reader_open_epoch_view_for_testing(
 		const std::uint64_t registry_open_token,
 		const std::shared_ptr<detail::sqlite_shm_reader_open_lineage_seal>& seal) const noexcept
