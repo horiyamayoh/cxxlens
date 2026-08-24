@@ -221,13 +221,17 @@ namespace cxxlens::test
 			return true;
 		}
 
-		[[nodiscard]] bool read_exact_at(const int descriptor,
-										 const std::span<std::byte> output,
-										 const off_t offset) noexcept
+		[[nodiscard]] bool
+		read_exact_at(const int descriptor,
+					  const std::span<std::byte> output,
+					  const off_t offset,
+					  const std::chrono::steady_clock::time_point deadline) noexcept
 		{
 			std::size_t consumed{};
 			while (consumed < output.size())
 			{
+				if (std::chrono::steady_clock::now() >= deadline)
+					return false;
 				const auto count = ::pread(descriptor,
 										   output.data() + consumed,
 										   output.size() - consumed,
@@ -237,8 +241,12 @@ namespace cxxlens::test
 					consumed += static_cast<std::size_t>(count);
 					continue;
 				}
-				if (count < 0 && errno == EINTR)
-					continue;
+				if (count < 0)
+				{
+					if (errno == EINTR && std::chrono::steady_clock::now() < deadline)
+						continue;
+					return false;
+				}
 				return false;
 			}
 			return true;
@@ -289,6 +297,7 @@ namespace cxxlens::test
 									  const std::string& shm_path,
 									  const file_identity& expected_main) noexcept
 		{
+			const auto validation_deadline = std::chrono::steady_clock::now() + callback_deadline;
 			if (!path_is_absent(wal_path) || !path_is_absent(shm_path))
 				return false;
 
@@ -309,7 +318,7 @@ namespace cxxlens::test
 						return false;
 
 					std::array<std::byte, 28U> header{};
-					if (!read_exact_at(journal, header, 0) ||
+					if (!read_exact_at(journal, header, 0, validation_deadline) ||
 						!std::equal(rollback_journal_magic.begin(),
 									rollback_journal_magic.end(),
 									header.begin()))
@@ -358,7 +367,7 @@ namespace cxxlens::test
 						std::byte{'3'},
 						std::byte{0U},
 					};
-					if (!read_exact_at(database, database_header, 0) ||
+					if (!read_exact_at(database, database_header, 0, validation_deadline) ||
 						!std::equal(
 							sqlite_header.begin(), sqlite_header.end(), database_header.begin()))
 						return false;
@@ -379,7 +388,10 @@ namespace cxxlens::test
 					{
 						const auto offset = static_cast<std::uint64_t>(sector_size) +
 							static_cast<std::uint64_t>(record) * record_size;
-						if (!read_exact_at(journal, number_or_checksum, static_cast<off_t>(offset)))
+						if (!read_exact_at(journal,
+										   number_or_checksum,
+										   static_cast<off_t>(offset),
+										   validation_deadline))
 							return false;
 						const auto page_number = read_be_u32(number_or_checksum, 0U);
 						if (page_number == 0U || page_number > database_page_count ||
@@ -388,10 +400,14 @@ namespace cxxlens::test
 						seen_pages[page_number] = true;
 
 						const auto page_span = std::span{journal_page}.first(page_size);
-						if (!read_exact_at(journal, page_span, static_cast<off_t>(offset + 4U)) ||
+						if (!read_exact_at(journal,
+										   page_span,
+										   static_cast<off_t>(offset + 4U),
+										   validation_deadline) ||
 							!read_exact_at(journal,
 										   number_or_checksum,
-										   static_cast<off_t>(offset + 4U + page_size)) ||
+										   static_cast<off_t>(offset + 4U + page_size),
+										   validation_deadline) ||
 							read_be_u32(number_or_checksum, 0U) !=
 								pager_record_checksum(page_span, nonce))
 							return false;
@@ -399,8 +415,10 @@ namespace cxxlens::test
 						const auto database_offset =
 							static_cast<std::uint64_t>(page_number - 1U) * page_size;
 						const auto database_span = std::span{database_page}.first(page_size);
-						if (!read_exact_at(
-								database, database_span, static_cast<off_t>(database_offset)) ||
+						if (!read_exact_at(database,
+										   database_span,
+										   static_cast<off_t>(database_offset),
+										   validation_deadline) ||
 							!std::equal(page_span.begin(), page_span.end(), database_span.begin()))
 							return false;
 					}
@@ -473,37 +491,55 @@ namespace cxxlens::test
 			return wanted == "any" || wanted == file_role(value);
 		}
 
-		void notify_and_stop(forwarding_vfs& owner) noexcept
+		[[nodiscard]] bool notify_and_stop(forwarding_vfs& owner) noexcept
 		{
 			owner.stop_enabled = false;
+			const auto deadline = std::chrono::steady_clock::now() + callback_deadline;
 			const char marker = 'S';
-			if (owner.notify_fd >= 0)
+			bool marker_written = false;
+			while (owner.notify_fd >= 0 && std::chrono::steady_clock::now() < deadline)
 			{
-				for (;;)
+				const auto written = ::write(owner.notify_fd, &marker, sizeof(marker));
+				if (written == static_cast<ssize_t>(sizeof(marker)))
 				{
-					const auto written = ::write(owner.notify_fd, &marker, sizeof(marker));
-					if (written == static_cast<ssize_t>(sizeof(marker)) ||
-						(written < 0 && errno == EINTR))
-					{
-						if (written == static_cast<ssize_t>(sizeof(marker)))
-							break;
-						continue;
-					}
+					marker_written = true;
 					break;
 				}
+				if (written >= 0 || errno != EINTR)
+					break;
 			}
-			(void)::kill(::getpid(), SIGSTOP);
+			if (!marker_written)
+			{
+				owner.binding_invalid = true;
+				return false;
+			}
+
+			for (;;)
+			{
+				if (std::chrono::steady_clock::now() >= deadline)
+				{
+					owner.binding_invalid = true;
+					return false;
+				}
+				if (::kill(::getpid(), SIGSTOP) == 0)
+					return true;
+				if (errno != EINTR)
+				{
+					owner.binding_invalid = true;
+					return false;
+				}
+			}
 		}
 
-		void maybe_stop_file(forwarding_file& value,
-							 const stop_callback callback,
-							 const bool successful) noexcept
+		[[nodiscard]] bool maybe_stop_file(forwarding_file& value,
+										   const stop_callback callback,
+										   const bool successful) noexcept
 		{
 			auto& owner = *value.owner;
 			if (!successful || !owner.stop_enabled || owner.callback != callback ||
 				owner.binding_invalid || !role_matches(value, owner.role.data()))
-				return;
-			notify_and_stop(owner);
+				return true;
+			return notify_and_stop(owner);
 		}
 
 		int forwarding_close(sqlite_file* raw) noexcept
@@ -529,8 +565,9 @@ namespace cxxlens::test
 			auto& value = *as_forwarding_file(raw);
 			const auto result =
 				value.delegated->methods->write(value.delegated, input, amount, offset);
-			maybe_stop_file(value, stop_callback::write, result == sqlite_ok);
-			return result;
+			return maybe_stop_file(value, stop_callback::write, result == sqlite_ok)
+				? result
+				: sqlite_io_error;
 		}
 
 		int forwarding_truncate(sqlite_file* raw, const long long size) noexcept
@@ -555,8 +592,9 @@ namespace cxxlens::test
 												  value.owner->shm_path,
 												  value.owner->expected_main);
 			}
-			maybe_stop_file(value, stop_callback::sync, authentic_boundary);
-			return result;
+			return maybe_stop_file(value, stop_callback::sync, authentic_boundary)
+				? result
+				: sqlite_io_error;
 		}
 
 		int forwarding_file_size(sqlite_file* raw, long long* output) noexcept
