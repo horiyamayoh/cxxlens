@@ -703,6 +703,7 @@ class NgSdkContractTest(unittest.TestCase):
                     "id": "completion.provider.protocol.v2",
                     "requires": ["input.project-catalog.v1"],
                     "action": "Resolve the provider authority conflict.",
+                    "reason_code": "doctor.conflicting-capability",
                     "unlocks": "provider.protocol.v2",
                 }
             ],
@@ -729,6 +730,11 @@ class NgSdkContractTest(unittest.TestCase):
         }
         validator = jsonschema.Draft202012Validator(self.doctor_resolution_schema)
         validator.validate(resolution)
+
+        missing_plan_reason = copy.deepcopy(resolution)
+        missing_plan_reason["completion_plan"][0].pop("reason_code")
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(missing_plan_reason)
 
         duplicate = copy.deepcopy(resolution)
         duplicate["preserved_semantics"]["conflict"][0]["candidate_ids"] = [

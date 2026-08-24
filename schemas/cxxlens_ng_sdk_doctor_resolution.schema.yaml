@@ -71,7 +71,7 @@ properties:
       type: object
       maxProperties: 128
       additionalProperties: false
-      required: [id, requires, action, unlocks]
+      required: [id, requires, action, reason_code, unlocks]
       properties:
         id: {$ref: '#/$defs/id'}
         requires:
