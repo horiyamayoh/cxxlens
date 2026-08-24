@@ -31,6 +31,225 @@ from check_ng_sdk_contract import (  # noqa: E402
 from relation_idl_compiler import render  # noqa: E402
 
 
+class DoctorResolutionSemanticError(AssertionError):
+    """The doctor resolution is schema-valid but not product-semantically coherent."""
+
+
+def validate_doctor_resolution_semantics(
+    document: dict[str, object], catalog: dict[str, object]
+) -> None:
+    """Validate the cross-field invariants not expressible in the JSON schema."""
+
+    use_case = next(
+        (
+            item
+            for item in catalog["use_cases"]
+            if item["id"] == document["use_case_id"]
+        ),
+        None,
+    )
+    if use_case is None:
+        raise DoctorResolutionSemanticError("resolution references an unknown use case")
+    if document["consumer"] != use_case["consumer"]:
+        raise DoctorResolutionSemanticError("resolution consumer differs from the use case")
+    if document["question"] != use_case["question"]:
+        raise DoctorResolutionSemanticError("resolution question differs from the use case")
+
+    capabilities = {item["id"]: item for item in catalog["capabilities"]}
+    expected_path = list(use_case["capability_path"])
+    path = document["capability_path"]
+    path_ids = [item["id"] for item in path]
+    if set(path_ids) != set(expected_path):
+        raise DoctorResolutionSemanticError(
+            f"capability path IDs differ from the catalog: {path_ids!r}"
+        )
+    if len(path_ids) != len(set(path_ids)):
+        raise DoctorResolutionSemanticError("capability path contains a duplicate ID")
+    path_by_id = {item["id"]: item for item in path}
+    path_positions = {identifier: index for index, identifier in enumerate(path_ids)}
+
+    for index, item in enumerate(path):
+        capability = capabilities.get(item["id"])
+        if capability is None:
+            raise DoctorResolutionSemanticError(
+                f"capability path references an unknown capability: {item['id']}"
+            )
+        if item["kind"] != capability["kind"]:
+            raise DoctorResolutionSemanticError(
+                f"capability kind differs from the catalog: {item['id']}"
+            )
+        if set(item["requires"]) != set(capability["requires"]):
+            raise DoctorResolutionSemanticError(
+                f"capability dependencies differ from the catalog: {item['id']}"
+            )
+        for dependency in item["requires"]:
+            dependency_position = path_positions.get(dependency)
+            if dependency_position is None or dependency_position >= index:
+                raise DoctorResolutionSemanticError(
+                    f"capability dependency is not topologically earlier: "
+                    f"{dependency} -> {item['id']}"
+                )
+        if item["state"] == "proved" and item["reason_code"] != "doctor.none":
+            raise DoctorResolutionSemanticError(
+                f"proved capability has a non-none reason: {item['id']}"
+            )
+        if item["state"] != "proved" and item["reason_code"] == "doctor.none":
+            raise DoctorResolutionSemanticError(
+                f"non-proved capability has doctor.none: {item['id']}"
+            )
+
+    plan = document["completion_plan"]
+    plan_ids = [item["id"] for item in plan]
+    unlocks = [item["unlocks"] for item in plan]
+    if len(plan_ids) != len(set(plan_ids)):
+        raise DoctorResolutionSemanticError("completion plan contains a duplicate step ID")
+    if len(unlocks) != len(set(unlocks)):
+        raise DoctorResolutionSemanticError("completion plan unlocks a capability twice")
+    previous_position = -1
+    for step in plan:
+        unlock = step["unlocks"]
+        capability = path_by_id.get(unlock)
+        if capability is None:
+            raise DoctorResolutionSemanticError(
+                f"completion plan unlocks a capability outside the path: {unlock}"
+            )
+        expected_step_id = "completion." + unlock
+        if step["id"] != expected_step_id:
+            raise DoctorResolutionSemanticError(
+                f"completion plan step ID is not bound to its unlock: {step['id']}"
+            )
+        if set(step["requires"]) != set(capability["requires"]):
+            raise DoctorResolutionSemanticError(
+                f"completion step dependencies differ from the capability: {unlock}"
+            )
+        if step["action"] != capabilities[unlock]["completion_action"]:
+            raise DoctorResolutionSemanticError(
+                f"completion step action differs from the catalog: {unlock}"
+            )
+        position = path_positions[unlock]
+        if position <= previous_position:
+            raise DoctorResolutionSemanticError(
+                "completion plan is not in capability-path topological order"
+            )
+        previous_position = position
+        if capability["state"] == "proved":
+            raise DoctorResolutionSemanticError(
+                f"completion plan attempts to unlock a proved capability: {unlock}"
+            )
+        if any(path_by_id[dependency]["state"] != "proved" for dependency in step["requires"]):
+            raise DoctorResolutionSemanticError(
+                f"completion step requires an unresolved dependency: {unlock}"
+            )
+        if step["reason_code"] != capability["reason_code"]:
+            raise DoctorResolutionSemanticError(
+                f"completion step reason differs from its capability: {unlock}"
+            )
+
+    expected_plan = [
+        item["id"]
+        for item in path
+        if item["state"] != "proved"
+        and item["state"] != "conflicting"
+        and all(path_by_id[dependency]["state"] == "proved" for dependency in item["requires"])
+    ]
+    if document["result"]["state"] == "conflicting":
+        expected_plan = []
+    if unlocks != expected_plan:
+        raise DoctorResolutionSemanticError(
+            f"completion plan does not expose the current capability frontier: {unlocks!r}"
+        )
+
+    missing = document["missing"]
+    missing_ids = [item["capability_id"] for item in missing]
+    expected_missing = [item["id"] for item in path if item["state"] != "proved"]
+    if missing_ids != expected_missing:
+        raise DoctorResolutionSemanticError(
+            f"missing capabilities do not match the path: {missing_ids!r}"
+        )
+    if len(missing_ids) != len(set(missing_ids)):
+        raise DoctorResolutionSemanticError("missing capabilities contain a duplicate ID")
+    for item in missing:
+        capability = path_by_id[item["capability_id"]]
+        if item["reason_code"] != capability["reason_code"]:
+            raise DoctorResolutionSemanticError(
+                f"missing reason differs from its capability: {item['capability_id']}"
+            )
+
+    states = [item["state"] for item in path]
+    if "conflicting" in states:
+        expected_state = "conflicting"
+        first_relevant = next(item for item in path if item["state"] == "conflicting")
+        expected_reason = first_relevant["reason_code"]
+    elif all(state == "proved" for state in states):
+        expected_state = "proved"
+        expected_reason = "doctor.none"
+    elif "proved" in states:
+        expected_state = "partial"
+        expected_reason = (
+            next(
+                item["reason_code"]
+                for item in path
+                if item["id"] in unlocks
+            )
+            if unlocks
+            else next(item["reason_code"] for item in path if item["state"] != "proved")
+        )
+    elif "disproved" in states:
+        expected_state = "disproved"
+        expected_reason = next(
+            item["reason_code"] for item in path if item["state"] == "disproved"
+        )
+    else:
+        expected_state = "unknown"
+        expected_reason = next(item["reason_code"] for item in path)
+    if document["result"]["state"] != expected_state:
+        raise DoctorResolutionSemanticError(
+            f"result state does not aggregate the capability states: "
+            f"{document['result']['state']} != {expected_state}"
+        )
+    if document["result"]["reason_code"] != expected_reason:
+        raise DoctorResolutionSemanticError(
+            f"result reason does not identify the aggregate cause: "
+            f"{document['result']['reason_code']} != {expected_reason}"
+        )
+
+    preserved = document["preserved_semantics"]
+    expected_unresolved = [
+        item["id"]
+        for item in path
+        if item["state"] in {"unknown", "partial"}
+    ]
+    if preserved["coverage"] != path_ids:
+        raise DoctorResolutionSemanticError("coverage is not the complete capability path")
+    if preserved["unresolved"] != expected_unresolved:
+        raise DoctorResolutionSemanticError(
+            "unresolved does not identify exactly the unknown or partial capabilities"
+        )
+    if preserved["logical_explain"] != expected_unresolved:
+        raise DoctorResolutionSemanticError(
+            "logical explanation does not identify the unresolved capabilities"
+        )
+    expected_closure = [
+        "dependency-graph-closed" if not missing else "dependency-graph-open"
+    ]
+    if preserved["closure"] != expected_closure:
+        raise DoctorResolutionSemanticError("closure does not match missing capabilities")
+    conflict_ids = [item["capability_id"] for item in preserved["conflict"]]
+    expected_conflict_ids = [
+        item["id"] for item in path if item["state"] == "conflicting"
+    ]
+    if conflict_ids != expected_conflict_ids:
+        raise DoctorResolutionSemanticError(
+            "conflict does not identify exactly the conflicting capabilities"
+        )
+    if not preserved["guarantee"]:
+        raise DoctorResolutionSemanticError("preserved guarantees must be non-empty")
+    if not preserved["provenance"]:
+        raise DoctorResolutionSemanticError("product provenance must be non-empty")
+    if not document["result"]["guarantee"]:
+        raise DoctorResolutionSemanticError("result guarantee must be non-empty")
+
+
 class NgSdkContractTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -137,7 +356,7 @@ class NgSdkContractTest(unittest.TestCase):
             },
             "use_case_id": "cxxlens.clang22.materialize-and-query.v1",
             "consumer": "semantic-query-consumer",
-            "question": "Can this project be materialized?",
+            "question": "Can this project be materialized and queried with semantic partiality preserved?",
             "result": {
                 "state": "proved",
                 "reason_code": "doctor.none",
@@ -165,6 +384,124 @@ class NgSdkContractTest(unittest.TestCase):
                 "physical_explain": [],
                 "provenance": ["cxxlens.sdk-doctor-catalog.v1"],
                 "unresolved": [],
+            },
+        }
+
+    def doctor_partial_resolution(self) -> dict[str, object]:
+        """Build a complete catalog-bound path with an actionable frontier."""
+
+        use_case = self.doctor_catalog["use_cases"][0]
+        capabilities = {
+            item["id"]: item for item in self.doctor_catalog["capabilities"]
+        }
+        state_and_reason = {
+            "input.project-catalog.v1": ("proved", "doctor.none"),
+            "input.source-closure.v1": (
+                "unknown",
+                "doctor.source-closure-unavailable",
+            ),
+            "provider.protocol.v2": ("proved", "doctor.none"),
+            "provider.source-closure.v1": (
+                "unknown",
+                "doctor.unknown-dependency",
+            ),
+            "relation.cc-entity.v1": ("proved", "doctor.none"),
+            "relation.cc-call-site.v1": ("proved", "doctor.none"),
+            "query.logical-ir.v1": ("proved", "doctor.none"),
+            "store.snapshot.v3": (
+                "unknown",
+                "doctor.store-authority-unavailable",
+            ),
+            "recipe.calls-to-function.v1": (
+                "unknown",
+                "doctor.unknown-dependency",
+            ),
+        }
+        path = []
+        for capability_id in use_case["capability_path"]:
+            capability = capabilities[capability_id]
+            state, reason_code = state_and_reason[capability_id]
+            path.append(
+                {
+                    "id": capability_id,
+                    "kind": capability["kind"],
+                    "requires": list(capability["requires"]),
+                    "state": state,
+                    "reason_code": reason_code,
+                }
+            )
+
+        missing = [
+            {
+                "capability_id": item["id"],
+                "reason_code": item["reason_code"],
+                "explanation": "The capability cannot be proved for this project context.",
+            }
+            for item in path
+            if item["state"] != "proved"
+        ]
+        completion_plan = [
+            {
+                "id": "completion." + item["id"],
+                "requires": list(item["requires"]),
+                "action": capabilities[item["id"]]["completion_action"],
+                "reason_code": item["reason_code"],
+                "unlocks": item["id"],
+            }
+            for item in path
+            if item["state"] != "proved"
+            and item["state"] != "conflicting"
+            and all(
+                next(
+                    path_item
+                    for path_item in path
+                    if path_item["id"] == dependency
+                )["state"]
+                == "proved"
+                for dependency in item["requires"]
+            )
+        ]
+        unresolved = [
+            item["id"]
+            for item in path
+            if item["state"] in {"unknown", "partial"}
+        ]
+        return {
+            "schema": "cxxlens.sdk-doctor-resolution.v2",
+            "document_version": "2.0.0",
+            "catalog_binding": {
+                "id": "cxxlens.sdk-doctor-catalog.v1",
+                "document_version": "1.0.0",
+            },
+            "use_case_id": use_case["id"],
+            "consumer": use_case["consumer"],
+            "question": use_case["question"],
+            "result": {
+                "state": "partial",
+                "reason_code": "doctor.source-closure-unavailable",
+                "explanation": "Capability resolution is derived from product context and explicit dependencies.",
+                "guarantee": "Product-only values are evaluated; unknown remains explicit.",
+            },
+            "capability_path": path,
+            "missing": missing,
+            "completion_plan": completion_plan,
+            "preserved_semantics": {
+                "closure": ["dependency-graph-open"],
+                "conflict": [],
+                "coverage": [item["id"] for item in path],
+                "differential_disagreement": [],
+                "guarantee": [
+                    "unknown-not-collapsed-to-empty-success",
+                    "product-only-diagnosis",
+                    "non-proved-state-preserved",
+                ],
+                "logical_explain": unresolved,
+                "physical_explain": [],
+                "provenance": [
+                    "cxxlens.sdk-doctor-project.v2",
+                    "cxxlens.sdk-doctor-catalog.v1",
+                ],
+                "unresolved": unresolved,
             },
         }
 
@@ -698,15 +1035,7 @@ class NgSdkContractTest(unittest.TestCase):
                     "explanation": "Provider authority is ambiguous.",
                 }
             ],
-            "completion_plan": [
-                {
-                    "id": "completion.provider.protocol.v2",
-                    "requires": ["input.project-catalog.v1"],
-                    "action": "Resolve the provider authority conflict.",
-                    "reason_code": "doctor.conflicting-capability",
-                    "unlocks": "provider.protocol.v2",
-                }
-            ],
+            "completion_plan": [],
             "preserved_semantics": {
                 "closure": ["dependency-graph-open"],
                 "conflict": [
@@ -731,7 +1060,9 @@ class NgSdkContractTest(unittest.TestCase):
         validator = jsonschema.Draft202012Validator(self.doctor_resolution_schema)
         validator.validate(resolution)
 
-        missing_plan_reason = copy.deepcopy(resolution)
+        plan_resolution = self.doctor_partial_resolution()
+        validator.validate(plan_resolution)
+        missing_plan_reason = copy.deepcopy(plan_resolution)
         missing_plan_reason["completion_plan"][0].pop("reason_code")
         with self.assertRaises(jsonschema.ValidationError):
             validator.validate(missing_plan_reason)
@@ -759,6 +1090,149 @@ class NgSdkContractTest(unittest.TestCase):
         conflict_on_proved["result"]["reason_code"] = "doctor.none"
         with self.assertRaises(jsonschema.ValidationError):
             validator.validate(conflict_on_proved)
+
+    def test_doctor_resolution_schema_closes_states_reasons_and_summary_fields(self) -> None:
+        validator = jsonschema.Draft202012Validator(self.doctor_resolution_schema)
+        self.assertEqual(
+            set(self.doctor_resolution_schema["$defs"]["state"]["enum"]),
+            {"proved", "disproved", "unknown", "partial", "conflicting"},
+        )
+        self.assertEqual(
+            set(self.doctor_resolution_schema["$defs"]["reason_code"]["enum"]),
+            {
+                "doctor.none",
+                "doctor.missing-input",
+                "doctor.missing-provider",
+                "doctor.missing-capability",
+                "doctor.unsupported-tuple",
+                "doctor.disproved-dependency",
+                "doctor.unknown-dependency",
+                "doctor.provider-untrusted",
+                "doctor.provider-revoked",
+                "doctor.trust-unknown",
+                "doctor.revocation-unknown",
+                "doctor.conflicting-capability",
+                "doctor.catalog-binding-invalid",
+                "doctor.catalog-unavailable",
+                "doctor.catalog-unverified",
+                "doctor.catalog-rejected",
+                "doctor.catalog-revoked",
+                "doctor.provider-certification-unavailable",
+                "doctor.provider-certification-unverified",
+                "doctor.source-closure-unavailable",
+                "doctor.store-authority-unavailable",
+            },
+        )
+
+        unknown_reason = self.doctor_proved_resolution()
+        unknown_reason["result"]["reason_code"] = "doctor.reason-not-defined"
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(unknown_reason)
+
+        proved_with_missing = self.doctor_proved_resolution()
+        proved_with_missing["missing"] = [
+            {
+                "capability_id": "input.project-catalog.v1",
+                "reason_code": "doctor.missing-input",
+                "explanation": "The capability is absent.",
+            }
+        ]
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(proved_with_missing)
+
+        partial = self.doctor_partial_resolution()
+        validator.validate(partial)
+        partial_none_reason = copy.deepcopy(partial)
+        partial_none_reason["result"]["reason_code"] = "doctor.none"
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(partial_none_reason)
+
+        partial_without_coverage = copy.deepcopy(partial)
+        partial_without_coverage["preserved_semantics"]["coverage"] = []
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(partial_without_coverage)
+
+        partial_without_provenance = copy.deepcopy(partial)
+        partial_without_provenance["preserved_semantics"]["provenance"] = []
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(partial_without_provenance)
+
+        conflict_plan = self.doctor_partial_resolution()
+        conflict_plan["result"]["state"] = "conflicting"
+        conflict_plan["result"]["reason_code"] = "doctor.conflicting-capability"
+        conflict_plan["preserved_semantics"]["conflict"] = [
+            {
+                "capability_id": "provider.protocol.v2",
+                "candidate_ids": [
+                    "semantic-v2:sha256:" + "a" * 64,
+                    "semantic-v2:sha256:" + "b" * 64,
+                ],
+                "reason_code": "doctor.conflicting-capability",
+            }
+        ]
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(conflict_plan)
+
+    def test_doctor_resolution_semantics_bind_path_frontier_and_preserved_meaning(self) -> None:
+        validator = jsonschema.Draft202012Validator(self.doctor_resolution_schema)
+        resolution = self.doctor_partial_resolution()
+        validator.validate(resolution)
+        validate_doctor_resolution_semantics(resolution, self.doctor_catalog)
+
+        outside_path_unlock = copy.deepcopy(resolution)
+        outside_path_unlock["completion_plan"][0]["unlocks"] = "capability.not-in-catalog"
+        with self.assertRaises(DoctorResolutionSemanticError):
+            validate_doctor_resolution_semantics(outside_path_unlock, self.doctor_catalog)
+
+        wrong_requires = copy.deepcopy(resolution)
+        wrong_requires["completion_plan"][0]["requires"] = []
+        with self.assertRaises(DoctorResolutionSemanticError):
+            validate_doctor_resolution_semantics(wrong_requires, self.doctor_catalog)
+
+        non_topological_path = copy.deepcopy(resolution)
+        non_topological_path["capability_path"][0], non_topological_path[
+            "capability_path"
+        ][1] = (
+            non_topological_path["capability_path"][1],
+            non_topological_path["capability_path"][0],
+        )
+        with self.assertRaises(DoctorResolutionSemanticError):
+            validate_doctor_resolution_semantics(non_topological_path, self.doctor_catalog)
+
+        duplicate_step_id = copy.deepcopy(resolution)
+        duplicate_step_id["completion_plan"][1]["id"] = duplicate_step_id[
+            "completion_plan"
+        ][0]["id"]
+        with self.assertRaises(DoctorResolutionSemanticError):
+            validate_doctor_resolution_semantics(duplicate_step_id, self.doctor_catalog)
+
+        duplicate_unlock = copy.deepcopy(resolution)
+        duplicate_unlock["completion_plan"][1]["id"] = "completion.duplicate-step"
+        duplicate_unlock["completion_plan"][1]["unlocks"] = duplicate_unlock[
+            "completion_plan"
+        ][0]["unlocks"]
+        with self.assertRaises(DoctorResolutionSemanticError):
+            validate_doctor_resolution_semantics(duplicate_unlock, self.doctor_catalog)
+
+        reversed_plan = copy.deepcopy(resolution)
+        reversed_plan["completion_plan"].reverse()
+        with self.assertRaises(DoctorResolutionSemanticError):
+            validate_doctor_resolution_semantics(reversed_plan, self.doctor_catalog)
+
+        missing_drift = copy.deepcopy(resolution)
+        missing_drift["missing"][0]["capability_id"] = "store.snapshot.v3"
+        with self.assertRaises(DoctorResolutionSemanticError):
+            validate_doctor_resolution_semantics(missing_drift, self.doctor_catalog)
+
+        unresolved_drift = copy.deepcopy(resolution)
+        unresolved_drift["preserved_semantics"]["unresolved"].pop()
+        with self.assertRaises(DoctorResolutionSemanticError):
+            validate_doctor_resolution_semantics(unresolved_drift, self.doctor_catalog)
+
+        coverage_drift = copy.deepcopy(resolution)
+        coverage_drift["preserved_semantics"]["coverage"].reverse()
+        with self.assertRaises(DoctorResolutionSemanticError):
+            validate_doctor_resolution_semantics(coverage_drift, self.doctor_catalog)
 
     def test_doctor_relation_presence_schema_binds_product_catalog(self) -> None:
         document = {

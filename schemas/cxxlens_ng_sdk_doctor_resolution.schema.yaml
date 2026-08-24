@@ -52,6 +52,19 @@ properties:
           items: {$ref: '#/$defs/id'}
         state: {$ref: '#/$defs/state'}
         reason_code: {$ref: '#/$defs/reason_code'}
+      allOf:
+        - if:
+            properties: {state: {const: proved}}
+            required: [state]
+          then:
+            properties: {reason_code: {const: doctor.none}}
+          else:
+            properties: {reason_code: {not: {const: doctor.none}}}
+        - if:
+            properties: {state: {const: conflicting}}
+            required: [state]
+          then:
+            properties: {reason_code: {const: doctor.conflicting-capability}}
   missing:
     type: array
     maxItems: 128
@@ -64,9 +77,13 @@ properties:
         capability_id: {$ref: '#/$defs/id'}
         reason_code: {$ref: '#/$defs/reason_code'}
         explanation: {$ref: '#/$defs/nonempty_string'}
+      allOf:
+        - properties:
+            reason_code: {not: {const: doctor.none}}
   completion_plan:
     type: array
     maxItems: 128
+    uniqueItems: true
     items:
       type: object
       maxProperties: 128
@@ -82,6 +99,9 @@ properties:
         action: {$ref: '#/$defs/nonempty_string'}
         reason_code: {$ref: '#/$defs/reason_code'}
         unlocks: {$ref: '#/$defs/id'}
+      allOf:
+        - properties:
+            reason_code: {not: {const: doctor.none}}
   preserved_semantics:
     type: object
     maxProperties: 128
@@ -97,20 +117,82 @@ properties:
       - provenance
       - unresolved
     properties:
-      closure: {$ref: '#/$defs/string_list'}
+      closure:
+        type: array
+        minItems: 1
+        maxItems: 128
+        uniqueItems: true
+        items:
+          enum: [dependency-graph-closed, dependency-graph-open]
       conflict:
         type: array
         maxItems: 128
         uniqueItems: true
         items: {$ref: '#/$defs/conflict'}
-      coverage: {$ref: '#/$defs/string_list'}
+      coverage:
+        type: array
+        minItems: 1
+        maxItems: 128
+        uniqueItems: true
+        items: {$ref: '#/$defs/id'}
       differential_disagreement: {$ref: '#/$defs/string_list'}
-      guarantee: {$ref: '#/$defs/string_list'}
+      guarantee:
+        type: array
+        minItems: 1
+        maxItems: 128
+        uniqueItems: true
+        items: {$ref: '#/$defs/nonempty_string'}
       logical_explain: {$ref: '#/$defs/string_list'}
       physical_explain: {$ref: '#/$defs/string_list'}
-      provenance: {$ref: '#/$defs/string_list'}
+      provenance:
+        type: array
+        minItems: 1
+        maxItems: 128
+        uniqueItems: true
+        items: {$ref: '#/$defs/nonempty_string'}
       unresolved: {$ref: '#/$defs/string_list'}
 allOf:
+  - if:
+      properties:
+        result:
+          properties: {state: {const: proved}}
+          required: [state]
+      required: [result]
+    then:
+      properties:
+        result:
+          properties: {reason_code: {const: doctor.none}}
+        missing: {maxItems: 0}
+        completion_plan: {maxItems: 0}
+        preserved_semantics:
+          properties:
+            closure: {const: [dependency-graph-closed]}
+            unresolved: {maxItems: 0}
+  - if:
+      properties:
+        result:
+          properties:
+            state:
+              enum: [disproved, unknown, partial, conflicting]
+          required: [state]
+      required: [result]
+    then:
+      properties:
+        result:
+          properties: {reason_code: {not: {const: doctor.none}}}
+        missing: {minItems: 1}
+        preserved_semantics:
+          properties: {closure: {const: [dependency-graph-open]}}
+  - if:
+      properties:
+        result:
+          properties: {state: {const: unknown}}
+          required: [state]
+      required: [result]
+    then:
+      properties:
+        preserved_semantics:
+          properties: {unresolved: {minItems: 1}}
   - if:
       properties:
         result:
@@ -122,6 +204,7 @@ allOf:
         result:
           properties:
             reason_code: {const: doctor.conflicting-capability}
+        completion_plan: {maxItems: 0}
         preserved_semantics:
           properties:
             conflict: {minItems: 1}
@@ -161,7 +244,28 @@ $defs:
   reason_code:
     type: string
     maxLength: 512
-    pattern: '^doctor\.[a-z0-9-]+$'
+    enum:
+      - doctor.none
+      - doctor.missing-input
+      - doctor.missing-provider
+      - doctor.missing-capability
+      - doctor.unsupported-tuple
+      - doctor.disproved-dependency
+      - doctor.unknown-dependency
+      - doctor.provider-untrusted
+      - doctor.provider-revoked
+      - doctor.trust-unknown
+      - doctor.revocation-unknown
+      - doctor.conflicting-capability
+      - doctor.catalog-binding-invalid
+      - doctor.catalog-unavailable
+      - doctor.catalog-unverified
+      - doctor.catalog-rejected
+      - doctor.catalog-revoked
+      - doctor.provider-certification-unavailable
+      - doctor.provider-certification-unverified
+      - doctor.source-closure-unavailable
+      - doctor.store-authority-unavailable
   conflict:
     type: object
     maxProperties: 128
