@@ -1198,12 +1198,49 @@ namespace
 					census ? std::string{"normalization retained-parent source census"}
 						   : std::string{"normalization retained-parent source census: "} +
 							census.error().field + '/' + census.error().detail);
+			auto second_census =
+				normalization_bundle->observation->capture_namespace(normalization_path);
+			require(second_census && second_census->source_shm_guard,
+					"second normalization retained-parent source census");
+			auto mixed_census = *census;
+			mixed_census.entries = second_census->entries;
+			std::shared_ptr<const sqlite_backend_held_object> mixed_main;
+			for (const auto& entry : mixed_census.entries)
+				if (entry.role == sqlite_backend_file_role::main_database)
+					mixed_main = entry.held_object;
+			require(mixed_main != nullptr, "mixed normalization held main source anchor");
 			std::shared_ptr<const sqlite_backend_held_object> held_main;
 			for (const auto& entry : census->entries)
 				if (entry.role == sqlite_backend_file_role::main_database)
 					held_main = entry.held_object;
 			require(held_main != nullptr, "normalization held main source anchor");
 			auto operation_port = std::make_shared<default_store_operation_port>();
+			{
+				auto mixed_receipt = seal_sqlite_logical_read_receipt(
+					std::static_pointer_cast<const void>(mixed_main), true, true, 0U, true);
+				require(mixed_receipt.has_value(), "mixed census receipt fixture");
+				auto mixed_input = sqlite_exact_empty_normalization_input{
+					sqlite_exact_empty_normalization_runtime{
+						real_runtime,
+						real_libversion_number,
+						real_compile_option_get,
+						std::bit_cast<
+							sqlite_exact_empty_normalization_runtime::db_readonly_function>(
+							real_db_readonly),
+					},
+					std::move(mixed_census),
+					normalization_path,
+					operation_port,
+				};
+				auto mixed_rejected = run_sqlite_exact_empty_normalization_effect(
+					std::move(*mixed_receipt), mixed_input, normalization_bundle->observation);
+				require(!mixed_rejected &&
+							mixed_rejected.error() ==
+								error{"store.backend-unavailable",
+									  "sqlite",
+									  "exact-empty-normalization-entry"},
+						"mixed census and normalization guard are rejected before effect");
+			}
 			auto input = sqlite_exact_empty_normalization_input{
 				sqlite_exact_empty_normalization_runtime{
 					real_runtime,

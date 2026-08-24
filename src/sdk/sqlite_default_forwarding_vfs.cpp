@@ -1423,10 +1423,34 @@ namespace cxxlens::sdk
 														   sqlite_backend_file_role::shared_memory);
 				const auto* journal = exact_empty_census_entry(
 					input.source_census, sqlite_backend_file_role::rollback_journal);
+				const auto census_matches_guard = [&]() noexcept
+				{
+					if (!input.source_census.source_shm_guard)
+						return false;
+					for (const auto role : {sqlite_backend_file_role::main_database,
+											sqlite_backend_file_role::write_ahead_log,
+											sqlite_backend_file_role::shared_memory,
+											sqlite_backend_file_role::rollback_journal})
+					{
+						const auto* captured = exact_empty_census_entry(input.source_census, role);
+						auto retained = input.source_census.source_shm_guard->retained_entry(role);
+						if (captured == nullptr || !retained || retained->role != captured->role ||
+							retained->state != captured->state ||
+							retained->object_identity != captured->object_identity ||
+							retained->directory_entry_identity !=
+								captured->directory_entry_identity ||
+							retained->held_object != captured->held_object ||
+							retained->object_filesystem_profile !=
+								captured->object_filesystem_profile ||
+							retained->direct_regular_entry != captured->direct_regular_entry)
+							return false;
+					}
+					return true;
+				};
 				if (!accepts_exact_empty_normalization_runtime(owner_pin, input.runtime) ||
 					input.canonical_vfs_locator != canonical_locator || !input.operation_port ||
 					input.source_census.capability_token != capability_token_value ||
-					!input.source_census.source_shm_guard || main == nullptr || wal == nullptr ||
+					!census_matches_guard() || main == nullptr || wal == nullptr ||
 					shm == nullptr || journal == nullptr ||
 					main->state != sqlite_backend_entry_state::held_regular || !main->held_object ||
 					!main->object_identity || !main->directory_entry_identity ||
