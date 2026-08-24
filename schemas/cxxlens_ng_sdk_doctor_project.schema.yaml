@@ -5,64 +5,200 @@ type: object
 additionalProperties: false
 required: [schema, document_version, project]
 properties:
-  schema: {const: cxxlens.sdk-doctor-project.v1}
-  document_version: {const: 1.0.0}
+  schema: {const: cxxlens.sdk-doctor-project.v2}
+  document_version: {const: 2.0.0}
   project:
     type: object
     additionalProperties: false
-    required: [project_id, catalog_id, catalog_digest, logical_root, environment_digest]
+    required:
+      - project_id
+      - catalog_id
+      - catalog_digest
+      - logical_root
+      - environment_digest
+      - environment
+      - provider_candidates
     properties:
-      project_id: {$ref: '#/$defs/nonempty_string'}
-      catalog_id: {$ref: '#/$defs/nonempty_string'}
-      catalog_digest: {$ref: '#/$defs/nonempty_string'}
+      project_id: {$ref: '#/$defs/id'}
+      catalog_id:
+        type: string
+        pattern: '^catalog:semantic-v2:sha256:[0-9a-f]{64}$'
+      catalog_digest: {$ref: '#/$defs/semantic_digest'}
       logical_root:
         type: string
         pattern: '^project://.+'
-      environment_digest: {$ref: '#/$defs/nonempty_string'}
+      environment_digest: {$ref: '#/$defs/digest'}
+      environment: {$ref: '#/$defs/environment'}
       source_input:
         type: object
         additionalProperties: false
         required: [source_snapshot_id, compilation_database_id]
         properties:
-          source_snapshot_id: {$ref: '#/$defs/nonempty_string'}
-          compilation_database_id: {$ref: '#/$defs/nonempty_string'}
-      provider:
-        type: object
-        additionalProperties: false
-        required:
-          - provider_id
-          - provider_version
-          - protocol_major
-          - protocol_minor
-          - offered_relations
-          - features
-          - interpretation_domains
-          - sandbox_minimum
-        properties:
-          provider_id: {$ref: '#/$defs/nonempty_string'}
-          provider_version: {$ref: '#/$defs/nonempty_string'}
-          protocol_major: {$ref: '#/$defs/u32'}
-          protocol_minor: {$ref: '#/$defs/u32'}
-          offered_relations: {$ref: '#/$defs/string_set'}
-          features: {$ref: '#/$defs/string_set'}
-          interpretation_domains: {$ref: '#/$defs/string_set'}
-          sandbox_minimum: {$ref: '#/$defs/nonempty_string'}
+          source_snapshot_id: {$ref: '#/$defs/id'}
+          compilation_database_id: {$ref: '#/$defs/id'}
+      provider_candidates:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/provider_candidate'}
       store:
         type: object
         additionalProperties: false
         required: [backend, format]
         properties:
-          backend: {$ref: '#/$defs/nonempty_string'}
-          format: {$ref: '#/$defs/nonempty_string'}
+          backend: {enum: [memory, sqlite]}
+          format: {const: cxxlens.snapshot.v3}
 $defs:
-  nonempty_string:
+  id:
     type: string
     minLength: 1
+    maxLength: 512
+  version:
+    type: string
+    pattern: '^[1-9][0-9]*\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
   u32:
     type: integer
     minimum: 0
     maximum: 4294967295
+  digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+  semantic_digest:
+    type: string
+    pattern: '^semantic-v2:sha256:[0-9a-f]{64}$'
+  nullable_id:
+    oneOf:
+      - {$ref: '#/$defs/id'}
+      - {type: 'null'}
+  nullable_digest:
+    oneOf:
+      - {$ref: '#/$defs/digest'}
+      - {type: 'null'}
+  nonnegative_integer:
+    type: integer
+    minimum: 0
+  nullable_nonnegative_integer:
+    oneOf:
+      - {$ref: '#/$defs/nonnegative_integer'}
+      - {type: 'null'}
   string_set:
     type: array
     uniqueItems: true
-    items: {$ref: '#/$defs/nonempty_string'}
+    items: {$ref: '#/$defs/id'}
+  environment:
+    type: object
+    additionalProperties: false
+    required:
+      - release_version
+      - surface
+      - os
+      - architecture
+      - compiler_provider_major
+      - linkage
+    properties:
+      release_version: {$ref: '#/$defs/version'}
+      surface: {$ref: '#/$defs/id'}
+      os: {$ref: '#/$defs/id'}
+      architecture: {$ref: '#/$defs/id'}
+      compiler_provider_major: {$ref: '#/$defs/id'}
+      linkage: {enum: [static, shared]}
+  protocol:
+    type: object
+    additionalProperties: false
+    required: [major, minor]
+    properties:
+      major:
+        type: integer
+        minimum: 1
+        maximum: 4294967295
+      minor: {$ref: '#/$defs/u32'}
+  sandbox:
+    type: object
+    additionalProperties: false
+    required: [minimum, policy_digest]
+    properties:
+      minimum: {$ref: '#/$defs/id'}
+      policy_digest: {$ref: '#/$defs/digest'}
+  revocation:
+    type: object
+    additionalProperties: false
+    required: [state, effective_sequence, reason]
+    properties:
+      state: {enum: [not-revoked, revoked, unknown]}
+      effective_sequence: {$ref: '#/$defs/nullable_nonnegative_integer'}
+      reason: {$ref: '#/$defs/nullable_id'}
+    allOf:
+      - if:
+          properties: {state: {const: revoked}}
+          required: [state]
+        then:
+          properties:
+            effective_sequence: {$ref: '#/$defs/nonnegative_integer'}
+            reason: {$ref: '#/$defs/id'}
+      - if:
+          properties: {state: {enum: [not-revoked, unknown]}}
+          required: [state]
+        then:
+          properties:
+            effective_sequence: {type: 'null'}
+            reason: {type: 'null'}
+  trust:
+    type: object
+    additionalProperties: false
+    required:
+      - state
+      - registry_sequence
+      - certificate_id
+      - trust_anchor_id
+      - signature_digest
+      - revocation
+    properties:
+      state: {enum: [verified, unknown, rejected]}
+      registry_sequence: {$ref: '#/$defs/nonnegative_integer'}
+      certificate_id: {$ref: '#/$defs/nullable_id'}
+      trust_anchor_id: {$ref: '#/$defs/nullable_id'}
+      signature_digest: {$ref: '#/$defs/nullable_digest'}
+      revocation: {$ref: '#/$defs/revocation'}
+    allOf:
+      - if:
+          properties: {state: {const: verified}}
+          required: [state]
+        then:
+          properties:
+            certificate_id: {$ref: '#/$defs/id'}
+            trust_anchor_id: {$ref: '#/$defs/id'}
+            signature_digest: {$ref: '#/$defs/digest'}
+            revocation:
+              allOf:
+                - {$ref: '#/$defs/revocation'}
+                - properties: {state: {const: not-revoked}}
+  provider_candidate:
+    type: object
+    additionalProperties: false
+    required:
+      - candidate_id
+      - provider_id
+      - provider_version
+      - package_identity
+      - provider_manifest_digest
+      - provider_binary_digest
+      - provider_semantic_contract_digest
+      - protocol
+      - features
+      - relations
+      - interpretations
+      - sandbox
+      - trust
+    properties:
+      candidate_id: {$ref: '#/$defs/semantic_digest'}
+      provider_id: {$ref: '#/$defs/id'}
+      provider_version: {$ref: '#/$defs/version'}
+      package_identity: {$ref: '#/$defs/id'}
+      provider_manifest_digest: {$ref: '#/$defs/digest'}
+      provider_binary_digest: {$ref: '#/$defs/digest'}
+      provider_semantic_contract_digest: {$ref: '#/$defs/digest'}
+      protocol: {$ref: '#/$defs/protocol'}
+      features: {$ref: '#/$defs/string_set'}
+      relations: {$ref: '#/$defs/string_set'}
+      interpretations: {$ref: '#/$defs/string_set'}
+      sandbox: {$ref: '#/$defs/sandbox'}
+      trust: {$ref: '#/$defs/trust'}

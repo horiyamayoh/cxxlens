@@ -1,0 +1,135 @@
+schema: cxxlens.sdk-doctor-catalog.v1
+document_version: 1.0.0
+commands:
+  - id: relation-presence
+    consumer: sdk-relation-consumer
+    output_schema: cxxlens.sdk-doctor-relation-presence.v2
+    formats: [json, markdown]
+    exit_codes: {proved: 0, not_proved: 1, invalid_request: 2}
+  - id: missing
+    consumer: semantic-query-consumer
+    output_schema: cxxlens.sdk-doctor-resolution.v2
+    formats: [json, markdown]
+    exit_codes: {proved: 0, not_proved: 1, invalid_request: 2}
+use_cases:
+  - id: cxxlens.clang22.materialize-and-query.v1
+    consumer: semantic-query-consumer
+    question: Can this project be materialized and queried with semantic partiality preserved?
+    capability_path:
+      - input.project-catalog.v1
+      - input.source-closure.v1
+      - provider.protocol.v2
+      - provider.source-closure.v1
+      - relation.cc-entity.v1
+      - relation.cc-call-site.v1
+      - query.logical-ir.v1
+      - store.snapshot.v3
+      - recipe.calls-to-function.v1
+capabilities:
+  - id: input.project-catalog.v1
+    kind: input
+    requires: []
+    consumers: [provider.protocol.v2, store.snapshot.v3]
+    completion_action: Supply a valid content-bound project catalog.
+  - id: input.source-closure.v1
+    kind: input
+    requires: [input.project-catalog.v1]
+    consumers: [provider.source-closure.v1]
+    completion_action: Supply the source-closure snapshot and compilation database identities.
+  - id: provider.protocol.v2
+    kind: provider
+    requires: [input.project-catalog.v1]
+    consumers: [provider.source-closure.v1, relation.cc-entity.v1, relation.cc-call-site.v1]
+    completion_action: Select one exact trusted Protocol 2.0 provider support tuple.
+  - id: provider.source-closure.v1
+    kind: provider
+    requires: [provider.protocol.v2, input.source-closure.v1]
+    consumers: [recipe.calls-to-function.v1]
+    completion_action: Provide task-input-chunks-v2 and task-source-closure-v2.
+  - id: relation.cc-entity.v1
+    kind: relation
+    requires: [provider.protocol.v2]
+    consumers: [query.logical-ir.v1]
+    completion_action: Offer cc.entity.v1 under the required interpretation.
+    relation_ids: [cc.entity.v1]
+  - id: relation.cc-call-site.v1
+    kind: relation
+    requires: [provider.protocol.v2]
+    consumers: [query.logical-ir.v1]
+    completion_action: Offer cc.call_site.v1 under the required interpretation.
+    relation_ids: [cc.call_site.v1]
+  - id: query.logical-ir.v1
+    kind: query
+    requires: [relation.cc-entity.v1, relation.cc-call-site.v1]
+    consumers: [recipe.calls-to-function.v1]
+    completion_action: Provide the logical query capability for both required relations.
+  - id: store.snapshot.v3
+    kind: store
+    requires: [input.project-catalog.v1]
+    consumers: [recipe.calls-to-function.v1]
+    completion_action: Select a supported memory or SQLite snapshot v3 store.
+  - id: recipe.calls-to-function.v1
+    kind: recipe
+    requires: [query.logical-ir.v1, store.snapshot.v3, provider.source-closure.v1]
+    consumers: [semantic-query-consumer]
+    completion_action: Satisfy every prerequisite before executing the recipe.
+provider_support:
+  protocol: {major: 2, minor: 0, downgrade: forbidden}
+  required_features: [task-input-chunks-v2, task-source-closure-v2]
+  required_relations: [cc.call_site.v1, cc.entity.v1]
+  required_interpretations: [cc.clang22-canonical-1]
+  sandbox_minimum: enforced
+  trust:
+    manifest: exact-digest-required
+    binary: exact-digest-required
+    semantics: exact-digest-required
+    signature: verified-required
+    certification: exact-registry-binding-required
+    revocation: not-revoked-required
+  candidate_identity:
+    domain: cxxlens.provider-candidate.v1
+    encoding: semantic-v2-sha256
+    producer: provider-discovery
+    input_binding: unique-candidate-id-required
+  support_tuple_fields:
+    - release_version
+    - surface
+    - os
+    - architecture
+    - compiler_provider_major
+    - linkage
+  supported_tuples:
+    - release_version: 1.0.0
+      surface: core
+      os: linux
+      architecture: x86_64
+      compiler_provider_major: clang22
+      linkage: static
+    - release_version: 1.0.0
+      surface: core
+      os: linux
+      architecture: x86_64
+      compiler_provider_major: clang22
+      linkage: shared
+    - release_version: 1.0.0
+      surface: provider-sdk
+      os: linux
+      architecture: x86_64
+      compiler_provider_major: clang22
+      linkage: static
+    - release_version: 1.0.0
+      surface: provider-sdk
+      os: linux
+      architecture: x86_64
+      compiler_provider_major: clang22
+      linkage: shared
+  conflict_policy:
+    subject: capability-provider-candidate-set
+    selection: exact-one-valid-candidate
+    duplicate_identity: reject
+    same_provider_version_distinct_identity: conflicting
+    multiple_valid_candidates: conflicting
+    fallback: forbidden
+store_support:
+  backends: [memory, sqlite]
+  format: cxxlens.snapshot.v3

@@ -6,6 +6,7 @@ additionalProperties: false
 required:
   - schema
   - document_version
+  - catalog_binding
   - use_case_id
   - consumer
   - question
@@ -15,10 +16,11 @@ required:
   - completion_plan
   - preserved_semantics
 properties:
-  schema: {const: cxxlens.sdk-doctor-resolution.v1}
-  document_version: {const: 1.0.0}
-  use_case_id: {$ref: '#/$defs/nonempty_string'}
-  consumer: {$ref: '#/$defs/nonempty_string'}
+  schema: {const: cxxlens.sdk-doctor-resolution.v2}
+  document_version: {const: 2.0.0}
+  catalog_binding: {$ref: '#/$defs/catalog_binding'}
+  use_case_id: {$ref: '#/$defs/id'}
+  consumer: {$ref: '#/$defs/id'}
   question: {$ref: '#/$defs/nonempty_string'}
   result:
     type: object
@@ -37,13 +39,12 @@ properties:
       additionalProperties: false
       required: [id, kind, requires, state, reason_code]
       properties:
-        id: {$ref: '#/$defs/nonempty_string'}
-        kind:
-          enum: [input, provider, relation, query, store, recipe]
+        id: {$ref: '#/$defs/id'}
+        kind: {enum: [input, provider, relation, query, store, recipe]}
         requires:
           type: array
           uniqueItems: true
-          items: {$ref: '#/$defs/nonempty_string'}
+          items: {$ref: '#/$defs/id'}
         state: {$ref: '#/$defs/state'}
         reason_code: {$ref: '#/$defs/reason_code'}
   missing:
@@ -53,7 +54,7 @@ properties:
       additionalProperties: false
       required: [capability_id, reason_code, explanation]
       properties:
-        capability_id: {$ref: '#/$defs/nonempty_string'}
+        capability_id: {$ref: '#/$defs/id'}
         reason_code: {$ref: '#/$defs/reason_code'}
         explanation: {$ref: '#/$defs/nonempty_string'}
   completion_plan:
@@ -63,13 +64,13 @@ properties:
       additionalProperties: false
       required: [id, requires, action, unlocks]
       properties:
-        id: {$ref: '#/$defs/nonempty_string'}
+        id: {$ref: '#/$defs/id'}
         requires:
           type: array
           uniqueItems: true
-          items: {$ref: '#/$defs/nonempty_string'}
+          items: {$ref: '#/$defs/id'}
         action: {$ref: '#/$defs/nonempty_string'}
-        unlocks: {$ref: '#/$defs/nonempty_string'}
+        unlocks: {$ref: '#/$defs/id'}
   preserved_semantics:
     type: object
     additionalProperties: false
@@ -85,7 +86,10 @@ properties:
       - unresolved
     properties:
       closure: {$ref: '#/$defs/string_list'}
-      conflict: {$ref: '#/$defs/string_list'}
+      conflict:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/conflict'}
       coverage: {$ref: '#/$defs/string_list'}
       differential_disagreement: {$ref: '#/$defs/string_list'}
       guarantee: {$ref: '#/$defs/string_list'}
@@ -93,7 +97,40 @@ properties:
       physical_explain: {$ref: '#/$defs/string_list'}
       provenance: {$ref: '#/$defs/string_list'}
       unresolved: {$ref: '#/$defs/string_list'}
+allOf:
+  - if:
+      properties:
+        result:
+          properties: {state: {const: conflicting}}
+          required: [state]
+      required: [result]
+    then:
+      properties:
+        result:
+          properties:
+            reason_code: {const: doctor.conflicting-capability}
+        preserved_semantics:
+          properties:
+            conflict: {minItems: 1}
+    else:
+      properties:
+        preserved_semantics:
+          properties:
+            conflict: {maxItems: 0}
 $defs:
+  catalog_binding:
+    type: object
+    additionalProperties: false
+    required: [id, document_version]
+    properties:
+      id: {const: cxxlens.sdk-doctor-catalog.v1}
+      document_version: {const: 1.0.0}
+  id:
+    type: string
+    pattern: '^[a-z][a-z0-9_.-]+$'
+  candidate_identity:
+    type: string
+    pattern: '^semantic-v2:sha256:[0-9a-f]{64}$'
   nonempty_string:
     type: string
     minLength: 1
@@ -106,3 +143,15 @@ $defs:
   reason_code:
     type: string
     pattern: '^doctor\.[a-z0-9-]+$'
+  conflict:
+    type: object
+    additionalProperties: false
+    required: [capability_id, candidate_ids, reason_code]
+    properties:
+      capability_id: {$ref: '#/$defs/id'}
+      candidate_ids:
+        type: array
+        minItems: 2
+        uniqueItems: true
+        items: {$ref: '#/$defs/candidate_identity'}
+      reason_code: {const: doctor.conflicting-capability}

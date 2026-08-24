@@ -3,10 +3,25 @@ $id: https://cxxlens.dev/schemas/cxxlens_ng_sdk_doctor_relation_presence.schema.
 title: cxxlens SDK doctor product relation presence
 type: object
 additionalProperties: false
-required: [schema, document_version, mode, requested, missing, state, components]
+required:
+  - schema
+  - document_version
+  - catalog_binding
+  - mode
+  - requested
+  - missing
+  - state
+  - components
 properties:
-  schema: {const: cxxlens.sdk-doctor-relation-presence.v1}
-  document_version: {const: 1.0.0}
+  schema: {const: cxxlens.sdk-doctor-relation-presence.v2}
+  document_version: {const: 2.0.0}
+  catalog_binding:
+    type: object
+    additionalProperties: false
+    required: [id, document_version]
+    properties:
+      id: {const: cxxlens.sdk-doctor-catalog.v1}
+      document_version: {const: 1.0.0}
   mode: {const: relation-presence}
   requested:
     type: integer

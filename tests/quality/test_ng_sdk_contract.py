@@ -49,6 +49,80 @@ class NgSdkContractTest(unittest.TestCase):
         cls.provider_manifest_schema = load_yaml(
             ROOT / "schemas/cxxlens_ng_provider_manifest.schema.yaml"
         )
+        cls.doctor_catalog = load_yaml(
+            ROOT / "schemas/cxxlens_ng_sdk_doctor_catalog.yaml"
+        )
+        cls.doctor_catalog_schema = load_yaml(
+            ROOT / "schemas/cxxlens_ng_sdk_doctor_catalog.schema.yaml"
+        )
+        cls.doctor_project_schema = load_yaml(
+            ROOT / "schemas/cxxlens_ng_sdk_doctor_project.schema.yaml"
+        )
+        cls.doctor_resolution_schema = load_yaml(
+            ROOT / "schemas/cxxlens_ng_sdk_doctor_resolution.schema.yaml"
+        )
+        cls.doctor_relation_presence_schema = load_yaml(
+            ROOT / "schemas/cxxlens_ng_sdk_doctor_relation_presence.schema.yaml"
+        )
+        cls.support_matrix = load_yaml(ROOT / "schemas/cxxlens_support_matrix.yaml")
+
+    @staticmethod
+    def doctor_project() -> dict[str, object]:
+        catalog_digest = "semantic-v2:sha256:" + "c" * 64
+        candidate = {
+            "candidate_id": "semantic-v2:sha256:" + "a" * 64,
+            "provider_id": "cxxlens.clang22.reference",
+            "provider_version": "2.0.0",
+            "package_identity": "cxxlens.clang22.package",
+            "provider_manifest_digest": "sha256:" + "1" * 64,
+            "provider_binary_digest": "sha256:" + "2" * 64,
+            "provider_semantic_contract_digest": "sha256:" + "3" * 64,
+            "protocol": {"major": 2, "minor": 0},
+            "features": ["task-input-chunks-v2", "task-source-closure-v2"],
+            "relations": ["cc.call_site.v1", "cc.entity.v1"],
+            "interpretations": ["cc.clang22-canonical-1"],
+            "sandbox": {
+                "minimum": "enforced",
+                "policy_digest": "sha256:" + "4" * 64,
+            },
+            "trust": {
+                "state": "verified",
+                "registry_sequence": 7,
+                "certificate_id": "certificate.provider.one",
+                "trust_anchor_id": "cxxlens.production-root.v1",
+                "signature_digest": "sha256:" + "5" * 64,
+                "revocation": {
+                    "state": "not-revoked",
+                    "effective_sequence": None,
+                    "reason": None,
+                },
+            },
+        }
+        return {
+            "schema": "cxxlens.sdk-doctor-project.v2",
+            "document_version": "2.0.0",
+            "project": {
+                "project_id": "project.example",
+                "catalog_id": "catalog:" + catalog_digest,
+                "catalog_digest": catalog_digest,
+                "logical_root": "project://example",
+                "environment_digest": "sha256:" + "6" * 64,
+                "environment": {
+                    "release_version": "1.0.0",
+                    "surface": "provider-sdk",
+                    "os": "linux",
+                    "architecture": "x86_64",
+                    "compiler_provider_major": "clang22",
+                    "linkage": "static",
+                },
+                "source_input": {
+                    "source_snapshot_id": "source-snapshot.example",
+                    "compilation_database_id": "compilation-database.example",
+                },
+                "provider_candidates": [candidate],
+                "store": {"backend": "memory", "format": "cxxlens.snapshot.v3"},
+            },
+        }
 
     def test_catalog_and_ordinary_boundary_are_valid(self) -> None:
         validate_catalog(ROOT, self.catalog)
@@ -188,6 +262,244 @@ class NgSdkContractTest(unittest.TestCase):
             self.assertNotIn("harness", path)
             self.assertIn("positive_example", path)
             self.assertIn("negative_example", path)
+
+    def test_doctor_catalog_and_document_schemas_are_valid(self) -> None:
+        schemas = (
+            self.doctor_catalog_schema,
+            self.doctor_project_schema,
+            self.doctor_resolution_schema,
+            self.doctor_relation_presence_schema,
+        )
+        for schema in schemas:
+            jsonschema.Draft202012Validator.check_schema(schema)
+        jsonschema.Draft202012Validator(self.doctor_catalog_schema).validate(
+            self.doctor_catalog
+        )
+
+        capability_ids: set[str] = set()
+        capability_by_id: dict[str, dict[str, object]] = {}
+        for capability in self.doctor_catalog["capabilities"]:
+            self.assertNotIn(capability["id"], capability_ids)
+            self.assertTrue(set(capability["requires"]).issubset(capability_ids))
+            capability_ids.add(capability["id"])
+            capability_by_id[capability["id"]] = capability
+        use_case_ids: set[str] = set()
+        for use_case in self.doctor_catalog["use_cases"]:
+            self.assertNotIn(use_case["id"], use_case_ids)
+            use_case_ids.add(use_case["id"])
+            path = use_case["capability_path"]
+            self.assertTrue(set(path).issubset(capability_ids))
+            path_positions = {
+                capability_id: index for index, capability_id in enumerate(path)
+            }
+            for capability_id in path:
+                self.assertTrue(
+                    all(
+                        dependency in path_positions
+                        and path_positions[dependency] < path_positions[capability_id]
+                        for dependency in capability_by_id[capability_id]["requires"]
+                    )
+                )
+
+        tuple_fields = self.doctor_catalog["provider_support"][
+            "support_tuple_fields"
+        ]
+        catalog_tuples = {
+            tuple(row[field] for field in tuple_fields)
+            for row in self.doctor_catalog["provider_support"]["supported_tuples"]
+        }
+        matrix_tuples = {
+            tuple(row[field] for field in tuple_fields)
+            for row in self.support_matrix["entries"]
+        }
+        self.assertEqual(catalog_tuples, matrix_tuples)
+
+        command_ids = [command["id"] for command in self.doctor_catalog["commands"]]
+        self.assertEqual(len(command_ids), len(set(command_ids)))
+        self.assertEqual(set(command_ids), {"relation-presence", "missing"})
+
+        non_product = copy.deepcopy(self.doctor_catalog)
+        non_product["non_product_field"] = {}
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(self.doctor_catalog_schema).validate(
+                non_product
+            )
+
+    def test_doctor_project_accepts_zero_or_more_typed_provider_candidates(self) -> None:
+        validator = jsonschema.Draft202012Validator(self.doctor_project_schema)
+        project = self.doctor_project()
+        validator.validate(project)
+
+        no_provider = copy.deepcopy(project)
+        no_provider["project"]["provider_candidates"] = []
+        validator.validate(no_provider)
+
+        second_provider = copy.deepcopy(
+            project["project"]["provider_candidates"][0]
+        )
+        second_provider["candidate_id"] = "semantic-v2:sha256:" + "b" * 64
+        second_provider["provider_binary_digest"] = "sha256:" + "7" * 64
+        project["project"]["provider_candidates"].append(second_provider)
+        validator.validate(project)
+
+        opaque_identity = self.doctor_project()
+        opaque_identity["project"]["provider_candidates"][0]["candidate_id"] = (
+            "provider.candidate.one"
+        )
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(opaque_identity)
+
+    def test_doctor_project_rejects_incomplete_or_self_inconsistent_authority(self) -> None:
+        validator = jsonschema.Draft202012Validator(self.doctor_project_schema)
+
+        for required in (
+            "provider_manifest_digest",
+            "provider_binary_digest",
+            "provider_semantic_contract_digest",
+            "protocol",
+            "features",
+            "relations",
+            "interpretations",
+            "sandbox",
+            "trust",
+        ):
+            project = self.doctor_project()
+            project["project"]["provider_candidates"][0].pop(required)
+            with self.subTest(required=required), self.assertRaises(
+                jsonschema.ValidationError
+            ):
+                validator.validate(project)
+
+        revoked = self.doctor_project()
+        revoked_trust = revoked["project"]["provider_candidates"][0]["trust"]
+        revoked_trust["revocation"] = {
+            "state": "revoked",
+            "effective_sequence": 8,
+            "reason": "provider-key-compromise",
+        }
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(revoked)
+
+        missing_tuple = self.doctor_project()
+        missing_tuple["project"]["environment"].pop("linkage")
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(missing_tuple)
+
+    def test_doctor_documents_reject_non_product_fields(self) -> None:
+        validator = jsonschema.Draft202012Validator(self.doctor_project_schema)
+        project = self.doctor_project()
+        project["project"]["non_product_field"] = {}
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(project)
+
+    def test_doctor_resolution_schema_admits_typed_reachable_conflict(self) -> None:
+        resolution = {
+            "schema": "cxxlens.sdk-doctor-resolution.v2",
+            "document_version": "2.0.0",
+            "catalog_binding": {
+                "id": "cxxlens.sdk-doctor-catalog.v1",
+                "document_version": "1.0.0",
+            },
+            "use_case_id": "cxxlens.clang22.materialize-and-query.v1",
+            "consumer": "semantic-query-consumer",
+            "question": "Can this project be materialized?",
+            "result": {
+                "state": "conflicting",
+                "reason_code": "doctor.conflicting-capability",
+                "explanation": "Two valid provider authorities disagree.",
+                "guarantee": "No provider is selected from a conflict.",
+            },
+            "capability_path": [
+                {
+                    "id": "provider.protocol.v2",
+                    "kind": "provider",
+                    "requires": ["input.project-catalog.v1"],
+                    "state": "conflicting",
+                    "reason_code": "doctor.conflicting-capability",
+                }
+            ],
+            "missing": [
+                {
+                    "capability_id": "provider.protocol.v2",
+                    "reason_code": "doctor.conflicting-capability",
+                    "explanation": "Provider authority is ambiguous.",
+                }
+            ],
+            "completion_plan": [
+                {
+                    "id": "completion.provider.protocol.v2",
+                    "requires": ["input.project-catalog.v1"],
+                    "action": "Resolve the provider authority conflict.",
+                    "unlocks": "provider.protocol.v2",
+                }
+            ],
+            "preserved_semantics": {
+                "closure": ["dependency-graph-open"],
+                "conflict": [
+                    {
+                        "capability_id": "provider.protocol.v2",
+                        "candidate_ids": [
+                            "semantic-v2:sha256:" + "a" * 64,
+                            "semantic-v2:sha256:" + "b" * 64,
+                        ],
+                        "reason_code": "doctor.conflicting-capability",
+                    }
+                ],
+                "coverage": ["provider.protocol.v2"],
+                "differential_disagreement": [],
+                "guarantee": ["no-conflict-fallback"],
+                "logical_explain": ["provider.protocol.v2"],
+                "physical_explain": [],
+                "provenance": ["cxxlens.sdk-doctor-catalog.v1"],
+                "unresolved": ["provider.protocol.v2"],
+            },
+        }
+        validator = jsonschema.Draft202012Validator(self.doctor_resolution_schema)
+        validator.validate(resolution)
+
+        duplicate = copy.deepcopy(resolution)
+        duplicate["preserved_semantics"]["conflict"][0]["candidate_ids"] = [
+            "semantic-v2:sha256:" + "a" * 64,
+            "semantic-v2:sha256:" + "a" * 64,
+        ]
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(duplicate)
+
+        missing_conflict = copy.deepcopy(resolution)
+        missing_conflict["preserved_semantics"]["conflict"] = []
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(missing_conflict)
+
+        wrong_conflict_reason = copy.deepcopy(resolution)
+        wrong_conflict_reason["result"]["reason_code"] = "doctor.unknown"
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(wrong_conflict_reason)
+
+        conflict_on_proved = copy.deepcopy(resolution)
+        conflict_on_proved["result"]["state"] = "proved"
+        conflict_on_proved["result"]["reason_code"] = "doctor.none"
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(conflict_on_proved)
+
+    def test_doctor_relation_presence_schema_binds_product_catalog(self) -> None:
+        document = {
+            "schema": "cxxlens.sdk-doctor-relation-presence.v2",
+            "document_version": "2.0.0",
+            "catalog_binding": {
+                "id": "cxxlens.sdk-doctor-catalog.v1",
+                "document_version": "1.0.0",
+            },
+            "mode": "relation-presence",
+            "requested": 1,
+            "missing": 0,
+            "state": "proved",
+            "components": [
+                {"id": "cc.entity.v1", "state": "proved", "reason_code": "none"}
+            ],
+        }
+        jsonschema.Draft202012Validator(
+            self.doctor_relation_presence_schema
+        ).validate(document)
 
     def test_project_catalog_projection_cannot_drop_source_digest(self) -> None:
         contract = copy.deepcopy(self.project_catalog_contract)
