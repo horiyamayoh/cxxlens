@@ -2362,6 +2362,57 @@ namespace
 		auto native = cxxlens::sdk::provider::make_scaffold(
 			{"company.example.native", "clang22-native", "company.example.relation"});
 		require(portable && native, "provider scaffold generation failed");
+		const auto safe_relative_path = [](const std::string_view path)
+		{
+			if (path.empty() || path.front() == '/' || path.front() == '\\' ||
+				path.contains('\\') || path.contains('\0') || path.contains(':'))
+				return false;
+			std::size_t component_begin = 0U;
+			while (component_begin <= path.size())
+			{
+				const auto separator = path.find('/', component_begin);
+				const auto component =
+					path.substr(component_begin,
+								separator == std::string_view::npos ? std::string_view::npos
+																	: separator - component_begin);
+				if (component.empty() || component == "." || component == "..")
+					return false;
+				if (separator == std::string_view::npos)
+					break;
+				component_begin = separator + 1U;
+			}
+			return true;
+		};
+		const auto scaffold_paths_valid = [&](const auto& files)
+		{
+			std::set<std::string, std::less<>> paths;
+			return std::ranges::all_of(files,
+									   [&](const auto& file)
+									   {
+										   return safe_relative_path(file.relative_path) &&
+											   paths.insert(file.relative_path).second;
+									   });
+		};
+		require(scaffold_paths_valid(*portable),
+				"portable scaffold paths are unsafe or duplicated");
+		require(scaffold_paths_valid(*native), "native scaffold paths are unsafe or duplicated");
+		const std::array invalid_scaffold_paths{std::string_view{},
+												std::string_view{"/escape"},
+												std::string_view{"C:/escape"},
+												std::string_view{"../escape"},
+												std::string_view{"src/../escape"},
+												std::string_view{"src/./main.cpp"},
+												std::string_view{"src//main.cpp"},
+												std::string_view{R"(src\..\escape)"}};
+		for (const auto path : invalid_scaffold_paths)
+			require(!safe_relative_path(path),
+					"unsafe scaffold path was accepted: " + std::string{path});
+		auto duplicate_paths = *portable;
+		duplicate_paths.push_back({"CMakeLists.txt", "duplicate"});
+		require(!scaffold_paths_valid(duplicate_paths), "duplicate scaffold paths were accepted");
+		auto extended = *portable;
+		extended.push_back({"docs/provider.md", "Additional provider notes.\n"});
+		require(scaffold_paths_valid(extended), "valid additional scaffold files were rejected");
 		const auto find_scaffold_file =
 			[](const std::vector<cxxlens::sdk::provider::scaffold_file>& files,
 			   const std::string_view path)
@@ -2392,6 +2443,7 @@ namespace
 		};
 		require_scaffold_shape(*portable, "portable");
 		require_scaffold_shape(*native, "native");
+		require_scaffold_shape(extended, "extended portable");
 
 		const auto portable_cmake = find_scaffold_file(*portable, "CMakeLists.txt");
 		const auto portable_manifest = find_scaffold_file(*portable, "provider-manifest.json");
@@ -2403,20 +2455,116 @@ namespace
 		const auto native_main = find_scaffold_file(*native, "src/main.cpp");
 		const auto native_test = find_scaffold_file(*native, "tests/provider_test.cpp");
 		const auto native_readme = find_scaffold_file(*native, "README.md");
+		const auto trim_line = [](std::string_view line)
+		{
+			const auto whitespace = [](const char byte)
+			{
+				return byte == ' ' || byte == '\t' || byte == '\r';
+			};
+			while (!line.empty() && whitespace(line.front()))
+				line.remove_prefix(1U);
+			while (!line.empty() && whitespace(line.back()))
+				line.remove_suffix(1U);
+			return line;
+		};
+		const auto has_exact_line =
+			[&](const std::string_view content, const std::string_view expected)
+		{
+			std::size_t line_begin = 0U;
+			while (line_begin <= content.size())
+			{
+				const auto line_end = content.find('\n', line_begin);
+				const auto line = trim_line(content.substr(line_begin,
+														   line_end == std::string_view::npos
+															   ? std::string_view::npos
+															   : line_end - line_begin));
+				if (line == expected)
+					return true;
+				if (line_end == std::string_view::npos)
+					break;
+				line_begin = line_end + 1U;
+			}
+			return false;
+		};
+		const auto looks_like_entrypoint = [&](const std::string_view code)
+		{
+			const auto trimmed = trim_line(code);
+			return trimmed.starts_with("int main(") && trimmed.contains(')') &&
+				trimmed.contains('{') && trimmed.contains('}');
+		};
+		const auto has_entrypoint = [&](const std::string_view content)
+		{
+			bool in_block_comment = false;
+			std::size_t line_begin = 0U;
+			while (line_begin <= content.size())
+			{
+				const auto line_end = content.find('\n', line_begin);
+				auto code =
+					content.substr(line_begin,
+								   line_end == std::string_view::npos ? std::string_view::npos
+																	  : line_end - line_begin);
+				while (true)
+				{
+					if (in_block_comment)
+					{
+						const auto close = code.find("*/");
+						if (close == std::string_view::npos)
+						{
+							code = {};
+							break;
+						}
+						code.remove_prefix(close + 2U);
+						in_block_comment = false;
+					}
+					const auto block_start = code.find("/*");
+					const auto line_start = code.find("//");
+					if (line_start != std::string_view::npos &&
+						(block_start == std::string_view::npos || line_start < block_start))
+					{
+						code = code.substr(0U, line_start);
+						break;
+					}
+					if (block_start == std::string_view::npos)
+						break;
+					if (looks_like_entrypoint(code.substr(0U, block_start)))
+						return true;
+					code.remove_prefix(block_start + 2U);
+					in_block_comment = true;
+				}
+				if (looks_like_entrypoint(code))
+					return true;
+				if (line_end == std::string_view::npos)
+					break;
+				line_begin = line_end + 1U;
+			}
+			return false;
+		};
 		const auto check_common_content = [&](const auto cmake,
 											  const auto manifest_file,
 											  const auto main_file,
 											  const auto test_file,
 											  const auto readme_file,
 											  const std::string_view provider_id,
-											  const std::string_view relation_name)
+											  const std::string_view relation_name,
+											  const std::string_view package_name,
+											  const std::string_view target_name,
+											  const std::string_view main_header)
 		{
-			require(
-				cmake->content.contains("cmake_minimum_required(VERSION 3.25)") &&
-					cmake->content.contains("LANGUAGES CXX") &&
-					cmake->content.contains("add_executable(provider src/main.cpp)") &&
-					cmake->content.contains("target_compile_features(provider PRIVATE cxx_std_23)"),
-				"provider scaffold build contract diverged");
+			std::string project_name{provider_id};
+			std::ranges::replace(project_name, '.', '_');
+			const auto project_line = std::string{"project("} + project_name + " LANGUAGES CXX)";
+			const auto package_line =
+				std::string{"find_package("} + std::string{package_name} + " CONFIG REQUIRED)";
+			const auto target_line = std::string{"target_link_libraries(provider PRIVATE "} +
+				std::string{target_name} + ")";
+			require(has_exact_line(cmake->content, "cmake_minimum_required(VERSION 3.25)") &&
+						has_exact_line(cmake->content, project_line) &&
+						has_exact_line(cmake->content, package_line) &&
+						has_exact_line(cmake->content, "add_executable(provider src/main.cpp)") &&
+						has_exact_line(cmake->content, target_line) &&
+						has_exact_line(cmake->content,
+									   "target_compile_features(provider PRIVATE cxx_std_23)"),
+					"provider scaffold build contract diverged");
 			require(
 				manifest_file->content.ends_with('\n') &&
 					manifest_file->content.contains(
@@ -2432,12 +2580,14 @@ namespace
 					manifest_file->content.contains(
 						R"("task_stage":{"input":"observation","output":"assertion"})"),
 				"provider scaffold manifest semantics diverged");
-			require(main_file->content.contains("#include ") &&
+			require(has_exact_line(main_file->content,
+								   std::string{"#include "} + std::string{main_header}) &&
+						has_entrypoint(main_file->content) &&
 						main_file->content.contains("run_worker") &&
 						main_file->content.contains("framing, credit, and checksums are SDK-owned"),
 					"provider scaffold runtime entrypoint contract diverged");
-			require(test_file->content.contains("#include <cxxlens/sdk/provider.hpp>") &&
-						test_file->content.contains("int main()"),
+			require(has_exact_line(test_file->content, "#include <cxxlens/sdk/provider.hpp>") &&
+						has_entrypoint(test_file->content),
 					"provider scaffold test entrypoint contract diverged");
 			require(readme_file->content.contains(std::string{provider_id}) &&
 						readme_file->content.contains(std::string{"`"} +
@@ -2450,19 +2600,20 @@ namespace
 							 portable_test,
 							 portable_readme,
 							 "company.example.provider",
-							 "company.example.relation");
+							 "company.example.relation",
+							 "cxxlensProviderSDK",
+							 "cxxlens::provider_sdk",
+							 "<cxxlens/sdk.hpp>");
 		check_common_content(native_cmake,
 							 native_manifest,
 							 native_main,
 							 native_test,
 							 native_readme,
 							 "company.example.native",
-							 "company.example.relation");
-		require(portable_cmake->content.contains("cxxlens::provider_sdk") &&
-					portable_main->content.contains("<cxxlens/sdk.hpp>") &&
-					native_cmake->content.contains("cxxlens::clang22_provider_sdk") &&
-					native_main->content.contains("<cxxlens/provider/clang22.hpp>"),
-				"provider scaffold package/runtime adapter contract diverged");
+							 "company.example.relation",
+							 "cxxlensClang22ProviderSDK",
+							 "cxxlens::clang22_provider_sdk",
+							 "<cxxlens/provider/clang22.hpp>");
 
 		coverage_provider implementation;
 		auto task = make_provider_task(implementation,
