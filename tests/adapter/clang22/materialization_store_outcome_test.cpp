@@ -1,11 +1,17 @@
 #include "llvm/clang22/materialization_store_outcome.hpp"
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
+
+#include "llvm/clang22/materialization_execution_journal.hpp"
+#include "llvm/clang22/materialization_prior_artifact.hpp"
 
 namespace
 {
@@ -261,6 +267,207 @@ namespace
 						cxxlens::sdk::error{"store.transaction-state", "publish", {}},
 				"publish conflict without recovery evidence was accepted");
 	}
+
+	[[nodiscard]] std::string sha(const char value)
+	{
+		return "sha256:" + std::string(64U, value);
+	}
+
+	[[nodiscard]] std::string semantic(const char value)
+	{
+		return "semantic-v2:sha256:" + std::string(64U, value);
+	}
+
+	[[nodiscard]] cxxlens::sdk::canonical_value text(const std::string_view value)
+	{
+		return cxxlens::sdk::canonical_value::from_string(std::string{value});
+	}
+
+	[[nodiscard]] cxxlens::sdk::canonical_value
+	receipt_projection(const materialization_v4_claim_receipt& value)
+	{
+		return cxxlens::sdk::canonical_value::from_tuple({
+			text(value.schema),
+			text(value.binding_digest),
+			text(value.materialization_request_id),
+			cxxlens::sdk::canonical_value::from_integer(
+				static_cast<std::int64_t>(value.task_index)),
+			text(value.task_id),
+			text(value.task_v4_digest),
+			text(value.provider_execution_id),
+			text(value.source_closure_id),
+			text(value.source_closure_digest),
+			text(value.manifest_digest),
+			text(value.task_input_digest),
+			text(value.claim_batch_content_digest),
+			text(value.partition_id),
+			text(value.partition_content_digest),
+			text(value.coverage_digest),
+			cxxlens::sdk::canonical_value::from_integer(
+				static_cast<std::int64_t>(value.claim_count)),
+			cxxlens::sdk::canonical_value::from_integer(
+				static_cast<std::int64_t>(value.unresolved_count)),
+			cxxlens::sdk::canonical_value::from_integer(
+				static_cast<std::int64_t>(value.conflict_count)),
+			cxxlens::sdk::canonical_value::from_integer(
+				static_cast<std::int64_t>(value.differential_disagreement_count)),
+			cxxlens::sdk::canonical_value::from_boolean(value.complete),
+			text(value.receipt_digest),
+		});
+	}
+
+	[[nodiscard]] std::string task_receipt_digest(const materialization_v4_claim_receipt& value)
+	{
+		const auto result = cxxlens::sdk::canonical_identity_digest(
+			"cxxlens.clang22.materialization-claim-receipt.v4",
+			std::array<cxxlens::sdk::canonical_value, 20U>{
+				text(value.schema),
+				text(value.binding_digest),
+				text(value.materialization_request_id),
+				cxxlens::sdk::canonical_value::from_integer(
+					static_cast<std::int64_t>(value.task_index)),
+				text(value.task_id),
+				text(value.task_v4_digest),
+				text(value.provider_execution_id),
+				text(value.source_closure_id),
+				text(value.source_closure_digest),
+				text(value.manifest_digest),
+				text(value.task_input_digest),
+				text(value.claim_batch_content_digest),
+				text(value.partition_id),
+				text(value.partition_content_digest),
+				text(value.coverage_digest),
+				cxxlens::sdk::canonical_value::from_integer(
+					static_cast<std::int64_t>(value.claim_count)),
+				cxxlens::sdk::canonical_value::from_integer(
+					static_cast<std::int64_t>(value.unresolved_count)),
+				cxxlens::sdk::canonical_value::from_integer(
+					static_cast<std::int64_t>(value.conflict_count)),
+				cxxlens::sdk::canonical_value::from_integer(
+					static_cast<std::int64_t>(value.differential_disagreement_count)),
+				cxxlens::sdk::canonical_value::from_boolean(value.complete),
+			});
+		require(result.has_value(), "test receipt digest derivation failed");
+		return *result;
+	}
+
+	[[nodiscard]] materialization_v4_claim_receipt task_receipt(const std::uint64_t index)
+	{
+		materialization_v4_claim_receipt value;
+		value.materialization_request_id = "materialization-request:v4-reuse";
+		value.task_index = index;
+		value.binding_digest = sha(static_cast<char>('a' + index));
+		value.task_id = "task:v4-" + std::to_string(index);
+		value.task_v4_digest = semantic(static_cast<char>('b' + index));
+		value.provider_execution_id = "provider-execution:v4-" + std::to_string(index);
+		value.source_closure_id = "source-closure:v4-" + std::to_string(index);
+		value.source_closure_digest = sha(static_cast<char>('c' + index));
+		value.manifest_digest = sha(static_cast<char>('d' + index));
+		value.task_input_digest = sha(static_cast<char>('e' + index));
+		value.claim_batch_content_digest = sha(static_cast<char>('f' + index));
+		value.partition_id = "partition:v4-" + std::to_string(index);
+		value.partition_content_digest = sha(static_cast<char>('1' + index));
+		value.coverage_digest = sha(static_cast<char>('2' + index));
+		value.claim_count = 1U;
+		value.complete = true;
+		value.receipt_digest = task_receipt_digest(value);
+		return value;
+	}
+
+	[[nodiscard]] materialization_v4_incremental_receipt
+	incremental_receipt(std::vector<materialization_v4_claim_receipt> tasks)
+	{
+		materialization_v4_incremental_receipt value;
+		value.materialization_request_id = tasks.front().materialization_request_id;
+		value.task_count = tasks.size();
+		value.task_receipts = std::move(tasks);
+		for (const auto& task : value.task_receipts)
+		{
+			value.claim_count += task.claim_count;
+			value.unresolved_count += task.unresolved_count;
+			value.conflict_count += task.conflict_count;
+			value.differential_disagreement_count += task.differential_disagreement_count;
+			value.complete = value.complete || task.complete;
+		}
+		value.complete = true;
+		std::vector<cxxlens::sdk::canonical_value> fields{
+			text(value.schema),
+			text(value.materialization_request_id),
+			cxxlens::sdk::canonical_value::from_integer(
+				static_cast<std::int64_t>(value.task_count)),
+		};
+		std::vector<cxxlens::sdk::canonical_value> task_values;
+		for (const auto& task : value.task_receipts)
+			task_values.push_back(receipt_projection(task));
+		fields.push_back(cxxlens::sdk::canonical_value::from_tuple(std::move(task_values)));
+		fields.push_back(cxxlens::sdk::canonical_value::from_integer(
+			static_cast<std::int64_t>(value.claim_count)));
+		fields.push_back(cxxlens::sdk::canonical_value::from_integer(
+			static_cast<std::int64_t>(value.unresolved_count)));
+		fields.push_back(cxxlens::sdk::canonical_value::from_integer(
+			static_cast<std::int64_t>(value.conflict_count)));
+		fields.push_back(cxxlens::sdk::canonical_value::from_integer(
+			static_cast<std::int64_t>(value.differential_disagreement_count)));
+		fields.push_back(cxxlens::sdk::canonical_value::from_boolean(value.complete));
+		const auto digest = cxxlens::sdk::canonical_identity_digest(
+			materialization_v4_incremental_receipt_schema, fields);
+		require(digest.has_value(), "test incremental digest derivation failed");
+		value.receipt_digest = *digest;
+		return value;
+	}
+
+	void v4_execution_and_prior_reuse_are_exact()
+	{
+		auto receipt = incremental_receipt({task_receipt(0U), task_receipt(1U)});
+		auto journal = materialization_v4_execution_journal::begin(
+			receipt.materialization_request_id, receipt.task_count);
+		require(journal.has_value(), "v4 execution journal did not begin");
+		require(journal->record(receipt.task_receipts[0U], true, 0U).has_value(),
+				"valid zero-call reuse was rejected");
+		require(journal->record(receipt.task_receipts[1U], true, 0U).has_value(),
+				"second zero-call reuse was rejected");
+		auto execution = std::move(*journal).finish(receipt);
+		require(execution.has_value() && execution->provider_call_count == 0U &&
+					execution->reused_task_count == receipt.task_count,
+				"valid reuse did not produce a zero-provider execution receipt");
+
+		auto invalid_calls = materialization_v4_execution_journal::begin(
+			receipt.materialization_request_id, receipt.task_count);
+		require(invalid_calls.has_value(), "invalid-call journal did not begin");
+		require(!invalid_calls->record(receipt.task_receipts[0U], true, 1U),
+				"reuse with provider call was accepted");
+		require(!materialization_v4_execution_journal::validate_exact_reuse(
+					receipt,
+					incremental_receipt({receipt.task_receipts[1U], receipt.task_receipts[0U]})),
+				"reordered v4 receipt was accepted");
+
+		materialization_v4_prior_artifact artifact;
+		artifact.materialization_request_id = receipt.materialization_request_id;
+		artifact.authority = {"recipe:v4", "output-plan:v4", "publication-target:v4"};
+		artifact.publication = {"series:v4",
+								"publication:v4",
+								"snapshot:v4",
+								std::string{"publication:parent"},
+								4U,
+								4U,
+								true,
+								false};
+		artifact.receipt = receipt;
+		auto encoded = encode_materialization_v4_prior_artifact(artifact);
+		require(encoded.has_value(), "v4 prior artifact did not encode");
+		auto decoded = decode_materialization_v4_prior_artifact(*encoded);
+		require(decoded.has_value(), "v4 prior artifact did not decode");
+		auto reuse = match_materialization_v4_prior_artifact(*decoded,
+															 receipt.materialization_request_id,
+															 artifact.authority,
+															 artifact.publication,
+															 receipt.task_receipts);
+		require(reuse.has_value() && reuse->provider_call_count == 0U,
+				"v4 prior artifact exact match did not issue zero-call reuse");
+		(*encoded)[encoded->size() - 1U] ^= std::byte{1};
+		require(!decode_materialization_v4_prior_artifact(*encoded),
+				"tampered v4 prior artifact was accepted");
+	}
 } // namespace
 
 int main()
@@ -268,5 +475,6 @@ int main()
 	exact_writer_publish_tuples_map_without_prose_parsing();
 	prepublication_and_postpublication_states_are_separate();
 	unknown_or_forged_tuples_fail_closed();
+	v4_execution_and_prior_reuse_are_exact();
 	return 0;
 }
