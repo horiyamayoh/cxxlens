@@ -4089,6 +4089,8 @@ namespace cxxlens::sdk
 			bool private_read_transaction{};
 			std::shared_ptr<sqlite_source_shm_target_namespace_epoch>
 				deferred_writer_target_namespace_epoch;
+			std::optional<sqlite_backend_opaque_identity>
+				deferred_writer_target_namespace_epoch_identity;
 			std::optional<sqlite_backend_opaque_identity> deferred_writer_sqlite_source_id;
 		};
 
@@ -6267,6 +6269,8 @@ namespace cxxlens::sdk
 						else
 						{
 							opened.deferred_writer_target_namespace_epoch = target_namespace_epoch;
+							opened.deferred_writer_target_namespace_epoch_identity =
+								target_namespace_epoch->identity();
 							opened.deferred_writer_sqlite_source_id =
 								opened.active_wal_anchor->sqlite_source_id;
 						}
@@ -12017,6 +12021,7 @@ namespace cxxlens::sdk
 				if (handoff_to_current_writer)
 				{
 					if (!opened->deferred_writer_target_namespace_epoch ||
+						!opened->deferred_writer_target_namespace_epoch_identity ||
 						!opened->deferred_writer_sqlite_source_id)
 					{
 						if (opened->deferred_writer_target_namespace_epoch)
@@ -12038,6 +12043,31 @@ namespace cxxlens::sdk
 					});
 				if (!diagnostic_corruption)
 				{
+					if (handoff_to_current_writer)
+					{
+						const auto writer_source_stable = revalidate_stored_quiescent_source(
+							*implementation->sqlite_source_anchor,
+							database_path,
+							*implementation->sqlite_observation);
+						const bool epoch_stable =
+							opened->deferred_writer_target_namespace_epoch &&
+							opened->deferred_writer_target_namespace_epoch_identity &&
+							opened->deferred_writer_target_namespace_epoch->identity() ==
+								*opened->deferred_writer_target_namespace_epoch_identity;
+						auto epoch_rechecked = epoch_stable
+							? opened->deferred_writer_target_namespace_epoch->recheck()
+							: result<void>{unexpected(sqlite_source_shm_qualification_failure())};
+						if (!writer_source_stable || !epoch_rechecked)
+						{
+							if (opened->deferred_writer_target_namespace_epoch)
+								(void)finish_source_shm_epoch_after_confirmed_close(
+									opened->deferred_writer_target_namespace_epoch, true);
+							opened->deferred_writer_target_namespace_epoch.reset();
+							opened->deferred_writer_target_namespace_epoch_identity.reset();
+							opened->deferred_writer_sqlite_source_id.reset();
+							return unexpected(sqlite_source_shm_qualification_failure());
+						}
+					}
 					auto writable = open_current_observed_database(
 						opened->api,
 						database_path,
@@ -12060,6 +12090,7 @@ namespace cxxlens::sdk
 						return unexpected(std::move(writable.error()));
 					}
 					opened->deferred_writer_target_namespace_epoch.reset();
+					opened->deferred_writer_target_namespace_epoch_identity.reset();
 					opened->deferred_writer_sqlite_source_id.reset();
 					implementation->database = std::move(*writable);
 				}
@@ -12076,6 +12107,7 @@ namespace cxxlens::sdk
 							return unexpected(std::move(finished.error()));
 					}
 					opened->deferred_writer_target_namespace_epoch.reset();
+					opened->deferred_writer_target_namespace_epoch_identity.reset();
 					opened->deferred_writer_sqlite_source_id.reset();
 				}
 			}
