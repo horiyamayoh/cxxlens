@@ -1301,6 +1301,10 @@ namespace
 					(*normalized)->post_close_logical_empty() &&
 					(*normalized)->post_close_sidecars_absent() && (*normalized)->custody_drained(),
 				"real normalization completed physical and logical edge");
+			const auto* effect_post_census = (*normalized)->post_namespace_census();
+			require(effect_post_census != nullptr &&
+						effect_post_census->source_shm_guard != nullptr,
+					"normalization edge did not retain its authenticated post namespace census");
 
 			auto cold_post =
 				normalization_bundle->observation->capture_namespace(normalization_path);

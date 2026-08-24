@@ -89,6 +89,12 @@ namespace cxxlens::sdk
 		return expected_post_main_;
 	}
 
+	const sqlite_backend_namespace_census*
+	sqlite_exact_empty_normalization_completed_edge::post_namespace_census() const noexcept
+	{
+		return post_namespace_census_ ? &*post_namespace_census_ : nullptr;
+	}
+
 	bool sqlite_exact_empty_normalization_completed_edge::confirmed_close() const noexcept
 	{
 		return confirmed_close_;
@@ -147,6 +153,12 @@ namespace cxxlens::sdk
 		seal_logical_empty(sqlite_exact_empty_normalization_completed_edge& edge) noexcept
 		{
 			edge.logical_empty_ = true;
+		}
+
+		static void bind_post_namespace(sqlite_exact_empty_normalization_completed_edge& edge,
+										sqlite_backend_namespace_census census)
+		{
+			edge.post_namespace_census_ = std::move(census);
 		}
 	};
 
@@ -10920,6 +10932,8 @@ namespace cxxlens::sdk
 				return fail("exact-empty-normalization-post-census");
 			auto mutable_implementation =
 				std::const_pointer_cast<sqlite_exact_empty_normalization_completed_edge>(*physical);
+			sqlite_exact_empty_normalization_edge_factory::bind_post_namespace(
+				*mutable_implementation, std::move(*post_census));
 			sqlite_exact_empty_normalization_edge_factory::seal_logical_empty(
 				*mutable_implementation);
 			if (!mutable_implementation->post_close_logical_empty())

@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -105,6 +106,8 @@ namespace cxxlens::sdk
 		[[nodiscard]] std::span<const std::byte> callback_payload() const noexcept;
 		[[nodiscard]] std::span<const std::byte> pre_main_bytes() const noexcept;
 		[[nodiscard]] std::span<const std::byte> expected_post_main_bytes() const noexcept;
+		/** Namespace census captured by the effect after classifier close and cleanup. */
+		[[nodiscard]] const sqlite_backend_namespace_census* post_namespace_census() const noexcept;
 		[[nodiscard]] bool confirmed_close() const noexcept;
 		[[nodiscard]] bool post_close_exact_projection() const noexcept;
 		[[nodiscard]] bool post_close_logical_empty() const noexcept;
@@ -131,6 +134,7 @@ namespace cxxlens::sdk
 		std::vector<std::byte> callback_payload_;
 		std::vector<std::byte> pre_main_;
 		std::vector<std::byte> expected_post_main_;
+		std::optional<sqlite_backend_namespace_census> post_namespace_census_;
 		bool confirmed_close_{};
 		bool exact_projection_{};
 		bool logical_empty_{};

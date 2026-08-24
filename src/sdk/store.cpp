@@ -4836,12 +4836,13 @@ namespace cxxlens::sdk
 					return unexpected(normalized ? sqlite_effect_gate_failure()
 												 : std::move(normalized.error()));
 
-				// The effect owns and verifies the physical transition.  Re-capture the retained
-				// namespace before the ordinary fresh writer is opened so its anchor cannot point
-				// at the pre-normalization main object digest.
-				auto post_census = observation->capture_namespace(path);
-				if (!post_census)
-					return unexpected(std::move(post_census.error()));
+				// The effect owns and verifies the physical transition.  Reuse the exact census
+				// captured after classifier close rather than recapturing the namespace here; a
+				// second capture would create an unauthenticated race between the effect and the
+				// fresh writer handoff.
+				const auto* post_census = (*normalized)->post_namespace_census();
+				if (post_census == nullptr)
+					return unexpected(sqlite_effect_gate_failure());
 				if (auto valid = validate_namespace_census(*post_census, *observation); !valid)
 					return unexpected(std::move(valid.error()));
 				const auto* post_main =
@@ -4865,7 +4866,7 @@ namespace cxxlens::sdk
 				if (!post_byte_count || !post_sha256)
 					return unexpected(sqlite_quiescent_observation_failure());
 				effective_source_anchor = sqlite_quiescent_source_anchor{
-					std::move(*post_census), *post_byte_count, std::move(*post_sha256)};
+					*post_census, *post_byte_count, std::move(*post_sha256)};
 			}
 			auto anchor_pin = sqlite_authority_anchor_pin(effective_source_anchor);
 			if (!anchor_pin)
