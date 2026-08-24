@@ -1357,12 +1357,10 @@ $defs:
         canonical_order: exact-full-canonical-bytes-never-digest-order
       d5_failure_taxonomy:
         stable_spool_failure_cause: actual-private-prepublication-spool-port-io-or-hash-failure-only
-        proposed_prepublication_phase_codes:
+        prepublication_phase_codes:
           materialization-validation: materialization.spool-failure
           store-stage: materialization.spool-failure
           report-construction: materialization.spool-failure
-        pre_review_phase_matrix_and_report_schema: unchanged
-        accepted_activation_step: atomically-add-three-private-spool-phase-codes-request-bound-reverse-closures-for-spool-and-partition-stage-counter-overflow-and-update-full-report-schema-canonical-json-digest
         relation_or_claim_schema_ceiling_exceeded: materialization-validation-materialization-claim-invalid-before-store-open
         v5_collection_count_overflow:
           operation: partition_stage
@@ -1421,11 +1419,9 @@ $defs:
             - fresh-request-and-budget-authority
             - same-cap-for-memory-and-sqlite-direct-tests
       d6_compatibility:
-        contract_version: 2.2.0-accepted-option-a-authority
-        report_schema_canonical_json_digest: sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96
-        public_headers_signatures_and_inventory: unchanged
-        public_catalog: additive-sqlite-v3-behavior-entry-with-store.migration-required-no-new-callable
-        request_and_report_shape: request-2.2.0-report-private-spool-failure-occurrence-inventory-sandbox-bounds-activated
+        contract_version: 2.2.0-option-a
+        public_api: additive-store.migration-required-with-no-new-callable
+        request_and_report_shape: request-2.2.0-report-2.2.0-private-spool-failure-installed-occurrence-identity-and-sandbox-bounds
         claim_store_identities_and_logical_canonical_schema_projection: unchanged-with-authorized-physical-generation-transition
         sqlite_contract: schemas/cxxlens_ng_sqlite_store_contract.yaml
         sqlite_physical_format: cxxlens.sqlite-semantic-store.v3-3.0.0
@@ -1433,15 +1429,6 @@ $defs:
         sqlite_predecessor: exact-v2.6.0-read-only-direct-open
         sqlite_migration: compact-v2.6.0-to-v3.0.0-single-transaction-cow
         source_private_receipts_and_counters: excluded-from-public-report-and-api
-        external_qualified_v2_1_found: require-successor-version-and-migration-boundary
-        fresh_public_semantics_gate:
-        - request-accepted-set-or-budget
-        - retained-memory-guarantee-weakening
-        - public-claim-or-store-signature-success-semantics-or-cursor-lifetime
-        - public-header-callable-or-catalog-entry
-        - report-shape-or-version
-        - canonical-v5-or-snapshot-identity
-        - incompatible-sqlite-format-or-migration-beyond-adr-0097
       falsification:
       - frozen-pre-refactor-and-current-public-claim-batch-byte-verdict-corpus
       - added-existing-and-new-existing-reference-conflict-nonreclassification

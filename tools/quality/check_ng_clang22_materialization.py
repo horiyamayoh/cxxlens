@@ -182,13 +182,6 @@ MAXIMUM_SEMANTIC_REPLAY_WINDOW_BYTES = 64 * 1_024 * 1_024
 EXPECTED_REQUEST_SCHEMA_CANONICAL_DIGEST = (
     "sha256:241fc96ae3a249e5a8851baa95e585460ad29378cb20d11cfcda33a69eaa9270"
 )
-EXPECTED_REPORT_SCHEMA_CANONICAL_DIGEST = (
-    "sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96"
-)
-DF_0200_REPORT_SHAPE_ACTIVATION = (
-    "request-2.2.0-report-private-spool-failure-"
-    "occurrence-inventory-sandbox-bounds-activated"
-)
 MAXIMUM_GLOBAL_SEMANTIC_JSON_BYTES = 10_420_985
 MAXIMUM_TASK_METADATA_SEMANTIC_JSON_BYTES = 8_463_179
 OCCURRENCE_MANIFEST_PATH = (
@@ -1256,27 +1249,17 @@ EXPECTED_INSTALLED_OCCURRENCE = {
             "configuration-closed-exact-ordered-role-prefix-relative-path-and-"
             "sha256-digest-records"
         ),
-        "configuration_inventories": {
-            "static": {
-                "count": 13,
-                "ordered_roles": [
-                    "materializer-executable",
-                    "worker-executable",
-                    *[role for role, _, _ in OCCURRENCE_AUTHORITY_FILES],
-                ],
-            },
-            "shared": {
-                "count": 19,
-                "ordered_roles": [
-                    "materializer-executable",
-                    "worker-executable",
-                    *[role for role, _, _ in OCCURRENCE_AUTHORITY_FILES],
-                    *[role for role, _ in SHARED_OCCURRENCE_RUNTIME_FILES],
-                ],
-                "package_owned_runtime_dso_paths": (
-                    "safe-prefix-relative-lib-or-lib64-soname"
-                ),
-            },
+        "configuration_inventory": {
+            "closure": (
+                "every-installed-materializer-worker-authority-and-package-owned-"
+                "runtime-artifact-exactly-once"
+            ),
+            "identity": "unique-role-prefix-relative-path-and-full-artifact-sha256",
+            "static": "package-owned-runtime-dso-entries-forbidden",
+            "shared": (
+                "package-owned-runtime-dso-paths-are-safe-prefix-relative-lib-or-"
+                "lib64-sonames"
+            ),
         },
         "external_system_libraries": (
             "excluded-toolchain-and-runtime-evidence-only"

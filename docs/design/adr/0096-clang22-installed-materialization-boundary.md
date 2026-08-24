@@ -563,7 +563,7 @@ codec/completeness/counter/SQLite-decision binding を照合する。generic Sto
 - **D4:** recordはkind/lengths/key/payload/checksum全体で、segment/spool splitを禁止する。preappend u128 check、half-open canonical offsets、segment then
   next-spool rollover、u128 aggregate census、8 MiB超 singleton run、二 comparator cursor合計64 KiB、16+1+1=18 FDを固定する。known limitはI/O前、
   private spool ENOSPCはproved in-range後だけとする。
-- **D5:** spool-failureはprivate prepublication spoolだけである。request 2.2.0 shape は不変で、report 2.2.0 は private spool-failure、13/19-file occurrence inventory、
+- **D5:** spool-failureはprivate prepublication spoolだけである。request 2.2.0 shape は不変で、report 2.2.0 は private spool-failure、installed occurrence artifact identity、
   sandbox array boundだけを追加する。SQLite writer_publish ENOSPC/SQLITE_TOOBIGは既存の store.sqlite-failure/database/opaque と
   publication_outcome_unknown、返却済handle後の検証failureはsafeなら committed_unverified を保つ。exit 2 はresponse-unsafe failureまたは
   successful receipt/arithmetic contradictionだけである。

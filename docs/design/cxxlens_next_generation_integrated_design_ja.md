@@ -1040,9 +1040,9 @@ Relation Registry の各 descriptor は `cpp_projection` を `installed-static` 
 `dynamic-only` として明示する。`installed-static` は non-null な generated C++ tag を
 要求し、static projection はその descriptor/column ID だけから導出する。
 `dynamic-only` は null tag を要求し、static header を持たない。Public API Catalog は
-installed header admission を所有し、accepted static admission では catalog header set と
-`installed-static` set が exact に一致しなければならない。proposal/review 中は catalog
-admission を先取りせず、production scope で blocked として扱う。
+installed header admission を所有し、static admission では catalog header set と
+`installed-static` set が exact に一致しなければならない。一致しない descriptor は
+`dynamic-only` であり、installed header surface を持たない。
 
 #### Dynamic API
 
@@ -2717,7 +2717,7 @@ chunksで持つvalid descendantもadmitする。precommitの`compact()`もidempo
 保つ。zero committed authorityのv3 compactはno-write/no-COMMITで、filesystemはconfirmed-close reclassification、exact
 `:memory:` はhealthy rollback/finalize後にsole connectionを保持するno-close successである。
 canonical payload
-schema と committed physical-generation 以外の payload bytes、semantic/publication/snapshot ID、request 2.2/report 2.1、public
+schema と committed physical-generation 以外の payload bytes、semantic/publication/snapshot ID、request 2.2/report 2.2、public
 signature、cursor lifetime は変えない。durable old chunk は successful transaction 内で除去するが、eager decoded process
 generation は最後の pin まで保持し、noncommitted row/chunk は通常 compaction でも byte-exact に維持する。
 
@@ -3119,10 +3119,10 @@ source span、claim、hard reference、coverage が検証されるまでこの v
 diagnostic/evidence に限定し、row reconstruction、claim construction、Store adoption の authority にしない。downstream re-decode、private codec の
 複製、diagnostic substring による制御を禁止し、sealed result を public C++ API として export しない。
 
-#### DF-0200 proposed incremental claim / Store residency resolution
+#### DF-0200 incremental claim / Store residency resolution
 
-この契約の Option A は Store contract として選択済みである。実装は direct
-positive・negative・fault・resource tests が成功するまで出荷経路へ接続せず、claims oracle 失敗を
+この契約の Option A は Store contract の production path である。direct
+positive・negative・fault・resource tests はこの経路を反証可能にし、claims oracle 失敗を
 materializer semantics digest の retarget で閉じてはならない。Snapshot Store contract/checker は
 resolution ID cxxlens.df-0200.incremental-claim-store.v1 と ingress object を self-contained hardcoded authority として検証し、Clang 22
 materialization checker だけが downstream から Store binding を照合する。generic Store checker が materialization contract を load する reverse
@@ -3164,13 +3164,13 @@ dependency は禁止する。
    in-range 証明後だけである。report limit は1 GiBである。
 5. **D5 — phase-authentic publication outcomes:** materialization.spool-failure は private prepublication spool の actual port I/O/hash/ENOSPC に限る。
    direct tests は三 phase binding、request-bound reverse closure、partition_stage counter-overflow tuple、full report-schema validation を一つの
-   contract として検査する。request 2.2.0 shape は不変で、report 2.2.0 には private spool-failure、13/19-file occurrence inventory、
+   contract として検査する。request 2.2.0 shape は不変で、report 2.2.0 には private spool-failure、installed occurrence artifact identity、
    `task_sandbox_requirements maxItems: 4096` を保持する。SQLite writer_publish の ENOSPC/SQLITE_TOOBIG は既存
    writer_publish / store.sqlite-failure / database / opaque と publication_outcome_unknown を維持する。publish handle 返却後の検証 failure は安全に response
    を構築できる場合 committed_unverified detailed response とする。exit 2 / stdout zero は response を安全に構築できない spool/allocation/report transport
    failure または successful receipt/checked arithmetic contradiction に限定する。
 6. **D6 — SQLite Option A physical runtime contract:** request 2.2.0、public signatures、claim/Store identity、logical canonical v5 は変更しない。
-   report 2.1.0 は private spool-failure phase/code closure、13/19-file occurrence inventory、sandbox array bound を direct tests で検査する。
+   report 2.2.0 は private spool-failure phase/code closure、installed occurrence artifact identity、sandbox array bound を direct tests で検査する。
    SQLite v2 single payload BLOB と runtime MAX_LENGTH 1,000,000,000 は required limit-adjacent passed memory/SQLite parity を満たさないため、
    selected alternative A と ADR 0097 に従い physical v3.0.0 の 8 MiB chunk table、16 MiB runtime floor、exact v2.6.0 read-only direct-open、
    `compact()` の deterministic COW migration を実装する。v2 `begin()` は exact
@@ -5189,7 +5189,6 @@ components:
   - relation-registry
 tests:
   - integration.external-relation
-status: proposed
 ```
 
 この宣言は product contract と直接試験の対応を表す。
