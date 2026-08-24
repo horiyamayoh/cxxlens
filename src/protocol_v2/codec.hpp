@@ -30,6 +30,7 @@ namespace cxxlens::protocol_v2
 	inline constexpr std::size_t fixed_header_bytes = 104U;
 	inline constexpr std::size_t max_control_bytes = 65'536U;
 	inline constexpr std::size_t max_payload_bytes = 16'777'216U;
+	inline constexpr std::size_t max_closure_payload_bytes = 1'048'576U;
 	inline constexpr std::size_t max_frame_bytes =
 		fixed_header_bytes + max_control_bytes + max_payload_bytes;
 	inline constexpr std::uint16_t heartbeat_message_id = 23U;
@@ -193,6 +194,31 @@ namespace cxxlens::protocol_v2
 	};
 
 	/** @brief SHA-256 of exact bytes (without a semantic-domain prefix). */
+	class sha256_workspace final
+	{
+	  public:
+		sha256_workspace() noexcept;
+		void update(std::span<const byte> input) noexcept;
+		[[nodiscard]] digest32 finish() noexcept;
+
+	  private:
+		[[nodiscard]] static constexpr std::uint32_t rotate_right(std::uint32_t value,
+																  std::uint32_t amount) noexcept
+		{
+			return (value >> amount) | (value << (32U - amount));
+		}
+		void transform(const std::uint8_t* input) noexcept;
+
+		std::array<std::uint32_t, 8U> state_{};
+		std::array<std::uint8_t, 64U> buffer_{};
+		std::array<std::uint32_t, 64U> schedule_{};
+		std::array<std::uint32_t, 8U> working_{};
+		std::size_t buffer_size_{};
+		std::uint64_t bit_length_{};
+	};
+
+	inline constexpr std::size_t sha256_workspace_bytes = sizeof(sha256_workspace);
+
 	[[nodiscard]] digest32 sha256(std::span<const byte> input) noexcept;
 
 	[[nodiscard]] bool digest_is_zero(const digest32& digest) noexcept;
@@ -253,6 +279,8 @@ namespace cxxlens::protocol_v2
 
 		[[nodiscard]] sdk::result<void> grant(credit increment);
 		[[nodiscard]] sdk::result<void> consume(const frame& value);
+		[[nodiscard]] sdk::result<void> consume_encoded(std::size_t control_bytes,
+														std::size_t payload_bytes);
 		[[nodiscard]] credit available() const noexcept
 		{
 			return available_;

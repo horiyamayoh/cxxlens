@@ -134,6 +134,10 @@ namespace cxxlens::protocol_v2
 			if (payload_size > bound.max_payload_bytes)
 				return sdk::unexpected(
 					failure("payload", "limit-exceeded", "protocol-v2.resource-limit"));
+			if (type_id >= closure_first_message_id && type_id <= closure_last_message_id &&
+				payload_size > max_closure_payload_bytes)
+				return sdk::unexpected(
+					failure("payload", "closure-limit-exceeded", "protocol-v2.resource-limit"));
 			if (control_size > std::numeric_limits<std::uint32_t>::max())
 				return sdk::unexpected(
 					failure("control", "wire-length-overflow", "protocol-v2.resource-limit"));
@@ -148,9 +152,64 @@ namespace cxxlens::protocol_v2
 			return {};
 		}
 
-		[[nodiscard]] sdk::result<void>
-		validate_canonical_control(const std::span<const byte> control, const limits bound)
+		[[nodiscard]] std::string_view scan_error_detail(const cbor::scan_error value) noexcept
 		{
+			switch (value)
+			{
+				case cbor::scan_error::none:
+					return "none";
+				case cbor::scan_error::empty_or_limit:
+					return "empty-or-limit-exceeded";
+				case cbor::scan_error::truncated:
+					return "truncated";
+				case cbor::scan_error::non_shortest:
+					return "non-shortest";
+				case cbor::scan_error::indefinite_or_reserved:
+					return "indefinite-or-reserved";
+				case cbor::scan_error::depth_limit:
+					return "depth-limit";
+				case cbor::scan_error::item_limit:
+					return "item-limit";
+				case cbor::scan_error::array_shape_limit:
+					return "array-shape-limit";
+				case cbor::scan_error::map_shape_limit:
+					return "map-shape-limit";
+				case cbor::scan_error::text_limit_or_utf8:
+					return "text-limit-or-utf8";
+				case cbor::scan_error::byte_string_limit:
+					return "byte-string-limit";
+				case cbor::scan_error::map_key_not_text:
+					return "map-key-not-text";
+				case cbor::scan_error::map_order_or_duplicate:
+					return "map-order-or-duplicate";
+				case cbor::scan_error::unsupported:
+					return "unsupported";
+				case cbor::scan_error::trailing_bytes:
+					return "trailing-bytes";
+			}
+			return "unsupported";
+		}
+
+		[[nodiscard]] sdk::result<void> validate_canonical_control(
+			const message_type type, const std::span<const byte> control, const limits bound)
+		{
+			if (is_closure_message(type))
+			{
+				cbor::scan_limits scan_bound;
+				scan_bound.max_bytes = bound.max_control_bytes;
+				scan_bound.max_depth = 2U;
+				scan_bound.max_items = 96U;
+				scan_bound.max_array_items = 0U;
+				scan_bound.max_map_items = 32U;
+				scan_bound.max_text_bytes = 4'096U;
+				scan_bound.max_byte_string_bytes = 0U;
+				scan_bound.require_root_map = true;
+				const auto scanned = cbor::scan_canonical(control, scan_bound);
+				if (!scanned)
+					return sdk::unexpected(failure(
+						"control", scan_error_detail(scanned.error), "protocol-v2.cbor-invalid"));
+				return {};
+			}
 			cbor::limits cbor_bound;
 			cbor_bound.max_bytes = bound.max_control_bytes;
 			cbor_bound.max_text_bytes = bound.max_control_bytes;
@@ -221,137 +280,118 @@ namespace cxxlens::protocol_v2
 
 		// FIPS 180-4 SHA-256, kept local so this bounded slice does not depend on
 		// OpenSSL or the shared provider runtime.
-		class sha256_state
-		{
-		  public:
-			sha256_state() noexcept
-				: state_{0x6a09e667U,
-						 0xbb67ae85U,
-						 0x3c6ef372U,
-						 0xa54ff53aU,
-						 0x510e527fU,
-						 0x9b05688cU,
-						 0x1f83d9abU,
-						 0x5be0cd19U}
-			{
-			}
+		constexpr std::array<std::uint32_t, 64U> sha256_constants{
+			0x428a2f98U, 0x71374491U, 0xb5c0fbcfU, 0xe9b5dba5U, 0x3956c25bU, 0x59f111f1U,
+			0x923f82a4U, 0xab1c5ed5U, 0xd807aa98U, 0x12835b01U, 0x243185beU, 0x550c7dc3U,
+			0x72be5d74U, 0x80deb1feU, 0x9bdc06a7U, 0xc19bf174U, 0xe49b69c1U, 0xefbe4786U,
+			0x0fc19dc6U, 0x240ca1ccU, 0x2de92c6fU, 0x4a7484aaU, 0x5cb0a9dcU, 0x76f988daU,
+			0x983e5152U, 0xa831c66dU, 0xb00327c8U, 0xbf597fc7U, 0xc6e00bf3U, 0xd5a79147U,
+			0x06ca6351U, 0x14292967U, 0x27b70a85U, 0x2e1b2138U, 0x4d2c6dfcU, 0x53380d13U,
+			0x650a7354U, 0x766a0abbU, 0x81c2c92eU, 0x92722c85U, 0xa2bfe8a1U, 0xa81a664bU,
+			0xc24b8b70U, 0xc76c51a3U, 0xd192e819U, 0xd6990624U, 0xf40e3585U, 0x106aa070U,
+			0x19a4c116U, 0x1e376c08U, 0x2748774cU, 0x34b0bcb5U, 0x391c0cb3U, 0x4ed8aa4aU,
+			0x5b9cca4fU, 0x682e6ff3U, 0x748f82eeU, 0x78a5636fU, 0x84c87814U, 0x8cc70208U,
+			0x90befffaU, 0xa4506cebU, 0xbef9a3f7U, 0xc67178f2U};
 
-			void update(const std::span<const byte> input) noexcept
-			{
-				for (const auto item : input)
-				{
-					buffer_[buffer_size_++] = std::to_integer<std::uint8_t>(item);
-					if (buffer_size_ == buffer_.size())
-					{
-						transform(buffer_.data());
-						buffer_size_ = 0U;
-					}
-				}
-				bit_length_ += static_cast<std::uint64_t>(input.size()) * 8U;
-			}
-
-			[[nodiscard]] digest32 finish() noexcept
-			{
-				buffer_[buffer_size_++] = 0x80U;
-				if (buffer_size_ > 56U)
-				{
-					std::fill(buffer_.begin() + static_cast<std::ptrdiff_t>(buffer_size_),
-							  buffer_.end(),
-							  0U);
-					transform(buffer_.data());
-					buffer_size_ = 0U;
-				}
-				std::fill(buffer_.begin() + static_cast<std::ptrdiff_t>(buffer_size_),
-						  buffer_.begin() + 56,
-						  0U);
-				for (std::size_t index{}; index < 8U; ++index)
-					buffer_[56U + index] =
-						static_cast<std::uint8_t>(bit_length_ >> (56U - index * 8U));
-				transform(buffer_.data());
-
-				digest32 output{};
-				for (std::size_t index{}; index < state_.size(); ++index)
-				{
-					output[index * 4U] = static_cast<byte>(state_[index] >> 24U);
-					output[index * 4U + 1U] = static_cast<byte>(state_[index] >> 16U);
-					output[index * 4U + 2U] = static_cast<byte>(state_[index] >> 8U);
-					output[index * 4U + 3U] = static_cast<byte>(state_[index]);
-				}
-				return output;
-			}
-
-		  private:
-			static constexpr std::array<std::uint32_t, 64U> constants{
-				0x428a2f98U, 0x71374491U, 0xb5c0fbcfU, 0xe9b5dba5U, 0x3956c25bU, 0x59f111f1U,
-				0x923f82a4U, 0xab1c5ed5U, 0xd807aa98U, 0x12835b01U, 0x243185beU, 0x550c7dc3U,
-				0x72be5d74U, 0x80deb1feU, 0x9bdc06a7U, 0xc19bf174U, 0xe49b69c1U, 0xefbe4786U,
-				0x0fc19dc6U, 0x240ca1ccU, 0x2de92c6fU, 0x4a7484aaU, 0x5cb0a9dcU, 0x76f988daU,
-				0x983e5152U, 0xa831c66dU, 0xb00327c8U, 0xbf597fc7U, 0xc6e00bf3U, 0xd5a79147U,
-				0x06ca6351U, 0x14292967U, 0x27b70a85U, 0x2e1b2138U, 0x4d2c6dfcU, 0x53380d13U,
-				0x650a7354U, 0x766a0abbU, 0x81c2c92eU, 0x92722c85U, 0xa2bfe8a1U, 0xa81a664bU,
-				0xc24b8b70U, 0xc76c51a3U, 0xd192e819U, 0xd6990624U, 0xf40e3585U, 0x106aa070U,
-				0x19a4c116U, 0x1e376c08U, 0x2748774cU, 0x34b0bcb5U, 0x391c0cb3U, 0x4ed8aa4aU,
-				0x5b9cca4fU, 0x682e6ff3U, 0x748f82eeU, 0x78a5636fU, 0x84c87814U, 0x8cc70208U,
-				0x90befffaU, 0xa4506cebU, 0xbef9a3f7U, 0xc67178f2U};
-
-			static constexpr std::uint32_t rotate_right(const std::uint32_t value,
-														const std::uint32_t amount) noexcept
-			{
-				return (value >> amount) | (value << (32U - amount));
-			}
-
-			void transform(const std::uint8_t* input) noexcept
-			{
-				std::array<std::uint32_t, 64U> schedule{};
-				for (std::size_t index{}; index < 16U; ++index)
-					schedule[index] = (static_cast<std::uint32_t>(input[index * 4U]) << 24U) |
-						(static_cast<std::uint32_t>(input[index * 4U + 1U]) << 16U) |
-						(static_cast<std::uint32_t>(input[index * 4U + 2U]) << 8U) |
-						static_cast<std::uint32_t>(input[index * 4U + 3U]);
-				for (std::size_t index = 16U; index < schedule.size(); ++index)
-				{
-					const auto s0 = rotate_right(schedule[index - 15U], 7U) ^
-						rotate_right(schedule[index - 15U], 18U) ^ (schedule[index - 15U] >> 3U);
-					const auto s1 = rotate_right(schedule[index - 2U], 17U) ^
-						rotate_right(schedule[index - 2U], 19U) ^ (schedule[index - 2U] >> 10U);
-					schedule[index] = schedule[index - 16U] + s0 + schedule[index - 7U] + s1;
-				}
-				auto working = state_;
-				for (std::size_t index{}; index < constants.size(); ++index)
-				{
-					const auto s1 = rotate_right(working[4], 6U) ^ rotate_right(working[4], 11U) ^
-						rotate_right(working[4], 25U);
-					const auto choose = (working[4] & working[5]) ^ (~working[4] & working[6]);
-					const auto temp1 =
-						working[7] + s1 + choose + constants[index] + schedule[index];
-					const auto s0 = rotate_right(working[0], 2U) ^ rotate_right(working[0], 13U) ^
-						rotate_right(working[0], 22U);
-					const auto majority = (working[0] & working[1]) ^ (working[0] & working[2]) ^
-						(working[1] & working[2]);
-					const auto temp2 = s0 + majority;
-					working[7] = working[6];
-					working[6] = working[5];
-					working[5] = working[4];
-					working[4] = working[3] + temp1;
-					working[3] = working[2];
-					working[2] = working[1];
-					working[1] = working[0];
-					working[0] = temp1 + temp2;
-				}
-				for (std::size_t index{}; index < state_.size(); ++index)
-					state_[index] += working[index];
-			}
-
-			std::array<std::uint32_t, 8U> state_{};
-			std::array<std::uint8_t, 64U> buffer_{};
-			std::size_t buffer_size_{};
-			std::uint64_t bit_length_{};
-		};
 	} // namespace
+
+	sha256_workspace::sha256_workspace() noexcept
+		: state_{0x6a09e667U,
+				 0xbb67ae85U,
+				 0x3c6ef372U,
+				 0xa54ff53aU,
+				 0x510e527fU,
+				 0x9b05688cU,
+				 0x1f83d9abU,
+				 0x5be0cd19U}
+	{
+	}
+
+	void sha256_workspace::update(const std::span<const byte> input) noexcept
+	{
+		for (const auto item : input)
+		{
+			buffer_[buffer_size_++] = std::to_integer<std::uint8_t>(item);
+			if (buffer_size_ == buffer_.size())
+			{
+				transform(buffer_.data());
+				buffer_size_ = 0U;
+			}
+		}
+		bit_length_ += static_cast<std::uint64_t>(input.size()) * 8U;
+	}
+
+	digest32 sha256_workspace::finish() noexcept
+	{
+		buffer_[buffer_size_++] = 0x80U;
+		if (buffer_size_ > 56U)
+		{
+			std::fill(
+				buffer_.begin() + static_cast<std::ptrdiff_t>(buffer_size_), buffer_.end(), 0U);
+			transform(buffer_.data());
+			buffer_size_ = 0U;
+		}
+		std::fill(
+			buffer_.begin() + static_cast<std::ptrdiff_t>(buffer_size_), buffer_.begin() + 56, 0U);
+		for (std::size_t index{}; index < 8U; ++index)
+			buffer_[56U + index] = static_cast<std::uint8_t>(bit_length_ >> (56U - index * 8U));
+		transform(buffer_.data());
+
+		digest32 output{};
+		for (std::size_t index{}; index < state_.size(); ++index)
+		{
+			output[index * 4U] = static_cast<byte>(state_[index] >> 24U);
+			output[index * 4U + 1U] = static_cast<byte>(state_[index] >> 16U);
+			output[index * 4U + 2U] = static_cast<byte>(state_[index] >> 8U);
+			output[index * 4U + 3U] = static_cast<byte>(state_[index]);
+		}
+		return output;
+	}
+
+	void sha256_workspace::transform(const std::uint8_t* input) noexcept
+	{
+		for (std::size_t index{}; index < 16U; ++index)
+			schedule_[index] = (static_cast<std::uint32_t>(input[index * 4U]) << 24U) |
+				(static_cast<std::uint32_t>(input[index * 4U + 1U]) << 16U) |
+				(static_cast<std::uint32_t>(input[index * 4U + 2U]) << 8U) |
+				static_cast<std::uint32_t>(input[index * 4U + 3U]);
+		for (std::size_t index = 16U; index < schedule_.size(); ++index)
+		{
+			const auto s0 = rotate_right(schedule_[index - 15U], 7U) ^
+				rotate_right(schedule_[index - 15U], 18U) ^ (schedule_[index - 15U] >> 3U);
+			const auto s1 = rotate_right(schedule_[index - 2U], 17U) ^
+				rotate_right(schedule_[index - 2U], 19U) ^ (schedule_[index - 2U] >> 10U);
+			schedule_[index] = schedule_[index - 16U] + s0 + schedule_[index - 7U] + s1;
+		}
+		working_ = state_;
+		for (std::size_t index{}; index < sha256_constants.size(); ++index)
+		{
+			const auto s1 = rotate_right(working_[4], 6U) ^ rotate_right(working_[4], 11U) ^
+				rotate_right(working_[4], 25U);
+			const auto choose = (working_[4] & working_[5]) ^ (~working_[4] & working_[6]);
+			const auto temp1 =
+				working_[7] + s1 + choose + sha256_constants[index] + schedule_[index];
+			const auto s0 = rotate_right(working_[0], 2U) ^ rotate_right(working_[0], 13U) ^
+				rotate_right(working_[0], 22U);
+			const auto majority = (working_[0] & working_[1]) ^ (working_[0] & working_[2]) ^
+				(working_[1] & working_[2]);
+			const auto temp2 = s0 + majority;
+			working_[7] = working_[6];
+			working_[6] = working_[5];
+			working_[5] = working_[4];
+			working_[4] = working_[3] + temp1;
+			working_[3] = working_[2];
+			working_[2] = working_[1];
+			working_[1] = working_[0];
+			working_[0] = temp1 + temp2;
+		}
+		for (std::size_t index{}; index < state_.size(); ++index)
+			state_[index] += working_[index];
+	}
 
 	digest32 sha256(const std::span<const byte> input) noexcept
 	{
-		sha256_state state;
+		sha256_workspace state;
 		state.update(input);
 		return state.finish();
 	}
@@ -449,7 +489,7 @@ namespace cxxlens::protocol_v2
 				return sdk::unexpected(valid.error());
 			if (auto valid = check_digest(payload, header_.payload_digest, "payload"); !valid)
 				return sdk::unexpected(valid.error());
-			if (auto valid = validate_canonical_control(control, bound_); !valid)
+			if (auto valid = validate_canonical_control(header_.type, control, bound_); !valid)
 				return sdk::unexpected(valid.error());
 			header_.control = std::move(control);
 			header_.payload = std::move(payload);
@@ -474,7 +514,7 @@ namespace cxxlens::protocol_v2
 													bound);
 				!valid)
 				return sdk::unexpected(valid.error());
-			if (auto valid = validate_canonical_control(value.control, bound); !valid)
+			if (auto valid = validate_canonical_control(value.type, value.control, bound); !valid)
 				return sdk::unexpected(valid.error());
 
 			const auto control_digest = sha256(value.control);
@@ -618,17 +658,22 @@ namespace cxxlens::protocol_v2
 
 	sdk::result<void> credit_window::consume(const frame& value)
 	{
+		return consume_encoded(value.control.size(), value.payload.size());
+	}
+
+	sdk::result<void> credit_window::consume_encoded(const std::size_t control_bytes,
+													 const std::size_t payload_bytes)
+	{
 		if (available_.frames == 0U)
 			return sdk::unexpected(
 				failure("credit.frames", "exceeded", "protocol-v2.credit-exceeded"));
-		if (value.payload.size() > std::numeric_limits<std::uint64_t>::max() - fixed_header_bytes ||
-			value.control.size() > std::numeric_limits<std::uint64_t>::max() - fixed_header_bytes -
-					value.payload.size())
+		if (payload_bytes > std::numeric_limits<std::uint64_t>::max() - fixed_header_bytes ||
+			control_bytes >
+				std::numeric_limits<std::uint64_t>::max() - fixed_header_bytes - payload_bytes)
 			return sdk::unexpected(
 				failure("credit.bytes", "overflow", "protocol-v2.credit-exceeded"));
 		const auto bytes_used = static_cast<std::uint64_t>(fixed_header_bytes) +
-			static_cast<std::uint64_t>(value.control.size()) +
-			static_cast<std::uint64_t>(value.payload.size());
+			static_cast<std::uint64_t>(control_bytes) + static_cast<std::uint64_t>(payload_bytes);
 		if (bytes_used > available_.bytes)
 			return sdk::unexpected(
 				failure("credit.bytes", "exceeded", "protocol-v2.credit-exceeded"));

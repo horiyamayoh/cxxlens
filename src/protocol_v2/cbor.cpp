@@ -348,6 +348,213 @@ namespace cxxlens::protocol_v2::cbor
 			}
 		};
 
+		struct scanned_head
+		{
+			major kind{major::simple};
+			std::uint64_t argument{};
+			std::size_t next{};
+			scan_error error{scan_error::none};
+		};
+
+		[[nodiscard]] scanned_head scan_head(const std::span<const byte> input,
+											 const std::size_t offset) noexcept
+		{
+			if (offset >= input.size())
+				return {.error = scan_error::truncated};
+			const auto initial = std::to_integer<std::uint8_t>(input[offset]);
+			const auto kind = static_cast<major>(initial >> 5U);
+			const auto additional = initial & 0x1fU;
+			if (additional >= 28U)
+				return {.error = scan_error::indefinite_or_reserved};
+			if (additional < 24U)
+				return {kind, additional, offset + 1U, scan_error::none};
+			const auto width = additional == 24U ? 1U
+				: additional == 25U				 ? 2U
+				: additional == 26U				 ? 4U
+												 : 8U;
+			if (width > input.size() - offset - 1U)
+				return {.error = scan_error::truncated};
+			std::uint64_t argument{};
+			for (std::size_t index{}; index < width; ++index)
+				argument =
+					(argument << 8U) | std::to_integer<std::uint64_t>(input[offset + 1U + index]);
+			const auto shortest = width == 1U ? 24U
+				: width == 2U				  ? 256U
+				: width == 4U				  ? 65'536U
+											  : (std::uint64_t{1U} << 32U);
+			if (argument < shortest)
+				return {.error = scan_error::non_shortest};
+			return {kind, argument, offset + 1U + width, scan_error::none};
+		}
+
+		[[nodiscard]] scan_result scan_canonical_impl(const std::span<const byte> input,
+													  const scan_limits bound) noexcept
+		{
+			scan_workspace workspace;
+			std::size_t cursor{};
+			major root_kind{major::simple};
+			bool root_complete{};
+			while (!root_complete)
+			{
+				const auto depth = workspace.stack_size;
+				if (depth > bound.max_depth || depth > maximum_scan_depth)
+					return {scan_error::depth_limit, workspace.item_count, workspace.maximum_depth};
+				if (workspace.item_count >= bound.max_items)
+					return {scan_error::item_limit, workspace.item_count, workspace.maximum_depth};
+				++workspace.item_count;
+				workspace.maximum_depth = std::max(workspace.maximum_depth, depth);
+
+				const auto item_begin = cursor;
+				const auto parsed = scan_head(input, cursor);
+				if (parsed.error != scan_error::none)
+					return {parsed.error, workspace.item_count, workspace.maximum_depth};
+				auto item_kind = parsed.kind;
+				auto item_end = parsed.next;
+				const auto count = parsed.argument;
+				switch (item_kind)
+				{
+					case major::unsigned_integer:
+						break;
+					case major::negative_integer:
+						if (count >
+							static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+							return {scan_error::unsupported,
+									workspace.item_count,
+									workspace.maximum_depth};
+						break;
+					case major::byte_string:
+						if (count > bound.max_byte_string_bytes || count > input.size() - item_end)
+							return {scan_error::byte_string_limit,
+									workspace.item_count,
+									workspace.maximum_depth};
+						item_end += static_cast<std::size_t>(count);
+						break;
+					case major::text:
+					{
+						if (count > bound.max_text_bytes || count > input.size() - item_end)
+							return {scan_error::text_limit_or_utf8,
+									workspace.item_count,
+									workspace.maximum_depth};
+						const auto size = static_cast<std::size_t>(count);
+						const std::string_view text{
+							reinterpret_cast<const char*>(input.data() + item_end), size};
+						if (!valid_utf8(text))
+							return {scan_error::text_limit_or_utf8,
+									workspace.item_count,
+									workspace.maximum_depth};
+						item_end += size;
+						break;
+					}
+					case major::array:
+					case major::map:
+					{
+						const auto map_item = item_kind == major::map;
+						const auto shape_limit =
+							map_item ? bound.max_map_items : bound.max_array_items;
+						if (count > shape_limit)
+							return {map_item ? scan_error::map_shape_limit
+											 : scan_error::array_shape_limit,
+									workspace.item_count,
+									workspace.maximum_depth};
+						if (count > std::numeric_limits<std::size_t>::max())
+							return {scan_error::item_limit,
+									workspace.item_count,
+									workspace.maximum_depth};
+						const auto size = static_cast<std::size_t>(count);
+						if (map_item && size > std::numeric_limits<std::size_t>::max() / 2U)
+							return {scan_error::item_limit,
+									workspace.item_count,
+									workspace.maximum_depth};
+						const auto children = map_item ? size * 2U : size;
+						if (children > bound.max_items - workspace.item_count)
+							return {scan_error::item_limit,
+									workspace.item_count,
+									workspace.maximum_depth};
+						if (children != 0U)
+						{
+							if (workspace.stack_size >= workspace.stack.size())
+								return {scan_error::depth_limit,
+										workspace.item_count,
+										workspace.maximum_depth};
+							workspace.stack[workspace.stack_size++] =
+								scan_stack_entry{children,
+												 item_begin,
+												 0U,
+												 0U,
+												 static_cast<std::uint8_t>(item_kind),
+												 map_item};
+							cursor = item_end;
+							continue;
+						}
+						break;
+					}
+					case major::simple:
+						if (count != 20U && count != 21U && count != 22U)
+							return {scan_error::unsupported,
+									workspace.item_count,
+									workspace.maximum_depth};
+						break;
+					default:
+						return {
+							scan_error::unsupported, workspace.item_count, workspace.maximum_depth};
+				}
+
+				auto completed_begin = item_begin;
+				for (;;)
+				{
+					cursor = item_end;
+					if (workspace.stack_size == 0U)
+					{
+						root_kind = item_kind;
+						root_complete = true;
+						break;
+					}
+					auto& parent = workspace.stack[workspace.stack_size - 1U];
+					const auto parent_kind = static_cast<major>(parent.container_kind);
+					if (parent_kind == major::map && parent.expecting_key)
+					{
+						if (item_kind != major::text)
+							return {scan_error::map_key_not_text,
+									workspace.item_count,
+									workspace.maximum_depth};
+						const auto key_size = item_end - completed_begin;
+						if (parent.previous_key_size != 0U)
+						{
+							const auto previous =
+								input.subspan(parent.previous_key_offset, parent.previous_key_size);
+							const auto current = input.subspan(completed_begin, key_size);
+							if (!(previous.size() < current.size() ||
+								  (previous.size() == current.size() &&
+								   std::lexicographical_compare(previous.begin(),
+																previous.end(),
+																current.begin(),
+																current.end()))))
+								return {scan_error::map_order_or_duplicate,
+										workspace.item_count,
+										workspace.maximum_depth};
+						}
+						parent.previous_key_offset = completed_begin;
+						parent.previous_key_size = key_size;
+						parent.expecting_key = false;
+					}
+					else if (parent_kind == major::map)
+						parent.expecting_key = true;
+					--parent.remaining;
+					if (parent.remaining != 0U)
+						break;
+					completed_begin = parent.item_begin;
+					item_kind = parent_kind;
+					--workspace.stack_size;
+				}
+			}
+
+			if (bound.require_root_map && root_kind != major::map)
+				return {scan_error::map_shape_limit, workspace.item_count, workspace.maximum_depth};
+			if (cursor != input.size())
+				return {scan_error::trailing_bytes, workspace.item_count, workspace.maximum_depth};
+			return {scan_error::none, workspace.item_count, workspace.maximum_depth};
+		}
+
 		[[nodiscard]] sdk::result<void> validate_value(const value& item,
 													   const limits bound,
 													   const std::size_t depth,
@@ -478,6 +685,13 @@ namespace cxxlens::protocol_v2::cbor
 		if (next != input.size())
 			return sdk::unexpected(failure("cbor", "trailing-bytes"));
 		return std::move(*output);
+	}
+
+	scan_result scan_canonical(const std::span<const byte> input, const scan_limits bound) noexcept
+	{
+		if (input.empty() || input.size() > bound.max_bytes || bound.max_items == 0U)
+			return {scan_error::empty_or_limit, 0U, 0U};
+		return scan_canonical_impl(input, bound);
 	}
 
 	const value* find(const map& fields, const std::string_view key) noexcept
