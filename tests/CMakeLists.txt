@@ -136,6 +136,177 @@ target_include_directories(cxxlens-sqlite-store-v3-scenario-support
 cxxlens_set_project_warnings(cxxlens-sqlite-store-v3-scenario-support)
 cxxlens_enable_sanitizers(cxxlens-sqlite-store-v3-scenario-support)
 
+include(CheckCXXSourceCompiles)
+include(CMakePushCheckState)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  cmake_push_check_state(RESET)
+  set(CMAKE_REQUIRED_LIBRARIES "${CMAKE_DL_LIBS}")
+  check_cxx_source_compiles(
+    [=[
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE 1
+#endif
+#include <features.h>
+#ifndef __GLIBC__
+#error "The SQLite interposer tests require glibc"
+#endif
+#include <dlfcn.h>
+#include <link.h>
+int main() {
+  auto* versioned = dlvsym(RTLD_NEXT, "dlsym", "GLIBC_2.2.5");
+  auto* isolated = dlmopen(LM_ID_NEWLM, nullptr, RTLD_LAZY | RTLD_LOCAL);
+  if (isolated != nullptr)
+    (void)dlclose(isolated);
+  return versioned == nullptr;
+}
+]=]
+    CXXLENS_TEST_HAS_GLIBC_DLMOPEN_DLVSYM)
+  check_cxx_source_compiles(
+    [=[
+#include <fcntl.h>
+#ifndef F_OFD_SETLK
+#error "The source-SHM availability test requires OFD locks"
+#endif
+int main() {
+  flock lock{};
+  return fcntl(-1, F_OFD_SETLK, &lock);
+}
+]=]
+    CXXLENS_TEST_HAS_OFD_LOCKS)
+  cmake_pop_check_state()
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_GLIBC_DLMOPEN_DLVSYM)
+  # These helpers interpose the process loader for one dedicated subprocess
+  # each. They are test-only DSOs: keep their symbols hidden by default, do not
+  # instrument them ahead of the sanitizer runtime, and never install/export
+  # them with a product target.
+  add_library(cxxlens-test-sqlite-migration-external-interposer SHARED
+              support/sqlite_migration_external_interposer.cpp)
+  target_compile_features(cxxlens-test-sqlite-migration-external-interposer
+                          PRIVATE cxx_std_23)
+  target_link_libraries(cxxlens-test-sqlite-migration-external-interposer
+                        PRIVATE "${CMAKE_DL_LIBS}")
+  set_target_properties(
+    cxxlens-test-sqlite-migration-external-interposer
+    PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
+  cxxlens_set_project_warnings(
+    cxxlens-test-sqlite-migration-external-interposer)
+
+  add_library(cxxlens-test-store-sqlite-crash-interposer SHARED
+              support/sqlite_store_crash_interposer.cpp)
+  target_compile_features(cxxlens-test-store-sqlite-crash-interposer
+                          PRIVATE cxx_std_23)
+  target_link_libraries(cxxlens-test-store-sqlite-crash-interposer
+                        PRIVATE "${CMAKE_DL_LIBS}")
+  set_target_properties(
+    cxxlens-test-store-sqlite-crash-interposer
+    PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
+  cxxlens_set_project_warnings(cxxlens-test-store-sqlite-crash-interposer)
+
+  add_executable(cxxlens-unit-sdk-sqlite-migration-outcomes
+                 unit/sdk/sqlite_store_migration_external_interposer_test.cpp)
+  target_compile_features(cxxlens-unit-sdk-sqlite-migration-outcomes
+                          PRIVATE cxx_std_23)
+  target_link_libraries(
+    cxxlens-unit-sdk-sqlite-migration-outcomes
+    PRIVATE cxxlens-sqlite-store-v3-scenario-support cxxlens::kernel
+            "${CMAKE_DL_LIBS}" Threads::Threads)
+  cxxlens_set_project_warnings(cxxlens-unit-sdk-sqlite-migration-outcomes)
+  cxxlens_enable_sanitizers(cxxlens-unit-sdk-sqlite-migration-outcomes)
+  add_dependencies(cxxlens-unit-sdk-sqlite-migration-outcomes
+                   cxxlens-test-sqlite-migration-external-interposer)
+  add_test(
+    NAME unit.sdk-sqlite-migration-outcomes
+    COMMAND cxxlens-unit-sdk-sqlite-migration-outcomes
+            "$<TARGET_FILE:cxxlens-test-sqlite-migration-external-interposer>")
+  set_tests_properties(
+    unit.sdk-sqlite-migration-outcomes
+    PROPERTIES
+      ENVIRONMENT_MODIFICATION
+      "LD_PRELOAD=unset:;CXXLENS_TEST_SQLITE_CRASH_PAUSE=unset:;CXXLENS_TEST_SQLITE_CRASH_READY_FD=unset:"
+      LABELS
+      "unit;sdk;store;sqlite;migration;effects;fault;recovery"
+      RUN_SERIAL
+      TRUE
+      TIMEOUT
+      60)
+
+  add_executable(cxxlens-unit-sdk-store-sqlite-crash-restart
+                 unit/sdk/store_sqlite_crash_recovery_test.cpp)
+  target_compile_features(cxxlens-unit-sdk-store-sqlite-crash-restart
+                          PRIVATE cxx_std_23)
+  target_link_libraries(
+    cxxlens-unit-sdk-store-sqlite-crash-restart
+    PRIVATE cxxlens-sqlite-store-v3-scenario-support cxxlens::kernel
+            "${CMAKE_DL_LIBS}" Threads::Threads)
+  cxxlens_set_project_warnings(cxxlens-unit-sdk-store-sqlite-crash-restart)
+  cxxlens_enable_sanitizers(cxxlens-unit-sdk-store-sqlite-crash-restart)
+  add_dependencies(cxxlens-unit-sdk-store-sqlite-crash-restart
+                   cxxlens-test-store-sqlite-crash-interposer)
+  if(NOT CXXLENS_ENABLE_TSAN)
+    add_test(
+      NAME unit.sdk-store-sqlite-crash-restart
+      COMMAND cxxlens-unit-sdk-store-sqlite-crash-restart
+              "$<TARGET_FILE:cxxlens-test-store-sqlite-crash-interposer>")
+    set_tests_properties(
+      unit.sdk-store-sqlite-crash-restart
+      PROPERTIES
+        ENVIRONMENT_MODIFICATION
+        "LD_PRELOAD=unset:;CXXLENS_TEST_SQLITE_CRASH_PAUSE=unset:;CXXLENS_TEST_SQLITE_CRASH_READY_FD=unset:"
+        LABELS
+        "unit;sdk;store;sqlite;normalization;crash;recovery;fault"
+        RUN_SERIAL
+        TRUE
+        TIMEOUT
+        30)
+  endif()
+
+  if(CXXLENS_TEST_HAS_OFD_LOCKS)
+    add_library(cxxlens-test-sqlite-source-shm-missing-symbols-preload SHARED
+                support/sqlite_source_shm_missing_symbols_preload.cpp)
+    target_compile_features(
+      cxxlens-test-sqlite-source-shm-missing-symbols-preload PRIVATE cxx_std_23)
+    target_link_libraries(cxxlens-test-sqlite-source-shm-missing-symbols-preload
+                          PRIVATE "${CMAKE_DL_LIBS}")
+    set_target_properties(
+      cxxlens-test-sqlite-source-shm-missing-symbols-preload
+      PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
+    cxxlens_set_project_warnings(
+      cxxlens-test-sqlite-source-shm-missing-symbols-preload)
+
+    add_executable(
+      cxxlens-unit-sdk-sqlite-source-availability
+      unit/sdk/sqlite_source_shm_symbol_resolution_integration_test.cpp)
+    target_compile_features(cxxlens-unit-sdk-sqlite-source-availability
+                            PRIVATE cxx_std_23)
+    target_link_libraries(
+      cxxlens-unit-sdk-sqlite-source-availability
+      PRIVATE cxxlens-sqlite-store-v3-scenario-support cxxlens::kernel
+              "${CMAKE_DL_LIBS}" Threads::Threads)
+    cxxlens_set_project_warnings(cxxlens-unit-sdk-sqlite-source-availability)
+    cxxlens_enable_sanitizers(cxxlens-unit-sdk-sqlite-source-availability)
+    add_dependencies(cxxlens-unit-sdk-sqlite-source-availability
+                     cxxlens-test-sqlite-source-shm-missing-symbols-preload)
+    add_test(
+      NAME unit.sdk-sqlite-source-availability
+      COMMAND
+        cxxlens-unit-sdk-sqlite-source-availability
+        "$<TARGET_FILE:cxxlens-test-sqlite-source-shm-missing-symbols-preload>")
+    set_tests_properties(
+      unit.sdk-sqlite-source-availability
+      PROPERTIES
+        ENVIRONMENT_MODIFICATION
+        "LD_PRELOAD=unset:;CXXLENS_TEST_SQLITE_CRASH_PAUSE=unset:;CXXLENS_TEST_SQLITE_CRASH_READY_FD=unset:"
+        LABELS
+        "unit;sdk;store;sqlite;source-shm;availability;fault;security"
+        RUN_SERIAL
+        TRUE
+        TIMEOUT
+        30)
+  endif()
+endif()
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-limit-length-precedence
                             unit/sdk/sqlite_limit_length_precedence_test.cpp)
 target_link_libraries(
@@ -464,7 +635,6 @@ endif()
 add_test(NAME unit.sdk-provider-runtime
          COMMAND cxxlens-unit-sdk-provider-runtime
                  "$<TARGET_FILE:cxxlens-provider-process-fixture>")
-include(CheckCXXSourceCompiles)
 check_cxx_source_compiles(
   [=[
 #include <features.h>
@@ -1777,6 +1947,15 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
                    cxxlens-unit-sdk-provider-process-channel)
   add_dependencies(cxxlens-ng-test-binaries cxxlens-clang22-source-closure-fd
                    cxxlens-clang22-installed-materializer-source-closure)
+  if(CXXLENS_TEST_HAS_GLIBC_DLMOPEN_DLVSYM)
+    add_dependencies(
+      cxxlens-ng-test-binaries cxxlens-unit-sdk-sqlite-migration-outcomes
+      cxxlens-unit-sdk-store-sqlite-crash-restart)
+    if(CXXLENS_TEST_HAS_OFD_LOCKS)
+      add_dependencies(cxxlens-ng-test-binaries
+                       cxxlens-unit-sdk-sqlite-source-availability)
+    endif()
+  endif()
 endif()
 
 if(CXXLENS_ENABLE_ASAN OR CXXLENS_ENABLE_UBSAN)
