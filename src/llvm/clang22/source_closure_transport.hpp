@@ -50,6 +50,25 @@ namespace cxxlens::detail::clang22
 		std::uint64_t maximum_resident_transport_bytes{1310720U};
 	};
 
+	/** Caller profiles may narrow product bounds, but can never raise the Protocol 2 contract. */
+	[[nodiscard]] constexpr bool source_closure_transport_limits_within_contract(
+		const source_closure_transport_limits& value) noexcept
+	{
+		constexpr source_closure_transport_limits contract{};
+		return value.maximum_members <= contract.maximum_members &&
+			value.maximum_unique_blobs <= contract.maximum_unique_blobs &&
+			value.maximum_logical_path_bytes <= contract.maximum_logical_path_bytes &&
+			value.maximum_blob_bytes <= contract.maximum_blob_bytes &&
+			value.maximum_unique_blob_bytes <= contract.maximum_unique_blob_bytes &&
+			value.maximum_manifest_bytes <= contract.maximum_manifest_bytes &&
+			value.maximum_manifest_chunks <= contract.maximum_manifest_chunks &&
+			value.maximum_chunk_payload_bytes <= contract.maximum_chunk_payload_bytes &&
+			value.maximum_chunks_per_blob <= contract.maximum_chunks_per_blob &&
+			value.maximum_blob_chunk_frames <= contract.maximum_blob_chunk_frames &&
+			value.maximum_task_spool_bytes <= contract.maximum_task_spool_bytes &&
+			value.maximum_resident_transport_bytes <= contract.maximum_resident_transport_bytes;
+	}
+
 	struct source_closure_transfer_binding
 	{
 		std::string session_id;

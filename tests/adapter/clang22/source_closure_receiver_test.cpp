@@ -16,6 +16,7 @@
 #include "llvm/clang22/materialization_json.hpp"
 #include "llvm/clang22/source_closure_spool.hpp"
 #include "protocol_v2/closure.hpp"
+#include "sdk/provider_protocol_v2_adapter.hpp"
 
 namespace
 {
@@ -63,6 +64,11 @@ namespace
 			std::ranges::copy(std::span{input_}.subspan(offset_, available), destination.begin());
 			offset_ += available;
 			return available;
+		}
+
+		[[nodiscard]] std::size_t bytes_read() const noexcept
+		{
+			return offset_;
 		}
 
 	  private:
@@ -283,6 +289,27 @@ namespace
 		return output;
 	}
 
+	template <typename Mutator>
+	[[nodiscard]] std::vector<std::byte> first_frame_with(const fixture& input, Mutator&& mutate)
+	{
+		require(input.transcript.size() >= protocol::fixed_header_bytes,
+				"receiver fixture had no complete frame header");
+		const std::span<const std::byte, protocol::fixed_header_bytes> header{
+			input.transcript.data(), protocol::fixed_header_bytes};
+		auto prepared =
+			cxxlens::sdk::provider::detail::prepare_provider_protocol_v2_frame(header, {});
+		require_result(prepared, "receiver fixture header preparation failed");
+		const auto total = protocol::fixed_header_bytes + prepared->body_resident_bytes();
+		require(total <= input.transcript.size(), "receiver fixture first frame was truncated");
+		auto decoded = cxxlens::sdk::provider::decode_frame(
+			std::span<const std::byte>{input.transcript}.first(total));
+		require_result(decoded, "receiver fixture first frame decode failed");
+		std::forward<Mutator>(mutate)(*decoded);
+		auto encoded = cxxlens::sdk::provider::encode_frame(*decoded);
+		require_result(encoded, "receiver fixture first frame re-encode failed");
+		return std::move(*encoded);
+	}
+
 	void positive_transfer()
 	{
 		auto input = make_fixture();
@@ -337,6 +364,98 @@ namespace
 		require(sink.output_.empty(), "truncated source closure emitted an ACK");
 	}
 
+	void frame_header_authority_precedes_body_allocation_and_read()
+	{
+		auto input = make_fixture();
+		auto run = [&](std::vector<std::byte> wire,
+					   const std::string_view expected_code,
+					   const std::string_view message)
+		{
+			memory_source source{std::move(wire)};
+			memory_sink sink;
+			authority task{input.binding.task_id, input.binding.task_v4_digest};
+			auto result =
+				receive_source_closure_frames(source, sink, {input.binding, &task, 7U, 16'384U});
+			require(!result && result.error().code == expected_code, message);
+			require(source.bytes_read() == protocol::fixed_header_bytes,
+					"receiver consumed a rejected frame body before header authority");
+			require(sink.output_.empty(), "receiver emitted an ACK for a rejected frame header");
+		};
+
+		run(first_frame_with(input,
+							 [](frame& value)
+							 {
+								 value.stream_id = 8U;
+							 }),
+			"source-closure.session-binding-mismatch",
+			"foreign stream was not rejected from the prepared header");
+		run(first_frame_with(input,
+							 [](frame& value)
+							 {
+								 value.sequence = 1U;
+							 }),
+			"source-closure.protocol-state-invalid",
+			"foreign sequence was not rejected from the prepared header");
+		run(first_frame_with(input,
+							 [](frame& value)
+							 {
+								 value.type = message_type::heartbeat;
+							 }),
+			"source-closure.protocol-state-invalid",
+			"non-closure channel message was not rejected from the prepared header");
+	}
+
+	void resident_contract_is_hard_and_body_is_read_once()
+	{
+		auto input = make_fixture();
+		const std::span<const std::byte, protocol::fixed_header_bytes> header{
+			input.transcript.data(), protocol::fixed_header_bytes};
+		auto prepared =
+			cxxlens::sdk::provider::detail::prepare_provider_protocol_v2_frame(header, {});
+		require_result(prepared, "resident fixture header preparation failed");
+		require(prepared->body_resident_bytes() > 0U, "resident fixture had an empty frame body");
+
+		source_closure_transport_limits narrow;
+		narrow.maximum_resident_transport_bytes = prepared->body_resident_bytes() - 1U;
+		memory_source narrow_source{first_frame_with(input,
+													 [](frame&)
+													 {
+													 })};
+		memory_sink narrow_sink;
+		authority narrow_authority{input.binding.task_id, input.binding.task_v4_digest};
+		auto narrowed = receive_source_closure_frames(
+			narrow_source, narrow_sink, {input.binding, &narrow_authority, 7U, 16'384U, narrow});
+		require(!narrowed && narrowed.error().code == "source-closure.limit-exceeded" &&
+					narrow_source.bytes_read() == protocol::fixed_header_bytes,
+				"frame body bypassed the narrowed resident ledger");
+
+		source_closure_transport_limits raised;
+		++raised.maximum_resident_transport_bytes;
+		memory_source raised_source{input.transcript};
+		memory_sink raised_sink;
+		authority raised_authority{input.binding.task_id, input.binding.task_v4_digest};
+		auto raised_result = receive_source_closure_frames(
+			raised_source, raised_sink, {input.binding, &raised_authority, 7U, 16'384U, raised});
+		require(!raised_result && raised_result.error().code == "source-closure.limit-exceeded" &&
+					raised_source.bytes_read() == 0U,
+				"caller raised the fixed resident transport contract");
+
+		auto truncated_wire = first_frame_with(input,
+											   [](frame&)
+											   {
+											   });
+		truncated_wire.pop_back();
+		const auto truncated_bytes = truncated_wire.size();
+		memory_source truncated_source{std::move(truncated_wire)};
+		memory_sink truncated_sink;
+		authority truncated_authority{input.binding.task_id, input.binding.task_v4_digest};
+		auto truncated = receive_source_closure_frames(
+			truncated_source, truncated_sink, {input.binding, &truncated_authority, 7U, 16'384U});
+		require(!truncated && truncated.error().code == "source-closure.truncated-stream" &&
+					truncated_source.bytes_read() == truncated_bytes,
+				"partial final-owned frame body did not fail closed");
+	}
+
 	void liveness_and_connection_terminals()
 	{
 		auto input = make_fixture();
@@ -388,6 +507,8 @@ int main()
 {
 	positive_transfer();
 	truncated_transfer();
+	frame_header_authority_precedes_body_allocation_and_read();
+	resident_contract_is_hard_and_body_is_read_once();
 	liveness_and_connection_terminals();
 	return 0;
 }
