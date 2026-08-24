@@ -253,30 +253,6 @@ set_target_properties(
 cxxlens_set_project_warnings(cxxlens_bounded_store_v6_sqlite_internal)
 cxxlens_enable_sanitizers(cxxlens_bounded_store_v6_sqlite_internal)
 
-if(BUILD_TESTING)
-  # Qualification-only authority implementation. This target is intentionally
-  # excluded from production components, installation, and export sets.
-  add_library(
-    cxxlens-sqlite-disposable-qualification-internal STATIC EXCLUDE_FROM_ALL
-    src/sdk/sqlite_disposable_qualification_internal.cpp
-    src/sdk/sqlite_disposable_normalization_internal.cpp
-    src/sdk/sqlite_payload_streaming_internal.cpp)
-  target_compile_features(cxxlens-sqlite-disposable-qualification-internal
-                          PRIVATE cxx_std_23)
-  target_include_directories(
-    cxxlens-sqlite-disposable-qualification-internal
-    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include"
-            "${CMAKE_CURRENT_SOURCE_DIR}/src")
-  set_target_properties(
-    cxxlens-sqlite-disposable-qualification-internal
-    PROPERTIES CXX_EXTENSIONS OFF
-               CXX_VISIBILITY_PRESET hidden
-               VISIBILITY_INLINES_HIDDEN YES
-               POSITION_INDEPENDENT_CODE ON)
-  cxxlens_set_project_warnings(cxxlens-sqlite-disposable-qualification-internal)
-  cxxlens_enable_sanitizers(cxxlens-sqlite-disposable-qualification-internal)
-endif()
-
 add_library(
   cxxlens_query ${CXXLENS_LIBRARY_TYPE} src/sdk/query.cpp
                 src/sdk/query_execution.cpp src/sdk/query_ir_decoder.cpp)

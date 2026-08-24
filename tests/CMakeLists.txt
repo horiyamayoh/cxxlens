@@ -153,20 +153,6 @@ set_tests_properties(
   unit.sdk-snapshot-store-v5-codec
   PROPERTIES LABELS "unit;sdk;store;codec;fault;determinism;resource")
 
-cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-disposable-qualification
-                            unit/sdk/sqlite_disposable_qualification_test.cpp)
-target_link_libraries(cxxlens-unit-sdk-sqlite-disposable-qualification
-                      PRIVATE cxxlens-sqlite-disposable-qualification-internal)
-target_include_directories(
-  cxxlens-unit-sdk-sqlite-disposable-qualification
-  PRIVATE "${PROJECT_SOURCE_DIR}/include" "${PROJECT_SOURCE_DIR}/src")
-add_test(NAME unit.sdk-sqlite-disposable-qualification
-         COMMAND cxxlens-unit-sdk-sqlite-disposable-qualification)
-set_tests_properties(
-  unit.sdk-sqlite-disposable-qualification
-  PROPERTIES
-    LABELS "unit;sdk;store;sqlite;qualification;capability;filesystem;security")
-
 add_library(cxxlens-sqlite-store-v3-scenario-support STATIC
             support/sqlite_store_v3_scenario.cpp)
 target_compile_features(cxxlens-sqlite-store-v3-scenario-support
@@ -1037,14 +1023,14 @@ cxxlens_add_test_executable(cxxlens-df0200-claim-batch-corpus
 target_link_libraries(cxxlens-df0200-claim-batch-corpus
                       PRIVATE cxxlens::clang22_provider_sdk)
 add_test(
-  NAME qualification.df0200-claim-batch-corpus
+  NAME adapter.clang22-claim-batch-differential
   COMMAND
     cxxlens-df0200-claim-batch-corpus
     "${PROJECT_SOURCE_DIR}/schemas/cxxlens_ng_df_0200_claim_batch_differential_corpus.tsv"
 )
 set_tests_properties(
-  qualification.df0200-claim-batch-corpus
-  PROPERTIES LABELS "qualification;sdk;claim;differential;df0200")
+  adapter.clang22-claim-batch-differential
+  PROPERTIES LABELS "adapter;provider;clang22;claim;differential;df0200")
 
 cxxlens_add_test_executable(cxxlens-clang22-materialization-store
                             adapter/clang22/materialization_store_test.cpp)
@@ -2055,7 +2041,6 @@ add_dependencies(
   cxxlens-unit-sdk-query-runtime
   cxxlens-unit-sdk-sqlite-connection-lifecycle
   cxxlens-unit-sdk-sqlite-default-forwarding-vfs
-  cxxlens-unit-sdk-sqlite-disposable-qualification
   cxxlens-unit-sdk-sqlite-limit-length-precedence
   cxxlens-unit-sdk-sqlite-payload-streaming
   cxxlens-unit-sdk-sqlite-shm-process-port
