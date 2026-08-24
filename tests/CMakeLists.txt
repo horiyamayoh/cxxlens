@@ -8,9 +8,6 @@ add_compile_definitions(CXXLENS_SQLITE_TEST_SUPPORT=1
 
 function(cxxlens_add_test_executable target source)
   add_executable(${target} ${source})
-  target_sources(
-    ${target}
-    PRIVATE $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
   target_compile_features(${target} PRIVATE cxx_std_23)
   cxxlens_set_project_warnings(${target})
   cxxlens_enable_sanitizers(${target})
@@ -29,9 +26,9 @@ target_include_directories(
 cxxlens_set_project_warnings(cxxlens-test-sdk-support)
 cxxlens_enable_sanitizers(cxxlens-test-sdk-support)
 
-# Every deterministic test binary receives the private thread-local dispatcher.
-# Production Store call sites use the header's inert inline implementation and
-# do not link a fault entry point.
+# Only the three Store suites that exercise typed SQL fault boundaries link the
+# private thread-local dispatcher. Production targets and unrelated tests do not
+# link a fault entry point.
 add_library(
   cxxlens-test-sqlite-store-fault-injection-support OBJECT
   "${PROJECT_SOURCE_DIR}/src/sdk/sqlite_store_fault_injection_internal.cpp")
@@ -82,6 +79,9 @@ foreach(case IN LISTS cxxlens_sdk_cases)
 endforeach()
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-store unit/sdk/store_test.cpp)
+target_sources(
+  cxxlens-unit-sdk-store
+  PRIVATE $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
 target_link_libraries(cxxlens-unit-sdk-store PRIVATE cxxlens::kernel
                                                      "${CMAKE_DL_LIBS}")
 target_include_directories(cxxlens-unit-sdk-store
@@ -346,6 +346,9 @@ set_tests_properties(
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-store-wal-routing
                             unit/sdk/sqlite_store_wal_routing_test.cpp)
+target_sources(
+  cxxlens-unit-sdk-sqlite-store-wal-routing
+  PRIVATE $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
 target_link_libraries(cxxlens-unit-sdk-sqlite-store-wal-routing
                       PRIVATE cxxlens::kernel "${CMAKE_DL_LIBS}")
 add_test(NAME unit.sdk-sqlite-store-wal-routing
@@ -602,6 +605,9 @@ set_tests_properties(
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-store-fault-injection
                             unit/sdk/sqlite_store_fault_injection_test.cpp)
+target_sources(
+  cxxlens-unit-sdk-sqlite-store-fault-injection
+  PRIVATE $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
 target_link_libraries(cxxlens-unit-sdk-sqlite-store-fault-injection
                       PRIVATE cxxlens::kernel)
 target_include_directories(cxxlens-unit-sdk-sqlite-store-fault-injection
@@ -1131,9 +1137,11 @@ target_link_libraries(cxxlens-unit-sdk-provider-protocol-v2-adapter
 if(CXXLENS_BUILD_SHARED)
   target_sources(
     cxxlens-unit-sdk-provider-protocol-v2-adapter
-    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp"
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_heartbeat_adapter.cpp")
+    PRIVATE
+      $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
+      "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp"
+      "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_heartbeat_adapter.cpp"
+  )
   target_link_libraries(cxxlens-unit-sdk-provider-protocol-v2-adapter
                         PRIVATE cxxlens_protocol_v2)
 endif()
