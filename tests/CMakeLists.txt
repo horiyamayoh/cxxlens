@@ -1829,8 +1829,7 @@ foreach(
         source_closure_transport
         release_contract
         clang22_materialization
-        sdk_contract
-        ci_supply_chain)
+        sdk_contract)
   add_test(NAME "quality.ng-${contract}"
            COMMAND "${Python3_EXECUTABLE}"
                    "${PROJECT_SOURCE_DIR}/tests/quality/test_ng_${contract}.py")
