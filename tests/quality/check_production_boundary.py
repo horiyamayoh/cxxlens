@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check that BUILD_TESTING cannot change the shipped kernel surface.
+"""Check that BUILD_TESTING cannot change the shipped product surface.
 
 The checker is deliberately read-only.  It consumes two already-configured and
 built trees plus their already-populated install prefixes, writes no report, and
@@ -44,6 +44,14 @@ _FALSE_CACHE_VALUES = frozenset({"0", "OFF", "FALSE", "NO", "N", ""})
 _PRODUCT_TARGET_OUTPUT = re.compile(
     r"(?:^|/)CMakeFiles/cxxlens_kernel\.dir(?:/|$)"
 )
+_CMAKE_TARGET_OUTPUT = re.compile(
+    r"(?:^|/)CMakeFiles/(?P<target>[^/]+)\.dir(?:/|$)"
+)
+_TEST_ONLY_TARGET = re.compile(
+    r"(?:^|[-_.])(?:test|tests|testing|unit|acceptance|quality|qualification|"
+    r"safety_support|benchmark|fuzz)(?:$|[-_.])",
+    re.IGNORECASE,
+)
 _NM_LINE = re.compile(
     r"^(?P<name>.+) (?P<kind>[A-Za-z?]) (?P<value>[0-9A-Fa-f]+)"
     r"(?: (?P<size>[0-9A-Fa-f]+))?$"
@@ -66,36 +74,80 @@ _FORBIDDEN_SEAMS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
     (
         "for-testing identifier",
-        re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*_for_testing\b"),
+        re.compile(
+            r"(?:^|[^A-Za-z0-9])(?:[A-Za-z_][A-Za-z0-9_]*_)?for_testing\b"
+        ),
     ),
     (
         "test peer identifier",
         re.compile(
-            r"\b[A-Za-z_][A-Za-z0-9_]*test_?peer[A-Za-z0-9_]*\b",
+            r"(?:^|[_:./-])test_?peer(?:$|[_:.(<])",
             re.IGNORECASE,
         ),
     ),
     (
         "test view identifier",
         re.compile(
-            r"\b[A-Za-z_][A-Za-z0-9_]*test_?view[A-Za-z0-9_]*\b",
+            r"(?:^|[_:./-])test_?view(?:$|[_:.(<])",
             re.IGNORECASE,
         ),
     ),
     (
         "test factory identifier",
         re.compile(
-            r"\b[A-Za-z_][A-Za-z0-9_]*test_?factory[A-Za-z0-9_]*\b",
+            r"(?:^|[_:./-])test_?factory(?:$|[_:.(<])",
             re.IGNORECASE,
         ),
     ),
     (
         "Store fault dispatcher",
-        re.compile(r"\bdispatch_sqlite_store_fault\b"),
+        re.compile(r"dispatch_sqlite_store_fault\b"),
+    ),
+    (
+        "Store fault implementation",
+        re.compile(r"sqlite_store_fault_injection(?:_noop)?(?:_internal)?\b"),
     ),
     (
         "test kernel target",
-        re.compile(r"\bcxxlens(?:::|[-_])test[-_]kernel\b", re.IGNORECASE),
+        re.compile(r"cxxlens(?:::|[-_])test[-_]kernel\b", re.IGNORECASE),
+    ),
+    (
+        "fixture/mutation test seam",
+        re.compile(
+            r"\b(?:[A-Za-z0-9_]*(?:test|fault)_(?:fixture|mutation)[A-Za-z0-9_]*|"
+            r"[A-Za-z0-9_]*(?:fixture|mutation)_(?:test|only|hook|seam)[A-Za-z0-9_]*)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "retired request/task protocol",
+        re.compile(
+            r"(?:materialization_request_v2_1|provider_task_v3|"
+            r"materializer_legacy_request_support|provider_protocol_v1(?:_[0-9]+)?|"
+            r"request[-_.]?2[-_.]?1|task[-_.]?v3)",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "legacy binding authority",
+        re.compile(r"LEGACY_BINDINGS\b"),
+    ),
+    (
+        "lint bypass",
+        re.compile(r"SKIP_LINTING\b"),
+    ),
+    (
+        "implementation byte authority",
+        re.compile(
+            r"(?:(?:implementation|schema)_(?:source_)?sha(?:256)?|"
+            r"source_sha(?:256)?_(?:binding|authority)|implementation_bytes?|"
+            r"byte_(?:authority|binding|drift)|frozen_(?:source|bytes?))",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "testing header",
+        re.compile(r"(?:^|[/\\])testing\.(?:h|hh|hpp|hxx)$", re.IGNORECASE),
     ),
 )
 
@@ -157,6 +209,42 @@ def _compile_definitions(tokens: Sequence[str]) -> tuple[str, ...]:
     return tuple(sorted(set(definitions)))
 
 
+def _cmake_target(output: str) -> str | None:
+    match = _CMAKE_TARGET_OUTPUT.search(output.replace("\\", "/"))
+    return match.group("target") if match is not None else None
+
+
+def _is_test_only_target(target: str) -> bool:
+    return _TEST_ONLY_TARGET.search(target) is not None
+
+
+def _is_product_target(target: str | None) -> bool:
+    return target is not None and target.startswith("cxxlens") and not _is_test_only_target(target)
+
+
+def _validate_product_compile_commands(document: Sequence[object]) -> None:
+    for raw_entry in document:
+        require(isinstance(raw_entry, dict), "compile database entry is not an object")
+        output = raw_entry.get("output", "")
+        if not isinstance(output, str):
+            continue
+        target = _cmake_target(output)
+        if not _is_product_target(target):
+            continue
+        tokens = _command_tokens(raw_entry)
+        file_text = raw_entry.get("file")
+        require(isinstance(file_text, str), "product compile command has no source file")
+        require_no_forbidden_seams(
+            (target or "", file_text, *tokens),
+            f"production compile command for {target}",
+        )
+        normalized_source = file_text.replace("\\", "/")
+        require(
+            re.search(r"(?:^|/)tests?(?:/|$)", normalized_source, re.IGNORECASE) is None,
+            f"production target {target} compiles test source: {file_text}",
+        )
+
+
 def _source_key(file: pathlib.Path, source_root: pathlib.Path, build: pathlib.Path) -> str:
     resolved = file.resolve(strict=False)
     try:
@@ -185,6 +273,7 @@ def load_compile_profile(build_path: pathlib.Path, expected_testing: bool) -> Co
     require(database_path.is_file(), f"missing compile database: {database_path}")
     document = json.loads(database_path.read_text(encoding="utf-8"))
     require(isinstance(document, list), f"compile database is not an array: {database_path}")
+    _validate_product_compile_commands(document)
 
     definitions: dict[str, tuple[str, ...]] = {}
     for raw_entry in document:
@@ -256,6 +345,67 @@ def require_no_forbidden_seams(values: Iterable[str], owner: str) -> None:
             )
 
 
+def _ninja_build_blocks(text: str) -> Iterable[tuple[str, tuple[str, ...]]]:
+    lines = text.splitlines()
+    index = 0
+    while index < len(lines):
+        if not lines[index].startswith("build "):
+            index += 1
+            continue
+        block = [lines[index]]
+        index += 1
+        while index < len(lines) and (lines[index].startswith((" ", "\t"))):
+            block.append(lines[index])
+            index += 1
+        yield block[0], tuple(block)
+
+
+def _ninja_output_targets(header: str) -> tuple[str, ...]:
+    output_text = header.removeprefix("build ").split(":", 1)[0]
+    targets: list[str] = []
+    for output in output_text.split():
+        normalized = output.replace("\\", "/")
+        target = _cmake_target(normalized)
+        if target is None:
+            order_prefix = "cmake_object_order_depends_target_"
+            name = pathlib.PurePosixPath(normalized).name
+            target = name.removeprefix(order_prefix) if name.startswith(order_prefix) else name
+        targets.append(target)
+    return tuple(targets)
+
+
+def _is_product_graph_output(output: str) -> bool:
+    if _is_product_target(output):
+        return True
+    name = pathlib.PurePosixPath(output).name
+    if _is_test_only_target(name):
+        return False
+    return (
+        re.fullmatch(r"libcxxlens[^/]*\.(?:a|dylib|so(?:\.[0-9.]+)?)", name) is not None
+        or name in {"cxxlens_kernel.lib", "cxxlens_kernel.dll"}
+        or name.startswith("cxxlens-")
+    )
+
+
+def check_product_target_graph(build: pathlib.Path) -> None:
+    graph = build / "build.ninja"
+    require(graph.is_file(), f"missing generated target graph: {graph}")
+    product_blocks = 0
+    for header, block in _ninja_build_blocks(graph.read_text(encoding="utf-8")):
+        outputs = _ninja_output_targets(header)
+        if not any(_is_product_graph_output(output) for output in outputs):
+            continue
+        product_blocks += 1
+        require_no_forbidden_seams(block, f"production target graph in {graph}")
+    require(product_blocks > 0, f"generated graph has no production targets: {graph}")
+    install_script = build / "cmake_install.cmake"
+    require(install_script.is_file(), f"missing generated install graph: {install_script}")
+    require_no_forbidden_seams(
+        install_script.read_text(encoding="utf-8").splitlines(),
+        f"production install graph in {install_script}",
+    )
+
+
 def _kernel_library_candidates(root: pathlib.Path, shared: bool) -> list[pathlib.Path]:
     def matches(path: pathlib.Path) -> bool:
         name = path.name
@@ -268,7 +418,7 @@ def _kernel_library_candidates(root: pathlib.Path, shared: bool) -> list[pathlib
         return name in {"libcxxlens_kernel.a", "cxxlens_kernel.lib"}
 
     resolved: dict[pathlib.Path, pathlib.Path] = {}
-    for candidate in root.rglob("*"):
+    for candidate in sorted(root.rglob("*")):
         if not matches(candidate) or not (candidate.is_file() or candidate.is_symlink()):
             continue
         parts = set(candidate.relative_to(root).parts)
@@ -303,6 +453,60 @@ def find_kernel_library(root_path: pathlib.Path, shared: bool) -> pathlib.Path:
     return shallowest[0]
 
 
+def _is_native_binary(path: pathlib.Path) -> bool:
+    with path.open("rb") as stream:
+        magic = stream.read(4)
+    return magic.startswith((b"\x7fELF", b"MZ")) or magic in {
+        b"\xca\xfe\xba\xbe",
+        b"\xce\xfa\xed\xfe",
+        b"\xcf\xfa\xed\xfe",
+        b"\xfe\xed\xfa\xce",
+        b"\xfe\xed\xfa\xcf",
+    }
+
+
+def installed_executable_names(prefix: pathlib.Path) -> tuple[str, ...]:
+    binary_directory = prefix / "bin"
+    require(binary_directory.is_dir(), f"installed binary directory is missing: {binary_directory}")
+    names = tuple(
+        sorted(
+            path.name
+            for path in binary_directory.iterdir()
+            if (path.is_file() or path.is_symlink())
+            and (path.suffix.lower() == ".exe" or path.stat().st_mode & 0o111)
+            and _is_native_binary(path)
+        )
+    )
+    require(names, f"installed prefix has no product executables: {prefix}")
+    require_no_forbidden_seams(names, f"installed executables under {prefix}")
+    return names
+
+
+def find_product_executable(root_path: pathlib.Path, name: str) -> pathlib.Path:
+    root = root_path.resolve(strict=True)
+    candidates: list[pathlib.Path] = []
+    for candidate in root.rglob(name):
+        if not (candidate.is_file() or candidate.is_symlink()):
+            continue
+        parts = set(candidate.relative_to(root).parts)
+        if {"CMakeFiles", "_deps"}.intersection(parts):
+            continue
+        candidates.append(candidate)
+    require(candidates, f"product executable {name} is missing under {root}")
+    candidates.sort(key=lambda value: (len(value.relative_to(root).parts), str(value)))
+    shallowest_depth = len(candidates[0].relative_to(root).parts)
+    shallowest = [
+        candidate
+        for candidate in candidates
+        if len(candidate.relative_to(root).parts) == shallowest_depth
+    ]
+    require(
+        len(shallowest) == 1,
+        f"ambiguous product executable {name} under {root}: {shallowest}",
+    )
+    return shallowest[0]
+
+
 def find_nm(explicit: str | None) -> str:
     if explicit is not None:
         resolved = shutil.which(explicit)
@@ -329,6 +533,15 @@ def parse_nm_symbols(output: str) -> frozenset[str]:
     return frozenset(symbols)
 
 
+def require_no_forbidden_product_symbols(symbols: Iterable[str], owner: str) -> None:
+    # Worker executables contain LLVM/Clang implementation symbols. Their
+    # vocabulary is outside this repository's production/test boundary; only
+    # cxxlens-owned symbols are classified here.
+    require_no_forbidden_seams(
+        (symbol for symbol in symbols if "cxxlens" in symbol.lower()), owner
+    )
+
+
 def read_symbols(nm: str, library: pathlib.Path, shared: bool) -> frozenset[str]:
     command = [nm, "-g", "--defined-only", "--format=posix", "-C"]
     if shared:
@@ -341,8 +554,56 @@ def read_symbols(nm: str, library: pathlib.Path, shared: bool) -> frozenset[str]
     )
     symbols = parse_nm_symbols(completed.stdout)
     require(symbols, f"nm returned no defined global symbols for {library}")
-    require_no_forbidden_seams(symbols, str(library))
+    require_no_forbidden_product_symbols(symbols, str(library))
     return symbols
+
+
+def scan_defined_symbols(nm: str, artifact: pathlib.Path) -> None:
+    # Local and hidden definitions matter: a test seam compiled into the
+    # product is a boundary violation even when it is not part of the ABI.
+    command = [nm, "--defined-only", "--format=posix", "-C", str(artifact)]
+    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    require(
+        completed.returncode == 0,
+        f"nm failed for {artifact}: {completed.stderr.strip()}",
+    )
+    symbols = parse_nm_symbols(completed.stdout)
+    require(symbols, f"nm returned no defined symbols for {artifact}")
+    require_no_forbidden_product_symbols(symbols, str(artifact))
+
+
+def product_library_artifacts(root: pathlib.Path) -> tuple[pathlib.Path, ...]:
+    resolved: dict[pathlib.Path, pathlib.Path] = {}
+    for candidate in sorted(root.rglob("*")):
+        if not (candidate.is_file() or candidate.is_symlink()):
+            continue
+        relative = candidate.relative_to(root)
+        if {"CMakeFiles", "_deps"}.intersection(relative.parts):
+            continue
+        name = candidate.name
+        if _is_test_only_target(name):
+            continue
+        if not (
+            re.fullmatch(r"libcxxlens[^/]*\.(?:a|dylib|so(?:\.[0-9.]+)?)", name)
+            or re.fullmatch(r"cxxlens[^/]*\.(?:lib|dll)", name)
+        ):
+            continue
+        target = candidate.resolve(strict=True)
+        previous = resolved.get(target)
+        if previous is None or len(relative.parts) < len(previous.relative_to(root).parts):
+            resolved[target] = candidate
+    artifacts = tuple(sorted(resolved.values(), key=lambda value: str(value)))
+    require(artifacts, f"no production libraries found under {root}")
+    return artifacts
+
+
+def scan_product_artifacts(
+    nm: str, root: pathlib.Path, executable_names: Sequence[str]
+) -> None:
+    for artifact in product_library_artifacts(root):
+        scan_defined_symbols(nm, artifact)
+    for name in executable_names:
+        scan_defined_symbols(nm, find_product_executable(root, name))
 
 
 def _surface_files(prefix: pathlib.Path) -> tuple[SurfaceFile, ...]:
@@ -353,6 +614,14 @@ def _surface_files(prefix: pathlib.Path) -> tuple[SurfaceFile, ...]:
         (path.relative_to(prefix).as_posix() for path in installed_paths),
         f"installed paths under {prefix}",
     )
+    for path in installed_paths:
+        relative = path.relative_to(prefix)
+        components = {part.lower() for part in relative.parts}
+        require(
+            not {"test", "tests", "testing"}.intersection(components)
+            and "cxxlens-quality" not in relative.as_posix().lower(),
+            f"installed test/quality path is not a product artifact: {relative}",
+        )
     header_paths = sorted(
         path
         for path in header_root.rglob("*")
@@ -396,6 +665,8 @@ def check(
     enabled_profile = load_compile_profile(enabled_build, expected_testing=True)
     disabled_profile = load_compile_profile(disabled_build, expected_testing=False)
     compare_compile_profiles(enabled_profile, disabled_profile)
+    check_product_target_graph(enabled_profile.build)
+    check_product_target_graph(disabled_profile.build)
 
     nm = find_nm(nm_executable)
     enabled_build_library = find_kernel_library(enabled_profile.build, enabled_profile.shared)
@@ -428,6 +699,18 @@ def check(
         disabled_build_symbols == disabled_installed_symbols,
         "BUILD_TESTING=OFF build and installed kernel ABI differ",
     )
+    executable_names = installed_executable_names(enabled_install)
+    require(
+        executable_names == installed_executable_names(disabled_install),
+        "BUILD_TESTING changes the installed product executable set",
+    )
+    for root in (
+        enabled_profile.build,
+        disabled_profile.build,
+        enabled_install,
+        disabled_install,
+    ):
+        scan_product_artifacts(nm, root, executable_names)
 
 
 def main(arguments: Sequence[str] | None = None) -> int:
