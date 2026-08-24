@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "protocol_v2/closure.hpp"
+#include "runtime/monotonic_clock_port_internal.hpp"
 #include "sdk/provider_protocol_v2_adapter.hpp"
 #include "source_closure_spool.hpp"
 
@@ -275,16 +276,76 @@ namespace cxxlens::detail::clang22
 			return sdk::unexpected(std::move(error));
 		}
 
-		[[nodiscard]] sdk::result<std::uint64_t> now_ns(const source_closure_monotonic_clock* clock)
+		struct progress_deadline
 		{
-			if (clock != nullptr)
-				return clock->now_ns();
-			const auto now = std::chrono::steady_clock::now().time_since_epoch();
-			const auto count = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
-			if (count < 0)
+			std::uint64_t last_observed_ns{};
+			std::uint64_t expires_at_ns{};
+			bool enabled{};
+		};
+
+		[[nodiscard]] sdk::result<std::uint64_t>
+		observe_clock(const source_closure_monotonic_clock& clock)
+		{
+			auto current = clock.now_ns();
+			if (!current)
+				return sdk::unexpected(failure(
+					"source-closure.channel-clock-invalid", "clock", current.error().detail));
+			return *current;
+		}
+
+		[[nodiscard]] sdk::result<progress_deadline>
+		start_progress_deadline(const source_closure_monotonic_clock& clock,
+								const std::uint64_t timeout_ns)
+		{
+			auto started = observe_clock(clock);
+			if (!started)
+				return sdk::unexpected(std::move(started.error()));
+			progress_deadline result{*started, 0U, timeout_ns != 0U};
+			if (!result.enabled)
+				return result;
+			if (*started > std::numeric_limits<std::uint64_t>::max() - timeout_ns)
 				return sdk::unexpected(
-					failure("source-closure.channel-clock-invalid", "clock", "negative"));
-			return static_cast<std::uint64_t>(count);
+					failure("source-closure.channel-clock-invalid", "clock", "deadline-overflow"));
+			result.expires_at_ns = *started + timeout_ns;
+			return result;
+		}
+
+		[[nodiscard]] sdk::result<std::uint64_t>
+		observe_progress_deadline(const source_closure_monotonic_clock& clock,
+								  progress_deadline& deadline)
+		{
+			auto current = observe_clock(clock);
+			if (!current)
+				return sdk::unexpected(std::move(current.error()));
+			if (*current < deadline.last_observed_ns)
+				return sdk::unexpected(
+					failure("source-closure.channel-clock-invalid", "clock", "backwards"));
+			deadline.last_observed_ns = *current;
+			if (deadline.enabled && *current >= deadline.expires_at_ns)
+				return sdk::unexpected(
+					failure("source-closure.channel-timeout", "transfer", "progress-deadline"));
+			return *current;
+		}
+
+		[[nodiscard]] sdk::result<void>
+		restart_progress_deadline(const source_closure_monotonic_clock& clock,
+								  progress_deadline& deadline,
+								  const std::uint64_t timeout_ns)
+		{
+			auto current = observe_progress_deadline(clock, deadline);
+			if (!current)
+				return sdk::unexpected(std::move(current.error()));
+			deadline.enabled = timeout_ns != 0U;
+			if (!deadline.enabled)
+			{
+				deadline.expires_at_ns = 0U;
+				return {};
+			}
+			if (*current > std::numeric_limits<std::uint64_t>::max() - timeout_ns)
+				return sdk::unexpected(
+					failure("source-closure.channel-clock-invalid", "clock", "deadline-overflow"));
+			deadline.expires_at_ns = *current + timeout_ns;
+			return {};
 		}
 
 		[[nodiscard]] sdk::result<source_closure_receiver_result>
@@ -444,6 +505,16 @@ namespace cxxlens::detail::clang22
 		}
 	} // namespace
 
+	sdk::result<std::uint64_t> source_closure_system_monotonic_clock::now_ns() const
+	{
+		const auto elapsed = cxxlens::runtime::monotonic_now().time_since_epoch();
+		const auto count = std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count();
+		if (count < 0)
+			return sdk::unexpected(
+				failure("source-closure.channel-clock-invalid", "clock", "negative"));
+		return static_cast<std::uint64_t>(count);
+	}
+
 	sdk::result<source_closure_receiver_credit>
 	source_closure_receiver_initial_credit(const source_closure_transport_limits& limits)
 	{
@@ -509,13 +580,14 @@ namespace cxxlens::detail::clang22
 		wire_limits.max_payload_bytes = std::min<std::uint64_t>(
 			wire_limits.max_payload_bytes, sdk::provider::protocol_limits{}.max_payload_bytes);
 
+		source_closure_system_monotonic_clock system_clock;
+		const auto& clock = options.clock != nullptr
+			? *options.clock
+			: static_cast<const source_closure_monotonic_clock&>(system_clock);
 		std::uint64_t frame_count{};
-		auto last_progress = now_ns(options.clock);
-		if (!last_progress)
-			return fail_with_cleanup(*relay,
-									 failure("source-closure.channel-clock-invalid",
-											 "clock",
-											 last_progress.error().detail));
+		auto deadline = start_progress_deadline(clock, options.progress_timeout_ns);
+		if (!deadline)
+			return fail_with_cleanup(*relay, std::move(deadline.error()));
 		for (;;)
 		{
 			if (options.cancellation.stop_requested())
@@ -523,23 +595,15 @@ namespace cxxlens::detail::clang22
 					*relay,
 					validator,
 					failure("source-closure.channel-cancelled", "transfer", "stop-requested"));
-			if (options.progress_timeout_ns != 0U)
+			if (deadline->enabled)
 			{
-				auto current = now_ns(options.clock);
-				if (!current)
-					return fail_with_cleanup(*relay,
-											 failure("source-closure.channel-clock-invalid",
-													 "clock",
-													 current.error().detail));
-				if (*current < *last_progress)
-					return fail_with_cleanup(
-						*relay,
-						failure("source-closure.channel-clock-invalid", "clock", "backwards"));
-				if (*current - *last_progress >= options.progress_timeout_ns)
-					return fail_liveness(
-						*relay,
-						validator,
-						failure("source-closure.channel-timeout", "transfer", "progress-deadline"));
+				auto observed = observe_progress_deadline(clock, *deadline);
+				if (!observed)
+				{
+					if (observed.error().code == "source-closure.channel-timeout")
+						return fail_liveness(*relay, validator, std::move(observed.error()));
+					return fail_with_cleanup(*relay, std::move(observed.error()));
+				}
 			}
 			if (frame_count >= options.maximum_frames)
 				return fail_with_cleanup(
@@ -556,16 +620,14 @@ namespace cxxlens::detail::clang22
 									 validator,
 									 failure("source-closure.truncated-stream", "ack", "missing"));
 			++frame_count;
-			auto current = now_ns(options.clock);
-			if (!current)
-				return fail_with_cleanup(*relay,
-										 failure("source-closure.channel-clock-invalid",
-												 "clock",
-												 current.error().detail));
-			if (*current < *last_progress)
-				return fail_with_cleanup(
-					*relay, failure("source-closure.channel-clock-invalid", "clock", "backwards"));
-			last_progress = *current;
+			auto progressed =
+				restart_progress_deadline(clock, *deadline, options.progress_timeout_ns);
+			if (!progressed)
+			{
+				if (progressed.error().code == "source-closure.channel-timeout")
+					return fail_liveness(*relay, validator, std::move(progressed.error()));
+				return fail_with_cleanup(*relay, std::move(progressed.error()));
+			}
 			bool sealed{};
 			auto accepted = accept_typed_frame(
 				std::move(**next), validator, *protocol_state, *closure_limits, sealed);

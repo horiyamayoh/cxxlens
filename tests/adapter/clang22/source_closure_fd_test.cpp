@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <span>
 #include <stop_token>
@@ -504,17 +505,30 @@ namespace
 	class sequence_clock final : public cxxlens::detail::clang22::source_closure_monotonic_clock
 	{
 	  public:
-		explicit sequence_clock(std::vector<std::uint64_t> values) : values_{std::move(values)} {}
+		explicit sequence_clock(std::vector<std::uint64_t> values,
+								std::atomic_bool* observation = nullptr,
+								const std::size_t notify_after_calls = 0U)
+			: values_{std::move(values)}, observation_{observation},
+			  notify_after_calls_{notify_after_calls}
+		{
+		}
 
 		cxxlens::sdk::result<std::uint64_t> now_ns() const override
 		{
-			const auto index = std::min(index_, values_.size() - 1U);
+			if (index_ >= values_.size())
+				return cxxlens::sdk::unexpected(cxxlens::sdk::error{
+					"source-closure.test-clock-exhausted", "clock", "script-exhausted"});
+			const auto value = values_[index_];
 			++index_;
-			return values_[index];
+			if (observation_ != nullptr && index_ == notify_after_calls_)
+				observation_->store(true, std::memory_order_release);
+			return value;
 		}
 
 	  private:
 		std::vector<std::uint64_t> values_;
+		std::atomic_bool* observation_{};
+		std::size_t notify_after_calls_{};
 		mutable std::size_t index_{};
 	};
 
@@ -532,6 +546,109 @@ namespace
 		require(static_cast<bool>(channel), "timeout channel creation failed");
 		std::array<std::byte, 1> byte{};
 		auto result = channel->read(byte);
+		require_error(result, "source-closure.channel-timeout", "read", "progress-deadline");
+	}
+
+	void completed_byte_progress_starts_the_next_absolute_interval()
+	{
+		auto input = make_socket_pair();
+		auto ack = make_socket_pair();
+		sequence_clock clock{{0U, 4U, 4U, 8U}};
+		source_closure_fd_channel_options options;
+		options.read = {input.first, source_closure_fd_ownership::borrowed};
+		options.write = {ack.first, source_closure_fd_ownership::borrowed};
+		options.clock = &clock;
+		options.progress_timeout_ns = 5U;
+		auto channel = source_closure_fd_channel::create(options);
+		require(static_cast<bool>(channel), "byte progress channel creation failed");
+
+		constexpr std::array<std::byte, 2> inbound{std::byte{0x31}, std::byte{0x32}};
+		require(::write(input.second, inbound.data(), inbound.size()) ==
+					static_cast<ssize_t>(inbound.size()),
+				"byte progress peer write failed");
+		std::array<std::byte, 2> observed{};
+		auto first = channel->read(std::span{observed}.first(1U));
+		auto second = channel->read(std::span{observed}.subspan(1U));
+		require(first && *first == 1U && second && *second == 1U && observed == inbound,
+				"completed byte progress did not start the next deadline interval");
+	}
+
+	void invalid_clock_is_typed_before_io()
+	{
+		auto run = [](sequence_clock& clock, const std::uint64_t timeout_ns)
+		{
+			auto input = make_socket_pair();
+			auto ack = make_socket_pair();
+			source_closure_fd_channel_options options;
+			options.read = {input.first, source_closure_fd_ownership::borrowed};
+			options.write = {ack.first, source_closure_fd_ownership::borrowed};
+			options.clock = &clock;
+			options.progress_timeout_ns = timeout_ns;
+			auto channel = source_closure_fd_channel::create(options);
+			require(static_cast<bool>(channel), "clock failure channel creation failed");
+			std::array<std::byte, 1> byte{};
+			return channel->read(byte);
+		};
+
+		sequence_clock backwards_clock{{10U, 9U}};
+		auto backwards = run(backwards_clock, 10U);
+		require_error(backwards, "source-closure.channel-clock-invalid", "read", "backwards");
+
+		sequence_clock overflow_clock{{std::numeric_limits<std::uint64_t>::max()}};
+		auto overflow = run(overflow_clock, 1U);
+		require_error(
+			overflow, "source-closure.channel-clock-invalid", "read", "deadline-overflow");
+
+		sequence_clock failed_clock{{}};
+		auto failed = run(failed_clock, 1U);
+		require_error(failed, "source-closure.channel-clock-invalid", "read", "script-exhausted");
+	}
+
+	void interrupted_poll_keeps_one_absolute_deadline()
+	{
+		auto input = make_socket_pair();
+		auto ack = make_socket_pair();
+		std::atomic_bool poll_observation_complete{false};
+		sequence_clock clock{
+			{0U, 0U, 4'000'000'000ULL, 5'000'000'000ULL}, &poll_observation_complete, 2U};
+		source_closure_fd_channel_options options;
+		options.read = {input.first, source_closure_fd_ownership::borrowed};
+		options.write = {ack.first, source_closure_fd_ownership::borrowed};
+		options.clock = &clock;
+		options.progress_timeout_ns = 5'000'000'000ULL;
+		auto channel = source_closure_fd_channel::create(options);
+		require(static_cast<bool>(channel), "absolute deadline channel creation failed");
+
+		struct sigaction action{};
+		action.sa_handler = count_sigusr1;
+		require(::sigemptyset(&action.sa_mask) == 0, "deadline signal mask setup failed");
+		struct sigaction previous{};
+		require(::sigaction(SIGUSR1, &action, &previous) == 0,
+				"deadline signal handler installation failed");
+		sigusr1_count = 0;
+		const auto reader_thread = ::pthread_self();
+		int signal_error{};
+		std::thread interrupter{
+			[&]
+			{
+				while (!poll_observation_complete.load(std::memory_order_acquire))
+					std::this_thread::yield();
+				constexpr timespec interval{0, 1'000'000};
+				for (int attempt = 0; attempt < 2; ++attempt)
+				{
+					(void)::nanosleep(&interval, nullptr);
+					const auto sent = ::pthread_kill(reader_thread, SIGUSR1);
+					if (sent != 0 && signal_error == 0)
+						signal_error = sent;
+				}
+			}};
+		std::array<std::byte, 1> byte{};
+		auto result = channel->read(byte);
+		interrupter.join();
+		require(::sigaction(SIGUSR1, &previous, nullptr) == 0,
+				"deadline signal handler restoration failed");
+		require(signal_error == 0 && sigusr1_count > 0,
+				"fixture did not deliver the deadline interrupt");
 		require_error(result, "source-closure.channel-timeout", "read", "progress-deadline");
 	}
 
@@ -727,6 +844,9 @@ int main()
 	cancellation_is_typed();
 	interrupted_poll_retries_without_losing_bytes();
 	timeout_is_typed();
+	completed_byte_progress_starts_the_next_absolute_interval();
+	invalid_clock_is_typed_before_io();
+	interrupted_poll_keeps_one_absolute_deadline();
 	closed_peer_is_typed_and_sigpipe_safe();
 	caller_pending_sigpipe_is_not_consumed();
 	owned_endpoint_closes_once();

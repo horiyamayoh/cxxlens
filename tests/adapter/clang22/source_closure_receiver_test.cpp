@@ -96,16 +96,31 @@ namespace
 
 		cxxlens::sdk::result<std::uint64_t> now_ns() const override
 		{
-			if (values_.empty())
-				return std::uint64_t{};
-			const auto index = std::min(index_, values_.size() - 1U);
+			if (index_ >= values_.size())
+				return cxxlens::sdk::unexpected(cxxlens::sdk::error{
+					"source-closure.test-clock-exhausted", "clock", "script-exhausted"});
+			const auto value = values_[index_];
 			++index_;
-			return values_[index];
+			return value;
 		}
 
 	  private:
 		std::vector<std::uint64_t> values_;
 		mutable std::size_t index_{};
+	};
+
+	class constant_clock final : public source_closure_monotonic_clock
+	{
+	  public:
+		explicit constant_clock(const std::uint64_t value) : value_{value} {}
+
+		cxxlens::sdk::result<std::uint64_t> now_ns() const override
+		{
+			return value_;
+		}
+
+	  private:
+		std::uint64_t value_{};
 	};
 
 	class failing_source final : public source_closure_frame_source
@@ -317,8 +332,9 @@ namespace
 		memory_source source{input.transcript};
 		memory_sink sink;
 		authority task{input.binding.task_id, input.binding.task_v4_digest};
-		auto result =
-			receive_source_closure_frames(source, sink, {input.binding, &task, 7U, 16'384U});
+		constant_clock deterministic_clock{0U};
+		auto result = receive_source_closure_frames(
+			source, sink, {input.binding, &task, 7U, 16'384U, {}, {}, &deterministic_clock});
 		require_result(result, "receiver rejected valid source closure");
 		require(result->snapshot.snapshot_id == input.closure.snapshot_id &&
 					result->snapshot.closure_digest == input.closure.closure_digest &&
@@ -518,6 +534,56 @@ namespace
 					timeout_sink.output_.empty(),
 				"stalled source closure did not produce a typed timeout without ACK");
 
+		memory_sink late_sink;
+		authority late_authority{input.binding.task_id, input.binding.task_v4_digest};
+		sequence_clock late_clock{{0U, 0U, 5U}};
+		memory_source late_source{input.transcript};
+		auto late = receive_source_closure_frames(
+			late_source,
+			late_sink,
+			{input.binding, &late_authority, 7U, 16'384U, {}, {}, &late_clock, 5U});
+		require(!late && late.error().code == "source-closure.transfer-timeout" &&
+					late_sink.output_.empty(),
+				"frame arriving at the absolute deadline was accepted or ACKed");
+
+		memory_sink backwards_sink;
+		authority backwards_authority{input.binding.task_id, input.binding.task_v4_digest};
+		sequence_clock backwards_clock{{10U, 9U}};
+		memory_source backwards_source{std::vector<std::byte>{}};
+		auto backwards = receive_source_closure_frames(
+			backwards_source,
+			backwards_sink,
+			{input.binding, &backwards_authority, 7U, 16'384U, {}, {}, &backwards_clock, 10U});
+		require(!backwards && backwards.error().code == "source-closure.channel-clock-invalid" &&
+					backwards.error().detail == "backwards" && backwards_sink.output_.empty(),
+				"backwards receiver clock was not rejected before read/ACK");
+
+		memory_sink overflow_sink;
+		authority overflow_authority{input.binding.task_id, input.binding.task_v4_digest};
+		sequence_clock overflow_clock{{std::numeric_limits<std::uint64_t>::max()}};
+		memory_source overflow_source{std::vector<std::byte>{}};
+		auto overflow = receive_source_closure_frames(
+			overflow_source,
+			overflow_sink,
+			{input.binding, &overflow_authority, 7U, 16'384U, {}, {}, &overflow_clock, 1U});
+		require(!overflow && overflow.error().code == "source-closure.channel-clock-invalid" &&
+					overflow.error().detail == "deadline-overflow" && overflow_sink.output_.empty(),
+				"receiver deadline overflow was not rejected before read/ACK");
+
+		memory_sink failed_clock_sink;
+		authority failed_clock_authority{input.binding.task_id, input.binding.task_v4_digest};
+		sequence_clock failed_clock{{}};
+		memory_source failed_clock_source{std::vector<std::byte>{}};
+		auto failed_clock_result = receive_source_closure_frames(
+			failed_clock_source,
+			failed_clock_sink,
+			{input.binding, &failed_clock_authority, 7U, 16'384U, {}, {}, &failed_clock, 1U});
+		require(!failed_clock_result &&
+					failed_clock_result.error().code == "source-closure.channel-clock-invalid" &&
+					failed_clock_result.error().detail == "script-exhausted" &&
+					failed_clock_sink.output_.empty(),
+				"receiver clock port failure was not propagated before read/ACK");
+
 		memory_sink cancel_sink;
 		authority cancel_authority{input.binding.task_id, input.binding.task_v4_digest};
 		std::stop_source cancellation;
@@ -548,6 +614,21 @@ namespace
 					connection_sink.output_.empty(),
 				"connection loss did not remain a local typed channel terminal");
 	}
+
+	void complete_frame_progress_starts_the_next_absolute_interval()
+	{
+		auto input = make_fixture();
+		memory_source source{input.transcript};
+		memory_sink sink;
+		authority task{input.binding.task_id, input.binding.task_v4_digest};
+		sequence_clock clock{{0U, 1U, 4U, 8U, 8U, 12U, 12U, 16U, 16U, 20U, 20U}};
+		auto result = receive_source_closure_frames(
+			source, sink, {input.binding, &task, 7U, 16'384U, {}, {}, &clock, 5U});
+		require_result(result, "complete frame progress did not start the next deadline interval");
+		require(!sink.output_.empty(), "progress-reset transfer did not emit its ACK");
+		auto crashed = result->relay->worker_crashed(false);
+		require_result(crashed, "progress-reset fixture cleanup failed");
+	}
 } // namespace
 
 int main()
@@ -558,5 +639,6 @@ int main()
 	resident_contract_is_hard_and_body_is_read_once();
 	initial_credit_counts_every_wire_header();
 	liveness_and_connection_terminals();
+	complete_frame_progress_starts_the_next_absolute_interval();
 	return 0;
 }

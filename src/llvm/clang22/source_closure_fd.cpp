@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cerrno>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -37,16 +36,82 @@ namespace cxxlens::detail::clang22
 #if defined(__unix__) || defined(__APPLE__)
 		constexpr std::uint64_t poll_slice_nanoseconds = 25'000'000ULL;
 
-		[[nodiscard]] sdk::result<std::uint64_t> now_ns(const source_closure_monotonic_clock* clock)
+		struct progress_deadline
 		{
-			if (clock != nullptr)
-				return clock->now_ns();
-			const auto now = std::chrono::steady_clock::now().time_since_epoch();
-			const auto count = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
-			if (count < 0)
-				return sdk::unexpected(
-					failure("source-closure.channel-clock-invalid", "clock", "negative"));
-			return static_cast<std::uint64_t>(count);
+			std::uint64_t last_observed_ns{};
+			std::uint64_t expires_at_ns{};
+			bool enabled{};
+		};
+
+		[[nodiscard]] sdk::result<std::uint64_t>
+		observe_clock(const source_closure_monotonic_clock& clock, const std::string_view field)
+		{
+			auto current = clock.now_ns();
+			if (!current)
+				return sdk::unexpected(failure("source-closure.channel-clock-invalid",
+											   std::string(field),
+											   current.error().detail));
+			return *current;
+		}
+
+		[[nodiscard]] sdk::result<progress_deadline>
+		start_progress_deadline(const source_closure_monotonic_clock& clock,
+								const std::uint64_t timeout_ns,
+								const std::string_view field)
+		{
+			auto started = observe_clock(clock, field);
+			if (!started)
+				return sdk::unexpected(std::move(started.error()));
+			progress_deadline result{*started, 0U, timeout_ns != 0U};
+			if (!result.enabled)
+				return result;
+			if (*started > std::numeric_limits<std::uint64_t>::max() - timeout_ns)
+				return sdk::unexpected(failure("source-closure.channel-clock-invalid",
+											   std::string(field),
+											   "deadline-overflow"));
+			result.expires_at_ns = *started + timeout_ns;
+			return result;
+		}
+
+		[[nodiscard]] sdk::result<std::uint64_t>
+		observe_progress_deadline(const source_closure_monotonic_clock& clock,
+								  progress_deadline& deadline,
+								  const std::string_view field)
+		{
+			auto current = observe_clock(clock, field);
+			if (!current)
+				return sdk::unexpected(std::move(current.error()));
+			if (*current < deadline.last_observed_ns)
+				return sdk::unexpected(failure(
+					"source-closure.channel-clock-invalid", std::string(field), "backwards"));
+			deadline.last_observed_ns = *current;
+			if (deadline.enabled && *current >= deadline.expires_at_ns)
+				return sdk::unexpected(failure(
+					"source-closure.channel-timeout", std::string(field), "progress-deadline"));
+			return *current;
+		}
+
+		[[nodiscard]] sdk::result<void>
+		restart_progress_deadline(const source_closure_monotonic_clock& clock,
+								  progress_deadline& deadline,
+								  const std::uint64_t timeout_ns,
+								  const std::string_view field)
+		{
+			auto current = observe_progress_deadline(clock, deadline, field);
+			if (!current)
+				return sdk::unexpected(std::move(current.error()));
+			deadline.enabled = timeout_ns != 0U;
+			if (!deadline.enabled)
+			{
+				deadline.expires_at_ns = 0U;
+				return {};
+			}
+			if (*current > std::numeric_limits<std::uint64_t>::max() - timeout_ns)
+				return sdk::unexpected(failure("source-closure.channel-clock-invalid",
+											   std::string(field),
+											   "deadline-overflow"));
+			deadline.expires_at_ns = *current + timeout_ns;
+			return {};
 		}
 
 		struct descriptor_identity
@@ -257,42 +322,23 @@ namespace cxxlens::detail::clang22
 		[[nodiscard]] sdk::result<short> wait_for(const int descriptor,
 												  const short events,
 												  const std::stop_token cancellation,
-												  const source_closure_monotonic_clock* clock,
-												  const std::uint64_t timeout_ns,
+												  const source_closure_monotonic_clock& clock,
+												  progress_deadline& deadline,
 												  const std::string_view field)
 		{
-			const auto started = now_ns(clock);
-			if (!started)
-				return sdk::unexpected(failure("source-closure.channel-clock-invalid",
-											   std::string(field),
-											   started.error().detail));
 			for (;;)
 			{
 				if (cancellation.stop_requested())
 					return sdk::unexpected(failure(
 						"source-closure.channel-cancelled", std::string(field), "stop-requested"));
-				const auto current = now_ns(clock);
+				auto current = observe_progress_deadline(clock, deadline, field);
 				if (!current)
-					return sdk::unexpected(failure("source-closure.channel-clock-invalid",
-												   std::string(field),
-												   current.error().detail));
-				if (timeout_ns != 0U)
-				{
-					if (*current < *started)
-						return sdk::unexpected(failure("source-closure.channel-clock-invalid",
-													   std::string(field),
-													   "backwards"));
-					if (*current - *started >= timeout_ns)
-						return sdk::unexpected(failure("source-closure.channel-timeout",
-													   std::string(field),
-													   "progress-deadline"));
-				}
+					return sdk::unexpected(std::move(current.error()));
 
 				int poll_milliseconds = 25;
-				if (timeout_ns != 0U)
+				if (deadline.enabled)
 				{
-					const auto elapsed = *current - *started;
-					const auto remaining = timeout_ns - std::min(timeout_ns, elapsed);
+					const auto remaining = deadline.expires_at_ns - *current;
 					const auto nanos = std::min(remaining, poll_slice_nanoseconds);
 					poll_milliseconds =
 						static_cast<int>(std::max<std::uint64_t>(1U, nanos / 1'000'000ULL));
@@ -330,7 +376,7 @@ namespace cxxlens::detail::clang22
 		: read_descriptor_{pinned_read}, write_descriptor_{pinned_write}, read_device_{read_device},
 		  read_inode_{read_inode}, read_mode_{read_mode}, write_device_{write_device},
 		  write_inode_{write_inode}, write_mode_{write_mode}, cancellation_{options.cancellation},
-		  clock_{options.clock}, progress_timeout_ns_{options.progress_timeout_ns}
+		  injected_clock_{options.clock}, progress_timeout_ns_{options.progress_timeout_ns}
 	{
 	}
 
@@ -379,8 +425,8 @@ namespace cxxlens::detail::clang22
 		  read_device_{other.read_device_}, read_inode_{other.read_inode_},
 		  read_mode_{other.read_mode_}, write_device_{other.write_device_},
 		  write_inode_{other.write_inode_}, write_mode_{other.write_mode_},
-		  poisoned_{other.poisoned_}, cancellation_{other.cancellation_}, clock_{other.clock_},
-		  progress_timeout_ns_{other.progress_timeout_ns_}
+		  poisoned_{other.poisoned_}, cancellation_{other.cancellation_},
+		  injected_clock_{other.injected_clock_}, progress_timeout_ns_{other.progress_timeout_ns_}
 	{
 		other.read_descriptor_ = -1;
 		other.write_descriptor_ = -1;
@@ -391,7 +437,7 @@ namespace cxxlens::detail::clang22
 		other.write_inode_ = 0U;
 		other.write_mode_ = 0U;
 		other.poisoned_ = true;
-		other.clock_ = nullptr;
+		other.injected_clock_ = nullptr;
 		other.progress_timeout_ns_ = source_closure_default_progress_timeout_ns;
 	}
 
@@ -411,7 +457,7 @@ namespace cxxlens::detail::clang22
 		write_mode_ = other.write_mode_;
 		poisoned_ = other.poisoned_;
 		cancellation_ = other.cancellation_;
-		clock_ = other.clock_;
+		injected_clock_ = other.injected_clock_;
 		progress_timeout_ns_ = other.progress_timeout_ns_;
 		other.read_descriptor_ = -1;
 		other.write_descriptor_ = -1;
@@ -422,7 +468,7 @@ namespace cxxlens::detail::clang22
 		other.write_inode_ = 0U;
 		other.write_mode_ = 0U;
 		other.poisoned_ = true;
-		other.clock_ = nullptr;
+		other.injected_clock_ = nullptr;
 		other.progress_timeout_ns_ = source_closure_default_progress_timeout_ns;
 		return *this;
 	}
@@ -451,6 +497,13 @@ namespace cxxlens::detail::clang22
 		poisoned_ = true;
 	}
 
+	const source_closure_monotonic_clock& source_closure_fd_channel::clock() const noexcept
+	{
+		if (injected_clock_ != nullptr)
+			return *injected_clock_;
+		return system_clock_;
+	}
+
 	sdk::result<std::size_t> source_closure_fd_channel::read(const std::span<std::byte> destination)
 	{
 #if defined(__unix__) || defined(__APPLE__)
@@ -475,10 +528,13 @@ namespace cxxlens::detail::clang22
 			identity->mode != read_mode_)
 			return sdk::unexpected(
 				failure("source-closure.channel-foreign", "read", "descriptor-identity"));
+		auto deadline = start_progress_deadline(clock(), progress_timeout_ns_, "read");
+		if (!deadline)
+			return sdk::unexpected(std::move(deadline.error()));
 		for (;;)
 		{
-			auto ready = wait_for(
-				read_descriptor_, POLLIN, cancellation_, clock_, progress_timeout_ns_, "read");
+			auto ready =
+				wait_for(read_descriptor_, POLLIN, cancellation_, clock(), *deadline, "read");
 			if (!ready)
 				return sdk::unexpected(std::move(ready.error()));
 			if ((*ready & POLLERR) != 0 && (*ready & (POLLIN | POLLHUP)) == 0)
@@ -528,6 +584,9 @@ namespace cxxlens::detail::clang22
 			identity->mode != write_mode_)
 			return sdk::unexpected(
 				failure("source-closure.channel-foreign", "write", "descriptor-identity"));
+		auto deadline = start_progress_deadline(clock(), progress_timeout_ns_, "write");
+		if (!deadline)
+			return sdk::unexpected(std::move(deadline.error()));
 		std::size_t offset{};
 		auto reject_after_progress = [&](sdk::error error) -> sdk::result<void>
 		{
@@ -537,8 +596,8 @@ namespace cxxlens::detail::clang22
 		};
 		while (offset < frame_bytes.size())
 		{
-			auto ready = wait_for(
-				write_descriptor_, POLLOUT, cancellation_, clock_, progress_timeout_ns_, "write");
+			auto ready =
+				wait_for(write_descriptor_, POLLOUT, cancellation_, clock(), *deadline, "write");
 			if (!ready)
 				return reject_after_progress(std::move(ready.error()));
 			if ((*ready & (POLLERR | POLLHUP)) != 0 && (*ready & POLLOUT) == 0)
@@ -554,6 +613,13 @@ namespace cxxlens::detail::clang22
 			if (count > 0)
 			{
 				offset += static_cast<std::size_t>(count);
+				if (offset < frame_bytes.size())
+				{
+					auto restarted = restart_progress_deadline(
+						clock(), *deadline, progress_timeout_ns_, "write");
+					if (!restarted)
+						return reject_after_progress(std::move(restarted.error()));
+				}
 				continue;
 			}
 			if (count == 0)

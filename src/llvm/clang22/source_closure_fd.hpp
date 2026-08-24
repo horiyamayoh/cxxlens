@@ -67,7 +67,9 @@ namespace cxxlens::detail::clang22
 		source_closure_fd_descriptor read;
 		source_closure_fd_descriptor write;
 		std::stop_token cancellation;
+		/** Optional caller-owned clock; null selects the channel-owned system clock. */
 		const source_closure_monotonic_clock* clock{};
+		/** Absolute bound for one no-progress interval; completed byte progress starts the next. */
 		std::uint64_t progress_timeout_ns{source_closure_default_progress_timeout_ns};
 	};
 
@@ -105,6 +107,7 @@ namespace cxxlens::detail::clang22
 								  std::uint64_t write_inode,
 								  std::uint32_t write_mode) noexcept;
 		void close_pinned() noexcept;
+		[[nodiscard]] const source_closure_monotonic_clock& clock() const noexcept;
 
 		int read_descriptor_{-1};
 		int write_descriptor_{-1};
@@ -116,7 +119,8 @@ namespace cxxlens::detail::clang22
 		std::uint32_t write_mode_{};
 		bool poisoned_{false};
 		std::stop_token cancellation_;
-		const source_closure_monotonic_clock* clock_{};
+		source_closure_system_monotonic_clock system_clock_;
+		const source_closure_monotonic_clock* injected_clock_{};
 		std::uint64_t progress_timeout_ns_{source_closure_default_progress_timeout_ns};
 	};
 } // namespace cxxlens::detail::clang22

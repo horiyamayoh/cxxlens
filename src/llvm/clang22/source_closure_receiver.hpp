@@ -24,12 +24,19 @@
 
 namespace cxxlens::detail::clang22
 {
-	/** Host-injected monotonic clock used for deterministic pre-accept liveness tests. */
+	/** Monotonic time environment port used by bounded source-closure operations. */
 	class source_closure_monotonic_clock
 	{
 	  public:
 		virtual ~source_closure_monotonic_clock() = default;
 		[[nodiscard]] virtual sdk::result<std::uint64_t> now_ns() const = 0;
+	};
+
+	/** Production clock backed by the runtime monotonic clock port. */
+	class source_closure_system_monotonic_clock final : public source_closure_monotonic_clock
+	{
+	  public:
+		[[nodiscard]] sdk::result<std::uint64_t> now_ns() const override;
 	};
 
 	inline constexpr std::uint64_t source_closure_default_progress_timeout_ns = 5'000'000'000ULL;
@@ -61,7 +68,9 @@ namespace cxxlens::detail::clang22
 		std::uint64_t maximum_frames{16'384U};
 		source_closure_transport_limits limits{};
 		std::stop_token cancellation{};
+		/** Optional caller-owned clock; null selects an operation-owned system clock. */
 		const source_closure_monotonic_clock* clock{};
+		/** Absolute bound for one no-progress interval; a complete frame starts the next. */
 		std::uint64_t progress_timeout_ns{source_closure_default_progress_timeout_ns};
 	};
 
