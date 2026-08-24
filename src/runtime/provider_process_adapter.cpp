@@ -594,6 +594,64 @@ namespace cxxlens::sdk::provider
 		}
 #endif
 
+		process_source_closure_descriptor_projection::process_source_closure_descriptor_projection(
+			const int read_descriptor,
+			const int write_descriptor,
+			const std::uint64_t read_device,
+			const std::uint64_t read_inode,
+			const std::uint32_t read_mode,
+			const std::uint64_t write_device,
+			const std::uint64_t write_inode,
+			const std::uint32_t write_mode,
+			std::unique_ptr<process_source_closure_generation_state> state,
+			const std::uint64_t generation) noexcept
+			: read_descriptor_{read_descriptor}, write_descriptor_{write_descriptor},
+			  read_device_{read_device}, read_inode_{read_inode}, read_mode_{read_mode},
+			  write_device_{write_device}, write_inode_{write_inode}, write_mode_{write_mode},
+			  state_{std::move(state)}, generation_{generation}
+		{
+		}
+
+		process_source_closure_descriptor_projection::process_source_closure_descriptor_projection(
+			process_source_closure_descriptor_projection&& other) noexcept
+			: read_descriptor_{std::exchange(other.read_descriptor_, -1)},
+			  write_descriptor_{std::exchange(other.write_descriptor_, -1)},
+			  read_device_{other.read_device_}, read_inode_{other.read_inode_},
+			  read_mode_{other.read_mode_}, write_device_{other.write_device_},
+			  write_inode_{other.write_inode_}, write_mode_{other.write_mode_},
+			  state_{std::move(other.state_)}, generation_{other.generation_},
+			  adapter_consumed_{other.adapter_consumed_}
+		{
+			other.generation_ = 0U;
+			other.adapter_consumed_ = true;
+		}
+
+		process_source_closure_descriptor_projection::
+			~process_source_closure_descriptor_projection() noexcept
+		{
+			close_owned();
+		}
+
+		void process_source_closure_descriptor_projection::close_owned() noexcept
+		{
+			if (state_)
+				state_->invalidate();
+#if defined(__linux__) && defined(__GLIBC__)
+			const auto read_closed = close_owned_source_descriptor(
+				read_descriptor_, true, {read_device_, read_inode_, read_mode_});
+			const auto write_closed = close_owned_source_descriptor(
+				write_descriptor_, false, {write_device_, write_inode_, write_mode_});
+			if ((!read_closed || !write_closed) && state_)
+				state_->invalidate();
+#else
+			read_descriptor_ = -1;
+			write_descriptor_ = -1;
+#endif
+			generation_ = 0U;
+			state_.reset();
+			adapter_consumed_ = true;
+		}
+
 		process_source_closure_launch_view::process_source_closure_launch_view(
 			const int read_descriptor,
 			const int write_descriptor,
@@ -764,6 +822,8 @@ namespace cxxlens::sdk::provider
 								  "sequence",
 								  stream_id_ == 0U ? "stream" : "first-sequence"));
 			if (!state_ || generation_ == 0U || state_->generation != generation_ ||
+				state_->read_descriptor != read_descriptor_ ||
+				state_->write_descriptor != write_descriptor_ ||
 				state_->creator_process != process_source_current_pid() ||
 				!state_->alive.load(std::memory_order_acquire) ||
 				state_->epoch.load(std::memory_order_acquire) != generation_)
@@ -821,6 +881,8 @@ namespace cxxlens::sdk::provider
 		bool process_source_closure_launch::validate_live_endpoint_identity() const noexcept
 		{
 			if (!state_ || generation_ == 0U || state_->generation != generation_ ||
+				state_->read_descriptor != read_descriptor_ ||
+				state_->write_descriptor != write_descriptor_ ||
 				state_->creator_process != process_source_current_pid() ||
 				!state_->alive.load(std::memory_order_acquire) ||
 				state_->epoch.load(std::memory_order_acquire) != generation_)
@@ -898,7 +960,7 @@ namespace cxxlens::sdk::provider
 				state_->invalidate();
 		}
 
-		result<process_source_closure_launch_adapter_access::descriptor_projection>
+		result<process_source_closure_descriptor_projection>
 		process_source_closure_launch_adapter_access::consume(
 			process_source_closure_launch_view&& value)
 		{
@@ -907,6 +969,8 @@ namespace cxxlens::sdk::provider
 					process_error("provider.process-channel-stale", "launch", "already-consumed"));
 			if (!value.state_ || value.generation_ == 0U ||
 				value.state_->generation != value.generation_ ||
+				value.state_->read_descriptor != value.read_descriptor_ ||
+				value.state_->write_descriptor != value.write_descriptor_ ||
 				value.state_->creator_process != process_source_current_pid() ||
 				!value.state_->alive.load(std::memory_order_acquire) ||
 				value.state_->epoch.load(std::memory_order_acquire) != value.generation_)
@@ -935,7 +999,88 @@ namespace cxxlens::sdk::provider
 			}
 #endif
 			value.adapter_accessed_ = true;
-			return descriptor_projection{value.read_descriptor_, value.write_descriptor_};
+			auto projection = process_source_closure_descriptor_projection{
+				std::exchange(value.read_descriptor_, -1),
+				std::exchange(value.write_descriptor_, -1),
+				value.read_device_,
+				value.read_inode_,
+				value.read_mode_,
+				value.write_device_,
+				value.write_inode_,
+				value.write_mode_,
+				std::move(value.state_),
+				value.generation_};
+			value.generation_ = 0U;
+			return projection;
+		}
+
+		result<void> process_source_closure_launch_adapter_access::consume(
+			process_source_closure_descriptor_projection&& value,
+			void* const context,
+			const descriptor_operation operation)
+		{
+			if (value.adapter_consumed_)
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-stale", "adapter", "already-consumed"));
+			value.adapter_consumed_ = true;
+			if (operation == nullptr)
+			{
+				auto failure = process_error(
+					"provider.process-channel-invalid", "adapter", "missing-operation");
+				value.close_owned();
+				return cxxlens::sdk::unexpected(std::move(failure));
+			}
+			if (!value.state_ || value.generation_ == 0U ||
+				value.state_->generation != value.generation_ ||
+				value.state_->read_descriptor != value.read_descriptor_ ||
+				value.state_->write_descriptor != value.write_descriptor_ ||
+				value.state_->creator_process != process_source_current_pid() ||
+				!value.state_->alive.load(std::memory_order_acquire) ||
+				value.state_->epoch.load(std::memory_order_acquire) != value.generation_)
+			{
+				auto failure =
+					process_error("provider.process-channel-stale", "adapter", "not-live");
+				value.close_owned();
+				return cxxlens::sdk::unexpected(std::move(failure));
+			}
+#if !defined(__linux__) || !defined(__GLIBC__)
+			auto failure = process_error(
+				"provider.process-channel-unavailable", "platform", "linux-glibc-required");
+			value.close_owned();
+			return cxxlens::sdk::unexpected(std::move(failure));
+#else
+			if (!live_host_channel_descriptor(
+					value.read_descriptor_,
+					true,
+					{value.read_device_, value.read_inode_, value.read_mode_}) ||
+				!live_host_channel_descriptor(
+					value.write_descriptor_,
+					false,
+					{value.write_device_, value.write_inode_, value.write_mode_}))
+			{
+				auto failure =
+					process_error("provider.process-channel-stale", "descriptor", "not-live");
+				value.close_owned();
+				return cxxlens::sdk::unexpected(std::move(failure));
+			}
+#endif
+			try
+			{
+				auto outcome = operation(context, value.read_descriptor_, value.write_descriptor_);
+				value.close_owned();
+				return outcome;
+			}
+			catch (const std::bad_alloc&)
+			{
+				value.close_owned();
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-invalid", "adapter", "allocation"));
+			}
+			catch (...)
+			{
+				value.close_owned();
+				throw;
+			}
 		}
 
 		result<process_source_closure_launch>

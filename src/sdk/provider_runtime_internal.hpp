@@ -55,6 +55,50 @@ namespace cxxlens::sdk::provider::detail
 
 	struct process_source_closure_generation_state;
 
+	/** Move-only custody transferred from a launch view to the process adapter. */
+	class CXXLENS_PROVIDER_DETAIL_HIDDEN process_source_closure_descriptor_projection final
+	{
+	  public:
+		process_source_closure_descriptor_projection(
+			const process_source_closure_descriptor_projection&) = delete;
+		process_source_closure_descriptor_projection&
+		operator=(const process_source_closure_descriptor_projection&) = delete;
+		process_source_closure_descriptor_projection(
+			process_source_closure_descriptor_projection&& other) noexcept;
+		process_source_closure_descriptor_projection&
+		operator=(process_source_closure_descriptor_projection&&) = delete;
+		~process_source_closure_descriptor_projection() noexcept;
+
+	  private:
+		process_source_closure_descriptor_projection(
+			int read_descriptor,
+			int write_descriptor,
+			std::uint64_t read_device,
+			std::uint64_t read_inode,
+			std::uint32_t read_mode,
+			std::uint64_t write_device,
+			std::uint64_t write_inode,
+			std::uint32_t write_mode,
+			std::unique_ptr<process_source_closure_generation_state> state,
+			std::uint64_t generation) noexcept;
+
+		void close_owned() noexcept;
+
+		int read_descriptor_{-1};
+		int write_descriptor_{-1};
+		std::uint64_t read_device_{};
+		std::uint64_t read_inode_{};
+		std::uint32_t read_mode_{};
+		std::uint64_t write_device_{};
+		std::uint64_t write_inode_{};
+		std::uint32_t write_mode_{};
+		std::unique_ptr<process_source_closure_generation_state> state_;
+		std::uint64_t generation_{};
+		bool adapter_consumed_{};
+
+		friend struct process_source_closure_launch_adapter_access;
+	};
+
 	/**
 	 * One-shot descriptor view issued by the host source-closure launch lease.
 	 *
@@ -242,30 +286,17 @@ namespace cxxlens::sdk::provider::detail
 										   std::uint64_t);
 	};
 
-	/** Narrow source-private projection consumed once by the process adapter. */
+	/** Narrow source-private adapter access; raw descriptors exist only during the callback. */
 	struct CXXLENS_PROVIDER_DETAIL_HIDDEN process_source_closure_launch_adapter_access
 	{
-		struct descriptor_projection final
-		{
-			explicit descriptor_projection(int read = -1, int write = -1) noexcept
-				: read_descriptor{read}, write_descriptor{write}
-			{
-			}
-			descriptor_projection(const descriptor_projection&) = delete;
-			descriptor_projection& operator=(const descriptor_projection&) = delete;
-			descriptor_projection(descriptor_projection&& other) noexcept
-				: read_descriptor{std::exchange(other.read_descriptor, -1)},
-				  write_descriptor{std::exchange(other.write_descriptor, -1)}
-			{
-			}
-			descriptor_projection& operator=(descriptor_projection&&) = delete;
+		using descriptor_operation = result<void> (*)(void*, int, int);
 
-			int read_descriptor{-1};
-			int write_descriptor{-1};
-		};
-
-		[[nodiscard]] static result<descriptor_projection>
+		[[nodiscard]] static result<process_source_closure_descriptor_projection>
 		consume(process_source_closure_launch_view&& value);
+		[[nodiscard]] static result<void>
+		consume(process_source_closure_descriptor_projection&& value,
+				void* context,
+				descriptor_operation operation);
 	};
 
 	/** Issue one validated, move-only host launch lease. */
