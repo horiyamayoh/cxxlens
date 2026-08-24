@@ -12049,8 +12049,7 @@ namespace cxxlens::sdk
 							*implementation->sqlite_source_anchor,
 							database_path,
 							*implementation->sqlite_observation);
-						const bool epoch_stable =
-							opened->deferred_writer_target_namespace_epoch &&
+						const bool epoch_stable = opened->deferred_writer_target_namespace_epoch &&
 							opened->deferred_writer_target_namespace_epoch_identity &&
 							opened->deferred_writer_target_namespace_epoch->identity() ==
 								*opened->deferred_writer_target_namespace_epoch_identity;
