@@ -94,9 +94,15 @@ namespace cxxlens::detail::clang22
 			try
 			{
 				std::vector<std::byte> control(prepared->control_bytes());
+				if (control.capacity() > maximum_resident_bytes)
+					return sdk::unexpected(failure(
+						"source-closure.limit-exceeded", "frame-resident", "allocator-capacity"));
+				const auto remaining_resident_bytes = maximum_resident_bytes - control.capacity();
+				if (prepared->payload_bytes() > remaining_resident_bytes)
+					return sdk::unexpected(
+						failure("source-closure.limit-exceeded", "frame-resident", "contract-cap"));
 				std::vector<std::byte> payload(prepared->payload_bytes());
-				if (control.capacity() > maximum_resident_bytes ||
-					payload.capacity() > maximum_resident_bytes - control.capacity())
+				if (payload.capacity() > remaining_resident_bytes)
 					return sdk::unexpected(failure(
 						"source-closure.limit-exceeded", "frame-resident", "allocator-capacity"));
 				if (auto complete = read_exact(source, control, false); !complete)
