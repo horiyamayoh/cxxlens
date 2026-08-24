@@ -32,6 +32,55 @@ namespace cxxlens::sdk
 {
 	namespace
 	{
+		[[nodiscard]] bool valid_process_identity_shape(
+			const sqlite_shm_process_identity_observation& observation) noexcept
+		{
+			return observation.pid != 0U && observation.process_start_ticks != 0U &&
+				observation.fork_epoch != 0U &&
+				(observation.pid_namespace_device != 0U || observation.pid_namespace_inode != 0U) &&
+				(observation.pidfd_device != 0U || observation.pidfd_inode != 0U);
+		}
+
+		[[nodiscard]] sqlite_shm_process_identity_validation_result process_identity_rejection(
+			const sqlite_shm_process_identity_rejection_reason reason) noexcept
+		{
+			return sqlite_shm_process_identity_validation_result{
+				sqlite_shm_process_identity_rejection{reason}};
+		}
+	} // namespace
+
+	sqlite_shm_process_identity_validation_result validate_sqlite_shm_process_identity(
+		const sqlite_shm_process_identity_observation& expected,
+		const sqlite_shm_process_identity_observation& observed) noexcept
+	{
+		if (!valid_process_identity_shape(expected) || !valid_process_identity_shape(observed))
+			return process_identity_rejection(
+				sqlite_shm_process_identity_rejection_reason::invalid_identity);
+		if (!expected.pidfd_live || !observed.pidfd_live)
+			return process_identity_rejection(
+				sqlite_shm_process_identity_rejection_reason::pidfd_not_live);
+		if (expected.pid != observed.pid)
+			return process_identity_rejection(
+				sqlite_shm_process_identity_rejection_reason::pid_mismatch);
+		if (expected.process_start_ticks != observed.process_start_ticks)
+			return process_identity_rejection(
+				sqlite_shm_process_identity_rejection_reason::process_start_mismatch);
+		if (expected.pid_namespace_device != observed.pid_namespace_device ||
+			expected.pid_namespace_inode != observed.pid_namespace_inode)
+			return process_identity_rejection(
+				sqlite_shm_process_identity_rejection_reason::pid_namespace_mismatch);
+		if (expected.pidfd_device != observed.pidfd_device ||
+			expected.pidfd_inode != observed.pidfd_inode)
+			return process_identity_rejection(
+				sqlite_shm_process_identity_rejection_reason::pidfd_mismatch);
+		if (expected.fork_epoch != observed.fork_epoch)
+			return process_identity_rejection(
+				sqlite_shm_process_identity_rejection_reason::fork_epoch_mismatch);
+		return {};
+	}
+
+	namespace
+	{
 		[[nodiscard]] sqlite_shm_lease_rejection
 		port_rejection(const sqlite_shm_lease_rejection_reason reason =
 						   sqlite_shm_lease_rejection_reason::invalid_identity,
@@ -143,9 +192,10 @@ namespace cxxlens::sdk
 			{
 				if (size == buffer.size())
 					return false;
-				// Process identity must observe /proc/self/stat while the fork mutex is held.
-				// This bounded procfs read cannot cross that boundary without mixing parent
-				// and child identity components.
+				// The state-creation path holds the fork mutex while reading this bounded procfs
+				// record. Revalidation may run without that mutex, so it pairs the read with an
+				// acquire/recheck of the atomic fork epoch and rejects an epoch that changed while
+				// the observation was in flight.
 				const auto count = ::read( // NOLINT(clang-analyzer-unix.BlockInCriticalSection)
 					descriptor.get(),
 					buffer.data() + size,
@@ -252,6 +302,34 @@ namespace cxxlens::sdk
 			inode = static_cast<std::uint64_t>(observed.st_ino);
 			return device != 0U || inode != 0U;
 		}
+
+		[[nodiscard]] sqlite_shm_process_identity_observation
+		observe_process_identity(const std::atomic<std::uint64_t>* fork_epoch_source,
+								 const owned_descriptor& pid_namespace,
+								 const owned_descriptor& pidfd) noexcept
+		{
+			sqlite_shm_process_identity_observation observation;
+			if (fork_epoch_source == nullptr)
+				return observation;
+			const auto fork_epoch_before = fork_epoch_source->load(std::memory_order_acquire);
+			const auto current_pid = ::getpid();
+			if (current_pid <= 0)
+				return observation;
+			observation.pid = static_cast<std::uint64_t>(current_pid);
+			observation.fork_epoch = fork_epoch_before;
+			if (!process_start_ticks(observation.process_start_ticks) ||
+				!descriptor_identity(pid_namespace.get(),
+									 observation.pid_namespace_device,
+									 observation.pid_namespace_inode) ||
+				!descriptor_identity(
+					pidfd.get(), observation.pidfd_device, observation.pidfd_inode))
+				return observation;
+			observation.pidfd_live = pidfd_live(pidfd.get());
+			const auto fork_epoch_after = fork_epoch_source->load(std::memory_order_acquire);
+			if (fork_epoch_after != fork_epoch_before)
+				observation.fork_epoch = fork_epoch_after;
+			return observation;
+		}
 #endif
 	} // namespace
 
@@ -261,7 +339,8 @@ namespace cxxlens::sdk
 		{
 #if defined(__linux__) && defined(SYS_pidfd_open)
 			pid_t creator_pid{};
-			std::uint64_t fork_epoch{};
+			sqlite_shm_process_identity_observation expected_identity;
+			const std::atomic<std::uint64_t>* fork_epoch_source{};
 			owned_descriptor pid_namespace;
 			owned_descriptor pidfd;
 #endif
@@ -283,8 +362,12 @@ namespace cxxlens::sdk
 			[[nodiscard]] bool current_process() const noexcept
 			{
 #if defined(__linux__) && defined(SYS_pidfd_open)
-				return creator_pid > 0 && fork_epoch != 0U && ::getpid() == creator_pid &&
-					pid_namespace && pidfd && pidfd_live(pidfd.get()) && registry &&
+				if (!pid_namespace || !pidfd || !registry || fork_epoch_source == nullptr)
+					return false;
+				const auto observed =
+					observe_process_identity(fork_epoch_source, pid_namespace, pidfd);
+				return validate_sqlite_shm_process_identity(expected_identity, observed)
+						   .has_value() &&
 					registry->process_instance_live_from_process_port();
 #else
 				return false;
@@ -300,7 +383,7 @@ namespace cxxlens::sdk
 		{
 			std::mutex mutex;
 			std::shared_ptr<detail::sqlite_shm_process_registry_port_state> state;
-			std::uint64_t fork_epoch{1U};
+			std::atomic<std::uint64_t> fork_epoch{1U};
 			bool atfork_registered{};
 			bool child_after_fork{};
 			bool exhausted{};
@@ -341,11 +424,12 @@ namespace cxxlens::sdk
 			if (globals.state)
 				globals.state->invalidate_inherited_registry();
 			globals.child_after_fork = true;
-			if (globals.fork_epoch == std::numeric_limits<std::uint64_t>::max())
+			if (globals.fork_epoch.load(std::memory_order_acquire) ==
+				std::numeric_limits<std::uint64_t>::max())
 				globals.exhausted = true;
 			else
 			{
-				++globals.fork_epoch;
+				(void)globals.fork_epoch.fetch_add(1U, std::memory_order_acq_rel);
 				globals.exhausted = false;
 			}
 			globals.mutex.unlock();
@@ -365,7 +449,7 @@ namespace cxxlens::sdk
 			std::shared_ptr<detail::sqlite_shm_process_registry_port_state>>
 		create_process_state_locked()
 		{
-			if (globals.exhausted || globals.fork_epoch == 0U)
+			if (globals.exhausted || globals.fork_epoch.load(std::memory_order_acquire) == 0U)
 				return port_rejection(sqlite_shm_lease_rejection_reason::generation_exhausted,
 									  sqlite_shm_lease_recovery_action::quarantine_no_retry);
 
@@ -377,16 +461,12 @@ namespace cxxlens::sdk
 			if (!pid_namespace || !pidfd || !pidfd_live(pidfd.get()))
 				return port_rejection();
 
-			std::uint64_t namespace_device{};
-			std::uint64_t namespace_inode{};
-			std::uint64_t pidfd_device{};
-			std::uint64_t pidfd_inode{};
-			std::uint64_t start_ticks{};
+			const auto expected_identity =
+				observe_process_identity(&globals.fork_epoch, pid_namespace, pidfd);
 			std::array<std::byte, 32> entropy{};
-			if (!descriptor_identity(pid_namespace.get(), namespace_device, namespace_inode) ||
-				!descriptor_identity(pidfd.get(), pidfd_device, pidfd_inode) ||
-				!process_start_ticks(start_ticks) || !fill_entropy(entropy) ||
-				::getpid() != creator_pid || !pidfd_live(pidfd.get()))
+			if (!validate_sqlite_shm_process_identity(expected_identity, expected_identity)
+					 .has_value() ||
+				!fill_entropy(entropy) || ::getpid() != creator_pid)
 				return port_rejection();
 
 			sqlite_backend_opaque_identity process_instance;
@@ -395,13 +475,13 @@ namespace cxxlens::sdk
 				process_instance.profile = "cxxlens.sqlite.process-instance.v1";
 				process_instance.bytes.reserve(std::size_t{8U} * 8U + entropy.size());
 				append_unsigned(process_instance.bytes, std::uint64_t{1U});
-				append_unsigned(process_instance.bytes, static_cast<std::uint64_t>(creator_pid));
-				append_unsigned(process_instance.bytes, start_ticks);
-				append_unsigned(process_instance.bytes, namespace_device);
-				append_unsigned(process_instance.bytes, namespace_inode);
-				append_unsigned(process_instance.bytes, pidfd_device);
-				append_unsigned(process_instance.bytes, pidfd_inode);
-				append_unsigned(process_instance.bytes, globals.fork_epoch);
+				append_unsigned(process_instance.bytes, expected_identity.pid);
+				append_unsigned(process_instance.bytes, expected_identity.process_start_ticks);
+				append_unsigned(process_instance.bytes, expected_identity.pid_namespace_device);
+				append_unsigned(process_instance.bytes, expected_identity.pid_namespace_inode);
+				append_unsigned(process_instance.bytes, expected_identity.pidfd_device);
+				append_unsigned(process_instance.bytes, expected_identity.pidfd_inode);
+				append_unsigned(process_instance.bytes, expected_identity.fork_epoch);
 				process_instance.bytes.insert(
 					process_instance.bytes.end(), entropy.begin(), entropy.end());
 			}
@@ -428,7 +508,8 @@ namespace cxxlens::sdk
 			}
 
 			state->creator_pid = creator_pid;
-			state->fork_epoch = globals.fork_epoch;
+			state->expected_identity = expected_identity;
+			state->fork_epoch_source = &globals.fork_epoch;
 			state->pid_namespace = std::move(pid_namespace);
 			state->pidfd = std::move(pidfd);
 
