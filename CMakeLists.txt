@@ -1084,26 +1084,69 @@ install(
             include/cxxlens/relations
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/cxxlens"
   PATTERN "testing.hpp" EXCLUDE)
-install(
-  DIRECTORY schemas/
-  DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas"
-  FILES_MATCHING
-  PATTERN "cxxlens_ng_*")
-# Runtime product schemas used by installed provider/materializer consumers.
-install(
-  FILES schemas/cxxlens_ng_provider_runtime_contract.yaml
-        schemas/cxxlens_ng_provider_runtime_contract.schema.yaml
-        schemas/cxxlens_ng_provider_execution_report.schema.yaml
-        schemas/cxxlens_ng_clang22_materialization_contract.yaml
-        schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml
-        schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml
-        schemas/cxxlens_ng_provider_protocol_v2.yaml
-        schemas/cxxlens_ng_provider_protocol_v2.schema.yaml
-        schemas/cxxlens_ng_clang22_materialization_report.schema.yaml
-        schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml
-  DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")
-install(FILES schemas/cxxlens_support_matrix.yaml
-              schemas/cxxlens_support_matrix.schema.yaml
+# Install only product authority.  The repository also contains conformance
+# vectors, differential corpora, compatibility fixtures, and retired protocol
+# schemas; those are development inputs rather than installed product data.
+set(CXXLENS_PRODUCT_SCHEMA_FILES
+    schemas/cxxlens_ng_claim_envelope.schema.yaml
+    schemas/cxxlens_ng_clang22_materialization_contract.yaml
+    schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml
+    schemas/cxxlens_ng_clang22_materialization_report.schema.yaml
+    schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml
+    schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml
+    schemas/cxxlens_ng_compatibility_report.schema.yaml
+    schemas/cxxlens_ng_compatibility_request.schema.yaml
+    schemas/cxxlens_ng_logical_query_contract.yaml
+    schemas/cxxlens_ng_logical_query_contract.schema.yaml
+    schemas/cxxlens_ng_logical_query_ir.schema.yaml
+    schemas/cxxlens_ng_namespace_registry.yaml
+    schemas/cxxlens_ng_namespace_registry.schema.yaml
+    schemas/cxxlens_ng_portable_provider_task_contract.yaml
+    schemas/cxxlens_ng_portable_provider_task_contract.schema.yaml
+    schemas/cxxlens_ng_project_catalog_contract.yaml
+    schemas/cxxlens_ng_project_catalog_contract.schema.yaml
+    schemas/cxxlens_ng_provider_certification_registry.yaml
+    schemas/cxxlens_ng_provider_certification_registry.schema.yaml
+    schemas/cxxlens_ng_provider_execution_report.schema.yaml
+    schemas/cxxlens_ng_provider_manifest.schema.yaml
+    schemas/cxxlens_ng_provider_ng1_hardening.yaml
+    schemas/cxxlens_ng_provider_ng1_hardening.schema.yaml
+    schemas/cxxlens_ng_provider_protocol_v2.yaml
+    schemas/cxxlens_ng_provider_protocol_v2.schema.yaml
+    schemas/cxxlens_ng_provider_runtime_contract.yaml
+    schemas/cxxlens_ng_provider_runtime_contract.schema.yaml
+    schemas/cxxlens_ng_provider_spill_fsync_receipt.schema.yaml
+    schemas/cxxlens_ng_provider_support_matrix.yaml
+    schemas/cxxlens_ng_provider_support_matrix.schema.yaml
+    schemas/cxxlens_ng_provider_task_v4.schema.yaml
+    schemas/cxxlens_ng_public_api_catalog.yaml
+    schemas/cxxlens_ng_public_api_catalog.schema.yaml
+    schemas/cxxlens_ng_query_execution_result.schema.yaml
+    schemas/cxxlens_ng_query_runtime_contract.yaml
+    schemas/cxxlens_ng_query_runtime_contract.schema.yaml
+    schemas/cxxlens_ng_relation_registry.yaml
+    schemas/cxxlens_ng_relation_registry.schema.yaml
+    schemas/cxxlens_ng_sdk_doctor_catalog.yaml
+    schemas/cxxlens_ng_sdk_doctor_catalog.schema.yaml
+    schemas/cxxlens_ng_sdk_doctor_project.schema.yaml
+    schemas/cxxlens_ng_sdk_doctor_relation_presence.schema.yaml
+    schemas/cxxlens_ng_sdk_doctor_resolution.schema.yaml
+    schemas/cxxlens_ng_security_profile.yaml
+    schemas/cxxlens_ng_security_profile.schema.yaml
+    schemas/cxxlens_ng_semantic_guarantee_contract.yaml
+    schemas/cxxlens_ng_semantic_guarantee_contract.schema.yaml
+    schemas/cxxlens_ng_semantic_metadata.schema.yaml
+    schemas/cxxlens_ng_snapshot_manifest.schema.yaml
+    schemas/cxxlens_ng_snapshot_store_contract.yaml
+    schemas/cxxlens_ng_snapshot_store_contract.schema.yaml
+    schemas/cxxlens_ng_source_closure_manifest_v1.schema.yaml
+    schemas/cxxlens_ng_source_closure_transport.yaml
+    schemas/cxxlens_ng_source_closure_transport.schema.yaml
+    schemas/cxxlens_ng_sqlite_store_contract.yaml
+    schemas/cxxlens_ng_sqlite_store_contract.schema.yaml
+    schemas/cxxlens_support_matrix.yaml
+    schemas/cxxlens_support_matrix.schema.yaml)
+install(FILES ${CXXLENS_PRODUCT_SCHEMA_FILES}
         DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")
 install(FILES README.md SECURITY.md LICENSE NOTICE
         DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/cxxlens")
