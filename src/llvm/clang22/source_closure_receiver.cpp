@@ -704,7 +704,6 @@ namespace cxxlens::detail::clang22
 			// In particular, do not copy the transfer digest or rebuild any result-side allocation.
 			source_closure_receiver_result result;
 			result.snapshot = std::move(*snapshot);
-			result.transfer_digest = std::move(credentials_value->transfer_digest);
 			result.credentials = std::move(*credentials_value);
 			result.relay = std::move(relay);
 			return result;

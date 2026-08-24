@@ -172,7 +172,7 @@ namespace cxxlens::detail::clang22
 		source_closure_receiver_options options{
 			ingress->closure_binding, &authority, ingress->stream_id, 16'384U, {}};
 		auto received = receive_source_closure_frames(*channel, *channel, std::move(options));
-		if (!received || received->transfer_digest != *transfer)
+		if (!received || received->credentials.transfer_digest != *transfer)
 			return reject("receive-closure");
 
 		auto decoded = decode_source_closure_task_v4_input(ingress->task_payload,

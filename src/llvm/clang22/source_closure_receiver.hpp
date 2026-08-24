@@ -96,7 +96,6 @@ namespace cxxlens::detail::clang22
 	{
 		source_closure_snapshot snapshot;
 		source_closure_ack_credentials credentials;
-		std::string transfer_digest;
 		/** Cleanup/terminal ownership retained after ACK for worker crash or connection loss. */
 		std::shared_ptr<source_closure_spool_relay> relay;
 	};

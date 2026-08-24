@@ -441,7 +441,7 @@ namespace cxxlens::detail::clang22::materialization
 							static_cast<std::int64_t>(closure.canonical_closure_index)),
 						text(closure.ingress_binding.closure_id),
 						text(closure.ingress_binding.manifest_digest),
-						text(closure.receiver.transfer_digest),
+						text(closure.receiver.credentials.transfer_digest),
 						text(closure.receiver.credentials.spool_receipt),
 						text(closure.receiver.credentials.cleanup_owner),
 					}));
@@ -727,15 +727,14 @@ namespace cxxlens::detail::clang22::materialization
 						input.request.task_extensions[*authority_index].task_id ||
 					admitted.ingress_binding.task_v4_digest !=
 						input.request.task_extensions[*authority_index].task_v4_digest ||
-					admitted.expected_transfer_digest != admitted.receiver.transfer_digest ||
-					admitted.receiver.credentials.transfer_digest !=
-						admitted.receiver.transfer_digest)
+					admitted.expected_transfer_digest !=
+						admitted.receiver.credentials.transfer_digest)
 					return sdk::unexpected(invalid("closures.binding", std::to_string(index)));
 				for (const auto& [field, value] : {
 						 std::pair{std::string_view{"closures.session"},
 								   std::string_view{admitted.ingress_binding.session_id}},
 						 std::pair{std::string_view{"closures.transfer"},
-								   std::string_view{admitted.receiver.transfer_digest}},
+								   std::string_view{admitted.receiver.credentials.transfer_digest}},
 						 std::pair{std::string_view{"closures.spool-receipt"},
 								   std::string_view{admitted.receiver.credentials.spool_receipt}},
 						 std::pair{std::string_view{"closures.cleanup-owner"},

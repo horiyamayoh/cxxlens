@@ -355,7 +355,7 @@ namespace
 		const auto* value = std::get_if<protocol::source_closure_ack>(&*decoded);
 		require(value != nullptr && value->spool_receipt == result->credentials.spool_receipt &&
 					value->cleanup_owner == result->credentials.cleanup_owner &&
-					value->transfer_digest == result->transfer_digest,
+					value->transfer_digest == result->credentials.transfer_digest,
 				"receiver ACK was not bound to the sealed spool");
 		require(result->relay != nullptr &&
 					result->relay->terminal() == source_closure_relay_terminal::sealed,

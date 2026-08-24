@@ -504,7 +504,7 @@ namespace cxxlens::detail::clang22
 			*fd_channel, *fd_channel, {std::move(binding), &authority, 1U, 16'384U});
 		if (!received)
 			return sdk::unexpected(std::move(received.error()));
-		if (received->transfer_digest != channel->transfer_digest)
+		if (received->credentials.transfer_digest != channel->transfer_digest)
 			return sdk::unexpected(
 				failure("source-closure.digest-mismatch", "transfer_digest", "environment"));
 		return installed_materializer_source_closure_result{std::move(*validated),
