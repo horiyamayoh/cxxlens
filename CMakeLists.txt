@@ -203,9 +203,7 @@ if(BUILD_TESTING)
   # Store mutation/fault fixtures are compiled only into the test configuration.
   # The installed product has neither the friend declarations nor the
   # corresponding symbols.
-  target_compile_definitions(
-    cxxlens_kernel PRIVATE CXXLENS_SQLITE_TEST_SUPPORT=1
-                           CXXLENS_STORE_FAULT_TEST_SUPPORT=1)
+  target_compile_definitions(cxxlens_kernel PRIVATE CXXLENS_STORE_FAULT_TEST_SUPPORT=1)
   target_sources(cxxlens_kernel
                  PRIVATE src/sdk/sqlite_store_fault_injection_noop_internal.cpp)
 endif()

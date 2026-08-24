@@ -173,7 +173,10 @@ namespace
 			write_be_u32(journal, record, page);
 			const auto image_offset = static_cast<std::size_t>(page - 1U) * page_size;
 			const auto source = image.subspan(image_offset, page_size);
-			std::ranges::copy(source, journal.begin() + record + 4U);
+					std::ranges::copy(
+						source,
+						journal.begin() + static_cast<std::vector<std::byte>::difference_type>(record) +
+							4);
 			write_be_u32(journal, record + 4U + page_size, pager_record_checksum(source, nonce));
 		}
 		return journal;

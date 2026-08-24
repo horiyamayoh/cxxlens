@@ -3,8 +3,7 @@ find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
 # SQLite lifecycle and Store fault peers are private test support. Keep their
 # declarations visible to deterministic tests while production targets are
 # compiled without the corresponding symbols.
-add_compile_definitions(CXXLENS_SQLITE_TEST_SUPPORT=1
-                        CXXLENS_STORE_FAULT_TEST_SUPPORT=1)
+add_compile_definitions(CXXLENS_STORE_FAULT_TEST_SUPPORT=1)
 
 function(cxxlens_add_test_executable target source)
   add_executable(${target} ${source})
