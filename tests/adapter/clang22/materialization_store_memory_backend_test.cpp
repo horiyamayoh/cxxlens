@@ -13,6 +13,39 @@ namespace
 	using namespace cxxlens::detail::clang22::materialization;
 	using cxxlens::sdk::result;
 
+	enum class cas_script : std::uint8_t
+	{
+		pre_effect_rejection,
+		post_effect_uncertain,
+	};
+
+	class scripted_cas_port final : public bounded_memory_cas_port
+	{
+	  public:
+		explicit scripted_cas_port(const cas_script script) : script_{script} {}
+
+		[[nodiscard]] result<bounded_memory_publication_terminal>
+		compare_exchange_once(const std::string_view expected_head,
+							  const std::string_view observed_head,
+							  effect commit) override
+		{
+			if (expected_head != observed_head)
+				return bounded_memory_publication_terminal::rejected_stale;
+			if (script_ == cas_script::pre_effect_rejection)
+				return bounded_memory_publication_terminal::rejected_store_failure;
+			if (!commit)
+				return cxxlens::sdk::unexpected(
+					cxxlens::sdk::error{"store.test-port-invalid", "commit", "missing"});
+			auto applied = commit();
+			if (!applied)
+				return cxxlens::sdk::unexpected(std::move(applied.error()));
+			return bounded_memory_publication_terminal::publication_outcome_unknown;
+		}
+
+	  private:
+		cas_script script_;
+	};
+
 	void require(const bool condition, const std::string_view message)
 	{
 		if (!condition)
@@ -190,9 +223,9 @@ namespace
 
 	void unknown_after_cas_is_recoverable()
 	{
-		bounded_memory_backend::options options;
-		options.injected_fault = bounded_memory_backend::fault::unknown_after_cas;
-		bounded_memory_backend backend{options};
+		bounded_memory_backend backend{
+			bounded_memory_backend::options{},
+			std::make_shared<scripted_cas_port>(cas_script::post_effect_uncertain)};
 		std::vector<bounded_memory_record> expected;
 		auto session = prepare(backend, "candidate:memory:unknown", "genesis", expected);
 		expected_stream stream{std::move(expected)};
@@ -207,7 +240,7 @@ namespace
 		auto terminal = session.publish_once();
 		require(terminal.has_value() &&
 					*terminal == bounded_memory_publication_terminal::publication_outcome_unknown,
-				"post-CAS fault was not classified as unknown");
+				"post-CAS ambiguity was not classified as unknown");
 		require(session.publication().has_value(), "unknown CAS lost its candidate identity");
 		auto reopened = backend.reopen(session.publication()->publication_id);
 		require(reopened.has_value() && reopened->verify_identity().has_value(),
@@ -216,7 +249,7 @@ namespace
 				"unknown CAS was retried or duplicated");
 	}
 
-	void bounds_and_pre_cas_faults()
+	void bounds_and_cas_rejection()
 	{
 		bounded_memory_backend::options options;
 		options.limits.max_payload_bytes = 128U;
@@ -229,27 +262,27 @@ namespace
 				"oversized task escaped the preallocation bound");
 		require(!session->seal(), "empty bounded session sealed");
 
-		options = {};
-		options.injected_fault = bounded_memory_backend::fault::reject_before_cas;
-		bounded_memory_backend fault_backend{options};
+		bounded_memory_backend rejected_backend{
+			bounded_memory_backend::options{},
+			std::make_shared<scripted_cas_port>(cas_script::pre_effect_rejection)};
 		std::vector<bounded_memory_record> expected;
-		auto fault_session =
-			prepare(fault_backend, "candidate:memory:pre-cas", "genesis", expected);
+		auto rejected_session =
+			prepare(rejected_backend, "candidate:memory:pre-cas", "genesis", expected);
 		expected_stream stream{std::move(expected)};
-		require(fault_session
+		require(rejected_session
 					.compare_expected(
 						[&stream]
 						{
 							return stream.next();
 						})
 					.has_value(),
-				"pre-CAS fault parity failed");
-		auto terminal = fault_session.publish_once();
+				"pre-CAS rejection parity failed");
+		auto terminal = rejected_session.publish_once();
 		require(terminal.has_value() &&
 					*terminal == bounded_memory_publication_terminal::rejected_store_failure,
-				"pre-CAS fault was not rejected without effect");
-		require(fault_backend.committed_publication_count() == 0U,
-				"pre-CAS fault changed memory state");
+				"pre-CAS rejection was not classified without effect");
+		require(rejected_backend.committed_publication_count() == 0U,
+				"pre-CAS rejection changed memory state");
 	}
 } // namespace
 
@@ -259,7 +292,7 @@ int main()
 	parity_mismatch_is_zero_effect();
 	stale_cas_is_terminal();
 	unknown_after_cas_is_recoverable();
-	bounds_and_pre_cas_faults();
-	std::cout << "bounded memory backend: parity, CAS, reopen, and fault tests passed\n";
+	bounds_and_cas_rejection();
+	std::cout << "bounded memory backend: parity, CAS, reopen, and ambiguity tests passed\n";
 	return EXIT_SUCCESS;
 }

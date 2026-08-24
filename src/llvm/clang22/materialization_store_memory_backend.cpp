@@ -272,13 +272,38 @@ namespace cxxlens::detail::clang22::materialization
 					failure("store.resource-limit", "final-payload", "allocation"));
 			}
 		}
+
+		class ordinary_memory_cas_port final : public bounded_memory_cas_port
+		{
+		  public:
+			[[nodiscard]] sdk::result<bounded_memory_publication_terminal>
+			compare_exchange_once(const std::string_view expected_head,
+								  const std::string_view observed_head,
+								  effect commit) override
+			{
+				if (expected_head != observed_head)
+					return bounded_memory_publication_terminal::rejected_stale;
+				if (!commit)
+					return bounded_memory_publication_terminal::rejected_store_failure;
+				auto applied = commit();
+				if (!applied)
+					return sdk::unexpected(std::move(applied.error()));
+				return bounded_memory_publication_terminal::committed_verified;
+			}
+		};
 	} // namespace
 
 	struct bounded_memory_backend::state
 	{
-		explicit state(options value) : options_{std::move(value)} {}
+		state(options value, std::shared_ptr<bounded_memory_cas_port> cas_port)
+			: options_{std::move(value)},
+			  cas_port_{cas_port ? std::move(cas_port)
+								 : std::make_shared<ordinary_memory_cas_port>()}
+		{
+		}
 
 		options options_;
+		std::shared_ptr<bounded_memory_cas_port> cas_port_;
 		mutable std::mutex mutex_;
 		std::string head_{"genesis"};
 		std::uint64_t next_sequence_{1U};
@@ -698,26 +723,15 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(failure("store.memory-session-state", "publish", "retry"));
 		state_->publication_attempted = true;
 		state_->terminal = bounded_memory_publication_terminal::not_attempted;
-		if (state_->backend->options_.injected_fault ==
-			bounded_memory_backend::fault::reject_before_cas)
-		{
-			state_->terminal = bounded_memory_publication_terminal::rejected_store_failure;
-			return *state_->terminal;
-		}
 		std::scoped_lock lock{state_->backend->mutex_};
-		if (state_->expected_head != state_->backend->head_)
-		{
-			state_->terminal = bounded_memory_publication_terminal::rejected_stale;
-			return *state_->terminal;
-		}
 		if (state_->backend->next_sequence_ == 0U)
 		{
 			state_->terminal = bounded_memory_publication_terminal::rejected_store_failure;
 			return *state_->terminal;
 		}
 		bounded_memory_publication value;
-		std::string new_head;
 		bounded_memory_publication session_publication;
+		bool effect_applied = false;
 		try
 		{
 			value.candidate_id = state_->candidate_id;
@@ -734,43 +748,104 @@ namespace cxxlens::detail::clang22::materialization
 				return *state_->terminal;
 			}
 			value.publication_id = std::move(*identity);
-			new_head = value.publication_id;
 			session_publication = value;
-			auto [unused, inserted] = state_->backend->publications_.emplace(
-				value.publication_id,
-				publication_state{value, state_->frozen_payload, state_->limits});
-			(void)unused;
-			if (!inserted)
+			publication_state stored{value, state_->frozen_payload, state_->limits};
+			std::string new_head = value.publication_id;
+			bounded_memory_cas_port::effect commit =
+				[state = state_->backend,
+				 new_head = std::move(new_head),
+				 stored = std::move(stored),
+				 &effect_applied]() mutable -> sdk::result<void>
+			{
+				try
+				{
+					auto [unused, inserted] =
+						state->publications_.emplace(new_head, std::move(stored));
+					(void)unused;
+					if (!inserted)
+						return sdk::unexpected(failure(
+							"store.memory-publication-invalid", "publication-id", "duplicate"));
+					state->head_.swap(new_head);
+					++state->next_sequence_;
+					effect_applied = true;
+					return {};
+				}
+				catch (const std::bad_alloc&)
+				{
+					return sdk::unexpected(
+						failure("store.resource-limit", "publication", "allocation"));
+				}
+			};
+			auto outcome = state_->backend->cas_port_->compare_exchange_once(
+				state_->expected_head, state_->backend->head_, std::move(commit));
+			if (!outcome)
+			{
+				if (effect_applied)
+				{
+					state_->publication.emplace(std::move(session_publication));
+					state_->terminal =
+						bounded_memory_publication_terminal::publication_outcome_unknown;
+					return *state_->terminal;
+				}
+				state_->terminal = bounded_memory_publication_terminal::rejected_store_failure;
+				return *state_->terminal;
+			}
+			if (!is_valid(*outcome) ||
+				*outcome == bounded_memory_publication_terminal::not_attempted)
+			{
+				if (effect_applied)
+				{
+					state_->publication.emplace(std::move(session_publication));
+					state_->terminal =
+						bounded_memory_publication_terminal::publication_outcome_unknown;
+					return *state_->terminal;
+				}
+				state_->terminal = bounded_memory_publication_terminal::rejected_store_failure;
+				return *state_->terminal;
+			}
+			if (!effect_applied &&
+				(*outcome == bounded_memory_publication_terminal::committed_verified ||
+				 *outcome == bounded_memory_publication_terminal::publication_outcome_unknown))
 			{
 				state_->terminal = bounded_memory_publication_terminal::rejected_store_failure;
 				return *state_->terminal;
 			}
+			if (effect_applied &&
+				(*outcome == bounded_memory_publication_terminal::rejected_stale ||
+				 *outcome == bounded_memory_publication_terminal::rejected_store_failure))
+			{
+				state_->publication.emplace(std::move(session_publication));
+				state_->terminal = bounded_memory_publication_terminal::publication_outcome_unknown;
+				return *state_->terminal;
+			}
+			if (effect_applied)
+				state_->publication.emplace(std::move(session_publication));
+			state_->terminal = *outcome;
+			return *state_->terminal;
 		}
 		catch (const std::bad_alloc&)
 		{
+			if (effect_applied)
+			{
+				state_->publication.emplace(std::move(session_publication));
+				state_->terminal = bounded_memory_publication_terminal::publication_outcome_unknown;
+				return *state_->terminal;
+			}
 			state_->terminal = bounded_memory_publication_terminal::rejected_store_failure;
 			return *state_->terminal;
 		}
-		// Everything after map insertion is deliberately no-throw: the payload and identity have
-		// already been allocated, and swapping/moving the default-allocator strings cannot create a
-		// partial CAS result.
-		state_->backend->head_.swap(new_head);
-		++state_->backend->next_sequence_;
-		state_->publication.emplace(std::move(session_publication));
-		if (state_->backend->options_.injected_fault ==
-			bounded_memory_backend::fault::unknown_after_cas)
-		{
-			state_->terminal = bounded_memory_publication_terminal::publication_outcome_unknown;
-			return *state_->terminal;
-		}
-		state_->terminal = bounded_memory_publication_terminal::committed_verified;
-		return *state_->terminal;
 	}
 
 	bounded_memory_backend::bounded_memory_backend() : bounded_memory_backend(options{}) {}
 
 	bounded_memory_backend::bounded_memory_backend(options value)
-		: state_{std::make_shared<state>(std::move(value))}
+		: bounded_memory_backend(std::move(value), nullptr)
+	{
+	}
+
+	bounded_memory_backend::bounded_memory_backend(
+		options value, std::shared_ptr<bounded_memory_cas_port> cas_port)
+		: state_{std::make_shared<state>(std::move(value), std::move(cas_port))}
 	{
 	}
 

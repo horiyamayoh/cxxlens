@@ -83,6 +83,27 @@ namespace cxxlens::detail::clang22::materialization
 			value <= bounded_memory_publication_terminal::committed_verified;
 	}
 
+	/**
+	 * One-shot compare/exchange port for the publication effect.
+	 *
+	 * The backend supplies a synchronous effect callback.  A port compares `expected_head` with
+	 * `observed_head` and invokes that callback at most once.  The ordinary production port is
+	 * installed by default; a storage boundary may provide another implementation when its own
+	 * effect authority owns the compare/exchange operation.  A port must never retain the callback
+	 * or retry it after returning.
+	 */
+	class bounded_memory_cas_port
+	{
+	  public:
+		using effect = std::function<sdk::result<void>()>;
+
+		virtual ~bounded_memory_cas_port() = default;
+		[[nodiscard]] virtual sdk::result<bounded_memory_publication_terminal>
+		compare_exchange_once(std::string_view expected_head,
+							  std::string_view observed_head,
+							  effect commit) = 0;
+	};
+
 	/** Exact semantic identity retained for one committed in-memory publication. */
 	struct bounded_memory_publication
 	{
@@ -214,21 +235,14 @@ namespace cxxlens::detail::clang22::materialization
 	class bounded_memory_backend
 	{
 	  public:
-		enum class fault : std::uint8_t
-		{
-			none,
-			reject_before_cas,
-			unknown_after_cas,
-		};
-
 		struct options
 		{
 			bounded_memory_backend_limits limits;
-			fault injected_fault{fault::none};
 		};
 
 		bounded_memory_backend();
 		explicit bounded_memory_backend(options value);
+		bounded_memory_backend(options value, std::shared_ptr<bounded_memory_cas_port> cas_port);
 		bounded_memory_backend(bounded_memory_backend&&) noexcept;
 		bounded_memory_backend& operator=(bounded_memory_backend&&) noexcept;
 		bounded_memory_backend(const bounded_memory_backend&) = delete;
