@@ -10508,8 +10508,8 @@ namespace cxxlens::sdk
 	// implementation beside the private Store representation preserves the exact memory/SQLite
 	// parity and serialization invariants while excluding every hook from BUILD_TESTING=OFF.
 #if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
-	result<void> mark_publication_corrupt_for_testing(snapshot_store& store,
-													  const std::string_view publication_id)
+	result<void> snapshot_store_backend_lifetime_access::mark_publication_corrupt(
+		snapshot_store& store, const std::string_view publication_id)
 	{
 		std::scoped_lock lock{store.implementation_->mutex};
 		const auto found = store.implementation_->publications.find(publication_id);
@@ -10531,11 +10531,12 @@ namespace cxxlens::sdk
 	// topology, and canonical-order failures. Source-private qualification wrappers below
 	// reuse those selectors without adding public header declarations.
 	// NOLINTBEGIN(bugprone-easily-swappable-parameters)
-	result<void> rewrite_publication_payload_for_testing(snapshot_store& store,
-														 const std::string_view publication_id,
-														 const std::string_view before,
-														 const std::string_view after,
-														 const std::size_t occurrence)
+	result<void> snapshot_store_backend_lifetime_access::rewrite_publication_payload(
+		snapshot_store& store,
+		const std::string_view publication_id,
+		const std::string_view before,
+		const std::string_view after,
+		const std::size_t occurrence)
 	{
 		std::scoped_lock lock{store.implementation_->mutex};
 		if (store.implementation_->database == nullptr)
@@ -10771,6 +10772,23 @@ namespace cxxlens::sdk
 	}
 	// NOLINTEND(bugprone-easily-swappable-parameters)
 
+	result<void> mark_publication_corrupt_for_testing(snapshot_store& store,
+													  const std::string_view publication_id)
+	{
+		return snapshot_store_backend_lifetime_access::mark_publication_corrupt(store,
+																				publication_id);
+	}
+
+	result<void> rewrite_publication_payload_for_testing(snapshot_store& store,
+														 const std::string_view publication_id,
+														 const std::string_view before,
+														 const std::string_view after,
+														 const std::size_t occurrence)
+	{
+		return snapshot_store_backend_lifetime_access::rewrite_publication_payload(
+			store, publication_id, before, after, occurrence);
+	}
+
 	result<void>
 	rewrite_publication_payload_schema_for_testing(snapshot_store& store,
 												   const std::string_view publication_id,
@@ -10784,7 +10802,7 @@ namespace cxxlens::sdk
 	}
 
 	// Publication identity and selected field are distinct test mutation coordinates.
-	result<void> rewrite_publication_identity_field_for_testing(
+	result<void> snapshot_store_backend_lifetime_access::rewrite_publication_identity_field(
 		snapshot_store& store,
 		const std::string_view publication_id, // NOLINT(bugprone-easily-swappable-parameters)
 		const std::string_view field)
@@ -10847,8 +10865,15 @@ namespace cxxlens::sdk
 			});
 	}
 
+	result<void> rewrite_publication_identity_field_for_testing(
+		snapshot_store& store, const std::string_view publication_id, const std::string_view field)
+	{
+		return snapshot_store_backend_lifetime_access::rewrite_publication_identity_field(
+			store, publication_id, field);
+	}
+
 	// Named test coordinates and wire/semantic values intentionally preserve fixture order.
-	result<std::string> rewrite_snapshot_version_for_testing(
+	result<std::string> snapshot_store_backend_lifetime_access::rewrite_snapshot_version(
 		snapshot_store& store,
 		const std::string_view publication_id, // NOLINT(bugprone-easily-swappable-parameters)
 		const std::string_view component,
@@ -10989,6 +11014,16 @@ namespace cxxlens::sdk
 		return record.publication_id;
 	}
 
+	result<std::string> rewrite_snapshot_version_for_testing(snapshot_store& store,
+															 const std::string_view publication_id,
+															 const std::string_view component,
+															 const std::uint64_t wire_value,
+															 const std::uint32_t semantic_value)
+	{
+		return snapshot_store_backend_lifetime_access::rewrite_snapshot_version(
+			store, publication_id, component, wire_value, semantic_value);
+	}
+
 	result<std::string>
 	insert_noncommitted_publication_for_testing(snapshot_store& store,
 												const std::string_view source_publication_id,
@@ -11000,9 +11035,8 @@ namespace cxxlens::sdk
 			store, source_publication_id, "test.insert-noncommitted-payload", 0U, payload_version);
 	}
 
-	result<std::string>
 	// sequence and generation are distinct persisted counters in fixture order.
-	rewrite_publication_counters_for_testing(
+	result<std::string> snapshot_store_backend_lifetime_access::rewrite_publication_counters(
 		snapshot_store& store,
 		const std::string_view publication_id,
 		const std::uint64_t sequence, // NOLINT(bugprone-easily-swappable-parameters)
@@ -11081,9 +11115,10 @@ namespace cxxlens::sdk
 		return record.publication_id;
 	}
 
-	result<void> poison_rejected_generation_for_testing(snapshot_store& store,
-														const std::string_view publication_id,
-														const std::uint64_t generation)
+	result<void> snapshot_store_backend_lifetime_access::poison_rejected_generation(
+		snapshot_store& store,
+		const std::string_view publication_id,
+		const std::uint64_t generation)
 	{
 		std::scoped_lock lock{store.implementation_->mutex};
 		if (store.implementation_->database == nullptr)
@@ -11141,6 +11176,24 @@ namespace cxxlens::sdk
 					return bound;
 				return delete_head->expect_done();
 			});
+	}
+
+	result<std::string>
+	rewrite_publication_counters_for_testing(snapshot_store& store,
+											 const std::string_view publication_id,
+											 const std::uint64_t sequence,
+											 const std::uint64_t generation)
+	{
+		return snapshot_store_backend_lifetime_access::rewrite_publication_counters(
+			store, publication_id, sequence, generation);
+	}
+
+	result<void> poison_rejected_generation_for_testing(snapshot_store& store,
+														const std::string_view publication_id,
+														const std::uint64_t generation)
+	{
+		return snapshot_store_backend_lifetime_access::poison_rejected_generation(
+			store, publication_id, generation);
 	}
 #endif
 

@@ -5750,7 +5750,6 @@ namespace cxxlens::sdk
 				}
 			}
 
-
 			[[nodiscard]] sqlite_shm_registry_reader_open_epoch_view
 			reader_open_epoch_view(const sqlite_shm_reader_open_authority& open) noexcept
 			{
@@ -5812,7 +5811,6 @@ namespace cxxlens::sdk
 					return {};
 				}
 			}
-
 
 			[[nodiscard]] sqlite_shm_lease_result<
 				sqlite_shm_reader_candidate_authority_minter::candidate>
@@ -7294,7 +7292,6 @@ namespace cxxlens::sdk
 		return control_ && control_->authority_valid_now();
 	}
 
-
 	void sqlite_shm_reader_open_authority::disarm() noexcept
 	{
 		state_.reset();
@@ -7493,7 +7490,6 @@ namespace cxxlens::sdk
 		return status::exact;
 	}
 
-
 	sqlite_shm_lease_result<void> sqlite_shm_writer_member_authority::release_activity() noexcept
 	{
 		if (!state_ || !state_->activity)
@@ -7665,7 +7661,6 @@ namespace cxxlens::sdk
 			family_record->phase == sqlite_shm_registry_family_phase::active && activity.valid() &&
 			state_->audit_seal->valid();
 	}
-
 
 	sqlite_shm_lease_result<void>
 	sqlite_shm_reader_attachment_authority::release_activity() noexcept
@@ -7904,7 +7899,6 @@ namespace cxxlens::sdk
 			binding.open_epoch == attachment.open_epoch() &&
 			binding.callback_cohort == attachment.callback_cohort();
 	}
-
 
 	sqlite_shm_lease_result<void>
 	sqlite_shm_reader_map_predelegate_authority::release_activity() noexcept
@@ -8436,7 +8430,6 @@ namespace cxxlens::sdk
 		return std::unique_ptr<sqlite_same_process_shm_mapping_registry>{
 			new sqlite_same_process_shm_mapping_registry{std::move(state)}};
 	}
-
 
 	sqlite_shm_lease_result<sqlite_shm_registry_alias_pin>
 	sqlite_same_process_shm_mapping_registry::reserve_alias(
@@ -9097,7 +9090,6 @@ namespace cxxlens::sdk
 		return state_ && state_->process_instance_live_from_process_port();
 	}
 
-
 	sqlite_shm_lease_result<sqlite_shm_reader_open_authority>
 	sqlite_same_process_shm_mapping_registry::acquire_reader_open_for_production(
 		sqlite_shm_registry_family_pin& family,
@@ -9415,7 +9407,6 @@ namespace cxxlens::sdk
 			family, inflight, scope, callback, effect, std::move(observation));
 	}
 
-
 	sqlite_shm_process_global_identity_issuer
 	sqlite_same_process_shm_mapping_registry::identity_issuer_for_production() const noexcept
 	{
@@ -9425,7 +9416,6 @@ namespace cxxlens::sdk
 			identity_issuer_owner_latch_,
 			state_ ? state_->process_epoch_for_identity_issuer() : 0U};
 	}
-
 
 	sqlite_shm_reader_lifecycle_identity_scope
 	sqlite_same_process_shm_mapping_registry::seal_reader_lifecycle_identity_scope_for_production(

@@ -4,6 +4,7 @@
 #include <array>
 #include <cerrno>
 #include <cstddef>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <memory>
@@ -27,6 +28,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "materialization_json.hpp"
@@ -34,10 +36,10 @@
 #include "materialization_v4_incremental_ingress.hpp"
 #include "materialization_v4_store_source.hpp"
 #include "observation_v2.hpp"
-#include "provider_worker_v4.hpp"
-#include "provider_worker_v4_output_normalizer.hpp"
 #include "protocol_v2/closure.hpp"
 #include "provider_task_v4.hpp"
+#include "provider_worker_v4.hpp"
+#include "provider_worker_v4_output_normalizer.hpp"
 #include "source_closure_task_v4.hpp"
 #include "source_closure_transport.hpp"
 
@@ -243,7 +245,7 @@ namespace cxxlens::detail::clang22
 			if (manifest_bytes.empty() || manifest_bytes.size() > limits.maximum_manifest_bytes)
 				return sdk::unexpected(failure("source-closure.limit-exceeded", "manifest"));
 			std::vector<std::byte> output;
-			std::uint64_t sequence{};
+			std::uint64_t sequence{binding.first_sequence};
 			auto append = [&](const sdk::provider::message_type type,
 							  protocol::closure_control control,
 							  const std::span<const std::byte> payload) -> sdk::result<void>
@@ -385,9 +387,7 @@ namespace cxxlens::detail::clang22
 							  const int host_write,
 							  const int child_write,
 							  const int host_read) noexcept
-				: child_read{child_read},
-				  host_write{host_write},
-				  child_write{child_write},
+				: child_read{child_read}, host_write{host_write}, child_write{child_write},
 				  host_read{host_read}
 			{
 			}
@@ -498,6 +498,72 @@ namespace cxxlens::detail::clang22
 			}
 		}
 
+		/**
+		 * Measure the exact executable selected by the request before provider selection.
+		 *
+		 * The process runtime repeats this check at exec time, but selection must not be based on
+		 * a caller-provided digest alone.  Keep the read bounded and reject replacement between
+		 * the two identity observations; the measured digest is then the only value used to build
+		 * the candidate and its sandbox evidence.
+		 */
+		[[nodiscard]] sdk::result<std::string>
+		measure_worker_executable(const std::string_view path, const std::string_view expected)
+		{
+			if (path.empty() || path.front() != '/')
+				return sdk::unexpected(
+					failure("security.provider-path-invalid", "worker.executable"));
+			const int descriptor = ::open(std::string{path}.c_str(), O_RDONLY | O_CLOEXEC);
+			if (descriptor < 0)
+				return sdk::unexpected(
+					failure("security.provider-binary-unavailable", "worker.executable"));
+			struct stat before{};
+			if (::fstat(descriptor, &before) != 0 || !S_ISREG(before.st_mode) ||
+				before.st_size < 0 || (before.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) == 0)
+			{
+				(void)::close(descriptor);
+				return sdk::unexpected(
+					failure("security.provider-binary-invalid", "worker.executable", "identity"));
+			}
+			constexpr std::uint64_t maximum_worker_bytes = 256U * 1024U * 1024U;
+			const auto size = static_cast<std::uint64_t>(before.st_size);
+			if (size == 0U || size > maximum_worker_bytes ||
+				size > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
+			{
+				(void)::close(descriptor);
+				return sdk::unexpected(
+					failure("security.provider-binary-invalid", "worker.executable", "size"));
+			}
+			std::vector<std::byte> bytes(static_cast<std::size_t>(size));
+			std::size_t offset{};
+			while (offset < bytes.size())
+			{
+				const auto count = ::read(descriptor, bytes.data() + offset, bytes.size() - offset);
+				if (count > 0)
+				{
+					offset += static_cast<std::size_t>(count);
+					continue;
+				}
+				if (count < 0 && errno == EINTR)
+					continue;
+				(void)::close(descriptor);
+				return sdk::unexpected(
+					failure("security.provider-binary-unavailable", "worker.executable", "read"));
+			}
+			struct stat after{};
+			const bool stable = ::fstat(descriptor, &after) == 0 && after.st_dev == before.st_dev &&
+				after.st_ino == before.st_ino && after.st_size == before.st_size &&
+				after.st_mtime == before.st_mtime && after.st_ctime == before.st_ctime;
+			(void)::close(descriptor);
+			if (!stable)
+				return sdk::unexpected(
+					failure("security.provider-binary-replaced", "worker.executable"));
+			auto measured = sdk::content_digest(bytes);
+			if (measured != expected)
+				return sdk::unexpected(
+					failure("security.provider-binary-mismatch", "worker.executable", "digest"));
+			return measured;
+		}
+
 		[[nodiscard]] sdk::result<sdk::provider::manifest>
 		make_manifest(const provider_task_v4_worker_authority& authority)
 		{
@@ -522,8 +588,8 @@ namespace cxxlens::detail::clang22
 			// digest; the envelope keeps the authority spelling for the worker-side cross-bind.
 			manifest.provider_semantic_contract_digest =
 				authority.semantic_contract_digest.starts_with(semantic_prefix)
-					? authority.semantic_contract_digest.substr(semantic_prefix.size())
-					: authority.semantic_contract_digest;
+				? authority.semantic_contract_digest.substr(semantic_prefix.size())
+				: authority.semantic_contract_digest;
 			manifest.offered_relations = {
 				"cc.call_direct_target@1",
 				"cc.call_site@1",
@@ -533,8 +599,14 @@ namespace cxxlens::detail::clang22
 				"frontend.clang22.type_observation@2",
 			};
 			manifest.interpretation_domains = {"cc.clang22-canonical-1"};
-			manifest.invalidation_contract = "sha256:" + std::string(64U, '5');
-			manifest.determinism_contract = "sha256:" + std::string(64U, '7');
+			const auto invalidation_contract = std::string{
+				"cxxlens.clang22.provider-invalidation.v2|source-closure|task-v4|sealed-output"};
+			const auto determinism_contract = std::string{
+				"cxxlens.clang22.provider-determinism.v2|canonical-cbor|ordered-six-batches"};
+			manifest.invalidation_contract = sdk::content_digest(std::as_bytes(
+				std::span{invalidation_contract.data(), invalidation_contract.size()}));
+			manifest.determinism_contract = sdk::content_digest(
+				std::as_bytes(std::span{determinism_contract.data(), determinism_contract.size()}));
 			manifest.resource_class = "provider.clang22";
 			manifest.sandbox_minimum = "enforced";
 			manifest.requested_qualifications = {
@@ -569,9 +641,8 @@ namespace cxxlens::detail::clang22
 			if (!engine)
 				return sdk::unexpected(std::move(engine.error()));
 			if (engine->registry_digest() != authority.engine.engine_registry_digest)
-				return sdk::unexpected(failure("materialization.relation-engine",
-												 "registry-digest",
-												 "authority-mismatch"));
+				return sdk::unexpected(failure(
+					"materialization.relation-engine", "registry-digest", "authority-mismatch"));
 			return std::move(*engine);
 		}
 
@@ -602,27 +673,64 @@ namespace cxxlens::detail::clang22
 			return manifest;
 		}
 
+		[[nodiscard]] sdk::result<std::vector<sdk::claim>>
+		make_worker_assertions(const materializer_worker_execution& execution,
+							   const sdk::relation_engine& engine,
+							   const provider_task_v4_task_authority& task,
+							   const std::string_view descriptor_id)
+		{
+			if (!execution.outcome.sealed || !execution.outcome.runtime_receipt)
+				return sdk::unexpected(failure("provider.transcript-invalid", "receipt"));
+			const sdk::provider::detail::sealed_provider_batch* selected = nullptr;
+			for (const auto& batch : execution.outcome.sealed->batches())
+				if (batch.descriptor_id() == descriptor_id)
+				{
+					selected = &batch;
+					break;
+				}
+			if (selected == nullptr)
+				return sdk::unexpected(failure(
+					"materialization.group-incomplete", "descriptor", std::string{descriptor_id}));
+			std::vector<sdk::claim> output;
+			output.reserve(selected->rows().size());
+			for (const auto& row : selected->rows())
+			{
+				sdk::observation observation{
+					row,
+					{task.condition_universe_id, {task.condition_id}},
+					task.interpretation_domain,
+					{execution.ingress.request.authority.worker.provider_id,
+					 execution.ingress.request.authority.worker.semantic_contract_digest},
+					{std::string{execution.outcome.runtime_receipt->raw_stdout_sha256()}},
+					std::string{execution.outcome.runtime_receipt->sealed_transcript_digest()},
+					{"under_approximation",
+					 "partition",
+					 "assumptions:none",
+					 {"runtime_sealed", "schema_validated"}},
+				};
+				auto claim = sdk::make_assertion(engine, std::move(observation));
+				if (!claim)
+					return sdk::unexpected(std::move(claim.error()));
+				output.push_back(std::move(*claim));
+			}
+			return output;
+		}
+
 		[[nodiscard]] sdk::result<materialization::materialization_v4_claim_sealed>
 		make_worker_claim(const materializer_worker_execution& execution,
 						  const sdk::relation_engine& engine,
 						  const provider_task_v4_task_authority& task,
 						  const provider_task_v4_base_task& base,
 						  const provider_task_v4& extension,
-						  const materialization::source_closure_manifest& manifest)
+						  const materialization::source_closure_manifest& manifest,
+						  const std::string_view descriptor_id,
+						  const std::span<const sdk::claim> existing)
 		{
 			if (!execution.outcome.sealed || !execution.outcome.runtime_receipt)
 				return sdk::unexpected(failure("provider.transcript-invalid", "receipt"));
-			const auto& transcript = *execution.outcome.sealed;
-			const auto batches = transcript.batches();
-			const sdk::provider::detail::sealed_provider_batch* selected = nullptr;
-			for (const auto& batch : batches)
-				if (batch.descriptor_id() == cc::relations::call_direct_target::descriptor().id)
-				{
-					selected = &batch;
-					break;
-				}
-			if (selected == nullptr)
-				return sdk::unexpected(failure("provider.transcript-invalid", "entity-batch"));
+			auto assertions = make_worker_assertions(execution, engine, task, descriptor_id);
+			if (!assertions)
+				return sdk::unexpected(std::move(assertions.error()));
 
 			materialization::materialization_v4_claim_binding binding;
 			binding.materialization_request_id =
@@ -642,33 +750,22 @@ namespace cxxlens::detail::clang22
 			binding.base_ingestion_transform_digest =
 				execution.ingress.request.authority.publication.recipe_digest;
 			binding.guarantee = {"under_approximation",
-									"partition",
-									"assumptions:none",
-									{"runtime_sealed", "schema_validated"}};
+								 "partition",
+								 "assumptions:none",
+								 {"runtime_sealed", "schema_validated"}};
 			binding.assumption_set_id = binding.guarantee.assumptions;
-			binding.relation_descriptor_id = std::string{selected->descriptor_id()};
+			binding.relation_descriptor_id = std::string{descriptor_id};
 			binding.scope = task.compile_unit_id;
 			binding.interpretation = task.interpretation_domain;
 			binding.precision_profile = "under_approximation";
 
 			sdk::claim_batch claim_batch;
-			for (const auto& row : selected->rows())
+			for (auto& claim : *assertions)
 			{
-				sdk::observation observation{
-					row,
-					{task.condition_universe_id, {task.condition_id}},
-					task.interpretation_domain,
-					{binding.provider_id, binding.provider_semantic_contract_digest},
-					{std::string{execution.outcome.runtime_receipt->raw_stdout_sha256()}},
-					std::string{execution.outcome.runtime_receipt->sealed_transcript_digest()},
-					binding.guarantee};
-				auto claim = sdk::make_assertion(engine, std::move(observation));
-				if (!claim)
-					return sdk::unexpected(std::move(claim.error()));
-				if (auto added = claim_batch.add(std::move(*claim)); !added)
+				if (auto added = claim_batch.add(std::move(claim)); !added)
 					return sdk::unexpected(std::move(added.error()));
 			}
-			auto committed = std::move(claim_batch).commit(engine);
+			auto committed = std::move(claim_batch).commit(engine, existing);
 			if (!committed)
 				return sdk::unexpected(std::move(committed.error()));
 			if (!committed->claims.empty())
@@ -699,7 +796,7 @@ namespace cxxlens::detail::clang22
 			translation.partition.claims = translation.batch.claims;
 			translation.partition.unresolved = translation.batch.unresolved;
 			return materialization::seal_materialization_v4_claim_translation(
-				engine, std::move(translation));
+				sdk::relation_engine{engine}, std::move(translation), existing);
 		}
 
 		[[nodiscard]] sdk::result<std::vector<std::byte>>
@@ -762,10 +859,8 @@ namespace cxxlens::detail::clang22
 				{"qualified_read_roots",
 				 array_strings(task.input_authority.qualified_read_roots).value()},
 			});
-			auto output_value = worker_output_value(task,
-																 manifest,
-																 authority.worker.semantic_contract_digest,
-																 output_descriptors());
+			auto output_value = worker_output_value(
+				task, manifest, authority.worker.semantic_contract_digest, output_descriptors());
 			if (!authority_value || !output_value)
 				return sdk::unexpected(!authority_value ? std::move(authority_value.error())
 														: std::move(output_value.error()));
@@ -793,10 +888,525 @@ namespace cxxlens::detail::clang22
 				std::as_bytes(std::span{encoded.data(), encoded.size()}).begin(),
 				std::as_bytes(std::span{encoded.data(), encoded.size()}).end()};
 		}
+
+		[[nodiscard]] sdk::canonical_value
+		receipt_projection(const materialization::materialization_v4_claim_receipt& value)
+		{
+			return sdk::canonical_value::from_tuple(std::vector<sdk::canonical_value>{
+				sdk::canonical_value::from_string(value.schema),
+				sdk::canonical_value::from_string(value.binding_digest),
+				sdk::canonical_value::from_string(value.materialization_request_id),
+				sdk::canonical_value::from_integer(static_cast<std::int64_t>(value.task_index)),
+				sdk::canonical_value::from_string(value.task_id),
+				sdk::canonical_value::from_string(value.task_v4_digest),
+				sdk::canonical_value::from_string(value.provider_execution_id),
+				sdk::canonical_value::from_string(value.source_closure_id),
+				sdk::canonical_value::from_string(value.source_closure_digest),
+				sdk::canonical_value::from_string(value.manifest_digest),
+				sdk::canonical_value::from_string(value.task_input_digest),
+				sdk::canonical_value::from_string(value.claim_batch_content_digest),
+				sdk::canonical_value::from_string(value.partition_id),
+				sdk::canonical_value::from_string(value.partition_content_digest),
+				sdk::canonical_value::from_string(value.coverage_digest),
+				sdk::canonical_value::from_integer(static_cast<std::int64_t>(value.claim_count)),
+				sdk::canonical_value::from_integer(
+					static_cast<std::int64_t>(value.unresolved_count)),
+				sdk::canonical_value::from_integer(static_cast<std::int64_t>(value.conflict_count)),
+				sdk::canonical_value::from_integer(
+					static_cast<std::int64_t>(value.differential_disagreement_count)),
+				sdk::canonical_value::from_boolean(value.complete),
+				sdk::canonical_value::from_string(value.receipt_digest),
+			});
+		}
+
+		[[nodiscard]] sdk::result<std::string>
+		output_receipt_digest(const materializer_task_output_receipt& value)
+		{
+			if (value.batch_receipts.size() != task_v4_output_descriptor_ids.size())
+				return sdk::unexpected(
+					failure("materialization.group-incomplete", "receipt.batch-count"));
+			std::vector<sdk::canonical_value> batches;
+			batches.reserve(value.batch_receipts.size());
+			for (const auto& receipt : value.batch_receipts)
+				batches.push_back(receipt_projection(receipt));
+			const std::vector<sdk::canonical_value> fields{
+				sdk::canonical_value::from_string(value.schema),
+				sdk::canonical_value::from_string(value.materialization_request_id),
+				sdk::canonical_value::from_integer(static_cast<std::int64_t>(value.task_index)),
+				sdk::canonical_value::from_string(value.task_id),
+				sdk::canonical_value::from_string(value.task_v4_digest),
+				sdk::canonical_value::from_tuple(std::move(batches)),
+				sdk::canonical_value::from_integer(static_cast<std::int64_t>(value.claim_count)),
+				sdk::canonical_value::from_integer(
+					static_cast<std::int64_t>(value.unresolved_count)),
+				sdk::canonical_value::from_integer(static_cast<std::int64_t>(value.conflict_count)),
+				sdk::canonical_value::from_integer(
+					static_cast<std::int64_t>(value.differential_disagreement_count)),
+				sdk::canonical_value::from_boolean(value.complete),
+			};
+			return sdk::canonical_identity_digest(
+				"cxxlens.clang22.materializer-task-output-receipt.v4", fields);
+		}
+
+		[[nodiscard]] sdk::result<materializer_task_output_receipt> make_task_output_receipt(
+			const sdk::relation_engine& engine,
+			const std::vector<materialization::materialization_v4_claim_sealed>& claims,
+			const std::span<const sdk::claim> existing)
+		{
+			if (claims.size() != task_v4_output_descriptor_ids.size())
+				return sdk::unexpected(
+					failure("materialization.group-incomplete", "descriptor-count"));
+			materializer_task_output_receipt output;
+			output.batch_receipts.reserve(claims.size());
+			for (std::size_t index{}; index < claims.size(); ++index)
+			{
+				const auto& claim = claims[index];
+				if (auto valid = materialization::validate_materialization_v4_claim_receipt(
+						engine, claim, existing);
+					!valid)
+					return sdk::unexpected(std::move(valid.error()));
+				if (claim.translation.binding.relation_descriptor_id !=
+					task_v4_output_descriptor_ids[index])
+					return sdk::unexpected(failure(
+						"materialization.descriptor-binding-mismatch", "descriptor", "order"));
+				if (index == 0U)
+				{
+					output.materialization_request_id = claim.receipt.materialization_request_id;
+					output.task_index = claim.receipt.task_index;
+					output.task_id = claim.receipt.task_id;
+					output.task_v4_digest = claim.receipt.task_v4_digest;
+				}
+				else if (claim.receipt.materialization_request_id !=
+							 output.materialization_request_id ||
+						 claim.receipt.task_index != output.task_index ||
+						 claim.receipt.task_id != output.task_id ||
+						 claim.receipt.task_v4_digest != output.task_v4_digest)
+					return sdk::unexpected(
+						failure("materialization.task-binding-mismatch", "descriptor", "task"));
+				output.batch_receipts.push_back(claim.receipt);
+				const auto add = [&](std::uint64_t& total,
+									 const std::uint64_t value,
+									 const std::string_view field) -> sdk::result<void>
+				{
+					if (value > std::numeric_limits<std::uint64_t>::max() - total)
+						return sdk::unexpected(
+							failure("materialization.group-overflow", std::string{field}));
+					total += value;
+					return {};
+				};
+				for (const auto [field, value] :
+					 {std::pair{std::string_view{"claim-count"}, claim.receipt.claim_count},
+					  std::pair{std::string_view{"unresolved-count"},
+								claim.receipt.unresolved_count},
+					  std::pair{std::string_view{"conflict-count"}, claim.receipt.conflict_count},
+					  std::pair{std::string_view{"differential-count"},
+								claim.receipt.differential_disagreement_count}})
+				{
+					auto& total = field == "claim-count" ? output.claim_count
+						: field == "unresolved-count"	 ? output.unresolved_count
+						: field == "conflict-count"		 ? output.conflict_count
+														 : output.differential_disagreement_count;
+					if (auto added = add(total, value, field); !added)
+						return sdk::unexpected(std::move(added.error()));
+				}
+				output.complete = index == 0U ? claim.receipt.complete
+											  : output.complete && claim.receipt.complete;
+			}
+			auto digest = output_receipt_digest(output);
+			if (!digest)
+				return sdk::unexpected(std::move(digest.error()));
+			output.receipt_digest = std::move(*digest);
+			return output;
+		}
+
+		[[nodiscard]] sdk::detached_cell
+		base_symbol_cell(const sdk::scalar_kind kind, std::string parameter, std::string value)
+		{
+			return {{kind, std::move(parameter), false},
+					sdk::cell_state::present,
+					sdk::scalar_value{std::move(value)},
+					std::nullopt};
+		}
+
+		[[nodiscard]] sdk::detached_cell base_optional_typed_cell(std::string parameter,
+																  std::string value)
+		{
+			auto output = sdk::detached_cell::typed(std::move(parameter), std::move(value));
+			output.type.optional = true;
+			return output;
+		}
+
+		[[nodiscard]] sdk::detached_cell base_digest_cell(std::string value)
+		{
+			return {{sdk::scalar_kind::digest, {}, false},
+					sdk::cell_state::present,
+					sdk::scalar_value{std::move(value)},
+					std::nullopt};
+		}
+
+		[[nodiscard]] sdk::result<sdk::claim>
+		make_base_claim(const sdk::relation_engine& engine,
+						const sdk::detached_row& row,
+						const provider_task_v4_task_authority& task,
+						const materializer_worker_execution& execution,
+						const std::string_view materializer_semantics)
+		{
+			if (!execution.outcome.runtime_receipt)
+				return sdk::unexpected(
+					failure("materialization.transcript-invalid", "runtime-receipt"));
+			sdk::observation observation{
+				row,
+				{task.condition_universe_id, {task.condition_id}},
+				task.interpretation_domain,
+				{"cxxlens.clang22.materializer", std::string{materializer_semantics}},
+				{std::string{execution.outcome.runtime_receipt->raw_stdout_sha256()}},
+				std::string{execution.outcome.runtime_receipt->sealed_transcript_digest()},
+				{"under_approximation",
+				 "partition",
+				 "assumptions:none",
+				 {"runtime_sealed", "schema_validated"}},
+			};
+			return sdk::make_assertion(engine, std::move(observation));
+		}
+
+		[[nodiscard]] sdk::result<sdk::partition_draft>
+		make_base_partition(const sdk::relation_engine& engine,
+							const std::string_view relation_descriptor_id,
+							std::vector<sdk::detached_row> rows,
+							const provider_task_v4_task_authority& task,
+							const materializer_worker_execution& execution,
+							const std::string_view materializer_semantics)
+		{
+			if (rows.empty())
+				return sdk::unexpected(failure("materialization.base-partition-empty",
+											   "relation",
+											   std::string{relation_descriptor_id}));
+			sdk::partition_draft output;
+			output.relation_descriptor_id = std::string{relation_descriptor_id};
+			output.scope = task.compile_unit_id;
+			output.condition = {task.condition_universe_id, {task.condition_id}};
+			output.interpretation = task.interpretation_domain;
+			output.producer_semantics = std::string{materializer_semantics};
+			output.precision_profile = "under_approximation";
+			output.assumption_set_id = "assumptions:none";
+			output.coverage = {{"compile-unit", task.compile_unit_id, "covered", {}}};
+			output.claims.reserve(rows.size());
+			for (const auto& row : rows)
+			{
+				if (row.descriptor_id != relation_descriptor_id)
+					return sdk::unexpected(failure(
+						"materialization.base-partition-invalid", "descriptor", row.descriptor_id));
+				auto claim = make_base_claim(engine, row, task, execution, materializer_semantics);
+				if (!claim)
+					return sdk::unexpected(std::move(claim.error()));
+				output.claims.push_back(std::move(*claim));
+			}
+			auto basis = sdk::claim_input_basis_digest(output.claims.front().input_basis);
+			if (!basis)
+				return sdk::unexpected(std::move(basis.error()));
+			output.producer_input_basis_digest = std::move(*basis);
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<sdk::detached_row>
+		make_base_project_row(const provider_task_v4_request_authority& authority,
+							  const provider_task_v4_task_authority& task)
+		{
+			using relation = build::relations::project;
+			relation::builder builder;
+			for (auto result : {
+					 builder.set<relation::project_column>(
+						 sdk::detached_cell::typed("project_id", task.project_id)),
+					 builder.set<relation::catalog>(
+						 sdk::detached_cell::typed("catalog_id", task.catalog_id)),
+					 builder.set<relation::catalog_digest>(
+						 base_digest_cell(authority.project.catalog.catalog_digest)),
+					 builder.set<relation::logical_root>(sdk::detached_cell::typed(
+						 "logical_path_id", authority.project.catalog.logical_root)),
+					 builder.set<relation::environment_digest>(
+						 base_digest_cell(authority.project.catalog.environment_digest)),
+				 })
+				if (!result)
+					return sdk::unexpected(std::move(result.error()));
+			return std::move(builder).finish();
+		}
+
+		[[nodiscard]] sdk::result<sdk::detached_row>
+		make_base_toolchain_row(const provider_task_v4_task_authority& task)
+		{
+			using relation = build::relations::toolchain_context;
+			relation::builder builder;
+			for (auto result : {
+					 builder.set<relation::toolchain>(sdk::detached_cell::typed(
+						 "toolchain_context_id", task.toolchain_context_id)),
+					 builder.set<relation::family>(base_symbol_cell(sdk::scalar_kind::open_symbol,
+																	"build.toolchain-family/1",
+																	task.toolchain.family)),
+					 builder.set<relation::exact_version>(
+						 sdk::detached_cell::utf8(task.toolchain.exact_version)),
+					 builder.set<relation::target_triple>(
+						 sdk::detached_cell::utf8(task.toolchain.target_triple)),
+					 builder.set<relation::builtin_headers_digest>(
+						 base_digest_cell(task.toolchain.builtin_headers_digest)),
+					 builder.set<relation::abi_digest>(base_digest_cell(task.toolchain.abi_digest)),
+					 builder.set<relation::plugin_spec_digest>(
+						 base_digest_cell(task.toolchain.plugin_spec_digest)),
+				 })
+				if (!result)
+					return sdk::unexpected(std::move(result.error()));
+			if (task.toolchain.sysroot)
+			{
+				auto result = builder.set<relation::sysroot>(
+					base_optional_typed_cell("logical_path_id", *task.toolchain.sysroot));
+				if (!result)
+					return sdk::unexpected(std::move(result.error()));
+			}
+			return std::move(builder).finish();
+		}
+
+		[[nodiscard]] sdk::result<sdk::detached_row>
+		make_base_variant_row(const provider_task_v4_task_authority& task)
+		{
+			using relation = build::relations::variant;
+			relation::builder builder;
+			for (auto result : {
+					 builder.set<relation::variant_column>(
+						 sdk::detached_cell::typed("build_variant_id", task.build_variant_id)),
+					 builder.set<relation::project>(
+						 sdk::detached_cell::typed("project_id", task.project_id)),
+					 builder.set<relation::toolchain>(sdk::detached_cell::typed(
+						 "toolchain_context_id", task.toolchain_context_id)),
+					 builder.set<relation::language>(base_symbol_cell(
+						 sdk::scalar_kind::open_symbol, "build.language/1", task.variant.language)),
+					 builder.set<relation::language_standard>(
+						 base_symbol_cell(sdk::scalar_kind::open_symbol,
+										  "build.language-standard/1",
+										  task.variant.language_standard)),
+					 builder.set<relation::target_triple>(
+						 sdk::detached_cell::utf8(task.variant.target_triple)),
+					 builder.set<relation::predefined_macros_digest>(
+						 base_digest_cell(task.variant.predefined_macros_digest)),
+					 builder.set<relation::include_search_digest>(
+						 base_digest_cell(task.variant.include_search_digest)),
+					 builder.set<relation::semantic_flags_digest>(
+						 base_digest_cell(task.variant.semantic_flags_digest)),
+				 })
+				if (!result)
+					return sdk::unexpected(std::move(result.error()));
+			return std::move(builder).finish();
+		}
+
+		[[nodiscard]] sdk::result<sdk::detached_row>
+		make_base_source_file_row(const provider_task_v4_request_authority& authority,
+								  const provider_task_v4_task_authority& task)
+		{
+			using relation = source::relations::file;
+			relation::builder builder;
+			for (auto result : {
+					 builder.set<relation::snapshot>(sdk::detached_cell::typed(
+						 "source_snapshot_id", task.source.source_snapshot_id)),
+					 builder.set<relation::file_column>(
+						 sdk::detached_cell::typed("file_id", task.source.file_id)),
+					 builder.set<relation::project>(
+						 sdk::detached_cell::typed("project_id", task.project_id)),
+					 builder.set<relation::logical_path>(
+						 sdk::detached_cell::typed("logical_path_id", task.source.logical_path)),
+					 builder.set<relation::content>(base_digest_cell(task.source.content_digest)),
+					 builder.set<relation::size>(
+						 sdk::detached_cell::unsigned_integer(task.source.size_bytes)),
+					 builder.set<relation::encoding>(base_symbol_cell(
+						 sdk::scalar_kind::open_symbol, "source.encoding/1", task.source.encoding)),
+					 builder.set<relation::line_index>(
+						 sdk::detached_cell::typed("line_index_id", task.source.line_index_id)),
+					 builder.set<relation::read_only>(
+						 sdk::detached_cell::boolean(task.source.read_only)),
+				 })
+				if (!result)
+					return sdk::unexpected(std::move(result.error()));
+			(void)authority;
+			return std::move(builder).finish();
+		}
+
+		[[nodiscard]] sdk::result<sdk::detached_row>
+		make_base_compile_unit_row(const provider_task_v4_task_authority& task)
+		{
+			using relation = build::relations::compile_unit;
+			relation::builder builder;
+			for (auto result : {
+					 builder.set<relation::compile_unit_column>(
+						 sdk::detached_cell::typed("compile_unit_id", task.compile_unit_id)),
+					 builder.set<relation::project>(
+						 sdk::detached_cell::typed("project_id", task.project_id)),
+					 builder.set<relation::main_source>(sdk::detached_cell::typed(
+						 "source_snapshot_id", task.source.source_snapshot_id)),
+					 builder.set<relation::variant>(
+						 sdk::detached_cell::typed("build_variant_id", task.build_variant_id)),
+					 builder.set<relation::toolchain>(sdk::detached_cell::typed(
+						 "toolchain_context_id", task.toolchain_context_id)),
+					 builder.set<relation::effective_invocation_digest>(
+						 base_digest_cell(task.normalized_invocation_digest)),
+					 builder.set<relation::language>(base_symbol_cell(
+						 sdk::scalar_kind::open_symbol, "build.language/1", task.language)),
+					 builder.set<relation::working_directory>(
+						 sdk::detached_cell::typed("logical_path_id", task.working_directory)),
+				 })
+				if (!result)
+					return sdk::unexpected(std::move(result.error()));
+			return std::move(builder).finish();
+		}
+
+		[[nodiscard]] sdk::result<sdk::detached_row>
+		make_base_source_span_row(const materialization::observation_v2_primary_span& value)
+		{
+			using relation = source::relations::span;
+			relation::builder builder;
+			for (auto result : {
+					 builder.set<relation::span_column>(
+						 sdk::detached_cell::typed("source_span_id", value.span_id)),
+					 builder.set<relation::snapshot>(
+						 sdk::detached_cell::typed("source_snapshot_id", value.snapshot)),
+					 builder.set<relation::file>(sdk::detached_cell::typed("file_id", value.file)),
+					 builder.set<relation::begin>(
+						 sdk::detached_cell::unsigned_integer(value.begin)),
+					 builder.set<relation::end>(sdk::detached_cell::unsigned_integer(value.end)),
+					 builder.set<relation::role>(base_symbol_cell(
+						 sdk::scalar_kind::open_symbol, "source.range-role/1", value.role)),
+					 builder.set<relation::read_only>(sdk::detached_cell::boolean(value.read_only)),
+				 })
+				if (!result)
+					return sdk::unexpected(std::move(result.error()));
+			return std::move(builder).finish();
+		}
+
+		[[nodiscard]] sdk::result<std::vector<sdk::partition_draft>>
+		make_base_partitions(const sdk::relation_engine& engine,
+							 const provider_task_v4_request_authority& authority,
+							 const provider_task_v4_task_authority& task,
+							 const materializer_worker_execution& execution,
+							 const std::span<const sdk::claim> claims)
+		{
+			const auto materializer_semantics = authority.tool.occurrence_manifest_digest;
+			std::vector<sdk::partition_draft> output;
+			output.reserve(task_v4_base_descriptor_ids.size());
+			auto add = [&](const std::string_view descriptor_id,
+						   sdk::result<sdk::detached_row> row) -> sdk::result<void>
+			{
+				if (!row)
+					return sdk::unexpected(std::move(row.error()));
+				std::vector<sdk::detached_row> rows;
+				rows.push_back(std::move(*row));
+				auto partition = make_base_partition(engine,
+													 descriptor_id,
+													 std::move(rows),
+													 task,
+													 execution,
+													 materializer_semantics);
+				if (!partition)
+					return sdk::unexpected(std::move(partition.error()));
+				output.push_back(std::move(*partition));
+				return {};
+			};
+			if (auto value = add(build::relations::project::descriptor().id,
+								 make_base_project_row(authority, task));
+				!value)
+				return sdk::unexpected(std::move(value.error()));
+			if (auto value = add(build::relations::toolchain_context::descriptor().id,
+								 make_base_toolchain_row(task));
+				!value)
+				return sdk::unexpected(std::move(value.error()));
+			if (auto value =
+					add(build::relations::variant::descriptor().id, make_base_variant_row(task));
+				!value)
+				return sdk::unexpected(std::move(value.error()));
+			if (auto value = add(source::relations::file::descriptor().id,
+								 make_base_source_file_row(authority, task));
+				!value)
+				return sdk::unexpected(std::move(value.error()));
+			if (auto value = add(build::relations::compile_unit::descriptor().id,
+								 make_base_compile_unit_row(task));
+				!value)
+				return sdk::unexpected(std::move(value.error()));
+
+			std::map<std::string, materialization::observation_v2_primary_span, std::less<>> spans;
+			const materialization::observation_v2_task_authority observation_authority{
+				task.compile_unit_id,
+				task.source.source_snapshot_id,
+				task.source.file_id,
+				task.source.size_bytes};
+			for (const auto& claim : claims)
+			{
+				if (claim.descriptor != materialization::entity_observation_v2_descriptor().id &&
+					claim.descriptor != materialization::call_observation_v2_descriptor().id)
+					continue;
+				auto decoded =
+					materialization::decode_observation_v2_row(claim.row, observation_authority);
+				if (!decoded)
+					return sdk::unexpected(std::move(decoded.error()));
+				if (!decoded->primary_span)
+					continue;
+				auto [it, inserted] =
+					spans.emplace(decoded->primary_span->span_id, *decoded->primary_span);
+				if (!inserted && it->second != *decoded->primary_span)
+					return sdk::unexpected(
+						failure("materialization.source-span-conflict", "span", it->first));
+			}
+			if (!spans.empty())
+			{
+				std::vector<sdk::detached_row> rows;
+				rows.reserve(spans.size());
+				for (const auto& [id, span] : spans)
+				{
+					(void)id;
+					auto row = make_base_source_span_row(span);
+					if (!row)
+						return sdk::unexpected(std::move(row.error()));
+					rows.push_back(std::move(*row));
+				}
+				auto partition = make_base_partition(engine,
+													 source::relations::span::descriptor().id,
+													 std::move(rows),
+													 task,
+													 execution,
+													 materializer_semantics);
+				if (!partition)
+					return sdk::unexpected(std::move(partition.error()));
+				output.push_back(std::move(*partition));
+			}
+			return output;
+		}
 	} // namespace
+
+	sdk::result<void> materializer_task_output_receipt::validate() const
+	{
+		if (schema != "cxxlens.clang22.materializer-task-output-receipt.v4" ||
+			batch_receipts.size() != task_v4_output_descriptor_ids.size())
+			return sdk::unexpected(
+				failure("materialization.receipt-invalid", "task-output", "shape"));
+		for (const auto [field, value] :
+			 {std::pair{std::string_view{"request"}, std::string_view{materialization_request_id}},
+			  std::pair{std::string_view{"task"}, std::string_view{task_id}},
+			  std::pair{std::string_view{"task-v4"}, std::string_view{task_v4_digest}},
+			  std::pair{std::string_view{"receipt"}, std::string_view{receipt_digest}}})
+			if (auto valid = sdk::validate_strong_id(value); !valid)
+				return sdk::unexpected(
+					failure("materialization.receipt-invalid", std::string{field}, "strong-id"));
+		auto expected = output_receipt_digest(*this);
+		if (!expected || *expected != receipt_digest)
+			return sdk::unexpected(
+				failure("materialization.receipt-invalid", "task-output", "digest"));
+		return {};
+	}
 
 	sdk::result<materializer_worker_execution>
 	run_materializer_worker(installed_materializer_source_closure_result ingress)
+	{
+		production_provider_trust_issuer issuer;
+		return run_materializer_worker(std::move(ingress), issuer);
+	}
+
+	sdk::result<materializer_worker_execution>
+	run_materializer_worker(installed_materializer_source_closure_result ingress,
+							provider_trust_issuer_port& issuer)
 	{
 		if (ingress.request.authority.tasks.empty())
 			return sdk::unexpected(failure("provider.worker-v4-input-invalid", "tasks", "empty"));
@@ -804,7 +1414,7 @@ namespace cxxlens::detail::clang22
 		auto manifest = make_manifest(ingress.request.authority.worker);
 		if (!manifest)
 			return sdk::unexpected(std::move(manifest.error()));
-		const auto stream_id = 1U;
+		const auto stream_id = ingress.receiver.stream_id;
 		const auto transfer = ingress.receiver.credentials.transfer_digest;
 		auto closure =
 			closure_transcript(ingress.binding, ingress.receiver.snapshot, transfer, stream_id);
@@ -827,7 +1437,7 @@ namespace cxxlens::detail::clang22
 			ingress.binding.manifest_digest,
 			transfer,
 			stream_id,
-			ingress.binding.first_sequence);
+			ingress.receiver.first_sequence);
 		if (!binding)
 			return sdk::unexpected(std::move(binding.error()));
 		sdk::provider::provider_candidate candidate;
@@ -835,18 +1445,45 @@ namespace cxxlens::detail::clang22
 		candidate.source = sdk::provider::discovery_source::explicit_path;
 		candidate.executable_argv = {ingress.request.authority.worker.executable};
 		candidate.authoritative_path = true;
-		candidate.trust_valid = true;
-		candidate.certification_valid = true;
-		candidate.certified_qualifications = candidate.description.requested_qualifications;
+		auto measured_worker =
+			measure_worker_executable(ingress.request.authority.worker.executable,
+									  ingress.request.authority.worker.installed_binary_digest);
+		if (!measured_worker)
+			return sdk::unexpected(std::move(measured_worker.error()));
+		auto issuance = issuer.issue(
+			candidate.description, *measured_worker, ingress.request.authority.trust_policy);
+		if (!issuance)
+			return sdk::unexpected(std::move(issuance.error()));
+		if (auto valid =
+				issuance->validate(candidate.description.provider_id,
+								   candidate.description.provider_version,
+								   *measured_worker,
+								   ingress.request.authority.trust_policy.required_qualification);
+			!valid)
+			return sdk::unexpected(std::move(valid.error()));
+		candidate.trust_valid = issuance->trust_valid;
+		candidate.certified_qualifications = std::move(issuance->certified_qualifications);
+		candidate.certification_valid = issuance->certification_valid;
 		auto policy = sdk::provider::resolve_sandbox_policy(
 			ingress.request.authority.worker.sandbox_policy_digest);
 		if (!policy)
 			return sdk::unexpected(std::move(policy.error()));
+		if (policy->policy_digest() != ingress.request.authority.worker.sandbox_policy_digest)
+			return sdk::unexpected(
+				failure("security.sandbox-policy-mismatch", "worker.sandbox_policy_digest"));
+		auto sandbox_evidence =
+			sdk::provider::sandbox_evidence_digest(*policy,
+												   task.budget,
+												   sdk::provider::sandbox_assurance::enforced,
+												   policy->mechanisms,
+												   *measured_worker);
+		if (!sandbox_evidence)
+			return sdk::unexpected(std::move(sandbox_evidence.error()));
 		candidate.sandbox = {"linux-glibc",
 							 policy->mechanisms,
 							 sdk::provider::sandbox_assurance::enforced,
 							 ingress.request.authority.worker.sandbox_policy_digest,
-							 "sha256:" + std::string(64U, '9')};
+							 *sandbox_evidence};
 		sdk::provider::provider_selection_request selection_request{
 			candidate.description.provider_id,
 			candidate.description.provider_version,
@@ -905,7 +1542,8 @@ namespace cxxlens::detail::clang22
 		if (!outcome->succeeded())
 			return sdk::unexpected(
 				failure("provider.transcript-invalid", "worker", outcome->terminal));
-		return materializer_worker_execution{std::move(ingress), std::move(*outcome)};
+		return materializer_worker_execution{
+			std::move(ingress), std::move(*outcome), std::move(*issuance)};
 	}
 
 	sdk::result<materializer_store_execution>
@@ -928,25 +1566,63 @@ namespace cxxlens::detail::clang22
 		const auto& base = request.base_tasks.front();
 		const auto& extension = request.task_extensions.front();
 		const auto& task = authority.tasks.front();
-		auto claim = make_worker_claim(execution,
-									 *engine,
-									 task,
-									 base,
-									 extension,
-									 *manifest);
-		if (!claim)
-			return sdk::unexpected(std::move(claim.error()));
-		const std::array<const materialization::materialization_v4_claim_sealed*, 1U> sealed_tasks{
-			&*claim};
-		auto receipt = materialization::make_materialization_v4_incremental_receipt(
-			*engine, sealed_tasks);
+		std::vector<sdk::claim> raw_output_claims;
+		for (const auto descriptor_id : task_v4_output_descriptor_ids)
+		{
+			auto assertions = make_worker_assertions(execution, *engine, task, descriptor_id);
+			if (!assertions)
+				return sdk::unexpected(std::move(assertions.error()));
+			raw_output_claims.insert(raw_output_claims.end(),
+									 std::make_move_iterator(assertions->begin()),
+									 std::make_move_iterator(assertions->end()));
+		}
+		auto base_partitions =
+			make_base_partitions(*engine, authority, task, execution, raw_output_claims);
+		if (!base_partitions)
+			return sdk::unexpected(std::move(base_partitions.error()));
+		std::vector<sdk::claim> reference_claims;
+		for (const auto& partition : *base_partitions)
+			reference_claims.insert(
+				reference_claims.end(), partition.claims.begin(), partition.claims.end());
+		reference_claims.insert(
+			reference_claims.end(), raw_output_claims.begin(), raw_output_claims.end());
+		for (const auto& reference : reference_claims)
+			if (auto valid = sdk::validate_claim(*engine, reference); !valid)
+				return sdk::unexpected(failure("materialization.reference-claim-invalid",
+											   "descriptor",
+											   valid.error().code + ":" + valid.error().field +
+												   ":" + valid.error().detail));
+		std::vector<materialization::materialization_v4_claim_sealed> claims;
+		claims.reserve(task_v4_output_descriptor_ids.size());
+		for (const auto descriptor_id : task_v4_output_descriptor_ids)
+		{
+			auto claim = make_worker_claim(execution,
+										   *engine,
+										   task,
+										   base,
+										   extension,
+										   *manifest,
+										   descriptor_id,
+										   reference_claims);
+			if (!claim)
+				return sdk::unexpected(std::move(claim.error()));
+			claims.push_back(std::move(*claim));
+		}
+		auto receipt = make_task_output_receipt(*engine, claims, reference_claims);
 		if (!receipt)
 			return sdk::unexpected(std::move(receipt.error()));
-		if (auto valid = materialization::validate_materialization_v4_incremental_receipt(
-				*engine, *receipt, sealed_tasks);
-			!valid)
+		if (auto valid = receipt->validate(); !valid)
 			return sdk::unexpected(std::move(valid.error()));
-
+		// The generic v4 incremental receipt is task-oriented: this worker receives one task and
+		// emits six descriptor batches for that task. Keep the complete six-batch aggregate above
+		// as the publication authority, while using one descriptor as the task receipt so the
+		// receipt's task-index sequence remains canonical (0..task_count-1).
+		const std::array<const materialization::materialization_v4_claim_sealed*, 1U> task_receipt{
+			&claims.front()};
+		auto incremental_receipt = materialization::make_materialization_v4_incremental_receipt(
+			*engine, task_receipt, reference_claims);
+		if (!incremental_receipt)
+			return sdk::unexpected(std::move(incremental_receipt.error()));
 		materialization::materialization_v4_provider_output_authority output;
 		output.materialization_request_id = request.materialization_request_id;
 		output.publication = {authority.publication.recipe_digest,
@@ -956,38 +1632,36 @@ namespace cxxlens::detail::clang22
 						   {1U, 0U, 0U},
 						   authority.project.catalog.catalog_digest,
 						   authority.publication.expected_parent_publication};
-		sdk::closure_candidate closure;
-		closure.relation_descriptor_id = claim->translation.partition.relation_descriptor_id;
-		closure.subject_partition_id = claim->partition_manifest.partition_id;
-		closure.partition_content_digest = claim->partition_manifest.content_digest;
-		closure.coverage_digest = claim->partition_manifest.coverage_digest;
-		auto key_domain = sdk::semantic_digest(
-			"cxxlens.clang22.materializer-key-domain.v1", task.compile_unit_id);
+		auto key_domain = sdk::semantic_digest("cxxlens.clang22.materializer-key-domain.v1",
+											   task.compile_unit_id);
 		if (!key_domain)
 			return sdk::unexpected(std::move(key_domain.error()));
-		closure.key_domain_digest = *key_domain;
-		closure.condition = claim->partition_binding.condition;
-		closure.interpretation = claim->partition_binding.interpretation;
-		closure.assumption_set_id = claim->partition_binding.assumption_set_id;
-		closure.closure_kind = "relation-key-enumeration";
-		closure.producer_semantics = claim->partition_binding.producer_semantics;
-		closure.evidence_digest = std::string{execution.outcome.runtime_receipt->raw_stdout_sha256()};
-		output.closures.push_back(std::move(closure));
-
-		auto source = materialization::make_materialization_v4_store_source(
-			*engine, *receipt, sealed_tasks, std::move(output));
-		if (!source)
-			return sdk::unexpected(std::move(source.error()));
-		const auto publication_engine = *engine;
-		sdk::result<sdk::snapshot_store> store = sdk::unexpected(sdk::error{
-			"materialization.store-open-failed", "backend", "unsupported"});
+		for (auto& claim : claims)
+		{
+			sdk::closure_candidate closure;
+			closure.relation_descriptor_id = claim.translation.partition.relation_descriptor_id;
+			closure.subject_partition_id = claim.partition_manifest.partition_id;
+			closure.partition_content_digest = claim.partition_manifest.content_digest;
+			closure.coverage_digest = claim.partition_manifest.coverage_digest;
+			closure.key_domain_digest = *key_domain;
+			closure.condition = claim.partition_binding.condition;
+			closure.interpretation = claim.partition_binding.interpretation;
+			closure.assumption_set_id = claim.partition_binding.assumption_set_id;
+			closure.closure_kind = "relation-key-enumeration";
+			closure.producer_semantics = claim.partition_binding.producer_semantics;
+			closure.evidence_digest =
+				std::string{execution.outcome.runtime_receipt->raw_stdout_sha256()};
+			output.closures.push_back(std::move(closure));
+		}
+		sdk::result<sdk::snapshot_store> store = sdk::unexpected(
+			sdk::error{"materialization.store-open-failed", "backend", "unsupported"});
 		if (authority.publication.backend == "sqlite")
 		{
 			if (!authority.publication.sqlite_path)
 				return sdk::unexpected(
 					failure("materialization.store-open-failed", "sqlite_path", "missing"));
 			store = sdk::open_sqlite_snapshot_store(*authority.publication.sqlite_path,
-												std::move(*engine));
+													std::move(*engine));
 		}
 		else if (authority.publication.backend == "memory")
 			store = sdk::make_in_memory_snapshot_store(std::move(*engine));
@@ -996,11 +1670,54 @@ namespace cxxlens::detail::clang22
 				failure("materialization.store-open-failed", "backend", "unsupported"));
 		if (!store)
 			return sdk::unexpected(std::move(store.error()));
-		auto publication = materialization::publish_materialization_v4_store_source(
-			publication_engine, *store, std::move(*source));
-		if (!publication)
-			return sdk::unexpected(std::move(publication.error()));
+		auto writer = store->begin(std::move(output.snapshot));
+		if (!writer)
+			return sdk::unexpected(std::move(writer.error()));
+		for (auto& partition : *base_partitions)
+			if (auto staged = writer->stage(std::move(partition)); !staged)
+				return sdk::unexpected(std::move(staged.error()));
+		for (auto& claim : claims)
+		{
+			if (auto staged = writer->stage(claim.translation.partition); !staged)
+				return sdk::unexpected(std::move(staged.error()));
+		}
+		for (auto& closure : output.closures)
+			if (auto staged = writer->add_closure(std::move(closure)); !staged)
+				return sdk::unexpected(std::move(staged.error()));
+		if (auto valid = writer->validate(); !valid)
+			return sdk::unexpected(std::move(valid.error()));
+		auto snapshot = writer->publish();
+		if (!snapshot)
+			return sdk::unexpected(std::move(snapshot.error()));
+		// A committed handle is not sufficient for the installed success boundary.  Re-open the
+		// current selector, publication, and snapshot while the backend is still owned so a caller
+		// cannot report success for a commit that is immediately unreadable or bound to another
+		// series.  The three paths must expose the same immutable identity and manifest.
+		auto reopened_publication = store->open_publication(snapshot->publication().publication_id);
+		if (!reopened_publication)
+			return sdk::unexpected(std::move(reopened_publication.error()));
+		auto reopened_snapshot = store->open(snapshot->id());
+		if (!reopened_snapshot)
+			return sdk::unexpected(std::move(reopened_snapshot.error()));
+		auto current = store->current(authority.publication.selector);
+		if (!current)
+			return sdk::unexpected(std::move(current.error()));
+		if (reopened_publication->id() != snapshot->id() ||
+			reopened_snapshot->id() != snapshot->id() || current->id() != snapshot->id() ||
+			reopened_publication->publication() != snapshot->publication() ||
+			reopened_snapshot->manifest() != snapshot->manifest() ||
+			current->manifest() != snapshot->manifest())
+			return sdk::unexpected(failure(
+				"materialization.store-verification-failed", "reopen", "identity-mismatch"));
+		// Retain the established single-task receipt field for generic publication consumers while
+		// exposing the complete six-batch receipt on the installed bridge publication.
+		materialization::materialization_v4_store_publication publication{
+			std::move(*snapshot),
+			std::move(output),
+			std::move(*incremental_receipt),
+			receipt->receipt_digest,
+			static_cast<std::uint64_t>(claims.size())};
 		return materializer_store_execution{
-			std::move(execution), std::move(*claim), std::move(*receipt), std::move(*publication)};
+			std::move(execution), std::move(claims), std::move(*receipt), std::move(publication)};
 	}
 } // namespace cxxlens::detail::clang22

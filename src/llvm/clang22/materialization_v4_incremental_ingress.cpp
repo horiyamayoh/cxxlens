@@ -181,7 +181,8 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] sdk::result<void>
 		validate_inputs(const sdk::relation_engine& engine,
 						const materialization_v4_incremental_receipt& receipt,
-						const std::span<const materialization_v4_claim_sealed* const> sealed_tasks)
+						const std::span<const materialization_v4_claim_sealed* const> sealed_tasks,
+						const std::span<const sdk::claim> existing)
 		{
 			if (auto valid = validate_receipt_header(receipt); !valid)
 				return valid;
@@ -201,7 +202,9 @@ namespace cxxlens::detail::clang22::materialization
 				const auto* sealed = sealed_tasks[index];
 				if (sealed == nullptr)
 					return sdk::unexpected(invalid("sealed-tasks", "null"));
-				if (auto valid = validate_materialization_v4_claim_receipt(engine, *sealed); !valid)
+				if (auto valid =
+						validate_materialization_v4_claim_receipt(engine, *sealed, existing);
+					!valid)
 					return sdk::unexpected(std::move(valid.error()));
 				const auto& task = sealed->receipt;
 				if (task.task_index != index)
@@ -249,7 +252,8 @@ namespace cxxlens::detail::clang22::materialization
 
 	sdk::result<materialization_v4_incremental_receipt> make_materialization_v4_incremental_receipt(
 		const sdk::relation_engine& engine,
-		const std::span<const materialization_v4_claim_sealed* const> sealed_tasks)
+		const std::span<const materialization_v4_claim_sealed* const> sealed_tasks,
+		const std::span<const sdk::claim> existing)
 	{
 		if (sealed_tasks.empty() || sealed_tasks.size() > materialization_v4_incremental_max_tasks)
 			return sdk::unexpected(invalid("sealed-tasks", "bound-or-empty"));
@@ -265,7 +269,8 @@ namespace cxxlens::detail::clang22::materialization
 		{
 			if (sealed == nullptr)
 				return sdk::unexpected(invalid("sealed-tasks", "null"));
-			if (auto valid = validate_materialization_v4_claim_receipt(engine, *sealed); !valid)
+			if (auto valid = validate_materialization_v4_claim_receipt(engine, *sealed, existing);
+				!valid)
 				return sdk::unexpected(std::move(valid.error()));
 			value.task_receipts.push_back(sealed->receipt);
 		}
@@ -300,7 +305,7 @@ namespace cxxlens::detail::clang22::materialization
 		if (!digest)
 			return sdk::unexpected(std::move(digest.error()));
 		value.receipt_digest = std::move(*digest);
-		if (auto valid = validate_inputs(engine, value, sealed_tasks); !valid)
+		if (auto valid = validate_inputs(engine, value, sealed_tasks, existing); !valid)
 			return sdk::unexpected(std::move(valid.error()));
 		return value;
 	}
@@ -308,9 +313,10 @@ namespace cxxlens::detail::clang22::materialization
 	sdk::result<void> validate_materialization_v4_incremental_receipt(
 		const sdk::relation_engine& engine,
 		const materialization_v4_incremental_receipt& receipt,
-		const std::span<const materialization_v4_claim_sealed* const> sealed_tasks)
+		const std::span<const materialization_v4_claim_sealed* const> sealed_tasks,
+		const std::span<const sdk::claim> existing)
 	{
-		return validate_inputs(engine, receipt, sealed_tasks);
+		return validate_inputs(engine, receipt, sealed_tasks, existing);
 	}
 
 	sdk::result<materialization_v4_store_ingress> admit_materialization_v4_store_ingress(
@@ -321,7 +327,7 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		if (!authority)
 			return sdk::unexpected(missing_authority("provider-output"));
-		if (auto valid = validate_inputs(engine, receipt, sealed_tasks); !valid)
+		if (auto valid = validate_inputs(engine, receipt, sealed_tasks, {}); !valid)
 			return sdk::unexpected(std::move(valid.error()));
 		if (!receipt.complete)
 			return sdk::unexpected(incomplete("receipt"));

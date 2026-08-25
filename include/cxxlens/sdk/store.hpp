@@ -361,24 +361,6 @@ namespace cxxlens::sdk
 		friend result<snapshot_store> open_sqlite_snapshot_store(const std::string&,
 																 relation_engine);
 		friend struct snapshot_store_backend_lifetime_access;
-		// Fault/mutation access is compiled only into BUILD_TESTING support. The installed product
-		// header deliberately has no test friend declarations or mutation surface.
-#if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
-		friend result<void> mark_publication_corrupt_for_testing(snapshot_store&, std::string_view);
-		friend result<void> rewrite_publication_payload_for_testing(
-			snapshot_store&, std::string_view, std::string_view, std::string_view, std::size_t);
-		friend result<void> rewrite_publication_identity_field_for_testing(snapshot_store&,
-																		   std::string_view,
-																		   std::string_view);
-		friend result<std::string> rewrite_snapshot_version_for_testing(
-			snapshot_store&, std::string_view, std::string_view, std::uint64_t, std::uint32_t);
-		friend result<std::string> rewrite_publication_counters_for_testing(snapshot_store&,
-																			std::string_view,
-																			std::uint64_t,
-																			std::uint64_t);
-		friend result<void>
-		poison_rejected_generation_for_testing(snapshot_store&, std::string_view, std::uint64_t);
-#endif
 	};
 
 	/** @brief Transactional writer enforcing stage, independent validation, then atomic publish. */

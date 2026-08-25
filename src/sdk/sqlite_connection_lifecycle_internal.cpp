@@ -1,5 +1,6 @@
 #include "sqlite_connection_lifecycle_internal.hpp"
 
+#include <array>
 #include <type_traits>
 #include <utility>
 
@@ -38,6 +39,78 @@ namespace cxxlens::sdk
 	namespace
 	{
 		constexpr int sqlite_ok = 0;
+
+		/**
+		 * Compare a census entry with the entry retained by the namespace guard.  The guard is the
+		 * source-read authority; accepting only the copied state from the caller would allow a
+		 * synthetic census to mint the exact-empty terminal after a replacement or role splice.
+		 */
+		[[nodiscard]] bool
+		same_guard_entry(const sqlite_backend_entry_observation& census,
+						 const sqlite_backend_entry_observation& retained) noexcept
+		{
+			return census.role == retained.role && census.state == retained.state &&
+				census.object_identity == retained.object_identity &&
+				census.directory_entry_identity == retained.directory_entry_identity &&
+				census.held_object.get() == retained.held_object.get() &&
+				census.object_filesystem_profile == retained.object_filesystem_profile &&
+				census.direct_regular_entry == retained.direct_regular_entry;
+		}
+
+		[[nodiscard]] bool
+		exact_empty_census_is_authenticated(const sqlite_backend_namespace_census& census) noexcept
+		{
+			if (!census.source_shm_guard || census.profile.empty() ||
+				census.capability_token.bytes.empty() ||
+				census.parent_namespace_identity.bytes.empty())
+				return false;
+			try
+			{
+				constexpr std::array roles{sqlite_backend_file_role::main_database,
+										   sqlite_backend_file_role::write_ahead_log,
+										   sqlite_backend_file_role::shared_memory,
+										   sqlite_backend_file_role::rollback_journal};
+				for (const auto role : roles)
+				{
+					const sqlite_backend_entry_observation* selected{};
+					for (const auto& entry : census.entries)
+						if (entry.role == role)
+						{
+							if (selected != nullptr)
+								return false;
+							selected = &entry;
+						}
+					if (selected == nullptr)
+						return false;
+					auto retained = census.source_shm_guard->retained_entry(role);
+					if (!retained || !same_guard_entry(*selected, *retained))
+						return false;
+					if (role == sqlite_backend_file_role::main_database)
+					{
+						if (selected->state != sqlite_backend_entry_state::held_regular ||
+							!selected->held_object || !selected->object_identity ||
+							!selected->directory_entry_identity ||
+							!selected->direct_regular_entry ||
+							selected->held_object->role() != role ||
+							selected->held_object->object_identity() !=
+								*selected->object_identity ||
+							selected->held_object->directory_entry_identity() !=
+								*selected->directory_entry_identity)
+							return false;
+					}
+					else if (selected->state != sqlite_backend_entry_state::absent ||
+							 selected->object_identity || selected->directory_entry_identity ||
+							 selected->held_object || selected->object_filesystem_profile ||
+							 selected->direct_regular_entry)
+						return false;
+				}
+				return census.source_shm_guard->recheck().has_value();
+			}
+			catch (...)
+			{
+				return false;
+			}
+		}
 	} // namespace
 
 	sqlite_authenticated_logical_read_terminal::sqlite_authenticated_logical_read_terminal(
@@ -140,7 +213,7 @@ namespace cxxlens::sdk
 			if (capability == nullptr || parent == nullptr ||
 				*capability != source_census.capability_token ||
 				*parent != source_census.parent_namespace_identity ||
-				!source_census.source_shm_guard->recheck())
+				!exact_empty_census_is_authenticated(source_census))
 				return std::nullopt;
 			const sqlite_backend_entry_observation* main{};
 			const sqlite_backend_entry_observation* wal{};
@@ -483,7 +556,7 @@ namespace cxxlens::sdk
 				journal->state != sqlite_backend_entry_state::absent ||
 				std::static_pointer_cast<const void>(main->held_object) !=
 					state_->pins.authority_anchor ||
-				!source_census.source_shm_guard->recheck())
+				!exact_empty_census_is_authenticated(source_census))
 				return false;
 			state_->logical_read_namespace_guard = source_census.source_shm_guard;
 			state_->logical_read_capability_token =

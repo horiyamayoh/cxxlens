@@ -282,27 +282,6 @@ namespace
 		return *digest;
 	}
 
-	[[nodiscard]] std::string
-	registry_digest_fixture(const provider_task_v4_registry_authority& registry)
-	{
-		std::vector<std::pair<std::string, std::string>> entries;
-		for (const auto& descriptor : registry.base_descriptors)
-			entries.emplace_back(descriptor.descriptor_id, descriptor.runtime_descriptor_digest);
-		for (const auto& descriptor : registry.descriptors)
-			entries.emplace_back(descriptor.descriptor_id, descriptor.runtime_descriptor_digest);
-		std::ranges::sort(entries,
-						  [](const auto& left, const auto& right)
-						  {
-							  return left.first < right.first;
-						  });
-		std::string payload;
-		for (const auto& [id, digest] : entries)
-			payload += id + "=" + digest + "\n";
-		auto digest = cxxlens::sdk::semantic_digest("cxxlens.relation-registry.v1", payload);
-		assert(digest);
-		return *digest;
-	}
-
 	[[nodiscard]] std::string trust_digest_fixture(const provider_task_v4_trust_authority& trust)
 	{
 		const auto sandbox_name = [](const auto assurance)
@@ -405,11 +384,12 @@ namespace
 				 id + "-batch",
 				 id.starts_with("cc.") ? "canonical_claim" : "assertion"});
 		}
-		request.registry.authority_registry_digest = registry_digest_fixture(request.registry);
+		// The registry document authority is a content identity.  The admitted engine
+		// inventory has its own semantic registry identity and must not alias it.
+		request.registry.authority_registry_digest = content('9');
 
 		request.engine.generation_contract = std::string{task_v4_engine_generation_contract};
 		request.engine.engine_generation_id = "engine-generation:sha256:" + std::string(64U, 'c');
-		request.engine.engine_registry_digest = request.registry.authority_registry_digest;
 		for (const auto id : task_v4_engine_descriptor_ids)
 		{
 			const auto base = std::ranges::find_if(request.registry.base_descriptors,
@@ -431,6 +411,26 @@ namespace
 			assert(output != request.registry.descriptors.end());
 			request.engine.admitted_descriptors.push_back(
 				{output->descriptor_id, output->runtime_descriptor_digest});
+		}
+		// The engine digest is derived from the admitted descriptor inventory, not
+		// from the full registry document authority.
+		{
+			std::vector<std::pair<std::string, std::string>> entries;
+			for (const auto& descriptor : request.engine.admitted_descriptors)
+				entries.emplace_back(descriptor.descriptor_id,
+									 descriptor.runtime_descriptor_digest);
+			std::ranges::sort(entries,
+							  [](const auto& left, const auto& right)
+							  {
+								  return left.first < right.first;
+							  });
+			std::string payload;
+			for (const auto& [id, digest] : entries)
+				payload += id + "=" + digest + "\n";
+			auto engine_digest =
+				cxxlens::sdk::semantic_digest("cxxlens.relation-registry.v1", payload);
+			assert(engine_digest);
+			request.engine.engine_registry_digest = *engine_digest;
 		}
 
 		request.interpretation_policy = {std::string{task_v4_interpretation_policy_id},
@@ -509,7 +509,7 @@ namespace
 										"channel:clang22",
 										request.engine.engine_generation_id,
 										request.tasks.front().condition_universe_id,
-										request.registry.authority_registry_digest,
+										request.engine.engine_registry_digest,
 										request.interpretation_policy.interpretation_policy_digest,
 										request.trust_policy.trust_policy_digest};
 		request.publication.series_id = request.publication.selector.id();

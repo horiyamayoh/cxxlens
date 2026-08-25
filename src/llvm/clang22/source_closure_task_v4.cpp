@@ -523,8 +523,8 @@ namespace cxxlens::detail::clang22
 		auto closure_digest = expected_string(**closure_ref, "digest", "source_closure.digest");
 		auto manifest_digest =
 			expected_string(**closure_ref, "manifest_digest", "source_closure.manifest_digest");
-		if (!task_input_digest || !invocation_digest || !toolchain_digest ||
-			!environment_digest || !closure_id || !closure_digest || !manifest_digest)
+		if (!task_input_digest || !invocation_digest || !toolchain_digest || !environment_digest ||
+			!closure_id || !closure_digest || !manifest_digest)
 			return sdk::unexpected(failure("source-closure.task-v4-invalid", "authority"));
 		if (*closure_id != closure.snapshot_id || *closure_digest != closure.closure_digest)
 			return sdk::unexpected(

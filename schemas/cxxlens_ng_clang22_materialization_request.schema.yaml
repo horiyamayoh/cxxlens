@@ -270,6 +270,7 @@ properties:
         - interpretation_domain
         - source
         - effective_argv
+        - qualified_read_roots
         - requested_descriptor_ids
         - dependency_groups
         - budget

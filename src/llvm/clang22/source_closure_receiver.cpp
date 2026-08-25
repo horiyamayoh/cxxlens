@@ -697,14 +697,13 @@ namespace cxxlens::detail::clang22
 				return fail_liveness(*relay, validator, std::move(emitted.error()));
 			validator.commit_acknowledgement(std::move(*validator_ack));
 			protocol_state->commit_acknowledgement(std::move(*protocol_ack));
-			auto credentials_value = validator.take_ack_credentials();
-			if (!credentials_value)
-				return fail_with_cleanup(*relay, std::move(credentials_value.error()));
-			// After the wire ACK has been emitted, only move-only ownership transfers are allowed.
-			// In particular, do not copy the transfer digest or rebuild any result-side allocation.
+			// No fallible credential extraction is performed after the wire commit.  The
+			// pre-commit authenticated copy is the value returned with the sealed relay.
 			source_closure_receiver_result result;
 			result.snapshot = std::move(*snapshot);
-			result.credentials = std::move(*credentials_value);
+			result.credentials = std::move(*credentials);
+			result.stream_id = options.stream_id;
+			result.first_sequence = options.binding.first_sequence;
 			result.relay = std::move(relay);
 			return result;
 		}

@@ -104,9 +104,9 @@ namespace cxxlens::detail::clang22
 	 * Walk the supplied Clang AST and detach source-bound observations before the callback ends.
 	 *
 	 * `metadata` is independently authenticated task-v4/closure metadata.  The function consumes
-	 * no filesystem, process, environment, task-v3, or Store state and does not infer relation,
-	 * recipe, publication, or trust authority.  The returned rows are observation-v2 rows only;
-	 * claim sealing and Store publication remain an explicit later boundary.
+	 * no filesystem, process, environment, task-authority, or Store state and does not infer
+	 * relation, recipe, publication, or trust authority.  The returned rows are observation-v2 rows
+	 * only; claim sealing and Store publication remain an explicit later boundary.
 	 */
 	[[nodiscard]] sdk::result<provider_worker_v4_ast_observation_batch>
 	observe_provider_worker_v4_ast(provider::clang22::borrowed_translation_unit& unit,

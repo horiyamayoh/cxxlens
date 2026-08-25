@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -141,10 +142,12 @@ namespace cxxlens::detail::clang22::materialization
 	/** Validate one translation unit and issue its immutable partition/receipt boundary. */
 	[[nodiscard]] sdk::result<materialization_v4_claim_sealed>
 	seal_materialization_v4_claim_translation(const sdk::relation_engine& engine,
-											  materialization_v4_claim_translation translation);
+											  materialization_v4_claim_translation translation,
+											  std::span<const sdk::claim> existing = {});
 
 	/** Recompute every binding, claim, coverage, partition, and receipt identity. */
 	[[nodiscard]] sdk::result<void>
 	validate_materialization_v4_claim_receipt(const sdk::relation_engine& engine,
-											  const materialization_v4_claim_sealed& sealed);
+											  const materialization_v4_claim_sealed& sealed,
+											  std::span<const sdk::claim> existing = {});
 } // namespace cxxlens::detail::clang22::materialization

@@ -3356,12 +3356,18 @@ def task_sandbox_requirements(tasks: Iterable[dict[str, Any]]) -> list[dict[str,
 
 def expected_trust_policy_digest(policy: dict[str, Any]) -> str:
     requirements = policy["task_sandbox_requirements"]
+    version = tuple(int(part) for part in policy["provider_version"].split("."))
+    if len(version) != 3:
+        raise MaterializationError(
+            "materialization.trust-policy-invalid",
+            "provider version is not a semantic version",
+        )
     projection = _canonical_tuple(
         (
             _canonical_string(policy["policy_id"]),
             _canonical_string(policy["execution_profile"]),
             _canonical_string(policy["provider_id"]),
-            _canonical_string(policy["provider_version"]),
+            _canonical_tuple(_canonical_integer(part) for part in version),
             _canonical_string(policy["semantic_contract_digest"]),
             _canonical_integer(policy["protocol_major"]),
             _canonical_integer(policy["protocol_minor"]),
@@ -4135,6 +4141,11 @@ def _maximum_string_witness(
     elif isinstance(pattern, str) and pattern.startswith("^project://"):
         prefix = "project://"
         witness = prefix + "p" * (maximum - len(prefix))
+    elif isinstance(pattern, str) and pattern.startswith("^/"):
+        # qualified_read_roots are absolute, canonical paths.  A single
+        # slash followed by ordinary ASCII is the saturated witness and
+        # cannot introduce a dot segment, duplicate slash, or backslash.
+        witness = "/" + "a" * (maximum - 1)
     else:
         fail(
             "materialization.task-binding-mismatch",
@@ -5913,7 +5924,10 @@ def sample_request(
             source = b"int main() { return 0; }\n"
         else:
             source = f"int unit_{index}() {{ return {index}; }}\n".encode("utf-8")
-        effective_argv = ["clang++", "-std=c++23", logical_path]
+        # The installed source-closure boundary does not admit ambient PATH
+        # lookup.  Keep the fixture invocation explicitly qualified so the
+        # native VFS can validate it against the declared /usr root.
+        effective_argv = ["/usr/bin/clang++", "-std=c++23", logical_path]
         source_specs.append(
             {
                 "catalog_compile_unit_id": f"catalog-unit:{index:04d}",
@@ -6046,6 +6060,16 @@ def sample_request(
             "partial_policy": "forbid",
             "transaction_count": 1,
             "reopen_before_success": True,
+            "recipe_id": "recipe:clang22",
+            "recipe_digest": semantic_digest(
+                "cxxlens.clang22-fixture-recipe.v1", "recipe:clang22"
+            ),
+            "output_plan_digest": semantic_digest(
+                "cxxlens.clang22-fixture-output-plan.v1", "clang22-atomic"
+            ),
+            "publication_target": (
+                "publication:sqlite" if backend == "sqlite" else "publication:memory"
+            ),
         },
     }
     pending_provider_task_id = "task:" + semantic_digest(
@@ -6121,6 +6145,7 @@ def sample_request(
                     "read_only": source_row["read_only"],
                 },
                 "effective_argv": spec["effective_argv"],
+                "qualified_read_roots": ["/usr"],
                 "requested_descriptor_ids": DESCRIPTOR_IDS,
                 "dependency_groups": ["canonical", "observation"],
                 "budget": {

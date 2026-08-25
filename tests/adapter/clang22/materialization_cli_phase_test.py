@@ -65,10 +65,13 @@ def run_input_limit(
 
 
 def v2_2_metadata_without_transport(root: pathlib.Path) -> bytes:
-    """Load the complete typed v2.2 request fixture without a closure frame channel."""
+    """Build the current typed v2.2 request without a closure frame channel."""
 
-    fixture = root / "tests" / "adapter" / "clang22" / "materialization_request_v2_2_complete.json"
-    return fixture.read_bytes()
+    sys.path.insert(0, str(root / "tools" / "quality"))
+    import check_ng_source_closure_transport as transport  # noqa: PLC0415
+
+    request, _ = transport.complete_request_witness(root)
+    return transport.canonical_json(request) + b"\n"
 
 
 def parse_one_json(

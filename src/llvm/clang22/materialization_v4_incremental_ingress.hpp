@@ -82,7 +82,8 @@ namespace cxxlens::detail::clang22::materialization
 	[[nodiscard]] sdk::result<materialization_v4_incremental_receipt>
 	make_materialization_v4_incremental_receipt(
 		const sdk::relation_engine& engine,
-		std::span<const materialization_v4_claim_sealed* const> sealed_tasks);
+		std::span<const materialization_v4_claim_sealed* const> sealed_tasks,
+		std::span<const sdk::claim> existing = {});
 
 	/**
 	 * Revalidate every sealed task and compare every aggregate field and digest.
@@ -93,7 +94,8 @@ namespace cxxlens::detail::clang22::materialization
 	[[nodiscard]] sdk::result<void> validate_materialization_v4_incremental_receipt(
 		const sdk::relation_engine& engine,
 		const materialization_v4_incremental_receipt& receipt,
-		std::span<const materialization_v4_claim_sealed* const> sealed_tasks);
+		std::span<const materialization_v4_claim_sealed* const> sealed_tasks,
+		std::span<const sdk::claim> existing = {});
 
 	/**
 	 * Admit a validated receipt set to the prepublication Store boundary.

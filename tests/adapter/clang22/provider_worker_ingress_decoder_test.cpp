@@ -11,7 +11,12 @@
 #include <variant>
 #include <vector>
 
+#include <cxxlens/relations/cc_call_direct_target.hpp>
+#include <cxxlens/relations/cc_call_site.hpp>
+#include <cxxlens/relations/cc_entity.hpp>
+
 #include "llvm/clang22/materialization_json.hpp"
+#include "llvm/clang22/observation_v2.hpp"
 #include "llvm/clang22/provider_task_v4.hpp"
 #include "llvm/clang22/provider_worker_ingress.hpp"
 #include "llvm/clang22/provider_worker_protocol_v2_input.hpp"
@@ -125,6 +130,35 @@ namespace
 		for (const auto& argument : arguments)
 			argument_values.push_back(text(argument));
 		std::vector<json_value> root_values{text("/usr")};
+		const std::array<const cxxlens::sdk::relation_descriptor*, 6U> descriptors{
+			&cxxlens::cc::relations::call_direct_target::descriptor(),
+			&cxxlens::cc::relations::call_site::descriptor(),
+			&cxxlens::cc::relations::entity::descriptor(),
+			&materialization::call_observation_v2_descriptor(),
+			&materialization::entity_observation_v2_descriptor(),
+			&materialization::type_observation_v2_descriptor()};
+		std::vector<json_value> descriptor_ids;
+		std::vector<json_value> descriptor_digests;
+		for (std::size_t index{}; index < descriptors.size(); ++index)
+		{
+			descriptor_ids.push_back(text(std::string{task_v4_output_descriptor_ids[index]}));
+			descriptor_digests.push_back(text(descriptors[index]->descriptor_digest));
+		}
+		std::vector<json_value> dependency_groups;
+		for (const auto group : task_v4_dependency_groups)
+			dependency_groups.push_back(text(group));
+		auto output_authority = object({
+			{"compile_unit_id", text("compile-unit:one")},
+			{"dependency_groups", array(std::move(dependency_groups))},
+			{"descriptor_digests", array(std::move(descriptor_digests))},
+			{"maximum_output_bytes", json_value::unsigned_integer(16U * 1024U * 1024U)},
+			{"maximum_rows", json_value::unsigned_integer(100000U)},
+			{"provider_id", text("provider:clang22")},
+			{"provider_version", text("1.0.0")},
+			{"requested_descriptor_ids", array(std::move(descriptor_ids))},
+			{"semantic_contract_digest", text(semantic('4'))},
+			{"toolchain_context_id", text("toolchain-context:one")},
+		});
 		auto authority = object({
 			{"effective_arguments", array(std::move(argument_values))},
 			{"logical_working_directory", text(working_directory)},
@@ -148,6 +182,7 @@ namespace
 			{"expected_base_task_digest", text(base_digest)},
 			{"expected_task_v4_input_digest", text(input_digest)},
 			{"input_authority", std::move(authority)},
+			{"output_authority", std::move(output_authority)},
 			{"schema", text("cxxlens.clang22.worker-ingress.v4")},
 			{"stream_id", json_value::unsigned_integer(7U)},
 			{"task_v4_payload", std::move(task_payload)},
@@ -434,7 +469,7 @@ namespace
 		old_version[5U] = std::byte{1U};
 		auto old_result =
 			decode_provider_worker_protocol_v2_input(old_version, fixture.expectation);
-		require(!old_result, "Protocol 1.x frame version was accepted");
+		require(!old_result, "older frame version was accepted");
 
 		auto mixed = fixture.encoded;
 		mixed.push_back(std::byte{'{'});

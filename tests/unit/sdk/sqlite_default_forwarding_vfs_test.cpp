@@ -1248,7 +1248,9 @@ namespace
 			require(held_main != nullptr, "normalization held main source anchor");
 			auto operation_port = std::make_shared<default_store_operation_port>();
 			{
-				auto mixed_receipt = make_logical_read_receipt(mixed_census);
+				// The receipt is authenticated against the original census.  The operation then
+				// receives a role-spliced census and must reject it before any filesystem effect.
+				auto mixed_receipt = make_logical_read_receipt(*census);
 				require(mixed_receipt.has_value(), "mixed census receipt fixture");
 				auto mixed_input = sqlite_exact_empty_normalization_input{
 					sqlite_exact_empty_normalization_runtime{

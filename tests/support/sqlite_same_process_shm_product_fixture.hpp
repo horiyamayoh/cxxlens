@@ -14,8 +14,8 @@
 
 namespace cxxlens::sdk::test_support
 {
-	[[nodiscard]] inline sqlite_backend_opaque_identity
-	shm_identity(const std::string_view profile, const std::uint8_t marker)
+	[[nodiscard]] inline sqlite_backend_opaque_identity shm_identity(const std::string_view profile,
+																	 const std::uint8_t marker)
 	{
 		return {std::string{profile}, {static_cast<std::byte>(marker)}};
 	}
@@ -79,12 +79,13 @@ namespace cxxlens::sdk::test_support
 			require_shm(registered.has_value(), "register production VFS alias");
 			alias_.emplace(std::move(*registered));
 
-			family_ = {alias_->process_instance(),
-					   alias_->shared_runtime_vfs_cohort(),
-					   shm_identity("test.product-shm.file-family",
-								 exact_file_marker.value_or(marker))};
-			auto family = sqlite_same_process_shm_vfs_alias_registration_port::install_or_join_family(
-				*alias_, family_);
+			family_ = {
+				alias_->process_instance(),
+				alias_->shared_runtime_vfs_cohort(),
+				shm_identity("test.product-shm.file-family", exact_file_marker.value_or(marker))};
+			auto family =
+				sqlite_same_process_shm_vfs_alias_registration_port::install_or_join_family(
+					*alias_, family_);
 			require_shm(family.has_value(), "install production SHM file family");
 			family_pin_.emplace(std::move(*family));
 		}
@@ -100,8 +101,8 @@ namespace cxxlens::sdk::test_support
 			active_native_fixture_ = previous_native_fixture_;
 		}
 
-		sqlite_same_process_shm_product_fixture(
-			const sqlite_same_process_shm_product_fixture&) = delete;
+		sqlite_same_process_shm_product_fixture(const sqlite_same_process_shm_product_fixture&) =
+			delete;
 		sqlite_same_process_shm_product_fixture&
 		operator=(const sqlite_same_process_shm_product_fixture&) = delete;
 
@@ -137,17 +138,35 @@ namespace cxxlens::sdk::test_support
 	  private:
 		using runtime = sqlite_source_shm_runtime_binding;
 
-		static int runtime_open(const char*, void**, int, const char*) { return 0; }
-		static int runtime_close(void*) { return 0; }
-		static int runtime_exec(void*, const char*, runtime::exec_callback, void*, char**) { return 0; }
-		static const char* runtime_errmsg(void*) { return "test product SHM runtime"; }
+		static int runtime_open(const char*, void**, int, const char*)
+		{
+			return 0;
+		}
+		static int runtime_close(void*)
+		{
+			return 0;
+		}
+		static int runtime_exec(void*, const char*, runtime::exec_callback, void*, char**)
+		{
+			return 0;
+		}
+		static const char* runtime_errmsg(void*)
+		{
+			return "test product SHM runtime";
+		}
 		static void runtime_free(void*) {}
 		static const char* runtime_source_id()
 		{
 			return "sqlite-source-id-for-product-shm-tests";
 		}
-		static const char* runtime_uri_parameter(const char*, const char*) { return nullptr; }
-		static const char* runtime_uri_key(const char*, int) { return nullptr; }
+		static const char* runtime_uri_parameter(const char*, const char*)
+		{
+			return nullptr;
+		}
+		static const char* runtime_uri_key(const char*, int)
+		{
+			return nullptr;
+		}
 
 		static void* native_find(const char* name)
 		{

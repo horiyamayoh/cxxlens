@@ -1,10 +1,5 @@
 find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
 
-# SQLite lifecycle and Store fault peers are private test support. Keep their
-# declarations visible to deterministic tests while production targets are
-# compiled without the corresponding symbols.
-add_compile_definitions(CXXLENS_STORE_FAULT_TEST_SUPPORT=1)
-
 function(cxxlens_add_test_executable target source)
   add_executable(${target} ${source})
   target_compile_features(${target} PRIVATE cxx_std_23)
@@ -33,11 +28,30 @@ add_library(
   "${PROJECT_SOURCE_DIR}/src/sdk/sqlite_store_fault_injection_internal.cpp")
 target_compile_features(cxxlens-test-sqlite-store-fault-injection-support
                         PRIVATE cxx_std_23)
+target_compile_definitions(cxxlens-test-sqlite-store-fault-injection-support
+                           PRIVATE CXXLENS_STORE_FAULT_TEST_SUPPORT=1)
 target_include_directories(
   cxxlens-test-sqlite-store-fault-injection-support
   PRIVATE "${PROJECT_SOURCE_DIR}/include" "${PROJECT_SOURCE_DIR}/src")
 cxxlens_set_project_warnings(cxxlens-test-sqlite-store-fault-injection-support)
 cxxlens_enable_sanitizers(cxxlens-test-sqlite-store-fault-injection-support)
+
+# A test-only Store translation unit owns the private mutation fixtures.  It is
+# linked as an object before the production kernel archive for the few suites
+# that need those helpers; normal tests and every installed/product target
+# continue to use the macro-free kernel.
+add_library(
+  cxxlens-test-store-kernel OBJECT
+  "${PROJECT_SOURCE_DIR}/src/sdk/store.cpp"
+  "${PROJECT_SOURCE_DIR}/src/sdk/snapshot_store_v5_codec_internal.cpp")
+target_compile_features(cxxlens-test-store-kernel PRIVATE cxx_std_23)
+target_compile_definitions(cxxlens-test-store-kernel
+                           PRIVATE CXXLENS_STORE_FAULT_TEST_SUPPORT=1)
+target_include_directories(
+  cxxlens-test-store-kernel PRIVATE "${PROJECT_SOURCE_DIR}/include"
+                                    "${PROJECT_SOURCE_DIR}/src")
+cxxlens_set_project_warnings(cxxlens-test-store-kernel)
+cxxlens_enable_sanitizers(cxxlens-test-store-kernel)
 
 cxxlens_add_test_executable(cxxlens-unit-sdk unit/sdk/sdk_test.cpp)
 target_sources(cxxlens-unit-sdk
@@ -80,7 +94,8 @@ endforeach()
 cxxlens_add_test_executable(cxxlens-unit-sdk-store unit/sdk/store_test.cpp)
 target_sources(
   cxxlens-unit-sdk-store
-  PRIVATE $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
+  PRIVATE $<TARGET_OBJECTS:cxxlens-test-store-kernel>
+          $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
 target_link_libraries(cxxlens-unit-sdk-store PRIVATE cxxlens::kernel
                                                      "${CMAKE_DL_LIBS}")
 target_include_directories(cxxlens-unit-sdk-store
@@ -137,7 +152,8 @@ add_test(NAME unit.sdk-bounded-store-v6-sqlite-backend
 set_tests_properties(
   unit.sdk-bounded-store-v6-sqlite-backend
   PROPERTIES
-    LABELS "unit;sdk;store;bounded;sqlite;v6;backend;fault;determinism;resource"
+    LABELS
+    "unit;sdk;store;bounded;sqlite;v6;backend;fault;determinism;resource"
     RUN_SERIAL TRUE)
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-snapshot-store-v5-codec
@@ -241,6 +257,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_GLIBC_DLMOPEN_DLVSYM)
     cxxlens-unit-sdk-sqlite-migration-outcomes
     PRIVATE cxxlens-sqlite-store-v3-scenario-support cxxlens::kernel
             "${CMAKE_DL_LIBS}" Threads::Threads)
+  target_sources(
+    cxxlens-unit-sdk-sqlite-migration-outcomes
+    PRIVATE $<TARGET_OBJECTS:cxxlens-test-store-kernel>
+            $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
   cxxlens_set_project_warnings(cxxlens-unit-sdk-sqlite-migration-outcomes)
   cxxlens_enable_sanitizers(cxxlens-unit-sdk-sqlite-migration-outcomes)
   add_dependencies(cxxlens-unit-sdk-sqlite-migration-outcomes
@@ -269,6 +289,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_GLIBC_DLMOPEN_DLVSYM)
     cxxlens-unit-sdk-store-sqlite-crash-restart
     PRIVATE cxxlens-sqlite-store-v3-scenario-support cxxlens::kernel
             "${CMAKE_DL_LIBS}" Threads::Threads)
+  target_sources(
+    cxxlens-unit-sdk-store-sqlite-crash-restart
+    PRIVATE $<TARGET_OBJECTS:cxxlens-test-store-kernel>
+            $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
   cxxlens_set_project_warnings(cxxlens-unit-sdk-store-sqlite-crash-restart)
   cxxlens_enable_sanitizers(cxxlens-unit-sdk-store-sqlite-crash-restart)
   add_dependencies(cxxlens-unit-sdk-store-sqlite-crash-restart
@@ -313,6 +337,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_GLIBC_DLMOPEN_DLVSYM)
       cxxlens-unit-sdk-sqlite-source-availability
       PRIVATE cxxlens-sqlite-store-v3-scenario-support cxxlens::kernel
               "${CMAKE_DL_LIBS}" Threads::Threads)
+    target_sources(
+      cxxlens-unit-sdk-sqlite-source-availability
+      PRIVATE
+        $<TARGET_OBJECTS:cxxlens-test-store-kernel>
+        $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
     cxxlens_set_project_warnings(cxxlens-unit-sdk-sqlite-source-availability)
     cxxlens_enable_sanitizers(cxxlens-unit-sdk-sqlite-source-availability)
     add_dependencies(cxxlens-unit-sdk-sqlite-source-availability
@@ -365,6 +394,10 @@ target_link_libraries(
   cxxlens-unit-sdk-sqlite-limit-length-precedence
   PRIVATE cxxlens-sqlite-store-v3-scenario-support cxxlens::kernel
           "${CMAKE_DL_LIBS}")
+target_sources(
+  cxxlens-unit-sdk-sqlite-limit-length-precedence
+  PRIVATE $<TARGET_OBJECTS:cxxlens-test-store-kernel>
+          $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
 target_include_directories(cxxlens-unit-sdk-sqlite-limit-length-precedence
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME unit.sdk-sqlite-limit-length-precedence
@@ -377,7 +410,8 @@ cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-store-wal-routing
                             unit/sdk/sqlite_store_wal_routing_test.cpp)
 target_sources(
   cxxlens-unit-sdk-sqlite-store-wal-routing
-  PRIVATE $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
+  PRIVATE $<TARGET_OBJECTS:cxxlens-test-store-kernel>
+          $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
 target_link_libraries(cxxlens-unit-sdk-sqlite-store-wal-routing
                       PRIVATE cxxlens::kernel "${CMAKE_DL_LIBS}")
 add_test(NAME unit.sdk-sqlite-store-wal-routing
@@ -1092,11 +1126,12 @@ target_link_libraries(
   cxxlens-clang22-materialization-request-v2-2
   PRIVATE cxxlens_clang22_materialization_request_v2_2_support)
 
-# Reuse the complete typed request document as a normal test fixture.  The fixture build omits
-# the executable's main and exports only the source-free document factory; production targets do
-# not link test code.
-add_library(cxxlens_clang22_materialization_request_v2_2_fixture STATIC EXCLUDE_FROM_ALL
-            adapter/clang22/materialization_request_v2_2_test.cpp)
+# Reuse the complete typed request document as a normal test fixture.  The
+# fixture build omits the executable's main and exports only the source-free
+# document factory; production targets do not link test code.
+add_library(
+  cxxlens_clang22_materialization_request_v2_2_fixture STATIC EXCLUDE_FROM_ALL
+  adapter/clang22/materialization_request_v2_2_test.cpp)
 target_compile_definitions(
   cxxlens_clang22_materialization_request_v2_2_fixture
   PRIVATE CXXLENS_MATERIALIZATION_REQUEST_V2_2_FIXTURE_ONLY)
@@ -1185,41 +1220,41 @@ set_tests_properties(
 cxxlens_add_test_executable(
   cxxlens-clang22-materialization-report-v2-2-builder
   adapter/clang22/materialization_report2_2_builder_test.cpp)
-target_link_libraries(
-  cxxlens-clang22-materialization-report-v2-2-builder
-  PRIVATE cxxlens_clang22_materializer_v4_coordinator)
-target_include_directories(
-  cxxlens-clang22-materialization-report-v2-2-builder
-  PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_link_libraries(cxxlens-clang22-materialization-report-v2-2-builder
+                      PRIVATE cxxlens_clang22_materializer_v4_coordinator)
+target_include_directories(cxxlens-clang22-materialization-report-v2-2-builder
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME adapter.clang22-materialization-report-v2-2-builder
          COMMAND cxxlens-clang22-materialization-report-v2-2-builder)
 set_tests_properties(
   adapter.clang22-materialization-report-v2-2-builder
-  PROPERTIES LABELS
-             "adapter;provider;clang22;materialization;report;v2.2;bounded;security")
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;materialization;report;v2.2;bounded;security")
 
 cxxlens_add_test_executable(
   cxxlens-clang22-materialization-v4-coordinator
   adapter/clang22/materialization_v4_coordinator_test.cpp)
-target_link_libraries(
-  cxxlens-clang22-materialization-v4-coordinator
-  PRIVATE cxxlens_clang22_materializer_v4_coordinator)
-target_include_directories(
-  cxxlens-clang22-materialization-v4-coordinator
-  PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_link_libraries(cxxlens-clang22-materialization-v4-coordinator
+                      PRIVATE cxxlens_clang22_materializer_v4_coordinator)
+target_include_directories(cxxlens-clang22-materialization-v4-coordinator
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME adapter.clang22-materialization-v4-coordinator
          COMMAND cxxlens-clang22-materialization-v4-coordinator)
 set_tests_properties(
   adapter.clang22-materialization-v4-coordinator
-  PROPERTIES LABELS
-             "adapter;provider;clang22;materialization;coordinator;task;v4;bounded;security")
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;materialization;coordinator;task;v4;bounded;security"
+)
 
 cxxlens_add_test_executable(
   cxxlens-clang22-materialization-store-v6-typed-ingress
   adapter/clang22/materialization_store_v6_typed_ingress_test.cpp)
 target_link_libraries(
   cxxlens-clang22-materialization-store-v6-typed-ingress
-  PRIVATE cxxlens_clang22_materializer_store_v6_typed_ingress)
+  PRIVATE cxxlens_clang22_materializer_store_v6_typed_ingress
+          cxxlens_clang22_materialization_request_v2_2_fixture)
 target_include_directories(
   cxxlens-clang22-materialization-store-v6-typed-ingress
   PRIVATE "${PROJECT_SOURCE_DIR}/src")
@@ -1227,8 +1262,10 @@ add_test(NAME adapter.clang22-materialization-store-v6-typed-ingress
          COMMAND cxxlens-clang22-materialization-store-v6-typed-ingress)
 set_tests_properties(
   adapter.clang22-materialization-store-v6-typed-ingress
-  PROPERTIES LABELS
-             "adapter;provider;clang22;materialization;store;v6;typed;ingress;bounded;security")
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;materialization;store;v6;typed;ingress;bounded;security"
+)
 
 cxxlens_add_test_executable(cxxlens-protocol-v2
                             protocol_v2/protocol_v2_direct_test.cpp)
@@ -1263,7 +1300,8 @@ cxxlens_add_test_executable(
   adapter/clang22/materialization_pipeline_v2_2_test.cpp)
 target_link_libraries(
   cxxlens-clang22-materialization-pipeline-v2-2
-  PRIVATE cxxlens_clang22_materializer_v2_2_pipeline_support)
+  PRIVATE cxxlens_clang22_materializer_v2_2_pipeline_support
+          cxxlens_clang22_materialization_request_v2_2_fixture)
 add_test(NAME adapter.clang22-materialization-pipeline-v2-2
          COMMAND cxxlens-clang22-materialization-pipeline-v2-2)
 set_tests_properties(
@@ -1414,16 +1452,16 @@ if(UNIX)
     cxxlens-clang22-installed-materializer-source-closure
     adapter/clang22/installed_materializer_source_closure_test.cpp)
   target_link_libraries(
-  cxxlens-clang22-installed-materializer-source-closure
-  PRIVATE cxxlens_clang22_materializer_ingress
+    cxxlens-clang22-installed-materializer-source-closure
+    PRIVATE cxxlens_clang22_materializer_ingress
             cxxlens_clang22_materialization_codecs
             cxxlens_clang22_materialization_request_v2_2_fixture
             cxxlens_clang22_materializer_v4_store_source)
-add_test(NAME adapter.clang22-installed-materializer-source-closure
+  add_test(NAME adapter.clang22-installed-materializer-source-closure
            COMMAND cxxlens-clang22-installed-materializer-source-closure
                    "$<TARGET_FILE:cxxlens-clang-worker-22>")
-add_dependencies(cxxlens-clang22-installed-materializer-source-closure
-                 cxxlens-clang-worker-22)
+  add_dependencies(cxxlens-clang22-installed-materializer-source-closure
+                   cxxlens-clang-worker-22)
   set_tests_properties(
     adapter.clang22-installed-materializer-source-closure
     PROPERTIES

@@ -177,12 +177,15 @@ def source_closure_file_id(logical_path: Any) -> str:
 
 
 def trust_policy_digest(policy: dict[str, Any]) -> str:
+    version = tuple(int(part) for part in policy["provider_version"].split("."))
+    if len(version) != 3:
+        raise SourceClosureTransportError("provider version is not a semantic version")
     projection = _canonical_tuple(
         [
             _canonical_string(policy["policy_id"]),
             _canonical_string(policy["execution_profile"]),
             _canonical_string(policy["provider_id"]),
-            _canonical_string(policy["provider_version"]),
+            _canonical_tuple([_canonical_integer(part) for part in version]),
             _canonical_string(policy["semantic_contract_digest"]),
             _canonical_integer(policy["protocol_major"]),
             _canonical_integer(policy["protocol_minor"]),

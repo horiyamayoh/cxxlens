@@ -2521,7 +2521,6 @@ namespace cxxlens::sdk
 			return output;
 		}
 
-
 		mutable std::mutex mutex;
 		std::uint64_t next{};
 		std::uint64_t last_issued{};
@@ -2547,12 +2546,10 @@ namespace cxxlens::sdk
 		return state_.get();
 	}
 
-
 	std::uint64_t sqlite_shm_reader_lifecycle_sequence_source::observed_last_issued() const noexcept
 	{
 		return state_ ? state_->observed_last_issued() : 0U;
 	}
-
 
 	namespace detail
 	{
@@ -24957,7 +24954,6 @@ namespace cxxlens::sdk
 	{
 		return state_->reader_open_epoch_view(registry_open_token, seal);
 	}
-
 
 	sqlite_shm_lease_result<sqlite_shm_writer_release>
 	sqlite_same_process_shm_mapping_lease_coordinator::release_writer_holder(

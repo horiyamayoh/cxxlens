@@ -161,5 +161,5 @@ int main(const int argument_count, const char* const* arguments)
 		std::cerr << '\n';
 	}
 	require(report && report->terminal == "provider.crash" && report->frames.empty(),
-				"Clang 22 worker accepted the retired stdin fallback");
+			"Clang 22 worker accepted the retired stdin fallback");
 }

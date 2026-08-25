@@ -455,6 +455,15 @@ namespace cxxlens::detail::clang22
 			return {};
 		}
 
+		[[nodiscard]] sdk::result<void>
+		authority_content_or_semantic_digest(const std::string_view value,
+											 const std::string_view field)
+		{
+			if (!content_or_semantic_digest_grammar(value))
+				return sdk::unexpected(authority_invalid(std::string{field}, "digest"));
+			return {};
+		}
+
 		[[nodiscard]] sdk::result<void> authority_revision(const std::string_view value,
 														   const std::string_view field)
 		{
@@ -1188,8 +1197,8 @@ namespace cxxlens::detail::clang22
 												  "tool.installed_executable_digest");
 			!valid)
 			return valid;
-		return authority_semantic_digest(occurrence_manifest_digest,
-										 "tool.occurrence_manifest_digest");
+		return authority_content_or_semantic_digest(occurrence_manifest_digest,
+													"tool.occurrence_manifest_digest");
 	}
 
 	sdk::result<void> provider_task_v4_worker_authority::validate() const
@@ -1204,8 +1213,8 @@ namespace cxxlens::detail::clang22
 				authority_content_digest(installed_binary_digest, "worker.installed_binary_digest");
 			!valid)
 			return valid;
-		if (auto valid = authority_semantic_digest(semantic_contract_digest,
-												   "worker.semantic_contract_digest");
+		if (auto valid = authority_content_or_semantic_digest(semantic_contract_digest,
+															  "worker.semantic_contract_digest");
 			!valid)
 			return valid;
 		if (protocol_major != sdk::provider::protocol_v2_major ||
@@ -1218,7 +1227,8 @@ namespace cxxlens::detail::clang22
 														 "task-source-closure-v2"};
 		if (required_features != expected_features)
 			return sdk::unexpected(authority_invalid("worker.required_features", "contract"));
-		return authority_semantic_digest(sandbox_policy_digest, "worker.sandbox_policy_digest");
+		return authority_content_or_semantic_digest(sandbox_policy_digest,
+													"worker.sandbox_policy_digest");
 	}
 
 	sdk::result<void> provider_task_v4_group_topology_authority::validate() const
@@ -1247,8 +1257,8 @@ namespace cxxlens::detail::clang22
 				return valid;
 		if (provider_version == sdk::semantic_version{})
 			return sdk::unexpected(authority_invalid("trust_policy.provider_version", "zero"));
-		if (auto valid = authority_semantic_digest(semantic_contract_digest,
-												   "trust_policy.semantic_contract_digest");
+		if (auto valid = authority_content_or_semantic_digest(
+				semantic_contract_digest, "trust_policy.semantic_contract_digest");
 			!valid)
 			return valid;
 		if (protocol_major != sdk::provider::protocol_v2_major ||
@@ -1263,8 +1273,8 @@ namespace cxxlens::detail::clang22
 														 "task-source-closure-v2"};
 		if (required_features != expected_features)
 			return sdk::unexpected(authority_invalid("trust_policy.required_features", "contract"));
-		if (auto valid = authority_semantic_digest(worker_sandbox_policy_digest,
-												   "trust_policy.worker_sandbox_policy_digest");
+		if (auto valid = authority_content_or_semantic_digest(
+				worker_sandbox_policy_digest, "trust_policy.worker_sandbox_policy_digest");
 			!valid)
 			return valid;
 		if (task_sandbox_requirements.empty())

@@ -96,6 +96,9 @@ namespace cxxlens::detail::clang22
 	{
 		source_closure_snapshot snapshot;
 		source_closure_ack_credentials credentials;
+		/** The authenticated wire binding used for this transfer. */
+		std::uint64_t stream_id{};
+		std::uint64_t first_sequence{};
 		/** Cleanup/terminal ownership retained after ACK for worker crash or connection loss. */
 		std::shared_ptr<source_closure_spool_relay> relay;
 	};

@@ -118,13 +118,15 @@ function(cxxlens_create_clang22_worker_static_closure)
     src/llvm/clang22/provider_task_v4.cpp
     src/llvm/clang22/observation_v2.cpp
     src/llvm/clang22/source_closure.cpp
+    src/llvm/clang22/source_closure_fd.cpp
     src/llvm/clang22/source_closure_receiver.cpp
     src/llvm/clang22/source_closure_spool.cpp
     src/llvm/clang22/source_closure_task_v4.cpp
     src/llvm/clang22/source_closure_transport.cpp
     src/llvm/clang22/source_closure_invocation.cpp
     src/llvm/clang22/source_closure_vfs.cpp
-    src/llvm/clang22/unicode_nfc.cpp)
+    src/llvm/clang22/unicode_nfc.cpp
+    src/llvm/clang22/provider_worker_ingress.cpp)
   cxxlens_configure_clang22_worker_static_component(
     cxxlens_clang22_worker_codecs_internal)
   target_link_libraries(

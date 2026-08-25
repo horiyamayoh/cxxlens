@@ -280,6 +280,6 @@ namespace cxxlens::detail::clang22::materialization
 		if (!published)
 			return sdk::unexpected(std::move(published.error()));
 		return materialization_v4_store_publication{
-			std::move(*published), output_authority, output_receipt};
+			std::move(*published), output_authority, output_receipt, {}, 0U};
 	}
 } // namespace cxxlens::detail::clang22::materialization

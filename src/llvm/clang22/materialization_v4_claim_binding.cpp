@@ -350,8 +350,12 @@ namespace cxxlens::detail::clang22::materialization
 
 	sdk::result<materialization_v4_claim_sealed>
 	seal_materialization_v4_claim_translation(const sdk::relation_engine& engine,
-											  materialization_v4_claim_translation translation)
+											  materialization_v4_claim_translation translation,
+											  const std::span<const sdk::claim> existing)
 	{
+		for (const auto& reference : existing)
+			if (auto valid = sdk::validate_claim(engine, reference); !valid)
+				return sdk::unexpected(std::move(valid.error()));
 		if (auto valid = validate_binding(translation.binding); !valid)
 			return sdk::unexpected(std::move(valid.error()));
 		if (auto valid = validate_claim_payload(engine, translation.binding, translation.batch);
@@ -365,7 +369,7 @@ namespace cxxlens::detail::clang22::materialization
 		for (const auto& claim : translation.batch.claims)
 			if (auto added = recomputed_batch.add(claim); !added)
 				return sdk::unexpected(std::move(added.error()));
-		auto recomputed = std::move(recomputed_batch).commit(engine);
+		auto recomputed = std::move(recomputed_batch).commit(engine, existing);
 		if (!recomputed || recomputed->content_digest != translation.batch.content_digest)
 			return sdk::unexpected(invalid("claim-batch", "independent-replay"));
 
@@ -446,7 +450,8 @@ namespace cxxlens::detail::clang22::materialization
 
 	sdk::result<void>
 	validate_materialization_v4_claim_receipt(const sdk::relation_engine& engine,
-											  const materialization_v4_claim_sealed& sealed)
+											  const materialization_v4_claim_sealed& sealed,
+											  const std::span<const sdk::claim> existing)
 	{
 		if (auto valid = validate_receipt_shape(sealed.receipt); !valid)
 			return valid;
@@ -458,7 +463,8 @@ namespace cxxlens::detail::clang22::materialization
 			sealed.translation.batch,
 			sealed.translation.partition,
 		};
-		auto expected = seal_materialization_v4_claim_translation(engine, std::move(copy));
+		auto expected =
+			seal_materialization_v4_claim_translation(engine, std::move(copy), existing);
 		if (!expected)
 			return sdk::unexpected(std::move(expected.error()));
 		if (expected->partition_manifest != sealed.partition_manifest ||

@@ -129,6 +129,9 @@ namespace cxxlens::detail::clang22::materialization
 		sdk::snapshot_handle snapshot;
 		materialization_v4_provider_output_authority authority;
 		materialization_v4_incremental_receipt receipt;
+		/** Installed Clang 22 task-output receipt; empty for generic single-partition callers. */
+		std::string output_receipt_digest;
+		std::uint64_t output_batch_count{};
 	};
 
 	[[nodiscard]] sdk::result<materialization_v4_store_publication>

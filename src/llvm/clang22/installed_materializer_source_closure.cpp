@@ -109,15 +109,14 @@ namespace cxxlens::detail::clang22
 
 		[[nodiscard]] sdk::result<std::string> base_task_digest(const json_value& task)
 		{
-			constexpr std::array<std::string_view, 8U> fields{
-				"environment_digest",
-				"normalized_invocation_digest",
-				"provider_execution_id",
-				"provider_task_id",
-				"source",
-				"task_input_digest",
-				"toolchain_digest",
-				"working_directory"};
+			constexpr std::array<std::string_view, 8U> fields{"environment_digest",
+															  "normalized_invocation_digest",
+															  "provider_execution_id",
+															  "provider_task_id",
+															  "source",
+															  "task_input_digest",
+															  "toolchain_digest",
+															  "working_directory"};
 			json_value::object_type projection;
 			for (const auto name : fields)
 			{
@@ -452,8 +451,7 @@ namespace cxxlens::detail::clang22
 			if (stream_result.ec != std::errc{} ||
 				stream_result.ptr != stream->data() + stream->size() ||
 				first_result.ec != std::errc{} ||
-				first_result.ptr != first->data() + first->size() || stream_id == 0U ||
-				first_sequence != 0U)
+				first_result.ptr != first->data() + first->size() || stream_id == 0U)
 				return sdk::unexpected(
 					failure("source-closure.channel-invalid", "environment", "sequence"));
 			return channel_environment{*read,

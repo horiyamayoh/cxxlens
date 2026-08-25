@@ -270,6 +270,108 @@ namespace
 		const auto encoded = canonical_json_line(*report);
 		return write_response(encoded) ? 1 : no_response();
 	}
+
+	[[nodiscard]] sdk::result<json_value> request_binding_value(const json_value& request_root)
+	{
+		const auto* materialization_id = request_root.member("materialization_request_id");
+		const auto* request_digest = request_root.member("request_digest");
+		const auto* semantic_digest = request_root.member("semantic_request_digest");
+		if (materialization_id == nullptr || request_digest == nullptr ||
+			semantic_digest == nullptr || materialization_id->as_string() == nullptr ||
+			request_digest->as_string() == nullptr || semantic_digest->as_string() == nullptr)
+			return sdk::unexpected(sdk::error{
+				"materialization.request-invalid", "request-binding", "missing-identities"});
+		return object_value({
+			{"materialization_request_id", text_value(*materialization_id->as_string()).value()},
+			{"request_digest", text_value(*request_digest->as_string()).value()},
+			{"semantic_request_digest", text_value(*semantic_digest->as_string()).value()},
+		});
+	}
+
+	[[nodiscard]] int emit_request_bound_failure(const raw_input_observation& input,
+												 const json_value& request_root,
+												 const std::string_view code,
+												 const std::string_view phase,
+												 const std::string_view subject,
+												 const std::string_view diagnostic,
+												 const std::uint64_t task_attempts,
+												 const std::uint64_t worker_attempts)
+	{
+		const auto response_code = [&]() -> std::string_view
+		{
+			if (code == "materialization.report-invalid")
+				return "materialization.report-invalid";
+			if (phase == "store-stage" || phase == "store-open")
+				return "materialization.store-failure";
+			if (phase == "transcript")
+				return "materialization.transcript-invalid";
+			if (phase == "worker-launch")
+				return "materialization.worker-failure";
+			if (phase == "installation-binding")
+				return "materialization.identity-mismatch";
+			if (code == "materialization.identity-mismatch" ||
+				code == "materialization.catalog-census-mismatch" ||
+				code == "materialization.task-binding-mismatch" ||
+				code == "materialization.descriptor-binding-mismatch" ||
+				code == "materialization.request-invalid" ||
+				code == "materialization.spool-failure" ||
+				code == "materialization.version-unsupported")
+				return code;
+			return "materialization.worker-failure";
+		}();
+		const auto response_diagnostic =
+			diagnostic.empty() ? std::string_view{"selected-contract"} : diagnostic;
+		auto binding_request = request_binding_value(request_root);
+		if (!binding_request)
+			return no_response();
+		auto raw = object_value({
+			{"byte_limit", json_value::unsigned_integer(input.byte_limit)},
+			{"complete", json_value::boolean(input.complete)},
+			{"observed_prefix_digest", text_value(input.observed_prefix_digest).value()},
+			{"observed_size_bytes", json_value::unsigned_integer(input.observed_size_bytes)},
+		});
+		auto binding = object_value({
+			{"request", std::move(*binding_request)},
+			{"state", text_value("request-bound").value()},
+		});
+		auto effects = object_value({
+			{"committed_transaction_count", json_value::unsigned_integer(0U)},
+			{"head_observation", text_value("not-observed").value()},
+			{"observed_head_publication", json_value::null()},
+			{"prior_history_retained", json_value::boolean(true)},
+			{"publication_attempted", json_value::boolean(false)},
+			{"store_draft_state", text_value("not-created").value()},
+			{"store_failure_cause", json_value::null()},
+			{"task_attempt_count", json_value::unsigned_integer(task_attempts)},
+			{"task_success_count", json_value::unsigned_integer(0U)},
+			{"worker_launch_attempt_count", json_value::unsigned_integer(worker_attempts)},
+			{"worker_launch_success_count", json_value::unsigned_integer(0U)},
+		});
+		auto error = object_value({
+			{"code", text_value(response_code).value()},
+			{"diagnostic", text_value(response_diagnostic).value()},
+			{"phase", text_value(phase).value()},
+			{"subject", text_value(subject).value()},
+		});
+		if (!raw || !binding || !effects || !error)
+			return no_response();
+		auto report = object_value({
+			{"binding", std::move(*binding)},
+			{"effects", std::move(*effects)},
+			{"error", std::move(*error)},
+			{"generated_at", text_value(utc_now()).value()},
+			{"process_exit_status", json_value::unsigned_integer(1U)},
+			{"raw_input_observation", std::move(*raw)},
+			{"report_version", text_value("2.2.0").value()},
+			{"response_kind", text_value("compact_failure").value()},
+			{"result", text_value("failed").value()},
+			{"schema", text_value("cxxlens.clang22-materialization-report.v2").value()},
+		});
+		if (!report)
+			return no_response();
+		return write_response(canonical_json_line(*report)) ? 1 : no_response();
+	}
+
 } // namespace
 
 int main(const int argc, char**)
@@ -338,30 +440,46 @@ int main(const int argc, char**)
 	{
 		auto received = receive_installed_materializer_source_closure(ingress->root);
 		if (!received)
-			return emit_failure(*observed,
-								received.error().code,
-								"source-closure",
-								received.error().field,
-								received.error().detail);
+			return emit_request_bound_failure(*observed,
+											  ingress->root,
+											  received.error().code,
+											  "installation-binding",
+											  received.error().field,
+											  received.error().detail,
+											  0U,
+											  0U);
 		auto worker = run_materializer_worker(std::move(*received));
 		if (!worker)
-			return emit_failure(*observed,
-								worker.error().code,
-								"worker-launch",
-								worker.error().field,
-								worker.error().detail);
+			return emit_request_bound_failure(*observed,
+											  ingress->root,
+											  worker.error().code,
+											  "worker-launch",
+											  worker.error().field,
+											  worker.error().detail,
+											  1U,
+											  1U);
 		auto published = publish_materializer_worker(std::move(*worker));
 		if (!published)
-			return emit_failure(*observed,
-								published.error().code,
-								"store-stage",
-								published.error().field,
-								published.error().detail);
-		return emit_failure(*observed,
-						"materialization.report-construction",
-						"report-construction",
-						"report",
-						"published-store-terminal-requires-detailed-report-projection");
+		{
+			const auto phase = published.error().code == "materialization.report-invalid"
+				? std::string_view{"report-construction"}
+				: std::string_view{"store-stage"};
+			return emit_request_bound_failure(*observed,
+											  ingress->root,
+											  published.error().code,
+											  phase,
+											  published.error().field,
+											  published.error().detail,
+											  1U,
+											  1U);
+		}
+		// The detailed v2.2 report requires the complete typed projection (including
+		// installation, task, provenance, and Store sections).  This executable
+		// boundary does not own that encoder yet.  Never serialize a schema-incomplete
+		// success response after publication; fail closed until the projection is
+		// available.
+		(void)published;
+		return no_response();
 	}
 	return emit_failure(*observed,
 						"materialization.request-invalid",

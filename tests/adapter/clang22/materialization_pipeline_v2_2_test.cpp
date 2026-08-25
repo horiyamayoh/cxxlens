@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "llvm/clang22/source_closure.hpp"
+#include "materialization_request_v2_2_fixture.hpp"
 
 namespace
 {
@@ -89,26 +90,13 @@ namespace
 	[[nodiscard]] json_value make_inherited_authority(const std::string& request_id,
 													  const std::string& semantic_request_digest)
 	{
-		std::map<std::string, json_value, utf8_byte_less> fields;
-		for (const auto name : {"engine",
-								"group_topology",
-								"interpretation_policy",
-								"publication",
-								"project",
-								"registry",
-								"tool",
-								"trust_policy",
-								"worker"})
-			fields.emplace(name, json_value::null());
+		auto document = cxxlens_test_materialization_request_v2_2_complete_document();
+		auto fields = *document.as_object();
 		auto materialization_id = json_value::string(request_id);
 		auto semantic_digest = json_value::string(semantic_request_digest);
 		assert(materialization_id && semantic_digest);
-		fields.emplace("materialization_request_id", *materialization_id);
-		fields.emplace("semantic_request_digest", *semantic_digest);
-		std::map<std::string, json_value, utf8_byte_less> task;
-		auto task_object = json_value::object(std::move(task));
-		assert(task_object);
-		fields.emplace("tasks", json_value::array({*task_object}));
+		fields.insert_or_assign("materialization_request_id", *materialization_id);
+		fields.insert_or_assign("semantic_request_digest", *semantic_digest);
 		auto object = json_value::object(std::move(fields));
 		assert(object);
 		return *object;
