@@ -1520,18 +1520,17 @@ namespace cxxlens::sdk
 
 		struct origin_probe_file_node
 		{
-			// NOLINTBEGIN(bugprone-easily-swappable-parameters)
-			origin_probe_file_node(const std::size_t storage_bytes,
-								   std::shared_ptr<void> runtime_pin,
-								   std::shared_ptr<void> backend_pin,
-								   sqlite3_vfs* underlying_vfs,
-								   const void* underlying_app_data,
-								   const void* runtime_image,
-								   const void* open_callback)
+			// NOLINTBEGIN(modernize-avoid-c-arrays): SQLite requires variable-size aligned storage.
+			origin_probe_file_node(
+				const std::size_t storage_bytes,
+				std::shared_ptr<void> runtime_pin,
+				std::shared_ptr<void> backend_pin,
+				sqlite3_vfs* underlying_vfs,
+				const void* underlying_app_data, // NOLINT(bugprone-easily-swappable-parameters)
+				const void* runtime_image,
+				const void* open_callback)
 				: storage_count{(storage_bytes + sizeof(std::max_align_t) - 1U) /
 								sizeof(std::max_align_t)},
-				  // NOLINTNEXTLINE(modernize-avoid-c-arrays): SQLite requires variable-size aligned
-				  // storage.
 				  storage{std::make_unique<std::max_align_t[]>(storage_count)},
 				  runtime_lifetime{std::move(runtime_pin)},
 				  backend_lifetime{std::move(backend_pin)}, underlying{underlying_vfs},
@@ -1541,17 +1540,14 @@ namespace cxxlens::sdk
 			{
 				std::memset(storage.get(), 0, storage_count * sizeof(std::max_align_t));
 			}
-			// NOLINTEND(bugprone-easily-swappable-parameters)
-
 			[[nodiscard]] sqlite3_file* file() const noexcept
 			{
 				return reinterpret_cast<sqlite3_file*>(storage.get());
 			}
 
 			std::size_t storage_count{};
-			// NOLINTNEXTLINE(modernize-avoid-c-arrays): SQLite requires variable-size aligned
-			// storage.
 			std::unique_ptr<std::max_align_t[]> storage;
+			// NOLINTEND(modernize-avoid-c-arrays)
 			std::shared_ptr<void> runtime_lifetime;
 			std::shared_ptr<void> backend_lifetime;
 			sqlite3_vfs* underlying{};

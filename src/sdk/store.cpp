@@ -6317,29 +6317,36 @@ namespace cxxlens::sdk
 			std::array<std::byte, 8U> generation_bytes_{};
 		};
 
+		struct sqlite_generation_rewrite_request
+		{
+			std::uint64_t expected_size{};
+			std::uint64_t expected_generation{};
+			std::uint64_t replacement_generation{};
+		};
+
 		class sqlite_generation_rewrite_payload_source final : public sqlite_replayable_byte_source
 		{
 		  public:
 			[[nodiscard]] static result<std::shared_ptr<const sqlite_replayable_byte_source>>
-			// Size and generations form an ordered validation/replacement tuple.
-			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-			create(
-				std::shared_ptr<const sqlite_replayable_byte_source> source,
-				const std::uint64_t expected_size, // NOLINT(bugprone-easily-swappable-parameters)
-				const std::uint64_t expected_generation,
-				const std::uint64_t replacement_generation)
+			create(std::shared_ptr<const sqlite_replayable_byte_source> source,
+				   sqlite_generation_rewrite_request request)
 			{
-				if (!source || expected_size > std::numeric_limits<std::size_t>::max())
+				if (!source || request.expected_size > std::numeric_limits<std::size_t>::max())
 					return unexpected(store_error("store.corrupt", "payload", "generation-source"));
-				auto offset =
-					payload_generation_offset(*source, expected_size, expected_generation);
-				if (!offset || *offset > expected_size || expected_size - *offset < 8U)
+				auto offset = payload_generation_offset(
+					*source,
+					detail::snapshot_payload_generation_request{request.expected_size,
+																request.expected_generation});
+				if (!offset || *offset > request.expected_size ||
+					request.expected_size - *offset < 8U)
 					return unexpected(
 						offset ? store_error("store.corrupt", "payload", "truncated-generation")
 							   : std::move(offset.error()));
 				return std::shared_ptr<const sqlite_replayable_byte_source>{
-					new sqlite_generation_rewrite_payload_source{
-						std::move(source), expected_size, *offset, replacement_generation}};
+					new sqlite_generation_rewrite_payload_source{std::move(source),
+																 request.expected_size,
+																 *offset,
+																 request.replacement_generation}};
 			}
 
 			[[nodiscard]] result<std::unique_ptr<sqlite_bounded_byte_source>>
@@ -8598,11 +8605,12 @@ namespace cxxlens::sdk
 					return fail(std::move(allocated.error()));
 				next_generation = *allocated;
 				replacement->publication_record_value.physical_generation = next_generation;
-				auto rewritten =
-					sqlite_generation_rewrite_payload_source::create(source->payload_source,
-																	 source->payload_byte_count,
-																	 source_generation,
-																	 next_generation);
+				sqlite_generation_rewrite_request rewrite_request;
+				rewrite_request.expected_size = source->payload_byte_count;
+				rewrite_request.expected_generation = source_generation;
+				rewrite_request.replacement_generation = next_generation;
+				auto rewritten = sqlite_generation_rewrite_payload_source::create(
+					source->payload_source, rewrite_request);
 				if (!rewritten)
 					return fail(store_error("store.compact-validation-failed", id));
 				source->payload_source = std::move(*rewritten);

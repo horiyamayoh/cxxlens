@@ -2780,10 +2780,9 @@ namespace cxxlens::sdk::detail
 	} // namespace
 
 	result<std::size_t> payload_generation_offset(const sqlite_replayable_byte_source& source,
-												  const std::uint64_t expected_size,
-												  const std::uint64_t expected_generation)
+												  const snapshot_payload_generation_request request)
 	{
-		if (expected_size > snapshot_store_v5_maximum_payload_bytes)
+		if (request.expected_size > snapshot_store_v5_maximum_payload_bytes)
 			return unexpected(error{"store.resource-limit", "snapshot-payload", "maximum-bytes"});
 		try
 		{
@@ -2793,8 +2792,8 @@ namespace cxxlens::sdk::detail
 			if (!*pass)
 				return unexpected(error{
 					"store.invariant-breach", "snapshot-v5-generation-offset", "null-replay-pass"});
-			binary_reader reader{**pass, expected_size};
-			return payload_generation_offset_private(reader, expected_generation);
+			binary_reader reader{**pass, request.expected_size};
+			return payload_generation_offset_private(reader, request.expected_generation);
 		}
 		catch (const std::bad_alloc&)
 		{

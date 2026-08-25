@@ -100,7 +100,7 @@ namespace cxxlens::detail::clang22
 			return true;
 		}
 
-		[[nodiscard]] std::optional<std::size_t>
+		[[maybe_unused]] [[nodiscard]] std::optional<std::size_t>
 		canonical_size(const provider_worker_v4_ast_observation& observation,
 					   const std::size_t maximum) noexcept
 		{
@@ -363,7 +363,7 @@ namespace cxxlens::detail::clang22
 		constexpr std::size_t maximum_clang_text_bytes{64U * 1024U};
 		constexpr std::size_t maximum_derived_identity_bytes{128U};
 
-		[[nodiscard]] sdk::result<void>
+		[[maybe_unused]] [[nodiscard]] sdk::result<void>
 		preflight_derived_identity(observer_budget& budget,
 								   const std::size_t projection_bytes,
 								   const std::string_view detail)

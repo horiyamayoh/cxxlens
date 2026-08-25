@@ -1123,16 +1123,17 @@ namespace
 		memory_source generation_source{generation_state};
 		auto generation_offset = detail::payload_generation_offset(
 			generation_source,
-			bytes.size(),
-			reference->publication_record_value.physical_generation);
+			detail::snapshot_payload_generation_request{
+				bytes.size(), reference->publication_record_value.physical_generation});
 		require(generation_offset.has_value() && *generation_offset < bytes.size(),
 				"valid v5 generation offset was rejected");
 		auto oversized_generation_state = state_from(bytes);
 		memory_source oversized_generation_source{oversized_generation_state};
 		auto oversized_generation_offset = detail::payload_generation_offset(
 			oversized_generation_source,
-			detail::snapshot_store_v5_maximum_payload_bytes + 1U,
-			reference->publication_record_value.physical_generation);
+			detail::snapshot_payload_generation_request{
+				detail::snapshot_store_v5_maximum_payload_bytes + 1U,
+				reference->publication_record_value.physical_generation});
 		require_error(oversized_generation_offset,
 					  "store.resource-limit",
 					  "snapshot-payload",
