@@ -848,6 +848,12 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		if (auto valid = source.validate(engine); !valid)
 			return sdk::unexpected(std::move(valid.error()));
+		const bool grouped_output =
+			std::ranges::any_of(source.partitions_,
+								[](const materialization_v4_store_partition& partition)
+								{
+									return !partition.has_receipt;
+								});
 		const auto output_authority = source.authority_;
 		const auto output_receipt = source.receipt_;
 		auto expected_records = make_expected_candidate_records(source);
@@ -1028,8 +1034,9 @@ namespace cxxlens::detail::clang22::materialization
 		if (!published)
 			return sdk::unexpected(
 				sdk::error{"materialization.store-publication-missing", "publish", "missing"});
-		const auto output_receipt_digest = output_receipt.receipt_digest;
-		const auto output_batch_count = output_receipt.task_count;
+		const auto output_receipt_digest =
+			grouped_output ? output_receipt.receipt_digest : std::string{};
+		const auto output_batch_count = grouped_output ? output_receipt.task_count : 0U;
 		return materialization_v4_store_publication{std::move(*published),
 													output_authority,
 													output_receipt,

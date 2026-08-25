@@ -290,7 +290,8 @@ namespace
 					published->snapshot.manifest().partitions.front().complete &&
 					published->snapshot.manifest().closure_ids.size() == 1U &&
 					published->authority.publication == authority.publication &&
-					published->receipt == *receipt,
+					published->receipt == *receipt && published->output_receipt_digest.empty() &&
+					published->output_batch_count == 0U && published->publication_verified,
 				"positive v4 publication lost authority or was not committed");
 
 		sealed->translation.partition.coverage.front().state = "unknown";
