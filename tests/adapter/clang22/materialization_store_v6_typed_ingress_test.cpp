@@ -1,3 +1,9 @@
+#if defined(NDEBUG)
+// This standalone contract binary uses assert expressions for its executable checks. Keep
+// those checks active even when the install consumer build uses a release configuration.
+#undef NDEBUG
+#endif
+
 #include "llvm/clang22/materialization_store_v6_typed_ingress.hpp"
 
 #include <algorithm>
@@ -112,7 +118,7 @@ namespace
 		return std::move(*output);
 	}
 
-	[[nodiscard]] sdk::detached_row row(const std::string_view key)
+	[[nodiscard]] sdk::detached_row row([[maybe_unused]] const std::string_view key)
 	{
 		using relation = cc::relations::call_direct_target;
 		relation::builder builder;
@@ -207,9 +213,10 @@ namespace
 		return std::move(*output);
 	}
 
-	[[nodiscard]] materialization_request_v2_2 request(const source_closure_manifest& manifest,
-													   const provider_task_v4_base_task& base,
-													   const provider_task_v4& task)
+	[[nodiscard]] materialization_request_v2_2
+	request([[maybe_unused]] const source_closure_manifest& manifest,
+			const provider_task_v4_base_task& base,
+			const provider_task_v4& task)
 	{
 		materialization_request_v2_2 value;
 		value.materialization_request_id = "materialization-authority:typed-ingress";
@@ -875,7 +882,7 @@ namespace
 		auto expected = ingress->take_expected_authority();
 		assert(expected);
 		assert(!ingress->take_expected_authority());
-		std::uint64_t expected_count{};
+		[[maybe_unused]] std::uint64_t expected_count{};
 		for (;;)
 		{
 			auto record = expected->next_semantic_record();
@@ -948,7 +955,7 @@ namespace
 			2U));
 		assert(!checked_materialization_store_v6_spool_charge(1U, 2U, 0U));
 
-		constexpr auto record = sdk::detail::bounded_store_v6_record_buffer_bytes;
+		[[maybe_unused]] constexpr auto record = sdk::detail::bounded_store_v6_record_buffer_bytes;
 		assert(validate_materialization_store_v6_record_source_bytes(record));
 		assert(!validate_materialization_store_v6_record_source_bytes(record + 1U));
 		constexpr auto sort = sdk::detail::bounded_store_v6_sort_arena_bytes;

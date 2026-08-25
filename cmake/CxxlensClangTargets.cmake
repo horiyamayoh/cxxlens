@@ -41,6 +41,7 @@ function(cxxlens_create_clang22_worker_static_closure)
     src/sdk/relation.cpp
     src/sdk/claim.cpp
     src/sdk/store.cpp
+    src/sdk/store_candidate_projection_internal.cpp
     src/sdk/snapshot_store_v5_codec_internal.cpp
     src/sdk/store_operation_port_internal.cpp
     src/runtime/monotonic_clock_port.cpp
