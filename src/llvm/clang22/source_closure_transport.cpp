@@ -944,9 +944,8 @@ namespace cxxlens::detail::clang22
 		return {};
 	}
 
-	sdk::result<void>
-	source_closure_transfer_validator::acknowledge(const source_closure_ack& value,
-												   const std::uint64_t sequence_value)
+	sdk::result<void> source_closure_transfer_validator::validate_acknowledgement(
+		const source_closure_ack& value, const std::uint64_t sequence_value) const
 	{
 		if (state_ != source_closure_transfer_state::closure_sealed)
 			return sdk::unexpected(failure("source-closure.protocol-state-invalid", "ack"));
@@ -957,10 +956,70 @@ namespace cxxlens::detail::clang22
 			value.spool_receipt != ack_credentials_.spool_receipt ||
 			value.cleanup_owner != ack_credentials_.cleanup_owner)
 			return sdk::unexpected(failure("source-closure.replay-invalid", "ack"));
-		if (auto valid = sequence(sequence_value); !valid)
-			return valid;
-		state_ = source_closure_transfer_state::closure_acknowledged;
+		if (sequence_value != next_sequence_)
+			return sdk::unexpected(failure("source-closure.protocol-state-invalid",
+										   "sequence",
+										   std::to_string(sequence_value)));
+		if (next_sequence_ == std::numeric_limits<std::uint64_t>::max())
+			return sdk::unexpected(failure("source-closure.limit-exceeded", "sequence"));
 		return {};
+	}
+
+	sdk::result<source_closure_transfer_validator::prepared_ack_transition>
+	source_closure_transfer_validator::prepare_acknowledgement(
+		const source_closure_ack& value, const std::uint64_t sequence_value) const
+	{
+		if (auto valid = validate_acknowledgement(value, sequence_value); !valid)
+			return sdk::unexpected(std::move(valid.error()));
+		try
+		{
+			auto next = std::make_unique<source_closure_transfer_validator>(*this);
+			++next->next_sequence_;
+			next->state_ = source_closure_transfer_state::closure_acknowledged;
+			return prepared_ack_transition{this, std::move(next)};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(
+				failure("source-closure.limit-exceeded", "ack", "transition-allocation"));
+		}
+	}
+
+	void source_closure_transfer_validator::commit_acknowledgement(
+		prepared_ack_transition&& transition) noexcept
+	{
+		if (transition.owner_ != this || transition.consumed_ || transition.next_ == nullptr ||
+			state_ != source_closure_transfer_state::closure_sealed ||
+			transition.next_->state_ != source_closure_transfer_state::closure_acknowledged)
+			return;
+		*this = std::move(*transition.next_);
+		transition.consumed_ = true;
+		transition.owner_ = nullptr;
+		transition.next_.reset();
+	}
+
+	sdk::result<source_closure_ack_credentials>
+	source_closure_transfer_validator::ack_credentials() const
+	{
+		if ((state_ != source_closure_transfer_state::closure_sealed &&
+			 state_ != source_closure_transfer_state::closure_acknowledged) ||
+			ack_credentials_.spool_receipt.empty() || ack_credentials_.cleanup_owner.empty() ||
+			ack_credentials_.transfer_digest.empty())
+			return sdk::unexpected(
+				failure("source-closure.protocol-state-invalid", "ack-credentials", "not-sealed"));
+		return ack_credentials_;
+	}
+
+	sdk::result<source_closure_ack_credentials>
+	source_closure_transfer_validator::take_ack_credentials()
+	{
+		if ((state_ != source_closure_transfer_state::closure_sealed &&
+			 state_ != source_closure_transfer_state::closure_acknowledged) ||
+			ack_credentials_.spool_receipt.empty() || ack_credentials_.cleanup_owner.empty() ||
+			ack_credentials_.transfer_digest.empty())
+			return sdk::unexpected(
+				failure("source-closure.protocol-state-invalid", "ack-credentials", "not-sealed"));
+		return std::move(ack_credentials_);
 	}
 
 	sdk::result<void>

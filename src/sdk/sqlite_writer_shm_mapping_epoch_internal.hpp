@@ -20,9 +20,6 @@ namespace cxxlens::sdk
 		class sqlite_shm_mapping_registry_state;
 	} // namespace detail
 
-	class sqlite_writer_shm_mapping_epoch_test_peer;
-	class sqlite_same_process_shm_registry_test_peer;
-	class sqlite_writer_shm_native_lifetime_test_factory;
 	class sqlite_writer_shm_native_lifetime_production_factory;
 	class sqlite_writer_shm_mapping_receipt_validator;
 	class sqlite_writer_shm_mapping_epoch_receipt;
@@ -83,9 +80,7 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool revoke() noexcept;
 
 	  private:
-		friend class sqlite_writer_shm_native_lifetime_test_factory;
 		friend class sqlite_writer_shm_native_lifetime_production_factory;
-		friend class sqlite_writer_shm_mapping_epoch_test_peer;
 
 		explicit sqlite_writer_shm_native_lifetime_revoker(
 			std::shared_ptr<detail::sqlite_writer_shm_native_lifetime_control> control) noexcept;
@@ -125,10 +120,8 @@ namespace cxxlens::sdk
 	  private:
 		friend class detail::sqlite_writer_shm_mapping_epoch_state;
 		friend class sqlite_writer_shm_native_lifetime_source;
-		friend class sqlite_writer_shm_native_lifetime_test_factory;
 		friend class sqlite_writer_shm_native_lifetime_production_factory;
 		friend class sqlite_writer_shm_mapping_epoch_port;
-		friend class sqlite_writer_shm_mapping_epoch_test_peer;
 
 		sqlite_writer_shm_native_lifetime_pin(
 			std::shared_ptr<detail::sqlite_writer_shm_native_lifetime_control> control,
@@ -165,7 +158,6 @@ namespace cxxlens::sdk
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_writer_shm_native_lifetime_pin> mint_pin();
 
 	  private:
-		friend class sqlite_writer_shm_native_lifetime_test_factory;
 		friend class sqlite_writer_shm_native_lifetime_production_factory;
 
 		sqlite_writer_shm_native_lifetime_source(
@@ -181,8 +173,7 @@ namespace cxxlens::sdk
 	 *
 	 * The forwarding VFS is the only production caller. It supplies the complete sealed
 	 * close-epoch tuple after native xOpen has returned and retains the native node as the
-	 * owner. Test fixtures use the separate test factory and cannot manufacture a production
-	 * lifetime through this boundary.
+	 * owner. Malformed tuples are rejected before a source is minted.
 	 */
 	class sqlite_writer_shm_native_lifetime_production_factory final
 	{
@@ -197,24 +188,6 @@ namespace cxxlens::sdk
 					  sqlite_backend_opaque_identity semantic_receipt,
 					  std::optional<sqlite_backend_opaque_identity> native_xopen_receipt,
 					  const std::shared_ptr<void>& retained_owner) noexcept;
-	};
-
-	class sqlite_writer_shm_native_lifetime_test_factory final
-	{
-	  public:
-		sqlite_writer_shm_native_lifetime_test_factory() = delete;
-
-	  private:
-		friend class sqlite_writer_shm_mapping_epoch_test_peer;
-		friend class sqlite_same_process_shm_registry_test_peer;
-
-		[[nodiscard]] static std::pair<sqlite_writer_shm_native_lifetime_revoker,
-									   sqlite_writer_shm_native_lifetime_source>
-		create_source(sqlite_writer_shm_native_lifetime_role role,
-					  sqlite_backend_opaque_identity native_lifetime_identity,
-					  sqlite_backend_opaque_identity semantic_receipt,
-					  std::optional<sqlite_backend_opaque_identity> native_xopen_receipt,
-					  const std::shared_ptr<void>& retained_owner);
 	};
 
 	/** Only the closed zero/one/multiple-or-overflow census is representable. */
@@ -434,7 +407,6 @@ namespace cxxlens::sdk
 		reserve_reader_borrow_mint(std::uint64_t map_token,
 								   std::uint64_t generation,
 								   std::uint64_t holder_token) const;
-		void invalidate_for_testing() noexcept;
 
 		std::shared_ptr<detail::sqlite_writer_shm_mapping_epoch_state> state_;
 		std::shared_ptr<detail::sqlite_writer_shm_generation_epoch_custody> custody_;
@@ -480,7 +452,6 @@ namespace cxxlens::sdk
 								   std::uint64_t holder_token) const;
 		[[nodiscard]] sqlite_writer_shm_generation_epoch_authority
 		make_generation_authority() const noexcept;
-		void invalidate_for_testing() noexcept;
 
 		std::shared_ptr<detail::sqlite_writer_shm_mapping_epoch_state> state_;
 	};

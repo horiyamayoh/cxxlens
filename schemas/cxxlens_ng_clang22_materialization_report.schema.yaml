@@ -713,19 +713,6 @@ properties:
         items:
           type: string
           pattern: '^materialization\.incremental-task-partition-set:sha256:[0-9a-f]{64}$'
-  authority_digests:
-    type: array
-    minItems: 5
-    maxItems: 5
-    uniqueItems: true
-    items:
-      type: object
-      additionalProperties: false
-      required: [path, digest]
-      properties:
-        path:
-          enum: [schemas/cxxlens_ng_clang22_materialization_contract.yaml, schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml, schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml, schemas/cxxlens_ng_clang22_materialization_report.schema.yaml, schemas/cxxlens_ng_relation_registry.yaml]
-        digest: {$ref: '#/$defs/content_digest'}
   error:
     oneOf:
       - {type: 'null'}
@@ -733,7 +720,7 @@ properties:
 oneOf:
   - properties:
       response_kind: {const: detailed}
-    required: [source, request, installation, provider, project, registry, engine, interpretation_policy, trust_policy, adoption, task_results, span_validation, base_claims, side_channels, claim_stages, provenance, store, publication, semantic_verification, incremental_execution, authority_digests, error]
+    required: [source, request, installation, provider, project, registry, engine, interpretation_policy, trust_policy, adoption, task_results, span_validation, base_claims, side_channels, claim_stages, provenance, store, publication, semantic_verification, incremental_execution, error]
     not:
       anyOf:
         - {required: [binding]}
@@ -766,7 +753,6 @@ oneOf:
         - {required: [publication]}
         - {required: [semantic_verification]}
         - {required: [incremental_execution]}
-        - {required: [authority_digests]}
 allOf:
   - if:
       properties:

@@ -40,7 +40,7 @@ namespace cxxlens::detail::clang22
 				"source-closure.worker-input-invalid", "closure-authority", "identity"));
 
 		// Decode the source-free task-v4 payload before task_accepted.  This is intentionally the
-		// v4 decoder; no legacy task decoder is reachable from this entrypoint.
+		// v4 decoder; no obsolete task decoder is reachable from this entrypoint.
 		auto decoded =
 			decode_source_closure_task_v4_input(input.task.input_payload,
 												input.task.closure,

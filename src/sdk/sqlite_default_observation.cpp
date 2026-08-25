@@ -27,6 +27,7 @@
 #include "sqlite_default_observation_internal.hpp"
 #include "sqlite_source_shm_readonly_preflight_internal.hpp"
 #include "sqlite_wal_recovery_workspace_internal.hpp"
+#include "store_operation_port_internal.hpp"
 
 namespace cxxlens::sdk
 {
@@ -665,8 +666,9 @@ namespace cxxlens::sdk
 						append_u64(identity_.bytes, static_cast<std::uint64_t>(entry.state));
 						const auto active_role =
 							entry.role != sqlite_backend_file_role::rollback_journal;
-						const auto absent_writer_shm =
-							entry.role == sqlite_backend_file_role::shared_memory &&
+						const auto absent_guardable_sidecar =
+							(entry.role == sqlite_backend_file_role::write_ahead_log ||
+							 entry.role == sqlite_backend_file_role::shared_memory) &&
 							entry.state == sqlite_backend_entry_state::absent &&
 							!entry.object_identity && !entry.directory_entry_identity &&
 							!entry.held_object && !entry.object_filesystem_profile &&
@@ -674,13 +676,13 @@ namespace cxxlens::sdk
 						const auto mount = entry.held_object
 							? entry.held_object->object_mount_identity()
 							: std::optional<sqlite_backend_opaque_identity>{};
-						if (active_role && !absent_writer_shm &&
+						if (active_role && !absent_guardable_sidecar &&
 							(!entry.object_filesystem_profile || !mount ||
 							 *mount != parent_mount_identity_))
 							return unexpected(observation_io_error());
 						if (active_role &&
 							entry.state != sqlite_backend_entry_state::held_regular &&
-							!absent_writer_shm)
+							!absent_guardable_sidecar)
 							return unexpected(observation_io_error());
 						if (entry.object_identity)
 						{
@@ -793,11 +795,220 @@ namespace cxxlens::sdk
 			[[nodiscard]] result<void> claim_target_epoch() override
 			{
 				std::scoped_lock lock{mutex_};
-				if (claimed_)
+				if (claimed_ || normalization_claimed_)
 					return unexpected(observation_io_error());
 				claimed_ = true;
 				if (auto checked = recheck_locked(); !checked)
 					return checked;
+				return {};
+			}
+			[[nodiscard]] result<void> claim_exact_empty_normalization_epoch() override
+			{
+				std::scoped_lock lock{mutex_};
+				if (claimed_ || normalization_claimed_ || finished_)
+					return unexpected(observation_io_error());
+				if (auto checked = recheck_locked(); !checked)
+					return checked;
+				const auto* main = find_entry_locked(sqlite_backend_file_role::main_database);
+				const auto* wal = find_entry_locked(sqlite_backend_file_role::write_ahead_log);
+				const auto* shm = find_entry_locked(sqlite_backend_file_role::shared_memory);
+				const auto* journal = find_entry_locked(sqlite_backend_file_role::rollback_journal);
+				if (main == nullptr || wal == nullptr || shm == nullptr || journal == nullptr ||
+					main->state != sqlite_backend_entry_state::held_regular || !main->held_object ||
+					(shm->state != sqlite_backend_entry_state::absent) ||
+					journal->state != sqlite_backend_entry_state::absent ||
+					(wal->state != sqlite_backend_entry_state::absent &&
+					 wal->state != sqlite_backend_entry_state::held_regular))
+					return unexpected(observation_io_error());
+				if (wal->state == sqlite_backend_entry_state::held_regular)
+				{
+					if (!wal->held_object)
+						return unexpected(observation_io_error());
+					auto size = wal->held_object->size();
+					if (!size || *size != 0U)
+						return unexpected(observation_io_error());
+				}
+				normalization_claimed_ = true;
+				return {};
+			}
+			[[nodiscard]] result<void> recheck_exact_empty_normalization_epoch() const override
+			{
+				std::scoped_lock lock{mutex_};
+				return recheck_normalization_locked();
+			}
+			[[nodiscard]] result<sqlite_backend_normalization_sidecar_observation>
+			observe_exact_empty_normalization_sidecar(const sqlite_backend_file_role role) override
+			{
+				std::scoped_lock lock{mutex_};
+				if (!normalization_claimed_ || finished_ ||
+					(role != sqlite_backend_file_role::write_ahead_log &&
+					 role != sqlite_backend_file_role::rollback_journal))
+					return unexpected(observation_io_error());
+				auto& dynamic = role == sqlite_backend_file_role::write_ahead_log
+					? normalization_wal_
+					: normalization_journal_;
+				if (dynamic)
+					return unexpected(observation_io_error());
+				const auto* initial = find_entry_locked(role);
+				if (initial == nullptr)
+					return unexpected(observation_io_error());
+				const auto leaf = normalization_leaf(role);
+				if (initial->state == sqlite_backend_entry_state::absent)
+				{
+					if (auto event = consume_exact_namespace_event_locked(leaf, IN_CREATE); !event)
+						return unexpected(std::move(event.error()));
+				}
+				else if (role != sqlite_backend_file_role::write_ahead_log ||
+						 initial->state != sqlite_backend_entry_state::held_regular ||
+						 !require_no_relevant_events_locked())
+					return unexpected(observation_io_error());
+
+				struct stat namespace_entry{};
+				struct stat resolved{};
+				owned_descriptor object{
+					open_relative(parent_->descriptor.get(),
+								  leaf.c_str(),
+								  O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)};
+				if (!object ||
+					stat_relative(parent_->descriptor.get(),
+								  leaf.c_str(),
+								  namespace_entry,
+								  AT_SYMLINK_NOFOLLOW) != 0 ||
+					::fstat(object.get(), &resolved) != 0 || !S_ISREG(namespace_entry.st_mode) ||
+					!S_ISREG(resolved.st_mode) || !same_object(namespace_entry, resolved))
+					return unexpected(observation_io_error());
+				auto filesystem = make_object_filesystem_profile(object.get(), resolved);
+				if (!filesystem)
+					return unexpected(observation_io_error());
+				dynamic = sqlite_backend_entry_observation{
+					role,
+					sqlite_backend_entry_state::held_regular,
+					make_stat_identity("default-filesystem-v1.open-object.v1", resolved),
+					make_entry_identity(parent_->status,
+										leaf,
+										namespace_entry,
+										std::optional<struct stat>{resolved}),
+					{},
+					std::move(*filesystem),
+					true};
+				if (auto checked = recheck_normalization_locked(); !checked)
+					return unexpected(std::move(checked.error()));
+				return sqlite_backend_normalization_sidecar_observation{
+					role,
+					*dynamic->object_identity,
+					*dynamic->directory_entry_identity,
+					static_cast<std::uint64_t>(resolved.st_size)};
+			}
+			[[nodiscard]] result<sqlite_backend_opaque_identity>
+			synchronize_exact_empty_normalization_parent(
+				const sqlite_backend_file_role role, store_operation_port& operation_port) override
+			{
+				std::scoped_lock lock{mutex_};
+				if (!normalization_claimed_ || finished_ ||
+					(role != sqlite_backend_file_role::write_ahead_log &&
+					 role != sqlite_backend_file_role::rollback_journal) ||
+					!normalization_entry(role) || !recheck_normalization_locked() ||
+					!operation_port
+						 .synchronize(parent_->descriptor.get(),
+									  store_sync_target::parent_directory)
+						 .durable())
+					return unexpected(observation_io_error());
+				return make_normalization_operation_receipt("parent-sync", role);
+			}
+			[[nodiscard]] result<sqlite_backend_opaque_identity>
+			delete_exact_empty_normalization_sidecar(
+				const sqlite_backend_file_role role,
+				const sqlite_backend_opaque_identity& expected_object,
+				const sqlite_backend_opaque_identity& expected_entry,
+				const std::span<const std::byte> expected_bytes,
+				store_operation_port& operation_port) override
+			{
+				std::scoped_lock lock{mutex_};
+				auto* dynamic = normalization_entry(role);
+				if (!normalization_claimed_ || finished_ || dynamic == nullptr ||
+					!dynamic->object_identity || !dynamic->directory_entry_identity ||
+					*dynamic->object_identity != expected_object ||
+					*dynamic->directory_entry_identity != expected_entry ||
+					!recheck_normalization_locked())
+					return unexpected(observation_io_error());
+				const auto leaf = normalization_leaf(role);
+				struct stat namespace_entry{};
+				struct stat resolved{};
+				owned_descriptor object{
+					open_relative(parent_->descriptor.get(),
+								  leaf.c_str(),
+								  O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)};
+				if (!object ||
+					stat_relative(parent_->descriptor.get(),
+								  leaf.c_str(),
+								  namespace_entry,
+								  AT_SYMLINK_NOFOLLOW) != 0 ||
+					::fstat(object.get(), &resolved) != 0 || !S_ISREG(namespace_entry.st_mode) ||
+					!S_ISREG(resolved.st_mode) || !same_object(namespace_entry, resolved) ||
+					resolved.st_size < 0 ||
+					static_cast<std::uint64_t>(resolved.st_size) != expected_bytes.size() ||
+					make_stat_identity("default-filesystem-v1.open-object.v1", resolved) !=
+						expected_object ||
+					make_entry_identity(parent_->status,
+										leaf,
+										namespace_entry,
+										std::optional<struct stat>{resolved}) != expected_entry)
+					return unexpected(observation_io_error());
+				std::array<std::byte, digest_buffer_bytes> buffer{};
+				std::size_t offset{};
+				while (offset < expected_bytes.size())
+				{
+					const auto count = std::min(buffer.size(), expected_bytes.size() - offset);
+					ssize_t read_count{};
+					do
+					{
+						read_count =
+							::pread(object.get(), buffer.data(), count, static_cast<off_t>(offset));
+					} while (read_count < 0 && errno == EINTR);
+					if (read_count != static_cast<ssize_t>(count) ||
+						!std::ranges::equal(std::span{buffer}.first(count),
+											expected_bytes.subspan(offset, count)))
+						return unexpected(observation_io_error());
+					offset += count;
+				}
+				const auto removed = ::unlinkat(parent_->descriptor.get(), leaf.c_str(), 0);
+				if (removed != 0 ||
+					!operation_port
+						 .synchronize(parent_->descriptor.get(),
+									  store_sync_target::parent_directory)
+						 .durable())
+					return unexpected(observation_io_error());
+				if (auto event = consume_exact_namespace_event_locked(leaf, IN_DELETE); !event)
+					return unexpected(std::move(event.error()));
+				auto receipt = make_normalization_operation_receipt("delete-and-parent-sync", role);
+				if (role == sqlite_backend_file_role::write_ahead_log)
+					normalization_wal_.reset();
+				else
+					normalization_journal_.reset();
+				return receipt;
+			}
+			[[nodiscard]] result<void> finish_exact_empty_normalization_epoch() override
+			{
+				std::scoped_lock lock{mutex_};
+				if (!normalization_claimed_ || finished_ || normalization_wal_ ||
+					normalization_journal_ || !recheck_normalization_locked())
+					return unexpected(observation_io_error());
+				const auto check_absent = [&](const std::string& leaf)
+				{
+					struct stat value{};
+					return stat_relative(parent_->descriptor.get(),
+										 leaf.c_str(),
+										 value,
+										 AT_SYMLINK_NOFOLLOW) != 0 &&
+						errno == ENOENT;
+				};
+				if (!check_absent(normalization_leaf(sqlite_backend_file_role::write_ahead_log)) ||
+					!check_absent(normalization_leaf(sqlite_backend_file_role::shared_memory)) ||
+					!check_absent(normalization_leaf(sqlite_backend_file_role::rollback_journal)) ||
+					!require_no_relevant_events_locked())
+					return unexpected(observation_io_error());
+				event_queue_ = owned_descriptor{};
+				finished_ = true;
 				return {};
 			}
 			[[nodiscard]] result<void> finish() override
@@ -837,6 +1048,166 @@ namespace cxxlens::sdk
 					if (entry.role == role)
 						return &entry;
 				return nullptr;
+			}
+
+			[[nodiscard]] std::string normalization_leaf(const sqlite_backend_file_role role) const
+			{
+				std::string leaf{main_leaf_};
+				if (role == sqlite_backend_file_role::write_ahead_log)
+					leaf.append(wal_suffix);
+				else if (role == sqlite_backend_file_role::shared_memory)
+					leaf.append(shm_suffix);
+				else if (role == sqlite_backend_file_role::rollback_journal)
+					leaf.append(journal_suffix);
+				return leaf;
+			}
+
+			[[nodiscard]] sqlite_backend_entry_observation*
+			normalization_entry(const sqlite_backend_file_role role) noexcept
+			{
+				if (role == sqlite_backend_file_role::write_ahead_log && normalization_wal_)
+					return &*normalization_wal_;
+				if (role == sqlite_backend_file_role::rollback_journal && normalization_journal_)
+					return &*normalization_journal_;
+				return nullptr;
+			}
+
+			[[nodiscard]] const sqlite_backend_entry_observation*
+			normalization_entry(const sqlite_backend_file_role role) const noexcept
+			{
+				return const_cast<default_source_shm_namespace_guard*>(this)->normalization_entry(
+					role);
+			}
+
+			[[nodiscard]] result<void>
+			consume_exact_namespace_event_locked(const std::string_view expected_leaf,
+												 const std::uint32_t expected_mask) const
+			{
+				bool found{};
+				std::array<std::byte, 4096U> buffer{};
+				for (;;)
+				{
+					ssize_t count{};
+					do
+					{
+						count = ::read(event_queue_.get(), buffer.data(), buffer.size());
+					} while (count < 0 && errno == EINTR);
+					if (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+						return found ? result<void>{} : unexpected(observation_io_error());
+					if (count <= 0)
+						return unexpected(observation_io_error());
+					const auto count_size = static_cast<std::size_t>(count);
+					std::size_t offset{};
+					while (offset < count_size)
+					{
+						if (count_size - offset < sizeof(inotify_event))
+							return unexpected(observation_io_error());
+						const auto* event =
+							reinterpret_cast<const inotify_event*>(buffer.data() + offset);
+						const auto event_size = sizeof(inotify_event) + event->len;
+						if (event_size > count_size - offset)
+							return unexpected(observation_io_error());
+						const auto name_size = event->len == 0U
+							? 0U
+							: ::strnlen(event->name, static_cast<std::size_t>(event->len));
+						const std::string_view name{event->name, name_size};
+						bool relevant = event->wd == parent_watch_ &&
+							(event->len == 0U || source_family_leaf(name));
+						for (const auto& ancestor : ancestry_)
+							if (event->wd == ancestor.watch)
+							{
+								relevant = event->len == 0U || name == ancestor.child_leaf;
+								break;
+							}
+						if (relevant)
+						{
+							if (found || event->wd != parent_watch_ || name != expected_leaf ||
+								event->mask != expected_mask)
+								return unexpected(observation_io_error());
+							found = true;
+						}
+						offset += event_size;
+					}
+				}
+			}
+
+			[[nodiscard]] result<void> recheck_normalization_locked() const
+			{
+				if (!sealed_ || !normalization_claimed_ || finished_ || !event_queue_ || !parent_)
+					return unexpected(observation_io_error());
+				struct stat current_parent{};
+				const auto current_parent_mount =
+					make_object_mount_identity(parent_->descriptor.get());
+				if (::fstat(parent_->descriptor.get(), &current_parent) != 0 ||
+					!same_object(parent_->status, current_parent) || !current_parent_mount ||
+					*current_parent_mount != parent_mount_identity_ ||
+					make_stat_identity("default-filesystem-v1.parent-namespace.v1",
+									   current_parent) != parent_->identity)
+					return unexpected(observation_io_error());
+				for (const auto& ancestor : ancestry_)
+				{
+					struct stat directory{};
+					struct stat child{};
+					if (::fstat(ancestor.directory.get(), &directory) != 0 ||
+						!same_object(directory, ancestor.directory_status) ||
+						stat_relative(ancestor.directory.get(),
+									  ancestor.child_leaf.c_str(),
+									  child,
+									  AT_SYMLINK_NOFOLLOW) != 0 ||
+						!S_ISDIR(child.st_mode) || !same_object(child, ancestor.child_status))
+						return unexpected(observation_io_error());
+				}
+				const auto* main = find_entry_locked(sqlite_backend_file_role::main_database);
+				auto replacement = main != nullptr && main->held_object
+					? main->held_object->recheck_current_entry()
+					: result<sqlite_backend_replacement_state>{unexpected(observation_io_error())};
+				if (main == nullptr || main->state != sqlite_backend_entry_state::held_regular ||
+					!main->held_object || !main->object_identity ||
+					!main->directory_entry_identity ||
+					!main->held_object->recheck_retained_object() || !replacement ||
+					*replacement != sqlite_backend_replacement_state::exact_same_entry_and_object)
+					return unexpected(observation_io_error());
+				for (const auto role : {sqlite_backend_file_role::write_ahead_log,
+										sqlite_backend_file_role::rollback_journal})
+				{
+					const auto* dynamic = normalization_entry(role);
+					if (dynamic == nullptr || dynamic->state == sqlite_backend_entry_state::absent)
+						continue;
+					const auto leaf = normalization_leaf(role);
+					struct stat entry{};
+					struct stat resolved{};
+					if (!dynamic->object_identity || !dynamic->directory_entry_identity ||
+						stat_relative(
+							parent_->descriptor.get(), leaf.c_str(), entry, AT_SYMLINK_NOFOLLOW) !=
+							0 ||
+						stat_relative(parent_->descriptor.get(), leaf.c_str(), resolved, 0) != 0 ||
+						!S_ISREG(entry.st_mode) || !S_ISREG(resolved.st_mode) ||
+						!same_object(entry, resolved) ||
+						make_stat_identity("default-filesystem-v1.open-object.v1", resolved) !=
+							*dynamic->object_identity ||
+						make_entry_identity(
+							parent_->status, leaf, entry, std::optional<struct stat>{resolved}) !=
+							*dynamic->directory_entry_identity)
+						return unexpected(observation_io_error());
+				}
+				if (!require_no_relevant_events_locked())
+					return unexpected(observation_io_error());
+				return {};
+			}
+
+			[[nodiscard]] sqlite_backend_opaque_identity
+			make_normalization_operation_receipt(const std::string_view operation,
+												 const sqlite_backend_file_role role)
+			{
+				sqlite_backend_opaque_identity receipt{
+					"default-filesystem-v1.exact-empty-normalization-operation.v1", {}};
+				append_bytes(receipt.bytes, operation);
+				append_u64(receipt.bytes, static_cast<std::uint64_t>(role));
+				append_u64(receipt.bytes, ++normalization_operation_sequence_);
+				receipt.bytes.insert(receipt.bytes.end(),
+									 parent_->identity.bytes.begin(),
+									 parent_->identity.bytes.end());
+				return receipt;
 			}
 
 			[[nodiscard]] result<sqlite_backend_writer_shm_stat_observation>
@@ -1265,7 +1636,11 @@ namespace cxxlens::sdk
 			mutable std::mutex mutex_;
 			bool sealed_{};
 			bool claimed_{};
+			bool normalization_claimed_{};
 			bool finished_{};
+			std::optional<sqlite_backend_entry_observation> normalization_wal_;
+			std::optional<sqlite_backend_entry_observation> normalization_journal_;
+			std::uint64_t normalization_operation_sequence_{};
 		};
 #endif
 
@@ -2044,9 +2419,13 @@ namespace cxxlens::sdk
 						entries[0U].state == sqlite_backend_entry_state::held_regular &&
 						entries[0U].direct_regular_entry && entries[0U].held_object &&
 						entries[0U].held_object->object_mount_identity() &&
-						entries[1U].state == sqlite_backend_entry_state::held_regular &&
-						entries[1U].direct_regular_entry && entries[1U].held_object &&
-						entries[1U].held_object->object_mount_identity() &&
+						((entries[1U].state == sqlite_backend_entry_state::held_regular &&
+						  entries[1U].direct_regular_entry && entries[1U].held_object &&
+						  entries[1U].held_object->object_mount_identity()) ||
+						 (entries[1U].state == sqlite_backend_entry_state::absent &&
+						  !entries[1U].object_identity && !entries[1U].directory_entry_identity &&
+						  !entries[1U].held_object && !entries[1U].object_filesystem_profile &&
+						  !entries[1U].direct_regular_entry)) &&
 						((entries[2U].state == sqlite_backend_entry_state::held_regular &&
 						  entries[2U].direct_regular_entry && entries[2U].held_object &&
 						  entries[2U].held_object->object_mount_identity()) ||

@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <limits>
 #include <map>
+#include <optional>
 #include <ranges>
 #include <set>
 #include <string_view>
@@ -102,10 +104,23 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] sdk::result<json_value>
 		request_projection(const materialization_request_v2_2& request)
 		{
+			auto authority = decode_provider_task_v4_request_authority(request.inherited_authority);
+			if (!authority)
+				return sdk::unexpected(std::move(authority.error()));
+			auto authority_digest = authority->authority_digest();
+			if (!authority_digest)
+				return sdk::unexpected(std::move(authority_digest.error()));
 			auto schema = json_text(request.schema, "schema");
 			auto version = json_text(request.request_version, "request_version");
-			if (!schema || !version)
+			auto materialization_id =
+				json_text(request.materialization_request_id, "materialization_request_id");
+			auto semantic_request_digest =
+				json_text(request.semantic_request_digest, "semantic_request_digest");
+			if (!schema || !version || !materialization_id || !semantic_request_digest)
 				return sdk::unexpected(invalid("request", "invalid-utf8"));
+			auto authority_digest_value = json_text(*authority_digest, "authority_digest");
+			if (!authority_digest_value)
+				return sdk::unexpected(std::move(authority_digest_value.error()));
 			std::vector<json_value> features;
 			features.reserve(request.required_features.size());
 			for (const auto& feature : request.required_features)
@@ -134,10 +149,12 @@ namespace cxxlens::detail::clang22::materialization
 				extensions.push_back(std::move(*value));
 			}
 			return json_object({
-				{"inherited_authority", request.inherited_authority},
+				{"authority_digest", std::move(*authority_digest_value)},
+				{"materialization_request_id", std::move(*materialization_id)},
 				{"request_version", std::move(*version)},
 				{"schema", std::move(*schema)},
 				{"required_features", json_value::array(std::move(features))},
+				{"semantic_request_digest", std::move(*semantic_request_digest)},
 				{"source_closures", json_value::array(std::move(closures))},
 				{"task_extensions", json_value::array(std::move(extensions))},
 			});
@@ -214,6 +231,1063 @@ namespace cxxlens::detail::clang22::materialization
 					return sdk::unexpected(invalid(std::string{field}, "required-feature-list"));
 			}
 			return {};
+		}
+
+		template <typename StringLike, std::size_t Size>
+		[[nodiscard]] sdk::result<void>
+		authority_exact_members(const json_value& value,
+								const std::array<StringLike, Size>& names,
+								const std::string_view field)
+		{
+			std::array<std::string_view, Size> views{};
+			for (std::size_t index{}; index < Size; ++index)
+				views[index] = names[index];
+			if (value.as_object() == nullptr || !value.has_exact_members(views))
+				return sdk::unexpected(invalid(std::string{field}, "member-set"));
+			return {};
+		}
+
+		[[nodiscard]] sdk::result<const json_value*> authority_member(const json_value& object,
+																	  const std::string_view name,
+																	  const std::string_view field)
+		{
+			const auto* value = object.member(name);
+			if (value == nullptr)
+				return sdk::unexpected(invalid(std::string{field}, std::string{name}));
+			return value;
+		}
+
+		[[nodiscard]] sdk::result<std::string> authority_text(const json_value& value,
+															  const std::string_view field)
+		{
+			const auto* text = value.as_string();
+			if (text == nullptr)
+				return sdk::unexpected(invalid(std::string{field}, "string"));
+			return *text;
+		}
+
+		[[nodiscard]] sdk::result<std::string> authority_member_text(const json_value& object,
+																	 const std::string_view name,
+																	 const std::string_view field)
+		{
+			auto value = authority_member(object, name, field);
+			if (!value)
+				return sdk::unexpected(std::move(value.error()));
+			return authority_text(**value, field);
+		}
+
+		[[nodiscard]] sdk::result<bool> authority_member_bool(const json_value& object,
+															  const std::string_view name,
+															  const std::string_view field)
+		{
+			auto value = authority_member(object, name, field);
+			if (!value)
+				return sdk::unexpected(std::move(value.error()));
+			const auto* boolean = (*value)->as_boolean();
+			if (boolean == nullptr)
+				return sdk::unexpected(invalid(std::string{field}, "boolean"));
+			return *boolean;
+		}
+
+		[[nodiscard]] sdk::result<std::uint64_t>
+		authority_unsigned(const json_value& value,
+						   const std::string_view field,
+						   const std::uint64_t maximum = std::numeric_limits<std::uint64_t>::max())
+		{
+			std::uint64_t output{};
+			if (const auto* unsigned_value = value.as_unsigned_integer(); unsigned_value != nullptr)
+				output = *unsigned_value;
+			else if (const auto* signed_value = value.as_signed_integer();
+					 signed_value != nullptr && *signed_value >= 0)
+				output = static_cast<std::uint64_t>(*signed_value);
+			else
+				return sdk::unexpected(invalid(std::string{field}, "unsigned-integer"));
+			if (output > maximum)
+				return sdk::unexpected(invalid(std::string{field}, "integer-range"));
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<std::uint64_t> authority_member_unsigned(
+			const json_value& object,
+			const std::string_view name,
+			const std::string_view field,
+			const std::uint64_t maximum = std::numeric_limits<std::uint64_t>::max())
+		{
+			auto value = authority_member(object, name, field);
+			if (!value)
+				return sdk::unexpected(std::move(value.error()));
+			return authority_unsigned(**value, field, maximum);
+		}
+
+		[[nodiscard]] sdk::result<std::optional<std::string>> authority_member_nullable_text(
+			const json_value& object, const std::string_view name, const std::string_view field)
+		{
+			auto value = authority_member(object, name, field);
+			if (!value)
+				return sdk::unexpected(std::move(value.error()));
+			if ((*value)->is_null())
+				return std::optional<std::string>{};
+			auto text = authority_text(**value, field);
+			if (!text)
+				return sdk::unexpected(std::move(text.error()));
+			return std::optional<std::string>{std::move(*text)};
+		}
+
+		[[nodiscard]] sdk::result<std::vector<std::string>>
+		authority_string_array(const json_value& value, const std::string_view field)
+		{
+			const auto* array = value.as_array();
+			if (array == nullptr)
+				return sdk::unexpected(invalid(std::string{field}, "array"));
+			if (array->size() > 4096U)
+				return sdk::unexpected(invalid(std::string{field}, "count"));
+			std::vector<std::string> output;
+			output.reserve(array->size());
+			for (const auto& item : *array)
+			{
+				auto text = authority_text(item, field);
+				if (!text)
+					return sdk::unexpected(std::move(text.error()));
+				output.push_back(std::move(*text));
+			}
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<std::vector<std::string>> authority_member_string_array(
+			const json_value& object, const std::string_view name, const std::string_view field)
+		{
+			auto value = authority_member(object, name, field);
+			if (!value)
+				return sdk::unexpected(std::move(value.error()));
+			return authority_string_array(**value, field);
+		}
+
+		[[nodiscard]] sdk::result<sdk::semantic_version>
+		authority_version(const json_value& value, const std::string_view field)
+		{
+			auto text = authority_text(value, field);
+			if (!text)
+				return sdk::unexpected(std::move(text.error()));
+			sdk::semantic_version version;
+			std::size_t begin{};
+			for (std::size_t component{}; component < 3U; ++component)
+			{
+				const auto end = component == 2U ? text->size() : text->find('.', begin);
+				if (end == std::string::npos || end == begin ||
+					(end - begin > 1U && (*text)[begin] == '0'))
+					return sdk::unexpected(invalid(std::string{field}, "semantic-version"));
+				std::uint32_t parsed{};
+				const auto result =
+					std::from_chars(text->data() + begin, text->data() + end, parsed);
+				if (result.ec != std::errc{} || result.ptr != text->data() + end)
+					return sdk::unexpected(invalid(std::string{field}, "semantic-version"));
+				if (component == 0U)
+					version.major = parsed;
+				else if (component == 1U)
+					version.minor = parsed;
+				else
+					version.patch = parsed;
+				begin = end + 1U;
+			}
+			if (begin != text->size() + 1U)
+				return sdk::unexpected(invalid(std::string{field}, "semantic-version"));
+			return version;
+		}
+
+		[[nodiscard]] sdk::result<sdk::provider::sandbox_assurance>
+		authority_sandbox_assurance(const json_value& value, const std::string_view field)
+		{
+			auto text = authority_text(value, field);
+			if (!text)
+				return sdk::unexpected(std::move(text.error()));
+			if (*text == "enforced")
+				return sdk::provider::sandbox_assurance::enforced;
+			if (*text == "certified")
+				return sdk::provider::sandbox_assurance::certified;
+			return sdk::unexpected(invalid(std::string{field}, "sandbox-assurance"));
+		}
+
+		[[nodiscard]] sdk::result<provider_task_v4_source>
+		decode_task_source(const json_value& value)
+		{
+			constexpr std::array fields{"source_snapshot_id",
+										"file_id",
+										"logical_path",
+										"content_digest",
+										"size_bytes",
+										"encoding",
+										"line_index_id",
+										"read_only"};
+			if (auto valid = authority_exact_members(value, fields, "task.source"); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			provider_task_v4_source output;
+			for (auto item :
+				 {std::pair{&output.source_snapshot_id, std::string_view{"source_snapshot_id"}},
+				  std::pair{&output.file_id, std::string_view{"file_id"}},
+				  std::pair{&output.logical_path, std::string_view{"logical_path"}},
+				  std::pair{&output.content_digest, std::string_view{"content_digest"}},
+				  std::pair{&output.encoding, std::string_view{"encoding"}},
+				  std::pair{&output.line_index_id, std::string_view{"line_index_id"}}})
+			{
+				auto text = authority_member_text(value, item.second, "task.source");
+				if (!text)
+					return sdk::unexpected(std::move(text.error()));
+				*item.first = std::move(*text);
+			}
+			auto size = authority_member_unsigned(value, "size_bytes", "task.source.size_bytes");
+			auto read_only = authority_member_bool(value, "read_only", "task.source.read_only");
+			if (!size || !read_only)
+				return sdk::unexpected(!size ? std::move(size.error())
+											 : std::move(read_only.error()));
+			output.size_bytes = *size;
+			output.read_only = *read_only;
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<provider_task_v4_toolchain_authority>
+		decode_toolchain(const json_value& value)
+		{
+			constexpr std::array fields{"family",
+										"exact_version",
+										"target_triple",
+										"builtin_headers_digest",
+										"sysroot",
+										"abi_digest",
+										"plugin_spec_digest"};
+			if (auto valid = authority_exact_members(value, fields, "task.toolchain"); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			provider_task_v4_toolchain_authority output;
+			for (auto item :
+				 {std::pair{&output.family, std::string_view{"family"}},
+				  std::pair{&output.exact_version, std::string_view{"exact_version"}},
+				  std::pair{&output.target_triple, std::string_view{"target_triple"}},
+				  std::pair{&output.builtin_headers_digest,
+							std::string_view{"builtin_headers_digest"}},
+				  std::pair{&output.abi_digest, std::string_view{"abi_digest"}},
+				  std::pair{&output.plugin_spec_digest, std::string_view{"plugin_spec_digest"}}})
+			{
+				auto text = authority_member_text(value, item.second, "task.toolchain");
+				if (!text)
+					return sdk::unexpected(std::move(text.error()));
+				*item.first = std::move(*text);
+			}
+			auto sysroot =
+				authority_member_nullable_text(value, "sysroot", "task.toolchain.sysroot");
+			if (!sysroot)
+				return sdk::unexpected(std::move(sysroot.error()));
+			output.sysroot = std::move(*sysroot);
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<provider_task_v4_variant_authority>
+		decode_variant(const json_value& value)
+		{
+			constexpr std::array fields{"language",
+										"language_standard",
+										"target_triple",
+										"predefined_macros_digest",
+										"include_search_digest",
+										"semantic_flags_digest"};
+			if (auto valid = authority_exact_members(value, fields, "task.variant"); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			provider_task_v4_variant_authority output;
+			for (auto item :
+				 {std::pair{&output.language, std::string_view{"language"}},
+				  std::pair{&output.language_standard, std::string_view{"language_standard"}},
+				  std::pair{&output.target_triple, std::string_view{"target_triple"}},
+				  std::pair{&output.predefined_macros_digest,
+							std::string_view{"predefined_macros_digest"}},
+				  std::pair{&output.include_search_digest,
+							std::string_view{"include_search_digest"}},
+				  std::pair{&output.semantic_flags_digest,
+							std::string_view{"semantic_flags_digest"}}})
+			{
+				auto text = authority_member_text(value, item.second, "task.variant");
+				if (!text)
+					return sdk::unexpected(std::move(text.error()));
+				*item.first = std::move(*text);
+			}
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<sdk::provider::execution_budget>
+		decode_budget(const json_value& value)
+		{
+			constexpr std::array fields{"output_bytes",
+										"rows",
+										"diagnostics",
+										"wall_ms",
+										"cpu_ms",
+										"address_space_bytes",
+										"transport_bytes",
+										"open_files",
+										"subprocesses"};
+			if (auto valid = authority_exact_members(value, fields, "task.budget"); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			constexpr auto maximum =
+				static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+			sdk::provider::execution_budget output;
+			for (auto item :
+				 {std::pair{&output.output_bytes, std::string_view{"output_bytes"}},
+				  std::pair{&output.rows, std::string_view{"rows"}},
+				  std::pair{&output.diagnostics, std::string_view{"diagnostics"}},
+				  std::pair{&output.wall_ms, std::string_view{"wall_ms"}},
+				  std::pair{&output.cpu_ms, std::string_view{"cpu_ms"}},
+				  std::pair{&output.address_space_bytes, std::string_view{"address_space_bytes"}},
+				  std::pair{&output.transport_bytes, std::string_view{"transport_bytes"}},
+				  std::pair{&output.open_files, std::string_view{"open_files"}},
+				  std::pair{&output.subprocesses, std::string_view{"subprocesses"}}})
+			{
+				auto number = authority_member_unsigned(value, item.second, "task.budget", maximum);
+				if (!number)
+					return sdk::unexpected(std::move(number.error()));
+				*item.first = *number;
+			}
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<sdk::provider::sandbox_requirement>
+		decode_sandbox(const json_value& value, const std::string_view field)
+		{
+			constexpr std::array fields{"minimum", "policy_digest"};
+			if (auto valid = authority_exact_members(value, fields, field); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			auto minimum = authority_member(value, "minimum", field);
+			auto digest = authority_member_text(value, "policy_digest", field);
+			if (!minimum || !digest)
+				return sdk::unexpected(!minimum ? std::move(minimum.error())
+												: std::move(digest.error()));
+			auto assurance =
+				authority_sandbox_assurance(**minimum, std::string{field} + ".minimum");
+			if (!assurance)
+				return sdk::unexpected(std::move(assurance.error()));
+			return sdk::provider::sandbox_requirement{*assurance, std::move(*digest)};
+		}
+
+		[[nodiscard]] sdk::result<provider_task_v4_task_authority>
+		decode_task_authority(const json_value& value)
+		{
+			constexpr std::array fields{"provider_task_id",
+										"provider_execution_id",
+										"task_input_digest",
+										"project_id",
+										"catalog_id",
+										"catalog_digest",
+										"selected_catalog_compile_unit_id",
+										"compile_unit_id",
+										"build_variant_id",
+										"toolchain_context_id",
+										"toolchain_digest",
+										"toolchain",
+										"variant",
+										"normalized_invocation_digest",
+										"environment_digest",
+										"language",
+										"working_directory",
+										"condition_universe_id",
+										"condition_id",
+										"interpretation_domain",
+										"source",
+										"effective_argv",
+										"qualified_read_roots",
+										"requested_descriptor_ids",
+										"dependency_groups",
+										"budget",
+										"sandbox"};
+			if (auto valid = authority_exact_members(value, fields, "task"); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			provider_task_v4_task_authority output;
+			for (auto item :
+				 {std::pair{&output.provider_task_id, std::string_view{"provider_task_id"}},
+				  std::pair{&output.provider_execution_id,
+							std::string_view{"provider_execution_id"}},
+				  std::pair{&output.project_id, std::string_view{"project_id"}},
+				  std::pair{&output.catalog_id, std::string_view{"catalog_id"}},
+				  std::pair{&output.catalog_digest, std::string_view{"catalog_digest"}},
+				  std::pair{&output.selected_catalog_compile_unit_id,
+							std::string_view{"selected_catalog_compile_unit_id"}},
+				  std::pair{&output.compile_unit_id, std::string_view{"compile_unit_id"}},
+				  std::pair{&output.build_variant_id, std::string_view{"build_variant_id"}},
+				  std::pair{&output.toolchain_context_id, std::string_view{"toolchain_context_id"}},
+				  std::pair{&output.toolchain_digest, std::string_view{"toolchain_digest"}},
+				  std::pair{&output.task_input_digest, std::string_view{"task_input_digest"}},
+				  std::pair{&output.normalized_invocation_digest,
+							std::string_view{"normalized_invocation_digest"}},
+				  std::pair{&output.environment_digest, std::string_view{"environment_digest"}},
+				  std::pair{&output.language, std::string_view{"language"}},
+				  std::pair{&output.working_directory, std::string_view{"working_directory"}},
+				  std::pair{&output.condition_universe_id,
+							std::string_view{"condition_universe_id"}},
+				  std::pair{&output.condition_id, std::string_view{"condition_id"}},
+				  std::pair{&output.interpretation_domain,
+							std::string_view{"interpretation_domain"}}})
+			{
+				auto text = authority_member_text(value, item.second, "task");
+				if (!text)
+					return sdk::unexpected(std::move(text.error()));
+				*item.first = std::move(*text);
+			}
+			auto toolchain = authority_member(value, "toolchain", "task.toolchain");
+			auto variant = authority_member(value, "variant", "task.variant");
+			auto source = authority_member(value, "source", "task.source");
+			auto budget = authority_member(value, "budget", "task.budget");
+			auto sandbox = authority_member(value, "sandbox", "task.sandbox");
+			if (!toolchain || !variant || !source || !budget || !sandbox)
+				return sdk::unexpected(!toolchain	  ? std::move(toolchain.error())
+										   : !variant ? std::move(variant.error())
+										   : !source  ? std::move(source.error())
+										   : !budget  ? std::move(budget.error())
+													  : std::move(sandbox.error()));
+			auto decoded_toolchain = decode_toolchain(**toolchain);
+			auto decoded_variant = decode_variant(**variant);
+			auto decoded_source = decode_task_source(**source);
+			auto decoded_budget = decode_budget(**budget);
+			auto decoded_sandbox = decode_sandbox(**sandbox, "task.sandbox");
+			if (!decoded_toolchain || !decoded_variant || !decoded_source || !decoded_budget ||
+				!decoded_sandbox)
+				return sdk::unexpected(!decoded_toolchain	  ? std::move(decoded_toolchain.error())
+										   : !decoded_variant ? std::move(decoded_variant.error())
+										   : !decoded_source  ? std::move(decoded_source.error())
+										   : !decoded_budget  ? std::move(decoded_budget.error())
+															  : std::move(decoded_sandbox.error()));
+			output.toolchain = std::move(*decoded_toolchain);
+			output.variant = std::move(*decoded_variant);
+			output.source = std::move(*decoded_source);
+			output.budget = std::move(*decoded_budget);
+			output.sandbox = std::move(*decoded_sandbox);
+			auto arguments =
+				authority_member_string_array(value, "effective_argv", "task.effective_argv");
+			auto roots = authority_member_string_array(
+				value, "qualified_read_roots", "task.qualified_read_roots");
+			auto descriptors = authority_member_string_array(
+				value, "requested_descriptor_ids", "task.requested_descriptor_ids");
+			auto groups =
+				authority_member_string_array(value, "dependency_groups", "task.dependency_groups");
+			if (!arguments || !roots || !descriptors || !groups)
+				return sdk::unexpected(!arguments		  ? std::move(arguments.error())
+										   : !roots		  ? std::move(roots.error())
+										   : !descriptors ? std::move(descriptors.error())
+														  : std::move(groups.error()));
+			output.input_authority = {output.normalized_invocation_digest,
+									  output.working_directory,
+									  std::move(*arguments),
+									  std::move(*roots)};
+			output.requested_descriptor_ids = std::move(*descriptors);
+			output.dependency_groups = std::move(*groups);
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<provider_task_v4_catalog_authority>
+		decode_catalog(const json_value& value)
+		{
+			constexpr std::array fields{"project_id",
+										"catalog_id",
+										"catalog_digest",
+										"logical_root",
+										"catalog_environment_digest",
+										"catalog_compile_unit_census_digest",
+										"catalog_compile_units"};
+			if (auto valid = authority_exact_members(value, fields, "project"); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			provider_task_v4_catalog_authority output;
+			auto project_id = authority_member_text(value, "project_id", "project.project_id");
+			auto catalog_id = authority_member_text(value, "catalog_id", "project.catalog_id");
+			auto catalog_digest =
+				authority_member_text(value, "catalog_digest", "project.catalog_digest");
+			auto logical_root =
+				authority_member_text(value, "logical_root", "project.logical_root");
+			auto environment = authority_member_text(
+				value, "catalog_environment_digest", "project.catalog_environment_digest");
+			auto census = authority_member_text(value,
+												"catalog_compile_unit_census_digest",
+												"project.catalog_compile_unit_census_digest");
+			if (!project_id || !catalog_id || !catalog_digest || !logical_root || !environment ||
+				!census)
+			{
+				return sdk::unexpected(!project_id			 ? std::move(project_id.error())
+										   : !catalog_id	 ? std::move(catalog_id.error())
+										   : !catalog_digest ? std::move(catalog_digest.error())
+										   : !logical_root	 ? std::move(logical_root.error())
+										   : !environment	 ? std::move(environment.error())
+															 : std::move(census.error()));
+			}
+			auto units_value =
+				authority_member(value, "catalog_compile_units", "project.catalog_compile_units");
+			if (!units_value || (*units_value)->as_array() == nullptr)
+			{
+				return sdk::unexpected(!units_value
+										   ? std::move(units_value.error())
+										   : invalid("project.catalog_compile_units", "array"));
+			}
+			if ((*units_value)->as_array()->size() > 4096U)
+				return sdk::unexpected(invalid("project.catalog_compile_units", "count"));
+			std::vector<sdk::catalog_compile_unit> units;
+			units.reserve((*units_value)->as_array()->size());
+			for (const auto& item : *(*units_value)->as_array())
+			{
+				constexpr std::array unit_fields{std::string_view{"catalog_compile_unit_id"},
+												 std::string_view{"effective_invocation_digest"},
+												 std::string_view{"source_digest"},
+												 std::string_view{"environment_digest"}};
+				if (auto valid =
+						authority_exact_members(item, unit_fields, "project.catalog_compile_unit");
+					!valid)
+					return sdk::unexpected(std::move(valid.error()));
+				auto unit_id = authority_member_text(
+					item, "catalog_compile_unit_id", "catalog_compile_unit_id");
+				auto invocation = authority_member_text(
+					item, "effective_invocation_digest", "effective_invocation_digest");
+				auto source = authority_member_text(item, "source_digest", "source_digest");
+				auto unit_environment =
+					authority_member_text(item, "environment_digest", "environment_digest");
+				if (!unit_id || !invocation || !source || !unit_environment)
+					return sdk::unexpected(!unit_id			 ? std::move(unit_id.error())
+											   : !invocation ? std::move(invocation.error())
+											   : !source	 ? std::move(source.error())
+															 : std::move(unit_environment.error()));
+				units.push_back({std::move(*unit_id),
+								 std::move(*invocation),
+								 std::move(*source),
+								 std::move(*unit_environment)});
+			}
+			auto catalog = sdk::project_catalog::make(
+				std::move(*logical_root), std::move(*environment), std::move(units));
+			if (!catalog)
+				return sdk::unexpected(std::move(catalog.error()));
+			if (catalog->catalog_id != *catalog_id || catalog->catalog_digest != *catalog_digest)
+				return sdk::unexpected(mismatch("project.catalog", "bottom-up-digest"));
+			output.project_id = std::move(*project_id);
+			output.catalog = std::move(*catalog);
+			output.catalog_compile_unit_census_digest = std::move(*census);
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<provider_task_v4_base_descriptor_binding>
+		decode_base_descriptor(const json_value& value)
+		{
+			constexpr std::array fields{"descriptor_id",
+										"descriptor_version",
+										"contract_digest",
+										"runtime_descriptor_digest",
+										"stage_order",
+										"output_stage",
+										"owner"};
+			if (auto valid = authority_exact_members(value, fields, "registry.base_descriptor");
+				!valid)
+				return sdk::unexpected(std::move(valid.error()));
+			provider_task_v4_base_descriptor_binding output;
+			auto id = authority_member_text(value, "descriptor_id", "registry.base_descriptor");
+			auto version =
+				authority_member(value, "descriptor_version", "registry.base_descriptor");
+			auto contract =
+				authority_member_text(value, "contract_digest", "registry.base_descriptor");
+			auto runtime = authority_member_text(
+				value, "runtime_descriptor_digest", "registry.base_descriptor");
+			auto stage =
+				authority_member_unsigned(value, "stage_order", "registry.base_descriptor");
+			auto output_stage =
+				authority_member_text(value, "output_stage", "registry.base_descriptor");
+			auto owner = authority_member_text(value, "owner", "registry.base_descriptor");
+			if (!id || !version || !contract || !runtime || !stage || !output_stage || !owner)
+			{
+				return sdk::unexpected(!id ? std::move(id.error())
+										   : !version	   ? std::move(version.error())
+										   : !contract	   ? std::move(contract.error())
+										   : !runtime	   ? std::move(runtime.error())
+										   : !stage		   ? std::move(stage.error())
+										   : !output_stage ? std::move(output_stage.error())
+														   : std::move(owner.error()));
+			}
+			if (*stage > std::numeric_limits<std::uint32_t>::max())
+				return sdk::unexpected(invalid("registry.base_descriptor.stage_order", "range"));
+			auto parsed_version =
+				authority_version(**version, "registry.base_descriptor.descriptor_version");
+			if (!parsed_version)
+				return sdk::unexpected(std::move(parsed_version.error()));
+			output.descriptor_id = std::move(*id);
+			output.descriptor_version = *parsed_version;
+			output.contract_digest = std::move(*contract);
+			output.runtime_descriptor_digest = std::move(*runtime);
+			output.stage_order = static_cast<std::uint32_t>(*stage);
+			output.output_stage = std::move(*output_stage);
+			output.owner = std::move(*owner);
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<provider_task_v4_output_descriptor_binding>
+		decode_output_descriptor(const json_value& value)
+		{
+			constexpr std::array fields{"descriptor_id",
+										"descriptor_version",
+										"contract_digest",
+										"runtime_descriptor_digest",
+										"dependency_group_id",
+										"atomic_output_group_id",
+										"batch_id",
+										"output_stage"};
+			if (auto valid = authority_exact_members(value, fields, "registry.descriptor"); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			provider_task_v4_output_descriptor_binding output;
+			auto id = authority_member_text(value, "descriptor_id", "registry.descriptor");
+			auto version = authority_member(value, "descriptor_version", "registry.descriptor");
+			auto contract = authority_member_text(value, "contract_digest", "registry.descriptor");
+			auto runtime =
+				authority_member_text(value, "runtime_descriptor_digest", "registry.descriptor");
+			auto group = authority_member_text(value, "dependency_group_id", "registry.descriptor");
+			auto atomic =
+				authority_member_text(value, "atomic_output_group_id", "registry.descriptor");
+			auto batch = authority_member_text(value, "batch_id", "registry.descriptor");
+			auto stage = authority_member_text(value, "output_stage", "registry.descriptor");
+			if (!id || !version || !contract || !runtime || !group || !atomic || !batch || !stage)
+				return sdk::unexpected(!id ? std::move(id.error())
+										   : !version  ? std::move(version.error())
+										   : !contract ? std::move(contract.error())
+										   : !runtime  ? std::move(runtime.error())
+										   : !group	   ? std::move(group.error())
+										   : !atomic   ? std::move(atomic.error())
+										   : !batch	   ? std::move(batch.error())
+													   : std::move(stage.error()));
+			auto parsed_version =
+				authority_version(**version, "registry.descriptor.descriptor_version");
+			if (!parsed_version)
+				return sdk::unexpected(std::move(parsed_version.error()));
+			output.descriptor_id = std::move(*id);
+			output.descriptor_version = *parsed_version;
+			output.contract_digest = std::move(*contract);
+			output.runtime_descriptor_digest = std::move(*runtime);
+			output.dependency_group_id = std::move(*group);
+			output.atomic_output_group_id = std::move(*atomic);
+			output.batch_id = std::move(*batch);
+			output.output_stage = std::move(*stage);
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<provider_task_v4_admitted_descriptor_binding>
+		decode_admitted_descriptor(const json_value& value)
+		{
+			constexpr std::array fields{"descriptor_id", "runtime_descriptor_digest"};
+			if (auto valid = authority_exact_members(value, fields, "engine.admitted_descriptor");
+				!valid)
+				return sdk::unexpected(std::move(valid.error()));
+			auto id = authority_member_text(value, "descriptor_id", "engine.admitted_descriptor");
+			auto digest = authority_member_text(
+				value, "runtime_descriptor_digest", "engine.admitted_descriptor");
+			if (!id || !digest)
+				return sdk::unexpected(!id ? std::move(id.error()) : std::move(digest.error()));
+			return provider_task_v4_admitted_descriptor_binding{std::move(*id), std::move(*digest)};
+		}
+
+		[[nodiscard]] sdk::result<provider_task_v4_tool_authority>
+		decode_tool_authority(const json_value& value)
+		{
+			constexpr std::array fields{"executable",
+										"interface_version",
+										"distribution_version",
+										"source_revision",
+										"source_tree",
+										"installed_executable_digest",
+										"package_configuration",
+										"occurrence_manifest_digest"};
+			if (auto valid = authority_exact_members(value, fields, "tool"); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			provider_task_v4_tool_authority output;
+			for (auto item :
+				 {std::pair{&output.executable, std::string_view{"executable"}},
+				  std::pair{&output.interface_version, std::string_view{"interface_version"}},
+				  std::pair{&output.distribution_version, std::string_view{"distribution_version"}},
+				  std::pair{&output.source_revision, std::string_view{"source_revision"}},
+				  std::pair{&output.source_tree, std::string_view{"source_tree"}},
+				  std::pair{&output.installed_executable_digest,
+							std::string_view{"installed_executable_digest"}},
+				  std::pair{&output.package_configuration,
+							std::string_view{"package_configuration"}},
+				  std::pair{&output.occurrence_manifest_digest,
+							std::string_view{"occurrence_manifest_digest"}}})
+			{
+				auto text = authority_member_text(value, item.second, "tool");
+				if (!text)
+					return sdk::unexpected(std::move(text.error()));
+				*item.first = std::move(*text);
+			}
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<provider_task_v4_worker_authority>
+		decode_worker_authority(const json_value& value)
+		{
+			constexpr std::array fields{"executable",
+										"provider_id",
+										"provider_version",
+										"installed_binary_digest",
+										"semantic_contract_digest",
+										"protocol_major",
+										"protocol_minor",
+										"required_features",
+										"sandbox_policy_digest"};
+			if (auto valid = authority_exact_members(value, fields, "worker"); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			provider_task_v4_worker_authority output;
+			for (auto item : {std::pair{&output.executable, std::string_view{"executable"}},
+							  std::pair{&output.provider_id, std::string_view{"provider_id"}},
+							  std::pair{&output.installed_binary_digest,
+										std::string_view{"installed_binary_digest"}},
+							  std::pair{&output.semantic_contract_digest,
+										std::string_view{"semantic_contract_digest"}},
+							  std::pair{&output.sandbox_policy_digest,
+										std::string_view{"sandbox_policy_digest"}}})
+			{
+				auto text = authority_member_text(value, item.second, "worker");
+				if (!text)
+					return sdk::unexpected(std::move(text.error()));
+				*item.first = std::move(*text);
+			}
+			auto version = authority_member(value, "provider_version", "worker.provider_version");
+			auto major =
+				authority_member_unsigned(value, "protocol_major", "worker.protocol_major");
+			auto minor =
+				authority_member_unsigned(value, "protocol_minor", "worker.protocol_minor");
+			auto features = authority_member_string_array(
+				value, "required_features", "worker.required_features");
+			if (!version || !major || !minor || !features)
+			{
+				return sdk::unexpected(!version		? std::move(version.error())
+										   : !major ? std::move(major.error())
+										   : !minor ? std::move(minor.error())
+													: std::move(features.error()));
+			}
+			auto parsed_version = authority_version(**version, "worker.provider_version");
+			if (!parsed_version)
+				return sdk::unexpected(std::move(parsed_version.error()));
+			if (*major > std::numeric_limits<std::uint16_t>::max() ||
+				*minor > std::numeric_limits<std::uint16_t>::max())
+				return sdk::unexpected(invalid("worker.protocol", "range"));
+			output.provider_version = *parsed_version;
+			output.protocol_major = static_cast<std::uint16_t>(*major);
+			output.protocol_minor = static_cast<std::uint16_t>(*minor);
+			output.required_features = std::move(*features);
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<provider_task_v4_interpretation_authority>
+		decode_interpretation(const json_value& value)
+		{
+			constexpr std::array fields{
+				"policy_id", "selected_domain", "interpretation_policy_digest"};
+			if (auto valid = authority_exact_members(value, fields, "interpretation_policy");
+				!valid)
+				return sdk::unexpected(std::move(valid.error()));
+			provider_task_v4_interpretation_authority output;
+			auto policy =
+				authority_member_text(value, "policy_id", "interpretation_policy.policy_id");
+			auto domain = authority_member_text(
+				value, "selected_domain", "interpretation_policy.selected_domain");
+			auto digest = authority_member_text(
+				value, "interpretation_policy_digest", "interpretation_policy.digest");
+			if (!policy || !domain || !digest)
+				return sdk::unexpected(!policy		 ? std::move(policy.error())
+										   : !domain ? std::move(domain.error())
+													 : std::move(digest.error()));
+			output.policy_id = std::move(*policy);
+			output.selected_domain = std::move(*domain);
+			output.interpretation_policy_digest = std::move(*digest);
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<provider_task_v4_group_topology_authority>
+		decode_group_topology(const json_value& value)
+		{
+			constexpr std::array fields{
+				"dependency_groups", "atomic_output_group", "partial_policy"};
+			if (auto valid = authority_exact_members(value, fields, "group_topology"); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			provider_task_v4_group_topology_authority output;
+			auto groups = authority_member_string_array(
+				value, "dependency_groups", "group_topology.dependency_groups");
+			auto atomic = authority_member_text(
+				value, "atomic_output_group", "group_topology.atomic_output_group");
+			auto partial =
+				authority_member_text(value, "partial_policy", "group_topology.partial_policy");
+			if (!groups || !atomic || !partial)
+				return sdk::unexpected(!groups		 ? std::move(groups.error())
+										   : !atomic ? std::move(atomic.error())
+													 : std::move(partial.error()));
+			output.dependency_groups = std::move(*groups);
+			output.atomic_output_group = std::move(*atomic);
+			output.partial_policy = std::move(*partial);
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<provider_task_v4_trust_authority>
+		decode_trust_policy(const json_value& value)
+		{
+			constexpr std::array fields{"policy_id",
+										"execution_profile",
+										"provider_id",
+										"provider_version",
+										"semantic_contract_digest",
+										"protocol_major",
+										"protocol_minor",
+										"required_features",
+										"required_qualification",
+										"worker_sandbox_policy_digest",
+										"task_sandbox_requirements",
+										"trust_policy_digest"};
+			if (auto valid = authority_exact_members(value, fields, "trust_policy"); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			provider_task_v4_trust_authority output;
+			for (auto item :
+				 {std::pair{&output.policy_id, std::string_view{"policy_id"}},
+				  std::pair{&output.execution_profile, std::string_view{"execution_profile"}},
+				  std::pair{&output.provider_id, std::string_view{"provider_id"}},
+				  std::pair{&output.semantic_contract_digest,
+							std::string_view{"semantic_contract_digest"}},
+				  std::pair{&output.required_qualification,
+							std::string_view{"required_qualification"}},
+				  std::pair{&output.worker_sandbox_policy_digest,
+							std::string_view{"worker_sandbox_policy_digest"}},
+				  std::pair{&output.trust_policy_digest, std::string_view{"trust_policy_digest"}}})
+			{
+				auto text = authority_member_text(value, item.second, "trust_policy");
+				if (!text)
+					return sdk::unexpected(std::move(text.error()));
+				*item.first = std::move(*text);
+			}
+			auto version =
+				authority_member(value, "provider_version", "trust_policy.provider_version");
+			auto major =
+				authority_member_unsigned(value, "protocol_major", "trust_policy.protocol_major");
+			auto minor =
+				authority_member_unsigned(value, "protocol_minor", "trust_policy.protocol_minor");
+			auto features = authority_member_string_array(
+				value, "required_features", "trust_policy.required_features");
+			if (!version || !major || !minor || !features)
+			{
+				return sdk::unexpected(!version		? std::move(version.error())
+										   : !major ? std::move(major.error())
+										   : !minor ? std::move(minor.error())
+													: std::move(features.error()));
+			}
+			auto parsed_version = authority_version(**version, "trust_policy.provider_version");
+			if (!parsed_version)
+				return sdk::unexpected(std::move(parsed_version.error()));
+			if (*major > std::numeric_limits<std::uint16_t>::max() ||
+				*minor > std::numeric_limits<std::uint16_t>::max())
+				return sdk::unexpected(invalid("trust_policy.protocol", "range"));
+			output.provider_version = *parsed_version;
+			output.protocol_major = static_cast<std::uint16_t>(*major);
+			output.protocol_minor = static_cast<std::uint16_t>(*minor);
+			output.required_features = std::move(*features);
+			auto requirements = authority_member(
+				value, "task_sandbox_requirements", "trust_policy.task_sandbox_requirements");
+			if (!requirements || (*requirements)->as_array() == nullptr)
+				return sdk::unexpected(
+					!requirements ? std::move(requirements.error())
+								  : invalid("trust_policy.task_sandbox_requirements", "array"));
+			if ((*requirements)->as_array()->size() > 4096U)
+				return sdk::unexpected(invalid("trust_policy.task_sandbox_requirements", "count"));
+			output.task_sandbox_requirements.reserve((*requirements)->as_array()->size());
+			for (const auto& requirement : *(*requirements)->as_array())
+			{
+				auto decoded =
+					decode_sandbox(requirement, "trust_policy.task_sandbox_requirements");
+				if (!decoded)
+					return sdk::unexpected(std::move(decoded.error()));
+				output.task_sandbox_requirements.push_back(std::move(*decoded));
+			}
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<sdk::snapshot_series_selector>
+		decode_selector(const json_value& value)
+		{
+			constexpr std::array fields{"catalog_id",
+										"channel_id",
+										"engine_generation_id",
+										"condition_universe_id",
+										"relation_registry_digest",
+										"interpretation_policy_digest",
+										"trust_policy_digest"};
+			if (auto valid = authority_exact_members(value, fields, "publication.selector"); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			sdk::snapshot_series_selector output;
+			for (auto item :
+				 {std::pair{&output.catalog_id, std::string_view{"catalog_id"}},
+				  std::pair{&output.channel_id, std::string_view{"channel_id"}},
+				  std::pair{&output.engine_generation_id, std::string_view{"engine_generation_id"}},
+				  std::pair{&output.condition_universe_id,
+							std::string_view{"condition_universe_id"}},
+				  std::pair{&output.relation_registry_digest,
+							std::string_view{"relation_registry_digest"}},
+				  std::pair{&output.interpretation_policy_digest,
+							std::string_view{"interpretation_policy_digest"}},
+				  std::pair{&output.trust_policy_digest, std::string_view{"trust_policy_digest"}}})
+			{
+				auto text = authority_member_text(value, item.second, "publication.selector");
+				if (!text)
+					return sdk::unexpected(std::move(text.error()));
+				*item.first = std::move(*text);
+			}
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<provider_task_v4_publication_authority>
+		decode_publication(const json_value& value)
+		{
+			constexpr std::array fields{"backend",
+										"selector",
+										"series_id",
+										"genesis",
+										"expected_parent_publication",
+										"sqlite_path",
+										"partial_policy",
+										"transaction_count",
+										"reopen_before_success",
+										"recipe_id",
+										"recipe_digest",
+										"output_plan_digest",
+										"publication_target"};
+			if (auto valid = authority_exact_members(value, fields, "publication"); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			provider_task_v4_publication_authority output;
+			auto backend = authority_member_text(value, "backend", "publication.backend");
+			auto selector = authority_member(value, "selector", "publication.selector");
+			auto series = authority_member_text(value, "series_id", "publication.series_id");
+			auto genesis = authority_member_bool(value, "genesis", "publication.genesis");
+			auto parent = authority_member_nullable_text(
+				value, "expected_parent_publication", "publication.expected_parent_publication");
+			auto sqlite =
+				authority_member_nullable_text(value, "sqlite_path", "publication.sqlite_path");
+			auto partial =
+				authority_member_text(value, "partial_policy", "publication.partial_policy");
+			auto transactions = authority_member_unsigned(
+				value, "transaction_count", "publication.transaction_count");
+			auto reopen = authority_member_bool(
+				value, "reopen_before_success", "publication.reopen_before_success");
+			auto recipe_id = authority_member_text(value, "recipe_id", "publication.recipe_id");
+			auto recipe_digest =
+				authority_member_text(value, "recipe_digest", "publication.recipe_digest");
+			auto output_plan = authority_member_text(
+				value, "output_plan_digest", "publication.output_plan_digest");
+			auto target = authority_member_text(
+				value, "publication_target", "publication.publication_target");
+			if (!backend || !selector || !series || !genesis || !parent || !sqlite || !partial ||
+				!transactions || !reopen || !recipe_id || !recipe_digest || !output_plan || !target)
+			{
+				return sdk::unexpected(!backend				? std::move(backend.error())
+										   : !selector		? std::move(selector.error())
+										   : !series		? std::move(series.error())
+										   : !genesis		? std::move(genesis.error())
+										   : !parent		? std::move(parent.error())
+										   : !sqlite		? std::move(sqlite.error())
+										   : !partial		? std::move(partial.error())
+										   : !transactions	? std::move(transactions.error())
+										   : !reopen		? std::move(reopen.error())
+										   : !recipe_id		? std::move(recipe_id.error())
+										   : !recipe_digest ? std::move(recipe_digest.error())
+										   : !output_plan	? std::move(output_plan.error())
+															: std::move(target.error()));
+			}
+			auto decoded_selector = decode_selector(**selector);
+			if (!decoded_selector)
+				return sdk::unexpected(std::move(decoded_selector.error()));
+			output.backend = std::move(*backend);
+			output.selector = std::move(*decoded_selector);
+			output.series_id = std::move(*series);
+			output.genesis = *genesis;
+			output.expected_parent_publication = std::move(*parent);
+			output.sqlite_path = std::move(*sqlite);
+			output.partial_policy = std::move(*partial);
+			output.transaction_count = *transactions;
+			output.reopen_before_success = *reopen;
+			output.recipe_id = std::move(*recipe_id);
+			output.recipe_digest = std::move(*recipe_digest);
+			output.output_plan_digest = std::move(*output_plan);
+			output.publication_target = std::move(*target);
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<provider_task_v4_registry_authority>
+		decode_registry(const json_value& value)
+		{
+			constexpr std::array fields{
+				"path", "authority_registry_digest", "base_descriptors", "descriptors"};
+			if (auto valid = authority_exact_members(value, fields, "registry"); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			provider_task_v4_registry_authority output;
+			auto path = authority_member_text(value, "path", "registry.path");
+			auto digest = authority_member_text(
+				value, "authority_registry_digest", "registry.authority_registry_digest");
+			auto base = authority_member(value, "base_descriptors", "registry.base_descriptors");
+			auto descriptors = authority_member(value, "descriptors", "registry.descriptors");
+			if (!path || !digest || !base || !descriptors)
+				return sdk::unexpected(!path		 ? std::move(path.error())
+										   : !digest ? std::move(digest.error())
+										   : !base	 ? std::move(base.error())
+													 : std::move(descriptors.error()));
+			if ((*base)->as_array() == nullptr || (*descriptors)->as_array() == nullptr)
+				return sdk::unexpected(invalid("registry", "descriptor-arrays"));
+			if ((*base)->as_array()->size() > 4096U || (*descriptors)->as_array()->size() > 4096U)
+				return sdk::unexpected(invalid("registry", "descriptor-count"));
+			output.path = std::move(*path);
+			output.authority_registry_digest = std::move(*digest);
+			output.base_descriptors.reserve((*base)->as_array()->size());
+			for (const auto& item : *(*base)->as_array())
+			{
+				auto decoded = decode_base_descriptor(item);
+				if (!decoded)
+					return sdk::unexpected(std::move(decoded.error()));
+				output.base_descriptors.push_back(std::move(*decoded));
+			}
+			output.descriptors.reserve((*descriptors)->as_array()->size());
+			for (const auto& item : *(*descriptors)->as_array())
+			{
+				auto decoded = decode_output_descriptor(item);
+				if (!decoded)
+					return sdk::unexpected(std::move(decoded.error()));
+				output.descriptors.push_back(std::move(*decoded));
+			}
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<provider_task_v4_engine_authority>
+		decode_engine(const json_value& value)
+		{
+			constexpr std::array fields{"generation_contract",
+										"admitted_descriptors",
+										"engine_registry_digest",
+										"engine_generation_id"};
+			if (auto valid = authority_exact_members(value, fields, "engine"); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			provider_task_v4_engine_authority output;
+			auto contract =
+				authority_member_text(value, "generation_contract", "engine.generation_contract");
+			auto digest = authority_member_text(
+				value, "engine_registry_digest", "engine.engine_registry_digest");
+			auto generation =
+				authority_member_text(value, "engine_generation_id", "engine.engine_generation_id");
+			auto admitted =
+				authority_member(value, "admitted_descriptors", "engine.admitted_descriptors");
+			if (!contract || !digest || !generation || !admitted)
+				return sdk::unexpected(!contract		 ? std::move(contract.error())
+										   : !digest	 ? std::move(digest.error())
+										   : !generation ? std::move(generation.error())
+														 : std::move(admitted.error()));
+			if ((*admitted)->as_array() == nullptr)
+				return sdk::unexpected(invalid("engine.admitted_descriptors", "array"));
+			if ((*admitted)->as_array()->size() > 4096U)
+				return sdk::unexpected(invalid("engine.admitted_descriptors", "count"));
+			output.generation_contract = std::move(*contract);
+			output.engine_registry_digest = std::move(*digest);
+			output.engine_generation_id = std::move(*generation);
+			output.admitted_descriptors.reserve((*admitted)->as_array()->size());
+			for (const auto& item : *(*admitted)->as_array())
+			{
+				auto decoded = decode_admitted_descriptor(item);
+				if (!decoded)
+					return sdk::unexpected(std::move(decoded.error()));
+				output.admitted_descriptors.push_back(std::move(*decoded));
+			}
+			return output;
 		}
 
 		[[nodiscard]] sdk::result<void> validate_document_closures(const json_value& root)
@@ -313,28 +1387,15 @@ namespace cxxlens::detail::clang22::materialization
 			return {};
 		}
 
-		[[nodiscard]] sdk::result<void>
+		[[nodiscard]] sdk::result<provider_task_v4_request_authority>
 		validate_inherited_authority(const materialization_request_v2_2& request)
 		{
+			auto decoded = decode_provider_task_v4_request_authority(request.inherited_authority);
+			if (!decoded)
+				return sdk::unexpected(std::move(decoded.error()));
 			const auto* object = request.inherited_authority.as_object();
 			if (object == nullptr)
 				return sdk::unexpected(invalid("inherited_authority", "object-required"));
-			constexpr std::array<std::string_view, 12U> exact{"engine",
-															  "group_topology",
-															  "interpretation_policy",
-															  "materialization_request_id",
-															  "publication",
-															  "project",
-															  "registry",
-															  "semantic_request_digest",
-															  "tasks",
-															  "tool",
-															  "trust_policy",
-															  "worker"};
-			if (!request.inherited_authority.has_exact_members(exact))
-				return sdk::unexpected(invalid("inherited_authority", "member-set"));
-			if (contains_forbidden_source_bytes(request.inherited_authority))
-				return sdk::unexpected(invalid("inherited_authority", "source-bytes-forbidden"));
 			const auto* request_id =
 				request.inherited_authority.member("materialization_request_id");
 			const auto* request_digest =
@@ -348,7 +1409,7 @@ namespace cxxlens::detail::clang22::materialization
 			if (tasks == nullptr || tasks->as_array() == nullptr ||
 				tasks->as_array()->size() != request.base_tasks.size())
 				return sdk::unexpected(mismatch("inherited_authority.tasks"));
-			return {};
+			return std::move(*decoded);
 		}
 
 		[[nodiscard]] sdk::result<void>
@@ -413,14 +1474,110 @@ namespace cxxlens::detail::clang22::materialization
 			if (!std::ranges::equal(request.required_features,
 									materialization_request_v2_2_required_features()))
 				return sdk::unexpected(invalid("required_features", "contract"));
-			if (auto inherited = validate_inherited_authority(request); !inherited)
-				return inherited;
 			for (const auto& base : request.base_tasks)
 				if (auto valid = base.validate(limits.task_limits); !valid)
 					return valid;
 			return {};
 		}
 	} // namespace
+
+	sdk::result<provider_task_v4_request_authority>
+	decode_provider_task_v4_request_authority(const json_value& root)
+	{
+		if (root.as_object() == nullptr)
+			return sdk::unexpected(invalid("authority", "object-required"));
+		if (contains_forbidden_source_bytes(root))
+			return sdk::unexpected(invalid("authority", "source-bytes-forbidden"));
+		constexpr std::array authority_fields{"tool",
+											  "worker",
+											  "project",
+											  "registry",
+											  "engine",
+											  "interpretation_policy",
+											  "trust_policy",
+											  "group_topology",
+											  "tasks",
+											  "publication"};
+		for (const auto name : authority_fields)
+			if (root.member(name) == nullptr)
+				return sdk::unexpected(invalid("authority", "missing:" + std::string{name}));
+
+		auto tool = authority_member(root, "tool", "tool");
+		auto worker = authority_member(root, "worker", "worker");
+		auto project = authority_member(root, "project", "project");
+		auto registry = authority_member(root, "registry", "registry");
+		auto engine = authority_member(root, "engine", "engine");
+		auto interpretation =
+			authority_member(root, "interpretation_policy", "interpretation_policy");
+		auto trust = authority_member(root, "trust_policy", "trust_policy");
+		auto groups = authority_member(root, "group_topology", "group_topology");
+		auto tasks = authority_member(root, "tasks", "tasks");
+		auto publication = authority_member(root, "publication", "publication");
+		if (!tool || !worker || !project || !registry || !engine || !interpretation || !trust ||
+			!groups || !tasks || !publication)
+		{
+			return sdk::unexpected(!tool				 ? std::move(tool.error())
+									   : !worker		 ? std::move(worker.error())
+									   : !project		 ? std::move(project.error())
+									   : !registry		 ? std::move(registry.error())
+									   : !engine		 ? std::move(engine.error())
+									   : !interpretation ? std::move(interpretation.error())
+									   : !trust			 ? std::move(trust.error())
+									   : !groups		 ? std::move(groups.error())
+									   : !tasks			 ? std::move(tasks.error())
+														 : std::move(publication.error()));
+		}
+		if ((*tasks)->as_array() == nullptr || (*tasks)->as_array()->empty() ||
+			(*tasks)->as_array()->size() > 4096U)
+			return sdk::unexpected(invalid("tasks", "array-or-empty"));
+
+		auto decoded_tool = decode_tool_authority(**tool);
+		auto decoded_worker = decode_worker_authority(**worker);
+		auto decoded_project = decode_catalog(**project);
+		auto decoded_registry = decode_registry(**registry);
+		auto decoded_engine = decode_engine(**engine);
+		auto decoded_interpretation = decode_interpretation(**interpretation);
+		auto decoded_trust = decode_trust_policy(**trust);
+		auto decoded_groups = decode_group_topology(**groups);
+		auto decoded_publication = decode_publication(**publication);
+		if (!decoded_tool || !decoded_worker || !decoded_project || !decoded_registry ||
+			!decoded_engine || !decoded_interpretation || !decoded_trust || !decoded_groups ||
+			!decoded_publication)
+		{
+			return sdk::unexpected(!decoded_tool		   ? std::move(decoded_tool.error())
+									   : !decoded_worker   ? std::move(decoded_worker.error())
+									   : !decoded_project  ? std::move(decoded_project.error())
+									   : !decoded_registry ? std::move(decoded_registry.error())
+									   : !decoded_engine   ? std::move(decoded_engine.error())
+									   : !decoded_interpretation
+									   ? std::move(decoded_interpretation.error())
+									   : !decoded_trust	 ? std::move(decoded_trust.error())
+									   : !decoded_groups ? std::move(decoded_groups.error())
+														 : std::move(decoded_publication.error()));
+		}
+
+		provider_task_v4_request_authority output;
+		output.tool = std::move(*decoded_tool);
+		output.worker = std::move(*decoded_worker);
+		output.project = std::move(*decoded_project);
+		output.registry = std::move(*decoded_registry);
+		output.engine = std::move(*decoded_engine);
+		output.interpretation_policy = std::move(*decoded_interpretation);
+		output.trust_policy = std::move(*decoded_trust);
+		output.group_topology = std::move(*decoded_groups);
+		output.publication = std::move(*decoded_publication);
+		output.tasks.reserve((*tasks)->as_array()->size());
+		for (const auto& task : *(*tasks)->as_array())
+		{
+			auto decoded = decode_task_authority(task);
+			if (!decoded)
+				return sdk::unexpected(std::move(decoded.error()));
+			output.tasks.push_back(std::move(*decoded));
+		}
+		if (auto valid = output.validate(); !valid)
+			return sdk::unexpected(std::move(valid.error()));
+		return output;
+	}
 
 	std::vector<std::string> materialization_request_v2_2_required_features()
 	{
@@ -498,6 +1655,8 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(unsupported("worker.protocol", "downgrade-or-unknown"));
 		if (contains_forbidden_source_bytes(root))
 			return sdk::unexpected(invalid("request", "source-bytes-forbidden"));
+		if (auto authority = decode_provider_task_v4_request_authority(root); !authority)
+			return sdk::unexpected(std::move(authority.error()));
 		if (auto valid = validate_document_closures(root); !valid)
 			return valid;
 		return validate_document_task_extensions(root);
@@ -552,6 +1711,9 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(invalid("limits", "zero"));
 		if (auto shape = validate_request_shape(request, limits); !shape)
 			return sdk::unexpected(std::move(shape.error()));
+		auto authority = validate_inherited_authority(request);
+		if (!authority)
+			return sdk::unexpected(std::move(authority.error()));
 		auto negotiated = negotiate_materialization_request_v2_2(
 			request.protocol_major, request.protocol_minor, advertised_features);
 		if (!negotiated)
@@ -642,6 +1804,6 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(sdk::error{
 				"materialization.identity-mismatch", "request_id", "request-v2_2-digest"});
 		return validated_materialization_request_v2_2{
-			std::move(request), std::move(*negotiated), *total};
+			std::move(request), std::move(*authority), std::move(*negotiated), *total};
 	}
 } // namespace cxxlens::detail::clang22::materialization

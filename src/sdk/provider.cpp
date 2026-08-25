@@ -14,6 +14,7 @@
 
 #include "json_internal.hpp"
 #include "provider_ng1_transport_internal.hpp"
+#include "provider_protocol_v2_adapter.hpp"
 #include "provider_validation_internal.hpp"
 
 namespace cxxlens::sdk::provider
@@ -38,43 +39,10 @@ namespace cxxlens::sdk::provider
 
 	namespace
 	{
-		constexpr std::size_t header_size = 104U;
-		constexpr std::uint16_t required_extension_flag =
-			static_cast<std::uint16_t>(frame_flag::required_extension);
-		constexpr std::uint16_t optional_extension_flag =
-			static_cast<std::uint16_t>(frame_flag::optional_extension);
-		constexpr std::uint16_t compressed_payload_flag =
-			static_cast<std::uint16_t>(frame_flag::compressed_payload);
-		constexpr std::uint16_t end_of_stream_flag =
-			static_cast<std::uint16_t>(frame_flag::end_of_stream);
-		constexpr std::uint16_t known_flag_mask = required_extension_flag |
-			optional_extension_flag | compressed_payload_flag | end_of_stream_flag;
-		constexpr std::uint16_t ng1_heartbeat_wire_type = detail::ng1_heartbeat_message_id;
-
-		[[nodiscard]] bool has_flag(const std::uint16_t flags, const frame_flag flag) noexcept
-		{
-			return (flags & static_cast<std::uint16_t>(flag)) != 0U;
-		}
-
 		[[nodiscard]] error
 		provider_error(std::string code, std::string field, std::string detail = {})
 		{
 			return {std::move(code), std::move(field), std::move(detail)};
-		}
-
-		[[nodiscard]] result<void> validate_protocol_limits(const protocol_limits& limits)
-		{
-			if (limits.protocol_major != protocol_v2_major)
-				return cxxlens::sdk::unexpected(
-					provider_error("provider.protocol-major-mismatch", "major"));
-			if (limits.minimum_minor != protocol_v2_minor ||
-				limits.maximum_minor != protocol_v2_minor)
-				return cxxlens::sdk::unexpected(provider_error(
-					"provider.protocol-minor-mismatch", "minor", "protocol-2.0-only"));
-			if (limits.max_control_bytes == 0U || limits.max_payload_bytes == 0U)
-				return cxxlens::sdk::unexpected(
-					provider_error("provider.protocol-state-invalid", "limits", "zero-bound"));
-			return {};
 		}
 
 		template <std::unsigned_integral T>
@@ -92,19 +60,6 @@ namespace cxxlens::sdk::provider
 			for (std::size_t index = 0U; index < sizeof(T); ++index)
 				output = static_cast<T>((static_cast<std::uint64_t>(output) << 8U) |
 										std::to_integer<std::uint64_t>(input[offset + index]));
-			return output;
-		}
-
-		[[nodiscard]] std::array<std::byte, 32U> digest_bytes(std::string digest)
-		{
-			std::array<std::byte, 32U> output{};
-			if (digest.starts_with("sha256:"))
-				digest.erase(0U, 7U);
-			for (std::size_t index = 0U; index < output.size(); ++index)
-			{
-				const auto value = digest.substr(index * 2U, 2U);
-				output.at(index) = static_cast<std::byte>(std::stoul(value, nullptr, 16));
-			}
 			return output;
 		}
 
@@ -833,204 +788,19 @@ namespace cxxlens::sdk::provider
 
 	result<std::vector<std::byte>> encode_frame(const frame& value, const protocol_limits limits)
 	{
-		if (auto valid = validate_protocol_limits(limits); !valid)
-			return cxxlens::sdk::unexpected(std::move(valid.error()));
-		if (value.control.size() > limits.max_control_bytes)
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.oversized-control", "control"));
-		if (value.payload.size() > limits.max_payload_bytes)
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.oversized-payload", "payload"));
-		const auto type = static_cast<std::uint16_t>(value.type);
-		const bool reserved_ng1_heartbeat = type == ng1_heartbeat_wire_type;
-		const bool known_message = type >= static_cast<std::uint16_t>(message_type::hello) &&
-			type <= static_cast<std::uint16_t>(message_type::source_closure_reject);
-		const bool optional_extension = has_flag(value.flags, frame_flag::optional_extension);
-		if (value.protocol_major != limits.protocol_major)
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.protocol-major-mismatch", "major"));
-		if (value.protocol_minor < limits.minimum_minor ||
-			value.protocol_minor > limits.maximum_minor)
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.protocol-minor-mismatch", "minor"));
-		if (reserved_ng1_heartbeat && value.protocol_minor != protocol_v2_minor)
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.protocol-minor-mismatch", "ng1-heartbeat"));
-		if (reserved_ng1_heartbeat && (value.flags != 0U || !value.payload.empty()))
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.protocol-state-invalid", "ng1-heartbeat"));
-		if ((value.flags & ~known_flag_mask) != 0U ||
-			(has_flag(value.flags, frame_flag::required_extension) && optional_extension) ||
-			(optional_extension && has_flag(value.flags, frame_flag::end_of_stream)) ||
-			(optional_extension && known_message))
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.invalid-frame-flags", "flags"));
-		if (has_flag(value.flags, frame_flag::required_extension))
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.unknown-required-extension", "flags"));
-		if (has_flag(value.flags, frame_flag::compressed_payload))
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.unsupported-compression", "flags"));
-		if (has_flag(value.flags, frame_flag::end_of_stream) &&
-			(limits.supported_flags & end_of_stream_flag) == 0U)
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.invalid-frame-flags", "end-of-stream"));
-		if (type == 0U || (!known_message && !optional_extension))
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.unknown-message-type", "type"));
-
-		std::vector<std::byte> output;
-		output.reserve(header_size + value.control.size() + value.payload.size());
-		for (const auto byte : std::string_view{"CXXP"})
-			output.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
-		append_big_endian(output, value.protocol_major);
-		append_big_endian(output, value.protocol_minor);
-		append_big_endian(output, type);
-		append_big_endian(output, value.flags);
-		append_big_endian(output, value.stream_id);
-		append_big_endian(output, value.sequence);
-		append_big_endian(output, static_cast<std::uint32_t>(value.control.size()));
-		append_big_endian(output, static_cast<std::uint64_t>(value.payload.size()));
-		const auto control_digest = digest_bytes(content_digest(value.control));
-		const auto payload_digest = digest_bytes(content_digest(value.payload));
-		output.insert(output.end(), control_digest.begin(), control_digest.end());
-		output.insert(output.end(), payload_digest.begin(), payload_digest.end());
-		output.insert(output.end(), value.control.begin(), value.control.end());
-		output.insert(output.end(), value.payload.begin(), value.payload.end());
-		return output;
+		return detail::encode_provider_protocol_v2_frame(value, limits);
 	}
 
 	result<frame> decode_frame(const std::span<const std::byte> input, const protocol_limits limits)
 	{
-		if (auto valid = validate_protocol_limits(limits); !valid)
-			return cxxlens::sdk::unexpected(std::move(valid.error()));
-		if (input.size() < header_size)
-			return cxxlens::sdk::unexpected(provider_error("provider.truncated-stream", "header"));
-		if (std::to_integer<char>(input[0]) != 'C' || std::to_integer<char>(input[1]) != 'X' ||
-			std::to_integer<char>(input[2]) != 'X' || std::to_integer<char>(input[3]) != 'P')
-			return cxxlens::sdk::unexpected(provider_error("provider.malformed-frame", "magic"));
-		const auto protocol_major = read_big_endian<std::uint16_t>(input, 4U);
-		const auto protocol_minor = read_big_endian<std::uint16_t>(input, 6U);
-		const auto type = read_big_endian<std::uint16_t>(input, 8U);
-		const auto flags = read_big_endian<std::uint16_t>(input, 10U);
-		const auto control_length = read_big_endian<std::uint32_t>(input, 28U);
-		const auto payload_length = read_big_endian<std::uint64_t>(input, 32U);
-		const bool reserved_ng1_heartbeat =
-			read_big_endian<std::uint16_t>(input, 8U) == ng1_heartbeat_wire_type;
-		if (control_length > limits.max_control_bytes || payload_length > limits.max_payload_bytes)
-			return cxxlens::sdk::unexpected(provider_error("provider.oversized-frame", "length"));
-		if (protocol_major != protocol_v2_major)
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.protocol-major-mismatch", "major"));
-		if (protocol_minor != protocol_v2_minor)
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.protocol-minor-mismatch", "minor"));
-		if (payload_length >
-				std::numeric_limits<std::size_t>::max() - header_size - control_length ||
-			input.size() != header_size + control_length + static_cast<std::size_t>(payload_length))
-			return cxxlens::sdk::unexpected(provider_error("provider.truncated-stream", "length"));
-
-		frame output;
-		output.type = static_cast<message_type>(type);
-		output.stream_id = read_big_endian<std::uint64_t>(input, 12U);
-		output.sequence = read_big_endian<std::uint64_t>(input, 20U);
-		output.control.assign(input.begin() + static_cast<std::ptrdiff_t>(header_size),
-							  input.begin() +
-								  static_cast<std::ptrdiff_t>(header_size + control_length));
-		output.payload.assign(
-			input.begin() + static_cast<std::ptrdiff_t>(header_size + control_length), input.end());
-		output.protocol_major = protocol_major;
-		output.protocol_minor = protocol_minor;
-		output.flags = flags;
-		const auto control_digest = digest_bytes(content_digest(output.control));
-		const auto payload_digest = digest_bytes(content_digest(output.payload));
-		if (!std::ranges::equal(control_digest, input.subspan(40U, 32U)) ||
-			!std::ranges::equal(payload_digest, input.subspan(72U, 32U)))
-			return cxxlens::sdk::unexpected(provider_error("provider.checksum-mismatch", "digest"));
-		if (reserved_ng1_heartbeat && protocol_minor != protocol_v2_minor)
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.protocol-minor-mismatch", "ng1-heartbeat"));
-		if (reserved_ng1_heartbeat && (flags != 0U || payload_length != 0U))
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.protocol-state-invalid", "ng1-heartbeat"));
-		if ((flags & ~known_flag_mask) != 0U)
-			return cxxlens::sdk::unexpected(
-				provider_error(has_flag(flags, frame_flag::required_extension)
-								   ? "provider.unknown-required-extension"
-								   : "provider.invalid-frame-flags",
-							   "flags"));
-		const bool required_extension = has_flag(flags, frame_flag::required_extension);
-		const bool optional_extension = has_flag(flags, frame_flag::optional_extension);
-		if ((required_extension && optional_extension) ||
-			(optional_extension && has_flag(flags, frame_flag::end_of_stream)))
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.invalid-frame-flags", "flags"));
-		if (has_flag(flags, frame_flag::compressed_payload))
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.unsupported-compression", "flags"));
-		if (has_flag(flags, frame_flag::end_of_stream) &&
-			(limits.supported_flags & end_of_stream_flag) == 0U)
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.invalid-frame-flags", "end-of-stream"));
-		if (type == 0U)
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.unknown-message-type", "type"));
-		const bool known_type = type >= static_cast<std::uint16_t>(message_type::hello) &&
-			type <= static_cast<std::uint16_t>(message_type::source_closure_reject);
-		if (optional_extension && known_type)
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.invalid-frame-flags", "optional-known-type"));
-		if (required_extension)
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.unknown-required-extension", "type"));
-		if (!known_type && !optional_extension && !reserved_ng1_heartbeat)
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.unknown-message-type", "type"));
-		return output;
+		return detail::decode_provider_protocol_v2_frame(input, limits);
 	}
 
 	result<std::vector<frame>> decode_frame_stream(const std::span<const std::byte> input,
 												   const protocol_limits limits,
 												   const std::uint64_t maximum_frames)
 	{
-		if (auto valid = validate_protocol_limits(limits); !valid)
-			return cxxlens::sdk::unexpected(std::move(valid.error()));
-		if (maximum_frames == 0U)
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.stream-invalid", "maximum_frames"));
-		std::vector<frame> output;
-		std::size_t offset{};
-		while (offset < input.size())
-		{
-			if (output.size() >= maximum_frames)
-				return cxxlens::sdk::unexpected(
-					provider_error("provider.oversized-frame", "frame-count"));
-			if (input.size() - offset < header_size)
-				return cxxlens::sdk::unexpected(
-					provider_error("provider.truncated-stream", "header"));
-			const auto header = input.subspan(offset, header_size);
-			const auto control_length = read_big_endian<std::uint32_t>(header, 28U);
-			const auto payload_length = read_big_endian<std::uint64_t>(header, 32U);
-			if (control_length > limits.max_control_bytes ||
-				payload_length > limits.max_payload_bytes ||
-				payload_length >
-					std::numeric_limits<std::size_t>::max() - header_size - control_length)
-				return cxxlens::sdk::unexpected(
-					provider_error("provider.oversized-frame", "length"));
-			const auto frame_size =
-				header_size + control_length + static_cast<std::size_t>(payload_length);
-			if (frame_size > input.size() - offset)
-				return cxxlens::sdk::unexpected(
-					provider_error("provider.truncated-stream", "frame"));
-			auto decoded = decode_frame(input.subspan(offset, frame_size), limits);
-			if (!decoded)
-				return cxxlens::sdk::unexpected(std::move(decoded.error()));
-			output.push_back(std::move(*decoded));
-			offset += frame_size;
-		}
-		if (output.empty())
-			return cxxlens::sdk::unexpected(provider_error("provider.truncated-stream", "empty"));
-		return output;
+		return detail::decode_provider_protocol_v2_frame_stream(input, limits, maximum_frames);
 	}
 
 	result<std::string> decode_control_text(const std::span<const std::byte> control)

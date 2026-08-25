@@ -15,6 +15,10 @@
 namespace cxxlens::sdk
 {
 	class sqlite_wal_recovery_workspace_builder;
+	class store_operation_port;
+	class sqlite_logical_read_receipt;
+	struct sqlite_exact_empty_normalization_input;
+	class sqlite_exact_empty_normalization_completed_edge;
 
 	/** Closed filesystem roles observed around one SQLite main database. */
 	enum class sqlite_backend_file_role : std::uint8_t
@@ -99,7 +103,6 @@ namespace cxxlens::sdk
 		friend class sqlite_shm_reader_native_ok_projection_permit;
 		friend class sqlite_shm_reader_handoff;
 		friend class detail::sqlite_shm_mapping_lease_state;
-		friend class sqlite_same_process_shm_lease_test_peer;
 
 		explicit sqlite_source_shm_target_namespace_epoch_reader_borrow(
 			std::unique_ptr<detail::sqlite_source_shm_target_namespace_epoch_reader_borrow_state>
@@ -140,7 +143,6 @@ namespace cxxlens::sdk
 		friend class sqlite_shm_writer_reader_borrow_mint_capability;
 		friend class detail::sqlite_writer_shm_mapping_epoch_state;
 		friend class detail::sqlite_writer_shm_generation_epoch_custody;
-		friend class sqlite_same_process_shm_lease_test_peer;
 		friend result<sqlite_source_shm_target_namespace_epoch_borrow_minter>
 		make_sqlite_source_shm_target_namespace_epoch_borrow_minter(
 			const std::shared_ptr<sqlite_source_shm_target_namespace_epoch>&);
@@ -268,6 +270,18 @@ namespace cxxlens::sdk
 		operator==(const sqlite_backend_writer_shm_stat_observation&) const = default;
 	};
 
+	/** Retained-parent observation for a normalizer-owned WAL or rollback-journal leaf. */
+	struct sqlite_backend_normalization_sidecar_observation
+	{
+		sqlite_backend_file_role role{sqlite_backend_file_role::write_ahead_log};
+		sqlite_backend_opaque_identity object_identity;
+		sqlite_backend_opaque_identity directory_entry_identity;
+		std::uint64_t byte_count{};
+
+		[[nodiscard]] bool
+		operator==(const sqlite_backend_normalization_sidecar_observation&) const = default;
+	};
+
 	/**
 	 * Census-owned continuous namespace proof. It retains the exact parent descriptor and
 	 * root-to-parent watches used while the census was captured; consumers must recheck it around
@@ -297,6 +311,55 @@ namespace cxxlens::sdk
 		[[nodiscard]] virtual result<void> recheck() const = 0;
 		/** One-shot transfer from census guard authority into one qualified target epoch. */
 		[[nodiscard]] virtual result<void> claim_target_epoch() = 0;
+		/**
+		 * Enter the one-shot accepted-empty normalization namespace epoch.  The default filesystem
+		 * implementation retains the already-open parent descriptor and admits only the exact WAL
+		 * and rollback-journal create/delete transitions requested through the methods below.
+		 */
+		[[nodiscard]] virtual result<void> claim_exact_empty_normalization_epoch()
+		{
+			return error{"store.backend-unavailable",
+						 "sqlite-observation",
+						 "exact-empty-normalization-epoch-unavailable"};
+		}
+		[[nodiscard]] virtual result<void> recheck_exact_empty_normalization_epoch() const
+		{
+			return error{"store.backend-unavailable",
+						 "sqlite-observation",
+						 "exact-empty-normalization-recheck-unavailable"};
+		}
+		[[nodiscard]] virtual result<sqlite_backend_normalization_sidecar_observation>
+		observe_exact_empty_normalization_sidecar(sqlite_backend_file_role)
+		{
+			return error{"store.backend-unavailable",
+						 "sqlite-observation",
+						 "exact-empty-normalization-sidecar-unavailable"};
+		}
+		[[nodiscard]] virtual result<sqlite_backend_opaque_identity>
+		synchronize_exact_empty_normalization_parent(sqlite_backend_file_role,
+													 store_operation_port&)
+		{
+			return error{"store.backend-unavailable",
+						 "sqlite-observation",
+						 "exact-empty-normalization-parent-sync-unavailable"};
+		}
+		[[nodiscard]] virtual result<sqlite_backend_opaque_identity>
+		delete_exact_empty_normalization_sidecar(sqlite_backend_file_role,
+												 const sqlite_backend_opaque_identity&,
+												 const sqlite_backend_opaque_identity&,
+												 std::span<const std::byte>,
+												 store_operation_port&)
+		{
+			return error{"store.backend-unavailable",
+						 "sqlite-observation",
+						 "exact-empty-normalization-delete-unavailable"};
+		}
+		[[nodiscard]] virtual result<void> finish_exact_empty_normalization_epoch()
+		{
+			return error{"store.backend-unavailable",
+						 "sqlite-observation",
+						 "exact-empty-normalization-finish-unavailable"};
+		}
 		/** Consume the continuous guard only after the target epoch has completed. */
 		[[nodiscard]] virtual result<void> finish() = 0;
 	};
@@ -721,6 +784,31 @@ namespace cxxlens::sdk
 		[[nodiscard]] virtual sqlite_backend_effect_gate* effect_gate_port() noexcept
 		{
 			return nullptr;
+		}
+		/** Consume #201 and prepare the actual callback-bound #202 profile before main xOpen. */
+		[[nodiscard]] virtual result<void>
+		arm_exact_empty_normalization_profile(sqlite_logical_read_receipt&&,
+											  const sqlite_exact_empty_normalization_input&)
+		{
+			return error{"store.backend-unavailable",
+						 "sqlite-observation",
+						 "exact-empty-normalization-profile-unavailable"};
+		}
+		/** Install sequence two; the VFS installs sequence three after its zero-WAL xOpen. */
+		[[nodiscard]] virtual result<void> install_exact_empty_normalization_coordination_arm()
+		{
+			return error{"store.backend-unavailable",
+						 "sqlite-observation",
+						 "exact-empty-normalization-arm-unavailable"};
+		}
+		/** Seal only after the real connection close and retained-parent post census. */
+		[[nodiscard]] virtual result<
+			std::shared_ptr<const sqlite_exact_empty_normalization_completed_edge>>
+		finish_exact_empty_normalization_profile()
+		{
+			return error{"store.backend-unavailable",
+						 "sqlite-observation",
+						 "exact-empty-normalization-finish-unavailable"};
 		}
 		/**
 		 * Whether the current-v3 Store writer must enter the source-SHM mapping epoch route.

@@ -104,7 +104,8 @@ namespace
 		root.emplace("closure_digest", json_value::string(snapshot.closure_digest).value());
 		root.emplace("closure_id", json_value::string(snapshot.snapshot_id).value());
 		root.emplace("members", json_value::array(std::move(members)));
-		root.emplace("schema", json_value::string("cxxlens.source-closure-manifest.v1").value());
+		root.emplace("schema",
+					 json_value::string(std::string{source_closure_manifest_schema}).value());
 		return json_value::object(std::move(root)).value();
 	}
 
@@ -133,7 +134,7 @@ namespace
 		const auto manifest_bytes =
 			cxxlens::detail::clang22::materialization::canonical_json(manifest_value);
 		auto manifest_digest =
-			cxxlens::sdk::semantic_digest("cxxlens.source-closure-manifest.v1", manifest_bytes);
+			cxxlens::sdk::semantic_digest(source_closure_manifest_digest_domain, manifest_bytes);
 		require_result(manifest_digest, "manifest fixture digest failed");
 
 		transfer_fixture output{std::move(*snapshot), {}, manifest_bytes, {}};
@@ -276,6 +277,26 @@ namespace
 		limits.maximum_manifest_bytes = input.manifest_bytes.size() - 1U;
 		source_closure_spool bounded{limits};
 		require(!bounded.begin_manifest(input.manifest), "manifest bound was not enforced");
+
+		limits = source_closure_transport_limits{};
+		limits.maximum_task_spool_bytes = input.manifest_bytes.size();
+		source_closure_spool task_bounded{limits};
+		require_result(task_bounded.begin_manifest(input.manifest),
+					   "task-spool bound setup rejected manifest");
+		require_result(task_bounded.append_manifest(as_bytes(input.manifest_bytes)),
+					   "task-spool bound setup rejected manifest bytes");
+		require_result(task_bounded.finish_manifest(input.binding.manifest_digest),
+					   "task-spool bound setup rejected canonical manifest");
+		const auto& first_blob = input.snapshot.blobs.front();
+		require(!task_bounded.begin_blob({input.binding.session_id,
+										  input.binding.task_id,
+										  input.binding.closure_digest,
+										  0U,
+										  first_blob.content_digest,
+										  first_blob.size_bytes,
+										  first_blob.size_bytes,
+										  1U}),
+				"task-spool bound ignored manifest bytes");
 	}
 } // namespace
 

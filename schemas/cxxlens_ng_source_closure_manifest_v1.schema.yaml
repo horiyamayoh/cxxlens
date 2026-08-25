@@ -1,6 +1,8 @@
 $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://cxxlens.dev/schemas/cxxlens.source-closure-manifest.v1
 title: cxxlens source closure manifest v1
+x-cxxlens-closure-digest-domain: cxxlens.clang22.source-closure.v1
+x-cxxlens-manifest-digest-domain: cxxlens.source-closure-manifest.v1
 type: object
 additionalProperties: false
 required: [schema, closure_id, closure_digest, members, blobs]

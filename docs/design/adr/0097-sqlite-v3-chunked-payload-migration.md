@@ -14,7 +14,7 @@ canonical export、query projection を得ることを要求する。SQLite phys
 canonical payload 全体を一つの BLOB row に置くため、qualified runtime の
 `SQLITE_LIMIT_LENGTH = 1,000,000,000` を越える有効な canonical-v5 payload を保存できない。
 この物理上限を public request cap として転用したり parity を弱めたりすることは、accepted
-request 2.2/report 2.1 と retained-memory guarantee を変更してしまう。
+request 2.2/report 2.2 と retained-memory guarantee を変更してしまう。
 
 2026-07-21 に この契約で Option A が fresh decision として選択された。本 ADR はその決定を
 physical Store contract に昇格し、logical payload、semantic identity、public callable を変えずに
@@ -27,7 +27,7 @@ SQLite の単一 BLOB ceiling を除く。
 current physical format は `cxxlens.sqlite-semantic-store.v3` / `3.0.0` とし、新規または空の
 database は v3 を作る。semantic payload は引き続き
 `cxxlens.ng-snapshot-payload.v5` の byte-exact canonical stream であり、v1〜v5 の既存 readable
-payload policy、snapshot/publication/claim identity、canonical export、request 2.2/report 2.1、public
+payload policy、snapshot/publication/claim identity、canonical export、request 2.2/report 2.2、public
 C++ signature、result/cursor lifetime、accepted request set は変えない。physical format と chunk
 layout は semantic snapshot ID から除外する。
 

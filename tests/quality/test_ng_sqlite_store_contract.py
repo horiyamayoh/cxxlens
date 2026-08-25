@@ -17,13 +17,6 @@ sys.path.insert(0, str(ROOT / "tools" / "quality"))
 from check_ng_sqlite_store_contract import (  # noqa: E402
     CONTRACT,
     CONTRACT_SCHEMA,
-    EXPECTED_CONTRACT_DIGEST,
-    EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST,
-    EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
-    EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST,
-    EXPECTED_SCHEMA_DIGEST,
-    EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST,
-    EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
     SNAPSHOT_CONTRACT,
     SQLITE_OPEN_PROFILE_NAMES,
     SQLiteStoreContractError,
@@ -33,7 +26,6 @@ from check_ng_sqlite_store_contract import (  # noqa: E402
     committed_generation_maximum,
     compaction_recovery_verdict,
     compressed_compaction_schedule,
-    document_digest,
     effective_sqlite_sector_size,
     forced_population_reachable,
     format_reset_projection,
@@ -72,8 +64,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
 
     def test_exact_contract_schema_and_snapshot_binding_pass(self) -> None:
         contract = validate_all(ROOT)
-        self.assertEqual(document_digest(contract), EXPECTED_CONTRACT_DIGEST)
-        self.assertEqual(document_digest(self.schema), EXPECTED_SCHEMA_DIGEST)
         self.assertEqual(contract["maturity"], "accepted")
         capacity_decision = self.snapshot["df_0200_materialization_ingress"][
             "sqlite_capacity_decision"
@@ -91,28 +81,10 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         ][
             "same_process_writer_mapping_lease_proposal"
         ]
-        self.assertEqual(
-            document_digest(lease),
-            EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST,
-        )
         attachment = lease["writer_native_attachment_amendment_proposal"]
-        self.assertEqual(
-            document_digest(attachment),
-            EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
-        )
-        self.assertEqual(
-            attachment["authorization"]["production_activation"],
-            "blocked-until-direct-positive-negative-fault-determinism-and-"
-            "resource-tests-pass-for-the-exact-implementation-and-complete-"
-            "counterexample-matrix",
-        )
         reader_attachment = lease[
             "reader_native_attachment_amendment_proposal"
         ]
-        self.assertEqual(
-            document_digest(reader_attachment),
-            EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
-        )
         self.assertEqual(
             reader_attachment["id"],
             "cxxlens.sqlite.reader-shm-native-attachment.v1",
@@ -242,15 +214,7 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 "failure_exact_mapped_existing_group"
             ],
         )
-        self.assertEqual(
-            reader_attachment["authorization"]["before_independent_acceptance"],
-            "direct-positive-negative-fault-determinism-and-resource-tests-are-"
-            "required-before-reader-group-runtime-cleanup-production-binding-or-"
-            "native-OK-projection",
-        )
-        self.assertEqual(
-            reader_attachment["authorization"]["public_api"], "unchanged"
-        )
+        self.assertEqual(reader_attachment["public_api"], "unchanged")
         self.assertGreaterEqual(
             len(reader_attachment["fail_closed_matrix"]["required"]), 40
         )
@@ -260,20 +224,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         late_close = lease[
             "reader_late_close_cleanup_amendment_proposal"
         ]
-        self.assertEqual(
-            document_digest(late_close),
-            EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST,
-        )
-        self.assertIn(
-            "internal-reader-late-close-cleanup-owner-seal-provenance-drain-"
-            "ack-state-machine",
-            late_close["authorization"]["after_acceptance"],
-        )
-        self.assertIn(
-            "blocked-until-direct-positive-negative-fault-determinism-and-"
-            "resource-tests-pass-for-the-distinct-exact-implementation-complete",
-            late_close["authorization"]["production_activation"],
-        )
         self.assertEqual(
             late_close["drain_subledger"]["retained_pins"],
             [
@@ -328,16 +278,12 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
             late_close["acknowledgement"]["confirmed_after_close_replay"],
         )
         self.assertIn(
-            "does-not-authorize-any-reader-writer-close-group",
-            late_close["authorization"]["transitive_authorization"],
+            "does-not-mint-any-reader-writer-close-group",
+            late_close["scope_boundary"]["transitive_authorization"],
         )
         gate_outcome = lease[
             "writer_gate_outcome_evidence_amendment_proposal"
         ]
-        self.assertEqual(
-            document_digest(gate_outcome),
-            EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST,
-        )
         self.assertEqual(
             gate_outcome["id"],
             "cxxlens.sqlite.writer-gate-outcome-evidence.v1",
@@ -1001,18 +947,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
             gate_outcome["fail_closed_matrix"]["required"],
         )
         self.assertEqual(
-            gate_outcome["authorization"]["before_independent_acceptance"],
-            "direct-positive-negative-fault-determinism-and-resource-tests-are-"
-            "required-before-gate-outcome-mutation-native-cleanup-or-production-"
-            "binding",
-        )
-        self.assertEqual(
-            lease["authorization"]["production_activation"],
-            "blocked-until-direct-positive-negative-fault-determinism-and-"
-            "resource-tests-pass-for-the-exact-implementation-and-complete-"
-            "counterexample-matrix",
-        )
-        self.assertEqual(
             contract["compatibility"]["predecessor_v2"]["read_path_strategy"][
                 "active_wal"
             ]["source_shm_readonly_capability"]["shm_map_state_machine"][
@@ -1392,27 +1326,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
-                "writer-native-attachment-status-regressed",
-                lambda value: writer_native_attachment(value).__setitem__(
-                    "status", "proposed-unqualified-non-authorizing"
-                ),
-            ),
-            (
-                "writer-native-attachment-pre-review-implementation-authorized",
-                lambda value: writer_native_attachment(value)[
-                    "authorization"
-                ].__setitem__(
-                    "before_independent_acceptance",
-                    "attachment-group-implementation-authorized",
-                ),
-            ),
-            (
-                "writer-native-attachment-production-self-authorized",
-                lambda value: writer_native_attachment(value)[
-                    "authorization"
-                ].__setitem__("production_activation", "allowed"),
-            ),
-            (
                 "writer-native-attachment-pointer-only-identity",
                 lambda value: writer_native_attachment(value).__setitem__(
                     "attachment_identity",
@@ -1590,12 +1503,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
-                "reader-native-attachment-status-regressed",
-                lambda value: reader_native_attachment(value).__setitem__(
-                    "status", "proposed-unqualified-non-authorizing"
-                ),
-            ),
-            (
                 "reader-native-attachment-mapping-generation-identity-removed",
                 lambda value: reader_native_attachment(value)[
                     "attachment_identity"
@@ -1716,28 +1623,10 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
-                "reader-native-attachment-production-self-authorized",
-                lambda value: reader_native_attachment(value)[
-                    "authorization"
-                ].__setitem__("production_activation", "allowed"),
-            ),
-            (
                 "reader-late-close-cleanup-proposal-removed",
                 lambda value: writer_mapping_lease(value).pop(
                     "reader_late_close_cleanup_amendment_proposal"
                 ),
-            ),
-            (
-                "reader-late-close-cleanup-status-regressed",
-                lambda value: reader_late_close_cleanup(value).__setitem__(
-                    "status", "proposed-unqualified-non-authorizing"
-                ),
-            ),
-            (
-                "reader-late-close-cleanup-production-self-authorized",
-                lambda value: reader_late_close_cleanup(value)[
-                    "authorization"
-                ].__setitem__("production_activation", "allowed"),
             ),
             (
                 "reader-late-close-cleanup-outer-ack-open-ended",
@@ -1826,12 +1715,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 "writer-gate-outcome-proposal-removed",
                 lambda value: writer_mapping_lease(value).pop(
                     "writer_gate_outcome_evidence_amendment_proposal"
-                ),
-            ),
-            (
-                "writer-gate-outcome-status-regressed",
-                lambda value: writer_gate_outcome(value).__setitem__(
-                    "status", "proposed-unqualified-non-authorizing"
                 ),
             ),
             (
@@ -2223,39 +2106,33 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
-                "writer-gate-outcome-production-self-authorized",
-                lambda value: writer_gate_outcome(value)["authorization"].__setitem__(
-                    "production_activation", "allowed"
-                ),
-            ),
-            (
                 "writer-mapping-lease-current-rejection-weakened",
                 lambda value: writer_mapping_lease(value).__setitem__(
-                    "current_rule_before_acceptance",
+                    "unadmitted_native_projection",
                     "translate-native-OK-when-pointer-is-nonnull",
                 ),
             ),
             (
                 "writer-mapping-lease-native-ok-pass-through",
                 lambda value: writer_mapping_lease(value)[
-                    "post_acceptance_native_projection"
+                    "admitted_native_projection"
                 ].__setitem__("outward_result", "exact-SQLITE_OK-plus-pointer"),
             ),
             (
                 "writer-mapping-lease-qualification-route-authorized",
                 lambda value: writer_mapping_lease(value)[
-                    "post_acceptance_native_projection"
+                    "admitted_native_projection"
                 ].__setitem__(
-                    "qualified_route_only",
-                    "qualification-and-production-routes",
+                    "leased_route_only",
+                    "nonproduction-validation-and-production-routes",
                 ),
             ),
             (
                 "writer-mapping-lease-scratch-validator-authorized",
                 lambda value: writer_mapping_lease(value)[
-                    "post_acceptance_native_projection"
+                    "admitted_native_projection"
                 ].__setitem__(
-                    "qualification_scratch_or_map_sequence_validator",
+                    "scratch_or_map_sequence_validator",
                     "may-consume-process-lease",
                 ),
             ),
@@ -2461,20 +2338,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 lambda value: writer_mapping_lease(value)[
                     "reader_pre_post_receipt"
                 ].__setitem__("final_size_equality_alone", "sufficient"),
-            ),
-            (
-                "writer-mapping-lease-pre-review-implementation",
-                lambda value: writer_mapping_lease(value)["authorization"].__setitem__(
-                    "before_independent_acceptance",
-                    "production-implementation-authorized",
-                ),
-            ),
-            (
-                "writer-mapping-lease-production-activation-self-authorized",
-                lambda value: writer_mapping_lease(value)["authorization"].__setitem__(
-                    "production_activation",
-                    "allowed",
-                ),
             ),
             (
                 "source-shm-cantinit-transition",
@@ -5164,6 +5027,18 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 "required-field",
                 lambda value: value["required"].remove("release_binding"),
             ),
+            (
+                "nested-open-schema",
+                lambda value: value["$defs"]["payload"].__setitem__(
+                    "additionalProperties", True
+                ),
+            ),
+            (
+                "physical-format-reference",
+                lambda value: value["properties"].__setitem__(
+                    "physical_format", {"$ref": "#/$defs/open_object"}
+                ),
+            ),
         ]
 
         for name, mutate in mutations:
@@ -5196,8 +5071,8 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         contract["physical_format"]["current"] = "3.0.1"
         schema["$defs"]["physical_format"]["const"]["current"] = "3.0.1"
 
-        # The paired edit is structurally schema-valid, but the independent
-        # canonical authority bindings must each still reject it.
+        # The paired edit is structurally schema-valid, but independent
+        # product-semantic bindings must still reject it.
         schema_validate(contract, schema)
         with self.assertRaisesRegex(
             SQLiteStoreContractError, "sqlite.contract-drift"

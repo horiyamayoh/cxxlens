@@ -34,17 +34,18 @@ dependencies are exact, binary-only, and hash-bound in
 `--only-binary=:all:`. External Actions must equal the full commit revisions in
 the supply-chain lock.
 
-The lock is used only while installing and checking the CI dependencies. CI
-does not emit a repository-side toolchain-provenance record or pair test output
-with an artifact. The ordinary job exit status and log are sufficient for
-development checks.
-
-`tools/quality/check_ci_supply_chain.py` owns the static contract. It rejects a
-mutable/unknown Action, `llvm.sh`, direct network shell bootstrap, unpinned APT
-requests, unhashed Python installation, generic Python minor selection, missing
-bootstrap profiles, and incomplete lock/profile wiring. A cached package set may
+The lock, `tools/ci/bootstrap_supply_chain.py`, the setup action, and the
+workflows directly enforce exact Action commits, package versions and
+architectures, signing-key digests and fingerprints, and Python interpreter and
+dependency hashes at execution. Ordinary tests exercise the bootstrap and
+security behavior through their normal pass/fail paths. A cached package set may
 be replayed without resolution; the lock remains the authority and a missing
 cached artifact is an error, never permission to select another version.
+
+CI does not emit a repository-side provenance report, pair test output with an
+artifact, or run a repository string/meta checker. The ordinary job exit status
+and log are sufficient for development checks, while the product's pinned
+Actions, locks, and checksums remain enforced.
 
 ## Consequences
 

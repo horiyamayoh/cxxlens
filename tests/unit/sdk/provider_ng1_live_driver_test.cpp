@@ -2,7 +2,9 @@
 #include <cstdint>
 #include <cstdlib>
 #include <deque>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <new>
 #include <optional>
@@ -16,6 +18,7 @@
 #include <cxxlens/sdk/common.hpp>
 
 #include "sdk/provider_ng1_live_driver_internal.hpp"
+#include "sdk/provider_runtime_internal.hpp"
 #include "sdk/provider_validation_internal.hpp"
 
 namespace
@@ -59,6 +62,44 @@ namespace
 	[[nodiscard]] std::string manifest_digest(const char fill)
 	{
 		return std::string{"sha256:"} + std::string(64U, fill);
+	}
+
+	[[nodiscard]] std::string executable_digest(const std::string& executable)
+	{
+		std::ifstream input{executable, std::ios::binary};
+		require(input.good(), "NG1 system executable could not be opened");
+		const std::string bytes{std::istreambuf_iterator<char>{input},
+								std::istreambuf_iterator<char>{}};
+		require(!input.bad(), "NG1 system executable could not be read");
+		return content_digest(std::as_bytes(std::span{bytes}));
+	}
+
+	[[nodiscard]] process_invocation system_invocation(const std::string& executable)
+	{
+		auto policies = builtin_sandbox_policies();
+		require(policies.size() == 2U && policies.front().validate().has_value(),
+				"NG1 system sandbox policy registry is invalid");
+		process_invocation invocation;
+		invocation.argv = {executable};
+		invocation.budget.wall_ms = 3000U;
+		invocation.budget.cpu_ms = 3000U;
+		invocation.budget.address_space_bytes = 256U * 1024U * 1024U;
+		invocation.budget.transport_bytes = 1024U * 1024U;
+		invocation.budget.output_bytes = 1024U * 1024U;
+		invocation.budget.open_files = 64U;
+		invocation.budget.subprocesses = 1U;
+		invocation.sandbox = {sandbox_assurance::enforced, policies.front().policy_digest()};
+		invocation.expected_binary_digest = executable_digest(executable);
+		return invocation;
+	}
+
+	[[nodiscard]] protocol_limits system_protocol_limits()
+	{
+		protocol_limits limits;
+		limits.protocol_major = provider::protocol_v2_major;
+		limits.minimum_minor = provider::protocol_v2_minor;
+		limits.maximum_minor = provider::protocol_v2_minor;
+		return limits;
 	}
 
 	[[nodiscard]] process_output clean_process_output()
@@ -109,6 +150,15 @@ namespace
 		result<std::optional<ng1_spill_resume_frontier>> read_resume_frontier() const override
 		{
 			return frontier_;
+		}
+
+		result<std::unique_ptr<ng1_spill_storage_port>> reopen() const override
+		{
+			auto output = std::make_unique<memory_spill_storage>(state_);
+			output->bytes_ = bytes_;
+			output->fsync_sequence_ = fsync_sequence_;
+			output->frontier_ = frontier_;
+			return std::unique_ptr<ng1_spill_storage_port>{std::move(output)};
 		}
 
 		result<void> persist_resume_frontier(const ng1_spill_resume_frontier& value) override
@@ -185,6 +235,8 @@ namespace
 	{
 		std::deque<frame> incoming;
 		std::vector<frame> sent;
+		std::size_t start_count{};
+		std::optional<std::size_t> throw_on_start;
 		std::optional<error> finish_failure;
 		std::optional<error> terminate_failure;
 		std::optional<process_output> finish_output;
@@ -245,6 +297,9 @@ namespace
 		result<std::unique_ptr<ng1_duplex_process>>
 		start(const process_invocation&, protocol_limits, const std::stop_token) const override
 		{
+			++state_->start_count;
+			if (state_->throw_on_start && state_->start_count == *state_->throw_on_start)
+				throw std::bad_alloc{};
 			return std::unique_ptr<ng1_duplex_process>{new fake_process{state_}};
 		}
 
@@ -309,6 +364,8 @@ namespace
 		{
 			process_invocation invocation;
 			invocation.argv = {"fake-provider"};
+			invocation.expected_binary_digest = resume.provider_binary_digest;
+			invocation.sandbox = {sandbox_assurance::enforced, resume.sandbox_policy_digest};
 			protocol_limits limits;
 			limits.minimum_minor = provider::protocol_v2_minor;
 			limits.maximum_minor = provider::protocol_v2_minor;
@@ -324,7 +381,13 @@ namespace
 					maximum_retained_frames,
 					std::make_unique<fake_clock>(std::move(clock)),
 					std::make_unique<fake_observation>(std::move(observation)),
-					std::make_unique<fake_process_port>(std::move(process))};
+					std::make_unique<fake_process_port>(std::move(process)),
+					std::nullopt};
+		}
+
+		[[nodiscard]] ng1_durable_resume_authority durable_authority() const
+		{
+			return {resume.task_input_digest, digest("source-closure")};
 		}
 
 		[[nodiscard]] ng1_heartbeat_control
@@ -371,6 +434,80 @@ namespace
 					heartbeat.stream_id,
 					sequence,
 					std::move(*encoded),
+					{},
+					provider::protocol_v2_major,
+					provider::protocol_v2_minor,
+					0U};
+		}
+
+		[[nodiscard]] frame batch_begin_frame(const std::uint64_t sequence) const
+		{
+			auto control =
+				encode_batch_begin_metadata(batch_begin_metadata{spill.task_id,
+																 "descriptor:test",
+																 manifest_digest('f'),
+																 spill.dependency_group_id,
+																 spill.atomic_output_group_id,
+																 spill.batch_id});
+			require(control, "live-driver batch-begin encoding failed");
+			return {message_type::batch_begin,
+					spill.stream_id,
+					sequence,
+					std::move(*control),
+					{},
+					provider::protocol_v2_major,
+					provider::protocol_v2_minor,
+					0U};
+		}
+
+		[[nodiscard]] frame batch_end_frame(const std::uint64_t sequence) const
+		{
+			columnar_batch_end terminal{spill.task_id,
+										spill.dependency_group_id,
+										spill.atomic_output_group_id,
+										spill.batch_id,
+										"descriptor:test",
+										manifest_digest('f'),
+										0U,
+										{{"column:test", 0U, 0U}},
+										{},
+										{}};
+			terminal.batch_digest = columnar_batch_digest(terminal);
+			auto encoded = encode_columnar_batch_end(terminal);
+			require(encoded, "live-driver batch-end encoding failed");
+			return {message_type::batch_end,
+					spill.stream_id,
+					sequence,
+					std::move(encoded->control),
+					std::move(encoded->payload),
+					provider::protocol_v2_major,
+					provider::protocol_v2_minor,
+					0U};
+		}
+
+		[[nodiscard]] frame resume_frame(const std::uint64_t sequence,
+										 const std::uint64_t generation = 1U) const
+		{
+			auto control = encode_ng1_resume_control(resume_control(generation));
+			require(control, "live-driver resume encoding failed");
+			return {message_type::resume,
+					spill.stream_id,
+					sequence,
+					std::move(*control),
+					{},
+					provider::protocol_v2_major,
+					provider::protocol_v2_minor,
+					0U};
+		}
+
+		[[nodiscard]] frame task_complete_frame(const std::uint64_t sequence) const
+		{
+			auto control = encode_task_complete_metadata(task_complete_metadata{spill.task_id});
+			require(control, "live-driver task-complete encoding failed");
+			return {message_type::task_complete,
+					spill.stream_id,
+					sequence,
+					std::move(*control),
 					{},
 					provider::protocol_v2_major,
 					provider::protocol_v2_minor,
@@ -929,6 +1066,51 @@ namespace
 				"live-driver did not clean the spill port after a process-port exception");
 	}
 
+	void test_live_driver_closes_replacement_process_exceptions()
+	{
+		fixture values;
+		auto clock = std::make_shared<clock_state>();
+		auto observation = std::make_shared<observation_state>();
+		auto process = std::make_shared<process_state>();
+		auto spill = std::make_shared<spill_state>();
+		process->throw_on_start = 2U;
+		process->incoming.push_back(values.task_accepted_frame(0U));
+		process->incoming.push_back(values.batch_begin_frame(1U));
+		process->incoming.push_back(values.batch_end_frame(2U));
+		process->incoming.push_back(values.resume_frame(1U));
+		auto configuration = values.configuration(clock, observation, process, 8U, spill);
+		configuration.durable_resume = values.durable_authority();
+		auto driver = ng1_live_session_driver::start(std::move(configuration), {});
+		require(driver && process->start_count == 1U,
+				"replacement exception fixture did not launch its initial process");
+
+		require(driver->receive_provider_frame({})->has_value(),
+				"replacement exception fixture did not accept task metadata");
+		require(driver->receive_provider_frame({})->has_value(),
+				"replacement exception fixture did not open its output group");
+		require(driver->append_durable_spill(values.spill_record("replacement-exception")),
+				"replacement exception fixture did not stage its durable record");
+		require(driver->receive_provider_frame({})->has_value(),
+				"replacement exception fixture did not close its output group");
+		auto checkpoint = driver->checkpoint_durable_spill(0U, 1U);
+		require(checkpoint, "replacement exception fixture did not publish its durable frontier");
+		require(driver->receive_provider_frame({})->has_value(),
+				"replacement exception fixture did not receive its resume token");
+		require(driver->terminate(process_status::crashed),
+				"replacement exception fixture did not terminate the initial worker");
+
+		auto replacement = driver->launch_replacement(*checkpoint, {});
+		require(!replacement && replacement.error().code == "provider.process-launch-failed" &&
+					replacement.error().field == "ng1-live" &&
+					replacement.error().detail == "replacement-port-allocation-failed" &&
+					process->start_count == 2U,
+				"replacement process exception escaped its typed failure boundary");
+		require(driver->session().state() == ng1_recovery_state::failed,
+				"replacement process exception did not poison publication");
+		require(driver->cleanup() && spill->cleaned,
+				"replacement process exception leaked active spill cleanup custody");
+	}
+
 	void test_live_driver_rebases_task_timers_at_acceptance()
 	{
 		fixture values;
@@ -996,6 +1178,610 @@ namespace
 		require(!rejected && driver->session().state() == ng1_recovery_state::failed,
 				"process-effect failure fixture did not reach explicit failed cleanup");
 		require(driver->cleanup(), "process-effect failure fixture cleanup failed");
+	}
+
+	void test_live_driver_publishes_only_fsynced_latest_resume_frontier()
+	{
+		fixture values;
+		auto clock = std::make_shared<clock_state>();
+		auto observation = std::make_shared<observation_state>();
+		auto process = std::make_shared<process_state>();
+		process->incoming.push_back(values.task_accepted_frame(0U));
+		process->incoming.push_back(values.batch_begin_frame(1U));
+		process->incoming.push_back(values.batch_end_frame(2U));
+		process->incoming.push_back(values.resume_frame(1U));
+		auto configuration = values.configuration(clock, observation, process, 8U);
+		configuration.durable_resume = values.durable_authority();
+		auto driver = ng1_live_session_driver::start(std::move(configuration), {});
+		require(driver, "durable live-driver start failed");
+
+		auto accepted = driver->receive_provider_frame({});
+		require(accepted && accepted->has_value() && accepted->value().ng1_control_admitted(),
+				"durable live-driver did not admit task acceptance");
+		auto begin = driver->receive_provider_frame({});
+		require(begin && begin->has_value(), "durable live-driver did not observe batch begin");
+		require(driver->append_durable_spill(values.spill_record("sealed-row")),
+				"durable live-driver did not append the bound spill record");
+		auto premature = driver->checkpoint_durable_spill(0U, 1U);
+		require(!premature && premature.error().code == "provider.protocol-state-invalid",
+				"durable live-driver checkpointed an open output group");
+		auto end = driver->receive_provider_frame({});
+		require(end && end->has_value(), "durable live-driver did not observe batch end");
+		auto checkpoint = driver->checkpoint_durable_spill(0U, 1U);
+		require(checkpoint && checkpoint->receipt().fsync_sequence == 1U &&
+					checkpoint->receipt().total_records == 1U &&
+					checkpoint->source_closure_digest() ==
+						values.durable_authority().source_closure_digest,
+				"durable live-driver did not bind fsync, prefix, and source closure");
+
+		auto resume = driver->receive_provider_frame({});
+		require(resume && resume->has_value(), "durable live-driver did not capture resume token");
+		require(driver->terminate(process_status::crashed),
+				"durable live-driver did not reap the failed worker");
+		auto resumed = driver->accept_provider_resume(resume->value(), *checkpoint);
+		if (!resumed)
+			require(false,
+					"durable live-driver rejected its exact latest fsynced token: " +
+						resumed.error().code + ":" + resumed.error().field + ":" +
+						resumed.error().detail);
+		auto replay = driver->session().replay_start_sequence();
+		require(replay && *replay == 1U,
+				"durable live-driver replay did not start at acknowledged sequence plus one");
+		auto rejected = driver->session().reject_output();
+		require(!rejected && driver->session().state() == ng1_recovery_state::failed,
+				"durable live-driver allowed an unvalidated replay to publish");
+		require(driver->cleanup(), "durable live-driver cleanup failed");
+	}
+
+	void test_live_driver_rejects_stale_corrupt_gap_and_terminal_resume()
+	{
+		fixture values;
+		{
+			auto configuration = values.configuration(std::make_shared<clock_state>(),
+													  std::make_shared<observation_state>(),
+													  std::make_shared<process_state>(),
+													  4U);
+			configuration.durable_resume = values.durable_authority();
+			configuration.invocation.expected_binary_digest = manifest_digest('9');
+			auto rejected = ng1_live_session_driver::start(std::move(configuration), {});
+			require(!rejected && rejected.error().code == "provider.resume-token-stale" &&
+						rejected.error().field == "provider_binary_digest",
+					"durable live-driver accepted a foreign process binary binding");
+		}
+
+		{
+			auto configuration = values.configuration(std::make_shared<clock_state>(),
+													  std::make_shared<observation_state>(),
+													  std::make_shared<process_state>(),
+													  4U);
+			configuration.durable_resume = values.durable_authority();
+			configuration.invocation.sandbox.policy_digest = digest("foreign-sandbox-policy");
+			auto rejected = ng1_live_session_driver::start(std::move(configuration), {});
+			require(!rejected && rejected.error().code == "provider.resume-token-stale" &&
+						rejected.error().field == "sandbox_policy_digest",
+					"durable live-driver accepted a foreign process sandbox binding");
+		}
+
+		{
+			auto clock = std::make_shared<clock_state>();
+			auto observation = std::make_shared<observation_state>();
+			auto process = std::make_shared<process_state>();
+			auto configuration = values.configuration(clock, observation, process, 4U);
+			configuration.durable_resume = values.durable_authority();
+			auto inherited = std::make_shared<process_inherited_channel_binding>();
+			inherited->task_id = values.resume.task_id;
+			inherited->session_id = values.resume.protocol_session_id;
+			inherited->closure_digest = digest("foreign-source-closure");
+			configuration.invocation.inherited_channel = std::move(inherited);
+			auto rejected = ng1_live_session_driver::start(std::move(configuration), {});
+			require(!rejected && rejected.error().code == "provider.resume-token-stale" &&
+						rejected.error().field == "source_closure",
+					"durable live-driver accepted a foreign inherited source closure");
+		}
+
+		{
+			auto clock = std::make_shared<clock_state>();
+			auto observation = std::make_shared<observation_state>();
+			auto process = std::make_shared<process_state>();
+			process->incoming.push_back(values.batch_begin_frame(0U));
+			auto configuration = values.configuration(clock, observation, process, 4U);
+			configuration.durable_resume = values.durable_authority();
+			auto driver = ng1_live_session_driver::start(std::move(configuration), {});
+			require(driver, "unaccepted-task fixture start failed");
+			auto rejected = driver->receive_provider_frame({});
+			require(!rejected && rejected.error().code == "provider.task-binding-mismatch" &&
+						driver->session().state() == ng1_recovery_state::failed,
+					"durable live-driver opened output before task acceptance");
+			require(driver->terminate(process_status::crashed),
+					"unaccepted-task fixture worker cleanup failed");
+			require(driver->cleanup(), "unaccepted-task fixture cleanup failed");
+		}
+
+		for (std::uint8_t variant{}; variant < 4U; ++variant)
+		{
+			auto clock = std::make_shared<clock_state>();
+			auto observation = std::make_shared<observation_state>();
+			auto process = std::make_shared<process_state>();
+			auto begin = values.batch_begin_frame(1U);
+			if (variant == 0U)
+				++begin.stream_id;
+			else if (variant == 1U)
+				++begin.protocol_major;
+			else if (variant == 2U)
+				begin.flags = 1U;
+			else
+				begin.payload.push_back(std::byte{0x01});
+			process->incoming.push_back(values.task_accepted_frame(0U));
+			process->incoming.push_back(std::move(begin));
+			auto configuration = values.configuration(clock, observation, process, 4U);
+			configuration.durable_resume = values.durable_authority();
+			auto driver = ng1_live_session_driver::start(std::move(configuration), {});
+			require(driver && driver->receive_provider_frame({}),
+					"foreign output-frame fixture task acceptance failed");
+			auto rejected = driver->receive_provider_frame({});
+			require(!rejected && rejected.error().code == "provider.task-binding-mismatch" &&
+						driver->session().state() == ng1_recovery_state::failed,
+					"durable live-driver admitted a foreign output-frame header");
+			require(driver->terminate(process_status::crashed),
+					"foreign output-frame fixture worker cleanup failed");
+			require(driver->cleanup(), "foreign output-frame fixture cleanup failed");
+		}
+
+		{
+			auto clock = std::make_shared<clock_state>();
+			auto observation = std::make_shared<observation_state>();
+			auto process = std::make_shared<process_state>();
+			auto foreign_end = values.batch_end_frame(2U);
+			++foreign_end.stream_id;
+			process->incoming.push_back(values.task_accepted_frame(0U));
+			process->incoming.push_back(values.batch_begin_frame(1U));
+			process->incoming.push_back(std::move(foreign_end));
+			auto configuration = values.configuration(clock, observation, process, 4U);
+			configuration.durable_resume = values.durable_authority();
+			auto driver = ng1_live_session_driver::start(std::move(configuration), {});
+			require(driver && driver->receive_provider_frame({}),
+					"foreign batch-end fixture task acceptance failed");
+			require(driver->receive_provider_frame({}), "foreign batch-end fixture begin failed");
+			require(driver->append_durable_spill(values.spill_record("foreign-end-row")),
+					"foreign batch-end fixture spill append failed");
+			auto rejected = driver->receive_provider_frame({});
+			require(!rejected && rejected.error().code == "provider.task-binding-mismatch" &&
+						driver->session().state() == ng1_recovery_state::failed,
+					"durable live-driver sealed output with a foreign batch end");
+			require(driver->terminate(process_status::crashed),
+					"foreign batch-end fixture worker cleanup failed");
+			require(driver->cleanup(), "foreign batch-end fixture cleanup failed");
+		}
+
+		{
+			auto clock = std::make_shared<clock_state>();
+			auto observation = std::make_shared<observation_state>();
+			auto process = std::make_shared<process_state>();
+			process->incoming.push_back(values.task_accepted_frame(0U));
+			process->incoming.push_back(values.batch_begin_frame(1U));
+			process->incoming.push_back(values.batch_end_frame(2U));
+			process->incoming.push_back(values.resume_frame(3U));
+			auto configuration = values.configuration(clock, observation, process, 8U);
+			configuration.durable_resume = values.durable_authority();
+			auto driver = ng1_live_session_driver::start(std::move(configuration), {});
+			require(driver && driver->receive_provider_frame({}),
+					"pre-fsync fixture task acceptance failed");
+			require(driver->receive_provider_frame({}), "pre-fsync fixture batch begin failed");
+			require(driver->append_durable_spill(values.spill_record("pre-fsync-row")),
+					"pre-fsync fixture spill append failed");
+			require(driver->receive_provider_frame({}), "pre-fsync fixture batch end failed");
+			auto rejected = driver->receive_provider_frame({});
+			require(!rejected && rejected.error().code == "provider.resume-replay-invalid" &&
+						driver->session().state() == ng1_recovery_state::failed,
+					"durable live-driver admitted a token published before fsync");
+			require(driver->terminate(process_status::crashed),
+					"pre-fsync fixture worker cleanup failed");
+			require(driver->cleanup(), "pre-fsync fixture cleanup failed");
+		}
+
+		{
+			auto clock = std::make_shared<clock_state>();
+			auto observation = std::make_shared<observation_state>();
+			auto process = std::make_shared<process_state>();
+			process->incoming.push_back(values.task_accepted_frame(0U));
+			process->incoming.push_back(values.batch_begin_frame(1U));
+			process->incoming.push_back(values.batch_end_frame(2U));
+			process->incoming.push_back(values.resume_frame(1U, 2U));
+			auto configuration = values.configuration(clock, observation, process, 8U);
+			configuration.durable_resume = values.durable_authority();
+			auto driver = ng1_live_session_driver::start(std::move(configuration), {});
+			require(driver && driver->receive_provider_frame({}),
+					"future-token fixture task acceptance failed");
+			require(driver->receive_provider_frame({}), "future-token fixture batch begin failed");
+			require(driver->append_durable_spill(values.spill_record("future-token-row")),
+					"future-token fixture spill append failed");
+			require(driver->receive_provider_frame({}), "future-token fixture batch end failed");
+			require(driver->checkpoint_durable_spill(0U, 1U),
+					"future-token fixture checkpoint failed");
+			auto rejected = driver->receive_provider_frame({});
+			require(!rejected && rejected.error().code == "provider.resume-token-stale" &&
+						driver->session().state() == ng1_recovery_state::failed,
+					"durable live-driver admitted generation N before checkpoint N");
+			require(driver->terminate(process_status::crashed),
+					"future-token fixture worker cleanup failed");
+			require(driver->cleanup(), "future-token fixture cleanup failed");
+		}
+
+		{
+			auto clock = std::make_shared<clock_state>();
+			auto observation = std::make_shared<observation_state>();
+			auto process = std::make_shared<process_state>();
+			process->incoming.push_back(values.task_accepted_frame(0U));
+			process->incoming.push_back(values.batch_begin_frame(1U));
+			process->incoming.push_back(values.batch_end_frame(2U));
+			process->incoming.push_back(values.resume_frame(1U));
+			process->incoming.push_back(values.resume_frame(1U));
+			auto configuration = values.configuration(clock, observation, process, 8U);
+			configuration.durable_resume = values.durable_authority();
+			auto driver = ng1_live_session_driver::start(std::move(configuration), {});
+			require(driver && driver->receive_provider_frame({}),
+					"duplicate-token fixture task acceptance failed");
+			require(driver->receive_provider_frame({}),
+					"duplicate-token fixture batch begin failed");
+			require(driver->append_durable_spill(values.spill_record("duplicate-token-row")),
+					"duplicate-token fixture spill append failed");
+			require(driver->receive_provider_frame({}), "duplicate-token fixture batch end failed");
+			require(driver->checkpoint_durable_spill(0U, 1U),
+					"duplicate-token fixture checkpoint failed");
+			auto first = driver->receive_provider_frame({});
+			require(first && first->has_value(), "duplicate-token fixture first token failed");
+			auto rejected = driver->receive_provider_frame({});
+			require(!rejected && rejected.error().code == "provider.resume-token-stale" &&
+						driver->session().state() == ng1_recovery_state::failed,
+					"durable live-driver admitted a duplicate token publication");
+			require(driver->terminate(process_status::crashed),
+					"duplicate-token fixture worker cleanup failed");
+			require(driver->cleanup(), "duplicate-token fixture cleanup failed");
+		}
+
+		{
+			auto clock = std::make_shared<clock_state>();
+			auto observation = std::make_shared<observation_state>();
+			auto process = std::make_shared<process_state>();
+			process->incoming.push_back(values.task_accepted_frame(0U));
+			process->incoming.push_back(values.batch_begin_frame(1U));
+			process->incoming.push_back(values.batch_end_frame(2U));
+			process->incoming.push_back(values.resume_frame(1U, 2U));
+			auto configuration = values.configuration(clock, observation, process, 8U);
+			configuration.durable_resume = values.durable_authority();
+			auto driver = ng1_live_session_driver::start(std::move(configuration), {});
+			require(driver, "stale durable live-driver start failed");
+			require(driver->receive_provider_frame({}), "stale fixture task acceptance failed");
+			require(driver->receive_provider_frame({}), "stale fixture batch begin failed");
+			require(driver->append_durable_spill(values.spill_record("stale-row")),
+					"stale fixture spill append failed");
+			require(driver->receive_provider_frame({}), "stale fixture batch end failed");
+			auto stale = driver->checkpoint_durable_spill(0U, 1U);
+			auto latest = driver->checkpoint_durable_spill(0U, 2U);
+			require(stale && latest && latest->resume_generation() == 2U,
+					"stale fixture did not persist a newer frontier");
+			auto resume = driver->receive_provider_frame({});
+			require(resume && resume->has_value(), "stale fixture resume receive failed");
+			require(driver->terminate(process_status::crashed),
+					"stale fixture worker cleanup failed");
+			auto rejected = driver->accept_provider_resume(resume->value(), *stale);
+			require(!rejected && rejected.error().code == "provider.resume-token-stale" &&
+						driver->session().state() == ng1_recovery_state::failed,
+					"durable live-driver accepted a non-latest checkpoint");
+			require(driver->cleanup(), "stale fixture cleanup failed");
+		}
+
+		{
+			auto clock = std::make_shared<clock_state>();
+			auto observation = std::make_shared<observation_state>();
+			auto process = std::make_shared<process_state>();
+			process->incoming.push_back(values.task_accepted_frame(0U));
+			process->incoming.push_back(values.batch_begin_frame(1U));
+			process->incoming.push_back(values.batch_end_frame(2U));
+			process->incoming.push_back(values.resume_frame(1U, 1U));
+			process->incoming.push_back(values.resume_frame(1U, 2U));
+			auto configuration = values.configuration(clock, observation, process, 8U);
+			configuration.durable_resume = values.durable_authority();
+			auto driver = ng1_live_session_driver::start(std::move(configuration), {});
+			require(driver && driver->receive_provider_frame({}),
+					"stale receipt fixture task acceptance failed");
+			require(driver->receive_provider_frame({}), "stale receipt fixture batch begin failed");
+			require(driver->append_durable_spill(values.spill_record("stale-receipt-row")),
+					"stale receipt fixture spill append failed");
+			require(driver->receive_provider_frame({}), "stale receipt fixture batch end failed");
+			require(driver->checkpoint_durable_spill(0U, 1U),
+					"stale receipt fixture first checkpoint failed");
+			auto stale = driver->receive_provider_frame({});
+			auto latest = driver->checkpoint_durable_spill(0U, 2U);
+			auto current = driver->receive_provider_frame({});
+			require(latest && stale && stale->has_value() && current && current->has_value(),
+					"stale receipt fixture did not capture both resume occurrences");
+			require(driver->terminate(process_status::crashed),
+					"stale receipt fixture worker cleanup failed");
+			auto rejected = driver->accept_provider_resume(stale->value(), *latest);
+			require(!rejected && rejected.error().code == "provider.resume-token-stale" &&
+						driver->session().state() == ng1_recovery_state::failed,
+					"durable live-driver left a stale receipt retryable");
+			require(driver->cleanup(), "stale receipt fixture cleanup failed");
+		}
+
+		{
+			auto clock = std::make_shared<clock_state>();
+			auto observation = std::make_shared<observation_state>();
+			auto process = std::make_shared<process_state>();
+			process->incoming.push_back(values.task_accepted_frame(0U));
+			process->incoming.push_back(values.batch_begin_frame(1U));
+			process->incoming.push_back(values.batch_end_frame(2U));
+			auto corrupt_resume = values.resume_frame(1U);
+			require(!corrupt_resume.control.empty(), "corrupt resume fixture has no control bytes");
+			corrupt_resume.control.back() ^= std::byte{0x01};
+			process->incoming.push_back(std::move(corrupt_resume));
+			auto configuration = values.configuration(clock, observation, process, 8U);
+			configuration.durable_resume = values.durable_authority();
+			auto driver = ng1_live_session_driver::start(std::move(configuration), {});
+			require(driver && driver->receive_provider_frame({}),
+					"corrupt fixture task acceptance failed");
+			require(driver->receive_provider_frame({}), "corrupt fixture begin failed");
+			require(driver->append_durable_spill(values.spill_record("corrupt-row")),
+					"corrupt fixture spill append failed");
+			require(driver->receive_provider_frame({}), "corrupt fixture end failed");
+			auto checkpoint = driver->checkpoint_durable_spill(0U, 1U);
+			auto rejected = driver->receive_provider_frame({});
+			require(checkpoint && !rejected &&
+						rejected.error().code == "provider.resume-replay-invalid" &&
+						driver->session().state() == ng1_recovery_state::failed,
+					"durable live-driver admitted a corrupt published resume token");
+			require(driver->terminate(process_status::crashed),
+					"corrupt fixture worker cleanup failed");
+			require(driver->cleanup(), "corrupt fixture cleanup failed");
+		}
+
+		{
+			auto clock = std::make_shared<clock_state>();
+			auto observation = std::make_shared<observation_state>();
+			auto process = std::make_shared<process_state>();
+			process->incoming.push_back(values.task_accepted_frame(0U));
+			process->incoming.push_back(values.batch_begin_frame(1U));
+			process->incoming.push_back(values.batch_end_frame(2U));
+			auto foreign_control = values.resume_control();
+			foreign_control.binding.protocol_session_id = "session:foreign";
+			ng1_resume_token foreign_token{foreign_control.schema,
+										   foreign_control.kind,
+										   foreign_control.binding,
+										   foreign_control.highest_contiguous_acked_sequence,
+										   foreign_control.staged_digest,
+										   foreign_control.token_generation,
+										   {}};
+			auto foreign_digest = ng1_resume_token_digest(foreign_token);
+			require(foreign_digest, "foreign resume digest construction failed");
+			foreign_control.token_digest = *foreign_digest;
+			auto foreign_bytes = encode_ng1_resume_control(foreign_control);
+			require(foreign_bytes, "foreign resume encoding failed");
+			process->incoming.push_back(frame{message_type::resume,
+											  values.spill.stream_id,
+											  1U,
+											  std::move(*foreign_bytes),
+											  {},
+											  provider::protocol_v2_major,
+											  provider::protocol_v2_minor,
+											  0U});
+			auto configuration = values.configuration(clock, observation, process, 8U);
+			configuration.durable_resume = values.durable_authority();
+			auto driver = ng1_live_session_driver::start(std::move(configuration), {});
+			require(driver && driver->receive_provider_frame({}),
+					"foreign fixture task acceptance failed");
+			require(driver->receive_provider_frame({}), "foreign fixture begin failed");
+			require(driver->append_durable_spill(values.spill_record("foreign-row")),
+					"foreign fixture spill append failed");
+			require(driver->receive_provider_frame({}), "foreign fixture end failed");
+			auto checkpoint = driver->checkpoint_durable_spill(0U, 1U);
+			auto rejected = driver->receive_provider_frame({});
+			require(checkpoint && !rejected &&
+						rejected.error().code == "provider.resume-token-stale" &&
+						driver->session().state() == ng1_recovery_state::failed,
+					"durable live-driver admitted a foreign published resume token");
+			require(driver->terminate(process_status::crashed),
+					"foreign fixture worker cleanup failed");
+			require(driver->cleanup(), "foreign fixture cleanup failed");
+		}
+
+		{
+			auto clock = std::make_shared<clock_state>();
+			auto observation = std::make_shared<observation_state>();
+			auto process = std::make_shared<process_state>();
+			process->incoming.push_back(values.task_accepted_frame(0U));
+			process->incoming.push_back(values.batch_begin_frame(1U));
+			auto configuration = values.configuration(clock, observation, process, 4U);
+			configuration.durable_resume = values.durable_authority();
+			auto driver = ng1_live_session_driver::start(std::move(configuration), {});
+			require(driver && driver->receive_provider_frame({}),
+					"gap fixture task acceptance failed");
+			require(driver->receive_provider_frame({}), "gap fixture start failed");
+			auto gap = values.spill_record("gap-row");
+			gap.sequence = 1U;
+			auto rejected = driver->append_durable_spill(gap);
+			require(!rejected && rejected.error().code == "provider.spill-corrupt" &&
+						driver->session().state() == ng1_recovery_state::failed,
+					"durable live-driver accepted a spill sequence gap");
+		}
+
+		{
+			auto clock = std::make_shared<clock_state>();
+			auto observation = std::make_shared<observation_state>();
+			auto process = std::make_shared<process_state>();
+			process->incoming.push_back(values.task_accepted_frame(0U));
+			process->incoming.push_back(values.batch_begin_frame(1U));
+			auto configuration = values.configuration(clock, observation, process, 4U);
+			configuration.durable_resume = values.durable_authority();
+			auto driver = ng1_live_session_driver::start(std::move(configuration), {});
+			require(driver && driver->receive_provider_frame({}),
+					"reorder fixture task acceptance failed");
+			require(driver->receive_provider_frame({}), "reorder fixture start failed");
+			auto reordered = values.spill_record("reordered-row");
+			reordered.record_ordinal = 1U;
+			auto rejected = driver->append_durable_spill(reordered);
+			require(!rejected && rejected.error().code == "provider.spill-corrupt" &&
+						driver->session().state() == ng1_recovery_state::failed,
+					"durable live-driver accepted a reordered spill occurrence");
+		}
+
+		{
+			auto clock = std::make_shared<clock_state>();
+			auto observation = std::make_shared<observation_state>();
+			auto process = std::make_shared<process_state>();
+			process->incoming.push_back(values.task_accepted_frame(0U));
+			process->incoming.push_back(values.batch_begin_frame(1U));
+			process->incoming.push_back(values.batch_end_frame(2U));
+			process->incoming.push_back(values.task_complete_frame(3U));
+			process->incoming.push_back(values.resume_frame(1U));
+			auto configuration = values.configuration(clock, observation, process, 8U);
+			configuration.durable_resume = values.durable_authority();
+			auto driver = ng1_live_session_driver::start(std::move(configuration), {});
+			require(driver && driver->receive_provider_frame({}),
+					"terminal fixture task acceptance failed");
+			require(driver->receive_provider_frame({}), "terminal fixture begin failed");
+			require(driver->append_durable_spill(values.spill_record("terminal-row")),
+					"terminal fixture spill append failed");
+			require(driver->receive_provider_frame({}), "terminal fixture end failed");
+			auto checkpoint = driver->checkpoint_durable_spill(0U, 1U);
+			require(checkpoint, "terminal fixture checkpoint failed");
+			require(driver->receive_provider_frame({}), "terminal fixture terminal receive failed");
+			auto resume = driver->receive_provider_frame({});
+			require(resume && resume->has_value(), "terminal fixture resume receive failed");
+			require(driver->terminate(process_status::crashed),
+					"terminal fixture worker cleanup failed");
+			auto rejected = driver->accept_provider_resume(resume->value(), *checkpoint);
+			require(!rejected && rejected.error().code == "provider.resume-token-stale" &&
+						driver->session().state() == ng1_recovery_state::failed,
+					"durable live-driver accepted a terminal token");
+			require(driver->cleanup(), "terminal fixture cleanup failed");
+		}
+	}
+
+	void test_system_live_driver_connects_clock_and_duplex_process()
+	{
+		fixture values;
+		auto observation = std::make_shared<observation_state>();
+		auto configuration = values.configuration(
+			std::make_shared<clock_state>(), observation, std::make_shared<process_state>());
+		// Production construction owns a durable filesystem spill when no injected test port
+		// exists.
+		configuration.session.spill_storage.reset();
+		const auto invocation = system_invocation("/bin/cat");
+		configuration.session.resume_binding.provider_binary_digest =
+			invocation.expected_binary_digest;
+		configuration.session.resume_binding.sandbox_policy_digest =
+			invocation.sandbox.policy_digest;
+		frame input;
+		input.type = message_type::input_chunk;
+		input.stream_id = values.heartbeat.stream_id;
+		input.sequence = 0U;
+		auto input_control = encode_control_text("ng1-system-duplex");
+		require(input_control, "NG1 system live driver control encoding failed");
+		input.control = std::move(*input_control);
+		input.payload = {std::byte{0x41}, std::byte{0x42}, std::byte{0x43}};
+		input.protocol_major = provider::protocol_v2_major;
+		input.protocol_minor = provider::protocol_v2_minor;
+
+		auto driver =
+			ng1_live_session_driver::start_system(std::move(configuration.session),
+												  invocation,
+												  system_protocol_limits(),
+												  4U,
+												  std::make_unique<fake_observation>(observation),
+												  values.durable_authority(),
+												  {});
+		require(driver, "NG1 system live driver could not start");
+		auto sent = driver->send_host_frame(input);
+		if (!sent)
+			require(false,
+					"NG1 system live driver could not send a frame: " + sent.error().code + ":" +
+						sent.error().field + ":" + sent.error().detail);
+		auto echoed = driver->receive_provider_frame({});
+		require(echoed && echoed->has_value(), "NG1 system live driver did not receive an echo");
+		require(echoed->value().value().type == input.type &&
+					echoed->value().value().stream_id == input.stream_id &&
+					echoed->value().value().sequence == input.sequence &&
+					echoed->value().value().payload == input.payload &&
+					echoed->value().host_receipt_time_ns() != 0U,
+				"NG1 system live driver lost the framed duplex or host clock receipt");
+
+		auto finished = driver->finish({});
+		require(finished && finished->status == process_status::exited &&
+					finished->exit_code == 0 &&
+					finished->measured_executable_digest == invocation.expected_binary_digest,
+				"NG1 system live driver did not preserve process identity on finish");
+		auto rejected = driver->session().reject_output();
+		require(!rejected && driver->session().state() == ng1_recovery_state::failed,
+				"NG1 system live driver allowed unsealed output to remain publishable");
+		require(driver->cleanup(), "NG1 system live driver cleanup failed");
+	}
+
+	void test_system_live_driver_propagates_cancellation_and_cleans_spill()
+	{
+		fixture values;
+		auto observation = std::make_shared<observation_state>();
+		auto process_state_value = std::make_shared<process_state>();
+		auto spill = std::make_shared<spill_state>();
+		auto configuration = values.configuration(
+			std::make_shared<clock_state>(), observation, process_state_value, 4U, spill);
+		auto invocation = system_invocation("/bin/cat");
+		configuration.session.resume_binding.provider_binary_digest =
+			invocation.expected_binary_digest;
+		configuration.session.resume_binding.sandbox_policy_digest =
+			invocation.sandbox.policy_digest;
+		std::stop_source cancellation;
+		auto driver =
+			ng1_live_session_driver::start_system(std::move(configuration.session),
+												  std::move(invocation),
+												  system_protocol_limits(),
+												  4U,
+												  std::make_unique<fake_observation>(observation),
+												  values.durable_authority(),
+												  cancellation.get_token());
+		require(driver, "NG1 system cancellation driver could not start");
+		cancellation.request_stop();
+		auto received = driver->receive_provider_frame({});
+		require(!received && received.error().code == "provider.cancelled",
+				"NG1 system live driver did not propagate its stop token");
+		auto finished = driver->finish({});
+		require(finished && finished->status == process_status::cancelled,
+				"NG1 system cancellation did not preserve process cleanup outcome");
+		require(driver->session().state() == ng1_recovery_state::worker_killed,
+				"NG1 system cancellation did not enter worker-killed state");
+		auto rejected = driver->session().reject_output();
+		require(!rejected && driver->cleanup(),
+				"NG1 system cancellation could not finish fail-closed cleanup");
+	}
+
+	void test_system_live_driver_destructor_cleans_unfinished_session()
+	{
+		fixture values;
+		auto observation = std::make_shared<observation_state>();
+		auto spill = std::make_shared<spill_state>();
+		{
+			auto configuration = values.configuration(std::make_shared<clock_state>(),
+													  observation,
+													  std::make_shared<process_state>(),
+													  4U,
+													  spill);
+			auto invocation = system_invocation("/bin/cat");
+			configuration.session.resume_binding.provider_binary_digest =
+				invocation.expected_binary_digest;
+			configuration.session.resume_binding.sandbox_policy_digest =
+				invocation.sandbox.policy_digest;
+			auto driver = ng1_live_session_driver::start_system(
+				std::move(configuration.session),
+				std::move(invocation),
+				system_protocol_limits(),
+				4U,
+				std::make_unique<fake_observation>(observation),
+				values.durable_authority(),
+				{});
+			require(driver, "NG1 destructor cleanup driver could not start");
+		}
+		require(spill->cleaned,
+				"NG1 live driver destructor did not clean the unfinished private spill session");
 	}
 
 	void test_shared_validator_accepts_explicit_ng1_controls()
@@ -1107,6 +1893,202 @@ namespace
 		require(!rejected && rejected.error().code == "provider.protocol-state-invalid",
 				"reserved NG1 heartbeat was accepted without the NG1 transcript mode");
 	}
+
+	void test_live_control_handoff_enforces_progress_rate_algorithm()
+	{
+		fixture values;
+
+		const auto make_handoff = [&values]()
+		{
+			auto configuration = values.configuration(std::make_shared<clock_state>(),
+													  std::make_shared<observation_state>(),
+													  std::make_shared<process_state>());
+			return ng1_live_control_handoff::create(std::move(configuration.session));
+		};
+
+		// A one-unit advance over a five-second host-receipt window is below the one-unit/second
+		// contract once the ten-second startup grace has elapsed. Provider timestamps do not affect
+		// this decision: the test deliberately gives them the exact host receipt values.
+		auto slow = make_handoff();
+		require(slow, "NG1 progress-rate slow fixture creation failed");
+		require(slow->observe_task_accepted(
+					task_accepted_metadata{values.heartbeat.provider_id,
+										   values.heartbeat.provider_version.string(),
+										   values.heartbeat.task_id},
+					2'000U),
+				"NG1 progress-rate slow fixture task acceptance failed");
+		require(slow->observe_progress(ng1_progress_control{"cxxlens.provider-control.progress.v2",
+															"task:test",
+															"dependency:test",
+															0U,
+															2'001U,
+															0U,
+															10U},
+									   2'001U),
+				"NG1 progress-rate slow fixture initial sample failed");
+		require(slow->observe_progress(ng1_progress_control{"cxxlens.provider-control.progress.v2",
+															"task:test",
+															"dependency:test",
+															1U,
+															5'000'002'001ULL,
+															5U,
+															10U},
+									   5'000'002'001ULL),
+				"NG1 progress-rate slow fixture checkpoint sample failed");
+		auto slow_sample =
+			slow->observe_progress(ng1_progress_control{"cxxlens.provider-control.progress.v2",
+														"task:test",
+														"dependency:test",
+														2U,
+														10'000'002'002ULL,
+														6U,
+														10U},
+								   10'000'002'002ULL);
+		require(!slow_sample && slow_sample.error().code == "provider.progress-rate" &&
+					slow_sample.error().field == "rate" &&
+					slow_sample.error().detail == "minimum-not-met" &&
+					slow->state() == ng1_recovery_state::progress_rate_failure,
+				"NG1 progress-rate accepted a host-receipted rate below the minimum");
+		require(slow->confirm_worker_kill(),
+				"NG1 progress-rate failure did not synchronize worker kill");
+		auto slow_rejected = slow->reject_output();
+		require(!slow_rejected && slow->state() == ng1_recovery_state::failed,
+				"NG1 progress-rate failure remained restartable after explicit rejection");
+		require(slow->cleanup(), "NG1 progress-rate slow fixture cleanup failed");
+
+		// A sample gap strictly beyond the bounded observation window is rejected even when the
+		// reported work would otherwise satisfy the rate. This prevents a silent long-run gap from
+		// turning a stale progress claim into a live one.
+		auto gapped = make_handoff();
+		require(gapped, "NG1 progress-gap fixture creation failed");
+		require(gapped->observe_task_accepted(
+					task_accepted_metadata{values.heartbeat.provider_id,
+										   values.heartbeat.provider_version.string(),
+										   values.heartbeat.task_id},
+					2'000U),
+				"NG1 progress-gap fixture task acceptance failed");
+		require(
+			gapped->observe_progress(ng1_progress_control{"cxxlens.provider-control.progress.v2",
+														  "task:test",
+														  "dependency:test",
+														  0U,
+														  2'001U,
+														  0U,
+														  2U},
+									 2'001U),
+			"NG1 progress-gap fixture initial sample failed");
+		auto gapped_sample =
+			gapped->observe_progress(ng1_progress_control{"cxxlens.provider-control.progress.v2",
+														  "task:test",
+														  "dependency:test",
+														  1U,
+														  10'000'002'002ULL,
+														  2U,
+														  2U},
+									 10'000'002'002ULL);
+		require(!gapped_sample && gapped_sample.error().code == "provider.progress-rate" &&
+					gapped_sample.error().field == "sample_gap" &&
+					gapped_sample.error().detail == "maximum-exceeded" &&
+					gapped->state() == ng1_recovery_state::progress_rate_failure,
+				"NG1 progress-rate accepted a sample gap beyond its bounded window");
+		require(gapped->confirm_worker_kill(),
+				"NG1 progress-gap failure did not synchronize worker kill");
+		auto gapped_rejected = gapped->reject_output();
+		require(!gapped_rejected && gapped->state() == ng1_recovery_state::failed,
+				"NG1 progress-gap failure remained restartable after explicit rejection");
+		require(gapped->cleanup(), "NG1 progress-gap fixture cleanup failed");
+
+		// A deterministic one-unit/second transcript remains admissible at both checkpoints and
+		// reaches terminal progress without inventing a completion receipt.
+		auto healthy = make_handoff();
+		require(healthy, "NG1 progress-rate healthy fixture creation failed");
+		require(healthy->observe_task_accepted(
+					task_accepted_metadata{values.heartbeat.provider_id,
+										   values.heartbeat.provider_version.string(),
+										   values.heartbeat.task_id},
+					2'000U),
+				"NG1 progress-rate healthy fixture task acceptance failed");
+		require(
+			healthy->observe_progress(ng1_progress_control{"cxxlens.provider-control.progress.v2",
+														   "task:test",
+														   "dependency:test",
+														   0U,
+														   2'001U,
+														   0U,
+														   10U},
+									  2'001U),
+			"NG1 progress-rate healthy fixture initial sample failed");
+		require(
+			healthy->observe_progress(ng1_progress_control{"cxxlens.provider-control.progress.v2",
+														   "task:test",
+														   "dependency:test",
+														   1U,
+														   5'000'002'001ULL,
+														   5U,
+														   10U},
+									  5'000'002'001ULL),
+			"NG1 progress-rate healthy fixture checkpoint sample failed");
+		require(
+			healthy->observe_progress(ng1_progress_control{"cxxlens.provider-control.progress.v2",
+														   "task:test",
+														   "dependency:test",
+														   2U,
+														   10'000'002'001ULL,
+														   10U,
+														   10U},
+									  10'000'002'001ULL,
+									  true),
+			"NG1 progress-rate healthy fixture terminal sample failed");
+		require(healthy->state() == ng1_recovery_state::running,
+				"NG1 progress-rate terminal observation fabricated completion authority");
+		require(!healthy->reject_output() && healthy->state() == ng1_recovery_state::failed,
+				"NG1 progress-rate healthy fixture could not remain unsealed");
+		require(healthy->cleanup(), "NG1 progress-rate healthy fixture cleanup failed");
+	}
+
+	void test_live_driver_retains_a_long_run_only_within_the_frame_bound()
+	{
+		fixture values;
+		auto clock = std::make_shared<clock_state>();
+		auto observation = std::make_shared<observation_state>();
+		auto process = std::make_shared<process_state>();
+		constexpr std::size_t retained_frame_bound = 4'096U;
+		for (std::size_t sequence{}; sequence <= retained_frame_bound; ++sequence)
+		{
+			frame value;
+			value.type = message_type::input_chunk;
+			value.stream_id = values.heartbeat.stream_id;
+			value.sequence = sequence;
+			value.payload = {std::byte{0x5a}};
+			value.protocol_major = provider::protocol_v2_major;
+			value.protocol_minor = provider::protocol_v2_minor;
+			process->incoming.push_back(std::move(value));
+		}
+
+		auto driver = ng1_live_session_driver::start(
+			values.configuration(clock, observation, process, retained_frame_bound), {});
+		require(driver, "NG1 long-run retention fixture start failed");
+		for (std::size_t index{}; index < retained_frame_bound; ++index)
+		{
+			auto received = driver->receive_provider_frame({});
+			require(received && received->has_value(),
+					"NG1 long-run retention fixture stopped before its explicit bound");
+		}
+		require(driver->provider_frames().size() == retained_frame_bound,
+				"NG1 long-run retention exceeded the configured frame bound");
+		auto overflow = driver->receive_provider_frame({});
+		require(!overflow && overflow.error().code == "provider.output-limit" &&
+					driver->provider_frames().size() == retained_frame_bound,
+				"NG1 long-run retention admitted an occurrence beyond the bound");
+		require(driver->terminate(process_status::output_limit),
+				"NG1 long-run retention overflow cleanup did not terminate the worker");
+		require(driver->session().state() == ng1_recovery_state::worker_killed,
+				"NG1 long-run retention overflow did not synchronize worker kill");
+		auto rejected = driver->session().reject_output();
+		require(!rejected && driver->session().state() == ng1_recovery_state::failed,
+				"NG1 long-run retention overflow did not enter explicit failed cleanup");
+		require(driver->cleanup(), "NG1 long-run retention fixture cleanup failed");
+	}
 } // namespace
 
 int main()
@@ -1121,8 +2103,16 @@ int main()
 	test_live_driver_rejects_host_resume_without_receipt();
 	test_live_driver_cleans_session_when_process_start_fails();
 	test_live_driver_cleans_session_when_process_start_throws();
+	test_live_driver_closes_replacement_process_exceptions();
 	test_live_driver_rebases_task_timers_at_acceptance();
 	test_live_driver_does_not_sync_failed_process_effects();
+	test_live_driver_publishes_only_fsynced_latest_resume_frontier();
+	test_live_driver_rejects_stale_corrupt_gap_and_terminal_resume();
+	test_system_live_driver_connects_clock_and_duplex_process();
+	test_system_live_driver_propagates_cancellation_and_cleans_spill();
+	test_system_live_driver_destructor_cleans_unfinished_session();
 	test_shared_validator_accepts_explicit_ng1_controls();
+	test_live_control_handoff_enforces_progress_rate_algorithm();
+	test_live_driver_retains_a_long_run_only_within_the_frame_bound();
 	return 0;
 }

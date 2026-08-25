@@ -50,6 +50,283 @@ class MaterializationProtocol2Tests(unittest.TestCase):
         self.assertEqual(worker["protocol_major"]["const"], 2)
         self.assertEqual(worker["protocol_minor"]["const"], 0)
 
+    def test_request_schema_shape_is_closed_and_bounded(self) -> None:
+        request = yaml.safe_load(
+            (ROOT / materialization.REQUEST_SCHEMA).read_text(encoding="utf-8")
+        )
+        materialization.validate_request_schema_shape(request)
+
+        missing = copy.deepcopy(request)
+        missing["required"].remove("worker")
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "request schema required fields"
+        ):
+            materialization.validate_request_schema_shape(missing)
+
+        unbounded = copy.deepcopy(request)
+        unbounded["properties"]["tasks"]["maxItems"] = 0
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "task count bound"
+        ):
+            materialization.validate_request_schema_shape(unbounded)
+
+        open_source = copy.deepcopy(request)
+        open_source["$defs"]["base_task_without_source_bytes"]["properties"][
+            "source"
+        ]["additionalProperties"] = True
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "source metadata schema is not closed"
+        ):
+            materialization.validate_request_schema_shape(open_source)
+
+        raw_bytes = copy.deepcopy(request)
+        raw_bytes["$defs"]["base_task_without_source_bytes"]["properties"][
+            "source"
+        ]["properties"]["content_base64"] = {"type": "string"}
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "source metadata field census"
+        ):
+            materialization.validate_request_schema_shape(raw_bytes)
+
+    def test_materializer_semantics_uses_product_source_identity(self) -> None:
+        request = self.request()
+        direct_basis = materialization.expected_direct_basis(request)
+        tool = request["tool"]
+        expected = materialization.semantic_digest(
+            "cxxlens.clang22-materializer-semantics.v1",
+            materialization._canonical_tuple(
+                materialization._canonical_string(tool[field])
+                for field in (
+                    "executable",
+                    "interface_version",
+                    "distribution_version",
+                    "source_revision",
+                    "source_tree",
+                )
+            ),
+        )
+        self.assertEqual(direct_basis["materializer_semantics_digest"], expected)
+
+        physical_occurrence = copy.deepcopy(request)
+        physical_occurrence["tool"]["installed_executable_digest"] = (
+            "sha256:" + "9" * 64
+        )
+        physical_occurrence["tool"]["occurrence_manifest_digest"] = (
+            "sha256:" + "8" * 64
+        )
+        physical_occurrence["tool"]["package_configuration"] = "shared"
+        self.assertEqual(
+            materialization.expected_direct_basis(physical_occurrence)[
+                "materializer_semantics_digest"
+            ],
+            expected,
+        )
+
+        different_source = copy.deepcopy(request)
+        different_source["tool"]["source_tree"] = "f" * 40
+        self.assertNotEqual(
+            materialization.expected_direct_basis(different_source)[
+                "materializer_semantics_digest"
+            ],
+            expected,
+        )
+
+    def test_installed_ingress_contract_declares_all_process_binding_authority(self) -> None:
+        schema_paths = (
+            ROOT / materialization.REQUEST_SCHEMA,
+            ROOT / "schemas" / "cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml",
+        )
+        expected_environment = {
+            "session_id": "CXXLENS_PROVIDER_SOURCE_CLOSURE_SESSION_ID",
+            "task_id": "CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_ID",
+            "task_v4_digest": "CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_V4_DIGEST",
+            "source_closure_id": "CXXLENS_PROVIDER_SOURCE_CLOSURE_ID",
+            "source_closure_digest": "CXXLENS_PROVIDER_SOURCE_CLOSURE_DIGEST",
+            "manifest_digest": "CXXLENS_PROVIDER_SOURCE_CLOSURE_MANIFEST_DIGEST",
+            "transfer_digest": "CXXLENS_PROVIDER_SOURCE_CLOSURE_TRANSFER_DIGEST",
+            "stream_id": "CXXLENS_PROVIDER_SOURCE_CLOSURE_STREAM_ID",
+            "first_sequence": "CXXLENS_PROVIDER_SOURCE_CLOSURE_FIRST_SEQUENCE",
+            "binding_digest": "CXXLENS_PROVIDER_SOURCE_CLOSURE_BINDING_DIGEST",
+        }
+        for schema_path in schema_paths:
+            document = yaml.safe_load(schema_path.read_text(encoding="utf-8"))
+            ingress = document["x-cxxlens-installed-ingress-contract"]
+            self.assertEqual(
+                ingress["mode_environment"], "CXXLENS_PROVIDER_INGRESS_MODE"
+            )
+            self.assertEqual(ingress["mode"], "task-v4-source-closure-v2")
+            self.assertEqual(ingress["fd_roles"]["read"]["environment"],
+                             "CXXLENS_PROVIDER_SOURCE_CLOSURE_READ_FD")
+            self.assertEqual(ingress["fd_roles"]["write"]["environment"],
+                             "CXXLENS_PROVIDER_SOURCE_CLOSURE_WRITE_FD")
+            self.assertEqual(ingress["binding_environment"], expected_environment)
+            self.assertEqual(
+                ingress["binding_environment_encoding"]["stream_id"],
+                "uint64-canonical-decimal",
+            )
+            self.assertEqual(
+                ingress["binding_environment_encoding"]["first_sequence"],
+                {"encoding": "uint64-canonical-decimal", "exact": 0},
+            )
+            expected_role_encoding = {
+                "session_id": "provider-session-id",
+                "task_id": "task-id",
+                "task_v4_digest": "semantic-v2-digest",
+                "source_closure_id": "source-closure-id",
+                "source_closure_digest": "semantic-v2-digest",
+                "manifest_digest": "semantic-v2-digest",
+                "transfer_digest": "semantic-v2-digest",
+                "stream_id": "uint64-canonical-decimal",
+                "first_sequence": "uint64-canonical-decimal",
+            }
+            binding_environment_encoding = ingress["binding_environment_encoding"]
+            self.assertEqual(
+                set(binding_environment_encoding) - {"binding_digest"},
+                set(expected_role_encoding),
+            )
+            self.assertEqual(
+                {
+                    role: (
+                        binding_environment_encoding[role]["encoding"]
+                        if isinstance(binding_environment_encoding[role], dict)
+                        else binding_environment_encoding[role]
+                    )
+                    for role in expected_role_encoding
+                },
+                expected_role_encoding,
+            )
+            binding_encoding = ingress["binding_environment_encoding"]["binding_digest"]
+            self.assertEqual(binding_encoding["type"], "process-channel-sha256")
+            self.assertEqual(binding_encoding["prefix"], "process-channel:sha256:")
+            self.assertEqual(binding_encoding["hash"], "sha256")
+            self.assertEqual(binding_encoding["identity_domain"], "process-channel")
+            self.assertEqual(
+                binding_encoding["projection_encoding"], "cxxlens-canonical-tuple-v1"
+            )
+            self.assertEqual(
+                [
+                    (
+                        field["name"],
+                        field["kind"],
+                        field.get("encoding"),
+                        field.get("exact"),
+                    )
+                    for field in binding_encoding["fields"]
+                ],
+                [
+                    ("mode", "utf8_string", None, "task-v4-source-closure-v2"),
+                    ("task_id", "utf8_string", "task-id", None),
+                    ("session_id", "utf8_string", "provider-session-id", None),
+                    ("task_v4_digest", "utf8_string", "semantic-v2-digest", None),
+                    ("source_closure_id", "utf8_string", "source-closure-id", None),
+                    ("source_closure_digest", "utf8_string", "semantic-v2-digest", None),
+                    ("manifest_digest", "utf8_string", "semantic-v2-digest", None),
+                    ("transfer_digest", "utf8_string", "semantic-v2-digest", None),
+                    ("stream_id", "utf8_string", "uint64-canonical-decimal", None),
+                    ("first_sequence", "utf8_string", "uint64-canonical-decimal", None),
+                    ("read_descriptor", "canonical_integer", None, None),
+                    ("write_descriptor", "canonical_integer", None, None),
+                    ("read_device", "utf8_string", "uint64-canonical-decimal", None),
+                    ("read_inode", "utf8_string", "uint64-canonical-decimal", None),
+                    ("read_mode", "utf8_string", "uint32-canonical-decimal", None),
+                    ("write_device", "utf8_string", "uint64-canonical-decimal", None),
+                    ("write_inode", "utf8_string", "uint64-canonical-decimal", None),
+                    ("write_mode", "utf8_string", "uint32-canonical-decimal", None),
+                ],
+            )
+            projection_names = [field["name"] for field in binding_encoding["fields"]]
+            expected_projection_names = [
+                "mode",
+                "task_id",
+                "session_id",
+                "task_v4_digest",
+                "source_closure_id",
+                "source_closure_digest",
+                "manifest_digest",
+                "transfer_digest",
+                "stream_id",
+                "first_sequence",
+                "read_descriptor",
+                "write_descriptor",
+                "read_device",
+                "read_inode",
+                "read_mode",
+                "write_device",
+                "write_inode",
+                "write_mode",
+            ]
+            self.assertEqual(projection_names, expected_projection_names)
+            self.assertEqual(len(projection_names), len(set(projection_names)))
+            self.assertEqual(
+                set(projection_names) & (set(expected_environment) - {"binding_digest"}),
+                set(expected_environment) - {"binding_digest"},
+            )
+
+            def assert_projection_order(document: dict) -> None:
+                fields = document["x-cxxlens-installed-ingress-contract"][
+                    "binding_environment_encoding"
+                ]["binding_digest"]["fields"]
+                names = [field["name"] for field in fields]
+                if names != expected_projection_names or len(names) != len(set(names)):
+                    raise AssertionError("process-channel projection is not exact")
+
+            assert_projection_order(document)
+            missing = copy.deepcopy(document)
+            del missing["x-cxxlens-installed-ingress-contract"][
+                "binding_environment_encoding"
+            ]["binding_digest"]["fields"][0]
+            with self.assertRaises(AssertionError):
+                assert_projection_order(missing)
+            extra = copy.deepcopy(document)
+            extra["x-cxxlens-installed-ingress-contract"][
+                "binding_environment_encoding"
+            ]["binding_digest"]["fields"].append({"name": "unexpected"})
+            with self.assertRaises(AssertionError):
+                assert_projection_order(extra)
+            duplicate = copy.deepcopy(document)
+            duplicate["x-cxxlens-installed-ingress-contract"][
+                "binding_environment_encoding"
+            ]["binding_digest"]["fields"].append(
+                duplicate["x-cxxlens-installed-ingress-contract"][
+                    "binding_environment_encoding"
+                ]["binding_digest"]["fields"][0]
+            )
+            with self.assertRaises(AssertionError):
+                assert_projection_order(duplicate)
+            reordered = copy.deepcopy(document)
+            fields = reordered["x-cxxlens-installed-ingress-contract"][
+                "binding_environment_encoding"
+            ]["binding_digest"]["fields"]
+            fields[0], fields[1] = fields[1], fields[0]
+            with self.assertRaises(AssertionError):
+                assert_projection_order(reordered)
+            self.assertEqual(
+                binding_encoding["endpoint_identity"],
+                {
+                    "read": {
+                        "descriptor_environment": "CXXLENS_PROVIDER_SOURCE_CLOSURE_READ_FD",
+                        "fstat_fields": ["read_device", "read_inode", "read_mode"],
+                    },
+                    "write": {
+                        "descriptor_environment": "CXXLENS_PROVIDER_SOURCE_CLOSURE_WRITE_FD",
+                        "fstat_fields": ["write_device", "write_inode", "write_mode"],
+                    },
+                },
+            )
+            self.assertEqual(ingress["fallback"], "forbidden")
+            self.assertEqual(ingress["caller_override"], "forbidden")
+            self.assertEqual(
+                ingress["id_binding"],
+                "exact-value-cross-check; substring-reconstruction-forbidden",
+            )
+            self.assertEqual(
+                document["x-cxxlens-identity-domains"],
+                {
+                    "inherited_request_v2": "cxxlens.clang22-materialization-request.v2",
+                    "base_claim_row_v1": "cxxlens.base-claim-row.v1",
+                },
+            )
+
     def test_task_v4_schema_has_metadata_only_source_binding(self) -> None:
         task = yaml.safe_load(
             (ROOT / materialization.TASK_V4_SCHEMA).read_text(encoding="utf-8")
@@ -346,6 +623,16 @@ class MaterializationProtocol2Tests(unittest.TestCase):
                 materialization.validate_primary_span_bundle(changed, source)
 
     def test_occurrence_manifest_is_closed_and_digest_bound(self) -> None:
+        def reseal(value: dict) -> None:
+            payload = {
+                key: copy.deepcopy(item)
+                for key, item in value.items()
+                if key != "occurrence_payload_digest"
+            }
+            value["occurrence_payload_digest"] = materialization.content_digest(
+                materialization.canonical_json(payload)
+            )
+
         manifest = materialization.fixture_occurrence_manifest(
             ROOT,
             source_revision="a" * 40,
@@ -368,6 +655,79 @@ class MaterializationProtocol2Tests(unittest.TestCase):
         )
         with self.assertRaises(materialization.MaterializationError):
             materialization.validate_occurrence_manifest(ROOT, changed_order)
+        reseal(changed_order)
+        materialization.validate_occurrence_manifest(ROOT, changed_order)
+
+        additional_artifact = copy.deepcopy(manifest)
+        additional_artifact["files"].append(
+            {
+                "role": "supplemental-contract",
+                "path": "share/cxxlens/schemas/supplemental-contract.yaml",
+                "digest": "sha256:" + "3" * 64,
+            }
+        )
+        reseal(additional_artifact)
+        materialization.validate_occurrence_manifest(ROOT, additional_artifact)
+
+        duplicate_role = copy.deepcopy(additional_artifact)
+        duplicate_role["files"].append(
+            {
+                "role": "supplemental-contract",
+                "path": "share/cxxlens/schemas/another-contract.yaml",
+                "digest": "sha256:" + "4" * 64,
+            }
+        )
+        reseal(duplicate_role)
+        with self.assertRaises(materialization.MaterializationError):
+            materialization.validate_occurrence_manifest(ROOT, duplicate_role)
+
+        duplicate_path = copy.deepcopy(additional_artifact)
+        duplicate_path["files"].append(
+            {
+                "role": "another-contract",
+                "path": "share/cxxlens/schemas/supplemental-contract.yaml",
+                "digest": "sha256:" + "4" * 64,
+            }
+        )
+        reseal(duplicate_path)
+        with self.assertRaises(materialization.MaterializationError):
+            materialization.validate_occurrence_manifest(ROOT, duplicate_path)
+
+        missing_required = copy.deepcopy(manifest)
+        missing_required["files"] = [
+            row
+            for row in missing_required["files"]
+            if row["role"] != "provider-protocol"
+        ]
+        reseal(missing_required)
+        with self.assertRaises(materialization.MaterializationError):
+            materialization.validate_occurrence_manifest(ROOT, missing_required)
+
+        static_runtime = copy.deepcopy(manifest)
+        static_runtime["files"].append(
+            {
+                "role": "supplemental-runtime",
+                "path": "lib/libcxxlens_supplemental.so.1",
+                "digest": "sha256:" + "5" * 64,
+            }
+        )
+        reseal(static_runtime)
+        with self.assertRaises(materialization.MaterializationError):
+            materialization.validate_occurrence_manifest(ROOT, static_runtime)
+
+        shared = materialization.fixture_occurrence_manifest(
+            ROOT,
+            source_revision="a" * 40,
+            source_tree="b" * 40,
+            configuration="shared",
+            tool_digest="sha256:" + "1" * 64,
+            worker_digest="sha256:" + "2" * 64,
+        )
+        materialization.validate_occurrence_manifest(ROOT, shared)
+        shared["files"] = [row for row in shared["files"] if row["role"] != "query"]
+        reseal(shared)
+        with self.assertRaises(materialization.MaterializationError):
+            materialization.validate_occurrence_manifest(ROOT, shared)
 
     def test_task_v4_resource_proof_is_schema_derived_and_deterministic(self) -> None:
         shared_schema_path = ROOT / "schemas/cxxlens_ng_clang22_materialization_request.schema.yaml"

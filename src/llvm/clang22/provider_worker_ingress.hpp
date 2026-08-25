@@ -32,6 +32,22 @@ namespace cxxlens::detail::clang22
 	 */
 	struct provider_worker_v4_ingress
 	{
+		struct output_authority
+		{
+			std::string provider_id;
+			std::string provider_version;
+			std::string semantic_contract_digest;
+			std::string toolchain_context_id;
+			std::string compile_unit_id;
+			std::vector<std::string> requested_descriptor_ids;
+			std::vector<std::string> descriptor_digests;
+			std::vector<std::string> dependency_groups;
+			std::uint64_t maximum_rows{100000U};
+			std::uint64_t maximum_output_bytes{16U * 1024U * 1024U};
+
+			[[nodiscard]] sdk::result<void> validate() const;
+		};
+
 		std::vector<std::byte> task_payload;
 		std::vector<std::byte> base_task_projection;
 		std::string expected_base_task_digest;
@@ -40,6 +56,7 @@ namespace cxxlens::detail::clang22
 		source_closure_transfer_binding closure_binding;
 		std::string expected_transfer_digest;
 		std::uint64_t stream_id{};
+		output_authority output;
 	};
 
 	/**

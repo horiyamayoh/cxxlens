@@ -2,6 +2,86 @@ $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://cxxlens.dev/schemas/cxxlens.clang22-materialization-request.v2_2
 title: cxxlens installed Clang 22 materialization request v2.2
 type: object
+
+# Installed-process authority. The materializer and worker derive their launch environment from
+# this contract; they must not reconstruct task or closure identity from an environment substring.
+x-cxxlens-identity-domains:
+  inherited_request_v2: cxxlens.clang22-materialization-request.v2
+  base_claim_row_v1: cxxlens.base-claim-row.v1
+x-cxxlens-installed-ingress-contract:
+  mode_environment: CXXLENS_PROVIDER_INGRESS_MODE
+  mode: task-v4-source-closure-v2
+  version: 2.0.0
+  fd_roles:
+    read:
+      environment: CXXLENS_PROVIDER_SOURCE_CLOSURE_READ_FD
+      role: host-to-worker-source-closure-input
+      fstat: required-before-frame-receive
+    write:
+      environment: CXXLENS_PROVIDER_SOURCE_CLOSURE_WRITE_FD
+      role: worker-to-host-source-closure-ack
+      fstat: required-before-frame-receive
+  binding_environment:
+    session_id: CXXLENS_PROVIDER_SOURCE_CLOSURE_SESSION_ID
+    task_id: CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_ID
+    task_v4_digest: CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_V4_DIGEST
+    source_closure_id: CXXLENS_PROVIDER_SOURCE_CLOSURE_ID
+    source_closure_digest: CXXLENS_PROVIDER_SOURCE_CLOSURE_DIGEST
+    manifest_digest: CXXLENS_PROVIDER_SOURCE_CLOSURE_MANIFEST_DIGEST
+    transfer_digest: CXXLENS_PROVIDER_SOURCE_CLOSURE_TRANSFER_DIGEST
+    stream_id: CXXLENS_PROVIDER_SOURCE_CLOSURE_STREAM_ID
+    first_sequence: CXXLENS_PROVIDER_SOURCE_CLOSURE_FIRST_SEQUENCE
+    binding_digest: CXXLENS_PROVIDER_SOURCE_CLOSURE_BINDING_DIGEST
+  binding_environment_encoding:
+    session_id: provider-session-id
+    task_id: task-id
+    task_v4_digest: semantic-v2-digest
+    source_closure_id: source-closure-id
+    source_closure_digest: semantic-v2-digest
+    manifest_digest: semantic-v2-digest
+    transfer_digest: semantic-v2-digest
+    stream_id: uint64-canonical-decimal
+    first_sequence: {encoding: uint64-canonical-decimal, exact: 0}
+    binding_digest:
+      type: process-channel-sha256
+      prefix: "process-channel:sha256:"
+      hash: sha256
+      identity_domain: process-channel
+      projection_encoding: cxxlens-canonical-tuple-v1
+      fields:
+        - {name: mode, kind: utf8_string, exact: task-v4-source-closure-v2}
+        - {name: task_id, kind: utf8_string, encoding: task-id}
+        - {name: session_id, kind: utf8_string, encoding: provider-session-id}
+        - {name: task_v4_digest, kind: utf8_string, encoding: semantic-v2-digest}
+        - {name: source_closure_id, kind: utf8_string, encoding: source-closure-id}
+        - {name: source_closure_digest, kind: utf8_string, encoding: semantic-v2-digest}
+        - {name: manifest_digest, kind: utf8_string, encoding: semantic-v2-digest}
+        - {name: transfer_digest, kind: utf8_string, encoding: semantic-v2-digest}
+        - {name: stream_id, kind: utf8_string, encoding: uint64-canonical-decimal}
+        - {name: first_sequence, kind: utf8_string, encoding: uint64-canonical-decimal}
+        - {name: read_descriptor, kind: canonical_integer}
+        - {name: write_descriptor, kind: canonical_integer}
+        - {name: read_device, kind: utf8_string, encoding: uint64-canonical-decimal}
+        - {name: read_inode, kind: utf8_string, encoding: uint64-canonical-decimal}
+        - {name: read_mode, kind: utf8_string, encoding: uint32-canonical-decimal}
+        - {name: write_device, kind: utf8_string, encoding: uint64-canonical-decimal}
+        - {name: write_inode, kind: utf8_string, encoding: uint64-canonical-decimal}
+        - {name: write_mode, kind: utf8_string, encoding: uint32-canonical-decimal}
+      endpoint_identity:
+        read:
+          descriptor_environment: CXXLENS_PROVIDER_SOURCE_CLOSURE_READ_FD
+          fstat_fields: [read_device, read_inode, read_mode]
+        write:
+          descriptor_environment: CXXLENS_PROVIDER_SOURCE_CLOSURE_WRITE_FD
+          fstat_fields: [write_device, write_inode, write_mode]
+  fallback: forbidden
+  caller_override: forbidden
+  frame_binding:
+    manifest_digest: source_closure_manifest_and_ack_metadata
+    stream_id: protocol_frame_stream_id
+    first_sequence: protocol_frame_sequence_zero
+    binding_digest: authenticated_process_binding_digest
+  id_binding: exact-value-cross-check; substring-reconstruction-forbidden
 additionalProperties: false
 required: [schema, request_version, request_id, request_digest, required_features, materialization_request_id, semantic_request_digest, tool, worker, project, registry, engine, interpretation_policy, trust_policy, group_topology, tasks, source_closures, task_extensions, publication]
 properties:
@@ -82,7 +162,7 @@ $defs:
   base_task_without_source_bytes:
     type: object
     additionalProperties: false
-    required: [provider_task_id, provider_execution_id, task_input_digest, project_id, catalog_id, catalog_digest, selected_catalog_compile_unit_id, compile_unit_id, build_variant_id, toolchain_context_id, toolchain_digest, toolchain, variant, normalized_invocation_digest, environment_digest, language, working_directory, condition_universe_id, condition_id, interpretation_domain, source, effective_argv, requested_descriptor_ids, dependency_groups, budget, sandbox]
+    required: [provider_task_id, provider_execution_id, task_input_digest, project_id, catalog_id, catalog_digest, selected_catalog_compile_unit_id, compile_unit_id, build_variant_id, toolchain_context_id, toolchain_digest, toolchain, variant, normalized_invocation_digest, environment_digest, language, working_directory, condition_universe_id, condition_id, interpretation_domain, source, effective_argv, qualified_read_roots, requested_descriptor_ids, dependency_groups, budget, sandbox]
     properties:
       provider_task_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/provider_task_id}
       provider_execution_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/provider_execution_id}
@@ -118,6 +198,7 @@ $defs:
           line_index_id: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/line_index_id}
           read_only: {const: true}
       effective_argv: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/effective_argv}
+      qualified_read_roots: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/qualified_read_roots}
       requested_descriptor_ids: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/requested_descriptor_ids}
       dependency_groups: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/dependency_groups}
       budget: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/tasks/items/properties/budget}

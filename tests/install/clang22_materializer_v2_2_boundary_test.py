@@ -75,6 +75,15 @@ def main() -> int:
     environment = dict(os.environ)
     environment.pop("LD_LIBRARY_PATH", None)
     environment.pop("DYLD_LIBRARY_PATH", None)
+    # This case deliberately exercises the disconnected stdin boundary.  Do
+    # not let a parent provider invocation leak its ingress mode or descriptors
+    # into the installed-process test and turn it into a different protocol
+    # phase.
+    for name in tuple(environment):
+        if name == "CXXLENS_PROVIDER_INGRESS_MODE" or name.startswith(
+            "CXXLENS_PROVIDER_SOURCE_CLOSURE_"
+        ):
+            environment.pop(name, None)
     with tempfile.TemporaryDirectory(prefix="clang22-materializer-v2-2-") as directory:
         working_directory = pathlib.Path(directory)
         completed = subprocess.run(

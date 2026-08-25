@@ -26,6 +26,9 @@ from check_ng_source_closure_transport import (  # noqa: E402
     SCHEMA,
     TASK,
     MANIFEST_SCHEMA,
+    SOURCE_CLOSURE_DIGEST_DOMAIN,
+    SOURCE_CLOSURE_MANIFEST_SCHEMA,
+    SOURCE_CLOSURE_MANIFEST_DIGEST_DOMAIN,
     SourceClosureTransportError,
     TransferStateWitness,
     blob_receipts_digest,
@@ -151,7 +154,7 @@ class SourceClosureTransportTest(unittest.TestCase):
         }
         digest = closure_digest([member], [blob])
         manifest = {
-            "schema": "cxxlens.source-closure-manifest.v1",
+            "schema": SOURCE_CLOSURE_MANIFEST_SCHEMA,
             "closure_id": "source-closure:" + digest,
             "closure_digest": digest,
             "members": [member],
@@ -233,26 +236,26 @@ class SourceClosureTransportTest(unittest.TestCase):
         request, manifest = complete_request_witness(ROOT)
         self.assertEqual(request["request_version"], "2.2.0")
         self.assertNotIn("content_base64", request["tasks"][0]["source"])
-        request_schema = yaml.safe_load(
+        request_v2_2_schema = yaml.safe_load(
             (ROOT / REQUEST).read_text(encoding="utf-8")
         )
-        legacy_request_schema = yaml.safe_load(
+        request_schema = yaml.safe_load(
             (ROOT / "schemas/cxxlens_ng_clang22_materialization_request.schema.yaml").read_text(
                 encoding="utf-8"
             )
         )
         task_schema = yaml.safe_load((ROOT / TASK).read_text(encoding="utf-8"))
         schema_store = {
+            request_v2_2_schema["$id"]: request_v2_2_schema,
             request_schema["$id"]: request_schema,
-            legacy_request_schema["$id"]: legacy_request_schema,
             task_schema["$id"]: task_schema,
             "https://cxxlens.dev/schemas/cxxlens_ng_provider_task_v4.schema.yaml": task_schema,
         }
         resolver = jsonschema.RefResolver.from_schema(
-            request_schema, store=schema_store
+            request_v2_2_schema, store=schema_store
         )
         jsonschema.Draft202012Validator(
-            request_schema, resolver=resolver
+            request_v2_2_schema, resolver=resolver
         ).validate(request)
         validate_manifest(
             manifest, yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text())
@@ -289,7 +292,7 @@ class SourceClosureTransportTest(unittest.TestCase):
             }
         blobs = [blobs_by_digest[digest] for digest in sorted(blobs_by_digest)]
         manifest = {
-            "schema": "cxxlens.source-closure-manifest.v1",
+            "schema": SOURCE_CLOSURE_MANIFEST_SCHEMA,
             "closure_digest": closure_digest(members, blobs),
             "members": members,
             "blobs": blobs,
@@ -325,7 +328,7 @@ class SourceClosureTransportTest(unittest.TestCase):
         semantic = "semantic-v2:sha256:" + "1" * 64
         content = "sha256:" + "2" * 64
         manifest = {
-            "schema": "cxxlens.source-closure-manifest.v1",
+            "schema": SOURCE_CLOSURE_MANIFEST_SCHEMA,
             "closure_id": "source-closure:" + semantic,
             "closure_digest": semantic,
             "members": [{
@@ -360,7 +363,7 @@ class SourceClosureTransportTest(unittest.TestCase):
         }
         wrong_file_id_digest = closure_digest([wrong_file_id_member], [blob])
         wrong_file_id_manifest = {
-            "schema": "cxxlens.source-closure-manifest.v1",
+            "schema": SOURCE_CLOSURE_MANIFEST_SCHEMA,
             "closure_id": "source-closure:" + wrong_file_id_digest,
             "closure_digest": wrong_file_id_digest,
             "members": [wrong_file_id_member],
@@ -381,7 +384,7 @@ class SourceClosureTransportTest(unittest.TestCase):
                 }
                 digest = closure_digest([member], [blob])
                 manifest = {
-                    "schema": "cxxlens.source-closure-manifest.v1",
+                    "schema": SOURCE_CLOSURE_MANIFEST_SCHEMA,
                     "closure_id": "source-closure:" + digest,
                     "closure_digest": digest,
                     "members": [member],
@@ -396,13 +399,45 @@ class SourceClosureTransportTest(unittest.TestCase):
             "file:sha256:83e065cbf0d8f742fe73a01155b02057c0de0fbe747f88b35ea5e96efe8faf06",
         )
 
+    def test_closure_digest_uses_the_clang22_content_domain_golden(self) -> None:
+        self.assertEqual(
+            SOURCE_CLOSURE_DIGEST_DOMAIN,
+            "cxxlens.clang22.source-closure.v1",
+        )
+        self.assertEqual(
+            SOURCE_CLOSURE_MANIFEST_DIGEST_DOMAIN,
+            "cxxlens.source-closure-manifest.v1",
+        )
+        self.assertNotEqual(
+            SOURCE_CLOSURE_DIGEST_DOMAIN,
+            SOURCE_CLOSURE_MANIFEST_DIGEST_DOMAIN,
+        )
+        payload = b"int main() { return 0; }\n"
+        content = "sha256:" + hashlib.sha256(payload).hexdigest()
+        member = {
+            "file_id": source_closure_file_id("project://src/main.cpp"),
+            "logical_path": "project://src/main.cpp",
+            "role": "main",
+            "encoding": "utf8",
+            "size_bytes": len(payload),
+            "content_digest": content,
+            "read_only": True,
+        }
+        self.assertEqual(
+            closure_digest(
+                [member],
+                [{"content_digest": content, "size_bytes": len(payload)}],
+            ),
+            "semantic-v2:sha256:ea94f38e8a9bdf7250f07769c3b902378c78c3d98dd36858904b3172f94962c9",
+        )
+
     def test_manifest_semantic_tamper_and_orphan_are_rejected(self) -> None:
         schema = yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text(encoding="utf-8"))
         content = "sha256:" + "2" * 64
         members = [{"file_id": source_closure_file_id("project://src/main.cpp"), "logical_path": "project://src/main.cpp", "role": "main", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True}]
         blobs = [{"content_digest": content, "size_bytes": 1}]
         semantic = closure_digest(members, blobs)
-        manifest = {"schema": "cxxlens.source-closure-manifest.v1", "closure_id": "source-closure:" + semantic, "closure_digest": semantic, "members": members, "blobs": blobs}
+        manifest = {"schema": SOURCE_CLOSURE_MANIFEST_SCHEMA, "closure_id": "source-closure:" + semantic, "closure_digest": semantic, "members": members, "blobs": blobs}
         validate_manifest(manifest, schema)
         manifest["members"][0]["role"] = "header"
         with self.assertRaisesRegex(SourceClosureTransportError, "exactly one main"):
@@ -421,7 +456,7 @@ class SourceClosureTransportTest(unittest.TestCase):
         ]
         blobs = [{"content_digest": content, "size_bytes": 1}]
         digest = closure_digest(members, blobs)
-        manifest = {"schema": "cxxlens.source-closure-manifest.v1", "closure_id": "source-closure:" + digest, "closure_digest": digest, "members": members, "blobs": blobs}
+        manifest = {"schema": SOURCE_CLOSURE_MANIFEST_SCHEMA, "closure_id": "source-closure:" + digest, "closure_digest": digest, "members": members, "blobs": blobs}
         validate_manifest(manifest, schema)
         manifest["members"][1]["role"] = "forced-include"
         with self.assertRaisesRegex(SourceClosureTransportError, "closure digest"):
@@ -816,7 +851,7 @@ class SourceClosureTransportTest(unittest.TestCase):
         members = [{"file_id": source_closure_file_id("project://src/main.cpp"), "logical_path": "project://src/main.cpp", "role": "main", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True}]
         blobs = [{"content_digest": content, "size_bytes": 1}]
         closure = closure_digest(members, blobs)
-        manifest = {"schema": "cxxlens.source-closure-manifest.v1", "closure_id": "source-closure:" + closure, "closure_digest": closure, "members": members, "blobs": blobs}
+        manifest = {"schema": SOURCE_CLOSURE_MANIFEST_SCHEMA, "closure_id": "source-closure:" + closure, "closure_digest": closure, "members": members, "blobs": blobs}
         payload = canonical_json(manifest)
         digest = manifest_digest(manifest)
         schema = yaml.safe_load((ROOT / MANIFEST_SCHEMA).read_text(encoding="utf-8"))
@@ -844,7 +879,7 @@ class SourceClosureTransportTest(unittest.TestCase):
         members = [{"file_id": source_closure_file_id("project://src/main.cpp"), "logical_path": "project://src/main.cpp", "role": "main", "encoding": "utf8", "size_bytes": 1, "content_digest": content, "read_only": True}]
         blobs = [{"content_digest": content, "size_bytes": 1}]
         closure = closure_digest(members, blobs)
-        manifest = {"schema": "cxxlens.source-closure-manifest.v1", "closure_id": "source-closure:" + closure, "closure_digest": closure, "members": members, "blobs": blobs}
+        manifest = {"schema": SOURCE_CLOSURE_MANIFEST_SCHEMA, "closure_id": "source-closure:" + closure, "closure_digest": closure, "members": members, "blobs": blobs}
         payload = canonical_json(manifest)
         digest = manifest_digest(manifest)
 
@@ -877,7 +912,7 @@ class SourceClosureTransportTest(unittest.TestCase):
             {**members[0], "file_id": source_closure_file_id("project://a/header.hpp"), "logical_path": "project://a/header.hpp", "role": "header"},
         ]
         invalid_closure = closure_digest(invalid_members, blobs)
-        invalid_manifest = {"schema": "cxxlens.source-closure-manifest.v1", "closure_id": "source-closure:" + invalid_closure, "closure_digest": invalid_closure, "members": invalid_members, "blobs": blobs}
+        invalid_manifest = {"schema": SOURCE_CLOSURE_MANIFEST_SCHEMA, "closure_id": "source-closure:" + invalid_closure, "closure_digest": invalid_closure, "members": invalid_members, "blobs": blobs}
         invalid_payload = canonical_json(invalid_manifest)
         invalid_digest = manifest_digest(invalid_manifest)
         invalid = TransferStateWitness(session_id=SESSION_ID, task_id=TASK_ID, task_v4_digest=SEMANTIC, closure_id=invalid_manifest["closure_id"], closure_digest=invalid_closure, manifest_digest=invalid_digest, manifest_schema=schema)

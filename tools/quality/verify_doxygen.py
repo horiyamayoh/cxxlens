@@ -12,6 +12,10 @@ import xml.etree.ElementTree as ET
 import yaml
 
 
+def text(element: ET.Element | None) -> str:
+    return "" if element is None else "".join(element.itertext()).strip()
+
+
 def catalog_headers(catalog_path: pathlib.Path) -> set[str]:
     catalog = yaml.safe_load(catalog_path.read_text(encoding="utf-8"))
     return {
@@ -63,11 +67,12 @@ def main() -> int:
     if failures:
         print("Doxygen contract validation failed:\n" + "\n".join(failures), file=sys.stderr)
         return 1
-    print(
-        f"validated Doxygen XML for {checked} public callables "
-        f"({sum(observed_ng_headers.values())} callables in "
-        f"{len(ng_headers)} catalog-admitted headers)"
-    )
+
+    details = [
+        f"{checked} public callables",
+        f"{sum(observed_ng_headers.values())} callables in {len(ng_headers)} catalog-admitted headers",
+    ]
+    print("validated Doxygen XML (" + "; ".join(details) + ")")
     return 0
 
 

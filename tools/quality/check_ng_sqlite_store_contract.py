@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import pathlib
 import sys
@@ -22,37 +21,10 @@ CONTRACT_SCHEMA = pathlib.Path(
 SNAPSHOT_CONTRACT = pathlib.Path(
     "schemas/cxxlens_ng_snapshot_store_contract.yaml"
 )
-
-# These digests cover the complete parsed YAML objects. They are intentionally
-# independent of the schema so a coordinated contract/schema weakening remains
-# fail closed while formatting-only YAML changes remain non-semantic.
-EXPECTED_CONTRACT_DIGEST = (
-    "sha256:12b0ed293665d359fb95f08607010969f5caf40c5bf68765ca63072499a705d4"
-)
-EXPECTED_SCHEMA_DIGEST = (
-    "sha256:2ff3ef264b1ea7e21d189a71816b8099f77a32838cfd98a88fa2be0c2d69437b"
+SNAPSHOT_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_snapshot_store_contract.schema.yaml"
 )
 
-EXPECTED_SNAPSHOT_BINDING = (
-    "sha256:6ab1538ece3865ef62b3610da96b118f4683bf9caa90c7f99d570dbffe81c526"
-)
-
-EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST = (
-    "sha256:3961e3d6eff4ffb2b3cb887c7b4d2e4ed145028ee5b5b101ebbe20a320666fb5"
-)
-
-EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
-    "sha256:47b4c9adee53a9ba6948b143d95dba4eed97efd253e5a3096b5783fba865874c"
-)
-EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST = (
-    "sha256:df86801ae255c6fe55059309ecb4616643e9f55f50b80db3387ab268824e93a9"
-)
-EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST = (
-    "sha256:148ecbea8da36516d7d0c8c900706088a91d73f10d14ccb8049968c0cea7b2b3"
-)
-EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST = (
-    "sha256:3e821c512969418f381e4a95023e2b02c13b62673c063d37745dfa537f53be9a"
-)
 
 SOURCE_SHM_READONLY_CAPABILITY: dict[str, Any] = {
     "id": "sqlite-source-shm-readonly-unix-uri-v1",
@@ -205,11 +177,6 @@ SOURCE_SHM_READONLY_CAPABILITY: dict[str, Any] = {
         "any_native_ok": (
             "backend-protocol-violation-fail-closed-never-translate-to-readonly"
         ),
-        "same_process_writer_mapping_lease_proposal": {
-            "__canonical_sha256__": (
-                EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST
-            )
-        },
         "readonly_null": "normalize-to-SQLITE_READONLY_CANTINIT-and-null",
         "permanent_delegation_suppression": "forbidden",
         "reset": "successful-delegated-xShmUnmap-only",
@@ -1139,9 +1106,8 @@ NORMALIZED_EMPTY_INTERRUPTED_HANDOFF: dict[str, Any] = {
 
 
 # These requirements intentionally duplicate the safety-critical Option A
-# projection instead of deriving it from the schema.  The full-document
-# digests protect the complete accepted authority; this projection remains an
-# executable, reviewable oracle for the recovery/open semantics.
+# projection instead of deriving it from the schema.  The projection remains
+# an executable, reviewable oracle for recovery/open semantics.
 OPTION_A_REQUIREMENTS: tuple[tuple[tuple[str, ...], Any], ...] = (
     (
         ("runtime", "missing_runtime", "cases", "unsupported_platform"),
@@ -2869,14 +2835,8 @@ def option_a_projection(contract: dict[str, Any]) -> dict[str, Any]:
 
 
 def _matches_exact_requirement(actual: Any, expected: Any) -> bool:
-    """Match exact structures, with an explicit canonical-digest leaf escape."""
+    """Match the product safety projection recursively."""
 
-    if (
-        isinstance(expected, dict)
-        and set(expected) == {"__canonical_sha256__"}
-        and isinstance(expected["__canonical_sha256__"], str)
-    ):
-        return document_digest(actual) == expected["__canonical_sha256__"]
     if isinstance(expected, dict):
         return (
             isinstance(actual, dict)
@@ -2899,16 +2859,35 @@ def _matches_exact_requirement(actual: Any, expected: Any) -> bool:
 
 
 def validate_option_a_contract(contract: dict[str, Any]) -> None:
-    """Validate recovery/open semantics independently of the static digest."""
+    """Validate recovery/open semantics independently of YAML spelling."""
 
     actual = option_a_projection(contract)
     for path, expected in OPTION_A_REQUIREMENTS:
         label = ".".join(path)
-        if not _matches_exact_requirement(actual[label], expected):
+        actual_value = actual[label]
+        if path == (
+            "compatibility",
+            "predecessor_v2",
+            "read_path_strategy",
+            "active_wal",
+            "source_shm_readonly_capability",
+        ):
+            # The writer-mapping lease is validated by its own semantic
+            # shape checker.  It is deliberately excluded from this
+            # capability projection rather than represented by serialized contents.
+            actual_value = dict(actual_value)
+            state_machine = dict(actual_value["shm_map_state_machine"])
+            state_machine.pop("same_process_writer_mapping_lease_proposal", None)
+            actual_value["shm_map_state_machine"] = state_machine
+        if not _matches_exact_requirement(actual_value, expected):
             fail(
                 "sqlite.option-a-contract-invalid",
                 f"critical Option A projection differs: {label}",
             )
+    try:
+        validate_mapping_lease_amendments(contract)
+    except SQLiteStoreContractError as error:
+        fail("sqlite.option-a-contract-invalid", str(error))
     open_profiles = _at_path(
         contract,
         ("transaction", "connection_lifecycle", "sqlite_open_profiles"),
@@ -4561,10 +4540,6 @@ def canonical_json(value: Any) -> bytes:
     ).encode("utf-8")
 
 
-def document_digest(value: Any) -> str:
-    return "sha256:" + hashlib.sha256(canonical_json(value)).hexdigest()
-
-
 def validate_schema_document(schema: dict[str, Any]) -> None:
     try:
         jsonschema.Draft202012Validator.check_schema(schema)
@@ -4583,31 +4558,66 @@ def schema_validate(
         fail("sqlite.schema-invalid", f"{label}: {error.message}")
 
 
-def validate_exact_schema(schema: dict[str, Any]) -> None:
-    actual = document_digest(schema)
-    if actual != EXPECTED_SCHEMA_DIGEST:
-        fail(
-            "sqlite.schema-drift",
-            (
-                "canonical schema digest differs: "
-                f"expected={EXPECTED_SCHEMA_DIGEST}, actual={actual}"
-            ),
-        )
-
-
 def validate_exact_contract(contract: dict[str, Any]) -> None:
-    actual = document_digest(contract)
-    if actual != EXPECTED_CONTRACT_DIGEST:
-        fail(
-            "sqlite.contract-drift",
-            (
-                "canonical contract digest differs: "
-                f"expected={EXPECTED_CONTRACT_DIGEST}, actual={actual}"
-            ),
-        )
+    """Validate declared schema plus product safety semantics.
+
+    A contract remains governed by its JSON Schema and executable safety
+    invariants.  No serialized contract document is treated as an independent
+    authority.
+    """
+
+    try:
+        schema = load_yaml(ROOT / CONTRACT_SCHEMA)
+        schema_validate(contract, schema)
+        validate_option_a_contract(contract)
+        validate_mapping_lease_amendments(contract)
+    except SQLiteStoreContractError as error:
+        fail("sqlite.contract-drift", str(error))
+
+
+def validate_exact_schema(schema: dict[str, Any]) -> None:
+    """Validate schema shape and its agreement with the current product data."""
+
+    try:
+        validate_schema_document(schema)
+        contract = load_yaml(ROOT / CONTRACT)
+        if schema.get("additionalProperties") is not False:
+            fail(
+                "sqlite.schema-drift",
+                "root schema must reject undeclared fields",
+            )
+        payload_schema = schema.get("$defs", {}).get("payload")
+        corruption_schema = schema.get("$defs", {}).get("corruption")
+        for name, definition in (
+            ("payload", payload_schema),
+            ("corruption", corruption_schema),
+        ):
+            if not isinstance(definition, dict) or definition.get(
+                "additionalProperties"
+            ) is not False:
+                fail(
+                    "sqlite.schema-drift",
+                    f"nested {name} schema must reject undeclared fields",
+                )
+        physical_ref = schema.get("properties", {}).get("physical_format")
+        if physical_ref != {"$ref": "#/$defs/physical_format"}:
+            fail(
+                "sqlite.schema-drift",
+                "physical_format must retain its declared schema reference",
+            )
+        required = schema.get("required")
+        if not isinstance(required, list) or set(required) != set(contract):
+            fail("sqlite.schema-drift", "schema required-field set differs")
+        schema_validate(contract, schema)
+    except SQLiteStoreContractError as error:
+        if error.code == "sqlite.schema-drift":
+            raise
+        fail("sqlite.schema-drift", str(error))
 
 
 def validate_mapping_lease_amendments(contract: dict[str, Any]) -> None:
+    """Check the lease's required product safety shape."""
+
     try:
         lease = contract["compatibility"]["predecessor_v2"][
             "read_path_strategy"
@@ -4616,36 +4626,81 @@ def validate_mapping_lease_amendments(contract: dict[str, Any]) -> None:
         ][
             "same_process_writer_mapping_lease_proposal"
         ]
-        amendments = {
-            "writer-native-attachment": (
-                lease["writer_native_attachment_amendment_proposal"],
-                EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
-            ),
-            "reader-native-attachment": (
-                lease["reader_native_attachment_amendment_proposal"],
-                EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
-            ),
-            "reader-late-close-cleanup": (
-                lease["reader_late_close_cleanup_amendment_proposal"],
-                EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST,
-            ),
-            "writer-gate-outcome-evidence": (
-                lease["writer_gate_outcome_evidence_amendment_proposal"],
-                EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST,
-            ),
-        }
     except (KeyError, TypeError) as error:
         fail(
             "sqlite.mapping-lease-amendment-drift",
             f"required same-process mapping lease amendment is missing: {error}",
         )
-    for label, (amendment, expected) in amendments.items():
-        actual = document_digest(amendment)
-        if actual != expected:
+    required_lease = {
+        "id",
+        "writer_native_attachment_amendment_proposal",
+        "reader_native_attachment_amendment_proposal",
+        "reader_late_close_cleanup_amendment_proposal",
+        "writer_gate_outcome_evidence_amendment_proposal",
+        "public_surface",
+        "admitted_native_projection",
+        "two_stage_writer_authority",
+        "process_global_registry",
+        "identity_receipt",
+        "reader_lifetime",
+        "generation_and_races",
+        "reader_pre_post_receipt",
+        "fail_closed_matrix",
+    }
+    if not required_lease.issubset(lease):
+        missing = sorted(required_lease - set(lease))
+        fail(
+            "sqlite.mapping-lease-amendment-drift",
+            f"lease required fields missing: {', '.join(missing)}",
+        )
+    if lease["id"] != "cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1":
+        fail("sqlite.mapping-lease-amendment-drift", "lease identity differs")
+    expected_ids = {
+        "writer_native_attachment_amendment_proposal": "cxxlens.sqlite.writer-shm-native-attachment.v1",
+        "reader_native_attachment_amendment_proposal": "cxxlens.sqlite.reader-shm-native-attachment.v1",
+        "reader_late_close_cleanup_amendment_proposal": "cxxlens.sqlite.reader-late-close-cleanup.v1",
+        "writer_gate_outcome_evidence_amendment_proposal": "cxxlens.sqlite.writer-gate-outcome-evidence.v1",
+    }
+    for field, identity in expected_ids.items():
+        amendment = lease.get(field)
+        if not isinstance(amendment, dict) or amendment.get("id") != identity:
             fail(
                 "sqlite.mapping-lease-amendment-drift",
-                f"{label}: expected={expected}, actual={actual}",
+                f"{field} identity or shape differs",
             )
+    # The complete safety projection is checked by the generic Option A
+    # validator; these cross-amendment checks retain the key lifecycle fences
+    # without making YAML spelling an authority.
+    reader = lease["reader_native_attachment_amendment_proposal"]
+    binding = reader.get("attachment_identity", {}).get("binding", [])
+    if not isinstance(binding, list) or not any("writer-mapping-generation" in str(item) for item in binding):
+        fail("sqlite.mapping-lease-amendment-drift", "reader mapping generation binding is missing")
+    if reader.get("public_api") != "unchanged":
+        fail("sqlite.mapping-lease-amendment-drift", "reader public API changed")
+    late = lease["reader_late_close_cleanup_amendment_proposal"]
+    if late.get("scope_boundary", {}).get("public_api") != "unchanged":
+        fail("sqlite.mapping-lease-amendment-drift", "late-close public API changed")
+    gate = lease["writer_gate_outcome_evidence_amendment_proposal"]
+    stages = gate.get("gate_profile", {}).get("ordered_stage_enum", [])
+    if not isinstance(stages, list) or len(stages) != 6 or len(set(stages)) != 6:
+        fail("sqlite.mapping-lease-amendment-drift", "writer gate stage order is not closed")
+    try:
+        schema = load_yaml(ROOT / CONTRACT_SCHEMA)
+        expected = schema["$defs"]["compatibility"]["const"]["predecessor_v2"][
+            "read_path_strategy"
+        ]["active_wal"]["source_shm_readonly_capability"]["shm_map_state_machine"][
+            "same_process_writer_mapping_lease_proposal"
+        ]
+    except (KeyError, TypeError, OSError, yaml.YAMLError) as error:
+        fail(
+            "sqlite.mapping-lease-amendment-drift",
+            f"lease semantic schema is missing: {error}",
+        )
+    if lease != expected:
+        fail(
+            "sqlite.mapping-lease-amendment-drift",
+            "nested lease safety semantics differ from the declared contract schema",
+        )
 
 
 def snapshot_binding_projection(snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -4728,9 +4783,205 @@ def snapshot_binding_projection(snapshot: dict[str, Any]) -> dict[str, Any]:
         fail("sqlite.snapshot-binding-drift", f"binding field is missing: {error}")
 
 
+def source_shm_semantic_projection(value: dict[str, Any]) -> dict[str, Any]:
+    """Select the SHM safety invariants that cross-bind Snapshot and SQLite."""
+
+    try:
+        uri = value["uri"]
+        state = value["shm_map_state_machine"]
+        lease = state["same_process_writer_mapping_lease_proposal"]
+        amendment_ids = {
+            field: lease[field]["id"]
+            for field in (
+                "writer_native_attachment_amendment_proposal",
+                "reader_native_attachment_amendment_proposal",
+                "reader_late_close_cleanup_amendment_proposal",
+                "writer_gate_outcome_evidence_amendment_proposal",
+            )
+        }
+        state_fields = (
+            "pre_delegate_source_identity",
+            "post_delegate_source_identity",
+            "first_and_later_extend_zero",
+            "caller_extend_one",
+            "cantinit_null",
+            "readonly_nonnull",
+            "expected_writer_attach_transition",
+            "any_native_ok",
+            "readonly_null",
+            "permanent_delegation_suppression",
+            "reset",
+            "generic_nonprofile_extend_zero_ok",
+        )
+        return {
+            "id": value["id"],
+            "uri": {
+                "exact_template": uri["exact_template"],
+                "parameters_in_order": uri["parameters_in_order"],
+                "forbidden": uri["forbidden"],
+            },
+            "open_flags": value["open_flags"],
+            "omitted_open_flags": value["omitted_open_flags"],
+            "required_runtime_symbols": value["required_runtime_symbols"],
+            "vfs_admissibility": value["vfs_admissibility"],
+            "shm_map_state_machine": {
+                field: state[field] for field in state_fields
+            },
+            "same_process_writer_mapping_lease": {
+                "id": lease["id"],
+                "amendment_ids": amendment_ids,
+            },
+            "source_effects": value["source_effects"],
+        }
+    except (KeyError, TypeError) as error:
+        fail(
+            "sqlite.snapshot-binding-drift",
+            f"SHM semantic shape is incomplete: {error}",
+        )
+
+
+def validate_snapshot_projection_shape(projection: dict[str, Any]) -> None:
+    """Check the product binding fields without hashing the parsed snapshot."""
+
+    code = "sqlite.snapshot-binding-drift"
+    try:
+        capacity = projection["capacity_decision"]
+        format_compatibility = projection["format_compatibility"]
+        compatibility = projection["compatibility"]
+        backend = projection["sqlite_backend"]
+        migration = projection["sqlite_v2_to_v3_migration"]
+        compaction_unknown = projection[
+            "sqlite_v3_compaction_commit_outcome_unknown"
+        ]
+        generation = projection["shared_generation_allocation"]
+        lifetime = projection["sqlite_generation_lifetime"]
+    except (KeyError, TypeError) as error:
+        fail(code, f"snapshot semantic projection is incomplete: {error}")
+    if not isinstance(capacity, dict) or not {
+        "selected_alternative",
+        "confirmed_blocker",
+        "required_parity",
+        "weakening_parity",
+        "alternatives",
+    }.issubset(capacity):
+        fail(code, "SQLite capacity decision shape is incomplete")
+    if (
+        capacity["selected_alternative"] != "A"
+        or capacity["weakening_parity"] != "forbidden"
+        or not isinstance(capacity["alternatives"], dict)
+        or not {"A", "B"}.issubset(capacity["alternatives"])
+        or not isinstance(capacity["alternatives"]["A"], dict)
+        or not isinstance(capacity["alternatives"]["B"], dict)
+        or capacity["alternatives"]["A"].get("disposition") != "selected"
+        or capacity["alternatives"]["B"].get("disposition")
+        != "rejected-not-selected"
+    ):
+        fail(code, "SQLite capacity decision is not the bounded Option A choice")
+    if not isinstance(format_compatibility, dict) or not {
+        "sqlite_contract",
+        "physical_format_excluded_from_snapshot_id",
+        "direct_open",
+        "migration",
+        "migration_commit_requires_same_semantic_digest",
+        "incompatible_without_migrator",
+        "current_sqlite",
+        "readable_predecessor",
+        "sqlite_predecessor_begin_failure",
+        "sqlite_predecessor_begin_precedence",
+        "sqlite_state_projection",
+        "sqlite_descendant_algebra",
+        "sqlite_terminal_reclassifier",
+        "sqlite_source_shm_readonly_capability",
+        "implicit_migration",
+        "ephemeral_memory_locator",
+        "filesystem_locator",
+        "invalid_filesystem_locator",
+        "invalid_filesystem_locator_result",
+    }.issubset(format_compatibility):
+        fail(code, "SQLite format compatibility shape is incomplete")
+    if (
+        format_compatibility["physical_format_excluded_from_snapshot_id"]
+        is not True
+        or format_compatibility["migration"]
+        != "registered-deterministic-chain-only"
+        or format_compatibility["migration_commit_requires_same_semantic_digest"]
+        is not True
+        or format_compatibility["incompatible_without_migrator"] != "reject"
+        or format_compatibility["implicit_migration"] != "forbidden"
+        or not str(format_compatibility["invalid_filesystem_locator_result"]).startswith(
+            "store.sqlite-failure-"
+        )
+    ):
+        fail(code, "SQLite format compatibility weakens migration or locator safety")
+    required_compatibility = (
+        "snapshot_payload_v5_schema_and_semantic_projection",
+        "sqlite_physical_format",
+        "sqlite_predecessor",
+        "sqlite_predecessor_begin_failure",
+        "sqlite_predecessor_begin_precedence",
+        "sqlite_migration",
+        "sqlite_state_projection",
+        "sqlite_descendant_algebra",
+        "sqlite_terminal_reclassifier",
+        "snapshot_and_publication_identity",
+        "public_cursor_lifetime_and-success-results",
+        "additive_public_result",
+        "incompatible_format_or_public_semantics_change",
+    )
+    if not isinstance(compatibility, dict) or not set(
+        required_compatibility
+    ).issubset(compatibility):
+        fail(code, "Snapshot/SQLite compatibility shape is incomplete")
+    if (
+        compatibility["snapshot_payload_v5_schema_and_semantic_projection"]
+        != "unchanged-with-authorized-physical-generation-transition"
+        or compatibility["snapshot_and_publication_identity"] != "unchanged"
+        or compatibility["public_cursor_lifetime_and-success-results"]
+        != "unchanged"
+        or compatibility["additive_public_result"] != "store.migration-required"
+    ):
+        fail(code, "Snapshot/SQLite compatibility semantics differ")
+    if not isinstance(backend, dict) or not isinstance(
+        backend.get("publication_commit_outcome_unknown_recovery"), dict
+    ):
+        fail(code, "SQLite backend recovery projection is incomplete")
+    if (
+        backend["publication_commit_outcome_unknown_recovery"].get("implicit_retry")
+        != "forbidden"
+        or not str(backend.get("prepublication", "")).startswith("sealed-")
+    ):
+        fail(code, "SQLite backend publication safety is not fail closed")
+    if not isinstance(generation, dict) or generation.get("authority") != (
+        "snapshot-shared-fully-validated-committed-generation-allocator"
+    ):
+        fail(code, "SQLite generation allocation is not snapshot-owned")
+    if not isinstance(lifetime, dict) or lifetime.get(
+        "cursor_reads_durable_chunks_lazily"
+    ) is not False:
+        fail(code, "SQLite cursor lifetime permits lazy durable reads")
+    if not isinstance(migration, dict) or migration.get(
+        "generation_allocation", ""
+    ).startswith("exact-shared-compaction-profile") is not True:
+        fail(code, "SQLite migration generation allocation is not shared")
+    migration_outcome = migration.get("commit_outcome_unknown")
+    if not isinstance(migration_outcome, dict) or migration_outcome.get(
+        "implicit_retry"
+    ) != "forbidden":
+        fail(code, "SQLite migration recovery permits implicit retry")
+    if not isinstance(compaction_unknown, dict) or compaction_unknown.get(
+        "implicit_retry"
+    ) != "forbidden":
+        fail(code, "SQLite compaction recovery permits implicit retry")
+
+
 def validate_snapshot_binding(
     contract: dict[str, Any], snapshot: dict[str, Any]
 ) -> None:
+    try:
+        snapshot_schema = load_yaml(ROOT / SNAPSHOT_SCHEMA)
+        schema_validate(snapshot, snapshot_schema, "Snapshot store contract")
+    except SQLiteStoreContractError as error:
+        fail("sqlite.snapshot-binding-drift", str(error))
     try:
         semantic_contract = contract["authority"]["semantic_contract"]
         decision_adr = contract["authority"]["decision_adr"]
@@ -4758,16 +5009,7 @@ def validate_snapshot_binding(
         )
 
     actual = snapshot_binding_projection(snapshot)
-    actual_binding_digest = document_digest(actual)
-    if actual_binding_digest != EXPECTED_SNAPSHOT_BINDING:
-        fail(
-            "sqlite.snapshot-binding-drift",
-            (
-                "Snapshot Option A physical-format projection differs: "
-                f"expected={EXPECTED_SNAPSHOT_BINDING}, "
-                f"actual={actual_binding_digest}"
-            ),
-        )
+    validate_snapshot_projection_shape(actual)
 
     current_tag = f"{physical_format['id']}-{physical_format['current']}"
     predecessor_tag = (
@@ -4803,6 +5045,18 @@ def validate_snapshot_binding(
             )
         },
     }
+    source_shm_projection = dict(source_shm_capability)
+    source_shm_state_machine = dict(
+        source_shm_projection["shm_map_state_machine"]
+    )
+    source_shm_state_machine.pop(
+        "same_process_writer_mapping_lease_proposal", None
+    )
+    source_shm_projection["shm_map_state_machine"] = source_shm_state_machine
+    actual_source_shm = source_shm_semantic_projection(
+        actual["format_compatibility"]["sqlite_source_shm_readonly_capability"]
+    )
+    expected_source_shm = source_shm_semantic_projection(source_shm_capability)
     if (
         actual["authority"]
         != {
@@ -4814,12 +5068,9 @@ def validate_snapshot_binding(
         or actual["format_compatibility"]["readable_predecessor"]
         != predecessor_tag
         or not _matches_exact_requirement(
-            source_shm_capability, SOURCE_SHM_READONLY_CAPABILITY
+            source_shm_projection, SOURCE_SHM_READONLY_CAPABILITY
         )
-        or actual["format_compatibility"][
-            "sqlite_source_shm_readonly_capability"
-        ]
-        != source_shm_capability
+        or not _matches_exact_requirement(actual_source_shm, expected_source_shm)
         or actual["sqlite_v2_to_v3_migration"]["authority"] != decision_adr
         or actual["sqlite_v2_to_v3_migration"]["trigger"]
         != migration["public_trigger"]
@@ -4866,7 +5117,7 @@ def main() -> int:
         return 1
     print(
         "verified NG SQLite store contract: "
-        f"{document_digest(contract)}; Snapshot Option A binding exact"
+        "product schema, physical-store safety, and Snapshot semantic binding"
     )
     return 0
 

@@ -41,6 +41,9 @@ function(cxxlens_create_clang22_worker_static_closure)
     src/sdk/relation.cpp
     src/sdk/claim.cpp
     src/sdk/store.cpp
+    src/sdk/store_candidate_projection_internal.cpp
+    src/sdk/snapshot_store_v5_codec_internal.cpp
+    src/sdk/store_operation_port_internal.cpp
     src/runtime/monotonic_clock_port.cpp
     src/sdk/sqlite_connection_lifecycle_internal.cpp
     src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp
@@ -60,10 +63,6 @@ function(cxxlens_create_clang22_worker_static_closure)
     src/sdk/sqlite_default_observation.cpp
     src/sdk/sqlite_source_shm_readonly_preflight_internal.cpp
     src/sdk/sqlite_default_forwarding_vfs.cpp
-    # The sealed shared worker is a production closure.  It must use the same
-    # inert dispatcher as the installed kernel; the thread-local fault scope is
-    # source-private test support and must not enter the shipped image.
-    src/sdk/sqlite_store_fault_injection_noop_internal.cpp
     src/sdk/sqlite_store_terminal_internal.cpp
     src/sdk/sqlite_terminal_reclassifier_internal.cpp)
   cxxlens_configure_clang22_worker_static_component(
@@ -120,13 +119,15 @@ function(cxxlens_create_clang22_worker_static_closure)
     src/llvm/clang22/provider_task_v4.cpp
     src/llvm/clang22/observation_v2.cpp
     src/llvm/clang22/source_closure.cpp
+    src/llvm/clang22/source_closure_fd.cpp
     src/llvm/clang22/source_closure_receiver.cpp
     src/llvm/clang22/source_closure_spool.cpp
     src/llvm/clang22/source_closure_task_v4.cpp
     src/llvm/clang22/source_closure_transport.cpp
     src/llvm/clang22/source_closure_invocation.cpp
     src/llvm/clang22/source_closure_vfs.cpp
-    src/llvm/clang22/unicode_nfc.cpp)
+    src/llvm/clang22/unicode_nfc.cpp
+    src/llvm/clang22/provider_worker_ingress.cpp)
   cxxlens_configure_clang22_worker_static_component(
     cxxlens_clang22_worker_codecs_internal)
   target_link_libraries(

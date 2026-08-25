@@ -1,4 +1,3 @@
-/include/cxxlens/core.hpp @horiyamayoh
 /include/cxxlens/cxxlens.hpp @horiyamayoh
 /CMakeLists.txt @horiyamayoh
 /cmake/CxxlensDeveloperTools.cmake @horiyamayoh

@@ -1,19 +1,18 @@
 # ADR 0103: Bounded Store candidate, adoption, and report construction
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-08-21
 - Contract IDs: `store.incremental-candidate.v1`, `materialization.bounded-report.v1`
-- Support disposition: implementation and direct tests pending
+- Support disposition: bounded candidate, independent validation, and two-phase report contract
 
 ## Context and scope split
 
 The production materializer must preserve ADR 0033 independent tamper detection without retaining
-all tasks, a second complete candidate graph, or a complete public-report DOM. DF-0200 proves that
-moving current vectors is insufficient. This ADR authorizes only prepublication candidate/adoption
-and ADR 0096 two-phase report construction. It does not claim that a reopened SQLite Store/query
-handle has `O(W)` residency. That separate unit is `wu-200-sqlite-lazy-read-residency` and remains
-blocked until its cursor lifetime, page residency, and query semantics have direct positive,
-negative, and fault tests.
+all tasks, a second complete candidate graph, or a complete public-report DOM. Moving current
+vectors is insufficient. This ADR defines prepublication candidate/adoption and ADR 0096 two-phase
+report construction. It does not claim that a reopened SQLite Store/query handle has `O(W)`
+residency; cursor lifetime, page residency, and query semantics remain independently specified and
+tested Store behavior.
 
 ## Two coupled but distinct machines
 
@@ -88,6 +87,12 @@ counter state may be treated as zero-cost. The maximum reserved report tail is e
 `28,321,546` bytes, derived independently from the accepted ADR 0096 maxima: 10,420,985 global
 projection bytes, 8,463,179 task-metadata bytes, 8 MiB exact SDK records, 1 MiB diagnostics, and 198
 framing bytes. It is not inferred from the source window.
+Each spooled record is charged before I/O as one kind byte, two u64 lengths, key bytes, payload
+bytes, and a 32-byte checksum: exactly `49 + key_bytes + payload_bytes` logical bytes. The framed
+record length, current segment length, spool length, and aggregate length are checked in unsigned
+128-bit arithmetic before narrowing or append. Segment rollover, merge metadata, cursor storage,
+and all 18 merge descriptors are covered by the fixed resident/descriptor census above rather than
+treated as zero-cost spool overhead.
 The exact DF-0200 limits are:
 
 - 4,096 tasks and a 512 MiB aggregate scale witness;
@@ -149,13 +154,11 @@ SQLite TEMP/page cache, a complete report DOM, candidate identity before sealing
 tail reservation, compact downgrade after attempt, loss of `publication_outcome_unknown`, partial
 stdout authority, non-v5 writes, legacy one-BLOB SQLite writes, and implicit lazy-read claims.
 
-Acceptance requires the machine checker plus direct positive, negative, fault, determinism, and
-resource-bound tests with all specified counterexamples covered. The proposal witness executes the
-six-outcome policy, symbolic state ordering, separate
-backend-row/immutable-input projection builders, byte-exact comparison including omission,
-duplication, reorder, and checksum-recomputed tamper, ambiguous publication authority, and checked
-u64/u128 window/descriptor arithmetic. It deliberately does not claim runtime implementation. The later bounded
-implementation unit must add 4,096 tasks/512 MiB, memory/reopened-SQLite parity, every publication and
-report crash edge, and a negative production call into a bulk API. SQLite lazy-read residency remains
-a separate blocked unit; neither the proposal witness nor this ADR changes the supported release
-surface.
+The machine checker and direct positive, negative, fault, determinism, and resource-bound tests
+cover the six-outcome policy, symbolic state ordering, separate backend-row/immutable-input
+projection builders, byte-exact comparison including omission, duplication, reorder, and
+checksum-recomputed tamper, ambiguous publication authority, and checked u64/u128
+window/spool/descriptor arithmetic. Scale tests cover 4,096 tasks and 512 MiB, memory/reopened-SQLite
+parity, every publication and report crash edge, and rejection of a production bulk-API path.
+SQLite lazy-read residency is a separate Store behavior and does not change this contract's
+supported product surface.

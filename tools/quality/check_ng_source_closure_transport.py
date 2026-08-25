@@ -29,6 +29,9 @@ MANIFEST_SCHEMA = pathlib.Path("schemas/cxxlens_ng_source_closure_manifest_v1.sc
 ADR = pathlib.Path("docs/design/adr/0107-provider-protocol-2-cutover.md")
 PROJECT_PATH_PREFIX = "project://"
 MAXIMUM_LOGICAL_PATH_UTF8_BYTES = 4096
+SOURCE_CLOSURE_DIGEST_DOMAIN = "cxxlens.clang22.source-closure.v1"
+SOURCE_CLOSURE_MANIFEST_SCHEMA = "cxxlens.source-closure-manifest.v1"
+SOURCE_CLOSURE_MANIFEST_DIGEST_DOMAIN = "cxxlens.source-closure-manifest.v1"
 
 
 class SourceClosureTransportError(ValueError):
@@ -94,11 +97,11 @@ def content_projection_digest(projection: Any) -> str:
 
 
 def manifest_digest(manifest: dict[str, Any]) -> str:
-    return semantic_digest("cxxlens.source-closure-manifest.v1", manifest)
+    return semantic_digest(SOURCE_CLOSURE_MANIFEST_DIGEST_DOMAIN, manifest)
 
 
 def closure_digest(members: list[dict[str, Any]], blobs: list[dict[str, Any]]) -> str:
-    """Reproduce ADR 0101 / source_closure.cpp byte-for-byte."""
+    """Reproduce the ADR 0101 canonical source-closure projection."""
     encoded_members = []
     for member in members:
         encoded_members.append(_canonical_tuple([
@@ -118,16 +121,16 @@ def closure_digest(members: list[dict[str, Any]], blobs: list[dict[str, Any]]) -
         for blob in blobs
     ]
     projection = _canonical_tuple([
-        _canonical_string("cxxlens.source-closure.v1"),
+        _canonical_string(SOURCE_CLOSURE_DIGEST_DOMAIN),
         _canonical_string("unicode-default-casefold-then-nfc"),
         _canonical_tuple(encoded_members),
         _canonical_tuple(encoded_blobs),
     ])
-    return semantic_digest_bytes("cxxlens.source-closure.v1", projection)
+    return semantic_digest_bytes(SOURCE_CLOSURE_DIGEST_DOMAIN, projection)
 
 
 def _validated_logical_path(value: Any, *, subject: str = "logical path") -> str:
-    """Return the ADR 0101 relative path after applying source_closure.cpp rules."""
+    """Return the ADR 0101 canonical relative-path projection."""
 
     if not isinstance(value, str) or not value.startswith(PROJECT_PATH_PREFIX):
         raise SourceClosureTransportError(f"{subject} is not project-scoped")
@@ -158,7 +161,7 @@ def _validated_logical_path(value: Any, *, subject: str = "logical path") -> str
 
 
 def source_closure_file_id(logical_path: Any) -> str:
-    """Derive the file identity used by source_closure.cpp from a logical path."""
+    """Derive the ADR 0101 file identity from a logical path."""
 
     relative = _validated_logical_path(logical_path)
     projection = _canonical_tuple(
@@ -174,12 +177,15 @@ def source_closure_file_id(logical_path: Any) -> str:
 
 
 def trust_policy_digest(policy: dict[str, Any]) -> str:
+    version = tuple(int(part) for part in policy["provider_version"].split("."))
+    if len(version) != 3:
+        raise SourceClosureTransportError("provider version is not a semantic version")
     projection = _canonical_tuple(
         [
             _canonical_string(policy["policy_id"]),
             _canonical_string(policy["execution_profile"]),
             _canonical_string(policy["provider_id"]),
-            _canonical_string(policy["provider_version"]),
+            _canonical_tuple([_canonical_integer(part) for part in version]),
             _canonical_string(policy["semantic_contract_digest"]),
             _canonical_integer(policy["protocol_major"]),
             _canonical_integer(policy["protocol_minor"]),
@@ -817,7 +823,7 @@ def complete_request_witness(root: pathlib.Path) -> tuple[dict[str, Any], dict[s
     blob = {field: source[field] for field in ("content_digest", "size_bytes")}
     digest = closure_digest([member], [blob])
     manifest = {
-        "schema": "cxxlens.source-closure-manifest.v1",
+        "schema": SOURCE_CLOSURE_MANIFEST_SCHEMA,
         "closure_id": "source-closure:" + digest,
         "closure_digest": digest,
         "members": [member],
@@ -895,6 +901,12 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     request = load(root / REQUEST)
     task = load(root / TASK)
     manifest_schema = load(root / MANIFEST_SCHEMA)
+    if manifest_schema.get("x-cxxlens-closure-digest-domain") != SOURCE_CLOSURE_DIGEST_DOMAIN or manifest_schema.get(
+        "x-cxxlens-manifest-digest-domain"
+    ) != SOURCE_CLOSURE_MANIFEST_DIGEST_DOMAIN:
+        raise SourceClosureTransportError(
+            "source-closure manifest schema digest domains are not the active product domains"
+        )
     try:
         jsonschema.Draft202012Validator.check_schema(request)
         jsonschema.Draft202012Validator.check_schema(task)
@@ -1169,9 +1181,12 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
         "semantic_digest_framing"
     ) != ["cxxlens-semantic-digest-v2", "domain", "canonical-projection-bytes"]:
         raise SourceClosureTransportError("semantic digest framing is not constructible")
-    if identity.get("manifest", {}).get("exact_fields") != [
+    manifest_identity = identity.get("manifest", {})
+    if manifest_identity.get("exact_fields") != [
         "schema", "closure_id", "closure_digest", "members", "blobs"
-    ] or identity.get("blob_receipts", {}).get("digest") != (
+    ] or manifest_identity.get("closure_digest_domain") != SOURCE_CLOSURE_DIGEST_DOMAIN or manifest_identity.get(
+        "domain"
+    ) != SOURCE_CLOSURE_MANIFEST_DIGEST_DOMAIN or identity.get("blob_receipts", {}).get("digest") != (
         "semantic-digest-of-canonical-complete-receipt-array-streamed"
     ):
         raise SourceClosureTransportError("manifest or bounded seal projection drift")
@@ -1195,14 +1210,14 @@ def validate(root: pathlib.Path) -> dict[str, Any]:
     witness_blobs = [{"content_digest": content, "size_bytes": 1}]
     semantic = closure_digest(witness_members, witness_blobs)
     validate_manifest({
-        "schema": "cxxlens.source-closure-manifest.v1",
+        "schema": SOURCE_CLOSURE_MANIFEST_SCHEMA,
         "closure_id": "source-closure:" + semantic,
         "closure_digest": semantic,
         "members": witness_members,
         "blobs": witness_blobs,
     }, manifest_schema)
     witness_manifest = {
-        "schema": "cxxlens.source-closure-manifest.v1",
+        "schema": SOURCE_CLOSURE_MANIFEST_SCHEMA,
         "closure_id": "source-closure:" + semantic,
         "closure_digest": semantic,
         "members": witness_members,

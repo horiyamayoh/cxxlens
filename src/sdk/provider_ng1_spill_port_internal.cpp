@@ -17,11 +17,10 @@
 #include <variant>
 #include <vector>
 
-#if defined(__linux__)
+#if defined(__linux__) && defined(__GLIBC__)
 #include <fcntl.h>
-#include <linux/memfd.h>
 #include <sys/stat.h>
-#include <sys/syscall.h>
+#include <sys/types.h>
 #include <unistd.h>
 #endif
 
@@ -151,6 +150,108 @@ namespace cxxlens::sdk::provider::detail
 			std::vector<std::byte> value;
 		};
 
+		[[nodiscard]] constexpr std::uint64_t
+		encoded_cbor_head_bytes(const std::uint64_t value) noexcept
+		{
+			if (value < 24U)
+				return 1U;
+			if (value <= std::numeric_limits<std::uint8_t>::max())
+				return 2U;
+			if (value <= std::numeric_limits<std::uint16_t>::max())
+				return 3U;
+			if (value <= std::numeric_limits<std::uint32_t>::max())
+				return 5U;
+			return 9U;
+		}
+
+		[[nodiscard]] result<std::uint64_t> checked_wire_add(const std::uint64_t left,
+															 const std::uint64_t right,
+															 const std::string_view field)
+		{
+			if (right > std::numeric_limits<std::uint64_t>::max() - left)
+				return unexpected(corrupt_error(field, "size-overflow"));
+			return left + right;
+		}
+
+		[[nodiscard]] result<std::uint64_t> encoded_string_wire_bytes(const std::string_view value,
+																	  const std::string_view field)
+		{
+			const auto length = static_cast<std::uint64_t>(value.size());
+			return checked_wire_add(encoded_cbor_head_bytes(length), length, field);
+		}
+
+		[[nodiscard]] result<void> validate_spill_record_wire_quota(const ng1_spill_record& record)
+		{
+			// This is the exact deterministic-CBOR size, computed without hashing or allocating.
+			// Rejecting here keeps attacker-controlled payload length outside digest and codec
+			// allocation paths.
+			std::uint64_t total = spill_length_prefix_bytes + encoded_cbor_head_bytes(11U);
+			auto add = [&total](const std::uint64_t bytes,
+								const std::string_view field) -> result<void>
+			{
+				auto next = checked_wire_add(total, bytes, field);
+				if (!next)
+					return unexpected(std::move(next.error()));
+				total = *next;
+				return {};
+			};
+			auto add_text_pair = [&add](const std::string_view key,
+										const std::string_view value) -> result<void>
+			{
+				auto key_bytes = encoded_string_wire_bytes(key, "record-key");
+				if (!key_bytes)
+					return unexpected(std::move(key_bytes.error()));
+				auto value_bytes = encoded_string_wire_bytes(value, key);
+				if (!value_bytes)
+					return unexpected(std::move(value_bytes.error()));
+				if (auto outcome = add(*key_bytes, key); !outcome)
+					return outcome;
+				return add(*value_bytes, key);
+			};
+			auto add_uint_pair = [&add](const std::string_view key,
+										const std::uint64_t value) -> result<void>
+			{
+				auto key_bytes = encoded_string_wire_bytes(key, "record-key");
+				if (!key_bytes)
+					return unexpected(std::move(key_bytes.error()));
+				if (auto outcome = add(*key_bytes, key); !outcome)
+					return outcome;
+				return add(encoded_cbor_head_bytes(value), key);
+			};
+			auto add_bytes_pair = [&add](const std::string_view key,
+										 const std::span<const std::byte> value) -> result<void>
+			{
+				auto key_bytes = encoded_string_wire_bytes(key, "record-key");
+				if (!key_bytes)
+					return unexpected(std::move(key_bytes.error()));
+				const auto length = static_cast<std::uint64_t>(value.size());
+				auto value_bytes = checked_wire_add(encoded_cbor_head_bytes(length), length, key);
+				if (!value_bytes)
+					return unexpected(std::move(value_bytes.error()));
+				if (auto outcome = add(*key_bytes, key); !outcome)
+					return outcome;
+				return add(*value_bytes, key);
+			};
+
+			for (const auto& outcome :
+				 {add_text_pair("schema", record.schema),
+				  add_uint_pair("record_ordinal", record.record_ordinal),
+				  add_text_pair("task_id", record.task_id),
+				  add_text_pair("dependency_group_id", record.dependency_group_id),
+				  add_text_pair("atomic_output_group_id", record.atomic_output_group_id),
+				  add_text_pair("batch_id", record.batch_id),
+				  add_uint_pair("stream_id", record.stream_id),
+				  add_uint_pair("sequence", record.sequence),
+				  add_bytes_pair("payload_bytes", record.payload_bytes),
+				  add_text_pair("payload_digest", record.payload_digest),
+				  add_text_pair("record_digest", record.record_digest)})
+				if (!outcome)
+					return unexpected(outcome.error());
+			if (total > ng1_spill_maximum_record_bytes)
+				return unexpected(corrupt_error("record_bytes", "record-quota"));
+			return {};
+		}
+
 		[[nodiscard]] result<std::vector<std::byte>>
 		encode_spill_record(const ng1_spill_record& record)
 		{
@@ -159,6 +260,8 @@ namespace cxxlens::sdk::provider::detail
 			// unit shared with ng1_spill_prefix_state::spill_record_wire_bytes().
 			if (record.schema != spill_schema)
 				return unexpected(corrupt_error("schema", "unexpected"));
+			if (auto bounded = validate_spill_record_wire_quota(record); !bounded)
+				return unexpected(std::move(bounded.error()));
 			if (auto digest = ng1_spill_record_digest(record); !digest)
 				return unexpected(std::move(digest.error()));
 
@@ -479,25 +582,864 @@ namespace cxxlens::sdk::provider::detail
 			return decode_spill_record(body);
 		}
 
-#if defined(__linux__) && defined(__GLIBC__) && defined(SYS_memfd_create)
+#if defined(__linux__) && defined(__GLIBC__)
+		constexpr std::string_view spill_data_file_name{"spill.data"};
+		constexpr std::string_view spill_commit_file_name{"spill.commit"};
+		constexpr std::string_view spill_frontier_file_name{"spill.frontier"};
+		constexpr std::string_view spill_metadata_magic{"CXXLNG1S"};
+		constexpr std::string_view spill_frontier_magic{"CXXLNG1F"};
+		constexpr std::uint64_t spill_maximum_metadata_bytes = 64U * 1024U;
+		constexpr std::uint64_t spill_maximum_metadata_string_bytes = 4U * 1024U;
+
+		void append_u64_be(std::vector<std::byte>& output, const std::uint64_t value)
+		{
+			append_big_endian(output, value, sizeof(value));
+		}
+
+		void append_magic(std::vector<std::byte>& output, const std::string_view magic)
+		{
+			for (const auto byte : magic)
+				output.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
+		}
+
+		[[nodiscard]] bool has_magic(const std::span<const std::byte> input,
+									 const std::string_view magic) noexcept
+		{
+			if (input.size() < magic.size())
+				return false;
+			for (std::size_t index{}; index < magic.size(); ++index)
+				if (input[index] !=
+					static_cast<std::byte>(static_cast<unsigned char>(magic[index])))
+					return false;
+			return true;
+		}
+
+		[[nodiscard]] result<void> write_all(const int descriptor,
+											 const std::span<const std::byte> bytes,
+											 const std::string_view field)
+		{
+			std::size_t offset{};
+			while (offset < bytes.size())
+			{
+				const auto count =
+					::write(descriptor, bytes.data() + offset, bytes.size() - offset);
+				if (count > 0)
+				{
+					offset += static_cast<std::size_t>(count);
+					continue;
+				}
+				if (count < 0 && errno == EINTR)
+					continue;
+				return unexpected(port_error(field, count == 0 ? "zero-write" : "write"));
+			}
+			return {};
+		}
+
+		[[nodiscard]] result<std::vector<std::byte>> read_descriptor(
+			const int descriptor, const std::uint64_t maximum_bytes, const std::string_view field)
+		{
+			struct stat metadata{};
+			if (::fstat(descriptor, &metadata) != 0 || metadata.st_size < 0)
+				return unexpected(port_error(field, "stat"));
+			const auto size = static_cast<std::uint64_t>(metadata.st_size);
+			if (size > maximum_bytes ||
+				size > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
+				return unexpected(corrupt_error(field, "quota"));
+			try
+			{
+				std::vector<std::byte> output(static_cast<std::size_t>(size));
+				std::size_t offset{};
+				while (offset < output.size())
+				{
+					const auto count = ::pread(descriptor,
+											   output.data() + offset,
+											   output.size() - offset,
+											   static_cast<off_t>(offset));
+					if (count > 0)
+					{
+						offset += static_cast<std::size_t>(count);
+						continue;
+					}
+					if (count < 0 && errno == EINTR)
+						continue;
+					return unexpected(corrupt_error(field, "truncated"));
+				}
+				return output;
+			}
+			catch (const std::bad_alloc&)
+			{
+				return unexpected(port_error(field, "allocation"));
+			}
+		}
+
+		[[nodiscard]] result<std::optional<int>> open_existing_regular_named_file(
+			const int directory_descriptor,
+			const std::string_view name,
+			const int access_flags,
+			const std::string_view field,
+			const bool optional,
+			const std::optional<std::pair<dev_t, ino_t>> expected_identity = std::nullopt)
+		{
+			struct stat named_metadata{};
+			if (::fstatat(
+					directory_descriptor, name.data(), &named_metadata, AT_SYMLINK_NOFOLLOW) != 0)
+			{
+				if (optional && errno == ENOENT)
+					return std::optional<int>{};
+				return unexpected(port_error(field, "stat"));
+			}
+			if (!S_ISREG(named_metadata.st_mode) || named_metadata.st_nlink != 1)
+				return unexpected(corrupt_error(field, "not-regular"));
+			if (expected_identity &&
+				(named_metadata.st_dev != expected_identity->first ||
+				 named_metadata.st_ino != expected_identity->second))
+				return unexpected(port_error(field, "identity"));
+
+			const auto descriptor = ::openat(directory_descriptor,
+											 name.data(),
+											 access_flags | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW);
+			if (descriptor < 0)
+				return unexpected(port_error(field, "open"));
+			struct stat descriptor_metadata{};
+			struct stat post_open_named_metadata{};
+			if (::fstat(descriptor, &descriptor_metadata) != 0 ||
+				::fstatat(directory_descriptor,
+						  name.data(),
+						  &post_open_named_metadata,
+						  AT_SYMLINK_NOFOLLOW) != 0 ||
+				!S_ISREG(descriptor_metadata.st_mode) || descriptor_metadata.st_nlink != 1 ||
+				!S_ISREG(post_open_named_metadata.st_mode) ||
+				post_open_named_metadata.st_nlink != 1 ||
+				descriptor_metadata.st_dev != named_metadata.st_dev ||
+				descriptor_metadata.st_ino != named_metadata.st_ino ||
+				post_open_named_metadata.st_dev != named_metadata.st_dev ||
+				post_open_named_metadata.st_ino != named_metadata.st_ino ||
+				(expected_identity &&
+				 (descriptor_metadata.st_dev != expected_identity->first ||
+				  descriptor_metadata.st_ino != expected_identity->second)))
+			{
+				(void)::close(descriptor);
+				return unexpected(port_error(field, "identity"));
+			}
+			return std::optional<int>{descriptor};
+		}
+
+		[[nodiscard]] result<std::optional<std::vector<std::byte>>>
+		read_named_file(const int directory_descriptor,
+						const std::string_view name,
+						const std::uint64_t maximum_bytes,
+						const std::string_view field,
+						const bool optional)
+		{
+			auto opened = open_existing_regular_named_file(
+				directory_descriptor, name, O_RDONLY, field, optional);
+			if (!opened)
+				return unexpected(std::move(opened.error()));
+			if (!opened->has_value())
+				return std::optional<std::vector<std::byte>>{};
+			const auto descriptor = **opened;
+			auto output = read_descriptor(descriptor, maximum_bytes, field);
+			if (::close(descriptor) != 0 && output)
+				return unexpected(port_error(field, "close"));
+			if (!output)
+				return unexpected(std::move(output.error()));
+			return std::optional<std::vector<std::byte>>{std::move(*output)};
+		}
+
+		[[nodiscard]] result<void> fsync_directory(const int descriptor)
+		{
+			if (::fsync(descriptor) != 0)
+				return unexpected(port_error("parent_directory", "fsync"));
+			return {};
+		}
+
+		[[nodiscard]] result<std::pair<dev_t, ino_t>> capture_directory_identity(
+			const int descriptor, const std::string_view path, const std::string_view field)
+		{
+			struct stat descriptor_metadata{};
+			struct stat path_metadata{};
+			if (::fstat(descriptor, &descriptor_metadata) != 0 ||
+				!S_ISDIR(descriptor_metadata.st_mode) ||
+				::lstat(path.data(), &path_metadata) != 0 || !S_ISDIR(path_metadata.st_mode) ||
+				descriptor_metadata.st_dev != path_metadata.st_dev ||
+				descriptor_metadata.st_ino != path_metadata.st_ino)
+				return unexpected(port_error(field, "identity"));
+			return std::pair{descriptor_metadata.st_dev, descriptor_metadata.st_ino};
+		}
+
+		[[nodiscard]] result<void> verify_directory_identity(const int descriptor,
+															 const std::string_view path,
+															 const dev_t expected_device,
+															 const ino_t expected_inode,
+															 const std::string_view field)
+		{
+			struct stat descriptor_metadata{};
+			struct stat path_metadata{};
+			if (::fstat(descriptor, &descriptor_metadata) != 0 ||
+				!S_ISDIR(descriptor_metadata.st_mode) ||
+				::lstat(path.data(), &path_metadata) != 0 || !S_ISDIR(path_metadata.st_mode) ||
+				descriptor_metadata.st_dev != expected_device ||
+				descriptor_metadata.st_ino != expected_inode ||
+				path_metadata.st_dev != expected_device || path_metadata.st_ino != expected_inode)
+				return unexpected(port_error(field, "identity"));
+			return {};
+		}
+
+		[[nodiscard]] result<void> verify_data_identity(const int directory_descriptor,
+														const int descriptor,
+														const dev_t expected_device,
+														const ino_t expected_inode,
+														const std::string_view field)
+		{
+			struct stat descriptor_metadata{};
+			struct stat path_metadata{};
+			if (::fstat(descriptor, &descriptor_metadata) != 0 ||
+				::fstatat(directory_descriptor,
+						  spill_data_file_name.data(),
+						  &path_metadata,
+						  AT_SYMLINK_NOFOLLOW) != 0 ||
+				!S_ISREG(descriptor_metadata.st_mode) || !S_ISREG(path_metadata.st_mode) ||
+				descriptor_metadata.st_nlink != 1 || path_metadata.st_nlink != 1 ||
+				descriptor_metadata.st_dev != expected_device ||
+				descriptor_metadata.st_ino != expected_inode ||
+				path_metadata.st_dev != expected_device || path_metadata.st_ino != expected_inode)
+				return unexpected(port_error(field, "identity"));
+			return {};
+		}
+
+		[[nodiscard]] result<void> remove_regular_named_file(const int directory_descriptor,
+															 const std::string_view name,
+															 const std::string_view field)
+		{
+			struct stat metadata{};
+			if (::fstatat(directory_descriptor, name.data(), &metadata, AT_SYMLINK_NOFOLLOW) != 0)
+			{
+				if (errno == ENOENT)
+					return {};
+				return unexpected(port_error(field, "stale-file"));
+			}
+			if (!S_ISREG(metadata.st_mode) || metadata.st_nlink != 1)
+				return unexpected(port_error(field, "stale-file"));
+			if (::unlinkat(directory_descriptor, name.data(), 0) != 0 && errno != ENOENT)
+				return unexpected(port_error(field, "unlink"));
+			return {};
+		}
+
+		[[nodiscard]] result<void>
+		validate_regular_destination_or_missing(const int directory_descriptor,
+												const std::string_view name,
+												const std::string_view field)
+		{
+			struct stat metadata{};
+			if (::fstatat(directory_descriptor, name.data(), &metadata, AT_SYMLINK_NOFOLLOW) != 0)
+			{
+				if (errno == ENOENT)
+					return {};
+				return unexpected(port_error(field, "destination-stat"));
+			}
+			if (!S_ISREG(metadata.st_mode) || metadata.st_nlink != 1)
+				return unexpected(corrupt_error(field, "destination-not-regular"));
+			return {};
+		}
+
+		[[nodiscard]] result<void> write_atomic_named_file(const int directory_descriptor,
+														   const std::string_view name,
+														   const std::span<const std::byte> bytes,
+														   const std::string_view field)
+		{
+			std::string temporary_name;
+			try
+			{
+				temporary_name = name;
+				temporary_name.append(".tmp");
+			}
+			catch (const std::bad_alloc&)
+			{
+				return unexpected(port_error(field, "allocation"));
+			}
+			if (auto removed =
+					remove_regular_named_file(directory_descriptor, temporary_name, "stale-temp");
+				!removed)
+				return unexpected(std::move(removed.error()));
+			const auto descriptor =
+				::openat(directory_descriptor,
+						 temporary_name.c_str(),
+						 O_WRONLY | O_CREAT | O_EXCL | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW,
+						 static_cast<mode_t>(0600));
+			if (descriptor < 0)
+				return unexpected(port_error(field, "temp-open"));
+			auto written = write_all(descriptor, bytes, field);
+			if (written && ::fsync(descriptor) != 0)
+				written = unexpected(port_error(field, "temp-fsync"));
+			if (::close(descriptor) != 0 && written)
+				written = unexpected(port_error(field, "temp-close"));
+			if (!written)
+			{
+				(void)remove_regular_named_file(directory_descriptor, temporary_name, "stale-temp");
+				return written;
+			}
+			if (auto destination =
+					validate_regular_destination_or_missing(directory_descriptor, name, field);
+				!destination)
+			{
+				(void)remove_regular_named_file(directory_descriptor, temporary_name, "stale-temp");
+				return unexpected(std::move(destination.error()));
+			}
+			if (::renameat(directory_descriptor,
+						   temporary_name.c_str(),
+						   directory_descriptor,
+						   name.data()) != 0)
+			{
+				(void)remove_regular_named_file(directory_descriptor, temporary_name, "stale-temp");
+				return unexpected(port_error(field, "rename"));
+			}
+			return fsync_directory(directory_descriptor);
+		}
+
+		[[nodiscard]] result<std::vector<std::byte>>
+		encode_commit_metadata(const std::uint64_t byte_count, const std::uint64_t fsync_sequence)
+		{
+			try
+			{
+				std::vector<std::byte> output;
+				output.reserve(spill_metadata_magic.size() + 16U);
+				append_magic(output, spill_metadata_magic);
+				append_u64_be(output, byte_count);
+				append_u64_be(output, fsync_sequence);
+				return output;
+			}
+			catch (const std::bad_alloc&)
+			{
+				return unexpected(port_error("commit", "allocation"));
+			}
+		}
+
+		[[nodiscard]] result<std::pair<std::uint64_t, std::uint64_t>>
+		decode_commit_metadata(const std::span<const std::byte> bytes)
+		{
+			if (bytes.size() != spill_metadata_magic.size() + 16U ||
+				!has_magic(bytes, spill_metadata_magic))
+				return unexpected(corrupt_error("commit", "header"));
+			const auto byte_count = read_big_endian(bytes.subspan(spill_metadata_magic.size(), 8U));
+			const auto fsync_sequence =
+				read_big_endian(bytes.subspan(spill_metadata_magic.size() + 8U, 8U));
+			if (byte_count > ng1_spill_maximum_total_bytes)
+				return unexpected(corrupt_error("commit", "total-quota"));
+			return std::pair{byte_count, fsync_sequence};
+		}
+
+		void append_metadata_string(std::vector<std::byte>& output, const std::string_view value)
+		{
+			append_u64_be(output, static_cast<std::uint64_t>(value.size()));
+			for (const auto byte : value)
+				output.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
+		}
+
+		void append_metadata_u64(std::vector<std::byte>& output, const std::uint64_t value)
+		{
+			append_u64_be(output, value);
+		}
+
+		[[nodiscard]] result<std::string>
+		read_metadata_string(const std::span<const std::byte> bytes,
+							 std::size_t& offset,
+							 const std::string_view field)
+		{
+			if (offset > bytes.size() || bytes.size() - offset < sizeof(std::uint64_t))
+				return unexpected(corrupt_error(field, "length"));
+			const auto size = read_big_endian(bytes.subspan(offset, sizeof(std::uint64_t)));
+			offset += sizeof(std::uint64_t);
+			if (size > spill_maximum_metadata_string_bytes || size > bytes.size() - offset)
+				return unexpected(corrupt_error(field, "quota"));
+			try
+			{
+				std::string output;
+				output.reserve(static_cast<std::size_t>(size));
+				for (const auto byte : bytes.subspan(offset, static_cast<std::size_t>(size)))
+					output.push_back(static_cast<char>(std::to_integer<unsigned char>(byte)));
+				offset += static_cast<std::size_t>(size);
+				return output;
+			}
+			catch (const std::bad_alloc&)
+			{
+				return unexpected(port_error(field, "allocation"));
+			}
+		}
+
+		[[nodiscard]] result<std::uint64_t>
+		read_metadata_u64(const std::span<const std::byte> bytes,
+						  std::size_t& offset,
+						  const std::string_view field)
+		{
+			if (offset > bytes.size() || bytes.size() - offset < sizeof(std::uint64_t))
+				return unexpected(corrupt_error(field, "length"));
+			const auto value = read_big_endian(bytes.subspan(offset, sizeof(std::uint64_t)));
+			offset += sizeof(std::uint64_t);
+			return value;
+		}
+
+		[[nodiscard]] result<std::vector<std::byte>>
+		encode_frontier_metadata(const ng1_spill_resume_frontier& frontier)
+		{
+			try
+			{
+				const auto& receipt = frontier.receipt;
+				std::vector<std::byte> output;
+				output.reserve(512U);
+				append_magic(output, spill_frontier_magic);
+				append_metadata_string(output, receipt.schema);
+				append_metadata_string(output, receipt.provider_id);
+				append_metadata_string(output, receipt.protocol_session_id);
+				append_metadata_string(output, receipt.task_id);
+				append_metadata_u64(output, receipt.stream_id);
+				append_metadata_u64(output, receipt.highest_contiguous_acked_sequence);
+				append_metadata_string(output, receipt.staged_digest);
+				append_metadata_string(output, receipt.spill_digest);
+				append_metadata_u64(output, receipt.total_bytes);
+				append_metadata_u64(output, receipt.total_records);
+				append_metadata_u64(output, receipt.fsync_sequence);
+				append_metadata_u64(output, frontier.resume_generation);
+				if (output.size() > spill_maximum_metadata_bytes)
+					return unexpected(corrupt_error("resume_frontier", "quota"));
+				return output;
+			}
+			catch (const std::bad_alloc&)
+			{
+				return unexpected(port_error("resume_frontier", "allocation"));
+			}
+		}
+
+		[[nodiscard]] result<ng1_spill_resume_frontier>
+		decode_frontier_metadata(const std::span<const std::byte> bytes)
+		{
+			if (bytes.size() > spill_maximum_metadata_bytes ||
+				bytes.size() < spill_frontier_magic.size() ||
+				!has_magic(bytes, spill_frontier_magic))
+				return unexpected(corrupt_error("resume_frontier", "header"));
+			std::size_t offset = spill_frontier_magic.size();
+			auto schema = read_metadata_string(bytes, offset, "schema");
+			auto provider_id = read_metadata_string(bytes, offset, "provider_id");
+			auto protocol_session_id = read_metadata_string(bytes, offset, "protocol_session_id");
+			auto task_id = read_metadata_string(bytes, offset, "task_id");
+			auto stream_id = read_metadata_u64(bytes, offset, "stream_id");
+			auto highest_ack = read_metadata_u64(bytes, offset, "highest_ack");
+			auto staged_digest = read_metadata_string(bytes, offset, "staged_digest");
+			auto spill_digest = read_metadata_string(bytes, offset, "spill_digest");
+			auto total_bytes = read_metadata_u64(bytes, offset, "total_bytes");
+			auto total_records = read_metadata_u64(bytes, offset, "total_records");
+			auto fsync_sequence = read_metadata_u64(bytes, offset, "fsync_sequence");
+			auto resume_generation = read_metadata_u64(bytes, offset, "resume_generation");
+			if (!schema || !provider_id || !protocol_session_id || !task_id || !stream_id ||
+				!highest_ack || !staged_digest || !spill_digest || !total_bytes || !total_records ||
+				!fsync_sequence || !resume_generation || offset != bytes.size())
+				return unexpected(corrupt_error("resume_frontier", "fields"));
+			ng1_spill_resume_frontier output{{*schema,
+											  *provider_id,
+											  *protocol_session_id,
+											  *task_id,
+											  *stream_id,
+											  *highest_ack,
+											  *staged_digest,
+											  *spill_digest,
+											  *total_bytes,
+											  *total_records,
+											  *fsync_sequence},
+											 *resume_generation};
+			if (auto valid = output.validate(); !valid)
+				return unexpected(std::move(valid.error()));
+			return output;
+		}
+
+		class temporary_spill_directory_guard
+		{
+		  public:
+			explicit temporary_spill_directory_guard(const char* path) noexcept : path_{path}
+			{
+				struct stat metadata{};
+				if (::lstat(path_, &metadata) == 0 && S_ISDIR(metadata.st_mode))
+				{
+					device_ = metadata.st_dev;
+					inode_ = metadata.st_ino;
+					identity_captured_ = true;
+				}
+			}
+
+			temporary_spill_directory_guard(const temporary_spill_directory_guard&) = delete;
+			temporary_spill_directory_guard&
+			operator=(const temporary_spill_directory_guard&) = delete;
+
+			~temporary_spill_directory_guard() noexcept
+			{
+				if (!active_ || !identity_captured_)
+					return;
+				const auto descriptor =
+					::open(path_, O_RDONLY | O_DIRECTORY | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW);
+				if (descriptor < 0)
+					return;
+				struct stat descriptor_metadata{};
+				struct stat path_metadata{};
+				if (::fstat(descriptor, &descriptor_metadata) != 0 ||
+					::lstat(path_, &path_metadata) != 0 || descriptor_metadata.st_dev != device_ ||
+					descriptor_metadata.st_ino != inode_ || path_metadata.st_dev != device_ ||
+					path_metadata.st_ino != inode_)
+				{
+					(void)::close(descriptor);
+					return;
+				}
+				for (const auto name : {"spill.data",
+										"spill.commit",
+										"spill.frontier",
+										"spill.commit.tmp",
+										"spill.frontier.tmp"})
+				{
+					struct stat metadata{};
+					if (::fstatat(descriptor, name, &metadata, AT_SYMLINK_NOFOLLOW) == 0 &&
+						S_ISREG(metadata.st_mode) && metadata.st_nlink == 1)
+						(void)::unlinkat(descriptor, name, 0);
+				}
+				(void)::close(descriptor);
+				if (::lstat(path_, &path_metadata) == 0 && path_metadata.st_dev == device_ &&
+					path_metadata.st_ino == inode_)
+					(void)::rmdir(path_);
+			}
+
+			void release() noexcept
+			{
+				active_ = false;
+			}
+
+		  private:
+			const char* path_{};
+			dev_t device_{};
+			ino_t inode_{};
+			bool identity_captured_{};
+			bool active_{true};
+		};
+
 		class linux_ng1_spill_storage_port final : public ng1_spill_storage_port
 		{
 		  public:
-			explicit linux_ng1_spill_storage_port(const int descriptor) noexcept
-				: descriptor_{descriptor}
-			{
-			}
-
 			~linux_ng1_spill_storage_port() override
 			{
+				if (!cleaned_)
+					(void)cleanup();
 				if (descriptor_ >= 0)
 					(void)::close(descriptor_);
+				if (directory_descriptor_ >= 0)
+					(void)::close(directory_descriptor_);
+			}
+
+			[[nodiscard]] static result<std::unique_ptr<linux_ng1_spill_storage_port>> create_new()
+			{
+				char directory_template[] = "/tmp/cxxlens-ng1-spill-XXXXXX";
+				const auto directory = ::mkdtemp(directory_template);
+				if (directory == nullptr)
+					return unexpected(port_error("platform", "temp-directory"));
+				temporary_spill_directory_guard directory_guard{directory_template};
+				std::string directory_path;
+				std::string data_path;
+				std::string commit_path;
+				std::string frontier_path;
+				try
+				{
+					directory_path = directory;
+					data_path = directory_path;
+					data_path.append("/");
+					data_path.append(spill_data_file_name);
+					commit_path = directory_path;
+					commit_path.append("/");
+					commit_path.append(spill_commit_file_name);
+					frontier_path = directory_path;
+					frontier_path.append("/");
+					frontier_path.append(spill_frontier_file_name);
+				}
+				catch (const std::bad_alloc&)
+				{
+					return unexpected(port_error("platform", "allocation"));
+				}
+				const auto directory_descriptor =
+					::open(directory_path.c_str(),
+						   O_RDONLY | O_DIRECTORY | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW);
+				if (directory_descriptor < 0)
+				{
+					(void)::rmdir(directory_path.c_str());
+					return unexpected(port_error("platform", "temp-directory-open"));
+				}
+				auto directory_identity = capture_directory_identity(
+					directory_descriptor, directory_path, "parent_directory");
+				if (!directory_identity)
+				{
+					(void)::close(directory_descriptor);
+					(void)::rmdir(directory_path.c_str());
+					return unexpected(std::move(directory_identity.error()));
+				}
+				const auto descriptor =
+					::openat(directory_descriptor,
+							 spill_data_file_name.data(),
+							 O_RDWR | O_CREAT | O_EXCL | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW,
+							 static_cast<mode_t>(0600));
+				if (descriptor < 0)
+				{
+					(void)::close(directory_descriptor);
+					(void)::rmdir(directory_path.c_str());
+					return unexpected(port_error("platform", "spill-file-open"));
+				}
+				bool failed{};
+				if (::fsync(descriptor) != 0 || ::fsync(directory_descriptor) != 0)
+					failed = true;
+				struct stat data_metadata{};
+				if (!failed &&
+					(::fstat(descriptor, &data_metadata) != 0 || !S_ISREG(data_metadata.st_mode) ||
+					 data_metadata.st_nlink != 1))
+					failed = true;
+				if (!failed)
+				{
+					auto initial_commit = encode_commit_metadata(0U, 0U);
+					if (!initial_commit ||
+						!write_atomic_named_file(directory_descriptor,
+												 spill_commit_file_name,
+												 *initial_commit,
+												 "commit"))
+						failed = true;
+				}
+				if (failed)
+				{
+					(void)::close(descriptor);
+					(void)::unlinkat(directory_descriptor, spill_data_file_name.data(), 0);
+					(void)::unlinkat(directory_descriptor, spill_commit_file_name.data(), 0);
+					(void)::unlinkat(directory_descriptor, "spill.commit.tmp", 0);
+					(void)::close(directory_descriptor);
+					(void)::rmdir(directory_path.c_str());
+					return unexpected(port_error("platform", "spill-initialize"));
+				}
+				try
+				{
+					auto output = std::unique_ptr<linux_ng1_spill_storage_port>{
+						new linux_ng1_spill_storage_port(descriptor,
+														 directory_descriptor,
+														 directory_path,
+														 data_path,
+														 commit_path,
+														 frontier_path,
+														 directory_identity->first,
+														 directory_identity->second,
+														 data_metadata.st_dev,
+														 data_metadata.st_ino,
+														 0U,
+														 0U,
+														 0U,
+														 std::nullopt,
+														 true)};
+					directory_guard.release();
+					return output;
+				}
+				catch (const std::bad_alloc&)
+				{
+					(void)::close(descriptor);
+					(void)::unlinkat(directory_descriptor, spill_data_file_name.data(), 0);
+					(void)::unlinkat(directory_descriptor, spill_commit_file_name.data(), 0);
+					(void)::close(directory_descriptor);
+					(void)::rmdir(directory_path.c_str());
+					return unexpected(port_error("platform", "allocation"));
+				}
+			}
+
+			[[nodiscard]] static result<std::unique_ptr<linux_ng1_spill_storage_port>>
+			open_existing(const std::string& directory_path,
+						  const std::string& data_path,
+						  const std::string& commit_path,
+						  const std::string& frontier_path,
+						  const dev_t expected_directory_device,
+						  const ino_t expected_directory_inode,
+						  const dev_t expected_data_device,
+						  const ino_t expected_data_inode,
+						  const bool cleanup_custody)
+			{
+				const auto directory_descriptor =
+					::open(directory_path.c_str(),
+						   O_RDONLY | O_DIRECTORY | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW);
+				if (directory_descriptor < 0)
+					return unexpected(port_error("reopen", "parent-directory-open"));
+				auto directory_identity = capture_directory_identity(
+					directory_descriptor, directory_path, "parent_directory");
+				if (!directory_identity)
+				{
+					(void)::close(directory_descriptor);
+					return unexpected(std::move(directory_identity.error()));
+				}
+				if (directory_identity->first != expected_directory_device ||
+					directory_identity->second != expected_directory_inode)
+				{
+					(void)::close(directory_descriptor);
+					return unexpected(port_error("reopen", "parent-directory-identity"));
+				}
+				auto opened = open_existing_regular_named_file(
+					directory_descriptor,
+					spill_data_file_name,
+					O_RDWR,
+					"spill_file",
+					false,
+					std::pair{expected_data_device, expected_data_inode});
+				if (!opened)
+				{
+					(void)::close(directory_descriptor);
+					return unexpected(std::move(opened.error()));
+				}
+				const auto descriptor = **opened;
+				struct stat data_metadata{};
+				if (::fstat(descriptor, &data_metadata) != 0 || !S_ISREG(data_metadata.st_mode) ||
+					data_metadata.st_nlink != 1 || data_metadata.st_dev != expected_data_device ||
+					data_metadata.st_ino != expected_data_inode)
+				{
+					(void)::close(descriptor);
+					(void)::close(directory_descriptor);
+					return unexpected(port_error("reopen", "spill-file-identity"));
+				}
+				auto commit_bytes = read_named_file(directory_descriptor,
+													spill_commit_file_name,
+													spill_metadata_magic.size() + 16U,
+													"commit",
+													false);
+				if (!commit_bytes)
+				{
+					(void)::close(descriptor);
+					(void)::close(directory_descriptor);
+					return unexpected(std::move(commit_bytes.error()));
+				}
+				auto commit = decode_commit_metadata(**commit_bytes);
+				if (!commit)
+				{
+					(void)::close(descriptor);
+					(void)::close(directory_descriptor);
+					return unexpected(std::move(commit.error()));
+				}
+				struct stat metadata{};
+				if (::fstat(descriptor, &metadata) != 0 || metadata.st_size < 0)
+				{
+					(void)::close(descriptor);
+					(void)::close(directory_descriptor);
+					return unexpected(port_error("reopen", "spill-file-stat"));
+				}
+				const auto stored_size = static_cast<std::uint64_t>(metadata.st_size);
+				const auto committed_size = commit->first;
+				if (stored_size < committed_size || committed_size > ng1_spill_maximum_total_bytes)
+				{
+					(void)::close(descriptor);
+					(void)::close(directory_descriptor);
+					return unexpected(corrupt_error("reopen", "commit-size"));
+				}
+				std::optional<ng1_spill_resume_frontier> frontier;
+				auto frontier_bytes = read_named_file(directory_descriptor,
+													  spill_frontier_file_name,
+													  spill_maximum_metadata_bytes,
+													  "resume_frontier",
+													  true);
+				if (!frontier_bytes)
+				{
+					(void)::close(descriptor);
+					(void)::close(directory_descriptor);
+					return unexpected(std::move(frontier_bytes.error()));
+				}
+				if (frontier_bytes->has_value())
+				{
+					auto decoded = decode_frontier_metadata(**frontier_bytes);
+					if (!decoded)
+					{
+						(void)::close(descriptor);
+						(void)::close(directory_descriptor);
+						return unexpected(std::move(decoded.error()));
+					}
+					if (decoded->receipt.fsync_sequence > commit->second ||
+						decoded->receipt.total_bytes > committed_size ||
+						decoded->receipt.total_bytes > stored_size)
+					{
+						(void)::close(descriptor);
+						(void)::close(directory_descriptor);
+						return unexpected(corrupt_error("resume_frontier", "commit-mismatch"));
+					}
+					frontier = std::move(*decoded);
+				}
+				const auto published_size = frontier ? frontier->receipt.total_bytes : 0U;
+				const auto published_sequence = frontier ? frontier->receipt.fsync_sequence : 0U;
+				if (stored_size != published_size)
+				{
+					if (::ftruncate(descriptor, static_cast<off_t>(published_size)) != 0 ||
+						::fsync(descriptor) != 0)
+					{
+						(void)::close(descriptor);
+						(void)::close(directory_descriptor);
+						return unexpected(port_error("reopen", "discard-unpublished-tail"));
+					}
+					if (auto synced = fsync_directory(directory_descriptor); !synced)
+					{
+						(void)::close(descriptor);
+						(void)::close(directory_descriptor);
+						return unexpected(std::move(synced.error()));
+					}
+				}
+				if (commit->first != published_size || commit->second != published_sequence)
+				{
+					auto rewritten = encode_commit_metadata(published_size, published_sequence);
+					if (!rewritten ||
+						!write_atomic_named_file(
+							directory_descriptor, spill_commit_file_name, *rewritten, "commit"))
+					{
+						(void)::close(descriptor);
+						(void)::close(directory_descriptor);
+						return unexpected(port_error("reopen", "rewrite-commit"));
+					}
+				}
+				try
+				{
+					return std::unique_ptr<linux_ng1_spill_storage_port>{
+						new linux_ng1_spill_storage_port(descriptor,
+														 directory_descriptor,
+														 std::string{directory_path},
+														 std::string{data_path},
+														 std::string{commit_path},
+														 std::string{frontier_path},
+														 directory_identity->first,
+														 directory_identity->second,
+														 data_metadata.st_dev,
+														 data_metadata.st_ino,
+														 published_size,
+														 published_size,
+														 published_sequence,
+														 std::move(frontier),
+														 cleanup_custody)};
+				}
+				catch (const std::bad_alloc&)
+				{
+					(void)::close(descriptor);
+					(void)::close(directory_descriptor);
+					return unexpected(port_error("reopen", "allocation"));
+				}
 			}
 
 			[[nodiscard]] result<void> append(const std::span<const std::byte> bytes) override
 			{
 				if (descriptor_ < 0 || poisoned_ || cleaned_)
 					return unexpected(port_error("append", "terminal-port"));
+				if (auto identity = verify_directory_identity(directory_descriptor_,
+															  directory_path_,
+															  directory_device_,
+															  directory_inode_,
+															  "parent_directory");
+					!identity)
+				{
+					poisoned_ = true;
+					return unexpected(std::move(identity.error()));
+				}
+				if (auto identity = verify_data_identity(directory_descriptor_,
+														 descriptor_,
+														 data_device_,
+														 data_inode_,
+														 "spill_file");
+					!identity)
+				{
+					poisoned_ = true;
+					return unexpected(std::move(identity.error()));
+				}
 				if (bytes.size() > ng1_spill_maximum_total_bytes - byte_count_)
 					return unexpected(corrupt_error("total_bytes", "total-quota"));
 				const auto maximum_offset =
@@ -527,57 +1469,82 @@ namespace cxxlens::sdk::provider::detail
 
 			[[nodiscard]] result<std::uint64_t> fsync() override
 			{
-				if (descriptor_ < 0 || cleaned_ || poisoned_)
+				if (descriptor_ < 0 || directory_descriptor_ < 0 || cleaned_ || poisoned_)
 					return unexpected(port_error("fsync", "terminal-port"));
-				if (::fsync(descriptor_) != 0)
+				if (auto identity = verify_directory_identity(directory_descriptor_,
+															  directory_path_,
+															  directory_device_,
+															  directory_inode_,
+															  "parent_directory");
+					!identity)
 				{
 					poisoned_ = true;
-					return unexpected(port_error("fsync", "durability-unknown"));
+					return unexpected(std::move(identity.error()));
+				}
+				if (auto identity = verify_data_identity(directory_descriptor_,
+														 descriptor_,
+														 data_device_,
+														 data_inode_,
+														 "spill_file");
+					!identity)
+				{
+					poisoned_ = true;
+					return unexpected(std::move(identity.error()));
 				}
 				if (fsync_sequence_ == std::numeric_limits<std::uint64_t>::max())
 				{
 					poisoned_ = true;
 					return unexpected(port_error("fsync_sequence", "overflow"));
 				}
-				++fsync_sequence_;
+				if (::fsync(descriptor_) != 0)
+				{
+					poisoned_ = true;
+					return unexpected(port_error("fsync", "durability-unknown"));
+				}
+				const auto next_sequence = fsync_sequence_ + 1U;
+				auto encoded = encode_commit_metadata(byte_count_, next_sequence);
+				if (!encoded)
+				{
+					poisoned_ = true;
+					return unexpected(std::move(encoded.error()));
+				}
+				if (auto committed = write_atomic_named_file(
+						directory_descriptor_, spill_commit_file_name, *encoded, "commit");
+					!committed)
+				{
+					poisoned_ = true;
+					return unexpected(std::move(committed.error()));
+				}
+				committed_byte_count_ = byte_count_;
+				fsync_sequence_ = next_sequence;
 				return fsync_sequence_;
 			}
 
 			[[nodiscard]] result<std::vector<std::byte>> read_all() const override
 			{
-				if (descriptor_ < 0 || cleaned_)
+				if (descriptor_ < 0 || cleaned_ || poisoned_)
 					return unexpected(port_error("read", "terminal-port"));
+				if (auto identity = verify_directory_identity(directory_descriptor_,
+															  directory_path_,
+															  directory_device_,
+															  directory_inode_,
+															  "parent_directory");
+					!identity)
+					return unexpected(std::move(identity.error()));
+				if (auto identity = verify_data_identity(directory_descriptor_,
+														 descriptor_,
+														 data_device_,
+														 data_inode_,
+														 "spill_file");
+					!identity)
+					return unexpected(std::move(identity.error()));
 				struct stat metadata{};
 				if (::fstat(descriptor_, &metadata) != 0 || metadata.st_size < 0)
 					return unexpected(port_error("read", "stat"));
 				const auto size = static_cast<std::uint64_t>(metadata.st_size);
 				if (size > ng1_spill_maximum_total_bytes || size != byte_count_)
 					return unexpected(corrupt_error("total_bytes", "storage-drift"));
-				try
-				{
-					std::vector<std::byte> output(static_cast<std::size_t>(size));
-					std::size_t consumed{};
-					while (consumed < output.size())
-					{
-						const auto count = ::pread(descriptor_,
-												   output.data() + consumed,
-												   output.size() - consumed,
-												   static_cast<off_t>(consumed));
-						if (count > 0)
-						{
-							consumed += static_cast<std::size_t>(count);
-							continue;
-						}
-						if (count < 0 && errno == EINTR)
-							continue;
-						return unexpected(corrupt_error("framing", "torn-last-record"));
-					}
-					return output;
-				}
-				catch (const std::bad_alloc&)
-				{
-					return unexpected(port_error("read", "allocation"));
-				}
+				return read_descriptor(descriptor_, ng1_spill_maximum_total_bytes, "read");
 			}
 
 			[[nodiscard]] result<std::optional<ng1_spill_resume_frontier>>
@@ -585,21 +1552,175 @@ namespace cxxlens::sdk::provider::detail
 			{
 				if (descriptor_ < 0 || cleaned_ || poisoned_)
 					return unexpected(port_error("resume_frontier", "terminal-port"));
-				return frontier_;
+				if (auto identity = verify_directory_identity(directory_descriptor_,
+															  directory_path_,
+															  directory_device_,
+															  directory_inode_,
+															  "parent_directory");
+					!identity)
+					return unexpected(std::move(identity.error()));
+				if (auto identity = verify_data_identity(directory_descriptor_,
+														 descriptor_,
+														 data_device_,
+														 data_inode_,
+														 "spill_file");
+					!identity)
+					return unexpected(std::move(identity.error()));
+				auto commit_bytes = read_named_file(directory_descriptor_,
+													spill_commit_file_name,
+													spill_metadata_magic.size() + 16U,
+													"commit",
+													false);
+				if (!commit_bytes)
+					return unexpected(std::move(commit_bytes.error()));
+				auto commit = decode_commit_metadata(**commit_bytes);
+				if (!commit)
+					return unexpected(std::move(commit.error()));
+				struct stat metadata{};
+				if (::fstat(descriptor_, &metadata) != 0 || metadata.st_size < 0)
+					return unexpected(port_error("resume_frontier", "spill-file-stat"));
+				const auto stored_size = static_cast<std::uint64_t>(metadata.st_size);
+				if (commit->first > stored_size || commit->first > ng1_spill_maximum_total_bytes)
+					return unexpected(corrupt_error("resume_frontier", "commit-size"));
+				auto frontier_bytes = read_named_file(directory_descriptor_,
+													  spill_frontier_file_name,
+													  spill_maximum_metadata_bytes,
+													  "resume_frontier",
+													  true);
+				if (!frontier_bytes)
+					return unexpected(std::move(frontier_bytes.error()));
+				if (!frontier_bytes->has_value())
+					return std::optional<ng1_spill_resume_frontier>{};
+				auto decoded = decode_frontier_metadata(**frontier_bytes);
+				if (!decoded)
+					return unexpected(std::move(decoded.error()));
+				if (decoded->receipt.fsync_sequence > commit->second ||
+					decoded->receipt.total_bytes > commit->first ||
+					decoded->receipt.total_bytes > stored_size)
+					return unexpected(corrupt_error("resume_frontier", "commit-mismatch"));
+				return std::optional<ng1_spill_resume_frontier>{std::move(*decoded)};
+			}
+
+			[[nodiscard]] result<std::unique_ptr<ng1_spill_storage_port>> reopen() const override
+			{
+				if (descriptor_ < 0 || directory_descriptor_ < 0 || cleaned_ || poisoned_)
+					return unexpected(port_error("reopen", "terminal-port"));
+				if (auto identity = verify_directory_identity(directory_descriptor_,
+															  directory_path_,
+															  directory_device_,
+															  directory_inode_,
+															  "parent_directory");
+					!identity)
+					return unexpected(std::move(identity.error()));
+				auto reopened = open_existing(directory_path_,
+											  data_path_,
+											  commit_path_,
+											  frontier_path_,
+											  directory_device_,
+											  directory_inode_,
+											  data_device_,
+											  data_inode_,
+											  false);
+				if (!reopened)
+					return unexpected(std::move(reopened.error()));
+				return std::unique_ptr<ng1_spill_storage_port>{std::move(*reopened)};
+			}
+
+			[[nodiscard]] result<void>
+			transfer_cleanup_custody_to(ng1_spill_storage_port& replacement) override
+			{
+				auto* target = dynamic_cast<linux_ng1_spill_storage_port*>(&replacement);
+				if (target == nullptr || target == this || !cleanup_custody_ ||
+					target->cleanup_custody_ || target->cleaned_ || target->descriptor_ < 0 ||
+					target->directory_descriptor_ < 0)
+					return unexpected(port_error("cleanup", "custody-transfer"));
+				if (auto identity = verify_directory_identity(directory_descriptor_,
+															  directory_path_,
+															  directory_device_,
+															  directory_inode_,
+															  "parent_directory");
+					!identity)
+					return unexpected(std::move(identity.error()));
+				if (auto identity = verify_data_identity(directory_descriptor_,
+														 descriptor_,
+														 data_device_,
+														 data_inode_,
+														 "spill_file");
+					!identity)
+					return unexpected(std::move(identity.error()));
+				if (target->directory_device_ != directory_device_ ||
+					target->directory_inode_ != directory_inode_ ||
+					target->data_device_ != data_device_ || target->data_inode_ != data_inode_)
+					return unexpected(port_error("cleanup", "custody-identity"));
+				if (auto identity = verify_directory_identity(target->directory_descriptor_,
+															  target->directory_path_,
+															  target->directory_device_,
+															  target->directory_inode_,
+															  "parent_directory");
+					!identity)
+					return unexpected(std::move(identity.error()));
+				if (auto identity = verify_data_identity(target->directory_descriptor_,
+														 target->descriptor_,
+														 target->data_device_,
+														 target->data_inode_,
+														 "spill_file");
+					!identity)
+					return unexpected(std::move(identity.error()));
+				cleanup_custody_ = false;
+				target->cleanup_custody_ = true;
+				return {};
 			}
 
 			[[nodiscard]] result<void>
 			persist_resume_frontier(const ng1_spill_resume_frontier& frontier) override
 			{
-				if (descriptor_ < 0 || cleaned_ || poisoned_)
+				if (descriptor_ < 0 || directory_descriptor_ < 0 || cleaned_ || poisoned_)
 					return unexpected(port_error("resume_frontier", "terminal-port"));
+				if (auto identity = verify_directory_identity(directory_descriptor_,
+															  directory_path_,
+															  directory_device_,
+															  directory_inode_,
+															  "parent_directory");
+					!identity)
+				{
+					poisoned_ = true;
+					return unexpected(std::move(identity.error()));
+				}
+				if (auto data_identity = verify_data_identity(directory_descriptor_,
+															  descriptor_,
+															  data_device_,
+															  data_inode_,
+															  "spill_file");
+					!data_identity)
+				{
+					poisoned_ = true;
+					return unexpected(std::move(data_identity.error()));
+				}
 				if (auto valid = frontier.validate(); !valid)
 					return unexpected(std::move(valid.error()));
+				if (frontier.receipt.fsync_sequence != fsync_sequence_ ||
+					frontier.receipt.total_bytes != committed_byte_count_)
+					return unexpected(corrupt_error("resume_frontier", "commit-mismatch"));
 				if (frontier_ &&
 					(frontier.resume_generation <= frontier_->resume_generation ||
 					 frontier.receipt.fsync_sequence <= frontier_->receipt.fsync_sequence))
 					return unexpected(
 						error{"provider.resume-token-stale", "resume_frontier", "not-increasing"});
+				auto encoded = encode_frontier_metadata(frontier);
+				if (!encoded)
+				{
+					poisoned_ = true;
+					return unexpected(std::move(encoded.error()));
+				}
+				if (auto persisted = write_atomic_named_file(directory_descriptor_,
+															 spill_frontier_file_name,
+															 *encoded,
+															 "resume_frontier");
+					!persisted)
+				{
+					poisoned_ = true;
+					return unexpected(std::move(persisted.error()));
+				}
 				frontier_ = frontier;
 				return {};
 			}
@@ -609,44 +1730,110 @@ namespace cxxlens::sdk::provider::detail
 				if (cleaned_)
 					return unexpected(port_error("cleanup", "already-terminal"));
 				cleaned_ = true;
+				bool failed{};
 				const auto descriptor = std::exchange(descriptor_, -1);
-				if (descriptor < 0)
-					return unexpected(port_error("cleanup", "missing-descriptor"));
-				if (::close(descriptor) != 0)
+				if (descriptor < 0 || ::close(descriptor) != 0)
+					failed = true;
+				const auto directory_descriptor = std::exchange(directory_descriptor_, -1);
+				if (directory_descriptor >= 0 && cleanup_custody_)
+					for (const auto name : {spill_data_file_name,
+											spill_commit_file_name,
+											spill_frontier_file_name,
+											std::string_view{"spill.commit.tmp"},
+											std::string_view{"spill.frontier.tmp"}})
+					{
+						auto removed =
+							remove_regular_named_file(directory_descriptor, name, "cleanup");
+						if (!removed)
+							failed = true;
+					}
+				if (directory_descriptor >= 0 && ::close(directory_descriptor) != 0)
+					failed = true;
+				struct stat path_metadata{};
+				if (cleanup_custody_ && ::lstat(directory_path_.c_str(), &path_metadata) == 0)
+				{
+					if (path_metadata.st_dev != directory_device_ ||
+						path_metadata.st_ino != directory_inode_ ||
+						::rmdir(directory_path_.c_str()) != 0)
+						failed = true;
+				}
+				else if (cleanup_custody_ && errno != ENOENT)
+					failed = true;
+				if (failed)
+				{
+					poisoned_ = true;
 					return unexpected(port_error("cleanup", "effect-unknown"));
+				}
 				return {};
 			}
 
 		  private:
+			linux_ng1_spill_storage_port(const int descriptor,
+										 const int directory_descriptor,
+										 std::string directory_path,
+										 std::string data_path,
+										 std::string commit_path,
+										 std::string frontier_path,
+										 const dev_t directory_device,
+										 const ino_t directory_inode,
+										 const dev_t data_device,
+										 const ino_t data_inode,
+										 const std::uint64_t byte_count,
+										 const std::uint64_t committed_byte_count,
+										 const std::uint64_t fsync_sequence,
+										 std::optional<ng1_spill_resume_frontier> frontier,
+										 const bool cleanup_custody) noexcept
+				: descriptor_{descriptor}, directory_descriptor_{directory_descriptor},
+				  directory_path_{std::move(directory_path)}, data_path_{std::move(data_path)},
+				  commit_path_{std::move(commit_path)}, frontier_path_{std::move(frontier_path)},
+				  directory_device_{directory_device}, directory_inode_{directory_inode},
+				  data_device_{data_device}, data_inode_{data_inode}, byte_count_{byte_count},
+				  committed_byte_count_{committed_byte_count}, fsync_sequence_{fsync_sequence},
+				  frontier_{std::move(frontier)}, cleanup_custody_{cleanup_custody}
+			{
+			}
+
 			int descriptor_{-1};
+			int directory_descriptor_{-1};
+			std::string directory_path_;
+			std::string data_path_;
+			std::string commit_path_;
+			std::string frontier_path_;
+			dev_t directory_device_{};
+			ino_t directory_inode_{};
+			dev_t data_device_{};
+			ino_t data_inode_{};
 			std::uint64_t byte_count_{};
+			std::uint64_t committed_byte_count_{};
 			std::uint64_t fsync_sequence_{};
 			std::optional<ng1_spill_resume_frontier> frontier_;
 			bool poisoned_{};
 			bool cleaned_{};
+			bool cleanup_custody_{};
 		};
 #endif
 	} // namespace
 
+	result<std::unique_ptr<ng1_spill_storage_port>> ng1_spill_storage_port::reopen() const
+	{
+		return unexpected(error{"provider.recovery-failed", "reopen", "unsupported"});
+	}
+
+	result<void> ng1_spill_storage_port::transfer_cleanup_custody_to(ng1_spill_storage_port&)
+	{
+		return unexpected(
+			error{"provider.recovery-failed", "cleanup", "custody-transfer-unsupported"});
+	}
+
 	result<std::unique_ptr<ng1_spill_storage_port>> make_system_ng1_spill_storage_port()
 	{
-#if defined(__linux__) && defined(__GLIBC__) && defined(SYS_memfd_create)
-		const auto descriptor = static_cast<int>(
-			::syscall(SYS_memfd_create, "cxxlens-ng1-spill-v1", MFD_CLOEXEC | MFD_ALLOW_SEALING));
-		if (descriptor < 0)
-			return unexpected(port_error("platform", "memfd-create"));
-		try
-		{
-			return std::unique_ptr<ng1_spill_storage_port>{
-				std::make_unique<linux_ng1_spill_storage_port>(descriptor)};
-		}
-		catch (const std::bad_alloc&)
-		{
-			(void)::close(descriptor);
-			return unexpected(port_error("platform", "allocation"));
-		}
+#if defined(__linux__) && defined(__GLIBC__)
+		auto storage = linux_ng1_spill_storage_port::create_new();
+		if (!storage)
+			return unexpected(std::move(storage.error()));
+		return std::unique_ptr<ng1_spill_storage_port>{std::move(*storage)};
 #else
-		return unexpected(port_error("platform", "linux-glibc-memfd-required"));
+		return unexpected(port_error("platform", "linux-glibc-filesystem-required"));
 #endif
 	}
 
@@ -714,6 +1901,8 @@ namespace cxxlens::sdk::provider::detail
 	{
 		if (!storage_ || cleaned_ || poisoned_)
 			return unexpected(port_error("append", "terminal-session"));
+		if (auto bounded = validate_spill_record_wire_quota(record); !bounded)
+			return unexpected(std::move(bounded.error()));
 		try
 		{
 			auto candidate = prefix_;
@@ -874,7 +2063,7 @@ namespace cxxlens::sdk::provider::detail
 
 	result<ng1_spill_prefix_state> ng1_spill_staging_session::recover()
 	{
-		if (!storage_ || cleaned_)
+		if (!storage_ || cleaned_ || poisoned_)
 			return unexpected(port_error("recovery", "terminal-session"));
 		result<std::vector<std::byte>> raw{port_error("recovery", "not-read")};
 		try
@@ -976,6 +2165,76 @@ namespace cxxlens::sdk::provider::detail
 		has_fsync_sequence_ = true;
 		last_resume_generation_ = resume_generation;
 		has_resume_generation_ = true;
+		return {};
+	}
+
+	result<void>
+	ng1_spill_staging_session::handoff_cleanup_custody_to(ng1_spill_staging_session& replacement)
+	{
+		if (this == &replacement)
+			return unexpected(port_error("cleanup", "custody-self-transfer"));
+		if (!storage_ || !replacement.storage_ || cleaned_ || replacement.cleaned_ || poisoned_ ||
+			replacement.poisoned_)
+			return unexpected(port_error("cleanup", "custody-session-terminal"));
+		if (binding_ != replacement.binding_)
+			return unexpected(corrupt_error("cleanup", "binding-mismatch"));
+		if (prefix_.total_bytes() != replacement.prefix_.total_bytes() ||
+			prefix_.total_records() != replacement.prefix_.total_records() ||
+			has_fsync_sequence_ != replacement.has_fsync_sequence_ ||
+			(has_fsync_sequence_ && last_fsync_sequence_ != replacement.last_fsync_sequence_) ||
+			has_resume_generation_ != replacement.has_resume_generation_ ||
+			(has_resume_generation_ &&
+			 last_resume_generation_ != replacement.last_resume_generation_))
+			return unexpected(corrupt_error("cleanup", "prefix-frontier-mismatch"));
+		result<std::string> source_digest{port_error("cleanup", "prefix-digest")};
+		result<std::string> replacement_digest{port_error("cleanup", "prefix-digest")};
+		try
+		{
+			source_digest = prefix_.spill_digest();
+			replacement_digest = replacement.prefix_.spill_digest();
+		}
+		catch (...)
+		{
+			return unexpected(port_error("cleanup", "prefix-digest"));
+		}
+		if (!source_digest || !replacement_digest)
+			return unexpected(corrupt_error("cleanup", "prefix-digest"));
+		if (*source_digest != *replacement_digest)
+			return unexpected(corrupt_error("cleanup", "prefix-mismatch"));
+
+		result<void> transferred{port_error("cleanup", "custody-transfer")};
+		try
+		{
+			transferred = storage_->transfer_cleanup_custody_to(*replacement.storage_);
+		}
+		catch (...)
+		{
+			return unexpected(port_error("cleanup", "custody-transfer-effect-unknown"));
+		}
+		if (!transferred)
+			return unexpected(std::move(transferred.error()));
+
+		// The replacement is now the sole unlink/rmdir custodian. Retire the old
+		// descriptor-only session before a coordinator move-installs the replacement.
+		result<void> retired{port_error("cleanup", "custody-retire")};
+		try
+		{
+			retired = storage_->cleanup();
+		}
+		catch (...)
+		{
+			storage_.reset();
+			cleaned_ = true;
+			poisoned_ = true;
+			return unexpected(port_error("cleanup", "custody-retire-effect-unknown"));
+		}
+		storage_.reset();
+		cleaned_ = true;
+		if (!retired)
+		{
+			poisoned_ = true;
+			return unexpected(std::move(retired.error()));
+		}
 		return {};
 	}
 

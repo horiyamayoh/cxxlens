@@ -10,6 +10,20 @@
 
 namespace cxxlens::detail::clang22
 {
+	/**
+	 * Product identity domains for the Protocol 2.0 source-closure boundary.
+	 *
+	 * The closure digest is the identity of the authenticated Clang 22 source snapshot.  The
+	 * manifest schema/digest are deliberately separate because they bind the canonical JSON wire
+	 * projection and must not be confused with the source-content identity.
+	 */
+	inline constexpr std::string_view source_closure_digest_domain =
+		"cxxlens.clang22.source-closure.v1";
+	inline constexpr std::string_view source_closure_manifest_schema =
+		"cxxlens.source-closure-manifest.v1";
+	inline constexpr std::string_view source_closure_manifest_digest_domain =
+		"cxxlens.source-closure-manifest.v1";
+
 	/** Closed semantic role of one compiler-visible source-closure member. */
 	enum class source_closure_role : std::uint8_t
 	{
@@ -87,6 +101,16 @@ namespace cxxlens::detail::clang22
 
 	/** Derive the canonical source.file identity for one admitted logical path. */
 	[[nodiscard]] sdk::result<std::string> source_closure_file_id(std::string_view logical_path);
+
+	/**
+	 * Derive the authenticated byte line-index identity for the closure's unique main blob.
+	 *
+	 * The offsets are byte offsets for the first line and for the byte after every LF.  A trailing
+	 * LF therefore contributes the EOF offset, while the bytes and their content digest remain the
+	 * authority for the result.
+	 */
+	[[nodiscard]] sdk::result<std::string>
+	source_closure_main_line_index_id(const source_closure_snapshot& snapshot);
 
 	/** Construct, sort, deduplicate, identify, and fully validate one source closure. */
 	[[nodiscard]] sdk::result<source_closure_snapshot>

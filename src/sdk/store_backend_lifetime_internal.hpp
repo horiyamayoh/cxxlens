@@ -1,11 +1,15 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include <cxxlens/sdk/store.hpp>
 
 #include "sqlite_backend_observation_internal.hpp"
+#include "store_candidate_projection_internal.hpp"
 
 namespace cxxlens::sdk
 {
@@ -27,6 +31,32 @@ namespace cxxlens::sdk
 	struct snapshot_store_backend_lifetime_access
 #endif
 	{
+		/** Return the value-owned actual projection produced by writer validation. */
+		[[nodiscard]] static result<detail::snapshot_candidate_projection>
+		candidate_projection(const snapshot_writer&);
+
+		/** Return the value-owned projection read back from an immutable published handle. */
+		[[nodiscard]] static result<detail::snapshot_candidate_projection>
+		published_projection(const snapshot_handle&);
+
+#if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
+		/** Test-only mutation entry points available only to fault-test translation units. */
+		[[nodiscard]] static result<void> mark_publication_corrupt(snapshot_store&,
+																   std::string_view);
+		[[nodiscard]] static result<void> rewrite_publication_payload(
+			snapshot_store&, std::string_view, std::string_view, std::string_view, std::size_t);
+		[[nodiscard]] static result<void>
+		rewrite_publication_identity_field(snapshot_store&, std::string_view, std::string_view);
+		[[nodiscard]] static result<std::string> rewrite_snapshot_version(
+			snapshot_store&, std::string_view, std::string_view, std::uint64_t, std::uint32_t);
+		[[nodiscard]] static result<std::string> rewrite_publication_counters(snapshot_store&,
+																			  std::string_view,
+																			  std::uint64_t,
+																			  std::uint64_t);
+		[[nodiscard]] static result<void>
+		poison_rejected_generation(snapshot_store&, std::string_view, std::uint64_t);
+#endif
+
 		[[nodiscard]] static result<snapshot_store>
 		open_sqlite(const std::string& database_path,
 					relation_engine engine,

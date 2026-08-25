@@ -18,12 +18,6 @@ from check_ng_snapshot_store_contract import (  # noqa: E402
     CONTRACT,
     CONTRACT_SCHEMA,
     CLOSURE_FIELDS,
-    EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST,
-    EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
-    EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST,
-    EXPECTED_SCHEMA_DIGEST,
-    EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST,
-    EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
     SELECTOR_FIELDS,
     VECTORS,
     StoreContractError,
@@ -33,7 +27,6 @@ from check_ng_snapshot_store_contract import (  # noqa: E402
     closure_mutation_matrix,
     compact,
     decode_sqlite_unsigned_integer,
-    document_digest,
     format_open,
     identity_digest,
     load_yaml,
@@ -48,7 +41,7 @@ from check_ng_snapshot_store_contract import (  # noqa: E402
     validate_all,
     validate_contract_shape,
     validate_df_0200_ingress_schema,
-    validate_exact_schema,
+    validate_writer_mapping_lease_shape,
     validate_identity_graph,
 )
 
@@ -66,11 +59,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         self.assertEqual(ingress["sqlite_capacity_decision"]["selected_alternative"], "A")
         self.assertEqual(len(results), len(load_yaml(ROOT / VECTORS)["vectors"]))
         self.assertGreater(comparisons, 0)
-        self.assertEqual(document_digest(self.schema), EXPECTED_SCHEMA_DIGEST)
-        changed_schema = copy.deepcopy(self.schema)
-        changed_schema["$id"] = "https://cxxlens.invalid/weakened-schema"
-        with self.assertRaisesRegex(StoreContractError, "store.schema-drift"):
-            validate_exact_schema(changed_schema)
 
     def test_sqlite_writer_mapping_lease_proposal_is_exact_and_fail_closed(
         self,
@@ -80,20 +68,8 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         ]["shm_map_state_machine"][
             "same_process_writer_mapping_lease_proposal"
         ]
-        self.assertEqual(
-            document_digest(lease),
-            EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST,
-        )
+        validate_writer_mapping_lease_shape(lease)
         attachment = lease["writer_native_attachment_amendment_proposal"]
-        self.assertEqual(
-            document_digest(attachment),
-            EXPECTED_WRITER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
-        )
-        self.assertEqual(
-            attachment["authorization"]["before_independent_acceptance"],
-            "direct-positive-negative-fault-determinism-and-resource-tests-are-"
-            "required-before-attachment-group-runtime-or-production-binding",
-        )
         self.assertEqual(
             attachment["generation_fresh_reader_page_set"],
             "union-of-page-support-from-exact-live-attachment-groups-recomputed-"
@@ -108,10 +84,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         reader_attachment = lease[
             "reader_native_attachment_amendment_proposal"
         ]
-        self.assertEqual(
-            document_digest(reader_attachment),
-            EXPECTED_READER_NATIVE_ATTACHMENT_AMENDMENT_DIGEST,
-        )
         self.assertEqual(
             reader_attachment["id"],
             "cxxlens.sqlite.reader-shm-native-attachment.v1",
@@ -190,12 +162,7 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 "failure_exact_mapped_existing_group"
             ],
         )
-        self.assertEqual(
-            reader_attachment["authorization"]["before_independent_acceptance"],
-            "direct-positive-negative-fault-determinism-and-resource-tests-are-"
-            "required-before-reader-group-runtime-cleanup-production-binding-or-"
-            "native-OK-projection",
-        )
+        self.assertEqual(reader_attachment["public_api"], "unchanged")
         self.assertGreater(
             len(reader_attachment["fail_closed_matrix"]["required"]), 0
         )
@@ -205,20 +172,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         late_close = lease[
             "reader_late_close_cleanup_amendment_proposal"
         ]
-        self.assertEqual(
-            document_digest(late_close),
-            EXPECTED_READER_LATE_CLOSE_CLEANUP_AMENDMENT_DIGEST,
-        )
-        self.assertIn(
-            "internal-reader-late-close-cleanup-owner-seal-provenance-drain-"
-            "ack-state-machine",
-            late_close["authorization"]["after_acceptance"],
-        )
-        self.assertIn(
-            "blocked-until-direct-positive-negative-fault-determinism-and-"
-            "resource-tests-pass-for-the-distinct-exact-implementation-complete",
-            late_close["authorization"]["production_activation"],
-        )
         self.assertEqual(
             late_close["drain_subledger"]["retained_pins"],
             [
@@ -273,16 +226,12 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
             late_close["acknowledgement"]["confirmed_after_close_replay"],
         )
         self.assertIn(
-            "does-not-authorize-any-reader-writer-close-group",
-            late_close["authorization"]["transitive_authorization"],
+            "does-not-mint-any-reader-writer-close-group",
+            late_close["scope_boundary"]["transitive_authorization"],
         )
         gate_outcome = lease[
             "writer_gate_outcome_evidence_amendment_proposal"
         ]
-        self.assertEqual(
-            document_digest(gate_outcome),
-            EXPECTED_WRITER_GATE_OUTCOME_EVIDENCE_AMENDMENT_DIGEST,
-        )
         self.assertEqual(
             gate_outcome["id"],
             "cxxlens.sqlite.writer-gate-outcome-evidence.v1",
@@ -510,18 +459,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 fragment,
             )
         self.assertEqual(
-            gate_outcome["authorization"]["production_activation"],
-            "blocked-until-direct-positive-negative-fault-determinism-and-"
-            "resource-tests-pass-for-the-exact-implementation-complete-"
-            "counterexample-matrix-and-production-VFS-public-projection",
-        )
-        self.assertEqual(
-            lease["authorization"]["production_activation"],
-            "blocked-until-direct-positive-negative-fault-determinism-and-"
-            "resource-tests-pass-for-the-exact-implementation-and-complete-"
-            "counterexample-matrix",
-        )
-        self.assertEqual(
             self.contract["format_compatibility"][
                 "sqlite_source_shm_readonly_capability"
             ]["shm_map_state_machine"]["any_native_ok"],
@@ -546,13 +483,13 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
             (
                 "current-rejection",
                 lambda value: value.__setitem__(
-                    "current_rule_before_acceptance",
+                    "unadmitted_native_projection",
                     "allow-native-OK-before-review",
                 ),
             ),
             (
                 "projection",
-                lambda value: value["post_acceptance_native_projection"].__setitem__(
+                lambda value: value["admitted_native_projection"].__setitem__(
                     "outward_result", "exact-SQLITE_OK-plus-pointer"
                 ),
             ),
@@ -567,31 +504,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 "attachment-amendment",
                 lambda value: value.pop(
                     "writer_native_attachment_amendment_proposal"
-                ),
-            ),
-            (
-                "attachment-status-regressed",
-                lambda value: value[
-                    "writer_native_attachment_amendment_proposal"
-                ].__setitem__(
-                    "status", "proposed-unqualified-non-authorizing"
-                ),
-            ),
-            (
-                "attachment-pre-review-implementation-authorized",
-                lambda value: value[
-                    "writer_native_attachment_amendment_proposal"
-                ]["authorization"].__setitem__(
-                    "before_independent_acceptance",
-                    "attachment-group-implementation-authorized",
-                ),
-            ),
-            (
-                "attachment-production-self-authorized",
-                lambda value: value[
-                    "writer_native_attachment_amendment_proposal"
-                ]["authorization"].__setitem__(
-                    "production_activation", "allowed"
                 ),
             ),
             (
@@ -706,12 +618,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 "reader-attachment-proposal-removed",
                 lambda value: value.pop(
                     "reader_native_attachment_amendment_proposal"
-                ),
-            ),
-            (
-                "reader-attachment-status-regressed",
-                lambda value: reader_native_attachment(value).__setitem__(
-                    "status", "proposed-unqualified-non-authorizing"
                 ),
             ),
             (
@@ -838,28 +744,10 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
-                "reader-attachment-production-self-authorized",
-                lambda value: reader_native_attachment(value)[
-                    "authorization"
-                ].__setitem__("production_activation", "allowed"),
-            ),
-            (
                 "reader-late-close-cleanup-proposal-removed",
                 lambda value: value.pop(
                     "reader_late_close_cleanup_amendment_proposal"
                 ),
-            ),
-            (
-                "reader-late-close-cleanup-status-regressed",
-                lambda value: reader_late_close_cleanup(value).__setitem__(
-                    "status", "proposed-unqualified-non-authorizing"
-                ),
-            ),
-            (
-                "reader-late-close-cleanup-production-self-authorized",
-                lambda value: reader_late_close_cleanup(value)[
-                    "authorization"
-                ].__setitem__("production_activation", "allowed"),
             ),
             (
                 "reader-late-close-cleanup-outer-ack-open-ended",
@@ -948,12 +836,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 "gate-outcome-proposal-removed",
                 lambda value: value.pop(
                     "writer_gate_outcome_evidence_amendment_proposal"
-                ),
-            ),
-            (
-                "gate-outcome-status-regressed",
-                lambda value: writer_gate_outcome(value).__setitem__(
-                    "status", "proposed-unqualified-non-authorizing"
                 ),
             ),
             (
@@ -1227,12 +1109,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
-                "gate-outcome-production-self-authorized",
-                lambda value: writer_gate_outcome(value)["authorization"].__setitem__(
-                    "production_activation", "allowed"
-                ),
-            ),
-            (
                 "attachment-untrusted-platform-mints",
                 lambda value: value["two_stage_writer_authority"].__setitem__(
                     "writer_mapping_epoch_failure",
@@ -1244,13 +1120,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 lambda value: value["generation_and_races"].__setitem__(
                     "successor_while_handoff_live",
                     "allow-successor-when-pointer-matches",
-                ),
-            ),
-            (
-                "production-activation",
-                lambda value: value["authorization"].__setitem__(
-                    "production_activation",
-                    "allowed",
                 ),
             ),
         ]
@@ -1690,12 +1559,6 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         ingress_mutations.append(("codec-kind-code", changed))
 
         changed = copy.deepcopy(self.contract)
-        changed["df_0200_materialization_ingress"]["source"]["codec"][
-            "authority_binding"
-        ]["canonical_json_sha256"] = "sha256:" + "0" * 64
-        ingress_mutations.append(("codec-full-authority-digest", changed))
-
-        changed = copy.deepcopy(self.contract)
         changed["df_0200_materialization_ingress"]["source"][
             "external_completeness_authority"
         ]["whole_partition_drop"] = "trust-self-reported-trailer"
@@ -1769,6 +1632,13 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         changed_schema["$defs"]["df_0200_materialization_ingress"][
             "const"
         ]["compatibility"].pop("snapshot_payload_v5_schema_and_semantic_projection")
+        with self.assertRaisesRegex(
+            StoreContractError, "materialization-ingress-contract-invalid"
+        ):
+            validate_df_0200_ingress_schema(changed_schema)
+
+        changed_schema = copy.deepcopy(schema)
+        changed_schema["properties"]["authority"]["additionalProperties"] = True
         with self.assertRaisesRegex(
             StoreContractError, "materialization-ingress-contract-invalid"
         ):

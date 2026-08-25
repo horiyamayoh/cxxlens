@@ -55,14 +55,7 @@ GENERIC_DEPENDENCIES = [
     SNAPSHOT_STORE,
     SQLITE_STORE,
 ]
-AUTHORITY_PATHS = [
-    CONTRACT,
-    CONTRACT_SCHEMA,
-    REQUEST_SCHEMA,
-    REPORT_SCHEMA,
-    REGISTRY,
-]
-OCCURRENCE_AUTHORITY_FILES = [
+OCCURRENCE_ARTIFACT_FILES = [
     (
         "relation-registry",
         "share/cxxlens/schemas/cxxlens_ng_relation_registry.yaml",
@@ -178,19 +171,6 @@ MAXIMUM_TASK_SANDBOX_REQUIREMENTS = 4_096
 MAXIMUM_JSON_MEMBERS_PER_OBJECT = 4_096
 MAXIMUM_REQUEST_SCHEMA_CAPTURE_BYTES = 43
 MAXIMUM_REQUEST_VERSION_CAPTURE_BYTES = 6
-MAXIMUM_SEMANTIC_REPLAY_WINDOW_BYTES = 64 * 1_024 * 1_024
-EXPECTED_REQUEST_SCHEMA_CANONICAL_DIGEST = (
-    "sha256:241fc96ae3a249e5a8851baa95e585460ad29378cb20d11cfcda33a69eaa9270"
-)
-EXPECTED_REPORT_SCHEMA_CANONICAL_DIGEST = (
-    "sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96"
-)
-DF_0200_REPORT_SHAPE_ACTIVATION = (
-    "request-2.2.0-report-private-spool-failure-"
-    "occurrence-inventory-sandbox-bounds-activated"
-)
-MAXIMUM_GLOBAL_SEMANTIC_JSON_BYTES = 10_420_985
-MAXIMUM_TASK_METADATA_SEMANTIC_JSON_BYTES = 8_463_179
 OCCURRENCE_MANIFEST_PATH = (
     "share/cxxlens/materialization/clang22/occurrence-v1.json"
 )
@@ -224,43 +204,6 @@ BASE_RESULT_FIELDS = {
     "source.file.v1": "snapshot",
     "build.compile_unit.v1": "compile_unit",
     "source.span.v1": "span",
-}
-EXPECTED_JSON_LEXICAL_POLICY = {
-    "encoding": "strict-utf8-no-bom",
-    "document": "exactly-one-top-level-object",
-    "duplicate_members": "reject-at-any-depth",
-    "trailing_or_second_value": "reject",
-    "non_finite_numbers": "reject",
-    "yaml_authority_loading": "separate",
-}
-EXPECTED_SEMANTIC_REPLAY_PROJECTION = {
-    "token_replay": (
-        "decoded-utf8-minimal-json-escape-canonical-integer-"
-        "no-insignificant-whitespace"
-    ),
-    "raw_spelling_bound": "excluded",
-    "schema_walk": "closed-required-local-ref-allof-intersection-oneof-maximum",
-    "global_substitution": "tasks-empty-array",
-    "task_metadata_substitution": "source-closure-metadata-empty-object",
-    "window_bytes": MAXIMUM_SEMANTIC_REPLAY_WINDOW_BYTES,
-    "global_selected_schema_maximum_bytes": MAXIMUM_GLOBAL_SEMANTIC_JSON_BYTES,
-    "global_margin_bytes": (
-        MAXIMUM_SEMANTIC_REPLAY_WINDOW_BYTES - MAXIMUM_GLOBAL_SEMANTIC_JSON_BYTES
-    ),
-    "task_metadata_selected_schema_maximum_bytes": (
-        MAXIMUM_TASK_METADATA_SEMANTIC_JSON_BYTES
-    ),
-    "task_metadata_margin_bytes": (
-        MAXIMUM_SEMANTIC_REPLAY_WINDOW_BYTES
-        - MAXIMUM_TASK_METADATA_SEMANTIC_JSON_BYTES
-    ),
-    "request_schema_canonical_digest": EXPECTED_REQUEST_SCHEMA_CANONICAL_DIGEST,
-}
-EXPECTED_SEMANTIC_REPLAY = {
-    **EXPECTED_SEMANTIC_REPLAY_PROJECTION,
-    "derivation_digest": (
-        "sha256:ff9baf9982f909d8a4f51c46f53637af6980a7d06728dfa65794ffc1eebf816d"
-    ),
 }
 EXPECTED_REPORT_CONSTRUCTION = {
     "lifecycle": "bounded-two-phase-report-lifecycle",
@@ -1256,27 +1199,17 @@ EXPECTED_INSTALLED_OCCURRENCE = {
             "configuration-closed-exact-ordered-role-prefix-relative-path-and-"
             "sha256-digest-records"
         ),
-        "configuration_inventories": {
-            "static": {
-                "count": 13,
-                "ordered_roles": [
-                    "materializer-executable",
-                    "worker-executable",
-                    *[role for role, _, _ in OCCURRENCE_AUTHORITY_FILES],
-                ],
-            },
-            "shared": {
-                "count": 19,
-                "ordered_roles": [
-                    "materializer-executable",
-                    "worker-executable",
-                    *[role for role, _, _ in OCCURRENCE_AUTHORITY_FILES],
-                    *[role for role, _ in SHARED_OCCURRENCE_RUNTIME_FILES],
-                ],
-                "package_owned_runtime_dso_paths": (
-                    "safe-prefix-relative-lib-or-lib64-soname"
-                ),
-            },
+        "configuration_inventory": {
+            "closure": (
+                "every-installed-materializer-worker-authority-and-package-owned-"
+                "runtime-artifact-exactly-once"
+            ),
+            "identity": "unique-role-prefix-relative-path-and-full-artifact-sha256",
+            "static": "package-owned-runtime-dso-entries-forbidden",
+            "shared": (
+                "package-owned-runtime-dso-paths-are-safe-prefix-relative-lib-or-"
+                "lib64-sonames"
+            ),
         },
         "external_system_libraries": (
             "excluded-toolchain-and-runtime-evidence-only"
@@ -3423,12 +3356,18 @@ def task_sandbox_requirements(tasks: Iterable[dict[str, Any]]) -> list[dict[str,
 
 def expected_trust_policy_digest(policy: dict[str, Any]) -> str:
     requirements = policy["task_sandbox_requirements"]
+    version = tuple(int(part) for part in policy["provider_version"].split("."))
+    if len(version) != 3:
+        raise MaterializationError(
+            "materialization.trust-policy-invalid",
+            "provider version is not a semantic version",
+        )
     projection = _canonical_tuple(
         (
             _canonical_string(policy["policy_id"]),
             _canonical_string(policy["execution_profile"]),
             _canonical_string(policy["provider_id"]),
-            _canonical_string(policy["provider_version"]),
+            _canonical_tuple(_canonical_integer(part) for part in version),
             _canonical_string(policy["semantic_contract_digest"]),
             _canonical_integer(policy["protocol_major"]),
             _canonical_integer(policy["protocol_minor"]),
@@ -4202,6 +4141,11 @@ def _maximum_string_witness(
     elif isinstance(pattern, str) and pattern.startswith("^project://"):
         prefix = "project://"
         witness = prefix + "p" * (maximum - len(prefix))
+    elif isinstance(pattern, str) and pattern.startswith("^/"):
+        # qualified_read_roots are absolute, canonical paths.  A single
+        # slash followed by ordinary ASCII is the saturated witness and
+        # cannot introduce a dot segment, duplicate slash, or backslash.
+        witness = "/" + "a" * (maximum - 1)
     else:
         fail(
             "materialization.task-binding-mismatch",
@@ -5361,22 +5305,14 @@ def validate_materialization_dependency_graph(
 
 
 @functools.lru_cache(maxsize=None)
-def authority_bindings(root: pathlib.Path) -> list[dict[str, str]]:
-    return [
-        {"path": path.as_posix(), "digest": content_digest((root / path).read_bytes())}
-        for path in AUTHORITY_PATHS
-    ]
-
-
-@functools.lru_cache(maxsize=None)
-def occurrence_authority_bindings(root: pathlib.Path) -> list[dict[str, str]]:
+def installed_occurrence_artifacts(root: pathlib.Path) -> list[dict[str, str]]:
     return [
         {
             "role": role,
             "path": installed_path,
             "digest": content_digest((root / source_path).read_bytes()),
         }
-        for role, installed_path, source_path in OCCURRENCE_AUTHORITY_FILES
+        for role, installed_path, source_path in OCCURRENCE_ARTIFACT_FILES
     ]
 
 
@@ -5403,7 +5339,7 @@ def fixture_occurrence_manifest(
             "path": "bin/cxxlens-clang-worker-22",
             "digest": worker_digest,
         },
-        *occurrence_authority_bindings(root),
+        *installed_occurrence_artifacts(root),
     ]
     if configuration == "shared":
         runtime_files = shared_runtime_files or [
@@ -5435,7 +5371,7 @@ def validate_occurrence_manifest(
     root: pathlib.Path,
     manifest: dict[str, Any],
 ) -> None:
-    """Validate occurrence schema, closed inventory and both digest boundaries."""
+    """Validate dynamic occurrence closure and both digest boundaries."""
 
     validate_schema(
         manifest,
@@ -5447,11 +5383,45 @@ def validate_occurrence_manifest(
             "materialization.identity-mismatch",
             "occurrence manifest inventories its own bytes",
         )
-    authority_end = 2 + len(OCCURRENCE_AUTHORITY_FILES)
-    if manifest["files"][2:authority_end] != occurrence_authority_bindings(root):
+    files_by_role: dict[str, dict[str, str]] = {}
+    paths: set[str] = set()
+    for row in manifest["files"]:
+        if row["role"] in files_by_role or row["path"] in paths:
+            fail(
+                "materialization.identity-mismatch",
+                "occurrence roles and paths must each be unique",
+            )
+        files_by_role[row["role"]] = row
+        paths.add(row["path"])
+
+    required_paths = {
+        "materializer-executable": "bin/cxxlens-clang22-materialize",
+        "worker-executable": "bin/cxxlens-clang-worker-22",
+    }
+    for role, path in required_paths.items():
+        if files_by_role.get(role, {}).get("path") != path:
+            fail(
+                "materialization.identity-mismatch",
+                f"required occurrence role differs: {role}",
+            )
+    for expected in installed_occurrence_artifacts(root):
+        if files_by_role.get(expected["role"]) != expected:
+            fail(
+                "materialization.identity-mismatch",
+                f"installed occurrence artifact differs: {expected['role']}",
+            )
+
+    runtime_roles = {role for role, _ in SHARED_OCCURRENCE_RUNTIME_FILES}
+    present_runtime_roles = runtime_roles.intersection(files_by_role)
+    if manifest["package_configuration"] == "static" and present_runtime_roles:
         fail(
             "materialization.identity-mismatch",
-            "occurrence authority role/path/digest inventory differs",
+            "static occurrence inventories package runtime DSOs",
+        )
+    if manifest["package_configuration"] == "shared" and present_runtime_roles != runtime_roles:
+        fail(
+            "materialization.identity-mismatch",
+            "shared occurrence omits a required package runtime DSO",
         )
     payload = {
         key: copy.deepcopy(value)
@@ -5954,7 +5924,10 @@ def sample_request(
             source = b"int main() { return 0; }\n"
         else:
             source = f"int unit_{index}() {{ return {index}; }}\n".encode("utf-8")
-        effective_argv = ["clang++", "-std=c++23", logical_path]
+        # The installed source-closure boundary does not admit ambient PATH
+        # lookup.  Keep the fixture invocation explicitly qualified so the
+        # native VFS can validate it against the declared /usr root.
+        effective_argv = ["/usr/bin/clang++", "-std=c++23", logical_path]
         source_specs.append(
             {
                 "catalog_compile_unit_id": f"catalog-unit:{index:04d}",
@@ -6087,6 +6060,16 @@ def sample_request(
             "partial_policy": "forbid",
             "transaction_count": 1,
             "reopen_before_success": True,
+            "recipe_id": "recipe:clang22",
+            "recipe_digest": semantic_digest(
+                "cxxlens.clang22-fixture-recipe.v1", "recipe:clang22"
+            ),
+            "output_plan_digest": semantic_digest(
+                "cxxlens.clang22-fixture-output-plan.v1", "clang22-atomic"
+            ),
+            "publication_target": (
+                "publication:sqlite" if backend == "sqlite" else "publication:memory"
+            ),
         },
     }
     pending_provider_task_id = "task:" + semantic_digest(
@@ -6162,6 +6145,7 @@ def sample_request(
                     "read_only": source_row["read_only"],
                 },
                 "effective_argv": spec["effective_argv"],
+                "qualified_read_roots": ["/usr"],
                 "requested_descriptor_ids": DESCRIPTOR_IDS,
                 "dependency_groups": ["canonical", "observation"],
                 "budget": {
@@ -8408,40 +8392,23 @@ def materializer_transform_digest(
     )
 
 
-def expected_materializer_semantics_digest(
-    root: pathlib.Path,
-    request: dict[str, Any],
-) -> str:
-    tool = request["tool"]
-    projection = _canonical_tuple(
-        (
-            _canonical_string(tool["executable"]),
-            _canonical_string(tool["interface_version"]),
-            _canonical_string(tool["distribution_version"]),
-            _canonical_string(tool["source_revision"]),
-            _canonical_string(tool["source_tree"]),
-            _canonical_tuple(
-                _canonical_tuple(
-                    (
-                        _canonical_string(binding["path"]),
-                        _canonical_string(binding["digest"]),
-                    )
-                )
-                for binding in sorted(
-                    authority_bindings(root),
-                    key=lambda row: row["path"].encode("utf-8"),
-                )
-            ),
-        )
-    )
-    return semantic_digest("cxxlens.clang22-materializer-semantics.v1", projection)
-
-
 def expected_direct_basis(
-    root: pathlib.Path,
     request: dict[str, Any],
 ) -> dict[str, str]:
-    materializer_semantics = expected_materializer_semantics_digest(root, request)
+    tool = request["tool"]
+    materializer_semantics = semantic_digest(
+        "cxxlens.clang22-materializer-semantics.v1",
+        _canonical_tuple(
+            _canonical_string(tool[field])
+            for field in (
+                "executable",
+                "interface_version",
+                "distribution_version",
+                "source_revision",
+                "source_tree",
+            )
+        ),
+    )
     semantic_tasks = sorted(
         (
             {
@@ -8891,7 +8858,7 @@ def _compute_store_binding(
     dict[str, Any],
     dict[tuple[tuple[str, str, str], str, str], list[dict[str, Any]]],
 ]:
-    direct_basis = expected_direct_basis(root, request)
+    direct_basis = expected_direct_basis(request)
     materializer_semantics = direct_basis["materializer_semantics_digest"]
     worker_semantics = request["worker"]["semantic_contract_digest"]
     materializer = {
@@ -10860,7 +10827,6 @@ def sample_report(
             "failure": None,
         },
         "incremental_execution": incremental_execution,
-        "authority_digests": copy.deepcopy(authority_bindings(root)),
         "error": None,
     }
     rebind_report_digest_chain(root, request, report)
@@ -12383,8 +12349,6 @@ def validate_report(
         "tree": request["tool"]["source_tree"],
     }:
         fail("materialization.identity-mismatch", "report source revision/tree differs")
-    if report["authority_digests"] != authority_bindings(root):
-        fail("materialization.report-invalid", "materialization authority digests differ")
     if report["installation"]["requested"] != {
         "occurrence_manifest_digest": request["tool"]["occurrence_manifest_digest"]
     }:
@@ -13579,6 +13543,85 @@ def _semantic_matrix_projection(request: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def validate_request_schema_shape(request_schema: dict[str, Any]) -> None:
+    """Check request v2.2's semantic shape and required fields."""
+
+    required = request_schema.get("required")
+    properties = request_schema.get("properties")
+    if not isinstance(required, list) or not isinstance(properties, dict):
+        fail("materialization.request-invalid", "request schema root shape")
+    required_fields = {
+        "schema",
+        "request_version",
+        "required_features",
+        "worker",
+        "tasks",
+    }
+    if not required_fields.issubset(set(required)):
+        fail("materialization.request-invalid", "request schema required fields")
+    for field in required_fields:
+        if not isinstance(properties.get(field), dict):
+            fail("materialization.request-invalid", f"request schema property: {field}")
+    worker = properties["worker"].get("properties")
+    if not isinstance(worker, dict) or not {
+        "protocol_major",
+        "protocol_minor",
+    }.issubset(worker):
+        fail("materialization.request-invalid", "worker protocol fields")
+    features = properties["required_features"].get("const")
+    if not isinstance(features, list) or "task-input-chunks-v2" not in features:
+        fail("materialization.request-invalid", "request feature set")
+    tasks = properties["tasks"]
+    if not isinstance(tasks.get("maxItems"), int) or tasks["maxItems"] <= 0:
+        fail("materialization.request-invalid", "task count bound")
+    if request_schema.get("additionalProperties") is not False:
+        fail("materialization.request-invalid", "request schema is not closed")
+    for field in required_fields:
+        if properties[field].get("additionalProperties") is True:
+            fail(
+                "materialization.request-invalid",
+                f"request schema property is open: {field}",
+            )
+    task_items = tasks.get("items")
+    if not isinstance(task_items, dict) or not str(task_items.get("$ref", "")).endswith(
+        "base_task_without_source_bytes"
+    ):
+        fail("materialization.request-invalid", "task v4 item schema")
+    defs = request_schema.get("$defs")
+    base_task = defs.get("base_task_without_source_bytes") if isinstance(defs, dict) else None
+    if not isinstance(base_task, dict) or base_task.get("additionalProperties") is not False:
+        fail("materialization.request-invalid", "task v4 schema is not closed")
+    source = base_task.get("properties", {}).get("source")
+    source_fields = {
+        "source_snapshot_id",
+        "file_id",
+        "logical_path",
+        "content_digest",
+        "size_bytes",
+        "encoding",
+        "line_index_id",
+        "read_only",
+    }
+    if not isinstance(source, dict) or source.get("additionalProperties") is not False:
+        fail("materialization.request-invalid", "source metadata schema is not closed")
+    if set(source.get("required", [])) != source_fields or set(
+        source.get("properties", {})
+    ) != source_fields:
+        fail("materialization.request-invalid", "source metadata field census")
+
+    def reject_source_bytes(node: Any) -> None:
+        if isinstance(node, dict):
+            for key in node:
+                if key in {"content_base64", "source_bytes", "content_bytes"}:
+                    fail("materialization.request-invalid", "raw source bytes in request schema")
+                reject_source_bytes(node[key])
+        elif isinstance(node, list):
+            for item in node:
+                reject_source_bytes(item)
+
+    reject_source_bytes(request_schema)
+
+
 def validate_v2_2_documents(root: pathlib.Path) -> dict[str, Any]:
     """Validate the current product schemas and Protocol 2.0 bindings.
 
@@ -13602,6 +13645,7 @@ def validate_v2_2_documents(root: pathlib.Path) -> dict[str, Any]:
         except jsonschema.SchemaError as error:
             fail("materialization.request-invalid", f"{label} schema: {error.message}")
     validate_schema(contract, contract_schema, "materialization contract")
+    validate_request_schema_shape(request_schema)
     request_version = request_schema.get("properties", {}).get("request_version", {}).get(
         "const"
     )

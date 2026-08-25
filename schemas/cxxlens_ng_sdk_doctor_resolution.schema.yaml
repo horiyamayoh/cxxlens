@@ -2,10 +2,12 @@ $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://cxxlens.dev/schemas/cxxlens_ng_sdk_doctor_resolution.schema.yaml
 title: cxxlens SDK doctor product capability resolution
 type: object
+maxProperties: 128
 additionalProperties: false
 required:
   - schema
   - document_version
+  - catalog_binding
   - use_case_id
   - consumer
   - question
@@ -15,13 +17,15 @@ required:
   - completion_plan
   - preserved_semantics
 properties:
-  schema: {const: cxxlens.sdk-doctor-resolution.v1}
-  document_version: {const: 1.0.0}
-  use_case_id: {$ref: '#/$defs/nonempty_string'}
-  consumer: {$ref: '#/$defs/nonempty_string'}
+  schema: {const: cxxlens.sdk-doctor-resolution.v2}
+  document_version: {const: 2.0.0}
+  catalog_binding: {$ref: '#/$defs/catalog_binding'}
+  use_case_id: {$ref: '#/$defs/id'}
+  consumer: {$ref: '#/$defs/id'}
   question: {$ref: '#/$defs/nonempty_string'}
   result:
     type: object
+    maxProperties: 128
     additionalProperties: false
     required: [state, reason_code, explanation, guarantee]
     properties:
@@ -32,46 +36,75 @@ properties:
   capability_path:
     type: array
     minItems: 1
+    maxItems: 128
     items:
       type: object
+      maxProperties: 128
       additionalProperties: false
       required: [id, kind, requires, state, reason_code]
       properties:
-        id: {$ref: '#/$defs/nonempty_string'}
-        kind:
-          enum: [input, provider, relation, query, store, recipe]
+        id: {$ref: '#/$defs/id'}
+        kind: {enum: [input, provider, relation, query, store, recipe]}
         requires:
           type: array
+          maxItems: 128
           uniqueItems: true
-          items: {$ref: '#/$defs/nonempty_string'}
+          items: {$ref: '#/$defs/id'}
         state: {$ref: '#/$defs/state'}
         reason_code: {$ref: '#/$defs/reason_code'}
+      allOf:
+        - if:
+            properties: {state: {const: proved}}
+            required: [state]
+          then:
+            properties: {reason_code: {const: doctor.none}}
+          else:
+            properties: {reason_code: {not: {const: doctor.none}}}
+        - if:
+            properties: {state: {const: conflicting}}
+            required: [state]
+          then:
+            properties: {reason_code: {const: doctor.conflicting-capability}}
   missing:
     type: array
+    maxItems: 128
     items:
       type: object
+      maxProperties: 128
       additionalProperties: false
       required: [capability_id, reason_code, explanation]
       properties:
-        capability_id: {$ref: '#/$defs/nonempty_string'}
+        capability_id: {$ref: '#/$defs/id'}
         reason_code: {$ref: '#/$defs/reason_code'}
         explanation: {$ref: '#/$defs/nonempty_string'}
+      allOf:
+        - properties:
+            reason_code: {not: {const: doctor.none}}
   completion_plan:
     type: array
+    maxItems: 128
+    uniqueItems: true
     items:
       type: object
+      maxProperties: 128
       additionalProperties: false
-      required: [id, requires, action, unlocks]
+      required: [id, requires, action, reason_code, unlocks]
       properties:
-        id: {$ref: '#/$defs/nonempty_string'}
+        id: {$ref: '#/$defs/id'}
         requires:
           type: array
+          maxItems: 128
           uniqueItems: true
-          items: {$ref: '#/$defs/nonempty_string'}
+          items: {$ref: '#/$defs/id'}
         action: {$ref: '#/$defs/nonempty_string'}
-        unlocks: {$ref: '#/$defs/nonempty_string'}
+        reason_code: {$ref: '#/$defs/reason_code'}
+        unlocks: {$ref: '#/$defs/id'}
+      allOf:
+        - properties:
+            reason_code: {not: {const: doctor.none}}
   preserved_semantics:
     type: object
+    maxProperties: 128
     additionalProperties: false
     required:
       - closure
@@ -84,25 +117,166 @@ properties:
       - provenance
       - unresolved
     properties:
-      closure: {$ref: '#/$defs/string_list'}
-      conflict: {$ref: '#/$defs/string_list'}
-      coverage: {$ref: '#/$defs/string_list'}
+      closure:
+        type: array
+        minItems: 1
+        maxItems: 128
+        uniqueItems: true
+        items:
+          enum: [dependency-graph-closed, dependency-graph-open]
+      conflict:
+        type: array
+        maxItems: 128
+        uniqueItems: true
+        items: {$ref: '#/$defs/conflict'}
+      coverage:
+        type: array
+        minItems: 1
+        maxItems: 128
+        uniqueItems: true
+        items: {$ref: '#/$defs/id'}
       differential_disagreement: {$ref: '#/$defs/string_list'}
-      guarantee: {$ref: '#/$defs/string_list'}
+      guarantee:
+        type: array
+        minItems: 1
+        maxItems: 128
+        uniqueItems: true
+        items: {$ref: '#/$defs/nonempty_string'}
       logical_explain: {$ref: '#/$defs/string_list'}
       physical_explain: {$ref: '#/$defs/string_list'}
-      provenance: {$ref: '#/$defs/string_list'}
+      provenance:
+        type: array
+        minItems: 1
+        maxItems: 128
+        uniqueItems: true
+        items: {$ref: '#/$defs/nonempty_string'}
       unresolved: {$ref: '#/$defs/string_list'}
+allOf:
+  - if:
+      properties:
+        result:
+          properties: {state: {const: proved}}
+          required: [state]
+      required: [result]
+    then:
+      properties:
+        result:
+          properties: {reason_code: {const: doctor.none}}
+        missing: {maxItems: 0}
+        completion_plan: {maxItems: 0}
+        preserved_semantics:
+          properties:
+            closure: {const: [dependency-graph-closed]}
+            unresolved: {maxItems: 0}
+  - if:
+      properties:
+        result:
+          properties:
+            state:
+              enum: [disproved, unknown, partial, conflicting]
+          required: [state]
+      required: [result]
+    then:
+      properties:
+        result:
+          properties: {reason_code: {not: {const: doctor.none}}}
+        missing: {minItems: 1}
+        preserved_semantics:
+          properties: {closure: {const: [dependency-graph-open]}}
+  - if:
+      properties:
+        result:
+          properties: {state: {const: unknown}}
+          required: [state]
+      required: [result]
+    then:
+      properties:
+        preserved_semantics:
+          properties: {unresolved: {minItems: 1}}
+  - if:
+      properties:
+        result:
+          properties: {state: {const: conflicting}}
+          required: [state]
+      required: [result]
+    then:
+      properties:
+        result:
+          properties:
+            reason_code: {const: doctor.conflicting-capability}
+        completion_plan: {maxItems: 0}
+        preserved_semantics:
+          properties:
+            conflict: {minItems: 1}
+    else:
+      properties:
+        preserved_semantics:
+          properties:
+            conflict: {maxItems: 0}
 $defs:
+  catalog_binding:
+    type: object
+    maxProperties: 128
+    additionalProperties: false
+    required: [id, document_version]
+    properties:
+      id: {const: cxxlens.sdk-doctor-catalog.v1}
+      document_version: {const: 1.0.0}
+  id:
+    type: string
+    maxLength: 512
+    pattern: '^[a-z][a-z0-9_.-]+$'
+  candidate_identity:
+    type: string
+    maxLength: 512
+    pattern: '^semantic-v2:sha256:[0-9a-f]{64}$'
   nonempty_string:
     type: string
     minLength: 1
+    maxLength: 512
   string_list:
     type: array
+    maxItems: 128
     uniqueItems: true
     items: {$ref: '#/$defs/nonempty_string'}
   state:
     enum: [proved, disproved, unknown, partial, conflicting]
   reason_code:
     type: string
-    pattern: '^doctor\.[a-z0-9-]+$'
+    maxLength: 512
+    enum:
+      - doctor.none
+      - doctor.missing-input
+      - doctor.missing-provider
+      - doctor.missing-capability
+      - doctor.unsupported-tuple
+      - doctor.disproved-dependency
+      - doctor.unknown-dependency
+      - doctor.provider-untrusted
+      - doctor.provider-revoked
+      - doctor.trust-unknown
+      - doctor.revocation-unknown
+      - doctor.conflicting-capability
+      - doctor.catalog-binding-invalid
+      - doctor.catalog-unavailable
+      - doctor.catalog-unverified
+      - doctor.catalog-rejected
+      - doctor.catalog-revoked
+      - doctor.provider-certification-unavailable
+      - doctor.provider-certification-unverified
+      - doctor.source-closure-unavailable
+      - doctor.store-authority-unavailable
+  conflict:
+    type: object
+    maxProperties: 128
+    additionalProperties: false
+    required: [capability_id, candidate_ids, reason_code]
+    properties:
+      capability_id: {$ref: '#/$defs/id'}
+      candidate_ids:
+        type: array
+        minItems: 2
+        maxItems: 128
+        uniqueItems: true
+        items: {$ref: '#/$defs/candidate_identity'}
+      reason_code: {const: doctor.conflicting-capability}

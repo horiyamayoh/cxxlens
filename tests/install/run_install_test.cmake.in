@@ -64,10 +64,13 @@ function(run_installed_tools label)
   file(
     WRITE "${doctor_project}"
     [=[
-{"schema":"cxxlens.sdk-doctor-project.v1","document_version":"1.0.0","project":{"project_id":"installed.example","catalog_id":"catalog.example","catalog_digest":"catalog-digest","logical_root":"project://installed","environment_digest":"environment-digest","source_input":{"source_snapshot_id":"snapshot.example","compilation_database_id":"compdb.example"},"provider":{"provider_id":"provider.example","provider_version":"2.0.0","protocol_major":2,"protocol_minor":0,"offered_relations":["cc.call_site.v1","cc.entity.v1"],"features":["task-source-closure-v2"],"interpretation_domains":["cc.canonical-1"],"sandbox_minimum":"enforced"},"store":{"backend":"memory","format":"cxxlens.snapshot.v3"}}}
+{"schema":"cxxlens.sdk-doctor-project.v2","document_version":"2.0.0","project":{"project_id":"installed.example","catalog_id":"catalog:semantic-v2:sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","catalog_digest":"semantic-v2:sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","logical_root":"project://installed","environment_digest":"sha256:9999999999999999999999999999999999999999999999999999999999999999","environment":{"release_version":"1.0.0","surface":"provider-sdk","os":"linux","architecture":"x86_64","compiler_provider_major":"clang22","linkage":"static"},"source_input":{"source_snapshot_id":"snapshot.example","compilation_database_id":"compdb.example"},"provider_candidates":[{"candidate_id":"semantic-v2:sha256:1111111111111111111111111111111111111111111111111111111111111111","provider_id":"provider.example","provider_version":"2.0.0","package_identity":"package.example","provider_manifest_digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","provider_binary_digest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","provider_semantic_contract_digest":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","protocol":{"major":2,"minor":0},"features":["task-input-chunks-v2","task-source-closure-v2"],"relations":["cc.call_site.v1","cc.entity.v1"],"interpretations":["cc.clang22-canonical-1"],"sandbox":{"minimum":"enforced","policy_digest":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},"trust":{"state":"verified","registry_sequence":7,"certificate_id":"certificate.example","trust_anchor_id":"trust-anchor.example","signature_digest":"sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","revocation":{"state":"not-revoked","effective_sequence":null,"reason":null}}}],"store":{"backend":"memory","format":"cxxlens.snapshot.v3"}}}
 ]=])
+  # The installed package intentionally ships no project/provider authority.  A
+  # schema-valid product context therefore yields an explicit non-proved
+  # diagnosis (exit 1), never a guessed success.
   run_clean(
-    0
+    1
     "${install_prefix}/bin/cxxlens-sdk-doctor${install_executable_suffix}"
     missing
     --project

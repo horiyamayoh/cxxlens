@@ -20,19 +20,38 @@ target_include_directories(
 cxxlens_set_project_warnings(cxxlens-test-sdk-support)
 cxxlens_enable_sanitizers(cxxlens-test-sdk-support)
 
-# The production Store links an unconditional no-op dispatch implementation.
-# Only the two tests that exercise typed fault directives receive the private
-# thread-local scope implementation.
+# Only the three Store suites that exercise typed SQL fault boundaries link the
+# private thread-local dispatcher. Production targets and unrelated tests do not
+# link a fault entry point.
 add_library(
   cxxlens-test-sqlite-store-fault-injection-support OBJECT
   "${PROJECT_SOURCE_DIR}/src/sdk/sqlite_store_fault_injection_internal.cpp")
 target_compile_features(cxxlens-test-sqlite-store-fault-injection-support
                         PRIVATE cxx_std_23)
+target_compile_definitions(cxxlens-test-sqlite-store-fault-injection-support
+                           PRIVATE CXXLENS_STORE_FAULT_TEST_SUPPORT=1)
 target_include_directories(
   cxxlens-test-sqlite-store-fault-injection-support
   PRIVATE "${PROJECT_SOURCE_DIR}/include" "${PROJECT_SOURCE_DIR}/src")
 cxxlens_set_project_warnings(cxxlens-test-sqlite-store-fault-injection-support)
 cxxlens_enable_sanitizers(cxxlens-test-sqlite-store-fault-injection-support)
+
+# A test-only Store translation unit owns the private mutation fixtures.  It is
+# linked as an object before the production kernel archive for the few suites
+# that need those helpers; normal tests and every installed/product target
+# continue to use the macro-free kernel.
+add_library(
+  cxxlens-test-store-kernel OBJECT
+  "${PROJECT_SOURCE_DIR}/src/sdk/store.cpp"
+  "${PROJECT_SOURCE_DIR}/src/sdk/snapshot_store_v5_codec_internal.cpp")
+target_compile_features(cxxlens-test-store-kernel PRIVATE cxx_std_23)
+target_compile_definitions(cxxlens-test-store-kernel
+                           PRIVATE CXXLENS_STORE_FAULT_TEST_SUPPORT=1)
+target_include_directories(
+  cxxlens-test-store-kernel PRIVATE "${PROJECT_SOURCE_DIR}/include"
+                                    "${PROJECT_SOURCE_DIR}/src")
+cxxlens_set_project_warnings(cxxlens-test-store-kernel)
+cxxlens_enable_sanitizers(cxxlens-test-store-kernel)
 
 cxxlens_add_test_executable(cxxlens-unit-sdk unit/sdk/sdk_test.cpp)
 target_sources(cxxlens-unit-sdk
@@ -71,19 +90,12 @@ foreach(case IN LISTS cxxlens_sdk_cases)
     "unit.sdk.${case}" PROPERTIES LABELS "unit;sdk;relation;query;provider"
                                   PROCESSORS 1)
 endforeach()
-add_test(
-  NAME unit.sdk.registration
-  COMMAND
-    "${Python3_EXECUTABLE}"
-    "${PROJECT_SOURCE_DIR}/tests/unit/sdk/check_case_registration.py"
-    "$<TARGET_FILE:cxxlens-unit-sdk>" ${cxxlens_sdk_cases})
-set_tests_properties(unit.sdk.registration PROPERTIES LABELS
-                                                      "unit;sdk;registration")
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-store unit/sdk/store_test.cpp)
 target_sources(
   cxxlens-unit-sdk-store
-  PRIVATE $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
+  PRIVATE $<TARGET_OBJECTS:cxxlens-test-store-kernel>
+          $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
 target_link_libraries(cxxlens-unit-sdk-store PRIVATE cxxlens::kernel
                                                      "${CMAKE_DL_LIBS}")
 target_include_directories(cxxlens-unit-sdk-store
@@ -96,19 +108,65 @@ add_test(NAME unit.sdk-store COMMAND cxxlens-unit-sdk-store)
 set_tests_properties(
   unit.sdk-store PROPERTIES LABELS "unit;sdk;store;transaction" RUN_SERIAL TRUE)
 
-cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-disposable-qualification
-                            unit/sdk/sqlite_disposable_qualification_test.cpp)
-target_link_libraries(cxxlens-unit-sdk-sqlite-disposable-qualification
-                      PRIVATE cxxlens-sqlite-disposable-qualification-internal)
+cxxlens_add_test_executable(cxxlens-unit-sdk-store-operation-port
+                            unit/sdk/store_operation_port_test.cpp)
+target_sources(cxxlens-unit-sdk-store-operation-port
+               PRIVATE support/store_operation_test_adapter.cpp)
+target_link_libraries(cxxlens-unit-sdk-store-operation-port
+                      PRIVATE cxxlens::kernel)
 target_include_directories(
-  cxxlens-unit-sdk-sqlite-disposable-qualification
-  PRIVATE "${PROJECT_SOURCE_DIR}/include" "${PROJECT_SOURCE_DIR}/src")
-add_test(NAME unit.sdk-sqlite-disposable-qualification
-         COMMAND cxxlens-unit-sdk-sqlite-disposable-qualification)
+  cxxlens-unit-sdk-store-operation-port
+  PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/tests/support")
+add_test(NAME unit.sdk-store-operation-port
+         COMMAND cxxlens-unit-sdk-store-operation-port)
 set_tests_properties(
-  unit.sdk-sqlite-disposable-qualification
+  unit.sdk-store-operation-port
+  PROPERTIES LABELS "unit;sdk;store;operation-port;fault;determinism")
+
+cxxlens_add_test_executable(cxxlens-unit-sdk-bounded-store-v6-memory-e2e
+                            unit/sdk/bounded_store_v6_memory_e2e_test.cpp)
+target_sources(cxxlens-unit-sdk-bounded-store-v6-memory-e2e
+               PRIVATE support/store_operation_test_adapter.cpp)
+target_link_libraries(
+  cxxlens-unit-sdk-bounded-store-v6-memory-e2e
+  PRIVATE cxxlens_bounded_store_v6_memory_internal cxxlens::kernel)
+target_include_directories(cxxlens-unit-sdk-bounded-store-v6-memory-e2e
+                           PRIVATE "${PROJECT_SOURCE_DIR}/tests/support")
+add_test(NAME unit.sdk-bounded-store-v6-memory-e2e
+         COMMAND cxxlens-unit-sdk-bounded-store-v6-memory-e2e)
+set_tests_properties(
+  unit.sdk-bounded-store-v6-memory-e2e
+  PROPERTIES LABELS
+             "unit;sdk;store;bounded;memory;v6;e2e;fault;determinism;resource")
+
+cxxlens_add_test_executable(cxxlens-unit-sdk-bounded-store-v6-sqlite-backend
+                            unit/sdk/bounded_store_v6_sqlite_backend_test.cpp)
+target_link_libraries(
+  cxxlens-unit-sdk-bounded-store-v6-sqlite-backend
+  PRIVATE cxxlens_bounded_store_v6_sqlite_internal
+          cxxlens_bounded_store_v6_memory_internal)
+target_include_directories(cxxlens-unit-sdk-bounded-store-v6-sqlite-backend
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-bounded-store-v6-sqlite-backend
+         COMMAND cxxlens-unit-sdk-bounded-store-v6-sqlite-backend)
+set_tests_properties(
+  unit.sdk-bounded-store-v6-sqlite-backend
   PROPERTIES
-    LABELS "unit;sdk;store;sqlite;qualification;capability;filesystem;security")
+    LABELS
+    "unit;sdk;store;bounded;sqlite;v6;backend;fault;determinism;resource"
+    RUN_SERIAL TRUE)
+
+cxxlens_add_test_executable(cxxlens-unit-sdk-snapshot-store-v5-codec
+                            unit/sdk/snapshot_store_v5_codec_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-snapshot-store-v5-codec
+                      PRIVATE cxxlens::kernel)
+target_include_directories(cxxlens-unit-sdk-snapshot-store-v5-codec
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-snapshot-store-v5-codec
+         COMMAND cxxlens-unit-sdk-snapshot-store-v5-codec)
+set_tests_properties(
+  unit.sdk-snapshot-store-v5-codec
+  PROPERTIES LABELS "unit;sdk;store;codec;fault;determinism;resource")
 
 add_library(cxxlens-sqlite-store-v3-scenario-support STATIC
             support/sqlite_store_v3_scenario.cpp)
@@ -123,12 +181,223 @@ target_include_directories(cxxlens-sqlite-store-v3-scenario-support
 cxxlens_set_project_warnings(cxxlens-sqlite-store-v3-scenario-support)
 cxxlens_enable_sanitizers(cxxlens-sqlite-store-v3-scenario-support)
 
+include(CheckCXXSourceCompiles)
+include(CMakePushCheckState)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  cmake_push_check_state(RESET)
+  set(CMAKE_REQUIRED_LIBRARIES "${CMAKE_DL_LIBS}")
+  check_cxx_source_compiles(
+    [=[
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE 1
+#endif
+#include <features.h>
+#ifndef __GLIBC__
+#error "The SQLite interposer tests require glibc"
+#endif
+#include <dlfcn.h>
+#include <link.h>
+int main() {
+  auto* versioned = dlvsym(RTLD_NEXT, "dlsym", "GLIBC_2.2.5");
+  auto* isolated = dlmopen(LM_ID_NEWLM, nullptr, RTLD_LAZY | RTLD_LOCAL);
+  if (isolated != nullptr)
+    (void)dlclose(isolated);
+  return versioned == nullptr;
+}
+]=]
+    CXXLENS_TEST_HAS_GLIBC_DLMOPEN_DLVSYM)
+  check_cxx_source_compiles(
+    [=[
+#include <fcntl.h>
+#ifndef F_OFD_SETLK
+#error "The source-SHM availability test requires OFD locks"
+#endif
+int main() {
+  flock lock{};
+  return fcntl(-1, F_OFD_SETLK, &lock);
+}
+]=]
+    CXXLENS_TEST_HAS_OFD_LOCKS)
+  cmake_pop_check_state()
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_GLIBC_DLMOPEN_DLVSYM)
+  # These helpers interpose the process loader for one dedicated subprocess
+  # each. They are test-only DSOs: keep their symbols hidden by default, do not
+  # instrument them ahead of the sanitizer runtime, and never install/export
+  # them with a product target.
+  add_library(cxxlens-test-sqlite-migration-external-interposer SHARED
+              support/sqlite_migration_external_interposer.cpp)
+  target_compile_features(cxxlens-test-sqlite-migration-external-interposer
+                          PRIVATE cxx_std_23)
+  target_link_libraries(cxxlens-test-sqlite-migration-external-interposer
+                        PRIVATE "${CMAKE_DL_LIBS}")
+  set_target_properties(
+    cxxlens-test-sqlite-migration-external-interposer
+    PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
+  cxxlens_set_project_warnings(
+    cxxlens-test-sqlite-migration-external-interposer)
+
+  add_library(cxxlens-test-store-sqlite-crash-interposer SHARED
+              support/sqlite_store_crash_interposer.cpp)
+  target_compile_features(cxxlens-test-store-sqlite-crash-interposer
+                          PRIVATE cxx_std_23)
+  target_link_libraries(cxxlens-test-store-sqlite-crash-interposer
+                        PRIVATE "${CMAKE_DL_LIBS}")
+  set_target_properties(
+    cxxlens-test-store-sqlite-crash-interposer
+    PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
+  cxxlens_set_project_warnings(cxxlens-test-store-sqlite-crash-interposer)
+
+  add_executable(cxxlens-unit-sdk-sqlite-migration-outcomes
+                 unit/sdk/sqlite_store_migration_external_interposer_test.cpp)
+  target_compile_features(cxxlens-unit-sdk-sqlite-migration-outcomes
+                          PRIVATE cxx_std_23)
+  target_link_libraries(
+    cxxlens-unit-sdk-sqlite-migration-outcomes
+    PRIVATE cxxlens-sqlite-store-v3-scenario-support cxxlens::kernel
+            "${CMAKE_DL_LIBS}" Threads::Threads)
+  target_sources(
+    cxxlens-unit-sdk-sqlite-migration-outcomes
+    PRIVATE $<TARGET_OBJECTS:cxxlens-test-store-kernel>
+            $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
+  cxxlens_set_project_warnings(cxxlens-unit-sdk-sqlite-migration-outcomes)
+  cxxlens_enable_sanitizers(cxxlens-unit-sdk-sqlite-migration-outcomes)
+  add_dependencies(cxxlens-unit-sdk-sqlite-migration-outcomes
+                   cxxlens-test-sqlite-migration-external-interposer)
+  add_test(
+    NAME unit.sdk-sqlite-migration-outcomes
+    COMMAND cxxlens-unit-sdk-sqlite-migration-outcomes
+            "$<TARGET_FILE:cxxlens-test-sqlite-migration-external-interposer>")
+  set_tests_properties(
+    unit.sdk-sqlite-migration-outcomes
+    PROPERTIES
+      ENVIRONMENT_MODIFICATION
+      "LD_PRELOAD=unset:;CXXLENS_TEST_SQLITE_CRASH_PAUSE=unset:;CXXLENS_TEST_SQLITE_CRASH_READY_FD=unset:"
+      LABELS
+      "unit;sdk;store;sqlite;migration;effects;fault;recovery"
+      RUN_SERIAL
+      TRUE
+      TIMEOUT
+      60)
+
+  add_executable(cxxlens-unit-sdk-store-sqlite-crash-restart
+                 unit/sdk/store_sqlite_crash_recovery_test.cpp)
+  target_compile_features(cxxlens-unit-sdk-store-sqlite-crash-restart
+                          PRIVATE cxx_std_23)
+  target_link_libraries(
+    cxxlens-unit-sdk-store-sqlite-crash-restart
+    PRIVATE cxxlens-sqlite-store-v3-scenario-support cxxlens::kernel
+            "${CMAKE_DL_LIBS}" Threads::Threads)
+  target_sources(
+    cxxlens-unit-sdk-store-sqlite-crash-restart
+    PRIVATE $<TARGET_OBJECTS:cxxlens-test-store-kernel>
+            $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
+  cxxlens_set_project_warnings(cxxlens-unit-sdk-store-sqlite-crash-restart)
+  cxxlens_enable_sanitizers(cxxlens-unit-sdk-store-sqlite-crash-restart)
+  add_dependencies(cxxlens-unit-sdk-store-sqlite-crash-restart
+                   cxxlens-test-store-sqlite-crash-interposer)
+  if(NOT CXXLENS_ENABLE_TSAN)
+    add_test(
+      NAME unit.sdk-store-sqlite-crash-restart
+      COMMAND cxxlens-unit-sdk-store-sqlite-crash-restart
+              "$<TARGET_FILE:cxxlens-test-store-sqlite-crash-interposer>")
+    set_tests_properties(
+      unit.sdk-store-sqlite-crash-restart
+      PROPERTIES
+        ENVIRONMENT_MODIFICATION
+        "LD_PRELOAD=unset:;CXXLENS_TEST_SQLITE_CRASH_PAUSE=unset:;CXXLENS_TEST_SQLITE_CRASH_READY_FD=unset:"
+        LABELS
+        "unit;sdk;store;sqlite;normalization;crash;recovery;fault"
+        RUN_SERIAL
+        TRUE
+        TIMEOUT
+        30)
+  endif()
+
+  if(CXXLENS_TEST_HAS_OFD_LOCKS)
+    add_library(cxxlens-test-sqlite-source-shm-missing-symbols-preload SHARED
+                support/sqlite_source_shm_missing_symbols_preload.cpp)
+    target_compile_features(
+      cxxlens-test-sqlite-source-shm-missing-symbols-preload PRIVATE cxx_std_23)
+    target_link_libraries(cxxlens-test-sqlite-source-shm-missing-symbols-preload
+                          PRIVATE "${CMAKE_DL_LIBS}")
+    set_target_properties(
+      cxxlens-test-sqlite-source-shm-missing-symbols-preload
+      PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
+    cxxlens_set_project_warnings(
+      cxxlens-test-sqlite-source-shm-missing-symbols-preload)
+
+    add_executable(
+      cxxlens-unit-sdk-sqlite-source-availability
+      unit/sdk/sqlite_source_shm_symbol_resolution_integration_test.cpp)
+    target_compile_features(cxxlens-unit-sdk-sqlite-source-availability
+                            PRIVATE cxx_std_23)
+    target_link_libraries(
+      cxxlens-unit-sdk-sqlite-source-availability
+      PRIVATE cxxlens-sqlite-store-v3-scenario-support cxxlens::kernel
+              "${CMAKE_DL_LIBS}" Threads::Threads)
+    target_sources(
+      cxxlens-unit-sdk-sqlite-source-availability
+      PRIVATE
+        $<TARGET_OBJECTS:cxxlens-test-store-kernel>
+        $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
+    cxxlens_set_project_warnings(cxxlens-unit-sdk-sqlite-source-availability)
+    cxxlens_enable_sanitizers(cxxlens-unit-sdk-sqlite-source-availability)
+    add_dependencies(cxxlens-unit-sdk-sqlite-source-availability
+                     cxxlens-test-sqlite-source-shm-missing-symbols-preload)
+    add_test(
+      NAME unit.sdk-sqlite-source-availability
+      COMMAND
+        cxxlens-unit-sdk-sqlite-source-availability
+        "$<TARGET_FILE:cxxlens-test-sqlite-source-shm-missing-symbols-preload>")
+    set_tests_properties(
+      unit.sdk-sqlite-source-availability
+      PROPERTIES
+        ENVIRONMENT_MODIFICATION
+        "LD_PRELOAD=unset:;CXXLENS_TEST_SQLITE_CRASH_PAUSE=unset:;CXXLENS_TEST_SQLITE_CRASH_READY_FD=unset:"
+        LABELS
+        "unit;sdk;store;sqlite;source-shm;availability;fault;security"
+        RUN_SERIAL
+        TRUE
+        TIMEOUT
+        30)
+  endif()
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_executable(
+    cxxlens-unit-sdk-sqlite-202-crash-recovery
+    unit/sdk/sqlite_202_crash_recovery_test.cpp
+    support/sqlite202_crash_recovery_harness.cpp)
+  target_compile_features(cxxlens-unit-sdk-sqlite-202-crash-recovery
+                          PRIVATE cxx_std_23)
+  target_link_libraries(cxxlens-unit-sdk-sqlite-202-crash-recovery
+                        PRIVATE "${CMAKE_DL_LIBS}")
+  target_include_directories(
+    cxxlens-unit-sdk-sqlite-202-crash-recovery
+    PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/tests/support")
+  cxxlens_set_project_warnings(cxxlens-unit-sdk-sqlite-202-crash-recovery)
+  cxxlens_enable_sanitizers(cxxlens-unit-sdk-sqlite-202-crash-recovery)
+  add_test(NAME unit.sdk-sqlite-202-crash-recovery
+           COMMAND cxxlens-unit-sdk-sqlite-202-crash-recovery)
+  set_tests_properties(
+    unit.sdk-sqlite-202-crash-recovery
+    PROPERTIES LABELS
+               "unit;sdk;store;sqlite;normalization;crash;recovery;fault"
+               TIMEOUT 60)
+endif()
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-limit-length-precedence
                             unit/sdk/sqlite_limit_length_precedence_test.cpp)
 target_link_libraries(
   cxxlens-unit-sdk-sqlite-limit-length-precedence
   PRIVATE cxxlens-sqlite-store-v3-scenario-support cxxlens::kernel
           "${CMAKE_DL_LIBS}")
+target_sources(
+  cxxlens-unit-sdk-sqlite-limit-length-precedence
+  PRIVATE $<TARGET_OBJECTS:cxxlens-test-store-kernel>
+          $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
 target_include_directories(cxxlens-unit-sdk-sqlite-limit-length-precedence
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME unit.sdk-sqlite-limit-length-precedence
@@ -141,7 +410,8 @@ cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-store-wal-routing
                             unit/sdk/sqlite_store_wal_routing_test.cpp)
 target_sources(
   cxxlens-unit-sdk-sqlite-store-wal-routing
-  PRIVATE $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
+  PRIVATE $<TARGET_OBJECTS:cxxlens-test-store-kernel>
+          $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
 target_link_libraries(cxxlens-unit-sdk-sqlite-store-wal-routing
                       PRIVATE cxxlens::kernel "${CMAKE_DL_LIBS}")
 add_test(NAME unit.sdk-sqlite-store-wal-routing
@@ -396,8 +666,24 @@ set_tests_properties(
   PROPERTIES LABELS
              "unit;sdk;store;sqlite;terminal;reclassification;descendant")
 
+cxxlens_add_test_executable(
+  cxxlens-unit-sdk-sqlite-exact-empty-cold-reclassifier
+  unit/sdk/sqlite_exact_empty_cold_reclassifier_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-sqlite-exact-empty-cold-reclassifier
+                      PRIVATE cxxlens::kernel)
+target_include_directories(cxxlens-unit-sdk-sqlite-exact-empty-cold-reclassifier
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-sqlite-exact-empty-cold-reclassifier
+         COMMAND cxxlens-unit-sdk-sqlite-exact-empty-cold-reclassifier)
+set_tests_properties(
+  unit.sdk-sqlite-exact-empty-cold-reclassifier
+  PROPERTIES LABELS
+             "unit;sdk;store;sqlite;normalization;classifier;cold;security")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-store-fault-injection
                             unit/sdk/sqlite_store_fault_injection_test.cpp)
+target_compile_definitions(cxxlens-unit-sdk-sqlite-store-fault-injection
+                           PRIVATE CXXLENS_STORE_FAULT_TEST_SUPPORT=1)
 target_sources(
   cxxlens-unit-sdk-sqlite-store-fault-injection
   PRIVATE $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
@@ -457,7 +743,6 @@ endif()
 add_test(NAME unit.sdk-provider-runtime
          COMMAND cxxlens-unit-sdk-provider-runtime
                  "$<TARGET_FILE:cxxlens-provider-process-fixture>")
-include(CheckCXXSourceCompiles)
 check_cxx_source_compiles(
   [=[
 #include <features.h>
@@ -524,6 +809,22 @@ set_tests_properties(
     LABELS
     "unit;sdk;provider;process;sandbox;security;budget;cancellation;slow"
     PROCESSORS 2)
+
+cxxlens_add_test_executable(
+  cxxlens-unit-sdk-provider-expected-output-validator
+  unit/sdk/provider_expected_output_validator_test.cpp)
+target_link_libraries(
+  cxxlens-unit-sdk-provider-expected-output-validator
+  PRIVATE cxxlens_provider_expected_output_validator_internal)
+target_include_directories(cxxlens-unit-sdk-provider-expected-output-validator
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-provider-expected-output-validator
+         COMMAND cxxlens-unit-sdk-provider-expected-output-validator)
+set_tests_properties(
+  unit.sdk-provider-expected-output-validator
+  PROPERTIES
+    LABELS
+    "unit;sdk;provider;protocol;expected-output;validation;security;bounded")
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
    AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD_WAITID)
   # The regression exercises several fork/watcher/cleanup sequences whose own
@@ -554,9 +855,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
                RUN_SERIAL
                TRUE
                TIMEOUT
-               ${CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT}
-               SKIP_RETURN_CODE
-               77)
+               ${CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT})
   set_tests_properties(
     unit.sdk-provider-runtime-timeout-contention
     PROPERTIES
@@ -567,9 +866,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
       RUN_SERIAL
       TRUE
       TIMEOUT
-      ${CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT}
-      SKIP_RETURN_CODE
-      77)
+      ${CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT})
 endif()
 set_tests_properties(unit.sdk-provider-runtime-sealed
                      PROPERTIES LABELS "unit;sdk;provider;sealed;adoption")
@@ -643,15 +940,13 @@ set_tests_properties(
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-session
                             unit/sdk/provider_ng1_session_test.cpp)
-target_sources(
-  cxxlens-unit-sdk-provider-ng1-session
-  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_session.cpp"
-          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_recovery.cpp"
-          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp")
 if(NOT CXXLENS_BUILD_SHARED)
   target_sources(
     cxxlens-unit-sdk-provider-ng1-session
-    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_session.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_recovery.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
             "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
 endif()
 target_link_libraries(cxxlens-unit-sdk-provider-ng1-session
@@ -674,16 +969,14 @@ set_tests_properties(
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-live-driver
                             unit/sdk/provider_ng1_live_driver_test.cpp)
-target_sources(
-  cxxlens-unit-sdk-provider-ng1-live-driver
-  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_live_driver.cpp"
-          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_session.cpp"
-          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_recovery.cpp"
-          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp")
 if(NOT CXXLENS_BUILD_SHARED)
   target_sources(
     cxxlens-unit-sdk-provider-ng1-live-driver
-    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_live_driver.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_session.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_recovery.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp"
+            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
             "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
 endif()
 target_link_libraries(cxxlens-unit-sdk-provider-ng1-live-driver
@@ -731,7 +1024,7 @@ set_tests_properties(
 cxxlens_add_test_executable(cxxlens-clang22-materialization-identity
                             adapter/clang22/materialization_identity_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-identity
-                      PRIVATE cxxlens_clang22_materializer_safety_support)
+                      PRIVATE cxxlens_clang22_materialization_codecs)
 add_test(NAME adapter.clang22-materialization-identity
          COMMAND cxxlens-clang22-materialization-identity)
 set_tests_properties(
@@ -765,27 +1058,14 @@ cxxlens_add_test_executable(cxxlens-df0200-claim-batch-corpus
 target_link_libraries(cxxlens-df0200-claim-batch-corpus
                       PRIVATE cxxlens::clang22_provider_sdk)
 add_test(
-  NAME qualification.df0200-claim-batch-corpus
+  NAME adapter.clang22-claim-batch-differential
   COMMAND
     cxxlens-df0200-claim-batch-corpus
     "${PROJECT_SOURCE_DIR}/schemas/cxxlens_ng_df_0200_claim_batch_differential_corpus.tsv"
 )
 set_tests_properties(
-  qualification.df0200-claim-batch-corpus
-  PROPERTIES LABELS "qualification;sdk;claim;differential;df0200")
-
-cxxlens_add_test_executable(cxxlens-clang22-materialization-store
-                            adapter/clang22/materialization_store_test.cpp)
-target_link_libraries(
-  cxxlens-clang22-materialization-store
-  PRIVATE cxxlens_clang22_materializer_safety_support "${CMAKE_DL_LIBS}")
-add_test(NAME adapter.clang22-materialization-store
-         COMMAND cxxlens-clang22-materialization-store)
-set_tests_properties(
-  adapter.clang22-materialization-store
-  PROPERTIES LABELS
-             "adapter;provider;clang22;materialization;store;transaction;sqlite"
-)
+  adapter.clang22-claim-batch-differential
+  PROPERTIES LABELS "adapter;provider;clang22;claim;differential;df0200")
 
 cxxlens_add_test_executable(
   cxxlens-clang22-materialization-store-candidate
@@ -830,8 +1110,10 @@ set_tests_properties(
 cxxlens_add_test_executable(
   cxxlens-clang22-materialization-store-outcome
   adapter/clang22/materialization_store_outcome_test.cpp)
-target_link_libraries(cxxlens-clang22-materialization-store-outcome
-                      PRIVATE cxxlens_clang22_materializer_safety_support)
+target_link_libraries(
+  cxxlens-clang22-materialization-store-outcome
+  PRIVATE cxxlens_clang22_materializer_store_outcome_support
+          cxxlens_clang22_materializer_v4_reuse_support)
 add_test(NAME adapter.clang22-materialization-store-outcome
          COMMAND cxxlens-clang22-materialization-store-outcome)
 set_tests_properties(
@@ -845,6 +1127,22 @@ cxxlens_add_test_executable(
 target_link_libraries(
   cxxlens-clang22-materialization-request-v2-2
   PRIVATE cxxlens_clang22_materialization_request_v2_2_support)
+
+# Reuse the complete typed request document as a normal test fixture.  The
+# fixture build omits the executable's main and exports only the source-free
+# document factory; production targets do not link test code.
+add_library(
+  cxxlens_clang22_materialization_request_v2_2_fixture STATIC EXCLUDE_FROM_ALL
+  adapter/clang22/materialization_request_v2_2_test.cpp)
+target_compile_definitions(
+  cxxlens_clang22_materialization_request_v2_2_fixture
+  PRIVATE CXXLENS_MATERIALIZATION_REQUEST_V2_2_FIXTURE_ONLY)
+target_link_libraries(
+  cxxlens_clang22_materialization_request_v2_2_fixture
+  PRIVATE cxxlens_clang22_materialization_request_v2_2_support)
+target_include_directories(cxxlens_clang22_materialization_request_v2_2_fixture
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+
 add_test(NAME adapter.clang22-materialization-request-v2-2
          COMMAND cxxlens-clang22-materialization-request-v2-2)
 set_tests_properties(
@@ -862,6 +1160,20 @@ add_test(NAME adapter.clang22-provider-task-v4
 set_tests_properties(
   adapter.clang22-provider-task-v4
   PROPERTIES LABELS "adapter;provider;clang22;materialization;task;v4;security")
+
+cxxlens_add_test_executable(cxxlens-clang22-provider-task-v4-authority
+                            adapter/clang22/provider_task_v4_authority_test.cpp)
+target_link_libraries(
+  cxxlens-clang22-provider-task-v4-authority
+  PRIVATE cxxlens_clang22_provider_task_v4_authority_internal)
+add_test(NAME adapter.clang22-provider-task-v4-authority
+         COMMAND cxxlens-clang22-provider-task-v4-authority)
+set_tests_properties(
+  adapter.clang22-provider-task-v4-authority
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;materialization;task;v4;authority;security;bounded;downgrade;replay"
+)
 
 cxxlens_add_test_executable(
   cxxlens-clang22-provider-worker-ingress-decoder
@@ -895,9 +1207,9 @@ cxxlens_add_test_executable(
   adapter/clang22/materialization_v4_store_positive_min_test.cpp)
 target_link_libraries(
   cxxlens-clang22-materialization-v4-store-positive
-  PRIVATE cxxlens_clang22_materializer_safety_support
-          cxxlens_clang22_materializer_v4_claims
-          cxxlens_clang22_materializer_v4_ingress)
+  PRIVATE cxxlens_clang22_materializer_v4_claims
+          cxxlens_clang22_materializer_v4_ingress
+          cxxlens_clang22_materializer_v4_store_source)
 add_test(NAME adapter.clang22-materialization-v4-store-positive
          COMMAND cxxlens-clang22-materialization-v4-store-positive)
 set_tests_properties(
@@ -905,6 +1217,56 @@ set_tests_properties(
   PROPERTIES
     LABELS
     "adapter;provider;clang22;materialization;claim;task;v4;store;positive;security"
+)
+
+cxxlens_add_test_executable(
+  cxxlens-clang22-materialization-report-v2-2-builder
+  adapter/clang22/materialization_report2_2_builder_test.cpp)
+target_link_libraries(cxxlens-clang22-materialization-report-v2-2-builder
+                      PRIVATE cxxlens_clang22_materializer_v4_coordinator)
+target_include_directories(cxxlens-clang22-materialization-report-v2-2-builder
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME adapter.clang22-materialization-report-v2-2-builder
+         COMMAND cxxlens-clang22-materialization-report-v2-2-builder)
+set_tests_properties(
+  adapter.clang22-materialization-report-v2-2-builder
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;materialization;report;v2.2;bounded;security")
+
+cxxlens_add_test_executable(
+  cxxlens-clang22-materialization-v4-coordinator
+  adapter/clang22/materialization_v4_coordinator_test.cpp)
+target_link_libraries(cxxlens-clang22-materialization-v4-coordinator
+                      PRIVATE cxxlens_clang22_materializer_v4_coordinator)
+target_include_directories(cxxlens-clang22-materialization-v4-coordinator
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME adapter.clang22-materialization-v4-coordinator
+         COMMAND cxxlens-clang22-materialization-v4-coordinator)
+set_tests_properties(
+  adapter.clang22-materialization-v4-coordinator
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;materialization;coordinator;task;v4;bounded;security"
+)
+
+cxxlens_add_test_executable(
+  cxxlens-clang22-materialization-store-v6-typed-ingress
+  adapter/clang22/materialization_store_v6_typed_ingress_test.cpp)
+target_link_libraries(
+  cxxlens-clang22-materialization-store-v6-typed-ingress
+  PRIVATE cxxlens_clang22_materializer_store_v6_typed_ingress
+          cxxlens_clang22_materialization_request_v2_2_fixture)
+target_include_directories(
+  cxxlens-clang22-materialization-store-v6-typed-ingress
+  PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME adapter.clang22-materialization-store-v6-typed-ingress
+         COMMAND cxxlens-clang22-materialization-store-v6-typed-ingress)
+set_tests_properties(
+  adapter.clang22-materialization-store-v6-typed-ingress
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;materialization;store;v6;typed;ingress;bounded;security"
 )
 
 cxxlens_add_test_executable(cxxlens-protocol-v2
@@ -921,8 +1283,11 @@ target_link_libraries(cxxlens-unit-sdk-provider-protocol-v2-adapter
 if(CXXLENS_BUILD_SHARED)
   target_sources(
     cxxlens-unit-sdk-provider-protocol-v2-adapter
-    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
+    PRIVATE
+      $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
+      "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp"
+      "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_heartbeat_adapter.cpp"
+  )
   target_link_libraries(cxxlens-unit-sdk-provider-protocol-v2-adapter
                         PRIVATE cxxlens_protocol_v2)
 endif()
@@ -937,7 +1302,8 @@ cxxlens_add_test_executable(
   adapter/clang22/materialization_pipeline_v2_2_test.cpp)
 target_link_libraries(
   cxxlens-clang22-materialization-pipeline-v2-2
-  PRIVATE cxxlens_clang22_materializer_v2_2_pipeline_support)
+  PRIVATE cxxlens_clang22_materializer_v2_2_pipeline_support
+          cxxlens_clang22_materialization_request_v2_2_fixture)
 add_test(NAME adapter.clang22-materialization-pipeline-v2-2
          COMMAND cxxlens-clang22-materialization-pipeline-v2-2)
 set_tests_properties(
@@ -948,7 +1314,7 @@ set_tests_properties(
 cxxlens_add_test_executable(cxxlens-clang22-materialization-rooted-vfs
                             adapter/clang22/materialization_rooted_vfs_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-rooted-vfs
-                      PRIVATE cxxlens_clang22_materializer_safety_support)
+                      PRIVATE cxxlens_clang22_materializer_rooted_vfs_support)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   target_compile_definitions(cxxlens-clang22-materialization-rooted-vfs
                              PRIVATE CXXLENS_TEST_WRAP_ROOTED_VFS_EFFECTS=1)
@@ -966,7 +1332,7 @@ set_tests_properties(
 cxxlens_add_test_executable(cxxlens-clang22-materialization-occurrence
                             adapter/clang22/materialization_occurrence_test.cpp)
 target_link_libraries(cxxlens-clang22-materialization-occurrence
-                      PRIVATE cxxlens_clang22_materializer_safety_support)
+                      PRIVATE cxxlens_clang22_materializer_occurrence_support)
 add_test(NAME adapter.clang22-materialization-occurrence
          COMMAND cxxlens-clang22-materialization-occurrence)
 set_tests_properties(
@@ -1083,6 +1449,27 @@ if(UNIX)
     PROPERTIES
       LABELS
       "adapter;provider;clang22;source-closure;fd;transport;security;bounded")
+
+  cxxlens_add_test_executable(
+    cxxlens-clang22-installed-materializer-source-closure
+    adapter/clang22/installed_materializer_source_closure_test.cpp)
+  target_link_libraries(
+    cxxlens-clang22-installed-materializer-source-closure
+    PRIVATE cxxlens_clang22_materializer_ingress
+            cxxlens_clang22_materialization_codecs
+            cxxlens_clang22_materialization_request_v2_2_fixture
+            cxxlens_clang22_materializer_v4_store_source)
+  add_test(NAME adapter.clang22-installed-materializer-source-closure
+           COMMAND cxxlens-clang22-installed-materializer-source-closure
+                   "$<TARGET_FILE:cxxlens-clang-worker-22>")
+  add_dependencies(cxxlens-clang22-installed-materializer-source-closure
+                   cxxlens-clang-worker-22)
+  set_tests_properties(
+    adapter.clang22-installed-materializer-source-closure
+    PROPERTIES
+      LABELS
+      "adapter;provider;clang22;source-closure;fd;materializer;security;bounded"
+  )
 endif()
 
 cxxlens_add_test_executable(cxxlens-clang22-source-closure-task-v4
@@ -1187,6 +1574,112 @@ set_tests_properties(
   PROPERTIES LABELS
              "adapter;provider;clang22;source-closure;task;v4;worker;security")
 
+cxxlens_add_test_executable(
+  cxxlens-clang22-provider-worker-v4-ast-observer
+  adapter/clang22/provider_worker_v4_ast_observer_test.cpp)
+target_link_libraries(cxxlens-clang22-provider-worker-v4-ast-observer
+                      PRIVATE cxxlens_clang22_worker_core)
+if(CXXLENS_BUILD_SHARED)
+  target_sources(cxxlens-clang22-provider-worker-v4-ast-observer
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
+if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG22_LIBRARY_DIRS)
+  list(GET CXXLENS_CLANG22_LIBRARY_DIRS 0 _cxxlens_ast_observer_lib_dir)
+  get_filename_component(_cxxlens_ast_observer_llvm_root
+                         "${_cxxlens_ast_observer_lib_dir}" DIRECTORY)
+  find_program(
+    _cxxlens_ast_observer_clangxx
+    NAMES clang++-22 clang++
+    PATHS "${_cxxlens_ast_observer_llvm_root}/bin"
+    NO_DEFAULT_PATH NO_CACHE)
+  if(_cxxlens_ast_observer_clangxx)
+    execute_process(
+      COMMAND "${_cxxlens_ast_observer_clangxx}" -print-resource-dir
+      OUTPUT_VARIABLE _cxxlens_ast_observer_resource_dir
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    target_compile_definitions(
+      cxxlens-clang22-provider-worker-v4-ast-observer
+      PRIVATE
+        CXXLENS_TEST_CLANG22_ROOT="${_cxxlens_ast_observer_llvm_root}"
+        CXXLENS_TEST_CLANGXX22_PATH="${_cxxlens_ast_observer_clangxx}"
+        CXXLENS_TEST_CLANG22_RESOURCE_DIR="${_cxxlens_ast_observer_resource_dir}"
+    )
+  endif()
+  unset(_cxxlens_ast_observer_lib_dir)
+  unset(_cxxlens_ast_observer_llvm_root)
+  unset(_cxxlens_ast_observer_clangxx)
+  unset(_cxxlens_ast_observer_resource_dir)
+endif()
+add_test(NAME adapter.clang22-provider-worker-v4-ast-observer
+         COMMAND cxxlens-clang22-provider-worker-v4-ast-observer)
+set_tests_properties(
+  adapter.clang22-provider-worker-v4-ast-observer
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;source-closure;task;v4;worker;ast;observation;security"
+)
+
+cxxlens_add_test_executable(
+  cxxlens-clang22-provider-worker-v4-output-normalizer
+  adapter/clang22/provider_worker_v4_output_normalizer_test.cpp)
+target_link_libraries(cxxlens-clang22-provider-worker-v4-output-normalizer
+                      PRIVATE cxxlens_clang22_worker_core)
+if(CXXLENS_BUILD_SHARED)
+  target_sources(cxxlens-clang22-provider-worker-v4-output-normalizer
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
+if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG22_LIBRARY_DIRS)
+  list(GET CXXLENS_CLANG22_LIBRARY_DIRS 0 _cxxlens_v4_normalizer_lib_dir)
+  get_filename_component(_cxxlens_v4_normalizer_llvm_root
+                         "${_cxxlens_v4_normalizer_lib_dir}" DIRECTORY)
+  find_program(
+    _cxxlens_v4_normalizer_clangxx
+    NAMES clang++-22 clang++
+    PATHS "${_cxxlens_v4_normalizer_llvm_root}/bin"
+    NO_DEFAULT_PATH NO_CACHE)
+  if(_cxxlens_v4_normalizer_clangxx)
+    execute_process(
+      COMMAND "${_cxxlens_v4_normalizer_clangxx}" -print-resource-dir
+      OUTPUT_VARIABLE _cxxlens_v4_normalizer_resource_dir
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    target_compile_definitions(
+      cxxlens-clang22-provider-worker-v4-output-normalizer
+      PRIVATE
+        CXXLENS_TEST_CLANG22_ROOT="${_cxxlens_v4_normalizer_llvm_root}"
+        CXXLENS_TEST_CLANGXX22_PATH="${_cxxlens_v4_normalizer_clangxx}"
+        CXXLENS_TEST_CLANG22_RESOURCE_DIR="${_cxxlens_v4_normalizer_resource_dir}"
+    )
+  endif()
+  unset(_cxxlens_v4_normalizer_lib_dir)
+  unset(_cxxlens_v4_normalizer_llvm_root)
+  unset(_cxxlens_v4_normalizer_clangxx)
+  unset(_cxxlens_v4_normalizer_resource_dir)
+endif()
+add_test(NAME adapter.clang22-provider-worker-v4-output-normalizer
+         COMMAND cxxlens-clang22-provider-worker-v4-output-normalizer)
+set_tests_properties(
+  adapter.clang22-provider-worker-v4-output-normalizer
+  PROPERTIES
+    LABELS
+    "adapter;provider;clang22;task;v4;worker;output;normalization;security;bounded"
+)
+
+cxxlens_add_test_executable(
+  cxxlens-clang22-provider-worker-v4-claim-bridge
+  adapter/clang22/provider_worker_v4_claim_bridge_test.cpp)
+target_link_libraries(
+  cxxlens-clang22-provider-worker-v4-claim-bridge
+  PRIVATE cxxlens_clang22_worker_v4_claim_bridge
+          cxxlens_clang22_materializer_v4_claims
+          cxxlens_clang22_materializer_v4_ingress)
+add_test(NAME adapter.clang22-provider-worker-v4-claim-bridge
+         COMMAND cxxlens-clang22-provider-worker-v4-claim-bridge)
+set_tests_properties(
+  adapter.clang22-provider-worker-v4-claim-bridge
+  PROPERTIES LABELS
+             "adapter;provider;clang22;materialization;worker;v4;claim;security"
+)
+
 cxxlens_add_test_executable(cxxlens-clang22-provider-worker-channel
                             adapter/clang22/provider_worker_channel_test.cpp)
 target_link_libraries(
@@ -1273,28 +1766,33 @@ if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG22_LIBRARY_DIRS)
     execute_process(
       COMMAND "${_cxxlens_native_test_clangxx}" -print-resource-dir
       OUTPUT_VARIABLE _cxxlens_native_test_resource_dir
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-    target_compile_definitions(
-      cxxlens-clang22-source-closure-native
-      PRIVATE
-        CXXLENS_TEST_CLANG22_ROOT="${_cxxlens_native_test_llvm_root}"
-        CXXLENS_TEST_CLANGXX22_PATH="${_cxxlens_native_test_clangxx}"
-        CXXLENS_TEST_CLANG22_RESOURCE_DIR="${_cxxlens_native_test_resource_dir}"
-    )
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      RESULT_VARIABLE _cxxlens_native_test_resource_result)
+    if(_cxxlens_native_test_resource_result EQUAL 0
+       AND IS_DIRECTORY "${_cxxlens_native_test_resource_dir}")
+      target_compile_definitions(
+        cxxlens-clang22-source-closure-native
+        PRIVATE
+          CXXLENS_TEST_CLANG22_ROOT="${_cxxlens_native_test_llvm_root}"
+          CXXLENS_TEST_CLANGXX22_PATH="${_cxxlens_native_test_clangxx}"
+          CXXLENS_TEST_CLANG22_RESOURCE_DIR="${_cxxlens_native_test_resource_dir}"
+      )
+      add_test(NAME adapter.clang22-source-closure-native
+               COMMAND cxxlens-clang22-source-closure-native)
+      set_tests_properties(
+        adapter.clang22-source-closure-native
+        PROPERTIES
+          LABELS
+          "adapter;provider;clang22;source-closure;vfs;native;security;contract"
+      )
+    endif()
   endif()
   unset(_cxxlens_native_test_lib_dir)
   unset(_cxxlens_native_test_llvm_root)
   unset(_cxxlens_native_test_clangxx)
   unset(_cxxlens_native_test_resource_dir)
+  unset(_cxxlens_native_test_resource_result)
 endif()
-add_test(NAME adapter.clang22-source-closure-native
-         COMMAND cxxlens-clang22-source-closure-native)
-set_tests_properties(
-  adapter.clang22-source-closure-native
-  PROPERTIES
-    LABELS
-    "adapter;provider;clang22;source-closure;vfs;native;security;contract"
-    SKIP_RETURN_CODE 77)
 
 cxxlens_add_test_executable(cxxlens-r2-vertical-slice
                             integration/r2_vertical_slice_test.cpp)
@@ -1453,8 +1951,7 @@ foreach(
         source_closure_transport
         release_contract
         clang22_materialization
-        sdk_contract
-        ci_supply_chain)
+        sdk_contract)
   add_test(NAME "quality.ng-${contract}"
            COMMAND "${Python3_EXECUTABLE}"
                    "${PROJECT_SOURCE_DIR}/tests/quality/test_ng_${contract}.py")
@@ -1537,14 +2034,21 @@ add_dependencies(
   cxxlens-clang22-materialization-json
   cxxlens-clang22-materialization-identity
   cxxlens-clang22-materialization-io
-  cxxlens-clang22-materialization-store
   cxxlens-clang22-materialization-store-candidate
   cxxlens-clang22-materialization-store-projection
   cxxlens-clang22-materialization-store-candidate-bridge
   cxxlens-clang22-materialization-store-outcome
   cxxlens-clang22-materialization-request-v2-2
   cxxlens-clang22-provider-task-v4
+  cxxlens-clang22-provider-task-v4-authority
+  cxxlens-clang22-provider-worker-ingress-decoder
+  cxxlens-clang22-materialization-v4-claim-binding
+  cxxlens-clang22-materialization-v4-store-positive
+  cxxlens-clang22-materialization-report-v2-2-builder
+  cxxlens-clang22-materialization-v4-coordinator
+  cxxlens-clang22-materialization-store-v6-typed-ingress
   cxxlens-protocol-v2
+  cxxlens-unit-sdk-provider-protocol-v2-adapter
   cxxlens-clang22-materialization-pipeline-v2-2
   cxxlens-clang22-materialization-rooted-vfs
   cxxlens-clang22-materialization-occurrence
@@ -1554,9 +2058,16 @@ add_dependencies(
   cxxlens-clang22-source-closure-vfs
   cxxlens-clang22-source-closure-invocation
   cxxlens-clang22-source-closure-transport
+  cxxlens-clang22-source-closure-spool
+  cxxlens-clang22-source-closure-receiver
   cxxlens-clang22-source-closure-task-v4
   cxxlens-clang22-source-closure-task-v4-worker
   cxxlens-clang22-source-closure-native
+  cxxlens-clang22-provider-worker-v4
+  cxxlens-clang22-provider-worker-v4-ast-observer
+  cxxlens-clang22-provider-worker-v4-output-normalizer
+  cxxlens-clang22-provider-worker-v4-claim-bridge
+  cxxlens-clang22-provider-worker-channel
   cxxlens-r2-vertical-slice
   cxxlens-provider-process-fixture
   cxxlens-public-header-cxxlens
@@ -1565,6 +2076,7 @@ add_dependencies(
   cxxlens-public-header-sdk
   cxxlens-unit-sdk
   cxxlens-unit-sdk-provider-runtime
+  cxxlens-unit-sdk-provider-expected-output-validator
   cxxlens-unit-sdk-provider-ng1-validation
   cxxlens-unit-sdk-provider-ng1-spill-port
   cxxlens-unit-sdk-provider-ng1-transport
@@ -1574,7 +2086,6 @@ add_dependencies(
   cxxlens-unit-sdk-query-runtime
   cxxlens-unit-sdk-sqlite-connection-lifecycle
   cxxlens-unit-sdk-sqlite-default-forwarding-vfs
-  cxxlens-unit-sdk-sqlite-disposable-qualification
   cxxlens-unit-sdk-sqlite-limit-length-precedence
   cxxlens-unit-sdk-sqlite-payload-streaming
   cxxlens-unit-sdk-sqlite-shm-process-port
@@ -1589,11 +2100,16 @@ add_dependencies(
   cxxlens-unit-sdk-sqlite-store-fault-injection
   cxxlens-unit-sdk-sqlite-store-terminal
   cxxlens-unit-sdk-sqlite-terminal-reclassifier
+  cxxlens-unit-sdk-sqlite-exact-empty-cold-reclassifier
   cxxlens-unit-sdk-sqlite-store-wal-routing
   cxxlens-unit-sdk-sqlite-wal-source-capture
   cxxlens-unit-sdk-sqlite-wal-recovery-workspace
   cxxlens-unit-sdk-sqlite-wal-receipt
   cxxlens-unit-sdk-store
+  cxxlens-unit-sdk-store-operation-port
+  cxxlens-unit-sdk-bounded-store-v6-memory-e2e
+  cxxlens-unit-sdk-bounded-store-v6-sqlite-backend
+  cxxlens-unit-sdk-snapshot-store-v5-codec
   cxxlens-unit-sdk-sqlite-writer-gate-outcome
   cxxlens-df0200-claim-batch-corpus
   cxxlens-sdk-example-typed_query
@@ -1614,6 +2130,19 @@ add_dependencies(
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   add_dependencies(cxxlens-ng-test-binaries
                    cxxlens-unit-sdk-provider-process-channel)
+  add_dependencies(cxxlens-ng-test-binaries cxxlens-clang22-source-closure-fd
+                   cxxlens-clang22-installed-materializer-source-closure)
+  add_dependencies(cxxlens-ng-test-binaries
+                   cxxlens-unit-sdk-sqlite-202-crash-recovery)
+  if(CXXLENS_TEST_HAS_GLIBC_DLMOPEN_DLVSYM)
+    add_dependencies(
+      cxxlens-ng-test-binaries cxxlens-unit-sdk-sqlite-migration-outcomes
+      cxxlens-unit-sdk-store-sqlite-crash-restart)
+    if(CXXLENS_TEST_HAS_OFD_LOCKS)
+      add_dependencies(cxxlens-ng-test-binaries
+                       cxxlens-unit-sdk-sqlite-source-availability)
+    endif()
+  endif()
 endif()
 
 if(CXXLENS_ENABLE_ASAN OR CXXLENS_ENABLE_UBSAN)

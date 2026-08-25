@@ -403,7 +403,7 @@ request は `build.project` の catalog/root/environment、`build.toolchain_cont
 の代用にせず、各 relation の domain identity と hard reference を Registry の canonical tuple から再計算する。base claim の
 condition/interpretation/provenance/evidence/guarantee envelope も request から exact に構築し、暗黙 default や first-wins を使わない。semantic
 producer identity は executable/interface/distribution/source revision/tree だけへ投影し、installed binary、configuration、measured occurrence は含めない。
-後者の physical producer occurrence は report の installation/provider/authority evidence が別に bind する。これにより static/shared の semantic
+後者の physical producer occurrence は report の installation/provider と installed occurrence の measured artifact identity/integrity が別に bind する。これにより static/shared の semantic
 base set と snapshot identity は同一のまま、実際に実行した bytes は失わない。
 
 base claim の set digest は row set と task-context set を独立に hash してはならない。各 canonical row identity と exact row digest を、
@@ -563,7 +563,7 @@ codec/completeness/counter/SQLite-decision binding を照合する。generic Sto
 - **D4:** recordはkind/lengths/key/payload/checksum全体で、segment/spool splitを禁止する。preappend u128 check、half-open canonical offsets、segment then
   next-spool rollover、u128 aggregate census、8 MiB超 singleton run、二 comparator cursor合計64 KiB、16+1+1=18 FDを固定する。known limitはI/O前、
   private spool ENOSPCはproved in-range後だけとする。
-- **D5:** spool-failureはprivate prepublication spoolだけである。request 2.2.0 shape は不変で、report 2.2.0 は private spool-failure、13/19-file occurrence inventory、
+- **D5:** spool-failureはprivate prepublication spoolだけである。request 2.2.0 shape は不変で、report 2.2.0 は private spool-failure、installed occurrence artifact identity、
   sandbox array boundだけを追加する。SQLite writer_publish ENOSPC/SQLITE_TOOBIGは既存の store.sqlite-failure/database/opaque と
   publication_outcome_unknown、返却済handle後の検証failureはsafeなら committed_unverified を保つ。exit 2 はresponse-unsafe failureまたは
   successful receipt/arithmetic contradictionだけである。
@@ -596,16 +596,18 @@ report を runtime adoption result として採用しない。
 
 #### Registry, engine, and Store identity projection
 
-v2 は次の三つの Registry identity を別の field として保持し、相互に代用しない。
+v2 は次の二つの Registry semantic identity を別の field として保持し、相互に代用しない。
 
-1. `authority_digests` 中の Relation Registry file digest は raw authority artifact bytes の `sha256` である。
-2. `registry.authority_registry_digest` は accepted Registry 全 21 relation の semantic projection を canonical JSON にした bytes の `sha256` である。
-3. `engine.engine_registry_digest` は、この tool が実際に admit する base 6 + worker output 6 descriptor の runtime inventory digest である。
+1. `registry.authority_registry_digest` は accepted Registry の全 relation の semantic projection を canonical JSON にした bytes の `sha256` である。
+2. `engine.engine_registry_digest` は、この tool が実際に admit する base 6 + worker output 6 descriptor の runtime inventory digest である。
+
+repository 内の schema/source file path と byte digest は report、claim、materializer semantics の authority にしない。installed occurrence の
+closed role inventory と actual artifact digest は、runtime が使用した製品 artifact の identity/integrity として `installation.measured` に保持する。
 
 engine inventory は各 accepted descriptor の canonical `descriptor_id` と `runtime_descriptor_digest` を UTF-8 byte order で sort し、各 row を
 `descriptor_id + "=" + runtime_descriptor_digest + "\n"` として連結する。その payload に
 `semantic_digest("cxxlens.relation-registry.v1", payload)` を適用する。relation name を descriptor ID の代わりに使うこと、duplicate canonical
-descriptor ID、missing/extra/reordered binding、full authority digest の代入を拒否する。`relation_registry::build()` も ADR 0017 と同じ projection を使う。
+descriptor ID、missing/extra/reordered binding、accepted Registry semantic digest の代入を拒否する。`relation_registry::build()` も ADR 0017 と同じ projection を使う。
 
 engine generation と named policy は次の exact projection から再計算する。
 
@@ -657,8 +659,8 @@ series/parent/publication、timestamp、task arrival order はこの direct basi
 作り、`cxxlens.clang22-base-ingestion-transform.v1` digest で canonicalize する。hidden assertion は Store batch に commit しない。
 
 両 transform digest は各 domain と同名 tag、materializer semantics digest、engine registry digest の canonical tuple に semantic-digest-v2 を適用する。
-materializer semantics は tool executable/interface/distribution/source revision/tree と sorted authority `{path,digest}` tuples を
-`cxxlens.clang22-materializer-semantics.v1` domain で bind し、physical installation fields を除外する。direct basis はその digest、worker の
+materializer semantics は tool executable/interface/distribution/source revision/tree を
+`cxxlens.clang22-materializer-semantics.v1` domain で bind し、repository file、physical installation fields を除外する。direct basis はその digest、worker の
 provider ID/version/semantic contract/protocol、project ID/catalog ID/catalog digest、engine generation/inventory、semantic task context と task input digest の
 sorted tuplesを同名 `cxxlens.clang22-direct-materialization-basis.v1` domain で bind する。
 
@@ -864,7 +866,7 @@ report binding mismatch を
 共有する二つの valid execution の誤 deduplicate、同一 task/input/execution tuple duplicate をそれぞれ反証する。
 raw input count/digest/complete drift、limit+1 以外の oversize prefix、raw-only failure への request binding 捏造、request-bound failure の binding drift、
 phase/code/effect mismatch、`not-observed` head を absent とする主張、compact response への detailed section 混入、incomplete detailed failure、failed response
-の runtime adoption も拒否する。Registry file/authority/engine digest の alias、descriptor ID duplicate/name-based inventory、engine generation/policy/
+の runtime adoption も拒否する。Registry semantic/engine digest の alias、descriptor ID duplicate/name-based inventory、engine generation/policy/
 selector component mutation、mixed task universe、old series ID、non-genesis memory、cross-series SQLite parent を個別に拒否する。partition の八 identity field、
 claim/basis/coverage/unresolved、empty-basis、manifest、sequence/parent/publication record の一項だけを old ID のまま変える case と reopened Store drift を
 各 identity DAG layer で拒否する。

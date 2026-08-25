@@ -19,6 +19,7 @@
 
 #include <cxxlens/sdk.hpp>
 
+#include "../../support/sdk_store_faults.hpp"
 #include "../../support/sqlite_store_fixture.hpp"
 #include "sdk/sqlite_default_forwarding_vfs_internal.hpp"
 #include "sdk/sqlite_store_fault_injection_internal.hpp"
@@ -28,23 +29,6 @@ static_assert(std::is_same_v<decltype(&cxxlens::sdk::snapshot_store::begin),
 								 cxxlens::sdk::snapshot_store::*)(cxxlens::sdk::snapshot_draft)>);
 static_assert(std::is_same_v<decltype(&cxxlens::sdk::snapshot_store::compact),
 							 cxxlens::sdk::result<void> (cxxlens::sdk::snapshot_store::*)()>);
-
-namespace cxxlens::sdk
-{
-	result<void> rewrite_publication_payload_for_testing(
-		snapshot_store&, std::string_view, std::string_view, std::string_view, std::size_t);
-	result<void> rewrite_publication_identity_field_for_testing(snapshot_store&,
-																std::string_view,
-																std::string_view);
-	result<std::string> rewrite_snapshot_version_for_testing(
-		snapshot_store&, std::string_view, std::string_view, std::uint64_t, std::uint32_t);
-	result<std::string> rewrite_publication_counters_for_testing(snapshot_store&,
-																 std::string_view,
-																 std::uint64_t,
-																 std::uint64_t);
-	result<void>
-	poison_rejected_generation_for_testing(snapshot_store&, std::string_view, std::uint64_t);
-} // namespace cxxlens::sdk
 
 namespace
 {

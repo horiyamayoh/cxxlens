@@ -223,6 +223,7 @@ namespace cxxlens::sdk
 	class row_cursor;
 	class claim_annotation_cursor;
 	class snapshot_writer;
+	struct snapshot_store_backend_lifetime_access;
 
 	/** @brief Immutable concurrent-readable snapshot pinning one physical generation. */
 	class snapshot_handle
@@ -262,6 +263,7 @@ namespace cxxlens::sdk
 		friend class snapshot_store;
 		friend class snapshot_builder;
 		friend class snapshot_writer;
+		friend struct snapshot_store_backend_lifetime_access;
 	};
 
 	/** @brief Cursor-scoped claim annotation invalidated by cursor advance. */
@@ -361,20 +363,6 @@ namespace cxxlens::sdk
 		friend result<snapshot_store> open_sqlite_snapshot_store(const std::string&,
 																 relation_engine);
 		friend struct snapshot_store_backend_lifetime_access;
-		friend result<void> mark_publication_corrupt_for_testing(snapshot_store&, std::string_view);
-		friend result<void> rewrite_publication_payload_for_testing(
-			snapshot_store&, std::string_view, std::string_view, std::string_view, std::size_t);
-		friend result<void> rewrite_publication_identity_field_for_testing(snapshot_store&,
-																		   std::string_view,
-																		   std::string_view);
-		friend result<std::string> rewrite_snapshot_version_for_testing(
-			snapshot_store&, std::string_view, std::string_view, std::uint64_t, std::uint32_t);
-		friend result<std::string> rewrite_publication_counters_for_testing(snapshot_store&,
-																			std::string_view,
-																			std::uint64_t,
-																			std::uint64_t);
-		friend result<void>
-		poison_rejected_generation_for_testing(snapshot_store&, std::string_view, std::uint64_t);
 	};
 
 	/** @brief Transactional writer enforcing stage, independent validation, then atomic publish. */
@@ -398,6 +386,7 @@ namespace cxxlens::sdk
 		explicit snapshot_writer(std::unique_ptr<data> data);
 		std::unique_ptr<data> data_;
 		friend class snapshot_store;
+		friend struct snapshot_store_backend_lifetime_access;
 	};
 
 	/** @brief Construct the normative process-local reference backend. */
@@ -405,10 +394,6 @@ namespace cxxlens::sdk
 	/** @brief Open/create the normative SQLite backend at an explicit physical locator. */
 	[[nodiscard]] result<snapshot_store>
 	open_sqlite_snapshot_store(const std::string& database_path, relation_engine engine);
-	/** @brief Fault injection used by conformance tests to verify fail-closed recovery. */
-	[[nodiscard]] result<void>
-	mark_publication_corrupt_for_testing(snapshot_store& store, std::string_view publication_id);
-
 	/** @brief Compatibility builder retained as a one-snapshot adapter for legacy callers. */
 	class snapshot_builder
 	{

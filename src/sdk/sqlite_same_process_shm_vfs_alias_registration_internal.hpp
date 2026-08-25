@@ -10,13 +10,12 @@
 namespace cxxlens::sdk
 {
 	class sqlite_same_process_shm_vfs_alias_identity_sealer;
-	class sqlite_same_process_shm_vfs_alias_registration_test_peer;
 
 	/**
 	 * Sealed input produced from one exact owned SQLite VFS alias lifecycle.
 	 *
 	 * This value deliberately does not infer a cohort from a name, pointer, pathname, or runtime
-	 * lifetime identity. The source-private identity sealer is the only non-test producer and binds
+	 * lifetime identity. The source-private identity sealer is the only producer and binds
 	 * the complete DF-0205 process/runtime/image/source-id/original-VFS/callback receipt before
 	 * constructing it. The registration port remains callback-family and Store inert.
 	 */
@@ -42,7 +41,6 @@ namespace cxxlens::sdk
 	  private:
 		friend class sqlite_same_process_shm_vfs_alias_identity_sealer;
 		friend class sqlite_same_process_shm_vfs_alias_registration_port;
-		friend class sqlite_same_process_shm_vfs_alias_registration_test_peer;
 
 		sqlite_shm_vfs_alias_lifecycle_binding(
 			sqlite_shm_process_registry_handle process,
@@ -144,7 +142,6 @@ namespace cxxlens::sdk
 
 	  private:
 		friend class sqlite_same_process_shm_vfs_alias_registration_port;
-		friend class sqlite_same_process_shm_vfs_alias_registration_test_peer;
 
 		sqlite_shm_registered_vfs_alias(
 			sqlite_shm_process_registry_handle process,
@@ -203,9 +200,7 @@ namespace cxxlens::sdk
 
 	  private:
 		friend class sqlite_shm_registered_vfs_alias;
-		friend class sqlite_same_process_shm_vfs_alias_registration_test_peer;
 		[[nodiscard]] static sqlite_shm_lease_result<void>
 		unregister_alias(sqlite_shm_registered_vfs_alias& alias) noexcept;
-		static void exhaust_lifecycle_sequence_for_testing() noexcept;
 	};
 } // namespace cxxlens::sdk

@@ -1,5 +1,7 @@
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <bit>
 #include <cerrno>
 #include <chrono>
 #include <csignal>
@@ -8,6 +10,7 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <new>
 #include <optional>
 #include <ranges>
 #include <string_view>
@@ -25,6 +28,7 @@
 #include <sys/mman.h>
 #include <sys/prctl.h>
 #include <sys/resource.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
@@ -95,7 +99,7 @@ namespace cxxlens::sdk::provider
 			append_process_environment(const process_invocation& invocation,
 									   std::vector<std::string>& storage)
 			{
-				constexpr std::array<std::string_view, 10U> channel_names{
+				constexpr std::array<std::string_view, 14U> channel_names{
 					"CXXLENS_PROVIDER_INGRESS_MODE",
 					"CXXLENS_PROVIDER_SOURCE_CLOSURE_READ_FD",
 					"CXXLENS_PROVIDER_SOURCE_CLOSURE_WRITE_FD",
@@ -104,8 +108,11 @@ namespace cxxlens::sdk::provider
 					"CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_V4_DIGEST",
 					"CXXLENS_PROVIDER_SOURCE_CLOSURE_ID",
 					"CXXLENS_PROVIDER_SOURCE_CLOSURE_DIGEST",
+					"CXXLENS_PROVIDER_SOURCE_CLOSURE_MANIFEST_DIGEST",
 					"CXXLENS_PROVIDER_SOURCE_CLOSURE_TRANSFER_DIGEST",
-					"CXXLENS_PROVIDER_SOURCE_CLOSURE_BINDING_DIGEST"};
+					"CXXLENS_PROVIDER_SOURCE_CLOSURE_BINDING_DIGEST",
+					"CXXLENS_PROVIDER_SOURCE_CLOSURE_STREAM_ID",
+					"CXXLENS_PROVIDER_SOURCE_CLOSURE_FIRST_SEQUENCE"};
 				for (const auto& [name, value] : invocation.environment)
 				{
 					if (name.empty() || name.contains('=') || name.contains('\0') ||
@@ -134,17 +141,23 @@ namespace cxxlens::sdk::provider
 										 binding.task_id);
 					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_SESSION_ID=" +
 										 binding.session_id);
+					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_V4_DIGEST=" +
+										 binding.task_v4_digest);
+					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_ID=" +
+										 binding.closure_id);
 					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_DIGEST=" +
 										 binding.closure_digest);
+					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_MANIFEST_DIGEST=" +
+										 binding.manifest_digest);
 					storage.emplace_back("CXXLENS_PROVIDER_INGRESS_MODE=task-v4-source-closure-v2");
-					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_TASK_V4_DIGEST=" +
-										 binding.task_id.substr(5U));
-					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_ID=source-closure:" +
-										 binding.closure_digest);
 					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_TRANSFER_DIGEST=" +
 										 binding.transfer_digest);
 					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_BINDING_DIGEST=" +
 										 binding.binding_digest);
+					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_STREAM_ID=" +
+										 std::to_string(binding.stream_id));
+					storage.emplace_back("CXXLENS_PROVIDER_SOURCE_CLOSURE_FIRST_SEQUENCE=" +
+										 std::to_string(binding.first_sequence));
 				}
 				return {};
 			}
@@ -172,8 +185,13 @@ namespace cxxlens::sdk::provider
 					std::array{
 						canonical_value::from_string(value.task_id),
 						canonical_value::from_string(value.session_id),
+						canonical_value::from_string(value.task_v4_digest),
+						canonical_value::from_string(value.closure_id),
 						canonical_value::from_string(value.closure_digest),
+						canonical_value::from_string(value.manifest_digest),
 						canonical_value::from_string(value.transfer_digest),
+						canonical_value::from_string(std::to_string(value.stream_id)),
+						canonical_value::from_string(std::to_string(value.first_sequence)),
 						canonical_value::from_integer(value.read_descriptor),
 						canonical_value::from_integer(value.write_descriptor),
 						canonical_value::from_string(std::to_string(value.read_device)),
@@ -248,12 +266,24 @@ namespace cxxlens::sdk::provider
 			if (!valid_typed_digest(session_id, session_digest_prefix))
 				return cxxlens::sdk::unexpected(process_error(
 					"provider.process-channel-invalid", "session_id", "typed-digest"));
+			if (!valid_typed_digest(task_v4_digest, semantic_digest_prefix) ||
+				task_id != std::string{"task:"} + task_v4_digest)
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-foreign", "binding", "identity"));
+			if (!valid_typed_digest(closure_id, "source-closure:semantic-v2:sha256:") ||
+				closure_id != std::string{"source-closure:"} + closure_digest)
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-foreign", "binding", "identity"));
 			if (!valid_typed_digest(closure_digest, semantic_digest_prefix))
 				return cxxlens::sdk::unexpected(process_error(
 					"provider.process-channel-invalid", "closure_digest", "typed-digest"));
 			if (!valid_typed_digest(transfer_digest, semantic_digest_prefix))
 				return cxxlens::sdk::unexpected(process_error(
 					"provider.process-channel-invalid", "transfer_digest", "typed-digest"));
+			if (!valid_typed_digest(manifest_digest, semantic_digest_prefix) || stream_id == 0U ||
+				first_sequence != 0U)
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", "manifest_sequence", "typed-digest"));
 			if (read_descriptor < 4 || write_descriptor < 4)
 				return cxxlens::sdk::unexpected(process_error(
 					"provider.process-channel-invalid", "descriptor", "reserved-descriptor"));
@@ -293,8 +323,13 @@ namespace cxxlens::sdk::provider
 											   const int write_descriptor,
 											   std::string task_id,
 											   std::string session_id,
+											   std::string task_v4_digest,
+											   std::string closure_id,
 											   std::string closure_digest,
-											   std::string transfer_digest)
+											   std::string manifest_digest,
+											   std::string transfer_digest,
+											   const std::uint64_t stream_id,
+											   const std::uint64_t first_sequence)
 		{
 			if (read_descriptor == write_descriptor)
 				return cxxlens::sdk::unexpected(
@@ -304,8 +339,13 @@ namespace cxxlens::sdk::provider
 			value.write_descriptor = write_descriptor;
 			value.task_id = std::move(task_id);
 			value.session_id = std::move(session_id);
+			value.task_v4_digest = std::move(task_v4_digest);
+			value.closure_id = std::move(closure_id);
 			value.closure_digest = std::move(closure_digest);
+			value.manifest_digest = std::move(manifest_digest);
 			value.transfer_digest = std::move(transfer_digest);
+			value.stream_id = stream_id;
+			value.first_sequence = first_sequence;
 #if defined(__linux__) && defined(__GLIBC__)
 			auto read = inspect_channel_descriptor(read_descriptor, "read_descriptor", true);
 			if (!read)
@@ -331,6 +371,903 @@ namespace cxxlens::sdk::provider
 				return cxxlens::sdk::unexpected(std::move(valid.error()));
 			return std::shared_ptr<const process_inherited_channel_binding>{
 				std::make_shared<process_inherited_channel_binding>(std::move(value))};
+		}
+
+		struct process_source_endpoint_identity
+		{
+			std::uint64_t device{};
+			std::uint64_t inode{};
+			std::uint32_t mode{};
+		};
+
+		struct process_source_closure_generation_state
+		{
+			const std::uint64_t generation;
+			const std::uint64_t creator_process;
+			const int read_descriptor;
+			const int write_descriptor;
+			const process_source_endpoint_identity read_identity;
+			const process_source_endpoint_identity write_identity;
+			mutable std::atomic<std::uint64_t> epoch;
+			mutable std::atomic<bool> alive{true};
+			mutable std::atomic<bool> launch_available{true};
+
+			process_source_closure_generation_state(
+				const std::uint64_t generation_value,
+				const std::uint64_t creator_process_value,
+				const int read_descriptor_value,
+				const int write_descriptor_value,
+				const process_source_endpoint_identity read_identity_value,
+				const process_source_endpoint_identity write_identity_value)
+				: generation{generation_value}, creator_process{creator_process_value},
+				  read_descriptor{read_descriptor_value}, write_descriptor{write_descriptor_value},
+				  read_identity{read_identity_value}, write_identity{write_identity_value},
+				  epoch{generation_value}
+			{
+			}
+
+			void invalidate() const noexcept
+			{
+				alive.store(false, std::memory_order_release);
+				launch_available.store(false, std::memory_order_release);
+				epoch.fetch_add(1U, std::memory_order_acq_rel);
+			}
+		};
+
+		class process_source_owned_descriptor final
+		{
+		  public:
+			explicit process_source_owned_descriptor(const int value = -1) noexcept : value_{value}
+			{
+			}
+			process_source_owned_descriptor(const process_source_owned_descriptor&) = delete;
+			process_source_owned_descriptor&
+			operator=(const process_source_owned_descriptor&) = delete;
+			~process_source_owned_descriptor() noexcept
+			{
+				reset();
+			}
+			[[nodiscard]] int get() const noexcept
+			{
+				return value_;
+			}
+			[[nodiscard]] int release() noexcept
+			{
+				return std::exchange(value_, -1);
+			}
+			void reset() noexcept
+			{
+#if defined(__linux__) && defined(__GLIBC__)
+				if (value_ >= 0)
+					(void)::close(std::exchange(value_, -1));
+#else
+				value_ = -1;
+#endif
+			}
+
+		  private:
+			int value_;
+		};
+
+		[[nodiscard]] std::uint64_t process_source_current_pid() noexcept
+		{
+#if defined(__linux__) && defined(__GLIBC__)
+			return static_cast<std::uint64_t>(::getpid());
+#else
+			return 0U;
+#endif
+		}
+
+		[[nodiscard]] std::uint64_t next_process_source_generation() noexcept
+		{
+			static std::atomic<std::uint64_t> next{1U};
+			return next.fetch_add(1U, std::memory_order_relaxed);
+		}
+
+		[[nodiscard]] bool process_source_typed_digest(const std::string_view value,
+													   const std::string_view prefix) noexcept
+		{
+			if (!value.starts_with(prefix) || value.size() != prefix.size() + 64U)
+				return false;
+			for (const auto byte : value.substr(prefix.size()))
+				if (!((byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f')))
+					return false;
+			return true;
+		}
+
+		[[nodiscard]] bool process_source_prefixed_identity(const std::string_view value,
+															const std::string_view prefix,
+															const std::string_view suffix) noexcept
+		{
+			return value.size() == prefix.size() + suffix.size() && value.starts_with(prefix) &&
+				value.substr(prefix.size()) == suffix;
+		}
+
+		[[nodiscard]] result<std::string>
+		process_source_binding_digest(const std::string_view task_id,
+									  const std::string_view session_id,
+									  const std::string_view task_v4_digest,
+									  const std::string_view closure_id,
+									  const std::string_view closure_digest,
+									  const std::string_view manifest_digest,
+									  const std::string_view transfer_digest,
+									  const std::uint64_t stream_id,
+									  const std::uint64_t first_sequence,
+									  const int read_descriptor,
+									  const int write_descriptor,
+									  const process_source_endpoint_identity read_identity,
+									  const process_source_endpoint_identity write_identity)
+		{
+			// The digest tuple has exactly 18 ordered fields. ingress_mode is a fixed protocol
+			// discriminator, while binding_digest is the digest of this tuple rather than a
+			// second input field.
+			return canonical_identity_digest(
+				"process-channel",
+				std::array{
+					canonical_value::from_string("task-v4-source-closure-v2"),
+					canonical_value::from_string(std::string{task_id}),
+					canonical_value::from_string(std::string{session_id}),
+					canonical_value::from_string(std::string{task_v4_digest}),
+					canonical_value::from_string(std::string{closure_id}),
+					canonical_value::from_string(std::string{closure_digest}),
+					canonical_value::from_string(std::string{manifest_digest}),
+					canonical_value::from_string(std::string{transfer_digest}),
+					canonical_value::from_string(std::to_string(stream_id)),
+					canonical_value::from_string(std::to_string(first_sequence)),
+					canonical_value::from_integer(read_descriptor),
+					canonical_value::from_integer(write_descriptor),
+					canonical_value::from_string(std::to_string(read_identity.device)),
+					canonical_value::from_string(std::to_string(read_identity.inode)),
+					canonical_value::from_string(std::to_string(read_identity.mode)),
+					canonical_value::from_string(std::to_string(write_identity.device)),
+					canonical_value::from_string(std::to_string(write_identity.inode)),
+					canonical_value::from_string(std::to_string(write_identity.mode)),
+				});
+		}
+
+#if defined(__linux__) && defined(__GLIBC__)
+		[[nodiscard]] result<descriptor_identity> inspect_host_channel_descriptor(
+			const int descriptor, const std::string_view field, const bool read_endpoint)
+		{
+			if (descriptor < 4)
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", std::string{field}, "reserved-descriptor"));
+			const auto descriptor_flags = ::fcntl(descriptor, F_GETFD);
+			if (descriptor_flags < 0)
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", std::string{field}, "descriptor-closed"));
+			if ((descriptor_flags & FD_CLOEXEC) == 0)
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", std::string{field}, "close-on-exec-clear"));
+			const auto status_flags = ::fcntl(descriptor, F_GETFL);
+			if (status_flags < 0)
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", std::string{field}, "status"));
+			if ((status_flags & O_NONBLOCK) == 0)
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", std::string{field}, "blocking-descriptor"));
+			const auto access_mode = status_flags & O_ACCMODE;
+			if ((read_endpoint && access_mode == O_WRONLY) ||
+				(!read_endpoint && access_mode == O_RDONLY))
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", std::string{field}, "access-mode"));
+			struct stat metadata{};
+			if (::fstat(descriptor, &metadata) != 0 || !S_ISSOCK(metadata.st_mode))
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", std::string{field}, "channel-type"));
+			int socket_type{};
+			socklen_t socket_type_size = sizeof(socket_type);
+			if (::getsockopt(descriptor, SOL_SOCKET, SO_TYPE, &socket_type, &socket_type_size) !=
+					0 ||
+				socket_type_size != sizeof(socket_type) || socket_type != SOCK_STREAM)
+			{
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", std::string{field}, "socket-type"));
+			}
+			sockaddr_storage peer{};
+			socklen_t peer_size = sizeof(peer);
+			if (::getpeername(descriptor, reinterpret_cast<sockaddr*>(&peer), &peer_size) != 0)
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", std::string{field}, "not-connected"));
+			if (peer.ss_family != AF_UNIX)
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", std::string{field}, "not-unix"));
+			return descriptor_identity{static_cast<std::uint64_t>(metadata.st_dev),
+									   static_cast<std::uint64_t>(metadata.st_ino),
+									   static_cast<std::uint32_t>(metadata.st_mode)};
+		}
+
+		[[nodiscard]] bool
+		live_host_channel_descriptor(const int descriptor,
+									 const bool read_endpoint,
+									 const process_source_endpoint_identity expected) noexcept
+		{
+			if (descriptor < 4)
+				return false;
+			const auto descriptor_flags = ::fcntl(descriptor, F_GETFD);
+			if (descriptor_flags < 0 || (descriptor_flags & FD_CLOEXEC) == 0)
+				return false;
+			const auto status_flags = ::fcntl(descriptor, F_GETFL);
+			if (status_flags < 0 || (status_flags & O_NONBLOCK) == 0)
+				return false;
+			const auto access_mode = status_flags & O_ACCMODE;
+			if ((read_endpoint && access_mode == O_WRONLY) ||
+				(!read_endpoint && access_mode == O_RDONLY))
+				return false;
+			struct stat metadata{};
+			if (::fstat(descriptor, &metadata) != 0 || !S_ISSOCK(metadata.st_mode))
+				return false;
+			int socket_type{};
+			socklen_t socket_type_size = sizeof(socket_type);
+			if (::getsockopt(descriptor, SOL_SOCKET, SO_TYPE, &socket_type, &socket_type_size) !=
+					0 ||
+				socket_type_size != sizeof(socket_type) || socket_type != SOCK_STREAM)
+				return false;
+			sockaddr_storage peer{};
+			socklen_t peer_size = sizeof(peer);
+			if (::getpeername(descriptor, reinterpret_cast<sockaddr*>(&peer), &peer_size) != 0 ||
+				peer.ss_family != AF_UNIX)
+				return false;
+			return static_cast<std::uint64_t>(metadata.st_dev) == expected.device &&
+				static_cast<std::uint64_t>(metadata.st_ino) == expected.inode &&
+				static_cast<std::uint32_t>(metadata.st_mode) == expected.mode;
+		}
+
+		[[nodiscard]] bool
+		close_owned_source_descriptor(int& descriptor,
+									  const bool read_endpoint,
+									  const process_source_endpoint_identity expected) noexcept
+		{
+			if (descriptor < 0)
+				return true;
+			if (!live_host_channel_descriptor(descriptor, read_endpoint, expected))
+			{
+				// The number may now designate a foreign descriptor.  Never close it: dropping
+				// our stale number is the only safe cleanup after the witness has changed.
+				descriptor = -1;
+				return false;
+			}
+			const auto owned = std::exchange(descriptor, -1);
+			return ::close(owned) == 0;
+		}
+#endif
+
+		process_source_closure_descriptor_projection::process_source_closure_descriptor_projection(
+			const int read_descriptor,
+			const int write_descriptor,
+			const std::uint64_t read_device,
+			const std::uint64_t read_inode,
+			const std::uint32_t read_mode,
+			const std::uint64_t write_device,
+			const std::uint64_t write_inode,
+			const std::uint32_t write_mode,
+			std::unique_ptr<process_source_closure_generation_state> state,
+			const std::uint64_t generation) noexcept
+			: read_descriptor_{read_descriptor}, write_descriptor_{write_descriptor},
+			  read_device_{read_device}, read_inode_{read_inode}, read_mode_{read_mode},
+			  write_device_{write_device}, write_inode_{write_inode}, write_mode_{write_mode},
+			  state_{std::move(state)}, generation_{generation}
+		{
+		}
+
+		process_source_closure_descriptor_projection::process_source_closure_descriptor_projection(
+			process_source_closure_descriptor_projection&& other) noexcept
+			: read_descriptor_{std::exchange(other.read_descriptor_, -1)},
+			  write_descriptor_{std::exchange(other.write_descriptor_, -1)},
+			  read_device_{other.read_device_}, read_inode_{other.read_inode_},
+			  read_mode_{other.read_mode_}, write_device_{other.write_device_},
+			  write_inode_{other.write_inode_}, write_mode_{other.write_mode_},
+			  state_{std::move(other.state_)}, generation_{other.generation_},
+			  adapter_consumed_{other.adapter_consumed_}
+		{
+			other.generation_ = 0U;
+			other.adapter_consumed_ = true;
+		}
+
+		process_source_closure_descriptor_projection::
+			~process_source_closure_descriptor_projection() noexcept
+		{
+			close_owned();
+		}
+
+		void process_source_closure_descriptor_projection::close_owned() noexcept
+		{
+			if (state_)
+				state_->invalidate();
+#if defined(__linux__) && defined(__GLIBC__)
+			const auto read_closed = close_owned_source_descriptor(
+				read_descriptor_, true, {read_device_, read_inode_, read_mode_});
+			const auto write_closed = close_owned_source_descriptor(
+				write_descriptor_, false, {write_device_, write_inode_, write_mode_});
+			if ((!read_closed || !write_closed) && state_)
+				state_->invalidate();
+#else
+			read_descriptor_ = -1;
+			write_descriptor_ = -1;
+#endif
+			generation_ = 0U;
+			state_.reset();
+			adapter_consumed_ = true;
+		}
+
+		process_source_closure_launch_view::process_source_closure_launch_view(
+			const int read_descriptor,
+			const int write_descriptor,
+			std::string task_id,
+			std::string session_id,
+			std::string task_v4_digest,
+			std::string closure_id,
+			std::string closure_digest,
+			std::string manifest_digest,
+			std::string transfer_digest,
+			std::string binding_digest,
+			const std::uint64_t stream_id,
+			const std::uint64_t first_sequence,
+			const std::uint64_t read_device,
+			const std::uint64_t read_inode,
+			const std::uint32_t read_mode,
+			const std::uint64_t write_device,
+			const std::uint64_t write_inode,
+			const std::uint32_t write_mode,
+			std::unique_ptr<process_source_closure_generation_state> state) noexcept
+			: read_descriptor_{read_descriptor}, write_descriptor_{write_descriptor},
+			  task_id_{std::move(task_id)}, session_id_{std::move(session_id)},
+			  task_v4_digest_{std::move(task_v4_digest)}, closure_id_{std::move(closure_id)},
+			  closure_digest_{std::move(closure_digest)},
+			  manifest_digest_{std::move(manifest_digest)},
+			  transfer_digest_{std::move(transfer_digest)},
+			  binding_digest_{std::move(binding_digest)}, stream_id_{stream_id},
+			  first_sequence_{first_sequence}, read_device_{read_device}, read_inode_{read_inode},
+			  read_mode_{read_mode}, write_device_{write_device}, write_inode_{write_inode},
+			  write_mode_{write_mode}, state_{std::move(state)},
+			  generation_{state_ ? state_->generation : 0U}
+		{
+		}
+
+		process_source_closure_launch_view::process_source_closure_launch_view(
+			process_source_closure_launch_view&& other) noexcept
+			: read_descriptor_{std::exchange(other.read_descriptor_, -1)},
+			  write_descriptor_{std::exchange(other.write_descriptor_, -1)},
+			  task_id_{std::move(other.task_id_)}, session_id_{std::move(other.session_id_)},
+			  task_v4_digest_{std::move(other.task_v4_digest_)},
+			  closure_id_{std::move(other.closure_id_)},
+			  closure_digest_{std::move(other.closure_digest_)},
+			  manifest_digest_{std::move(other.manifest_digest_)},
+			  transfer_digest_{std::move(other.transfer_digest_)},
+			  binding_digest_{std::move(other.binding_digest_)}, stream_id_{other.stream_id_},
+			  first_sequence_{other.first_sequence_}, read_device_{other.read_device_},
+			  read_inode_{other.read_inode_}, read_mode_{other.read_mode_},
+			  write_device_{other.write_device_}, write_inode_{other.write_inode_},
+			  write_mode_{other.write_mode_}, state_{std::move(other.state_)},
+			  generation_{other.generation_}, adapter_accessed_{other.adapter_accessed_}
+		{
+			other.generation_ = 0U;
+			other.adapter_accessed_ = true;
+		}
+
+		process_source_closure_launch_view::~process_source_closure_launch_view() noexcept
+		{
+			if (state_)
+				state_->invalidate();
+#if defined(__linux__) && defined(__GLIBC__)
+			const auto read_closed = close_owned_source_descriptor(
+				read_descriptor_, true, {read_device_, read_inode_, read_mode_});
+			const auto write_closed = close_owned_source_descriptor(
+				write_descriptor_, false, {write_device_, write_inode_, write_mode_});
+			if ((!read_closed || !write_closed) && state_)
+				state_->invalidate();
+#else
+			read_descriptor_ = -1;
+			write_descriptor_ = -1;
+#endif
+		}
+
+		process_source_closure_launch::process_source_closure_launch(
+			const int read_descriptor,
+			const int write_descriptor,
+			std::string task_id,
+			std::string session_id,
+			std::string task_v4_digest,
+			std::string closure_id,
+			std::string closure_digest,
+			std::string manifest_digest,
+			std::string transfer_digest,
+			std::string binding_digest,
+			const std::uint64_t stream_id,
+			const std::uint64_t first_sequence,
+			const std::uint64_t read_device,
+			const std::uint64_t read_inode,
+			const std::uint32_t read_mode,
+			const std::uint64_t write_device,
+			const std::uint64_t write_inode,
+			const std::uint32_t write_mode,
+			std::unique_ptr<process_source_closure_generation_state> state) noexcept
+			: read_descriptor_{read_descriptor}, write_descriptor_{write_descriptor},
+			  task_id_{std::move(task_id)}, session_id_{std::move(session_id)},
+			  task_v4_digest_{std::move(task_v4_digest)}, closure_id_{std::move(closure_id)},
+			  closure_digest_{std::move(closure_digest)},
+			  manifest_digest_{std::move(manifest_digest)},
+			  transfer_digest_{std::move(transfer_digest)},
+			  binding_digest_{std::move(binding_digest)}, stream_id_{stream_id},
+			  first_sequence_{first_sequence}, read_device_{read_device}, read_inode_{read_inode},
+			  read_mode_{read_mode}, write_device_{write_device}, write_inode_{write_inode},
+			  write_mode_{write_mode}, state_{std::move(state)},
+			  generation_{state_ ? state_->generation : 0U}
+		{
+		}
+
+		process_source_closure_launch::process_source_closure_launch(
+			process_source_closure_launch&& other) noexcept
+			: read_descriptor_{std::exchange(other.read_descriptor_, -1)},
+			  write_descriptor_{std::exchange(other.write_descriptor_, -1)},
+			  task_id_{std::move(other.task_id_)}, session_id_{std::move(other.session_id_)},
+			  task_v4_digest_{std::move(other.task_v4_digest_)},
+			  closure_id_{std::move(other.closure_id_)},
+			  closure_digest_{std::move(other.closure_digest_)},
+			  manifest_digest_{std::move(other.manifest_digest_)},
+			  transfer_digest_{std::move(other.transfer_digest_)},
+			  binding_digest_{std::move(other.binding_digest_)}, stream_id_{other.stream_id_},
+			  first_sequence_{other.first_sequence_}, read_device_{other.read_device_},
+			  read_inode_{other.read_inode_}, read_mode_{other.read_mode_},
+			  write_device_{other.write_device_}, write_inode_{other.write_inode_},
+			  write_mode_{other.write_mode_}, state_{std::move(other.state_)},
+			  generation_{other.generation_}
+		{
+			other.generation_ = 0U;
+		}
+
+		process_source_closure_launch::~process_source_closure_launch() noexcept
+		{
+			invalidate();
+#if defined(__linux__) && defined(__GLIBC__)
+			const auto read_closed = close_owned_source_descriptor(
+				read_descriptor_, true, {read_device_, read_inode_, read_mode_});
+			const auto write_closed = close_owned_source_descriptor(
+				write_descriptor_, false, {write_device_, write_inode_, write_mode_});
+			if ((!read_closed || !write_closed) && state_)
+				state_->invalidate();
+#endif
+			read_descriptor_ = -1;
+			write_descriptor_ = -1;
+		}
+
+		result<void> process_source_closure_launch::validate() const
+		{
+			constexpr std::string_view semantic_prefix{"semantic-v2:sha256:"};
+			constexpr std::string_view task_prefix{"task:semantic-v2:sha256:"};
+			constexpr std::string_view session_prefix{"provider-session:sha256:"};
+			constexpr std::string_view closure_id_prefix{"source-closure:semantic-v2:sha256:"};
+			if (!process_source_typed_digest(task_v4_digest_, semantic_prefix) ||
+				!process_source_prefixed_identity(task_id_, "task:", task_v4_digest_) ||
+				!process_source_typed_digest(task_id_, task_prefix))
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", "task_authority", "typed-digest"));
+			if (!process_source_typed_digest(session_id_, session_prefix))
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", "session_id", "typed-digest"));
+			if (!process_source_typed_digest(closure_digest_, semantic_prefix) ||
+				!process_source_typed_digest(closure_id_, closure_id_prefix) ||
+				!process_source_prefixed_identity(closure_id_, "source-closure:", closure_digest_))
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", "closure_authority", "typed-digest"));
+			if (!process_source_typed_digest(manifest_digest_, semantic_prefix) ||
+				!process_source_typed_digest(transfer_digest_, semantic_prefix))
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", "manifest_transfer", "typed-digest"));
+			if (stream_id_ == 0U || first_sequence_ != 0U)
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-invalid",
+								  "sequence",
+								  stream_id_ == 0U ? "stream" : "first-sequence"));
+			if (!state_ || generation_ == 0U || state_->generation != generation_ ||
+				state_->read_descriptor != read_descriptor_ ||
+				state_->write_descriptor != write_descriptor_ ||
+				state_->creator_process != process_source_current_pid() ||
+				!state_->alive.load(std::memory_order_acquire) ||
+				state_->epoch.load(std::memory_order_acquire) != generation_)
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-stale", "generation", "not-alive"));
+			if (!process_source_typed_digest(binding_digest_, "process-channel:sha256:"))
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", "binding_digest", "typed-digest"));
+
+#if !defined(__linux__) || !defined(__GLIBC__)
+			return cxxlens::sdk::unexpected(process_error(
+				"provider.process-channel-unavailable", "platform", "linux-glibc-required"));
+#else
+			if (!live_host_channel_descriptor(
+					read_descriptor_, true, {read_device_, read_inode_, read_mode_}) ||
+				!live_host_channel_descriptor(
+					write_descriptor_, false, {write_device_, write_inode_, write_mode_}))
+			{
+				invalidate();
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-stale", "descriptor", "not-live"));
+			}
+#endif
+			try
+			{
+				auto expected =
+					process_source_binding_digest(task_id_,
+												  session_id_,
+												  task_v4_digest_,
+												  closure_id_,
+												  closure_digest_,
+												  manifest_digest_,
+												  transfer_digest_,
+												  stream_id_,
+												  first_sequence_,
+												  read_descriptor_,
+												  write_descriptor_,
+												  {read_device_, read_inode_, read_mode_},
+												  {write_device_, write_inode_, write_mode_});
+				if (!expected || *expected != binding_digest_)
+				{
+					invalidate();
+					return cxxlens::sdk::unexpected(
+						process_error("provider.process-channel-foreign", "binding", "identity"));
+				}
+			}
+			catch (const std::bad_alloc&)
+			{
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-invalid", "binding", "allocation"));
+			}
+			return {};
+		}
+
+		bool process_source_closure_launch::validate_live_endpoint_identity() const noexcept
+		{
+			if (!state_ || generation_ == 0U || state_->generation != generation_ ||
+				state_->read_descriptor != read_descriptor_ ||
+				state_->write_descriptor != write_descriptor_ ||
+				state_->creator_process != process_source_current_pid() ||
+				!state_->alive.load(std::memory_order_acquire) ||
+				state_->epoch.load(std::memory_order_acquire) != generation_)
+				return false;
+#if !defined(__linux__) || !defined(__GLIBC__)
+			return false;
+#else
+			const auto valid =
+				live_host_channel_descriptor(read_descriptor_, true, state_->read_identity) &&
+				live_host_channel_descriptor(write_descriptor_, false, state_->write_identity);
+			if (!valid)
+				state_->invalidate();
+			return valid;
+#endif
+		}
+
+		result<process_source_closure_launch_view> process_source_closure_launch::claim_launch() &&
+		{
+			if (!state_)
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-stale", "launch", "already-consumed"));
+			auto valid = validate();
+			if (!valid)
+				return cxxlens::sdk::unexpected(std::move(valid.error()));
+			bool expected = true;
+			if (!state_ ||
+				!state_->launch_available.compare_exchange_strong(
+					expected, false, std::memory_order_acq_rel, std::memory_order_acquire))
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-stale", "launch", "already-consumed"));
+			if (!state_->alive.load(std::memory_order_acquire) ||
+				state_->epoch.load(std::memory_order_acquire) != generation_)
+			{
+				state_->invalidate();
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-stale", "launch", "not-live"));
+			}
+			auto state = std::move(state_);
+			try
+			{
+				auto view = process_source_closure_launch_view{std::exchange(read_descriptor_, -1),
+															   std::exchange(write_descriptor_, -1),
+															   std::move(task_id_),
+															   std::move(session_id_),
+															   std::move(task_v4_digest_),
+															   std::move(closure_id_),
+															   std::move(closure_digest_),
+															   std::move(manifest_digest_),
+															   std::move(transfer_digest_),
+															   std::move(binding_digest_),
+															   stream_id_,
+															   first_sequence_,
+															   read_device_,
+															   read_inode_,
+															   read_mode_,
+															   write_device_,
+															   write_inode_,
+															   write_mode_,
+															   std::move(state)};
+				generation_ = 0U;
+				return view;
+			}
+			catch (const std::bad_alloc&)
+			{
+				if (state)
+					state->invalidate();
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-invalid", "launch", "allocation"));
+			}
+		}
+
+		void process_source_closure_launch::invalidate() const noexcept
+		{
+			if (state_)
+				state_->invalidate();
+		}
+
+		result<process_source_closure_descriptor_projection>
+		process_source_closure_launch_adapter_access::consume(
+			process_source_closure_launch_view&& value)
+		{
+			if (value.adapter_accessed_)
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-stale", "launch", "already-consumed"));
+			if (!value.state_ || value.generation_ == 0U ||
+				value.state_->generation != value.generation_ ||
+				value.state_->read_descriptor != value.read_descriptor_ ||
+				value.state_->write_descriptor != value.write_descriptor_ ||
+				value.state_->creator_process != process_source_current_pid() ||
+				!value.state_->alive.load(std::memory_order_acquire) ||
+				value.state_->epoch.load(std::memory_order_acquire) != value.generation_)
+			{
+				if (value.state_)
+					value.state_->invalidate();
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-stale", "launch", "not-live"));
+			}
+#if !defined(__linux__) || !defined(__GLIBC__)
+			return cxxlens::sdk::unexpected(process_error(
+				"provider.process-channel-unavailable", "platform", "linux-glibc-required"));
+#else
+			if (!live_host_channel_descriptor(
+					value.read_descriptor_,
+					true,
+					{value.read_device_, value.read_inode_, value.read_mode_}) ||
+				!live_host_channel_descriptor(
+					value.write_descriptor_,
+					false,
+					{value.write_device_, value.write_inode_, value.write_mode_}))
+			{
+				value.state_->invalidate();
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-stale", "descriptor", "not-live"));
+			}
+#endif
+			value.adapter_accessed_ = true;
+			auto projection = process_source_closure_descriptor_projection{
+				std::exchange(value.read_descriptor_, -1),
+				std::exchange(value.write_descriptor_, -1),
+				value.read_device_,
+				value.read_inode_,
+				value.read_mode_,
+				value.write_device_,
+				value.write_inode_,
+				value.write_mode_,
+				std::move(value.state_),
+				value.generation_};
+			value.generation_ = 0U;
+			return projection;
+		}
+
+		result<void> process_source_closure_launch_adapter_access::consume(
+			process_source_closure_descriptor_projection&& value,
+			void* const context,
+			const descriptor_operation operation)
+		{
+			if (value.adapter_consumed_)
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-stale", "adapter", "already-consumed"));
+			value.adapter_consumed_ = true;
+			if (operation == nullptr)
+			{
+				auto failure = process_error(
+					"provider.process-channel-invalid", "adapter", "missing-operation");
+				value.close_owned();
+				return cxxlens::sdk::unexpected(std::move(failure));
+			}
+			if (!value.state_ || value.generation_ == 0U ||
+				value.state_->generation != value.generation_ ||
+				value.state_->read_descriptor != value.read_descriptor_ ||
+				value.state_->write_descriptor != value.write_descriptor_ ||
+				value.state_->creator_process != process_source_current_pid() ||
+				!value.state_->alive.load(std::memory_order_acquire) ||
+				value.state_->epoch.load(std::memory_order_acquire) != value.generation_)
+			{
+				auto failure =
+					process_error("provider.process-channel-stale", "adapter", "not-live");
+				value.close_owned();
+				return cxxlens::sdk::unexpected(std::move(failure));
+			}
+#if !defined(__linux__) || !defined(__GLIBC__)
+			auto failure = process_error(
+				"provider.process-channel-unavailable", "platform", "linux-glibc-required");
+			value.close_owned();
+			return cxxlens::sdk::unexpected(std::move(failure));
+#else
+			if (!live_host_channel_descriptor(
+					value.read_descriptor_,
+					true,
+					{value.read_device_, value.read_inode_, value.read_mode_}) ||
+				!live_host_channel_descriptor(
+					value.write_descriptor_,
+					false,
+					{value.write_device_, value.write_inode_, value.write_mode_}))
+			{
+				auto failure =
+					process_error("provider.process-channel-stale", "descriptor", "not-live");
+				value.close_owned();
+				return cxxlens::sdk::unexpected(std::move(failure));
+			}
+#endif
+			try
+			{
+				auto outcome = operation(context, value.read_descriptor_, value.write_descriptor_);
+				value.close_owned();
+				return outcome;
+			}
+			catch (const std::bad_alloc&)
+			{
+				value.close_owned();
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-invalid", "adapter", "allocation"));
+			}
+			catch (...)
+			{
+				value.close_owned();
+				throw;
+			}
+		}
+
+		result<process_source_closure_launch>
+		make_process_source_closure_launch(const int read_descriptor,
+										   const int write_descriptor,
+										   std::string task_id,
+										   std::string session_id,
+										   std::string task_v4_digest,
+										   std::string closure_id,
+										   std::string closure_digest,
+										   std::string manifest_digest,
+										   std::string transfer_digest,
+										   const std::uint64_t stream_id,
+										   const std::uint64_t first_sequence)
+		{
+			constexpr std::string_view semantic_prefix{"semantic-v2:sha256:"};
+			constexpr std::string_view task_prefix{"task:semantic-v2:sha256:"};
+			constexpr std::string_view session_prefix{"provider-session:sha256:"};
+			constexpr std::string_view closure_id_prefix{"source-closure:semantic-v2:sha256:"};
+			if (!process_source_typed_digest(task_v4_digest, semantic_prefix) ||
+				!process_source_typed_digest(task_id, task_prefix) ||
+				!process_source_prefixed_identity(task_id, "task:", task_v4_digest))
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", "task_authority", "typed-digest"));
+			if (!process_source_typed_digest(session_id, session_prefix) ||
+				!process_source_typed_digest(closure_digest, semantic_prefix) ||
+				!process_source_typed_digest(closure_id, closure_id_prefix) ||
+				!process_source_prefixed_identity(closure_id, "source-closure:", closure_digest))
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-channel-invalid", "closure_authority", "typed-digest"));
+			if (!process_source_typed_digest(manifest_digest, semantic_prefix) ||
+				!process_source_typed_digest(transfer_digest, semantic_prefix) || stream_id == 0U ||
+				first_sequence != 0U)
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-invalid",
+								  "sequence",
+								  stream_id == 0U ? "stream" : "first-sequence"));
+			if (read_descriptor == write_descriptor)
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-invalid", "descriptor", "duplicate"));
+
+#if !defined(__linux__) || !defined(__GLIBC__)
+			return cxxlens::sdk::unexpected(process_error(
+				"provider.process-channel-unavailable", "platform", "linux-glibc-required"));
+#else
+			auto read_source =
+				inspect_host_channel_descriptor(read_descriptor, "read_descriptor", true);
+			if (!read_source)
+				return cxxlens::sdk::unexpected(std::move(read_source.error()));
+			auto write_source =
+				inspect_host_channel_descriptor(write_descriptor, "write_descriptor", false);
+			if (!write_source)
+				return cxxlens::sdk::unexpected(std::move(write_source.error()));
+			if (read_source->device == write_source->device &&
+				read_source->inode == write_source->inode &&
+				read_source->mode == write_source->mode)
+				return cxxlens::sdk::unexpected(process_error("provider.process-channel-invalid",
+															  "descriptor",
+															  "duplicate-physical-endpoint"));
+			try
+			{
+				const auto read_owned_value = ::fcntl(read_descriptor, F_DUPFD_CLOEXEC, 4);
+				if (read_owned_value < 4)
+					return cxxlens::sdk::unexpected(process_error(
+						"provider.process-channel-invalid", "read_descriptor", "duplicate"));
+				process_source_owned_descriptor read_owned{read_owned_value};
+				const auto write_owned_value = ::fcntl(write_descriptor, F_DUPFD_CLOEXEC, 4);
+				if (write_owned_value < 4)
+					return cxxlens::sdk::unexpected(process_error(
+						"provider.process-channel-invalid", "write_descriptor", "duplicate"));
+				process_source_owned_descriptor write_owned{write_owned_value};
+				auto read =
+					inspect_host_channel_descriptor(read_owned.get(), "read_descriptor", true);
+				if (!read)
+					return cxxlens::sdk::unexpected(std::move(read.error()));
+				auto write =
+					inspect_host_channel_descriptor(write_owned.get(), "write_descriptor", false);
+				if (!write)
+					return cxxlens::sdk::unexpected(std::move(write.error()));
+				if (read->device != read_source->device || read->inode != read_source->inode ||
+					read->mode != read_source->mode || write->device != write_source->device ||
+					write->inode != write_source->inode || write->mode != write_source->mode)
+					return cxxlens::sdk::unexpected(process_error(
+						"provider.process-channel-foreign", "descriptor", "identity"));
+				if (read->device == write->device && read->inode == write->inode &&
+					read->mode == write->mode)
+					return cxxlens::sdk::unexpected(
+						process_error("provider.process-channel-invalid",
+									  "descriptor",
+									  "duplicate-physical-endpoint"));
+				const process_source_endpoint_identity read_identity{
+					read->device, read->inode, read->mode};
+				const process_source_endpoint_identity write_identity{
+					write->device, write->inode, write->mode};
+				auto digest = process_source_binding_digest(task_id,
+															session_id,
+															task_v4_digest,
+															closure_id,
+															closure_digest,
+															manifest_digest,
+															transfer_digest,
+															stream_id,
+															first_sequence,
+															read_owned.get(),
+															write_owned.get(),
+															read_identity,
+															write_identity);
+				if (!digest)
+					return cxxlens::sdk::unexpected(std::move(digest.error()));
+				const auto generation = next_process_source_generation();
+				if (generation == 0U)
+					return cxxlens::sdk::unexpected(process_error(
+						"provider.process-channel-invalid", "generation", "exhausted"));
+				auto state = std::make_unique<process_source_closure_generation_state>(
+					generation,
+					process_source_current_pid(),
+					read_owned.get(),
+					write_owned.get(),
+					read_identity,
+					write_identity);
+				auto value = process_source_closure_launch{read_owned.release(),
+														   write_owned.release(),
+														   std::move(task_id),
+														   std::move(session_id),
+														   std::move(task_v4_digest),
+														   std::move(closure_id),
+														   std::move(closure_digest),
+														   std::move(manifest_digest),
+														   std::move(transfer_digest),
+														   std::move(*digest),
+														   stream_id,
+														   first_sequence,
+														   read_identity.device,
+														   read_identity.inode,
+														   read_identity.mode,
+														   write_identity.device,
+														   write_identity.inode,
+														   write_identity.mode,
+														   std::move(state)};
+				if (auto valid = value.validate(); !valid)
+					return cxxlens::sdk::unexpected(std::move(valid.error()));
+				return value;
+			}
+			catch (const std::bad_alloc&)
+			{
+				return cxxlens::sdk::unexpected(
+					process_error("provider.process-channel-invalid", "binding", "allocation"));
+			}
+#endif
 		}
 	} // namespace detail
 
@@ -362,6 +1299,141 @@ namespace cxxlens::sdk::provider
 					policy.policy_digest(),
 					evidence ? std::move(*evidence) : std::string{}};
 		}
+
+		/** Generic bounded streaming SHA-256 for executable measurement; no SQLite dependency. */
+		class process_streaming_sha256 final
+		{
+		  public:
+			void update(const std::span<const std::byte> input) noexcept
+			{
+				total_bytes_ += static_cast<std::uint64_t>(input.size());
+				auto remaining = input;
+				if (pending_size_ != 0U)
+				{
+					const auto count = std::min(remaining.size(), block_bytes - pending_size_);
+					std::ranges::copy(remaining.first(count), pending_.begin() + pending_size_);
+					pending_size_ += count;
+					remaining = remaining.subspan(count);
+					if (pending_size_ == block_bytes)
+					{
+						transform(pending_);
+						pending_size_ = 0U;
+					}
+				}
+				while (remaining.size() >= block_bytes)
+				{
+					transform(remaining.first(block_bytes));
+					remaining = remaining.subspan(block_bytes);
+				}
+				std::ranges::copy(remaining, pending_.begin());
+				pending_size_ = remaining.size();
+			}
+
+			[[nodiscard]] std::string finish()
+			{
+				const auto bit_count = total_bytes_ * 8U;
+				pending_.at(pending_size_++) = std::byte{0x80U};
+				if (pending_size_ > 56U)
+				{
+					std::fill(pending_.begin() + pending_size_, pending_.end(), std::byte{});
+					transform(pending_);
+					pending_size_ = 0U;
+				}
+				std::fill(pending_.begin() + pending_size_, pending_.begin() + 56U, std::byte{});
+				for (std::size_t index{}; index < 8U; ++index)
+					pending_.at(56U + index) = static_cast<std::byte>(
+						(bit_count >> (56U - static_cast<unsigned>(index * 8U))) & 0xffU);
+				transform(pending_);
+				constexpr std::string_view digits{"0123456789abcdef"};
+				std::string output{"sha256:"};
+				output.reserve(71U);
+				for (const auto word : state_)
+					for (std::uint32_t shift = 28U;; shift -= 4U)
+					{
+						output.push_back(digits[(word >> shift) & 0x0fU]);
+						if (shift == 0U)
+							break;
+					}
+				return output;
+			}
+
+		  private:
+			static constexpr std::size_t block_bytes = 64U;
+			static constexpr std::array<std::uint32_t, 64U> round_constants{
+				0x428a2f98U, 0x71374491U, 0xb5c0fbcfU, 0xe9b5dba5U, 0x3956c25bU, 0x59f111f1U,
+				0x923f82a4U, 0xab1c5ed5U, 0xd807aa98U, 0x12835b01U, 0x243185beU, 0x550c7dc3U,
+				0x72be5d74U, 0x80deb1feU, 0x9bdc06a7U, 0xc19bf174U, 0xe49b69c1U, 0xefbe4786U,
+				0x0fc19dc6U, 0x240ca1ccU, 0x2de92c6fU, 0x4a7484aaU, 0x5cb0a9dcU, 0x76f988daU,
+				0x983e5152U, 0xa831c66dU, 0xb00327c8U, 0xbf597fc7U, 0xc6e00bf3U, 0xd5a79147U,
+				0x06ca6351U, 0x14292967U, 0x27b70a85U, 0x2e1b2138U, 0x4d2c6dfcU, 0x53380d13U,
+				0x650a7354U, 0x766a0abbU, 0x81c2c92eU, 0x92722c85U, 0xa2bfe8a1U, 0xa81a664bU,
+				0xc24b8b70U, 0xc76c51a3U, 0xd192e819U, 0xd6990624U, 0xf40e3585U, 0x106aa070U,
+				0x19a4c116U, 0x1e376c08U, 0x2748774cU, 0x34b0bcb5U, 0x391c0cb3U, 0x4ed8aa4aU,
+				0x5b9cca4fU, 0x682e6ff3U, 0x748f82eeU, 0x78a5636fU, 0x84c87814U, 0x8cc70208U,
+				0x90befffaU, 0xa4506cebU, 0xbef9a3f7U, 0xc67178f2U,
+			};
+
+			void transform(const std::span<const std::byte> block) noexcept
+			{
+				std::array<std::uint32_t, 64U> schedule{};
+				for (std::size_t index{}; index < 16U; ++index)
+				{
+					const auto offset = index * 4U;
+					schedule.at(index) = (std::to_integer<std::uint32_t>(block[offset]) << 24U) |
+						(std::to_integer<std::uint32_t>(block[offset + 1U]) << 16U) |
+						(std::to_integer<std::uint32_t>(block[offset + 2U]) << 8U) |
+						std::to_integer<std::uint32_t>(block[offset + 3U]);
+				}
+				for (std::size_t index = 16U; index < schedule.size(); ++index)
+				{
+					const auto small_zero = std::rotr(schedule[index - 15U], 7) ^
+						std::rotr(schedule[index - 15U], 18) ^ (schedule[index - 15U] >> 3U);
+					const auto small_one = std::rotr(schedule[index - 2U], 17) ^
+						std::rotr(schedule[index - 2U], 19) ^ (schedule[index - 2U] >> 10U);
+					schedule[index] =
+						schedule[index - 16U] + small_zero + schedule[index - 7U] + small_one;
+				}
+				auto [a, b, c, d, e, f, g, h] = state_;
+				for (std::size_t index{}; index < schedule.size(); ++index)
+				{
+					const auto big_one = std::rotr(e, 6) ^ std::rotr(e, 11) ^ std::rotr(e, 25);
+					const auto choose = (e & f) ^ (~e & g);
+					const auto first =
+						h + big_one + choose + round_constants.at(index) + schedule.at(index);
+					const auto big_zero = std::rotr(a, 2) ^ std::rotr(a, 13) ^ std::rotr(a, 22);
+					const auto majority = (a & b) ^ (a & c) ^ (b & c);
+					const auto second = big_zero + majority;
+					h = g;
+					g = f;
+					f = e;
+					e = d + first;
+					d = c;
+					c = b;
+					b = a;
+					a = first + second;
+				}
+				state_[0U] += a;
+				state_[1U] += b;
+				state_[2U] += c;
+				state_[3U] += d;
+				state_[4U] += e;
+				state_[5U] += f;
+				state_[6U] += g;
+				state_[7U] += h;
+			}
+
+			std::array<std::uint32_t, 8U> state_{0x6a09e667U,
+												 0xbb67ae85U,
+												 0x3c6ef372U,
+												 0xa54ff53aU,
+												 0x510e527fU,
+												 0x9b05688cU,
+												 0x1f83d9abU,
+												 0x5be0cd19U};
+			std::array<std::byte, 64U> pending_{};
+			std::size_t pending_size_{};
+			std::uint64_t total_bytes_{};
+		};
 
 #if defined(__linux__) && defined(__GLIBC__)
 		class descriptor
@@ -441,7 +1513,7 @@ namespace cxxlens::sdk::provider
 				return cxxlens::sdk::unexpected(process_error(
 					"provider.process-launch-failed", "executable-memfd", std::to_string(errno)));
 			descriptor image{image_value};
-			std::vector<std::byte> measured;
+			process_streaming_sha256 measured;
 			std::array<std::byte, 65536U> buffer{};
 			for (;;)
 			{
@@ -457,7 +1529,7 @@ namespace cxxlens::sdk::provider
 																  std::to_string(errno)));
 				}
 				const auto received = static_cast<std::size_t>(count);
-				measured.insert(measured.end(), buffer.begin(), buffer.begin() + received);
+				measured.update(std::span<const std::byte>{buffer.data(), received});
 				std::size_t offset{};
 				while (offset < received)
 				{
@@ -481,7 +1553,16 @@ namespace cxxlens::sdk::provider
 						F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL) != 0)
 				return cxxlens::sdk::unexpected(process_error(
 					"provider.process-launch-failed", "executable-seal", std::to_string(errno)));
-			return verified_executable{std::move(image), cxxlens::sdk::content_digest(measured)};
+			try
+			{
+				auto digest = measured.finish();
+				return verified_executable{std::move(image), std::move(digest)};
+			}
+			catch (const std::bad_alloc&)
+			{
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-launch-failed", "executable-digest", "allocation"));
+			}
 		}
 
 		struct pipe_pair

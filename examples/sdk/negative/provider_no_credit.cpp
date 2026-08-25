@@ -1,4 +1,4 @@
-#include <limits>
+#include <array>
 
 #include <cxxlens/sdk/provider.hpp>
 
@@ -17,6 +17,7 @@ int main()
 {
 	sink output;
 	cxxlens::sdk::provider::protocol_writer writer{output};
-	auto rejected = writer.send(cxxlens::sdk::provider::message_type::hello);
+	const std::array<std::byte, 2U> hello_control{std::byte{0x61U}, std::byte{0x78U}};
+	auto rejected = writer.send(cxxlens::sdk::provider::message_type::hello, hello_control);
 	return !rejected && rejected.error().code == "provider.backpressure" ? 0 : 1;
 }

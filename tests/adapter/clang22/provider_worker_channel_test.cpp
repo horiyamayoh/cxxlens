@@ -20,9 +20,13 @@
 #include <unistd.h>
 #endif
 
+#include <cxxlens/relations/cc_call_direct_target.hpp>
+#include <cxxlens/relations/cc_call_site.hpp>
+#include <cxxlens/relations/cc_entity.hpp>
 #include <cxxlens/sdk/provider.hpp>
 
 #include "llvm/clang22/materialization_json.hpp"
+#include "llvm/clang22/observation_v2.hpp"
 #include "llvm/clang22/provider_task_v4.hpp"
 #include "llvm/clang22/source_closure.hpp"
 #include "llvm/clang22/source_closure_task_v4.hpp"
@@ -32,6 +36,7 @@
 
 namespace
 {
+#if defined(__linux__) && defined(__GLIBC__) && defined(CXXLENS_TEST_CLANGXX22_PATH)
 	using namespace cxxlens::detail::clang22;
 	using cxxlens::sdk::provider::frame;
 	using cxxlens::sdk::provider::message_type;
@@ -117,7 +122,8 @@ namespace
 		root.emplace("closure_digest", json_value::string(closure.closure_digest).value());
 		root.emplace("closure_id", json_value::string(closure.snapshot_id).value());
 		root.emplace("members", json_value::array(std::move(members)));
-		root.emplace("schema", json_value::string("cxxlens.source-closure-manifest.v1").value());
+		root.emplace("schema",
+					 json_value::string(std::string{source_closure_manifest_schema}).value());
 		return canonical_json(json_value::object(std::move(root)).value());
 	}
 
@@ -165,7 +171,7 @@ namespace
 		using cxxlens::sdk::provider::encode_frame;
 		const auto manifest = manifest_bytes(output.input.closure);
 		auto manifest_digest =
-			cxxlens::sdk::semantic_digest("cxxlens.source-closure-manifest.v1", manifest);
+			cxxlens::sdk::semantic_digest(source_closure_manifest_digest_domain, manifest);
 		require(manifest_digest && *manifest_digest == output.identity.manifest_digest,
 				"worker channel manifest digest diverged");
 		const auto closure_id = output.input.closure.snapshot_id;
@@ -297,6 +303,41 @@ namespace
 			"normalized_invocation_digest",
 			json_value::string(output.input.normalized_invocation_digest).value());
 		authority_fields.emplace("qualified_read_roots", json_value::array(std::move(root_values)));
+		json_value::object_type output_authority_fields;
+		output_authority_fields.emplace("provider_id",
+										json_value::string("cxxlens.clang22.reference").value());
+		output_authority_fields.emplace("provider_version", json_value::string("1.0.0").value());
+		output_authority_fields.emplace(
+			"semantic_contract_digest",
+			json_value::string("semantic-v2:sha256:" + std::string(64U, '8')).value());
+		output_authority_fields.emplace("toolchain_context_id",
+										json_value::string("toolchain:clang22").value());
+		output_authority_fields.emplace("compile_unit_id",
+										json_value::string("compile-unit:reference").value());
+		std::vector<json_value> output_descriptors;
+		for (const auto descriptor : task_v4_output_descriptor_ids)
+			output_descriptors.push_back(json_value::string(std::string{descriptor}).value());
+		output_authority_fields.emplace("requested_descriptor_ids",
+										json_value::array(std::move(output_descriptors)));
+		std::vector<json_value> output_descriptor_digests;
+		for (const auto descriptor : {&cxxlens::cc::relations::call_direct_target::descriptor(),
+									  &cxxlens::cc::relations::call_site::descriptor(),
+									  &cxxlens::cc::relations::entity::descriptor(),
+									  &materialization::call_observation_v2_descriptor(),
+									  &materialization::entity_observation_v2_descriptor(),
+									  &materialization::type_observation_v2_descriptor()})
+			output_descriptor_digests.push_back(
+				json_value::string(descriptor->descriptor_digest).value());
+		output_authority_fields.emplace("descriptor_digests",
+										json_value::array(std::move(output_descriptor_digests)));
+		std::vector<json_value> output_groups;
+		for (const auto group : task_v4_dependency_groups)
+			output_groups.push_back(json_value::string(std::string{group}).value());
+		output_authority_fields.emplace("dependency_groups",
+										json_value::array(std::move(output_groups)));
+		output_authority_fields.emplace("maximum_rows", json_value::unsigned_integer(100000U));
+		output_authority_fields.emplace("maximum_output_bytes",
+										json_value::unsigned_integer(16U * 1024U * 1024U));
 		json_value::object_type envelope_fields;
 		auto base_document = materialization::parse_json_object(base_projection);
 		require(base_document.has_value(), "worker channel base projection parse failed");
@@ -309,6 +350,8 @@ namespace
 								json_value::string(output.identity.task_v4_input_digest).value());
 		envelope_fields.emplace("input_authority",
 								json_value::object(std::move(authority_fields)).value());
+		envelope_fields.emplace("output_authority",
+								json_value::object(std::move(output_authority_fields)).value());
 		envelope_fields.emplace("stream_id", json_value::unsigned_integer(7U));
 		envelope_fields.emplace("schema",
 								json_value::string("cxxlens.clang22.worker-ingress.v4").value());
@@ -426,6 +469,7 @@ namespace
 		}
 	}
 #endif
+#endif
 } // namespace
 
 int main(const int argc, const char* const* argv)
@@ -435,6 +479,20 @@ int main(const int argc, const char* const* argv)
 	auto fixture = make_fixture();
 	auto run = [&](std::string envelope, const bool expect_success)
 	{
+		const auto envelope_bytes = std::as_bytes(std::span{envelope.data(), envelope.size()});
+		const auto host_task_input_digest = cxxlens::sdk::content_digest(envelope_bytes);
+		cxxlens::sdk::provider::host_transcript_request host_request{
+			{"cxxlens.clang22.reference",
+			 {fixture.identity.task_id,
+			  host_task_input_digest,
+			  fixture.input.normalized_invocation_digest,
+			  fixture.input.toolchain_digest,
+			  fixture.input.environment_digest},
+			 {}},
+			{4U * 1024U * 1024U, 256U},
+			{envelope_bytes.begin(), envelope_bytes.end()}};
+		auto host_transcript = cxxlens::sdk::provider::encode_host_transcript(host_request);
+		require(host_transcript.has_value(), "worker channel host transcript encoding failed");
 		auto descriptors = make_descriptors();
 		const auto task = fixture.identity.task_id;
 		auto binding = cxxlens::sdk::provider::detail::make_process_inherited_channel_binding(
@@ -442,16 +500,19 @@ int main(const int argc, const char* const* argv)
 			descriptors.write_child,
 			task,
 			fixture.session_id,
+			fixture.identity.task_v4_digest,
+			"source-closure:" + fixture.input.closure.closure_digest,
 			fixture.input.closure.closure_digest,
-			fixture.expected_transfer);
+			fixture.identity.manifest_digest,
+			fixture.expected_transfer,
+			1U,
+			0U);
 		require(binding.has_value(), "worker channel process binding failed");
 		auto policies = cxxlens::sdk::provider::builtin_sandbox_policies();
 		require(!policies.empty(), "worker channel sandbox registry empty");
 		cxxlens::sdk::provider::process_invocation invocation;
 		invocation.argv = {argv[1]};
-		invocation.standard_input.assign(
-			std::as_bytes(std::span{envelope.data(), envelope.size()}).begin(),
-			std::as_bytes(std::span{envelope.data(), envelope.size()}).end());
+		invocation.standard_input = std::move(*host_transcript);
 		invocation.budget.wall_ms = 15'000U;
 		invocation.budget.cpu_ms = 15'000U;
 		invocation.budget.address_space_bytes = 1024U * 1024U * 1024U;
@@ -462,7 +523,14 @@ int main(const int argc, const char* const* argv)
 		invocation.sandbox = {cxxlens::sdk::provider::sandbox_assurance::enforced,
 							  policies.front().policy_digest()};
 		invocation.expected_binary_digest = executable_digest(argv[1]);
-		invocation.environment = {{"CXXLENS_PROVIDER_MANIFEST", "cxxlens.clang22.reference"}};
+		invocation.environment = {
+			{"CXXLENS_PROVIDER_MANIFEST", "cxxlens.clang22.reference"},
+			{"CXXLENS_PROVIDER_TASK_ID", fixture.identity.task_id},
+			{"CXXLENS_PROVIDER_TASK_INPUT_DIGEST", host_task_input_digest},
+			{"CXXLENS_PROVIDER_NORMALIZED_INVOCATION_DIGEST",
+			 fixture.input.normalized_invocation_digest},
+			{"CXXLENS_PROVIDER_TOOLCHAIN_DIGEST", fixture.input.toolchain_digest},
+			{"CXXLENS_PROVIDER_ENVIRONMENT_DIGEST", fixture.input.environment_digest}};
 		invocation.inherited_channel = std::move(*binding);
 		if (expect_success)
 			write_all(descriptors.read_parent, fixture.transcript);
@@ -486,14 +554,25 @@ int main(const int argc, const char* const* argv)
 		{
 			require(result->exit_code == 0, "worker channel v4 ingress failed");
 			auto frames = cxxlens::sdk::provider::decode_frame_stream(result->standard_output);
-			require(frames && frames->size() == 3U &&
-						frames->back().type == message_type::task_failed,
-					"worker channel output did not fail closed after translation");
-			auto failed =
-				cxxlens::sdk::provider::decode_task_failed_metadata(frames->back().control);
-			require(failed && failed->error_code == "provider.output-authority-missing" &&
-						failed->task_id == fixture.identity.task_id,
-					"worker channel publication boundary was not typed");
+			require(frames && frames->size() >= 13U &&
+						frames->front().type == message_type::hello &&
+						frames->at(1U).type == message_type::schema_negotiate &&
+						frames->at(2U).type == message_type::task_accepted &&
+						frames->back().type == message_type::task_complete,
+					"worker channel output did not complete the Protocol 2 task");
+			std::size_t batch_begin_count{};
+			std::size_t batch_end_count{};
+			for (const auto& frame : *frames)
+			{
+				batch_begin_count += frame.type == message_type::batch_begin;
+				batch_end_count += frame.type == message_type::batch_end;
+			}
+			require(batch_begin_count == 6U && batch_end_count == 6U,
+					"worker channel output did not stream all authorized batches");
+			auto complete =
+				cxxlens::sdk::provider::decode_task_complete_metadata(frames->back().control);
+			require(complete && complete->task_id == fixture.identity.task_id,
+					"worker channel completion binding was not typed");
 			auto ack = read_available(descriptors.write_parent);
 			require(!ack.empty(), "worker channel did not emit closure ACK");
 			auto ack_frame = cxxlens::sdk::provider::decode_frame(ack);

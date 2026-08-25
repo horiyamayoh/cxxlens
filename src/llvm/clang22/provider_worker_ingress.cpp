@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <istream>
 #include <map>
 #include <new>
 #include <ranges>
@@ -10,7 +11,15 @@
 #include <string_view>
 #include <utility>
 
+#include <cxxlens/relations/cc_call_direct_target.hpp>
+#include <cxxlens/relations/cc_call_site.hpp>
+#include <cxxlens/relations/cc_entity.hpp>
+
 #include "materialization_json.hpp"
+#include "observation_v2.hpp"
+#include "protocol_v2/codec.hpp"
+#include "provider_worker_protocol_v2_input.hpp"
+#include "sdk/provider_protocol_v2_adapter.hpp"
 #include "source_closure_task_v4.hpp"
 
 namespace cxxlens::detail::clang22
@@ -163,11 +172,12 @@ namespace cxxlens::detail::clang22
 		[[nodiscard]] sdk::result<provider_worker_v4_ingress>
 		decode_document(const json_value& root)
 		{
-			constexpr std::array<std::string_view, 8U> root_fields{"base_task_projection",
+			constexpr std::array<std::string_view, 9U> root_fields{"base_task_projection",
 																   "closure_binding",
 																   "expected_base_task_digest",
 																   "expected_task_v4_input_digest",
 																   "input_authority",
+																   "output_authority",
 																   "stream_id",
 																   "task_v4_payload",
 																   "schema"};
@@ -187,12 +197,14 @@ namespace cxxlens::detail::clang22
 
 			auto closure_object = member(root, "closure_binding", "closure-binding");
 			auto authority_object = member(root, "input_authority", "input-authority");
+			auto output_object = member(root, "output_authority", "output-authority");
 			auto payload_object = member(root, "task_v4_payload", "task-v4-payload");
 			auto base_projection_object =
 				member(root, "base_task_projection", "base-task-projection");
-			if (!closure_object || !authority_object || !payload_object ||
+			if (!closure_object || !authority_object || !output_object || !payload_object ||
 				!base_projection_object || (*closure_object)->as_object() == nullptr ||
 				(*authority_object)->as_object() == nullptr ||
+				(*output_object)->as_object() == nullptr ||
 				(*payload_object)->as_object() == nullptr ||
 				(*base_projection_object)->as_object() == nullptr)
 				return sdk::unexpected(
@@ -220,6 +232,19 @@ namespace cxxlens::detail::clang22
 				"normalized_invocation_digest",
 				"qualified_read_roots"};
 			if (auto valid = exact_members(**authority_object, authority_fields, "input-authority");
+				!valid)
+				return sdk::unexpected(std::move(valid.error()));
+			constexpr std::array<std::string_view, 10U> output_fields{"dependency_groups",
+																	  "descriptor_digests",
+																	  "maximum_output_bytes",
+																	  "maximum_rows",
+																	  "provider_id",
+																	  "provider_version",
+																	  "requested_descriptor_ids",
+																	  "semantic_contract_digest",
+																	  "toolchain_context_id",
+																	  "compile_unit_id"};
+			if (auto valid = exact_members(**output_object, output_fields, "output-authority");
 				!valid)
 				return sdk::unexpected(std::move(valid.error()));
 			constexpr std::array<std::string_view, 10U> payload_fields{"base_provider_task_id",
@@ -294,6 +319,24 @@ namespace cxxlens::detail::clang22
 				**authority_object, "effective_arguments", "input-authority.arguments");
 			auto roots = string_array_member(
 				**authority_object, "qualified_read_roots", "input-authority.read-roots");
+			auto provider_id = string_member(**output_object, "provider_id", "output.provider-id");
+			auto provider_version =
+				string_member(**output_object, "provider_version", "output.provider-version");
+			auto semantic_contract = string_member(
+				**output_object, "semantic_contract_digest", "output.semantic-contract");
+			auto toolchain_context =
+				string_member(**output_object, "toolchain_context_id", "output.toolchain-context");
+			auto compile_unit_id =
+				string_member(**output_object, "compile_unit_id", "output.compile-unit");
+			auto descriptor_ids = string_array_member(
+				**output_object, "requested_descriptor_ids", "output.descriptors");
+			auto descriptor_digests = string_array_member(
+				**output_object, "descriptor_digests", "output.descriptor-digests");
+			auto dependency_groups = string_array_member(
+				**output_object, "dependency_groups", "output.dependency-groups");
+			auto maximum_rows = unsigned_member(**output_object, "maximum_rows", "output.rows");
+			auto maximum_output_bytes =
+				unsigned_member(**output_object, "maximum_output_bytes", "output.bytes");
 			if (!normalized || !working_directory || !arguments || !roots)
 				return sdk::unexpected(
 					failure("provider.worker-v4-input-invalid", "input-authority"));
@@ -370,6 +413,25 @@ namespace cxxlens::detail::clang22
 				!valid)
 				return sdk::unexpected(std::move(valid.error()));
 
+			provider_worker_v4_ingress::output_authority output_authority{
+				provider_id ? std::move(*provider_id) : std::string{},
+				provider_version ? std::move(*provider_version) : std::string{},
+				semantic_contract ? std::move(*semantic_contract) : std::string{},
+				toolchain_context ? std::move(*toolchain_context) : std::string{},
+				compile_unit_id ? std::move(*compile_unit_id) : std::string{},
+				descriptor_ids ? std::move(*descriptor_ids) : std::vector<std::string>{},
+				descriptor_digests ? std::move(*descriptor_digests) : std::vector<std::string>{},
+				dependency_groups ? std::move(*dependency_groups) : std::vector<std::string>{},
+				maximum_rows ? *maximum_rows : 0U,
+				maximum_output_bytes ? *maximum_output_bytes : 0U};
+			if (!provider_id || !provider_version || !semantic_contract || !toolchain_context ||
+				!compile_unit_id || !descriptor_ids || !descriptor_digests || !dependency_groups ||
+				!maximum_rows || !maximum_output_bytes)
+				return sdk::unexpected(
+					failure("provider.worker-v4-input-invalid", "output-authority"));
+			if (auto valid = output_authority.validate(); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+
 			return provider_worker_v4_ingress{
 				std::vector<std::byte>{payload_bytes.begin(), payload_bytes.end()},
 				std::vector<std::byte>{base_bytes.begin(), base_bytes.end()},
@@ -378,9 +440,51 @@ namespace cxxlens::detail::clang22
 				std::move(authority),
 				std::move(binding),
 				std::move(*transfer_digest),
-				*stream_id};
+				*stream_id,
+				std::move(output_authority)};
 		}
 	} // namespace
+
+	sdk::result<void> provider_worker_v4_ingress::output_authority::validate() const
+	{
+		if (!sdk::validate_strong_id(provider_id) || provider_version.empty() ||
+			!typed_digest(semantic_contract_digest, "semantic-v2:sha256:") ||
+			!sdk::validate_strong_id(toolchain_context_id) ||
+			!sdk::validate_strong_id(compile_unit_id) || maximum_rows == 0U ||
+			maximum_rows > 100000U || maximum_output_bytes == 0U ||
+			maximum_output_bytes > 16U * 1024U * 1024U ||
+			requested_descriptor_ids.size() != task_v4_output_descriptor_ids.size() ||
+			descriptor_digests.size() != task_v4_output_descriptor_ids.size() ||
+			!std::ranges::equal(requested_descriptor_ids, task_v4_output_descriptor_ids) ||
+			dependency_groups.size() != task_v4_dependency_groups.size() ||
+			!std::ranges::equal(dependency_groups, task_v4_dependency_groups))
+			return sdk::unexpected(
+				failure("provider.worker-v4.output-authority-invalid", "output-authority"));
+		const std::array<const sdk::relation_descriptor*, 6U> descriptors{
+			&cc::relations::call_direct_target::descriptor(),
+			&cc::relations::call_site::descriptor(),
+			&cc::relations::entity::descriptor(),
+			&materialization::call_observation_v2_descriptor(),
+			&materialization::entity_observation_v2_descriptor(),
+			&materialization::type_observation_v2_descriptor()};
+		for (std::size_t index{}; index < descriptors.size(); ++index)
+			if (descriptor_digests[index] != descriptors[index]->descriptor_digest)
+				return sdk::unexpected(
+					failure("provider.worker-v4.output-authority-invalid", "descriptor-digest"));
+		std::size_t dots{};
+		for (const auto value : provider_version)
+		{
+			if (value == '.')
+				++dots;
+			else if (value < '0' || value > '9')
+				return sdk::unexpected(
+					failure("provider.worker-v4.output-authority-invalid", "provider-version"));
+		}
+		if (dots != 2U || provider_version.front() == '.' || provider_version.back() == '.')
+			return sdk::unexpected(
+				failure("provider.worker-v4.output-authority-invalid", "provider-version"));
+		return {};
+	}
 
 	sdk::result<provider_worker_v4_ingress> decode_provider_worker_v4_ingress(std::string raw)
 	{
@@ -407,6 +511,197 @@ namespace cxxlens::detail::clang22
 		{
 			return sdk::unexpected(
 				failure("provider.worker-v4-input-invalid", "envelope", "allocation"));
+		}
+	}
+
+	namespace
+	{
+		[[nodiscard]] bool protocol_v2_json_prefix(const std::byte value) noexcept
+		{
+			const auto byte = std::to_integer<unsigned char>(value);
+			return byte == static_cast<unsigned char>('{') ||
+				byte == static_cast<unsigned char>('[') ||
+				byte == static_cast<unsigned char>('"') ||
+				byte == static_cast<unsigned char>(' ') ||
+				byte == static_cast<unsigned char>('\t') ||
+				byte == static_cast<unsigned char>('\r') ||
+				byte == static_cast<unsigned char>('\n');
+		}
+
+		[[nodiscard]] sdk::result<provider_worker_protocol_v2_launch_envelope>
+		decode_protocol_v2_input_bytes(const std::span<const std::byte> encoded,
+									   const sdk::provider::host_transcript_expectation& expected)
+		{
+			if (encoded.size() > provider_worker_protocol_v2_maximum_wire_bytes)
+				return sdk::unexpected(failure(
+					"provider.worker-protocol-v2-input-invalid", "stdin", "wire-size-limit"));
+			if (encoded.empty())
+				return sdk::unexpected(
+					failure("provider.worker-protocol-v2-input-invalid", "stdin", "empty"));
+			if (protocol_v2_json_prefix(encoded.front()))
+				return sdk::unexpected(failure(
+					"provider.worker-protocol-v2-input-invalid", "stdin", "json-input-forbidden"));
+
+			// The task-input-chunks-v2 profile binds exact SHA-256 content bytes.  A task-v4
+			// semantic digest is a different authority and must never be accepted as this field.
+			if (!typed_digest(expected.task.task_input_digest, "sha256:"))
+				return sdk::unexpected(failure("provider.worker-protocol-v2-input-invalid",
+											   "task_input_digest",
+											   "content-digest-required"));
+
+			auto frames = sdk::provider::decode_frame_stream(
+				encoded, expected.limits, provider_worker_protocol_v2_maximum_frames);
+			if (!frames)
+				return sdk::unexpected(std::move(frames.error()));
+			auto validated = sdk::provider::validate_host_transcript(*frames, expected);
+			if (!validated)
+				return sdk::unexpected(std::move(validated.error()));
+
+			const auto protocol_content_digest = sdk::content_digest(validated->payload);
+			if (protocol_content_digest != expected.task.task_input_digest)
+				return sdk::unexpected(failure("provider.worker-protocol-v2-input-invalid",
+											   "protocol_content_digest",
+											   "payload-mismatch"));
+
+			return provider_worker_protocol_v2_launch_envelope{
+				std::string{expected.provider_manifest},
+				std::move(validated->task),
+				validated->credit,
+				std::move(validated->payload),
+				protocol_content_digest,
+				1U,
+				sdk::provider::protocol_v2_major,
+				sdk::provider::protocol_v2_minor};
+		}
+	} // namespace
+
+	sdk::result<provider_worker_protocol_v2_launch_envelope>
+	decode_provider_worker_protocol_v2_input(
+		const std::span<const std::byte> encoded,
+		const sdk::provider::host_transcript_expectation& expected)
+	{
+		try
+		{
+			return decode_protocol_v2_input_bytes(encoded, expected);
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(
+				failure("provider.worker-protocol-v2-input-invalid", "stdin", "allocation"));
+		}
+	}
+
+	sdk::result<provider_worker_protocol_v2_launch_envelope>
+	decode_provider_worker_protocol_v2_input(
+		std::istream& input, const sdk::provider::host_transcript_expectation& expected)
+	{
+		try
+		{
+			std::vector<std::byte> encoded;
+			constexpr std::size_t read_buffer_bytes = 64U * 1024U;
+			std::array<char, read_buffer_bytes> buffer{};
+			for (;;)
+			{
+				input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+				const auto read_count = input.gcount();
+				if (read_count > 0)
+				{
+					const auto count = static_cast<std::size_t>(read_count);
+					if (count > provider_worker_protocol_v2_maximum_wire_bytes ||
+						encoded.size() > provider_worker_protocol_v2_maximum_wire_bytes - count)
+						return sdk::unexpected(failure("provider.worker-protocol-v2-input-invalid",
+													   "stdin",
+													   "wire-size-limit"));
+					const auto bytes = std::as_bytes(std::span{buffer.data(), count});
+					encoded.insert(encoded.end(), bytes.begin(), bytes.end());
+				}
+				if (input.bad())
+					return sdk::unexpected(failure(
+						"provider.worker-protocol-v2-input-invalid", "stdin", "read-failure"));
+				if (input.eof())
+					break;
+				if (input.fail())
+					return sdk::unexpected(failure(
+						"provider.worker-protocol-v2-input-invalid", "stdin", "read-failure"));
+			}
+			return decode_protocol_v2_input_bytes(encoded, expected);
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(
+				failure("provider.worker-protocol-v2-input-invalid", "stdin", "allocation"));
+		}
+	}
+
+	namespace
+	{
+		[[nodiscard]] sdk::result<void> read_stream_exact(std::istream& input,
+														  const std::span<std::byte> destination)
+		{
+			std::size_t offset{};
+			while (offset < destination.size())
+			{
+				const auto count =
+					input.rdbuf()->sgetn(reinterpret_cast<char*>(destination.data() + offset),
+										 static_cast<std::streamsize>(destination.size() - offset));
+				if (count <= 0)
+					return sdk::unexpected(
+						failure("provider.worker-protocol-v2-input-invalid", "stdin", "truncated"));
+				offset += static_cast<std::size_t>(count);
+			}
+			return {};
+		}
+	} // namespace
+
+	sdk::result<provider_worker_protocol_v2_launch_envelope>
+	decode_provider_worker_protocol_v2_input_until_close(
+		std::istream& input, const sdk::provider::host_transcript_expectation& expected)
+	{
+		try
+		{
+			std::vector<std::byte> encoded;
+			encoded.reserve(16U * 1024U);
+			sdk::provider::protocol_limits limits = expected.limits;
+			for (std::size_t frame_count{};
+				 frame_count < provider_worker_protocol_v2_maximum_frames;
+				 ++frame_count)
+			{
+				std::array<std::byte, protocol_v2::fixed_header_bytes> header{};
+				if (auto read = read_stream_exact(input, header); !read)
+					return sdk::unexpected(std::move(read.error()));
+				auto prepared =
+					sdk::provider::detail::prepare_provider_protocol_v2_frame(header, limits);
+				if (!prepared)
+					return sdk::unexpected(std::move(prepared.error()));
+				const auto frame_bytes = protocol_v2::fixed_header_bytes +
+					prepared->control_bytes() + prepared->payload_bytes();
+				if (frame_bytes > provider_worker_protocol_v2_maximum_wire_bytes - encoded.size())
+					return sdk::unexpected(failure(
+						"provider.worker-protocol-v2-input-invalid", "stdin", "wire-size-limit"));
+				std::vector<std::byte> control(prepared->control_bytes());
+				std::vector<std::byte> payload(prepared->payload_bytes());
+				if (auto read = read_stream_exact(input, control); !read)
+					return sdk::unexpected(std::move(read.error()));
+				if (auto read = read_stream_exact(input, payload); !read)
+					return sdk::unexpected(std::move(read.error()));
+				auto value = std::move(*prepared).finalize(std::move(control), std::move(payload));
+				if (!value)
+					return sdk::unexpected(std::move(value.error()));
+				auto wire =
+					sdk::provider::detail::encode_provider_protocol_v2_frame(*value, limits);
+				if (!wire)
+					return sdk::unexpected(std::move(wire.error()));
+				encoded.insert(encoded.end(), wire->begin(), wire->end());
+				if (value->type == sdk::provider::message_type::close)
+					return decode_provider_worker_protocol_v2_input(encoded, expected);
+			}
+			return sdk::unexpected(failure(
+				"provider.worker-protocol-v2-input-invalid", "stdin", "close-frame-missing"));
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(
+				failure("provider.worker-protocol-v2-input-invalid", "stdin", "allocation"));
 		}
 	}
 } // namespace cxxlens::detail::clang22

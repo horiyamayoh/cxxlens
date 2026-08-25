@@ -23,7 +23,6 @@ namespace cxxlens::detail::clang22
 		constexpr std::uint64_t maximum_blob_bytes = std::uint64_t{16U} * 1024U * 1024U;
 		constexpr std::uint64_t maximum_unique_blob_bytes = std::uint64_t{48U} * 1024U * 1024U;
 		constexpr std::string_view project_prefix{"project://"};
-		constexpr std::string_view closure_domain{"cxxlens.clang22.source-closure.v1"};
 
 		[[nodiscard]] sdk::error
 		failure(std::string code, std::string field, std::string detail = {})
@@ -145,7 +144,7 @@ namespace cxxlens::detail::clang22
 			}
 
 			auto projection = sdk::canonical_binary(sdk::canonical_value::from_tuple({
-				sdk::canonical_value::from_string(std::string{closure_domain}),
+				sdk::canonical_value::from_string(std::string{source_closure_digest_domain}),
 				sdk::canonical_value::from_string("unicode-default-casefold-then-nfc"),
 				sdk::canonical_value::from_tuple(std::move(member_values)),
 				sdk::canonical_value::from_tuple(std::move(blob_values)),
@@ -156,7 +155,7 @@ namespace cxxlens::detail::clang22
 			encoded.reserve(projection->size());
 			for (const auto byte : *projection)
 				encoded.push_back(static_cast<char>(std::to_integer<unsigned char>(byte)));
-			return sdk::semantic_digest(closure_domain, encoded);
+			return sdk::semantic_digest(source_closure_digest_domain, encoded);
 		}
 	} // namespace
 
@@ -218,6 +217,45 @@ namespace cxxlens::detail::clang22
 			sdk::canonical_value::from_string("cxxlens.logical-path.v1"),
 		};
 		return sdk::canonical_identity_digest("file", fields);
+	}
+
+	sdk::result<std::string>
+	source_closure_main_line_index_id(const source_closure_snapshot& snapshot)
+	{
+		if (auto valid = snapshot.validate(); !valid)
+			return sdk::unexpected(std::move(valid.error()));
+
+		const auto main = std::ranges::find_if(snapshot.members,
+											   [](const source_closure_member& member)
+											   {
+												   return member.role == source_closure_role::main;
+											   });
+		if (main == snapshot.members.end())
+			return sdk::unexpected(
+				failure("source-closure.main-invalid", "closure.main-count", "missing"));
+		const auto* blob = snapshot.find_blob(main->content_digest);
+		if (blob == nullptr || !blob->content)
+			return sdk::unexpected(failure(
+				"source-closure.blob-missing", "member.content-digest", main->logical_path));
+		if (blob->size_bytes > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+			return sdk::unexpected(
+				failure("source-closure.limit-exceeded", "blob.size-bytes", main->logical_path));
+
+		std::vector<sdk::canonical_value> offsets;
+		offsets.reserve(1U);
+		offsets.push_back(sdk::canonical_value::from_integer(0));
+		for (std::size_t index{}; index < blob->content->size(); ++index)
+			if ((*blob->content)[index] == '\n')
+				offsets.push_back(
+					sdk::canonical_value::from_integer(static_cast<std::int64_t>(index + 1U)));
+
+		const std::array fields{
+			sdk::canonical_value::from_string("cxxlens.byte-line-index.v1"),
+			sdk::canonical_value::from_string(blob->content_digest),
+			sdk::canonical_value::from_integer(static_cast<std::int64_t>(blob->size_bytes)),
+			sdk::canonical_value::from_tuple(std::move(offsets)),
+		};
+		return sdk::canonical_identity_digest("line-index", fields);
 	}
 
 	sdk::result<void> source_closure_blob::validate() const

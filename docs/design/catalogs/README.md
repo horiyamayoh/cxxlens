@@ -12,6 +12,7 @@
 | Provider Runtime | `schemas/cxxlens_ng_provider_runtime_contract.yaml` | implemented |
 | Clang 22 Installed Materialization | `schemas/cxxlens_ng_clang22_materialization_contract.yaml` | implemented with runtime reports |
 | Public C++ API Catalog | `schemas/cxxlens_ng_public_api_catalog.yaml` | implemented |
+| SDK Doctor Product Catalog | `schemas/cxxlens_ng_sdk_doctor_catalog.yaml` | implemented product-only capability and use-case authority |
 | Security Profile | `schemas/cxxlens_ng_security_profile.yaml` | accepted |
 | Compatibility v2 | `schemas/cxxlens_ng_compatibility_request.schema.yaml` / `schemas/cxxlens_ng_compatibility_report.schema.yaml` | implemented |
 | Support table | `schemas/cxxlens_support_matrix.yaml` | version/environment declaration |

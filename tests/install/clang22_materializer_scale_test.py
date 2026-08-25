@@ -145,15 +145,10 @@ def build_request(
     else:
         raise ScaleTestError(f"scenario does not contain a JSON request: {scenario_id}")
 
-    # The worker spools both the raw wire input and the decoded source into
-    # private memfd-backed files (materialization_task_spool.cpp), and each
-    # spool is bounded by the same RLIMIT_FSIZE the process adapter derives
-    # from the task's transport_bytes budget (provider_process_adapter.cpp,
-    # ADR 0087).  A task budget narrower than its own source is guaranteed to
-    # crash the worker with SIGXFSZ once that source is spooled, regardless
-    # of how small the eventual wire response is.  Double the source size for
-    # the wire-plus-decoded spool footprint and add a fixed protocol-framing
-    # margin so the budget clears that boundary with real headroom.
+    # transport_bytes bounds combined stdout/stderr independently from the
+    # Protocol 2 source-closure spool and frame-credit limits. Keep a
+    # conservative response allowance proportional to the generated source,
+    # plus fixed framing headroom, for these maximum-scale process scenarios.
     task_transport_bytes = max(2097152, 2 * source_bytes + (1 << 20))
     request = oracle.sample_request(
         root,

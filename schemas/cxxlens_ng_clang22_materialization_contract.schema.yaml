@@ -657,28 +657,12 @@ $defs:
         digest_only_equality_or_order: forbidden
         qualification_corpus:
           id: cxxlens.df-0200.claim-batch-differential-corpus.v1
-          freeze_point: pre-refactor-canonical-bytes-and-verdicts
           artifact:
-            path: schemas/cxxlens_ng_df_0200_claim_batch_differential_corpus.tsv
-            schema: schemas/cxxlens_ng_df_0200_claim_batch_differential_corpus.schema.yaml
             schema_id: https://cxxlens.dev/schema/ng/df-0200-claim-batch-differential-corpus.schema.yaml
             format: cxxlens.df-0200.claim-batch-differential-corpus.tsv.v1
             artifact_version: 1.0.0
             raw_sha256: sha256:f05513d05b0b57788b6f94d9c1a477c88d589b64dd8232d88a5c6c6022a84836
-          current_public_reference:
-            driver: tests/adapter/clang22/df_0200_claim_batch_corpus_test.cpp
-            cmake_target: cxxlens-df0200-claim-batch-corpus
-            ctest: qualification.df0200-claim-batch-corpus
-            operation: cxxlens::sdk::claim_batch::commit
-            mode: execute-all-frozen-cases-and-compare-exact-artifact-bytes
-            generator:
-              visibility: source-private
-              option: --emit
-              artifact_update_gate: direct-positive-negative-fault-determinism-and-resource-tests-must-pass
           census:
-            case_count: 10
-            success_count: 9
-            error_count: 1
             added_claim_count: 17
             existing_claim_count: 16
             projection_byte_count: 88607
@@ -699,9 +683,6 @@ $defs:
           - new-existing-same-payload
           - new-existing-disjoint
           - new-existing-cross-domain-differential
-          compare_against:
-          - frozen-pre-refactor-corpus
-          - current-public-sdk-claim-batch-commit
           cases:
           - added-versus-existing-claim-classification
           - new-to-existing-hard-and-soft-references
@@ -720,9 +701,6 @@ $defs:
           - accepted-added-and-existing-occurrence-sets
           - reference-conflict-and-differential-verdicts
           - unresolved-conflict-and-differential-censuses
-          production_path_comparison: required-direct-positive-negative-fault-determinism-and-resource-tests-before-production
-          corpus_regeneration: requires-direct-positive-negative-fault-determinism-and-resource-tests
-        bounded_differential_oracle: frozen-corpus-and-current-public-api-direct-positive-negative-fault-tests-required
         qualified_zero_side_channel_result: replay-receipt-instead-of-resident-full-claim-batch-result
       d2_move_only_lifecycle:
         operations:
@@ -1143,7 +1121,6 @@ $defs:
               exact_duplicate_claim_occurrence: collapse-before-event-enumeration
               metadata_distinct_same_content_occurrence: preserve-as-distinct-event
               duplicate_final_full_event_projection: reject
-              qualification_binding: cxxlens.df-0200.claim-batch-differential-corpus.v1-raw-sha256-f05513d05b0b57788b6f94d9c1a477c88d589b64dd8232d88a5c6c6022a84836
             shared_implementation_allowlist: [canonical-codecs, identity-functions, field-validators]
             shared_event_enumeration_or_aggregation_control_flow: forbidden
             selected_request_entry_cross_check: exactly-one-entry-whose-task-id-and-canonical-ordinal-equal-this-task-receipt
@@ -1357,12 +1334,10 @@ $defs:
         canonical_order: exact-full-canonical-bytes-never-digest-order
       d5_failure_taxonomy:
         stable_spool_failure_cause: actual-private-prepublication-spool-port-io-or-hash-failure-only
-        proposed_prepublication_phase_codes:
+        prepublication_phase_codes:
           materialization-validation: materialization.spool-failure
           store-stage: materialization.spool-failure
           report-construction: materialization.spool-failure
-        pre_review_phase_matrix_and_report_schema: unchanged
-        accepted_activation_step: atomically-add-three-private-spool-phase-codes-request-bound-reverse-closures-for-spool-and-partition-stage-counter-overflow-and-update-full-report-schema-canonical-json-digest
         relation_or_claim_schema_ceiling_exceeded: materialization-validation-materialization-claim-invalid-before-store-open
         v5_collection_count_overflow:
           operation: partition_stage
@@ -1421,11 +1396,9 @@ $defs:
             - fresh-request-and-budget-authority
             - same-cap-for-memory-and-sqlite-direct-tests
       d6_compatibility:
-        contract_version: 2.2.0-accepted-option-a-authority
-        report_schema_canonical_json_digest: sha256:7251ced9b5ac1bb199875d5bdc81eef7fff6406ff189bfaf91dc22406d634d96
-        public_headers_signatures_and_inventory: unchanged
-        public_catalog: additive-sqlite-v3-behavior-entry-with-store.migration-required-no-new-callable
-        request_and_report_shape: request-2.2.0-report-private-spool-failure-occurrence-inventory-sandbox-bounds-activated
+        contract_version: 2.2.0-option-a
+        public_api: additive-store.migration-required-with-no-new-callable
+        request_and_report_shape: request-2.2.0-report-2.2.0-private-spool-failure-installed-occurrence-identity-and-sandbox-bounds
         claim_store_identities_and_logical_canonical_schema_projection: unchanged-with-authorized-physical-generation-transition
         sqlite_contract: schemas/cxxlens_ng_sqlite_store_contract.yaml
         sqlite_physical_format: cxxlens.sqlite-semantic-store.v3-3.0.0
@@ -1433,17 +1406,8 @@ $defs:
         sqlite_predecessor: exact-v2.6.0-read-only-direct-open
         sqlite_migration: compact-v2.6.0-to-v3.0.0-single-transaction-cow
         source_private_receipts_and_counters: excluded-from-public-report-and-api
-        external_qualified_v2_1_found: require-successor-version-and-migration-boundary
-        fresh_public_semantics_gate:
-        - request-accepted-set-or-budget
-        - retained-memory-guarantee-weakening
-        - public-claim-or-store-signature-success-semantics-or-cursor-lifetime
-        - public-header-callable-or-catalog-entry
-        - report-shape-or-version
-        - canonical-v5-or-snapshot-identity
-        - incompatible-sqlite-format-or-migration-beyond-adr-0097
       falsification:
-      - frozen-pre-refactor-and-current-public-claim-batch-byte-verdict-corpus
+      - golden-claim-batch-input-output-and-semantic-verdict-corpus
       - added-existing-and-new-existing-reference-conflict-nonreclassification
       - one-shot-split-and-input-permutation-parity
       - exact-duplicate-versus-metadata-distinct-occurrence-preservation

@@ -2361,23 +2361,513 @@ namespace
 			{"company.example.provider", "portable", "company.example.relation"});
 		auto native = cxxlens::sdk::provider::make_scaffold(
 			{"company.example.native", "clang22-native", "company.example.relation"});
-		require(portable && native && portable->size() == 5U && native->size() == 5U,
-				"provider scaffold is incomplete");
-		const auto portable_manifest =
-			std::ranges::find(*portable,
-							  std::string{"provider-manifest.json"},
-							  &cxxlens::sdk::provider::scaffold_file::relative_path);
-		const auto native_cmake =
-			std::ranges::find(*native,
-							  std::string{"CMakeLists.txt"},
-							  &cxxlens::sdk::provider::scaffold_file::relative_path);
-		require(portable_manifest != portable->end() &&
-					portable_manifest->content.contains("cxxlens.provider-manifest.v1") &&
-					portable_manifest->content.contains(R"("provider_version":"1.0.0")") &&
-					!portable_manifest->content.contains(R"("provider_version":"0.)") &&
-					native_cmake != native->end() &&
-					native_cmake->content.contains("cxxlens::clang22_provider_sdk"),
-				"provider scaffold package/runtime-valid manifest contract diverged");
+		require(portable && native, "provider scaffold generation failed");
+		const auto safe_relative_path = [](const std::string_view path)
+		{
+			if (path.empty() || path.front() == '/' || path.front() == '\\' ||
+				path.contains('\\') || path.contains('\0') || path.contains(':'))
+				return false;
+			if (std::ranges::any_of(path,
+									[](const char byte)
+									{
+										const auto value = static_cast<unsigned char>(byte);
+										return value < 0x20U || value == 0x7fU;
+									}))
+				return false;
+			std::size_t component_begin = 0U;
+			while (component_begin <= path.size())
+			{
+				const auto separator = path.find('/', component_begin);
+				const auto component =
+					path.substr(component_begin,
+								separator == std::string_view::npos ? std::string_view::npos
+																	: separator - component_begin);
+				if (component.empty() || component == "." || component == "..")
+					return false;
+				if (separator == std::string_view::npos)
+					break;
+				component_begin = separator + 1U;
+			}
+			return true;
+		};
+		const auto scaffold_paths_valid = [&](const auto& files)
+		{
+			std::set<std::string, std::less<>> paths;
+			return std::ranges::all_of(files,
+									   [&](const auto& file)
+									   {
+										   return safe_relative_path(file.relative_path) &&
+											   paths.insert(file.relative_path).second;
+									   });
+		};
+		require(scaffold_paths_valid(*portable),
+				"portable scaffold paths are unsafe or duplicated");
+		require(scaffold_paths_valid(*native), "native scaffold paths are unsafe or duplicated");
+		const std::array invalid_scaffold_paths{std::string_view{},
+												std::string_view{"/escape"},
+												std::string_view{"C:/escape"},
+												std::string_view{"../escape"},
+												std::string_view{"src/../escape"},
+												std::string_view{"src/./main.cpp"},
+												std::string_view{"src//main.cpp"},
+												std::string_view{"src/\nmain.cpp"},
+												std::string_view{R"(src\..\escape)"}};
+		for (const auto path : invalid_scaffold_paths)
+			require(!safe_relative_path(path),
+					"unsafe scaffold path was accepted: " + std::string{path});
+		const std::string nul_scaffold_path{"src/\0main.cpp", 13U};
+		require(!safe_relative_path(nul_scaffold_path), "NUL scaffold path was accepted");
+		auto duplicate_paths = *portable;
+		duplicate_paths.push_back({"CMakeLists.txt", "duplicate"});
+		require(!scaffold_paths_valid(duplicate_paths), "duplicate scaffold paths were accepted");
+		auto extended = *portable;
+		extended.push_back({"docs/provider.md", "Additional provider notes.\n"});
+		require(scaffold_paths_valid(extended), "valid additional scaffold files were rejected");
+		const auto find_scaffold_file =
+			[](const std::vector<cxxlens::sdk::provider::scaffold_file>& files,
+			   const std::string_view path)
+			-> std::vector<cxxlens::sdk::provider::scaffold_file>::const_iterator
+		{
+			return std::ranges::find(
+				files, path, &cxxlens::sdk::provider::scaffold_file::relative_path);
+		};
+		const auto require_scaffold_shape = [&](const auto& files, const std::string_view label)
+		{
+			// These are the files needed to build and inspect a provider. Additional generated
+			// files remain forward-compatible and must not make this check fail.
+			const std::array required_files{std::string_view{"CMakeLists.txt"},
+											std::string_view{"provider-manifest.json"},
+											std::string_view{"src/main.cpp"},
+											std::string_view{"tests/provider_test.cpp"},
+											std::string_view{"README.md"}};
+			for (const auto path : required_files)
+			{
+				const auto first = find_scaffold_file(files, path);
+				require(first != files.end(),
+						std::string{label} + " scaffold is missing " + std::string{path});
+				require(std::ranges::count(
+							files, path, &cxxlens::sdk::provider::scaffold_file::relative_path) ==
+							1,
+						std::string{label} + " scaffold duplicates " + std::string{path});
+			}
+		};
+		require_scaffold_shape(*portable, "portable");
+		require_scaffold_shape(*native, "native");
+		require_scaffold_shape(extended, "extended portable");
+
+		const auto portable_cmake = find_scaffold_file(*portable, "CMakeLists.txt");
+		const auto portable_manifest = find_scaffold_file(*portable, "provider-manifest.json");
+		const auto portable_main = find_scaffold_file(*portable, "src/main.cpp");
+		const auto portable_test = find_scaffold_file(*portable, "tests/provider_test.cpp");
+		const auto portable_readme = find_scaffold_file(*portable, "README.md");
+		const auto native_cmake = find_scaffold_file(*native, "CMakeLists.txt");
+		const auto native_manifest = find_scaffold_file(*native, "provider-manifest.json");
+		const auto native_main = find_scaffold_file(*native, "src/main.cpp");
+		const auto native_test = find_scaffold_file(*native, "tests/provider_test.cpp");
+		const auto native_readme = find_scaffold_file(*native, "README.md");
+		const auto trim_line = [](std::string_view line)
+		{
+			const auto whitespace = [](const char byte)
+			{
+				return byte == ' ' || byte == '\t' || byte == '\r';
+			};
+			while (!line.empty() && whitespace(line.front()))
+				line.remove_prefix(1U);
+			while (!line.empty() && whitespace(line.back()))
+				line.remove_suffix(1U);
+			return line;
+		};
+		const auto has_exact_code_line =
+			[&](const std::string_view content, const std::string_view expected)
+		{
+			std::size_t line_begin = 0U;
+			while (line_begin <= content.size())
+			{
+				const auto line_end = content.find('\n', line_begin);
+				const auto line = trim_line(content.substr(line_begin,
+														   line_end == std::string_view::npos
+															   ? std::string_view::npos
+															   : line_end - line_begin));
+				if (line == expected)
+					return true;
+				if (line_end == std::string_view::npos)
+					break;
+				line_begin = line_end + 1U;
+			}
+			return false;
+		};
+		const auto strip_cmake_comments = [](const std::string_view content)
+		{
+			std::string stripped;
+			stripped.reserve(content.size());
+			bool in_quote = false;
+			bool escaped = false;
+			bool in_line_comment = false;
+			bool in_bracket_comment = false;
+			std::size_t bracket_equals = 0U;
+			const auto bracket_open =
+				[&](const std::size_t offset, std::size_t& after_open, std::size_t& equals) noexcept
+			{
+				if (offset + 1U >= content.size() || content[offset] != '#' ||
+					content[offset + 1U] != '[')
+					return false;
+				std::size_t cursor = offset + 2U;
+				equals = 0U;
+				while (cursor < content.size() && content[cursor] == '=')
+				{
+					++cursor;
+					++equals;
+				}
+				if (cursor >= content.size() || content[cursor] != '[')
+					return false;
+				after_open = cursor + 1U;
+				return true;
+			};
+			const auto bracket_close = [&](const std::size_t offset) noexcept
+			{
+				if (content[offset] != ']')
+					return false;
+				const auto close_end = offset + bracket_equals + 1U;
+				if (close_end >= content.size() || content[close_end] != ']')
+					return false;
+				for (std::size_t equals = 0U; equals < bracket_equals; ++equals)
+					if (content[offset + equals + 1U] != '=')
+						return false;
+				return true;
+			};
+			for (std::size_t index = 0U; index < content.size();)
+			{
+				const auto byte = content[index];
+				if (in_bracket_comment)
+				{
+					if (byte == '\r' || byte == '\n')
+						stripped.push_back(byte);
+					if (byte == ']' && bracket_close(index))
+					{
+						index += bracket_equals + 2U;
+						in_bracket_comment = false;
+					}
+					else
+						++index;
+					continue;
+				}
+				if (in_line_comment)
+				{
+					if (byte == '\r' || byte == '\n')
+					{
+						in_line_comment = false;
+						stripped.push_back(byte);
+					}
+					++index;
+					continue;
+				}
+				if (in_quote)
+				{
+					stripped.push_back(byte);
+					if (escaped)
+						escaped = false;
+					else if (byte == '\\')
+						escaped = true;
+					else if (byte == '"')
+						in_quote = false;
+					++index;
+					continue;
+				}
+				if (byte == '"')
+				{
+					in_quote = true;
+					stripped.push_back(byte);
+					++index;
+					continue;
+				}
+				if (byte == '#')
+				{
+					std::size_t after_open = 0U;
+					if (bracket_open(index, after_open, bracket_equals))
+					{
+						in_bracket_comment = true;
+						index = after_open;
+					}
+					else
+					{
+						in_line_comment = true;
+						++index;
+					}
+					continue;
+				}
+				stripped.push_back(byte);
+				++index;
+			}
+			return stripped;
+		};
+		const auto has_exact_cmake_line =
+			[&](const std::string_view content, const std::string_view expected)
+		{
+			return has_exact_code_line(strip_cmake_comments(content), expected);
+		};
+		const auto splice_cpp_lines = [](const std::string_view content)
+		{
+			std::string spliced;
+			spliced.reserve(content.size());
+			for (std::size_t index = 0U; index < content.size();)
+			{
+				if (content[index] == '\\' && index + 1U < content.size())
+				{
+					if (content[index + 1U] == '\n')
+					{
+						index += 2U;
+						continue;
+					}
+					if (content[index + 1U] == '\r')
+					{
+						index +=
+							index + 2U < content.size() && content[index + 2U] == '\n' ? 3U : 2U;
+						continue;
+					}
+				}
+				spliced.push_back(content[index]);
+				++index;
+			}
+			return spliced;
+		};
+		const auto strip_cpp_comments = [&](const std::string_view content)
+		{
+			const auto spliced = splice_cpp_lines(content);
+			std::string stripped;
+			stripped.reserve(spliced.size());
+			bool in_line_comment = false;
+			bool in_block_comment = false;
+			char quote = '\0';
+			bool escaped = false;
+			for (std::size_t index = 0U; index < spliced.size();)
+			{
+				const auto byte = spliced[index];
+				if (in_line_comment)
+				{
+					if (byte == '\r' || byte == '\n')
+					{
+						in_line_comment = false;
+						stripped.push_back(byte);
+					}
+					else
+						stripped.push_back(' ');
+					++index;
+					continue;
+				}
+				if (in_block_comment)
+				{
+					if (byte == '*' && index + 1U < spliced.size() && spliced[index + 1U] == '/')
+					{
+						stripped += "  ";
+						index += 2U;
+						in_block_comment = false;
+					}
+					else
+					{
+						stripped.push_back(byte == '\r' || byte == '\n' ? byte : ' ');
+						++index;
+					}
+					continue;
+				}
+				if (quote != '\0')
+				{
+					stripped.push_back(byte == '\r' || byte == '\n' ? byte : ' ');
+					if (escaped)
+						escaped = false;
+					else if (byte == '\\')
+						escaped = true;
+					else if (byte == quote)
+						quote = '\0';
+					++index;
+					continue;
+				}
+				if (byte == '/' && index + 1U < spliced.size() && spliced[index + 1U] == '/')
+				{
+					stripped += "  ";
+					index += 2U;
+					in_line_comment = true;
+					continue;
+				}
+				if (byte == '/' && index + 1U < spliced.size() && spliced[index + 1U] == '*')
+				{
+					stripped += "  ";
+					index += 2U;
+					in_block_comment = true;
+					continue;
+				}
+				if (byte == '"' || byte == '\'')
+				{
+					stripped.push_back(' ');
+					quote = byte;
+					escaped = false;
+					++index;
+					continue;
+				}
+				stripped.push_back(byte);
+				++index;
+			}
+			return stripped;
+		};
+		const auto is_identifier_character = [](const char byte)
+		{
+			const auto value = static_cast<unsigned char>(byte);
+			return (value >= static_cast<unsigned char>('a') &&
+					value <= static_cast<unsigned char>('z')) ||
+				(value >= static_cast<unsigned char>('A') &&
+				 value <= static_cast<unsigned char>('Z')) ||
+				(value >= static_cast<unsigned char>('0') &&
+				 value <= static_cast<unsigned char>('9')) ||
+				byte == '_';
+		};
+		const auto is_cpp_whitespace = [](const char byte)
+		{
+			return byte == ' ' || byte == '\t' || byte == '\r' || byte == '\n' || byte == '\f' ||
+				byte == '\v';
+		};
+		const auto has_entrypoint = [&](const std::string_view content)
+		{
+			const auto code = strip_cpp_comments(content);
+			for (std::size_t index = 0U; index + 3U <= code.size(); ++index)
+			{
+				if (code.compare(index, 3U, "int") != 0 ||
+					(index > 0U && is_identifier_character(code[index - 1U])) ||
+					(index + 3U < code.size() && is_identifier_character(code[index + 3U])))
+					continue;
+				std::size_t cursor = index + 3U;
+				while (cursor < code.size() && is_cpp_whitespace(code[cursor]))
+					++cursor;
+				if (cursor + 4U > code.size() || code.compare(cursor, 4U, "main") != 0 ||
+					(cursor + 4U < code.size() && is_identifier_character(code[cursor + 4U])))
+					continue;
+				cursor += 4U;
+				while (cursor < code.size() && is_cpp_whitespace(code[cursor]))
+					++cursor;
+				if (cursor >= code.size() || code[cursor] != '(')
+					continue;
+				const auto close_parenthesis = code.find(')', cursor + 1U);
+				if (close_parenthesis == std::string::npos)
+					continue;
+				cursor = close_parenthesis + 1U;
+				while (cursor < code.size() && is_cpp_whitespace(code[cursor]))
+					++cursor;
+				if (cursor >= code.size() || code[cursor] != '{' ||
+					code.find('}', cursor + 1U) == std::string::npos)
+					continue;
+				return true;
+			}
+			return false;
+		};
+		const std::string portable_package_line{"find_package(cxxlensProviderSDK CONFIG REQUIRED)"};
+		const std::string native_package_line{
+			"find_package(cxxlensClang22ProviderSDK CONFIG REQUIRED)"};
+		const std::string portable_target_line{
+			"target_link_libraries(provider PRIVATE cxxlens::provider_sdk)"};
+		const std::string native_target_line{
+			"target_link_libraries(provider PRIVATE cxxlens::clang22_provider_sdk)"};
+		std::string bracket_commented_cmake = portable_cmake->content;
+		const auto package_offset = bracket_commented_cmake.find(portable_package_line);
+		require(package_offset != std::string::npos,
+				"portable scaffold package line was not available for mutation");
+		std::string bracket_comment{"#[=[\n"};
+		bracket_comment += portable_package_line;
+		bracket_comment += "\n]=]";
+		bracket_commented_cmake.replace(
+			package_offset, portable_package_line.size(), bracket_comment);
+		require(!has_exact_cmake_line(bracket_commented_cmake, portable_package_line),
+				"bracket-commented CMake package line was accepted");
+		std::string spliced_comment_main{"//\\"};
+		spliced_comment_main += '\n';
+		spliced_comment_main += " int main(){return 0;}";
+		require(!has_entrypoint(spliced_comment_main),
+				"backslash-spliced C++ comment entrypoint was accepted");
+		const std::string multiline_main{"int main(\n)\n{\n\treturn 0;\n}\n"};
+		require(has_entrypoint(multiline_main), "ordinary multiline C++ entrypoint was rejected");
+		const auto check_common_content = [&](const auto cmake,
+											  const auto manifest_file,
+											  const auto main_file,
+											  const auto test_file,
+											  const auto readme_file,
+											  const std::string_view provider_id,
+											  const std::string_view relation_name,
+											  const std::string_view package_name,
+											  const std::string_view target_name,
+											  const std::string_view main_header)
+		{
+			std::string project_name{provider_id};
+			std::ranges::replace(project_name, '.', '_');
+			const auto project_line = std::string{"project("} + project_name + " LANGUAGES CXX)";
+			const auto package_line =
+				std::string{"find_package("} + std::string{package_name} + " CONFIG REQUIRED)";
+			const auto target_line = std::string{"target_link_libraries(provider PRIVATE "} +
+				std::string{target_name} + ")";
+			require(
+				has_exact_cmake_line(cmake->content, "cmake_minimum_required(VERSION 3.25)") &&
+					has_exact_cmake_line(cmake->content, project_line) &&
+					has_exact_cmake_line(cmake->content, package_line) &&
+					has_exact_cmake_line(cmake->content, "add_executable(provider src/main.cpp)") &&
+					has_exact_cmake_line(cmake->content, target_line) &&
+					has_exact_cmake_line(cmake->content,
+										 "target_compile_features(provider PRIVATE cxx_std_23)"),
+				"provider scaffold build contract diverged");
+			require(
+				manifest_file->content.ends_with('\n') &&
+					manifest_file->content.contains(
+						"\"schema\":\"cxxlens.provider-manifest.v1\"") &&
+					manifest_file->content.contains("\"provider_id\":\"" +
+													std::string{provider_id} + "\"") &&
+					manifest_file->content.contains(R"("provider_version":"1.0.0")") &&
+					manifest_file->content.contains(R"("protocol_range":{"major":2)") &&
+					manifest_file->content.contains(
+						R"("required_features":["credit-backpressure","task-input-chunks-v2"])") &&
+					manifest_file->content.contains("\"offered_relations\":[\"" +
+													std::string{relation_name} + "\"]") &&
+					manifest_file->content.contains(
+						R"("task_stage":{"input":"observation","output":"assertion"})"),
+				"provider scaffold manifest semantics diverged");
+			require(has_exact_code_line(main_file->content,
+										std::string{"#include "} + std::string{main_header}) &&
+						has_entrypoint(main_file->content) &&
+						main_file->content.contains("run_worker") &&
+						main_file->content.contains("framing, credit, and checksums are SDK-owned"),
+					"provider scaffold runtime entrypoint contract diverged");
+			require(
+				has_exact_code_line(test_file->content, "#include <cxxlens/sdk/provider.hpp>") &&
+					has_entrypoint(test_file->content),
+				"provider scaffold test entrypoint contract diverged");
+			require(readme_file->content.contains(std::string{provider_id}) &&
+						readme_file->content.contains(std::string{"`"} +
+													  std::string{relation_name} + "`"),
+					"provider scaffold documentation contract diverged");
+		};
+		check_common_content(portable_cmake,
+							 portable_manifest,
+							 portable_main,
+							 portable_test,
+							 portable_readme,
+							 "company.example.provider",
+							 "company.example.relation",
+							 "cxxlensProviderSDK",
+							 "cxxlens::provider_sdk",
+							 "<cxxlens/sdk.hpp>");
+		check_common_content(native_cmake,
+							 native_manifest,
+							 native_main,
+							 native_test,
+							 native_readme,
+							 "company.example.native",
+							 "company.example.relation",
+							 "cxxlensClang22ProviderSDK",
+							 "cxxlens::clang22_provider_sdk",
+							 "<cxxlens/provider/clang22.hpp>");
+		require(!has_exact_cmake_line(portable_cmake->content, native_package_line) &&
+					!has_exact_cmake_line(portable_cmake->content, native_target_line) &&
+					!has_exact_code_line(portable_main->content,
+										 "#include <cxxlens/provider/clang22.hpp>"),
+				"portable scaffold selected native package or runtime adapter");
+		require(!has_exact_cmake_line(native_cmake->content, portable_package_line) &&
+					!has_exact_cmake_line(native_cmake->content, portable_target_line) &&
+					!has_exact_code_line(native_main->content, "#include <cxxlens/sdk.hpp>"),
+				"native scaffold selected portable package or runtime adapter");
 
 		coverage_provider implementation;
 		auto task = make_provider_task(implementation,

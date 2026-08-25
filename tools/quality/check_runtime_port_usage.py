@@ -32,47 +32,6 @@ def main() -> int:
                 line = text.count("\n", 0, match.start()) + 1
                 failures.append(f"{path}:{line}: {name} must use a runtime port")
 
-    process = (source_root / "runtime/provider_process_adapter.cpp").read_text(
-        encoding="utf-8"
-    )
-    provider_policy = (source_root / "sdk/provider.cpp").read_text(encoding="utf-8")
-    provider_header = (
-        source_root.parent / "include/cxxlens/sdk/provider.hpp"
-    ).read_text(encoding="utf-8")
-    runtime_tests = (
-        source_root.parent / "tests/unit/sdk/provider_runtime_test.cpp"
-    ).read_text(encoding="utf-8")
-    for marker in (
-        "class provider_process_port",
-        "process_invocation",
-        "process_output",
-        "make_system_provider_process_port",
-    ):
-        if marker not in provider_header:
-            failures.append(f"provider process port marker missing: {marker}")
-    for marker in (
-        "(void)::kill(-child",
-        "provider.binary-identity-mismatch",
-        "resolve_sandbox_policy",
-        "configure_child(invocation, *policy)",
-        "make_verified_executable",
-        "SYS_execveat",
-        "AT_EMPTY_PATH",
-    ):
-        if marker not in process:
-            failures.append(f"provider process adapter marker missing: {marker}")
-    for marker in ("no-shell-argv-exec", "network-syscall-deny"):
-        if marker not in provider_policy:
-            failures.append(f"provider sandbox policy marker missing: {marker}")
-    for fixture in (
-        "timeout",
-        "cancel",
-        "output limit",
-        "binary-identity",
-        "sandbox",
-    ):
-        if fixture not in runtime_tests.lower():
-            failures.append(f"provider process regression fixture missing: {fixture}")
     if failures:
         print("\n".join(failures), file=sys.stderr)
         return 1

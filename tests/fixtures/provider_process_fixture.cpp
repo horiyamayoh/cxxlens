@@ -105,6 +105,48 @@ namespace
 		}
 	};
 
+	[[nodiscard]] std::optional<std::array<std::byte, 32U>>
+	digest_bytes(const std::span<const std::byte> bytes)
+	{
+		const auto digest = content_digest(bytes);
+		constexpr std::string_view prefix{"sha256:"};
+		if (!digest.starts_with(prefix) || digest.size() != prefix.size() + 64U)
+			return std::nullopt;
+		std::array<std::byte, 32U> output{};
+		for (std::size_t index{}; index < output.size(); ++index)
+		{
+			unsigned int value{};
+			const auto* begin = digest.data() + prefix.size() + index * 2U;
+			const auto parsed = std::from_chars(begin, begin + 2U, value, 16);
+			if (parsed.ec != std::errc{} || parsed.ptr != begin + 2U || value > 0xffU)
+				return std::nullopt;
+			output[index] = static_cast<std::byte>(value);
+		}
+		return output;
+	}
+
+	[[nodiscard]] bool write_invalid_utf8_task_accepted(stdout_sink& sink,
+														const protocol_limits limits)
+	{
+		const std::array valid_control{std::byte{0x61}, std::byte{0x61}};
+		const std::array invalid_control{std::byte{0x61}, std::byte{0x80}};
+		frame value{message_type::task_accepted,
+					1U,
+					2U,
+					{valid_control.begin(), valid_control.end()},
+					{},
+					protocol_v2_major,
+					protocol_v2_minor,
+					0U};
+		auto encoded = encode_frame(value, limits);
+		auto digest = digest_bytes(invalid_control);
+		if (!encoded || !digest || encoded->size() != 104U + invalid_control.size())
+			return false;
+		std::copy(digest->begin(), digest->end(), encoded->begin() + 40);
+		std::copy(invalid_control.begin(), invalid_control.end(), encoded->begin() + 104);
+		return static_cast<bool>(sink.write(*encoded));
+	}
+
 #if defined(__linux__) && defined(__GLIBC__)
 	class child_process_guard final
 	{
@@ -553,10 +595,19 @@ int main(const int argument_count, const char* const* arguments)
 	auto identity = *expected_manifest;
 	if (mode == "wrong-identity")
 		identity.replace(identity.find(provider_id), provider_id.size(), "company.test.other");
-	const auto hello_flags =
-		mode == "bad-eos" ? static_cast<std::uint16_t>(frame_flag::end_of_stream) : std::uint16_t{};
-	if (!writer.send(message_type::hello, control(identity), {}, hello_flags))
+	if (!writer.send(message_type::hello, control(identity)))
 		return EXIT_FAILURE;
+	if (mode == "bad-eos")
+	{
+		auto complete = encode_task_complete_metadata({task_id});
+		return complete &&
+				writer.send(message_type::task_complete,
+							*complete,
+							{},
+							static_cast<std::uint16_t>(frame_flag::end_of_stream))
+			? EXIT_SUCCESS
+			: EXIT_FAILURE;
+	}
 	if (mode == "minimal")
 	{
 		auto complete = encode_task_complete_metadata({task_id});
@@ -575,14 +626,7 @@ int main(const int argument_count, const char* const* arguments)
 																		 : EXIT_FAILURE;
 	}
 	if (mode == "invalid-utf8")
-	{
-		const std::array invalid_control{std::byte{0x61}, std::byte{0x80}};
-		if (!writer.send(message_type::task_accepted, invalid_control))
-			return EXIT_FAILURE;
-		auto failed = encode_task_failed_metadata({"provider.schema-invalid", task_id, "fixture"});
-		return failed && writer.send(message_type::task_failed, *failed) ? EXIT_SUCCESS
-																		 : EXIT_FAILURE;
-	}
+		return write_invalid_utf8_task_accepted(sink, output_limits) ? EXIT_SUCCESS : EXIT_FAILURE;
 	if (mode != "missing-accepted")
 	{
 		auto accepted = encode_task_accepted_metadata(
@@ -734,8 +778,12 @@ int main(const int argument_count, const char* const* arguments)
 		: std::uint16_t{};
 	auto complete_control =
 		encode_task_complete_metadata({mode == "wrong-complete-task" ? "other-task" : task_id});
+	// Protocol 2 requires every control value to be canonical CBOR.  Use a canonical empty map to
+	// exercise a task_complete occurrence with no typed completion fields; an empty byte span would
+	// be rejected by the encoder before the malformed provider transcript reaches the host.
+	constexpr std::array missing_complete_control{std::byte{0xa0}};
 	const std::span<const std::byte> final_control = mode == "missing-complete-control"
-		? std::span<const std::byte>{}
+		? std::span<const std::byte>{missing_complete_control}
 		: std::span<const std::byte>{*complete_control};
 	if (!coverage_control || !unresolved_control || !evidence_control || !complete_control ||
 		!writer.send(message_type::coverage_chunk, *coverage_control) ||

@@ -14,6 +14,7 @@ namespace
 	using cxxlens::detail::clang22::make_source_closure_snapshot;
 	using cxxlens::detail::clang22::source_closure_encoding;
 	using cxxlens::detail::clang22::source_closure_file_input;
+	using cxxlens::detail::clang22::source_closure_main_line_index_id;
 	using cxxlens::detail::clang22::source_closure_role;
 	using cxxlens::detail::clang22::source_closure_snapshot;
 
@@ -72,6 +73,18 @@ int main()
 			"main source was not addressable by canonical logical path");
 	require(closure.find_member("project://missing.hpp") == nullptr,
 			"missing logical path unexpectedly resolved");
+	auto main_line_index = source_closure_main_line_index_id(closure);
+	require(main_line_index.has_value(), "authenticated main line index was not derived");
+	require(
+		*main_line_index ==
+			"line-index:sha256:6efce82ddf18ee9a3ed6882f3dda7019fb8158b6164449b974243ba6d9197ebc",
+		"main LF/EOF line-index golden vector changed");
+	auto line_index_tamper = closure;
+	line_index_tamper.blobs.front().content = content("tampered\n");
+	auto tampered_line_index = source_closure_main_line_index_id(line_index_tamper);
+	require(!tampered_line_index &&
+				tampered_line_index.error().code == "source-closure.digest-mismatch",
+			"main line-index accepted unauthenticated blob bytes");
 
 	auto mutable_bytes = std::make_shared<std::string>("int main() { return 0; }");
 	std::shared_ptr<const std::string> borrowed_mutable = mutable_bytes;

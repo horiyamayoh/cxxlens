@@ -490,9 +490,6 @@ namespace cxxlens::sdk
 			const std::shared_ptr<sqlite_shm_process_identity_issuer_state>& state,
 			const sqlite_shm_reader_lifecycle_identity_scope& scope,
 			const sqlite_shm_issued_reader_callback_identity& callback);
-		void exhaust_identity_issuer_for_registry(
-			const std::shared_ptr<sqlite_shm_process_identity_issuer_state>& state) noexcept;
-
 		struct sqlite_shm_registry_process_owner_seal
 		{
 			const std::shared_ptr<std::atomic<std::uint64_t>> process_epoch{
@@ -5549,12 +5546,11 @@ namespace cxxlens::sdk
 					output.phase = singleton->phase;
 					output.lookup_visible = true;
 					output.coordinator = singleton->coordinator->snapshot();
-					const auto reader_lifecycle =
-						singleton->coordinator->reader_lifecycle_view_for_testing();
+					const auto reader_lifecycle = singleton->coordinator->reader_lifecycle_census();
 					output.reader_lifecycle_compact_tombstone_count =
-						reader_lifecycle.compact_tombstone_count;
+						reader_lifecycle.observed().compact_tombstone_count;
 					output.reader_open_epoch_close_tombstone_count =
-						reader_lifecycle.open_epoch_close_compact_tombstone_count;
+						reader_lifecycle.observed().open_epoch_close_compact_tombstone_count;
 					output.coordinator_present = true;
 					return output;
 				}
@@ -5562,6 +5558,52 @@ namespace cxxlens::sdk
 				{
 					emergency_quarantine();
 					return {};
+				}
+			}
+
+			[[nodiscard]] std::optional<sqlite_shm_reader_lifecycle_census>
+			reader_lifecycle_census(const sqlite_shm_lease_family_binding& binding) noexcept
+			{
+				if (!current(process_epoch_) || !valid_family(binding))
+					return std::nullopt;
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					synchronize_activity_controls_locked();
+					synchronize_reader_open_controls_locked();
+					synchronize_coordinator_quarantines_locked();
+					family_record* singleton = nullptr;
+					std::size_t active_match_count{};
+					std::size_t quarantined_match_count{};
+					for (auto& family : families_)
+					{
+						if (family.binding != binding)
+							continue;
+						if (family.phase == sqlite_shm_registry_family_phase::active)
+						{
+							++active_match_count;
+							singleton = &family;
+						}
+						else if (family.phase == sqlite_shm_registry_family_phase::quarantined)
+							++quarantined_match_count;
+					}
+					if (active_match_count > 1U ||
+						(active_match_count == 1U && quarantined_match_count != 0U))
+					{
+						increment_audit_counter_locked(ambiguous_lookup_count_);
+						quarantine_registry_locked();
+						return std::nullopt;
+					}
+					if (active_match_count != 1U || quarantined_match_count != 0U ||
+						singleton == nullptr || !singleton->coordinator || registry_quarantined_ ||
+						emergency_quarantined_.load(std::memory_order_acquire))
+						return std::nullopt;
+					return singleton->coordinator->reader_lifecycle_census();
+				}
+				catch (...)
+				{
+					emergency_quarantine();
+					return std::nullopt;
 				}
 			}
 
@@ -5708,219 +5750,10 @@ namespace cxxlens::sdk
 				}
 			}
 
-			void lock_mutex_for_fork_testing()
-			{
-				mutex_.lock();
-			}
-
-			void unlock_mutex_for_fork_testing() noexcept
-			{
-				mutex_.unlock();
-			}
-
-			[[nodiscard]] bool
-			inject_duplicate_family(const sqlite_shm_lease_family_binding& binding) noexcept
-			{
-				if (!current(process_epoch_) || !valid_family(binding))
-					return false;
-				try
-				{
-					std::scoped_lock lock{mutex_};
-					synchronize_activity_controls_locked();
-					if (binding.process_instance != process_instance_ || registry_quarantined_ ||
-						emergency_quarantined_.load(std::memory_order_acquire))
-						return false;
-					std::size_t active_matches{};
-					for (const auto& family : families_)
-						active_matches += family.binding == binding &&
-								family.phase == sqlite_shm_registry_family_phase::active
-							? 1U
-							: 0U;
-					if (active_matches != 1U)
-						return false;
-					std::uint64_t epoch{};
-					if (!allocate_counter_locked(next_family_epoch_, epoch))
-						return false;
-					auto coordinator =
-						std::make_shared<sqlite_same_process_shm_mapping_lease_coordinator>(
-							binding, generations_, reader_lifecycle_sequences_);
-					auto imported =
-						import_retired_reader_lifecycle_tombstones_locked(*coordinator, binding);
-					if (!imported)
-						return false;
-					auto imported_closes = import_retired_reader_open_epoch_close_tombstones_locked(
-						*coordinator, binding);
-					if (!imported_closes)
-						return false;
-					families_.emplace_back(epoch, binding, std::move(coordinator));
-					return true;
-				}
-				catch (...)
-				{
-					emergency_quarantine();
-					return false;
-				}
-			}
-
-			void exhaust_counters() noexcept
-			{
-				if (!current(process_epoch_))
-					return;
-				try
-				{
-					std::scoped_lock lock{mutex_};
-					synchronize_activity_controls_locked();
-					next_alias_token_ = std::numeric_limits<std::uint64_t>::max();
-					next_family_epoch_ = std::numeric_limits<std::uint64_t>::max();
-					next_family_pin_token_ = std::numeric_limits<std::uint64_t>::max();
-					next_activity_token_ = std::numeric_limits<std::uint64_t>::max();
-					next_reader_open_token_ = std::numeric_limits<std::uint64_t>::max();
-					next_reader_attachment_epoch_ = std::numeric_limits<std::uint64_t>::max();
-					reader_lifecycle_sequences_->exhaust_for_testing();
-				}
-				catch (...)
-				{
-					emergency_quarantine();
-				}
-			}
-
-			void exhaust_counter(const sqlite_shm_registry_counter_for_testing counter) noexcept
-			{
-				if (!current(process_epoch_))
-					return;
-				try
-				{
-					std::scoped_lock lock{mutex_};
-					synchronize_activity_controls_locked();
-					switch (counter)
-					{
-						case sqlite_shm_registry_counter_for_testing::alias_token:
-							next_alias_token_ = std::numeric_limits<std::uint64_t>::max();
-							break;
-						case sqlite_shm_registry_counter_for_testing::family_epoch:
-							next_family_epoch_ = std::numeric_limits<std::uint64_t>::max();
-							break;
-						case sqlite_shm_registry_counter_for_testing::family_pin_token:
-							next_family_pin_token_ = std::numeric_limits<std::uint64_t>::max();
-							break;
-						case sqlite_shm_registry_counter_for_testing::activity_token:
-							next_activity_token_ = std::numeric_limits<std::uint64_t>::max();
-							break;
-						case sqlite_shm_registry_counter_for_testing::reader_open_token:
-							next_reader_open_token_ = std::numeric_limits<std::uint64_t>::max();
-							break;
-						case sqlite_shm_registry_counter_for_testing::reader_attachment_epoch:
-							next_reader_attachment_epoch_ =
-								std::numeric_limits<std::uint64_t>::max();
-							break;
-						case sqlite_shm_registry_counter_for_testing::reader_lifecycle_sequence:
-							reader_lifecycle_sequences_->exhaust_for_testing();
-							break;
-					}
-				}
-				catch (...)
-				{
-					emergency_quarantine();
-				}
-			}
-
-			[[nodiscard]] sqlite_same_process_shm_mapping_lease_coordinator*
-			coordinator_for_activity(const sqlite_shm_registry_activity_pin& pin) noexcept
-			{
-				if (!pin.control_ || !current(pin.control_->process_epoch) ||
-					!pin.control_->authority_valid_now())
-					return nullptr;
-				try
-				{
-					std::scoped_lock lock{mutex_};
-					synchronize_activity_controls_locked();
-					if (registry_quarantined_ ||
-						emergency_quarantined_.load(std::memory_order_acquire) ||
-						current_activity_locked(pin) == nullptr ||
-						!pin.control_->authority_valid_now())
-						return nullptr;
-					auto* family = find_family_epoch_locked(pin.control_->family_epoch);
-					return family != nullptr && exact_family_admission_visible_locked(*family)
-						? family->coordinator.get()
-						: nullptr;
-				}
-				catch (...)
-				{
-					emergency_quarantine();
-					return nullptr;
-				}
-			}
-
-			[[nodiscard]] sqlite_same_process_shm_mapping_lease_coordinator*
-			coordinator_for_family(const sqlite_shm_lease_family_binding& binding) noexcept
-			{
-				if (!current(process_epoch_))
-					return nullptr;
-				try
-				{
-					std::scoped_lock lock{mutex_};
-					synchronize_activity_controls_locked();
-					synchronize_coordinator_quarantines_locked();
-					const auto found = std::find_if(
-						families_.begin(),
-						families_.end(),
-						[&binding](const family_record& family)
-						{
-							return family.binding == binding &&
-								family.phase == sqlite_shm_registry_family_phase::active;
-						});
-					return found != families_.end() && exact_family_admission_visible_locked(*found)
-						? found->coordinator.get()
-						: nullptr;
-				}
-				catch (...)
-				{
-					emergency_quarantine();
-					return nullptr;
-				}
-			}
-
-			[[nodiscard]] bool
-			activity_seal_matches(const sqlite_shm_registry_activity_seal& audit_seal,
-								  const sqlite_backend_opaque_identity& process_instance,
-								  const sqlite_shm_lease_family_binding& family,
-								  const sqlite_backend_opaque_identity& alias_lifetime) noexcept
-			{
-				if (!current(process_epoch_))
-					return false;
-				try
-				{
-					std::scoped_lock lock{mutex_};
-					synchronize_activity_controls_locked();
-					synchronize_coordinator_quarantines_locked();
-					const auto control = audit_seal.control_.lock();
-					if (!control || !control->audit_seal_minted.load(std::memory_order_acquire) ||
-						!control->authority_valid_now() ||
-						control->process_instance != process_instance ||
-						control->process_instance != process_instance_ ||
-						control->family != family || control->alias_lifetime != alias_lifetime)
-						return false;
-					auto* activity = find_activity_locked(control->activity_token);
-					return activity != nullptr && activity->active &&
-						activity->control.get() == control.get() &&
-						activity_control_matches_record_locked(*activity);
-				}
-				catch (...)
-				{
-					emergency_quarantine();
-					return false;
-				}
-			}
-
-			[[nodiscard]] const void* generation_source_identity() const noexcept
-			{
-				return current(process_epoch_) ? generations_.get() : nullptr;
-			}
-
-			[[nodiscard]] sqlite_shm_registry_reader_open_epoch_test_view
+			[[nodiscard]] sqlite_shm_registry_reader_open_epoch_view
 			reader_open_epoch_view(const sqlite_shm_reader_open_authority& open) noexcept
 			{
-				sqlite_shm_registry_reader_open_epoch_test_view output;
+				sqlite_shm_registry_reader_open_epoch_view output;
 				if (!current(process_epoch_) || !open.control_)
 					return output;
 				const auto owner_state = open.state_.lock();
@@ -5955,9 +5788,8 @@ namespace cxxlens::sdk
 					if (alias != nullptr && family != nullptr && exact_family_drain_visible &&
 						family->coordinator && exact_record->control->lineage_seal)
 					{
-						output.lease_open_epoch =
-							family->coordinator->reader_open_epoch_view_for_testing(
-								exact_record->token, exact_record->control->lineage_seal);
+						output.lease_open_epoch = family->coordinator->reader_open_epoch_view(
+							exact_record->token, exact_record->control->lineage_seal);
 						if (output.lease_open_epoch)
 							output.lease_binding_matches =
 								output.lease_open_epoch->registry_open_token ==
@@ -5978,146 +5810,6 @@ namespace cxxlens::sdk
 					emergency_quarantine();
 					return {};
 				}
-			}
-
-			[[nodiscard]] const void* reader_lifecycle_sequence_source_identity() const noexcept
-			{
-				return current(process_epoch_) ? reader_lifecycle_sequences_->identity_for_testing()
-											   : nullptr;
-			}
-
-			[[nodiscard]] std::uint64_t reader_lifecycle_last_issued_sequence() const noexcept
-			{
-				return current(process_epoch_)
-					? reader_lifecycle_sequences_->last_issued_for_testing()
-					: 0U;
-			}
-
-			[[nodiscard]] std::size_t reader_map_identity_phase_count(
-				const sqlite_shm_lease_family_binding& binding) const noexcept
-			{
-				try
-				{
-					std::scoped_lock lock{mutex_};
-					const auto family = std::find_if(families_.begin(),
-													 families_.end(),
-													 [&binding](const family_record& candidate)
-													 {
-														 return candidate.binding == binding;
-													 });
-					return family == families_.end() ? 0U
-													 : family->reader_map_identity_phases.size();
-				}
-				catch (...)
-				{
-					return std::numeric_limits<std::size_t>::max();
-				}
-			}
-
-			void exhaust_reader_lifecycle_sequence_source() noexcept
-			{
-				if (!current(process_epoch_))
-					return;
-				try
-				{
-					std::scoped_lock lock{mutex_};
-					synchronize_activity_controls_locked();
-					reader_lifecycle_sequences_->exhaust_for_testing();
-				}
-				catch (...)
-				{
-					emergency_quarantine();
-				}
-			}
-
-			[[nodiscard]] std::size_t retired_reader_lifecycle_tombstone_count() noexcept
-			{
-				if (!current(process_epoch_))
-					return 0U;
-				try
-				{
-					std::scoped_lock lock{mutex_};
-					return retired_reader_lifecycle_tombstones_.size();
-				}
-				catch (...)
-				{
-					emergency_quarantine();
-					return 0U;
-				}
-			}
-
-			[[nodiscard]] bool retired_reader_lifecycle_tombstone_matches(
-				const sqlite_shm_reader_attachment_reservation_identity& attachment) noexcept
-			{
-				if (!current(process_epoch_))
-					return false;
-				try
-				{
-					std::scoped_lock lock{mutex_};
-					return std::ranges::any_of(
-						retired_reader_lifecycle_tombstones_,
-						[&attachment](
-							const sqlite_shm_reader_lifecycle_compact_tombstone& tombstone)
-						{
-							return tombstone.attachment == attachment;
-						});
-				}
-				catch (...)
-				{
-					emergency_quarantine();
-					return false;
-				}
-			}
-
-			[[nodiscard]] std::size_t retired_reader_open_epoch_close_tombstone_count() noexcept
-			{
-				if (!current(process_epoch_))
-					return 0U;
-				try
-				{
-					std::scoped_lock lock{mutex_};
-					return retired_reader_open_epoch_close_tombstones_.size();
-				}
-				catch (...)
-				{
-					emergency_quarantine();
-					return 0U;
-				}
-			}
-
-			[[nodiscard]] bool retired_reader_open_epoch_close_tombstone_matches(
-				const std::uint64_t registry_open_token,
-				const sqlite_shm_reader_open_epoch_binding& binding) noexcept
-			{
-				if (!current(process_epoch_))
-					return false;
-				try
-				{
-					std::scoped_lock lock{mutex_};
-					return std::ranges::any_of(
-						retired_reader_open_epoch_close_tombstones_,
-						[registry_open_token,
-						 &binding](const sqlite_shm_reader_open_epoch_close_tombstone& tombstone)
-						{
-							return tombstone.registry_open_token == registry_open_token &&
-								tombstone.binding == binding;
-						});
-				}
-				catch (...)
-				{
-					emergency_quarantine();
-					return false;
-				}
-			}
-
-			void lock_mutex_for_testing()
-			{
-				mutex_.lock();
-			}
-
-			void unlock_mutex_for_testing()
-			{
-				mutex_.unlock();
 			}
 
 			[[nodiscard]] sqlite_shm_lease_result<
@@ -7600,12 +7292,6 @@ namespace cxxlens::sdk
 		return control_ && control_->authority_valid_now();
 	}
 
-	void sqlite_shm_reader_open_authority::publish_abandonment_lineage_for_testing() noexcept
-	{
-		if (control_ && control_->lineage_seal)
-			control_->lineage_seal->authority_valid.store(false, std::memory_order_release);
-	}
-
 	void sqlite_shm_reader_open_authority::disarm() noexcept
 	{
 		state_.reset();
@@ -7804,12 +7490,6 @@ namespace cxxlens::sdk
 		return status::exact;
 	}
 
-	void sqlite_shm_writer_member_authority::invalidate_epoch_for_testing() noexcept
-	{
-		if (state_ && state_->local_epoch_arm)
-			state_->local_epoch_arm->invalidate_for_testing();
-	}
-
 	sqlite_shm_lease_result<void> sqlite_shm_writer_member_authority::release_activity() noexcept
 	{
 		if (!state_ || !state_->activity)
@@ -7980,12 +7660,6 @@ namespace cxxlens::sdk
 			alias->phase == sqlite_shm_registry_alias_phase::registered &&
 			family_record->phase == sqlite_shm_registry_family_phase::active && activity.valid() &&
 			state_->audit_seal->valid();
-	}
-
-	void sqlite_shm_reader_attachment_authority::invalidate_activity_for_testing() noexcept
-	{
-		if (state_ && state_->activity && state_->activity->control_)
-			state_->activity->control_->authority_valid.store(false, std::memory_order_release);
 	}
 
 	sqlite_shm_lease_result<void>
@@ -8224,12 +7898,6 @@ namespace cxxlens::sdk
 			binding.main_xopen_receipt == attachment.main_xopen_receipt() &&
 			binding.open_epoch == attachment.open_epoch() &&
 			binding.callback_cohort == attachment.callback_cohort();
-	}
-
-	void sqlite_shm_reader_map_predelegate_authority::invalidate_activity_for_testing() noexcept
-	{
-		if (state_ && state_->activity && state_->activity->control_)
-			state_->activity->control_->authority_valid.store(false, std::memory_order_release);
 	}
 
 	sqlite_shm_lease_result<void>
@@ -8733,11 +8401,11 @@ namespace cxxlens::sdk
 	sqlite_shm_lease_result<std::unique_ptr<sqlite_same_process_shm_mapping_registry>>
 	sqlite_same_process_shm_mapping_registry::create(sqlite_shm_registry_process_owner owner)
 	{
-		return create_with_generation_for_testing(std::move(owner), 1U);
+		return create_with_generation(std::move(owner), 1U);
 	}
 
 	sqlite_shm_lease_result<std::unique_ptr<sqlite_same_process_shm_mapping_registry>>
-	sqlite_same_process_shm_mapping_registry::create_with_generation_for_testing(
+	sqlite_same_process_shm_mapping_registry::create_with_generation(
 		sqlite_shm_registry_process_owner owner, const std::uint64_t first_mapping_generation)
 	{
 		if (!valid_identity(owner.process_instance_) || !owner.seal_ ||
@@ -9390,6 +9058,13 @@ namespace cxxlens::sdk
 					  : sqlite_shm_mapping_registry_family_snapshot{};
 	}
 
+	std::optional<sqlite_shm_reader_lifecycle_census>
+	sqlite_same_process_shm_mapping_registry::reader_lifecycle_census(
+		const sqlite_shm_lease_family_binding& family) const noexcept
+	{
+		return state_ ? state_->reader_lifecycle_census(family) : std::nullopt;
+	}
+
 	sqlite_shm_lease_result<sqlite_shm_registry_runtime_lifetime_pin>
 	sqlite_same_process_shm_mapping_registry::adopt_runtime_lifetime_from_process_port(
 		sqlite_backend_opaque_identity identity,
@@ -9413,20 +9088,6 @@ namespace cxxlens::sdk
 		const noexcept
 	{
 		return state_ && state_->process_instance_live_from_process_port();
-	}
-
-	void
-	sqlite_same_process_shm_mapping_registry::invalidate_process_instance_for_testing() noexcept
-	{
-		if (state_)
-			state_->invalidate_process_instance();
-	}
-
-	sqlite_shm_lease_result<sqlite_shm_reader_open_authority>
-	sqlite_same_process_shm_mapping_registry::acquire_reader_open_for_testing(
-		sqlite_shm_registry_family_pin& family, const sqlite_shm_reader_open_binding& binding)
-	{
-		return state_->acquire_reader_open(family, binding);
 	}
 
 	sqlite_shm_lease_result<sqlite_shm_reader_open_authority>
@@ -9540,7 +9201,7 @@ namespace cxxlens::sdk
 						  handoff.generation_);
 	}
 
-	std::optional<sqlite_shm_reader_open_epoch_test_view>
+	std::optional<sqlite_shm_reader_open_epoch_view>
 	sqlite_shm_reader_lifecycle_production_factory::open_epoch_view(
 		sqlite_same_process_shm_mapping_registry& registry,
 		const sqlite_shm_reader_open_authority& open) noexcept
@@ -9746,160 +9407,6 @@ namespace cxxlens::sdk
 			family, inflight, scope, callback, effect, std::move(observation));
 	}
 
-	void sqlite_same_process_shm_mapping_registry::lock_registry_mutex_for_fork_testing()
-	{
-		state_->lock_mutex_for_fork_testing();
-	}
-
-	void sqlite_same_process_shm_mapping_registry::unlock_registry_mutex_for_fork_testing() noexcept
-	{
-		state_->unlock_mutex_for_fork_testing();
-	}
-
-	bool sqlite_same_process_shm_mapping_registry::inject_duplicate_family_for_testing(
-		const sqlite_shm_lease_family_binding& family) noexcept
-	{
-		return state_ && state_->inject_duplicate_family(family);
-	}
-
-	void sqlite_same_process_shm_mapping_registry::exhaust_registry_counters_for_testing() noexcept
-	{
-		if (state_)
-			state_->exhaust_counters();
-	}
-
-	void sqlite_same_process_shm_mapping_registry::exhaust_registry_counter_for_testing(
-		const detail::sqlite_shm_registry_counter_for_testing counter) noexcept
-	{
-		if (state_)
-			state_->exhaust_counter(counter);
-	}
-
-	std::uint64_t
-	sqlite_same_process_shm_mapping_registry::state_destruction_count_for_testing() noexcept
-	{
-		return registry_state_destruction_count.load(std::memory_order_relaxed);
-	}
-
-	sqlite_shm_registry_reader_open_epoch_test_view
-	sqlite_same_process_shm_mapping_registry::reader_open_epoch_view_for_testing(
-		const sqlite_shm_reader_open_authority& open) const noexcept
-	{
-		return state_ ? state_->reader_open_epoch_view(open)
-					  : sqlite_shm_registry_reader_open_epoch_test_view{};
-	}
-
-	sqlite_shm_lease_result<sqlite_shm_registry_runtime_lifetime_pin>
-	sqlite_same_process_shm_mapping_registry::adopt_runtime_lifetime_for_testing(
-		sqlite_backend_opaque_identity identity,
-		sqlite_backend_opaque_identity pin_identity,
-		std::shared_ptr<void> owner)
-	{
-		return state_->adopt_runtime_lifetime(
-			std::move(identity), std::move(pin_identity), std::move(owner));
-	}
-
-	sqlite_same_process_shm_mapping_lease_coordinator*
-	sqlite_same_process_shm_mapping_registry::coordinator_for_activity_for_testing(
-		const sqlite_shm_registry_activity_pin& activity) const noexcept
-	{
-		return state_ ? state_->coordinator_for_activity(activity) : nullptr;
-	}
-
-	sqlite_same_process_shm_mapping_lease_coordinator*
-	sqlite_same_process_shm_mapping_registry::coordinator_for_family_for_testing(
-		const sqlite_shm_lease_family_binding& family) const noexcept
-	{
-		return state_ ? state_->coordinator_for_family(family) : nullptr;
-	}
-
-	bool sqlite_same_process_shm_mapping_registry::activity_seal_matches_for_testing(
-		const sqlite_shm_registry_activity_seal& audit_seal,
-		const sqlite_backend_opaque_identity& process_instance,
-		const sqlite_shm_lease_family_binding& family,
-		const sqlite_backend_opaque_identity& alias_lifetime) noexcept
-	{
-		return state_ &&
-			state_->activity_seal_matches(audit_seal, process_instance, family, alias_lifetime);
-	}
-
-	const void* sqlite_same_process_shm_mapping_registry::generation_source_identity_for_testing()
-		const noexcept
-	{
-		return state_ ? state_->generation_source_identity() : nullptr;
-	}
-
-	const void* sqlite_same_process_shm_mapping_registry::
-		reader_lifecycle_sequence_source_identity_for_testing() const noexcept
-	{
-		return state_ ? state_->reader_lifecycle_sequence_source_identity() : nullptr;
-	}
-
-	std::uint64_t
-	sqlite_same_process_shm_mapping_registry::reader_lifecycle_last_issued_sequence_for_testing()
-		const noexcept
-	{
-		return state_ ? state_->reader_lifecycle_last_issued_sequence() : 0U;
-	}
-
-	void sqlite_same_process_shm_mapping_registry::
-		exhaust_reader_lifecycle_sequence_source_for_testing() noexcept
-	{
-		if (state_)
-			state_->exhaust_reader_lifecycle_sequence_source();
-	}
-
-	std::size_t
-	sqlite_same_process_shm_mapping_registry::retired_reader_lifecycle_tombstone_count_for_testing()
-		const noexcept
-	{
-		return state_ ? state_->retired_reader_lifecycle_tombstone_count() : 0U;
-	}
-
-	bool sqlite_same_process_shm_mapping_registry::
-		retired_reader_lifecycle_tombstone_matches_for_testing(
-			const sqlite_shm_reader_attachment_reservation_identity& attachment) const noexcept
-	{
-		return state_ && state_->retired_reader_lifecycle_tombstone_matches(attachment);
-	}
-
-	std::size_t sqlite_same_process_shm_mapping_registry::
-		retired_reader_open_epoch_close_tombstone_count_for_testing() const noexcept
-	{
-		return state_ ? state_->retired_reader_open_epoch_close_tombstone_count() : 0U;
-	}
-
-	bool sqlite_same_process_shm_mapping_registry::
-		retired_reader_open_epoch_close_tombstone_matches_for_testing(
-			const std::uint64_t registry_open_token,
-			const sqlite_shm_reader_open_epoch_binding& binding) const noexcept
-	{
-		return state_ &&
-			state_->retired_reader_open_epoch_close_tombstone_matches(registry_open_token, binding);
-	}
-
-	void sqlite_same_process_shm_mapping_registry::lock_state_mutex_for_testing()
-	{
-		if (state_)
-			state_->lock_mutex_for_testing();
-	}
-
-	void sqlite_same_process_shm_mapping_registry::unlock_state_mutex_for_testing()
-	{
-		if (state_)
-			state_->unlock_mutex_for_testing();
-	}
-
-	sqlite_shm_process_global_identity_issuer
-	sqlite_same_process_shm_mapping_registry::identity_issuer_for_testing() const noexcept
-	{
-		return sqlite_shm_process_global_identity_issuer{
-			identity_issuer_state_,
-			state_->process_epoch_latch_for_identity_issuer(),
-			identity_issuer_owner_latch_,
-			state_->process_epoch_for_identity_issuer()};
-	}
-
 	sqlite_shm_process_global_identity_issuer
 	sqlite_same_process_shm_mapping_registry::identity_issuer_for_production() const noexcept
 	{
@@ -9908,33 +9415,6 @@ namespace cxxlens::sdk
 			state_ ? state_->process_epoch_latch_for_identity_issuer() : nullptr,
 			identity_issuer_owner_latch_,
 			state_ ? state_->process_epoch_for_identity_issuer() : 0U};
-	}
-
-	sqlite_shm_reader_lifecycle_identity_scope
-	sqlite_same_process_shm_mapping_registry::seal_reader_lifecycle_identity_scope_for_testing(
-		const sqlite_shm_registry_family_pin& family,
-		const sqlite_backend_opaque_identity& callback_cohort,
-		const sqlite_backend_opaque_identity& request_seal,
-		const std::uint64_t registry_open_token,
-		const sqlite_shm_reader_lifecycle_owner_kind owner_kind,
-		const std::uint64_t lifecycle_owner_token,
-		const std::uint64_t writer_mapping_generation) const
-	{
-		const auto exact_family = state_->family_binding_for_identity_scope(family);
-		if (!exact_family || family.state_.get() != state_.get() ||
-			!family.identity_authority_latch_ ||
-			!family.identity_authority_latch_->load(std::memory_order_acquire))
-			return detail::seal_identity_scope_for_registry(
-				identity_issuer_state_, {}, {}, 0U, 0U, {}, {}, {});
-		return detail::seal_identity_scope_for_registry(
-			identity_issuer_state_,
-			*exact_family,
-			family.identity_authority_latch_,
-			family.family_epoch_,
-			family.pin_token_,
-			callback_cohort,
-			request_seal,
-			{registry_open_token, owner_kind, lifecycle_owner_token, writer_mapping_generation});
 	}
 
 	sqlite_shm_reader_lifecycle_identity_scope
@@ -9965,23 +9445,12 @@ namespace cxxlens::sdk
 			{registry_open_token, owner_kind, lifecycle_owner_token, writer_mapping_generation});
 	}
 
-	sqlite_shm_registry_reader_open_epoch_test_view
+	sqlite_shm_registry_reader_open_epoch_view
 	sqlite_same_process_shm_mapping_registry::reader_open_epoch_view_for_production(
 		const sqlite_shm_reader_open_authority& open) const noexcept
 	{
 		return state_ ? state_->reader_open_epoch_view(open)
-					  : sqlite_shm_registry_reader_open_epoch_test_view{};
+					  : sqlite_shm_registry_reader_open_epoch_view{};
 	}
 
-	void sqlite_same_process_shm_mapping_registry::exhaust_identity_issuer_for_testing() noexcept
-	{
-		detail::exhaust_identity_issuer_for_registry(identity_issuer_state_);
-	}
-
-	std::size_t
-	sqlite_same_process_shm_mapping_registry::reader_map_identity_phase_count_for_testing(
-		const sqlite_shm_lease_family_binding& family) const noexcept
-	{
-		return state_ ? state_->reader_map_identity_phase_count(family) : 0U;
-	}
 } // namespace cxxlens::sdk

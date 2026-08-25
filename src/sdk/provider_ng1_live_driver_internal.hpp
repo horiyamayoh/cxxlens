@@ -119,6 +119,10 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] virtual result<std::uint64_t> now_ns() const = 0;
 	};
 
+	/** Create the host monotonic clock used by the system NG1 live driver. */
+	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN std::unique_ptr<ng1_monotonic_clock_port>
+	make_system_ng1_monotonic_clock_port();
+
 	/** Host observation supplied alongside each NG1 control receipt. */
 	struct CXXLENS_PROVIDER_DETAIL_HIDDEN ng1_host_observation
 	{
@@ -135,6 +139,62 @@ namespace cxxlens::sdk::provider::detail
 	  public:
 		virtual ~ng1_host_observation_port() = default;
 		[[nodiscard]] virtual result<ng1_host_observation> current() const = 0;
+	};
+
+	/**
+	 * Host authority that binds a durable resume occurrence to the admitted task-v4 closure.
+	 *
+	 * `task_input_digest` is repeated deliberately and must equal the resume binding.  The closure
+	 * digest is retained beside the Protocol 2 token because the accepted resume control carries
+	 * the task-input digest but does not duplicate the task-v4 closure field.
+	 */
+	struct CXXLENS_PROVIDER_DETAIL_HIDDEN ng1_durable_resume_authority
+	{
+		std::string task_input_digest;
+		std::string source_closure_digest;
+
+		[[nodiscard]] bool operator==(const ng1_durable_resume_authority&) const = default;
+	};
+
+	/** Opaque append/fsync frontier created before a provider may publish a resume token. */
+	class CXXLENS_PROVIDER_DETAIL_HIDDEN ng1_durable_spill_checkpoint
+	{
+	  public:
+		[[nodiscard]] const ng1_spill_fsync_receipt& receipt() const noexcept
+		{
+			return receipt_;
+		}
+		[[nodiscard]] std::uint64_t resume_generation() const noexcept
+		{
+			return resume_generation_;
+		}
+		[[nodiscard]] std::string_view source_closure_digest() const noexcept
+		{
+			return authority_.source_closure_digest;
+		}
+
+	  private:
+		ng1_durable_spill_checkpoint(ng1_spill_fsync_receipt receipt,
+									 ng1_resume_binding binding,
+									 ng1_durable_resume_authority authority,
+									 const std::uint64_t highest_observed_sequence,
+									 const std::uint64_t resume_generation) noexcept
+			: receipt_{std::move(receipt)}, binding_{std::move(binding)},
+			  authority_{std::move(authority)},
+			  highest_observed_sequence_{highest_observed_sequence},
+			  resume_generation_{resume_generation}
+		{
+		}
+
+		ng1_spill_fsync_receipt receipt_;
+		ng1_resume_binding binding_;
+		ng1_durable_resume_authority authority_;
+		std::uint64_t highest_observed_sequence_{};
+		std::uint64_t resume_generation_{};
+
+		[[nodiscard]] bool operator==(const ng1_durable_spill_checkpoint&) const = default;
+
+		friend class ng1_live_session_driver;
 	};
 
 	/** One provider frame plus the host receipt and observation captured at ingress. */
@@ -201,6 +261,7 @@ namespace cxxlens::sdk::provider::detail
 		std::unique_ptr<ng1_monotonic_clock_port> clock;
 		std::unique_ptr<ng1_host_observation_port> observation;
 		std::unique_ptr<ng1_duplex_process_port> processes;
+		std::optional<ng1_durable_resume_authority> durable_resume;
 	};
 
 	/**
@@ -217,11 +278,26 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] static result<ng1_live_session_driver>
 		start(ng1_live_driver_configuration configuration, std::stop_token cancellation);
 
+		/**
+		 * Start the source-private driver with the real host clock and duplex process port.
+		 *
+		 * The observation port remains caller-owned because its durable sequence and staged digest
+		 * are host authority.  No provider capability is negotiated or advertised by this helper.
+		 */
+		[[nodiscard]] static result<ng1_live_session_driver>
+		start_system(ng1_session_configuration session,
+					 process_invocation invocation,
+					 protocol_limits limits,
+					 std::uint64_t maximum_retained_frames,
+					 std::unique_ptr<ng1_host_observation_port> observation,
+					 ng1_durable_resume_authority durable_resume,
+					 std::stop_token cancellation);
+
 		ng1_live_session_driver(const ng1_live_session_driver&) = delete;
 		ng1_live_session_driver& operator=(const ng1_live_session_driver&) = delete;
 		ng1_live_session_driver(ng1_live_session_driver&& other) noexcept;
 		ng1_live_session_driver& operator=(ng1_live_session_driver&&) = delete;
-		~ng1_live_session_driver() noexcept = default;
+		~ng1_live_session_driver() noexcept;
 
 		/** Stamp and validate an NG1 host control before sending it to the provider. */
 		[[nodiscard]] result<void> send_host_frame(const frame& value);
@@ -230,13 +306,41 @@ namespace cxxlens::sdk::provider::detail
 		receive_provider_frame(std::stop_token cancellation);
 		/** Apply the injected host clock to the current liveness deadline. */
 		[[nodiscard]] result<void> check_liveness();
+		/** Append one exact bound output occurrence to the private spill object. */
+		[[nodiscard]] result<void> append_durable_spill(const ng1_spill_record& record);
+		/**
+		 * Fsync the complete prefix and publish only the opaque latest checkpoint authority.
+		 * The host observation supplies the staged digest and observed sequence; callers cannot
+		 * substitute either value.
+		 */
+		[[nodiscard]] result<ng1_durable_spill_checkpoint>
+		checkpoint_durable_spill(std::uint64_t highest_contiguous_acked_sequence,
+								 std::uint64_t resume_generation);
 		/** Admit a provider resume only with the captured host receipt and durable fsync receipt.
 		 */
 		[[nodiscard]] result<void>
 		accept_provider_resume(const ng1_live_frame_receipt& receipt,
-							   const ng1_spill_fsync_receipt& fsync_receipt,
-							   bool open_dependency_group,
-							   bool terminal);
+							   const ng1_durable_spill_checkpoint& checkpoint);
+		/**
+		 * Make a separately reopened and receipt-restored spill transaction the active session
+		 * storage before the replacement process is launched. This transfers cleanup custody only;
+		 * the replacement resume frame remains the sole recovery-state transition.
+		 */
+		[[nodiscard]] result<void>
+		replace_durable_spill_for_resume(ng1_spill_staging_session&& replacement,
+										 const ng1_durable_spill_checkpoint& checkpoint);
+		/** Launch the one permitted replacement process while retaining the killed worker's
+		 * session. */
+		[[nodiscard]] result<void>
+		launch_replacement(const ng1_durable_spill_checkpoint& checkpoint,
+						   std::stop_token cancellation);
+		/**
+		 * Accept exactly one replacement-process resume handshake. No replay output may be read
+		 * through the ordinary receive path until this validates the latest durable checkpoint.
+		 */
+		[[nodiscard]] result<ng1_live_frame_receipt>
+		accept_replacement_resume(const ng1_durable_spill_checkpoint& checkpoint,
+								  std::stop_token cancellation);
 		/** Close the live channel and return the exact process outcome. */
 		[[nodiscard]] result<process_output> finish(std::stop_token cancellation);
 		/** Kill the process group and return the exact bounded cleanup outcome. */
@@ -256,13 +360,27 @@ namespace cxxlens::sdk::provider::detail
 		{
 			return provider_frames_;
 		}
+		[[nodiscard]] bool process_ended() const noexcept
+		{
+			return ended_;
+		}
+		[[nodiscard]] bool replay_process_active() const noexcept
+		{
+			return replay_process_active_;
+		}
 
 	  private:
 		ng1_live_session_driver(ng1_session_coordinator session,
 								std::unique_ptr<ng1_duplex_process> process,
+								std::unique_ptr<ng1_duplex_process_port> processes,
+								process_invocation invocation,
+								protocol_limits limits,
 								std::unique_ptr<ng1_monotonic_clock_port> clock,
 								std::unique_ptr<ng1_host_observation_port> observation,
-								std::uint64_t maximum_retained_frames) noexcept;
+								ng1_resume_binding resume_binding,
+								std::optional<ng1_durable_resume_authority> durable_resume,
+								std::uint64_t maximum_retained_frames,
+								std::stop_token cancellation) noexcept;
 
 		[[nodiscard]] result<void> ensure_open(std::string_view operation) const;
 		/**
@@ -276,17 +394,35 @@ namespace cxxlens::sdk::provider::detail
 		 */
 		[[nodiscard]] result<void> synchronize_process_outcome(const process_output& output);
 		[[nodiscard]] result<ng1_live_frame_receipt> stamp_provider_frame(frame value);
+		[[nodiscard]] result<void> observe_output_group_state(const frame& value);
+		[[nodiscard]] result<void> reject_resume_checkpoint(error original_error);
 		[[nodiscard]] result<ng1_host_observation> current_observation() const;
 		[[nodiscard]] result<std::uint64_t> now_ns() const;
 
 		ng1_session_coordinator session_;
 		ng1_live_session_adapter adapter_;
 		std::unique_ptr<ng1_duplex_process> process_;
+		std::unique_ptr<ng1_duplex_process_port> processes_;
+		process_invocation invocation_;
+		protocol_limits limits_;
 		std::unique_ptr<ng1_monotonic_clock_port> clock_;
 		std::unique_ptr<ng1_host_observation_port> observation_;
+		ng1_resume_binding resume_binding_;
+		std::optional<ng1_durable_resume_authority> durable_resume_;
 		std::vector<frame> provider_frames_;
 		std::optional<ng1_live_frame_receipt> last_provider_receipt_;
+		std::optional<ng1_live_frame_receipt> published_resume_receipt_;
+		std::optional<ng1_durable_spill_checkpoint> latest_checkpoint_;
 		std::uint64_t maximum_retained_frames_{};
+		std::stop_token cancellation_;
+		bool task_accepted_observed_{};
+		bool bound_output_group_open_{};
+		bool bound_output_group_sealed_{};
+		bool resume_token_published_{};
+		bool provider_terminal_observed_{};
 		bool ended_{};
+		bool replacement_attempted_{};
+		bool replacement_handshake_pending_{};
+		bool replay_process_active_{};
 	};
 } // namespace cxxlens::sdk::provider::detail

@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -265,6 +266,31 @@ namespace
 
 int main()
 {
+	// The runtime source snapshot and the task-v4 manifest must use one canonical
+	// identity.  This guards the worker->claim boundary against silently treating
+	// an authenticated snapshot as a foreign manifest.
+	const auto runtime_snapshot = make_source_closure_snapshot({
+		{"project://src/main.cpp",
+		 source_closure_role::main,
+		 source_closure_encoding::utf8,
+		 std::make_shared<const std::string>("int main() { return 0; }")},
+	});
+	require(runtime_snapshot.has_value(), "runtime source snapshot was rejected");
+	const auto& runtime_member = runtime_snapshot->members.front();
+	const auto& runtime_blob = runtime_snapshot->blobs.front();
+	source_closure_manifest runtime_manifest;
+	runtime_manifest.members = {{runtime_member.file_id,
+								 runtime_member.logical_path,
+								 "main",
+								 "utf8",
+								 runtime_member.size_bytes,
+								 runtime_member.content_digest,
+								 runtime_member.read_only}};
+	runtime_manifest.blobs = {{runtime_blob.content_digest, runtime_blob.size_bytes}};
+	auto runtime_digest = derive_source_closure_digest(runtime_manifest);
+	require(runtime_digest.has_value() && *runtime_digest == runtime_snapshot->closure_digest,
+			"task-v4 manifest identity diverged from runtime source-closure identity");
+
 	auto value = engine();
 	auto first = seal_materialization_v4_claim_translation(value, translation(value, 0U));
 	auto second = seal_materialization_v4_claim_translation(value, translation(value, 1U));

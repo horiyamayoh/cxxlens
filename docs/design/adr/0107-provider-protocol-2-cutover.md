@@ -1,15 +1,14 @@
 # ADR 0107: Provider Protocol 2.0 cutover
 
-- Status: Accepted for implementation
+- Status: Accepted
 - Date: 2026-08-23
-- Supersedes: ADR 0102 for transport versioning and compatibility
 - Depends on: ADR 0101, ADR 0099, ADR 0100
 - Normative contract: `schemas/cxxlens_ng_provider_protocol_v2.yaml`
 
 ## Context
 
-The accepted provider implementation is being cut over to Protocol 2.0, while source-closure
-transport, task v4, and the hardened NG1 lifecycle must share one live session state machine.
+The provider implementation uses Protocol 2.0. Source-closure transport, task v4, and the hardened
+NG1 lifecycle share one live session state machine.
 Earlier development material coupled product behavior to a checkout-specific source
 representation. That made ordinary refactoring, formatting, and compiler upgrades appear to be
 protocol changes.
@@ -22,16 +21,14 @@ SHA ledgers and development qualification records do not.
 
 ## Decision
 
-Adopt `cxxlens.provider-protocol.v2`, major 2 minor 0, as the sole implementation target for the
-next cutover. The normative message registry, capability rules, task/request authority, closure
+`cxxlens.provider-protocol.v2`, major 2 minor 0, is the sole implementation target. The normative
+message registry, capability rules, task/request authority, closure
 transport, bounds, NG1 rules, and product boundary are in the schema named above.
 
-Protocol 2.0 is the sole compatibility target for the cutover. A peer advertising another major,
+Protocol 2.0 is the sole compatibility target. A peer advertising another major,
 an obsolete request/task shape, or a missing required capability is rejected before payload or
 ambient file access. No implicit downgrade, first-wins negotiation, compatibility shim, or
-checkout-specific preservation test is permitted. The final integration owner may change the
-existing public provider headers and runtime only after this contract handoff; this commit
-intentionally does not change those shared hot files.
+checkout-specific preservation test is permitted.
 
 ### Wire and identity
 
@@ -76,10 +73,7 @@ cannot publish output.
 Product digests, semantic identity, provenance, closure/coverage/unresolved state, provider binary
 identity/signature/revocation, sandbox policy, and crash/recovery receipts remain authoritative.
 
-## Non-goals of this contract commit
+## Verification boundary
 
-This contract commit does not alter `include/cxxlens/sdk/provider.hpp`, `src/sdk/provider.cpp`,
-`src/sdk/provider_runtime.cpp`, CMake, workflows, public catalog, or installed release behavior.
-Those are owned by the later integration wave. The product cutover is complete only after the
-live worker/VFS/materializer path and direct positive, negative, fault, determinism, and resource
-tests pass.
+The live worker/VFS/materializer path is verified by direct positive, negative, fault,
+determinism, and resource tests against this contract.

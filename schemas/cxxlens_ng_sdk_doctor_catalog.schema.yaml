@@ -1,0 +1,233 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens_ng_sdk_doctor_catalog.schema.yaml
+title: cxxlens SDK doctor product capability catalog
+type: object
+maxProperties: 128
+additionalProperties: false
+required:
+  - schema
+  - document_version
+  - commands
+  - use_cases
+  - capabilities
+  - provider_support
+  - store_support
+properties:
+  schema: {const: cxxlens.sdk-doctor-catalog.v1}
+  document_version: {const: 1.0.0}
+  commands:
+    type: array
+    minItems: 1
+    maxItems: 128
+    uniqueItems: true
+    items:
+      type: object
+      maxProperties: 128
+      additionalProperties: false
+      required: [id, consumer, output_schema, formats, exit_codes]
+      properties:
+        id: {enum: [relation-presence, missing]}
+        consumer: {$ref: '#/$defs/id'}
+        output_schema: {$ref: '#/$defs/id'}
+        formats:
+          type: array
+          minItems: 1
+          maxItems: 128
+          uniqueItems: true
+          items: {enum: [json, markdown]}
+        exit_codes:
+          type: object
+          maxProperties: 128
+          additionalProperties: false
+          required: [proved, not_proved, invalid_request]
+          properties:
+            proved: {const: 0}
+            not_proved: {const: 1}
+            invalid_request: {const: 2}
+  use_cases:
+    type: array
+    minItems: 1
+    maxItems: 128
+    uniqueItems: true
+    items:
+      type: object
+      maxProperties: 128
+      additionalProperties: false
+      required: [id, consumer, question, capability_path]
+      properties:
+        id: {$ref: '#/$defs/id'}
+        consumer: {$ref: '#/$defs/id'}
+        question: {$ref: '#/$defs/nonempty_string'}
+        capability_path:
+          type: array
+          minItems: 1
+          maxItems: 128
+          uniqueItems: true
+          items: {$ref: '#/$defs/id'}
+  capabilities:
+    type: array
+    minItems: 1
+    maxItems: 128
+    uniqueItems: true
+    items:
+      type: object
+      maxProperties: 128
+      additionalProperties: false
+      required: [id, kind, requires, consumers, completion_action]
+      properties:
+        id: {$ref: '#/$defs/id'}
+        kind: {enum: [input, provider, relation, query, store, recipe]}
+        requires:
+          type: array
+          maxItems: 128
+          uniqueItems: true
+          items: {$ref: '#/$defs/id'}
+        consumers:
+          type: array
+          minItems: 1
+          maxItems: 128
+          uniqueItems: true
+          items: {$ref: '#/$defs/id'}
+        completion_action: {$ref: '#/$defs/nonempty_string'}
+        relation_ids:
+          type: array
+          maxItems: 128
+          uniqueItems: true
+          items: {$ref: '#/$defs/relation_id'}
+  provider_support:
+    type: object
+    maxProperties: 128
+    additionalProperties: false
+    required:
+      - protocol
+      - required_features
+      - required_relations
+      - required_interpretations
+      - sandbox_minimum
+      - trust
+      - candidate_identity
+      - support_tuple_fields
+      - supported_tuples
+      - conflict_policy
+    properties:
+      protocol:
+        type: object
+        maxProperties: 128
+        additionalProperties: false
+        required: [major, minor, downgrade]
+        properties:
+          major: {const: 2}
+          minor: {const: 0}
+          downgrade: {const: forbidden}
+      required_features:
+        type: array
+        maxItems: 128
+        const: [task-input-chunks-v2, task-source-closure-v2]
+      required_relations:
+        type: array
+        maxItems: 128
+        const: [cc.call_site.v1, cc.entity.v1]
+      required_interpretations:
+        type: array
+        maxItems: 128
+        const: [cc.clang22-canonical-1]
+      sandbox_minimum: {const: enforced}
+      trust:
+        type: object
+        maxProperties: 128
+        additionalProperties: false
+        required: [manifest, binary, semantics, signature, certification, revocation]
+        properties:
+          manifest: {const: exact-digest-required}
+          binary: {const: exact-digest-required}
+          semantics: {const: exact-digest-required}
+          signature: {const: verified-required}
+          certification: {const: exact-registry-binding-required}
+          revocation: {const: not-revoked-required}
+      candidate_identity:
+        type: object
+        maxProperties: 128
+        additionalProperties: false
+        required: [domain, encoding, producer, input_binding]
+        properties:
+          domain: {const: cxxlens.provider-candidate.v1}
+          encoding: {const: semantic-v2-sha256}
+          producer: {const: provider-discovery}
+          input_binding: {const: unique-candidate-id-required}
+      support_tuple_fields:
+        type: array
+        maxItems: 128
+        const:
+          - release_version
+          - surface
+          - os
+          - architecture
+          - compiler_provider_major
+          - linkage
+      supported_tuples:
+        type: array
+        minItems: 1
+        maxItems: 128
+        uniqueItems: true
+        items: {$ref: '#/$defs/support_tuple'}
+      conflict_policy:
+        type: object
+        maxProperties: 128
+        additionalProperties: false
+        required:
+          - subject
+          - selection
+          - duplicate_identity
+          - same_provider_version_distinct_identity
+          - multiple_valid_candidates
+          - fallback
+        properties:
+          subject: {const: capability-provider-candidate-set}
+          selection: {const: exact-one-valid-candidate}
+          duplicate_identity: {const: reject}
+          same_provider_version_distinct_identity: {const: conflicting}
+          multiple_valid_candidates: {const: conflicting}
+          fallback: {const: forbidden}
+  store_support:
+    type: object
+    maxProperties: 128
+    additionalProperties: false
+    required: [backends, format]
+    properties:
+      backends: {type: array, maxItems: 128, const: [memory, sqlite]}
+      format: {const: cxxlens.snapshot.v3}
+$defs:
+  id:
+    type: string
+    maxLength: 512
+    pattern: '^[a-z][a-z0-9_.-]+$'
+  relation_id:
+    type: string
+    maxLength: 512
+    pattern: '^[a-z0-9_]+(?:\.[a-z0-9_]+)+\.v[0-9]+$'
+  nonempty_string:
+    type: string
+    minLength: 1
+    maxLength: 512
+  version:
+    type: string
+    maxLength: 512
+    pattern: '^[1-9][0-9]*\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+  support_tuple:
+    type: object
+    maxProperties: 128
+    additionalProperties: false
+    required:
+      - release_version
+      - surface
+      - os
+      - architecture
+      - compiler_provider_major
+      - linkage
+    properties:
+      release_version: {$ref: '#/$defs/version'}
+      surface: {$ref: '#/$defs/id'}
+      os: {$ref: '#/$defs/id'}
+      architecture: {$ref: '#/$defs/id'}
+      compiler_provider_major: {$ref: '#/$defs/id'}
+      linkage: {enum: [static, shared]}

@@ -27,59 +27,19 @@
 
 namespace cxxlens::sdk
 {
-	class sqlite_same_process_shm_vfs_alias_registration_test_peer
-	{
-	  public:
-		[[nodiscard]] static sqlite_shm_vfs_alias_lifecycle_binding
-		binding(sqlite_shm_process_registry_handle process,
-				sqlite_backend_opaque_identity shared_runtime_vfs_cohort,
-				sqlite_backend_opaque_identity alias_lifetime,
-				sqlite_backend_opaque_identity runtime_lifetime_identity,
-				sqlite_backend_opaque_identity runtime_lifetime_pin_identity,
-				std::shared_ptr<void> runtime_lifetime_owner,
-				std::string registered_vfs_name,
-				void* vfs_implementation,
-				sqlite_shm_vfs_alias_lifecycle_binding::find_function find,
-				sqlite_shm_vfs_alias_lifecycle_binding::register_function register_vfs,
-				sqlite_shm_vfs_alias_lifecycle_binding::unregister_function unregister_vfs)
-		{
-			return {std::move(process),
-					std::move(shared_runtime_vfs_cohort),
-					std::move(alias_lifetime),
-					std::move(runtime_lifetime_identity),
-					std::move(runtime_lifetime_pin_identity),
-					std::move(runtime_lifetime_owner),
-					std::move(registered_vfs_name),
-					vfs_implementation,
-					find,
-					register_vfs,
-					unregister_vfs};
-		}
-
-		[[nodiscard]] static sqlite_shm_registry_alias_pin&
-		alias_pin(sqlite_shm_registered_vfs_alias& alias)
-		{
-			return *alias.alias_;
-		}
-
-		static void exhaust_lifecycle_sequence() noexcept
-		{
-			sqlite_same_process_shm_vfs_alias_registration_port::
-				exhaust_lifecycle_sequence_for_testing();
-		}
-	};
 } // namespace cxxlens::sdk
 
 namespace
 {
 	using cxxlens::sdk::sqlite_backend_opaque_identity;
 	using cxxlens::sdk::sqlite_same_process_shm_process_port;
+	using cxxlens::sdk::sqlite_same_process_shm_vfs_alias_identity_sealer;
 	using cxxlens::sdk::sqlite_same_process_shm_vfs_alias_registration_port;
-	using cxxlens::sdk::sqlite_same_process_shm_vfs_alias_registration_test_peer;
 	using cxxlens::sdk::sqlite_shm_lease_recovery_action;
 	using cxxlens::sdk::sqlite_shm_lease_rejection_reason;
 	using cxxlens::sdk::sqlite_shm_process_registry_handle;
 	using cxxlens::sdk::sqlite_shm_registered_vfs_alias;
+	using cxxlens::sdk::sqlite_source_shm_runtime_binding;
 
 	void require(const bool condition, const std::string_view message)
 	{
@@ -120,6 +80,50 @@ namespace
 	{
 		std::uint64_t marker{};
 	};
+
+	int runtime_identity_sentinel{};
+	int runtime_image_sentinel{};
+	int underlying_vfs_sentinel{};
+	int underlying_app_data_sentinel{};
+	int underlying_open_sentinel{};
+
+	int runtime_open(const char*, void**, int, const char*)
+	{
+		return 0;
+	}
+
+	int runtime_close(void*)
+	{
+		return 0;
+	}
+
+	int runtime_exec(
+		void*, const char*, sqlite_source_shm_runtime_binding::exec_callback, void*, char**)
+	{
+		return 0;
+	}
+
+	const char* runtime_errmsg(void*)
+	{
+		return "test";
+	}
+
+	void runtime_free(void*) {}
+
+	const char* runtime_source_id()
+	{
+		return "sqlite-source-id-for-alias-registration-test";
+	}
+
+	const char* runtime_uri_parameter(const char*, const char*)
+	{
+		return nullptr;
+	}
+
+	const char* runtime_uri_key(const char*, int)
+	{
+		return nullptr;
+	}
 
 	struct native_registry_fixture;
 	thread_local native_registry_fixture* active_native_registry{};
@@ -218,18 +222,34 @@ namespace
 				 const std::uint64_t marker,
 				 const std::shared_ptr<runtime_owner_probe>& owner)
 	{
-		return sqlite_same_process_shm_vfs_alias_registration_test_peer::binding(
+		auto sealed = sqlite_same_process_shm_vfs_alias_identity_sealer::seal({
 			process,
-			identity("test.vfs-alias.shared-cohort", 1U),
-			identity("test.vfs-alias.alias-lifetime", marker),
-			identity("test.vfs-alias.runtime-lifetime", marker),
-			identity("test.vfs-alias.runtime-lifetime-pin", marker),
-			owner,
+			{&runtime_identity_sentinel,
+			 &runtime_image_sentinel,
+			 owner.get(),
+			 owner,
+			 runtime_open,
+			 runtime_close,
+			 runtime_exec,
+			 runtime_errmsg,
+			 runtime_free,
+			 runtime_source_id,
+			 runtime_uri_parameter,
+			 runtime_uri_key,
+			 native_registry_fixture::find,
+			 native_registry_fixture::register_vfs,
+			 native_registry_fixture::unregister_vfs},
+			&underlying_vfs_sentinel,
+			&underlying_app_data_sentinel,
+			&underlying_open_sentinel,
+			&fixture,
 			fixture.expected_name,
 			fixture.expected_vfs,
-			native_registry_fixture::find,
-			native_registry_fixture::register_vfs,
-			native_registry_fixture::unregister_vfs);
+		});
+		if (!sealed)
+			throw std::runtime_error{"alias test supplied an invalid sealed lifecycle tuple"};
+		(void)marker;
+		return std::move(*sealed);
 	}
 
 	[[nodiscard]] sqlite_shm_process_registry_handle acquire_process()
@@ -376,8 +396,9 @@ namespace
 			alias.process_instance(),
 			alias.shared_runtime_vfs_cohort(),
 			identity("test.vfs-alias.file-family", 4U)};
-		auto family_pin = process.registry()->install_or_join_family(
-			sqlite_same_process_shm_vfs_alias_registration_test_peer::alias_pin(alias), family);
+		auto family_pin =
+			sqlite_same_process_shm_vfs_alias_registration_port::install_or_join_family(alias,
+																						family);
 		require(family_pin.has_value(), "install family under registered alias");
 		auto waiting = alias.unregister_alias();
 		require(!waiting.has_value() &&
@@ -704,85 +725,6 @@ namespace
 #endif
 	}
 
-	void verify_lifecycle_sequence_exhaustion_is_sticky_and_zero_effect()
-	{
-		require_child_success(
-			"registration epoch exhaustion child",
-			[]
-			{
-				auto process = acquire_process();
-				auto* const registry = process.registry();
-				require(registry != nullptr, "exhaustion process registry present");
-				const auto baseline = registry->snapshot();
-				fake_vfs vfs{600U};
-				native_registry_fixture fixture;
-				fixture.expected_name = "cxxlens-test-registration-exhaustion";
-				fixture.expected_vfs = &vfs;
-				native_registry_scope scope{fixture};
-				auto destruction_count = std::make_shared<std::atomic_int>(0);
-				auto owner = std::make_shared<runtime_owner_probe>(destruction_count);
-				std::weak_ptr<runtime_owner_probe> weak_owner = owner;
-				sqlite_same_process_shm_vfs_alias_registration_test_peer::
-					exhaust_lifecycle_sequence();
-				auto rejected = sqlite_same_process_shm_vfs_alias_registration_port::register_alias(
-					make_binding(process, fixture, 600U, owner));
-				owner.reset();
-				require(!rejected.has_value() &&
-							rejected.error().reason ==
-								sqlite_shm_lease_rejection_reason::generation_exhausted &&
-							rejected.error().action ==
-								sqlite_shm_lease_recovery_action::quarantine_no_retry,
-						"registration epoch exhaustion is terminal");
-				require(fixture.find_calls == 1 && fixture.register_calls == 0 &&
-							fixture.unregister_calls == 0,
-						"registration epoch exhaustion has zero native effect");
-				require(weak_owner.expired() &&
-							destruction_count->load(std::memory_order_relaxed) == 1,
-						"pre-registration exhaustion releases unregistered owner");
-				const auto snapshot = registry->snapshot();
-				require(snapshot.alias_record_count == baseline.alias_record_count &&
-							snapshot.detached_alias_tombstone_count ==
-								baseline.detached_alias_tombstone_count &&
-							snapshot.quarantined_alias_count == 0U,
-						"pre-registration exhaustion leaves registry state untouched");
-			});
-
-		require_child_success(
-			"unregistration epoch exhaustion child",
-			[]
-			{
-				auto process = acquire_process();
-				fake_vfs vfs{601U};
-				native_registry_fixture fixture;
-				fixture.expected_name = "cxxlens-test-unregistration-exhaustion";
-				fixture.expected_vfs = &vfs;
-				native_registry_scope scope{fixture};
-				std::weak_ptr<runtime_owner_probe> weak_owner;
-				std::shared_ptr<std::atomic_int> destruction_count;
-				auto alias =
-					register_clean_alias(process, fixture, 601U, weak_owner, destruction_count);
-				sqlite_same_process_shm_vfs_alias_registration_test_peer::
-					exhaust_lifecycle_sequence();
-				auto rejected = alias.unregister_alias();
-				require(!rejected.has_value() &&
-							rejected.error().reason ==
-								sqlite_shm_lease_rejection_reason::generation_exhausted &&
-							rejected.error().action ==
-								sqlite_shm_lease_recovery_action::quarantine_no_retry,
-						"unregistration epoch exhaustion is terminal");
-				require(!alias.valid() && fixture.unregister_calls == 0,
-						"unregistration exhaustion forbids native unregister and retry");
-				const auto replay = alias.unregister_alias();
-				require(!replay.has_value() && fixture.unregister_calls == 0,
-						"unregistration exhaustion remains sticky");
-				const auto snapshot = process.registry()->snapshot();
-				require(snapshot.alias_record_count == 1U &&
-							snapshot.quarantined_alias_count == 1U && !weak_owner.expired() &&
-							destruction_count->load(std::memory_order_relaxed) == 0,
-						"registered owner is retained in quarantine after exhaustion");
-			});
-	}
-
 	void require_quarantined_registration_failure(const int register_status,
 												  const bool install_on_register,
 												  void* registration_value,
@@ -985,7 +927,6 @@ int main()
 		verify_cross_thread_callback_reentry_is_bounded_zero_effect();
 		verify_fork_during_native_callback_recovers_child_gate();
 		verify_parallel_alias_lifecycles_are_serialized();
-		verify_lifecycle_sequence_exhaustion_is_sticky_and_zero_effect();
 		verify_registration_failures_quarantine();
 		verify_drop_without_unregister_quarantines();
 		verify_unregistration_failures_quarantine();

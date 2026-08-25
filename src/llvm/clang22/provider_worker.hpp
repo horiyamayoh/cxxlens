@@ -136,7 +136,7 @@ namespace cxxlens::detail::clang22
 	 * The runtime owns the concrete implementation.  In particular, `revalidate()` must verify
 	 * the completed message-24..29 transfer and its cleanup/custody receipt; a caller must not
 	 * implement this interface from a boolean or an untrusted task field.  Keeping this as a
-	 * narrow port lets the worker consume the v2.2 authority without importing the old task.v3
+	 * narrow port lets the worker consume the v2.2 authority without importing an obsolete task
 	 * decoder into the new path.
 	 */
 	class provider_worker_v2_2_closure_authority
@@ -175,9 +175,6 @@ namespace cxxlens::detail::clang22
 	 */
 	[[nodiscard]] sdk::result<source_closure_task_v4_worker_receipt>
 	run_provider_worker_v2_2(provider_worker_v2_2_dispatch_input input);
-
-	/** Run the worker from a bounded-read host stream; the stream is never materialized. */
-	[[nodiscard]] int run_provider_worker(std::istream& input, std::ostream& output);
 
 	/**
 	 * Run the explicit Protocol 2.0 task-v4/source-closure ingress.
