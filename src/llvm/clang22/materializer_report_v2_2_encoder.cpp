@@ -57,16 +57,6 @@ namespace cxxlens::detail::clang22
 			return json_value::string(std::string{value}).value();
 		}
 
-		[[nodiscard]] json_value bytes_digest(const std::span<const std::byte> bytes)
-		{
-			return text(sdk::content_digest(bytes));
-		}
-
-		[[nodiscard]] json_value digest_text(const std::string_view value)
-		{
-			return bytes_digest(std::as_bytes(std::span{value.data(), value.size()}));
-		}
-
 		[[nodiscard]] json_value array(std::vector<json_value> values)
 		{
 			return json_value::array(std::move(values));
@@ -723,12 +713,19 @@ namespace cxxlens::detail::clang22
 			return array(std::move(groups));
 		}
 
-		[[nodiscard]] json_value task_evidence_records(const provider_task_v4_task_authority& task)
+		[[nodiscard]] json_value
+		task_evidence_records(const provider_task_v4_task_authority& task,
+							  const provider_detail::sealed_provider_transcript& sealed)
 		{
 			// These are product-side evidence edges, not repository-operation receipts.  They
 			// describe the three independently retained boundaries of a successful task:
 			// canonical adoption, provider execution, and source observation.
 			std::vector<json_value> records;
+			for (const auto& item : sealed.evidence())
+				records.push_back(object({{"kind", text(item.kind)},
+										  {"subject", text(item.subject)},
+										  {"producer", text(item.producer)},
+										  {"summary", text(item.summary)}}));
 			for (const auto kind : {"canonicalization", "provider_execution", "source_observation"})
 				records.push_back(object({{"kind", text(kind)},
 										  {"subject", text(task.compile_unit_id)},
@@ -754,12 +751,13 @@ namespace cxxlens::detail::clang22
 		}
 
 		[[nodiscard]] sdk::result<std::string>
-		task_evidence_digest(const provider_task_v4_task_authority& task)
+		task_evidence_digest(const provider_task_v4_task_authority& task,
+							 const provider_detail::sealed_provider_transcript& sealed)
 		{
 			return semantic_projection_digest(
 				"cxxlens.clang22-task-evidence.v1",
 				object({{"originating_task", task_context_value(task)},
-						{"records", task_evidence_records(task)}}));
+						{"records", task_evidence_records(task, sealed)}}));
 		}
 
 		[[nodiscard]] json_value task_component_rows(const std::vector<json_value>& task_results,
@@ -1084,9 +1082,16 @@ namespace cxxlens::detail::clang22
 					   const provider_task_v4_task_authority& task)
 		{
 			std::map<std::string, std::uint64_t> counts;
+			std::vector<json_value> records;
 			for (const auto& item : sealed.evidence())
+			{
 				++counts[item.kind == "provider.clang22.execution" ? "provider_execution"
 																   : "verification"];
+				records.push_back(object({{"kind", text(item.kind)},
+										  {"subject", text(item.subject)},
+										  {"producer", text(item.producer)},
+										  {"summary", text(item.summary)}}));
+			}
 			std::vector<json_value> kinds;
 			json_value::object_type kind_counts;
 			for (const auto& [kind, count] : counts)
@@ -1094,13 +1099,21 @@ namespace cxxlens::detail::clang22
 				kinds.push_back(text(kind));
 				kind_counts.emplace(kind, json_value::unsigned_integer(count));
 			}
-			auto digest = digest_text(task.provider_task_id);
+			std::ranges::sort(records,
+							  [](const auto& left, const auto& right)
+							  {
+								  return materialization::canonical_json(left) <
+									  materialization::canonical_json(right);
+							  });
+			auto digest = semantic_projection_digest(
+				"cxxlens.clang22-evidence-value.v1",
+				object({{"task_id", text(task.provider_task_id)}, {"records", array(records)}}));
 			return object({{"record_type", text("typed-evidence-edge")},
 						   {"record_count", json_value::unsigned_integer(sealed.evidence().size())},
 						   {"kinds", array(std::move(kinds))},
 						   {"kind_counts", json_value::object(std::move(kind_counts)).value()},
 						   {"subject_binding", text("exact-claim-or-task-identity")},
-						   {"digest", digest}});
+						   {"digest", text(digest.value())}});
 		}
 
 		[[nodiscard]] json_value claim_stage_value(const std::string_view descriptor,
@@ -2623,7 +2636,7 @@ namespace cxxlens::detail::clang22
 		const auto task_batches = array(encoded_batches);
 
 		const auto unresolved_digest = task_unresolved_digest(task);
-		const auto evidence_digest = task_evidence_digest(task);
+		const auto evidence_digest = task_evidence_digest(task, sealed);
 		if (!unresolved_digest || !evidence_digest)
 			return sdk::unexpected(!unresolved_digest ? std::move(unresolved_digest.error())
 													  : std::move(evidence_digest.error()));

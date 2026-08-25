@@ -39,7 +39,8 @@ namespace cxxlens::sdk
 		[[nodiscard]] static result<detail::snapshot_candidate_projection>
 		published_projection(const snapshot_handle&);
 
-		/** Test-only mutation entry points kept behind the source-private friend. */
+#if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
+		/** Test-only mutation entry points available only to fault-test translation units. */
 		[[nodiscard]] static result<void> mark_publication_corrupt(snapshot_store&,
 																   std::string_view);
 		[[nodiscard]] static result<void> rewrite_publication_payload(
@@ -54,6 +55,7 @@ namespace cxxlens::sdk
 																			  std::uint64_t);
 		[[nodiscard]] static result<void>
 		poison_rejected_generation(snapshot_store&, std::string_view, std::uint64_t);
+#endif
 
 		[[nodiscard]] static result<snapshot_store>
 		open_sqlite(const std::string& database_path,
