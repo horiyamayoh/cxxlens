@@ -10504,6 +10504,157 @@ namespace cxxlens::sdk
 		return snapshot_store{std::move(implementation)};
 	}
 
+	result<detail::snapshot_candidate_projection>
+	snapshot_store_backend_lifetime_access::candidate_projection(const snapshot_writer& writer)
+	{
+		if (!writer.data_ || writer.data_->current_state != publication_state::validating ||
+			!writer.data_->candidate)
+			return unexpected(store_error("store.transaction-state", "candidate-projection"));
+		const auto& candidate = *writer.data_->candidate;
+		detail::snapshot_candidate_projection output;
+		const auto add = [&](std::string kind, std::string key, std::vector<std::byte> payload)
+		{
+			output.records.push_back(detail::snapshot_candidate_projection_record{
+				std::move(kind), std::move(key), std::move(payload)});
+		};
+		auto manifest = detail::encode_snapshot_candidate_manifest(candidate.semantic_manifest);
+		if (!manifest)
+			return unexpected(std::move(manifest.error()));
+		add("manifest", "semantic", std::move(*manifest));
+		for (const auto& partition : candidate.semantic_manifest.partitions)
+		{
+			auto payload = canonical_binary(canonical_value::from_tuple(
+				{canonical_value::from_string(partition.partition_id),
+				 canonical_value::from_string(partition.relation_descriptor_id),
+				 canonical_value::from_string(partition.input_basis_digest),
+				 canonical_value::from_string(partition.claim_set_digest),
+				 canonical_value::from_string(partition.coverage_digest),
+				 canonical_value::from_string(partition.content_digest),
+				 canonical_value::from_integer(static_cast<std::int64_t>(partition.claim_count)),
+				 canonical_value::from_boolean(partition.complete)}));
+			if (!payload)
+				return unexpected(std::move(payload.error()));
+			add("partition-manifest", partition.partition_id, std::move(*payload));
+		}
+		for (const auto& binding : candidate.partition_bindings)
+		{
+			auto payload = detail::encode_snapshot_candidate_binding(binding);
+			if (!payload)
+				return unexpected(std::move(payload.error()));
+			add("partition-binding", binding.partition_id, std::move(*payload));
+		}
+		for (const auto& [partition_id, partition] : candidate.partition_envelopes)
+		{
+			auto payload = detail::encode_snapshot_candidate_partition(partition);
+			if (!payload)
+				return unexpected(std::move(payload.error()));
+			add("partition-envelope", partition_id, std::move(*payload));
+		}
+		for (const auto& closure : candidate.closure_certificates)
+		{
+			auto payload = detail::encode_snapshot_candidate_closure(closure.subject);
+			if (!payload)
+				return unexpected(std::move(payload.error()));
+			add("closure", closure.subject.subject_partition_id, std::move(*payload));
+		}
+		for (const auto& unresolved : candidate.unresolved)
+		{
+			auto payload = detail::encode_snapshot_candidate_unresolved(unresolved);
+			if (!payload)
+				return unexpected(std::move(payload.error()));
+			add("unresolved", unresolved.source_assertion, std::move(*payload));
+		}
+		std::ranges::sort(output.records,
+						  [](const auto& left, const auto& right)
+						  {
+							  if (left.kind != right.kind)
+								  return left.kind < right.kind;
+							  if (left.key != right.key)
+								  return left.key < right.key;
+							  return std::lexicographical_compare(left.payload.begin(),
+																  left.payload.end(),
+																  right.payload.begin(),
+																  right.payload.end());
+						  });
+		return output;
+	}
+
+	result<detail::snapshot_candidate_projection>
+	snapshot_store_backend_lifetime_access::published_projection(const snapshot_handle& handle)
+	{
+		if (!handle.data_ ||
+			handle.data_->publication_record_value.state != publication_state::committed ||
+			handle.data_->publication_record_value.corrupt)
+			return unexpected(store_error("store.publication-state", "published-projection"));
+		const auto& candidate = *handle.data_;
+		detail::snapshot_candidate_projection output;
+		const auto add = [&](std::string kind, std::string key, std::vector<std::byte> payload)
+		{
+			output.records.push_back(detail::snapshot_candidate_projection_record{
+				std::move(kind), std::move(key), std::move(payload)});
+		};
+		auto manifest = detail::encode_snapshot_candidate_manifest(candidate.semantic_manifest);
+		if (!manifest)
+			return unexpected(std::move(manifest.error()));
+		add("manifest", "semantic", std::move(*manifest));
+		for (const auto& partition : candidate.semantic_manifest.partitions)
+		{
+			auto payload = canonical_binary(canonical_value::from_tuple(
+				{canonical_value::from_string(partition.partition_id),
+				 canonical_value::from_string(partition.relation_descriptor_id),
+				 canonical_value::from_string(partition.input_basis_digest),
+				 canonical_value::from_string(partition.claim_set_digest),
+				 canonical_value::from_string(partition.coverage_digest),
+				 canonical_value::from_string(partition.content_digest),
+				 canonical_value::from_integer(static_cast<std::int64_t>(partition.claim_count)),
+				 canonical_value::from_boolean(partition.complete)}));
+			if (!payload)
+				return unexpected(std::move(payload.error()));
+			add("partition-manifest", partition.partition_id, std::move(*payload));
+		}
+		for (const auto& binding : candidate.partition_bindings)
+		{
+			auto payload = detail::encode_snapshot_candidate_binding(binding);
+			if (!payload)
+				return unexpected(std::move(payload.error()));
+			add("partition-binding", binding.partition_id, std::move(*payload));
+		}
+		for (const auto& [partition_id, partition] : candidate.partition_envelopes)
+		{
+			auto payload = detail::encode_snapshot_candidate_partition(partition);
+			if (!payload)
+				return unexpected(std::move(payload.error()));
+			add("partition-envelope", partition_id, std::move(*payload));
+		}
+		for (const auto& closure : candidate.closure_certificates)
+		{
+			auto payload = detail::encode_snapshot_candidate_closure(closure.subject);
+			if (!payload)
+				return unexpected(std::move(payload.error()));
+			add("closure", closure.subject.subject_partition_id, std::move(*payload));
+		}
+		for (const auto& unresolved : candidate.unresolved)
+		{
+			auto payload = detail::encode_snapshot_candidate_unresolved(unresolved);
+			if (!payload)
+				return unexpected(std::move(payload.error()));
+			add("unresolved", unresolved.source_assertion, std::move(*payload));
+		}
+		std::ranges::sort(output.records,
+						  [](const auto& left, const auto& right)
+						  {
+							  if (left.kind != right.kind)
+								  return left.kind < right.kind;
+							  if (left.key != right.key)
+								  return left.key < right.key;
+							  return std::lexicographical_compare(left.payload.begin(),
+																  left.payload.end(),
+																  right.payload.begin(),
+																  right.payload.end());
+						  });
+		return output;
+	}
+
 	// Persisted corruption and counter mutation fixtures are test support only. Keeping the
 	// implementation beside the private Store representation preserves the exact memory/SQLite
 	// parity and serialization invariants while excluding every hook from BUILD_TESTING=OFF.

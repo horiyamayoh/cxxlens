@@ -9,6 +9,7 @@
 #include <cxxlens/sdk/store.hpp>
 
 #include "sqlite_backend_observation_internal.hpp"
+#include "store_candidate_projection_internal.hpp"
 
 namespace cxxlens::sdk
 {
@@ -30,6 +31,14 @@ namespace cxxlens::sdk
 	struct snapshot_store_backend_lifetime_access
 #endif
 	{
+		/** Return the value-owned actual projection produced by writer validation. */
+		[[nodiscard]] static result<detail::snapshot_candidate_projection>
+		candidate_projection(const snapshot_writer&);
+
+		/** Return the value-owned projection read back from an immutable published handle. */
+		[[nodiscard]] static result<detail::snapshot_candidate_projection>
+		published_projection(const snapshot_handle&);
+
 		/** Test-only mutation entry points kept behind the source-private friend. */
 		[[nodiscard]] static result<void> mark_publication_corrupt(snapshot_store&,
 																   std::string_view);

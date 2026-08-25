@@ -17,7 +17,9 @@
 #include "llvm/clang22/materialization_admission_error.hpp"
 #include "llvm/clang22/materialization_io.hpp"
 #include "llvm/clang22/materialization_json.hpp"
+#include "llvm/clang22/materialization_occurrence.hpp"
 #include "llvm/clang22/materialization_request_v2_2.hpp"
+#include "llvm/clang22/materializer_report_v2_2_encoder.hpp"
 #include "llvm/clang22/materializer_worker_bridge.hpp"
 
 namespace
@@ -448,6 +450,25 @@ int main(const int argc, char**)
 											  received.error().detail,
 											  0U,
 											  0U);
+		const auto& authority_tool = received->request.authority.tool;
+		const auto& authority_worker = received->request.authority.worker;
+		materialization_occurrence_expectation occurrence_expectation{
+			authority_tool.source_revision,
+			authority_tool.source_tree,
+			authority_tool.package_configuration,
+			authority_tool.occurrence_manifest_digest,
+			authority_tool.installed_executable_digest,
+			authority_worker.installed_binary_digest};
+		auto occurrence = measure_materialization_occurrence(occurrence_expectation);
+		if (!occurrence)
+			return emit_request_bound_failure(*observed,
+											  ingress->root,
+											  occurrence.error().code,
+											  "installation-binding",
+											  occurrence.error().field,
+											  occurrence.error().detail,
+											  0U,
+											  0U);
 		auto worker = run_materializer_worker(std::move(*received));
 		if (!worker)
 			return emit_request_bound_failure(*observed,
@@ -461,6 +482,12 @@ int main(const int argc, char**)
 		auto published = publish_materializer_worker(std::move(*worker));
 		if (!published)
 		{
+			// A committed Store whose authenticated reopen/v6 physical projection could not
+			// be verified is not a zero-effect compact failure.  Do not serialize a false
+			// prepublication ledger after the irreversible effect; fail closed with no
+			// authoritative response.
+			if (published.error().code == "materialization.v4-store-source-postpublish-mismatch")
+				return no_response();
 			const auto phase = published.error().code == "materialization.report-invalid"
 				? std::string_view{"report-construction"}
 				: std::string_view{"store-stage"};
@@ -473,13 +500,13 @@ int main(const int argc, char**)
 											  1U,
 											  1U);
 		}
-		// The detailed v2.2 report requires the complete typed projection (including
-		// installation, task, provenance, and Store sections).  This executable
-		// boundary does not own that encoder yet.  Never serialize a schema-incomplete
-		// success response after publication; fail closed until the projection is
-		// available.
-		(void)published;
-		return no_response();
+		auto report = encode_materializer_v2_2_success_report(
+			*observed, ingress->root, *published, *occurrence);
+		if (!report)
+			// Publication has already been observed and verified.  A failed final
+			// projection must not be relabelled as a zero-effect request-bound failure.
+			return no_response();
+		return write_response(*report) ? 0 : no_response();
 	}
 	return emit_failure(*observed,
 						"materialization.request-invalid",

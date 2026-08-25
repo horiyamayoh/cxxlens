@@ -1281,12 +1281,13 @@ namespace cxxlens::sdk::detail
 					return output;
 				}
 				const auto physical_digest = digest_string(measured->binary_sha256);
+				const auto selector_id = metadata_.selector.id();
 				const auto bind_values = [&]() -> result<void>
 				{
 					for (const auto [index, value] :
 						 std::array<std::pair<int, std::string_view>, 4U>{
 							 {{1, *publication_id},
-							  {2, metadata_.selector.id()},
+							  {2, selector_id},
 							  {3, measured->candidate_snapshot.snapshot_id},
 							  {14, measured->candidate_snapshot.semantic_projection_digest}}})
 						if (auto bound = insert_publication->bind_text(index, value); !bound)

@@ -6,10 +6,12 @@
  */
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "installed_materializer_source_closure.hpp"
+#include "materialization_rooted_vfs.hpp"
 #include "materialization_v4_store_source.hpp"
 #include "provider_trust_issuer_internal.hpp"
 #include "sdk/provider_runtime_internal.hpp"
@@ -73,16 +75,38 @@ namespace cxxlens::detail::clang22
 	{
 		materializer_worker_execution worker;
 		std::vector<materialization::materialization_v4_claim_sealed> claims;
+		/** Host-side canonical base partitions retained for the detailed report projection. */
+		std::vector<sdk::partition_draft> base_partitions;
+		/** All validated reference occurrences used by canonical adoption and Store staging. */
+		std::vector<sdk::claim> reference_claims;
 		materializer_task_output_receipt receipt;
 		materialization::materialization_v4_store_publication publication;
+		/** Exact committed parent observed before the invocation publication, when non-genesis. */
+		std::optional<sdk::publication_record> observed_parent_record;
+		/** SDK canonical export identity captured before the backend lifetime is released. */
+		std::string canonical_export_digest;
+		/** Rooted SQLite observation captured by the production opener, when SQLite is selected. */
+		std::optional<materialization::materialization_rooted_vfs_receipt>
+			sqlite_effect_root_receipt;
 
 		materializer_store_execution(
 			materializer_worker_execution worker,
 			std::vector<materialization::materialization_v4_claim_sealed> claims,
+			std::vector<sdk::partition_draft> base_partitions,
+			std::vector<sdk::claim> reference_claims,
 			materializer_task_output_receipt receipt,
-			materialization::materialization_v4_store_publication publication)
-			: worker{std::move(worker)}, claims{std::move(claims)}, receipt{std::move(receipt)},
-			  publication{std::move(publication)}
+			materialization::materialization_v4_store_publication publication,
+			std::optional<sdk::publication_record> observed_parent_record,
+			std::string canonical_export_digest,
+			std::optional<materialization::materialization_rooted_vfs_receipt>
+				sqlite_effect_root_receipt)
+			: worker{std::move(worker)}, claims{std::move(claims)},
+			  base_partitions{std::move(base_partitions)},
+			  reference_claims{std::move(reference_claims)}, receipt{std::move(receipt)},
+			  publication{std::move(publication)},
+			  observed_parent_record{std::move(observed_parent_record)},
+			  canonical_export_digest{std::move(canonical_export_digest)},
+			  sqlite_effect_root_receipt{std::move(sqlite_effect_root_receipt)}
 		{
 		}
 

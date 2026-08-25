@@ -682,6 +682,8 @@ set_tests_properties(
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-store-fault-injection
                             unit/sdk/sqlite_store_fault_injection_test.cpp)
+target_compile_definitions(cxxlens-unit-sdk-sqlite-store-fault-injection
+                           PRIVATE CXXLENS_STORE_FAULT_TEST_SUPPORT=1)
 target_sources(
   cxxlens-unit-sdk-sqlite-store-fault-injection
   PRIVATE $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)

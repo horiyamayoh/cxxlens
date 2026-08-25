@@ -32,6 +32,7 @@
 #include <unistd.h>
 
 #include "materialization_json.hpp"
+#include "materialization_rooted_vfs.hpp"
 #include "materialization_v4_claim_binding.hpp"
 #include "materialization_v4_incremental_ingress.hpp"
 #include "materialization_v4_store_source.hpp"
@@ -229,6 +230,179 @@ namespace cxxlens::detail::clang22
 				{"semantic_contract_digest", text(semantic_contract_digest).value()},
 				{"toolchain_context_id", text(task.toolchain_context_id).value()},
 			});
+		}
+
+		struct materializer_basis_authority
+		{
+			std::string materializer_semantics_digest;
+			std::string basis_digest;
+			std::string producer_input_basis_digest;
+			std::string canonical_adoption_transform_digest;
+			std::string base_ingestion_transform_digest;
+			std::string assumption_set_id;
+			sdk::claim_guarantee guarantee;
+		};
+
+		[[nodiscard]] sdk::canonical_value canonical_text(const std::string_view value)
+		{
+			return sdk::canonical_value::from_string(std::string{value});
+		}
+
+		[[nodiscard]] sdk::canonical_value canonical_version(const sdk::semantic_version value)
+		{
+			return sdk::canonical_value::from_tuple({
+				sdk::canonical_value::from_integer(static_cast<std::int64_t>(value.major)),
+				sdk::canonical_value::from_integer(static_cast<std::int64_t>(value.minor)),
+				sdk::canonical_value::from_integer(static_cast<std::int64_t>(value.patch)),
+			});
+		}
+
+		[[nodiscard]] sdk::canonical_value
+		canonical_strings(const std::span<const std::string> values)
+		{
+			std::vector<sdk::canonical_value> encoded;
+			encoded.reserve(values.size());
+			for (const auto& value : values)
+				encoded.push_back(canonical_text(value));
+			return sdk::canonical_value::from_tuple(std::move(encoded));
+		}
+
+		[[nodiscard]] sdk::result<std::string>
+		semantic_digest_projection(const std::string_view domain,
+								   const sdk::canonical_value& projection)
+		{
+			auto encoded = sdk::canonical_binary(projection);
+			if (!encoded)
+				return sdk::unexpected(std::move(encoded.error()));
+			std::string bytes;
+			bytes.reserve(encoded->size());
+			for (const auto byte : *encoded)
+				bytes.push_back(static_cast<char>(std::to_integer<unsigned char>(byte)));
+			return sdk::semantic_digest(domain, bytes);
+		}
+
+		[[nodiscard]] sdk::result<std::string>
+		direct_input_basis_digest(const std::string_view basis_digest)
+		{
+			auto identity = sdk::canonical_identity_digest(
+				"producer-input-direct", std::array{canonical_text(basis_digest)});
+			if (!identity)
+				return sdk::unexpected(std::move(identity.error()));
+			const auto separator = identity->find(':');
+			if (separator == std::string::npos)
+				return sdk::unexpected(
+					failure("materialization.identity-mismatch", "direct-basis"));
+			return identity->substr(separator + 1U);
+		}
+
+		[[nodiscard]] sdk::result<materializer_basis_authority>
+		make_materializer_basis_authority(const provider_task_v4_request_authority& authority)
+		{
+			const auto& tool = authority.tool;
+			auto materializer_semantics = semantic_digest_projection(
+				"cxxlens.clang22-materializer-semantics.v1",
+				sdk::canonical_value::from_tuple({canonical_text(tool.executable),
+												  canonical_text(tool.interface_version),
+												  canonical_text(tool.distribution_version),
+												  canonical_text(tool.source_revision),
+												  canonical_text(tool.source_tree)}));
+			if (!materializer_semantics)
+				return sdk::unexpected(std::move(materializer_semantics.error()));
+
+			std::vector<sdk::canonical_value> admitted;
+			admitted.reserve(authority.engine.admitted_descriptors.size());
+			for (const auto& descriptor : authority.engine.admitted_descriptors)
+				admitted.push_back(sdk::canonical_value::from_tuple({
+					canonical_text(descriptor.descriptor_id),
+					canonical_text(descriptor.runtime_descriptor_digest),
+				}));
+
+			std::vector<sdk::canonical_value> semantic_tasks;
+			semantic_tasks.reserve(authority.tasks.size());
+			for (const auto& task : authority.tasks)
+			{
+				auto context = sdk::canonical_value::from_tuple({
+					canonical_text(task.provider_task_id),
+					canonical_text(task.task_input_digest),
+					canonical_text(task.selected_catalog_compile_unit_id),
+					canonical_text(task.compile_unit_id),
+					canonical_text(task.condition_universe_id),
+					canonical_text(task.condition_id),
+					canonical_text(task.interpretation_domain),
+				});
+				semantic_tasks.push_back(sdk::canonical_value::from_tuple(
+					{std::move(context), canonical_text(task.task_input_digest)}));
+			}
+			std::ranges::sort(semantic_tasks,
+							  [](const auto& left, const auto& right)
+							  {
+								  return sdk::canonical_binary(left).value() <
+									  sdk::canonical_binary(right).value();
+							  });
+			const auto projection = sdk::canonical_value::from_tuple({
+				canonical_text("cxxlens.clang22-direct-materialization-basis.v1"),
+				canonical_text(*materializer_semantics),
+				sdk::canonical_value::from_tuple({
+					canonical_text(authority.worker.provider_id),
+					canonical_version(authority.worker.provider_version),
+					canonical_text(authority.worker.semantic_contract_digest),
+					sdk::canonical_value::from_integer(
+						static_cast<std::int64_t>(authority.worker.protocol_major)),
+					sdk::canonical_value::from_integer(
+						static_cast<std::int64_t>(authority.worker.protocol_minor)),
+					canonical_strings(authority.worker.required_features),
+				}),
+				sdk::canonical_value::from_tuple(
+					{canonical_text(authority.project.project_id),
+					 canonical_text(authority.project.catalog.catalog_id),
+					 canonical_text(authority.project.catalog.catalog_digest)}),
+				sdk::canonical_value::from_tuple(
+					{canonical_text(authority.engine.generation_contract),
+					 canonical_text(authority.engine.engine_generation_id),
+					 canonical_text(authority.engine.engine_registry_digest),
+					 sdk::canonical_value::from_tuple(std::move(admitted))}),
+				sdk::canonical_value::from_tuple(std::move(semantic_tasks)),
+			});
+			auto basis = semantic_digest_projection(
+				"cxxlens.clang22-direct-materialization-basis.v1", projection);
+			if (!basis)
+				return sdk::unexpected(std::move(basis.error()));
+			auto producer_input = direct_input_basis_digest(*basis);
+			if (!producer_input)
+				return sdk::unexpected(std::move(producer_input.error()));
+			auto canonical_transform = semantic_digest_projection(
+				"cxxlens.clang22-canonical-adoption-transform.v1",
+				sdk::canonical_value::from_tuple(
+					{canonical_text("cxxlens.clang22-canonical-adoption-transform.v1"),
+					 canonical_text(*materializer_semantics),
+					 canonical_text(authority.engine.engine_registry_digest)}));
+			if (!canonical_transform)
+				return sdk::unexpected(std::move(canonical_transform.error()));
+			auto base_transform = semantic_digest_projection(
+				"cxxlens.clang22-base-ingestion-transform.v1",
+				sdk::canonical_value::from_tuple(
+					{canonical_text("cxxlens.clang22-base-ingestion-transform.v1"),
+					 canonical_text(*materializer_semantics),
+					 canonical_text(authority.engine.engine_registry_digest)}));
+			if (!base_transform)
+				return sdk::unexpected(std::move(base_transform.error()));
+			auto assumption_digest = semantic_digest_projection(
+				"cxxlens.clang22-assumption-set.v1",
+				sdk::canonical_value::from_tuple(std::vector<sdk::canonical_value>{}));
+			if (!assumption_digest)
+				return sdk::unexpected(std::move(assumption_digest.error()));
+			return materializer_basis_authority{*materializer_semantics,
+												*basis,
+												*producer_input,
+												*canonical_transform,
+												*base_transform,
+												"assumption-set:" + *assumption_digest,
+												{"exact",
+												 authority.project.project_id,
+												 "assumption-set:" + *assumption_digest,
+												 {"clang22.materialization-sealed.v1",
+												  "provider.transcript-sealed.v1",
+												  "sdk.claim-envelope-validated.v1"}}};
 		}
 
 		[[nodiscard]] sdk::result<std::vector<std::byte>>
@@ -677,7 +851,8 @@ namespace cxxlens::detail::clang22
 		make_worker_assertions(const materializer_worker_execution& execution,
 							   const sdk::relation_engine& engine,
 							   const provider_task_v4_task_authority& task,
-							   const std::string_view descriptor_id)
+							   const std::string_view descriptor_id,
+							   const materializer_basis_authority& basis)
 		{
 			if (!execution.outcome.sealed || !execution.outcome.runtime_receipt)
 				return sdk::unexpected(failure("provider.transcript-invalid", "receipt"));
@@ -701,12 +876,9 @@ namespace cxxlens::detail::clang22
 					task.interpretation_domain,
 					{execution.ingress.request.authority.worker.provider_id,
 					 execution.ingress.request.authority.worker.semantic_contract_digest},
-					{std::string{execution.outcome.runtime_receipt->raw_stdout_sha256()}},
+					{basis.basis_digest},
 					std::string{execution.outcome.runtime_receipt->sealed_transcript_digest()},
-					{"under_approximation",
-					 "partition",
-					 "assumptions:none",
-					 {"runtime_sealed", "schema_validated"}},
+					basis.guarantee,
 				};
 				auto claim = sdk::make_assertion(engine, std::move(observation));
 				if (!claim)
@@ -724,11 +896,12 @@ namespace cxxlens::detail::clang22
 						  const provider_task_v4& extension,
 						  const materialization::source_closure_manifest& manifest,
 						  const std::string_view descriptor_id,
+						  const materializer_basis_authority& basis,
 						  const std::span<const sdk::claim> existing)
 		{
 			if (!execution.outcome.sealed || !execution.outcome.runtime_receipt)
 				return sdk::unexpected(failure("provider.transcript-invalid", "receipt"));
-			auto assertions = make_worker_assertions(execution, engine, task, descriptor_id);
+			auto assertions = make_worker_assertions(execution, engine, task, descriptor_id, basis);
 			if (!assertions)
 				return sdk::unexpected(std::move(assertions.error()));
 
@@ -743,24 +916,43 @@ namespace cxxlens::detail::clang22
 			binding.provider_semantic_contract_digest =
 				execution.ingress.request.authority.worker.semantic_contract_digest;
 			binding.materializer_id = "cxxlens.clang22.materializer";
-			binding.materializer_semantic_contract_digest =
-				execution.ingress.request.authority.tool.occurrence_manifest_digest;
-			binding.canonical_adoption_transform_digest =
-				execution.ingress.request.authority.publication.output_plan_digest;
-			binding.base_ingestion_transform_digest =
-				execution.ingress.request.authority.publication.recipe_digest;
-			binding.guarantee = {"under_approximation",
-								 "partition",
-								 "assumptions:none",
-								 {"runtime_sealed", "schema_validated"}};
-			binding.assumption_set_id = binding.guarantee.assumptions;
+			binding.materializer_semantic_contract_digest = basis.materializer_semantics_digest;
+			binding.canonical_adoption_transform_digest = basis.canonical_adoption_transform_digest;
+			binding.base_ingestion_transform_digest = basis.base_ingestion_transform_digest;
+			binding.direct_basis_digest = basis.basis_digest;
+			binding.guarantee = basis.guarantee;
+			binding.assumption_set_id = basis.assumption_set_id;
 			binding.relation_descriptor_id = std::string{descriptor_id};
-			binding.scope = task.compile_unit_id;
+			// Store partitions are project-scoped; compile-unit identity remains in the
+			// task association and coverage records.
+			binding.scope = task.project_id;
 			binding.interpretation = task.interpretation_domain;
-			binding.precision_profile = "under_approximation";
+			binding.precision_profile = "exact";
+
+			const bool canonical_stage = descriptor_id == "cc.call_direct_target.v1" ||
+				descriptor_id == "cc.call_site.v1" || descriptor_id == "cc.entity.v1";
+			std::vector<sdk::claim> adopted;
+			adopted.reserve(assertions->size());
+			for (const auto& assertion : *assertions)
+			{
+				if (canonical_stage)
+				{
+					auto canonical = sdk::make_canonical_claim(
+						engine,
+						assertion,
+						{"cxxlens.clang22.materializer", basis.materializer_semantics_digest},
+						assertion.row,
+						basis.canonical_adoption_transform_digest);
+					if (!canonical)
+						return sdk::unexpected(std::move(canonical.error()));
+					adopted.push_back(std::move(*canonical));
+				}
+				else
+					adopted.push_back(assertion);
+			}
 
 			sdk::claim_batch claim_batch;
-			for (auto& claim : *assertions)
+			for (auto& claim : adopted)
 			{
 				if (auto added = claim_batch.add(std::move(claim)); !added)
 					return sdk::unexpected(std::move(added.error()));
@@ -768,16 +960,15 @@ namespace cxxlens::detail::clang22
 			auto committed = std::move(claim_batch).commit(engine, existing);
 			if (!committed)
 				return sdk::unexpected(std::move(committed.error()));
+			std::string partition_basis = basis.producer_input_basis_digest;
 			if (!committed->claims.empty())
 			{
-				auto basis = sdk::claim_input_basis_digest(committed->claims.front().input_basis);
-				if (!basis)
-					return sdk::unexpected(std::move(basis.error()));
-				binding.direct_basis_digest = *basis;
+				auto claim_basis =
+					sdk::claim_input_basis_digest(committed->claims.front().input_basis);
+				if (!claim_basis)
+					return sdk::unexpected(std::move(claim_basis.error()));
+				partition_basis = std::move(*claim_basis);
 			}
-			else
-				binding.direct_basis_digest =
-					std::string{execution.outcome.runtime_receipt->raw_stdout_sha256()};
 
 			materialization::materialization_v4_claim_translation translation{
 				binding,
@@ -786,8 +977,9 @@ namespace cxxlens::detail::clang22
 				 binding.scope,
 				 {task.condition_universe_id, {task.condition_id}},
 				 binding.interpretation,
-				 binding.provider_semantic_contract_digest,
-				 binding.direct_basis_digest,
+				 canonical_stage ? binding.materializer_semantic_contract_digest
+								 : binding.provider_semantic_contract_digest,
+				 partition_basis,
 				 binding.precision_profile,
 				 binding.assumption_set_id,
 				 {},
@@ -1049,7 +1241,7 @@ namespace cxxlens::detail::clang22
 						const sdk::detached_row& row,
 						const provider_task_v4_task_authority& task,
 						const materializer_worker_execution& execution,
-						const std::string_view materializer_semantics)
+						const materializer_basis_authority& basis)
 		{
 			if (!execution.outcome.runtime_receipt)
 				return sdk::unexpected(
@@ -1058,13 +1250,10 @@ namespace cxxlens::detail::clang22
 				row,
 				{task.condition_universe_id, {task.condition_id}},
 				task.interpretation_domain,
-				{"cxxlens.clang22.materializer", std::string{materializer_semantics}},
-				{std::string{execution.outcome.runtime_receipt->raw_stdout_sha256()}},
+				{"cxxlens.clang22.materializer", basis.materializer_semantics_digest},
+				{basis.basis_digest},
 				std::string{execution.outcome.runtime_receipt->sealed_transcript_digest()},
-				{"under_approximation",
-				 "partition",
-				 "assumptions:none",
-				 {"runtime_sealed", "schema_validated"}},
+				basis.guarantee,
 			};
 			return sdk::make_assertion(engine, std::move(observation));
 		}
@@ -1075,7 +1264,8 @@ namespace cxxlens::detail::clang22
 							std::vector<sdk::detached_row> rows,
 							const provider_task_v4_task_authority& task,
 							const materializer_worker_execution& execution,
-							const std::string_view materializer_semantics)
+							const materializer_basis_authority& basis,
+							std::vector<sdk::claim>* reference_claims)
 		{
 			if (rows.empty())
 				return sdk::unexpected(failure("materialization.base-partition-empty",
@@ -1083,12 +1273,12 @@ namespace cxxlens::detail::clang22
 											   std::string{relation_descriptor_id}));
 			sdk::partition_draft output;
 			output.relation_descriptor_id = std::string{relation_descriptor_id};
-			output.scope = task.compile_unit_id;
+			output.scope = task.project_id;
 			output.condition = {task.condition_universe_id, {task.condition_id}};
 			output.interpretation = task.interpretation_domain;
-			output.producer_semantics = std::string{materializer_semantics};
-			output.precision_profile = "under_approximation";
-			output.assumption_set_id = "assumptions:none";
+			output.producer_semantics = basis.materializer_semantics_digest;
+			output.precision_profile = "exact";
+			output.assumption_set_id = basis.assumption_set_id;
 			output.coverage = {{"compile-unit", task.compile_unit_id, "covered", {}}};
 			output.claims.reserve(rows.size());
 			for (const auto& row : rows)
@@ -1096,15 +1286,25 @@ namespace cxxlens::detail::clang22
 				if (row.descriptor_id != relation_descriptor_id)
 					return sdk::unexpected(failure(
 						"materialization.base-partition-invalid", "descriptor", row.descriptor_id));
-				auto claim = make_base_claim(engine, row, task, execution, materializer_semantics);
+				auto claim = make_base_claim(engine, row, task, execution, basis);
 				if (!claim)
 					return sdk::unexpected(std::move(claim.error()));
-				output.claims.push_back(std::move(*claim));
+				if (reference_claims != nullptr)
+					reference_claims->push_back(*claim);
+				auto canonical = sdk::make_canonical_claim(
+					engine,
+					*claim,
+					{"cxxlens.clang22.materializer", basis.materializer_semantics_digest},
+					row,
+					basis.base_ingestion_transform_digest);
+				if (!canonical)
+					return sdk::unexpected(std::move(canonical.error()));
+				output.claims.push_back(std::move(*canonical));
 			}
-			auto basis = sdk::claim_input_basis_digest(output.claims.front().input_basis);
-			if (!basis)
-				return sdk::unexpected(std::move(basis.error()));
-			output.producer_input_basis_digest = std::move(*basis);
+			auto claim_basis = sdk::claim_input_basis_digest(output.claims.front().input_basis);
+			if (!claim_basis)
+				return sdk::unexpected(std::move(claim_basis.error()));
+			output.producer_input_basis_digest = std::move(*claim_basis);
 			return output;
 		}
 
@@ -1283,9 +1483,10 @@ namespace cxxlens::detail::clang22
 							 const provider_task_v4_request_authority& authority,
 							 const provider_task_v4_task_authority& task,
 							 const materializer_worker_execution& execution,
-							 const std::span<const sdk::claim> claims)
+							 const std::span<const sdk::claim> claims,
+							 const materializer_basis_authority& basis,
+							 std::vector<sdk::claim>* reference_claims)
 		{
-			const auto materializer_semantics = authority.tool.occurrence_manifest_digest;
 			std::vector<sdk::partition_draft> output;
 			output.reserve(task_v4_base_descriptor_ids.size());
 			auto add = [&](const std::string_view descriptor_id,
@@ -1300,7 +1501,8 @@ namespace cxxlens::detail::clang22
 													 std::move(rows),
 													 task,
 													 execution,
-													 materializer_semantics);
+													 basis,
+													 reference_claims);
 				if (!partition)
 					return sdk::unexpected(std::move(partition.error()));
 				output.push_back(std::move(*partition));
@@ -1367,7 +1569,8 @@ namespace cxxlens::detail::clang22
 													 std::move(rows),
 													 task,
 													 execution,
-													 materializer_semantics);
+													 basis,
+													 reference_claims);
 				if (!partition)
 					return sdk::unexpected(std::move(partition.error()));
 				output.push_back(std::move(*partition));
@@ -1566,24 +1769,28 @@ namespace cxxlens::detail::clang22
 		const auto& base = request.base_tasks.front();
 		const auto& extension = request.task_extensions.front();
 		const auto& task = authority.tasks.front();
+		auto basis = make_materializer_basis_authority(authority);
+		if (!basis)
+			return sdk::unexpected(std::move(basis.error()));
 		std::vector<sdk::claim> raw_output_claims;
 		for (const auto descriptor_id : task_v4_output_descriptor_ids)
 		{
-			auto assertions = make_worker_assertions(execution, *engine, task, descriptor_id);
+			auto assertions =
+				make_worker_assertions(execution, *engine, task, descriptor_id, *basis);
 			if (!assertions)
 				return sdk::unexpected(std::move(assertions.error()));
 			raw_output_claims.insert(raw_output_claims.end(),
 									 std::make_move_iterator(assertions->begin()),
 									 std::make_move_iterator(assertions->end()));
 		}
-		auto base_partitions =
-			make_base_partitions(*engine, authority, task, execution, raw_output_claims);
+		std::vector<sdk::claim> base_reference_claims;
+		auto base_partitions = make_base_partitions(
+			*engine, authority, task, execution, raw_output_claims, *basis, &base_reference_claims);
 		if (!base_partitions)
 			return sdk::unexpected(std::move(base_partitions.error()));
 		std::vector<sdk::claim> reference_claims;
-		for (const auto& partition : *base_partitions)
-			reference_claims.insert(
-				reference_claims.end(), partition.claims.begin(), partition.claims.end());
+		reference_claims.insert(
+			reference_claims.end(), base_reference_claims.begin(), base_reference_claims.end());
 		reference_claims.insert(
 			reference_claims.end(), raw_output_claims.begin(), raw_output_claims.end());
 		for (const auto& reference : reference_claims)
@@ -1603,6 +1810,7 @@ namespace cxxlens::detail::clang22
 										   extension,
 										   *manifest,
 										   descriptor_id,
+										   *basis,
 										   reference_claims);
 			if (!claim)
 				return sdk::unexpected(std::move(claim.error()));
@@ -1676,13 +1884,28 @@ namespace cxxlens::detail::clang22
 		auto publication_engine = *engine;
 		sdk::result<sdk::snapshot_store> store = sdk::unexpected(
 			sdk::error{"materialization.store-open-failed", "backend", "unsupported"});
+		std::optional<materialization::materialization_rooted_vfs_receipt>
+			sqlite_effect_root_receipt;
 		if (authority.publication.backend == "sqlite")
 		{
 			if (!authority.publication.sqlite_path)
 				return sdk::unexpected(
 					failure("materialization.store-open-failed", "sqlite_path", "missing"));
-			store = sdk::open_sqlite_snapshot_store(*authority.publication.sqlite_path,
-													std::move(*engine));
+			auto effect_root = materialization::materialization_effect_root::capture_startup();
+			if (!effect_root)
+				return sdk::unexpected(std::move(effect_root.error()));
+			auto rooted_opener =
+				materialization::materialization_rooted_store_opener::create(*effect_root);
+			if (!rooted_opener)
+				return sdk::unexpected(std::move(rooted_opener.error()));
+			store = (*rooted_opener)
+						->open_sqlite(*authority.publication.sqlite_path, std::move(*engine));
+			if (!store)
+				return sdk::unexpected(std::move(store.error()));
+			if (!(*rooted_opener)->receipt())
+				return sdk::unexpected(
+					failure("materialization.store-open-failed", "rooted-vfs", "receipt-missing"));
+			sqlite_effect_root_receipt = *(*rooted_opener)->receipt();
 		}
 		else if (authority.publication.backend == "memory")
 			store = sdk::make_in_memory_snapshot_store(std::move(*engine));
@@ -1691,8 +1914,22 @@ namespace cxxlens::detail::clang22
 				failure("materialization.store-open-failed", "backend", "unsupported"));
 		if (!store)
 			return sdk::unexpected(std::move(store.error()));
+		std::optional<sdk::publication_record> observed_parent_record;
+		if (authority.publication.expected_parent_publication)
+		{
+			auto parent =
+				store->open_publication(*authority.publication.expected_parent_publication);
+			if (!parent)
+				return sdk::unexpected(std::move(parent.error()));
+			observed_parent_record = parent->publication();
+		}
 		auto published_source = materialization::publish_materialization_v4_store_source(
-			publication_engine, *store, std::move(*source));
+			publication_engine,
+			*store,
+			std::move(*source),
+			authority.publication.backend == "sqlite" && authority.publication.sqlite_path
+				? authority.publication.sqlite_path
+				: std::nullopt);
 		if (!published_source)
 			return sdk::unexpected(std::move(published_source.error()));
 		auto snapshot = std::move(published_source->snapshot);
@@ -1716,6 +1953,11 @@ namespace cxxlens::detail::clang22
 			current->manifest() != snapshot.manifest())
 			return sdk::unexpected(failure(
 				"materialization.store-verification-failed", "reopen", "identity-mismatch"));
+		auto canonical_export = store->canonical_export(snapshot.id());
+		if (!canonical_export)
+			return sdk::unexpected(std::move(canonical_export.error()));
+		const auto canonical_export_digest = sdk::content_digest(
+			std::as_bytes(std::span{canonical_export->data(), canonical_export->size()}));
 		// Retain the established single-task receipt field for generic publication consumers while
 		// exposing the complete six-batch receipt on the installed bridge publication.
 		materialization::materialization_v4_store_publication publication{
@@ -1723,8 +1965,16 @@ namespace cxxlens::detail::clang22
 			std::move(published_source->authority),
 			std::move(published_source->receipt),
 			receipt->receipt_digest,
-			static_cast<std::uint64_t>(claims.size())};
-		return materializer_store_execution{
-			std::move(execution), std::move(claims), std::move(*receipt), std::move(publication)};
+			static_cast<std::uint64_t>(claims.size()),
+			published_source->publication_verified};
+		return materializer_store_execution{std::move(execution),
+											std::move(claims),
+											std::move(*base_partitions),
+											std::move(reference_claims),
+											std::move(*receipt),
+											std::move(publication),
+											std::move(observed_parent_record),
+											canonical_export_digest,
+											std::move(sqlite_effect_root_receipt)};
 	}
 } // namespace cxxlens::detail::clang22

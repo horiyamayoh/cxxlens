@@ -169,6 +169,7 @@ add_library(
   src/sdk/relation.cpp
   src/sdk/claim.cpp
   src/sdk/store.cpp
+  src/sdk/store_candidate_projection_internal.cpp
   src/sdk/snapshot_store_v5_codec_internal.cpp
   src/sdk/store_operation_port_internal.cpp
   src/sdk/sqlite_connection_lifecycle_internal.cpp
@@ -680,7 +681,11 @@ add_library(cxxlens_clang22_materializer_v4_store_source STATIC EXCLUDE_FROM_ALL
 target_link_libraries(
   cxxlens_clang22_materializer_v4_store_source
   PUBLIC cxxlens::base
-  PRIVATE cxxlens::kernel cxxlens_clang22_materializer_v4_ingress)
+  PRIVATE cxxlens::kernel
+          cxxlens_clang22_materializer_v4_ingress
+          cxxlens_clang22_materializer_bounded_support
+          cxxlens_bounded_store_v6_memory_internal
+          cxxlens_bounded_store_v6_sqlite_internal)
 target_include_directories(cxxlens_clang22_materializer_v4_store_source
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(cxxlens_clang22_materializer_v4_store_source
@@ -831,6 +836,7 @@ add_library(
   src/llvm/clang22/materialization_io.cpp
   src/llvm/clang22/materialization_request_v2_2.cpp
   src/llvm/clang22/installed_materializer_source_closure.cpp
+  src/llvm/clang22/materializer_report_v2_2_encoder.cpp
   src/llvm/clang22/materializer_worker_bridge.cpp
   src/llvm/clang22/provider_trust_issuer_internal.cpp)
 target_link_libraries(
@@ -839,6 +845,10 @@ target_link_libraries(
   PRIVATE cxxlens_clang22_materialization_codecs
           cxxlens_icu_static
           cxxlens_clang22_worker_core
+          cxxlens_clang22_materializer_rooted_vfs_support
+          cxxlens_bounded_store_v6_memory_internal
+          cxxlens_bounded_store_v6_sqlite_internal
+          cxxlens_clang22_materializer_occurrence_support
           cxxlens_clang22_materializer_v4_store_source
           cxxlens_clang22_materializer_v4_coordinator)
 target_include_directories(cxxlens_clang22_materializer_ingress

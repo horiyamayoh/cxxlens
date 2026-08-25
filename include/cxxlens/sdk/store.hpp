@@ -223,6 +223,7 @@ namespace cxxlens::sdk
 	class row_cursor;
 	class claim_annotation_cursor;
 	class snapshot_writer;
+	struct snapshot_store_backend_lifetime_access;
 
 	/** @brief Immutable concurrent-readable snapshot pinning one physical generation. */
 	class snapshot_handle
@@ -262,6 +263,7 @@ namespace cxxlens::sdk
 		friend class snapshot_store;
 		friend class snapshot_builder;
 		friend class snapshot_writer;
+		friend struct snapshot_store_backend_lifetime_access;
 	};
 
 	/** @brief Cursor-scoped claim annotation invalidated by cursor advance. */
@@ -384,6 +386,7 @@ namespace cxxlens::sdk
 		explicit snapshot_writer(std::unique_ptr<data> data);
 		std::unique_ptr<data> data_;
 		friend class snapshot_store;
+		friend struct snapshot_store_backend_lifetime_access;
 	};
 
 	/** @brief Construct the normative process-local reference backend. */

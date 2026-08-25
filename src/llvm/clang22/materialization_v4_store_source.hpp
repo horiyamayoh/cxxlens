@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -117,7 +118,8 @@ namespace cxxlens::detail::clang22::materialization
 		friend sdk::result<materialization_v4_store_publication>
 		publish_materialization_v4_store_source(const sdk::relation_engine&,
 												sdk::snapshot_store&,
-												materialization_v4_store_source);
+												materialization_v4_store_source,
+												std::optional<std::string>);
 	};
 
 	/** Construct a Store source only after the existing sealed-task admission boundary succeeds. */
@@ -158,10 +160,15 @@ namespace cxxlens::detail::clang22::materialization
 		/** Installed Clang 22 task-output receipt; empty for generic single-partition callers. */
 		std::string output_receipt_digest;
 		std::uint64_t output_batch_count{};
+		/** True only after the committed handle has passed the authenticated reopen projection
+		 * gate. */
+		bool publication_verified{};
 	};
 
 	[[nodiscard]] sdk::result<materialization_v4_store_publication>
-	publish_materialization_v4_store_source(const sdk::relation_engine& engine,
-											sdk::snapshot_store& store,
-											materialization_v4_store_source source);
+	publish_materialization_v4_store_source(
+		const sdk::relation_engine& engine,
+		sdk::snapshot_store& store,
+		materialization_v4_store_source source,
+		std::optional<std::string> v6_sqlite_path = std::nullopt);
 } // namespace cxxlens::detail::clang22::materialization

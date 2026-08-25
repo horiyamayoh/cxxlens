@@ -381,9 +381,32 @@ namespace cxxlens::detail::clang22::materialization
 			partition.precision_profile != binding.precision_profile ||
 			partition.assumption_set_id != binding.assumption_set_id)
 			return sdk::unexpected(mismatch("partition.identity", "binding"));
-		if (partition.producer_semantics == binding.provider_semantic_contract_digest &&
-			partition.producer_input_basis_digest != binding.direct_basis_digest)
-			return sdk::unexpected(mismatch("partition.producer-input-basis", "direct-authority"));
+		if (partition.producer_semantics == binding.provider_semantic_contract_digest)
+		{
+			if (partition.claims.empty())
+			{
+				// An empty provider batch has no claim input basis to derive.  Its
+				// producer-input digest remains the task authority digest rather than
+				// the direct basis digest carried by the per-relation binding.
+			}
+			else
+			{
+				const auto* direct =
+					std::get_if<sdk::direct_claim_basis>(&partition.claims.front().input_basis);
+				if (direct == nullptr)
+					return sdk::unexpected(
+						mismatch("partition.producer-input-basis", "direct-claim"));
+				auto expected_partition_basis =
+					sdk::claim_input_basis_digest(partition.claims.front().input_basis);
+				if (!expected_partition_basis ||
+					*expected_partition_basis != partition.producer_input_basis_digest)
+					return sdk::unexpected(mismatch(
+						"partition.producer-input-basis",
+						"claim-basis:" + partition.relation_descriptor_id + ":" +
+							partition.producer_input_basis_digest + ":" +
+							(expected_partition_basis ? *expected_partition_basis : "missing")));
+			}
+		}
 		if (partition.coverage.empty())
 			return sdk::unexpected(invalid("partition.coverage", "missing"));
 		for (const auto& coverage : partition.coverage)
