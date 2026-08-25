@@ -129,6 +129,30 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::unexpected(mismatch("partition.receipt", "manifest"));
 			return {};
 		}
+
+		[[nodiscard]] sdk::result<void>
+		validate_grouped_output_receipt(const materialization_v4_store_partition& value,
+										const materialization_v4_claim_receipt& task_receipt)
+		{
+			if (!value.has_receipt)
+				return {};
+			if (value.receipt.materialization_request_id !=
+					task_receipt.materialization_request_id ||
+				value.receipt.task_index != task_receipt.task_index ||
+				value.receipt.task_id != task_receipt.task_id ||
+				value.receipt.task_v4_digest != task_receipt.task_v4_digest)
+				return sdk::unexpected(mismatch("partition.receipt", "group-task-binding"));
+			if (!value.receipt.complete)
+				return sdk::unexpected(incomplete("partition.receipt"));
+			if (value.receipt.partition_id != value.manifest.partition_id ||
+				value.receipt.partition_content_digest != value.manifest.content_digest ||
+				value.receipt.coverage_digest != value.manifest.coverage_digest ||
+				value.receipt.claim_count != value.manifest.claim_count ||
+				value.receipt.complete != value.manifest.complete ||
+				value.receipt.unresolved_count != value.draft.unresolved.size())
+				return sdk::unexpected(mismatch("partition.receipt", "manifest"));
+			return {};
+		}
 	} // namespace
 
 	sdk::result<void>
@@ -138,8 +162,15 @@ namespace cxxlens::detail::clang22::materialization
 			return valid;
 		if (auto valid = validate_authority(engine, receipt_, authority_); !valid)
 			return valid;
-		if (partitions_.size() != receipt_.task_count)
+		const bool grouped = std::ranges::any_of(partitions_,
+												 [](const materialization_v4_store_partition& value)
+												 {
+													 return !value.has_receipt;
+												 });
+		if (!grouped && partitions_.size() != receipt_.task_count)
 			return sdk::unexpected(mismatch("partitions", "receipt.task-count"));
+		if (grouped && (receipt_.task_count != 1U || receipt_.task_receipts.size() != 1U))
+			return sdk::unexpected(mismatch("partitions", "grouped-task-receipt"));
 
 		std::uint64_t claim_count{};
 		std::uint64_t unresolved_count{};
@@ -149,12 +180,25 @@ namespace cxxlens::detail::clang22::materialization
 		for (std::size_t index{}; index < partitions_.size(); ++index)
 		{
 			const auto& value = partitions_[index];
-			if (value.receipt != receipt_.task_receipts[index])
-				return sdk::unexpected(mismatch("partition.receipt", "aggregate"));
-			if (auto valid =
-					validate_partition_receipt(value, receipt_.task_receipts[index], index);
-				!valid)
-				return valid;
+			if (grouped)
+			{
+				if (value.has_receipt)
+				{
+					if (auto valid =
+							validate_grouped_output_receipt(value, receipt_.task_receipts.front());
+						!valid)
+						return valid;
+				}
+			}
+			else
+			{
+				if (value.receipt != receipt_.task_receipts[index])
+					return sdk::unexpected(mismatch("partition.receipt", "aggregate"));
+				if (auto valid =
+						validate_partition_receipt(value, receipt_.task_receipts[index], index);
+					!valid)
+					return valid;
+			}
 			if (!partition_ids.insert(value.manifest.partition_id).second)
 				return sdk::unexpected(mismatch("partition.partition-id", "duplicate"));
 			if (value.draft.condition.universe != authority_.snapshot.series.condition_universe_id)
@@ -168,28 +212,33 @@ namespace cxxlens::detail::clang22::materialization
 			auto subject = sdk::make_partition_certificate_subject(value.manifest, value.binding);
 			if (!subject)
 				return sdk::unexpected(std::move(subject.error()));
-			if (auto valid =
-					add_checked(claim_count, value.receipt.claim_count, "receipt.claim-count");
-				!valid)
-				return valid;
-			if (auto valid = add_checked(
-					unresolved_count, value.receipt.unresolved_count, "receipt.unresolved-count");
-				!valid)
-				return valid;
-			if (auto valid = add_checked(
-					conflict_count, value.receipt.conflict_count, "receipt.conflict-count");
-				!valid)
-				return valid;
-			if (auto valid = add_checked(differential_disagreement_count,
-										 value.receipt.differential_disagreement_count,
-										 "receipt.differential-disagreement-count");
-				!valid)
-				return valid;
+			if (value.has_receipt)
+			{
+				if (auto valid =
+						add_checked(claim_count, value.receipt.claim_count, "receipt.claim-count");
+					!valid)
+					return valid;
+				if (auto valid = add_checked(unresolved_count,
+											 value.receipt.unresolved_count,
+											 "receipt.unresolved-count");
+					!valid)
+					return valid;
+				if (auto valid = add_checked(
+						conflict_count, value.receipt.conflict_count, "receipt.conflict-count");
+					!valid)
+					return valid;
+				if (auto valid = add_checked(differential_disagreement_count,
+											 value.receipt.differential_disagreement_count,
+											 "receipt.differential-disagreement-count");
+					!valid)
+					return valid;
+			}
 		}
 
-		if (claim_count != receipt_.claim_count || unresolved_count != receipt_.unresolved_count ||
-			conflict_count != receipt_.conflict_count ||
-			differential_disagreement_count != receipt_.differential_disagreement_count)
+		if (!grouped &&
+			(claim_count != receipt_.claim_count || unresolved_count != receipt_.unresolved_count ||
+			 conflict_count != receipt_.conflict_count ||
+			 differential_disagreement_count != receipt_.differential_disagreement_count))
 			return sdk::unexpected(mismatch("receipt.counters", "partitions"));
 
 		std::set<std::string, std::less<>> closure_ids;
@@ -242,6 +291,77 @@ namespace cxxlens::detail::clang22::materialization
 								  sealed->partition_manifest,
 								  sealed->partition_binding,
 								  sealed->receipt});
+		}
+
+		materialization_v4_store_source source{
+			std::move(authority), receipt, std::move(partitions)};
+		if (auto valid = source.validate(engine); !valid)
+			return sdk::unexpected(std::move(valid.error()));
+		return source;
+	}
+
+	sdk::result<materialization_v4_store_source> make_materialization_v4_grouped_store_source(
+		const sdk::relation_engine& engine,
+		const materialization_v4_incremental_receipt& receipt,
+		const std::span<const materialization_v4_claim_sealed* const> sealed_tasks,
+		const std::span<const sdk::partition_draft> base_partitions,
+		const std::span<const sdk::claim> existing,
+		materialization_v4_provider_output_authority authority)
+	{
+		if (sealed_tasks.empty() || base_partitions.empty())
+			return sdk::unexpected(invalid("grouped-source", "empty"));
+		if (receipt.task_count != 1U || receipt.task_receipts.size() != 1U)
+			return sdk::unexpected(mismatch("grouped-source", "task-receipt"));
+		const std::array<const materialization_v4_claim_sealed*, 1U> receipt_task{
+			sealed_tasks.front()};
+		if (auto admitted = admit_materialization_v4_store_ingress(
+				engine, receipt, receipt_task, authority.publication, existing);
+			!admitted)
+			return sdk::unexpected(std::move(admitted.error()));
+		if (authority.materialization_request_id != receipt.materialization_request_id)
+			return sdk::unexpected(mismatch("authority.materialization-request-id", "receipt"));
+
+		std::vector<materialization_v4_store_partition> partitions;
+		partitions.reserve(base_partitions.size() + sealed_tasks.size());
+		for (const auto& draft : base_partitions)
+		{
+			if (draft.claims.empty())
+				return sdk::unexpected(invalid("grouped-source.base-partition", "empty"));
+			auto manifest = sdk::make_partition_manifest(engine, draft);
+			if (!manifest)
+				return sdk::unexpected(std::move(manifest.error()));
+			// Base partitions are already canonical claims produced by the host-side planner. Their
+			// source identity is re-derived here, but they deliberately do not masquerade as worker
+			// task receipts.
+			sdk::snapshot_partition_binding binding{manifest->partition_id,
+													draft.relation_descriptor_id,
+													draft.scope,
+													draft.condition,
+													draft.interpretation,
+													draft.producer_semantics,
+													draft.producer_input_basis_digest,
+													draft.precision_profile,
+													draft.assumption_set_id};
+			partitions.push_back({0U, draft, *manifest, std::move(binding), {}, false});
+		}
+		for (const auto* sealed : sealed_tasks)
+		{
+			if (sealed == nullptr)
+				return sdk::unexpected(invalid("grouped-source.sealed-tasks", "null"));
+			if (auto valid = validate_materialization_v4_claim_receipt(engine, *sealed, existing);
+				!valid)
+				return sdk::unexpected(std::move(valid.error()));
+			if (sealed->receipt.materialization_request_id != receipt.materialization_request_id ||
+				sealed->receipt.task_index != receipt.task_receipts.front().task_index ||
+				sealed->receipt.task_id != receipt.task_receipts.front().task_id ||
+				sealed->receipt.task_v4_digest != receipt.task_receipts.front().task_v4_digest)
+				return sdk::unexpected(mismatch("grouped-source.task-binding", "receipt"));
+			partitions.push_back({sealed->translation.binding.task_index,
+								  sealed->translation.partition,
+								  sealed->partition_manifest,
+								  sealed->partition_binding,
+								  sealed->receipt,
+								  true});
 		}
 
 		materialization_v4_store_source source{

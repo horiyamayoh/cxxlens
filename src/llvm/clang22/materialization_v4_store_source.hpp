@@ -47,6 +47,8 @@ namespace cxxlens::detail::clang22::materialization
 		sdk::partition_manifest manifest;
 		sdk::snapshot_partition_binding binding;
 		materialization_v4_claim_receipt receipt;
+		/** Base partitions are source-owned inputs, not task-v4 output receipts. */
+		bool has_receipt{true};
 	};
 
 	struct materialization_v4_store_publication;
@@ -104,6 +106,14 @@ namespace cxxlens::detail::clang22::materialization
 			const materialization_v4_incremental_receipt&,
 			std::span<const materialization_v4_claim_sealed* const>,
 			materialization_v4_provider_output_authority);
+		friend sdk::result<materialization_v4_store_source>
+		make_materialization_v4_grouped_store_source(
+			const sdk::relation_engine&,
+			const materialization_v4_incremental_receipt&,
+			std::span<const materialization_v4_claim_sealed* const>,
+			std::span<const sdk::partition_draft>,
+			std::span<const sdk::claim>,
+			materialization_v4_provider_output_authority);
 		friend sdk::result<materialization_v4_store_publication>
 		publish_materialization_v4_store_source(const sdk::relation_engine&,
 												sdk::snapshot_store&,
@@ -115,6 +125,22 @@ namespace cxxlens::detail::clang22::materialization
 		const sdk::relation_engine& engine,
 		const materialization_v4_incremental_receipt& receipt,
 		std::span<const materialization_v4_claim_sealed* const> sealed_tasks,
+		materialization_v4_provider_output_authority authority);
+
+	/**
+	 * Construct the installed worker's grouped source. One task-v4 execution emits one ordered
+	 * descriptor group plus independently ingested base partitions, so its six output receipts all
+	 * bind to task index zero while the incremental receipt remains task-oriented. The grouped
+	 * overload keeps that distinction explicit instead of coercing descriptor batches into fake
+	 * task indices or bypassing source validation.
+	 */
+	[[nodiscard]] sdk::result<materialization_v4_store_source>
+	make_materialization_v4_grouped_store_source(
+		const sdk::relation_engine& engine,
+		const materialization_v4_incremental_receipt& receipt,
+		std::span<const materialization_v4_claim_sealed* const> sealed_tasks,
+		std::span<const sdk::partition_draft> base_partitions,
+		std::span<const sdk::claim> existing,
 		materialization_v4_provider_output_authority authority);
 
 	/**

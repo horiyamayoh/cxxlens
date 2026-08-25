@@ -47,11 +47,10 @@ namespace cxxlens::detail::clang22::materialization
 	};
 
 	/**
-	 * Authority that is still absent from the task-v4 worker receipt today.
+	 * Authority supplied by the validated analysis/output planner and publication owner.
 	 *
-	 * These identities must come from a validated analysis/output planner and publication owner;
-	 * inventing them from a task receipt would turn a compiler execution into an unsafe Store
-	 * write.
+	 * These identities are intentionally separate from task bytes and receipts; the worker cannot
+	 * manufacture a Store write by returning a complete transcript alone.
 	 */
 	struct materialization_v4_store_publication_authority
 	{
@@ -64,11 +63,10 @@ namespace cxxlens::detail::clang22::materialization
 	};
 
 	/**
-	 * Validated prepublication handoff token.
+	 * Validated prepublication handoff value.
 	 *
-	 * This slice deliberately stops before opening or mutating a Store.  A future writer may
-	 * consume this token only after it supplies the same validated authority and the sealed task
-	 * payloads; no prior request/task object is represented here.
+	 * This value carries the task-oriented receipt and publication authority into the typed Store
+	 * source constructor.  It contains no request/task DOM and cannot authorize a write by itself.
 	 */
 	struct materialization_v4_store_ingress
 	{
@@ -98,16 +96,15 @@ namespace cxxlens::detail::clang22::materialization
 		std::span<const sdk::claim> existing = {});
 
 	/**
-	 * Admit a validated receipt set to the prepublication Store boundary.
-	 *
-	 * The current task-v4 worker has no recipe, output plan, or publication target, so callers must
-	 * pass `std::nullopt` and receive a typed failure.  This is intentionally fail-closed until a
-	 * real worker/materializer supplies all three identities.
+	 * Admit a validated receipt set to the prepublication Store boundary. Existing claims are
+	 * supplied when one task emits multiple descriptor partitions. Every output is checked against
+	 * the same independent claim universe before a writer is opened.
 	 */
 	[[nodiscard]] sdk::result<materialization_v4_store_ingress>
 	admit_materialization_v4_store_ingress(
 		const sdk::relation_engine& engine,
 		const materialization_v4_incremental_receipt& receipt,
 		std::span<const materialization_v4_claim_sealed* const> sealed_tasks,
-		std::optional<materialization_v4_store_publication_authority> authority);
+		std::optional<materialization_v4_store_publication_authority> authority,
+		std::span<const sdk::claim> existing = {});
 } // namespace cxxlens::detail::clang22::materialization

@@ -1653,6 +1653,27 @@ namespace cxxlens::detail::clang22
 				std::string{execution.outcome.runtime_receipt->raw_stdout_sha256()};
 			output.closures.push_back(std::move(closure));
 		}
+		// Keep the production bridge on the typed v4 Store-source path.  The source constructor
+		// revalidates every sealed task, partition manifest, binding, receipt, closure certificate,
+		// and publication authority before opening a writer; callers must not bypass that boundary
+		// by staging the raw claim vector directly.
+		std::vector<const materialization::materialization_v4_claim_sealed*> sealed_tasks;
+		sealed_tasks.reserve(claims.size());
+		for (const auto& claim : claims)
+			sealed_tasks.push_back(&claim);
+		auto source =
+			materialization::make_materialization_v4_grouped_store_source(*engine,
+																		  *incremental_receipt,
+																		  sealed_tasks,
+																		  *base_partitions,
+																		  reference_claims,
+																		  std::move(output));
+		if (!source)
+			return sdk::unexpected(std::move(source.error()));
+		// snapshot_store takes ownership of its engine. Retain an immutable validation copy for the
+		// publish-side revalidation; passing the moved-from engine would erase the registry
+		// authority precisely at the final effect boundary.
+		auto publication_engine = *engine;
 		sdk::result<sdk::snapshot_store> store = sdk::unexpected(
 			sdk::error{"materialization.store-open-failed", "backend", "unsupported"});
 		if (authority.publication.backend == "sqlite")
@@ -1670,51 +1691,37 @@ namespace cxxlens::detail::clang22
 				failure("materialization.store-open-failed", "backend", "unsupported"));
 		if (!store)
 			return sdk::unexpected(std::move(store.error()));
-		auto writer = store->begin(std::move(output.snapshot));
-		if (!writer)
-			return sdk::unexpected(std::move(writer.error()));
-		for (auto& partition : *base_partitions)
-			if (auto staged = writer->stage(std::move(partition)); !staged)
-				return sdk::unexpected(std::move(staged.error()));
-		for (auto& claim : claims)
-		{
-			if (auto staged = writer->stage(claim.translation.partition); !staged)
-				return sdk::unexpected(std::move(staged.error()));
-		}
-		for (auto& closure : output.closures)
-			if (auto staged = writer->add_closure(std::move(closure)); !staged)
-				return sdk::unexpected(std::move(staged.error()));
-		if (auto valid = writer->validate(); !valid)
-			return sdk::unexpected(std::move(valid.error()));
-		auto snapshot = writer->publish();
-		if (!snapshot)
-			return sdk::unexpected(std::move(snapshot.error()));
+		auto published_source = materialization::publish_materialization_v4_store_source(
+			publication_engine, *store, std::move(*source));
+		if (!published_source)
+			return sdk::unexpected(std::move(published_source.error()));
+		auto snapshot = std::move(published_source->snapshot);
 		// A committed handle is not sufficient for the installed success boundary.  Re-open the
 		// current selector, publication, and snapshot while the backend is still owned so a caller
 		// cannot report success for a commit that is immediately unreadable or bound to another
 		// series.  The three paths must expose the same immutable identity and manifest.
-		auto reopened_publication = store->open_publication(snapshot->publication().publication_id);
+		auto reopened_publication = store->open_publication(snapshot.publication().publication_id);
 		if (!reopened_publication)
 			return sdk::unexpected(std::move(reopened_publication.error()));
-		auto reopened_snapshot = store->open(snapshot->id());
+		auto reopened_snapshot = store->open(snapshot.id());
 		if (!reopened_snapshot)
 			return sdk::unexpected(std::move(reopened_snapshot.error()));
 		auto current = store->current(authority.publication.selector);
 		if (!current)
 			return sdk::unexpected(std::move(current.error()));
-		if (reopened_publication->id() != snapshot->id() ||
-			reopened_snapshot->id() != snapshot->id() || current->id() != snapshot->id() ||
-			reopened_publication->publication() != snapshot->publication() ||
-			reopened_snapshot->manifest() != snapshot->manifest() ||
-			current->manifest() != snapshot->manifest())
+		if (reopened_publication->id() != snapshot.id() ||
+			reopened_snapshot->id() != snapshot.id() || current->id() != snapshot.id() ||
+			reopened_publication->publication() != snapshot.publication() ||
+			reopened_snapshot->manifest() != snapshot.manifest() ||
+			current->manifest() != snapshot.manifest())
 			return sdk::unexpected(failure(
 				"materialization.store-verification-failed", "reopen", "identity-mismatch"));
 		// Retain the established single-task receipt field for generic publication consumers while
 		// exposing the complete six-batch receipt on the installed bridge publication.
 		materialization::materialization_v4_store_publication publication{
-			std::move(*snapshot),
-			std::move(output),
-			std::move(*incremental_receipt),
+			std::move(snapshot),
+			std::move(published_source->authority),
+			std::move(published_source->receipt),
 			receipt->receipt_digest,
 			static_cast<std::uint64_t>(claims.size())};
 		return materializer_store_execution{

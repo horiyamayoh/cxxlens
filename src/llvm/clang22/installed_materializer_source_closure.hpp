@@ -5,8 +5,9 @@
  * @brief Typed Protocol 2.0 source-closure ingress for the installed materializer.
  *
  * Request metadata arrives on stdin while source bytes arrive on the provider-owned inherited
- * channel. This boundary validates the complete source-free request identity before admitting
- * any closure frame. It intentionally stops before worker output, Store claims, and publication.
+ * channel. This boundary validates the complete source-free request identity before admitting any
+ * closure frame. The returned value is the only input accepted by the worker/Store bridge; this
+ * function itself stops before worker output and publication.
  */
 
 #include "materialization_request_v2_2.hpp"

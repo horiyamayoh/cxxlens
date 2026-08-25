@@ -323,11 +323,12 @@ namespace cxxlens::detail::clang22::materialization
 		const sdk::relation_engine& engine,
 		const materialization_v4_incremental_receipt& receipt,
 		const std::span<const materialization_v4_claim_sealed* const> sealed_tasks,
-		std::optional<materialization_v4_store_publication_authority> authority)
+		std::optional<materialization_v4_store_publication_authority> authority,
+		const std::span<const sdk::claim> existing)
 	{
 		if (!authority)
 			return sdk::unexpected(missing_authority("provider-output"));
-		if (auto valid = validate_inputs(engine, receipt, sealed_tasks, {}); !valid)
+		if (auto valid = validate_inputs(engine, receipt, sealed_tasks, existing); !valid)
 			return sdk::unexpected(std::move(valid.error()));
 		if (!receipt.complete)
 			return sdk::unexpected(incomplete("receipt"));

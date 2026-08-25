@@ -454,7 +454,7 @@ namespace cxxlens::detail::clang22
 	/**
 	 * Complete typed Protocol 2.2 request authority.
 	 *
-	 * This is the source-free handoff value for the future request-v2.2 bridge.  Validation is
+	 * This is the source-free handoff value for the request-v2.2 bridge. Validation is
 	 * independent of JSON transport validation: a JSON document may be decoded for framing, but it
 	 * cannot manufacture this authority.  The canonical projection is deterministic and contains
 	 * only typed metadata and digests.

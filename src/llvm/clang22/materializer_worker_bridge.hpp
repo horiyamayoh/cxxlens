@@ -100,7 +100,7 @@ namespace cxxlens::detail::clang22
 	[[nodiscard]] sdk::result<materializer_worker_execution>
 	run_materializer_worker(installed_materializer_source_closure_result ingress);
 
-	/** Test/conformance and future installed-registry entry point with an explicit issuer. */
+	/** Conformance and embedding entry point with an explicit trust issuer. */
 	[[nodiscard]] sdk::result<materializer_worker_execution>
 	run_materializer_worker(installed_materializer_source_closure_result ingress,
 							provider_trust_issuer_port& issuer);

@@ -640,8 +640,7 @@ target_compile_features(cxxlens_clang22_materializer_bounded_support
 cxxlens_set_project_warnings(cxxlens_clang22_materializer_bounded_support)
 cxxlens_enable_sanitizers(cxxlens_clang22_materializer_bounded_support)
 
-# The task-v4 claim boundary is source-private until the production Store
-# handoff is connected.  It is nevertheless built as a first-class typed
+# The task-v4 claim boundary is source-private and remains a first-class typed
 # boundary so the v4 authority/receipt contract cannot depend on obsolete
 # request or task implementations.
 add_library(cxxlens_clang22_materializer_v4_claims STATIC EXCLUDE_FROM_ALL
@@ -657,9 +656,9 @@ target_compile_features(cxxlens_clang22_materializer_v4_claims
 cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_claims)
 cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_claims)
 
-# This boundary consumes only sealed task-v4 claim receipts.  It intentionally
-# stops before Store mutation until the worker supplies a real recipe, output
-# plan, and publication target.
+# This boundary consumes only sealed task-v4 claim receipts.  Store mutation is
+# performed by the separate typed source publisher after the same authority,
+# expected/actual identity, and reopen checks have passed.
 add_library(cxxlens_clang22_materializer_v4_ingress STATIC EXCLUDE_FROM_ALL
             src/llvm/clang22/materialization_v4_incremental_ingress.cpp)
 target_link_libraries(
@@ -783,7 +782,7 @@ endif()
 
 # Source-private production bridge for the explicit task-v4 detached-claim
 # handoff.  It consumes only the worker core and the independently validating v4
-# ingress; it does not open or mutate a Store.
+# ingress; Store publication stays in the typed source publisher.
 add_library(cxxlens_clang22_worker_v4_claim_bridge STATIC
             src/llvm/clang22/provider_worker_v4_claim_bridge.cpp)
 target_link_libraries(

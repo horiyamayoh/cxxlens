@@ -715,6 +715,11 @@ namespace
 			}
 			if (published->publication.snapshot.id().empty())
 				std::abort();
+			const auto expected_partition_count =
+				task_v4_base_descriptor_ids.size() + task_v4_output_descriptor_ids.size();
+			if (published->publication.snapshot.manifest().partitions.size() !=
+				expected_partition_count)
+				std::abort();
 			if (published->receipt.batch_receipts.size() != task_v4_output_descriptor_ids.size() ||
 				published->publication.output_batch_count != task_v4_output_descriptor_ids.size() ||
 				published->publication.output_receipt_digest != published->receipt.receipt_digest ||
