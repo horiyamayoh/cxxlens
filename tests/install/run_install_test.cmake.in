@@ -151,6 +151,40 @@ if(PHASE STREQUAL "prepare")
     endif()
   endforeach()
 
+  # Compile every installed public header in isolation.  The umbrella consumer
+  # checks above prove that one supported include graph works; this sweep keeps
+  # a header from accidentally depending on an uninstalled sibling or on the
+  # build-tree include path.  It is an installed product-surface check, not a
+  # repository-operation artifact.
+  set(public_header_probe_root "${test_root}/public-header-probes")
+  file(MAKE_DIRECTORY "${public_header_probe_root}")
+  file(
+    GLOB_RECURSE installed_public_headers
+    RELATIVE "${install_prefix}/include"
+    "${install_prefix}/include/cxxlens/*.hpp")
+  list(SORT installed_public_headers)
+  if(NOT installed_public_headers)
+    message(FATAL_ERROR "installed public header sweep found no headers")
+  endif()
+  foreach(header IN LISTS installed_public_headers)
+    string(REPLACE "/" "_" probe_name "${header}")
+    set(probe_source "${public_header_probe_root}/${probe_name}.cpp")
+    file(WRITE "${probe_source}"
+         "#include <${header}>\nint main() { return 0; }\n")
+    execute_process(
+      COMMAND "@CMAKE_CXX_COMPILER@" -std=c++23 -fsyntax-only
+              "-I${install_prefix}/include" "${probe_source}"
+      RESULT_VARIABLE header_probe_result
+      OUTPUT_VARIABLE header_probe_output
+      ERROR_VARIABLE header_probe_error)
+    if(NOT header_probe_result EQUAL 0)
+      message(
+        FATAL_ERROR
+          "installed public header failed isolated syntax check: ${header}\nstdout: ${header_probe_output}\nstderr: ${header_probe_error}"
+      )
+    endif()
+  endforeach()
+
   # The old snapshot_builder was physically shipped by the SDK header directory
   # but was never part of the public API catalog.  Its compatibility path also
   # bypassed the normative writer validation, so keep its removal fail-closed at
