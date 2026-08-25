@@ -151,6 +151,61 @@ if(PHASE STREQUAL "prepare")
     endif()
   endforeach()
 
+  # The old snapshot_builder was physically shipped by the SDK header directory
+  # but was never part of the public API catalog.  Its compatibility path also
+  # bypassed the normative writer validation, so keep its removal fail-closed at
+  # the installed-header boundary.
+  set(legacy_surface_probe_root "${test_root}/snapshot-builder-legacy-probe")
+  set(legacy_surface_probe "${legacy_surface_probe_root}/main.cpp")
+  file(MAKE_DIRECTORY "${legacy_surface_probe_root}")
+  file(
+    WRITE "${legacy_surface_probe}"
+    [=[
+#include <cxxlens/sdk/store.hpp>
+
+int main()
+{
+  cxxlens::sdk::snapshot_builder* legacy = nullptr;
+  (void)legacy;
+  return 0;
+}
+]=])
+  file(
+    WRITE "${legacy_surface_probe_root}/CMakeLists.txt"
+    [=[
+cmake_minimum_required(VERSION 3.25)
+project(snapshot_builder_legacy_probe LANGUAGES CXX)
+add_executable(snapshot_builder_legacy_probe main.cpp)
+target_compile_features(snapshot_builder_legacy_probe PRIVATE cxx_std_23)
+]=])
+  set(legacy_surface_probe_build "${legacy_surface_probe_root}/build")
+  execute_process(
+    COMMAND
+      "@CMAKE_COMMAND@" -S "${legacy_surface_probe_root}" -B
+      "${legacy_surface_probe_build}"
+      "-DCMAKE_CXX_COMPILER=@CMAKE_CXX_COMPILER@"
+      "-DCMAKE_CXX_FLAGS=-I${install_prefix}/include"
+    RESULT_VARIABLE legacy_surface_configure_result
+    OUTPUT_VARIABLE legacy_surface_configure_output
+    ERROR_VARIABLE legacy_surface_configure_error)
+  if(NOT legacy_surface_configure_result EQUAL 0)
+    message(
+      FATAL_ERROR
+        "legacy snapshot_builder probe could not configure: ${legacy_surface_configure_error}"
+    )
+  endif()
+  execute_process(
+    COMMAND "@CMAKE_COMMAND@" --build "${legacy_surface_probe_build}"
+    RESULT_VARIABLE legacy_surface_build_result
+    OUTPUT_VARIABLE legacy_surface_build_output
+    ERROR_VARIABLE legacy_surface_build_error)
+  if(legacy_surface_build_result EQUAL 0)
+    message(
+      FATAL_ERROR
+        "removed snapshot_builder unexpectedly reappeared in installed public headers"
+    )
+  endif()
+
   run_installed_tools(original)
 
   return()
