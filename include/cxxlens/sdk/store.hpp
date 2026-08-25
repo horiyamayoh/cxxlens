@@ -4,7 +4,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <map>
 #include <memory>
 #include <optional>
 #include <span>
@@ -261,7 +260,6 @@ namespace cxxlens::sdk
 		explicit snapshot_handle(std::shared_ptr<const data> data);
 		std::shared_ptr<const data> data_;
 		friend class snapshot_store;
-		friend class snapshot_builder;
 		friend class snapshot_writer;
 		friend struct snapshot_store_backend_lifetime_access;
 	};
@@ -394,16 +392,4 @@ namespace cxxlens::sdk
 	/** @brief Open/create the normative SQLite backend at an explicit physical locator. */
 	[[nodiscard]] result<snapshot_store>
 	open_sqlite_snapshot_store(const std::string& database_path, relation_engine engine);
-	/** @brief Compatibility builder retained as a one-snapshot adapter for legacy callers. */
-	class snapshot_builder
-	{
-	  public:
-		explicit snapshot_builder(relation_registry registry);
-		[[nodiscard]] result<void> add(detached_row row);
-		[[nodiscard]] result<snapshot_handle> publish() &&;
-
-	  private:
-		relation_registry registry_;
-		std::map<std::string, std::vector<detached_row>, std::less<>> rows_;
-	};
 } // namespace cxxlens::sdk
