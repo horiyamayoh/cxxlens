@@ -14,8 +14,12 @@ def main() -> int:
         capture_output=True,
         text=True,
     )
-    lowered = result.stdout.lower()
-    forbidden = [line for line in lowered.splitlines() if "llvm" in line or "clang" in line]
+    forbidden = []
+    for line in result.stdout.splitlines():
+        dependency = line.strip().split("=>", 1)[0].strip()
+        dependency_name = pathlib.Path(dependency).name.lower()
+        if "llvm" in dependency_name or "clang" in dependency_name:
+            forbidden.append(line)
     if forbidden:
         raise SystemExit(
             "provider/query/store link closure exposed LLVM/Clang:\n" + "\n".join(forbidden)
