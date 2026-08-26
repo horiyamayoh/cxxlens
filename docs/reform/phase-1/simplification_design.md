@@ -6,6 +6,10 @@ Phase 1 は、現行の semantic contract を弱めずに、重複 authority、�
 
 Authority の順序は [次世代統合設計](../../design/cxxlens_next_generation_integrated_design_ja.md)、relation registry、各 machine contract、public API catalog、security profile、accepted ADR、test/implementation とする。旧設計書や `docs/archive/` は履歴であり、現行 contract を変更しない。
 
+Phase 0 の現行 inventory、surface census、Golden/corpus 仕様、contract preservation は
+[`docs/reform/phase-0/`](../phase-0/) に置く。Phase 1 の分類・削除条件は
+[Authority Retirement Matrix](authority_retirement_matrix.md) と対応させる。
+
 Phase 1 の変更は原則 `CH-0`。公開意味論、identity、protocol、persistence、不可逆 effect の変更が必要になった時点で Phase 1 を止め、別の `CH-3` 設計提案へ切り出す。
 
 ## 保全対象
