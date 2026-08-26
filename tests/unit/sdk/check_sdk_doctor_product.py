@@ -1654,7 +1654,7 @@ def check_direct_authenticated_resolver(executable: str, directory: pathlib.Path
             "-L",
             str(build),
             f"-Wl,-rpath,{build}",
-            "-lcxxlens_provider_sdk",
+            "-lcxxlens_sdk",
             "-lcxxlens_recipes",
             "-lcxxlens_query",
             "-lcxxlens_kernel",

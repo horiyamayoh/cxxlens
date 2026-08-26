@@ -2819,11 +2819,11 @@ namespace
 			}
 			return false;
 		};
-		const std::string portable_package_line{"find_package(cxxlensProviderSDK CONFIG REQUIRED)"};
+		const std::string portable_package_line{"find_package(cxxlens CONFIG REQUIRED)"};
 		const std::string native_package_line{
 			"find_package(cxxlensClang22ProviderSDK CONFIG REQUIRED)"};
 		const std::string portable_target_line{
-			"target_link_libraries(provider PRIVATE cxxlens::provider_sdk)"};
+			"target_link_libraries(provider PRIVATE cxxlens::sdk)"};
 		const std::string native_target_line{
 			"target_link_libraries(provider PRIVATE cxxlens::clang22_provider_sdk)"};
 		std::string bracket_commented_cmake = portable_cmake->content;
@@ -2908,8 +2908,8 @@ namespace
 							 portable_readme,
 							 "company.example.provider",
 							 "company.example.relation",
-							 "cxxlensProviderSDK",
-							 "cxxlens::provider_sdk",
+							 "cxxlens",
+							 "cxxlens::sdk",
 							 "<cxxlens/sdk.hpp>");
 		check_common_content(native_cmake,
 							 native_manifest,

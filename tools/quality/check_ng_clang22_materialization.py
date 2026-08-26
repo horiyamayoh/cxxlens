@@ -117,7 +117,7 @@ SHARED_OCCURRENCE_RUNTIME_FILES = [
     ("kernel", "lib/libcxxlens_kernel.so.1.0.0"),
     ("query", "lib/libcxxlens_query.so.1.0.0"),
     ("recipes", "lib/libcxxlens_recipes.so.1.0.0"),
-    ("provider-sdk", "lib/libcxxlens_provider_sdk.so.1.0.0"),
+    ("provider-sdk", "lib/libcxxlens_sdk.so.1.0.0"),
     ("clang22-provider-sdk", "lib/libcxxlens_clang22_provider_sdk.so.1.0.0"),
 ]
 FORBIDDEN_REPORT_LIFECYCLE_TEXT = (

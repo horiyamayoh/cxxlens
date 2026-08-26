@@ -13,9 +13,9 @@ LLVM/Clang の直接利用に近い負担を残す。
 
 ## Decision
 
-公開 author SDK を二つの installable package に分離する。
+公開 author SDK は `cxxlens` installable package の authoritative target とし、compiler-native surface だけを別 package に分離する。
 
-- `cxxlensProviderSDK` / `cxxlens::provider_sdk` は標準ライブラリだけに依存し、relation descriptor、generated tag、
+- `cxxlens` / `cxxlens::sdk` は標準ライブラリだけに依存し、relation descriptor、generated tag、
   dynamic relation、detached row/snapshot、Logical Query IR、portable provider protocol helper、conformance harness、
   recipe lowering を提供する。通常 header と link interface に LLVM/Clang を露出しない。
 - `cxxlensClang22ProviderSDK` / `cxxlens::clang22_provider_sdk` は明示的な native opt-in surface とし、

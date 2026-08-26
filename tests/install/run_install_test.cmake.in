@@ -11,8 +11,8 @@ set(cxxlens_clang22_adapter "@CXXLENS_CLANG_ADAPTER@")
 set(cxxlens_clang22_unavailable_reason "@CXXLENS_CLANG22_UNAVAILABLE_REASON@")
 set(install_executable_suffix "@CMAKE_EXECUTABLE_SUFFIX@")
 set(install_executable_names
-    cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22
-    cxxlens-clang22-materialize)
+    cxxlens cxxlens-provider-scaffold cxxlens-sdk-doctor
+    cxxlens-clang-worker-22 cxxlens-clang22-materialize)
 # These phases are the installed native-provider test boundary.  An AUTO/OFF
 # structured-unavailable build remains useful for the portable SDK and its
 # unavailable-mode consumers, but it must not enter a native positive or
@@ -55,6 +55,14 @@ endfunction()
 
 function(run_installed_tools label)
   run_clean(
+    0
+    "${install_prefix}/bin/cxxlens${install_executable_suffix}"
+    doctor
+    relation-presence
+    build.project.v1
+    cc.call_site.v1
+    source.span.v1)
+  run_clean(
     0 "${install_prefix}/bin/cxxlens-sdk-doctor${install_executable_suffix}"
     relation-presence build.project.v1 cc.call_site.v1 source.span.v1)
   # Exercise the product-only capability resolver through the installed
@@ -73,6 +81,14 @@ function(run_installed_tools label)
     1
     "${install_prefix}/bin/cxxlens-sdk-doctor${install_executable_suffix}"
     missing
+    --project
+    "${doctor_project}"
+    --use-case
+    cxxlens.clang22.materialize-and-query.v1)
+  run_clean(
+    1
+    "${install_prefix}/bin/cxxlens${install_executable_suffix}"
+    run
     --project
     "${doctor_project}"
     --use-case
@@ -105,10 +121,16 @@ if(PHASE STREQUAL "prepare")
     COMMAND
       "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target
       cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22
-      cxxlens_clang22_provider_sdk COMMAND_ERROR_IS_FATAL ANY)
+      cxxlens_cli cxxlens_sdk cxxlens_clang22_provider_sdk
+      COMMAND_ERROR_IS_FATAL ANY)
   execute_process(
     COMMAND "@CMAKE_COMMAND@" --install "@CMAKE_BINARY_DIR@" --prefix
             "${install_prefix}" COMMAND_ERROR_IS_FATAL ANY)
+  if(EXISTS
+     "${install_prefix}/${install_libdir}/cmake/cxxlensProviderSDK/cxxlensProviderSDKConfig.cmake"
+  )
+    message(FATAL_ERROR "retired cxxlensProviderSDK package was installed")
+  endif()
 
   # Keep canonical artifact paths literal for the installed-surface census. Only
   # the filesystem path used by the existence check receives the platform
@@ -129,7 +151,6 @@ if(PHASE STREQUAL "prepare")
       "${install_prefix}/include/cxxlens/relations/core_differential_disagreement.hpp"
       "${install_prefix}/include/cxxlens/relations/source_origin.hpp"
       "${install_prefix}/${install_libdir}/cmake/cxxlens/cxxlensConfig.cmake"
-      "${install_prefix}/${install_libdir}/cmake/cxxlensProviderSDK/cxxlensProviderSDKConfig.cmake"
       "${install_prefix}/${install_libdir}/cmake/cxxlensClang22ProviderSDK/cxxlensClang22ProviderSDKConfig.cmake"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_public_api_catalog.yaml"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.yaml"
@@ -140,6 +161,7 @@ if(PHASE STREQUAL "prepare")
       "${install_prefix}/share/doc/cxxlens/LICENSE"
       "${install_prefix}/share/doc/cxxlens/NOTICE"
       "${install_prefix}/bin/cxxlens-provider-scaffold"
+      "${install_prefix}/bin/cxxlens"
       "${install_prefix}/bin/cxxlens-sdk-doctor"
       "${install_prefix}/bin/cxxlens-clang-worker-22"
       "${install_prefix}/bin/cxxlens-clang22-materialize")
@@ -265,7 +287,7 @@ if(PHASE STREQUAL "shared-runtime-layout"
    AND UNIX
    AND NOT APPLE)
   find_program(CXXLENS_READELF NAMES readelf llvm-readelf REQUIRED)
-  foreach(tool IN ITEMS cxxlens-provider-scaffold cxxlens-sdk-doctor
+  foreach(tool IN ITEMS cxxlens cxxlens-provider-scaffold cxxlens-sdk-doctor
                         cxxlens-clang-worker-22 cxxlens-clang22-materialize)
     execute_process(
       COMMAND "${CXXLENS_READELF}" -d
@@ -331,7 +353,7 @@ if(PHASE STREQUAL "shared-runtime-layout" AND WIN32)
   # advertise Windows/MSVC support.
   foreach(library IN
           ITEMS cxxlens_base cxxlens_kernel cxxlens_query cxxlens_recipes
-                cxxlens_provider_sdk cxxlens_clang22_provider_sdk)
+                cxxlens_sdk cxxlens_clang22_provider_sdk)
     file(
       GLOB
       runtime_artifacts

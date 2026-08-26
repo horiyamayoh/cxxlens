@@ -65,7 +65,7 @@ namespace cxxlens::detail::clang22::materialization
 			"libcxxlens_kernel.so",
 			"libcxxlens_query.so",
 			"libcxxlens_recipes.so",
-			"libcxxlens_provider_sdk.so",
+			"libcxxlens_sdk.so",
 			"libcxxlens_clang22_provider_sdk.so",
 		};
 

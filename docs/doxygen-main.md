@@ -9,7 +9,7 @@ partiality とともに immutable snapshot へ公開する C++23 library です�
 
 ## Author SDK
 
-通常の author SDK は `<cxxlens/sdk.hpp>` と CMake target `cxxlens::provider_sdk` から利用でき、LLVM/Clang の
+通常の author SDK は `<cxxlens/sdk.hpp>` と CMake target `cxxlens::sdk` から利用でき、LLVM/Clang の
 header と link dependency を持ちません。generated typed query、runtime dynamic query、portable provider、
 conformance harness、recipe lowering は同じ `cxxlens::sdk::relation_descriptor` と
 `cxxlens::sdk::query::logical_query_ir` を使用します。

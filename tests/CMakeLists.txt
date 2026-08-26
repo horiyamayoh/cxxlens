@@ -5,6 +5,44 @@ function(cxxlens_add_test_executable target source)
   target_compile_features(${target} PRIVATE cxx_std_23)
   cxxlens_set_project_warnings(${target})
   cxxlens_enable_sanitizers(${target})
+  if(NOT CXXLENS_CLANG22_AVAILABLE)
+    # Native-only test helpers are intentionally unreachable in a structured
+    # unavailable build; do not turn those branch-local helpers into errors.
+    target_compile_options(${target} PRIVATE -Wno-unused-function)
+  endif()
+endfunction()
+
+# These two deterministic fault-injection tests provide their own process-wide
+# allocation hooks.  ThreadSanitizer also supplies strong global new/delete
+# definitions, so instrumenting either target would fail at link time before the
+# test can run.  Keep the allocation-fault contract exercised while explicitly
+# leaving only these harnesses outside sanitizer instrumentation.
+function(cxxlens_add_unsanitized_test_executable target source)
+  add_executable(${target} ${source})
+  target_compile_features(${target} PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(${target})
+  if(NOT CXXLENS_CLANG22_AVAILABLE)
+    target_compile_options(${target} PRIVATE -Wno-unused-function)
+  endif()
+  if(CXXLENS_ENABLE_TSAN)
+    # The linked TSan-instrumented production library supplies its runtime
+    # allocator.  Allow this harness's deliberate fault-injection new/delete
+    # definitions to remain the executable-local authority.
+    target_link_options(${target} PRIVATE "-Wl,--allow-multiple-definition")
+  endif()
+endfunction()
+
+# Shared SDK consumers must embed the provider implementation objects; static
+# consumers can use the same closure directly. Centralizing this wiring keeps
+# provider tests from compiling individual runtime sources again.
+function(cxxlens_add_provider_runtime_closure target)
+  target_sources(${target}
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+  if(CXXLENS_BUILD_SHARED)
+    target_sources(
+      ${target} PRIVATE $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
+    target_link_libraries(${target} PRIVATE cxxlens_protocol_v2)
+  endif()
 endfunction()
 
 # Provider transcript fault harnesses are test support, not part of the
@@ -57,12 +95,7 @@ cxxlens_add_test_executable(cxxlens-unit-sdk unit/sdk/sdk_test.cpp)
 target_sources(cxxlens-unit-sdk
                PRIVATE $<TARGET_OBJECTS:cxxlens-test-sdk-support>)
 if(CXXLENS_BUILD_SHARED)
-  target_sources(cxxlens-unit-sdk
-                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
-  target_sources(
-    cxxlens-unit-sdk
-    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
-  target_link_libraries(cxxlens-unit-sdk PRIVATE cxxlens_protocol_v2)
+  cxxlens_add_provider_runtime_closure(cxxlens-unit-sdk)
 endif()
 target_link_libraries(cxxlens-unit-sdk PRIVATE cxxlens::clang22_provider_sdk)
 set(cxxlens_sdk_cases
@@ -221,22 +254,85 @@ int main() {
   cmake_pop_check_state()
 endif()
 
+add_executable(cxxlens-unit-sdk-sqlite-migration-fault-matrix
+               unit/sdk/sqlite_store_migration_fault_matrix_test.cpp)
+target_compile_features(cxxlens-unit-sdk-sqlite-migration-fault-matrix
+                        PRIVATE cxx_std_23)
+target_compile_definitions(cxxlens-unit-sdk-sqlite-migration-fault-matrix
+                           PRIVATE CXXLENS_STORE_FAULT_TEST_SUPPORT=1)
+target_link_libraries(
+  cxxlens-unit-sdk-sqlite-migration-fault-matrix
+  PRIVATE cxxlens-sqlite-store-v3-scenario-support cxxlens::kernel
+          "${CMAKE_DL_LIBS}")
+target_include_directories(cxxlens-unit-sdk-sqlite-migration-fault-matrix
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_sources(
+  cxxlens-unit-sdk-sqlite-migration-fault-matrix
+  PRIVATE $<TARGET_OBJECTS:cxxlens-test-store-kernel>
+          $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
+cxxlens_set_project_warnings(cxxlens-unit-sdk-sqlite-migration-fault-matrix)
+cxxlens_enable_sanitizers(cxxlens-unit-sdk-sqlite-migration-fault-matrix)
+add_test(NAME unit.sdk-sqlite-migration-fault-matrix
+         COMMAND cxxlens-unit-sdk-sqlite-migration-fault-matrix)
+set_tests_properties(
+  unit.sdk-sqlite-migration-fault-matrix
+  PROPERTIES LABELS
+             "unit;sdk;store;sqlite;migration;fault;recovery;determinism"
+             RUN_SERIAL TRUE TIMEOUT 45)
+
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_GLIBC_DLMOPEN_DLVSYM)
   # These helpers interpose the process loader for one dedicated subprocess
   # each. They are test-only DSOs: keep their symbols hidden by default, do not
   # instrument them ahead of the sanitizer runtime, and never install/export
   # them with a product target.
-  add_library(cxxlens-test-sqlite-migration-external-interposer SHARED
-              support/sqlite_migration_external_interposer.cpp)
-  target_compile_features(cxxlens-test-sqlite-migration-external-interposer
-                          PRIVATE cxx_std_23)
-  target_link_libraries(cxxlens-test-sqlite-migration-external-interposer
-                        PRIVATE "${CMAKE_DL_LIBS}")
-  set_target_properties(
-    cxxlens-test-sqlite-migration-external-interposer
-    PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
-  cxxlens_set_project_warnings(
-    cxxlens-test-sqlite-migration-external-interposer)
+  if(NOT CXXLENS_ENABLE_ASAN
+     AND NOT CXXLENS_ENABLE_UBSAN
+     AND NOT CXXLENS_ENABLE_TSAN)
+    add_library(cxxlens-test-sqlite-migration-external-interposer SHARED
+                support/sqlite_migration_external_interposer.cpp)
+    target_compile_features(cxxlens-test-sqlite-migration-external-interposer
+                            PRIVATE cxx_std_23)
+    target_link_libraries(cxxlens-test-sqlite-migration-external-interposer
+                          PRIVATE "${CMAKE_DL_LIBS}")
+    set_target_properties(
+      cxxlens-test-sqlite-migration-external-interposer
+      PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
+    cxxlens_set_project_warnings(
+      cxxlens-test-sqlite-migration-external-interposer)
+
+    add_executable(cxxlens-unit-sdk-sqlite-migration-outcomes
+                   unit/sdk/sqlite_store_migration_external_interposer_test.cpp)
+    target_compile_features(cxxlens-unit-sdk-sqlite-migration-outcomes
+                            PRIVATE cxx_std_23)
+    target_link_libraries(
+      cxxlens-unit-sdk-sqlite-migration-outcomes
+      PRIVATE cxxlens-sqlite-store-v3-scenario-support cxxlens::kernel
+              "${CMAKE_DL_LIBS}" Threads::Threads)
+    target_sources(
+      cxxlens-unit-sdk-sqlite-migration-outcomes
+      PRIVATE
+        $<TARGET_OBJECTS:cxxlens-test-store-kernel>
+        $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
+    cxxlens_set_project_warnings(cxxlens-unit-sdk-sqlite-migration-outcomes)
+    add_dependencies(cxxlens-unit-sdk-sqlite-migration-outcomes
+                     cxxlens-test-sqlite-migration-external-interposer)
+    add_test(
+      NAME unit.sdk-sqlite-migration-outcomes
+      COMMAND cxxlens-unit-sdk-sqlite-migration-outcomes
+              "$<TARGET_FILE:cxxlens-test-sqlite-migration-external-interposer>"
+    )
+    set_tests_properties(
+      unit.sdk-sqlite-migration-outcomes
+      PROPERTIES
+        ENVIRONMENT_MODIFICATION
+        "LD_PRELOAD=unset:;CXXLENS_TEST_SQLITE_CRASH_PAUSE=unset:;CXXLENS_TEST_SQLITE_CRASH_READY_FD=unset:"
+        LABELS
+        "unit;sdk;store;sqlite;migration;effects;fault;recovery"
+        RUN_SERIAL
+        TRUE
+        TIMEOUT
+        60)
+  endif()
 
   add_library(cxxlens-test-store-sqlite-crash-interposer SHARED
               support/sqlite_store_crash_interposer.cpp)
@@ -248,38 +344,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_GLIBC_DLMOPEN_DLVSYM)
     cxxlens-test-store-sqlite-crash-interposer
     PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
   cxxlens_set_project_warnings(cxxlens-test-store-sqlite-crash-interposer)
-
-  add_executable(cxxlens-unit-sdk-sqlite-migration-outcomes
-                 unit/sdk/sqlite_store_migration_external_interposer_test.cpp)
-  target_compile_features(cxxlens-unit-sdk-sqlite-migration-outcomes
-                          PRIVATE cxx_std_23)
-  target_link_libraries(
-    cxxlens-unit-sdk-sqlite-migration-outcomes
-    PRIVATE cxxlens-sqlite-store-v3-scenario-support cxxlens::kernel
-            "${CMAKE_DL_LIBS}" Threads::Threads)
-  target_sources(
-    cxxlens-unit-sdk-sqlite-migration-outcomes
-    PRIVATE $<TARGET_OBJECTS:cxxlens-test-store-kernel>
-            $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
-  cxxlens_set_project_warnings(cxxlens-unit-sdk-sqlite-migration-outcomes)
-  cxxlens_enable_sanitizers(cxxlens-unit-sdk-sqlite-migration-outcomes)
-  add_dependencies(cxxlens-unit-sdk-sqlite-migration-outcomes
-                   cxxlens-test-sqlite-migration-external-interposer)
-  add_test(
-    NAME unit.sdk-sqlite-migration-outcomes
-    COMMAND cxxlens-unit-sdk-sqlite-migration-outcomes
-            "$<TARGET_FILE:cxxlens-test-sqlite-migration-external-interposer>")
-  set_tests_properties(
-    unit.sdk-sqlite-migration-outcomes
-    PROPERTIES
-      ENVIRONMENT_MODIFICATION
-      "LD_PRELOAD=unset:;CXXLENS_TEST_SQLITE_CRASH_PAUSE=unset:;CXXLENS_TEST_SQLITE_CRASH_READY_FD=unset:"
-      LABELS
-      "unit;sdk;store;sqlite;migration;effects;fault;recovery"
-      RUN_SERIAL
-      TRUE
-      TIMEOUT
-      60)
 
   add_executable(cxxlens-unit-sdk-store-sqlite-crash-restart
                  unit/sdk/store_sqlite_crash_recovery_test.cpp)
@@ -706,7 +770,7 @@ set_tests_properties(
                                     "unit;sdk;query;store;budget;cancellation")
 
 cxxlens_add_test_executable(cxxlens-g5-runtime unit/sdk/g5_runtime_test.cpp)
-target_link_libraries(cxxlens-g5-runtime PRIVATE cxxlens::provider_sdk)
+target_link_libraries(cxxlens-g5-runtime PRIVATE cxxlens::sdk)
 add_test(NAME acceptance.g5-runtime COMMAND cxxlens-g5-runtime)
 set_tests_properties(
   acceptance.g5-runtime
@@ -715,31 +779,16 @@ set_tests_properties(
 
 cxxlens_add_test_executable(cxxlens-provider-process-fixture
                             fixtures/provider_process_fixture.cpp)
-target_link_libraries(cxxlens-provider-process-fixture
-                      PRIVATE cxxlens::provider_sdk)
+target_link_libraries(cxxlens-provider-process-fixture PRIVATE cxxlens::sdk)
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-runtime
                             unit/sdk/provider_runtime_test.cpp)
 target_sources(cxxlens-unit-sdk-provider-runtime
                PRIVATE $<TARGET_OBJECTS:cxxlens-test-sdk-support>)
-if(NOT CXXLENS_BUILD_SHARED)
-  target_sources(
-    cxxlens-unit-sdk-provider-runtime
-    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
-endif()
-target_link_libraries(cxxlens-unit-sdk-provider-runtime
-                      PRIVATE cxxlens::provider_sdk)
+cxxlens_add_provider_runtime_closure(cxxlens-unit-sdk-provider-runtime)
+target_link_libraries(cxxlens-unit-sdk-provider-runtime PRIVATE cxxlens::sdk)
 target_include_directories(cxxlens-unit-sdk-provider-runtime
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
-if(CXXLENS_BUILD_SHARED)
-  target_sources(
-    cxxlens-unit-sdk-provider-runtime
-    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
-  target_link_libraries(cxxlens-unit-sdk-provider-runtime
-                        PRIVATE cxxlens_protocol_v2)
-endif()
 add_test(NAME unit.sdk-provider-runtime
          COMMAND cxxlens-unit-sdk-provider-runtime
                  "$<TARGET_FILE:cxxlens-provider-process-fixture>")
@@ -785,16 +834,12 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   cxxlens_add_test_executable(cxxlens-unit-sdk-provider-process-channel
                               unit/sdk/provider_process_channel_test.cpp)
   target_link_libraries(cxxlens-unit-sdk-provider-process-channel
-                        PRIVATE cxxlens::provider_sdk)
+                        PRIVATE cxxlens::sdk)
   target_include_directories(cxxlens-unit-sdk-provider-process-channel
                              PRIVATE "${PROJECT_SOURCE_DIR}/src")
   if(CXXLENS_BUILD_SHARED)
-    target_sources(
-      cxxlens-unit-sdk-provider-process-channel
-      PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
-              "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
-    target_link_libraries(cxxlens-unit-sdk-provider-process-channel
-                          PRIVATE cxxlens_protocol_v2)
+    cxxlens_add_provider_runtime_closure(
+      cxxlens-unit-sdk-provider-process-channel)
   endif()
   add_test(NAME unit.sdk-provider-process-channel
            COMMAND cxxlens-unit-sdk-provider-process-channel)
@@ -802,6 +847,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     unit.sdk-provider-process-channel
     PROPERTIES LABELS
                "unit;sdk;provider;process;source-closure;security;cancellation")
+  set_tests_properties(unit.sdk-provider-process-channel
+                       PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 set_tests_properties(
   unit.sdk-provider-runtime
@@ -876,11 +923,9 @@ set_tests_properties(
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-validation
                             unit/sdk/provider_ng1_hardening_test.cpp)
-target_sources(
-  cxxlens-unit-sdk-provider-ng1-validation
-  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+cxxlens_add_provider_runtime_closure(cxxlens-unit-sdk-provider-ng1-validation)
 target_link_libraries(cxxlens-unit-sdk-provider-ng1-validation
-                      PRIVATE cxxlens::provider_sdk)
+                      PRIVATE cxxlens::sdk)
 target_include_directories(cxxlens-unit-sdk-provider-ng1-validation
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME unit.sdk-provider-ng1-validation
@@ -891,12 +936,9 @@ set_tests_properties(
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-spill-port
                             unit/sdk/provider_ng1_spill_port_test.cpp)
-target_sources(
-  cxxlens-unit-sdk-provider-ng1-spill-port
-  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp"
-          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+cxxlens_add_provider_runtime_closure(cxxlens-unit-sdk-provider-ng1-spill-port)
 target_link_libraries(cxxlens-unit-sdk-provider-ng1-spill-port
-                      PRIVATE cxxlens::provider_sdk)
+                      PRIVATE cxxlens::sdk)
 target_include_directories(cxxlens-unit-sdk-provider-ng1-spill-port
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME unit.sdk-provider-ng1-spill-port
@@ -907,12 +949,9 @@ set_tests_properties(
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-transport
                             unit/sdk/provider_ng1_transport_test.cpp)
-target_sources(
-  cxxlens-unit-sdk-provider-ng1-transport
-  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
-          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+cxxlens_add_provider_runtime_closure(cxxlens-unit-sdk-provider-ng1-transport)
 target_link_libraries(cxxlens-unit-sdk-provider-ng1-transport
-                      PRIVATE cxxlens::provider_sdk)
+                      PRIVATE cxxlens::sdk)
 target_include_directories(cxxlens-unit-sdk-provider-ng1-transport
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME unit.sdk-provider-ng1-transport
@@ -924,12 +963,10 @@ set_tests_properties(
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-recovery-adapter
                             unit/sdk/provider_ng1_recovery_adapter_test.cpp)
-target_sources(
-  cxxlens-unit-sdk-provider-ng1-recovery-adapter
-  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_recovery.cpp"
-          "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
+cxxlens_add_provider_runtime_closure(
+  cxxlens-unit-sdk-provider-ng1-recovery-adapter)
 target_link_libraries(cxxlens-unit-sdk-provider-ng1-recovery-adapter
-                      PRIVATE cxxlens::provider_sdk)
+                      PRIVATE cxxlens::sdk)
 target_include_directories(cxxlens-unit-sdk-provider-ng1-recovery-adapter
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME unit.sdk-provider-ng1-recovery-adapter
@@ -940,27 +977,11 @@ set_tests_properties(
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-session
                             unit/sdk/provider_ng1_session_test.cpp)
-if(NOT CXXLENS_BUILD_SHARED)
-  target_sources(
-    cxxlens-unit-sdk-provider-ng1-session
-    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_session.cpp"
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_recovery.cpp"
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp"
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
-endif()
+cxxlens_add_provider_runtime_closure(cxxlens-unit-sdk-provider-ng1-session)
 target_link_libraries(cxxlens-unit-sdk-provider-ng1-session
-                      PRIVATE cxxlens::provider_sdk)
+                      PRIVATE cxxlens::sdk)
 target_include_directories(cxxlens-unit-sdk-provider-ng1-session
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
-if(CXXLENS_BUILD_SHARED)
-  target_sources(
-    cxxlens-unit-sdk-provider-ng1-session
-    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
-  target_link_libraries(cxxlens-unit-sdk-provider-ng1-session
-                        PRIVATE cxxlens_protocol_v2)
-endif()
 add_test(NAME unit.sdk-provider-ng1-session
          COMMAND cxxlens-unit-sdk-provider-ng1-session)
 set_tests_properties(
@@ -969,28 +990,11 @@ set_tests_properties(
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-ng1-live-driver
                             unit/sdk/provider_ng1_live_driver_test.cpp)
-if(NOT CXXLENS_BUILD_SHARED)
-  target_sources(
-    cxxlens-unit-sdk-provider-ng1-live-driver
-    PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_live_driver.cpp"
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_session.cpp"
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_recovery.cpp"
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_spill_port_internal.cpp"
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_transport.cpp"
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_ng1_validation.cpp")
-endif()
+cxxlens_add_provider_runtime_closure(cxxlens-unit-sdk-provider-ng1-live-driver)
 target_link_libraries(cxxlens-unit-sdk-provider-ng1-live-driver
-                      PRIVATE cxxlens::provider_sdk)
+                      PRIVATE cxxlens::sdk)
 target_include_directories(cxxlens-unit-sdk-provider-ng1-live-driver
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
-if(CXXLENS_BUILD_SHARED)
-  target_sources(
-    cxxlens-unit-sdk-provider-ng1-live-driver
-    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
-  target_link_libraries(cxxlens-unit-sdk-provider-ng1-live-driver
-                        PRIVATE cxxlens_protocol_v2)
-endif()
 add_test(NAME unit.sdk-provider-ng1-live-driver
          COMMAND cxxlens-unit-sdk-provider-ng1-live-driver)
 set_tests_properties(
@@ -1000,7 +1004,7 @@ set_tests_properties(
 cxxlens_add_test_executable(cxxlens-clang22-provider-worker-protocol
                             adapter/clang22/provider_worker_protocol_test.cpp)
 target_link_libraries(cxxlens-clang22-provider-worker-protocol
-                      PRIVATE cxxlens::provider_sdk)
+                      PRIVATE cxxlens::sdk)
 add_dependencies(cxxlens-clang22-provider-worker-protocol
                  cxxlens-clang-worker-22)
 add_test(NAME adapter.clang22-provider-worker-protocol
@@ -1269,27 +1273,27 @@ set_tests_properties(
     "adapter;provider;clang22;materialization;store;v6;typed;ingress;bounded;security"
 )
 
-cxxlens_add_test_executable(cxxlens-protocol-v2
-                            protocol_v2/protocol_v2_direct_test.cpp)
+cxxlens_add_unsanitized_test_executable(cxxlens-protocol-v2
+                                        protocol_v2/protocol_v2_direct_test.cpp)
 target_link_libraries(cxxlens-protocol-v2 PRIVATE cxxlens_protocol_v2)
+if(CXXLENS_ENABLE_TSAN)
+  target_compile_definitions(cxxlens-protocol-v2
+                             PRIVATE CXXLENS_PROTOCOL_V2_TSAN_UNSUPPORTED=1)
+endif()
 add_test(NAME sdk.protocol-v2 COMMAND cxxlens-protocol-v2)
 set_tests_properties(sdk.protocol-v2 PROPERTIES LABELS
                                                 "sdk;protocol;v2;security")
+if(CXXLENS_ENABLE_TSAN)
+  set_tests_properties(sdk.protocol-v2 PROPERTIES SKIP_RETURN_CODE 77)
+endif()
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-protocol-v2-adapter
                             unit/sdk/provider_protocol_v2_adapter_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-provider-protocol-v2-adapter
-                      PRIVATE cxxlens::provider_sdk)
+                      PRIVATE cxxlens::sdk)
 if(CXXLENS_BUILD_SHARED)
-  target_sources(
-    cxxlens-unit-sdk-provider-protocol-v2-adapter
-    PRIVATE
-      $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
-      "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp"
-      "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_heartbeat_adapter.cpp"
-  )
-  target_link_libraries(cxxlens-unit-sdk-provider-protocol-v2-adapter
-                        PRIVATE cxxlens_protocol_v2)
+  cxxlens_add_provider_runtime_closure(
+    cxxlens-unit-sdk-provider-protocol-v2-adapter)
 endif()
 add_test(NAME unit.sdk-provider-protocol-v2-adapter
          COMMAND cxxlens-unit-sdk-provider-protocol-v2-adapter)
@@ -1574,7 +1578,7 @@ set_tests_properties(
   PROPERTIES LABELS
              "adapter;provider;clang22;source-closure;task;v4;worker;security")
 
-cxxlens_add_test_executable(
+cxxlens_add_unsanitized_test_executable(
   cxxlens-clang22-provider-worker-v4-ast-observer
   adapter/clang22/provider_worker_v4_ast_observer_test.cpp)
 target_link_libraries(cxxlens-clang22-provider-worker-v4-ast-observer
@@ -1684,7 +1688,7 @@ cxxlens_add_test_executable(cxxlens-clang22-provider-worker-channel
                             adapter/clang22/provider_worker_channel_test.cpp)
 target_link_libraries(
   cxxlens-clang22-provider-worker-channel
-  PRIVATE cxxlens_clang22_materialization_codecs cxxlens::provider_sdk)
+  PRIVATE cxxlens_clang22_materialization_codecs cxxlens::sdk)
 if(CXXLENS_BUILD_SHARED)
   # The channel launch helper is source-private and intentionally hidden from
   # the installed provider SDK. Embed its runtime object closure for this
@@ -1692,7 +1696,7 @@ if(CXXLENS_BUILD_SHARED)
   target_sources(
     cxxlens-clang22-provider-worker-channel
     PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
+            $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
   target_link_libraries(cxxlens-clang22-provider-worker-channel
                         PRIVATE cxxlens_protocol_v2)
 endif()
@@ -1798,12 +1802,12 @@ cxxlens_add_test_executable(cxxlens-r2-vertical-slice
                             integration/r2_vertical_slice_test.cpp)
 target_sources(cxxlens-r2-vertical-slice
                PRIVATE $<TARGET_OBJECTS:cxxlens-test-sdk-support>)
-target_link_libraries(cxxlens-r2-vertical-slice PRIVATE cxxlens::provider_sdk)
+target_link_libraries(cxxlens-r2-vertical-slice PRIVATE cxxlens::sdk)
 if(CXXLENS_BUILD_SHARED)
   target_sources(
     cxxlens-r2-vertical-slice
     PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
+            $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
   target_link_libraries(cxxlens-r2-vertical-slice PRIVATE cxxlens_protocol_v2)
 endif()
 add_test(NAME integration.r2-vertical-slice COMMAND cxxlens-r2-vertical-slice)
@@ -1832,7 +1836,7 @@ set_tests_properties(public-api.cxxlens-header
 
 cxxlens_add_test_executable(cxxlens-public-header-sdk
                             public_headers/sdk_header_test.cpp)
-target_link_libraries(cxxlens-public-header-sdk PRIVATE cxxlens::provider_sdk)
+target_link_libraries(cxxlens-public-header-sdk PRIVATE cxxlens::sdk)
 add_test(NAME public-api.sdk-header COMMAND cxxlens-public-header-sdk)
 set_tests_properties(public-api.sdk-header
                      PROPERTIES LABELS "public-api;sdk;llvm-free")
@@ -1871,7 +1875,7 @@ foreach(
   set(target_name "cxxlens-sdk-example-${example}")
   cxxlens_add_test_executable(
     ${target_name} "${PROJECT_SOURCE_DIR}/examples/sdk/${example}.cpp")
-  target_link_libraries(${target_name} PRIVATE cxxlens::provider_sdk)
+  target_link_libraries(${target_name} PRIVATE cxxlens::sdk)
   add_test(NAME "sdk.example-${example}" COMMAND ${target_name})
   set_tests_properties("sdk.example-${example}"
                        PROPERTIES LABELS "sdk;example;acceptance")
@@ -1892,7 +1896,7 @@ foreach(example IN ITEMS dynamic_literal_type_mismatch unordered_limit
   set(target_name "cxxlens-sdk-negative-${example}")
   cxxlens_add_test_executable(
     ${target_name} "${PROJECT_SOURCE_DIR}/examples/sdk/negative/${example}.cpp")
-  target_link_libraries(${target_name} PRIVATE cxxlens::provider_sdk)
+  target_link_libraries(${target_name} PRIVATE cxxlens::sdk)
   add_test(NAME "sdk.negative-${example}" COMMAND ${target_name})
   set_tests_properties("sdk.negative-${example}"
                        PROPERTIES LABELS "sdk;negative;acceptance")
@@ -1966,6 +1970,29 @@ add_test(
     "${PROJECT_SOURCE_DIR}/tests/unit/sdk/check_sdk_doctor_product.py"
     "$<TARGET_FILE:cxxlens-sdk-doctor>")
 set_tests_properties(sdk.doctor-product PROPERTIES LABELS "sdk;doctor;product")
+
+add_test(NAME sdk.cli-usage COMMAND "$<TARGET_FILE:cxxlens_cli>")
+set_tests_properties(sdk.cli-usage PROPERTIES WILL_FAIL TRUE LABELS
+                                              "sdk;cli;validation")
+
+# The production authority keeps trust-anchor storage and rotation outside the
+# repository.  When the host supplies OpenSSL 3, exercise the source-private
+# Ed25519 verifier port with generated keys and malformed-material cases.  The
+# test is intentionally gated at configure time so unsupported installations
+# remain structured-unavailable rather than silently accepting a weaker crypto
+# path.
+find_package(OpenSSL 3.0 QUIET COMPONENTS Crypto)
+if(OpenSSL_FOUND)
+  add_test(
+    NAME security.sdk-openssl-ed25519-verifier
+    COMMAND
+      "${Python3_EXECUTABLE}"
+      "${PROJECT_SOURCE_DIR}/tests/unit/sdk/check_openssl_ed25519_signature_verifier.py"
+  )
+  set_tests_properties(
+    security.sdk-openssl-ed25519-verifier
+    PROPERTIES LABELS "security;sdk;provider;trust;ed25519;openssl")
+endif()
 
 configure_file(install/run_install_test.cmake.in
                "${CMAKE_CURRENT_BINARY_DIR}/run_install_test.cmake" @ONLY)
@@ -2134,10 +2161,15 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
                    cxxlens-clang22-installed-materializer-source-closure)
   add_dependencies(cxxlens-ng-test-binaries
                    cxxlens-unit-sdk-sqlite-202-crash-recovery)
+  add_dependencies(cxxlens-ng-test-binaries
+                   cxxlens-unit-sdk-sqlite-migration-fault-matrix)
   if(CXXLENS_TEST_HAS_GLIBC_DLMOPEN_DLVSYM)
-    add_dependencies(
-      cxxlens-ng-test-binaries cxxlens-unit-sdk-sqlite-migration-outcomes
-      cxxlens-unit-sdk-store-sqlite-crash-restart)
+    add_dependencies(cxxlens-ng-test-binaries
+                     cxxlens-unit-sdk-store-sqlite-crash-restart)
+    if(TARGET cxxlens-unit-sdk-sqlite-migration-outcomes)
+      add_dependencies(cxxlens-ng-test-binaries
+                       cxxlens-unit-sdk-sqlite-migration-outcomes)
+    endif()
     if(CXXLENS_TEST_HAS_OFD_LOCKS)
       add_dependencies(cxxlens-ng-test-binaries
                        cxxlens-unit-sdk-sqlite-source-availability)
@@ -2152,3 +2184,24 @@ if(CXXLENS_ENABLE_TSAN)
   add_dependencies(cxxlens-ng-test-binaries cxxlens-tsan-test-canary
                    cxxlens-tsan-provider-canary)
 endif()
+
+# Every registered test must have a bounded wall-clock budget.  A missing
+# timeout turns a deadlocked provider, SQLite interposer, or child-process
+# handshake into an indefinitely hanging main workflow.  Keep deliberately
+# longer budgets already assigned above; this is only the default for tests that
+# did not declare a contract-specific bound.
+get_property(
+  _cxxlens_registered_tests
+  DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+  PROPERTY TESTS)
+foreach(_cxxlens_test IN LISTS _cxxlens_registered_tests)
+  get_test_property(_cxxlens_test_timeout "${_cxxlens_test}" TIMEOUT)
+  if("${_cxxlens_test_timeout}" STREQUAL ""
+     OR "${_cxxlens_test_timeout}" STREQUAL "_cxxlens_test_timeout-NOTFOUND"
+     OR "${_cxxlens_test_timeout}" STREQUAL "NOTFOUND")
+    set_tests_properties("${_cxxlens_test}" PROPERTIES TIMEOUT 600)
+  endif()
+endforeach()
+unset(_cxxlens_registered_tests)
+unset(_cxxlens_test)
+unset(_cxxlens_test_timeout)

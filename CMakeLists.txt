@@ -279,10 +279,10 @@ target_link_libraries(cxxlens INTERFACE cxxlens::base cxxlens::kernel
                                         cxxlens::query cxxlens::cpp)
 set_target_properties(cxxlens PROPERTIES EXPORT_NAME cxxlens)
 
-# A source-private copy of the provider launch/validation core is embedded only
-# where a shared build cannot resolve hidden SDK implementation symbols across
-# DSO boundaries. The public runtime is deliberately omitted from this object,
-# and the target is neither installed nor exported.
+# The provider launch/validation core is compiled once and reused by the public
+# SDK and by source-private worker/test closures. In shared builds the object is
+# also embedded into consumers that cannot resolve implementation symbols across
+# DSO boundaries. The target is neither installed nor exported.
 add_library(
   cxxlens_provider_runtime_internal OBJECT
   EXCLUDE_FROM_ALL
@@ -294,40 +294,21 @@ add_library(
   src/sdk/provider_ng1_spill_port_internal.cpp
   src/sdk/provider_ng1_session.cpp
   src/sdk/provider_ng1_live_driver.cpp)
-target_compile_definitions(cxxlens_provider_runtime_internal
-                           PRIVATE CXXLENS_PROVIDER_RUNTIME_INTERNAL_ONLY=1)
 target_link_libraries(cxxlens_provider_runtime_internal
                       PRIVATE cxxlens::cxxlens cxxlens::recipes)
 target_include_directories(cxxlens_provider_runtime_internal
                            PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(cxxlens_provider_runtime_internal PRIVATE cxx_std_23)
-set_target_properties(
-  cxxlens_provider_runtime_internal
-  PROPERTIES POSITION_INDEPENDENT_CODE ON
-             CXX_VISIBILITY_PRESET hidden
-             VISIBILITY_INLINES_HIDDEN YES)
+set_target_properties(cxxlens_provider_runtime_internal
+                      PROPERTIES POSITION_INDEPENDENT_CODE ON)
 cxxlens_set_project_warnings(cxxlens_provider_runtime_internal)
 cxxlens_enable_sanitizers(cxxlens_provider_runtime_internal)
 
-add_library(
-  cxxlens_provider_sdk
-  ${CXXLENS_LIBRARY_TYPE}
-  src/sdk/provider.cpp
-  src/sdk/incremental.cpp
-  src/runtime/provider_process_adapter.cpp
-  src/sdk/provider_runtime.cpp
-  src/sdk/provider_ng1_validation.cpp
-  src/sdk/provider_ng1_transport.cpp
-  src/sdk/provider_ng1_recovery.cpp
-  src/sdk/provider_ng1_spill_port_internal.cpp
-  src/sdk/provider_ng1_session.cpp
-  src/sdk/provider_ng1_live_driver.cpp
-  src/sdk/provider_protocol_v2_adapter.cpp
-  src/sdk/provider_protocol_v2_heartbeat_adapter.cpp)
-add_library(cxxlens::provider_sdk ALIAS cxxlens_provider_sdk)
-cxxlens_configure_component(cxxlens_provider_sdk provider_sdk)
-target_link_libraries(cxxlens_provider_sdk PUBLIC cxxlens::cxxlens
-                                                  cxxlens::recipes)
+add_library(cxxlens_sdk ${CXXLENS_LIBRARY_TYPE} src/sdk/provider.cpp
+                        src/sdk/incremental.cpp)
+add_library(cxxlens::sdk ALIAS cxxlens_sdk)
+cxxlens_configure_component(cxxlens_sdk sdk)
+target_link_libraries(cxxlens_sdk PUBLIC cxxlens::cxxlens cxxlens::recipes)
 
 # Protocol 2 is a product transport component.  Its wire codec and closure state
 # machine are independent of repository metadata and are available to
@@ -347,7 +328,31 @@ set_target_properties(
              VISIBILITY_INLINES_HIDDEN YES)
 cxxlens_set_project_warnings(cxxlens_protocol_v2)
 cxxlens_enable_sanitizers(cxxlens_protocol_v2)
-target_link_libraries(cxxlens_provider_sdk PUBLIC cxxlens_protocol_v2)
+
+# Protocol adapters are implementation details of the SDK. Keep one object
+# closure for the SDK and source-private consumers that must embed the adapter
+# symbols; standalone worker closures retain their own static closure.
+add_library(
+  cxxlens_provider_protocol_v2_internal OBJECT
+  src/sdk/provider_protocol_v2_adapter.cpp
+  src/sdk/provider_protocol_v2_heartbeat_adapter.cpp)
+target_link_libraries(cxxlens_provider_protocol_v2_internal
+                      PRIVATE cxxlens_protocol_v2)
+target_include_directories(cxxlens_provider_protocol_v2_internal
+                           PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_provider_protocol_v2_internal
+                        PRIVATE cxx_std_23)
+set_target_properties(
+  cxxlens_provider_protocol_v2_internal
+  PROPERTIES POSITION_INDEPENDENT_CODE ON
+             CXX_VISIBILITY_PRESET hidden
+             VISIBILITY_INLINES_HIDDEN YES)
+cxxlens_set_project_warnings(cxxlens_provider_protocol_v2_internal)
+cxxlens_enable_sanitizers(cxxlens_provider_protocol_v2_internal)
+target_sources(
+  cxxlens_sdk PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
+                      $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
+target_link_libraries(cxxlens_sdk PUBLIC cxxlens_protocol_v2)
 
 # The opaque task-v4 authority is a source-private product contract. It is not
 # installed or exported; the receiver/worker join can consume this archive
@@ -376,7 +381,7 @@ add_library(
   cxxlens_provider_expected_output_validator_internal STATIC EXCLUDE_FROM_ALL
   src/sdk/provider_expected_output_validator_internal.cpp)
 target_link_libraries(cxxlens_provider_expected_output_validator_internal
-                      PUBLIC cxxlens::provider_sdk)
+                      PUBLIC cxxlens::sdk)
 target_include_directories(cxxlens_provider_expected_output_validator_internal
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(cxxlens_provider_expected_output_validator_internal
@@ -390,7 +395,7 @@ if(CXXLENS_BUILD_SHARED)
   target_sources(
     cxxlens_provider_expected_output_validator_internal
     PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
+            $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
   target_link_libraries(cxxlens_provider_expected_output_validator_internal
                         PRIVATE cxxlens_protocol_v2)
 endif()
@@ -399,7 +404,7 @@ add_library(cxxlens_clang22_provider_sdk ${CXXLENS_LIBRARY_TYPE}
                                          src/llvm/clang22/provider_sdk.cpp)
 add_library(cxxlens::clang22_provider_sdk ALIAS cxxlens_clang22_provider_sdk)
 cxxlens_configure_component(cxxlens_clang22_provider_sdk clang22_provider_sdk)
-target_link_libraries(cxxlens_clang22_provider_sdk PUBLIC cxxlens::provider_sdk)
+target_link_libraries(cxxlens_clang22_provider_sdk PUBLIC cxxlens::sdk)
 target_include_directories(cxxlens_clang22_provider_sdk
                            PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 cxxlens_configure_clang22(cxxlens_clang22_provider_sdk)
@@ -478,14 +483,13 @@ add_library(
   src/llvm/clang22/provider_worker_ingress.cpp)
 target_link_libraries(
   cxxlens_clang22_materialization_codecs
-  PUBLIC cxxlens::provider_sdk
+  PUBLIC cxxlens::sdk
   PRIVATE cxxlens_icu_static cxxlens_protocol_v2)
 # The provider SDK DSO keeps its Protocol 2 adapter definitions hidden. Give the
 # source-private codec archive its own frame/closure adapter object without
 # importing the heartbeat adapter's NG1 runtime dependency.
-target_sources(
-  cxxlens_clang22_materialization_codecs
-  PRIVATE "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
+target_sources(cxxlens_clang22_materialization_codecs
+               PRIVATE $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
 target_include_directories(cxxlens_clang22_materialization_codecs
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(cxxlens_clang22_materialization_codecs
@@ -504,7 +508,7 @@ add_library(cxxlens_clang22_materialization_io_support STATIC EXCLUDE_FROM_ALL
 target_link_libraries(
   cxxlens_clang22_materialization_io_support
   PUBLIC cxxlens::base
-  PRIVATE cxxlens::provider_sdk)
+  PRIVATE cxxlens::sdk)
 target_include_directories(cxxlens_clang22_materialization_io_support
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(cxxlens_clang22_materialization_io_support
@@ -521,8 +525,7 @@ add_library(cxxlens_clang22_materializer_rooted_vfs_support STATIC
 target_link_libraries(
   cxxlens_clang22_materializer_rooted_vfs_support
   PUBLIC cxxlens::base
-  PRIVATE cxxlens::kernel cxxlens::provider_sdk
-          cxxlens_clang22_materialization_codecs
+  PRIVATE cxxlens::kernel cxxlens::sdk cxxlens_clang22_materialization_codecs
           cxxlens_clang22_materialization_io_support)
 target_include_directories(cxxlens_clang22_materializer_rooted_vfs_support
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -579,8 +582,7 @@ add_library(
 target_link_libraries(
   cxxlens_clang22_materializer_v4_reuse_support
   PUBLIC cxxlens::base
-  PRIVATE cxxlens::kernel cxxlens::provider_sdk
-          cxxlens_clang22_materialization_codecs
+  PRIVATE cxxlens::kernel cxxlens::sdk cxxlens_clang22_materialization_codecs
           cxxlens_clang22_materializer_prior_artifact_storage_support)
 target_include_directories(cxxlens_clang22_materializer_v4_reuse_support
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -598,9 +600,7 @@ add_library(cxxlens_clang22_materializer_occurrence_support STATIC
 target_link_libraries(
   cxxlens_clang22_materializer_occurrence_support
   PUBLIC cxxlens::base
-  PRIVATE cxxlens::kernel
-          cxxlens::provider_sdk
-          cxxlens_clang22_materialization_codecs
+  PRIVATE cxxlens::kernel cxxlens::sdk cxxlens_clang22_materialization_codecs
           cxxlens_clang22_materialization_io_support
           cxxlens_clang22_materializer_rooted_vfs_support)
 target_include_directories(cxxlens_clang22_materializer_occurrence_support
@@ -615,7 +615,7 @@ add_library(cxxlens_clang22_materialization_request_v2_2_support STATIC
 target_link_libraries(
   cxxlens_clang22_materialization_request_v2_2_support
   PUBLIC cxxlens::base
-  PRIVATE cxxlens::provider_sdk cxxlens_clang22_materialization_codecs)
+  PRIVATE cxxlens::sdk cxxlens_clang22_materialization_codecs)
 target_include_directories(cxxlens_clang22_materialization_request_v2_2_support
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(cxxlens_clang22_materialization_request_v2_2_support
@@ -633,7 +633,7 @@ add_library(
 target_link_libraries(
   cxxlens_clang22_materializer_bounded_support
   PUBLIC cxxlens::base
-  PRIVATE cxxlens::provider_sdk cxxlens_clang22_materialization_io_support)
+  PRIVATE cxxlens::sdk cxxlens_clang22_materialization_io_support)
 target_include_directories(cxxlens_clang22_materializer_bounded_support
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(cxxlens_clang22_materializer_bounded_support
@@ -704,7 +704,7 @@ target_link_libraries(
   cxxlens_clang22_materializer_v4_coordinator
   PUBLIC cxxlens::base
   PRIVATE cxxlens::kernel
-          cxxlens::provider_sdk
+          cxxlens::sdk
           cxxlens_clang22_materialization_codecs
           cxxlens_clang22_materialization_request_v2_2_support
           cxxlens_clang22_materializer_v4_claims
@@ -725,7 +725,7 @@ if(CXXLENS_BUILD_SHARED)
   target_sources(
     cxxlens_clang22_materializer_v4_coordinator
     PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
+            $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
   target_link_libraries(cxxlens_clang22_materializer_v4_coordinator
                         PRIVATE cxxlens_protocol_v2)
 endif()
@@ -738,7 +738,7 @@ add_library(cxxlens_clang22_materializer_v2_2_pipeline_support STATIC
 target_link_libraries(
   cxxlens_clang22_materializer_v2_2_pipeline_support
   PUBLIC cxxlens::base
-  PRIVATE cxxlens::provider_sdk cxxlens_clang22_materialization_codecs
+  PRIVATE cxxlens::sdk cxxlens_clang22_materialization_codecs
           cxxlens_clang22_materialization_request_v2_2_support)
 target_include_directories(cxxlens_clang22_materializer_v2_2_pipeline_support
                            PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -766,7 +766,7 @@ if(CXXLENS_BUILD_SHARED)
   target_sources(
     cxxlens_clang22_worker_core
     PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
-            "${PROJECT_SOURCE_DIR}/src/sdk/provider_protocol_v2_adapter.cpp")
+            $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
   target_link_libraries(cxxlens_clang22_worker_core PRIVATE cxxlens_protocol_v2)
 endif()
 target_include_directories(cxxlens_clang22_worker_core
@@ -811,7 +811,7 @@ target_link_libraries(
   PUBLIC cxxlens::base
   PRIVATE cxxlens::kernel
           cxxlens_bounded_store_v6_memory_internal
-          cxxlens::provider_sdk
+          cxxlens::sdk
           cxxlens_clang22_materialization_codecs
           cxxlens_clang22_materialization_io_support
           cxxlens_clang22_materialization_request_v2_2_support
@@ -841,7 +841,7 @@ add_library(
   src/llvm/clang22/provider_trust_issuer_internal.cpp)
 target_link_libraries(
   cxxlens_clang22_materializer_ingress
-  PUBLIC cxxlens::base cxxlens::provider_sdk
+  PUBLIC cxxlens::base cxxlens::sdk
   PRIVATE cxxlens_clang22_materialization_codecs
           cxxlens_icu_static
           cxxlens_clang22_worker_core
@@ -858,18 +858,30 @@ cxxlens_set_project_warnings(cxxlens_clang22_materializer_ingress)
 cxxlens_enable_sanitizers(cxxlens_clang22_materializer_ingress)
 
 add_executable(cxxlens-provider-scaffold tools/sdk/provider_scaffold_main.cpp)
-target_link_libraries(cxxlens-provider-scaffold PRIVATE cxxlens::provider_sdk)
+target_link_libraries(cxxlens-provider-scaffold PRIVATE cxxlens::sdk)
 target_compile_features(cxxlens-provider-scaffold PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens-provider-scaffold)
 cxxlens_enable_sanitizers(cxxlens-provider-scaffold)
 cxxlens_configure_installed_tool(cxxlens-provider-scaffold)
 
 add_executable(cxxlens-sdk-doctor tools/sdk/sdk_doctor_main.cpp)
-target_link_libraries(cxxlens-sdk-doctor PRIVATE cxxlens::provider_sdk)
+target_link_libraries(cxxlens-sdk-doctor PRIVATE cxxlens::sdk)
 target_compile_features(cxxlens-sdk-doctor PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens-sdk-doctor)
 cxxlens_enable_sanitizers(cxxlens-sdk-doctor)
 cxxlens_configure_installed_tool(cxxlens-sdk-doctor)
+
+# The user-facing command is intentionally thin: it delegates doctor/run parsing
+# to the product-only resolver while keeping one stable installed entry point
+# for SDK consumers. Native materialization remains behind the sealed Clang22
+# worker/materializer tools and never accepts shell-concatenated input.
+add_executable(cxxlens_cli tools/sdk/cxxlens_main.cpp)
+set_target_properties(cxxlens_cli PROPERTIES OUTPUT_NAME cxxlens)
+target_link_libraries(cxxlens_cli PRIVATE cxxlens::sdk)
+target_compile_features(cxxlens_cli PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens_cli)
+cxxlens_enable_sanitizers(cxxlens_cli)
+cxxlens_configure_installed_tool(cxxlens_cli)
 
 add_executable(cxxlens-clang-worker-22
                src/llvm/clang22/provider_worker_main.cpp)
@@ -909,7 +921,10 @@ set(CXXLENS_COMPILED_TARGETS
     cxxlens_kernel
     cxxlens_query
     cxxlens_recipes
-    cxxlens_provider_sdk
+    cxxlens_provider_runtime_internal
+    cxxlens_provider_protocol_v2_internal
+    cxxlens_sdk
+    cxxlens_cli
     cxxlens_clang22_provider_sdk
     cxxlens_clang22_materialization_codecs
     cxxlens_clang22_worker_core
@@ -954,16 +969,9 @@ install(
           cxxlens_cpp
           cxxlens_recipes
           cxxlens
+          cxxlens_sdk
           cxxlens_protocol_v2
   EXPORT cxxlensTargets
-  ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-  LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-  RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
-  INCLUDES
-  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
-install(
-  TARGETS cxxlens_provider_sdk
-  EXPORT cxxlensProviderSDKTargets
   ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
   RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
@@ -977,7 +985,7 @@ install(
   RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
   INCLUDES
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
-install(TARGETS cxxlens-provider-scaffold cxxlens-sdk-doctor
+install(TARGETS cxxlens_cli cxxlens-provider-scaffold cxxlens-sdk-doctor
                 cxxlens-clang-worker-22 cxxlens-clang22-materialize
         RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 install(
@@ -1076,24 +1084,6 @@ install(
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/cxxlensConfig.cmake"
               "${CMAKE_CURRENT_BINARY_DIR}/cxxlensConfigVersion.cmake"
         DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlens")
-
-configure_package_config_file(
-  cmake/cxxlensProviderSDKConfig.cmake.in
-  "${CMAKE_CURRENT_BINARY_DIR}/cxxlensProviderSDKConfig.cmake"
-  INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlensProviderSDK")
-write_basic_package_version_file(
-  "${CMAKE_CURRENT_BINARY_DIR}/cxxlensProviderSDKConfigVersion.cmake"
-  VERSION "${PROJECT_VERSION}"
-  COMPATIBILITY SameMajorVersion)
-install(
-  EXPORT cxxlensProviderSDKTargets
-  FILE cxxlensProviderSDKTargets.cmake
-  NAMESPACE cxxlens::
-  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlensProviderSDK")
-install(
-  FILES "${CMAKE_CURRENT_BINARY_DIR}/cxxlensProviderSDKConfig.cmake"
-        "${CMAKE_CURRENT_BINARY_DIR}/cxxlensProviderSDKConfigVersion.cmake"
-  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlensProviderSDK")
 
 configure_package_config_file(
   cmake/cxxlensClang22ProviderSDKConfig.cmake.in

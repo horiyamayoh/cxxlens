@@ -57,12 +57,10 @@ namespace cxxlens::sdk::provider
 				 canonical_digest(value.substr(semantic_prefix.size())));
 		}
 
-#if !defined(CXXLENS_PROVIDER_RUNTIME_INTERNAL_ONLY)
 		[[nodiscard]] std::string json_string(const std::string_view value)
 		{
 			return cxxlens::sdk::detail::canonical_json_string(value);
 		}
-#endif
 
 		[[nodiscard]] bool namespaced(const std::string_view value)
 		{
@@ -2411,7 +2409,6 @@ namespace cxxlens::sdk::provider
 	namespace
 	{
 
-#if !defined(CXXLENS_PROVIDER_RUNTIME_INTERNAL_ONLY)
 		[[nodiscard]] std::string transcript_projection(const std::span<const frame> frames)
 		{
 			std::ostringstream output;
@@ -2422,7 +2419,6 @@ namespace cxxlens::sdk::provider
 					   << content_digest(value.payload) << '\n';
 			return output.str();
 		}
-#endif
 
 		[[nodiscard]] std::string terminal_for_status(const process_status status)
 		{
@@ -2514,7 +2510,6 @@ namespace cxxlens::sdk::provider
 
 	} // namespace
 
-#if !defined(CXXLENS_PROVIDER_RUNTIME_INTERNAL_ONLY)
 	bool process_execution_report::succeeded() const noexcept
 	{
 		return validated_success_ && terminal == "provider.success" && !frames.empty() &&
@@ -2583,7 +2578,6 @@ namespace cxxlens::sdk::provider
 		: processes_{&processes}
 	{
 	}
-#endif
 
 	namespace
 	{
@@ -3726,7 +3720,6 @@ namespace cxxlens::sdk::provider
 			request, std::move(*prepared), std::move(*input_seal), std::move(*launched));
 	}
 
-#if !defined(CXXLENS_PROVIDER_RUNTIME_INTERNAL_ONLY)
 	result<process_execution_report>
 	process_provider_runtime::execute(const process_task_request& request) const
 	{
@@ -3753,5 +3746,4 @@ namespace cxxlens::sdk::provider
 		report.validated_success_ = outcome->validated_transcript_success;
 		return report;
 	}
-#endif
 } // namespace cxxlens::sdk::provider

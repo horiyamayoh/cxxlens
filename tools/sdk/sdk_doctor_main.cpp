@@ -293,7 +293,7 @@ namespace
 
 } // namespace
 
-int main(int argc, char** argv)
+int cxxlens_sdk_doctor_main(int argc, char** argv)
 {
 	if (argc < 2)
 	{
@@ -311,3 +311,10 @@ int main(int argc, char** argv)
 	std::cerr << "usage: cxxlens-sdk-doctor relation-presence|missing\n";
 	return 2;
 }
+
+#ifndef CXXLENS_SDK_DOCTOR_NO_MAIN
+int main(int argc, char** argv)
+{
+	return cxxlens_sdk_doctor_main(argc, argv);
+}
+#endif

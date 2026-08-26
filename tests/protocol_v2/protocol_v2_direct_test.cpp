@@ -937,9 +937,17 @@ namespace
 
 int main()
 {
+#if defined(CXXLENS_PROTOCOL_V2_TSAN_UNSUPPORTED)
+	// This harness deliberately replaces process-wide new/delete to inject
+	// deterministic allocation faults. TSan's allocator is a competing global
+	// authority; ordinary and ASan/UBSan runs cover this contract, while the
+	// TSan graph records the incompatibility as an explicit skip.
+	return 77;
+#else
 	test_sha256_and_cbor();
 	test_frame_codec_and_guards();
 	test_prepared_frame_decode();
 	test_closure_codec_and_state();
 	std::cout << "protocol-v2 direct tests passed\n";
+#endif
 }
