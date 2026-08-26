@@ -23,7 +23,18 @@
       "inherits": "base",
       "displayName": "Developer build",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CXXLENS_BUILD_CLANG22_COMPONENTS": "ON"
+      }
+    },
+    {
+      "name": "dev-core",
+      "inherits": "base",
+      "displayName": "Compiler-neutral core developer build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CXXLENS_BUILD_CLANG22_COMPONENTS": "OFF",
+        "CXXLENS_CLANG_ADAPTER": "OFF"
       }
     },
     {
@@ -32,6 +43,7 @@
       "displayName": "CI quick gate",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
+        "CXXLENS_BUILD_CLANG22_COMPONENTS": "ON",
         "CXXLENS_WARNINGS_AS_ERRORS": "ON"
       }
     },
@@ -41,6 +53,7 @@
       "displayName": "Doxygen documentation",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
+        "CXXLENS_BUILD_CLANG22_COMPONENTS": "ON",
         "CXXLENS_BUILD_DOCS": "ON"
       }
     },
@@ -50,6 +63,7 @@
       "displayName": "ASan and UBSan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
+        "CXXLENS_BUILD_CLANG22_COMPONENTS": "ON",
         "CXXLENS_ENABLE_ASAN": "ON",
         "CXXLENS_ENABLE_UBSAN": "ON",
         "CXXLENS_WARNINGS_AS_ERRORS": "ON"
@@ -61,6 +75,7 @@
       "displayName": "Release install verification",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "CXXLENS_BUILD_CLANG22_COMPONENTS": "ON",
         "CXXLENS_WARNINGS_AS_ERRORS": "ON"
       }
     },
@@ -70,6 +85,7 @@
       "displayName": "ThreadSanitizer",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
+        "CXXLENS_BUILD_CLANG22_COMPONENTS": "OFF",
         "CXXLENS_CLANG_ADAPTER": "OFF",
         "CXXLENS_ENABLE_TSAN": "ON",
         "CXXLENS_WARNINGS_AS_ERRORS": "ON"
@@ -78,6 +94,7 @@
   ],
   "buildPresets": [
     {"name": "dev-clang", "configurePreset": "dev-clang"},
+    {"name": "dev-core", "configurePreset": "dev-core"},
     {"name": "ci-quick", "configurePreset": "ci-quick"},
     {"name": "docs", "configurePreset": "docs"},
     {"name": "asan-ubsan", "configurePreset": "asan-ubsan"},
@@ -86,6 +103,7 @@
   ],
   "testPresets": [
     {"name": "dev-clang", "configurePreset": "dev-clang", "output": {"outputOnFailure": true}},
+    {"name": "dev-core", "configurePreset": "dev-core", "output": {"outputOnFailure": true}},
     {"name": "ci-quick", "configurePreset": "ci-quick", "output": {"outputOnFailure": true}},
     {"name": "asan-ubsan", "configurePreset": "asan-ubsan", "output": {"outputOnFailure": true}},
     {"name": "install-check", "configurePreset": "install-check", "output": {"outputOnFailure": true}},

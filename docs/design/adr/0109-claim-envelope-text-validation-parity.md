@@ -1,4 +1,4 @@
-# ADR 0058: claim envelope の text primitive を全 construction surface で共有する
+# ADR 0109: claim envelope の text primitive を全 construction surface で共有する
 
 - Status: Accepted
 - Date: 2026-07-18

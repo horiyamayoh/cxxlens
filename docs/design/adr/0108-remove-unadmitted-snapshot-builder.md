@@ -1,4 +1,4 @@
-# ADR 0107: Remove the unadmitted snapshot builder compatibility path
+# ADR 0108: Remove the unadmitted snapshot builder compatibility path
 
 - Status: Accepted
 - Date: 2026-08-26

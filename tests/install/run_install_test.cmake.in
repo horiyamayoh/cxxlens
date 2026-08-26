@@ -9,10 +9,14 @@ endif()
 set(cxxlens_clang22_available "@CXXLENS_CLANG22_AVAILABLE@")
 set(cxxlens_clang22_adapter "@CXXLENS_CLANG_ADAPTER@")
 set(cxxlens_clang22_unavailable_reason "@CXXLENS_CLANG22_UNAVAILABLE_REASON@")
+set(cxxlens_clang22_components "@CXXLENS_BUILD_CLANG22_COMPONENTS@")
 set(install_executable_suffix "@CMAKE_EXECUTABLE_SUFFIX@")
-set(install_executable_names
-    cxxlens cxxlens-provider-scaffold cxxlens-sdk-doctor
-    cxxlens-clang-worker-22 cxxlens-clang22-materialize)
+set(install_executable_names cxxlens cxxlens-provider-scaffold
+                             cxxlens-sdk-doctor)
+if(cxxlens_clang22_components STREQUAL "ON")
+  list(APPEND install_executable_names cxxlens-clang-worker-22
+       cxxlens-clang22-materialize)
+endif()
 # These phases are the installed native-provider test boundary.  An AUTO/OFF
 # structured-unavailable build remains useful for the portable SDK and its
 # unavailable-mode consumers, but it must not enter a native positive or
@@ -93,9 +97,12 @@ function(run_installed_tools label)
     "${doctor_project}"
     --use-case
     cxxlens.clang22.materialize-and-query.v1)
-  run_clean(
-    1
-    "${install_prefix}/bin/cxxlens-clang-worker-22${install_executable_suffix}")
+  if(cxxlens_clang22_components STREQUAL "ON")
+    run_clean(
+      1
+      "${install_prefix}/bin/cxxlens-clang-worker-22${install_executable_suffix}"
+    )
+  endif()
   set(scaffold_output "${test_root}/scaffold-${label}")
   file(REMOVE_RECURSE "${scaffold_output}")
   run_clean(
@@ -111,18 +118,28 @@ if(PHASE STREQUAL "prepare")
   file(REMOVE_RECURSE "${test_root}")
   set(staging_prefix "${test_root}/prefix")
   set(install_prefix "${staging_prefix}")
-  execute_process(
-    COMMAND "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target
-            cxxlens-clang22-materialize COMMAND_ERROR_IS_FATAL ANY)
+  if(cxxlens_clang22_components STREQUAL "ON")
+    execute_process(
+      COMMAND "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target
+              cxxlens-clang22-materialize COMMAND_ERROR_IS_FATAL ANY)
+  endif()
   # `cmake --install` does not build targets, and the public Clang 22 SDK DSO
   # plus the installed worker are not dependencies of the materializer binary.
   # Build the complete installed executable/DSO closure before staging it.
-  execute_process(
-    COMMAND
-      "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target
-      cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22
-      cxxlens_cli cxxlens_sdk cxxlens_clang22_provider_sdk
-      COMMAND_ERROR_IS_FATAL ANY)
+  if(cxxlens_clang22_components STREQUAL "ON")
+    execute_process(
+      COMMAND
+        "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target
+        cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22
+        cxxlens_cli cxxlens_sdk cxxlens_clang22_provider_sdk
+        COMMAND_ERROR_IS_FATAL ANY)
+  else()
+    execute_process(
+      COMMAND
+        "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target
+        cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens_cli cxxlens_sdk
+        cxxlens_clang22_provider_sdk COMMAND_ERROR_IS_FATAL ANY)
+  endif()
   execute_process(
     COMMAND "@CMAKE_COMMAND@" --install "@CMAKE_BINARY_DIR@" --prefix
             "${install_prefix}" COMMAND_ERROR_IS_FATAL ANY)
@@ -135,9 +152,7 @@ if(PHASE STREQUAL "prepare")
   # Keep canonical artifact paths literal for the installed-surface census. Only
   # the filesystem path used by the existence check receives the platform
   # executable suffix.
-  foreach(
-    required IN
-    ITEMS
+  set(required_artifacts
       "${install_prefix}/include/cxxlens/cxxlens.hpp"
       "${install_prefix}/include/cxxlens/sdk.hpp"
       "${install_prefix}/include/cxxlens/sdk/query.hpp"
@@ -151,20 +166,26 @@ if(PHASE STREQUAL "prepare")
       "${install_prefix}/include/cxxlens/relations/core_differential_disagreement.hpp"
       "${install_prefix}/include/cxxlens/relations/source_origin.hpp"
       "${install_prefix}/${install_libdir}/cmake/cxxlens/cxxlensConfig.cmake"
-      "${install_prefix}/${install_libdir}/cmake/cxxlensClang22ProviderSDK/cxxlensClang22ProviderSDKConfig.cmake"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_public_api_catalog.yaml"
+      "${install_prefix}/share/doc/cxxlens/LICENSE"
+      "${install_prefix}/share/doc/cxxlens/NOTICE"
+      "${install_prefix}/bin/cxxlens-provider-scaffold"
+      "${install_prefix}/bin/cxxlens"
+      "${install_prefix}/bin/cxxlens-sdk-doctor")
+  if(cxxlens_clang22_components STREQUAL "ON")
+    list(
+      APPEND
+      required_artifacts
+      "${install_prefix}/${install_libdir}/cmake/cxxlensClang22ProviderSDK/cxxlensClang22ProviderSDKConfig.cmake"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.yaml"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materialization_report.schema.yaml"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml"
-      "${install_prefix}/share/doc/cxxlens/LICENSE"
-      "${install_prefix}/share/doc/cxxlens/NOTICE"
-      "${install_prefix}/bin/cxxlens-provider-scaffold"
-      "${install_prefix}/bin/cxxlens"
-      "${install_prefix}/bin/cxxlens-sdk-doctor"
       "${install_prefix}/bin/cxxlens-clang-worker-22"
       "${install_prefix}/bin/cxxlens-clang22-materialize")
+  endif()
+  foreach(required IN LISTS required_artifacts)
     resolve_install_artifact_path("${required}" resolved_required)
     if(NOT EXISTS "${resolved_required}")
       message(
@@ -287,8 +308,12 @@ if(PHASE STREQUAL "shared-runtime-layout"
    AND UNIX
    AND NOT APPLE)
   find_program(CXXLENS_READELF NAMES readelf llvm-readelf REQUIRED)
-  foreach(tool IN ITEMS cxxlens cxxlens-provider-scaffold cxxlens-sdk-doctor
-                        cxxlens-clang-worker-22 cxxlens-clang22-materialize)
+  set(runtime_tools cxxlens cxxlens-provider-scaffold cxxlens-sdk-doctor)
+  if(cxxlens_clang22_components STREQUAL "ON")
+    list(APPEND runtime_tools cxxlens-clang-worker-22
+         cxxlens-clang22-materialize)
+  endif()
+  foreach(tool IN LISTS runtime_tools)
     execute_process(
       COMMAND "${CXXLENS_READELF}" -d
               "${install_prefix}/bin/${tool}${install_executable_suffix}"
@@ -351,9 +376,12 @@ if(PHASE STREQUAL "shared-runtime-layout" AND WIN32)
   # in the archive directory, while the DLL runtime must be beside installed
   # executables. This check is intentionally limited to layout; it does not
   # advertise Windows/MSVC support.
-  foreach(library IN
-          ITEMS cxxlens_base cxxlens_kernel cxxlens_query cxxlens_recipes
-                cxxlens_sdk cxxlens_clang22_provider_sdk)
+  set(runtime_libraries cxxlens_base cxxlens_kernel cxxlens_query
+                        cxxlens_recipes cxxlens_sdk)
+  if(cxxlens_clang22_components STREQUAL "ON")
+    list(APPEND runtime_libraries cxxlens_clang22_provider_sdk)
+  endif()
+  foreach(library IN LISTS runtime_libraries)
     file(
       GLOB
       runtime_artifacts
@@ -472,8 +500,11 @@ if(PHASE STREQUAL "examples-consumer")
   execute_process(
     COMMAND "@CMAKE_COMMAND@" --install "${example_build_dir}" --prefix
             "${example_prefix}" COMMAND_ERROR_IS_FATAL ANY)
-  foreach(example IN ITEMS recipe typed_query dynamic_query portable_provider
-                           clang22-native)
+  set(installed_examples recipe typed_query dynamic_query portable_provider)
+  if(cxxlens_clang22_components STREQUAL "ON")
+    list(APPEND installed_examples clang22-native)
+  endif()
+  foreach(example IN LISTS installed_examples)
     run_clean(
       0
       "${example_build_dir}/cxxlens-installed-${example}${install_executable_suffix}"

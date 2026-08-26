@@ -28,6 +28,8 @@ option(CXXLENS_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
 option(CXXLENS_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 option(CXXLENS_BUILD_DOCS "Enable Doxygen documentation targets" OFF)
 option(CXXLENS_BUILD_QUALITY_TOOLS "Enable local quality targets" ON)
+option(CXXLENS_BUILD_CLANG22_COMPONENTS
+       "Build Clang 22 native provider, materializer, and worker components" ON)
 
 set(CXXLENS_SOURCE_REVISION
     ""
@@ -38,66 +40,90 @@ set(CXXLENS_SOURCE_TREE
     ""
     CACHE STRING
           "Exact 40-hex source tree embedded in installed occurrence identity")
-if((CXXLENS_SOURCE_REVISION STREQUAL "" AND NOT CXXLENS_SOURCE_TREE STREQUAL "")
-   OR (NOT CXXLENS_SOURCE_REVISION STREQUAL "" AND CXXLENS_SOURCE_TREE STREQUAL
-                                                   ""))
-  message(
-    FATAL_ERROR
-      "CXXLENS_SOURCE_REVISION and CXXLENS_SOURCE_TREE must be supplied together"
-  )
-endif()
-if(CXXLENS_SOURCE_REVISION STREQUAL "" AND CXXLENS_SOURCE_TREE STREQUAL "")
-  find_package(Git QUIET)
-  if(NOT Git_FOUND OR NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+if(CXXLENS_BUILD_CLANG22_COMPONENTS)
+  if((CXXLENS_SOURCE_REVISION STREQUAL "" AND NOT CXXLENS_SOURCE_TREE STREQUAL
+                                              "")
+     OR (NOT CXXLENS_SOURCE_REVISION STREQUAL "" AND CXXLENS_SOURCE_TREE
+                                                     STREQUAL ""))
     message(
       FATAL_ERROR
-        "Source provenance requires either an available git checkout or an explicit revision/tree pair"
+        "CXXLENS_SOURCE_REVISION and CXXLENS_SOURCE_TREE must be supplied together"
     )
   endif()
-  execute_process(
-    COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    OUTPUT_VARIABLE _cxxlens_git_revision
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    RESULT_VARIABLE _cxxlens_git_revision_status)
-  execute_process(
-    COMMAND "${GIT_EXECUTABLE}" rev-parse "HEAD^{tree}"
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    OUTPUT_VARIABLE _cxxlens_git_tree
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    RESULT_VARIABLE _cxxlens_git_tree_status)
-  if(NOT _cxxlens_git_revision_status EQUAL 0 OR NOT _cxxlens_git_tree_status
-                                                 EQUAL 0)
-    message(FATAL_ERROR "Cannot derive exact source provenance from git")
+  if(CXXLENS_SOURCE_REVISION STREQUAL "" AND CXXLENS_SOURCE_TREE STREQUAL "")
+    find_package(Git QUIET)
+    if(NOT Git_FOUND OR NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+      message(
+        FATAL_ERROR
+          "Source provenance requires either an available git checkout or an explicit revision/tree pair"
+      )
+    endif()
+    execute_process(
+      COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+      WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+      OUTPUT_VARIABLE _cxxlens_git_revision
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      RESULT_VARIABLE _cxxlens_git_revision_status)
+    execute_process(
+      COMMAND "${GIT_EXECUTABLE}" rev-parse "HEAD^{tree}"
+      WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+      OUTPUT_VARIABLE _cxxlens_git_tree
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      RESULT_VARIABLE _cxxlens_git_tree_status)
+    if(NOT _cxxlens_git_revision_status EQUAL 0 OR NOT _cxxlens_git_tree_status
+                                                   EQUAL 0)
+      message(FATAL_ERROR "Cannot derive exact source provenance from git")
+    endif()
+    set(CXXLENS_SOURCE_REVISION "${_cxxlens_git_revision}")
+    set(CXXLENS_SOURCE_TREE "${_cxxlens_git_tree}")
   endif()
-  set(CXXLENS_SOURCE_REVISION "${_cxxlens_git_revision}")
-  set(CXXLENS_SOURCE_TREE "${_cxxlens_git_tree}")
+  string(LENGTH "${CXXLENS_SOURCE_REVISION}" _cxxlens_source_revision_length)
+  string(LENGTH "${CXXLENS_SOURCE_TREE}" _cxxlens_source_tree_length)
+  if(NOT CXXLENS_SOURCE_REVISION MATCHES "^[0-9a-f]+$"
+     OR NOT CXXLENS_SOURCE_TREE MATCHES "^[0-9a-f]+$"
+     OR NOT _cxxlens_source_revision_length EQUAL 40
+     OR NOT _cxxlens_source_tree_length EQUAL 40)
+    message(
+      FATAL_ERROR
+        "CXXLENS_SOURCE_REVISION and CXXLENS_SOURCE_TREE must be exact 40-hex identities"
+    )
+  endif()
+  if(CXXLENS_BUILD_SHARED)
+    set(CXXLENS_OCCURRENCE_CONFIGURATION shared)
+  else()
+    set(CXXLENS_OCCURRENCE_CONFIGURATION static)
+  endif()
+  configure_file(
+    cmake/GenerateClang22OccurrenceManifest.cmake.in
+    "${CMAKE_CURRENT_BINARY_DIR}/GenerateClang22OccurrenceManifest.cmake" @ONLY)
 endif()
-string(LENGTH "${CXXLENS_SOURCE_REVISION}" _cxxlens_source_revision_length)
-string(LENGTH "${CXXLENS_SOURCE_TREE}" _cxxlens_source_tree_length)
-if(NOT CXXLENS_SOURCE_REVISION MATCHES "^[0-9a-f]+$"
-   OR NOT CXXLENS_SOURCE_TREE MATCHES "^[0-9a-f]+$"
-   OR NOT _cxxlens_source_revision_length EQUAL 40
-   OR NOT _cxxlens_source_tree_length EQUAL 40)
-  message(
-    FATAL_ERROR
-      "CXXLENS_SOURCE_REVISION and CXXLENS_SOURCE_TREE must be exact 40-hex identities"
-  )
-endif()
-if(CXXLENS_BUILD_SHARED)
-  set(CXXLENS_OCCURRENCE_CONFIGURATION shared)
-else()
-  set(CXXLENS_OCCURRENCE_CONFIGURATION static)
-endif()
-configure_file(
-  cmake/GenerateClang22OccurrenceManifest.cmake.in
-  "${CMAKE_CURRENT_BINARY_DIR}/GenerateClang22OccurrenceManifest.cmake" @ONLY)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CxxlensWarnings)
 include(CxxlensSanitizers)
 include(CxxlensClangTargets)
 cxxlens_validate_sanitizer_configuration()
+
+if(NOT CXXLENS_BUILD_CLANG22_COMPONENTS)
+  if(CXXLENS_CLANG_ADAPTER STREQUAL "ON")
+    message(
+      FATAL_ERROR
+        "CXXLENS_CLANG_ADAPTER=ON requires CXXLENS_BUILD_CLANG22_COMPONENTS=ON")
+  endif()
+  set(CXXLENS_CLANG22_AVAILABLE
+      FALSE
+      CACHE INTERNAL "Whether the exact Clang 22 adapter is linked" FORCE)
+  set(CXXLENS_CLANG22_UNAVAILABLE_REASON
+      "disabled-by-build-profile"
+      CACHE INTERNAL "Reason the exact Clang 22 adapter is unavailable" FORCE)
+  set(CXXLENS_CLANG22_LIBRARY_DIRS
+      ""
+      CACHE INTERNAL "Exact LLVM/Clang 22 runtime library directories" FORCE)
+  message(
+    STATUS
+      "Clang 22 native components disabled by CXXLENS_BUILD_CLANG22_COMPONENTS=OFF"
+  )
+endif()
 
 if(CXXLENS_BUILD_SHARED)
   set(CXXLENS_LIBRARY_TYPE SHARED)
@@ -354,25 +380,41 @@ target_sources(
                       $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
 target_link_libraries(cxxlens_sdk PUBLIC cxxlens_protocol_v2)
 
-# The opaque task-v4 authority is a source-private product contract. It is not
-# installed or exported; the receiver/worker join can consume this archive
-# without duplicating its issuer implementation.
-add_library(cxxlens_clang22_provider_task_v4_authority_internal STATIC
-            EXCLUDE_FROM_ALL src/llvm/clang22/provider_task_v4_authority.cpp)
-target_link_libraries(cxxlens_clang22_provider_task_v4_authority_internal
-                      PUBLIC cxxlens::base)
-target_include_directories(cxxlens_clang22_provider_task_v4_authority_internal
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_provider_task_v4_authority_internal
-                        PRIVATE cxx_std_23)
-set_target_properties(
-  cxxlens_clang22_provider_task_v4_authority_internal
-  PROPERTIES POSITION_INDEPENDENT_CODE ON
-             CXX_VISIBILITY_PRESET hidden
-             VISIBILITY_INLINES_HIDDEN YES)
-cxxlens_set_project_warnings(
-  cxxlens_clang22_provider_task_v4_authority_internal)
-cxxlens_enable_sanitizers(cxxlens_clang22_provider_task_v4_authority_internal)
+add_library(cxxlens_clang22_provider_sdk ${CXXLENS_LIBRARY_TYPE}
+                                         src/llvm/clang22/provider_sdk.cpp)
+add_library(cxxlens::clang22_provider_sdk ALIAS cxxlens_clang22_provider_sdk)
+cxxlens_configure_component(cxxlens_clang22_provider_sdk clang22_provider_sdk)
+target_link_libraries(cxxlens_clang22_provider_sdk PUBLIC cxxlens::sdk)
+target_include_directories(cxxlens_clang22_provider_sdk
+                           PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+if(CXXLENS_BUILD_CLANG22_COMPONENTS)
+  cxxlens_configure_clang22(cxxlens_clang22_provider_sdk)
+else()
+  target_compile_definitions(cxxlens_clang22_provider_sdk
+                             PRIVATE CXXLENS_HAS_CLANG22=0)
+endif()
+
+if(CXXLENS_BUILD_CLANG22_COMPONENTS)
+  # The opaque task-v4 authority is a source-private product contract. It is not
+  # installed or exported; the receiver/worker join can consume this archive
+  # without duplicating its issuer implementation.
+  add_library(cxxlens_clang22_provider_task_v4_authority_internal STATIC
+              EXCLUDE_FROM_ALL src/llvm/clang22/provider_task_v4_authority.cpp)
+  target_link_libraries(cxxlens_clang22_provider_task_v4_authority_internal
+                        PUBLIC cxxlens::base)
+  target_include_directories(cxxlens_clang22_provider_task_v4_authority_internal
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_provider_task_v4_authority_internal
+                          PRIVATE cxx_std_23)
+  set_target_properties(
+    cxxlens_clang22_provider_task_v4_authority_internal
+    PROPERTIES POSITION_INDEPENDENT_CODE ON
+               CXX_VISIBILITY_PRESET hidden
+               VISIBILITY_INLINES_HIDDEN YES)
+  cxxlens_set_project_warnings(
+    cxxlens_clang22_provider_task_v4_authority_internal)
+  cxxlens_enable_sanitizers(cxxlens_clang22_provider_task_v4_authority_internal)
+endif()
 
 # The host-side expected-output validator is a source-private product boundary.
 # Keep it independently linkable so direct contract tests and the provider host
@@ -400,462 +442,471 @@ if(CXXLENS_BUILD_SHARED)
                         PRIVATE cxxlens_protocol_v2)
 endif()
 
-add_library(cxxlens_clang22_provider_sdk ${CXXLENS_LIBRARY_TYPE}
-                                         src/llvm/clang22/provider_sdk.cpp)
-add_library(cxxlens::clang22_provider_sdk ALIAS cxxlens_clang22_provider_sdk)
-cxxlens_configure_component(cxxlens_clang22_provider_sdk clang22_provider_sdk)
-target_link_libraries(cxxlens_clang22_provider_sdk PUBLIC cxxlens::sdk)
-target_include_directories(cxxlens_clang22_provider_sdk
-                           PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-cxxlens_configure_clang22(cxxlens_clang22_provider_sdk)
-
-# NFC validation is part of the installed materializer's self-contained-prefix
-# contract. Never let CMake silently select an ICU shared object or import
-# library for this private implementation.
-find_path(CXXLENS_ICU_STATIC_INCLUDE_DIR NAMES unicode/unorm2.h REQUIRED)
-if(WIN32)
-  find_library(CXXLENS_ICUUC_STATIC_ARCHIVE NAMES sicuuc REQUIRED)
-  find_library(CXXLENS_ICUDATA_STATIC_ARCHIVE NAMES sicudt REQUIRED)
-  if(NOT CXXLENS_ICUUC_STATIC_ARCHIVE MATCHES "[/\\\\]sicuuc[^/\\\\]*\\.lib$"
-     OR NOT CXXLENS_ICUDATA_STATIC_ARCHIVE MATCHES
-        "[/\\\\]sicudt[^/\\\\]*\\.lib$")
-    message(
-      FATAL_ERROR
-        "Static ICU proof failed: expected the ICU sicuuc/sicudt .lib naming contract"
-    )
-  endif()
-elseif(UNIX)
-  set(_cxxlens_saved_library_suffixes "${CMAKE_FIND_LIBRARY_SUFFIXES}")
-  set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
-  find_library(CXXLENS_ICUUC_STATIC_ARCHIVE NAMES icuuc REQUIRED)
-  find_library(CXXLENS_ICUDATA_STATIC_ARCHIVE NAMES icudata REQUIRED)
-  set(CMAKE_FIND_LIBRARY_SUFFIXES "${_cxxlens_saved_library_suffixes}")
-  unset(_cxxlens_saved_library_suffixes)
-  if(NOT CXXLENS_ICUUC_STATIC_ARCHIVE MATCHES "\\.a$"
-     OR NOT CXXLENS_ICUDATA_STATIC_ARCHIVE MATCHES "\\.a$")
-    message(
-      FATAL_ERROR
-        "Static ICU proof failed: icuuc and icudata must resolve to .a archives"
-    )
-  endif()
-else()
-  message(
-    FATAL_ERROR
-      "Static ICU proof is not implemented for this platform; refusing a shared fallback"
-  )
-endif()
-
 find_package(Threads REQUIRED)
-add_library(cxxlens_icu_static INTERFACE)
-target_include_directories(cxxlens_icu_static SYSTEM
-                           INTERFACE "${CXXLENS_ICU_STATIC_INCLUDE_DIR}")
-target_compile_definitions(cxxlens_icu_static
-                           INTERFACE U_STATIC_IMPLEMENTATION=1)
-target_link_libraries(
-  cxxlens_icu_static
-  INTERFACE "${CXXLENS_ICUUC_STATIC_ARCHIVE}"
-            "${CXXLENS_ICUDATA_STATIC_ARCHIVE}" Threads::Threads)
-if(CMAKE_DL_LIBS)
-  target_link_libraries(cxxlens_icu_static INTERFACE "${CMAKE_DL_LIBS}")
-endif()
-if(UNIX AND NOT APPLE)
-  find_library(CXXLENS_MATH_LIBRARY NAMES m REQUIRED)
-  target_link_libraries(cxxlens_icu_static INTERFACE "${CXXLENS_MATH_LIBRARY}")
-endif()
 
-# Canonical task/observation codecs stay private to provider-owned execution and
-# materialization, without importing the Clang parser implementation.
-add_library(
-  cxxlens_clang22_materialization_codecs STATIC
-  src/llvm/clang22/materialization_json.cpp
-  src/llvm/clang22/provider_task_v4.cpp
-  src/llvm/clang22/observation_v2.cpp
-  src/llvm/clang22/source_closure.cpp
-  src/llvm/clang22/source_closure_fd.cpp
-  src/llvm/clang22/source_closure_receiver.cpp
-  src/llvm/clang22/source_closure_spool.cpp
-  src/llvm/clang22/source_closure_task_v4.cpp
-  src/llvm/clang22/source_closure_transport.cpp
-  src/llvm/clang22/source_closure_invocation.cpp
-  src/llvm/clang22/source_closure_vfs.cpp
-  src/llvm/clang22/unicode_nfc.cpp
-  src/llvm/clang22/materialization_identity.cpp
-  src/llvm/clang22/provider_worker_ingress.cpp)
-target_link_libraries(
-  cxxlens_clang22_materialization_codecs
-  PUBLIC cxxlens::sdk
-  PRIVATE cxxlens_icu_static cxxlens_protocol_v2)
-# The provider SDK DSO keeps its Protocol 2 adapter definitions hidden. Give the
-# source-private codec archive its own frame/closure adapter object without
-# importing the heartbeat adapter's NG1 runtime dependency.
-target_sources(cxxlens_clang22_materialization_codecs
-               PRIVATE $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
-target_include_directories(cxxlens_clang22_materialization_codecs
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_materialization_codecs
-                        PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_clang22_materialization_codecs)
-cxxlens_enable_sanitizers(cxxlens_clang22_materialization_codecs)
+# Native Clang 22 materialization and worker components are kept out of the
+# compiler-neutral core profile. The public provider SDK stub remains available
+# above so core consumers can compile and observe a structured unavailable mode.
+if(CXXLENS_BUILD_CLANG22_COMPONENTS)
+  # NFC validation is part of the installed materializer's self-contained-prefix
+  # contract. Never let CMake silently select an ICU shared object or import
+  # library for this private implementation.
+  find_path(CXXLENS_ICU_STATIC_INCLUDE_DIR NAMES unicode/unorm2.h REQUIRED)
+  if(WIN32)
+    find_library(CXXLENS_ICUUC_STATIC_ARCHIVE NAMES sicuuc REQUIRED)
+    find_library(CXXLENS_ICUDATA_STATIC_ARCHIVE NAMES sicudt REQUIRED)
+    if(NOT CXXLENS_ICUUC_STATIC_ARCHIVE MATCHES "[/\\\\]sicuuc[^/\\\\]*\\.lib$"
+       OR NOT CXXLENS_ICUDATA_STATIC_ARCHIVE MATCHES
+          "[/\\\\]sicudt[^/\\\\]*\\.lib$")
+      message(
+        FATAL_ERROR
+          "Static ICU proof failed: expected the ICU sicuuc/sicudt .lib naming contract"
+      )
+    endif()
+  elseif(UNIX)
+    set(_cxxlens_saved_library_suffixes "${CMAKE_FIND_LIBRARY_SUFFIXES}")
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+    find_library(CXXLENS_ICUUC_STATIC_ARCHIVE NAMES icuuc REQUIRED)
+    find_library(CXXLENS_ICUDATA_STATIC_ARCHIVE NAMES icudata REQUIRED)
+    set(CMAKE_FIND_LIBRARY_SUFFIXES "${_cxxlens_saved_library_suffixes}")
+    unset(_cxxlens_saved_library_suffixes)
+    if(NOT CXXLENS_ICUUC_STATIC_ARCHIVE MATCHES "\\.a$"
+       OR NOT CXXLENS_ICUDATA_STATIC_ARCHIVE MATCHES "\\.a$")
+      message(
+        FATAL_ERROR
+          "Static ICU proof failed: icuuc and icudata must resolve to .a archives"
+      )
+    endif()
+  else()
+    message(
+      FATAL_ERROR
+        "Static ICU proof is not implemented for this platform; refusing a shared fallback"
+    )
+  endif()
 
-# Source-private materialization primitives are split by ownership.  The bounded
-# Store candidate and the v2.2 request validator are consumed by focused product
-# tests and by the independent safety ports below, but neither target is part of
-# the installed materializer or worker production graph. Keeping these sources
-# in their own archives prevents a focused test from accidentally becoming the
-# link-time owner of the v2.2 primitives.
-add_library(cxxlens_clang22_materialization_io_support STATIC EXCLUDE_FROM_ALL
-            src/llvm/clang22/materialization_io.cpp)
-target_link_libraries(
-  cxxlens_clang22_materialization_io_support
-  PUBLIC cxxlens::base
-  PRIVATE cxxlens::sdk)
-target_include_directories(cxxlens_clang22_materialization_io_support
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_materialization_io_support
-                        PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_clang22_materialization_io_support)
-cxxlens_enable_sanitizers(cxxlens_clang22_materialization_io_support)
+  add_library(cxxlens_icu_static INTERFACE)
+  target_include_directories(cxxlens_icu_static SYSTEM
+                             INTERFACE "${CXXLENS_ICU_STATIC_INCLUDE_DIR}")
+  target_compile_definitions(cxxlens_icu_static
+                             INTERFACE U_STATIC_IMPLEMENTATION=1)
+  target_link_libraries(
+    cxxlens_icu_static
+    INTERFACE "${CXXLENS_ICUUC_STATIC_ARCHIVE}"
+              "${CXXLENS_ICUDATA_STATIC_ARCHIVE}" Threads::Threads)
+  if(CMAKE_DL_LIBS)
+    target_link_libraries(cxxlens_icu_static INTERFACE "${CMAKE_DL_LIBS}")
+  endif()
+  if(UNIX AND NOT APPLE)
+    find_library(CXXLENS_MATH_LIBRARY NAMES m REQUIRED)
+    target_link_libraries(cxxlens_icu_static
+                          INTERFACE "${CXXLENS_MATH_LIBRARY}")
+  endif()
 
-# Rooted SQLite VFS is a product safety primitive, not a dependency of the
-# installed materializer. Keep its implementation in a source-private archive so
-# focused VFS tests and prior-artifact reuse share one implementation without
-# pulling unrelated request/task code.
-add_library(cxxlens_clang22_materializer_rooted_vfs_support STATIC
-            EXCLUDE_FROM_ALL src/llvm/clang22/materialization_rooted_vfs.cpp)
-target_link_libraries(
-  cxxlens_clang22_materializer_rooted_vfs_support
-  PUBLIC cxxlens::base
-  PRIVATE cxxlens::kernel cxxlens::sdk cxxlens_clang22_materialization_codecs
-          cxxlens_clang22_materialization_io_support)
-target_include_directories(cxxlens_clang22_materializer_rooted_vfs_support
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_materializer_rooted_vfs_support
-                        PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_clang22_materializer_rooted_vfs_support)
-cxxlens_enable_sanitizers(cxxlens_clang22_materializer_rooted_vfs_support)
-
-# Store outcome classification is likewise a source-private product boundary. It
-# is consumed by its direct contract test and can be connected by the v4
-# publication path without importing unrelated safety implementations.
-add_library(cxxlens_clang22_materializer_store_outcome_support STATIC
-            EXCLUDE_FROM_ALL src/llvm/clang22/materialization_store_outcome.cpp)
-target_link_libraries(
-  cxxlens_clang22_materializer_store_outcome_support
-  PUBLIC cxxlens::base
-  PRIVATE cxxlens::kernel)
-target_include_directories(cxxlens_clang22_materializer_store_outcome_support
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_materializer_store_outcome_support
-                        PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_clang22_materializer_store_outcome_support)
-cxxlens_enable_sanitizers(cxxlens_clang22_materializer_store_outcome_support)
-
-# Prior-artifact sidecar I/O is shared by the focused safety suite and task-v4
-# reuse without making either implementation own the other.
-add_library(
-  cxxlens_clang22_materializer_prior_artifact_storage_support STATIC
-  EXCLUDE_FROM_ALL
-  src/llvm/clang22/materialization_prior_artifact_storage_internal.cpp)
-target_link_libraries(
-  cxxlens_clang22_materializer_prior_artifact_storage_support
-  PUBLIC cxxlens::base
-  PRIVATE cxxlens_clang22_materialization_io_support
-          cxxlens_clang22_materializer_rooted_vfs_support)
-target_include_directories(
-  cxxlens_clang22_materializer_prior_artifact_storage_support
-  PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(
-  cxxlens_clang22_materializer_prior_artifact_storage_support
-  PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(
-  cxxlens_clang22_materializer_prior_artifact_storage_support)
-cxxlens_enable_sanitizers(
-  cxxlens_clang22_materializer_prior_artifact_storage_support)
-
-# Task-v4 journal and prior-artifact reuse form their own source-private product
-# boundary. Focused v4 consumers must not pull obsolete request or task
-# implementations merely to validate or reuse an exact v4 artifact.
-add_library(
-  cxxlens_clang22_materializer_v4_reuse_support STATIC EXCLUDE_FROM_ALL
-  src/llvm/clang22/materialization_v4_execution_journal.cpp
-  src/llvm/clang22/materialization_v4_prior_artifact.cpp)
-target_link_libraries(
-  cxxlens_clang22_materializer_v4_reuse_support
-  PUBLIC cxxlens::base
-  PRIVATE cxxlens::kernel cxxlens::sdk cxxlens_clang22_materialization_codecs
-          cxxlens_clang22_materializer_prior_artifact_storage_support)
-target_include_directories(cxxlens_clang22_materializer_v4_reuse_support
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_materializer_v4_reuse_support
-                        PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_reuse_support)
-cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_reuse_support)
-
-# Installed occurrence identity is an artifact-integrity contract. Its
-# implementation is independent of the materializer admission path and is
-# therefore kept in its own source-private archive for the focused test and
-# future installed-consumer binding.
-add_library(cxxlens_clang22_materializer_occurrence_support STATIC
-            EXCLUDE_FROM_ALL src/llvm/clang22/materialization_occurrence.cpp)
-target_link_libraries(
-  cxxlens_clang22_materializer_occurrence_support
-  PUBLIC cxxlens::base
-  PRIVATE cxxlens::kernel cxxlens::sdk cxxlens_clang22_materialization_codecs
-          cxxlens_clang22_materialization_io_support
-          cxxlens_clang22_materializer_rooted_vfs_support)
-target_include_directories(cxxlens_clang22_materializer_occurrence_support
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_materializer_occurrence_support
-                        PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_clang22_materializer_occurrence_support)
-cxxlens_enable_sanitizers(cxxlens_clang22_materializer_occurrence_support)
-
-add_library(cxxlens_clang22_materialization_request_v2_2_support STATIC
-            EXCLUDE_FROM_ALL src/llvm/clang22/materialization_request_v2_2.cpp)
-target_link_libraries(
-  cxxlens_clang22_materialization_request_v2_2_support
-  PUBLIC cxxlens::base
-  PRIVATE cxxlens::sdk cxxlens_clang22_materialization_codecs)
-target_include_directories(cxxlens_clang22_materialization_request_v2_2_support
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_materialization_request_v2_2_support
-                        PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(
-  cxxlens_clang22_materialization_request_v2_2_support)
-cxxlens_enable_sanitizers(cxxlens_clang22_materialization_request_v2_2_support)
-
-add_library(
-  cxxlens_clang22_materializer_bounded_support STATIC EXCLUDE_FROM_ALL
-  src/llvm/clang22/materialization_store_candidate.cpp
-  src/llvm/clang22/materialization_store_projection.cpp
-  src/llvm/clang22/materialization_bounded_report.cpp
-  src/llvm/clang22/materialization_store_candidate_bridge.cpp)
-target_link_libraries(
-  cxxlens_clang22_materializer_bounded_support
-  PUBLIC cxxlens::base
-  PRIVATE cxxlens::sdk cxxlens_clang22_materialization_io_support)
-target_include_directories(cxxlens_clang22_materializer_bounded_support
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_materializer_bounded_support
-                        PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_clang22_materializer_bounded_support)
-cxxlens_enable_sanitizers(cxxlens_clang22_materializer_bounded_support)
-
-# The task-v4 claim boundary is source-private and remains a first-class typed
-# boundary so the v4 authority/receipt contract cannot depend on obsolete
-# request or task implementations.
-add_library(cxxlens_clang22_materializer_v4_claims STATIC EXCLUDE_FROM_ALL
-            src/llvm/clang22/materialization_v4_claim_binding.cpp)
-target_link_libraries(
-  cxxlens_clang22_materializer_v4_claims
-  PUBLIC cxxlens::base
-  PRIVATE cxxlens::kernel cxxlens_clang22_materialization_codecs)
-target_include_directories(cxxlens_clang22_materializer_v4_claims
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_materializer_v4_claims
-                        PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_claims)
-cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_claims)
-
-# This boundary consumes only sealed task-v4 claim receipts.  Store mutation is
-# performed by the separate typed source publisher after the same authority,
-# expected/actual identity, and reopen checks have passed.
-add_library(cxxlens_clang22_materializer_v4_ingress STATIC EXCLUDE_FROM_ALL
-            src/llvm/clang22/materialization_v4_incremental_ingress.cpp)
-target_link_libraries(
-  cxxlens_clang22_materializer_v4_ingress
-  PUBLIC cxxlens::base
-  PRIVATE cxxlens_clang22_materializer_v4_claims)
-target_include_directories(cxxlens_clang22_materializer_v4_ingress
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_materializer_v4_ingress
-                        PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_ingress)
-cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_ingress)
-
-# Typed task-v4 replay source for the Store handoff.  It consumes only sealed v4
-# translations plus explicit output authority; no obsolete request/task graph or
-# inferred publication metadata is permitted at this boundary.
-add_library(cxxlens_clang22_materializer_v4_store_source STATIC EXCLUDE_FROM_ALL
-            src/llvm/clang22/materialization_v4_store_source.cpp)
-target_link_libraries(
-  cxxlens_clang22_materializer_v4_store_source
-  PUBLIC cxxlens::base
-  PRIVATE cxxlens::kernel
-          cxxlens_clang22_materializer_v4_ingress
-          cxxlens_clang22_materializer_bounded_support
-          cxxlens_bounded_store_v6_memory_internal
-          cxxlens_bounded_store_v6_sqlite_internal)
-target_include_directories(cxxlens_clang22_materializer_v4_store_source
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_materializer_v4_store_source
-                        PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_store_source)
-cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_store_source)
-
-# Complete task-v4 orchestration and report sealing.  This source-private
-# boundary owns the admission/worker/claim/Store/report ordering and is
-# explicitly exercised by the coordinator contract tests.
-add_library(
-  cxxlens_clang22_materializer_v4_coordinator STATIC EXCLUDE_FROM_ALL
-  src/llvm/clang22/materialization_report2_2_builder.cpp
-  src/llvm/clang22/materialization_v4_coordinator.cpp)
-target_link_libraries(
-  cxxlens_clang22_materializer_v4_coordinator
-  PUBLIC cxxlens::base
-  PRIVATE cxxlens::kernel
-          cxxlens::sdk
-          cxxlens_clang22_materialization_codecs
-          cxxlens_clang22_materialization_request_v2_2_support
-          cxxlens_clang22_materializer_v4_claims
-          cxxlens_clang22_materializer_v4_ingress
-          cxxlens_clang22_materializer_v4_reuse_support
-          cxxlens_clang22_materializer_bounded_support)
-target_include_directories(cxxlens_clang22_materializer_v4_coordinator
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_materializer_v4_coordinator
-                        PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_coordinator)
-cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_coordinator)
-if(CXXLENS_BUILD_SHARED)
-  # The provider runtime keeps its implementation symbols hidden in shared
-  # builds.  Embed the same source-private runtime closure used by the worker
-  # and retained materializer safety path so this coordinator remains a linkable
-  # source-private component without exporting implementation ABI.
+  # Canonical task/observation codecs stay private to provider-owned execution
+  # and materialization, without importing the Clang parser implementation.
+  add_library(
+    cxxlens_clang22_materialization_codecs STATIC
+    src/llvm/clang22/materialization_json.cpp
+    src/llvm/clang22/provider_task_v4.cpp
+    src/llvm/clang22/observation_v2.cpp
+    src/llvm/clang22/source_closure.cpp
+    src/llvm/clang22/source_closure_fd.cpp
+    src/llvm/clang22/source_closure_receiver.cpp
+    src/llvm/clang22/source_closure_spool.cpp
+    src/llvm/clang22/source_closure_task_v4.cpp
+    src/llvm/clang22/source_closure_transport.cpp
+    src/llvm/clang22/source_closure_invocation.cpp
+    src/llvm/clang22/source_closure_vfs.cpp
+    src/llvm/clang22/unicode_nfc.cpp
+    src/llvm/clang22/materialization_identity.cpp
+    src/llvm/clang22/provider_worker_ingress.cpp)
+  target_link_libraries(
+    cxxlens_clang22_materialization_codecs
+    PUBLIC cxxlens::sdk
+    PRIVATE cxxlens_icu_static cxxlens_protocol_v2)
+  # The provider SDK DSO keeps its Protocol 2 adapter definitions hidden. Give
+  # the source-private codec archive its own frame/closure adapter object
+  # without importing the heartbeat adapter's NG1 runtime dependency.
   target_sources(
+    cxxlens_clang22_materialization_codecs
+    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
+  target_include_directories(cxxlens_clang22_materialization_codecs
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_materialization_codecs
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_clang22_materialization_codecs)
+  cxxlens_enable_sanitizers(cxxlens_clang22_materialization_codecs)
+
+  # Source-private materialization primitives are split by ownership.  The
+  # bounded Store candidate and the v2.2 request validator are consumed by
+  # focused product tests and by the independent safety ports below, but neither
+  # target is part of the installed materializer or worker production graph.
+  # Keeping these sources in their own archives prevents a focused test from
+  # accidentally becoming the link-time owner of the v2.2 primitives.
+  add_library(cxxlens_clang22_materialization_io_support STATIC EXCLUDE_FROM_ALL
+              src/llvm/clang22/materialization_io.cpp)
+  target_link_libraries(
+    cxxlens_clang22_materialization_io_support
+    PUBLIC cxxlens::base
+    PRIVATE cxxlens::sdk)
+  target_include_directories(cxxlens_clang22_materialization_io_support
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_materialization_io_support
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_clang22_materialization_io_support)
+  cxxlens_enable_sanitizers(cxxlens_clang22_materialization_io_support)
+
+  # Rooted SQLite VFS is a product safety primitive, not a dependency of the
+  # installed materializer. Keep its implementation in a source-private archive
+  # so focused VFS tests and prior-artifact reuse share one implementation
+  # without pulling unrelated request/task code.
+  add_library(cxxlens_clang22_materializer_rooted_vfs_support STATIC
+              EXCLUDE_FROM_ALL src/llvm/clang22/materialization_rooted_vfs.cpp)
+  target_link_libraries(
+    cxxlens_clang22_materializer_rooted_vfs_support
+    PUBLIC cxxlens::base
+    PRIVATE cxxlens::kernel cxxlens::sdk cxxlens_clang22_materialization_codecs
+            cxxlens_clang22_materialization_io_support)
+  target_include_directories(cxxlens_clang22_materializer_rooted_vfs_support
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_materializer_rooted_vfs_support
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_clang22_materializer_rooted_vfs_support)
+  cxxlens_enable_sanitizers(cxxlens_clang22_materializer_rooted_vfs_support)
+
+  # Store outcome classification is likewise a source-private product boundary.
+  # It is consumed by its direct contract test and can be connected by the v4
+  # publication path without importing unrelated safety implementations.
+  add_library(
+    cxxlens_clang22_materializer_store_outcome_support STATIC EXCLUDE_FROM_ALL
+    src/llvm/clang22/materialization_store_outcome.cpp)
+  target_link_libraries(
+    cxxlens_clang22_materializer_store_outcome_support
+    PUBLIC cxxlens::base
+    PRIVATE cxxlens::kernel)
+  target_include_directories(cxxlens_clang22_materializer_store_outcome_support
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_materializer_store_outcome_support
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(
+    cxxlens_clang22_materializer_store_outcome_support)
+  cxxlens_enable_sanitizers(cxxlens_clang22_materializer_store_outcome_support)
+
+  # Prior-artifact sidecar I/O is shared by the focused safety suite and task-v4
+  # reuse without making either implementation own the other.
+  add_library(
+    cxxlens_clang22_materializer_prior_artifact_storage_support STATIC
+    EXCLUDE_FROM_ALL
+    src/llvm/clang22/materialization_prior_artifact_storage_internal.cpp)
+  target_link_libraries(
+    cxxlens_clang22_materializer_prior_artifact_storage_support
+    PUBLIC cxxlens::base
+    PRIVATE cxxlens_clang22_materialization_io_support
+            cxxlens_clang22_materializer_rooted_vfs_support)
+  target_include_directories(
+    cxxlens_clang22_materializer_prior_artifact_storage_support
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(
+    cxxlens_clang22_materializer_prior_artifact_storage_support
+    PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(
+    cxxlens_clang22_materializer_prior_artifact_storage_support)
+  cxxlens_enable_sanitizers(
+    cxxlens_clang22_materializer_prior_artifact_storage_support)
+
+  # Task-v4 journal and prior-artifact reuse form their own source-private
+  # product boundary. Focused v4 consumers must not pull obsolete request or
+  # task implementations merely to validate or reuse an exact v4 artifact.
+  add_library(
+    cxxlens_clang22_materializer_v4_reuse_support STATIC EXCLUDE_FROM_ALL
+    src/llvm/clang22/materialization_v4_execution_journal.cpp
+    src/llvm/clang22/materialization_v4_prior_artifact.cpp)
+  target_link_libraries(
+    cxxlens_clang22_materializer_v4_reuse_support
+    PUBLIC cxxlens::base
+    PRIVATE cxxlens::kernel cxxlens::sdk cxxlens_clang22_materialization_codecs
+            cxxlens_clang22_materializer_prior_artifact_storage_support)
+  target_include_directories(cxxlens_clang22_materializer_v4_reuse_support
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_materializer_v4_reuse_support
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_reuse_support)
+  cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_reuse_support)
+
+  # Installed occurrence identity is an artifact-integrity contract. Its
+  # implementation is independent of the materializer admission path and is
+  # therefore kept in its own source-private archive for the focused test and
+  # future installed-consumer binding.
+  add_library(cxxlens_clang22_materializer_occurrence_support STATIC
+              EXCLUDE_FROM_ALL src/llvm/clang22/materialization_occurrence.cpp)
+  target_link_libraries(
+    cxxlens_clang22_materializer_occurrence_support
+    PUBLIC cxxlens::base
+    PRIVATE cxxlens::kernel cxxlens::sdk cxxlens_clang22_materialization_codecs
+            cxxlens_clang22_materialization_io_support
+            cxxlens_clang22_materializer_rooted_vfs_support)
+  target_include_directories(cxxlens_clang22_materializer_occurrence_support
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_materializer_occurrence_support
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_clang22_materializer_occurrence_support)
+  cxxlens_enable_sanitizers(cxxlens_clang22_materializer_occurrence_support)
+
+  add_library(
+    cxxlens_clang22_materialization_request_v2_2_support STATIC EXCLUDE_FROM_ALL
+    src/llvm/clang22/materialization_request_v2_2.cpp)
+  target_link_libraries(
+    cxxlens_clang22_materialization_request_v2_2_support
+    PUBLIC cxxlens::base
+    PRIVATE cxxlens::sdk cxxlens_clang22_materialization_codecs)
+  target_include_directories(
+    cxxlens_clang22_materialization_request_v2_2_support
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_materialization_request_v2_2_support
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(
+    cxxlens_clang22_materialization_request_v2_2_support)
+  cxxlens_enable_sanitizers(
+    cxxlens_clang22_materialization_request_v2_2_support)
+
+  add_library(
+    cxxlens_clang22_materializer_bounded_support STATIC EXCLUDE_FROM_ALL
+    src/llvm/clang22/materialization_store_candidate.cpp
+    src/llvm/clang22/materialization_store_projection.cpp
+    src/llvm/clang22/materialization_bounded_report.cpp
+    src/llvm/clang22/materialization_store_candidate_bridge.cpp)
+  target_link_libraries(
+    cxxlens_clang22_materializer_bounded_support
+    PUBLIC cxxlens::base
+    PRIVATE cxxlens::sdk cxxlens_clang22_materialization_io_support)
+  target_include_directories(cxxlens_clang22_materializer_bounded_support
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_materializer_bounded_support
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_clang22_materializer_bounded_support)
+  cxxlens_enable_sanitizers(cxxlens_clang22_materializer_bounded_support)
+
+  # The task-v4 claim boundary is source-private and remains a first-class typed
+  # boundary so the v4 authority/receipt contract cannot depend on obsolete
+  # request or task implementations.
+  add_library(cxxlens_clang22_materializer_v4_claims STATIC EXCLUDE_FROM_ALL
+              src/llvm/clang22/materialization_v4_claim_binding.cpp)
+  target_link_libraries(
+    cxxlens_clang22_materializer_v4_claims
+    PUBLIC cxxlens::base
+    PRIVATE cxxlens::kernel cxxlens_clang22_materialization_codecs)
+  target_include_directories(cxxlens_clang22_materializer_v4_claims
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_materializer_v4_claims
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_claims)
+  cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_claims)
+
+  # This boundary consumes only sealed task-v4 claim receipts.  Store mutation
+  # is performed by the separate typed source publisher after the same
+  # authority, expected/actual identity, and reopen checks have passed.
+  add_library(cxxlens_clang22_materializer_v4_ingress STATIC EXCLUDE_FROM_ALL
+              src/llvm/clang22/materialization_v4_incremental_ingress.cpp)
+  target_link_libraries(
+    cxxlens_clang22_materializer_v4_ingress
+    PUBLIC cxxlens::base
+    PRIVATE cxxlens_clang22_materializer_v4_claims)
+  target_include_directories(cxxlens_clang22_materializer_v4_ingress
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_materializer_v4_ingress
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_ingress)
+  cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_ingress)
+
+  # Typed task-v4 replay source for the Store handoff.  It consumes only sealed
+  # v4 translations plus explicit output authority; no obsolete request/task
+  # graph or inferred publication metadata is permitted at this boundary.
+  add_library(
+    cxxlens_clang22_materializer_v4_store_source STATIC EXCLUDE_FROM_ALL
+    src/llvm/clang22/materialization_v4_store_source.cpp)
+  target_link_libraries(
+    cxxlens_clang22_materializer_v4_store_source
+    PUBLIC cxxlens::base
+    PRIVATE cxxlens::kernel
+            cxxlens_clang22_materializer_v4_ingress
+            cxxlens_clang22_materializer_bounded_support
+            cxxlens_bounded_store_v6_memory_internal
+            cxxlens_bounded_store_v6_sqlite_internal)
+  target_include_directories(cxxlens_clang22_materializer_v4_store_source
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_materializer_v4_store_source
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_store_source)
+  cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_store_source)
+
+  # Complete task-v4 orchestration and report sealing.  This source-private
+  # boundary owns the admission/worker/claim/Store/report ordering and is
+  # explicitly exercised by the coordinator contract tests.
+  add_library(
+    cxxlens_clang22_materializer_v4_coordinator STATIC EXCLUDE_FROM_ALL
+    src/llvm/clang22/materialization_report2_2_builder.cpp
+    src/llvm/clang22/materialization_v4_coordinator.cpp)
+  target_link_libraries(
     cxxlens_clang22_materializer_v4_coordinator
-    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
-            $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
-  target_link_libraries(cxxlens_clang22_materializer_v4_coordinator
-                        PRIVATE cxxlens_protocol_v2)
-endif()
+    PUBLIC cxxlens::base
+    PRIVATE cxxlens::kernel
+            cxxlens::sdk
+            cxxlens_clang22_materialization_codecs
+            cxxlens_clang22_materialization_request_v2_2_support
+            cxxlens_clang22_materializer_v4_claims
+            cxxlens_clang22_materializer_v4_ingress
+            cxxlens_clang22_materializer_v4_reuse_support
+            cxxlens_clang22_materializer_bounded_support)
+  target_include_directories(cxxlens_clang22_materializer_v4_coordinator
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_materializer_v4_coordinator
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_clang22_materializer_v4_coordinator)
+  cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v4_coordinator)
+  if(CXXLENS_BUILD_SHARED)
+    # The provider runtime keeps its implementation symbols hidden in shared
+    # builds.  Embed the same source-private runtime closure used by the worker
+    # and retained materializer safety path so this coordinator remains a
+    # linkable source-private component without exporting implementation ABI.
+    target_sources(
+      cxxlens_clang22_materializer_v4_coordinator
+      PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
+              $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
+    target_link_libraries(cxxlens_clang22_materializer_v4_coordinator
+                          PRIVATE cxxlens_protocol_v2)
+  endif()
 
-# Request-v2.2 admission is kept in a standalone source-private boundary.  The
-# v2.2 tests and consumers do not pull unrelated implementation merely to issue
-# a task token.
-add_library(cxxlens_clang22_materializer_v2_2_pipeline_support STATIC
-            EXCLUDE_FROM_ALL src/llvm/clang22/materialization_pipeline_v2_2.cpp)
-target_link_libraries(
-  cxxlens_clang22_materializer_v2_2_pipeline_support
-  PUBLIC cxxlens::base
-  PRIVATE cxxlens::sdk cxxlens_clang22_materialization_codecs
-          cxxlens_clang22_materialization_request_v2_2_support)
-target_include_directories(cxxlens_clang22_materializer_v2_2_pipeline_support
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_materializer_v2_2_pipeline_support
-                        PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_clang22_materializer_v2_2_pipeline_support)
-cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v2_2_pipeline_support)
+  # Request-v2.2 admission is kept in a standalone source-private boundary.  The
+  # v2.2 tests and consumers do not pull unrelated implementation merely to
+  # issue a task token.
+  add_library(
+    cxxlens_clang22_materializer_v2_2_pipeline_support STATIC EXCLUDE_FROM_ALL
+    src/llvm/clang22/materialization_pipeline_v2_2.cpp)
+  target_link_libraries(
+    cxxlens_clang22_materializer_v2_2_pipeline_support
+    PUBLIC cxxlens::base
+    PRIVATE cxxlens::sdk cxxlens_clang22_materialization_codecs
+            cxxlens_clang22_materialization_request_v2_2_support)
+  target_include_directories(cxxlens_clang22_materializer_v2_2_pipeline_support
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_materializer_v2_2_pipeline_support
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(
+    cxxlens_clang22_materializer_v2_2_pipeline_support)
+  cxxlens_enable_sanitizers(cxxlens_clang22_materializer_v2_2_pipeline_support)
 
-# Worker/parser implementation stays out of the installed Clang 22 SDK DSO. It
-# is linked only by provider-owned executables and source-private tests.
-add_library(
-  cxxlens_clang22_worker_core STATIC
-  src/llvm/clang22/provider_worker_channel.cpp
-  src/llvm/clang22/provider_worker_v2_2.cpp
-  src/llvm/clang22/source_closure_native.cpp
-  src/llvm/clang22/provider_worker_v4.cpp
-  src/llvm/clang22/provider_worker_v4_ast_observer.cpp
-  src/llvm/clang22/provider_worker_v4_output_normalizer.cpp
-  src/llvm/clang22/source_closure_task_v4_worker.cpp)
-target_link_libraries(
-  cxxlens_clang22_worker_core
-  PUBLIC cxxlens::clang22_provider_sdk
-  PRIVATE cxxlens_clang22_materialization_codecs)
-if(CXXLENS_BUILD_SHARED)
-  target_sources(
+  # Worker/parser implementation stays out of the installed Clang 22 SDK DSO. It
+  # is linked only by provider-owned executables and source-private tests.
+  add_library(
+    cxxlens_clang22_worker_core STATIC
+    src/llvm/clang22/provider_worker_channel.cpp
+    src/llvm/clang22/provider_worker_v2_2.cpp
+    src/llvm/clang22/source_closure_native.cpp
+    src/llvm/clang22/provider_worker_v4.cpp
+    src/llvm/clang22/provider_worker_v4_ast_observer.cpp
+    src/llvm/clang22/provider_worker_v4_output_normalizer.cpp
+    src/llvm/clang22/source_closure_task_v4_worker.cpp)
+  target_link_libraries(
     cxxlens_clang22_worker_core
-    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
-            $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
-  target_link_libraries(cxxlens_clang22_worker_core PRIVATE cxxlens_protocol_v2)
+    PUBLIC cxxlens::clang22_provider_sdk
+    PRIVATE cxxlens_clang22_materialization_codecs)
+  if(CXXLENS_BUILD_SHARED)
+    target_sources(
+      cxxlens_clang22_worker_core
+      PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
+              $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
+    target_link_libraries(cxxlens_clang22_worker_core
+                          PRIVATE cxxlens_protocol_v2)
+  endif()
+  target_include_directories(cxxlens_clang22_worker_core
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_worker_core PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_clang22_worker_core)
+  cxxlens_enable_sanitizers(cxxlens_clang22_worker_core)
+  cxxlens_configure_clang22(cxxlens_clang22_worker_core)
+  # Keep the provider SDK runtime on the project-wide RTTI configuration. Its
+  # context owns standard-library polymorphic state (including shared_ptr
+  # control blocks), so compiling only this translation unit with an
+  # RTTI-disabled override makes UBSan observe invalid vtables when the exact
+  # provider is enabled.
+  if(CXXLENS_ENABLE_UBSAN AND NOT MSVC)
+    set_source_files_properties(src/llvm/clang22/provider_worker_v2_2.cpp
+                                PROPERTIES COMPILE_OPTIONS "-frtti")
+  endif()
+
+  # Source-private production bridge for the explicit task-v4 detached-claim
+  # handoff.  It consumes only the worker core and the independently validating
+  # v4 ingress; Store publication stays in the typed source publisher.
+  add_library(cxxlens_clang22_worker_v4_claim_bridge STATIC
+              src/llvm/clang22/provider_worker_v4_claim_bridge.cpp)
+  target_link_libraries(
+    cxxlens_clang22_worker_v4_claim_bridge
+    PUBLIC cxxlens::base
+    PRIVATE cxxlens_clang22_worker_core cxxlens_clang22_materializer_v4_ingress)
+  target_include_directories(cxxlens_clang22_worker_v4_claim_bridge
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_worker_v4_claim_bridge
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_clang22_worker_v4_claim_bridge)
+  cxxlens_enable_sanitizers(cxxlens_clang22_worker_v4_claim_bridge)
+
+  # Source-private typed Store v6 ingress. Keep the production binding separate
+  # from the installed v2.2 boundary and the focused safety ports.
+  add_library(
+    cxxlens_clang22_materializer_store_v6_typed_ingress STATIC EXCLUDE_FROM_ALL
+    src/llvm/clang22/materialization_store_v6_typed_ingress.cpp)
+  target_link_libraries(
+    cxxlens_clang22_materializer_store_v6_typed_ingress
+    PUBLIC cxxlens::base
+    PRIVATE cxxlens::kernel
+            cxxlens_bounded_store_v6_memory_internal
+            cxxlens::sdk
+            cxxlens_clang22_materialization_codecs
+            cxxlens_clang22_materialization_io_support
+            cxxlens_clang22_materialization_request_v2_2_support
+            cxxlens_clang22_provider_task_v4_authority_internal
+            cxxlens_clang22_materializer_v4_claims
+            cxxlens_clang22_materializer_v4_ingress
+            cxxlens_clang22_materializer_v4_reuse_support
+            cxxlens_clang22_worker_core)
+  target_include_directories(cxxlens_clang22_materializer_store_v6_typed_ingress
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_materializer_store_v6_typed_ingress
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(
+    cxxlens_clang22_materializer_store_v6_typed_ingress)
+  cxxlens_enable_sanitizers(cxxlens_clang22_materializer_store_v6_typed_ingress)
+
+  # The installed materializer boundary owns the v2.2 ingress, Protocol 2.0
+  # worker handoff, and typed v4 Store publication.  Older request/task paths
+  # are not part of this production graph.
+  add_library(
+    cxxlens_clang22_materializer_ingress STATIC
+    src/llvm/clang22/materialization_io.cpp
+    src/llvm/clang22/materialization_request_v2_2.cpp
+    src/llvm/clang22/installed_materializer_source_closure.cpp
+    src/llvm/clang22/materializer_report_v2_2_encoder.cpp
+    src/llvm/clang22/materializer_worker_bridge.cpp
+    src/llvm/clang22/provider_trust_issuer_internal.cpp)
+  target_link_libraries(
+    cxxlens_clang22_materializer_ingress
+    PUBLIC cxxlens::base cxxlens::sdk
+    PRIVATE cxxlens_clang22_materialization_codecs
+            cxxlens_icu_static
+            cxxlens_clang22_worker_core
+            cxxlens_clang22_materializer_rooted_vfs_support
+            cxxlens_bounded_store_v6_memory_internal
+            cxxlens_bounded_store_v6_sqlite_internal
+            cxxlens_clang22_materializer_occurrence_support
+            cxxlens_clang22_materializer_v4_store_source
+            cxxlens_clang22_materializer_v4_coordinator)
+  target_include_directories(cxxlens_clang22_materializer_ingress
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_materializer_ingress
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_clang22_materializer_ingress)
+  cxxlens_enable_sanitizers(cxxlens_clang22_materializer_ingress)
 endif()
-target_include_directories(cxxlens_clang22_worker_core
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_worker_core PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_clang22_worker_core)
-cxxlens_enable_sanitizers(cxxlens_clang22_worker_core)
-cxxlens_configure_clang22(cxxlens_clang22_worker_core)
-# Keep the provider SDK runtime on the project-wide RTTI configuration. Its
-# context owns standard-library polymorphic state (including shared_ptr control
-# blocks), so compiling only this translation unit with an RTTI-disabled
-# override makes UBSan observe invalid vtables when the exact provider is
-# enabled.
-if(CXXLENS_ENABLE_UBSAN AND NOT MSVC)
-  set_source_files_properties(src/llvm/clang22/provider_worker_v2_2.cpp
-                              PROPERTIES COMPILE_OPTIONS "-frtti")
-endif()
-
-# Source-private production bridge for the explicit task-v4 detached-claim
-# handoff.  It consumes only the worker core and the independently validating v4
-# ingress; Store publication stays in the typed source publisher.
-add_library(cxxlens_clang22_worker_v4_claim_bridge STATIC
-            src/llvm/clang22/provider_worker_v4_claim_bridge.cpp)
-target_link_libraries(
-  cxxlens_clang22_worker_v4_claim_bridge
-  PUBLIC cxxlens::base
-  PRIVATE cxxlens_clang22_worker_core cxxlens_clang22_materializer_v4_ingress)
-target_include_directories(cxxlens_clang22_worker_v4_claim_bridge
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_worker_v4_claim_bridge
-                        PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_clang22_worker_v4_claim_bridge)
-cxxlens_enable_sanitizers(cxxlens_clang22_worker_v4_claim_bridge)
-
-# Source-private typed Store v6 ingress. Keep the production binding separate
-# from the installed v2.2 boundary and the focused safety ports.
-add_library(
-  cxxlens_clang22_materializer_store_v6_typed_ingress STATIC EXCLUDE_FROM_ALL
-  src/llvm/clang22/materialization_store_v6_typed_ingress.cpp)
-target_link_libraries(
-  cxxlens_clang22_materializer_store_v6_typed_ingress
-  PUBLIC cxxlens::base
-  PRIVATE cxxlens::kernel
-          cxxlens_bounded_store_v6_memory_internal
-          cxxlens::sdk
-          cxxlens_clang22_materialization_codecs
-          cxxlens_clang22_materialization_io_support
-          cxxlens_clang22_materialization_request_v2_2_support
-          cxxlens_clang22_provider_task_v4_authority_internal
-          cxxlens_clang22_materializer_v4_claims
-          cxxlens_clang22_materializer_v4_ingress
-          cxxlens_clang22_materializer_v4_reuse_support
-          cxxlens_clang22_worker_core)
-target_include_directories(cxxlens_clang22_materializer_store_v6_typed_ingress
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_materializer_store_v6_typed_ingress
-                        PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(
-  cxxlens_clang22_materializer_store_v6_typed_ingress)
-cxxlens_enable_sanitizers(cxxlens_clang22_materializer_store_v6_typed_ingress)
-
-# The installed materializer boundary owns the v2.2 ingress, Protocol 2.0 worker
-# handoff, and typed v4 Store publication.  Older request/task paths are not
-# part of this production graph.
-add_library(
-  cxxlens_clang22_materializer_ingress STATIC
-  src/llvm/clang22/materialization_io.cpp
-  src/llvm/clang22/materialization_request_v2_2.cpp
-  src/llvm/clang22/installed_materializer_source_closure.cpp
-  src/llvm/clang22/materializer_report_v2_2_encoder.cpp
-  src/llvm/clang22/materializer_worker_bridge.cpp
-  src/llvm/clang22/provider_trust_issuer_internal.cpp)
-target_link_libraries(
-  cxxlens_clang22_materializer_ingress
-  PUBLIC cxxlens::base cxxlens::sdk
-  PRIVATE cxxlens_clang22_materialization_codecs
-          cxxlens_icu_static
-          cxxlens_clang22_worker_core
-          cxxlens_clang22_materializer_rooted_vfs_support
-          cxxlens_bounded_store_v6_memory_internal
-          cxxlens_bounded_store_v6_sqlite_internal
-          cxxlens_clang22_materializer_occurrence_support
-          cxxlens_clang22_materializer_v4_store_source
-          cxxlens_clang22_materializer_v4_coordinator)
-target_include_directories(cxxlens_clang22_materializer_ingress
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_clang22_materializer_ingress PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_clang22_materializer_ingress)
-cxxlens_enable_sanitizers(cxxlens_clang22_materializer_ingress)
 
 add_executable(cxxlens-provider-scaffold tools/sdk/provider_scaffold_main.cpp)
 target_link_libraries(cxxlens-provider-scaffold PRIVATE cxxlens::sdk)
@@ -883,37 +934,39 @@ cxxlens_set_project_warnings(cxxlens_cli)
 cxxlens_enable_sanitizers(cxxlens_cli)
 cxxlens_configure_installed_tool(cxxlens_cli)
 
-add_executable(cxxlens-clang-worker-22
-               src/llvm/clang22/provider_worker_main.cpp)
-target_link_libraries(
-  cxxlens-clang-worker-22
-  PRIVATE cxxlens_clang22_worker_core cxxlens_clang22_worker_v4_claim_bridge
-          cxxlens_clang22_materialization_codecs)
-if(CXXLENS_BUILD_SHARED)
-  # The worker SDK is a static private closure when the public SDK is shared.
-  # Its provider implementation references the hidden runtime objects.  Put
-  # those objects on the final executable as well as in worker_core so archive
-  # ordering cannot leave the incremental transcript symbols unresolved.
-  target_sources(cxxlens-clang-worker-22
-                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
-endif()
-target_include_directories(cxxlens-clang-worker-22
-                           PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens-clang-worker-22 PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens-clang-worker-22)
-cxxlens_enable_sanitizers(cxxlens-clang-worker-22)
-cxxlens_configure_installed_clang22_tool(cxxlens-clang-worker-22)
+if(CXXLENS_BUILD_CLANG22_COMPONENTS)
+  add_executable(cxxlens-clang-worker-22
+                 src/llvm/clang22/provider_worker_main.cpp)
+  target_link_libraries(
+    cxxlens-clang-worker-22
+    PRIVATE cxxlens_clang22_worker_core cxxlens_clang22_worker_v4_claim_bridge
+            cxxlens_clang22_materialization_codecs)
+  if(CXXLENS_BUILD_SHARED)
+    # The worker SDK is a static private closure when the public SDK is shared.
+    # Its provider implementation references the hidden runtime objects.  Put
+    # those objects on the final executable as well as in worker_core so archive
+    # ordering cannot leave the incremental transcript symbols unresolved.
+    target_sources(cxxlens-clang-worker-22
+                   PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+  endif()
+  target_include_directories(cxxlens-clang-worker-22
+                             PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens-clang-worker-22 PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens-clang-worker-22)
+  cxxlens_enable_sanitizers(cxxlens-clang-worker-22)
+  cxxlens_configure_installed_clang22_tool(cxxlens-clang-worker-22)
 
-add_executable(cxxlens-clang22-materialize
-               tools/clang22/materialize_main_v2.cpp)
-target_link_libraries(cxxlens-clang22-materialize
-                      PRIVATE cxxlens_clang22_materializer_ingress)
-target_include_directories(cxxlens-clang22-materialize
-                           PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens-clang22-materialize PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens-clang22-materialize)
-cxxlens_enable_sanitizers(cxxlens-clang22-materialize)
-cxxlens_configure_installed_clang22_tool(cxxlens-clang22-materialize)
+  add_executable(cxxlens-clang22-materialize
+                 tools/clang22/materialize_main_v2.cpp)
+  target_link_libraries(cxxlens-clang22-materialize
+                        PRIVATE cxxlens_clang22_materializer_ingress)
+  target_include_directories(cxxlens-clang22-materialize
+                             PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens-clang22-materialize PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens-clang22-materialize)
+  cxxlens_enable_sanitizers(cxxlens-clang22-materialize)
+  cxxlens_configure_installed_clang22_tool(cxxlens-clang22-materialize)
+endif()
 
 set(CXXLENS_COMPILED_TARGETS
     cxxlens_base
@@ -925,11 +978,12 @@ set(CXXLENS_COMPILED_TARGETS
     cxxlens_provider_protocol_v2_internal
     cxxlens_sdk
     cxxlens_cli
-    cxxlens_clang22_provider_sdk
-    cxxlens_clang22_materialization_codecs
-    cxxlens_clang22_worker_core
-    cxxlens_clang22_worker_v4_claim_bridge
-    cxxlens_clang22_materializer_ingress)
+    cxxlens_clang22_provider_sdk)
+if(CXXLENS_BUILD_CLANG22_COMPONENTS)
+  list(APPEND CXXLENS_COMPILED_TARGETS cxxlens_clang22_materialization_codecs
+       cxxlens_clang22_worker_core cxxlens_clang22_worker_v4_claim_bridge
+       cxxlens_clang22_materializer_ingress)
+endif()
 
 if(CXXLENS_ENABLE_CLANG_TIDY)
   find_program(CXXLENS_CLANG_TIDY NAMES clang-tidy-22 clang-tidy REQUIRED)
@@ -977,17 +1031,20 @@ install(
   RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
   INCLUDES
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
-install(
-  TARGETS cxxlens_clang22_provider_sdk
-  EXPORT cxxlensClang22ProviderSDKTargets
-  ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-  LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-  RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
-  INCLUDES
-  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 install(TARGETS cxxlens_cli cxxlens-provider-scaffold cxxlens-sdk-doctor
-                cxxlens-clang-worker-22 cxxlens-clang22-materialize
         RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+if(CXXLENS_BUILD_CLANG22_COMPONENTS)
+  install(
+    TARGETS cxxlens_clang22_provider_sdk
+    EXPORT cxxlensClang22ProviderSDKTargets
+    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    INCLUDES
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+  install(TARGETS cxxlens-clang-worker-22 cxxlens-clang22-materialize
+          RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+endif()
 install(
   PROGRAMS tools/sdk/relation_idl_compiler.py
   DESTINATION "${CMAKE_INSTALL_BINDIR}"
@@ -1085,28 +1142,34 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/cxxlensConfig.cmake"
               "${CMAKE_CURRENT_BINARY_DIR}/cxxlensConfigVersion.cmake"
         DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlens")
 
-configure_package_config_file(
-  cmake/cxxlensClang22ProviderSDKConfig.cmake.in
-  "${CMAKE_CURRENT_BINARY_DIR}/cxxlensClang22ProviderSDKConfig.cmake"
-  INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlensClang22ProviderSDK")
-write_basic_package_version_file(
-  "${CMAKE_CURRENT_BINARY_DIR}/cxxlensClang22ProviderSDKConfigVersion.cmake"
-  VERSION "${PROJECT_VERSION}"
-  COMPATIBILITY SameMajorVersion)
-install(
-  EXPORT cxxlensClang22ProviderSDKTargets
-  FILE cxxlensClang22ProviderSDKTargets.cmake
-  NAMESPACE cxxlens::
-  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlensClang22ProviderSDK")
-install(
-  FILES
+if(CXXLENS_BUILD_CLANG22_COMPONENTS)
+  configure_package_config_file(
+    cmake/cxxlensClang22ProviderSDKConfig.cmake.in
     "${CMAKE_CURRENT_BINARY_DIR}/cxxlensClang22ProviderSDKConfig.cmake"
+    INSTALL_DESTINATION
+      "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlensClang22ProviderSDK")
+  write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/cxxlensClang22ProviderSDKConfigVersion.cmake"
-  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlensClang22ProviderSDK")
+    VERSION "${PROJECT_VERSION}"
+    COMPATIBILITY SameMajorVersion)
+  install(
+    EXPORT cxxlensClang22ProviderSDKTargets
+    FILE cxxlensClang22ProviderSDKTargets.cmake
+    NAMESPACE cxxlens::
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlensClang22ProviderSDK")
+  install(
+    FILES
+      "${CMAKE_CURRENT_BINARY_DIR}/cxxlensClang22ProviderSDKConfig.cmake"
+      "${CMAKE_CURRENT_BINARY_DIR}/cxxlensClang22ProviderSDKConfigVersion.cmake"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlensClang22ProviderSDK")
+endif()
 
 # The occurrence manifest inventories the final installed executables, schemas,
 # and (for shared packages) runtime libraries.  Generate it only after all
 # inventoried install rules have completed so its digests bind the actual
 # package, including a relocated install prefix.
-install(
-  SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/GenerateClang22OccurrenceManifest.cmake")
+if(CXXLENS_BUILD_CLANG22_COMPONENTS)
+  install(
+    SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/GenerateClang22OccurrenceManifest.cmake"
+  )
+endif()
