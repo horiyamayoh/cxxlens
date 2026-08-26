@@ -2213,6 +2213,36 @@ foreach(
         security.sdk-openssl-ed25519-verifier)
   cxxlens_append_test_label("${test_name}" provider-hardened)
 endforeach()
+
+# The fast lane is a local, compiler-neutral smoke set.  It exercises the public
+# SDK examples, negative admission paths, relation generation, and repository
+# boundary checks without replacing the complete deterministic suite used by
+# main and release workflows.
+foreach(
+  test_name IN
+  ITEMS quality.format
+        quality.text-lint
+        quality.documentation-consistency
+        quality.public-boundary
+        quality.runtime-port
+        configure.dev-core-no-dependencies
+        public-api.cxxlens-header
+        public-api.sdk-header
+        sdk.example-typed_query
+        sdk.example-dynamic_query
+        sdk.example-portable_provider
+        sdk.example-recipe
+        sdk.example-relation_claim_batch
+        sdk.example-snapshot_store
+        sdk.example-query_execution
+        sdk.example-incremental_materialization
+        sdk.negative-dynamic_literal_type_mismatch
+        sdk.negative-unordered_limit
+        sdk.negative-invalid_recipe
+        sdk.negative-provider_no_credit
+        quality.relation-idl-reproducibility)
+  cxxlens_append_test_label("${test_name}" fast)
+endforeach()
 unset(test_name)
 
 if(CXXLENS_CLANG22_AVAILABLE)

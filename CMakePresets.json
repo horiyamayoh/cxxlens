@@ -104,6 +104,13 @@
   "testPresets": [
     {"name": "dev-clang", "configurePreset": "dev-clang", "output": {"outputOnFailure": true}},
     {"name": "dev-core", "configurePreset": "dev-core", "output": {"outputOnFailure": true}},
+    {
+      "name": "fast",
+      "configurePreset": "dev-core",
+      "displayName": "Fast compiler-neutral developer tests",
+      "output": {"outputOnFailure": true},
+      "filter": {"include": {"label": "fast"}}
+    },
     {"name": "ci-quick", "configurePreset": "ci-quick", "output": {"outputOnFailure": true}},
     {"name": "asan-ubsan", "configurePreset": "asan-ubsan", "output": {"outputOnFailure": true}},
     {"name": "install-check", "configurePreset": "install-check", "output": {"outputOnFailure": true}},

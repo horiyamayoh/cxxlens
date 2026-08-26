@@ -31,6 +31,7 @@ Phase 1 の変更は原則 `CH-0`。公開意味論、identity、protocol、pers
 - `CXXLENS_BUILD_CLANG22_COMPONENTS` を導入し、compiler-neutral core/query/store/CLI の configure を Clang/LLVM/static ICU/Git metadata から分離する。full native/package/CI は同 option を有効化し、source identity は省略しない。
 - `dev-core` は Clang adapter を無効化し、Git metadata のない source tree と native dependency 不在でも構成できる。native capability が必要な request は structured unavailable/error とし、silent fallback しない。
 - 既存の `dev-clang` と main/release の exact LLVM/Clang 22.1.0 検証は縮小しない。fast label はローカル反復用であり、main suite の代替にしない。
+- `dev-core` を構成・build した後は `ctest --preset fast` で compiler-neutral な SDK、negative admission、relation reproducibility、境界検査だけを反復できる。fast lane は local smoke set であり、main の全決定的 CTest や installed/native 検証を代替しない。
 
 ## Workstream C — store profiles
 

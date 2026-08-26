@@ -13,7 +13,7 @@ if(BUILD_TESTING)
       "${_cxxlens_quality_check_root}/tools/quality/check_format.py"
       --clang-format "${CXXLENS_CLANG_FORMAT}" --root
       "${_cxxlens_quality_check_root}")
-  set_tests_properties(quality.format PROPERTIES LABELS "quality;style")
+  set_tests_properties(quality.format PROPERTIES LABELS "quality;style;fast")
 
   add_test(
     NAME quality.text-lint
@@ -21,7 +21,7 @@ if(BUILD_TESTING)
       "${Python3_EXECUTABLE}"
       "${_cxxlens_quality_check_root}/tools/quality/run_text_lints.py" --root
       "${_cxxlens_quality_check_root}")
-  set_tests_properties(quality.text-lint PROPERTIES LABELS "quality;style")
+  set_tests_properties(quality.text-lint PROPERTIES LABELS "quality;style;fast")
 
   add_test(
     NAME quality.documentation-consistency
@@ -30,7 +30,7 @@ if(BUILD_TESTING)
       "${_cxxlens_quality_check_root}/tools/quality/check_documentation_consistency.py"
       check --root "${_cxxlens_quality_check_root}")
   set_tests_properties(quality.documentation-consistency
-                       PROPERTIES LABELS "quality;docs")
+                       PROPERTIES LABELS "quality;docs;fast")
 
   add_test(
     NAME quality.public-boundary
@@ -38,7 +38,8 @@ if(BUILD_TESTING)
       "${Python3_EXECUTABLE}"
       "${_cxxlens_quality_check_root}/tools/quality/check_public_headers.py"
       "${_cxxlens_quality_check_root}/include/cxxlens")
-  set_tests_properties(quality.public-boundary PROPERTIES LABELS "quality;api")
+  set_tests_properties(quality.public-boundary PROPERTIES LABELS
+                                                          "quality;api;fast")
 
   add_test(
     NAME quality.runtime-port
@@ -46,7 +47,8 @@ if(BUILD_TESTING)
       "${Python3_EXECUTABLE}"
       "${_cxxlens_quality_check_root}/tools/quality/check_runtime_port_usage.py"
       "${_cxxlens_quality_check_root}/src")
-  set_tests_properties(quality.runtime-port PROPERTIES LABELS "quality;api")
+  set_tests_properties(quality.runtime-port PROPERTIES LABELS
+                                                       "quality;api;fast")
 
   # This target is only a convenience wrapper around CTest.  CI may use it or
   # invoke CTest directly, but the checker commands themselves have one owner:
