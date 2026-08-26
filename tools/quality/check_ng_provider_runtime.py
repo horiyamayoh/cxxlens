@@ -16,12 +16,15 @@ import jsonschema
 import yaml
 
 from check_ng_provider_protocol import (
-    FRAME,
     ProviderContractError,
-    decode_frame,
-    encode_frame,
     validate_shared_coverage_authority,
     validate_shared_coverage_records,
+)
+from provider_protocol_test_support import (
+    FRAME,
+    ProviderWireTestError,
+    decode_frame,
+    encode_frame,
 )
 
 
@@ -301,7 +304,7 @@ def _decode_provider_stdout(
         occurrence = raw_stdout[offset : offset + frame_bytes]
         try:
             frame = decode_frame(protocol, occurrence, negotiated_minor=0)
-        except ProviderContractError as error:
+        except ProviderWireTestError as error:
             raise ContractError(f"raw provider stdout decode failed: {error}") from error
         frame["control_digest"] = "sha256:" + header[9].hex()
         frame["payload_digest"] = "sha256:" + header[10].hex()

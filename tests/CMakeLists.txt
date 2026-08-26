@@ -1964,6 +1964,14 @@ foreach(
 endforeach()
 
 add_test(
+  NAME quality.relation-idl-reproducibility
+  COMMAND "${Python3_EXECUTABLE}"
+          "${PROJECT_SOURCE_DIR}/tests/quality/test_relation_idl_compiler.py")
+set_tests_properties(
+  quality.relation-idl-reproducibility
+  PROPERTIES LABELS "quality;ng;contract;relation;generated")
+
+add_test(
   NAME sdk.doctor-product
   COMMAND
     "${Python3_EXECUTABLE}"

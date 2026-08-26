@@ -33,7 +33,6 @@ from check_ng_source_closure_transport import (  # noqa: E402
     TransferStateWitness,
     blob_receipts_digest,
     canonical_json,
-    cbor_encode,
     closure_digest,
     complete_request_witness,
     content_projection_digest,
@@ -50,7 +49,10 @@ from check_ng_source_closure_transport import (  # noqa: E402
     validate_request_binding,
     transfer_digest,
 )
-from check_ng_provider_protocol import encode_frame  # noqa: E402
+from provider_protocol_test_support import (  # noqa: E402
+    cbor_encode,
+    encode_frame,
+)
 
 SEMANTIC = "semantic-v2:sha256:" + "1" * 64
 SESSION_ID = "provider-session:sha256:" + "2" * 64
