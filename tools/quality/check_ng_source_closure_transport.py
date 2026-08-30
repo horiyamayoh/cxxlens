@@ -15,7 +15,7 @@ from typing import Any
 import jsonschema
 import yaml
 
-from check_ng_provider_protocol import cbor_encode
+from provider_protocol_test_support import cbor_encode
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]

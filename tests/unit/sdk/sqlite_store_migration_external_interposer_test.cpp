@@ -45,6 +45,7 @@ namespace
 	using cxxlens::test::sqlite_v3_scenario::make_engine;
 	using cxxlens::test::sqlite_v3_scenario::selector;
 	using sqlite_row = cxxlens::test::sqlite_fixture::row;
+	constexpr auto child_deadline = std::chrono::seconds{15};
 
 	using arm_function = int (*)(const char*, const char*);
 	using status_function = int (*)();
@@ -530,7 +531,7 @@ namespace
 
 		owned_child child{process};
 		int status{};
-		const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{45};
+		const auto deadline = std::chrono::steady_clock::now() + child_deadline;
 		for (;;)
 		{
 			const auto waited = ::waitpid(child.get(), &status, WNOHANG);
@@ -551,7 +552,8 @@ namespace
 			if (std::chrono::steady_clock::now() >= deadline)
 			{
 				child.terminate_and_reap();
-				fail("migration interposer child exceeded bounded runtime");
+				fail("migration interposer child exceeded 15-second bounded deadline in mode " +
+					 std::string{mode});
 			}
 			std::this_thread::sleep_for(std::chrono::milliseconds{20});
 		}

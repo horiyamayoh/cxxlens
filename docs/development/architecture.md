@@ -13,13 +13,18 @@ cxxlens::cpp
 
 cxxlens::query → cxxlens::recipes
 cxxlens::cxxlens = base + kernel + query + cpp
-cxxlens::cxxlens + cxxlens::recipes → cxxlens::provider_sdk
-cxxlens::provider_sdk + exact Clang 22 → cxxlens::clang22_provider_sdk
+cxxlens::cxxlens + cxxlens::recipes → cxxlens::sdk
+cxxlens::sdk + exact Clang 22 → cxxlens::clang22_provider_sdk
 ```
 
-`cxxlens::provider_sdk` は relation、snapshot、query、provider、testing、recipe を束ねる高水準 author SDK です。
-`base/kernel/query/cpp/recipes/provider_sdk` は compiler-native type を public surface に露出しません。
+`cxxlens::sdk` は relation、snapshot、query、provider、testing、recipe を束ねる高水準 author SDK です。
+`base/kernel/query/cpp/recipes/sdk` は compiler-native type を public surface に露出しません。
 native target だけが Clang major に opt-in します。
+
+installed `cxxlens` CLI はこの SDK surface の薄い入口です。`doctor` と `run` は同じ
+fail-closed capability resolver を呼び、unknown の理由・coverage・completion action を落としません。
+実際の Clang 22 materialization は sealed worker/materializer boundary に残し、CLI が shell command や
+ambient filesystem を再構成することはありません。
 
 ## Semantic flow
 

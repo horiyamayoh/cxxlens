@@ -464,7 +464,7 @@ flowchart TB
 - semantic services
 - identity contracts
 
-#### `provider_sdk`
+#### `sdk`
 
 - provider manifest/task/batch value types
 - protocol client/server helpers
@@ -485,7 +485,7 @@ cxxlens::base
 cxxlens::kernel
 cxxlens::query
 cxxlens::cpp
-cxxlens::provider_sdk
+cxxlens::sdk
 cxxlens::recipes
 cxxlens::cxxlens       INTERFACE aggregate of base/kernel/query/cpp
 ```
@@ -494,11 +494,11 @@ Provider package examples:
 
 ```text
 cxxlens-clang-worker-22
-cxxlens-provider-clang22-sdk
+cxxlensClang22ProviderSDK / cxxlens::clang22_provider_sdk
 ```
 
 `cxxlens::cxxlens` は provider executable、native SDK、recipes を強制 link してはならない。
-`cxxlens::provider_sdk` は ADR 0089 により relation、snapshot、Logical Query、provider、testing、recipe を束ねる
+`cxxlens::sdk` は ADR 0089 により relation、snapshot、Logical Query、provider、testing、recipe を束ねる
 高水準 author SDK とし、direct public dependency は `cxxlens::cxxlens` と `cxxlens::recipes` とする。
 compiler-native surface は引き続き major-specific native SDK だけに隔離する。
 
@@ -1254,7 +1254,7 @@ ADR 0009 により system claim envelope は `cxxlens.claim-envelope.v2` へ更�
 は `producer_input_basis` の tagged direct/derived variant とし、direct observation に snapshot ID を要求しない。
 derived claim だけが strict-prior published snapshot と consumed partition content digest を保持できる。
 
-ADR 0058 により claim envelope の全 text surface は common の `validate_utf8_text()`、
+ADR 0109 により claim envelope の全 text surface は common の `validate_utf8_text()`、
 `validate_strong_id()`、`validate_registered_symbol()` を共有する。strong ID は nonempty、strict UTF-8、control-free、最大512
 Unicode scalar、registered symbol は `[a-z][a-z0-9_.-]+` とする。public builder、aggregate revalidation、stage constructor、store
 adoption は identity encoding より前に同じ検査を行い、checked canonical string/JSON encoder は invalid UTF-8 を escape によって
@@ -4717,7 +4717,7 @@ stable/versioned baseline:
 
 | Package | Target | 用途 | LLVM/Clang boundary |
 | --- | --- | --- | --- |
-| `cxxlensProviderSDK` | `cxxlens::provider_sdk` | generated/dynamic relation、Logical Query IR、detached snapshot、portable provider、harness、recipe lowering | 通常 header/link とも禁止 |
+| `cxxlens` | `cxxlens::sdk` | generated/dynamic relation、Logical Query IR、detached snapshot、portable provider、harness、recipe lowering | 通常 header/link とも禁止 |
 | `cxxlensClang22ProviderSDK` | `cxxlens::clang22_provider_sdk` | callback-scoped Clang 22 source normalization と detachment | `<cxxlens/provider/clang22.hpp>` だけで明示 opt-in |
 
 Author paths は次の同一 semantic substrate を使う。
@@ -5286,7 +5286,7 @@ limit 拡張は test process に限定する。これらは release workflow の
 
 この契約で production tree の移行を完了した。
 
-- public/build/install surface は `base/kernel/query/cpp/recipes/provider_sdk` target DAG に統一した。
+- public/build/install surface は `base/kernel/query/cpp/recipes/sdk` target DAG に統一した。
 - relation/claim/store/query/provider/native provider の実装は `sdk` と provider-owned boundary に統合した。
 - central fact kind、opaque custom payload、profile、旧 selector/query/reducer/store authority は削除した。
 - provider worker input/output は detached provider-owned value とし、compiler-native object を境界外へ出さない。

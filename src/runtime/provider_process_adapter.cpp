@@ -2892,7 +2892,6 @@ namespace cxxlens::sdk::provider
 #endif
 	} // namespace
 
-#if !defined(CXXLENS_PROVIDER_RUNTIME_INTERNAL_ONLY)
 	std::unique_ptr<provider_process_port> make_system_provider_process_port()
 	{
 #if defined(__linux__) && defined(__GLIBC__)
@@ -2901,7 +2900,6 @@ namespace cxxlens::sdk::provider
 		return std::make_unique<unavailable_process_port>();
 #endif
 	}
-#endif
 
 	std::unique_ptr<detail::replayable_provider_process_port>
 	detail::make_system_replayable_provider_process_port()

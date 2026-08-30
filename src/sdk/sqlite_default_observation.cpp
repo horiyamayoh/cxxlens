@@ -889,7 +889,7 @@ namespace cxxlens::sdk
 										namespace_entry,
 										std::optional<struct stat>{resolved}),
 					{},
-					std::move(*filesystem),
+					std::move(filesystem),
 					true};
 				if (auto checked = recheck_normalization_locked(); !checked)
 					return unexpected(std::move(checked.error()));
@@ -965,7 +965,7 @@ namespace cxxlens::sdk
 						read_count =
 							::pread(object.get(), buffer.data(), count, static_cast<off_t>(offset));
 					} while (read_count < 0 && errno == EINTR);
-					if (read_count != static_cast<ssize_t>(count) ||
+					if (std::cmp_not_equal(read_count, count) ||
 						!std::ranges::equal(std::span{buffer}.first(count),
 											expected_bytes.subspan(offset, count)))
 						return unexpected(observation_io_error());
@@ -1090,6 +1090,10 @@ namespace cxxlens::sdk
 					ssize_t count{};
 					do
 					{
+						// The event queue is opened with O_NONBLOCK; this read cannot hold the lock
+						// waiting for a producer. Keep the locked drain atomic with event
+						// validation.
+						// NOLINTNEXTLINE(clang-analyzer-unix.BlockInCriticalSection)
 						count = ::read(event_queue_.get(), buffer.data(), buffer.size());
 					} while (count < 0 && errno == EINTR);
 					if (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))

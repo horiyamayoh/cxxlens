@@ -17,6 +17,7 @@
 
 #include "llvm/clang22/provider_task_v4.hpp"
 
+#if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
 namespace allocation_fault_test
 {
 	std::atomic<std::size_t> failed_allocation_size{};
@@ -52,6 +53,27 @@ void* operator new[](const std::size_t size)
 {
 	return ::operator new(size);
 }
+
+void operator delete(void* allocation) noexcept
+{
+	std::free(allocation);
+}
+
+void operator delete[](void* allocation) noexcept
+{
+	::operator delete(allocation);
+}
+
+void operator delete(void* allocation, std::size_t) noexcept
+{
+	std::free(allocation);
+}
+
+void operator delete[](void* allocation, std::size_t) noexcept
+{
+	::operator delete(allocation);
+}
+#endif
 
 namespace
 {
@@ -166,11 +188,15 @@ namespace
 				std::string compile_unit = inject_bad_alloc
 					? "compile-unit:" + std::string(490U, 'x')
 					: std::string{compile_unit_value};
+#if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
 				if (inject_bad_alloc)
 					allocation_fault_test::arm(compile_unit.size() + 1U);
+#endif
 				auto result = observe_provider_worker_v4_ast(
 					unit, value.metadata, std::move(compile_unit), limits);
+#if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
 				allocation_fault_test::disarm();
+#endif
 				if (!result)
 					return sdk::unexpected(std::move(result.error()));
 				observed.emplace(std::move(*result));
@@ -881,11 +907,13 @@ int main()
 	require(run_once(diagnostic_fixture, limited).has_value(),
 			"observer rejected one diagnostic of caller headroom");
 
+#if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
 	auto allocation_failure = run_once(baseline_fixture, product_limits, true);
 	require_error(allocation_failure,
 				  "provider-worker-v4.ast-allocation",
 				  "observer",
 				  "observer did not type an allocation failure");
+#endif
 
 	// A task identity changed after transport admission must not be accepted by the AST seam.
 	auto tampered = baseline_fixture;

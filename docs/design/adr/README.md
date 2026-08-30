@@ -70,6 +70,9 @@
 | [0103](0103-bounded-store-candidate-and-report.md) | bounded Store candidate and report construction |
 | [0104](0104-unified-sqlite-source-lifecycle.md) | unified SQLite source lifecycle |
 | [0106](0106-test-only-development-and-release-policy.md) | test-only development and release policy; supersedes operational evidence governance |
+| [0107](0107-provider-protocol-2-cutover.md) | Provider Protocol 2.0 cutover |
+| [0108](0108-remove-unadmitted-snapshot-builder.md) | remove unadmitted snapshot builder compatibility path |
+| [0109](0109-claim-envelope-text-validation-parity.md) | claim envelope text validation parity |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

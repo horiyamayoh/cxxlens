@@ -831,9 +831,9 @@ namespace cxxlens::sdk
 		[[nodiscard]] virtual result<void> arm_writer_shm_mapping_epoch(
 			// NOLINTNEXTLINE(performance-unnecessary-value-param): the override consumes the epoch.
 			std::shared_ptr<sqlite_source_shm_target_namespace_epoch> target_namespace_epoch,
-			// NOLINTNEXTLINE(performance-unnecessary-value-param): the override consumes the
-			// identity.
-			sqlite_backend_opaque_identity sqlite_source_id)
+			sqlite_backend_opaque_identity
+				sqlite_source_id) // NOLINT(performance-unnecessary-value-param):
+								  // overrides consume identity.
 		{
 			(void)target_namespace_epoch;
 			(void)sqlite_source_id;

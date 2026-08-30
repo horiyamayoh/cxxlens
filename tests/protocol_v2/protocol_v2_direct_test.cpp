@@ -12,6 +12,7 @@
 #include "protocol_v2/closure.hpp"
 #include "protocol_v2/codec.hpp"
 
+#if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
 namespace
 {
 	thread_local bool fail_next_allocation{};
@@ -53,6 +54,7 @@ void operator delete[](void* allocation, std::size_t) noexcept
 {
 	::operator delete(allocation);
 }
+#endif
 
 namespace
 {
@@ -688,14 +690,20 @@ namespace
 		bytes empty_payload;
 		bytes adopted_control = *descriptor_bytes;
 		const auto* adopted_allocation = adopted_control.data();
+#if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
 		fail_next_allocation = true;
+#endif
 		auto token_result = cxxlens::protocol_v2::decode_closure_control_token(
 			message_type::source_closure_manifest, std::move(adopted_control), empty_payload);
+#if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
 		const auto token_decode_was_allocation_free = fail_next_allocation;
 		fail_next_allocation = false;
+#endif
 		require_ok(token_result, "bounded closure token decoding");
+#if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
 		require(token_decode_was_allocation_free,
 				"production closure token decode performs no dynamic allocation");
+#endif
 		require(token_result->control_bytes().data() == adopted_allocation &&
 					token_result->resident_bytes() ==
 						token_result->control_capacity() +
@@ -759,6 +767,7 @@ namespace
 					oversized_payload_token.error().code == "source-closure.limit-exceeded",
 				"oversized closure payload stable resource error");
 
+#if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
 		fail_next_allocation = true;
 		auto owning_allocation_failure = cxxlens::protocol_v2::decode_closure_control(
 			message_type::source_closure_manifest, *descriptor_bytes);
@@ -771,6 +780,7 @@ namespace
 		require(owning_allocation_failure.error().field == "control" &&
 					owning_allocation_failure.error().detail == "allocation",
 				"compatibility owning decoder allocation failure is stable");
+#endif
 
 		closure_session session_config{
 			session, task, task_digest, closure_digest, manifest_digest, 1U};
@@ -870,6 +880,7 @@ namespace
 		forged_ack.transfer_digest = semantic_digest('9');
 		require_error(transfer->prepare_acknowledgement(forged_ack, 48U),
 					  "ACK cross-bound to sealed transfer digest");
+#if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
 		fail_next_allocation = true;
 		auto allocation_failed_ack = transfer->prepare_acknowledgement(ack, 48U);
 		const auto ack_allocation_was_injected = !fail_next_allocation;
@@ -880,6 +891,7 @@ namespace
 					allocation_failed_ack.error().detail == "allocation" &&
 					transfer->phase() == cxxlens::protocol_v2::closure_phase::closure_sealed,
 				"ACK prepare allocation failure leaves live state unchanged");
+#endif
 
 		auto aborted_ack = transfer->prepare_acknowledgement(ack, 48U);
 		require_ok(aborted_ack, "ACK fully prepared before wire emission");
@@ -906,12 +918,16 @@ namespace
 		auto committed_ack = moved_transfer.prepare_acknowledgement(ack, 48U);
 		require_ok(stale_ack, "stale ACK candidate preparation");
 		require_ok(committed_ack, "committed ACK candidate preparation");
+#if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
 		fail_next_allocation = true;
+#endif
 		moved_transfer.commit_acknowledgement(std::move(*committed_ack));
+#if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
 		const auto ack_commit_was_allocation_free = fail_next_allocation;
 		fail_next_allocation = false;
 		require(ack_commit_was_allocation_free,
 				"ACK commit is a fixed-state allocation-free phase flip");
+#endif
 		require(moved_transfer.phase() == cxxlens::protocol_v2::closure_phase::acknowledged &&
 					moved_transfer.next_sequence() == 49U,
 				"successful wire ACK commits by fixed no-allocation phase flip");

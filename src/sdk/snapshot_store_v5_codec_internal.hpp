@@ -38,7 +38,7 @@ namespace cxxlens::sdk
 	namespace detail
 	{
 		inline constexpr std::uint64_t snapshot_store_v5_maximum_payload_bytes =
-			512U * 1024U * 1024U;
+			std::uint64_t{512U} * 1024U * 1024U;
 
 		enum class snapshot_payload_schema : std::uint8_t
 		{
@@ -84,10 +84,15 @@ namespace cxxlens::sdk
 														   const relation_engine& engine);
 
 		/** Return the generation field offset after validating the complete streamed header. */
+		struct snapshot_payload_generation_request
+		{
+			std::uint64_t expected_size{};
+			std::uint64_t expected_generation{};
+		};
+
 		[[nodiscard]] result<std::size_t>
 		payload_generation_offset(const sqlite_replayable_byte_source& source,
-								  std::uint64_t expected_size,
-								  std::uint64_t expected_generation);
+								  snapshot_payload_generation_request request);
 
 #if defined(CXXLENS_STORE_FAULT_TEST_SUPPORT)
 		/** Return the byte offset of one v5 semantic-version component in a complete payload. */

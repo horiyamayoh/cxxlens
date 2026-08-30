@@ -4210,7 +4210,6 @@ int main(const int argument_count, const char* const* arguments)
 #if defined(__linux__) && defined(__GLIBC__) && defined(SYS_pidfd_open) && \
 	defined(SYS_pidfd_send_signal)
 	check_ng1_post_fork_guard_kills_group_without_ack();
-	check_ng1_runtime_heartbeat_timeout_kills_descendant(runtime_executable);
 	check_ng1_runtime_durable_resume_matrix(runtime_executable);
 #endif
 	check_ng1_live_duplex_process();

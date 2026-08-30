@@ -267,21 +267,14 @@ def render(relation: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
-def arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--registry",
-        type=pathlib.Path,
-        default=ROOT / "schemas/cxxlens_ng_relation_registry.yaml",
-    )
-    parser.add_argument("--relation", required=True)
-    parser.add_argument("--output", type=pathlib.Path, required=True)
-    return parser.parse_args()
+def generated_filename(relation: dict[str, object]) -> str:
+    """Return the deterministic public-header name for a static relation."""
+    return str(relation["name"]).replace(".", "_") + ".hpp"
 
 
-def main() -> int:
-    args = arguments()
-    document = yaml.safe_load(args.registry.read_text(encoding="utf-8"))
+def load_registry(registry_path: pathlib.Path) -> dict[str, object]:
+    """Load and validate the relation registry before any generation occurs."""
+    document = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
     schema = yaml.safe_load(
         (ROOT / "schemas/cxxlens_ng_relation_registry.schema.yaml").read_text(
             encoding="utf-8"
@@ -290,34 +283,151 @@ def main() -> int:
     try:
         jsonschema.Draft202012Validator(schema).validate(document)
     except jsonschema.ValidationError as error:
-        print(f"relation registry validation failed: {error.message}", file=sys.stderr)
-        return 2
-    names = [str(item["name"]) for item in document["relations"]]
+        raise ValueError(
+            f"relation registry validation failed: {error.message}"
+        ) from error
+
+    relations = document["relations"]
+    names = [str(item["name"]) for item in relations]
     tags = [
         str(item["generated_cpp_tag"])
-        for item in document["relations"]
+        for item in relations
         if item["generated_cpp_tag"] is not None
     ]
     if len(names) != len(set(names)) or len(tags) != len(set(tags)):
-        print("relation registry contains duplicate names or C++ tags", file=sys.stderr)
-        return 2
-    relation = next(
-        (item for item in document["relations"] if item["name"] == args.relation),
-        None,
-    )
-    if relation is None:
-        print(f"relation not found: {args.relation}", file=sys.stderr)
-        return 2
-    if relation.get("cpp_projection") == "dynamic-only":
-        print(
-            f"dynamic-only relation has no generated C++ tag: {args.relation}",
-            file=sys.stderr,
+        raise ValueError("relation registry contains duplicate names or C++ tags")
+    return document
+
+
+def generated_relations(document: dict[str, object]) -> list[dict[str, object]]:
+    """Return every relation admitted to the installed static C++ projection."""
+    relations = document["relations"]
+    result: list[dict[str, object]] = []
+    for relation in relations:
+        projection = relation.get("cpp_projection")
+        tag = relation.get("generated_cpp_tag")
+        if projection == "dynamic-only":
+            if tag is not None:
+                raise ValueError(
+                    "dynamic-only relation has a generated C++ tag: "
+                    f"{relation['name']}"
+                )
+            continue
+        if not isinstance(tag, str):
+            raise ValueError(f"relation has no generated_cpp_tag: {relation['name']}")
+        result.append(relation)
+    return result
+
+
+def check_generated_headers(
+    relations: list[dict[str, object]], output_dir: pathlib.Path
+) -> list[str]:
+    """Return deterministic drift diagnostics for a generated-header directory."""
+    expected = {
+        generated_filename(relation): render(relation) for relation in relations
+    }
+    actual_paths = {
+        path.name: path for path in output_dir.glob("*.hpp") if path.is_file()
+    }
+    diagnostics: list[str] = []
+    for filename in sorted(set(expected) - set(actual_paths)):
+        diagnostics.append(
+            f"missing generated relation header: {output_dir / filename}"
         )
+    for filename in sorted(set(actual_paths) - set(expected)):
+        diagnostics.append(f"unexpected relation header: {actual_paths[filename]}")
+    for filename in sorted(set(expected) & set(actual_paths)):
+        path = actual_paths[filename]
+        if path.read_text(encoding="utf-8") != expected[filename]:
+            diagnostics.append(f"generated relation header differs: {path}")
+    return diagnostics
+
+
+def arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--registry",
+        type=pathlib.Path,
+        default=ROOT / "schemas/cxxlens_ng_relation_registry.yaml",
+    )
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--relation")
+    mode.add_argument("--all", action="store_true")
+    parser.add_argument("--output", type=pathlib.Path)
+    parser.add_argument("--output-dir", type=pathlib.Path)
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="check generated output instead of writing it",
+    )
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = arguments()
+    try:
+        document = load_registry(args.registry)
+        if args.all:
+            if args.output is not None:
+                print("--output is only valid with --relation", file=sys.stderr)
+                return 2
+            output_dir = args.output_dir or ROOT / "include/cxxlens/relations"
+            relations = generated_relations(document)
+            if args.check:
+                diagnostics = check_generated_headers(relations, output_dir)
+                if diagnostics:
+                    print("\n".join(diagnostics), file=sys.stderr)
+                    return 1
+                print(
+                    f"checked {len(relations)} generated relation headers in {output_dir}"
+                )
+                return 0
+            if args.output_dir is None:
+                print("--output-dir is required when generating --all", file=sys.stderr)
+                return 2
+            output_dir.mkdir(parents=True, exist_ok=True)
+            for relation in relations:
+                output = output_dir / generated_filename(relation)
+                output.write_text(render(relation), encoding="utf-8")
+            print(f"generated {len(relations)} relation headers -> {output_dir}")
+            return 0
+
+        if args.output_dir is not None:
+            print("--output-dir is only valid with --all", file=sys.stderr)
+            return 2
+        if args.output is None:
+            print("--output is required with --relation", file=sys.stderr)
+            return 2
+        relation = next(
+            (item for item in document["relations"] if item["name"] == args.relation),
+            None,
+        )
+        if relation is None:
+            print(f"relation not found: {args.relation}", file=sys.stderr)
+            return 2
+        generated = render(relation)
+        if args.check:
+            if not args.output.is_file():
+                print(
+                    f"missing generated relation header: {args.output}",
+                    file=sys.stderr,
+                )
+                return 1
+            if args.output.read_text(encoding="utf-8") != generated:
+                print(
+                    f"generated relation header differs: {args.output}",
+                    file=sys.stderr,
+                )
+                return 1
+            print(f"checked {args.relation} -> {args.output}")
+            return 0
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(generated, encoding="utf-8")
+        print(f"generated {args.relation} -> {args.output}")
+        return 0
+    except (OSError, KeyError, TypeError, ValueError) as error:
+        print(str(error), file=sys.stderr)
         return 2
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(render(relation), encoding="utf-8")
-    print(f"generated {args.relation} -> {args.output}")
-    return 0
 
 
 if __name__ == "__main__":

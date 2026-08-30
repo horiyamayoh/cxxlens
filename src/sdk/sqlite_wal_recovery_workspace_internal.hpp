@@ -20,7 +20,7 @@ namespace cxxlens::sdk
 	inline constexpr int sqlite_wal_recovery_required_open_flags =
 		sqlite_wal_recovery_open_readwrite | sqlite_wal_recovery_open_fullmutex |
 		sqlite_wal_recovery_open_privatecache;
-	inline constexpr std::size_t sqlite_wal_recovery_copy_buffer_bound = 64U * 1024U;
+	inline constexpr std::size_t sqlite_wal_recovery_copy_buffer_bound = std::size_t{64U} * 1024U;
 
 	enum class sqlite_wal_recovery_copy_role : std::uint8_t
 	{

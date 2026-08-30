@@ -1776,12 +1776,74 @@ namespace
 	{
 		using relation = cxxlens::cc::relations::call_site;
 		cxxlens::sdk::relation_registry registry;
-		require(registry.add(relation::descriptor()).has_value(), "snapshot descriptor rejected");
-		auto dynamic = registry.require("cc.call_site", 1U);
-		cxxlens::sdk::snapshot_builder builder{registry};
-		require(builder.add(make_call_row()).has_value(), "snapshot row rejected");
-		auto snapshot = std::move(builder).publish();
+		const std::array descriptors{
+			cxxlens::build::relations::project::descriptor(),
+			cxxlens::build::relations::compile_unit::descriptor(),
+			cxxlens::build::relations::variant::descriptor(),
+			cxxlens::build::relations::toolchain_context::descriptor(),
+			cxxlens::source::relations::file::descriptor(),
+			cxxlens::source::relations::span::descriptor(),
+			cxxlens::source::relations::origin::descriptor(),
+			cxxlens::cc::relations::entity::descriptor(),
+			cxxlens::cc::relations::declaration::descriptor(),
+			cxxlens::cc::relations::type::descriptor(),
+			cxxlens::cc::relations::type_component::descriptor(),
+			cxxlens::cc::relations::call_site::descriptor(),
+			cxxlens::cc::relations::call_direct_target::descriptor(),
+			cxxlens::core::relations::provider_execution::descriptor(),
+			cxxlens::core::relations::unresolved::descriptor(),
+			cxxlens::core::relations::claim_conflict::descriptor(),
+			cxxlens::core::relations::differential_disagreement::descriptor(),
+			cxxlens::company::relations::lock_acquire::descriptor(),
+		};
+		for (const auto& descriptor : descriptors)
+			require(registry.add(descriptor).has_value(), "snapshot descriptor rejected");
+		auto engine = registry.build("snapshot-lifetime-engine");
+		require(engine.has_value(), "snapshot engine rejected");
+		auto observation = observe(make_call_row());
+		observation.producer.semantic_contract = digest('d');
+		auto assertion = cxxlens::sdk::make_assertion(*engine, std::move(observation));
+		require(assertion.has_value(), "snapshot claim rejected");
+		cxxlens::sdk::partition_draft partition;
+		partition.relation_descriptor_id = relation::descriptor().id;
+		partition.scope = "compile-unit:1";
+		partition.condition = assertion->presence;
+		partition.interpretation = assertion->interpretation;
+		partition.producer_semantics = assertion->producer.semantic_contract;
+		auto basis = cxxlens::sdk::claim_input_basis_digest(assertion->input_basis);
+		require(basis.has_value(), "snapshot claim basis rejected");
+		partition.producer_input_basis_digest = std::move(*basis);
+		partition.precision_profile = "exact";
+		partition.assumption_set_id = "assumptions:none";
+		partition.claims = {*assertion};
+		partition.coverage = {{"compile-unit", "compile-unit:1", "covered", {}}};
+		const cxxlens::sdk::snapshot_series_selector selector{
+			"catalog:snapshot-lifetime",
+			"stable",
+			std::string{engine->generation()},
+			assertion->presence.universe,
+			std::string{engine->registry_digest()},
+			digest('a'),
+			digest('b')};
+		const cxxlens::sdk::snapshot_draft draft{selector, {1U, 0U, 0U}, digest('c'), std::nullopt};
+		auto store = cxxlens::sdk::make_in_memory_snapshot_store(*engine);
+		require(store.has_value(), "snapshot store unavailable");
+		auto writer = store->begin(draft);
+		require(writer.has_value(), "snapshot writer did not begin");
+		auto staged = writer->stage(std::move(partition));
+		if (!staged)
+			require(false,
+					"snapshot partition staging failed: " + staged.error().code + "/" +
+						staged.error().field + "/" + staged.error().detail);
+		auto validated = writer->validate();
+		if (!validated)
+			require(false,
+					"snapshot publication validation failed: " + validated.error().code + "/" +
+						validated.error().field + "/" + validated.error().detail);
+		auto snapshot = writer->publish();
 		require(snapshot.has_value() && !snapshot->id().empty(), "snapshot publication failed");
+		auto dynamic = engine->require("cc.call_site", 1U);
+		require(dynamic.has_value(), "snapshot relation lookup failed");
 		auto cursor = snapshot->open(*dynamic);
 		require(cursor.has_value(), "snapshot cursor failed");
 		auto first = cursor->next();
@@ -2757,11 +2819,11 @@ namespace
 			}
 			return false;
 		};
-		const std::string portable_package_line{"find_package(cxxlensProviderSDK CONFIG REQUIRED)"};
+		const std::string portable_package_line{"find_package(cxxlens CONFIG REQUIRED)"};
 		const std::string native_package_line{
 			"find_package(cxxlensClang22ProviderSDK CONFIG REQUIRED)"};
 		const std::string portable_target_line{
-			"target_link_libraries(provider PRIVATE cxxlens::provider_sdk)"};
+			"target_link_libraries(provider PRIVATE cxxlens::sdk)"};
 		const std::string native_target_line{
 			"target_link_libraries(provider PRIVATE cxxlens::clang22_provider_sdk)"};
 		std::string bracket_commented_cmake = portable_cmake->content;
@@ -2846,8 +2908,8 @@ namespace
 							 portable_readme,
 							 "company.example.provider",
 							 "company.example.relation",
-							 "cxxlensProviderSDK",
-							 "cxxlens::provider_sdk",
+							 "cxxlens",
+							 "cxxlens::sdk",
 							 "<cxxlens/sdk.hpp>");
 		check_common_content(native_cmake,
 							 native_manifest,

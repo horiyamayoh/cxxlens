@@ -403,7 +403,7 @@ class MaterializationProtocol2Tests(unittest.TestCase):
     def test_protocol2_contract_preserves_wire_and_content_integrity(self) -> None:
         contract = protocol.load_yaml(ROOT / protocol.CONTRACT)
         protocol.validate_contract_shape(contract)
-        self.assertEqual(contract["wire"]["fixed_header_bytes"], protocol.FRAME.size)
+        self.assertEqual(contract["wire"]["fixed_header_bytes"], protocol.FIXED_HEADER_BYTES)
         self.assertEqual(contract["wire"]["checksums"], "independent-full-sha256")
 
     def test_strict_json_loader_rejects_lexical_ambiguity(self) -> None:

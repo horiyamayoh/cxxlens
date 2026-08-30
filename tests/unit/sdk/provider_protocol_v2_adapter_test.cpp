@@ -3,10 +3,13 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <exception>
 #include <iostream>
+#include <span>
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <vector>
 
 #include "sdk/provider_runtime_internal.hpp"
 #include "sdk/provider_validation_internal.hpp"
@@ -317,6 +320,132 @@ namespace
 				"heartbeat payload is rejected");
 	}
 
+	void test_bounded_decode_mutations()
+	{
+		const frame seed{static_cast<message_type>(65'000U),
+						 7U,
+						 11U,
+						 {std::byte{0x61}, std::byte{'a'}},
+						 {std::byte{'p'},
+						  std::byte{'a'},
+						  std::byte{'y'},
+						  std::byte{'l'},
+						  std::byte{'o'},
+						  std::byte{'a'},
+						  std::byte{'d'}},
+						 protocol_v2_major,
+						 protocol_v2_minor,
+						 static_cast<std::uint16_t>(frame_flag::optional_extension)};
+		auto encoded = encode_frame(seed);
+		require(encoded.has_value(), "bounded mutation seed encoding");
+
+		const auto compare_outcomes =
+			[](const std::span<const std::byte> input, const protocol_limits limits = {})
+		{
+			const auto same_frame = [](const frame& left, const frame& right)
+			{
+				return left.type == right.type && left.stream_id == right.stream_id &&
+					left.sequence == right.sequence && left.control == right.control &&
+					left.payload == right.payload && left.protocol_major == right.protocol_major &&
+					left.protocol_minor == right.protocol_minor && left.flags == right.flags;
+			};
+			try
+			{
+				auto direct = decode_frame(input, limits);
+				auto stream = decode_frame_stream(input, limits);
+				auto direct_repeat = decode_frame(input, limits);
+				auto stream_repeat = decode_frame_stream(input, limits);
+				require(direct.has_value() == stream.has_value() &&
+							direct.has_value() == direct_repeat.has_value() &&
+							stream.has_value() == stream_repeat.has_value(),
+						"bounded mutation acceptance was not deterministic");
+				if (!direct)
+				{
+					require(!stream && !direct_repeat && !stream_repeat &&
+								direct.error() == stream.error() &&
+								direct.error() == direct_repeat.error() &&
+								stream.error() == stream_repeat.error() &&
+								!direct.error().code.empty() && !direct.error().field.empty() &&
+								!direct.error().detail.empty(),
+							"bounded mutation rejection was not typed and deterministic");
+					return;
+				}
+				require(stream && stream_repeat && stream->size() == 1U &&
+							stream_repeat->size() == 1U && same_frame(*direct, *direct_repeat) &&
+							same_frame(stream->front(), stream_repeat->front()) &&
+							same_frame(*direct, stream->front()),
+						"direct and stream mutation payloads diverged");
+			}
+			catch (const std::exception& exception)
+			{
+				require(false, std::string{"bounded decoder threw: "} + exception.what());
+			}
+			catch (...)
+			{
+				require(false, "bounded decoder threw a non-standard exception");
+			}
+		};
+
+		// Fixed byte/bit mutations provide a deterministic bounded smoke corpus.  Both
+		// facades must remain exception-free and deterministic under the same mutation.
+		for (std::size_t index{}; index < encoded->size(); ++index)
+		{
+			// Keep the declared body lengths fixed so direct and concatenated-stream
+			// decoding exercise the same frame boundary for this parity corpus.
+			if (index >= 28U && index < 40U)
+				continue;
+			for (const auto mask : {std::byte{0x01}, std::byte{0x55}, std::byte{0x80}})
+			{
+				auto mutated = *encoded;
+				mutated[index] ^= mask;
+				compare_outcomes(mutated);
+			}
+		}
+
+		for (std::size_t length{}; length < encoded->size(); ++length)
+		{
+			try
+			{
+				const auto empty_transcript = length == 0U;
+				// A single-frame decoder reports an absent header for an empty input,
+				// while the stream decoder reports an empty transcript.  Preserve that
+				// intentional boundary, but require parity for every non-empty prefix.
+				auto direct = decode_frame(std::span<const std::byte>{*encoded}.first(length));
+				auto stream =
+					decode_frame_stream(std::span<const std::byte>{*encoded}.first(length));
+				auto direct_repeat =
+					decode_frame(std::span<const std::byte>{*encoded}.first(length));
+				auto stream_repeat =
+					decode_frame_stream(std::span<const std::byte>{*encoded}.first(length));
+				require(!direct && !stream && !direct_repeat && !stream_repeat &&
+							(empty_transcript || direct.error() == stream.error()) &&
+							direct.error() == direct_repeat.error() &&
+							stream.error() == stream_repeat.error() &&
+							!direct.error().code.empty() && !direct.error().field.empty() &&
+							!stream.error().code.empty() && !stream.error().field.empty(),
+						"truncated mutation was accepted or not typed");
+			}
+			catch (const std::exception& exception)
+			{
+				require(false, std::string{"truncated bounded decoder threw: "} + exception.what());
+			}
+			catch (...)
+			{
+				require(false, "truncated bounded decoder threw a non-standard exception");
+			}
+		}
+
+		for (const auto payload_limit : {1U, 7U, 64U})
+		{
+			protocol_limits limits;
+			limits.max_payload_bytes = payload_limit;
+			compare_outcomes(*encoded, limits);
+		}
+		protocol_limits invalid_limits;
+		invalid_limits.max_control_bytes = 0U;
+		compare_outcomes(*encoded, invalid_limits);
+	}
+
 	void test_closure_state()
 	{
 		const std::string session{"provider-session:sha256:" + std::string(64U, '1')};
@@ -555,6 +684,7 @@ namespace
 int main()
 {
 	test_single_codec_facade();
+	test_bounded_decode_mutations();
 	test_registry_and_heartbeat();
 	test_closure_state();
 	test_runtime_closure_channel();

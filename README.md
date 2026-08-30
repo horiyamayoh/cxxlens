@@ -56,15 +56,19 @@ provider を有効化する場合は、`docs/development/build-and-test.md` の
 
 | Package | Targets |
 | --- | --- |
-| `cxxlens` | `cxxlens::base`, `cxxlens::kernel`, `cxxlens::query`, `cxxlens::cpp`, `cxxlens::recipes`, `cxxlens::cxxlens` |
-| `cxxlensProviderSDK` | `cxxlens::provider_sdk` |
+| `cxxlens` | `cxxlens::base`, `cxxlens::kernel`, `cxxlens::query`, `cxxlens::cpp`, `cxxlens::recipes`, `cxxlens::cxxlens`, `cxxlens::sdk` |
 | `cxxlensClang22ProviderSDK` | `cxxlens::clang22_provider_sdk` |
 
 ```cmake
-find_package(cxxlensProviderSDK 1.0 CONFIG REQUIRED)
-target_link_libraries(my_analyzer PRIVATE cxxlens::provider_sdk)
+find_package(cxxlens 1.0 CONFIG REQUIRED)
+target_link_libraries(my_analyzer PRIVATE cxxlens::sdk)
 target_compile_features(my_analyzer PRIVATE cxx_std_23)
 ```
+
+インストールされる薄い CLI は `cxxlens doctor ...` と `cxxlens run ...` を提供します。
+`doctor` は relation/capability の診断、`run` は現在認定された materialize-and-query 経路の
+fail-closed admission を同じ JSON/Markdown result 契約で返します。provider の署名鍵・trust anchor・
+rotation は CLI やリポジトリへ埋め込まず、外部 authority port が供給します。
 
 ## Authority
 

@@ -3218,9 +3218,8 @@ namespace cxxlens::sdk::provider
 		auto class_name = options.provider_id;
 		std::ranges::replace(class_name, '.', '_');
 		const bool native = options.provider_class == "clang22-native";
-		const std::string package = native ? "cxxlensClang22ProviderSDK" : "cxxlensProviderSDK";
-		const std::string target =
-			native ? "cxxlens::clang22_provider_sdk" : "cxxlens::provider_sdk";
+		const std::string package = native ? "cxxlensClang22ProviderSDK" : "cxxlens";
+		const std::string target = native ? "cxxlens::clang22_provider_sdk" : "cxxlens::sdk";
 		const std::string header = native ? "<cxxlens/provider/clang22.hpp>" : "<cxxlens/sdk.hpp>";
 		const std::string zero_digest = "sha256:" + std::string(64U, '0');
 		manifest generated_manifest;

@@ -6317,29 +6317,36 @@ namespace cxxlens::sdk
 			std::array<std::byte, 8U> generation_bytes_{};
 		};
 
+		struct sqlite_generation_rewrite_request
+		{
+			std::uint64_t expected_size{};
+			std::uint64_t expected_generation{};
+			std::uint64_t replacement_generation{};
+		};
+
 		class sqlite_generation_rewrite_payload_source final : public sqlite_replayable_byte_source
 		{
 		  public:
 			[[nodiscard]] static result<std::shared_ptr<const sqlite_replayable_byte_source>>
-			// Size and generations form an ordered validation/replacement tuple.
-			// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-			create(
-				std::shared_ptr<const sqlite_replayable_byte_source> source,
-				const std::uint64_t expected_size, // NOLINT(bugprone-easily-swappable-parameters)
-				const std::uint64_t expected_generation,
-				const std::uint64_t replacement_generation)
+			create(std::shared_ptr<const sqlite_replayable_byte_source> source,
+				   sqlite_generation_rewrite_request request)
 			{
-				if (!source || expected_size > std::numeric_limits<std::size_t>::max())
+				if (!source || request.expected_size > std::numeric_limits<std::size_t>::max())
 					return unexpected(store_error("store.corrupt", "payload", "generation-source"));
-				auto offset =
-					payload_generation_offset(*source, expected_size, expected_generation);
-				if (!offset || *offset > expected_size || expected_size - *offset < 8U)
+				auto offset = payload_generation_offset(
+					*source,
+					detail::snapshot_payload_generation_request{request.expected_size,
+																request.expected_generation});
+				if (!offset || *offset > request.expected_size ||
+					request.expected_size - *offset < 8U)
 					return unexpected(
 						offset ? store_error("store.corrupt", "payload", "truncated-generation")
 							   : std::move(offset.error()));
 				return std::shared_ptr<const sqlite_replayable_byte_source>{
-					new sqlite_generation_rewrite_payload_source{
-						std::move(source), expected_size, *offset, replacement_generation}};
+					new sqlite_generation_rewrite_payload_source{std::move(source),
+																 request.expected_size,
+																 *offset,
+																 request.replacement_generation}};
 			}
 
 			[[nodiscard]] result<std::unique_ptr<sqlite_bounded_byte_source>>
@@ -8598,11 +8605,12 @@ namespace cxxlens::sdk
 					return fail(std::move(allocated.error()));
 				next_generation = *allocated;
 				replacement->publication_record_value.physical_generation = next_generation;
-				auto rewritten =
-					sqlite_generation_rewrite_payload_source::create(source->payload_source,
-																	 source->payload_byte_count,
-																	 source_generation,
-																	 next_generation);
+				sqlite_generation_rewrite_request rewrite_request;
+				rewrite_request.expected_size = source->payload_byte_count;
+				rewrite_request.expected_generation = source_generation;
+				rewrite_request.replacement_generation = next_generation;
+				auto rewritten = sqlite_generation_rewrite_payload_source::create(
+					source->payload_source, rewrite_request);
 				if (!rewritten)
 					return fail(store_error("store.compact-validation-failed", id));
 				source->payload_source = std::move(*rewritten);
@@ -11348,56 +11356,4 @@ namespace cxxlens::sdk
 	}
 #endif
 
-	snapshot_builder::snapshot_builder(relation_registry registry) : registry_{std::move(registry)}
-	{
-	}
-	result<void> snapshot_builder::add(detached_row row)
-	{
-		const auto descriptors = registry_.descriptors();
-		const auto descriptor =
-			std::ranges::find(descriptors, row.descriptor_id, &relation_descriptor::id);
-		if (descriptor == descriptors.end())
-			return unexpected(store_error("sdk.snapshot-unknown-relation", row.descriptor_id));
-		if (auto valid = validate_row(*descriptor, row); !valid)
-			return valid;
-		rows_[row.descriptor_id].push_back(std::move(row));
-		return {};
-	}
-	result<snapshot_handle> snapshot_builder::publish() &&
-	{
-		auto value = std::make_shared<snapshot_handle::data>();
-		std::vector<canonical_value> identity_rows;
-		for (const auto& descriptor : registry_.descriptors())
-			value->descriptors.emplace(descriptor.id, descriptor);
-		for (auto& [descriptor, rows] : rows_)
-		{
-			std::ranges::sort(rows,
-							  [](const detached_row& left, const detached_row& right)
-							  {
-								  return left.canonical_form() < right.canonical_form();
-							  });
-			for (const auto& row : rows)
-				identity_rows.push_back(text(row.canonical_form()));
-			value->rows.emplace(descriptor, std::move(rows));
-		}
-		const std::array fields{canonical_value::from_tuple(std::move(identity_rows))};
-		value->semantic_manifest.id = *canonical_identity_digest("snapshot-compat", fields);
-		value->semantic_manifest.catalog_semantic_digest =
-			*semantic_digest("compat.catalog", "legacy");
-		value->semantic_manifest.condition_universe_id = "compat-universe";
-		value->semantic_manifest.relation_registry_digest =
-			*semantic_digest("compat.registry", "legacy");
-		value->semantic_manifest.interpretation_policy_digest =
-			*semantic_digest("compat.policy", "legacy");
-		value->publication_record_value = {*canonical_identity_digest("publication-compat", fields),
-										   "compat-series",
-										   value->semantic_manifest.id,
-										   1U,
-										   1U,
-										   std::nullopt,
-										   publication_state::committed,
-										   false};
-		value->generation_pin = std::make_shared<const std::uint64_t>(1U);
-		return snapshot_handle{std::move(value)};
-	}
 } // namespace cxxlens::sdk

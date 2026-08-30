@@ -90,7 +90,7 @@ namespace
 		"lib/libcxxlens_kernel.so.1.0.0",
 		"lib/libcxxlens_query.so.1.0.0",
 		"lib/libcxxlens_recipes.so.1.0.0",
-		"lib/libcxxlens_provider_sdk.so.1.0.0",
+		"lib/libcxxlens_sdk.so.1.0.0",
 		"lib/libcxxlens_clang22_provider_sdk.so.1.0.0",
 	};
 	constexpr std::string_view child_mode_name{"CXXLENS_OCCURRENCE_REPLACEMENT_CHILD"};

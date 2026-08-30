@@ -9,10 +9,14 @@ endif()
 set(cxxlens_clang22_available "@CXXLENS_CLANG22_AVAILABLE@")
 set(cxxlens_clang22_adapter "@CXXLENS_CLANG_ADAPTER@")
 set(cxxlens_clang22_unavailable_reason "@CXXLENS_CLANG22_UNAVAILABLE_REASON@")
+set(cxxlens_clang22_components "@CXXLENS_BUILD_CLANG22_COMPONENTS@")
 set(install_executable_suffix "@CMAKE_EXECUTABLE_SUFFIX@")
-set(install_executable_names
-    cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22
-    cxxlens-clang22-materialize)
+set(install_executable_names cxxlens cxxlens-provider-scaffold
+                             cxxlens-sdk-doctor)
+if(cxxlens_clang22_components STREQUAL "ON")
+  list(APPEND install_executable_names cxxlens-clang-worker-22
+       cxxlens-clang22-materialize)
+endif()
 # These phases are the installed native-provider test boundary.  An AUTO/OFF
 # structured-unavailable build remains useful for the portable SDK and its
 # unavailable-mode consumers, but it must not enter a native positive or
@@ -55,6 +59,14 @@ endfunction()
 
 function(run_installed_tools label)
   run_clean(
+    0
+    "${install_prefix}/bin/cxxlens${install_executable_suffix}"
+    doctor
+    relation-presence
+    build.project.v1
+    cc.call_site.v1
+    source.span.v1)
+  run_clean(
     0 "${install_prefix}/bin/cxxlens-sdk-doctor${install_executable_suffix}"
     relation-presence build.project.v1 cc.call_site.v1 source.span.v1)
   # Exercise the product-only capability resolver through the installed
@@ -79,7 +91,18 @@ function(run_installed_tools label)
     cxxlens.clang22.materialize-and-query.v1)
   run_clean(
     1
-    "${install_prefix}/bin/cxxlens-clang-worker-22${install_executable_suffix}")
+    "${install_prefix}/bin/cxxlens${install_executable_suffix}"
+    run
+    --project
+    "${doctor_project}"
+    --use-case
+    cxxlens.clang22.materialize-and-query.v1)
+  if(cxxlens_clang22_components STREQUAL "ON")
+    run_clean(
+      1
+      "${install_prefix}/bin/cxxlens-clang-worker-22${install_executable_suffix}"
+    )
+  endif()
   set(scaffold_output "${test_root}/scaffold-${label}")
   file(REMOVE_RECURSE "${scaffold_output}")
   run_clean(
@@ -95,27 +118,41 @@ if(PHASE STREQUAL "prepare")
   file(REMOVE_RECURSE "${test_root}")
   set(staging_prefix "${test_root}/prefix")
   set(install_prefix "${staging_prefix}")
-  execute_process(
-    COMMAND "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target
-            cxxlens-clang22-materialize COMMAND_ERROR_IS_FATAL ANY)
+  if(cxxlens_clang22_components STREQUAL "ON")
+    execute_process(
+      COMMAND "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target
+              cxxlens-clang22-materialize COMMAND_ERROR_IS_FATAL ANY)
+  endif()
   # `cmake --install` does not build targets, and the public Clang 22 SDK DSO
   # plus the installed worker are not dependencies of the materializer binary.
   # Build the complete installed executable/DSO closure before staging it.
-  execute_process(
-    COMMAND
-      "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target
-      cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22
-      cxxlens_clang22_provider_sdk COMMAND_ERROR_IS_FATAL ANY)
+  if(cxxlens_clang22_components STREQUAL "ON")
+    execute_process(
+      COMMAND
+        "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target
+        cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22
+        cxxlens_cli cxxlens_sdk cxxlens_clang22_provider_sdk
+        COMMAND_ERROR_IS_FATAL ANY)
+  else()
+    execute_process(
+      COMMAND
+        "@CMAKE_COMMAND@" --build "@CMAKE_BINARY_DIR@" --target
+        cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens_cli cxxlens_sdk
+        cxxlens_clang22_provider_sdk COMMAND_ERROR_IS_FATAL ANY)
+  endif()
   execute_process(
     COMMAND "@CMAKE_COMMAND@" --install "@CMAKE_BINARY_DIR@" --prefix
             "${install_prefix}" COMMAND_ERROR_IS_FATAL ANY)
+  if(EXISTS
+     "${install_prefix}/${install_libdir}/cmake/cxxlensProviderSDK/cxxlensProviderSDKConfig.cmake"
+  )
+    message(FATAL_ERROR "retired cxxlensProviderSDK package was installed")
+  endif()
 
   # Keep canonical artifact paths literal for the installed-surface census. Only
   # the filesystem path used by the existence check receives the platform
   # executable suffix.
-  foreach(
-    required IN
-    ITEMS
+  set(required_artifacts
       "${install_prefix}/include/cxxlens/cxxlens.hpp"
       "${install_prefix}/include/cxxlens/sdk.hpp"
       "${install_prefix}/include/cxxlens/sdk/query.hpp"
@@ -129,20 +166,26 @@ if(PHASE STREQUAL "prepare")
       "${install_prefix}/include/cxxlens/relations/core_differential_disagreement.hpp"
       "${install_prefix}/include/cxxlens/relations/source_origin.hpp"
       "${install_prefix}/${install_libdir}/cmake/cxxlens/cxxlensConfig.cmake"
-      "${install_prefix}/${install_libdir}/cmake/cxxlensProviderSDK/cxxlensProviderSDKConfig.cmake"
-      "${install_prefix}/${install_libdir}/cmake/cxxlensClang22ProviderSDK/cxxlensClang22ProviderSDKConfig.cmake"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_public_api_catalog.yaml"
+      "${install_prefix}/share/doc/cxxlens/LICENSE"
+      "${install_prefix}/share/doc/cxxlens/NOTICE"
+      "${install_prefix}/bin/cxxlens-provider-scaffold"
+      "${install_prefix}/bin/cxxlens"
+      "${install_prefix}/bin/cxxlens-sdk-doctor")
+  if(cxxlens_clang22_components STREQUAL "ON")
+    list(
+      APPEND
+      required_artifacts
+      "${install_prefix}/${install_libdir}/cmake/cxxlensClang22ProviderSDK/cxxlensClang22ProviderSDKConfig.cmake"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.yaml"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materialization_request_v2_2.schema.yaml"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materialization_report.schema.yaml"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml"
-      "${install_prefix}/share/doc/cxxlens/LICENSE"
-      "${install_prefix}/share/doc/cxxlens/NOTICE"
-      "${install_prefix}/bin/cxxlens-provider-scaffold"
-      "${install_prefix}/bin/cxxlens-sdk-doctor"
       "${install_prefix}/bin/cxxlens-clang-worker-22"
       "${install_prefix}/bin/cxxlens-clang22-materialize")
+  endif()
+  foreach(required IN LISTS required_artifacts)
     resolve_install_artifact_path("${required}" resolved_required)
     if(NOT EXISTS "${resolved_required}")
       message(
@@ -150,6 +193,95 @@ if(PHASE STREQUAL "prepare")
           "installed next-generation artifact is missing: ${resolved_required}")
     endif()
   endforeach()
+
+  # Compile every installed public header in isolation.  The umbrella consumer
+  # checks above prove that one supported include graph works; this sweep keeps
+  # a header from accidentally depending on an uninstalled sibling or on the
+  # build-tree include path.  It is an installed product-surface check, not a
+  # repository-operation artifact.
+  set(public_header_probe_root "${test_root}/public-header-probes")
+  file(MAKE_DIRECTORY "${public_header_probe_root}")
+  file(
+    GLOB_RECURSE installed_public_headers
+    RELATIVE "${install_prefix}/include"
+    "${install_prefix}/include/cxxlens/*.hpp")
+  list(SORT installed_public_headers)
+  if(NOT installed_public_headers)
+    message(FATAL_ERROR "installed public header sweep found no headers")
+  endif()
+  foreach(header IN LISTS installed_public_headers)
+    string(REPLACE "/" "_" probe_name "${header}")
+    set(probe_source "${public_header_probe_root}/${probe_name}.cpp")
+    file(WRITE "${probe_source}"
+         "#include <${header}>\nint main() { return 0; }\n")
+    execute_process(
+      COMMAND "@CMAKE_CXX_COMPILER@" -std=c++23 -fsyntax-only
+              "-I${install_prefix}/include" "${probe_source}"
+      RESULT_VARIABLE header_probe_result
+      OUTPUT_VARIABLE header_probe_output
+      ERROR_VARIABLE header_probe_error)
+    if(NOT header_probe_result EQUAL 0)
+      message(
+        FATAL_ERROR
+          "installed public header failed isolated syntax check: ${header}\nstdout: ${header_probe_output}\nstderr: ${header_probe_error}"
+      )
+    endif()
+  endforeach()
+
+  # The old snapshot_builder was physically shipped by the SDK header directory
+  # but was never part of the public API catalog.  Its compatibility path also
+  # bypassed the normative writer validation, so keep its removal fail-closed at
+  # the installed-header boundary.
+  set(legacy_surface_probe_root "${test_root}/snapshot-builder-legacy-probe")
+  set(legacy_surface_probe "${legacy_surface_probe_root}/main.cpp")
+  file(MAKE_DIRECTORY "${legacy_surface_probe_root}")
+  file(
+    WRITE "${legacy_surface_probe}"
+    [=[
+#include <cxxlens/sdk/store.hpp>
+
+int main()
+{
+  cxxlens::sdk::snapshot_builder* legacy = nullptr;
+  (void)legacy;
+  return 0;
+}
+]=])
+  file(
+    WRITE "${legacy_surface_probe_root}/CMakeLists.txt"
+    [=[
+cmake_minimum_required(VERSION 3.25)
+project(snapshot_builder_legacy_probe LANGUAGES CXX)
+add_executable(snapshot_builder_legacy_probe main.cpp)
+target_compile_features(snapshot_builder_legacy_probe PRIVATE cxx_std_23)
+]=])
+  set(legacy_surface_probe_build "${legacy_surface_probe_root}/build")
+  execute_process(
+    COMMAND
+      "@CMAKE_COMMAND@" -S "${legacy_surface_probe_root}" -B
+      "${legacy_surface_probe_build}"
+      "-DCMAKE_CXX_COMPILER=@CMAKE_CXX_COMPILER@"
+      "-DCMAKE_CXX_FLAGS=-I${install_prefix}/include"
+    RESULT_VARIABLE legacy_surface_configure_result
+    OUTPUT_VARIABLE legacy_surface_configure_output
+    ERROR_VARIABLE legacy_surface_configure_error)
+  if(NOT legacy_surface_configure_result EQUAL 0)
+    message(
+      FATAL_ERROR
+        "legacy snapshot_builder probe could not configure: ${legacy_surface_configure_error}"
+    )
+  endif()
+  execute_process(
+    COMMAND "@CMAKE_COMMAND@" --build "${legacy_surface_probe_build}"
+    RESULT_VARIABLE legacy_surface_build_result
+    OUTPUT_VARIABLE legacy_surface_build_output
+    ERROR_VARIABLE legacy_surface_build_error)
+  if(legacy_surface_build_result EQUAL 0)
+    message(
+      FATAL_ERROR
+        "removed snapshot_builder unexpectedly reappeared in installed public headers"
+    )
+  endif()
 
   run_installed_tools(original)
 
@@ -176,8 +308,12 @@ if(PHASE STREQUAL "shared-runtime-layout"
    AND UNIX
    AND NOT APPLE)
   find_program(CXXLENS_READELF NAMES readelf llvm-readelf REQUIRED)
-  foreach(tool IN ITEMS cxxlens-provider-scaffold cxxlens-sdk-doctor
-                        cxxlens-clang-worker-22 cxxlens-clang22-materialize)
+  set(runtime_tools cxxlens cxxlens-provider-scaffold cxxlens-sdk-doctor)
+  if(cxxlens_clang22_components STREQUAL "ON")
+    list(APPEND runtime_tools cxxlens-clang-worker-22
+         cxxlens-clang22-materialize)
+  endif()
+  foreach(tool IN LISTS runtime_tools)
     execute_process(
       COMMAND "${CXXLENS_READELF}" -d
               "${install_prefix}/bin/${tool}${install_executable_suffix}"
@@ -240,9 +376,12 @@ if(PHASE STREQUAL "shared-runtime-layout" AND WIN32)
   # in the archive directory, while the DLL runtime must be beside installed
   # executables. This check is intentionally limited to layout; it does not
   # advertise Windows/MSVC support.
-  foreach(library IN
-          ITEMS cxxlens_base cxxlens_kernel cxxlens_query cxxlens_recipes
-                cxxlens_provider_sdk cxxlens_clang22_provider_sdk)
+  set(runtime_libraries cxxlens_base cxxlens_kernel cxxlens_query
+                        cxxlens_recipes cxxlens_sdk)
+  if(cxxlens_clang22_components STREQUAL "ON")
+    list(APPEND runtime_libraries cxxlens_clang22_provider_sdk)
+  endif()
+  foreach(library IN LISTS runtime_libraries)
     file(
       GLOB
       runtime_artifacts
@@ -361,8 +500,11 @@ if(PHASE STREQUAL "examples-consumer")
   execute_process(
     COMMAND "@CMAKE_COMMAND@" --install "${example_build_dir}" --prefix
             "${example_prefix}" COMMAND_ERROR_IS_FATAL ANY)
-  foreach(example IN ITEMS recipe typed_query dynamic_query portable_provider
-                           clang22-native)
+  set(installed_examples recipe typed_query dynamic_query portable_provider)
+  if(cxxlens_clang22_components STREQUAL "ON")
+    list(APPEND installed_examples clang22-native)
+  endif()
+  foreach(example IN LISTS installed_examples)
     run_clean(
       0
       "${example_build_dir}/cxxlens-installed-${example}${install_executable_suffix}"

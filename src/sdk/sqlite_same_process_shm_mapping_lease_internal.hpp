@@ -2562,7 +2562,8 @@ namespace cxxlens::sdk
 		sqlite_shm_reader_map_identity_prepare_capability(
 			std::shared_ptr<std::atomic<std::uint64_t>> process_epoch,
 			std::shared_ptr<std::atomic_bool> global_emergency_latch,
-			const std::uint64_t expected_process_epoch,
+			const std::uint64_t
+				expected_process_epoch, // NOLINT(bugprone-easily-swappable-parameters)
 			const std::uint64_t family_epoch,
 			const std::uint64_t family_pin_token,
 			const std::uint64_t alias_token) noexcept

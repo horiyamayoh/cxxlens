@@ -150,6 +150,20 @@ namespace
 				descriptor{promote_host_endpoint(second[1])}};
 	}
 
+	[[nodiscard]] bool host_socket_type_preflight()
+	{
+		std::array<int, 2U> pair{-1, -1};
+		if (::socketpair(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, pair.data()) != 0)
+			return false;
+		int socket_type{};
+		socklen_t socket_type_size = sizeof(socket_type);
+		const auto result =
+			::getsockopt(pair[0], SOL_SOCKET, SO_TYPE, &socket_type, &socket_type_size);
+		(void)::close(pair[0]);
+		(void)::close(pair[1]);
+		return result == 0 && socket_type_size == sizeof(socket_type) && socket_type == SOCK_STREAM;
+	}
+
 	[[nodiscard]] std::size_t open_fd_count()
 	{
 		DIR* directory = ::opendir("/proc/self/fd");
@@ -679,6 +693,11 @@ namespace
 int main()
 {
 #if defined(__linux__) && defined(__GLIBC__)
+	if (!host_socket_type_preflight())
+	{
+		std::cerr << "provider process channel host socket inspection unavailable\n";
+		return 77;
+	}
 	const auto policies = builtin_sandbox_policies();
 	require(!policies.empty(), "sandbox policy registry is empty");
 	auto fixture = make_channel();

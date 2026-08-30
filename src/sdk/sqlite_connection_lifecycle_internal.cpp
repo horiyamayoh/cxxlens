@@ -366,14 +366,15 @@ namespace cxxlens::sdk
 
 	sqlite_confirmed_close_token::sqlite_confirmed_close_token(
 		const sqlite_confirmed_close_kind kind,
-		std::shared_ptr<const void> authority_anchor_pin,
+		std::shared_ptr<const void>
+			authority_anchor_pin, // NOLINT(bugprone-easily-swappable-parameters)
 		std::shared_ptr<const void> lifecycle_identity,
 		const bool logical_read_exact_empty,
 		std::shared_ptr<const void> logical_read_namespace_guard,
 		std::shared_ptr<const void> logical_read_capability_token,
 		std::shared_ptr<const void> logical_read_parent_identity) noexcept
 		: kind_{kind}, authority_anchor_pin_{std::move(authority_anchor_pin)},
-		  lifecycle_identity_{lifecycle_identity},
+		  lifecycle_identity_{std::move(lifecycle_identity)},
 		  logical_read_exact_empty_{logical_read_exact_empty},
 		  logical_read_namespace_guard_{std::move(logical_read_namespace_guard)},
 		  logical_read_capability_token_{std::move(logical_read_capability_token)},
@@ -384,7 +385,7 @@ namespace cxxlens::sdk
 	sqlite_confirmed_close_token::sqlite_confirmed_close_token(
 		sqlite_confirmed_close_token&& other) noexcept
 		: kind_{other.kind_}, authority_anchor_pin_{std::move(other.authority_anchor_pin_)},
-		  lifecycle_identity_{other.lifecycle_identity_},
+		  lifecycle_identity_{std::move(other.lifecycle_identity_)},
 		  logical_read_exact_empty_{other.logical_read_exact_empty_},
 		  logical_read_namespace_guard_{std::move(other.logical_read_namespace_guard_)},
 		  logical_read_capability_token_{std::move(other.logical_read_capability_token_)},
@@ -400,7 +401,7 @@ namespace cxxlens::sdk
 			return *this;
 		kind_ = other.kind_;
 		authority_anchor_pin_ = std::move(other.authority_anchor_pin_);
-		lifecycle_identity_ = other.lifecycle_identity_;
+		lifecycle_identity_ = std::move(other.lifecycle_identity_);
 		logical_read_exact_empty_ = other.logical_read_exact_empty_;
 		logical_read_namespace_guard_ = std::move(other.logical_read_namespace_guard_);
 		logical_read_capability_token_ = std::move(other.logical_read_capability_token_);
@@ -597,11 +598,11 @@ namespace cxxlens::sdk
 				auto anchor = owned->pins.authority_anchor;
 				const auto identity = owned->lifecycle_identity;
 				const auto exact_empty = owned->logical_read_exact_empty;
-				const auto namespace_guard =
+				auto namespace_guard =
 					std::static_pointer_cast<const void>(owned->logical_read_namespace_guard);
-				const auto capability =
+				auto capability =
 					std::static_pointer_cast<const void>(owned->logical_read_capability_token);
-				const auto parent =
+				auto parent =
 					std::static_pointer_cast<const void>(owned->logical_read_parent_identity);
 				release_known_safe(owned);
 				return sqlite_confirmed_close_token{sqlite_confirmed_close_kind::sqlite_ok,
@@ -646,12 +647,11 @@ namespace cxxlens::sdk
 			auto anchor = owned->pins.authority_anchor;
 			const auto identity = owned->lifecycle_identity;
 			const auto exact_empty = owned->logical_read_exact_empty;
-			const auto namespace_guard =
+			auto namespace_guard =
 				std::static_pointer_cast<const void>(owned->logical_read_namespace_guard);
-			const auto capability =
+			auto capability =
 				std::static_pointer_cast<const void>(owned->logical_read_capability_token);
-			const auto parent =
-				std::static_pointer_cast<const void>(owned->logical_read_parent_identity);
+			auto parent = std::static_pointer_cast<const void>(owned->logical_read_parent_identity);
 			release_known_safe(owned);
 			return sqlite_confirmed_close_token{sqlite_confirmed_close_kind::sqlite_ok,
 												std::move(anchor),

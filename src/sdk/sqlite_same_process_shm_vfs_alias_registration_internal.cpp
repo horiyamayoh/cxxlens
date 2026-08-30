@@ -369,10 +369,18 @@ namespace cxxlens::sdk
 				return rejection(sqlite_shm_lease_rejection_reason::generation_exhausted,
 								 sqlite_shm_lease_recovery_action::quarantine_no_retry);
 
+			// Alias lifetime is a lease identity, not a semantic identity.  Include a
+			// process-local issuance sequence so a successor cannot inherit the
+			// previous alias when backend/VFS storage addresses are reused (ABA).
+			const auto alias_lifetime_sequence = reserve_lifecycle_sequence();
+			if (alias_lifetime_sequence == 0U)
+				return rejection(sqlite_shm_lease_rejection_reason::generation_exhausted,
+								 sqlite_shm_lease_recovery_action::quarantine_no_retry);
 			auto alias_lifetime =
 				mint_sealed_identity("cxxlens.sqlite.shm.vfs.alias-lifetime.v1",
 									 [&](std::vector<std::byte>& bytes)
 									 {
+										 append_u64(bytes, alias_lifetime_sequence);
 										 append_identity(bytes, *shared_runtime_vfs_cohort);
 										 append_pointer(bytes, input.backend_lifetime_identity);
 										 append_pointer(bytes, input.vfs_implementation);

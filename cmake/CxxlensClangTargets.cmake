@@ -88,7 +88,7 @@ function(cxxlens_create_clang22_worker_static_closure)
                         PUBLIC cxxlens_clang22_worker_query_internal)
 
   # provider_runtime.cpp and provider_process_adapter.cpp are already embedded
-  # as the hidden cxxlens_provider_runtime_internal object closure by #224.
+  # as the cxxlens_provider_runtime_internal object closure by #224.
   # Rebuild only the remaining provider SDK objects against the worker-private
   # static semantic stack; do not duplicate the runtime object definitions.
   add_library(

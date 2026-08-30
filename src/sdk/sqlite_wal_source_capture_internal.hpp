@@ -10,7 +10,7 @@
 
 namespace cxxlens::sdk
 {
-	inline constexpr std::size_t sqlite_wal_source_capture_buffer_bound = 64U * 1024U;
+	inline constexpr std::size_t sqlite_wal_source_capture_buffer_bound = std::size_t{64U} * 1024U;
 
 	/** Stable held-source evidence and the sealed private workspace derived from it. */
 	struct sqlite_wal_source_capture

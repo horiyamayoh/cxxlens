@@ -101,8 +101,7 @@ if("@CXXLENS_OCCURRENCE_CONFIGURATION@" STREQUAL "shared")
   _cxxlens_occurrence_append(
     recipes "@CMAKE_INSTALL_LIBDIR@/libcxxlens_recipes.so.@PROJECT_VERSION@")
   _cxxlens_occurrence_append(
-    provider-sdk
-    "@CMAKE_INSTALL_LIBDIR@/libcxxlens_provider_sdk.so.@PROJECT_VERSION@")
+    provider-sdk "@CMAKE_INSTALL_LIBDIR@/libcxxlens_sdk.so.@PROJECT_VERSION@")
   _cxxlens_occurrence_append(
     clang22-provider-sdk
     "@CMAKE_INSTALL_LIBDIR@/libcxxlens_clang22_provider_sdk.so.@PROJECT_VERSION@"

@@ -183,7 +183,7 @@ $defs:
       - {$ref: '#/$defs/file'}
       - properties:
           role: {const: provider-sdk}
-          path: {type: string, pattern: '^(?:lib|lib64)/libcxxlens_provider_sdk\.so(?:\.[0-9]+)*$'}
+          path: {type: string, pattern: '^(?:lib|lib64)/libcxxlens_sdk\.so(?:\.[0-9]+)*$'}
         required: [role, path]
   runtime_clang22_provider_sdk:
     allOf:
