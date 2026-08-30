@@ -12,26 +12,6 @@ function(cxxlens_add_test_executable target source)
   endif()
 endfunction()
 
-# These two deterministic fault-injection tests provide their own process-wide
-# allocation hooks.  ThreadSanitizer also supplies strong global new/delete
-# definitions, so instrumenting either target would fail at link time before the
-# test can run.  Keep the allocation-fault contract exercised while explicitly
-# leaving only these harnesses outside sanitizer instrumentation.
-function(cxxlens_add_unsanitized_test_executable target source)
-  add_executable(${target} ${source})
-  target_compile_features(${target} PRIVATE cxx_std_23)
-  cxxlens_set_project_warnings(${target})
-  if(NOT CXXLENS_CLANG22_AVAILABLE)
-    target_compile_options(${target} PRIVATE -Wno-unused-function)
-  endif()
-  if(CXXLENS_ENABLE_TSAN)
-    # The linked TSan-instrumented production library supplies its runtime
-    # allocator.  Allow this harness's deliberate fault-injection new/delete
-    # definitions to remain the executable-local authority.
-    target_link_options(${target} PRIVATE "-Wl,--allow-multiple-definition")
-  endif()
-endfunction()
-
 add_test(
   NAME configure.dev-core-no-dependencies
   COMMAND
@@ -824,6 +804,8 @@ int main() {
   CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD_WAITID)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
    AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD_WAITID)
+  add_test(NAME unit.sdk-provider-runtime-ng1-heartbeat
+           COMMAND cxxlens-unit-sdk-provider-runtime --ng1-heartbeat-only)
   add_test(NAME unit.sdk-provider-runtime-timeout
            COMMAND cxxlens-unit-sdk-provider-runtime --timeout-regression
                    "$<TARGET_FILE:cxxlens-provider-process-fixture>")
@@ -865,7 +847,7 @@ set_tests_properties(
   PROPERTIES
     LABELS
     "unit;sdk;provider;process;sandbox;security;budget;cancellation;slow"
-    PROCESSORS 2)
+    RUN_SERIAL TRUE)
 
 cxxlens_add_test_executable(
   cxxlens-unit-sdk-provider-expected-output-validator
@@ -901,6 +883,17 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
   else()
     set(CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT 30)
   endif()
+  set_tests_properties(
+    unit.sdk-provider-runtime-ng1-heartbeat
+    PROPERTIES
+      LABELS
+      "unit;sdk;provider;process;ng1;heartbeat;budget;cancellation;regression"
+      RUN_SERIAL
+      TRUE
+      SKIP_RETURN_CODE
+      77
+      TIMEOUT
+      ${CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT})
   set_tests_properties(
     unit.sdk-provider-runtime-timeout
     PROPERTIES LABELS
@@ -1295,19 +1288,16 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   )
 endif()
 
-cxxlens_add_unsanitized_test_executable(cxxlens-protocol-v2
-                                        protocol_v2/protocol_v2_direct_test.cpp)
+cxxlens_add_test_executable(cxxlens-protocol-v2
+                            protocol_v2/protocol_v2_direct_test.cpp)
 target_link_libraries(cxxlens-protocol-v2 PRIVATE cxxlens_protocol_v2)
 if(CXXLENS_ENABLE_TSAN)
-  target_compile_definitions(cxxlens-protocol-v2
-                             PRIVATE CXXLENS_PROTOCOL_V2_TSAN_UNSUPPORTED=1)
+  target_compile_definitions(
+    cxxlens-protocol-v2 PRIVATE CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED=1)
 endif()
 add_test(NAME sdk.protocol-v2 COMMAND cxxlens-protocol-v2)
 set_tests_properties(sdk.protocol-v2 PROPERTIES LABELS
                                                 "sdk;protocol;v2;security")
-if(CXXLENS_ENABLE_TSAN)
-  set_tests_properties(sdk.protocol-v2 PROPERTIES SKIP_RETURN_CODE 77)
-endif()
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-protocol-v2-adapter
                             unit/sdk/provider_protocol_v2_adapter_test.cpp)
@@ -1613,9 +1603,14 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
                "adapter;provider;clang22;source-closure;task;v4;worker;security"
   )
 
-  cxxlens_add_unsanitized_test_executable(
+  cxxlens_add_test_executable(
     cxxlens-clang22-provider-worker-v4-ast-observer
     adapter/clang22/provider_worker_v4_ast_observer_test.cpp)
+  if(CXXLENS_ENABLE_TSAN)
+    target_compile_definitions(
+      cxxlens-clang22-provider-worker-v4-ast-observer
+      PRIVATE CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED=1)
+  endif()
   target_link_libraries(cxxlens-clang22-provider-worker-v4-ast-observer
                         PRIVATE cxxlens_clang22_worker_core)
   if(CXXLENS_BUILD_SHARED)
@@ -2183,6 +2178,7 @@ endforeach()
 foreach(
   test_name IN
   ITEMS unit.sdk-provider-runtime
+        unit.sdk-provider-runtime-ng1-heartbeat
         unit.sdk-provider-expected-output-validator
         unit.sdk-provider-ng1-validation
         unit.sdk-provider-ng1-spill-port
