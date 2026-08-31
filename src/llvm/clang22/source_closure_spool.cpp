@@ -414,7 +414,7 @@ namespace cxxlens::detail::clang22
 		return output;
 	}
 
-	sdk::result<void> source_closure_spool::seal_private_spool()
+	sdk::result<void> source_closure_spool::seal_private_spool() const
 	{
 #if defined(__linux__)
 		if (private_spool_fd_ < 0)
@@ -896,8 +896,10 @@ namespace cxxlens::detail::clang22
 	{
 	}
 
+	// NOLINTBEGIN(bugprone-exception-escape): cleanup accesses only checked result alternatives.
 	source_closure_spool_relay::~source_closure_spool_relay()
 	{
+		// NOLINTEND(bugprone-exception-escape)
 		if (terminal_ != source_closure_relay_terminal::cleaned &&
 			(spool_.sealed() || spool_.retained_bytes() != 0U))
 			(void)cleanup();

@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <memory>
 #include <span>
@@ -307,6 +308,14 @@ namespace
 			auto task_fields = *tasks.front().as_object();
 			task_fields.insert_or_assign("catalog_id", text(catalog->catalog_id));
 			task_fields.insert_or_assign("catalog_digest", text(catalog->catalog_digest));
+#if defined(CXXLENS_SANITIZER_INSTRUMENTED)
+			auto budget_fields = *task_fields.at("budget").as_object();
+			budget_fields.insert_or_assign("address_space_bytes",
+										   json_value::unsigned_integer(static_cast<std::uint64_t>(
+											   std::numeric_limits<std::int64_t>::max())));
+			budget_fields.insert_or_assign("subprocesses", json_value::unsigned_integer(1024U));
+			task_fields.insert_or_assign("budget", object(std::move(budget_fields)));
+#endif
 			auto source_fields = *task_fields.at("source").as_object();
 			source_fields.insert_or_assign("source_snapshot_id", text(manifest.closure_id));
 			source_fields.insert_or_assign("file_id", text(member.file_id));

@@ -149,19 +149,17 @@ def installed_static_relation_ids() -> list[str]:
     )
 
 
-def check_direct_authenticated_resolver(executable: str, directory: pathlib.Path) -> None:
-    """Compile one internal consumer to exercise the injected authority ports."""
+def check_direct_authenticated_resolver(
+    executable: str,
+    consumer: pathlib.Path,
+    directory: pathlib.Path,
+    provider: pathlib.Path | None = None,
+    *,
+    emit_source_only: bool = False,
+) -> None:
+    """Generate and run one CMake-built consumer of the injected authority ports."""
     root = ROOT
-    build = pathlib.Path(executable).resolve().parent
-    cache = (build / "CMakeCache.txt").read_text(encoding="utf-8", errors="replace")
-    match = re.search(r"^CMAKE_CXX_COMPILER(?::[^=]*)?=(.+)$", cache, re.MULTILINE)
-    compiler = match.group(1).strip() if match else ""
-    if not compiler:
-        compiler = os.environ.get("CXX", "") or shutil.which("clang++-22") or shutil.which("c++") or ""
-    require(bool(compiler), "cannot locate the configured C++ compiler for direct resolver test")
-
     source = directory / "doctor-authority-consumer.cpp"
-    binary = directory / "doctor-authority-consumer"
     expected_catalog_projection = directory / "doctor-catalog-projection.json"
     state_projection = directory / "doctor-state-projections.json"
     catalog_document = yaml.safe_load(
@@ -182,6 +180,7 @@ def check_direct_authenticated_resolver(executable: str, directory: pathlib.Path
             #include <fstream>
             #include <iostream>
             #include <iterator>
+			#include <limits>
 			#include <optional>
             #include <string>
             #include <type_traits>
@@ -439,6 +438,16 @@ def check_direct_authenticated_resolver(executable: str, directory: pathlib.Path
                 request.normalized_invocation_digest = digest('1');
                 request.toolchain_digest = digest('2');
                 request.environment_digest = digest('3');
+				// Sanitizer runtimes reserve a large sparse virtual address range and LSan
+				// forks while inspecting a process. Do not make those implementation details
+				// part of the production resource contract exercised by non-sanitizer builds.
+			#if defined(CXXLENS_SANITIZER_INSTRUMENTED)
+				request.budget.address_space_bytes =
+					std::numeric_limits<std::uint64_t>::max();
+				request.budget.subprocesses = 1024U;
+			#endif
+				request.budget.wall_ms = 10'000U;
+				request.budget.cpu_ms = 10'000U;
 				request.sandbox = request.selection.authority_request().sandbox;
 				return request;
 			}
@@ -508,7 +517,7 @@ def check_direct_authenticated_resolver(executable: str, directory: pathlib.Path
                 const auto policies = cxxlens::sdk::provider::builtin_sandbox_policies();
                 require(!policies.empty(), "built-in sandbox policies missing");
                 discovered.source = cxxlens::sdk::provider::discovery_source::explicit_path;
-                discovered.executable_argv = {selected_executable};
+                discovered.executable_argv = {selected_executable, "doctor"};
                 discovered.authoritative_path = true;
                 discovered.trust_valid = true;
                 discovered.certification_valid = true;
@@ -518,7 +527,14 @@ def check_direct_authenticated_resolver(executable: str, directory: pathlib.Path
                 discovered.sandbox.mechanisms = policies.front().mechanisms;
                 discovered.sandbox.achieved = assurance;
                 discovered.sandbox.policy_digest = policies.front().policy_digest();
-                cxxlens::sdk::provider::execution_budget execution_budget;
+				cxxlens::sdk::provider::execution_budget execution_budget;
+			#if defined(CXXLENS_SANITIZER_INSTRUMENTED)
+				execution_budget.address_space_bytes =
+					std::numeric_limits<std::uint64_t>::max();
+				execution_budget.subprocesses = 1024U;
+			#endif
+				execution_budget.wall_ms = 10'000U;
+				execution_budget.cpu_ms = 10'000U;
                 auto evidence = cxxlens::sdk::provider::sandbox_evidence_digest(
                     policies.front(),
                     execution_budget,
@@ -815,10 +831,8 @@ def check_direct_authenticated_resolver(executable: str, directory: pathlib.Path
 
             int main(const int argc, char** argv)
             {
-				if (std::getenv("CXXLENS_PROVIDER_MANIFEST") != nullptr)
-					return run_provider_child();
-                require(argc == 4, "doctor executable/catalog/state projection path missing");
-				provider_executable_path = std::filesystem::absolute(argv[0]).string();
+                require(argc == 5, "doctor executable/catalog/state/provider path missing");
+				provider_executable_path = std::filesystem::absolute(argv[4]).string();
                 const doctor::installed_product_catalog_loader loader;
                 auto loaded_catalog = loader.load();
                 require(std::holds_alternative<doctor::authenticated_capability_catalog>(
@@ -1638,47 +1652,16 @@ def check_direct_authenticated_resolver(executable: str, directory: pathlib.Path
         ),
         encoding="utf-8",
     )
-    compile_result = subprocess.run(
-        [
-            compiler,
-            "-std=c++23",
-            "-Wall",
-            "-Wextra",
-            "-Wpedantic",
-            "-Werror",
-            "-I",
-            str(root / "include"),
-            "-I",
-            str(root / "tools" / "sdk"),
-            str(source),
-            "-L",
-            str(build),
-            f"-Wl,-rpath,{build}",
-            "-lcxxlens_sdk",
-            "-lcxxlens_recipes",
-            "-lcxxlens_query",
-            "-lcxxlens_kernel",
-            "-ldl",
-            "-lcxxlens_protocol_v2",
-            "-lcxxlens_base",
-            "-pthread",
-            "-o",
-            str(binary),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    require(
-        compile_result.returncode == 0,
-        f"direct resolver consumer did not compile: {compile_result.stderr}",
-    )
+    if emit_source_only:
+        return
+    require(consumer.is_file(), "CMake-built direct resolver consumer is missing")
     completed = subprocess.run(
         [
-            str(binary),
+            str(consumer),
             str(pathlib.Path(executable).resolve()),
             str(expected_catalog_projection),
             str(state_projection),
+            str(provider.resolve()) if provider is not None else "",
         ],
         capture_output=True,
         text=True,
@@ -2267,11 +2250,35 @@ def check_relation_presence(executable: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("executable")
+    parser.add_argument("executable", nargs="?")
+    parser.add_argument("consumer", nargs="?")
+    parser.add_argument("provider", nargs="?")
+    parser.add_argument("--emit-consumer-source", type=pathlib.Path)
     args = parser.parse_args()
+    if args.emit_consumer_source is not None:
+        require(bool(args.executable), "doctor executable is required while generating consumer")
+        args.emit_consumer_source.parent.mkdir(parents=True, exist_ok=True)
+        check_direct_authenticated_resolver(
+            args.executable,
+            pathlib.Path(),
+            args.emit_consumer_source.parent,
+            emit_source_only=True,
+        )
+        generated = args.emit_consumer_source.parent / "doctor-authority-consumer.cpp"
+        if generated != args.emit_consumer_source:
+            generated.replace(args.emit_consumer_source)
+        return 0
+    require(bool(args.executable), "doctor executable is required")
+    require(bool(args.consumer), "CMake-built direct resolver consumer is required")
+    require(bool(args.provider), "CMake-built provider fixture is required")
     with tempfile.TemporaryDirectory(prefix="cxxlens-sdk-doctor-product-") as raw_directory:
         directory = pathlib.Path(raw_directory)
-        check_direct_authenticated_resolver(args.executable, directory)
+        check_direct_authenticated_resolver(
+            args.executable,
+            pathlib.Path(args.consumer),
+            directory,
+            pathlib.Path(args.provider),
+        )
         check_unverified_and_deterministic(args.executable, directory)
         check_missing_and_completion_plan(args.executable, directory)
         check_provider_trust_and_conflict(args.executable, directory)

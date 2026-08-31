@@ -31,6 +31,7 @@
 #include "snapshot_store_v5_codec_internal.hpp"
 #include "sqlite_connection_lifecycle_internal.hpp"
 #include "sqlite_default_forwarding_vfs_internal.hpp"
+#include "sqlite_dynamic_loader_port_internal.hpp"
 #include "sqlite_exact_empty_normalization_effect_internal.hpp"
 #include "sqlite_limit_length_control_internal.hpp"
 #include "sqlite_payload_streaming_internal.hpp"
@@ -59,6 +60,61 @@ namespace cxxlens::sdk
 #endif
 	namespace
 	{
+		class system_sqlite_dynamic_loader_port final : public detail::sqlite_dynamic_loader_port
+		{
+		  public:
+			[[nodiscard]] result<void*> open(const std::string_view candidate) const override
+			{
+#if defined(__unix__) || defined(__APPLE__)
+				void* library = ::dlopen(std::string{candidate}.c_str(), RTLD_NOW | RTLD_LOCAL);
+				if (library == nullptr)
+					return unexpected(error{"store.backend-unavailable", "sqlite", "library"});
+				return library;
+#else
+				(void)candidate;
+				return unexpected(error{"store.backend-unavailable", "sqlite", "platform"});
+#endif
+			}
+
+			void close(void* library) const noexcept override
+			{
+#if defined(__unix__) || defined(__APPLE__)
+				if (library != nullptr)
+					(void)::dlclose(library);
+#else
+				(void)library;
+#endif
+			}
+
+			[[nodiscard]] result<void*> resolve(void* library,
+												const std::string_view symbol) const override
+			{
+#if defined(__unix__) || defined(__APPLE__)
+				if (library == nullptr)
+					return unexpected(error{"store.backend-unavailable", "sqlite", "library"});
+				return ::dlsym(library, std::string{symbol}.c_str());
+#else
+				(void)library;
+				(void)symbol;
+				return unexpected(error{"store.backend-unavailable", "sqlite", "platform"});
+#endif
+			}
+
+			[[nodiscard]] const void* image_identity(const void* symbol) const noexcept override
+			{
+#if defined(__unix__) || defined(__APPLE__)
+				if (symbol == nullptr)
+					return nullptr;
+				Dl_info information{};
+				if (::dladdr(symbol, &information) == 0 || information.dli_fbase == nullptr)
+					return nullptr;
+				return information.dli_fbase;
+#else
+				(void)symbol;
+				return nullptr;
+#endif
+			}
+		};
 		[[nodiscard]] error
 		store_error(std::string code, std::string field, std::string detail = {})
 		{
@@ -700,6 +756,7 @@ namespace cxxlens::sdk
 			using blob_bytes_fn = int (*)(void*);
 			using blob_close_fn = int (*)(void*);
 			void* library{};
+			std::shared_ptr<const detail::sqlite_dynamic_loader_port> loader;
 			const void* runtime_identity{};
 			std::shared_ptr<void> retained_runtime_lifetime;
 			open_fn open{};
@@ -746,30 +803,21 @@ namespace cxxlens::sdk
 			~sqlite_api()
 			{
 #if defined(__unix__) || defined(__APPLE__)
-				if (owns_library && library != nullptr)
-					dlclose(library);
+				if (owns_library && library != nullptr && loader)
+					loader->close(library);
 #endif
 			}
 		};
 
 		template <class Function>
-		[[nodiscard]] bool resolve_sqlite(void* library, const char* name, Function& output);
+		[[nodiscard]] bool resolve_sqlite(sqlite_api& api, const char* name, Function& output);
 
 		template <class Function>
-		[[nodiscard]] const void* sqlite_loader_image(Function function) noexcept
+		[[nodiscard]] const void* sqlite_loader_image(sqlite_api& api, Function function) noexcept
 		{
-#if defined(__unix__) || defined(__APPLE__)
-			if (function == nullptr)
+			if (function == nullptr || !api.loader)
 				return nullptr;
-			Dl_info information{};
-			if (::dladdr(reinterpret_cast<const void*>(function), &information) == 0 ||
-				information.dli_fbase == nullptr)
-				return nullptr;
-			return information.dli_fbase;
-#else
-			(void)function;
-			return nullptr;
-#endif
+			return api.loader->image_identity(reinterpret_cast<const void*>(function));
 		}
 
 		[[nodiscard]] result<void> require_source_shm_readonly_symbols(sqlite_api& api)
@@ -787,14 +835,14 @@ namespace cxxlens::sdk
 			sqlite_api::sourceid_fn sourceid{};
 			sqlite_api::uri_parameter_fn uri_parameter{};
 			sqlite_api::uri_key_fn uri_key{};
-			if (!resolve_sqlite(api.library, "sqlite3_sourceid", sourceid) ||
-				!resolve_sqlite(api.library, "sqlite3_uri_parameter", uri_parameter) ||
-				!resolve_sqlite(api.library, "sqlite3_uri_key", uri_key))
+			if (!resolve_sqlite(api, "sqlite3_sourceid", sourceid) ||
+				!resolve_sqlite(api, "sqlite3_uri_parameter", uri_parameter) ||
+				!resolve_sqlite(api, "sqlite3_uri_key", uri_key))
 				return unexpected(store_error("store.backend-unavailable", "sqlite", "symbols"));
-			const auto* loader_image = sqlite_loader_image(api.open);
-			if (loader_image == nullptr || sqlite_loader_image(sourceid) != loader_image ||
-				sqlite_loader_image(uri_parameter) != loader_image ||
-				sqlite_loader_image(uri_key) != loader_image)
+			const auto* loader_image = sqlite_loader_image(api, api.open);
+			if (loader_image == nullptr || sqlite_loader_image(api, sourceid) != loader_image ||
+				sqlite_loader_image(api, uri_parameter) != loader_image ||
+				sqlite_loader_image(api, uri_key) != loader_image)
 				return unexpected(
 					store_error("store.backend-unavailable", "sqlite", "runtime-binding"));
 			const char* source_id = sourceid();
@@ -843,15 +891,15 @@ namespace cxxlens::sdk
 		{
 			if (api.v3_symbols_ready)
 				return {};
-			if (!resolve_sqlite(api.library, "sqlite3_libversion_number", api.libversion_number) ||
-				!resolve_sqlite(api.library, "sqlite3_compileoption_get", api.compile_option_get) ||
-				!resolve_sqlite(api.library, "sqlite3_db_readonly", api.db_readonly) ||
-				!resolve_sqlite(api.library, "sqlite3_limit", api.limit) ||
-				!resolve_sqlite(api.library, "sqlite3_prepare_v3", api.prepare_v3) ||
-				!resolve_sqlite(api.library, "sqlite3_reset", api.reset) ||
-				!resolve_sqlite(api.library, "sqlite3_bind_int64", api.bind_int64) ||
-				!resolve_sqlite(api.library, "sqlite3_bind_blob64", api.bind_blob64) ||
-				!resolve_sqlite(api.library, "sqlite3_bind_null", api.bind_null))
+			if (!resolve_sqlite(api, "sqlite3_libversion_number", api.libversion_number) ||
+				!resolve_sqlite(api, "sqlite3_compileoption_get", api.compile_option_get) ||
+				!resolve_sqlite(api, "sqlite3_db_readonly", api.db_readonly) ||
+				!resolve_sqlite(api, "sqlite3_limit", api.limit) ||
+				!resolve_sqlite(api, "sqlite3_prepare_v3", api.prepare_v3) ||
+				!resolve_sqlite(api, "sqlite3_reset", api.reset) ||
+				!resolve_sqlite(api, "sqlite3_bind_int64", api.bind_int64) ||
+				!resolve_sqlite(api, "sqlite3_bind_blob64", api.bind_blob64) ||
+				!resolve_sqlite(api, "sqlite3_bind_null", api.bind_null))
 				return unexpected(store_error("store.backend-unavailable", "sqlite", "symbols"));
 			if (api.libversion_number() < 3'037'000)
 				return unexpected(
@@ -863,14 +911,19 @@ namespace cxxlens::sdk
 		class sqlite_library_guard
 		{
 		  public:
-			explicit sqlite_library_guard(void* library) noexcept : library_{library} {}
+			sqlite_library_guard(
+				void* library,
+				std::shared_ptr<const detail::sqlite_dynamic_loader_port> loader) noexcept
+				: library_{library}, loader_{std::move(loader)}
+			{
+			}
 			sqlite_library_guard(const sqlite_library_guard&) = delete;
 			sqlite_library_guard& operator=(const sqlite_library_guard&) = delete;
 			~sqlite_library_guard()
 			{
 #if defined(__unix__) || defined(__APPLE__)
-				if (library_ != nullptr)
-					(void)dlclose(library_);
+				if (library_ != nullptr && loader_)
+					loader_->close(library_);
 #endif
 			}
 			[[nodiscard]] void* release() noexcept
@@ -880,51 +933,47 @@ namespace cxxlens::sdk
 
 		  private:
 			void* library_{};
+			std::shared_ptr<const detail::sqlite_dynamic_loader_port> loader_;
 		};
 
 		template <class Function>
-		[[nodiscard]] bool resolve_sqlite(void* library, const char* name, Function& output)
+		[[nodiscard]] bool resolve_sqlite(sqlite_api& api, const char* name, Function& output)
 		{
-#if defined(__unix__) || defined(__APPLE__)
-			void* symbol = dlsym(library, name);
-			if (symbol == nullptr)
+			if (!api.loader)
 				return false;
-			output = reinterpret_cast<Function>(symbol);
+			auto symbol = api.loader->resolve(api.library, name);
+			if (!symbol || *symbol == nullptr)
+				return false;
+			output = reinterpret_cast<Function>(*symbol);
 			return true;
-#else
-			(void)library;
-			(void)name;
-			(void)output;
-			return false;
-#endif
 		}
 
 		[[nodiscard]] bool resolve_base_sqlite_symbols(sqlite_api& api)
 		{
-			return resolve_sqlite(api.library, "sqlite3_open_v2", api.open) &&
-				resolve_sqlite(api.library, "sqlite3_close_v2", api.close) &&
-				resolve_sqlite(api.library, "sqlite3_errmsg", api.errmsg) &&
-				resolve_sqlite(api.library, "sqlite3_exec", api.exec) &&
-				resolve_sqlite(api.library, "sqlite3_free", api.free_memory) &&
-				resolve_sqlite(api.library, "sqlite3_prepare_v2", api.prepare_v2) &&
-				resolve_sqlite(api.library, "sqlite3_step", api.step) &&
-				resolve_sqlite(api.library, "sqlite3_finalize", api.finalize) &&
-				resolve_sqlite(api.library, "sqlite3_column_type", api.column_type) &&
-				resolve_sqlite(api.library, "sqlite3_column_text", api.column_text) &&
-				resolve_sqlite(api.library, "sqlite3_column_blob", api.column_blob) &&
-				resolve_sqlite(api.library, "sqlite3_column_bytes", api.column_bytes) &&
-				resolve_sqlite(api.library, "sqlite3_column_int64", api.column_int64) &&
-				resolve_sqlite(api.library, "sqlite3_bind_text", api.bind_text) &&
-				resolve_sqlite(api.library, "sqlite3_bind_int64", api.bind_int64) &&
-				resolve_sqlite(api.library, "sqlite3_bind_blob64", api.bind_blob64) &&
-				resolve_sqlite(api.library, "sqlite3_bind_null", api.bind_null) &&
-				resolve_sqlite(api.library, "sqlite3_vfs_find", api.vfs_find) &&
-				resolve_sqlite(api.library, "sqlite3_vfs_register", api.vfs_register) &&
-				resolve_sqlite(api.library, "sqlite3_vfs_unregister", api.vfs_unregister) &&
-				resolve_sqlite(api.library, "sqlite3_blob_open", api.blob_open) &&
-				resolve_sqlite(api.library, "sqlite3_blob_read", api.blob_read) &&
-				resolve_sqlite(api.library, "sqlite3_blob_bytes", api.blob_bytes) &&
-				resolve_sqlite(api.library, "sqlite3_blob_close", api.blob_close);
+			return resolve_sqlite(api, "sqlite3_open_v2", api.open) &&
+				resolve_sqlite(api, "sqlite3_close_v2", api.close) &&
+				resolve_sqlite(api, "sqlite3_errmsg", api.errmsg) &&
+				resolve_sqlite(api, "sqlite3_exec", api.exec) &&
+				resolve_sqlite(api, "sqlite3_free", api.free_memory) &&
+				resolve_sqlite(api, "sqlite3_prepare_v2", api.prepare_v2) &&
+				resolve_sqlite(api, "sqlite3_step", api.step) &&
+				resolve_sqlite(api, "sqlite3_finalize", api.finalize) &&
+				resolve_sqlite(api, "sqlite3_column_type", api.column_type) &&
+				resolve_sqlite(api, "sqlite3_column_text", api.column_text) &&
+				resolve_sqlite(api, "sqlite3_column_blob", api.column_blob) &&
+				resolve_sqlite(api, "sqlite3_column_bytes", api.column_bytes) &&
+				resolve_sqlite(api, "sqlite3_column_int64", api.column_int64) &&
+				resolve_sqlite(api, "sqlite3_bind_text", api.bind_text) &&
+				resolve_sqlite(api, "sqlite3_bind_int64", api.bind_int64) &&
+				resolve_sqlite(api, "sqlite3_bind_blob64", api.bind_blob64) &&
+				resolve_sqlite(api, "sqlite3_bind_null", api.bind_null) &&
+				resolve_sqlite(api, "sqlite3_vfs_find", api.vfs_find) &&
+				resolve_sqlite(api, "sqlite3_vfs_register", api.vfs_register) &&
+				resolve_sqlite(api, "sqlite3_vfs_unregister", api.vfs_unregister) &&
+				resolve_sqlite(api, "sqlite3_blob_open", api.blob_open) &&
+				resolve_sqlite(api, "sqlite3_blob_read", api.blob_read) &&
+				resolve_sqlite(api, "sqlite3_blob_bytes", api.blob_bytes) &&
+				resolve_sqlite(api, "sqlite3_blob_close", api.blob_close);
 		}
 
 		[[nodiscard]] result<std::shared_ptr<sqlite_api>>
@@ -937,6 +986,7 @@ namespace cxxlens::sdk
 					store_error("store.backend-unavailable", "sqlite", "runtime-binding"));
 			auto api = std::make_shared<sqlite_api>();
 			api->library = binding.native_library_handle;
+			api->loader = detail::make_system_sqlite_dynamic_loader_port();
 			api->runtime_identity = binding.runtime_identity;
 			api->retained_runtime_lifetime = std::move(binding.runtime_lifetime);
 			if (!resolve_base_sqlite_symbols(*api))
@@ -948,9 +998,13 @@ namespace cxxlens::sdk
 #endif
 		}
 
-		[[nodiscard]] result<std::shared_ptr<sqlite_api>> load_sqlite()
+		[[nodiscard]] result<std::shared_ptr<sqlite_api>>
+		load_sqlite(std::shared_ptr<const detail::sqlite_dynamic_loader_port> loader)
 		{
 #if defined(__unix__) || defined(__APPLE__)
+			if (!loader)
+				return unexpected(
+					store_error("store.backend-unavailable", "sqlite", "loader-port"));
 #if defined(__APPLE__)
 			constexpr std::array candidates{"libsqlite3.dylib", "/usr/lib/libsqlite3.dylib"};
 #else
@@ -959,21 +1013,25 @@ namespace cxxlens::sdk
 			void* library{};
 			for (const auto* candidate : candidates)
 			{
-				library = dlopen(candidate, RTLD_NOW | RTLD_LOCAL);
+				auto opened = loader->open(candidate);
+				if (opened)
+					library = *opened;
 				if (library != nullptr)
 					break;
 			}
 			if (library == nullptr)
 				return unexpected(store_error("store.backend-unavailable", "sqlite", "library"));
-			sqlite_library_guard library_guard{library};
+			sqlite_library_guard library_guard{library, loader};
 			auto api = std::make_shared<sqlite_api>();
 			api->library = library_guard.release();
+			api->loader = std::move(loader);
 			api->runtime_identity = library;
 			api->owns_library = true;
 			if (!resolve_base_sqlite_symbols(*api))
 				return unexpected(store_error("store.backend-unavailable", "sqlite", "symbols"));
 			return api;
 #else
+			(void)loader;
 			return unexpected(store_error("store.backend-unavailable", "sqlite", "platform"));
 #endif
 		}
@@ -10232,9 +10290,26 @@ namespace cxxlens::sdk
 			std::make_shared<snapshot_store::implementation>(std::move(engine), "memory")};
 	}
 
+	std::shared_ptr<const detail::sqlite_dynamic_loader_port>
+	detail::make_system_sqlite_dynamic_loader_port()
+	{
+		return std::make_shared<system_sqlite_dynamic_loader_port>();
+	}
+
 	result<snapshot_store> open_sqlite_snapshot_store(const std::string& database_path,
 													  relation_engine engine)
 	{
+		return detail::open_sqlite_snapshot_store_with_loader_port(
+			database_path, std::move(engine), detail::make_system_sqlite_dynamic_loader_port());
+	}
+
+	result<snapshot_store> detail::open_sqlite_snapshot_store_with_loader_port(
+		const std::string& database_path,
+		relation_engine engine,
+		std::shared_ptr<const detail::sqlite_dynamic_loader_port> loader)
+	{
+		if (!loader)
+			return unexpected(store_error("store.backend-unavailable", "sqlite", "loader-port"));
 		if (database_path.empty())
 			return unexpected(store_error("store.sqlite-path-empty", "database_path"));
 		if (database_path != ":memory:" &&
@@ -10244,7 +10319,7 @@ namespace cxxlens::sdk
 				store_error("store.sqlite-failure", "sqlite-locator", "invalid-filesystem-path"));
 		if (database_path != ":memory:")
 		{
-			auto api = load_sqlite();
+			auto api = load_sqlite(loader);
 			if (!api)
 				return unexpected(std::move(api.error()));
 			void* default_vfs = (*api)->vfs_find(nullptr);
@@ -10292,7 +10367,7 @@ namespace cxxlens::sdk
 				std::move(backend_lifetime),
 				std::move(bundle->observation));
 		}
-		auto api = load_sqlite();
+		auto api = load_sqlite(std::move(loader));
 		if (!api)
 			return unexpected(std::move(api.error()));
 		void* default_vfs = (*api)->vfs_find(nullptr);

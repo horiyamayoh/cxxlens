@@ -327,7 +327,7 @@ namespace cxxlens::detail::clang22
 			values.push_back({std::move(code), std::move(subject), std::move(detail)});
 		}
 
-		[[nodiscard]] sdk::result<void> cancellation_check(const std::stop_token token)
+		[[nodiscard]] sdk::result<void> cancellation_check(const std::stop_token& token)
 		{
 			if (token.stop_requested())
 				return sdk::unexpected(
@@ -362,7 +362,7 @@ namespace cxxlens::detail::clang22
 						"provider-worker-v4.output-limit", "bytes", "maximum-output-bytes"));
 				output_bytes += size;
 				++row_count;
-				output.batches[batch_index].rows.push_back(std::move(row));
+				output.batches.at(batch_index).rows.push_back(std::move(row));
 				return {};
 			};
 
@@ -696,8 +696,8 @@ namespace cxxlens::detail::clang22
 				failure("provider-worker-v4.output-invalid", "identity", "task-or-compile-unit"));
 		for (std::size_t index{}; index < batches.size(); ++index)
 		{
-			const auto& batch = batches[index];
-			if (batch.descriptor_id != task_v4_output_descriptor_ids[index])
+			const auto& batch = batches.at(index);
+			if (batch.descriptor_id != task_v4_output_descriptor_ids.at(index))
 				return sdk::unexpected(
 					failure("provider-worker-v4.output-invalid", "descriptor-order"));
 			if (auto valid = batch.validate(); !valid)
@@ -731,7 +731,7 @@ namespace cxxlens::detail::clang22
 
 	sdk::result<provider_worker_v4_normalized_output>
 	normalize_provider_worker_v4_output(const provider_worker_v4_ast_observation_batch& input,
-										provider_worker_v4_output_normalizer_options options)
+										const provider_worker_v4_output_normalizer_options& options)
 	{
 		try
 		{
@@ -751,12 +751,11 @@ namespace cxxlens::detail::clang22
 			output.compile_unit = input.compile_unit;
 			for (std::size_t index{}; index < output.batches.size(); ++index)
 			{
-				output.batches[index].descriptor_id =
-					std::string{task_v4_output_descriptor_ids[index]};
-				output.batches[index].dependency_group_id =
-					index < 3U ? "canonical" : "observation";
-				output.batches[index].atomic_output_group_id = "clang22-atomic";
-				output.batches[index].batch_id = output.batches[index].descriptor_id + "-batch";
+				auto& batch = output.batches.at(index);
+				batch.descriptor_id = std::string{task_v4_output_descriptor_ids.at(index)};
+				batch.dependency_group_id = index < 3U ? "canonical" : "observation";
+				batch.atomic_output_group_id = "clang22-atomic";
+				batch.batch_id = batch.descriptor_id + "-batch";
 			}
 			if (auto valid = normalize_impl(input, options, output); !valid)
 				return sdk::unexpected(std::move(valid.error()));

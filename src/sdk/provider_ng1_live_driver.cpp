@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <chrono>
 #include <exception>
 #include <limits>
@@ -16,7 +17,7 @@ namespace cxxlens::sdk::provider::detail
 		class system_ng1_monotonic_clock final : public ng1_monotonic_clock_port
 		{
 		  public:
-			result<std::uint64_t> now_ns() const override
+			[[nodiscard]] result<std::uint64_t> now_ns() const override
 			{
 				const auto count = std::chrono::duration_cast<std::chrono::nanoseconds>(
 									   cxxlens::runtime::monotonic_now().time_since_epoch())
@@ -24,8 +25,7 @@ namespace cxxlens::sdk::provider::detail
 				if (count < 0)
 					return cxxlens::sdk::unexpected(
 						error{"provider.heartbeat-clock-invalid", "clock", "negative"});
-				if (static_cast<unsigned long long>(count) >
-					std::numeric_limits<std::uint64_t>::max())
+				if (std::cmp_greater(count, std::numeric_limits<std::uint64_t>::max()))
 					return cxxlens::sdk::unexpected(
 						error{"provider.heartbeat-clock-invalid", "clock", "overflow"});
 				return static_cast<std::uint64_t>(count);
@@ -230,7 +230,7 @@ namespace cxxlens::sdk::provider::detail
 										  const std::uint64_t maximum_retained_frames,
 										  std::unique_ptr<ng1_host_observation_port> observation,
 										  ng1_durable_resume_authority durable_resume,
-										  const std::stop_token cancellation)
+										  std::stop_token cancellation)
 	{
 		auto clock = make_system_ng1_monotonic_clock_port();
 		auto processes = make_system_ng1_duplex_process_port();
@@ -251,13 +251,14 @@ namespace cxxlens::sdk::provider::detail
 												   std::move(clock),
 												   std::move(observation),
 												   std::move(processes),
-												   std::move(durable_resume)},
-					 cancellation);
+												   std::move(durable_resume),
+												   std::nullopt},
+					 std::move(cancellation));
 	}
 
 	result<ng1_live_session_driver>
 	ng1_live_session_driver::start(ng1_live_driver_configuration configuration,
-								   const std::stop_token cancellation)
+								   std::stop_token cancellation)
 	{
 		if (cancellation.stop_requested())
 			return cxxlens::sdk::unexpected(
@@ -274,6 +275,15 @@ namespace cxxlens::sdk::provider::detail
 		if (!configuration.clock || !configuration.observation || !configuration.processes)
 			return cxxlens::sdk::unexpected(
 				error{"provider.process-request-invalid", "ng1-live", "missing-port"});
+		if (configuration.absolute_wall_deadline_ns)
+		{
+			auto now = configuration.clock->now_ns();
+			if (!now)
+				return cxxlens::sdk::unexpected(std::move(now.error()));
+			if (*now >= *configuration.absolute_wall_deadline_ns)
+				return cxxlens::sdk::unexpected(
+					error{"provider.timeout", "ng1-live", "wall-deadline"});
+		}
 		if (auto valid = configuration.invocation.budget.validate(); !valid)
 			return cxxlens::sdk::unexpected(std::move(valid.error()));
 		if (auto valid = configuration.invocation.sandbox.validate(); !valid)
@@ -331,8 +341,11 @@ namespace cxxlens::sdk::provider::detail
 		{
 			try
 			{
-				return configuration.processes->start(
-					configuration.invocation, configuration.limits, cancellation);
+				return configuration.processes->start_until(
+					configuration.invocation,
+					configuration.limits,
+					cancellation,
+					configuration.absolute_wall_deadline_ns);
 			}
 			catch (const std::bad_alloc&)
 			{
@@ -375,6 +388,7 @@ namespace cxxlens::sdk::provider::detail
 									   std::move(configuration.observation),
 									   std::move(resume_binding),
 									   std::move(configuration.durable_resume),
+									   configuration.absolute_wall_deadline_ns,
 									   configuration.maximum_retained_frames,
 									   cancellation};
 	}
@@ -389,13 +403,15 @@ namespace cxxlens::sdk::provider::detail
 		std::unique_ptr<ng1_host_observation_port> observation,
 		ng1_resume_binding resume_binding,
 		std::optional<ng1_durable_resume_authority> durable_resume,
+		std::optional<std::uint64_t> absolute_wall_deadline_ns,
 		const std::uint64_t maximum_retained_frames,
-		const std::stop_token cancellation) noexcept
+		std::stop_token cancellation) noexcept
 		: session_{std::move(session)}, adapter_{session_}, process_{std::move(process)},
 		  processes_{std::move(processes)}, invocation_{std::move(invocation)}, limits_{limits},
 		  clock_{std::move(clock)}, observation_{std::move(observation)},
 		  resume_binding_{std::move(resume_binding)}, durable_resume_{std::move(durable_resume)},
-		  maximum_retained_frames_{maximum_retained_frames}, cancellation_{cancellation}
+		  absolute_wall_deadline_ns_{absolute_wall_deadline_ns},
+		  maximum_retained_frames_{maximum_retained_frames}, cancellation_{std::move(cancellation)}
 	{
 	}
 
@@ -430,6 +446,7 @@ namespace cxxlens::sdk::provider::detail
 					(void)session_.cleanup();
 			}
 		}
+		// NOLINTNEXTLINE(bugprone-empty-catch): no-throw terminal cleanup is best effort.
 		catch (...)
 		{
 			// Destruction is a last-resort fail-closed boundary.  The process object has already
@@ -444,6 +461,7 @@ namespace cxxlens::sdk::provider::detail
 		  clock_{std::move(other.clock_)}, observation_{std::move(other.observation_)},
 		  resume_binding_{std::move(other.resume_binding_)},
 		  durable_resume_{std::move(other.durable_resume_)},
+		  absolute_wall_deadline_ns_{other.absolute_wall_deadline_ns_},
 		  provider_frames_{std::move(other.provider_frames_)},
 		  last_provider_receipt_{std::move(other.last_provider_receipt_)},
 		  published_resume_receipt_{std::move(other.published_resume_receipt_)},
@@ -663,7 +681,15 @@ namespace cxxlens::sdk::provider::detail
 				error{"provider.recovery-failed", "resume", "handshake-required"});
 		if (!cancellation.stop_possible())
 			cancellation = cancellation_;
-		auto value = process_->receive_frame(std::move(cancellation));
+		auto current = now_ns();
+		if (!current)
+			return cxxlens::sdk::unexpected(std::move(current.error()));
+		constexpr std::uint64_t liveness_poll_interval_ns = 100'000'000U;
+		const auto poll_deadline =
+			*current > std::numeric_limits<std::uint64_t>::max() - liveness_poll_interval_ns
+			? std::numeric_limits<std::uint64_t>::max()
+			: *current + liveness_poll_interval_ns;
+		auto value = process_->receive_frame_until(std::move(cancellation), poll_deadline);
 		if (!value)
 			return cxxlens::sdk::unexpected(std::move(value.error()));
 		if (!*value)
@@ -842,6 +868,11 @@ namespace cxxlens::sdk::provider::detail
 		}
 
 		replacement_attempted_ = true;
+		if (auto bounded = constrain_invocation_to_absolute_deadline(); !bounded)
+		{
+			(void)session_.reject_output();
+			return cxxlens::sdk::unexpected(std::move(bounded.error()));
+		}
 		result<std::unique_ptr<ng1_duplex_process>> replacement =
 			[&]() -> result<std::unique_ptr<ng1_duplex_process>>
 		{
@@ -864,7 +895,8 @@ namespace cxxlens::sdk::provider::detail
 													 std::to_string(checkpoint.resume_generation_));
 				invocation_.environment.emplace_back("CXXLENS_PROVIDER_NG1_RESUME_STAGED_DIGEST",
 													 checkpoint.receipt_.staged_digest);
-				return processes_->start(invocation_, limits_, cancellation);
+				return processes_->start_until(
+					invocation_, limits_, cancellation, absolute_wall_deadline_ns_);
 			}
 			catch (const std::bad_alloc&)
 			{
@@ -911,6 +943,15 @@ namespace cxxlens::sdk::provider::detail
 		if (!*value)
 			return cxxlens::sdk::unexpected(
 				error{"provider.recovery-failed", "resume", "handshake-eof"});
+		if (absolute_wall_deadline_ns_)
+		{
+			auto current = now_ns();
+			if (!current)
+				return cxxlens::sdk::unexpected(std::move(current.error()));
+			if (*current >= *absolute_wall_deadline_ns_)
+				return cxxlens::sdk::unexpected(
+					error{"provider.timeout", "ng1-live", "wall-deadline"});
+		}
 		auto receipt = stamp_provider_frame(std::move(**value));
 		if (!receipt)
 			return cxxlens::sdk::unexpected(std::move(receipt.error()));
@@ -976,6 +1017,18 @@ namespace cxxlens::sdk::provider::detail
 		if (auto synchronized = synchronize_process_outcome(*output); !synchronized)
 			return cxxlens::sdk::unexpected(std::move(synchronized.error()));
 		return output;
+	}
+
+	result<void> ng1_live_session_driver::constrain_invocation_to_absolute_deadline()
+	{
+		if (!absolute_wall_deadline_ns_)
+			return {};
+		auto current = now_ns();
+		if (!current)
+			return cxxlens::sdk::unexpected(std::move(current.error()));
+		if (*current >= *absolute_wall_deadline_ns_)
+			return cxxlens::sdk::unexpected(error{"provider.timeout", "ng1-live", "wall-deadline"});
+		return {};
 	}
 
 	result<void> ng1_live_session_driver::cleanup()

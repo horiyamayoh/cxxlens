@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <string_view>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 #include <fcntl.h>
@@ -133,7 +134,7 @@ namespace cxxlens::detail::clang22::materialization
 					return materialization_io_failure{materialization_io_failure_kind::spool,
 													  materialization_io_operation::spool_seal};
 				}
-				if (status.st_size < 0 || static_cast<std::uint64_t>(status.st_size) != size_)
+				if (status.st_size < 0 || std::cmp_not_equal(status.st_size, size_))
 				{
 					poisoned_ = true;
 					return materialization_io_failure{
@@ -198,7 +199,7 @@ namespace cxxlens::detail::clang22::materialization
 					if (count < 0)
 						return materialization_io_failure{materialization_io_failure_kind::read,
 														  materialization_io_operation::spool_read};
-					if (count == 0 || static_cast<std::size_t>(count) > available)
+					if (count == 0 || std::cmp_greater(count, available))
 						return materialization_io_failure{
 							materialization_io_failure_kind::invalid_configuration,
 							materialization_io_operation::spool_read};
@@ -261,7 +262,7 @@ namespace cxxlens::detail::clang22::materialization
 							return materialization_io_failure{
 								materialization_io_failure_kind::read,
 								materialization_io_operation::spool_read};
-						if (count == 0 || static_cast<std::size_t>(count) > requested)
+						if (count == 0 || std::cmp_greater(count, requested))
 							return materialization_io_failure{
 								materialization_io_failure_kind::invalid_configuration,
 								materialization_io_operation::spool_read};
@@ -330,7 +331,7 @@ namespace cxxlens::detail::clang22::materialization
 			[[nodiscard]] materialization_io_result<std::string> finish() override
 			{
 				const auto bit_count = total_bytes_ * 8U;
-				pending_[pending_size_++] = std::byte{0x80U};
+				pending_.at(pending_size_++) = std::byte{0x80U};
 				if (pending_size_ > 56U)
 				{
 					std::fill(pending_.begin() + pending_size_, pending_.end(), std::byte{});
@@ -339,7 +340,7 @@ namespace cxxlens::detail::clang22::materialization
 				}
 				std::fill(pending_.begin() + pending_size_, pending_.begin() + 56U, std::byte{});
 				for (std::size_t index{}; index < 8U; ++index)
-					pending_[56U + index] = static_cast<std::byte>(
+					pending_.at(56U + index) = static_cast<std::byte>(
 						(bit_count >> (56U - static_cast<unsigned>(index * 8U))) & 0xffU);
 				transform(pending_);
 
@@ -372,6 +373,9 @@ namespace cxxlens::detail::clang22::materialization
 				0x90befffaU, 0xa4506cebU, 0xbef9a3f7U, 0xc67178f2U,
 			};
 
+			// The SHA-256 schedule indices are bounded by the fixed 64-byte block and
+			// the loop limits below; std::span has no bounds-checked accessor in C++23.
+			// NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index)
 			void transform(const std::span<const std::byte> block) noexcept
 			{
 				std::array<std::uint32_t, 64U> schedule{};
@@ -421,6 +425,7 @@ namespace cxxlens::detail::clang22::materialization
 				state_[6U] += g;
 				state_[7U] += h;
 			}
+			// NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index)
 
 			std::array<std::uint32_t, 8U> state_{0x6a09e667U,
 												 0xbb67ae85U,

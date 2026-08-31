@@ -21,7 +21,7 @@ namespace cxxlens::detail::clang22
 	 * from this value.
 	 */
 	inline constexpr std::size_t provider_worker_v4_maximum_envelope_bytes =
-		source_closure_task_v4_maximum_payload_bytes + 64U * 1024U;
+		source_closure_task_v4_maximum_payload_bytes + std::size_t{64U} * 1024U;
 
 	/**
 	 * Explicit task-v4 process authority after bounded JSON decoding.
@@ -43,7 +43,7 @@ namespace cxxlens::detail::clang22
 			std::vector<std::string> descriptor_digests;
 			std::vector<std::string> dependency_groups;
 			std::uint64_t maximum_rows{100000U};
-			std::uint64_t maximum_output_bytes{16U * 1024U * 1024U};
+			std::uint64_t maximum_output_bytes{std::uint64_t{16U} * 1024U * 1024U};
 
 			[[nodiscard]] sdk::result<void> validate() const;
 		};

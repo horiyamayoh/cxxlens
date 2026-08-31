@@ -3070,6 +3070,16 @@ namespace cxxlens::sdk::provider
 				return processes_->start(invocation, limits, cancellation);
 			}
 
+			[[nodiscard]] result<std::unique_ptr<detail::ng1_duplex_process>>
+			start_until(const process_invocation& invocation,
+						const protocol_limits limits,
+						const std::stop_token cancellation,
+						const std::optional<std::uint64_t> absolute_wall_deadline_ns) const override
+			{
+				return processes_->start_until(
+					invocation, limits, cancellation, absolute_wall_deadline_ns);
+			}
+
 		  private:
 			const detail::ng1_duplex_process_port* processes_{};
 		};
@@ -3185,7 +3195,8 @@ namespace cxxlens::sdk::provider
 									 const process_task_request& request,
 									 prepared_provider_process prepared,
 									 detail::sealed_host_input input_seal,
-									 const std::span<const frame> host_frames)
+									 const std::span<const frame> host_frames,
+									 const std::uint64_t execution_started_ns)
 		{
 			if (host_frames.empty())
 				return cxxlens::sdk::unexpected(runtime_error(
@@ -3240,7 +3251,22 @@ namespace cxxlens::sdk::provider
 				return cxxlens::sdk::unexpected(
 					runtime_error("provider.process-request-invalid", "ng1", "two-attempt-budget"));
 			process_task_request process_request = request;
-			process_request.budget.wall_ms /= 2U;
+			constexpr std::uint64_t nanoseconds_per_millisecond = 1'000'000U;
+			if (request.budget.wall_ms >
+				(std::numeric_limits<std::uint64_t>::max() - execution_started_ns) /
+					nanoseconds_per_millisecond)
+				return cxxlens::sdk::unexpected(runtime_error(
+					"provider.process-request-invalid", "ng1", "wall-deadline-overflow"));
+			const auto absolute_wall_deadline_ns =
+				execution_started_ns + request.budget.wall_ms * nanoseconds_per_millisecond;
+			constexpr std::uint64_t maximum_cleanup_reserve_ns = 250'000'000U;
+			const auto wall_budget_ns = request.budget.wall_ms * nanoseconds_per_millisecond;
+			const auto cleanup_reserve_ns =
+				std::min(maximum_cleanup_reserve_ns, wall_budget_ns / 4U);
+			const auto effect_wall_deadline_ns = absolute_wall_deadline_ns - cleanup_reserve_ns;
+			// Every attempt observes the same absolute wall deadline. Dividing the wall budget
+			// here made process startup time race the authenticated heartbeat deadline and, on
+			// restart, effectively created a second relative wall-clock authority.
 			process_request.budget.cpu_ms /= 2U;
 			process_request.budget.transport_bytes /= 2U;
 			prepared.invocation.budget = process_request.budget;
@@ -3259,7 +3285,8 @@ namespace cxxlens::sdk::provider
 					std::move(binding->clock),
 					std::move(binding->observation),
 					std::make_unique<borrowed_ng1_duplex_process_port>(processes),
-					std::move(binding->durable_resume)},
+					std::move(binding->durable_resume),
+					effect_wall_deadline_ns},
 				process_request.cancellation);
 			if (!driver)
 				return cxxlens::sdk::unexpected(std::move(driver.error()));
@@ -3378,16 +3405,21 @@ namespace cxxlens::sdk::provider
 				if (!received)
 				{
 					auto receive_error = std::move(received.error());
+					if (restarted && receive_error.code == "provider.poll-timeout")
+						continue;
 					if (!restarted)
 					{
 						// A transport timeout is only an observation trigger. Preserve an
 						// authenticated progress-rate or protocol error already produced by the
 						// live session instead of replacing it with a secondary state error.
-						if (receive_error.code == "provider.timeout")
+						const bool liveness_poll = receive_error.code == "provider.poll-timeout";
+						if (receive_error.code == "provider.timeout" || liveness_poll)
 						{
 							auto liveness = driver->check_liveness();
 							if (!liveness)
 								receive_error = std::move(liveness.error());
+							else if (liveness_poll)
+								continue;
 						}
 						auto recovery = try_one_restart(receive_error);
 						if (!recovery)
@@ -3650,6 +3682,14 @@ namespace cxxlens::sdk::provider
 	detail::execute_provider_process(const provider_process_port& processes,
 									 const process_task_request& request)
 	{
+		auto execution_clock = detail::make_system_ng1_monotonic_clock_port();
+		if (!execution_clock)
+			return cxxlens::sdk::unexpected(
+				runtime_error("provider.runtime-unavailable", "ng1", "clock-port"));
+		auto execution_started = execution_clock->now_ns();
+		if (!execution_started)
+			return cxxlens::sdk::unexpected(std::move(execution_started.error()));
+		const auto execution_started_ns = *execution_started;
 		auto prepared = prepare_provider_process(request);
 		if (!prepared)
 			return cxxlens::sdk::unexpected(std::move(prepared.error()));
@@ -3673,7 +3713,8 @@ namespace cxxlens::sdk::provider
 												request,
 												std::move(*prepared),
 												std::move(*input_seal),
-												*host_frames);
+												*host_frames,
+												execution_started_ns);
 		}
 		prepared->invocation.standard_input = std::move(transcript.bytes_);
 		auto launched = processes.run(prepared->invocation, request.cancellation);

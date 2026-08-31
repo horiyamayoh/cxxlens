@@ -1,9 +1,11 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <span>
 #include <stop_token>
+#include <utility>
 
 #include <cxxlens/sdk/provider.hpp>
 
@@ -54,6 +56,20 @@ namespace cxxlens::sdk::provider::detail
 		/** Read one complete provider-to-host frame, or nullopt after an orderly EOF. */
 		[[nodiscard]] virtual result<std::optional<frame>>
 		receive_frame(std::stop_token cancellation) = 0;
+		/**
+		 * Read until one frame/EOF or a host-monotonic observation deadline.
+		 *
+		 * The default preserves deterministic in-process fakes.  The system process port overrides
+		 * this to return `provider.poll-timeout` without terminating the worker, so lifecycle
+		 * authority can distinguish an authenticated liveness deadline from transport activity.
+		 */
+		[[nodiscard]] virtual result<std::optional<frame>>
+		receive_frame_until(std::stop_token cancellation,
+							std::optional<std::uint64_t> absolute_receive_deadline_ns)
+		{
+			(void)absolute_receive_deadline_ns;
+			return receive_frame(std::move(cancellation));
+		}
 		/** Close stdin, drain output, and return the exact process/sandbox outcome. */
 		[[nodiscard]] virtual result<process_output> finish(std::stop_token cancellation) = 0;
 		/** Kill the process group and return the bounded cleanup outcome. */
@@ -70,6 +86,16 @@ namespace cxxlens::sdk::provider::detail
 		start(const process_invocation& invocation,
 			  protocol_limits limits,
 			  std::stop_token cancellation) const = 0;
+		/** Start under an optional host-monotonic deadline that includes launch/readiness work. */
+		[[nodiscard]] virtual result<std::unique_ptr<ng1_duplex_process>>
+		start_until(const process_invocation& invocation,
+					protocol_limits limits,
+					std::stop_token cancellation,
+					std::optional<std::uint64_t> absolute_wall_deadline_ns) const
+		{
+			(void)absolute_wall_deadline_ns;
+			return start(invocation, limits, std::move(cancellation));
+		}
 	};
 
 	/** Create the source-private Linux live process port, or a fail-closed unavailable port. */

@@ -419,7 +419,7 @@ namespace cxxlens::protocol_v2
 		/** Compatibility entry; production receivers adopt control through a token. */
 		[[nodiscard]] sdk::result<void> accept(const frame& value);
 		/** Consume exactly one adopted, schema-validated control without decoding again. */
-		[[nodiscard]] sdk::result<void> accept_decoded(const frame& metadata_and_payload,
+		[[nodiscard]] sdk::result<void> accept_decoded(const frame& value,
 													   closure_control_token&& control);
 
 		/**
@@ -498,7 +498,7 @@ namespace cxxlens::protocol_v2
 
 		[[nodiscard]] sdk::result<mutable_state>
 		prepare_transition(const frame& value,
-						   const closure_control_view& control,
+						   const closure_control_view& decoded,
 						   std::size_t control_bytes,
 						   const digest32& control_digest,
 						   bool consume_credit) const;

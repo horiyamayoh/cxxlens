@@ -177,12 +177,12 @@ namespace cxxlens::provider::clang22
 									  const std::string& compiler_filename,
 									  const std::string& tool_name,
 									  const std::vector<std::string>& compiler_arguments,
-									  llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> filesystem,
+									  llvm::vfs::FileSystem& filesystem,
 									  translation_unit_callback callback)
 	{
 		if (auto valid = input.validate(); !valid)
 			return valid;
-		if (!callback || !filesystem || compiler_filename.empty() || tool_name.empty() ||
+		if (!callback || compiler_filename.empty() || tool_name.empty() ||
 			compiler_filename.find('\0') != std::string::npos ||
 			tool_name.find('\0') != std::string::npos)
 			return sdk::unexpected(native_error("native.input-invalid", "closure-vfs"));
@@ -192,9 +192,10 @@ namespace cxxlens::provider::clang22
 
 		sdk::result<void> outcome{};
 		auto action = std::make_unique<callback_action>(callback, outcome);
+		llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> retained_filesystem{&filesystem};
 		const auto parsed = clang::tooling::runToolOnCodeWithArgs(std::move(action),
 																  input.source,
-																  std::move(filesystem),
+																  std::move(retained_filesystem),
 																  compiler_arguments,
 																  compiler_filename,
 																  tool_name);

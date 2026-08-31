@@ -80,12 +80,13 @@ namespace
 			return ++fsync_sequence_;
 		}
 
-		result<std::vector<std::byte>> read_all() const override
+		[[nodiscard]] result<std::vector<std::byte>> read_all() const override
 		{
 			return bytes_;
 		}
 
-		result<std::optional<ng1_spill_resume_frontier>> read_resume_frontier() const override
+		[[nodiscard]] result<std::optional<ng1_spill_resume_frontier>>
+		read_resume_frontier() const override
 		{
 			return frontier_;
 		}
@@ -138,14 +139,15 @@ namespace
 			return ++state_->fsync_sequence;
 		}
 
-		result<std::vector<std::byte>> read_all() const override
+		[[nodiscard]] result<std::vector<std::byte>> read_all() const override
 		{
 			if (cleaned_)
 				return unexpected(error{"provider.recovery-failed", "read", "cleaned"});
 			return state_->bytes;
 		}
 
-		result<std::optional<ng1_spill_resume_frontier>> read_resume_frontier() const override
+		[[nodiscard]] result<std::optional<ng1_spill_resume_frontier>>
+		read_resume_frontier() const override
 		{
 			if (cleaned_)
 				return unexpected(error{"provider.recovery-failed", "resume_frontier", "cleaned"});
@@ -185,12 +187,13 @@ namespace
 			return unexpected(error{"provider.spill-port-failed", "fsync", "injected"});
 		}
 
-		result<std::vector<std::byte>> read_all() const override
+		[[nodiscard]] result<std::vector<std::byte>> read_all() const override
 		{
 			return unexpected(error{"provider.spill-port-failed", "read", "injected"});
 		}
 
-		result<std::optional<ng1_spill_resume_frontier>> read_resume_frontier() const override
+		[[nodiscard]] result<std::optional<ng1_spill_resume_frontier>>
+		read_resume_frontier() const override
 		{
 			return unexpected(error{"provider.spill-port-failed", "resume_frontier", "injected"});
 		}
@@ -215,7 +218,7 @@ namespace
 		}
 	};
 
-	enum class throwing_spill_effect
+	enum class throwing_spill_effect : std::uint8_t
 	{
 		append,
 		fsync,
@@ -242,7 +245,7 @@ namespace
 			return memory_spill_storage::fsync();
 		}
 
-		result<std::vector<std::byte>> read_all() const override
+		[[nodiscard]] result<std::vector<std::byte>> read_all() const override
 		{
 			if (effect_ == throwing_spill_effect::read)
 				throw std::runtime_error{"read"};

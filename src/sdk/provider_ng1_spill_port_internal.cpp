@@ -11,6 +11,7 @@
 #include <new>
 #include <optional>
 #include <ranges>
+#include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -42,11 +43,11 @@ namespace cxxlens::sdk::provider::detail
 			return {"provider.spill-corrupt", std::string{field}, std::string{detail}};
 		}
 
-		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): digest value and diagnostic field
-		// are ordered protocol inputs
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): ordered protocol inputs.
 		[[nodiscard]] result<void> valid_semantic_digest(const std::string_view value,
 														 const std::string_view field)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			constexpr std::string_view prefix{"semantic-v2:sha256:"};
 			if (!value.starts_with(prefix) || value.size() != prefix.size() + 64U)
 				return unexpected(corrupt_error(field, "semantic-v2"));
@@ -105,11 +106,11 @@ namespace cxxlens::sdk::provider::detail
 			}
 		}
 
-		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): text value and diagnostic field are
-		// ordered protocol inputs
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): ordered protocol inputs.
 		[[nodiscard]] result<std::vector<std::byte>> cbor_text(const std::string_view value,
 															   const std::string_view field)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			if (auto valid = validate_utf8_text(value); !valid)
 				return unexpected(corrupt_error(field, "invalid-utf8"));
 			try
@@ -173,9 +174,11 @@ namespace cxxlens::sdk::provider::detail
 			return left + right;
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): ordered protocol inputs.
 		[[nodiscard]] result<std::uint64_t> encoded_string_wire_bytes(const std::string_view value,
 																	  const std::string_view field)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			const auto length = static_cast<std::uint64_t>(value.size());
 			return checked_wire_add(encoded_cbor_head_bytes(length), length, field);
 		}
@@ -583,13 +586,19 @@ namespace cxxlens::sdk::provider::detail
 		}
 
 #if defined(__linux__) && defined(__GLIBC__)
-		constexpr std::string_view spill_data_file_name{"spill.data"};
-		constexpr std::string_view spill_commit_file_name{"spill.commit"};
-		constexpr std::string_view spill_frontier_file_name{"spill.frontier"};
+		constexpr auto spill_data_file_name_storage = std::to_array("spill.data");
+		constexpr auto spill_commit_file_name_storage = std::to_array("spill.commit");
+		constexpr auto spill_frontier_file_name_storage = std::to_array("spill.frontier");
+		constexpr std::string_view spill_data_file_name{spill_data_file_name_storage.data(),
+														spill_data_file_name_storage.size() - 1U};
+		constexpr std::string_view spill_commit_file_name{
+			spill_commit_file_name_storage.data(), spill_commit_file_name_storage.size() - 1U};
+		constexpr std::string_view spill_frontier_file_name{
+			spill_frontier_file_name_storage.data(), spill_frontier_file_name_storage.size() - 1U};
 		constexpr std::string_view spill_metadata_magic{"CXXLNG1S"};
 		constexpr std::string_view spill_frontier_magic{"CXXLNG1F"};
-		constexpr std::uint64_t spill_maximum_metadata_bytes = 64U * 1024U;
-		constexpr std::uint64_t spill_maximum_metadata_string_bytes = 4U * 1024U;
+		constexpr std::uint64_t spill_maximum_metadata_bytes = 64ULL * 1024ULL;
+		constexpr std::uint64_t spill_maximum_metadata_string_bytes = 4ULL * 1024ULL;
 
 		void append_u64_be(std::vector<std::byte>& output, const std::uint64_t value)
 		{
@@ -635,9 +644,11 @@ namespace cxxlens::sdk::provider::detail
 			return {};
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): descriptor quota contract order.
 		[[nodiscard]] result<std::vector<std::byte>> read_descriptor(
 			const int descriptor, const std::uint64_t maximum_bytes, const std::string_view field)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			struct stat metadata{};
 			if (::fstat(descriptor, &metadata) != 0 || metadata.st_size < 0)
 				return unexpected(port_error(field, "stat"));
@@ -680,9 +691,12 @@ namespace cxxlens::sdk::provider::detail
 			const bool optional,
 			const std::optional<std::pair<dev_t, ino_t>> expected_identity = std::nullopt)
 		{
+			const std::string native_name{name};
 			struct stat named_metadata{};
-			if (::fstatat(
-					directory_descriptor, name.data(), &named_metadata, AT_SYMLINK_NOFOLLOW) != 0)
+			if (::fstatat(directory_descriptor,
+						  native_name.c_str(),
+						  &named_metadata,
+						  AT_SYMLINK_NOFOLLOW) != 0)
 			{
 				if (optional && errno == ENOENT)
 					return std::optional<int>{};
@@ -696,7 +710,7 @@ namespace cxxlens::sdk::provider::detail
 				return unexpected(port_error(field, "identity"));
 
 			const auto descriptor = ::openat(directory_descriptor,
-											 name.data(),
+											 native_name.c_str(),
 											 access_flags | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW);
 			if (descriptor < 0)
 				return unexpected(port_error(field, "open"));
@@ -704,7 +718,7 @@ namespace cxxlens::sdk::provider::detail
 			struct stat post_open_named_metadata{};
 			if (::fstat(descriptor, &descriptor_metadata) != 0 ||
 				::fstatat(directory_descriptor,
-						  name.data(),
+						  native_name.c_str(),
 						  &post_open_named_metadata,
 						  AT_SYMLINK_NOFOLLOW) != 0 ||
 				!S_ISREG(descriptor_metadata.st_mode) || descriptor_metadata.st_nlink != 1 ||
@@ -753,14 +767,18 @@ namespace cxxlens::sdk::provider::detail
 			return {};
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): path and diagnostic field order.
 		[[nodiscard]] result<std::pair<dev_t, ino_t>> capture_directory_identity(
 			const int descriptor, const std::string_view path, const std::string_view field)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
+			const std::string native_path{path};
 			struct stat descriptor_metadata{};
 			struct stat path_metadata{};
 			if (::fstat(descriptor, &descriptor_metadata) != 0 ||
 				!S_ISDIR(descriptor_metadata.st_mode) ||
-				::lstat(path.data(), &path_metadata) != 0 || !S_ISDIR(path_metadata.st_mode) ||
+				::lstat(native_path.c_str(), &path_metadata) != 0 ||
+				!S_ISDIR(path_metadata.st_mode) ||
 				descriptor_metadata.st_dev != path_metadata.st_dev ||
 				descriptor_metadata.st_ino != path_metadata.st_ino)
 				return unexpected(port_error(field, "identity"));
@@ -773,12 +791,13 @@ namespace cxxlens::sdk::provider::detail
 															 const ino_t expected_inode,
 															 const std::string_view field)
 		{
+			const std::string native_path{path};
 			struct stat descriptor_metadata{};
 			struct stat path_metadata{};
 			if (::fstat(descriptor, &descriptor_metadata) != 0 ||
 				!S_ISDIR(descriptor_metadata.st_mode) ||
-				::lstat(path.data(), &path_metadata) != 0 || !S_ISDIR(path_metadata.st_mode) ||
-				descriptor_metadata.st_dev != expected_device ||
+				::lstat(native_path.c_str(), &path_metadata) != 0 ||
+				!S_ISDIR(path_metadata.st_mode) || descriptor_metadata.st_dev != expected_device ||
 				descriptor_metadata.st_ino != expected_inode ||
 				path_metadata.st_dev != expected_device || path_metadata.st_ino != expected_inode)
 				return unexpected(port_error(field, "identity"));
@@ -795,7 +814,7 @@ namespace cxxlens::sdk::provider::detail
 			struct stat path_metadata{};
 			if (::fstat(descriptor, &descriptor_metadata) != 0 ||
 				::fstatat(directory_descriptor,
-						  spill_data_file_name.data(),
+						  spill_data_file_name_storage.data(),
 						  &path_metadata,
 						  AT_SYMLINK_NOFOLLOW) != 0 ||
 				!S_ISREG(descriptor_metadata.st_mode) || !S_ISREG(path_metadata.st_mode) ||
@@ -807,12 +826,16 @@ namespace cxxlens::sdk::provider::detail
 			return {};
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): name and diagnostic field order.
 		[[nodiscard]] result<void> remove_regular_named_file(const int directory_descriptor,
 															 const std::string_view name,
 															 const std::string_view field)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
+			const std::string native_name{name};
 			struct stat metadata{};
-			if (::fstatat(directory_descriptor, name.data(), &metadata, AT_SYMLINK_NOFOLLOW) != 0)
+			if (::fstatat(
+					directory_descriptor, native_name.c_str(), &metadata, AT_SYMLINK_NOFOLLOW) != 0)
 			{
 				if (errno == ENOENT)
 					return {};
@@ -820,18 +843,22 @@ namespace cxxlens::sdk::provider::detail
 			}
 			if (!S_ISREG(metadata.st_mode) || metadata.st_nlink != 1)
 				return unexpected(port_error(field, "stale-file"));
-			if (::unlinkat(directory_descriptor, name.data(), 0) != 0 && errno != ENOENT)
+			if (::unlinkat(directory_descriptor, native_name.c_str(), 0) != 0 && errno != ENOENT)
 				return unexpected(port_error(field, "unlink"));
 			return {};
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): name and diagnostic field order.
 		[[nodiscard]] result<void>
 		validate_regular_destination_or_missing(const int directory_descriptor,
 												const std::string_view name,
 												const std::string_view field)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
+			const std::string native_name{name};
 			struct stat metadata{};
-			if (::fstatat(directory_descriptor, name.data(), &metadata, AT_SYMLINK_NOFOLLOW) != 0)
+			if (::fstatat(
+					directory_descriptor, native_name.c_str(), &metadata, AT_SYMLINK_NOFOLLOW) != 0)
 			{
 				if (errno == ENOENT)
 					return {};
@@ -847,6 +874,7 @@ namespace cxxlens::sdk::provider::detail
 														   const std::span<const std::byte> bytes,
 														   const std::string_view field)
 		{
+			const std::string native_name{name};
 			std::string temporary_name;
 			try
 			{
@@ -888,7 +916,7 @@ namespace cxxlens::sdk::provider::detail
 			if (::renameat(directory_descriptor,
 						   temporary_name.c_str(),
 						   directory_descriptor,
-						   name.data()) != 0)
+						   native_name.c_str()) != 0)
 			{
 				(void)remove_regular_named_file(directory_descriptor, temporary_name, "stale-temp");
 				return unexpected(port_error(field, "rename"));
@@ -1131,11 +1159,11 @@ namespace cxxlens::sdk::provider::detail
 
 			[[nodiscard]] static result<std::unique_ptr<linux_ng1_spill_storage_port>> create_new()
 			{
-				char directory_template[] = "/tmp/cxxlens-ng1-spill-XXXXXX";
-				const auto directory = ::mkdtemp(directory_template);
+				auto directory_template = std::to_array("/tmp/cxxlens-ng1-spill-XXXXXX");
+				const auto directory = ::mkdtemp(directory_template.data());
 				if (directory == nullptr)
 					return unexpected(port_error("platform", "temp-directory"));
-				temporary_spill_directory_guard directory_guard{directory_template};
+				temporary_spill_directory_guard directory_guard{directory_template.data()};
 				std::string directory_path;
 				std::string data_path;
 				std::string commit_path;
@@ -1175,7 +1203,7 @@ namespace cxxlens::sdk::provider::detail
 				}
 				const auto descriptor =
 					::openat(directory_descriptor,
-							 spill_data_file_name.data(),
+							 spill_data_file_name_storage.data(),
 							 O_RDWR | O_CREAT | O_EXCL | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW,
 							 static_cast<mode_t>(0600));
 				if (descriptor < 0)
@@ -1205,8 +1233,9 @@ namespace cxxlens::sdk::provider::detail
 				if (failed)
 				{
 					(void)::close(descriptor);
-					(void)::unlinkat(directory_descriptor, spill_data_file_name.data(), 0);
-					(void)::unlinkat(directory_descriptor, spill_commit_file_name.data(), 0);
+					(void)::unlinkat(directory_descriptor, spill_data_file_name_storage.data(), 0);
+					(void)::unlinkat(
+						directory_descriptor, spill_commit_file_name_storage.data(), 0);
 					(void)::unlinkat(directory_descriptor, "spill.commit.tmp", 0);
 					(void)::close(directory_descriptor);
 					(void)::rmdir(directory_path.c_str());
@@ -1236,14 +1265,16 @@ namespace cxxlens::sdk::provider::detail
 				catch (const std::bad_alloc&)
 				{
 					(void)::close(descriptor);
-					(void)::unlinkat(directory_descriptor, spill_data_file_name.data(), 0);
-					(void)::unlinkat(directory_descriptor, spill_commit_file_name.data(), 0);
+					(void)::unlinkat(directory_descriptor, spill_data_file_name_storage.data(), 0);
+					(void)::unlinkat(
+						directory_descriptor, spill_commit_file_name_storage.data(), 0);
 					(void)::close(directory_descriptor);
 					(void)::rmdir(directory_path.c_str());
 					return unexpected(port_error("platform", "allocation"));
 				}
 			}
 
+			// NOLINTBEGIN(bugprone-easily-swappable-parameters): persisted identity tuple order.
 			[[nodiscard]] static result<std::unique_ptr<linux_ng1_spill_storage_port>>
 			open_existing(const std::string& directory_path,
 						  const std::string& data_path,
@@ -1255,6 +1286,7 @@ namespace cxxlens::sdk::provider::detail
 						  const ino_t expected_data_inode,
 						  const bool cleanup_custody)
 			{
+				// NOLINTEND(bugprone-easily-swappable-parameters)
 				const auto directory_descriptor =
 					::open(directory_path.c_str(),
 						   O_RDONLY | O_DIRECTORY | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW);
@@ -1768,6 +1800,7 @@ namespace cxxlens::sdk::provider::detail
 			}
 
 		  private:
+			// NOLINTBEGIN(bugprone-easily-swappable-parameters): persisted identity tuple order.
 			linux_ng1_spill_storage_port(const int descriptor,
 										 const int directory_descriptor,
 										 std::string directory_path,
@@ -1791,6 +1824,7 @@ namespace cxxlens::sdk::provider::detail
 				  committed_byte_count_{committed_byte_count}, fsync_sequence_{fsync_sequence},
 				  frontier_{std::move(frontier)}, cleanup_custody_{cleanup_custody}
 			{
+				// NOLINTEND(bugprone-easily-swappable-parameters)
 			}
 
 			int descriptor_{-1};

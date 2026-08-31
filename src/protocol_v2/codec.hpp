@@ -242,8 +242,9 @@ namespace cxxlens::protocol_v2
 	class sequence_guard
 	{
 	  public:
-		explicit sequence_guard(std::uint64_t stream_id = 1U,
-								std::uint64_t first_sequence = 0U) noexcept
+		explicit sequence_guard(
+			std::uint64_t stream_id = 1U, // NOLINT(bugprone-easily-swappable-parameters)
+			std::uint64_t first_sequence = 0U) noexcept
 			: stream_id_{stream_id}, next_sequence_{first_sequence}
 		{
 		}

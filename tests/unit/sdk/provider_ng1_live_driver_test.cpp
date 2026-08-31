@@ -382,6 +382,7 @@ namespace
 					std::make_unique<fake_clock>(std::move(clock)),
 					std::make_unique<fake_observation>(std::move(observation)),
 					std::make_unique<fake_process_port>(std::move(process)),
+					std::nullopt,
 					std::nullopt};
 		}
 

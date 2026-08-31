@@ -2383,8 +2383,8 @@ namespace cxxlens::sdk
 					return unexpected(qualification_error(
 						"source-shm-readonly-qualification-origin-probe-create"));
 			}
-			auto* underlying = static_cast<sqlite3_vfs*>(
-				const_cast<void*>(request.pinned_underlying_vfs_identity));
+			auto* underlying = const_cast<sqlite3_vfs*>(
+				static_cast<const sqlite3_vfs*>(request.pinned_underlying_vfs_identity));
 			if (underlying == nullptr ||
 				underlying->app_data != request.pinned_underlying_vfs_app_data_identity ||
 				!validate_sqlite_source_shm_readonly_origin_probe(
@@ -2812,8 +2812,8 @@ namespace cxxlens::sdk
 			return unexpected(qualification_error());
 		try
 		{
-			auto* underlying =
-				static_cast<sqlite3_vfs*>(const_cast<void*>(pinned_underlying_vfs_identity));
+			auto* underlying = const_cast<sqlite3_vfs*>(
+				static_cast<const sqlite3_vfs*>(pinned_underlying_vfs_identity));
 			return validate_underlying_callback_image(
 				*underlying, runtime, std::move(backend_lifetime), std::string{scratch_probe_path});
 		}

@@ -45,15 +45,15 @@ namespace cxxlens::detail::clang22
 		std::uint64_t maximum_argument_bytes{2048U};
 		std::uint64_t maximum_roots{256U};
 		std::uint64_t maximum_root_path_bytes{4096U};
-		std::uint64_t maximum_manifest_bytes{40U * 1024U * 1024U};
+		std::uint64_t maximum_manifest_bytes{std::uint64_t{40U} * 1024U * 1024U};
 		std::uint64_t maximum_members{4096U};
 		std::uint64_t maximum_blobs{4096U};
-		std::uint64_t maximum_blob_bytes{16U * 1024U * 1024U};
-		std::uint64_t maximum_unique_blob_bytes{48U * 1024U * 1024U};
-		std::uint64_t maximum_source_bytes{16U * 1024U * 1024U};
-		std::uint64_t maximum_aggregate_source_bytes{512U * 1024U * 1024U};
+		std::uint64_t maximum_blob_bytes{std::uint64_t{16U} * 1024U * 1024U};
+		std::uint64_t maximum_unique_blob_bytes{std::uint64_t{48U} * 1024U * 1024U};
+		std::uint64_t maximum_source_bytes{std::uint64_t{16U} * 1024U * 1024U};
+		std::uint64_t maximum_aggregate_source_bytes{std::uint64_t{512U} * 1024U * 1024U};
 		std::uint64_t maximum_output_groups{4096U};
-		std::uint64_t maximum_output_bytes{1024U * 1024U * 1024U};
+		std::uint64_t maximum_output_bytes{std::uint64_t{1024U} * 1024U * 1024U};
 		std::uint64_t maximum_resident_bytes{1'310'720U};
 
 		[[nodiscard]] sdk::result<void> validate() const;

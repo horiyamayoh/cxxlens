@@ -340,7 +340,7 @@ namespace cxxlens::sdk::provider::detail
 		native.manifest_digest = std::move(session.manifest_digest);
 		native.stream_id = session.stream_id;
 		native.initial_credit = {session.initial_credit.bytes, session.initial_credit.frames};
-		native.limits = std::move(session.limits);
+		native.limits = session.limits;
 		auto transfer = protocol_v2::closure_transfer::create(std::move(native));
 		if (!transfer)
 			return cxxlens::sdk::unexpected(std::move(transfer.error()));

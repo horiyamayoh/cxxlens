@@ -237,11 +237,13 @@ namespace cxxlens::detail::clang22
 			return object(std::move(fields), "source_closure");
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): projection digest order.
 		[[nodiscard]] sdk::result<json_value>
 		projection_value(const source_closure_task_v4_input& input,
 						 const std::string_view base_digest,
 						 const std::string_view manifest_digest)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			auto open = open_task_value(input);
 			if (!open)
 				return sdk::unexpected(std::move(open.error()));
@@ -264,6 +266,7 @@ namespace cxxlens::detail::clang22
 			return object(std::move(fields), "task_v4_projection");
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): payload identity order.
 		[[nodiscard]] sdk::result<json_value>
 		payload_value(const source_closure_task_v4_input& input,
 					  const std::string_view base_digest,
@@ -271,6 +274,7 @@ namespace cxxlens::detail::clang22
 					  const std::string_view task_id,
 					  const std::string_view task_digest)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			auto projection = projection_value(input, base_digest, manifest_digest);
 			if (!projection)
 				return sdk::unexpected(std::move(projection.error()));
@@ -437,12 +441,14 @@ namespace cxxlens::detail::clang22
 		return {};
 	}
 
+	// NOLINTBEGIN(bugprone-easily-swappable-parameters): expected digest binding order.
 	sdk::result<source_closure_task_v4_decoded>
 	decode_source_closure_task_v4_input(const std::span<const std::byte> payload,
 										const source_closure_snapshot& closure,
 										const std::string_view expected_base_task_digest,
 										const std::string_view expected_task_v4_input_digest)
 	{
+		// NOLINTEND(bugprone-easily-swappable-parameters)
 		if (!typed_digest(expected_base_task_digest, content_prefix))
 			return sdk::unexpected(failure("source-closure.task-v4-invalid", "base-task-digest"));
 		if (payload.empty() || payload.size() > source_closure_task_v4_maximum_payload_bytes)

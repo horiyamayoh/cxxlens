@@ -19,14 +19,20 @@ namespace cxxlens::detail::clang22
 			return {std::move(code), std::move(field), std::move(detail)};
 		}
 
+		struct binding_identity_view
+		{
+			std::string_view closure_id;
+			std::string_view closure_digest;
+			std::string_view manifest_digest;
+			std::string_view main_file_id;
+		};
+
 		[[nodiscard]] sdk::result<void>
 		validate_binding_identity(const source_closure_task_v4_decoded& metadata,
-								  std::string_view closure_id,
-								  std::string_view closure_digest,
-								  std::string_view manifest_digest,
-								  std::string_view main_file_id,
+								  const binding_identity_view identity,
 								  const materialization::materialization_v4_claim_binding& binding)
 		{
+			const auto [closure_id, closure_digest, manifest_digest, main_file_id] = identity;
 			const auto& base = binding.base_task;
 			const auto& task = binding.task;
 			const auto reject = [&](const std::string_view field)
@@ -163,12 +169,10 @@ namespace cxxlens::detail::clang22
 			return sdk::unexpected(
 				failure("provider-worker-v4.output-invalid", "callback", "not-produced"));
 
-		if (auto valid = validate_binding_identity(metadata,
-												   closure_id,
-												   closure_digest,
-												   *manifest_digest,
-												   main_file_id,
-												   translation->binding);
+		if (auto valid = validate_binding_identity(
+				metadata,
+				{closure_id, closure_digest, *manifest_digest, main_file_id},
+				translation->binding);
 			!valid)
 			return sdk::unexpected(std::move(valid.error()));
 

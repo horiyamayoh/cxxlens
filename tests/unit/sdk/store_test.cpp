@@ -3104,35 +3104,62 @@ int main(const int argc, char** argv)
 	(void)argc;
 	(void)argv;
 #endif
-	check_sqlite_locator_prevalidation();
-	check_sqlite_format_discriminator_and_index_profile_precedence();
-	check_sqlite_v2_compact_rejects_corrupt_committed_before_write();
-	check_sqlite_v3_chunk_corruption_classes();
-	check_sqlite_v3_compaction_pins_and_empty();
-	check_sqlite_v2_compact_migrates_and_preserves_diagnostics();
-	check_sqlite_v2_migration_terminal_faults();
-	check_sqlite_v3_fresh_schema_and_chunk_boundary();
-	check_sqlite_v2_read_only_and_begin_precedence();
-	check_sqlite_active_wal_and_wal_only_routes();
-	check_sqlite_poison_guards_and_nonresult_observers();
-	check_canonical_vectors();
-	check_backend_parity();
-	check_writer_partition_payload_transfer();
-	check_occurrence_round_trip();
-	check_sqlite_multi_instance_cas();
-	check_compaction_resolver_order();
-	check_sqlite_publish_refreshes_committed_census();
-	check_sqlite_transactional_generation_authority();
-	check_compaction_failure_isolation();
-	check_sqlite_authority_corruption();
-	check_unsigned_counter_codec_transition();
-	check_sqlite_semantic_graph_tamper();
-	check_publication_identity_binding();
-	check_snapshot_version_wire_bounds();
-	check_publication_counter_bounds();
-	check_derived_basis_membership();
-	check_derived_basis_uses_checked_snapshot_resolver();
-	check_v5_manifest_order_is_canonical();
-	check_sqlite_existing_empty_initialization_and_zero_byte_containment();
+	std::string_view group{"all"};
+	if (argc == 3 && std::string_view{argv[1]} == "--group")
+		group = argv[2];
+	else if (argc != 1)
+	{
+		std::cerr << "usage: store_test [--group format|migration-routing|publication|integrity]\n";
+		return 2;
+	}
+	const bool run_all = group == "all";
+	if (run_all || group == "format")
+	{
+		check_sqlite_locator_prevalidation();
+		check_sqlite_format_discriminator_and_index_profile_precedence();
+		check_sqlite_v2_compact_rejects_corrupt_committed_before_write();
+		check_sqlite_v3_chunk_corruption_classes();
+		check_sqlite_v3_compaction_pins_and_empty();
+	}
+	if (run_all || group == "migration-routing")
+	{
+		check_sqlite_v2_compact_migrates_and_preserves_diagnostics();
+		check_sqlite_v2_migration_terminal_faults();
+		check_sqlite_v3_fresh_schema_and_chunk_boundary();
+		check_sqlite_v2_read_only_and_begin_precedence();
+		check_sqlite_active_wal_and_wal_only_routes();
+		check_sqlite_poison_guards_and_nonresult_observers();
+		check_canonical_vectors();
+	}
+	if (run_all || group == "publication")
+	{
+		check_backend_parity();
+		check_writer_partition_payload_transfer();
+		check_occurrence_round_trip();
+		check_sqlite_multi_instance_cas();
+		check_compaction_resolver_order();
+		check_sqlite_publish_refreshes_committed_census();
+		check_sqlite_transactional_generation_authority();
+		check_compaction_failure_isolation();
+	}
+	if (run_all || group == "integrity")
+	{
+		check_sqlite_authority_corruption();
+		check_unsigned_counter_codec_transition();
+		check_sqlite_semantic_graph_tamper();
+		check_publication_identity_binding();
+		check_snapshot_version_wire_bounds();
+		check_publication_counter_bounds();
+		check_derived_basis_membership();
+		check_derived_basis_uses_checked_snapshot_resolver();
+		check_v5_manifest_order_is_canonical();
+		check_sqlite_existing_empty_initialization_and_zero_byte_containment();
+	}
+	if (!run_all && group != "format" && group != "migration-routing" && group != "publication" &&
+		group != "integrity")
+	{
+		std::cerr << "unknown Store test group\n";
+		return 2;
+	}
 	return 0;
 }

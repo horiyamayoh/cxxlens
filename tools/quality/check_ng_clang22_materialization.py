@@ -6075,7 +6075,7 @@ def sample_request(
     pending_provider_task_id = "task:" + semantic_digest(
         "cxxlens.fixture.v1", "pending-provider-task"
     )
-    for spec in source_specs:
+    for task_index, spec in enumerate(source_specs):
         source = spec["source"]
         source_row = {
             "file": file_identity(spec["logical_path"]),
@@ -6085,7 +6085,7 @@ def sample_request(
             "size": len(source),
             "encoding": "utf8",
             "line_index": line_index_identity(source),
-            "read_only": False,
+            "read_only": True,
         }
         source_snapshot_id = derive_base_row_identity(
             relations["source.file.v1"], source_row
@@ -6132,7 +6132,11 @@ def sample_request(
                 "language": variant_payload["language"],
                 "working_directory": logical_root,
                 "condition_universe_id": "condition-universe:one",
-                "condition_id": "condition:all",
+                "condition_id": (
+                    "condition:all"
+                    if len(source_specs) == 1
+                    else f"condition:unit-{task_index:04d}"
+                ),
                 "interpretation_domain": "cc.clang22-canonical-1",
                 "source": {
                     "source_snapshot_id": source_snapshot_id,
@@ -6169,6 +6173,69 @@ def sample_request(
     bind_task_execution_identities(request)
     bind_engine_policy_and_selector_identities(request)
     bind_request_identity(request)
+    request["required_features"] = [TASK_INPUT_FEATURE, SOURCE_CLOSURE_FEATURE]
+    request["source_closures"] = []
+    request["task_extensions"] = []
+    for index, task in enumerate(request["tasks"]):
+        closure_projection = {
+            "source": task["source"],
+            "effective_argv": task["effective_argv"],
+            "qualified_read_roots": task["qualified_read_roots"],
+        }
+        closure_digest = semantic_digest(
+            "cxxlens.clang22.fixture-source-closure.v1",
+            canonical_json(closure_projection),
+        )
+        manifest_digest = semantic_digest(
+            "cxxlens.clang22.fixture-source-closure-manifest.v1",
+            canonical_json(closure_projection),
+        )
+        closure_id = "source-closure:" + closure_digest
+        request["source_closures"].append(
+            {
+                "source_closure_id": closure_id,
+                "source_closure_digest": closure_digest,
+                "manifest_digest": manifest_digest,
+                "member_count": 1,
+                "blob_count": 1,
+                "unique_blob_bytes": task["source"]["size_bytes"],
+            }
+        )
+        extension = {
+            "schema": "cxxlens.clang22.task.v4",
+            "base_task_index": index,
+            "base_provider_task_id": task["provider_task_id"],
+            "base_task_digest": content_digest(canonical_json(task)),
+            "open_task": {
+                "task_input_digest": task["task_input_digest"],
+                "normalized_invocation_digest": task["normalized_invocation_digest"],
+                "toolchain_digest": task["toolchain_digest"],
+                "environment_digest": task["environment_digest"],
+            },
+            "source_closure": {
+                "id": closure_id,
+                "digest": closure_digest,
+                "manifest_digest": manifest_digest,
+            },
+            "main_logical_path": task["source"]["logical_path"],
+            "logical_working_directory": task["working_directory"],
+        }
+        request["task_extensions"].append(extension)
+    # The v2.2 logical task input includes its closure reference and logical
+    # paths. Rebind the physical execution only after the complete extension
+    # census exists, then seal each extension against that final base task.
+    bind_task_execution_identities(request)
+    for index, extension in enumerate(request["task_extensions"]):
+        task = request["tasks"][index]
+        extension["base_task_digest"] = content_digest(canonical_json(task))
+        extension["open_task"]["task_input_digest"] = task["task_input_digest"]
+        task_v4_digest = semantic_digest(
+            "cxxlens.clang22.task.v4", canonical_json(extension)
+        )
+        extension["task_v4_digest"] = task_v4_digest
+        extension["task_id"] = "task:" + task_v4_digest
+    request["request_digest"] = _v2_2_request_digest(request)
+    request["request_id"] = "materialization-request:" + request["request_digest"]
     return request
 
 

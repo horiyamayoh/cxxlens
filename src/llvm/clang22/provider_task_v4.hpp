@@ -75,8 +75,8 @@ namespace cxxlens::detail::clang22
 		std::size_t maximum_unique_blobs{4096U};
 		std::size_t maximum_arguments{4096U};
 		std::size_t maximum_logical_path_bytes{4096U};
-		std::uint64_t maximum_blob_bytes{16U * 1024U * 1024U};
-		std::uint64_t maximum_unique_blob_bytes{48U * 1024U * 1024U};
+		std::uint64_t maximum_blob_bytes{std::uint64_t{16U} * 1024U * 1024U};
+		std::uint64_t maximum_unique_blob_bytes{std::uint64_t{48U} * 1024U * 1024U};
 	};
 
 	/**

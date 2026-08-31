@@ -172,7 +172,7 @@ namespace cxxlens::sdk::provider
 				if (!value.starts_with(prefix) || value.size() != prefix.size() + 64U)
 					return false;
 				for (const auto byte : value.substr(prefix.size()))
-					if (!((byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f')))
+					if ((byte < '0' || byte > '9') && (byte < 'a' || byte > 'f'))
 						return false;
 				return true;
 			}
@@ -318,6 +318,7 @@ namespace cxxlens::sdk::provider
 			return {};
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): authenticated wire-field order.
 		result<std::shared_ptr<const process_inherited_channel_binding>>
 		make_process_inherited_channel_binding(const int read_descriptor,
 											   const int write_descriptor,
@@ -331,6 +332,7 @@ namespace cxxlens::sdk::provider
 											   const std::uint64_t stream_id,
 											   const std::uint64_t first_sequence)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			if (read_descriptor == write_descriptor)
 				return cxxlens::sdk::unexpected(
 					process_error("provider.process-channel-invalid", "descriptor", "duplicate"));
@@ -392,6 +394,7 @@ namespace cxxlens::sdk::provider
 			mutable std::atomic<bool> alive{true};
 			mutable std::atomic<bool> launch_available{true};
 
+			// NOLINTBEGIN(bugprone-easily-swappable-parameters): descriptor witness order.
 			process_source_closure_generation_state(
 				const std::uint64_t generation_value,
 				const std::uint64_t creator_process_value,
@@ -404,6 +407,7 @@ namespace cxxlens::sdk::provider
 				  read_identity{read_identity_value}, write_identity{write_identity_value},
 				  epoch{generation_value}
 			{
+				// NOLINTEND(bugprone-easily-swappable-parameters)
 			}
 
 			void invalidate() const noexcept
@@ -470,7 +474,7 @@ namespace cxxlens::sdk::provider
 			if (!value.starts_with(prefix) || value.size() != prefix.size() + 64U)
 				return false;
 			for (const auto byte : value.substr(prefix.size()))
-				if (!((byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f')))
+				if ((byte < '0' || byte > '9') && (byte < 'a' || byte > 'f'))
 					return false;
 			return true;
 		}
@@ -632,6 +636,7 @@ namespace cxxlens::sdk::provider
 		}
 #endif
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): descriptor witness order.
 		process_source_closure_descriptor_projection::process_source_closure_descriptor_projection(
 			const int read_descriptor,
 			const int write_descriptor,
@@ -648,6 +653,7 @@ namespace cxxlens::sdk::provider
 			  write_device_{write_device}, write_inode_{write_inode}, write_mode_{write_mode},
 			  state_{std::move(state)}, generation_{generation}
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 		}
 
 		process_source_closure_descriptor_projection::process_source_closure_descriptor_projection(
@@ -690,6 +696,7 @@ namespace cxxlens::sdk::provider
 			adapter_consumed_ = true;
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): authenticated launch wire order.
 		process_source_closure_launch_view::process_source_closure_launch_view(
 			const int read_descriptor,
 			const int write_descriptor,
@@ -722,6 +729,7 @@ namespace cxxlens::sdk::provider
 			  write_mode_{write_mode}, state_{std::move(state)},
 			  generation_{state_ ? state_->generation : 0U}
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 		}
 
 		process_source_closure_launch_view::process_source_closure_launch_view(
@@ -762,6 +770,7 @@ namespace cxxlens::sdk::provider
 #endif
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): authenticated launch wire order.
 		process_source_closure_launch::process_source_closure_launch(
 			const int read_descriptor,
 			const int write_descriptor,
@@ -794,6 +803,7 @@ namespace cxxlens::sdk::provider
 			  write_mode_{write_mode}, state_{std::move(state)},
 			  generation_{state_ ? state_->generation : 0U}
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 		}
 
 		process_source_closure_launch::process_source_closure_launch(
@@ -1386,12 +1396,12 @@ namespace cxxlens::sdk::provider
 				}
 				for (std::size_t index = 16U; index < schedule.size(); ++index)
 				{
-					const auto small_zero = std::rotr(schedule[index - 15U], 7) ^
-						std::rotr(schedule[index - 15U], 18) ^ (schedule[index - 15U] >> 3U);
-					const auto small_one = std::rotr(schedule[index - 2U], 17) ^
-						std::rotr(schedule[index - 2U], 19) ^ (schedule[index - 2U] >> 10U);
-					schedule[index] =
-						schedule[index - 16U] + small_zero + schedule[index - 7U] + small_one;
+					const auto small_zero = std::rotr(schedule.at(index - 15U), 7) ^
+						std::rotr(schedule.at(index - 15U), 18) ^ (schedule.at(index - 15U) >> 3U);
+					const auto small_one = std::rotr(schedule.at(index - 2U), 17) ^
+						std::rotr(schedule.at(index - 2U), 19) ^ (schedule.at(index - 2U) >> 10U);
+					schedule.at(index) =
+						schedule.at(index - 16U) + small_zero + schedule.at(index - 7U) + small_one;
 				}
 				auto [a, b, c, d, e, f, g, h] = state_;
 				for (std::size_t index{}; index < schedule.size(); ++index)
@@ -1478,9 +1488,22 @@ namespace cxxlens::sdk::provider
 			std::string digest;
 		};
 
-		[[nodiscard]] result<verified_executable>
-		make_verified_executable(const process_invocation& invocation)
+		[[nodiscard]] result<verified_executable> make_verified_executable(
+			const process_invocation& invocation,
+			const std::optional<std::uint64_t> absolute_wall_deadline_ns = std::nullopt)
 		{
+			const auto deadline_expired = [&]() noexcept
+			{
+				if (!absolute_wall_deadline_ns)
+					return false;
+				const auto now = std::chrono::duration_cast<std::chrono::nanoseconds>(
+									 std::chrono::steady_clock::now().time_since_epoch())
+									 .count();
+				return now < 0 || std::cmp_greater_equal(now, *absolute_wall_deadline_ns);
+			};
+			if (deadline_expired())
+				return cxxlens::sdk::unexpected(
+					process_error("provider.timeout", "executable", "wall-deadline"));
 			descriptor directory;
 			int source_value{-1};
 			const bool relative = invocation.argv.front().front() != '/';
@@ -1517,6 +1540,9 @@ namespace cxxlens::sdk::provider
 			std::array<std::byte, 65536U> buffer{};
 			for (;;)
 			{
+				if (deadline_expired())
+					return cxxlens::sdk::unexpected(
+						process_error("provider.timeout", "executable", "wall-deadline"));
 				const auto count = ::read(source.get(), buffer.data(), buffer.size());
 				if (count == 0)
 					break;
@@ -1965,10 +1991,38 @@ namespace cxxlens::sdk::provider
 									 sandbox_policy policy,
 									 execution_budget budget,
 									 std::string measured_digest) noexcept
+				: linux_ng1_duplex_process(std::move(input),
+										   std::move(output),
+										   std::move(error),
+										   child,
+										   limits,
+										   std::move(policy),
+										   budget,
+										   std::move(measured_digest),
+										   std::nullopt)
+			{
+			}
+
+			linux_ng1_duplex_process(
+				descriptor input,
+				descriptor output,
+				descriptor error,
+				const pid_t child,
+				const protocol_limits limits,
+				sandbox_policy policy,
+				const execution_budget budget,
+				std::string measured_digest,
+				const std::optional<std::uint64_t> absolute_wall_deadline_ns) noexcept
 				: input_{std::move(input)}, output_{std::move(output)}, error_{std::move(error)},
 				  child_{child}, limits_{limits}, policy_{std::move(policy)}, budget_{budget},
 				  measured_digest_{std::move(measured_digest)},
-				  started_{std::chrono::steady_clock::now()}
+				  started_{std::chrono::steady_clock::now()},
+				  deadline_{
+					  std::min(started_ + std::chrono::milliseconds{budget_.wall_ms},
+							   absolute_wall_deadline_ns
+								   ? std::chrono::steady_clock::time_point{std::chrono::nanoseconds{
+										 *absolute_wall_deadline_ns}}
+								   : std::chrono::steady_clock::time_point::max())}
 			{
 			}
 
@@ -2059,6 +2113,17 @@ namespace cxxlens::sdk::provider
 
 			result<std::optional<frame>> receive_frame(const std::stop_token cancellation) override
 			{
+				return receive_frame_until(cancellation, std::nullopt);
+			}
+
+			result<std::optional<frame>> receive_frame_until(
+				const std::stop_token cancellation,
+				const std::optional<std::uint64_t> absolute_receive_deadline_ns) override
+			{
+				const auto receive_deadline = absolute_receive_deadline_ns
+					? std::chrono::steady_clock::time_point{std::chrono::nanoseconds{
+						  *absolute_receive_deadline_ns}}
+					: std::chrono::steady_clock::time_point::max();
 				if (finished_)
 					return cxxlens::sdk::unexpected(
 						process_error("provider.protocol-state-invalid", "ng1-live", "finished"));
@@ -2080,6 +2145,9 @@ namespace cxxlens::sdk::provider
 						(void)terminate(process_status::timed_out);
 						return cxxlens::sdk::unexpected(std::move(deadline.error()));
 					}
+					if (std::chrono::steady_clock::now() >= receive_deadline)
+						return cxxlens::sdk::unexpected(process_error(
+							"provider.poll-timeout", "ng1-live", "liveness-deadline"));
 					if (stdout_ended_)
 					{
 						if (!pending_.empty())
@@ -2367,8 +2435,7 @@ namespace cxxlens::sdk::provider
 			execution_budget budget_;
 			std::string measured_digest_;
 			std::chrono::steady_clock::time_point started_;
-			std::chrono::steady_clock::time_point deadline_ =
-				started_ + std::chrono::milliseconds{budget_.wall_ms};
+			std::chrono::steady_clock::time_point deadline_;
 			std::vector<std::byte> pending_;
 			std::vector<std::byte> stdout_bytes_;
 			std::string stderr_text_;
@@ -2393,6 +2460,15 @@ namespace cxxlens::sdk::provider
 				  const protocol_limits limits,
 				  const std::stop_token cancellation) const override
 			{
+				return start_until(invocation, limits, cancellation, std::nullopt);
+			}
+
+			[[nodiscard]] result<std::unique_ptr<detail::ng1_duplex_process>>
+			start_until(const process_invocation& invocation,
+						const protocol_limits limits,
+						const std::stop_token cancellation,
+						const std::optional<std::uint64_t> absolute_wall_deadline_ns) const override
+			{
 				if (auto valid = invocation.budget.validate(); !valid)
 					return cxxlens::sdk::unexpected(
 						process_error("provider.process-request-invalid", "budget"));
@@ -2415,7 +2491,7 @@ namespace cxxlens::sdk::provider
 					if (auto valid = invocation.inherited_channel->validate(); !valid)
 						return cxxlens::sdk::unexpected(std::move(valid.error()));
 				}
-				auto verified = make_verified_executable(invocation);
+				auto verified = make_verified_executable(invocation, absolute_wall_deadline_ns);
 				if (!verified)
 					return cxxlens::sdk::unexpected(std::move(verified.error()));
 				if (invocation.expected_binary_digest.empty() ||
@@ -2526,7 +2602,8 @@ namespace cxxlens::sdk::provider
 															   limits,
 															   std::move(*policy),
 															   invocation.budget,
-															   verified->digest);
+															   verified->digest,
+															   absolute_wall_deadline_ns);
 				child_guard.release();
 				return process;
 			}

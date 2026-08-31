@@ -104,6 +104,7 @@ namespace cxxlens::detail::clang22
 			return left.size() < right.size();
 		}
 
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): value-field contract order.
 		[[nodiscard]] sdk::result<void> validate_utf8(const std::string_view value,
 													  const std::string_view field)
 		{
@@ -125,6 +126,7 @@ namespace cxxlens::detail::clang22
 			return {};
 		}
 
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): value-field contract order.
 		[[nodiscard]] sdk::result<void> validate_strong(const std::string_view value,
 														const std::string_view field)
 		{
@@ -133,6 +135,7 @@ namespace cxxlens::detail::clang22
 			return {};
 		}
 
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): value-field contract order.
 		[[nodiscard]] sdk::result<json_value> json_string(const std::string_view value,
 														  const std::string_view field)
 		{
@@ -431,6 +434,7 @@ namespace cxxlens::detail::clang22
 					std::move(detail)};
 		}
 
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): authority value-field order.
 		[[nodiscard]] sdk::result<void> authority_string(const std::string_view value,
 														 const std::string_view field)
 		{
@@ -439,6 +443,7 @@ namespace cxxlens::detail::clang22
 			return {};
 		}
 
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): authority value-field order.
 		[[nodiscard]] sdk::result<void> authority_content_digest(const std::string_view value,
 																 const std::string_view field)
 		{
@@ -447,6 +452,7 @@ namespace cxxlens::detail::clang22
 			return {};
 		}
 
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): authority value-field order.
 		[[nodiscard]] sdk::result<void> authority_semantic_digest(const std::string_view value,
 																  const std::string_view field)
 		{
@@ -455,15 +461,18 @@ namespace cxxlens::detail::clang22
 			return {};
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): authority value-field order.
 		[[nodiscard]] sdk::result<void>
 		authority_content_or_semantic_digest(const std::string_view value,
 											 const std::string_view field)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			if (!content_or_semantic_digest_grammar(value))
 				return sdk::unexpected(authority_invalid(std::string{field}, "digest"));
 			return {};
 		}
 
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): authority value-field order.
 		[[nodiscard]] sdk::result<void> authority_revision(const std::string_view value,
 														   const std::string_view field)
 		{
@@ -913,11 +922,13 @@ namespace cxxlens::detail::clang22
 			}));
 	}
 
+	// NOLINTBEGIN(bugprone-easily-swappable-parameters): task binding field order.
 	sdk::result<void> provider_task_v4_input_authority::validate(
 		const std::string_view main_logical_path,
 		const std::string_view expected_working_directory,
 		const std::string_view expected_invocation_digest) const
 	{
+		// NOLINTEND(bugprone-easily-swappable-parameters)
 		if (logical_working_directory != expected_working_directory)
 			return sdk::unexpected(
 				mismatch("input-authority.logical_working_directory", logical_working_directory));
@@ -1085,7 +1096,7 @@ namespace cxxlens::detail::clang22
 			return sdk::unexpected(authority_invalid("registry", "descriptor-census"));
 		for (std::size_t index{}; index < base_descriptors.size(); ++index)
 		{
-			if (base_descriptors[index].descriptor_id != task_v4_base_descriptor_ids[index] ||
+			if (base_descriptors[index].descriptor_id != task_v4_base_descriptor_ids.at(index) ||
 				base_descriptors[index].stage_order != index)
 				return sdk::unexpected(authority_invalid("registry.base_descriptors", "order"));
 			if (auto valid = base_descriptors[index].validate(); !valid)
@@ -1093,7 +1104,7 @@ namespace cxxlens::detail::clang22
 		}
 		for (std::size_t index{}; index < descriptors.size(); ++index)
 		{
-			if (descriptors[index].descriptor_id != task_v4_output_descriptor_ids[index])
+			if (descriptors[index].descriptor_id != task_v4_output_descriptor_ids.at(index))
 				return sdk::unexpected(authority_invalid("registry.descriptors", "order"));
 			if (auto valid = descriptors[index].validate(); !valid)
 				return valid;
@@ -1120,7 +1131,8 @@ namespace cxxlens::detail::clang22
 			return sdk::unexpected(authority_invalid("engine.engine_generation_id", "identity"));
 		for (std::size_t index{}; index < admitted_descriptors.size(); ++index)
 		{
-			if (admitted_descriptors[index].descriptor_id != task_v4_engine_descriptor_ids[index])
+			if (admitted_descriptors[index].descriptor_id !=
+				task_v4_engine_descriptor_ids.at(index))
 				return sdk::unexpected(authority_invalid("engine.admitted_descriptors", "order"));
 			if (auto valid = admitted_descriptors[index].validate(); !valid)
 				return valid;

@@ -926,7 +926,9 @@ cxxlens_configure_installed_tool(cxxlens-sdk-doctor)
 # to the product-only resolver while keeping one stable installed entry point
 # for SDK consumers. Native materialization remains behind the sealed Clang22
 # worker/materializer tools and never accepts shell-concatenated input.
-add_executable(cxxlens_cli tools/sdk/cxxlens_main.cpp)
+add_executable(cxxlens_cli tools/sdk/cxxlens_main.cpp
+                           tools/sdk/sdk_doctor_main.cpp)
+target_compile_definitions(cxxlens_cli PRIVATE CXXLENS_SDK_DOCTOR_NO_MAIN)
 set_target_properties(cxxlens_cli PROPERTIES OUTPUT_NAME cxxlens)
 target_link_libraries(cxxlens_cli PRIVATE cxxlens::sdk)
 target_compile_features(cxxlens_cli PRIVATE cxx_std_23)

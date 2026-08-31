@@ -207,17 +207,20 @@ namespace cxxlens::detail::clang22
 							const std::array<const sdk::relation_descriptor*, 6U>& descriptors)
 		{
 			std::vector<json_value> descriptor_ids;
+			descriptor_ids.reserve(task_v4_output_descriptor_ids.size());
 			std::vector<json_value> descriptor_digests;
+			descriptor_digests.reserve(descriptors.size());
 			for (const auto& id : task_v4_output_descriptor_ids)
 				descriptor_ids.push_back(text(id).value());
 			for (const auto* descriptor : descriptors)
 				descriptor_digests.push_back(text(descriptor->descriptor_digest).value());
 			std::vector<json_value> groups;
+			groups.reserve(task_v4_dependency_groups.size());
 			for (const auto& group : task_v4_dependency_groups)
 				groups.push_back(text(group).value());
 			const auto maximum_rows = std::min<std::uint64_t>(task.budget.rows, 100000U);
-			const auto maximum_bytes =
-				std::min<std::uint64_t>(task.budget.output_bytes, 16U * 1024U * 1024U);
+			const auto maximum_bytes = std::min<std::uint64_t>(task.budget.output_bytes,
+															   std::uint64_t{16U} * 1024U * 1024U);
 			return object({
 				{"compile_unit_id", text(task.compile_unit_id).value()},
 				{"dependency_groups", json_value::array(std::move(groups))},
@@ -421,12 +424,12 @@ namespace cxxlens::detail::clang22
 			std::vector<std::byte> output;
 			std::uint64_t sequence{binding.first_sequence};
 			auto append = [&](const sdk::provider::message_type type,
-							  protocol::closure_control control,
+							  const protocol::closure_control& control,
 							  const std::span<const std::byte> payload) -> sdk::result<void>
 			{
 				auto encoded = protocol::encode_closure_control(
 					static_cast<protocol::message_type>(static_cast<std::uint16_t>(type)),
-					std::move(control),
+					control,
 					limits);
 				if (!encoded)
 					return sdk::unexpected(std::move(encoded.error()));
@@ -557,14 +560,6 @@ namespace cxxlens::detail::clang22
 			int host_read{-1};
 
 			channel_endpoints() = default;
-			channel_endpoints(const int child_read,
-							  const int host_write,
-							  const int child_write,
-							  const int host_read) noexcept
-				: child_read{child_read}, host_write{host_write}, child_write{child_write},
-				  host_read{host_read}
-			{
-			}
 			channel_endpoints(const channel_endpoints&) = delete;
 			channel_endpoints& operator=(const channel_endpoints&) = delete;
 			channel_endpoints(channel_endpoints&& other) noexcept
@@ -599,17 +594,22 @@ namespace cxxlens::detail::clang22
 
 		[[nodiscard]] sdk::result<channel_endpoints> make_channels()
 		{
-			int input[2]{-1, -1};
-			int output[2]{-1, -1};
-			if (::socketpair(AF_UNIX, SOCK_STREAM, 0, input) != 0 ||
-				::socketpair(AF_UNIX, SOCK_STREAM, 0, output) != 0)
+			std::array<int, 2U> input{-1, -1};
+			std::array<int, 2U> output{-1, -1};
+			if (::socketpair(AF_UNIX, SOCK_STREAM, 0, input.data()) != 0 ||
+				::socketpair(AF_UNIX, SOCK_STREAM, 0, output.data()) != 0)
 			{
-				for (const auto descriptor : {input[0], input[1], output[0], output[1]})
+				for (const auto descriptor :
+					 {input.at(0U), input.at(1U), output.at(0U), output.at(1U)})
 					if (descriptor >= 0)
 						(void)::close(descriptor);
 				return sdk::unexpected(failure("provider.process-channel-invalid", "socketpair"));
 			}
-			channel_endpoints result{input[0], input[1], output[0], output[1]};
+			channel_endpoints result;
+			result.child_read = input.at(0U);
+			result.host_write = input.at(1U);
+			result.child_write = output.at(0U);
+			result.host_read = output.at(1U);
 			for (int* endpoint : {&result.child_read, &result.child_write, &result.host_read})
 			{
 				if (*endpoint < 4)
@@ -680,8 +680,10 @@ namespace cxxlens::detail::clang22
 		 * the two identity observations; the measured digest is then the only value used to build
 		 * the candidate and its sandbox evidence.
 		 */
-		[[nodiscard]] sdk::result<std::string>
-		measure_worker_executable(const std::string_view path, const std::string_view expected)
+		// The selected absolute path and its expected digest form one ordered identity check.
+		[[nodiscard]] sdk::result<std::string> measure_worker_executable(
+			const std::string_view path, // NOLINT(bugprone-easily-swappable-parameters)
+			const std::string_view expected)
 		{
 			if (path.empty() || path.front() != '/')
 				return sdk::unexpected(
@@ -698,7 +700,7 @@ namespace cxxlens::detail::clang22
 				return sdk::unexpected(
 					failure("security.provider-binary-invalid", "worker.executable", "identity"));
 			}
-			constexpr std::uint64_t maximum_worker_bytes = 256U * 1024U * 1024U;
+			constexpr std::uint64_t maximum_worker_bytes = std::uint64_t{256U} * 1024U * 1024U;
 			const auto size = static_cast<std::uint64_t>(before.st_size);
 			if (size == 0U || size > maximum_worker_bytes ||
 				size > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
@@ -1158,7 +1160,7 @@ namespace cxxlens::detail::clang22
 					!valid)
 					return sdk::unexpected(std::move(valid.error()));
 				if (claim.translation.binding.relation_descriptor_id !=
-					task_v4_output_descriptor_ids[index])
+					task_v4_output_descriptor_ids.at(index))
 					return sdk::unexpected(failure(
 						"materialization.descriptor-binding-mismatch", "descriptor", "order"));
 				if (index == 0U)
@@ -1261,7 +1263,7 @@ namespace cxxlens::detail::clang22
 		[[nodiscard]] sdk::result<sdk::partition_draft>
 		make_base_partition(const sdk::relation_engine& engine,
 							const std::string_view relation_descriptor_id,
-							std::vector<sdk::detached_row> rows,
+							const std::vector<sdk::detached_row>& rows,
 							const provider_task_v4_task_authority& task,
 							const materializer_worker_execution& execution,
 							const materializer_basis_authority& basis,
@@ -1496,13 +1498,8 @@ namespace cxxlens::detail::clang22
 					return sdk::unexpected(std::move(row.error()));
 				std::vector<sdk::detached_row> rows;
 				rows.push_back(std::move(*row));
-				auto partition = make_base_partition(engine,
-													 descriptor_id,
-													 std::move(rows),
-													 task,
-													 execution,
-													 basis,
-													 reference_claims);
+				auto partition = make_base_partition(
+					engine, descriptor_id, rows, task, execution, basis, reference_claims);
 				if (!partition)
 					return sdk::unexpected(std::move(partition.error()));
 				output.push_back(std::move(*partition));
@@ -1566,7 +1563,7 @@ namespace cxxlens::detail::clang22
 				}
 				auto partition = make_base_partition(engine,
 													 source::relations::span::descriptor().id,
-													 std::move(rows),
+													 rows,
 													 task,
 													 execution,
 													 basis,
@@ -1629,7 +1626,7 @@ namespace cxxlens::detail::clang22
 		auto channels = make_channels();
 		if (!channels)
 			return sdk::unexpected(std::move(channels.error()));
-		const auto binding = sdk::provider::detail::make_process_inherited_channel_binding(
+		auto binding = sdk::provider::detail::make_process_inherited_channel_binding(
 			channels->child_read,
 			channels->child_write,
 			ingress.binding.task_id,
@@ -1721,7 +1718,7 @@ namespace cxxlens::detail::clang22
 		request.limits.protocol_major = ingress.request.request.protocol_major;
 		request.limits.minimum_minor = ingress.request.request.protocol_minor;
 		request.limits.maximum_minor = ingress.request.request.protocol_minor;
-		request.output_credit = {64U * 1024U * 1024U, 65536U};
+		request.output_credit = {std::uint64_t{64U} * 1024U * 1024U, 65536U};
 		request.inherited_channel = std::move(*binding);
 		const auto sender_bytes = std::move(*closure);
 		const auto sender_descriptor = channels->host_write;

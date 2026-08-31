@@ -330,6 +330,12 @@ namespace cxxlens::detail::clang22
 
 		struct native_vfs_mount
 		{
+			native_vfs_mount(llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> mounted_filesystem,
+							 std::shared_ptr<native_vfs_audit> mounted_audit)
+				: filesystem{std::move(mounted_filesystem)}, audit{std::move(mounted_audit)}
+			{
+			}
+
 			llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> filesystem;
 			std::shared_ptr<native_vfs_audit> audit;
 		};
@@ -419,6 +425,8 @@ namespace cxxlens::detail::clang22
 			auto mount = mount_native_vfs(input.closure, *invocation, input.member_mount_policy);
 			if (!mount)
 				return sdk::unexpected(std::move(mount.error()));
+			if (!mount->filesystem)
+				return sdk::unexpected(failure("native.input-invalid", "closure-vfs"));
 			provider::clang22::translation_unit_input native_input{
 				input.closure.snapshot_id,
 				main->file_id,
@@ -431,7 +439,7 @@ namespace cxxlens::detail::clang22
 																	 invocation->compiler_filename,
 																	 invocation->tool_name,
 																	 invocation->compiler_arguments,
-																	 mount->filesystem,
+																	 *mount->filesystem,
 																	 std::move(callback));
 			// A member the closure actually claims but could not serve is a determinate input
 			// failure (the record's core invariant) and must fail the task even when Clang's own

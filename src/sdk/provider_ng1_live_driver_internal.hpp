@@ -174,6 +174,7 @@ namespace cxxlens::sdk::provider::detail
 		}
 
 	  private:
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): durable checkpoint field order.
 		ng1_durable_spill_checkpoint(ng1_spill_fsync_receipt receipt,
 									 ng1_resume_binding binding,
 									 ng1_durable_resume_authority authority,
@@ -185,6 +186,7 @@ namespace cxxlens::sdk::provider::detail
 			  resume_generation_{resume_generation}
 		{
 		}
+		// NOLINTEND(bugprone-easily-swappable-parameters)
 
 		ng1_spill_fsync_receipt receipt_;
 		ng1_resume_binding binding_;
@@ -223,11 +225,12 @@ namespace cxxlens::sdk::provider::detail
 		}
 
 	  private:
-		ng1_live_frame_receipt(frame value,
-							   std::uint64_t host_receipt_time_ns,
-							   std::uint64_t highest_observed_sequence,
-							   std::string host_staged_digest,
-							   bool ng1_control_admitted) noexcept
+		ng1_live_frame_receipt(
+			frame value,
+			std::uint64_t host_receipt_time_ns, // NOLINT(bugprone-easily-swappable-parameters)
+			std::uint64_t highest_observed_sequence,
+			std::string host_staged_digest,
+			bool ng1_control_admitted) noexcept
 			: value_{std::move(value)}, host_receipt_time_ns_{host_receipt_time_ns},
 			  highest_observed_sequence_{highest_observed_sequence},
 			  host_staged_digest_{std::move(host_staged_digest)},
@@ -262,6 +265,8 @@ namespace cxxlens::sdk::provider::detail
 		std::unique_ptr<ng1_host_observation_port> observation;
 		std::unique_ptr<ng1_duplex_process_port> processes;
 		std::optional<ng1_durable_resume_authority> durable_resume;
+		/** One host-monotonic deadline shared by initial and replacement process attempts. */
+		std::optional<std::uint64_t> absolute_wall_deadline_ns;
 	};
 
 	/**
@@ -379,6 +384,7 @@ namespace cxxlens::sdk::provider::detail
 								std::unique_ptr<ng1_host_observation_port> observation,
 								ng1_resume_binding resume_binding,
 								std::optional<ng1_durable_resume_authority> durable_resume,
+								std::optional<std::uint64_t> absolute_wall_deadline_ns,
 								std::uint64_t maximum_retained_frames,
 								std::stop_token cancellation) noexcept;
 
@@ -398,6 +404,7 @@ namespace cxxlens::sdk::provider::detail
 		[[nodiscard]] result<void> reject_resume_checkpoint(error original_error);
 		[[nodiscard]] result<ng1_host_observation> current_observation() const;
 		[[nodiscard]] result<std::uint64_t> now_ns() const;
+		[[nodiscard]] result<void> constrain_invocation_to_absolute_deadline();
 
 		ng1_session_coordinator session_;
 		ng1_live_session_adapter adapter_;
@@ -409,6 +416,7 @@ namespace cxxlens::sdk::provider::detail
 		std::unique_ptr<ng1_host_observation_port> observation_;
 		ng1_resume_binding resume_binding_;
 		std::optional<ng1_durable_resume_authority> durable_resume_;
+		std::optional<std::uint64_t> absolute_wall_deadline_ns_;
 		std::vector<frame> provider_frames_;
 		std::optional<ng1_live_frame_receipt> last_provider_receipt_;
 		std::optional<ng1_live_frame_receipt> published_resume_receipt_;

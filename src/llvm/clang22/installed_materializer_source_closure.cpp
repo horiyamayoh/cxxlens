@@ -554,7 +554,9 @@ namespace cxxlens::detail::clang22
 		if (!fd_channel)
 			return sdk::unexpected(std::move(fd_channel.error()));
 		auto received = receive_source_closure_frames(
-			*fd_channel, *fd_channel, {std::move(binding), &authority, 1U, 16'384U});
+			*fd_channel,
+			*fd_channel,
+			{std::move(binding), &authority, 1U, 16'384U, {}, std::stop_token{}});
 		if (!received)
 			return sdk::unexpected(std::move(received.error()));
 		if (received->credentials.transfer_digest != channel->transfer_digest)

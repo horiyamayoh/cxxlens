@@ -123,13 +123,21 @@ target_link_libraries(cxxlens-unit-sdk-store PRIVATE cxxlens::kernel
                                                      "${CMAKE_DL_LIBS}")
 target_include_directories(cxxlens-unit-sdk-store
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
-add_test(NAME unit.sdk-store COMMAND cxxlens-unit-sdk-store)
+set(cxxlens_store_test_groups format migration-routing publication integrity)
+set(cxxlens_store_tests unit.sdk-store-format unit.sdk-store-migration-routing
+                        unit.sdk-store-publication unit.sdk-store-integrity)
+foreach(test_name group_name IN ZIP_LISTS cxxlens_store_tests
+                  cxxlens_store_test_groups)
+  add_test(NAME "${test_name}" COMMAND cxxlens-unit-sdk-store --group
+                                       "${group_name}")
+endforeach()
 # The store suite deliberately exercises process-global SQLite/VFS lifecycle and
 # a set of fixed crash/tamper fixture paths.  Keep that one executable isolated
 # from install fixture preparation and other SQLite processes while allowing the
 # rest of the deterministic suite to run in parallel.
 set_tests_properties(
-  unit.sdk-store PROPERTIES LABELS "unit;sdk;store;transaction" RUN_SERIAL TRUE)
+  ${cxxlens_store_tests} PROPERTIES LABELS "unit;sdk;store;transaction"
+                                    RUN_SERIAL TRUE)
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-store-operation-port
                             unit/sdk/store_operation_port_test.cpp)
@@ -370,21 +378,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_GLIBC_DLMOPEN_DLVSYM)
   endif()
 
   if(CXXLENS_TEST_HAS_OFD_LOCKS)
-    add_library(cxxlens-test-sqlite-source-shm-missing-symbols-preload SHARED
-                support/sqlite_source_shm_missing_symbols_preload.cpp)
-    target_compile_features(
-      cxxlens-test-sqlite-source-shm-missing-symbols-preload PRIVATE cxx_std_23)
-    target_link_libraries(cxxlens-test-sqlite-source-shm-missing-symbols-preload
-                          PRIVATE "${CMAKE_DL_LIBS}")
-    set_target_properties(
-      cxxlens-test-sqlite-source-shm-missing-symbols-preload
-      PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
-    cxxlens_set_project_warnings(
-      cxxlens-test-sqlite-source-shm-missing-symbols-preload)
-
-    add_executable(
-      cxxlens-unit-sdk-sqlite-source-availability
-      unit/sdk/sqlite_source_shm_symbol_resolution_integration_test.cpp)
+    add_executable(cxxlens-unit-sdk-sqlite-source-availability
+                   unit/sdk/sqlite_source_shm_loader_port_test.cpp)
     target_compile_features(cxxlens-unit-sdk-sqlite-source-availability
                             PRIVATE cxx_std_23)
     target_link_libraries(
@@ -398,13 +393,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CXXLENS_TEST_HAS_GLIBC_DLMOPEN_DLVSYM)
         $<TARGET_OBJECTS:cxxlens-test-sqlite-store-fault-injection-support>)
     cxxlens_set_project_warnings(cxxlens-unit-sdk-sqlite-source-availability)
     cxxlens_enable_sanitizers(cxxlens-unit-sdk-sqlite-source-availability)
-    add_dependencies(cxxlens-unit-sdk-sqlite-source-availability
-                     cxxlens-test-sqlite-source-shm-missing-symbols-preload)
-    add_test(
-      NAME unit.sdk-sqlite-source-availability
-      COMMAND
-        cxxlens-unit-sdk-sqlite-source-availability
-        "$<TARGET_FILE:cxxlens-test-sqlite-source-shm-missing-symbols-preload>")
+    add_test(NAME unit.sdk-sqlite-source-availability
+             COMMAND cxxlens-unit-sdk-sqlite-source-availability)
     set_tests_properties(
       unit.sdk-sqlite-source-availability
       PROPERTIES
@@ -771,6 +761,11 @@ cxxlens_add_test_executable(cxxlens-provider-process-fixture
                             fixtures/provider_process_fixture.cpp)
 target_link_libraries(cxxlens-provider-process-fixture PRIVATE cxxlens::sdk)
 
+cxxlens_add_test_executable(cxxlens-provider-ng1-heartbeat-fixture
+                            fixtures/provider_ng1_heartbeat_fixture.cpp)
+target_link_libraries(cxxlens-provider-ng1-heartbeat-fixture
+                      PRIVATE cxxlens_protocol_v2 cxxlens_base)
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-provider-runtime
                             unit/sdk/provider_runtime_test.cpp)
 target_sources(cxxlens-unit-sdk-provider-runtime
@@ -779,9 +774,40 @@ cxxlens_add_provider_runtime_closure(cxxlens-unit-sdk-provider-runtime)
 target_link_libraries(cxxlens-unit-sdk-provider-runtime PRIVATE cxxlens::sdk)
 target_include_directories(cxxlens-unit-sdk-provider-runtime
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
-add_test(NAME unit.sdk-provider-runtime
-         COMMAND cxxlens-unit-sdk-provider-runtime
-                 "$<TARGET_FILE:cxxlens-provider-process-fixture>")
+
+cxxlens_add_test_executable(cxxlens-provider-ng1-resume-fixture
+                            unit/sdk/provider_runtime_test.cpp)
+target_sources(cxxlens-provider-ng1-resume-fixture
+               PRIVATE $<TARGET_OBJECTS:cxxlens-test-sdk-support>)
+cxxlens_add_provider_runtime_closure(cxxlens-provider-ng1-resume-fixture)
+target_link_libraries(cxxlens-provider-ng1-resume-fixture PRIVATE cxxlens::sdk)
+target_include_directories(cxxlens-provider-ng1-resume-fixture
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_definitions(cxxlens-provider-ng1-resume-fixture
+                           PRIVATE CXXLENS_NG1_RESUME_FIXTURE_ONLY=1)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  target_compile_options(cxxlens-provider-ng1-resume-fixture
+                         PRIVATE -ffunction-sections -fdata-sections)
+  target_link_options(cxxlens-provider-ng1-resume-fixture PRIVATE
+                      -Wl,--gc-sections)
+endif()
+if(CXXLENS_ENABLE_TSAN)
+  target_compile_definitions(cxxlens-unit-sdk-provider-runtime
+                             PRIVATE CXXLENS_TSAN_PROCESS_FIXTURE_LIMITS=1)
+  foreach(
+    _cxxlens_tsan_process_fixture
+    cxxlens-provider-process-fixture cxxlens-provider-ng1-heartbeat-fixture
+    cxxlens-provider-ng1-resume-fixture)
+    target_compile_options(${_cxxlens_tsan_process_fixture} PRIVATE -fno-pie)
+    target_link_options(${_cxxlens_tsan_process_fixture} PRIVATE -no-pie)
+  endforeach()
+endif()
+add_test(
+  NAME unit.sdk-provider-runtime
+  COMMAND
+    cxxlens-unit-sdk-provider-runtime
+    "$<TARGET_FILE:cxxlens-provider-process-fixture>"
+    "$<TARGET_FILE:cxxlens-provider-ng1-resume-fixture>")
 check_cxx_source_compiles(
   [=[
 #include <features.h>
@@ -805,7 +831,11 @@ int main() {
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
    AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD_WAITID)
   add_test(NAME unit.sdk-provider-runtime-ng1-heartbeat
-           COMMAND cxxlens-unit-sdk-provider-runtime --ng1-heartbeat-only)
+           COMMAND cxxlens-unit-sdk-provider-runtime --ng1-heartbeat-only
+                   "$<TARGET_FILE:cxxlens-provider-ng1-heartbeat-fixture>")
+  add_test(NAME unit.sdk-provider-runtime-ng1-resume
+           COMMAND cxxlens-unit-sdk-provider-runtime --ng1-resume-only
+                   "$<TARGET_FILE:cxxlens-provider-ng1-resume-fixture>")
   add_test(NAME unit.sdk-provider-runtime-timeout
            COMMAND cxxlens-unit-sdk-provider-runtime --timeout-regression
                    "$<TARGET_FILE:cxxlens-provider-process-fixture>")
@@ -894,6 +924,22 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
       77
       TIMEOUT
       ${CXXLENS_PROVIDER_RUNTIME_TIMEOUT_REGRESSION_TIMEOUT})
+  if(CXXLENS_ENABLE_TSAN)
+    set(CXXLENS_PROVIDER_RUNTIME_RESUME_TIMEOUT 600)
+  else()
+    set(CXXLENS_PROVIDER_RUNTIME_RESUME_TIMEOUT 300)
+  endif()
+  set_tests_properties(
+    unit.sdk-provider-runtime-ng1-resume
+    PROPERTIES
+      LABELS
+      "unit;sdk;provider;process;ng1;resume;budget;cancellation;fault;slow"
+      RUN_SERIAL
+      TRUE
+      SKIP_RETURN_CODE
+      77
+      TIMEOUT
+      ${CXXLENS_PROVIDER_RUNTIME_RESUME_TIMEOUT})
   set_tests_properties(
     unit.sdk-provider-runtime-timeout
     PROPERTIES LABELS
@@ -1139,6 +1185,14 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   target_link_libraries(
     cxxlens-clang22-materialization-request-v2-2
     PRIVATE cxxlens_clang22_materialization_request_v2_2_support)
+
+  cxxlens_add_test_executable(
+    cxxlens-clang22-materialization-request-driver
+    adapter/clang22/materialization_request_v2_2_driver.cpp)
+  target_link_libraries(
+    cxxlens-clang22-materialization-request-driver
+    PRIVATE cxxlens_clang22_materialization_io_support
+            cxxlens_clang22_materialization_request_v2_2_support)
 
   # Reuse the complete typed request document as a normal test fixture.  The
   # fixture build omits the executable's main and exports only the source-free
@@ -2023,13 +2077,38 @@ add_test(
 set_tests_properties(quality.relation-idl-reproducibility
                      PROPERTIES LABELS "quality;ng;contract;relation;generated")
 
+set(cxxlens_sdk_doctor_authority_consumer_source
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/doctor-authority-consumer.cpp")
+add_custom_command(
+  OUTPUT "${cxxlens_sdk_doctor_authority_consumer_source}"
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/unit/sdk/check_sdk_doctor_product.py"
+    --emit-consumer-source "${cxxlens_sdk_doctor_authority_consumer_source}"
+    "$<TARGET_FILE:cxxlens-sdk-doctor>"
+  DEPENDS
+    cxxlens-sdk-doctor
+    "${PROJECT_SOURCE_DIR}/tests/unit/sdk/check_sdk_doctor_product.py"
+    "${PROJECT_SOURCE_DIR}/schemas/cxxlens_ng_sdk_doctor_catalog.yaml"
+    "${PROJECT_SOURCE_DIR}/schemas/cxxlens_ng_sdk_doctor_catalog.schema.yaml"
+  VERBATIM)
+cxxlens_add_test_executable(cxxlens-sdk-doctor-authority-consumer
+                            "${cxxlens_sdk_doctor_authority_consumer_source}")
+target_include_directories(cxxlens-sdk-doctor-authority-consumer
+                           PRIVATE "${PROJECT_SOURCE_DIR}/tools/sdk")
+target_link_libraries(cxxlens-sdk-doctor-authority-consumer
+                      PRIVATE cxxlens::sdk)
+
 add_test(
   NAME sdk.doctor-product
   COMMAND
     "${Python3_EXECUTABLE}"
     "${PROJECT_SOURCE_DIR}/tests/unit/sdk/check_sdk_doctor_product.py"
-    "$<TARGET_FILE:cxxlens-sdk-doctor>")
-set_tests_properties(sdk.doctor-product PROPERTIES LABELS "sdk;doctor;product")
+    "$<TARGET_FILE:cxxlens-sdk-doctor>"
+    "$<TARGET_FILE:cxxlens-sdk-doctor-authority-consumer>"
+    "$<TARGET_FILE:cxxlens-provider-process-fixture>")
+set_tests_properties(sdk.doctor-product PROPERTIES LABELS "sdk;doctor;product"
+                                                   RUN_SERIAL TRUE)
 
 add_test(NAME sdk.cli-usage COMMAND "$<TARGET_FILE:cxxlens_cli>")
 set_tests_properties(sdk.cli-usage PROPERTIES WILL_FAIL TRUE LABELS
@@ -2133,13 +2212,14 @@ endfunction()
 
 foreach(
   test_name IN
-  ITEMS unit.sdk-store unit.sdk-store-operation-port
+  ITEMS ${cxxlens_store_tests} unit.sdk-store-operation-port
         unit.sdk-bounded-store-v6-memory-e2e unit.sdk-query-runtime
         integration.r2-vertical-slice)
   cxxlens_append_test_label("${test_name}" store-common)
 endforeach()
-foreach(test_name IN ITEMS unit.sdk-store unit.sdk-bounded-store-v6-memory-e2e
-                           unit.sdk-snapshot-store-v5-codec)
+foreach(test_name IN
+        ITEMS ${cxxlens_store_tests} unit.sdk-bounded-store-v6-memory-e2e
+              unit.sdk-snapshot-store-v5-codec)
   cxxlens_append_test_label("${test_name}" store-memory)
 endforeach()
 foreach(

@@ -12,7 +12,7 @@ set(cxxlens_clang22_unavailable_reason "@CXXLENS_CLANG22_UNAVAILABLE_REASON@")
 set(cxxlens_clang22_components "@CXXLENS_BUILD_CLANG22_COMPONENTS@")
 set(install_executable_suffix "@CMAKE_EXECUTABLE_SUFFIX@")
 set(install_executable_names cxxlens cxxlens-provider-scaffold
-                             cxxlens-sdk-doctor)
+                             cxxlens-sdk-doctor cxxlens-relation-idl)
 if(cxxlens_clang22_components STREQUAL "ON")
   list(APPEND install_executable_names cxxlens-clang-worker-22
        cxxlens-clang22-materialize)
@@ -58,6 +58,9 @@ function(resolve_install_artifact_path canonical_path resolved_path)
 endfunction()
 
 function(run_installed_tools label)
+  run_clean(
+    0 "${install_prefix}/bin/cxxlens-relation-idl${install_executable_suffix}"
+    --all --check)
   run_clean(
     0
     "${install_prefix}/bin/cxxlens${install_executable_suffix}"
@@ -172,6 +175,7 @@ if(PHASE STREQUAL "prepare")
       "${install_prefix}/bin/cxxlens-provider-scaffold"
       "${install_prefix}/bin/cxxlens"
       "${install_prefix}/bin/cxxlens-sdk-doctor")
+  list(APPEND required_artifacts "${install_prefix}/bin/cxxlens-relation-idl")
   if(cxxlens_clang22_components STREQUAL "ON")
     list(
       APPEND
@@ -289,7 +293,10 @@ target_compile_features(snapshot_builder_legacy_probe PRIVATE cxx_std_23)
 endif()
 
 if(PHASE STREQUAL "relocation")
-  file(RENAME "${test_root}/prefix" "${install_prefix}")
+  # Keep the prepared prefix intact so CTest's --repeat mode can execute this
+  # fixture consumer independently on every iteration.
+  file(REMOVE_RECURSE "${install_prefix}")
+  file(COPY "${test_root}/prefix/" DESTINATION "${install_prefix}")
   run_installed_tools(relocated)
   return()
 endif()

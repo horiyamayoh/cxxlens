@@ -53,7 +53,7 @@ namespace cxxlens::detail::clang22
 	};
 
 	inline constexpr std::uint64_t source_closure_task_v4_maximum_payload_bytes =
-		88U * 1024U * 1024U;
+		std::uint64_t{88U} * 1024U * 1024U;
 
 	/** Build the canonical source-closure manifest digest without retaining blob bytes in it. */
 	[[nodiscard]] sdk::result<std::string>

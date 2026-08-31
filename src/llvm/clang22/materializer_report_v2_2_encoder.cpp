@@ -46,10 +46,10 @@ namespace cxxlens::detail::clang22
 #else
 			(void)gmtime_r(&time, &value);
 #endif
-			char output[21]{};
-			if (std::strftime(output, sizeof(output), "%Y-%m-%dT%H:%M:%SZ", &value) == 0U)
+			std::array<char, 21U> output{};
+			if (std::strftime(output.data(), output.size(), "%Y-%m-%dT%H:%M:%SZ", &value) == 0U)
 				return {};
-			return output;
+			return output.data();
 		}
 
 		[[nodiscard]] json_value text(const std::string_view value)
@@ -67,7 +67,7 @@ namespace cxxlens::detail::clang22
 		{
 			json_value::object_type value;
 			for (auto&& [key, child] : fields)
-				value.emplace(std::move(key), std::move(child));
+				value.emplace(key, child);
 			return json_value::object(std::move(value)).value();
 		}
 
@@ -1116,11 +1116,13 @@ namespace cxxlens::detail::clang22
 						   {"digest", text(digest.value())}});
 		}
 
-		[[nodiscard]] json_value claim_stage_value(const std::string_view descriptor,
-												   const std::vector<const sdk::claim*>& claims,
-												   const json_value& guarantee_digest,
-												   const json_value& store,
-												   const std::vector<json_value>& task_results)
+		// guarantee_digest and store are distinct ordered fields in the report schema.
+		[[nodiscard]] json_value claim_stage_value(
+			const std::string_view descriptor,
+			const std::vector<const sdk::claim*>& claims,
+			const json_value& guarantee_digest, // NOLINT(bugprone-easily-swappable-parameters)
+			const json_value& store,
+			const std::vector<json_value>& task_results)
 		{
 			std::vector<json_value> contents;
 			std::vector<json_value> refs;
@@ -1303,10 +1305,10 @@ namespace cxxlens::detail::clang22
 				sdk::canonical_identity_digest("materialization-task", task_key_fields).value();
 			const bool base = relation.starts_with("build.") || relation.starts_with("source.");
 			std::vector<json_value> coverage;
-			auto add_coverage = [&](std::string domain, std::string key)
+			auto add_coverage = [&](const std::string& domain, const std::string& key)
 			{
 				coverage.push_back(object({{"domain", text(domain)},
-										   {"key", text(std::move(key))},
+										   {"key", text(key)},
 										   {"state", text("covered")},
 										   {"reason", text("")}}));
 			};
@@ -1337,6 +1339,7 @@ namespace cxxlens::detail::clang22
 								  return materialization::canonical_json(left) <
 									  materialization::canonical_json(right);
 							  });
+			const auto claim_occurrence_count = refs.size();
 			return object(
 				{{"relation_descriptor_id", text(relation)},
 				 {"scope", text(scope)},
@@ -1350,8 +1353,9 @@ namespace cxxlens::detail::clang22
 				 {"empty_partition", json_value::boolean(claims.empty())},
 				 {"stored_claim_refs", array(std::move(refs))},
 				 {"claim_content_digests", array(std::move(contents))},
-				 {"sdk_claim_occurrence_count", json_value::unsigned_integer(refs.size())},
-				 {"origin_association_count", json_value::unsigned_integer(refs.size())},
+				 {"sdk_claim_occurrence_count",
+				  json_value::unsigned_integer(claim_occurrence_count)},
+				 {"origin_association_count", json_value::unsigned_integer(claim_occurrence_count)},
 				 {"coverage_units", array(std::move(coverage))},
 				 {"unresolved", array({})},
 				 {"partition_id", text(manifest.partition_id)},
@@ -1409,9 +1413,9 @@ namespace cxxlens::detail::clang22
 		}
 
 		[[nodiscard]] json_value claim_row_json(const sdk::claim& claim);
-		[[nodiscard]] std::string base_row_identity(const std::string_view descriptor,
+		[[nodiscard]] std::string base_row_identity(std::string_view descriptor,
 													const json_value& row);
-		[[nodiscard]] std::string base_row_digest(const std::string_view descriptor,
+		[[nodiscard]] std::string base_row_digest(std::string_view descriptor,
 												  const json_value& row);
 		[[nodiscard]] std::optional<std::string>
 		store_source_evidence_digest(const sdk::claim& claim,
@@ -1647,6 +1651,8 @@ namespace cxxlens::detail::clang22
 				for (const auto& claim : sealed.translation.batch.claims)
 					final_claims.push_back(&claim);
 			std::vector<json_value> descriptors;
+			descriptors.reserve(
+				execution.worker.ingress.request.authority.engine.admitted_descriptors.size());
 			for (const auto& descriptor :
 				 execution.worker.ingress.request.authority.engine.admitted_descriptors)
 				descriptors.push_back(object(
@@ -1680,6 +1686,7 @@ namespace cxxlens::detail::clang22
 									  *right.member("partition_id")->as_string();
 							  });
 			std::vector<json_value> annotations;
+			annotations.reserve(final_claims.size());
 			for (const auto* claim : final_claims)
 				annotations.push_back(object(
 					{{"relation_descriptor_id", text(claim->descriptor)},
@@ -1791,6 +1798,7 @@ namespace cxxlens::detail::clang22
 			auto partition_bindings_digest = semantic_projection_digest(
 				"cxxlens.clang22-reopened-partition-binding-multiset.v1", array(bindings));
 			std::vector<json_value> row_multiset;
+			row_multiset.reserve(relations.size());
 			for (const auto& relation : relations)
 				row_multiset.push_back(array({*relation.member("relation_descriptor_id"),
 											  *relation.member("row_canonical_forms")}));
@@ -1878,10 +1886,11 @@ namespace cxxlens::detail::clang22
 				 {"handle_receipts", array(std::move(receipts))}});
 		}
 
-		[[nodiscard]] sdk::result<json_value>
-		publication_value(const materializer_store_execution& execution,
-						  const json_value& request_root,
-						  const json_value& reopened)
+		// request_root and reopened are distinct ordered report projections.
+		[[nodiscard]] sdk::result<json_value> publication_value(
+			const materializer_store_execution& execution,
+			const json_value& request_root, // NOLINT(bugprone-easily-swappable-parameters)
+			const json_value& reopened)
 		{
 			const auto& authority = execution.publication.authority;
 			const auto& record = execution.publication.snapshot.publication();
@@ -2638,8 +2647,8 @@ namespace cxxlens::detail::clang22
 		const auto unresolved_digest = task_unresolved_digest(task);
 		const auto evidence_digest = task_evidence_digest(task, sealed);
 		if (!unresolved_digest || !evidence_digest)
-			return sdk::unexpected(!unresolved_digest ? std::move(unresolved_digest.error())
-													  : std::move(evidence_digest.error()));
+			return sdk::unexpected(!unresolved_digest ? unresolved_digest.error()
+													  : evidence_digest.error());
 		const auto profile_id =
 			std::string_view{"cxxlens.clang22-materialization-guarantee-profile.v1"};
 		const auto profile = object({{"profile_id", text(profile_id)},
@@ -2853,6 +2862,7 @@ namespace cxxlens::detail::clang22
 									 {"guarantee", guarantee}});
 		auto store = store_value(execution, task);
 		std::vector<json_value> claim_stages;
+		claim_stages.reserve(task_v4_output_descriptor_ids.size());
 		for (const auto descriptor : task_v4_output_descriptor_ids)
 			claim_stages.push_back(claim_stage_value(descriptor,
 													 claims_for_descriptor(execution, descriptor),

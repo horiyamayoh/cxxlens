@@ -39,10 +39,12 @@ namespace cxxlens::protocol_v2
 			return cbor::encode(cbor::value{std::move(fields)});
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): value-field contract order.
 		[[nodiscard]] sdk::result<void> valid_text(const std::string_view value,
 												   const std::string_view field,
 												   const std::size_t maximum = 4'096U)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			if (value.empty() || value.size() > maximum || !cbor::valid_utf8(value))
 				return sdk::unexpected(
 					failure(field, "typed-id-or-text", "source-closure.manifest-invalid"));
@@ -61,8 +63,7 @@ namespace cxxlens::protocol_v2
 			if (value.size() != 64U)
 				return false;
 			for (const auto character : value)
-				if (!((character >= '0' && character <= '9') ||
-					  (character >= 'a' && character <= 'f')))
+				if ((character < '0' || character > '9') && (character < 'a' || character > 'f'))
 					return false;
 			return true;
 		}
@@ -85,24 +86,29 @@ namespace cxxlens::protocol_v2
 			return value.starts_with(prefix) && hex64(value.substr(prefix.size()));
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): value-field contract order.
 		[[nodiscard]] sdk::result<void> valid_semantic(const std::string_view value,
 													   const std::string_view field)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			if (!semantic_digest(value))
 				return sdk::unexpected(
 					failure(field, "semantic-digest", "source-closure.digest-mismatch"));
 			return {};
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): value-field contract order.
 		[[nodiscard]] sdk::result<void> valid_content(const std::string_view value,
 													  const std::string_view field)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			if (!content_digest(value))
 				return sdk::unexpected(
 					failure(field, "content-digest", "source-closure.digest-mismatch"));
 			return {};
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): closure shape wire order.
 		[[nodiscard]] sdk::result<void> valid_shape(const std::uint64_t total_bytes,
 													const std::uint64_t chunk_bytes,
 													const std::uint64_t chunk_count,
@@ -110,6 +116,7 @@ namespace cxxlens::protocol_v2
 													const std::size_t max_chunks,
 													const std::string_view field)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			if (chunk_bytes == 0U || chunk_bytes > max_chunk_bytes)
 				return sdk::unexpected(
 					failure(field, "chunk-size", "source-closure.limit-exceeded"));
@@ -494,7 +501,7 @@ namespace cxxlens::protocol_v2
 			unknown,
 		};
 
-		enum text_slot : std::size_t
+		enum text_slot : std::uint8_t
 		{
 			session_text,
 			task_text,
@@ -512,7 +519,7 @@ namespace cxxlens::protocol_v2
 			cleanup_receipt_text,
 		};
 
-		enum number_slot : std::size_t
+		enum number_slot : std::uint8_t
 		{
 			total_number,
 			chunk_bytes_number,
@@ -636,11 +643,13 @@ namespace cxxlens::protocol_v2
 			return {reinterpret_cast<const char*>(input.data() + range.offset), range.size};
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): decoded value-cursor order.
 		[[nodiscard]] bool parse_uint(const std::span<const byte> input,
 									  const std::size_t offset,
 									  std::uint64_t& output,
 									  std::size_t& next) noexcept
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			const auto head = read_wire_head(input, offset);
 			if (!head.valid || head.major != 0U)
 				return false;
@@ -762,11 +771,11 @@ namespace cxxlens::protocol_v2
 		{
 			const auto parse_text = [&](const text_slot slot)
 			{
-				return parse_text_range(input, offset, output.text[slot], next);
+				return parse_text_range(input, offset, output.text.at(slot), next);
 			};
 			const auto parse_number = [&](const number_slot slot)
 			{
-				return parse_uint(input, offset, output.number[slot], next);
+				return parse_uint(input, offset, output.number.at(slot), next);
 			};
 			switch (field)
 			{
@@ -843,11 +852,11 @@ namespace cxxlens::protocol_v2
 		{
 			const auto text = [&](const text_slot slot)
 			{
-				return text_view(control, parsed.text[slot]);
+				return text_view(control, parsed.text.at(slot));
 			};
 			const auto number = [&](const number_slot slot)
 			{
-				return parsed.number[slot];
+				return parsed.number.at(slot);
 			};
 			if (type == message_type::source_closure_manifest &&
 				parsed.kind == manifest_kind::descriptor)
@@ -1147,8 +1156,10 @@ namespace cxxlens::protocol_v2
 			return own_reject(std::get<source_closure_reject_view>(value));
 		}
 
+		// NOLINTBEGIN(bugprone-exception-escape): admitted variant is never valueless.
 		[[nodiscard]] std::size_t owned_control_resident(const closure_control& value) noexcept
 		{
+			// NOLINTEND(bugprone-exception-escape)
 			std::size_t output = sizeof(closure_control);
 			const auto add_string = [&output](const std::string& item) noexcept
 			{
@@ -1359,7 +1370,8 @@ namespace cxxlens::protocol_v2
 			// materialization before allocating the adopted vector or any strings. The
 			// production receiver keeps the token/view and does not pay this reserve.
 			constexpr std::size_t compatibility_dynamic_reserve =
-				4U * max_control_bytes + 2U * 32U * sizeof(cbor::map::value_type);
+				std::size_t{4U} * max_control_bytes +
+				std::size_t{2U} * 32U * sizeof(cbor::map::value_type);
 			std::size_t projected_resident = fixed_header_bytes + sizeof(frame);
 			const auto add = [](std::size_t& total, const std::size_t increment) noexcept
 			{
@@ -1576,10 +1588,12 @@ namespace cxxlens::protocol_v2
 		return closure_transfer{std::move(session), initial};
 	}
 
+	// NOLINTBEGIN(bugprone-easily-swappable-parameters): protocol binding field order.
 	sdk::result<void> closure_transfer::bind_common(const std::string_view session_id,
 													const std::string_view task_id,
 													const std::string_view closure_digest) const
 	{
+		// NOLINTEND(bugprone-easily-swappable-parameters)
 		if (session_id != session_.session_id)
 			return sdk::unexpected(
 				failure("session_id", "mismatch", "source-closure.session-binding-mismatch"));
@@ -1890,7 +1904,7 @@ namespace cxxlens::protocol_v2
 				2U * sizeof(sdk::result<bytes>) + sizeof(sdk::result<mutable_state>) +
 				sizeof(prepared_ack_transition) + sizeof(sdk::result<prepared_ack_transition>);
 			constexpr std::size_t encoding_dynamic_reserve = 4U * max_control_bytes +
-				fixed_header_bytes + 2U * 32U * sizeof(cbor::map::value_type);
+				fixed_header_bytes + std::size_t{2U} * 32U * sizeof(cbor::map::value_type);
 			const auto add = [](std::size_t& total, const std::size_t increment) noexcept
 			{
 				if (increment > std::numeric_limits<std::size_t>::max() - total)

@@ -58,6 +58,7 @@ namespace cxxlens::detail::clang22
 			return false;
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): frame binding wire order.
 		[[nodiscard]] sdk::result<std::optional<frame>>
 		read_frame(source_closure_frame_source& source,
 				   const sdk::provider::protocol_limits& limits,
@@ -65,6 +66,7 @@ namespace cxxlens::detail::clang22
 				   const std::uint64_t expected_sequence,
 				   const std::uint64_t maximum_resident_bytes)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			std::array<std::byte, wire_header_bytes> header{};
 			auto eof = read_exact(source, header, true);
 			if (!eof)
@@ -553,7 +555,7 @@ namespace cxxlens::detail::clang22
 	sdk::result<source_closure_receiver_result>
 	receive_source_closure_frames(source_closure_frame_source& source,
 								  source_closure_frame_sink& sink,
-								  source_closure_receiver_options options)
+								  const source_closure_receiver_options& options)
 	{
 		if (options.authority == nullptr)
 			return sdk::unexpected(

@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <span>
 #include <string>
@@ -515,11 +516,16 @@ int main(const int argc, const char* const* argv)
 		invocation.standard_input = std::move(*host_transcript);
 		invocation.budget.wall_ms = 15'000U;
 		invocation.budget.cpu_ms = 15'000U;
+#if defined(CXXLENS_SANITIZER_INSTRUMENTED)
+		invocation.budget.address_space_bytes = std::numeric_limits<std::uint64_t>::max();
+		invocation.budget.subprocesses = 1024U;
+#else
 		invocation.budget.address_space_bytes = 1024U * 1024U * 1024U;
+		invocation.budget.subprocesses = 1U;
+#endif
 		invocation.budget.transport_bytes = 128U * 1024U * 1024U;
 		invocation.budget.output_bytes = 4U * 1024U * 1024U;
 		invocation.budget.open_files = 128U;
-		invocation.budget.subprocesses = 1U;
 		invocation.sandbox = {cxxlens::sdk::provider::sandbox_assurance::enforced,
 							  policies.front().policy_digest()};
 		invocation.expected_binary_digest = executable_digest(argv[1]);

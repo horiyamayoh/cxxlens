@@ -73,7 +73,7 @@ namespace cxxlens::sdk
 		}
 
 	  private:
-		inline static constexpr sqlite_shm_process_identity_rejection empty_rejection_{};
+		static constexpr sqlite_shm_process_identity_rejection empty_rejection_{};
 		std::optional<sqlite_shm_process_identity_rejection> rejection_;
 	};
 

@@ -452,7 +452,7 @@ namespace cxxlens::detail::clang22
 			!sdk::validate_strong_id(toolchain_context_id) ||
 			!sdk::validate_strong_id(compile_unit_id) || maximum_rows == 0U ||
 			maximum_rows > 100000U || maximum_output_bytes == 0U ||
-			maximum_output_bytes > 16U * 1024U * 1024U ||
+			maximum_output_bytes > std::uint64_t{16U} * 1024U * 1024U ||
 			requested_descriptor_ids.size() != task_v4_output_descriptor_ids.size() ||
 			descriptor_digests.size() != task_v4_output_descriptor_ids.size() ||
 			!std::ranges::equal(requested_descriptor_ids, task_v4_output_descriptor_ids) ||
@@ -468,7 +468,7 @@ namespace cxxlens::detail::clang22
 			&materialization::entity_observation_v2_descriptor(),
 			&materialization::type_observation_v2_descriptor()};
 		for (std::size_t index{}; index < descriptors.size(); ++index)
-			if (descriptor_digests[index] != descriptors[index]->descriptor_digest)
+			if (descriptor_digests.at(index) != descriptors.at(index)->descriptor_digest)
 				return sdk::unexpected(
 					failure("provider.worker-v4.output-authority-invalid", "descriptor-digest"));
 		std::size_t dots{};
@@ -495,9 +495,9 @@ namespace cxxlens::detail::clang22
 			limits.max_depth = 16U;
 			limits.max_array_elements = 4096U;
 			limits.max_object_members = 32U;
-			limits.max_string_bytes = 8U * 1024U * 1024U;
+			limits.max_string_bytes = std::size_t{8U} * 1024U * 1024U;
 			limits.max_total_string_bytes = provider_worker_v4_maximum_envelope_bytes;
-			limits.max_total_values = 256U * 1024U;
+			limits.max_total_values = std::size_t{256U} * 1024U;
 			auto document = materialization::parse_json_object(std::move(raw), limits);
 			if (!document)
 				return sdk::unexpected(failure(
@@ -598,7 +598,7 @@ namespace cxxlens::detail::clang22
 		try
 		{
 			std::vector<std::byte> encoded;
-			constexpr std::size_t read_buffer_bytes = 64U * 1024U;
+			constexpr std::size_t read_buffer_bytes = std::size_t{64U} * 1024U;
 			std::array<char, read_buffer_bytes> buffer{};
 			for (;;)
 			{
@@ -660,7 +660,7 @@ namespace cxxlens::detail::clang22
 		try
 		{
 			std::vector<std::byte> encoded;
-			encoded.reserve(16U * 1024U);
+			encoded.reserve(std::size_t{16U} * 1024U);
 			sdk::provider::protocol_limits limits = expected.limits;
 			for (std::size_t frame_count{};
 				 frame_count < provider_worker_protocol_v2_maximum_frames;

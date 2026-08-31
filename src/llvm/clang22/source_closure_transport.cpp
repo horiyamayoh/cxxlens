@@ -204,7 +204,7 @@ namespace cxxlens::detail::clang22
 			std::string output;
 			output.reserve(value.size() + 2U);
 			output.push_back('"');
-			constexpr char hex[] = "0123456789abcdef";
+			constexpr std::string_view hex{"0123456789abcdef"};
 			for (const char value_byte : value)
 			{
 				const auto byte = static_cast<unsigned char>(value_byte);
@@ -235,8 +235,8 @@ namespace cxxlens::detail::clang22
 						if (byte < 0x20U)
 						{
 							output.append("\\u00");
-							output.push_back(hex[(byte >> 4U) & 0x0fU]);
-							output.push_back(hex[byte & 0x0fU]);
+							output.push_back(hex.at((byte >> 4U) & 0x0fU));
+							output.push_back(hex.at(byte & 0x0fU));
 						}
 						else
 							output.push_back(static_cast<char>(byte));
@@ -285,24 +285,24 @@ namespace cxxlens::detail::clang22
 			for (std::size_t index{}; index < 16U; ++index)
 			{
 				const auto offset = index * 4U;
-				words[index] = (std::to_integer<std::uint32_t>(block[offset]) << 24U) |
+				words.at(index) = (std::to_integer<std::uint32_t>(block[offset]) << 24U) |
 					(std::to_integer<std::uint32_t>(block[offset + 1U]) << 16U) |
 					(std::to_integer<std::uint32_t>(block[offset + 2U]) << 8U) |
 					std::to_integer<std::uint32_t>(block[offset + 3U]);
 			}
 			for (std::size_t index = 16U; index < words.size(); ++index)
 			{
-				const auto s0 = rotr(words[index - 15U], 7U) ^ rotr(words[index - 15U], 18U) ^
-					(words[index - 15U] >> 3U);
-				const auto s1 = rotr(words[index - 2U], 17U) ^ rotr(words[index - 2U], 19U) ^
-					(words[index - 2U] >> 10U);
-				words[index] = words[index - 16U] + s0 + words[index - 7U] + s1;
+				const auto s0 = rotr(words.at(index - 15U), 7U) ^ rotr(words.at(index - 15U), 18U) ^
+					(words.at(index - 15U) >> 3U);
+				const auto s1 = rotr(words.at(index - 2U), 17U) ^ rotr(words.at(index - 2U), 19U) ^
+					(words.at(index - 2U) >> 10U);
+				words.at(index) = words.at(index - 16U) + s0 + words.at(index - 7U) + s1;
 			}
 			auto [a, b, c, d, e, f, g, h] = state;
 			for (std::size_t index{}; index < words.size(); ++index)
 			{
 				const auto t1 = h + (rotr(e, 6U) ^ rotr(e, 11U) ^ rotr(e, 25U)) +
-					((e & f) ^ (~e & g)) + sha_k[index] + words[index];
+					((e & f) ^ (~e & g)) + sha_k.at(index) + words.at(index);
 				const auto t2 =
 					(rotr(a, 2U) ^ rotr(a, 13U) ^ rotr(a, 22U)) + ((a & b) ^ (a & c) ^ (b & c));
 				h = g;
@@ -324,11 +324,13 @@ namespace cxxlens::detail::clang22
 			state[7U] += h;
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): SHA workspace field order.
 		void sha_reset(std::array<std::uint32_t, 8U>& state,
 					   std::array<std::byte, 64U>& buffer,
 					   std::size_t& buffer_size,
 					   std::uint64_t& total_bytes)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			state = {0x6a09e667U,
 					 0xbb67ae85U,
 					 0x3c6ef372U,
@@ -342,12 +344,14 @@ namespace cxxlens::detail::clang22
 			total_bytes = 0U;
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): SHA workspace field order.
 		void sha_update(std::array<std::uint32_t, 8U>& state,
 						std::array<std::byte, 64U>& buffer,
 						std::size_t& buffer_size,
 						std::uint64_t& total_bytes,
 						const std::span<const std::byte> bytes)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			std::size_t offset{};
 			if (buffer_size != 0U)
 			{
@@ -374,16 +378,19 @@ namespace cxxlens::detail::clang22
 			total_bytes += bytes.size();
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): SHA workspace field order.
 		[[nodiscard]] std::string sha_finish(const std::array<std::uint32_t, 8U>& state,
 											 const std::array<std::byte, 64U>& buffer,
 											 const std::size_t buffer_size,
 											 const std::uint64_t total_bytes)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			auto final_state = state;
 			auto final_buffer = buffer;
 			auto final_size = buffer_size;
 			const auto marker = std::byte{0x80U};
-			final_buffer[final_size++] = marker;
+			final_buffer.at(final_size) = marker;
+			++final_size;
 			if (final_size > 56U)
 			{
 				std::fill(final_buffer.begin() + static_cast<std::ptrdiff_t>(final_size),
@@ -397,15 +404,15 @@ namespace cxxlens::detail::clang22
 					  std::byte{});
 			const auto bit_length = total_bytes * 8U;
 			for (std::size_t index{}; index < 8U; ++index)
-				final_buffer[56U + index] =
+				final_buffer.at(56U + index) =
 					static_cast<std::byte>((bit_length >> ((7U - index) * 8U)) & 0xffU);
 			sha_transform(final_state, final_buffer.data());
-			constexpr char hex[] = "0123456789abcdef";
+			constexpr std::string_view hex{"0123456789abcdef"};
 			std::string output{"sha256:"};
 			output.reserve(71U);
 			for (const auto word : final_state)
 				for (int shift = 28; shift >= 0; shift -= 4)
-					output.push_back(hex[(word >> shift) & 0x0fU]);
+					output.push_back(hex.at((word >> shift) & 0x0fU));
 			return output;
 		}
 
@@ -426,7 +433,7 @@ namespace cxxlens::detail::clang22
 		{
 			std::array<std::byte, 8U> encoded{};
 			for (std::size_t index{}; index < encoded.size(); ++index)
-				encoded[index] = static_cast<std::byte>((value >> ((7U - index) * 8U)) & 0xffU);
+				encoded.at(index) = static_cast<std::byte>((value >> ((7U - index) * 8U)) & 0xffU);
 			sha_update(state, buffer, buffer_size, total_bytes, encoded);
 		}
 
@@ -584,9 +591,11 @@ namespace cxxlens::detail::clang22
 		return {};
 	}
 
+	// NOLINTBEGIN(bugprone-easily-swappable-parameters): protocol header field order.
 	sdk::result<void> validate_source_closure_frame_header(const std::uint16_t message_id,
 														   const std::uint16_t flags)
 	{
+		// NOLINTEND(bugprone-easily-swappable-parameters)
 		if (!is_source_closure_message_id(message_id))
 			return sdk::unexpected(failure("source-closure.protocol-state-invalid", "message-id"));
 		if (flags != 0U)
@@ -617,10 +626,12 @@ namespace cxxlens::detail::clang22
 		return {};
 	}
 
+	// NOLINTBEGIN(bugprone-easily-swappable-parameters): session-task binding order.
 	sdk::result<void>
 	source_closure_transfer_validator::ensure_identity(const std::string_view session_id,
 													   const std::string_view task_id) const
 	{
+		// NOLINTEND(bugprone-easily-swappable-parameters)
 		if (!typed_id(binding_.session_id, "provider-session:sha256:"))
 			return sdk::unexpected(
 				failure("source-closure.task-binding-mismatch", "outer-task", "session"));
@@ -646,7 +657,7 @@ namespace cxxlens::detail::clang22
 	}
 
 	sdk::result<void> source_closure_transfer_validator::fail(std::string code,
-															  const std::string field,
+															  const std::string& field,
 															  std::string detail)
 	{
 		(void)cleanup_once();

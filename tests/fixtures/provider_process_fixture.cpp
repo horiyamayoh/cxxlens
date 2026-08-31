@@ -416,6 +416,7 @@ int main(const int argument_count, const char* const* arguments)
 		return value == nullptr ? std::nullopt : std::optional<std::string>{value};
 	};
 	auto expected_manifest = environment("CXXLENS_PROVIDER_MANIFEST");
+	auto expected_provider_id = environment("CXXLENS_PROVIDER_ID");
 	auto expected_task_id = environment("CXXLENS_PROVIDER_TASK_ID");
 	auto expected_task_digest = environment("CXXLENS_PROVIDER_TASK_INPUT_DIGEST");
 	auto expected_invocation = environment("CXXLENS_PROVIDER_NORMALIZED_INVOCATION_DIGEST");
@@ -423,8 +424,9 @@ int main(const int argument_count, const char* const* arguments)
 	auto expected_environment = environment("CXXLENS_PROVIDER_ENVIRONMENT_DIGEST");
 	auto expected_major = environment("CXXLENS_PROVIDER_PROTOCOL_MAJOR");
 	auto expected_minor = environment("CXXLENS_PROVIDER_PROTOCOL_MINOR");
-	if (!expected_manifest || !expected_task_id || !expected_task_digest || !expected_invocation ||
-		!expected_toolchain || !expected_environment || !expected_major || !expected_minor)
+	if (!expected_manifest || !expected_provider_id || !expected_task_id || !expected_task_digest ||
+		!expected_invocation || !expected_toolchain || !expected_environment || !expected_major ||
+		!expected_minor)
 		return EXIT_FAILURE;
 	protocol_limits input_limits;
 	const auto parse_version = [](const std::string_view text, std::uint16_t& output)
@@ -630,7 +632,9 @@ int main(const int argument_count, const char* const* arguments)
 	if (mode != "missing-accepted")
 	{
 		auto accepted = encode_task_accepted_metadata(
-			{std::string{provider_id}, "1.0.0", mode == "wrong-task" ? "other-task" : task_id});
+			{mode == "doctor" ? *expected_provider_id : std::string{provider_id},
+			 mode == "doctor" ? "2.0.0" : "1.0.0",
+			 mode == "wrong-task" ? "other-task" : task_id});
 		if (!accepted || !writer.send(message_type::task_accepted, *accepted))
 			return EXIT_FAILURE;
 	}
@@ -647,6 +651,23 @@ int main(const int argument_count, const char* const* arguments)
 			{std::string{nul_code, sizeof(nul_code) - 1U}, task_id, "fixture"});
 		return failed && writer.send(message_type::task_failed, *failed) ? EXIT_SUCCESS
 																		 : EXIT_FAILURE;
+	}
+	if (mode == "doctor")
+	{
+		const std::array coverage{coverage_unit{"task", task_id, "covered", {}}};
+		const std::span<const unresolved_item> unresolved;
+		const std::span<const evidence_item> evidence;
+		auto coverage_control = encode_coverage_metadata(coverage);
+		auto unresolved_control = encode_unresolved_metadata(unresolved);
+		auto evidence_control = encode_evidence_metadata(evidence);
+		auto complete_control = encode_task_complete_metadata({task_id});
+		return coverage_control && unresolved_control && evidence_control && complete_control &&
+				writer.send(message_type::coverage_chunk, *coverage_control) &&
+				writer.send(message_type::unresolved_chunk, *unresolved_control) &&
+				writer.send(message_type::progress, *evidence_control) &&
+				writer.send(message_type::task_complete, *complete_control)
+			? EXIT_SUCCESS
+			: EXIT_FAILURE;
 	}
 	if (mode == "provider-credit" || mode == "provider-open-task" || mode == "provider-batch-ack")
 	{

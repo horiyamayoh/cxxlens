@@ -28,7 +28,7 @@ namespace cxxlens::detail::clang22
 	{
 		std::size_t maximum_observations{100000U};
 		std::size_t maximum_rows{200000U};
-		std::size_t maximum_output_bytes{16U * 1024U * 1024U};
+		std::size_t maximum_output_bytes{std::size_t{16U} * 1024U * 1024U};
 		std::size_t maximum_diagnostics{10000U};
 
 		[[nodiscard]] sdk::result<void> validate() const;
@@ -42,7 +42,7 @@ namespace cxxlens::detail::clang22
 		bool invocation_exact{true};
 		std::vector<std::string> invocation_limitations;
 		provider_worker_v4_output_normalizer_limits limits{};
-		std::stop_token cancellation{};
+		std::stop_token cancellation;
 
 		[[nodiscard]] sdk::result<void> validate() const;
 	};
@@ -87,6 +87,7 @@ namespace cxxlens::detail::clang22
 	 * remain later host/runtime boundaries.
 	 */
 	[[nodiscard]] sdk::result<provider_worker_v4_normalized_output>
-	normalize_provider_worker_v4_output(const provider_worker_v4_ast_observation_batch& input,
-										provider_worker_v4_output_normalizer_options options);
+	normalize_provider_worker_v4_output(
+		const provider_worker_v4_ast_observation_batch& input,
+		const provider_worker_v4_output_normalizer_options& options);
 } // namespace cxxlens::detail::clang22

@@ -374,8 +374,8 @@ namespace
 		memory_source source{std::move(input.transcript)};
 		memory_sink sink;
 		authority task{input.binding.task_id, input.binding.task_v4_digest};
-		auto result =
-			receive_source_closure_frames(source, sink, {input.binding, &task, 7U, 16'384U});
+		auto result = receive_source_closure_frames(
+			source, sink, {input.binding, &task, 7U, 16'384U, {}, {}});
 		require(!result && result.error().code == "source-closure.truncated-stream",
 				"truncated source closure did not fail closed");
 		require(sink.output_.empty(), "truncated source closure emitted an ACK");
@@ -391,8 +391,8 @@ namespace
 			memory_source source{std::move(wire)};
 			memory_sink sink;
 			authority task{input.binding.task_id, input.binding.task_v4_digest};
-			auto result =
-				receive_source_closure_frames(source, sink, {input.binding, &task, 7U, 16'384U});
+			auto result = receive_source_closure_frames(
+				source, sink, {input.binding, &task, 7U, 16'384U, {}, {}});
 			require(!result && result.error().code == expected_code, message);
 			require(source.bytes_read() == protocol::fixed_header_bytes,
 					"receiver consumed a rejected frame body before header authority");
@@ -441,7 +441,9 @@ namespace
 		memory_sink narrow_sink;
 		authority narrow_authority{input.binding.task_id, input.binding.task_v4_digest};
 		auto narrowed = receive_source_closure_frames(
-			narrow_source, narrow_sink, {input.binding, &narrow_authority, 7U, 16'384U, narrow});
+			narrow_source,
+			narrow_sink,
+			{input.binding, &narrow_authority, 7U, 16'384U, narrow, {}});
 		require(!narrowed && narrowed.error().code == "source-closure.limit-exceeded" &&
 					narrow_source.bytes_read() == protocol::fixed_header_bytes,
 				"frame body bypassed the narrowed resident ledger");
@@ -452,7 +454,9 @@ namespace
 		memory_sink raised_sink;
 		authority raised_authority{input.binding.task_id, input.binding.task_v4_digest};
 		auto raised_result = receive_source_closure_frames(
-			raised_source, raised_sink, {input.binding, &raised_authority, 7U, 16'384U, raised});
+			raised_source,
+			raised_sink,
+			{input.binding, &raised_authority, 7U, 16'384U, raised, {}});
 		require(!raised_result && raised_result.error().code == "source-closure.limit-exceeded" &&
 					raised_source.bytes_read() == 0U,
 				"caller raised the fixed resident transport contract");
@@ -467,7 +471,9 @@ namespace
 		memory_sink truncated_sink;
 		authority truncated_authority{input.binding.task_id, input.binding.task_v4_digest};
 		auto truncated = receive_source_closure_frames(
-			truncated_source, truncated_sink, {input.binding, &truncated_authority, 7U, 16'384U});
+			truncated_source,
+			truncated_sink,
+			{input.binding, &truncated_authority, 7U, 16'384U, {}, {}});
 		require(!truncated && truncated.error().code == "source-closure.truncated-stream" &&
 					truncated_source.bytes_read() == truncated_bytes,
 				"partial final-owned frame body did not fail closed");
@@ -606,10 +612,10 @@ namespace
 		memory_sink connection_sink;
 		authority connection_authority{input.binding.task_id, input.binding.task_v4_digest};
 		failing_source disconnected_source;
-		auto disconnected =
-			receive_source_closure_frames(disconnected_source,
-										  connection_sink,
-										  {input.binding, &connection_authority, 7U, 16'384U});
+		auto disconnected = receive_source_closure_frames(
+			disconnected_source,
+			connection_sink,
+			{input.binding, &connection_authority, 7U, 16'384U, {}, {}});
 		require(!disconnected && disconnected.error().code == "source-closure.channel-closed" &&
 					connection_sink.output_.empty(),
 				"connection loss did not remain a local typed channel terminal");

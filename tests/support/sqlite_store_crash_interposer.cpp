@@ -1,3 +1,4 @@
+#include <array>
 #include <cerrno>
 #include <cstddef>
 #include <cstdlib>
@@ -23,8 +24,9 @@ namespace
 	void* prepared_marker_statement{};
 	void* physical_format_statement{};
 
-	constexpr char marker_sql[]{"INSERT INTO cxxlens_ng_metadata(key,value) VALUES(?1,?2)"};
-	constexpr char marker_key[]{"physical_format"};
+	constexpr auto marker_sql =
+		std::to_array("INSERT INTO cxxlens_ng_metadata(key,value) VALUES(?1,?2)");
+	constexpr auto marker_key = std::to_array("physical_format");
 
 	[[nodiscard]] dlsym_function next_dlsym() noexcept
 	{
@@ -83,7 +85,7 @@ namespace
 			return 21; // SQLITE_MISUSE
 		const auto result = prepare_v3_delegate(database, sql, byte_count, flags, statement, tail);
 		if (result == 0 && crash_pause_enabled() && statement != nullptr && *statement != nullptr &&
-			exact_text(sql, byte_count, marker_sql, sizeof(marker_sql) - 1U))
+			exact_text(sql, byte_count, marker_sql.data(), marker_sql.size() - 1U))
 			prepared_marker_statement = *statement;
 		return result;
 	}
@@ -98,7 +100,7 @@ namespace
 			return 21; // SQLITE_MISUSE
 		const auto result = bind_text_delegate(statement, index, value, byte_count, destructor);
 		if (result == 0 && crash_pause_enabled() && statement == prepared_marker_statement &&
-			index == 1 && exact_text(value, byte_count, marker_key, sizeof(marker_key) - 1U))
+			index == 1 && exact_text(value, byte_count, marker_key.data(), marker_key.size() - 1U))
 			physical_format_statement = statement;
 		return result;
 	}
@@ -142,8 +144,11 @@ namespace
 	}
 } // namespace
 
-extern "C" __attribute__((visibility("default"))) void* dlsym(void* handle,
-															  const char* symbol) noexcept
+// Interposing the system declaration keeps descriptive local parameter names.
+extern "C" __attribute__((visibility("default"))) void*
+dlsym(			  // NOLINT(readability-inconsistent-declaration-parameter-name)
+	void* handle, // NOLINT(readability-inconsistent-declaration-parameter-name)
+	const char* symbol) noexcept
 {
 	const auto delegate = next_dlsym();
 	if (delegate == nullptr)

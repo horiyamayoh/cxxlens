@@ -26,7 +26,7 @@ namespace cxxlens::detail::clang22
 	inline constexpr int source_closure_first_inherited_descriptor = 4;
 
 	/** Whether factory invocation borrows or consumes one supplied endpoint. */
-	enum class source_closure_fd_ownership
+	enum class source_closure_fd_ownership : std::uint8_t
 	{
 		borrowed,
 		owned,
@@ -85,7 +85,7 @@ namespace cxxlens::detail::clang22
 	{
 	  public:
 		[[nodiscard]] static sdk::result<source_closure_fd_channel>
-		create(source_closure_fd_channel_options options);
+		create(const source_closure_fd_channel_options& options);
 
 		source_closure_fd_channel(const source_closure_fd_channel&) = delete;
 		source_closure_fd_channel& operator=(const source_closure_fd_channel&) = delete;
@@ -97,7 +97,7 @@ namespace cxxlens::detail::clang22
 		[[nodiscard]] sdk::result<void> write(std::span<const std::byte> frame_bytes) override;
 
 	  private:
-		source_closure_fd_channel(source_closure_fd_channel_options options,
+		source_closure_fd_channel(const source_closure_fd_channel_options& options,
 								  int pinned_read,
 								  int pinned_write,
 								  std::uint64_t read_device,

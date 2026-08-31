@@ -64,14 +64,34 @@ endif()
 
 find_program(CXXLENS_RUN_CLANG_TIDY NAMES run-clang-tidy-22 run-clang-tidy)
 if(CXXLENS_RUN_CLANG_TIDY)
+  set(_cxxlens_clang_tidy_sources)
+  foreach(_cxxlens_target IN LISTS CXXLENS_COMPILED_TARGETS)
+    get_target_property(_cxxlens_target_sources ${_cxxlens_target} SOURCES)
+    foreach(_cxxlens_source IN LISTS _cxxlens_target_sources)
+      if(_cxxlens_source MATCHES "\\.(cc|cpp|cxx)$" AND NOT _cxxlens_source
+                                                        MATCHES "^\\$<")
+        if(NOT IS_ABSOLUTE "${_cxxlens_source}")
+          cmake_path(ABSOLUTE_PATH _cxxlens_source BASE_DIRECTORY
+                     "${CMAKE_CURRENT_SOURCE_DIR}" NORMALIZE)
+        endif()
+        list(APPEND _cxxlens_clang_tidy_sources "${_cxxlens_source}")
+      endif()
+    endforeach()
+  endforeach()
+  list(REMOVE_DUPLICATES _cxxlens_clang_tidy_sources)
   add_custom_target(
     cxxlens-clang-tidy
     COMMAND
-      "${CXXLENS_RUN_CLANG_TIDY}" -p "${CMAKE_BINARY_DIR}" -config-file
+      "${CXXLENS_RUN_CLANG_TIDY}" -quiet -p "${CMAKE_BINARY_DIR}" -config-file
       "${CMAKE_CURRENT_SOURCE_DIR}/.clang-tidy" -header-filter
       "${CMAKE_CURRENT_SOURCE_DIR}/(include/cxxlens|src)/.*"
+      ${_cxxlens_clang_tidy_sources}
     DEPENDS ${CXXLENS_COMPILED_TARGETS}
     VERBATIM)
+  unset(_cxxlens_clang_tidy_sources)
+  unset(_cxxlens_source)
+  unset(_cxxlens_target_sources)
+  unset(_cxxlens_target)
 endif()
 
 if(CXXLENS_BUILD_DOCS)

@@ -19,7 +19,7 @@ namespace cxxlens::detail::clang22
 	inline constexpr std::string_view source_closure_capability = "task-source-closure-v2";
 
 	/** Reserved source-closure message IDs. Heartbeat 23 is owned by NG1. */
-	enum class source_closure_message_id : std::uint16_t
+	enum class source_closure_message_id : std::uint8_t
 	{
 		manifest = 24U,
 		blob = 25U,
@@ -40,14 +40,14 @@ namespace cxxlens::detail::clang22
 		std::uint64_t maximum_members{4096U};
 		std::uint64_t maximum_unique_blobs{4096U};
 		std::uint64_t maximum_logical_path_bytes{4096U};
-		std::uint64_t maximum_blob_bytes{16U * 1024U * 1024U};
-		std::uint64_t maximum_unique_blob_bytes{48U * 1024U * 1024U};
-		std::uint64_t maximum_manifest_bytes{40U * 1024U * 1024U};
+		std::uint64_t maximum_blob_bytes{std::uint64_t{16U} * 1024U * 1024U};
+		std::uint64_t maximum_unique_blob_bytes{std::uint64_t{48U} * 1024U * 1024U};
+		std::uint64_t maximum_manifest_bytes{std::uint64_t{40U} * 1024U * 1024U};
 		std::uint64_t maximum_manifest_chunks{40U};
-		std::uint64_t maximum_chunk_payload_bytes{1024U * 1024U};
+		std::uint64_t maximum_chunk_payload_bytes{std::uint64_t{1024U} * 1024U};
 		std::uint64_t maximum_chunks_per_blob{16U};
 		std::uint64_t maximum_blob_chunk_frames{4144U};
-		std::uint64_t maximum_task_spool_bytes{88U * 1024U * 1024U};
+		std::uint64_t maximum_task_spool_bytes{std::uint64_t{88U} * 1024U * 1024U};
 		std::uint64_t maximum_resident_transport_bytes{1310720U};
 	};
 
@@ -349,7 +349,7 @@ namespace cxxlens::detail::clang22
 		[[nodiscard]] sdk::result<void> ensure_identity(std::string_view session_id,
 														std::string_view task_id) const;
 		[[nodiscard]] sdk::result<void>
-		fail(std::string code, std::string field, std::string detail = {});
+		fail(std::string code, const std::string& field, std::string detail = {});
 		[[nodiscard]] sdk::result<void> validate_reject(const source_closure_reject& value) const;
 		[[nodiscard]] sdk::result<void> validate_acknowledgement(const source_closure_ack& value,
 																 std::uint64_t sequence) const;

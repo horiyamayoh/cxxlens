@@ -127,7 +127,7 @@ namespace cxxlens::detail::clang22
 			int error{};
 		};
 
-		enum class descriptor_stage
+		enum class descriptor_stage : std::uint8_t
 		{
 			inherited,
 			private_pinned,
@@ -325,7 +325,7 @@ namespace cxxlens::detail::clang22
 
 		[[nodiscard]] sdk::result<short> wait_for(const int descriptor,
 												  const short events,
-												  const std::stop_token cancellation,
+												  const std::stop_token& cancellation,
 												  const source_closure_monotonic_clock& clock,
 												  progress_deadline& deadline,
 												  const std::string_view field)
@@ -368,24 +368,27 @@ namespace cxxlens::detail::clang22
 #endif
 	} // namespace
 
-	source_closure_fd_channel::source_closure_fd_channel(source_closure_fd_channel_options options,
-														 const int pinned_read,
-														 const int pinned_write,
-														 const std::uint64_t read_device,
-														 const std::uint64_t read_inode,
-														 const std::uint32_t read_mode,
-														 const std::uint64_t write_device,
-														 const std::uint64_t write_inode,
-														 const std::uint32_t write_mode) noexcept
+	// NOLINTBEGIN(bugprone-easily-swappable-parameters): descriptor witness tuple order.
+	source_closure_fd_channel::source_closure_fd_channel(
+		const source_closure_fd_channel_options& options,
+		const int pinned_read,
+		const int pinned_write,
+		const std::uint64_t read_device,
+		const std::uint64_t read_inode,
+		const std::uint32_t read_mode,
+		const std::uint64_t write_device,
+		const std::uint64_t write_inode,
+		const std::uint32_t write_mode) noexcept
 		: read_descriptor_{pinned_read}, write_descriptor_{pinned_write}, read_device_{read_device},
 		  read_inode_{read_inode}, read_mode_{read_mode}, write_device_{write_device},
 		  write_inode_{write_inode}, write_mode_{write_mode}, cancellation_{options.cancellation},
 		  injected_clock_{options.clock}, progress_timeout_ns_{options.progress_timeout_ns}
 	{
+		// NOLINTEND(bugprone-easily-swappable-parameters)
 	}
 
 	sdk::result<source_closure_fd_channel>
-	source_closure_fd_channel::create(source_closure_fd_channel_options options)
+	source_closure_fd_channel::create(const source_closure_fd_channel_options& options)
 	{
 #if defined(__unix__) || defined(__APPLE__)
 		input_descriptor_custody input_custody{options};
@@ -408,7 +411,7 @@ namespace cxxlens::detail::clang22
 		auto pinned_write = pin_descriptor(options.write, *write, "write", false);
 		if (!pinned_write)
 			return sdk::unexpected(std::move(pinned_write.error()));
-		return source_closure_fd_channel{std::move(options),
+		return source_closure_fd_channel{options,
 										 pinned_read->release(),
 										 pinned_write->release(),
 										 read->device,
@@ -429,7 +432,7 @@ namespace cxxlens::detail::clang22
 		  read_device_{other.read_device_}, read_inode_{other.read_inode_},
 		  read_mode_{other.read_mode_}, write_device_{other.write_device_},
 		  write_inode_{other.write_inode_}, write_mode_{other.write_mode_},
-		  poisoned_{other.poisoned_}, cancellation_{other.cancellation_},
+		  poisoned_{other.poisoned_}, cancellation_{std::move(other.cancellation_)},
 		  injected_clock_{other.injected_clock_}, progress_timeout_ns_{other.progress_timeout_ns_}
 	{
 		other.read_descriptor_ = -1;

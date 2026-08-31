@@ -128,7 +128,8 @@ namespace cxxlens::sdk::provider
 	};
 
 	/** @brief Decoded frame retaining all semantic header fields after validation. */
-	struct frame
+	// All fields carry explicit aggregate defaults; the analyzer loses that state through optional.
+	struct frame // NOLINT(clang-analyzer-core.uninitialized.Assign)
 	{
 		message_type type{message_type::hello};
 		std::uint64_t stream_id{};

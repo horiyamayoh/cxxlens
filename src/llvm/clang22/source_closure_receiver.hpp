@@ -67,7 +67,7 @@ namespace cxxlens::detail::clang22
 		std::uint64_t stream_id{1U};
 		std::uint64_t maximum_frames{16'384U};
 		source_closure_transport_limits limits{};
-		std::stop_token cancellation{};
+		std::stop_token cancellation;
 		/** Optional caller-owned clock; null selects an operation-owned system clock. */
 		const source_closure_monotonic_clock* clock{};
 		/** Absolute bound for one no-progress interval; a complete frame starts the next. */
@@ -117,5 +117,5 @@ namespace cxxlens::detail::clang22
 	[[nodiscard]] sdk::result<source_closure_receiver_result>
 	receive_source_closure_frames(source_closure_frame_source& source,
 								  source_closure_frame_sink& sink,
-								  source_closure_receiver_options options);
+								  const source_closure_receiver_options& options);
 } // namespace cxxlens::detail::clang22

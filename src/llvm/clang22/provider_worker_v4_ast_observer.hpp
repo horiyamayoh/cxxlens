@@ -27,7 +27,7 @@ namespace cxxlens::detail::clang22
 	inline constexpr std::size_t provider_worker_v4_ast_product_maximum_origins_per_observation =
 		256U;
 	inline constexpr std::size_t provider_worker_v4_ast_product_maximum_logical_bytes =
-		16U * 1024U * 1024U;
+		std::size_t{16U} * 1024U * 1024U;
 	inline constexpr std::size_t provider_worker_v4_ast_product_maximum_traversal_entries =
 		2000000U;
 	inline constexpr std::size_t provider_worker_v4_ast_product_maximum_traversal_depth = 4096U;

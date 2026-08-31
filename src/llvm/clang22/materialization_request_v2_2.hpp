@@ -19,6 +19,18 @@ namespace cxxlens::detail::clang22::materialization
 	inline constexpr std::string_view materialization_request_v2_2_version = "2.2.0";
 	inline constexpr std::uint16_t materialization_protocol_v2_major = 2U;
 	inline constexpr std::uint16_t materialization_protocol_v2_minor = 0U;
+	/** Bounded metadata size that admits the schema's maximum 4096-task census. */
+	inline constexpr std::size_t maximum_materialization_request_v2_2_document_bytes =
+		std::size_t{64U} * 1024U * 1024U;
+	/** JSON resource ledger for the complete base-task/closure/task-v4 census. */
+	[[nodiscard]] constexpr json_limits materialization_request_v2_2_json_limits() noexcept
+	{
+		json_limits output;
+		output.max_input_bytes = maximum_materialization_request_v2_2_document_bytes;
+		output.max_total_string_bytes = std::size_t{64U} * 1024U * 1024U;
+		output.max_total_values = std::size_t{1024U} * 1024U;
+		return output;
+	}
 
 	/** Exact required capabilities for Protocol 2 closure-bearing requests. */
 	[[nodiscard]] std::vector<std::string> materialization_request_v2_2_required_features();
@@ -28,7 +40,7 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		std::size_t maximum_closures{4096U};
 		std::size_t maximum_tasks{4096U};
-		std::uint64_t maximum_unique_blob_bytes{48U * 1024U * 1024U};
+		std::uint64_t maximum_unique_blob_bytes{std::uint64_t{48U} * 1024U * 1024U};
 		provider_task_v4_limits task_limits{};
 	};
 

@@ -17,10 +17,10 @@ namespace cxxlens::detail::clang22
 {
 	/** Maximum logical task-input bytes accepted by the task-input-chunks-v2 profile. */
 	inline constexpr std::size_t provider_worker_protocol_v2_maximum_input_bytes =
-		64U * 1024U * 1024U;
+		std::size_t{64U} * 1024U * 1024U;
 	/** Maximum bytes carried by one input_chunk frame in the host profile. */
 	inline constexpr std::size_t provider_worker_protocol_v2_maximum_chunk_bytes =
-		1U * 1024U * 1024U;
+		std::size_t{1U} * 1024U * 1024U;
 	/** Maximum input_chunk frames in one bounded task transcript. */
 	inline constexpr std::size_t provider_worker_protocol_v2_maximum_input_chunks = 64U;
 	/**

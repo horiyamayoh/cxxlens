@@ -237,9 +237,11 @@ namespace cxxlens::protocol_v2::cbor
 			limits bound;
 			std::size_t item_count{};
 
+			// NOLINTBEGIN(bugprone-easily-swappable-parameters): recursive cursor order.
 			[[nodiscard]] sdk::result<value>
 			visit(const std::size_t offset, const std::size_t depth, std::size_t& next)
 			{
+				// NOLINTEND(bugprone-easily-swappable-parameters)
 				if (depth > bound.max_depth)
 					return sdk::unexpected(failure("depth", "limit-exceeded"));
 				if (item_count++ >= bound.max_items)
@@ -314,12 +316,12 @@ namespace cxxlens::protocol_v2::cbor
 								input.begin() + static_cast<std::ptrdiff_t>(key_begin),
 								input.begin() + static_cast<std::ptrdiff_t>(key_next));
 							if (!previous_key.empty() &&
-								!(previous_key.size() < encoded_key.size() ||
-								  (previous_key.size() == encoded_key.size() &&
-								   std::lexicographical_compare(previous_key.begin(),
-																previous_key.end(),
-																encoded_key.begin(),
-																encoded_key.end()))))
+								previous_key.size() >= encoded_key.size() &&
+								(previous_key.size() != encoded_key.size() ||
+								 !std::lexicographical_compare(previous_key.begin(),
+															   previous_key.end(),
+															   encoded_key.begin(),
+															   encoded_key.end())))
 								return sdk::unexpected(failure("map", "order-or-duplicate"));
 							const auto& key_text = std::get<std::string>(key->data);
 							if (find(item, key_text) != nullptr)
@@ -476,13 +478,14 @@ namespace cxxlens::protocol_v2::cbor
 								return {scan_error::depth_limit,
 										workspace.item_count,
 										workspace.maximum_depth};
-							workspace.stack[workspace.stack_size++] =
+							workspace.stack.at(workspace.stack_size) =
 								scan_stack_entry{children,
 												 item_begin,
 												 0U,
 												 0U,
 												 static_cast<std::uint8_t>(item_kind),
 												 map_item};
+							++workspace.stack_size;
 							cursor = item_end;
 							continue;
 						}
@@ -509,7 +512,7 @@ namespace cxxlens::protocol_v2::cbor
 						root_complete = true;
 						break;
 					}
-					auto& parent = workspace.stack[workspace.stack_size - 1U];
+					auto& parent = workspace.stack.at(workspace.stack_size - 1U);
 					const auto parent_kind = static_cast<major>(parent.container_kind);
 					if (parent_kind == major::map && parent.expecting_key)
 					{
@@ -523,12 +526,12 @@ namespace cxxlens::protocol_v2::cbor
 							const auto previous =
 								input.subspan(parent.previous_key_offset, parent.previous_key_size);
 							const auto current = input.subspan(completed_begin, key_size);
-							if (!(previous.size() < current.size() ||
-								  (previous.size() == current.size() &&
-								   std::lexicographical_compare(previous.begin(),
-																previous.end(),
-																current.begin(),
-																current.end()))))
+							if (previous.size() >= current.size() &&
+								(previous.size() != current.size() ||
+								 !std::lexicographical_compare(previous.begin(),
+															   previous.end(),
+															   current.begin(),
+															   current.end())))
 								return {scan_error::map_order_or_duplicate,
 										workspace.item_count,
 										workspace.maximum_depth};

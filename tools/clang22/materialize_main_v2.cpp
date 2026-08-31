@@ -144,7 +144,8 @@ namespace
 	[[nodiscard]] sdk::result<ingress_envelope>
 	read_ingress_envelope(materialization_replayable_spool& spool)
 	{
-		constexpr std::size_t maximum_probe_bytes = 16U * 1024U * 1024U;
+		constexpr std::size_t maximum_probe_bytes =
+			maximum_materialization_request_v2_2_document_bytes;
 		if (!spool.sealed() || spool.size_bytes() == 0U || spool.size_bytes() > maximum_probe_bytes)
 			return sdk::unexpected(materialization_admission_no_response());
 		try
@@ -165,8 +166,7 @@ namespace
 				offset += static_cast<std::uint64_t>(*received);
 			}
 
-			json_limits limits;
-			limits.max_input_bytes = maximum_probe_bytes;
+			const auto limits = materialization_request_v2_2_json_limits();
 			auto document = parse_json_object(std::move(raw), limits);
 			if (!document)
 				return sdk::unexpected(std::move(document.error()));

@@ -17844,8 +17844,7 @@ namespace cxxlens::sdk
 					return std::ranges::find(replay.callback_invocation_tokens, invocation) !=
 						replay.callback_invocation_tokens.end();
 				};
-				return false ||
-					std::ranges::any_of(
+				return std::ranges::any_of(
 						   writers_,
 						   [&invocation, excluded_writer_token](const writer_record& writer)
 						   {

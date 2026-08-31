@@ -64,6 +64,8 @@ namespace cxxlens::detail::clang22::materialization
 				semantic_digest_grammar(value.substr(24U));
 		}
 
+		// Ordered value/field pair keeps encoding failures attached to the contract field.
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 		[[nodiscard]] sdk::result<json_value> json_text(const std::string_view value,
 														const std::string_view field)
 		{
@@ -241,7 +243,7 @@ namespace cxxlens::detail::clang22::materialization
 		{
 			std::array<std::string_view, Size> views{};
 			for (std::size_t index{}; index < Size; ++index)
-				views[index] = names[index];
+				views.at(index) = names.at(index);
 			if (value.as_object() == nullptr || !value.has_exact_members(views))
 				return sdk::unexpected(invalid(std::string{field}, "member-set"));
 			return {};
@@ -653,7 +655,7 @@ namespace cxxlens::detail::clang22::materialization
 			output.toolchain = std::move(*decoded_toolchain);
 			output.variant = std::move(*decoded_variant);
 			output.source = std::move(*decoded_source);
-			output.budget = std::move(*decoded_budget);
+			output.budget = *decoded_budget;
 			output.sandbox = std::move(*decoded_sandbox);
 			auto arguments =
 				authority_member_string_array(value, "effective_argv", "task.effective_argv");

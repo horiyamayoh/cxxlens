@@ -391,7 +391,8 @@ namespace
 													  input.closure.closure_digest,
 													  identity.manifest_digest,
 													  0U};
-		auto received = receive_source_closure_frames(source, sink, {binding, &authority, 7U});
+		auto received =
+			receive_source_closure_frames(source, sink, {binding, &authority, 7U, 16'384U, {}, {}});
 		if (!received)
 			std::cerr << "receiver positive path failed: " << received.error().code << " / "
 					  << received.error().field << " / " << received.error().detail << '\n';

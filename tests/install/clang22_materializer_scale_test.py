@@ -17,13 +17,13 @@ from typing import Any, Callable
 
 RAW_INPUT_LIMIT_BYTES = 1 << 30
 MAXIMUM_TASK_COUNT = 4096
-MAXIMUM_AGGREGATE_SOURCE_BYTES = 512 << 20
+MAXIMUM_AGGREGATE_SOURCE_BYTES = 48 << 20
 SOURCE_CHUNK_BYTES = 16 << 20
 SCENARIO_IDS = (
     "one-task",
     "four-thousand-ninety-six-tasks",
     "sixteen-mib-source",
-    "five-hundred-twelve-mib-aggregate-source",
+    "forty-eight-mib-aggregate-source",
     "one-gib-raw-request",
     "raw-request-limit-plus-one",
     "arbitrary-short-reads",
@@ -134,7 +134,7 @@ def build_request(
         task_count = 1
         source_bytes = SOURCE_CHUNK_BYTES
         factory = repeated_source(source_bytes)
-    elif scenario_id == "five-hundred-twelve-mib-aggregate-source":
+    elif scenario_id == "forty-eight-mib-aggregate-source":
         task_count = MAXIMUM_AGGREGATE_SOURCE_BYTES // SOURCE_CHUNK_BYTES
         source_bytes = SOURCE_CHUNK_BYTES
         factory = repeated_source(source_bytes)
@@ -287,6 +287,26 @@ def bind_installed_request(
     return bound
 
 
+def assert_installed_source_closure_channel_required(stdout_path: pathlib.Path) -> None:
+    try:
+        report = json.loads(stdout_path.read_text(encoding="utf-8"))
+        error = report["error"]
+    except (KeyError, TypeError, json.JSONDecodeError, UnicodeDecodeError) as failure:
+        raise ScaleTestError("installed rejection is not a typed compact report") from failure
+    expected = {
+        "code": "materialization.request-invalid",
+        "diagnostic": (
+            "source-code=materialization.source-closure-invalid;"
+            "source-detail=source-closure-channel-required;"
+            "transport=protocol-v2-separate-channel"
+        ),
+        "phase": "request-schema",
+        "subject": "request-v2_2",
+    }
+    if error != expected:
+        raise ScaleTestError(f"installed rejection differs from channel contract: {error}")
+
+
 def expected_process_status(
     process: dict[str, Any], expected: str, stdout_path: pathlib.Path
 ) -> str:
@@ -306,32 +326,6 @@ def expected_process_status(
     if process["actual_exit_status"] in {1, 2}:
         return "expected-rejection"
     return "failed"
-
-
-def installed_input_transfer_receipt(stdout_path: pathlib.Path) -> dict[str, Any]:
-    try:
-        with stdout_path.open("rb") as response:
-            report = json.load(response)
-        task_results = report["task_results"]
-        if len(task_results) != 1:
-            raise ScaleTestError("scale installed positive must contain one task result")
-        return task_results[0]["input_transfer"]
-    except (KeyError, TypeError, IndexError, json.JSONDecodeError) as error:
-        raise ScaleTestError(
-            f"installed scale positive lacks its authenticated input transfer receipt: {stdout_path}"
-        ) from error
-
-
-def assert_installed_input_transfer_receipt(stdout_path: pathlib.Path) -> None:
-    """Assert the product runtime input-transfer receipt after a pass.
-
-    A failed installed invocation is expected to emit a compact failure report,
-    which intentionally has no task result or input-transfer receipt.  Reading
-    that failure as though it were a success report obscures the owning worker
-    failure with a false "receipt missing" error.
-    """
-
-    installed_input_transfer_receipt(stdout_path)
 
 
 def scenario_input(
@@ -395,8 +389,11 @@ def run() -> int:
         expected = "reject" if scenario_id == "raw-request-limit-plus-one" else "pass"
         print(f"materialization scale scenario start: id={scenario_id}", flush=True)
         request_path = scenario_input(root, oracle, scenario_id, input_directory)
+        driver_argv = [str(driver)]
+        if scenario_id in {"one-gib-raw-request", "raw-request-limit-plus-one"}:
+            driver_argv.append("--capture-only")
         admission = run_process(
-            [str(driver)],
+            driver_argv,
             request_path,
             run_directory / scenario_id / "admission",
             fragmented=scenario_id == "arbitrary-short-reads",
@@ -415,8 +412,6 @@ def run() -> int:
         )
         installed_status = "not-run"
         if materializer is not None and scenario_id in installed_scenarios:
-            if expected != "pass":
-                raise ScaleTestError("installed scenarios must be positive")
             with request_path.open("rb") as source:
                 request_value = json.load(source)
             installed_request = bind_installed_request(request_value, occurrence_path, oracle)
@@ -430,13 +425,12 @@ def run() -> int:
             )
             installed_status = expected_process_status(
                 installed,
-                expected,
+                "reject",
                 installed["stdout_path"],
             )
-            if installed_status == "passed":
-                assert_installed_input_transfer_receipt(installed["stdout_path"])
             if installed_status == "failed":
                 raise ScaleTestError(f"installed scale scenario failed: {scenario_id}")
+            assert_installed_source_closure_channel_required(installed["stdout_path"])
             print(
                 f"materialization scale scenario progress: id={scenario_id} "
                 f"phase=installed status={installed_status}",

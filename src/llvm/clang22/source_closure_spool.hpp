@@ -33,12 +33,13 @@ namespace cxxlens::detail::clang22
 
 		[[nodiscard]] sdk::result<void>
 		begin_manifest(const source_closure_manifest_descriptor& descriptor) override;
-		[[nodiscard]] sdk::result<void> append_manifest(std::span<const std::byte> bytes) override;
+		[[nodiscard]] sdk::result<void>
+		append_manifest(std::span<const std::byte> payload) override;
 		[[nodiscard]] sdk::result<source_closure_manifest_summary>
 		finish_manifest(std::string_view manifest_digest) override;
 		[[nodiscard]] sdk::result<void>
 		begin_blob(const source_closure_blob_descriptor& descriptor) override;
-		[[nodiscard]] sdk::result<void> append_blob(std::span<const std::byte> bytes) override;
+		[[nodiscard]] sdk::result<void> append_blob(std::span<const std::byte> payload) override;
 		[[nodiscard]] sdk::result<void>
 		finish_blob(const source_closure_blob_receipt& receipt) override;
 		[[nodiscard]] sdk::result<source_closure_ack_credentials>
@@ -69,10 +70,10 @@ namespace cxxlens::detail::clang22
 		[[nodiscard]] sdk::result<std::string> credential(std::string_view prefix,
 														  std::string_view transfer_digest) const;
 		[[nodiscard]] sdk::result<void> ensure_private_spool();
-		[[nodiscard]] sdk::result<void> append_private_spool(std::span<const std::byte> bytes);
+		[[nodiscard]] sdk::result<void> append_private_spool(std::span<const std::byte> payload);
 		[[nodiscard]] sdk::result<std::string> read_private_blob(std::uint64_t offset,
 																 std::uint64_t size) const;
-		[[nodiscard]] sdk::result<void> seal_private_spool();
+		[[nodiscard]] sdk::result<void> seal_private_spool() const;
 		[[nodiscard]] sdk::result<void> validate_sealed_metadata() const;
 		void close_private_spool() noexcept;
 

@@ -711,6 +711,7 @@ namespace cxxlens::sdk
 				state->invalid = true;
 				state->phase = exact_empty_live_phase::failed;
 			}
+			// NOLINTNEXTLINE(bugprone-empty-catch): no-throw failure marking is best effort.
 			catch (...)
 			{
 			}
@@ -1309,6 +1310,7 @@ namespace cxxlens::sdk
 		class exact_empty_arm_authority final : public sqlite_backend_effect_arm_authority
 		{
 		  public:
+			// NOLINTBEGIN(bugprone-easily-swappable-parameters): ordered state-machine phases.
 			exact_empty_arm_authority(std::weak_ptr<exact_empty_normalization_state> state,
 									  const sqlite_backend_effect_stage target,
 									  const exact_empty_live_phase required,
@@ -1316,6 +1318,7 @@ namespace cxxlens::sdk
 				: state_{std::move(state)}, target_{target}, required_{required}, sealed_{sealed}
 			{
 			}
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 
 			[[nodiscard]] result<sqlite_backend_opaque_identity> recheck_and_seal(
 				const sqlite_backend_effect_arm_request& request,
@@ -1406,7 +1409,7 @@ namespace cxxlens::sdk
 				!std::has_single_bit(static_cast<unsigned>(effective)))
 				return false;
 			state.device_profile.effective_sector_size = static_cast<std::uint32_t>(effective);
-			const auto quotient = effective > static_cast<int>(state.device_profile.page_size)
+			const auto quotient = std::cmp_greater(effective, state.device_profile.page_size)
 				? static_cast<std::uint32_t>(effective) / state.device_profile.page_size
 				: 1U;
 			const auto count = std::min(state.device_profile.database_page_count, quotient);
@@ -1435,6 +1438,7 @@ namespace cxxlens::sdk
 														   sqlite_backend_file_role::shared_memory);
 				const auto* journal = exact_empty_census_entry(
 					input.source_census, sqlite_backend_file_role::rollback_journal);
+				// NOLINTNEXTLINE(bugprone-exception-escape): checked result access cannot fail.
 				const auto census_matches_guard = [&]() noexcept
 				{
 					if (!input.source_census.source_shm_guard)
@@ -2122,7 +2126,7 @@ namespace cxxlens::sdk
 				const auto expected_size = std::min<std::size_t>(
 					header_chunk_size, static_cast<std::size_t>(sector_size) - header_offset);
 				const auto payload = exact_empty_callback_payload(state, callback);
-				if (callback.offset != static_cast<std::int64_t>(header_offset) ||
+				if (std::cmp_not_equal(callback.offset, header_offset) ||
 					callback.byte_count != expected_size || payload.size() != expected_size)
 					return false;
 				if (chunk == 0U)
@@ -2151,11 +2155,11 @@ namespace cxxlens::sdk
 				const auto checksum_payload = exact_empty_callback_payload(state, checksum);
 				const auto source = std::span{state.pre_main}.subspan(
 					(static_cast<std::size_t>(page) - 1U) * page_size, page_size);
-				if (number.offset != static_cast<std::int64_t>(record) || number.byte_count != 4U ||
+				if (std::cmp_not_equal(number.offset, record) || number.byte_count != 4U ||
 					number_payload.size() != 4U || read_be_u32(number_payload, 0U) != page ||
-					image.offset != static_cast<std::int64_t>(record + 4U) ||
+					std::cmp_not_equal(image.offset, record + 4U) ||
 					image.byte_count != page_size || !std::ranges::equal(image_payload, source) ||
-					checksum.offset != static_cast<std::int64_t>(record + 4U + page_size) ||
+					std::cmp_not_equal(checksum.offset, record + 4U + page_size) ||
 					checksum.byte_count != 4U || checksum_payload.size() != 4U ||
 					read_be_u32(checksum_payload, 0U) != pager_record_checksum(source, nonce))
 					return false;
@@ -2192,9 +2196,8 @@ namespace cxxlens::sdk
 			{
 				const auto& callback = state.callbacks[main_writes[index]];
 				const auto page = state.device_profile.journal_record_pages[index];
-				if (callback.offset !=
-						static_cast<std::int64_t>((static_cast<std::size_t>(page) - 1U) *
-												  page_size) ||
+				if (std::cmp_not_equal(callback.offset,
+									   (static_cast<std::size_t>(page) - 1U) * page_size) ||
 					callback.byte_count != page_size)
 					return false;
 			}
@@ -2409,6 +2412,7 @@ namespace cxxlens::sdk
 				validate_exact_empty_callback_grammar_details(state);
 		}
 
+		// NOLINTBEGIN(bugprone-exception-escape): checked result access cannot fail.
 		[[nodiscard]] bool
 		held_main_matches_post(const exact_empty_normalization_state& state) noexcept
 		{
@@ -2436,6 +2440,7 @@ namespace cxxlens::sdk
 			return static_cast<bool>(
 				state.namespace_guard->recheck_exact_empty_normalization_epoch());
 		}
+		// NOLINTEND(bugprone-exception-escape)
 
 		result<std::shared_ptr<const sqlite_exact_empty_normalization_completed_edge>>
 		default_connection_observation::finish_exact_empty_normalization_profile()
@@ -5466,7 +5471,7 @@ namespace cxxlens::sdk
 		{
 			if (input == nullptr || count <= 0 || offset < 0 ||
 				state.device_profile.page_size == 0U ||
-				count != static_cast<int>(state.device_profile.page_size) ||
+				std::cmp_not_equal(count, state.device_profile.page_size) ||
 				static_cast<std::uint64_t>(offset) % state.device_profile.page_size != 0U)
 				return false;
 			const auto page =
@@ -5521,6 +5526,7 @@ namespace cxxlens::sdk
 			}
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): SQLite write ABI order.
 		void apply_exact_empty_journal_write(
 			const std::shared_ptr<exact_empty_normalization_state>& state,
 			const void* input,
@@ -5551,6 +5557,7 @@ namespace cxxlens::sdk
 				fail_exact_empty_state(state);
 			}
 		}
+		// NOLINTEND(bugprone-easily-swappable-parameters)
 
 		void mark_source_shm_terminal_failure(forwarding_file& file) noexcept
 		{
@@ -10608,6 +10615,7 @@ namespace cxxlens::sdk
 			return found;
 		}
 
+		// NOLINTNEXTLINE(bugprone-exception-escape): checked result access cannot fail.
 		[[nodiscard]] bool post_close_census_matches_edge(
 			const sqlite_backend_namespace_census& census,
 			const sqlite_exact_empty_normalization_completed_edge& edge) noexcept

@@ -415,6 +415,7 @@ namespace cxxlens::sdk
 			return checksum;
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): journal wire-field order.
 		[[nodiscard]] bool rebuild_pre_from_journal(const std::span<const std::byte> journal,
 													const std::size_t record_offset,
 													const std::uint32_t nonce,
@@ -456,6 +457,7 @@ namespace cxxlens::sdk
 				return false;
 			}
 		}
+		// NOLINTEND(bugprone-easily-swappable-parameters)
 
 		struct journal_profile
 		{
@@ -560,7 +562,7 @@ namespace cxxlens::sdk
 				if (sector_size == maximum_page_size)
 					break;
 			}
-			return {std::move(admitted), false};
+			return {admitted, false};
 		}
 
 		[[nodiscard]] std::optional<journal_profile>
@@ -677,9 +679,9 @@ namespace cxxlens::sdk
 			for (const auto& value : source_census.entries)
 			{
 				const auto index = role_index(value.role);
-				if (!index || entries[*index] != nullptr)
+				if (!index || entries.at(*index) != nullptr)
 					return rejected(failure::invalid_input);
-				entries[*index] = &value;
+				entries.at(*index) = &value;
 			}
 			if (std::ranges::any_of(entries,
 									[](const entry* value)

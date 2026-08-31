@@ -30,16 +30,20 @@ namespace cxxlens::protocol_v2
 			return {std::string{code}, std::string{field}, std::string{detail}};
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): wire value-width order.
 		void append_be(bytes& output, const std::uint64_t value, const std::size_t width)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			for (std::size_t shift = width * 8U; shift > 0U; shift -= 8U)
 				output.push_back(static_cast<byte>(value >> (shift - 8U)));
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): wire offset-width order.
 		[[nodiscard]] std::uint64_t read_be(const std::span<const byte> input,
 											const std::size_t offset,
 											const std::size_t width) noexcept
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			std::uint64_t value{};
 			for (std::size_t index{}; index < width; ++index)
 				value = (value << 8U) | std::to_integer<std::uint64_t>(input[offset + index]);
@@ -73,6 +77,7 @@ namespace cxxlens::protocol_v2
 			return {};
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): fixed protocol header order.
 		[[nodiscard]] sdk::result<void> validate_header_values(const std::uint16_t major,
 															   const std::uint16_t minor,
 															   const std::uint16_t type_id,
@@ -81,6 +86,7 @@ namespace cxxlens::protocol_v2
 															   const std::size_t payload_size,
 															   const limits bound)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			if (auto valid = validate_limits(bound); !valid)
 				return valid;
 			if (major != protocol_major)
@@ -232,10 +238,12 @@ namespace cxxlens::protocol_v2
 			output.insert(output.end(), digest.begin(), digest.end());
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): actual-expected contract order.
 		[[nodiscard]] sdk::result<void> check_digest(const std::span<const byte> actual,
 													 const std::span<const byte> expected,
 													 const std::string_view field)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			const auto digest = sha256(actual);
 			if (expected.size() != digest.size() || !std::ranges::equal(digest, expected))
 				return sdk::unexpected(failure(field, "mismatch", "protocol-v2.digest-mismatch"));
@@ -311,7 +319,8 @@ namespace cxxlens::protocol_v2
 	{
 		for (const auto item : input)
 		{
-			buffer_[buffer_size_++] = std::to_integer<std::uint8_t>(item);
+			buffer_.at(buffer_size_) = std::to_integer<std::uint8_t>(item);
+			++buffer_size_;
 			if (buffer_size_ == buffer_.size())
 			{
 				transform(buffer_.data());
@@ -323,7 +332,8 @@ namespace cxxlens::protocol_v2
 
 	digest32 sha256_workspace::finish() noexcept
 	{
-		buffer_[buffer_size_++] = 0x80U;
+		buffer_.at(buffer_size_) = 0x80U;
+		++buffer_size_;
 		if (buffer_size_ > 56U)
 		{
 			std::fill(
@@ -334,16 +344,16 @@ namespace cxxlens::protocol_v2
 		std::fill(
 			buffer_.begin() + static_cast<std::ptrdiff_t>(buffer_size_), buffer_.begin() + 56, 0U);
 		for (std::size_t index{}; index < 8U; ++index)
-			buffer_[56U + index] = static_cast<std::uint8_t>(bit_length_ >> (56U - index * 8U));
+			buffer_.at(56U + index) = static_cast<std::uint8_t>(bit_length_ >> (56U - index * 8U));
 		transform(buffer_.data());
 
 		digest32 output{};
 		for (std::size_t index{}; index < state_.size(); ++index)
 		{
-			output[index * 4U] = static_cast<byte>(state_[index] >> 24U);
-			output[index * 4U + 1U] = static_cast<byte>(state_[index] >> 16U);
-			output[index * 4U + 2U] = static_cast<byte>(state_[index] >> 8U);
-			output[index * 4U + 3U] = static_cast<byte>(state_[index]);
+			output.at(index * 4U) = static_cast<byte>(state_.at(index) >> 24U);
+			output.at(index * 4U + 1U) = static_cast<byte>(state_.at(index) >> 16U);
+			output.at(index * 4U + 2U) = static_cast<byte>(state_.at(index) >> 8U);
+			output.at(index * 4U + 3U) = static_cast<byte>(state_.at(index));
 		}
 		return output;
 	}
@@ -351,17 +361,17 @@ namespace cxxlens::protocol_v2
 	void sha256_workspace::transform(const std::uint8_t* input) noexcept
 	{
 		for (std::size_t index{}; index < 16U; ++index)
-			schedule_[index] = (static_cast<std::uint32_t>(input[index * 4U]) << 24U) |
+			schedule_.at(index) = (static_cast<std::uint32_t>(input[index * 4U]) << 24U) |
 				(static_cast<std::uint32_t>(input[index * 4U + 1U]) << 16U) |
 				(static_cast<std::uint32_t>(input[index * 4U + 2U]) << 8U) |
 				static_cast<std::uint32_t>(input[index * 4U + 3U]);
 		for (std::size_t index = 16U; index < schedule_.size(); ++index)
 		{
-			const auto s0 = rotate_right(schedule_[index - 15U], 7U) ^
-				rotate_right(schedule_[index - 15U], 18U) ^ (schedule_[index - 15U] >> 3U);
-			const auto s1 = rotate_right(schedule_[index - 2U], 17U) ^
-				rotate_right(schedule_[index - 2U], 19U) ^ (schedule_[index - 2U] >> 10U);
-			schedule_[index] = schedule_[index - 16U] + s0 + schedule_[index - 7U] + s1;
+			const auto s0 = rotate_right(schedule_.at(index - 15U), 7U) ^
+				rotate_right(schedule_.at(index - 15U), 18U) ^ (schedule_.at(index - 15U) >> 3U);
+			const auto s1 = rotate_right(schedule_.at(index - 2U), 17U) ^
+				rotate_right(schedule_.at(index - 2U), 19U) ^ (schedule_.at(index - 2U) >> 10U);
+			schedule_.at(index) = schedule_.at(index - 16U) + s0 + schedule_.at(index - 7U) + s1;
 		}
 		working_ = state_;
 		for (std::size_t index{}; index < sha256_constants.size(); ++index)
@@ -370,7 +380,7 @@ namespace cxxlens::protocol_v2
 				rotate_right(working_[4], 25U);
 			const auto choose = (working_[4] & working_[5]) ^ (~working_[4] & working_[6]);
 			const auto temp1 =
-				working_[7] + s1 + choose + sha256_constants[index] + schedule_[index];
+				working_[7] + s1 + choose + sha256_constants.at(index) + schedule_.at(index);
 			const auto s0 = rotate_right(working_[0], 2U) ^ rotate_right(working_[0], 13U) ^
 				rotate_right(working_[0], 22U);
 			const auto majority = (working_[0] & working_[1]) ^ (working_[0] & working_[2]) ^
@@ -386,7 +396,7 @@ namespace cxxlens::protocol_v2
 			working_[0] = temp1 + temp2;
 		}
 		for (std::size_t index{}; index < state_.size(); ++index)
-			state_[index] += working_[index];
+			state_.at(index) += working_.at(index);
 	}
 
 	digest32 sha256(const std::span<const byte> input) noexcept
@@ -406,6 +416,7 @@ namespace cxxlens::protocol_v2
 		return std::equal(left.begin(), left.end(), right.begin(), right.end());
 	}
 
+	// NOLINTBEGIN(bugprone-easily-swappable-parameters): fixed frame size order.
 	prepared_frame_decode::prepared_frame_decode(frame header,
 												 const std::size_t control_bytes,
 												 const std::size_t payload_bytes,
@@ -413,6 +424,7 @@ namespace cxxlens::protocol_v2
 		: header_{std::move(header)}, control_bytes_{control_bytes}, payload_bytes_{payload_bytes},
 		  bound_{bound}
 	{
+		// NOLINTEND(bugprone-easily-swappable-parameters)
 	}
 
 	prepared_frame_decode::prepared_frame_decode(prepared_frame_decode&& other) noexcept

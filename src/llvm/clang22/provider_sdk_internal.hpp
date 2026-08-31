@@ -23,7 +23,7 @@ namespace cxxlens::provider::clang22::detail
 							  const std::string& compiler_filename,
 							  const std::string& tool_name,
 							  const std::vector<std::string>& compiler_arguments,
-							  llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> filesystem,
+							  llvm::vfs::FileSystem& filesystem,
 							  translation_unit_callback callback);
 #endif
 } // namespace cxxlens::provider::clang22::detail

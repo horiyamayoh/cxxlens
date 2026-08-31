@@ -171,9 +171,13 @@ namespace cxxlens::detail::clang22
 		if (!channel)
 			return reject("fd-channel");
 		ingress_authority authority{*ingress};
-		source_closure_receiver_options options{
-			ingress->closure_binding, &authority, ingress->stream_id, 16'384U, {}};
-		auto received = receive_source_closure_frames(*channel, *channel, std::move(options));
+		source_closure_receiver_options options{ingress->closure_binding,
+												&authority,
+												ingress->stream_id,
+												16'384U,
+												{},
+												std::stop_token{}};
+		auto received = receive_source_closure_frames(*channel, *channel, options);
 		if (!received || received->credentials.transfer_digest != *transfer)
 			return reject("receive-closure");
 
@@ -217,8 +221,7 @@ namespace cxxlens::detail::clang22
 					 static_cast<std::size_t>(output_authority.maximum_rows);
 				 options.limits.maximum_output_bytes =
 					 static_cast<std::size_t>(output_authority.maximum_output_bytes);
-				 auto output_value =
-					 normalize_provider_worker_v4_output(std::move(*observed), std::move(options));
+				 auto output_value = normalize_provider_worker_v4_output(*observed, options);
 				 if (!output_value)
 					 return sdk::unexpected(std::move(output_value.error()));
 				 normalized.emplace(std::move(*output_value));
@@ -263,8 +266,8 @@ namespace cxxlens::detail::clang22
 												output_authority.dependency_groups};
 		for (std::size_t index{}; index < normalized->batches.size(); ++index)
 		{
-			auto relation = callback_context.relation(descriptors[index]);
-			const auto& batch = normalized->batches[index];
+			auto relation = callback_context.relation(descriptors.at(index));
+			const auto& batch = normalized->batches.at(index);
 			if (auto begun = relation.begin(
 					batch.dependency_group_id, batch.atomic_output_group_id, batch.batch_id);
 				!begun)

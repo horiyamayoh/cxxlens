@@ -120,7 +120,7 @@ namespace cxxlens::detail::clang22::materialization
 		}
 
 		[[nodiscard]] sdk::result<void> sync_sidecar_parent(const materialization_effect_root& root,
-															const std::string_view path);
+															std::string_view path);
 
 		[[nodiscard]] sdk::result<void>
 		compare_sidecar_to_spool(const materialization_owned_fd& file,

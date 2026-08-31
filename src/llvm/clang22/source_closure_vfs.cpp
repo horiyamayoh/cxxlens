@@ -48,10 +48,12 @@ namespace cxxlens::detail::clang22
 			return {};
 		}
 
+		// NOLINTBEGIN(bugprone-easily-swappable-parameters): base-request path order.
 		[[nodiscard]] sdk::result<std::vector<std::string>>
 		normalize_relative_segments(const std::string_view base_directory,
 									const std::string_view requested)
 		{
+			// NOLINTEND(bugprone-easily-swappable-parameters)
 			std::vector<std::string> segments;
 			auto append = [&segments](const std::string_view path,
 									  const bool allow_parent) -> sdk::result<void>
@@ -190,10 +192,12 @@ namespace cxxlens::detail::clang22
 		return open_logical(std::move(*logical));
 	}
 
+	// NOLINTBEGIN(bugprone-easily-swappable-parameters): include-parent path order.
 	sdk::result<source_closure_vfs_file>
 	source_closure_vfs::open_relative(const std::string_view include_path,
 									  const std::string_view including_logical_path) const
 	{
+		// NOLINTEND(bugprone-easily-swappable-parameters)
 		if (auto valid = validate_include_spelling(include_path); !valid)
 			return sdk::unexpected(std::move(valid.error()));
 		auto including_relative = source_closure_relative_path(including_logical_path);

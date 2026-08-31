@@ -46,7 +46,7 @@ namespace cxxlens::protocol_v2::cbor
 									 array,
 									 map>;
 
-		storage data{};
+		storage data;
 
 		value() = default;
 		value(std::nullptr_t) : data{std::monostate{}} {}

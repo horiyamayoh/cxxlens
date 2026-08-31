@@ -1,10 +1,12 @@
 #include <algorithm>
+#include <exception>
 #include <iostream>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "doctor_product.hpp"
+#include "sdk_doctor_entry.hpp"
 
 namespace
 {
@@ -22,7 +24,9 @@ namespace
 		std::cerr << '\n';
 	}
 
-	[[nodiscard]] bool print_document(const std::string_view format, const std::string_view json)
+	[[nodiscard]] bool
+	print_document(const std::string_view format, // NOLINT(bugprone-easily-swappable-parameters)
+				   const std::string_view json)
 	{
 		if (format == "json")
 			std::cout << json << '\n';
@@ -59,7 +63,7 @@ namespace
 				format = argv[index];
 				continue;
 			}
-			if (argument.rfind("--format=", 0U) == 0U)
+			if (argument.starts_with("--format="))
 			{
 				if (format_seen)
 				{
@@ -156,7 +160,7 @@ namespace
 					return 2;
 				continue;
 			}
-			if (argument.rfind("--project=", 0U) == 0U)
+			if (argument.starts_with("--project="))
 			{
 				if (project_seen)
 				{
@@ -179,7 +183,7 @@ namespace
 					return 2;
 				continue;
 			}
-			if (argument.rfind("--use-case=", 0U) == 0U)
+			if (argument.starts_with("--use-case="))
 			{
 				if (use_case_seen)
 				{
@@ -206,7 +210,7 @@ namespace
 				format = argv[index];
 				continue;
 			}
-			if (argument.rfind("--format=", 0U) == 0U)
+			if (argument.starts_with("--format="))
 			{
 				if (format_seen)
 				{
@@ -313,8 +317,20 @@ int cxxlens_sdk_doctor_main(int argc, char** argv)
 }
 
 #ifndef CXXLENS_SDK_DOCTOR_NO_MAIN
-int main(int argc, char** argv)
+int main(int argc, char** argv) noexcept
 {
-	return cxxlens_sdk_doctor_main(argc, argv);
+	try
+	{
+		return cxxlens_sdk_doctor_main(argc, argv);
+	}
+	catch (const std::exception& error)
+	{
+		std::cerr << "cxxlens-sdk-doctor: unexpected failure: " << error.what() << '\n';
+	}
+	catch (...)
+	{
+		std::cerr << "cxxlens-sdk-doctor: unexpected failure\n";
+	}
+	return 2;
 }
 #endif

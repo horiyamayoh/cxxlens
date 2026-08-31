@@ -93,11 +93,9 @@ namespace cxxlens::detail::clang22
 											  std::size_t& total) noexcept
 		{
 			std::size_t framed{};
-			if (!checked_add(decimal_digits(value_size), 1U, maximum, framed) ||
-				!checked_add(framed, value_size, maximum, framed) ||
-				!checked_add(total, framed, maximum, total))
-				return false;
-			return true;
+			return checked_add(decimal_digits(value_size), 1U, maximum, framed) &&
+				checked_add(framed, value_size, maximum, framed) &&
+				checked_add(total, framed, maximum, total);
 		}
 
 		[[maybe_unused]] [[nodiscard]] std::optional<std::size_t>
@@ -360,7 +358,7 @@ namespace cxxlens::detail::clang22
 			std::size_t depth_{};
 		};
 
-		constexpr std::size_t maximum_clang_text_bytes{64U * 1024U};
+		constexpr std::size_t maximum_clang_text_bytes{std::size_t{64U} * 1024U};
 		constexpr std::size_t maximum_derived_identity_bytes{128U};
 
 		[[maybe_unused]] [[nodiscard]] sdk::result<void>
@@ -639,7 +637,7 @@ namespace cxxlens::detail::clang22
 			{
 				std::array<std::uint8_t, 8U> bytes{};
 				for (std::size_t index{}; index < bytes.size(); ++index)
-					bytes[index] = static_cast<std::uint8_t>(value >> ((7U - index) * 8U));
+					bytes.at(index) = static_cast<std::uint8_t>(value >> ((7U - index) * 8U));
 				hash_.update(bytes);
 			}
 
@@ -962,7 +960,7 @@ namespace cxxlens::detail::clang22
 				return std::move(failure_);
 			}
 
-			bool TraverseType(clang::QualType type, const bool traverse_qualifier = true)
+			bool TraverseType(clang::QualType type, const bool TraverseQualifier = true)
 			{
 				if (type.isNull())
 					return true;
@@ -984,7 +982,7 @@ namespace cxxlens::detail::clang22
 							if (!markers(static_cast<std::size_t>(array->getSize().getBitWidth()) +
 										 1U))
 								return false;
-						return base::TraverseType(type, traverse_qualifier);
+						return base::TraverseType(type, TraverseQualifier);
 					});
 			}
 
@@ -1087,11 +1085,11 @@ namespace cxxlens::detail::clang22
 			[[nodiscard]] bool enter(const clang::Decl& declaration)
 			{
 				for (std::size_t index = 0U; index < active_size_; ++index)
-					if (active_[index] == &declaration)
+					if (active_.at(index) == &declaration)
 						return false;
 				if (active_size_ == active_.size())
 					return false;
-				active_[active_size_++] = &declaration;
+				active_.at(active_size_++) = &declaration;
 				return true;
 			}
 
@@ -1489,14 +1487,20 @@ namespace cxxlens::detail::clang22
 			return source.str();
 		}
 
+		struct declaration_identity_authority
+		{
+			std::string_view toolchain_digest;
+			std::string_view source_snapshot;
+			std::string_view file;
+		};
+
 		[[nodiscard]] sdk::result<std::pair<std::string, std::string>>
 		declaration_identity_for(provider::clang22::borrowed_translation_unit& unit,
 								 observer_budget& budget,
 								 const clang::FunctionDecl& declaration,
-								 const std::string_view toolchain_digest,
-								 const std::string_view source_snapshot,
-								 const std::string_view file)
+								 const declaration_identity_authority authority)
 		{
+			const auto [toolchain_digest, source_snapshot, file] = authority;
 			const auto* canonical = declaration.getCanonicalDecl();
 			const auto* anchor_declaration = canonical;
 			if (!unit.source_manager().isWrittenInMainFile(canonical->getLocation()))
@@ -1661,6 +1665,13 @@ namespace cxxlens::detail::clang22
 			return direct->isOverloadedOperator() ? "operator" : "direct_member";
 		}
 
+		struct visitor_source_context
+		{
+			std::string_view source_snapshot;
+			std::string_view source_file;
+			std::string_view toolchain_digest;
+		};
+
 		class visitor final : public clang::RecursiveASTVisitor<visitor>
 		{
 			using base = clang::RecursiveASTVisitor<visitor>;
@@ -1675,12 +1686,10 @@ namespace cxxlens::detail::clang22
 			visitor(provider::clang22::borrowed_translation_unit& unit,
 					provider_worker_v4_ast_observation_batch& output,
 					observer_budget& budget,
-					std::string_view source_snapshot,
-					std::string_view source_file,
-					std::string_view toolchain_digest)
+					const visitor_source_context source)
 				: unit_{&unit}, output_{&output}, budget_{&budget},
-				  source_snapshot_{source_snapshot}, source_file_{source_file},
-				  toolchain_digest_{toolchain_digest}
+				  source_snapshot_{source.source_snapshot}, source_file_{source.source_file},
+				  toolchain_digest_{source.toolchain_digest}
 			{
 			}
 
@@ -1695,25 +1704,25 @@ namespace cxxlens::detail::clang22
 					});
 			}
 
-			bool TraverseType(clang::QualType type, const bool traverse_qualifier = true)
+			bool TraverseType(clang::QualType type, const bool TraverseQualifier = true)
 			{
 				if (type.isNull())
 					return true;
 				return with_depth(
 					[&]()
 					{
-						return base::TraverseType(type, traverse_qualifier);
+						return base::TraverseType(type, TraverseQualifier);
 					});
 			}
 
-			bool TraverseTypeLoc(clang::TypeLoc type, const bool traverse_qualifier = true)
+			bool TraverseTypeLoc(clang::TypeLoc type, const bool TraverseQualifier = true)
 			{
 				if (type.isNull())
 					return true;
 				return with_depth(
 					[&]()
 					{
-						return base::TraverseTypeLoc(type, traverse_qualifier);
+						return base::TraverseTypeLoc(type, TraverseQualifier);
 					});
 			}
 
@@ -1800,12 +1809,11 @@ namespace cxxlens::detail::clang22
 					!accept(budget_->preflight_observations(2U, output_->compile_unit.size())))
 					return false;
 				auto previous = std::move(current_function_);
-				auto identity = declaration_identity_for(*unit_,
-														 *budget_,
-														 *declaration,
-														 toolchain_digest_,
-														 source_snapshot_,
-														 source_file_);
+				auto identity =
+					declaration_identity_for(*unit_,
+											 *budget_,
+											 *declaration,
+											 {toolchain_digest_, source_snapshot_, source_file_});
 				if (identity)
 				{
 					if (!accept(
@@ -1840,12 +1848,11 @@ namespace cxxlens::detail::clang22
 				type.kind = provider_worker_v4_ast_observation_kind::type;
 				if (!begin_observation(entity) || !begin_observation(type))
 					return false;
-				auto identity = declaration_identity_for(*unit_,
-														 *budget_,
-														 *declaration,
-														 toolchain_digest_,
-														 source_snapshot_,
-														 source_file_);
+				auto identity =
+					declaration_identity_for(*unit_,
+											 *budget_,
+											 *declaration,
+											 {toolchain_digest_, source_snapshot_, source_file_});
 				if (!identity)
 				{
 					if (identity.error().code == "provider-worker-v4.ast-resource-limit")
@@ -1890,7 +1897,7 @@ namespace cxxlens::detail::clang22
 					!set_limitation(entity, "identity-confidence:structural-fallback"))
 					return false;
 				if (!attach_source(entity, declaration->getSourceRange(), "declaration") ||
-					!insert(std::move(entity)))
+					!insert(entity))
 					return false;
 
 				auto canonical_type = bounded_canonical_type(*budget_, declaration->getType());
@@ -1909,7 +1916,7 @@ namespace cxxlens::detail::clang22
 					return false;
 				}
 				if (!put_payload_preflighted(type, "type.canonical", std::move(*canonical_type)) ||
-					!set_semantic_key(type, std::move(*type_identity)) || !insert(std::move(type)))
+					!set_semantic_key(type, std::move(*type_identity)) || !insert(type))
 					return false;
 				return true;
 			}
@@ -1931,12 +1938,11 @@ namespace cxxlens::detail::clang22
 					const auto* declaration = callee->getDefinition();
 					if (declaration == nullptr)
 						declaration = callee->getCanonicalDecl();
-					auto identity = declaration_identity_for(*unit_,
-															 *budget_,
-															 *declaration,
-															 toolchain_digest_,
-															 source_snapshot_,
-															 source_file_);
+					auto identity = declaration_identity_for(
+						*unit_,
+						*budget_,
+						*declaration,
+						{toolchain_digest_, source_snapshot_, source_file_});
 					if (identity)
 					{
 						const bool exact_identity = identity->second == "exact-usr";
@@ -2064,7 +2070,7 @@ namespace cxxlens::detail::clang22
 					set_failure(std::move(semantic_key.error()));
 					return false;
 				}
-				return set_semantic_key(call, std::move(*semantic_key)) && insert(std::move(call));
+				return set_semantic_key(call, std::move(*semantic_key)) && insert(call);
 			}
 
 			[[nodiscard]] const std::optional<sdk::error>& error() const noexcept
@@ -2380,7 +2386,7 @@ namespace cxxlens::detail::clang22
 				return true;
 			}
 
-			[[nodiscard]] bool insert(provider_worker_v4_ast_observation observation)
+			[[nodiscard]] bool insert(const provider_worker_v4_ast_observation& observation)
 			{
 				const auto expected_size =
 					canonical_size(observation, budget_->limits().maximum_logical_bytes);
@@ -2401,7 +2407,7 @@ namespace cxxlens::detail::clang22
 										"size-estimator-mismatch"));
 					return false;
 				}
-				observations_.try_emplace(std::move(key), std::move(observation));
+				observations_.try_emplace(std::move(key), observation);
 				return true;
 			}
 
@@ -2628,12 +2634,11 @@ namespace cxxlens::detail::clang22
 			};
 
 #if defined(CXXLENS_HAS_CLANG22) && CXXLENS_HAS_CLANG22
-			visitor extractor{unit,
-							  output,
-							  budget,
-							  output.source_snapshot,
-							  output.source_file,
-							  metadata.input.toolchain_digest};
+			visitor extractor{
+				unit,
+				output,
+				budget,
+				{output.source_snapshot, output.source_file, metadata.input.toolchain_digest}};
 			const bool traversed = extractor.TraverseDecl(unit.ast().getTranslationUnitDecl());
 			if (extractor.error())
 				return sdk::unexpected(*extractor.error());

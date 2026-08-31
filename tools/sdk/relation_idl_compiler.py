@@ -15,7 +15,25 @@ import jsonschema
 import yaml
 
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
+SCRIPT_PATH = pathlib.Path(__file__).resolve()
+
+
+def default_layout() -> tuple[pathlib.Path, pathlib.Path]:
+    """Return the registry and generated-header roots for source or install use."""
+    source_root = SCRIPT_PATH.parents[2]
+    source_registry = source_root / "schemas/cxxlens_ng_relation_registry.yaml"
+    if source_registry.is_file():
+        return source_registry, source_root / "include/cxxlens/relations"
+
+    install_prefix = SCRIPT_PATH.parent.parent
+    return (
+        install_prefix
+        / "share/cxxlens/schemas/cxxlens_ng_relation_registry.yaml",
+        install_prefix / "include/cxxlens/relations",
+    )
+
+
+DEFAULT_REGISTRY, DEFAULT_OUTPUT_DIR = default_layout()
 
 
 def canonical_relation(relation: dict[str, object]) -> dict[str, object]:
@@ -275,11 +293,10 @@ def generated_filename(relation: dict[str, object]) -> str:
 def load_registry(registry_path: pathlib.Path) -> dict[str, object]:
     """Load and validate the relation registry before any generation occurs."""
     document = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
-    schema = yaml.safe_load(
-        (ROOT / "schemas/cxxlens_ng_relation_registry.schema.yaml").read_text(
-            encoding="utf-8"
-        )
+    schema_path = registry_path.with_name(
+        "cxxlens_ng_relation_registry.schema.yaml"
     )
+    schema = yaml.safe_load(schema_path.read_text(encoding="utf-8"))
     try:
         jsonschema.Draft202012Validator(schema).validate(document)
     except jsonschema.ValidationError as error:
@@ -348,7 +365,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument(
         "--registry",
         type=pathlib.Path,
-        default=ROOT / "schemas/cxxlens_ng_relation_registry.yaml",
+        default=DEFAULT_REGISTRY,
     )
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--relation")
@@ -371,7 +388,7 @@ def main() -> int:
             if args.output is not None:
                 print("--output is only valid with --relation", file=sys.stderr)
                 return 2
-            output_dir = args.output_dir or ROOT / "include/cxxlens/relations"
+            output_dir = args.output_dir or DEFAULT_OUTPUT_DIR
             relations = generated_relations(document)
             if args.check:
                 diagnostics = check_generated_headers(relations, output_dir)
