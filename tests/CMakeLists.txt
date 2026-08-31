@@ -879,21 +879,6 @@ set_tests_properties(
     "unit;sdk;provider;process;sandbox;security;budget;cancellation;slow"
     RUN_SERIAL TRUE)
 
-cxxlens_add_test_executable(
-  cxxlens-unit-sdk-provider-expected-output-validator
-  unit/sdk/provider_expected_output_validator_test.cpp)
-target_link_libraries(
-  cxxlens-unit-sdk-provider-expected-output-validator
-  PRIVATE cxxlens_provider_expected_output_validator_internal)
-target_include_directories(cxxlens-unit-sdk-provider-expected-output-validator
-                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
-add_test(NAME unit.sdk-provider-expected-output-validator
-         COMMAND cxxlens-unit-sdk-provider-expected-output-validator)
-set_tests_properties(
-  unit.sdk-provider-expected-output-validator
-  PROPERTIES
-    LABELS
-    "unit;sdk;provider;protocol;expected-output;validation;security;bounded")
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
    AND CXXLENS_TEST_HAS_LINUX_GLIBC_PIDFD_WAITID)
   # The regression exercises several fork/watcher/cleanup sequences whose own
@@ -1137,20 +1122,6 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   )
 
   cxxlens_add_test_executable(
-    cxxlens-clang22-materialization-store-projection
-    adapter/clang22/materialization_store_projection_test.cpp)
-  target_link_libraries(cxxlens-clang22-materialization-store-projection
-                        PRIVATE cxxlens_clang22_materializer_bounded_support)
-  add_test(NAME adapter.clang22-materialization-store-projection
-           COMMAND cxxlens-clang22-materialization-store-projection)
-  set_tests_properties(
-    adapter.clang22-materialization-store-projection
-    PROPERTIES
-      LABELS
-      "adapter;provider;clang22;materialization;store;projection;bounded;security"
-  )
-
-  cxxlens_add_test_executable(
     cxxlens-clang22-materialization-store-candidate-bridge
     adapter/clang22/materialization_store_candidate_bridge_test.cpp)
   target_link_libraries(cxxlens-clang22-materialization-store-candidate-bridge
@@ -1259,37 +1230,6 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     PROPERTIES
       LABELS
       "adapter;provider;clang22;materialization;claim;task;v4;store;positive;security"
-  )
-
-  cxxlens_add_test_executable(
-    cxxlens-clang22-materialization-report-v2-2-builder
-    adapter/clang22/materialization_report2_2_builder_test.cpp)
-  target_link_libraries(cxxlens-clang22-materialization-report-v2-2-builder
-                        PRIVATE cxxlens_clang22_materializer_v4_coordinator)
-  target_include_directories(cxxlens-clang22-materialization-report-v2-2-builder
-                             PRIVATE "${PROJECT_SOURCE_DIR}/src")
-  add_test(NAME adapter.clang22-materialization-report-v2-2-builder
-           COMMAND cxxlens-clang22-materialization-report-v2-2-builder)
-  set_tests_properties(
-    adapter.clang22-materialization-report-v2-2-builder
-    PROPERTIES
-      LABELS
-      "adapter;provider;clang22;materialization;report;v2.2;bounded;security")
-
-  cxxlens_add_test_executable(
-    cxxlens-clang22-materialization-v4-coordinator
-    adapter/clang22/materialization_v4_coordinator_test.cpp)
-  target_link_libraries(cxxlens-clang22-materialization-v4-coordinator
-                        PRIVATE cxxlens_clang22_materializer_v4_coordinator)
-  target_include_directories(cxxlens-clang22-materialization-v4-coordinator
-                             PRIVATE "${PROJECT_SOURCE_DIR}/src")
-  add_test(NAME adapter.clang22-materialization-v4-coordinator
-           COMMAND cxxlens-clang22-materialization-v4-coordinator)
-  set_tests_properties(
-    adapter.clang22-materialization-v4-coordinator
-    PROPERTIES
-      LABELS
-      "adapter;provider;clang22;materialization;coordinator;task;v4;bounded;security"
   )
 
 endif()
@@ -1500,57 +1440,6 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     PROPERTIES LABELS
                "adapter;provider;clang22;source-closure;task;v4;security")
 
-  cxxlens_add_test_executable(
-    cxxlens-clang22-source-closure-task-v4-worker
-    adapter/clang22/source_closure_task_v4_worker_test.cpp)
-  target_link_libraries(cxxlens-clang22-source-closure-task-v4-worker
-                        PRIVATE cxxlens_clang22_worker_core)
-  if(CXXLENS_BUILD_SHARED)
-    target_sources(cxxlens-clang22-source-closure-task-v4-worker
-                   PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
-  endif()
-  if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG22_LIBRARY_DIRS)
-    # The positive worker path must invoke the exact packaged compiler selected
-    # by the adapter, with the same admitted root and resource directory as the
-    # native source-closure fixture. Keep the test bounded to that package; it
-    # must never silently fall back to a host clang++.
-    list(GET CXXLENS_CLANG22_LIBRARY_DIRS 0 _cxxlens_worker_test_lib_dir)
-    get_filename_component(_cxxlens_worker_test_llvm_root
-                           "${_cxxlens_worker_test_lib_dir}" DIRECTORY)
-    find_program(
-      _cxxlens_worker_test_clangxx
-      NAMES clang++-22 clang++
-      PATHS "${_cxxlens_worker_test_llvm_root}/bin"
-      NO_DEFAULT_PATH NO_CACHE)
-    if(_cxxlens_worker_test_clangxx)
-      execute_process(
-        COMMAND "${_cxxlens_worker_test_clangxx}" -print-resource-dir
-        OUTPUT_VARIABLE _cxxlens_worker_test_resource_dir
-        OUTPUT_STRIP_TRAILING_WHITESPACE)
-      target_include_directories(
-        cxxlens-clang22-source-closure-task-v4-worker SYSTEM
-        PRIVATE "${_cxxlens_worker_test_llvm_root}/include")
-      target_compile_definitions(
-        cxxlens-clang22-source-closure-task-v4-worker
-        PRIVATE
-          CXXLENS_TEST_CLANG22_ROOT="${_cxxlens_worker_test_llvm_root}"
-          CXXLENS_TEST_CLANGXX22_PATH="${_cxxlens_worker_test_clangxx}"
-          CXXLENS_TEST_CLANG22_RESOURCE_DIR="${_cxxlens_worker_test_resource_dir}"
-      )
-    endif()
-    unset(_cxxlens_worker_test_lib_dir)
-    unset(_cxxlens_worker_test_llvm_root)
-    unset(_cxxlens_worker_test_clangxx)
-    unset(_cxxlens_worker_test_resource_dir)
-  endif()
-  add_test(NAME adapter.clang22-source-closure-task-v4-worker
-           COMMAND cxxlens-clang22-source-closure-task-v4-worker)
-  set_tests_properties(
-    adapter.clang22-source-closure-task-v4-worker
-    PROPERTIES LABELS
-               "adapter;provider;clang22;source-closure;task;v4;worker;security"
-  )
-
   cxxlens_add_test_executable(cxxlens-clang22-provider-worker-v4
                               adapter/clang22/provider_worker_v4_test.cpp)
   target_link_libraries(cxxlens-clang22-provider-worker-v4
@@ -1688,22 +1577,6 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
       LABELS
       "adapter;provider;clang22;task;v4;worker;output;normalization;security;bounded"
   )
-
-  cxxlens_add_test_executable(
-    cxxlens-clang22-provider-worker-v4-claim-bridge
-    adapter/clang22/provider_worker_v4_claim_bridge_test.cpp)
-  target_link_libraries(
-    cxxlens-clang22-provider-worker-v4-claim-bridge
-    PRIVATE cxxlens_clang22_worker_v4_claim_bridge
-            cxxlens_clang22_materializer_v4_claims
-            cxxlens_clang22_materializer_v4_ingress)
-  add_test(NAME adapter.clang22-provider-worker-v4-claim-bridge
-           COMMAND cxxlens-clang22-provider-worker-v4-claim-bridge)
-  set_tests_properties(
-    adapter.clang22-provider-worker-v4-claim-bridge
-    PROPERTIES
-      LABELS
-      "adapter;provider;clang22;materialization;worker;v4;claim;security")
 
   cxxlens_add_test_executable(cxxlens-clang22-provider-worker-channel
                               adapter/clang22/provider_worker_channel_test.cpp)
@@ -2196,7 +2069,6 @@ foreach(
   test_name IN
   ITEMS unit.sdk-provider-runtime
         unit.sdk-provider-runtime-ng1-heartbeat
-        unit.sdk-provider-expected-output-validator
         unit.sdk-provider-ng1-validation
         unit.sdk-provider-ng1-spill-port
         unit.sdk-provider-ng1-transport
@@ -2287,15 +2159,12 @@ set(_cxxlens_ng_test_binary_candidates
     cxxlens-clang22-materialization-identity
     cxxlens-clang22-materialization-io
     cxxlens-clang22-materialization-store-candidate
-    cxxlens-clang22-materialization-store-projection
     cxxlens-clang22-materialization-store-candidate-bridge
     cxxlens-clang22-materialization-request-v2-2
     cxxlens-clang22-provider-task-v4
     cxxlens-clang22-provider-worker-ingress-decoder
     cxxlens-clang22-materialization-v4-claim-binding
     cxxlens-clang22-materialization-v4-store-positive
-    cxxlens-clang22-materialization-report-v2-2-builder
-    cxxlens-clang22-materialization-v4-coordinator
     cxxlens-protocol-v2
     cxxlens-unit-sdk-provider-protocol-v2-adapter
     cxxlens-clang22-materialization-rooted-vfs
@@ -2309,12 +2178,10 @@ set(_cxxlens_ng_test_binary_candidates
     cxxlens-clang22-source-closure-spool
     cxxlens-clang22-source-closure-receiver
     cxxlens-clang22-source-closure-task-v4
-    cxxlens-clang22-source-closure-task-v4-worker
     cxxlens-clang22-source-closure-native
     cxxlens-clang22-provider-worker-v4
     cxxlens-clang22-provider-worker-v4-ast-observer
     cxxlens-clang22-provider-worker-v4-output-normalizer
-    cxxlens-clang22-provider-worker-v4-claim-bridge
     cxxlens-clang22-provider-worker-channel
     cxxlens-r2-vertical-slice
     cxxlens-provider-process-fixture
@@ -2324,7 +2191,6 @@ set(_cxxlens_ng_test_binary_candidates
     cxxlens-public-header-sdk
     cxxlens-unit-sdk
     cxxlens-unit-sdk-provider-runtime
-    cxxlens-unit-sdk-provider-expected-output-validator
     cxxlens-unit-sdk-provider-ng1-validation
     cxxlens-unit-sdk-provider-ng1-spill-port
     cxxlens-unit-sdk-provider-ng1-transport
