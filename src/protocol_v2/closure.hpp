@@ -318,7 +318,7 @@ namespace cxxlens::protocol_v2
 		{
 		}
 
-		message_type type_{};
+		message_type type_;
 		bytes control_;
 		closure_parsed_control parsed_{};
 		std::size_t resident_bytes_{};
