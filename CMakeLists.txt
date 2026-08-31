@@ -882,8 +882,6 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   # are not part of this production graph.
   add_library(
     cxxlens_clang22_materializer_ingress STATIC
-    src/llvm/clang22/materialization_io.cpp
-    src/llvm/clang22/materialization_request_v2_2.cpp
     src/llvm/clang22/installed_materializer_source_closure.cpp
     src/llvm/clang22/materializer_report_v2_2_encoder.cpp
     src/llvm/clang22/materializer_worker_bridge.cpp
@@ -893,6 +891,8 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     PUBLIC cxxlens::base cxxlens::sdk
     PRIVATE cxxlens_clang22_materialization_codecs
             cxxlens_icu_static
+            cxxlens_clang22_materialization_io_support
+            cxxlens_clang22_materialization_request_v2_2_support
             cxxlens_clang22_worker_core
             cxxlens_clang22_materializer_rooted_vfs_support
             cxxlens_bounded_store_v6_memory_internal
@@ -969,6 +969,64 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   cxxlens_enable_sanitizers(cxxlens-clang22-materialize)
   cxxlens_configure_installed_clang22_tool(cxxlens-clang22-materialize)
 endif()
+
+# Keep the product dependency direction executable at configure time.  Alias
+# names and object-library source expressions are normalized to their owning
+# targets before checking; external/system targets remain the responsibility of
+# their enclosing frontend or physical port.
+function(cxxlens_assert_direct_project_dependencies target)
+  set(_cxxlens_allowed_targets ${ARGN})
+  set(_cxxlens_direct_entries)
+  foreach(_cxxlens_property IN ITEMS LINK_LIBRARIES INTERFACE_LINK_LIBRARIES
+                                     SOURCES)
+    get_target_property(_cxxlens_property_entries "${target}"
+                        "${_cxxlens_property}")
+    if(_cxxlens_property_entries)
+      list(APPEND _cxxlens_direct_entries ${_cxxlens_property_entries})
+    endif()
+  endforeach()
+
+  foreach(_cxxlens_entry IN LISTS _cxxlens_direct_entries)
+    if(_cxxlens_entry MATCHES "^\\$<TARGET_OBJECTS:([^>]+)>$")
+      set(_cxxlens_dependency "${CMAKE_MATCH_1}")
+    elseif(TARGET "${_cxxlens_entry}")
+      set(_cxxlens_dependency "${_cxxlens_entry}")
+    else()
+      continue()
+    endif()
+
+    get_target_property(_cxxlens_aliased_target "${_cxxlens_dependency}"
+                        ALIASED_TARGET)
+    if(_cxxlens_aliased_target)
+      set(_cxxlens_dependency "${_cxxlens_aliased_target}")
+    endif()
+    if(_cxxlens_dependency MATCHES "^cxxlens($|_)"
+       AND NOT _cxxlens_dependency IN_LIST _cxxlens_allowed_targets)
+      message(
+        FATAL_ERROR
+          "Forbidden direct cxxlens dependency: ${target} -> ${_cxxlens_dependency}"
+      )
+    endif()
+  endforeach()
+endfunction()
+
+cxxlens_assert_direct_project_dependencies(cxxlens_base)
+cxxlens_assert_direct_project_dependencies(cxxlens_kernel cxxlens_base)
+cxxlens_assert_direct_project_dependencies(cxxlens_query cxxlens_kernel)
+cxxlens_assert_direct_project_dependencies(cxxlens_cpp cxxlens_query)
+cxxlens_assert_direct_project_dependencies(cxxlens_recipes cxxlens_query)
+cxxlens_assert_direct_project_dependencies(cxxlens cxxlens_base cxxlens_kernel
+                                           cxxlens_query cxxlens_cpp)
+cxxlens_assert_direct_project_dependencies(cxxlens_protocol_v2 cxxlens_base)
+cxxlens_assert_direct_project_dependencies(cxxlens_provider_protocol_v2_internal
+                                           cxxlens_protocol_v2)
+cxxlens_assert_direct_project_dependencies(cxxlens_provider_runtime_internal
+                                           cxxlens cxxlens_recipes)
+cxxlens_assert_direct_project_dependencies(
+  cxxlens_sdk cxxlens cxxlens_recipes cxxlens_protocol_v2
+  cxxlens_provider_runtime_internal cxxlens_provider_protocol_v2_internal)
+cxxlens_assert_direct_project_dependencies(cxxlens_clang22_provider_sdk
+                                           cxxlens_sdk)
 
 set(CXXLENS_COMPILED_TARGETS
     cxxlens_base
