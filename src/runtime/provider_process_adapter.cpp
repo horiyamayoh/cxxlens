@@ -2901,7 +2901,14 @@ namespace cxxlens::sdk::provider
 					while (::waitpid(child, &wait_status, 0) < 0 && errno == EINTR)
 					{
 					}
-				if (output.status == process_status::launch_failed && WIFSIGNALED(wait_status))
+				// A crashed group leader can become waitable before inherited output
+				// descriptors close. If the wall deadline initiates cleanup first, retain
+				// the established crash instead of overwriting it with that cleanup timeout.
+				// SIGKILL is sent by this cleanup path and therefore remains a timeout.
+				if ((output.status == process_status::launch_failed ||
+					 (output.status == process_status::timed_out && WIFSIGNALED(wait_status) &&
+					  WTERMSIG(wait_status) != SIGKILL)) &&
+					WIFSIGNALED(wait_status))
 				{
 					output.status = process_status::crashed;
 					output.termination_signal = WTERMSIG(wait_status);

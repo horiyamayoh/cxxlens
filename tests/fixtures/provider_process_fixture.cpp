@@ -36,6 +36,24 @@ namespace
 
 	constexpr std::string_view provider_id = "company.test.process-provider";
 
+	[[noreturn]] void terminate_with_sigsegv()
+	{
+#if defined(__linux__) && defined(__GLIBC__)
+		struct sigaction disposition{};
+		disposition.sa_handler = SIG_DFL;
+		if (::sigemptyset(&disposition.sa_mask) != 0 ||
+			::sigaction(SIGSEGV, &disposition, nullptr) != 0)
+			::_exit(EXIT_FAILURE);
+		sigset_t unblocked{};
+		if (::sigemptyset(&unblocked) != 0 || ::sigaddset(&unblocked, SIGSEGV) != 0 ||
+			::sigprocmask(SIG_UNBLOCK, &unblocked, nullptr) != 0)
+			::_exit(EXIT_FAILURE);
+#endif
+		if (::raise(SIGSEGV) != 0)
+			std::_Exit(EXIT_FAILURE);
+		std::_Exit(EXIT_FAILURE);
+	}
+
 	template <std::unsigned_integral T>
 	void append_big_endian(std::vector<std::byte>& output, const T value)
 	{
@@ -405,6 +423,26 @@ int main(const int argument_count, const char* const* arguments)
 	if (argument_count != 2)
 		return EXIT_FAILURE;
 	const std::string_view mode{arguments[1]};
+	// Crash fixtures terminate before protocol admission. Their purpose is to
+	// exercise process-terminal classification, not transcript validation, and
+	// their product wall budget must not depend on decoder or loader latency.
+	if (mode == "crash")
+		terminate_with_sigsegv();
+#if defined(__linux__) && defined(__GLIBC__)
+	if (mode == "crash-open-pipe")
+	{
+		const auto holder = ::fork();
+		if (holder < 0)
+			return EXIT_FAILURE;
+		if (holder == 0)
+		{
+			sleep_for_seconds(30U);
+			::_exit(EXIT_SUCCESS);
+		}
+		terminate_with_sigsegv();
+	}
+#endif
+
 	std::string input{std::istreambuf_iterator<char>{std::cin}, std::istreambuf_iterator<char>{}};
 	std::vector<std::byte> bytes;
 	bytes.reserve(input.size());
@@ -455,8 +493,6 @@ int main(const int argument_count, const char* const* arguments)
 		return EXIT_FAILURE;
 	const std::string task_id{validated->task.task_id};
 
-	if (mode == "crash")
-		(void)::raise(SIGSEGV);
 	if (mode == "timeout")
 		std::this_thread::sleep_for(std::chrono::seconds{5});
 

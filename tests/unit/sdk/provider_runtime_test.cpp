@@ -3266,9 +3266,27 @@ namespace
 				"raw terminal text overrode the validated report terminal state");
 
 		auto crash = runtime.execute(task(select(executable, "crash")));
-		require(crash && crash->terminal == "provider.crash" &&
-					crash->termination_signal == SIGSEGV,
-				"worker crash was not distinguished");
+		require(
+			crash && crash->terminal == "provider.crash" && crash->termination_signal == SIGSEGV,
+			std::string{"worker crash was not distinguished: "} +
+				(crash ? crash->terminal + " signal=" + std::to_string(crash->termination_signal) +
+						 " exit=" + std::to_string(crash->exit_code)
+					   : crash.error().code));
+
+#if defined(__linux__) && defined(__GLIBC__)
+		auto crash_with_open_pipe_request = task(select(executable, "crash-open-pipe"));
+		const auto crash_subprocess_budget = descendant_fixture_subprocess_budget();
+		require(crash_subprocess_budget.has_value(), "crash cleanup subprocess budget unavailable");
+		crash_with_open_pipe_request.budget.subprocesses = *crash_subprocess_budget;
+		auto crash_with_open_pipe = runtime.execute(crash_with_open_pipe_request);
+		require(crash_with_open_pipe && crash_with_open_pipe->terminal == "provider.crash" &&
+					crash_with_open_pipe->termination_signal == SIGSEGV,
+				std::string{"crashed group leader was reclassified during descendant cleanup: "} +
+					(crash_with_open_pipe ? crash_with_open_pipe->terminal +
+							 " signal=" + std::to_string(crash_with_open_pipe->termination_signal) +
+							 " exit=" + std::to_string(crash_with_open_pipe->exit_code)
+										  : crash_with_open_pipe.error().code));
+#endif
 
 		auto timeout_request = task(select(executable, "timeout"));
 		timeout_request.budget.wall_ms = 25U;
