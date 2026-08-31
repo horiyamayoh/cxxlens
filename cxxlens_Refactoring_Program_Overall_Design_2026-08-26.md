@@ -182,7 +182,7 @@ Phase 1〜3の既定budgetは`CH-0`〜`CH-2`である。`CH-3`が必要になっ
 |---|---|---:|---|
 | Clang materialization contract checker | `tools/quality/check_ng_clang22_materialization.py` | 約513 KiB | 仕様validatorが独立したshadow product化している可能性 |
 | SQLite contract checker | `tools/quality/check_ng_sqlite_store_contract.py` | 約207 KiB | 物理状態機械の検査責務が巨大 |
-| Clang Store v6 ingress | `materialization_store_v6_typed_ingress.cpp` | 約167 KiB | materialization・authority・store接続が密結合 |
+| Clang materializer worker bridge | `materializer_worker_bridge.cpp` | 約84 KiB | worker handoff・検証・result adoptionの責務分離が必要 |
 | Provider runtime | `src/sdk/provider_runtime.cpp` | 約153 KiB | process、validation、trust、transport責務の集中 |
 | Provider SDK implementation | `src/sdk/provider.cpp` | 約133 KiB | public SDKとwire/lifecycleの責務が広い |
 | Rooted VFS | `materialization_rooted_vfs.cpp` | 約121 KiB | filesystem threat modelが大きな比率を占有 |

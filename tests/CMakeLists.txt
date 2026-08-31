@@ -1165,21 +1165,6 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   )
 
   cxxlens_add_test_executable(
-    cxxlens-clang22-materialization-store-outcome
-    adapter/clang22/materialization_store_outcome_test.cpp)
-  target_link_libraries(
-    cxxlens-clang22-materialization-store-outcome
-    PRIVATE cxxlens_clang22_materializer_store_outcome_support
-            cxxlens_clang22_materializer_v4_reuse_support)
-  add_test(NAME adapter.clang22-materialization-store-outcome
-           COMMAND cxxlens-clang22-materialization-store-outcome)
-  set_tests_properties(
-    adapter.clang22-materialization-store-outcome
-    PROPERTIES LABELS
-               "adapter;provider;clang22;materialization;store;outcome;security"
-  )
-
-  cxxlens_add_test_executable(
     cxxlens-clang22-materialization-request-v2-2
     adapter/clang22/materialization_request_v2_2_test.cpp)
   target_link_libraries(
@@ -1229,21 +1214,6 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     adapter.clang22-provider-task-v4
     PROPERTIES LABELS
                "adapter;provider;clang22;materialization;task;v4;security")
-
-  cxxlens_add_test_executable(
-    cxxlens-clang22-provider-task-v4-authority
-    adapter/clang22/provider_task_v4_authority_test.cpp)
-  target_link_libraries(
-    cxxlens-clang22-provider-task-v4-authority
-    PRIVATE cxxlens_clang22_provider_task_v4_authority_internal)
-  add_test(NAME adapter.clang22-provider-task-v4-authority
-           COMMAND cxxlens-clang22-provider-task-v4-authority)
-  set_tests_properties(
-    adapter.clang22-provider-task-v4-authority
-    PROPERTIES
-      LABELS
-      "adapter;provider;clang22;materialization;task;v4;authority;security;bounded;downgrade;replay"
-  )
 
   cxxlens_add_test_executable(
     cxxlens-clang22-provider-worker-ingress-decoder
@@ -1322,24 +1292,6 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
       "adapter;provider;clang22;materialization;coordinator;task;v4;bounded;security"
   )
 
-  cxxlens_add_test_executable(
-    cxxlens-clang22-materialization-store-v6-typed-ingress
-    adapter/clang22/materialization_store_v6_typed_ingress_test.cpp)
-  target_link_libraries(
-    cxxlens-clang22-materialization-store-v6-typed-ingress
-    PRIVATE cxxlens_clang22_materializer_store_v6_typed_ingress
-            cxxlens_clang22_materialization_request_v2_2_fixture)
-  target_include_directories(
-    cxxlens-clang22-materialization-store-v6-typed-ingress
-    PRIVATE "${PROJECT_SOURCE_DIR}/src")
-  add_test(NAME adapter.clang22-materialization-store-v6-typed-ingress
-           COMMAND cxxlens-clang22-materialization-store-v6-typed-ingress)
-  set_tests_properties(
-    adapter.clang22-materialization-store-v6-typed-ingress
-    PROPERTIES
-      LABELS
-      "adapter;provider;clang22;materialization;store;v6;typed;ingress;bounded;security"
-  )
 endif()
 
 cxxlens_add_test_executable(cxxlens-protocol-v2
@@ -1368,21 +1320,6 @@ set_tests_properties(
   PROPERTIES LABELS "unit;sdk;protocol;v2;source-closure;security")
 
 if(CXXLENS_BUILD_CLANG22_COMPONENTS)
-  cxxlens_add_test_executable(
-    cxxlens-clang22-materialization-pipeline-v2-2
-    adapter/clang22/materialization_pipeline_v2_2_test.cpp)
-  target_link_libraries(
-    cxxlens-clang22-materialization-pipeline-v2-2
-    PRIVATE cxxlens_clang22_materializer_v2_2_pipeline_support
-            cxxlens_clang22_materialization_request_v2_2_fixture)
-  add_test(NAME adapter.clang22-materialization-pipeline-v2-2
-           COMMAND cxxlens-clang22-materialization-pipeline-v2-2)
-  set_tests_properties(
-    adapter.clang22-materialization-pipeline-v2-2
-    PROPERTIES LABELS
-               "adapter;provider;clang22;materialization;pipeline;v2.2;security"
-  )
-
   cxxlens_add_test_executable(
     cxxlens-clang22-materialization-rooted-vfs
     adapter/clang22/materialization_rooted_vfs_test.cpp)
@@ -2352,19 +2289,15 @@ set(_cxxlens_ng_test_binary_candidates
     cxxlens-clang22-materialization-store-candidate
     cxxlens-clang22-materialization-store-projection
     cxxlens-clang22-materialization-store-candidate-bridge
-    cxxlens-clang22-materialization-store-outcome
     cxxlens-clang22-materialization-request-v2-2
     cxxlens-clang22-provider-task-v4
-    cxxlens-clang22-provider-task-v4-authority
     cxxlens-clang22-provider-worker-ingress-decoder
     cxxlens-clang22-materialization-v4-claim-binding
     cxxlens-clang22-materialization-v4-store-positive
     cxxlens-clang22-materialization-report-v2-2-builder
     cxxlens-clang22-materialization-v4-coordinator
-    cxxlens-clang22-materialization-store-v6-typed-ingress
     cxxlens-protocol-v2
     cxxlens-unit-sdk-provider-protocol-v2-adapter
-    cxxlens-clang22-materialization-pipeline-v2-2
     cxxlens-clang22-materialization-rooted-vfs
     cxxlens-clang22-materialization-occurrence
     cxxlens-clang22-observation-v2
