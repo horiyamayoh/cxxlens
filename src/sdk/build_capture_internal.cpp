@@ -209,7 +209,7 @@ namespace cxxlens::sdk::detail
 		[[nodiscard]] bool logical_path(const std::string_view value) noexcept
 		{
 			return !value.empty() && value.front() != '/' && !value.contains('\\') &&
-				!(value.size() > 1U && value[1U] == ':');
+				(value.size() <= 1U || value[1U] != ':');
 		}
 
 		[[nodiscard]] result<void> validate_auxiliary_files(
