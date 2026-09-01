@@ -1,7 +1,6 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
-#include <bit>
 #include <cerrno>
 #include <chrono>
 #include <csignal>
@@ -40,6 +39,7 @@
 
 #include "../sdk/provider_ng1_process_internal.hpp"
 #include "../sdk/provider_runtime_internal.hpp"
+#include "sealed_executable_internal.hpp"
 
 namespace cxxlens::sdk::provider
 {
@@ -1310,141 +1310,6 @@ namespace cxxlens::sdk::provider
 					evidence ? std::move(*evidence) : std::string{}};
 		}
 
-		/** Generic bounded streaming SHA-256 for executable measurement; no SQLite dependency. */
-		class process_streaming_sha256 final
-		{
-		  public:
-			void update(const std::span<const std::byte> input) noexcept
-			{
-				total_bytes_ += static_cast<std::uint64_t>(input.size());
-				auto remaining = input;
-				if (pending_size_ != 0U)
-				{
-					const auto count = std::min(remaining.size(), block_bytes - pending_size_);
-					std::ranges::copy(remaining.first(count), pending_.begin() + pending_size_);
-					pending_size_ += count;
-					remaining = remaining.subspan(count);
-					if (pending_size_ == block_bytes)
-					{
-						transform(pending_);
-						pending_size_ = 0U;
-					}
-				}
-				while (remaining.size() >= block_bytes)
-				{
-					transform(remaining.first(block_bytes));
-					remaining = remaining.subspan(block_bytes);
-				}
-				std::ranges::copy(remaining, pending_.begin());
-				pending_size_ = remaining.size();
-			}
-
-			[[nodiscard]] std::string finish()
-			{
-				const auto bit_count = total_bytes_ * 8U;
-				pending_.at(pending_size_++) = std::byte{0x80U};
-				if (pending_size_ > 56U)
-				{
-					std::fill(pending_.begin() + pending_size_, pending_.end(), std::byte{});
-					transform(pending_);
-					pending_size_ = 0U;
-				}
-				std::fill(pending_.begin() + pending_size_, pending_.begin() + 56U, std::byte{});
-				for (std::size_t index{}; index < 8U; ++index)
-					pending_.at(56U + index) = static_cast<std::byte>(
-						(bit_count >> (56U - static_cast<unsigned>(index * 8U))) & 0xffU);
-				transform(pending_);
-				constexpr std::string_view digits{"0123456789abcdef"};
-				std::string output{"sha256:"};
-				output.reserve(71U);
-				for (const auto word : state_)
-					for (std::uint32_t shift = 28U;; shift -= 4U)
-					{
-						output.push_back(digits[(word >> shift) & 0x0fU]);
-						if (shift == 0U)
-							break;
-					}
-				return output;
-			}
-
-		  private:
-			static constexpr std::size_t block_bytes = 64U;
-			static constexpr std::array<std::uint32_t, 64U> round_constants{
-				0x428a2f98U, 0x71374491U, 0xb5c0fbcfU, 0xe9b5dba5U, 0x3956c25bU, 0x59f111f1U,
-				0x923f82a4U, 0xab1c5ed5U, 0xd807aa98U, 0x12835b01U, 0x243185beU, 0x550c7dc3U,
-				0x72be5d74U, 0x80deb1feU, 0x9bdc06a7U, 0xc19bf174U, 0xe49b69c1U, 0xefbe4786U,
-				0x0fc19dc6U, 0x240ca1ccU, 0x2de92c6fU, 0x4a7484aaU, 0x5cb0a9dcU, 0x76f988daU,
-				0x983e5152U, 0xa831c66dU, 0xb00327c8U, 0xbf597fc7U, 0xc6e00bf3U, 0xd5a79147U,
-				0x06ca6351U, 0x14292967U, 0x27b70a85U, 0x2e1b2138U, 0x4d2c6dfcU, 0x53380d13U,
-				0x650a7354U, 0x766a0abbU, 0x81c2c92eU, 0x92722c85U, 0xa2bfe8a1U, 0xa81a664bU,
-				0xc24b8b70U, 0xc76c51a3U, 0xd192e819U, 0xd6990624U, 0xf40e3585U, 0x106aa070U,
-				0x19a4c116U, 0x1e376c08U, 0x2748774cU, 0x34b0bcb5U, 0x391c0cb3U, 0x4ed8aa4aU,
-				0x5b9cca4fU, 0x682e6ff3U, 0x748f82eeU, 0x78a5636fU, 0x84c87814U, 0x8cc70208U,
-				0x90befffaU, 0xa4506cebU, 0xbef9a3f7U, 0xc67178f2U,
-			};
-
-			void transform(const std::span<const std::byte> block) noexcept
-			{
-				std::array<std::uint32_t, 64U> schedule{};
-				for (std::size_t index{}; index < 16U; ++index)
-				{
-					const auto offset = index * 4U;
-					schedule.at(index) = (std::to_integer<std::uint32_t>(block[offset]) << 24U) |
-						(std::to_integer<std::uint32_t>(block[offset + 1U]) << 16U) |
-						(std::to_integer<std::uint32_t>(block[offset + 2U]) << 8U) |
-						std::to_integer<std::uint32_t>(block[offset + 3U]);
-				}
-				for (std::size_t index = 16U; index < schedule.size(); ++index)
-				{
-					const auto small_zero = std::rotr(schedule.at(index - 15U), 7) ^
-						std::rotr(schedule.at(index - 15U), 18) ^ (schedule.at(index - 15U) >> 3U);
-					const auto small_one = std::rotr(schedule.at(index - 2U), 17) ^
-						std::rotr(schedule.at(index - 2U), 19) ^ (schedule.at(index - 2U) >> 10U);
-					schedule.at(index) =
-						schedule.at(index - 16U) + small_zero + schedule.at(index - 7U) + small_one;
-				}
-				auto [a, b, c, d, e, f, g, h] = state_;
-				for (std::size_t index{}; index < schedule.size(); ++index)
-				{
-					const auto big_one = std::rotr(e, 6) ^ std::rotr(e, 11) ^ std::rotr(e, 25);
-					const auto choose = (e & f) ^ (~e & g);
-					const auto first =
-						h + big_one + choose + round_constants.at(index) + schedule.at(index);
-					const auto big_zero = std::rotr(a, 2) ^ std::rotr(a, 13) ^ std::rotr(a, 22);
-					const auto majority = (a & b) ^ (a & c) ^ (b & c);
-					const auto second = big_zero + majority;
-					h = g;
-					g = f;
-					f = e;
-					e = d + first;
-					d = c;
-					c = b;
-					b = a;
-					a = first + second;
-				}
-				state_[0U] += a;
-				state_[1U] += b;
-				state_[2U] += c;
-				state_[3U] += d;
-				state_[4U] += e;
-				state_[5U] += f;
-				state_[6U] += g;
-				state_[7U] += h;
-			}
-
-			std::array<std::uint32_t, 8U> state_{0x6a09e667U,
-												 0xbb67ae85U,
-												 0x3c6ef372U,
-												 0xa54ff53aU,
-												 0x510e527fU,
-												 0x9b05688cU,
-												 0x1f83d9abU,
-												 0x5be0cd19U};
-			std::array<std::byte, 64U> pending_{};
-			std::size_t pending_size_{};
-			std::uint64_t total_bytes_{};
-		};
-
 #if defined(__linux__) && defined(__GLIBC__)
 		class descriptor
 		{
@@ -1482,113 +1347,26 @@ namespace cxxlens::sdk::provider
 			int value_;
 		};
 
-		struct verified_executable
-		{
-			descriptor image;
-			std::string digest;
-		};
-
-		[[nodiscard]] result<verified_executable> make_verified_executable(
+		[[nodiscard]] result<cxxlens::sdk::detail::sealed_executable> make_verified_executable(
 			const process_invocation& invocation,
 			const std::optional<std::uint64_t> absolute_wall_deadline_ns = std::nullopt)
 		{
-			const auto deadline_expired = [&]() noexcept
-			{
-				if (!absolute_wall_deadline_ns)
-					return false;
-				const auto now = std::chrono::duration_cast<std::chrono::nanoseconds>(
-									 std::chrono::steady_clock::now().time_since_epoch())
-									 .count();
-				return now < 0 || std::cmp_greater_equal(now, *absolute_wall_deadline_ns);
-			};
-			if (deadline_expired())
+			auto verified =
+				cxxlens::sdk::detail::open_sealed_executable({invocation.argv.front(),
+															  invocation.working_directory,
+															  absolute_wall_deadline_ns,
+															  std::nullopt,
+															  std::nullopt});
+			if (verified)
+				return verified;
+			if (verified.error().code == "runtime.sealed-executable-timeout")
 				return cxxlens::sdk::unexpected(
 					process_error("provider.timeout", "executable", "wall-deadline"));
-			descriptor directory;
-			int source_value{-1};
-			const bool relative = invocation.argv.front().front() != '/';
-			if (relative && !invocation.working_directory.empty())
-			{
-				directory.reset(
-					::open(invocation.working_directory.c_str(), O_PATH | O_DIRECTORY | O_CLOEXEC));
-				if (directory.get() < 0)
-					return cxxlens::sdk::unexpected(process_error("provider.process-launch-failed",
-																  "working-directory-open",
-																  std::to_string(errno)));
-				source_value = ::openat(
-					directory.get(), invocation.argv.front().c_str(), O_RDONLY | O_CLOEXEC);
-			}
-			else
-				source_value = ::open(invocation.argv.front().c_str(), O_RDONLY | O_CLOEXEC);
-			if (source_value < 0)
-				return cxxlens::sdk::unexpected(process_error(
-					"provider.process-launch-failed", "executable-open", std::to_string(errno)));
-			descriptor source{source_value};
-			struct stat metadata{};
-			if (::fstat(source.get(), &metadata) != 0 || !S_ISREG(metadata.st_mode) ||
-				(metadata.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) == 0)
-				return cxxlens::sdk::unexpected(process_error(
-					"provider.process-launch-failed", "executable-type", std::to_string(errno)));
-
-			const int image_value =
-				::memfd_create("cxxlens-provider-executable", MFD_CLOEXEC | MFD_ALLOW_SEALING);
-			if (image_value < 0)
-				return cxxlens::sdk::unexpected(process_error(
-					"provider.process-launch-failed", "executable-memfd", std::to_string(errno)));
-			descriptor image{image_value};
-			process_streaming_sha256 measured;
-			std::array<std::byte, 65536U> buffer{};
-			for (;;)
-			{
-				if (deadline_expired())
-					return cxxlens::sdk::unexpected(
-						process_error("provider.timeout", "executable", "wall-deadline"));
-				const auto count = ::read(source.get(), buffer.data(), buffer.size());
-				if (count == 0)
-					break;
-				if (count < 0)
-				{
-					if (errno == EINTR)
-						continue;
-					return cxxlens::sdk::unexpected(process_error("provider.process-launch-failed",
-																  "executable-read",
-																  std::to_string(errno)));
-				}
-				const auto received = static_cast<std::size_t>(count);
-				measured.update(std::span<const std::byte>{buffer.data(), received});
-				std::size_t offset{};
-				while (offset < received)
-				{
-					const auto written =
-						::write(image.get(), buffer.data() + offset, received - offset);
-					if (written > 0)
-					{
-						offset += static_cast<std::size_t>(written);
-						continue;
-					}
-					if (written < 0 && errno == EINTR)
-						continue;
-					return cxxlens::sdk::unexpected(process_error("provider.process-launch-failed",
-																  "executable-copy",
-																  std::to_string(errno)));
-				}
-			}
-			if (::fchmod(image.get(), S_IRUSR | S_IXUSR) != 0 ||
-				::fcntl(image.get(),
-						F_ADD_SEALS,
-						F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL) != 0)
-				return cxxlens::sdk::unexpected(process_error(
-					"provider.process-launch-failed", "executable-seal", std::to_string(errno)));
-			try
-			{
-				auto digest = measured.finish();
-				return verified_executable{std::move(image), std::move(digest)};
-			}
-			catch (const std::bad_alloc&)
-			{
+			if (verified.error().field == "allocation")
 				return cxxlens::sdk::unexpected(process_error(
 					"provider.process-launch-failed", "executable-digest", "allocation"));
-			}
+			return cxxlens::sdk::unexpected(process_error(
+				"provider.process-launch-failed", verified.error().field, verified.error().detail));
 		}
 
 		struct pipe_pair
@@ -2495,7 +2273,7 @@ namespace cxxlens::sdk::provider
 				if (!verified)
 					return cxxlens::sdk::unexpected(std::move(verified.error()));
 				if (invocation.expected_binary_digest.empty() ||
-					verified->digest != invocation.expected_binary_digest)
+					verified->digest() != invocation.expected_binary_digest)
 					return cxxlens::sdk::unexpected(process_error(
 						"provider.binary-identity-mismatch", "ng1-live", "executable"));
 				if (cancellation.stop_requested())
@@ -2556,9 +2334,9 @@ namespace cxxlens::sdk::provider
 						::dup2(output_pipe->write.get(), STDOUT_FILENO) < 0 ||
 						::dup2(error_pipe->write.get(), STDERR_FILENO) < 0)
 						::_exit(126);
-					if ((verified->image.get() == 3
-							 ? ::fcntl(verified->image.get(), F_SETFD, FD_CLOEXEC)
-							 : ::dup3(verified->image.get(), 3, O_CLOEXEC)) < 0 ||
+					if ((verified->native_handle() == 3
+							 ? ::fcntl(verified->native_handle(), F_SETFD, FD_CLOEXEC)
+							 : ::dup3(verified->native_handle(), 3, O_CLOEXEC)) < 0 ||
 						!prepare_inherited_descriptors(invocation.inherited_channel.get()) ||
 						!close_inherited_descriptors(invocation.inherited_channel.get()))
 						::_exit(126);
@@ -2602,7 +2380,7 @@ namespace cxxlens::sdk::provider
 															   limits,
 															   std::move(*policy),
 															   invocation.budget,
-															   verified->digest,
+															   verified->digest(),
 															   absolute_wall_deadline_ns);
 				child_guard.release();
 				return process;
@@ -2668,7 +2446,7 @@ namespace cxxlens::sdk::provider
 				if (!verified)
 					return cxxlens::sdk::unexpected(std::move(verified.error()));
 				if (invocation.expected_binary_digest.empty() ||
-					verified->digest != invocation.expected_binary_digest)
+					verified->digest() != invocation.expected_binary_digest)
 					return process_output{
 						process_status::launch_failed,
 						0,
@@ -2679,9 +2457,9 @@ namespace cxxlens::sdk::provider
 										 invocation.budget,
 										 sandbox_assurance::none,
 										 false,
-										 verified->digest),
+										 verified->digest()),
 						"provider.binary-identity-mismatch",
-						verified->digest};
+						verified->digest()};
 				if (cancellation.stop_requested())
 					return process_output{process_status::cancelled,
 										  0,
@@ -2692,9 +2470,9 @@ namespace cxxlens::sdk::provider
 														   invocation.budget,
 														   sandbox_assurance::none,
 														   false,
-														   verified->digest),
+														   verified->digest()),
 										  {},
-										  verified->digest};
+										  verified->digest()};
 
 				auto input = std::forward<InputFactory>(input_factory)();
 				auto output_pipe = make_pipe();
@@ -2732,9 +2510,9 @@ namespace cxxlens::sdk::provider
 														   invocation.budget,
 														   sandbox_assurance::none,
 														   false,
-														   verified->digest),
+														   verified->digest()),
 										  "provider.runtime-unavailable",
-										  verified->digest};
+										  verified->digest()};
 				if (child == 0)
 				{
 					process_group_pipe->read.reset();
@@ -2750,9 +2528,9 @@ namespace cxxlens::sdk::provider
 						::dup2(output_pipe->write.get(), STDOUT_FILENO) < 0 ||
 						::dup2(error_pipe->write.get(), STDERR_FILENO) < 0)
 						::_exit(126);
-					if ((verified->image.get() == 3
-							 ? ::fcntl(verified->image.get(), F_SETFD, FD_CLOEXEC)
-							 : ::dup3(verified->image.get(), 3, O_CLOEXEC)) < 0 ||
+					if ((verified->native_handle() == 3
+							 ? ::fcntl(verified->native_handle(), F_SETFD, FD_CLOEXEC)
+							 : ::dup3(verified->native_handle(), 3, O_CLOEXEC)) < 0 ||
 						!prepare_inherited_descriptors(invocation.inherited_channel.get()) ||
 						!close_inherited_descriptors(invocation.inherited_channel.get()))
 						::_exit(126);
@@ -2795,9 +2573,9 @@ namespace cxxlens::sdk::provider
 														   invocation.budget,
 														   sandbox_assurance::none,
 														   false,
-														   verified->digest),
+														   verified->digest()),
 										  "provider.runtime-unavailable",
-										  verified->digest};
+										  verified->digest()};
 				}
 				input->reset();
 				output_pipe->write.reset();
@@ -2806,12 +2584,12 @@ namespace cxxlens::sdk::provider
 				const auto deadline =
 					started + std::chrono::milliseconds{invocation.budget.wall_ms};
 				process_output output;
-				output.measured_executable_digest = verified->digest;
+				output.measured_executable_digest = verified->digest();
 				output.sandbox = sandbox_evidence(*policy,
 												  invocation.budget,
 												  sandbox_assurance::enforced,
 												  true,
-												  verified->digest);
+												  verified->digest());
 				std::size_t total{};
 				bool stdout_ended{};
 				bool stderr_ended{};
@@ -2923,7 +2701,7 @@ namespace cxxlens::sdk::provider
 														  invocation.budget,
 														  sandbox_assurance::none,
 														  false,
-														  verified->digest);
+														  verified->digest());
 					}
 					else
 						output.status = process_status::exited;

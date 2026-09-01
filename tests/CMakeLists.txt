@@ -148,6 +148,23 @@ set_tests_properties(
     "unit;sdk;capture;gcc;filesystem;bounded;fault;determinism;resource;security"
 )
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-sealed-executable
+                            unit/sdk/sealed_executable_internal_test.cpp)
+target_sources(cxxlens-unit-sdk-sealed-executable
+               PRIVATE $<TARGET_OBJECTS:cxxlens_process_authority_internal>)
+target_link_libraries(cxxlens-unit-sdk-sealed-executable
+                      PRIVATE cxxlens::cxxlens)
+target_include_directories(cxxlens-unit-sdk-sealed-executable
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-sealed-executable
+         COMMAND cxxlens-unit-sdk-sealed-executable)
+set_tests_properties(
+  unit.sdk-sealed-executable
+  PROPERTIES
+    LABELS
+    "unit;sdk;runtime;process;identity;bounded;negative;determinism;resource;security"
+)
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-bounded-json
                             unit/sdk/bounded_json_internal_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-bounded-json PRIVATE cxxlens::base)
@@ -2154,6 +2171,7 @@ foreach(
         unit.sdk-bounded-json
         unit.sdk-compile-commands-capture
         unit.sdk-gcc-capture-files
+        unit.sdk-sealed-executable
         unit.sdk-application-analysis
         sdk.example-application_analysis
         sdk.example-typed_query
@@ -2239,6 +2257,7 @@ set(_cxxlens_ng_test_binary_candidates
     cxxlens-unit-sdk-bounded-json
     cxxlens-unit-sdk-compile-commands-capture
     cxxlens-unit-sdk-gcc-capture-files
+    cxxlens-unit-sdk-sealed-executable
     cxxlens-unit-sdk-materialization-task
     cxxlens-unit-sdk-provider-runtime
     cxxlens-sdk-doctor-authority-consumer

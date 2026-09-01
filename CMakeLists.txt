@@ -322,6 +322,8 @@ add_library(
   cxxlens_provider_process_internal OBJECT
   EXCLUDE_FROM_ALL src/runtime/provider_process_adapter.cpp
   src/sdk/provider_ng1_spill_port_internal.cpp)
+add_library(cxxlens_process_authority_internal OBJECT
+            EXCLUDE_FROM_ALL src/runtime/sealed_executable_internal.cpp)
 foreach(
   target IN
   ITEMS cxxlens_provider_runtime_core_internal
@@ -334,6 +336,17 @@ foreach(
   cxxlens_set_project_warnings(${target})
   cxxlens_enable_sanitizers(${target})
 endforeach()
+target_link_libraries(cxxlens_process_authority_internal PRIVATE cxxlens::base)
+target_include_directories(cxxlens_process_authority_internal
+                           PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_process_authority_internal PRIVATE cxx_std_23)
+set_target_properties(
+  cxxlens_process_authority_internal
+  PROPERTIES POSITION_INDEPENDENT_CODE ON
+             CXX_VISIBILITY_PRESET hidden
+             VISIBILITY_INLINES_HIDDEN YES)
+cxxlens_set_project_warnings(cxxlens_process_authority_internal)
+cxxlens_enable_sanitizers(cxxlens_process_authority_internal)
 
 add_library(
   cxxlens_sdk
@@ -442,6 +455,7 @@ cxxlens_enable_sanitizers(cxxlens_provider_protocol_v2_internal)
 # a second object graph or omitting one of the protocol/lifecycle/process
 # owners.
 set(CXXLENS_PROVIDER_RUNTIME_PRIVATE_OBJECTS
+    $<TARGET_OBJECTS:cxxlens_process_authority_internal>
     $<TARGET_OBJECTS:cxxlens_provider_runtime_core_internal>
     $<TARGET_OBJECTS:cxxlens_provider_ng1_runtime_internal>
     $<TARGET_OBJECTS:cxxlens_provider_process_internal>
@@ -805,8 +819,11 @@ cxxlens_assert_direct_project_dependencies(cxxlens_provider_ng1_runtime_internal
                                            cxxlens cxxlens_recipes)
 cxxlens_assert_direct_project_dependencies(cxxlens_provider_process_internal
                                            cxxlens cxxlens_recipes)
+cxxlens_assert_direct_project_dependencies(cxxlens_process_authority_internal
+                                           cxxlens_base)
 cxxlens_assert_direct_project_dependencies(
   cxxlens_provider_runtime_private_closure
+  cxxlens_process_authority_internal
   cxxlens_provider_runtime_core_internal
   cxxlens_provider_ng1_runtime_internal
   cxxlens_provider_process_internal
@@ -817,6 +834,7 @@ cxxlens_assert_direct_project_dependencies(
   cxxlens
   cxxlens_recipes
   cxxlens_protocol_v2
+  cxxlens_process_authority_internal
   cxxlens_provider_runtime_core_internal
   cxxlens_provider_ng1_runtime_internal
   cxxlens_provider_process_internal
@@ -833,6 +851,7 @@ set(CXXLENS_COMPILED_TARGETS
     cxxlens_provider_runtime_core_internal
     cxxlens_provider_ng1_runtime_internal
     cxxlens_provider_process_internal
+    cxxlens_process_authority_internal
     cxxlens_provider_protocol_v2_internal
     cxxlens_sdk
     cxxlens_cli

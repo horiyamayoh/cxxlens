@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "sdk/gcc_capture_file_port_internal.hpp"
+#include "sealed_executable_internal.hpp"
 
 #if defined(__linux__)
 #include <fcntl.h>
@@ -55,20 +56,12 @@ namespace cxxlens::sdk::detail
 		[[nodiscard]] result<std::string>
 		canonical_descriptor_path(const descriptor& file, const std::size_t maximum_path_bytes)
 		{
-			if (maximum_path_bytes == 0U ||
-				maximum_path_bytes >= std::numeric_limits<std::size_t>::max() - 1U)
+			auto path = canonical_open_descriptor_path({file.get(), maximum_path_bytes});
+			if (path)
+				return path;
+			if (path.error().code == "runtime.descriptor-path-limit")
 				return unexpected(limit_error("capture.path", "path-bytes"));
-			const auto link = "/proc/self/fd/" + std::to_string(file.get());
-			std::vector<char> buffer(maximum_path_bytes + 1U);
-			const auto count = ::readlink(link.c_str(), buffer.data(), maximum_path_bytes + 1U);
-			if (count < 0)
-				return unexpected(io_error("capture.path", "canonical-path"));
-			if (std::cmp_greater(count, maximum_path_bytes))
-				return unexpected(limit_error("capture.path", "path-bytes"));
-			std::string output{buffer.data(), static_cast<std::size_t>(count)};
-			if (output.empty() || !output.starts_with('/') || output.ends_with(" (deleted)"))
-				return unexpected(io_error("capture.path", "canonical-path"));
-			return output;
+			return unexpected(io_error("capture.path", "canonical-path"));
 		}
 
 		[[nodiscard]] bool same_file_state(const struct stat& left,
