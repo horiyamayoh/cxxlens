@@ -1,6 +1,6 @@
 #include "sdk/materialization_task_internal.hpp"
 
-#include <cassert>
+#include <cstdlib>
 #include <string>
 #include <utility>
 #include <vector>
@@ -9,6 +9,12 @@ namespace
 {
 	using namespace cxxlens::sdk;
 	using namespace cxxlens::sdk::detail;
+
+	void require(const bool condition)
+	{
+		if (!condition)
+			std::abort();
+	}
 
 	[[nodiscard]] std::string content(const char digit)
 	{
@@ -44,9 +50,9 @@ namespace
 	[[nodiscard]] relation_engine engine_for(const relation_descriptor& relation)
 	{
 		relation_registry registry;
-		assert(registry.add(relation));
+		require(registry.add(relation).has_value());
 		auto engine = registry.build("generation:test");
-		assert(engine);
+		require(engine.has_value());
 		return std::move(*engine);
 	}
 
@@ -56,7 +62,7 @@ namespace
 	{
 		auto value = project_catalog::make(
 			"project://root", environment, {{"catalog-unit:one", invocation, source, environment}});
-		assert(value);
+		require(value.has_value());
 		return std::move(*value);
 	}
 
@@ -116,7 +122,7 @@ namespace
 									value.source.content_digest,
 									value.invocation.environment_digest);
 		auto validated = validate_build_capture(std::move(value));
-		assert(validated);
+		require(validated.has_value());
 		return std::move(*validated);
 	}
 
@@ -178,10 +184,10 @@ namespace
 											 "condition:true",
 											 "clang.cpp23",
 											 {"clang-ast"});
-		assert(portable);
+		require(portable.has_value());
 		auto partition = partition_for(relation);
 		auto manifest = make_partition_manifest(engine, partition);
-		assert(manifest);
+		require(manifest.has_value());
 		const auto catalog_digest = capture.value().catalog.catalog_digest;
 		materialization_task_draft output{"materialization-request:one",
 										  content('d'),
@@ -236,20 +242,20 @@ namespace
 		const auto engine = engine_for(relation);
 		auto first = validate_materialization_task(task_draft(relation, engine));
 		auto second = validate_materialization_task(task_draft(relation, engine));
-		assert(first && second);
-		assert(first->id() == second->id());
-		assert(first->input_binding_digest() == second->input_binding_digest());
-		assert(first->plan().frontend_provider_executions == 1U);
-		assert(!first->plan().warm_zero);
+		require(first && second);
+		require(first->id() == second->id());
+		require(first->input_binding_digest() == second->input_binding_digest());
+		require(first->plan().frontend_provider_executions == 1U);
+		require(!first->plan().warm_zero);
 
 		auto provider_mismatch = task_draft(relation, engine);
 		provider_mismatch.provider.provider_id = "provider.other";
-		assert(!validate_materialization_task(std::move(provider_mismatch)));
+		require(!validate_materialization_task(std::move(provider_mismatch)));
 
 		auto capture_mismatch = task_draft(relation, engine);
 		capture_mismatch.partitions.front().candidate.current.input.source_digest = content('0');
 		auto rejected = validate_materialization_task(std::move(capture_mismatch));
-		assert(!rejected && rejected.error().detail == "authority-mismatch");
+		require(!rejected && rejected.error().detail == "authority-mismatch");
 	}
 
 	void result_terminals_and_atomic_rejection()
@@ -257,7 +263,7 @@ namespace
 		const auto relation = descriptor();
 		const auto engine = engine_for(relation);
 		auto task = validate_materialization_task(task_draft(relation, engine));
-		assert(task);
+		require(task.has_value());
 		materialization_result_draft complete;
 		complete.terminal = materialization_terminal::complete;
 		complete.task_id = task->id();
@@ -266,12 +272,12 @@ namespace
 		complete.partitions = {partition_for(relation)};
 		complete.coverage = {{"relation", relation.id, "covered", {}}};
 		auto accepted = validate_materialization_result(engine, *task, complete);
-		assert(accepted);
-		assert(accepted->partitions().size() == 1U);
-		assert(!accepted->result_digest().empty());
+		require(accepted.has_value());
+		require(accepted->partitions().size() == 1U);
+		require(!accepted->result_digest().empty());
 
 		auto repeated = validate_materialization_result(engine, *task, std::move(complete));
-		assert(repeated && repeated->result_digest() == accepted->result_digest());
+		require(repeated && repeated->result_digest() == accepted->result_digest());
 
 		auto wrong_runtime_input = materialization_result_draft{};
 		wrong_runtime_input.terminal = materialization_terminal::complete;
@@ -282,7 +288,8 @@ namespace
 		wrong_runtime_input.partitions = {partition_for(relation)};
 		auto runtime_rejected =
 			validate_materialization_result(engine, *task, std::move(wrong_runtime_input));
-		assert(!runtime_rejected && runtime_rejected.error().detail == "task-or-provider-mismatch");
+		require(!runtime_rejected &&
+				runtime_rejected.error().detail == "task-or-provider-mismatch");
 
 		materialization_result_draft partial;
 		partial.terminal = materialization_terminal::partial;
@@ -290,17 +297,17 @@ namespace
 		partial.task_input_digest = task->input_binding_digest();
 		partial.runtime = runtime_for(*task);
 		partial.unresolved = {{"frontend.missing-input", "compile-unit:one", "recapture-source"}};
-		assert(validate_materialization_result(engine, *task, std::move(partial)));
+		require(validate_materialization_result(engine, *task, std::move(partial)).has_value());
 
 		materialization_result_draft failed;
 		failed.terminal = materialization_terminal::failed;
 		failed.task_id = task->id();
 		failed.task_input_digest = task->input_binding_digest();
 		failed.unresolved = {{"provider.failed", "compile-unit:one", "retry-provider"}};
-		assert(validate_materialization_result(engine, *task, failed));
+		require(validate_materialization_result(engine, *task, failed).has_value());
 		failed.partitions = {partition_for(relation)};
 		auto forbidden = validate_materialization_result(engine, *task, std::move(failed));
-		assert(!forbidden && forbidden.error().detail == "publication-data-forbidden");
+		require(!forbidden && forbidden.error().detail == "publication-data-forbidden");
 
 		auto malformed = materialization_result_draft{};
 		malformed.terminal = materialization_terminal::complete;
@@ -310,7 +317,7 @@ namespace
 		malformed.partitions = {partition_for(relation)};
 		malformed.partitions.front().relation_descriptor_id = "unknown.relation.v1";
 		auto atomic_reject = validate_materialization_result(engine, *task, std::move(malformed));
-		assert(!atomic_reject);
+		require(!atomic_reject);
 	}
 } // namespace
 
