@@ -1,6 +1,8 @@
+#include <array>
 #include <cstddef>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <cxxlens/sdk.hpp>
 
@@ -20,10 +22,23 @@ namespace
 											canonical_value::from_string({}),
 											canonical_value::from_string({})});
 	}
+
+	[[nodiscard]] std::vector<std::byte> source_bytes()
+	{
+		const std::string source{"int main() { return 0; }\n"};
+		std::vector<std::byte> output;
+		output.reserve(source.size());
+		for (const char byte : source)
+			output.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
+		return output;
+	}
 } // namespace
 
 int main()
 {
+	auto content = source_bytes();
+	const auto source_digest = cxxlens::sdk::content_digest(content);
+	const auto source_size = static_cast<std::int64_t>(content.size());
 	auto toolchain = canonical_value::from_tuple({
 		canonical_value::from_string("gcc"),
 		canonical_value::from_string("16.2.0"),
@@ -41,8 +56,8 @@ int main()
 		canonical_value::from_string("source-snapshot:one"),
 		canonical_value::from_string("source-file:main"),
 		canonical_value::from_string("project://src/main.cpp"),
-		canonical_value::from_string(digest('6')),
-		canonical_value::from_integer(42),
+		canonical_value::from_string(source_digest),
+		canonical_value::from_integer(source_size),
 		canonical_value::from_string("project://build"),
 		canonical_value::from_string("c++"),
 		observed(canonical_value::from_tuple({
@@ -60,8 +75,26 @@ int main()
 		canonical_value::from_string(digest('8')),
 		canonical_value::from_integer(1),
 		canonical_value::from_integer(1),
-		canonical_value::from_integer(42),
+		canonical_value::from_integer(source_size),
+		canonical_value::from_tuple({canonical_value::from_tuple({
+			canonical_value::from_string("source-file:main"),
+			canonical_value::from_string("project://src/main.cpp"),
+			observed(canonical_value::from_string(source_digest)),
+			observed(canonical_value::from_bytes(std::move(content))),
+			canonical_value::from_integer(source_size),
+		})}),
 	});
+	auto encoded_members = cxxlens::sdk::canonical_binary(closure.tuple[6]);
+	if (!encoded_members)
+		return 1;
+	closure.tuple[2] = canonical_value::from_string(cxxlens::sdk::content_digest(*encoded_members));
+	const std::array closure_fields{
+		closure.tuple[2], closure.tuple[3], closure.tuple[4], closure.tuple[5]};
+	auto closure_digest =
+		cxxlens::sdk::canonical_identity_digest("application-source-closure", closure_fields);
+	if (!closure_digest)
+		return 1;
+	closure.tuple[1] = canonical_value::from_string(std::move(*closure_digest));
 	auto encoded = cxxlens::sdk::canonical_binary(canonical_value::from_tuple({
 		canonical_value::from_string("cxxlens.build-capture-bundle.v1"),
 		std::move(toolchain),

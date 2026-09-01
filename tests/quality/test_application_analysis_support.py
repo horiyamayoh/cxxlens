@@ -129,6 +129,12 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
             replay["option_mapping_tuple"]["fields"][2]["values"],
             ["exact", "semantics_preserving", "approximation", "unsupported", "nonsemantic"],
         )
+        closure_fields = capture["source_closure_member_tuple"]["fields"]
+        self.assertEqual([field["index"] for field in closure_fields], list(range(5)))
+        self.assertEqual(
+            [field["name"] for field in closure_fields],
+            ["file_id", "logical_path", "content_digest", "content", "size_bytes"],
+        )
 
 
 if __name__ == "__main__":

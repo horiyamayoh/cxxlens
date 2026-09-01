@@ -50,6 +50,14 @@ source_closure_tuple:
     - {index: 3, name: member_count, type: nonnegative-integer}
     - {index: 4, name: blob_count, type: nonnegative-integer}
     - {index: 5, name: unique_blob_bytes, type: nonnegative-integer}
+    - {index: 6, name: members, type: ordered-tuple-of-source-closure-member}
+source_closure_member_tuple:
+  fields:
+    - {index: 0, name: file_id, type: strong-id}
+    - {index: 1, name: logical_path, type: logical-path}
+    - {index: 2, name: content_digest, type: captured-digest}
+    - {index: 3, name: content, type: captured-bytes}
+    - {index: 4, name: size_bytes, type: nonnegative-integer}
 captured_value_tuple:
   fields:
     - {index: 0, name: state, type: enum, values: [observed, derived, redacted, unavailable]}
@@ -93,6 +101,12 @@ invariants:
   - original-argv-order-is-preserved
   - compile-units-auxiliary-files-environment-effects-and-gaps-use-canonical-order
   - auxiliary-file-parent-graph-is-acyclic-and-depth-bounded
+  - source-closure-members-use-canonical-file-id-order-and-unique-logical-paths
+  - observed-source-bytes-match-their-declared-size-and-content-digest
+  - source-closure-member-blob-and-byte-censuses-are-recomputed-before-acceptance
+  - source-closure-manifest-is-the-content-digest-of-the-canonical-members-tuple
+  - source-closure-digest-binds-manifest-and-all-three-recomputed-censuses
+  - every-compile-unit-source-is-bound-to-an-exact-source-closure-member
   - environment-is-deny-by-default-and-only-normalized-effects-are-carried
   - machine-root-pid-time-and-unordered-order-do-not-contribute-to-semantic-identity
   - missing-and-redacted-are-never-reconstructed-from-placeholders
