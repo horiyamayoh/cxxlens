@@ -26,6 +26,7 @@ namespace cxxlens::sdk
 		std::size_t maximum_arguments_per_unit{4096U};
 		std::size_t maximum_auxiliary_files_per_unit{4096U};
 		std::size_t maximum_environment_effects_per_unit{1024U};
+		std::size_t maximum_path_mappings{4096U};
 		std::size_t maximum_string_bytes{4096U};
 		std::size_t maximum_total_metadata_bytes{std::size_t{64U} * 1024U * 1024U};
 		std::uint64_t maximum_source_closure_members{4096U};
@@ -54,6 +55,7 @@ namespace cxxlens::sdk
 		[[nodiscard]] std::string_view capture_adapter() const noexcept;
 		[[nodiscard]] std::string_view target_abi() const noexcept;
 		[[nodiscard]] std::string_view project_id() const noexcept;
+		[[nodiscard]] std::string_view logical_project_root() const noexcept;
 		[[nodiscard]] std::size_t compile_unit_count() const noexcept;
 		[[nodiscard]] std::span<const capture_gap> gaps() const noexcept;
 

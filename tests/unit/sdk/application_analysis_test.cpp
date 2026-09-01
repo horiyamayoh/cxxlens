@@ -112,6 +112,7 @@ namespace
 			observed(canonical_value::from_tuple({})),
 			unavailable("config-files-unobserved", "capture-config-files"),
 			observed(std::move(environment)),
+			observed(canonical_value::from_string("/workspace/example/build")),
 		});
 		auto closure = canonical_value::from_tuple({
 			canonical_value::from_string("source-closure:one"),
@@ -141,6 +142,11 @@ namespace
 			canonical_value::from_tuple({std::move(unit)}),
 			std::move(closure),
 			std::move(gaps),
+			canonical_value::from_string("project://"),
+			observed(canonical_value::from_tuple({canonical_value::from_tuple({
+				canonical_value::from_string("/workspace/example"),
+				canonical_value::from_string("project://"),
+			})})),
 		});
 		rebind_source_closure(bundle);
 		return bundle;
@@ -179,6 +185,7 @@ namespace
 		assert(decoded->capture_adapter() == "shell-free-wrapper");
 		assert(decoded->target_abi() == "x86_64-linux-gnu");
 		assert(decoded->project_id() == "project:gcc-example");
+		assert(decoded->logical_project_root() == "project://");
 		assert(decoded->compile_unit_count() == 1U);
 		assert(decoded->gaps().size() == 2U);
 		assert(decoded->digest() == cxxlens::sdk::content_digest(*bytes));
@@ -283,6 +290,52 @@ namespace
 			cxxlens::sdk::decode_capture_bundle(*relative_compiler_bytes);
 		assert(!relative_compiler_result &&
 			   relative_compiler_result.error().detail == "not-canonical-absolute");
+
+		auto unmapped_working_directory = valid_bundle();
+		unmapped_working_directory.tuple[5].tuple[0].tuple[12] =
+			observed(canonical_value::from_string("/another/build"));
+		auto unmapped_bytes = canonical_binary(unmapped_working_directory);
+		assert(unmapped_bytes);
+		auto unmapped_result = cxxlens::sdk::decode_capture_bundle(*unmapped_bytes);
+		assert(!unmapped_result && unmapped_result.error().detail == "unmapped-physical-path");
+
+		auto overlapping_mapping = valid_bundle();
+		overlapping_mapping.tuple[9] = observed(canonical_value::from_tuple({
+			canonical_value::from_tuple({canonical_value::from_string("/workspace"),
+										 canonical_value::from_string("project://")}),
+			canonical_value::from_tuple({canonical_value::from_string("/workspace/example"),
+										 canonical_value::from_string("project://src")}),
+		}));
+		auto overlapping_bytes = canonical_binary(overlapping_mapping);
+		assert(overlapping_bytes);
+		auto overlapping_result = cxxlens::sdk::decode_capture_bundle(*overlapping_bytes);
+		assert(!overlapping_result && overlapping_result.error().detail == "overlapping-authority");
+
+		auto excessive_mappings = valid_bundle();
+		cxxlens::sdk::import_limits path_limits;
+		path_limits.maximum_path_mappings = 1U;
+		excessive_mappings.tuple[9] = observed(canonical_value::from_tuple({
+			canonical_value::from_tuple({canonical_value::from_string("/external"),
+										 canonical_value::from_string("project://external")}),
+			canonical_value::from_tuple({canonical_value::from_string("/workspace/example"),
+										 canonical_value::from_string("project://")}),
+		}));
+		auto excessive_mapping_bytes = canonical_binary(excessive_mappings);
+		assert(excessive_mapping_bytes);
+		auto excessive_mapping_result =
+			cxxlens::sdk::decode_capture_bundle(*excessive_mapping_bytes, path_limits);
+		assert(!excessive_mapping_result &&
+			   excessive_mapping_result.error().code ==
+				   "application-analysis.import-limit-exceeded");
+
+		auto escaping_logical_path = valid_bundle();
+		escaping_logical_path.tuple[5].tuple[0].tuple[3] =
+			canonical_value::from_string("external://src/main.cpp");
+		auto escaping_bytes = canonical_binary(escaping_logical_path);
+		assert(escaping_bytes);
+		auto escaping_result = cxxlens::sdk::decode_capture_bundle(*escaping_bytes);
+		assert(!escaping_result &&
+			   escaping_result.error().detail == "duplicate-or-noncanonical-order");
 
 		canonical_value nested = canonical_value::from_string("leaf");
 		for (std::size_t depth{}; depth < 12U; ++depth)

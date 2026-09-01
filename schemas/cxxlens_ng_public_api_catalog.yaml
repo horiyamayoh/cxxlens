@@ -108,7 +108,7 @@ entries:
     symbols:
       - name: application-analysis.capture
         kind: function-family
-        signature: 'import_limits; capture_gap; class capture_bundle; result<capture_bundle> decode_capture_bundle(span<const byte>, import_limits); enum replay_fidelity; class replay_plan; class imported_project; result<imported_project> import_capture(const capture_bundle&, import_limits)'
+        signature: 'import_limits; capture_gap; class capture_bundle with logical_project_root; result<capture_bundle> decode_capture_bundle(span<const byte>, import_limits); enum replay_fidelity; class replay_plan; class imported_project; result<imported_project> import_capture(const capture_bundle&, import_limits)'
       - name: application-analysis.materialization
         kind: function-family
         signature: 'class materialization_request; enum materialization_terminal; application_analysis_provenance; class materialization_result; result<materialization_result> materialize(snapshot_store&, const imported_project&, const materialization_request&)'
@@ -116,7 +116,7 @@ entries:
     lifetime: [capture-replay-project-request-and-result-values-own-or-share-immutable-detached-data, no-compiler-native-pointer-or-process-handle-crosses-the-header]
     threading: [immutable-values-are-concurrent-readable, materialize-follows-snapshot-store-writer-threading]
     versioning: [experimental-ch1-additive-surface, build-capture-bundle-v1, compiler-replay-plan-v1, detached-provider-run-v1, stable-2_0-surface-is-unchanged]
-    invariants: [external-counts-and-nesting-are-bounded-before-allocation, only-decoder-and-validated-factory-create-authority-values, capture-replay-and-provider-output-have-distinct-identities, planned-targets-return-structured-unavailable, missing-and-redacted-values-propagate-as-actionable-unresolved, replay-fidelity-is-closed-and-never-promotes-approximation-to-exact, materialize-publishes-at-most-once-through-snapshot-writer, failed-cancelled-and-rejected-results-have-no-published-snapshot, partial-never-certifies-complete-closure, provider-runtime-provenance-and-disagreements-are-preserved]
+    invariants: [external-counts-and-nesting-are-bounded-before-allocation, only-decoder-and-validated-factory-create-authority-values, capture-replay-and-provider-output-have-distinct-identities, planned-targets-return-structured-unavailable, missing-and-redacted-values-propagate-as-actionable-unresolved, captured-physical-paths-are-explicitly-mapped-and-excluded-from-semantic-identity, replay-fidelity-is-closed-and-never-promotes-approximation-to-exact, materialize-publishes-at-most-once-through-snapshot-writer, failed-cancelled-and-rejected-results-have-no-published-snapshot, partial-never-certifies-complete-closure, provider-runtime-provenance-and-disagreements-are-preserved]
     depends_on: [public.common, public.project-catalog, public.provider-sdk, public.snapshot-store]
 
   - id: public.incremental

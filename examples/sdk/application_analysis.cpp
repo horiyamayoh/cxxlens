@@ -68,6 +68,7 @@ int main()
 		observed(canonical_value::from_tuple({})),
 		observed(canonical_value::from_tuple({})),
 		observed(canonical_value::from_tuple({})),
+		observed(canonical_value::from_string("/workspace/example/build")),
 	});
 	auto closure = canonical_value::from_tuple({
 		canonical_value::from_string("source-closure:one"),
@@ -104,6 +105,11 @@ int main()
 		canonical_value::from_tuple({std::move(unit)}),
 		std::move(closure),
 		canonical_value::from_tuple({}),
+		canonical_value::from_string("project://"),
+		observed(canonical_value::from_tuple({canonical_value::from_tuple({
+			canonical_value::from_string("/workspace/example"),
+			canonical_value::from_string("project://"),
+		})})),
 	}));
 	if (!encoded)
 		return 1;

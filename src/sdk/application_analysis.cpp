@@ -18,6 +18,7 @@ namespace cxxlens::sdk
 		std::string capture_adapter;
 		std::string target_abi;
 		std::string project_id;
+		std::string logical_project_root;
 		std::size_t compile_unit_count{};
 		std::vector<capture_gap> gaps;
 	};
@@ -223,6 +224,83 @@ namespace cxxlens::sdk
 				value[1U] == ':' && (value[2U] == '\\' || value[2U] == '/');
 		}
 
+		[[nodiscard]] bool canonical_native_path(const std::string_view value,
+												 const bool windows_path)
+		{
+			if (!absolute_native_path(value, windows_path))
+				return false;
+			const char separator = windows_path ? '\\' : '/';
+			if (windows_path)
+			{
+				if (value.front() < 'A' || value.front() > 'Z' || value.contains('/'))
+					return false;
+			}
+			else if (value.contains('\\'))
+				return false;
+			for (std::size_t index{}; index < value.size(); ++index)
+			{
+				const auto byte = static_cast<unsigned char>(value[index]);
+				if (byte <= 0x1fU || byte == 0x7fU ||
+					(windows_path && index >= 2U &&
+					 std::string_view{"<>:\"|?*"}.contains(value[index])))
+					return false;
+			}
+			const std::size_t root_width = windows_path ? 3U : 1U;
+			if (value.size() > root_width && value.back() == separator)
+				return false;
+			std::size_t offset = root_width;
+			while (offset < value.size())
+			{
+				const auto next = value.find(separator, offset);
+				const auto segment = value.substr(
+					offset, next == std::string_view::npos ? value.size() - offset : next - offset);
+				if (segment.empty() || segment == "." || segment == "..")
+					return false;
+				if (next == std::string_view::npos)
+					break;
+				offset = next + 1U;
+			}
+			return true;
+		}
+
+		[[nodiscard]] char ascii_path_fold(const char value) noexcept
+		{
+			return value >= 'A' && value <= 'Z' ? static_cast<char>(value - 'A' + 'a') : value;
+		}
+
+		[[nodiscard]] bool native_path_at_or_below(const std::string_view path,
+												   const std::string_view root,
+												   const bool windows_path)
+		{
+			if (path.size() < root.size())
+				return false;
+			for (std::size_t index{}; index < root.size(); ++index)
+				if ((windows_path ? ascii_path_fold(path[index]) : path[index]) !=
+					(windows_path ? ascii_path_fold(root[index]) : root[index]))
+					return false;
+			if (path.size() == root.size())
+				return true;
+			const char separator = windows_path ? '\\' : '/';
+			return root.back() == separator || path[root.size()] == separator;
+		}
+
+		[[nodiscard]] bool path_at_or_below(const std::string_view path,
+											const std::string_view root,
+											const char separator)
+		{
+			if (path == root)
+				return true;
+			if (!path.starts_with(root))
+				return false;
+			return root.back() == separator || path[root.size()] == separator;
+		}
+
+		[[nodiscard]] bool logical_at_or_below(const std::string_view path,
+											   const std::string_view root)
+		{
+			return path_at_or_below(path, root, '/');
+		}
+
 		[[nodiscard]] result<void> require_strong_id(const canonical_value& value,
 													 const std::string& field)
 		{
@@ -282,6 +360,7 @@ namespace cxxlens::sdk
 		[[nodiscard]] result<void> validate_auxiliary_files(const canonical_value& captured,
 															const std::string& field,
 															const import_limits& limits,
+															const std::string_view logical_root,
 															std::vector<capture_gap>& gaps)
 		{
 			if (auto valid =
@@ -303,7 +382,8 @@ namespace cxxlens::sdk
 				if (!item)
 					return unexpected(std::move(item.error()));
 				auto path = require_text((*item.value())[0], prefix + ".logical_path");
-				if (!path || !logical_path(*path) || !paths.emplace(*path).second)
+				if (!path || !logical_path(*path) || !logical_at_or_below(*path, logical_root) ||
+					!paths.emplace(*path).second)
 					return unexpected(
 						path ? invalid(prefix + ".logical_path", "duplicate-or-machine-path")
 							 : std::move(path.error()));
@@ -353,6 +433,7 @@ namespace cxxlens::sdk
 			std::string capture_adapter;
 			std::string target_abi;
 			std::string project_id;
+			std::string logical_project_root;
 			std::size_t compile_unit_count{};
 			std::vector<capture_gap> gaps;
 		};
@@ -368,7 +449,7 @@ namespace cxxlens::sdk
 		validate_bundle_shape(const canonical_value& root, const import_limits& limits)
 		{
 			validated_bundle_projection output;
-			auto tuple = require_tuple(root, "root", 8U);
+			auto tuple = require_tuple(root, "root", 10U);
 			if (!tuple)
 				return unexpected(std::move(tuple.error()));
 			auto schema = require_text((*tuple.value())[0], "schema");
@@ -447,6 +528,54 @@ namespace cxxlens::sdk
 			output.capture_adapter = *adapter;
 			output.target_abi = *abi;
 			output.project_id = *project;
+			auto logical_root = require_text((*tuple.value())[8], "logical_project_root");
+			if (!logical_root || !logical_path(*logical_root))
+				return unexpected(logical_root ? invalid("logical_project_root", "machine-path")
+											   : std::move(logical_root.error()));
+			output.logical_project_root = *logical_root;
+
+			if (auto valid = validate_captured((*tuple.value())[9],
+											   "path_mappings",
+											   canonical_value::kind::ordered_tuple,
+											   generated_gaps);
+				!valid)
+				return unexpected(std::move(valid.error()));
+			const auto& mappings = (*tuple.value())[9].tuple[1];
+			if (mappings.type == canonical_value::kind::ordered_tuple &&
+				mappings.tuple.size() > limits.maximum_path_mappings)
+				return unexpected(limit("path_mappings", "count"));
+			std::vector<std::pair<std::string, std::string>> path_mappings;
+			if (mappings.type == canonical_value::kind::ordered_tuple)
+			{
+				std::string previous_physical;
+				std::set<std::string, std::less<>> logical_prefixes;
+				for (std::size_t index{}; index < mappings.tuple.size(); ++index)
+				{
+					const auto prefix = "path_mappings[" + std::to_string(index) + "]";
+					auto mapping = require_tuple(mappings.tuple[index], prefix, 2U);
+					if (!mapping)
+						return unexpected(std::move(mapping.error()));
+					auto physical =
+						require_text((*mapping.value())[0], prefix + ".captured_physical_prefix");
+					auto logical = require_text((*mapping.value())[1], prefix + ".logical_prefix");
+					if (!physical || !logical ||
+						!canonical_native_path(*physical, *family == "msvc") ||
+						!logical_path(*logical) || !logical_at_or_below(*logical, *logical_root) ||
+						(!previous_physical.empty() && previous_physical >= *physical) ||
+						!logical_prefixes.emplace(*logical).second)
+						return unexpected(invalid(prefix, "invalid-or-noncanonical"));
+					for (const auto& [existing_physical, existing_logical] : path_mappings)
+						if (native_path_at_or_below(
+								*physical, existing_physical, *family == "msvc") ||
+							native_path_at_or_below(
+								existing_physical, *physical, *family == "msvc") ||
+							logical_at_or_below(*logical, existing_logical) ||
+							logical_at_or_below(existing_logical, *logical))
+							return unexpected(invalid(prefix, "overlapping-authority"));
+					previous_physical = *physical;
+					path_mappings.emplace_back(*physical, *logical);
+				}
+			}
 
 			const auto& units = (*tuple.value())[5];
 			if (units.type != canonical_value::kind::ordered_tuple || units.tuple.empty() ||
@@ -459,12 +588,13 @@ namespace cxxlens::sdk
 			for (std::size_t index{}; index < units.tuple.size(); ++index)
 			{
 				const auto prefix = "compile_units[" + std::to_string(index) + "]";
-				auto unit = require_tuple(units.tuple[index], prefix, 12U);
+				auto unit = require_tuple(units.tuple[index], prefix, 13U);
 				if (!unit)
 					return unexpected(std::move(unit.error()));
 				auto id = require_text((*unit.value())[0], prefix + ".compile_unit_id");
 				auto path = require_text((*unit.value())[3], prefix + ".source_logical_path");
-				if (!id || !path || !logical_path(*path) || !unit_ids.emplace(*id).second ||
+				if (!id || !path || !logical_path(*path) ||
+					!logical_at_or_below(*path, *logical_root) || !unit_ids.emplace(*id).second ||
 					!source_paths.emplace(*path).second ||
 					(!previous_unit.empty() && previous_unit >= *id))
 					return unexpected(
@@ -500,7 +630,8 @@ namespace cxxlens::sdk
 					return unexpected(invalid(prefix + ".source_file_id", "duplicate"));
 				auto working =
 					require_text((*unit.value())[6], prefix + ".logical_working_directory");
-				if (!working || !logical_path(*working))
+				if (!working || !logical_path(*working) ||
+					!logical_at_or_below(*working, *logical_root))
 					return unexpected(
 						working ? invalid(prefix + ".logical_working_directory", "machine-path")
 								: std::move(working.error()));
@@ -516,12 +647,18 @@ namespace cxxlens::sdk
 														   limits.maximum_arguments_per_unit);
 						!valid)
 						return unexpected(std::move(valid.error()));
-				if (auto valid = validate_auxiliary_files(
-						(*unit.value())[9], prefix + ".response_files", limits, generated_gaps);
+				if (auto valid = validate_auxiliary_files((*unit.value())[9],
+														  prefix + ".response_files",
+														  limits,
+														  *logical_root,
+														  generated_gaps);
 					!valid)
 					return unexpected(std::move(valid.error()));
-				if (auto valid = validate_auxiliary_files(
-						(*unit.value())[10], prefix + ".config_files", limits, generated_gaps);
+				if (auto valid = validate_auxiliary_files((*unit.value())[10],
+														  prefix + ".config_files",
+														  limits,
+														  *logical_root,
+														  generated_gaps);
 					!valid)
 					return unexpected(std::move(valid.error()));
 				if (auto valid = validate_captured((*unit.value())[11],
@@ -559,6 +696,29 @@ namespace cxxlens::sdk
 							!valid)
 							return unexpected(std::move(valid.error()));
 					}
+				}
+				if (auto valid = validate_captured((*unit.value())[12],
+												   prefix + ".captured_working_directory",
+												   canonical_value::kind::utf8_string,
+												   generated_gaps);
+					!valid)
+					return unexpected(std::move(valid.error()));
+				if ((*unit.value())[12].tuple[1].type == canonical_value::kind::utf8_string)
+				{
+					const auto physical = std::string_view{(*unit.value())[12].tuple[1].text};
+					if (!canonical_native_path(physical, *family == "msvc"))
+						return unexpected(invalid(prefix + ".captured_working_directory",
+												  "not-canonical-absolute"));
+					const auto mapping =
+						std::ranges::find_if(path_mappings,
+											 [&](const auto& candidate)
+											 {
+												 return native_path_at_or_below(
+													 physical, candidate.first, *family == "msvc");
+											 });
+					if (mapping == path_mappings.end())
+						return unexpected(invalid(prefix + ".captured_working_directory",
+												  "unmapped-physical-path"));
 				}
 			}
 			output.compile_unit_count = units.tuple.size();
@@ -606,6 +766,7 @@ namespace cxxlens::sdk
 				auto file_id = require_text((*member.value())[0], prefix + ".file_id");
 				auto path = require_text((*member.value())[1], prefix + ".logical_path");
 				if (!file_id || !path || !logical_path(*path) ||
+					!logical_at_or_below(*path, *logical_root) ||
 					!member_ids.emplace(*file_id).second || !member_paths.emplace(*path).second ||
 					(!previous_member_id.empty() && previous_member_id >= *file_id))
 					return unexpected(
@@ -730,9 +891,10 @@ namespace cxxlens::sdk
 		if (maximum_bundle_bytes == 0U || maximum_nesting_depth == 0U ||
 			maximum_nesting_depth > 64U || maximum_compile_units == 0U ||
 			maximum_arguments_per_unit == 0U || maximum_auxiliary_files_per_unit == 0U ||
-			maximum_environment_effects_per_unit == 0U || maximum_string_bytes == 0U ||
-			maximum_total_metadata_bytes == 0U || maximum_source_closure_members == 0U ||
-			maximum_source_closure_blobs == 0U || maximum_source_closure_bytes == 0U)
+			maximum_environment_effects_per_unit == 0U || maximum_path_mappings == 0U ||
+			maximum_string_bytes == 0U || maximum_total_metadata_bytes == 0U ||
+			maximum_source_closure_members == 0U || maximum_source_closure_blobs == 0U ||
+			maximum_source_closure_bytes == 0U)
 			return unexpected(error{"application-analysis.import-limits-invalid", "limits", {}});
 		return {};
 	}
@@ -760,6 +922,10 @@ namespace cxxlens::sdk
 	std::string_view capture_bundle::project_id() const noexcept
 	{
 		return value_->project_id;
+	}
+	std::string_view capture_bundle::logical_project_root() const noexcept
+	{
+		return value_->logical_project_root;
 	}
 	std::size_t capture_bundle::compile_unit_count() const noexcept
 	{
@@ -794,6 +960,7 @@ namespace cxxlens::sdk
 		value->capture_adapter = std::move(projection->capture_adapter);
 		value->target_abi = std::move(projection->target_abi);
 		value->project_id = std::move(projection->project_id);
+		value->logical_project_root = std::move(projection->logical_project_root);
 		value->compile_unit_count = projection->compile_unit_count;
 		value->gaps = std::move(projection->gaps);
 		value->digest = content_digest(input);
