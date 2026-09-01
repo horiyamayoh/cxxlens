@@ -527,4 +527,22 @@ namespace cxxlens::sdk::detail
 		return output;
 #endif
 	}
+
+	namespace
+	{
+		class system_gcc_probe_process_port final : public gcc_probe_process_port
+		{
+		  public:
+			result<gcc_probe_process_output> run(const gcc_probe_process_request& request,
+												 const std::stop_token& cancellation) override
+			{
+				return run_gcc_probe_process(request, cancellation);
+			}
+		};
+	} // namespace
+
+	std::unique_ptr<gcc_probe_process_port> make_system_gcc_probe_process_port()
+	{
+		return std::make_unique<system_gcc_probe_process_port>();
+	}
 } // namespace cxxlens::sdk::detail

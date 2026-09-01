@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <stop_token>
 #include <string>
 #include <vector>
@@ -65,10 +66,22 @@ namespace cxxlens::sdk::detail
 		std::string failure_detail;
 	};
 
+	class CXXLENS_RUNTIME_DETAIL_HIDDEN gcc_probe_process_port
+	{
+	  public:
+		virtual ~gcc_probe_process_port() = default;
+		[[nodiscard]] virtual result<gcc_probe_process_output>
+		run(const gcc_probe_process_request& request, const std::stop_token& cancellation) = 0;
+	};
+
 	/** Run one exact GCC introspection command without shell or ambient environment lookup. */
 	[[nodiscard]] CXXLENS_RUNTIME_DETAIL_HIDDEN result<gcc_probe_process_output>
 	run_gcc_probe_process(const gcc_probe_process_request& request,
 						  const std::stop_token& cancellation = {});
+
+	/** Linux/glibc production adapter; other hosts return structured unavailable. */
+	[[nodiscard]] CXXLENS_RUNTIME_DETAIL_HIDDEN std::unique_ptr<gcc_probe_process_port>
+	make_system_gcc_probe_process_port();
 } // namespace cxxlens::sdk::detail
 
 #undef CXXLENS_RUNTIME_DETAIL_HIDDEN
