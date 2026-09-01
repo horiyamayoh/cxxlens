@@ -60,7 +60,7 @@ properties:
       required: [id, entry, positive_example, negative_example]
       properties:
         id:
-          enum: [generated-typed-query, runtime-dynamic-query, portable-provider, clang22-native-provider, high-level-recipe]
+          enum: [generated-typed-query, runtime-dynamic-query, portable-provider, clang22-native-provider, high-level-recipe, application-analysis]
         entry: {$ref: '#/$defs/id'}
         positive_example: {$ref: '#/$defs/path'}
         negative_example: {$ref: '#/$defs/path'}

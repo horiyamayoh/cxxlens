@@ -1,0 +1,99 @@
+schema: cxxlens.build-capture-bundle.v1
+document_version: 1.0.0
+maturity: experimental
+encoding: cxxlens-canonical-tuple-v1
+purpose: Detached observations of an application build performed by a production compiler.
+authority:
+  producer: capture-adapter
+  consumer: bounded-sdk-decoder
+  not_authoritative_for: [replay-fidelity, provider-trust, store-publication]
+root_tuple:
+  - {index: 0, name: schema, type: string, const: cxxlens.build-capture-bundle.v1}
+  - {index: 1, name: production_toolchain, type: toolchain-tuple}
+  - {index: 2, name: capture_adapter, type: registered-symbol}
+  - {index: 3, name: target_abi, type: strong-id}
+  - {index: 4, name: project_id, type: strong-id}
+  - {index: 5, name: compile_units, type: ordered-tuple-of-compile-unit}
+  - {index: 6, name: source_closure, type: source-closure-tuple}
+  - {index: 7, name: gaps, type: ordered-tuple-of-gap}
+toolchain_tuple:
+  fields:
+    - {index: 0, name: family, type: enum, values: [gcc, msvc]}
+    - {index: 1, name: exact_version, type: strong-id}
+    - {index: 2, name: canonical_binary_path, type: captured-string}
+    - {index: 3, name: binary_digest, type: captured-digest}
+    - {index: 4, name: target_triple, type: strong-id}
+    - {index: 5, name: sysroot, type: captured-string}
+    - {index: 6, name: abi_digest, type: digest}
+    - {index: 7, name: builtin_headers_digest, type: digest}
+    - {index: 8, name: builtin_macros_digest, type: digest}
+    - {index: 9, name: include_search_digest, type: digest}
+compile_unit_tuple:
+  fields:
+    - {index: 0, name: compile_unit_id, type: strong-id}
+    - {index: 1, name: source_snapshot_id, type: strong-id}
+    - {index: 2, name: source_file_id, type: strong-id}
+    - {index: 3, name: source_logical_path, type: logical-path}
+    - {index: 4, name: source_content_digest, type: digest}
+    - {index: 5, name: source_size_bytes, type: nonnegative-integer}
+    - {index: 6, name: logical_working_directory, type: logical-path}
+    - {index: 7, name: language, type: strong-id}
+    - {index: 8, name: original_argv, type: captured-string-tuple}
+    - {index: 9, name: response_files, type: captured-auxiliary-file-tuple}
+    - {index: 10, name: config_files, type: captured-auxiliary-file-tuple}
+    - {index: 11, name: environment_effects, type: captured-environment-effect-tuple}
+source_closure_tuple:
+  fields:
+    - {index: 0, name: closure_id, type: strong-id}
+    - {index: 1, name: closure_digest, type: digest}
+    - {index: 2, name: manifest_digest, type: digest}
+    - {index: 3, name: member_count, type: nonnegative-integer}
+    - {index: 4, name: blob_count, type: nonnegative-integer}
+    - {index: 5, name: unique_blob_bytes, type: nonnegative-integer}
+captured_value_tuple:
+  fields:
+    - {index: 0, name: state, type: enum, values: [observed, derived, redacted, unavailable]}
+    - {index: 1, name: value, type: value-or-null}
+    - {index: 2, name: reason, type: string}
+    - {index: 3, name: completion_action, type: string}
+  invariants:
+    - observed-or-derived-has-value-and-no-gap-metadata
+    - redacted-or-unavailable-has-null-and-nonempty-reason-and-action
+auxiliary_file_tuple:
+  fields:
+    - {index: 0, name: logical_path, type: logical-path}
+    - {index: 1, name: content_digest, type: captured-digest}
+    - {index: 2, name: size_bytes, type: nonnegative-integer}
+    - {index: 3, name: parent_index, type: nonnegative-integer-or-null}
+environment_effect_tuple:
+  fields:
+    - {index: 0, name: name, type: registered-symbol}
+    - {index: 1, name: semantic_value, type: captured-string}
+gap_tuple:
+  fields:
+    - {index: 0, name: field, type: strong-id}
+    - {index: 1, name: state, type: enum, values: [redacted, unavailable]}
+    - {index: 2, name: reason, type: strong-id}
+    - {index: 3, name: completion_action, type: string}
+bounds:
+  bundle_bytes: 67108864
+  nesting_depth: 32
+  compile_units: 4096
+  arguments_per_unit: 4096
+  auxiliary_files_per_unit: 4096
+  environment_effects_per_unit: 1024
+  string_bytes: 4096
+  total_metadata_bytes: 67108864
+  source_closure_members: 4096
+  source_closure_blobs: 4096
+  source_closure_bytes: 50331648
+invariants:
+  - all-external-counts-are-checked-before-allocation
+  - compile-unit-ids-and-logical-paths-are-unique
+  - original-argv-order-is-preserved
+  - compile-units-auxiliary-files-environment-effects-and-gaps-use-canonical-order
+  - auxiliary-file-parent-graph-is-acyclic-and-depth-bounded
+  - environment-is-deny-by-default-and-only-normalized-effects-are-carried
+  - machine-root-pid-time-and-unordered-order-do-not-contribute-to-semantic-identity
+  - missing-and-redacted-are-never-reconstructed-from-placeholders
+  - canonical-bundle-digest-is-derived-from-the-complete-input-bytes

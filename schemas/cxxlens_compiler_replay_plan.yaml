@@ -1,0 +1,41 @@
+schema: cxxlens.compiler-replay-plan.v1
+document_version: 1.0.0
+maturity: experimental
+encoding: cxxlens-canonical-tuple-v1
+purpose: A validated translation from one production compile invocation to one analysis frontend.
+authority:
+  producer: versioned-replay-planner
+  input: cxxlens.build-capture-bundle.v1
+  not_authoritative_for: [production-compiler-exactness, provider-trust, store-publication]
+root_tuple:
+  - {index: 0, name: schema, type: string, const: cxxlens.compiler-replay-plan.v1}
+  - {index: 1, name: capture_bundle_digest, type: digest}
+  - {index: 2, name: compile_unit_id, type: strong-id}
+  - {index: 3, name: analysis_frontend, type: strong-id}
+  - {index: 4, name: target_abi, type: strong-id}
+  - {index: 5, name: effective_argv, type: ordered-tuple-of-string}
+  - {index: 6, name: option_mappings, type: ordered-tuple-of-option-mapping}
+  - {index: 7, name: source_closure_digest, type: digest}
+  - {index: 8, name: unresolved, type: ordered-tuple-of-unresolved}
+option_mapping_tuple:
+  fields:
+    - {index: 0, name: production_token, type: string}
+    - {index: 1, name: replay_tokens, type: ordered-tuple-of-string}
+    - {index: 2, name: fidelity, type: enum, values: [exact, semantics_preserving, approximation, unsupported, nonsemantic]}
+    - {index: 3, name: affected_scope, type: string}
+    - {index: 4, name: reason, type: string}
+    - {index: 5, name: completion_action, type: string}
+invariants:
+  - exact-and-semantics-preserving-have-no-unresolved-metadata
+  - approximation-and-unsupported-have-nonempty-scope-reason-and-action
+  - unsupported-options-are-not-present-in-effective-argv
+  - nonsemantic-options-cannot-change-semantic-identity
+  - effective-argv-is-shell-free-and-order-preserving
+  - plan-identity-binds-capture-frontend-abi-mappings-closure-and-unresolved
+  - clang-parse-success-does-not-imply-production-compiler-exactness
+bounds:
+  arguments: 4096
+  option_mappings: 4096
+  unresolved: 10000
+  string_bytes: 4096
+  total_bytes: 67108864

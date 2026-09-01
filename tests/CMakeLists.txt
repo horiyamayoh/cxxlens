@@ -120,6 +120,18 @@ set_tests_properties(
   PROPERTIES LABELS
              "unit;sdk;capture;compiler-neutral;determinism;resource;security")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-application-analysis
+                            unit/sdk/application_analysis_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-application-analysis
+                      PRIVATE cxxlens::sdk)
+add_test(NAME unit.sdk-application-analysis
+         COMMAND cxxlens-unit-sdk-application-analysis)
+set_tests_properties(
+  unit.sdk-application-analysis
+  PROPERTIES
+    LABELS
+    "unit;sdk;application-analysis;capture;fault;determinism;resource;security")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-materialization-task
                             unit/sdk/materialization_task_internal_test.cpp)
 target_link_libraries(
@@ -1742,6 +1754,7 @@ set_tests_properties(
 foreach(
   example IN
   ITEMS typed_query
+        application_analysis
         dynamic_query
         portable_provider
         recipe
@@ -1786,8 +1799,9 @@ if(CXXLENS_CLANG22_AVAILABLE)
     PROPERTY LABELS golden)
 endif()
 
-foreach(example IN ITEMS dynamic_literal_type_mismatch unordered_limit
-                         invalid_recipe provider_no_credit)
+foreach(example IN
+        ITEMS application_analysis_invalid_bundle dynamic_literal_type_mismatch
+              unordered_limit invalid_recipe provider_no_credit)
   set(target_name "cxxlens-sdk-negative-${example}")
   cxxlens_add_test_executable(
     ${target_name} "${PROJECT_SOURCE_DIR}/examples/sdk/negative/${example}.cpp")
@@ -2099,6 +2113,8 @@ foreach(
         configure.dev-core-no-dependencies
         public-api.cxxlens-header
         public-api.sdk-header
+        unit.sdk-application-analysis
+        sdk.example-application_analysis
         sdk.example-typed_query
         sdk.example-dynamic_query
         sdk.example-portable_provider
@@ -2107,10 +2123,12 @@ foreach(
         sdk.example-snapshot_store
         sdk.example-query_execution
         sdk.example-incremental_materialization
+        sdk.negative-application_analysis_invalid_bundle
         sdk.negative-dynamic_literal_type_mismatch
         sdk.negative-unordered_limit
         sdk.negative-invalid_recipe
         sdk.negative-provider_no_credit
+        quality.application-analysis-support
         quality.relation-idl-reproducibility)
   cxxlens_append_test_label("${test_name}" fast)
 endforeach()

@@ -12,5 +12,13 @@
 int main()
 {
 	static_assert(!std::is_constructible_v<cxxlens::sdk::scalar_value, void*>);
+	static_assert(!std::is_default_constructible_v<cxxlens::sdk::capture_bundle>);
+	static_assert(!std::is_default_constructible_v<cxxlens::sdk::replay_plan>);
+	static_assert(!std::is_default_constructible_v<cxxlens::sdk::imported_project>);
+	static_assert(!std::is_default_constructible_v<cxxlens::sdk::materialization_request>);
+	static_assert(!std::is_default_constructible_v<cxxlens::sdk::materialization_result>);
+	static_assert(cxxlens::sdk::is_valid(cxxlens::sdk::replay_fidelity::unsupported));
+	static_assert(
+		cxxlens::sdk::is_valid(cxxlens::sdk::materialization_terminal::published_partial));
 	return 0;
 }

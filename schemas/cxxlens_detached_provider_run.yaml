@@ -1,0 +1,48 @@
+schema: cxxlens.detached-provider-run.v1
+document_version: 1.0.0
+maturity: experimental
+encoding: cxxlens-canonical-tuple-v1
+purpose: A detached provider execution candidate that cannot publish a snapshot by itself.
+authority:
+  producer: application-analysis-worker
+  consumer: linux-provider-adoption
+  not_authoritative_for: [trust-policy, relation-registry, store-publication]
+root_tuple:
+  - {index: 0, name: schema, type: string, const: cxxlens.detached-provider-run.v1}
+  - {index: 1, name: task_id, type: strong-id}
+  - {index: 2, name: task_input_digest, type: digest}
+  - {index: 3, name: replay_plan_digest, type: digest}
+  - {index: 4, name: provider_identity, type: provider-identity-tuple}
+  - {index: 5, name: protocol_transcript, type: bytes}
+  - {index: 6, name: terminal, type: enum, values: [complete, partial, rejected, failed, cancelled]}
+  - {index: 7, name: partition_candidates, type: ordered-tuple-of-partition-candidate}
+  - {index: 8, name: coverage, type: ordered-tuple-of-coverage}
+  - {index: 9, name: unresolved, type: ordered-tuple-of-unresolved}
+  - {index: 10, name: provenance, type: ordered-tuple-of-provenance}
+  - {index: 11, name: runtime_receipt_digest, type: digest-or-null}
+provider_identity_tuple:
+  fields:
+    - {index: 0, name: provider_id, type: strong-id}
+    - {index: 1, name: provider_version, type: semantic-version}
+    - {index: 2, name: binary_digest, type: digest}
+    - {index: 3, name: semantic_contract_digest, type: digest}
+    - {index: 4, name: signature_digest, type: digest}
+    - {index: 5, name: revocation_state, type: strong-id}
+    - {index: 6, name: sandbox_policy_digest, type: digest}
+adoption_invariants:
+  - canonical-bundle-digest-is-recomputed-before-adoption
+  - task-input-and-replay-plan-bindings-must-match-host-authority
+  - provider-binary-signature-revocation-and-sandbox-are-validated-before-output
+  - protocol-transcript-is-redecoded-by-the-existing-protocol-v2-validator
+  - every-relation-descriptor-and-partition-shape-is-revalidated
+  - malformed-output-is-atomically-rejected-and-never-downgraded-to-partial
+  - failed-cancelled-and-rejected-carry-no-publication-candidate
+  - complete-requires-balanced-coverage-and-valid-closure
+  - detached-run-never-contains-a-snapshot-or-publication-record
+bounds:
+  bundle_bytes: 67108864
+  protocol_frames: 65536
+  output_bytes: 16777216
+  rows: 100000
+  diagnostics: 10000
+  nesting_depth: 32

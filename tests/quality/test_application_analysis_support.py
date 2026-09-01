@@ -24,6 +24,14 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
                 encoding="utf-8"
             )
         )
+        cls.wire_contracts = {
+            name: yaml.safe_load((ROOT / f"schemas/{name}.yaml").read_text(encoding="utf-8"))
+            for name in (
+                "cxxlens_build_capture_bundle",
+                "cxxlens_compiler_replay_plan",
+                "cxxlens_detached_provider_run",
+            )
+        }
 
     def test_contract_validates(self) -> None:
         jsonschema.Draft202012Validator(self.schema).validate(self.contract)
@@ -92,6 +100,35 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
         self.assertEqual(pins["clang_replay"]["exact_version"], "23.1.0")
         self.assertNotIn("latest", str(pins).lower())
         self.assertFalse(pins["windows_runner"]["ambient_defaults_authoritative"])
+
+    def test_wire_authorities_are_distinct_and_bounded(self) -> None:
+        expected = {
+            "cxxlens_build_capture_bundle": "cxxlens.build-capture-bundle.v1",
+            "cxxlens_compiler_replay_plan": "cxxlens.compiler-replay-plan.v1",
+            "cxxlens_detached_provider_run": "cxxlens.detached-provider-run.v1",
+        }
+        self.assertEqual(
+            {name: value["schema"] for name, value in self.wire_contracts.items()},
+            expected,
+        )
+        for contract in self.wire_contracts.values():
+            self.assertEqual(contract["encoding"], "cxxlens-canonical-tuple-v1")
+            self.assertTrue(all(value > 0 for value in contract["bounds"].values()))
+            self.assertIn("not_authoritative_for", contract["authority"])
+            root = contract["root_tuple"]
+            self.assertEqual([field["index"] for field in root], list(range(len(root))))
+            self.assertEqual(len({field["name"] for field in root}), len(root))
+
+        capture = self.wire_contracts["cxxlens_build_capture_bundle"]
+        replay = self.wire_contracts["cxxlens_compiler_replay_plan"]
+        detached = self.wire_contracts["cxxlens_detached_provider_run"]
+        self.assertIn("replay-fidelity", capture["authority"]["not_authoritative_for"])
+        self.assertIn("production-compiler-exactness", replay["authority"]["not_authoritative_for"])
+        self.assertIn("store-publication", detached["authority"]["not_authoritative_for"])
+        self.assertEqual(
+            replay["option_mapping_tuple"]["fields"][2]["values"],
+            ["exact", "semantics_preserving", "approximation", "unsupported", "nonsemantic"],
+        )
 
 
 if __name__ == "__main__":

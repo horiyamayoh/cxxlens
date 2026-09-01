@@ -112,6 +112,8 @@ namespace
 
 int main()
 {
+	if (!cxxlens::sdk::import_limits{}.validate())
+		return 1;
 	auto query = cxxlens::sdk::query::from<cxxlens::cc::relations::call_site>();
 	auto declaration = cxxlens::sdk::query::from<cxxlens::cc::relations::declaration>();
 	auto component = cxxlens::sdk::query::from<cxxlens::cc::relations::type_component>();

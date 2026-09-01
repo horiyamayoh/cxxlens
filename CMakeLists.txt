@@ -336,8 +336,13 @@ endforeach()
 
 add_library(
   cxxlens_sdk
-  ${CXXLENS_LIBRARY_TYPE} src/sdk/provider.cpp src/sdk/incremental.cpp
-  src/sdk/build_capture_internal.cpp src/sdk/materialization_task_internal.cpp)
+  ${CXXLENS_LIBRARY_TYPE}
+  src/sdk/provider.cpp
+  src/sdk/incremental.cpp
+  src/sdk/application_analysis.cpp
+  src/sdk/application_analysis_service.cpp
+  src/sdk/build_capture_internal.cpp
+  src/sdk/materialization_task_internal.cpp)
 add_library(cxxlens::sdk ALIAS cxxlens_sdk)
 cxxlens_configure_component(cxxlens_sdk sdk)
 target_link_libraries(cxxlens_sdk PUBLIC cxxlens::cxxlens cxxlens::recipes)
@@ -911,6 +916,9 @@ install(
 set(CXXLENS_PRODUCT_SCHEMA_FILES
     schemas/cxxlens_application_analysis_support.schema.yaml
     schemas/cxxlens_application_analysis_support.yaml
+    schemas/cxxlens_build_capture_bundle.yaml
+    schemas/cxxlens_compiler_replay_plan.yaml
+    schemas/cxxlens_detached_provider_run.yaml
     schemas/cxxlens_ng_claim_envelope.schema.yaml
     schemas/cxxlens_ng_clang22_materialization_contract.yaml
     schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml

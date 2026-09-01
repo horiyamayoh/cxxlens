@@ -4,6 +4,7 @@
  * test authors.
  */
 
+#include <cxxlens/sdk/application_analysis.hpp>
 #include <cxxlens/sdk/claim.hpp>
 #include <cxxlens/sdk/common.hpp>
 #include <cxxlens/sdk/incremental.hpp>
