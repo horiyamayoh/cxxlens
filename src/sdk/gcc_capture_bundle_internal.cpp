@@ -461,10 +461,17 @@ namespace cxxlens::sdk::detail
 					metadata_bytes += argument.size();
 				}
 
-				auto directory = canonical_posix_path({entry.directory, prefix + ".directory"});
+				const auto directory_input = source.canonical_working_directory.empty()
+					? std::string_view{entry.directory}
+					: std::string_view{source.canonical_working_directory};
+				auto directory = canonical_posix_path(
+					{directory_input, prefix + ".canonical_working_directory"});
 				if (!directory)
 					return unexpected(std::move(directory.error()));
-				auto source_path = resolve_path({entry.file, *directory, prefix + ".file"});
+				result<std::string> source_path = source.canonical_source_path.empty()
+					? resolve_path({entry.file, *directory, prefix + ".file"})
+					: canonical_posix_path(
+						  {source.canonical_source_path, prefix + ".canonical_source_path"});
 				if (!source_path)
 					return unexpected(std::move(source_path.error()));
 				if (!at_or_below(*directory, *physical_root) ||

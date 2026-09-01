@@ -48,6 +48,10 @@ namespace cxxlens::sdk::detail
 	{
 		std::vector<std::byte> content;
 		std::string encoding{"binary_or_unknown"};
+		// Empty only for pure projector callers. Filesystem-backed capture supplies both values
+		// from the same opened objects that yielded the bytes.
+		std::string canonical_source_path;
+		std::string canonical_working_directory;
 	};
 
 	struct gcc_compile_commands_bundle_input
