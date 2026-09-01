@@ -8,21 +8,10 @@
 
 #include <cxxlens/sdk/application_analysis.hpp>
 
+#include "application_analysis_internal.hpp"
+
 namespace cxxlens::sdk
 {
-	struct capture_bundle::implementation
-	{
-		canonical_value root;
-		std::string digest;
-		std::string production_compiler;
-		std::string capture_adapter;
-		std::string target_abi;
-		std::string project_id;
-		std::string logical_project_root;
-		std::size_t compile_unit_count{};
-		std::vector<capture_gap> gaps;
-	};
-
 	namespace
 	{
 		[[nodiscard]] error invalid(std::string field, std::string detail)
@@ -436,6 +425,7 @@ namespace cxxlens::sdk
 			std::string logical_project_root;
 			std::size_t compile_unit_count{};
 			std::vector<capture_gap> gaps;
+			detail::decoded_capture_projection decoded;
 		};
 
 		struct compile_source_binding
@@ -511,6 +501,8 @@ namespace cxxlens::sdk
 							: (!version ? std::move(version.error())
 										: invalid("production_toolchain.family", "unsupported")));
 			output.production_compiler = std::string{*family} + "-" + std::string{*version};
+			output.decoded.toolchain_family = *family;
+			output.decoded.toolchain_version = *version;
 			if ((*family == "gcc" && *version != "16.2.0") ||
 				(*family == "msvc" && *version != "19.51.36247"))
 				return unexpected(invalid("production_toolchain.exact_version", "not-pinned"));
@@ -574,11 +566,15 @@ namespace cxxlens::sdk
 			output.capture_adapter = *adapter;
 			output.target_abi = *abi;
 			output.project_id = *project;
+			output.decoded.target_triple = (*toolchain.value())[4].text;
+			output.decoded.target_abi = *abi;
+			output.decoded.project_id = *project;
 			auto logical_root = require_text((*tuple.value())[8], "logical_project_root");
 			if (!logical_root || !logical_path(*logical_root) || *logical_root != "project://")
 				return unexpected(logical_root ? invalid("logical_project_root", "machine-path")
 											   : std::move(logical_root.error()));
 			output.logical_project_root = *logical_root;
+			output.decoded.logical_project_root = *logical_root;
 
 			if (auto valid = validate_captured((*tuple.value())[9],
 											   "path_mappings",
@@ -620,6 +616,8 @@ namespace cxxlens::sdk
 							return unexpected(invalid(prefix, "overlapping-authority"));
 					previous_physical = *physical;
 					path_mappings.emplace_back(*physical, *logical);
+					output.decoded.path_mappings.push_back(
+						{std::string{*physical}, std::string{*logical}});
 				}
 			}
 
@@ -688,7 +686,7 @@ namespace cxxlens::sdk
 				std::optional<std::string> source_snapshot;
 				if ((*unit.value())[1].tuple[1].type == canonical_value::kind::utf8_string)
 					source_snapshot = (*unit.value())[1].tuple[1].text;
-				source_bindings.push_back({std::move(source_snapshot),
+				source_bindings.push_back({source_snapshot,
 										   std::string{*source_file_id},
 										   std::string{*path},
 										   std::string{*source_digest},
@@ -824,6 +822,30 @@ namespace cxxlens::sdk
 					((*family == "gcc" && extension.text != "strict" && extension.text != "gnu") ||
 					 (*family == "msvc" && extension.text != "strict" && extension.text != "msvc")))
 					return unexpected(invalid(prefix + ".extension_mode", "toolchain-mismatch"));
+
+				detail::decoded_capture_unit decoded_unit;
+				decoded_unit.compile_unit_id = *id;
+				decoded_unit.source_snapshot_id = source_snapshot;
+				decoded_unit.source_file_id = *source_file_id;
+				decoded_unit.source_logical_path = *path;
+				decoded_unit.source_content_digest = *source_digest;
+				decoded_unit.source_size_bytes = *source_size;
+				decoded_unit.logical_working_directory = *working;
+				decoded_unit.language = (*unit.value())[7].text;
+				if ((*unit.value())[8].tuple[1].type == canonical_value::kind::ordered_tuple)
+				{
+					std::vector<std::string> arguments;
+					arguments.reserve((*unit.value())[8].tuple[1].tuple.size());
+					for (const auto& argument : (*unit.value())[8].tuple[1].tuple)
+						arguments.push_back(argument.text);
+					decoded_unit.original_arguments = std::move(arguments);
+				}
+				if ((*unit.value())[13].tuple[1].type == canonical_value::kind::utf8_string)
+					decoded_unit.language_standard = (*unit.value())[13].tuple[1].text;
+				if (extension.type == canonical_value::kind::utf8_string)
+					decoded_unit.extension_mode = extension.text;
+				decoded_unit.source_closure_id = *source_closure;
+				output.decoded.compile_units.push_back(std::move(decoded_unit));
 			}
 			output.compile_unit_count = units.tuple.size();
 
@@ -1016,6 +1038,9 @@ namespace cxxlens::sdk
 					*closure_id != "source-closure:" + *recomputed_closure)
 					return unexpected(
 						invalid(closure_prefix + ".closure_digest", "binding-mismatch"));
+				for (auto& unit : output.decoded.compile_units)
+					if (unit.source_closure_id == *closure_id)
+						unit.source_closure_digest = *recomputed_closure;
 				for (const auto& binding : source_bindings)
 					if (binding.source_closure_id == *closure_id &&
 						!member_ids.contains(binding.file_id))
@@ -1141,6 +1166,7 @@ namespace cxxlens::sdk
 		value->logical_project_root = std::move(projection->logical_project_root);
 		value->compile_unit_count = projection->compile_unit_count;
 		value->gaps = std::move(projection->gaps);
+		value->projection = std::move(projection->decoded);
 		value->digest = content_digest(input);
 		return capture_bundle{std::move(value)};
 	}

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstddef>
@@ -123,7 +124,7 @@ namespace
 			canonical_value::from_string("c++"),
 			observed(canonical_value::from_tuple({
 				canonical_value::from_string("/opt/gcc-16.2.0/bin/g++"),
-				canonical_value::from_string("-std=c++23"),
+				canonical_value::from_string("-std=gnu++23"),
 				canonical_value::from_string("/workspace/example/src/main.cpp"),
 			})),
 			observed(canonical_value::from_tuple({})),
@@ -196,7 +197,17 @@ namespace
 		return value;
 	}
 
-	void positive_decode_and_unavailable_import()
+	[[nodiscard]] bool has_reason(const std::span<const cxxlens::sdk::capture_gap> gaps,
+								  const std::string_view reason)
+	{
+		return std::ranges::any_of(gaps,
+								   [&](const auto& gap)
+								   {
+									   return gap.reason == reason;
+								   });
+	}
+
+	void positive_decode_and_deterministic_import()
 	{
 		auto bytes = canonical_binary(valid_bundle());
 		assert(bytes);
@@ -213,8 +224,75 @@ namespace
 		assert(decoded->gaps().size() == 2U);
 		assert(decoded->digest() == cxxlens::sdk::content_digest(*bytes));
 		auto imported = cxxlens::sdk::import_capture(*decoded);
-		assert(!imported);
-		assert(imported.error().code == "application-analysis.target-unavailable");
+		auto imported_again = cxxlens::sdk::import_capture(*decoded_again);
+		assert(imported && imported_again);
+		assert(imported->id() == imported_again->id());
+		assert(imported->capture_bundle_digest() == decoded->digest());
+		assert(imported->replay_plans().size() == 1U);
+		const auto& plan = imported->replay_plans().front();
+		assert(plan.digest() == imported_again->replay_plans().front().digest());
+		assert(plan.capture_bundle_digest() == decoded->digest());
+		assert(plan.compile_unit_id() == "compile-unit:main");
+		assert(plan.analysis_frontend() == "clang-23.1.0-gcc-mode");
+		assert(plan.target_abi() == "x86_64-linux-gnu");
+		assert(has_reason(plan.unresolved(), "analysis-frontend-differs-from-production-compiler"));
+		assert(has_reason(plan.unresolved(), "gcc-extension-fidelity-not-proved-for-clang-replay"));
+		assert(imported->unresolved().size() == plan.unresolved().size());
+	}
+
+	void replay_fidelity_and_import_bounds_fail_closed()
+	{
+		auto strict = valid_bundle();
+		strict.tuple[5].tuple[0].tuple[8].tuple[1].tuple[1] =
+			canonical_value::from_string("-std=c++23");
+		strict.tuple[5].tuple[0].tuple[13] = observed(canonical_value::from_string("c++23"));
+		strict.tuple[5].tuple[0].tuple[14] = observed(canonical_value::from_string("strict"));
+		auto strict_bytes = canonical_binary(strict);
+		assert(strict_bytes);
+		auto strict_bundle = cxxlens::sdk::decode_capture_bundle(*strict_bytes);
+		assert(strict_bundle);
+		auto strict_import = cxxlens::sdk::import_capture(*strict_bundle);
+		assert(strict_import);
+		assert(!has_reason(strict_import->unresolved(),
+						   "gcc-extension-fidelity-not-proved-for-clang-replay"));
+
+		auto unknown = valid_bundle();
+		unknown.tuple[5].tuple[0].tuple[8].tuple[1].tuple.insert(
+			unknown.tuple[5].tuple[0].tuple[8].tuple[1].tuple.begin() + 2,
+			canonical_value::from_string("-fvendor-mode"));
+		auto unknown_bytes = canonical_binary(unknown);
+		assert(unknown_bytes);
+		auto unknown_bundle = cxxlens::sdk::decode_capture_bundle(*unknown_bytes);
+		assert(unknown_bundle);
+		auto unknown_import = cxxlens::sdk::import_capture(*unknown_bundle);
+		assert(unknown_import &&
+			   has_reason(unknown_import->unresolved(), "gcc-option-not-classified"));
+
+		cxxlens::sdk::import_limits limits;
+		limits.maximum_arguments_per_unit = 2U;
+		auto bounded = cxxlens::sdk::import_capture(*unknown_bundle, limits);
+		assert(!bounded && bounded.error().code == "application-analysis.import-limit-exceeded");
+
+		auto missing_output = valid_bundle();
+		missing_output.tuple[5].tuple[0].tuple[8].tuple[1].tuple.push_back(
+			canonical_value::from_string("-o"));
+		auto missing_output_bytes = canonical_binary(missing_output);
+		assert(missing_output_bytes);
+		auto missing_output_bundle = cxxlens::sdk::decode_capture_bundle(*missing_output_bytes);
+		assert(missing_output_bundle);
+		auto missing_output_import = cxxlens::sdk::import_capture(*missing_output_bundle);
+		assert(!missing_output_import &&
+			   missing_output_import.error().detail == "missing-output-path");
+
+		auto empty_argv = valid_bundle();
+		empty_argv.tuple[5].tuple[0].tuple[8] = observed(canonical_value::from_tuple({}));
+		auto empty_argv_bytes = canonical_binary(empty_argv);
+		assert(empty_argv_bytes);
+		auto empty_argv_bundle = cxxlens::sdk::decode_capture_bundle(*empty_argv_bytes);
+		assert(empty_argv_bundle);
+		auto empty_argv_import = cxxlens::sdk::import_capture(*empty_argv_bundle);
+		assert(!empty_argv_import &&
+			   empty_argv_import.error().code == "application-analysis.target-unavailable");
 	}
 
 	void duplicate_source_variants_bind_one_closure()
@@ -231,6 +309,18 @@ namespace
 		assert(bytes);
 		auto decoded = cxxlens::sdk::decode_capture_bundle(*bytes);
 		assert(decoded && decoded->compile_unit_count() == 2U);
+		auto imported = cxxlens::sdk::import_capture(*decoded);
+		assert(imported && imported->replay_plans().size() == 2U);
+		assert(std::ranges::none_of(imported->replay_plans()[0].unresolved(),
+									[](const auto& value)
+									{
+										return value.field.starts_with("compile_units[1].");
+									}));
+		assert(std::ranges::none_of(imported->replay_plans()[1].unresolved(),
+									[](const auto& value)
+									{
+										return value.field.starts_with("compile_units[0].");
+									}));
 
 		auto missing_closure = std::move(bundle);
 		missing_closure.tuple[5].tuple[1].tuple[15] =
@@ -485,7 +575,8 @@ namespace
 
 int main()
 {
-	positive_decode_and_unavailable_import();
+	positive_decode_and_deterministic_import();
+	replay_fidelity_and_import_bounds_fail_closed();
 	duplicate_source_variants_bind_one_closure();
 	resource_and_shape_fail_closed();
 	materialization_request_factory_validates_authority();

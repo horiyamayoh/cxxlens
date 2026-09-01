@@ -1,29 +1,14 @@
 #include <algorithm>
 #include <set>
+#include <tuple>
 #include <utility>
 
 #include <cxxlens/sdk/application_analysis.hpp>
 
+#include "application_analysis_internal.hpp"
+
 namespace cxxlens::sdk
 {
-	struct replay_plan::implementation
-	{
-		std::string digest;
-		std::string capture_bundle_digest;
-		std::string compile_unit_id;
-		std::string analysis_frontend;
-		std::string target_abi;
-		std::vector<capture_gap> unresolved;
-	};
-
-	struct imported_project::implementation
-	{
-		std::string id;
-		std::string capture_bundle_digest;
-		std::vector<replay_plan> replay_plans;
-		std::vector<capture_gap> unresolved;
-	};
-
 	struct materialization_request::implementation
 	{
 		relation_engine engine;
@@ -64,6 +49,275 @@ namespace cxxlens::sdk
 										   return (byte >= '0' && byte <= '9') ||
 											   (byte >= 'a' && byte <= 'f');
 									   });
+		}
+
+		[[nodiscard]] std::string_view fidelity_name(const replay_fidelity value) noexcept
+		{
+			switch (value)
+			{
+				case replay_fidelity::exact:
+					return "exact";
+				case replay_fidelity::semantics_preserving:
+					return "semantics_preserving";
+				case replay_fidelity::approximation:
+					return "approximation";
+				case replay_fidelity::unsupported:
+					return "unsupported";
+				case replay_fidelity::nonsemantic:
+					return "nonsemantic";
+			}
+			return {};
+		}
+
+		[[nodiscard]] bool gap_less(const capture_gap& left, const capture_gap& right)
+		{
+			return std::tie(left.field, left.state, left.reason, left.completion_action) <
+				std::tie(right.field, right.state, right.reason, right.completion_action);
+		}
+
+		void canonicalize_gaps(std::vector<capture_gap>& values)
+		{
+			std::ranges::sort(values, gap_less);
+			values.erase(std::ranges::unique(values).begin(), values.end());
+		}
+
+		void append_gap(std::vector<capture_gap>& values,
+						std::string field,
+						std::string reason,
+						std::string action)
+		{
+			values.push_back(
+				{std::move(field), "unavailable", std::move(reason), std::move(action)});
+		}
+
+		[[nodiscard]] std::vector<capture_gap>
+		capture_gaps_for_unit(const std::span<const capture_gap> gaps, const std::size_t unit_index)
+		{
+			const auto unit_prefix = "compile_units[" + std::to_string(unit_index) + "].";
+			std::vector<capture_gap> output;
+			for (const auto& gap : gaps)
+				if (!gap.field.starts_with("compile_units[") || gap.field.starts_with(unit_prefix))
+					output.push_back(gap);
+			return output;
+		}
+
+		[[nodiscard]] std::optional<std::string>
+		logical_path_for(const detail::decoded_capture_projection& capture,
+						 const std::string_view physical)
+		{
+			for (const auto& mapping : capture.path_mappings)
+			{
+				if (!physical.starts_with(mapping.physical_prefix))
+					continue;
+				if (physical.size() != mapping.physical_prefix.size() &&
+					mapping.physical_prefix.back() != '/' &&
+					physical[mapping.physical_prefix.size()] != '/')
+					continue;
+				auto suffix = physical.substr(mapping.physical_prefix.size());
+				if (mapping.logical_prefix.ends_with('/') && suffix.starts_with('/'))
+					suffix.remove_prefix(1U);
+				return mapping.logical_prefix + std::string{suffix};
+			}
+			return std::nullopt;
+		}
+
+		[[nodiscard]] canonical_value mapping_value(const detail::replay_option_mapping& value)
+		{
+			std::vector<canonical_value> replay_tokens;
+			replay_tokens.reserve(value.replay_tokens.size());
+			for (const auto& token : value.replay_tokens)
+				replay_tokens.push_back(canonical_value::from_string(token));
+			return canonical_value::from_tuple({
+				canonical_value::from_string(value.production_token),
+				canonical_value::from_tuple(std::move(replay_tokens)),
+				canonical_value::from_string(std::string{fidelity_name(value.fidelity)}),
+				canonical_value::from_string(value.affected_scope),
+				canonical_value::from_string(value.reason),
+				canonical_value::from_string(value.completion_action),
+			});
+		}
+
+		[[nodiscard]] canonical_value gap_value(const capture_gap& value)
+		{
+			return canonical_value::from_tuple(
+				{canonical_value::from_string(value.field),
+				 canonical_value::from_string(value.state),
+				 canonical_value::from_string(value.reason),
+				 canonical_value::from_string(value.completion_action)});
+		}
+
+		[[nodiscard]] result<std::shared_ptr<replay_plan::implementation>>
+		make_gcc_replay_plan(const capture_bundle::implementation& bundle,
+							 const detail::decoded_capture_unit& unit,
+							 const std::size_t unit_index,
+							 const import_limits& limits)
+		{
+			if (!unit.original_arguments || unit.original_arguments->empty())
+				return unexpected(error{"application-analysis.target-unavailable",
+										"original_argv",
+										"recapture the GCC compile unit with its exact argv"});
+			if (unit.original_arguments->size() > limits.maximum_arguments_per_unit)
+				return unexpected(
+					error{"application-analysis.import-limit-exceeded", "original_argv", "count"});
+
+			auto value = std::make_shared<replay_plan::implementation>();
+			value->capture_bundle_digest = bundle.digest;
+			value->compile_unit_id = unit.compile_unit_id;
+			value->analysis_frontend = "clang-23.1.0-gcc-mode";
+			value->target_abi = bundle.target_abi;
+			value->source_closure_digest = unit.source_closure_digest;
+			if (value->source_closure_digest.empty())
+				return unexpected(error{"application-analysis.capture-invalid",
+										"source_closure",
+										"missing-validated-binding"});
+			value->unresolved = capture_gaps_for_unit(bundle.gaps, unit_index);
+			value->effective_arguments.reserve(unit.original_arguments->size() + 1U);
+			value->option_mappings.reserve(unit.original_arguments->size());
+
+			bool source_bound = false;
+			bool output_argument = false;
+			for (std::size_t index{}; index < unit.original_arguments->size(); ++index)
+			{
+				const auto& token = (*unit.original_arguments)[index];
+				if (token.size() > limits.maximum_string_bytes)
+					return unexpected(error{"application-analysis.import-limit-exceeded",
+											"original_argv",
+											"string-bytes"});
+				detail::replay_option_mapping mapping;
+				mapping.production_token = token;
+				const auto field = "compile_units[" + std::to_string(unit_index) +
+					"].original_argv[" + std::to_string(index) + "]";
+
+				if (index == 0U)
+				{
+					mapping.replay_tokens = {"clang++", "-fsyntax-only"};
+					mapping.fidelity = replay_fidelity::approximation;
+					mapping.affected_scope = unit.compile_unit_id;
+					mapping.reason = "analysis-frontend-differs-from-production-compiler";
+					mapping.completion_action = "use-a-qualified-gcc-native-gap-provider";
+					value->effective_arguments.insert(value->effective_arguments.end(),
+													  mapping.replay_tokens.begin(),
+													  mapping.replay_tokens.end());
+					append_gap(value->unresolved, field, mapping.reason, mapping.completion_action);
+				}
+				else if (output_argument)
+				{
+					mapping.fidelity = replay_fidelity::nonsemantic;
+					output_argument = false;
+				}
+				else if (token == "-c")
+					mapping.fidelity = replay_fidelity::nonsemantic;
+				else if (token == "-o")
+				{
+					mapping.fidelity = replay_fidelity::nonsemantic;
+					output_argument = true;
+				}
+				else if (token.starts_with("-std="))
+				{
+					const auto standard = token.substr(5U);
+					const bool matches =
+						unit.language_standard && *unit.language_standard == standard;
+					const bool strict = unit.extension_mode && *unit.extension_mode == "strict";
+					if (matches && strict && standard == "c++23")
+					{
+						mapping.replay_tokens = {token};
+						mapping.fidelity = replay_fidelity::exact;
+						value->effective_arguments.push_back(token);
+					}
+					else if (matches && unit.extension_mode && *unit.extension_mode == "gnu" &&
+							 standard == "gnu++23")
+					{
+						mapping.replay_tokens = {token};
+						mapping.fidelity = replay_fidelity::approximation;
+						mapping.affected_scope = unit.compile_unit_id;
+						mapping.reason = "gcc-extension-fidelity-not-proved-for-clang-replay";
+						mapping.completion_action =
+							"compare-the-required-extension-or-use-native-gap-provider";
+						value->effective_arguments.push_back(token);
+						append_gap(
+							value->unresolved, field, mapping.reason, mapping.completion_action);
+					}
+					else
+					{
+						mapping.fidelity = replay_fidelity::unsupported;
+						mapping.affected_scope = unit.compile_unit_id;
+						mapping.reason = "language-mode-capture-mismatch-or-unsupported";
+						mapping.completion_action = "recapture-a-pinned-cxx23-language-mode";
+						append_gap(
+							value->unresolved, field, mapping.reason, mapping.completion_action);
+					}
+				}
+				else
+				{
+					auto logical = logical_path_for(bundle.projection, token);
+					if ((logical && *logical == unit.source_logical_path) ||
+						token == unit.source_logical_path)
+					{
+						const auto replay = logical ? *logical : token;
+						mapping.replay_tokens = {replay};
+						mapping.fidelity = logical ? replay_fidelity::semantics_preserving
+												   : replay_fidelity::exact;
+						value->effective_arguments.push_back(replay);
+						source_bound = true;
+					}
+					else
+					{
+						mapping.fidelity = replay_fidelity::unsupported;
+						mapping.affected_scope = unit.compile_unit_id;
+						mapping.reason = token.starts_with('@')
+							? "response-file-expansion-unavailable"
+							: "gcc-option-not-classified";
+						mapping.completion_action = token.starts_with('@')
+							? "capture-and-expand-the-response-file"
+							: "add-a-versioned-gcc16-option-mapping";
+						append_gap(
+							value->unresolved, field, mapping.reason, mapping.completion_action);
+					}
+				}
+				value->option_mappings.push_back(std::move(mapping));
+			}
+			if (output_argument)
+				return unexpected(error{"application-analysis.capture-invalid",
+										"original_argv",
+										"missing-output-path"});
+			if (!source_bound)
+			{
+				value->effective_arguments.push_back(unit.source_logical_path);
+				append_gap(value->unresolved,
+						   "compile_units[" + std::to_string(unit_index) + "].original_argv",
+						   "source-token-not-bound",
+						   "recapture-the-exact-production-source-token");
+			}
+			canonicalize_gaps(value->unresolved);
+
+			std::vector<canonical_value> effective;
+			effective.reserve(value->effective_arguments.size());
+			for (const auto& token : value->effective_arguments)
+				effective.push_back(canonical_value::from_string(token));
+			std::vector<canonical_value> mappings;
+			mappings.reserve(value->option_mappings.size());
+			for (const auto& mapping : value->option_mappings)
+				mappings.push_back(mapping_value(mapping));
+			std::vector<canonical_value> unresolved;
+			unresolved.reserve(value->unresolved.size());
+			for (const auto& gap : value->unresolved)
+				unresolved.push_back(gap_value(gap));
+			auto encoded = canonical_binary(canonical_value::from_tuple({
+				canonical_value::from_string("cxxlens.compiler-replay-plan.v1"),
+				canonical_value::from_string(value->capture_bundle_digest),
+				canonical_value::from_string(value->compile_unit_id),
+				canonical_value::from_string(value->analysis_frontend),
+				canonical_value::from_string(value->target_abi),
+				canonical_value::from_tuple(std::move(effective)),
+				canonical_value::from_tuple(std::move(mappings)),
+				canonical_value::from_string(value->source_closure_digest),
+				canonical_value::from_tuple(std::move(unresolved)),
+			}));
+			if (!encoded)
+				return unexpected(
+					error{"application-analysis.capture-invalid", "replay_plan", "encoding"});
+			value->digest = content_digest(*encoded);
+			return value;
 		}
 	} // namespace
 
@@ -118,13 +372,45 @@ namespace cxxlens::sdk
 		return value_->unresolved;
 	}
 
-	result<imported_project> import_capture(const capture_bundle&, const import_limits limits)
+	result<imported_project> import_capture(const capture_bundle& bundle,
+											const import_limits limits)
 	{
 		if (auto valid = limits.validate(); !valid)
 			return unexpected(std::move(valid.error()));
-		return unexpected(error{"application-analysis.target-unavailable",
-								"replay-planner",
-								"GCC and MSVC replay targets are not configured"});
+		if (bundle.value_->projection.toolchain_family != "gcc")
+			return unexpected(error{"application-analysis.target-unavailable",
+									"replay-planner",
+									"MSVC replay is not configured"});
+		if (bundle.value_->projection.compile_units.size() > limits.maximum_compile_units)
+			return unexpected(
+				error{"application-analysis.import-limit-exceeded", "compile_units", "count"});
+
+		auto value = std::make_shared<imported_project::implementation>();
+		value->capture_bundle_digest = bundle.value_->digest;
+		value->replay_plans.reserve(bundle.value_->projection.compile_units.size());
+		for (std::size_t index{}; index < bundle.value_->projection.compile_units.size(); ++index)
+		{
+			auto plan_value = make_gcc_replay_plan(
+				*bundle.value_, bundle.value_->projection.compile_units[index], index, limits);
+			if (!plan_value)
+				return unexpected(std::move(plan_value.error()));
+			replay_plan plan{std::move(*plan_value)};
+			value->unresolved.insert(
+				value->unresolved.end(), plan.unresolved().begin(), plan.unresolved().end());
+			value->replay_plans.push_back(std::move(plan));
+		}
+		canonicalize_gaps(value->unresolved);
+		std::vector<canonical_value> fields;
+		fields.reserve(value->replay_plans.size() + 1U);
+		fields.push_back(canonical_value::from_string(value->capture_bundle_digest));
+		for (const auto& plan : value->replay_plans)
+			fields.push_back(canonical_value::from_string(std::string{plan.digest()}));
+		auto identity = canonical_identity_digest("application-imported-project", fields);
+		if (!identity)
+			return unexpected(
+				error{"application-analysis.capture-invalid", "imported_project", "identity"});
+		value->id = "imported-project:" + *identity;
+		return imported_project{std::move(value)};
 	}
 
 	materialization_request::materialization_request(std::shared_ptr<const implementation> value)
