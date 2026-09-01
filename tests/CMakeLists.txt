@@ -2120,7 +2120,7 @@ if(CXXLENS_CLANG22_AVAILABLE)
 endif()
 
 cxxlens_configure_sanitizer_tests()
-if(CXXLENS_ENABLE_ASAN)
+if(CXXLENS_ENABLE_ASAN AND CXXLENS_CLANG22_AVAILABLE)
   set_property(
     TEST install.clang22-materializer-v2-2
     APPEND
