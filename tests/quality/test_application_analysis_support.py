@@ -130,11 +130,31 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
             ["exact", "semantics_preserving", "approximation", "unsupported", "nonsemantic"],
         )
         closure_fields = capture["source_closure_member_tuple"]["fields"]
-        self.assertEqual([field["index"] for field in closure_fields], list(range(5)))
+        self.assertEqual([field["index"] for field in closure_fields], list(range(8)))
         self.assertEqual(
             [field["name"] for field in closure_fields],
-            ["file_id", "logical_path", "content_digest", "content", "size_bytes"],
+            [
+                "file_id",
+                "logical_path",
+                "content_digest",
+                "content",
+                "size_bytes",
+                "role",
+                "encoding",
+                "read_only",
+            ],
         )
+        compile_unit_fields = capture["compile_unit_tuple"]["fields"]
+        self.assertEqual(
+            [field["name"] for field in compile_unit_fields[-4:]],
+            [
+                "captured_working_directory",
+                "language_standard",
+                "extension_mode",
+                "source_closure_id",
+            ],
+        )
+        self.assertEqual(capture["root_tuple"][6]["name"], "source_closures")
 
 
 if __name__ == "__main__":

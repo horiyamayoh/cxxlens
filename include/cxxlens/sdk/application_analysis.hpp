@@ -30,6 +30,7 @@ namespace cxxlens::sdk
 		std::size_t maximum_string_bytes{4096U};
 		std::size_t maximum_total_metadata_bytes{std::size_t{64U} * 1024U * 1024U};
 		std::uint64_t maximum_source_closure_members{4096U};
+		std::uint64_t maximum_source_closures{4096U};
 		std::uint64_t maximum_source_closure_blobs{4096U};
 		std::uint64_t maximum_source_closure_bytes{std::uint64_t{48U} * 1024U * 1024U};
 		[[nodiscard]] result<void> validate() const;

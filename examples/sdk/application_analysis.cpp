@@ -39,6 +39,23 @@ int main()
 	auto content = source_bytes();
 	const auto source_digest = cxxlens::sdk::content_digest(content);
 	const auto source_size = static_cast<std::int64_t>(content.size());
+	const std::array file_fields{
+		canonical_value::from_string("project"),
+		canonical_value::from_string("src/main.cpp"),
+		canonical_value::from_string("cxxlens.logical-path.v1"),
+	};
+	auto source_file_id = cxxlens::sdk::canonical_identity_digest("file", file_fields);
+	if (!source_file_id)
+		return 1;
+	const std::array snapshot_fields{
+		canonical_value::from_string(*source_file_id),
+		canonical_value::from_string(source_digest),
+		canonical_value::from_string("utf8"),
+	};
+	auto source_snapshot =
+		cxxlens::sdk::canonical_identity_digest("source-snapshot", snapshot_fields);
+	if (!source_snapshot)
+		return 1;
 	auto toolchain = canonical_value::from_tuple({
 		canonical_value::from_string("gcc"),
 		canonical_value::from_string("16.2.0"),
@@ -53,8 +70,8 @@ int main()
 	});
 	auto unit = canonical_value::from_tuple({
 		canonical_value::from_string("compile-unit:main"),
-		canonical_value::from_string("source-snapshot:one"),
-		canonical_value::from_string("source-file:main"),
+		observed(canonical_value::from_string(*source_snapshot)),
+		canonical_value::from_string(*source_file_id),
 		canonical_value::from_string("project://src/main.cpp"),
 		canonical_value::from_string(source_digest),
 		canonical_value::from_integer(source_size),
@@ -63,26 +80,32 @@ int main()
 		observed(canonical_value::from_tuple({
 			canonical_value::from_string("/opt/gcc-16.2.0/bin/g++"),
 			canonical_value::from_string("-std=c++23"),
-			canonical_value::from_string("project://src/main.cpp"),
+			canonical_value::from_string("/workspace/example/src/main.cpp"),
 		})),
 		observed(canonical_value::from_tuple({})),
 		observed(canonical_value::from_tuple({})),
 		observed(canonical_value::from_tuple({})),
 		observed(canonical_value::from_string("/workspace/example/build")),
+		observed(canonical_value::from_string("gnu++23")),
+		observed(canonical_value::from_string("gnu")),
+		canonical_value::from_string("source-closure:pending"),
 	});
 	auto closure = canonical_value::from_tuple({
-		canonical_value::from_string("source-closure:one"),
+		canonical_value::from_string("source-closure:pending"),
 		canonical_value::from_string(digest('7')),
 		canonical_value::from_string(digest('8')),
 		canonical_value::from_integer(1),
 		canonical_value::from_integer(1),
 		canonical_value::from_integer(source_size),
 		canonical_value::from_tuple({canonical_value::from_tuple({
-			canonical_value::from_string("source-file:main"),
+			canonical_value::from_string(*source_file_id),
 			canonical_value::from_string("project://src/main.cpp"),
 			observed(canonical_value::from_string(source_digest)),
 			observed(canonical_value::from_bytes(std::move(content))),
 			canonical_value::from_integer(source_size),
+			observed(canonical_value::from_string("main")),
+			observed(canonical_value::from_string("utf8")),
+			canonical_value::from_boolean(true),
 		})}),
 	});
 	auto encoded_members = cxxlens::sdk::canonical_binary(closure.tuple[6]);
@@ -96,6 +119,8 @@ int main()
 	if (!closure_digest)
 		return 1;
 	closure.tuple[1] = canonical_value::from_string(std::move(*closure_digest));
+	closure.tuple[0] = canonical_value::from_string("source-closure:" + closure.tuple[1].text);
+	unit.tuple[15] = closure.tuple[0];
 	auto encoded = cxxlens::sdk::canonical_binary(canonical_value::from_tuple({
 		canonical_value::from_string("cxxlens.build-capture-bundle.v1"),
 		std::move(toolchain),
@@ -103,7 +128,7 @@ int main()
 		canonical_value::from_string("x86_64-linux-gnu"),
 		canonical_value::from_string("project:gcc-example"),
 		canonical_value::from_tuple({std::move(unit)}),
-		std::move(closure),
+		canonical_value::from_tuple({std::move(closure)}),
 		canonical_value::from_tuple({}),
 		canonical_value::from_string("project://"),
 		observed(canonical_value::from_tuple({canonical_value::from_tuple({

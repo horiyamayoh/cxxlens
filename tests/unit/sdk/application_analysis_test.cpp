@@ -61,7 +61,7 @@ namespace
 
 	void rebind_source_closure(canonical_value& bundle)
 	{
-		auto& closure = bundle.tuple[6];
+		auto& closure = bundle.tuple[6].tuple[0];
 		auto encoded_members = canonical_binary(closure.tuple[6]);
 		assert(encoded_members);
 		closure.tuple[2] =
@@ -72,6 +72,8 @@ namespace
 			cxxlens::sdk::canonical_identity_digest("application-source-closure", fields);
 		assert(closure_digest);
 		closure.tuple[1] = canonical_value::from_string(std::move(*closure_digest));
+		closure.tuple[0] = canonical_value::from_string("source-closure:" + closure.tuple[1].text);
+		bundle.tuple[5].tuple[0].tuple[15] = closure.tuple[0];
 	}
 
 	[[nodiscard]] canonical_value valid_bundle()
@@ -79,6 +81,21 @@ namespace
 		auto content = source_bytes();
 		const auto source_digest = cxxlens::sdk::content_digest(content);
 		const auto source_size = static_cast<std::int64_t>(content.size());
+		const std::array file_fields{
+			canonical_value::from_string("project"),
+			canonical_value::from_string("src/main.cpp"),
+			canonical_value::from_string("cxxlens.logical-path.v1"),
+		};
+		auto source_file_id = cxxlens::sdk::canonical_identity_digest("file", file_fields);
+		assert(source_file_id);
+		const std::array snapshot_fields{
+			canonical_value::from_string(*source_file_id),
+			canonical_value::from_string(source_digest),
+			canonical_value::from_string("utf8"),
+		};
+		auto source_snapshot =
+			cxxlens::sdk::canonical_identity_digest("source-snapshot", snapshot_fields);
+		assert(source_snapshot);
 		auto toolchain = canonical_value::from_tuple({
 			canonical_value::from_string("gcc"),
 			canonical_value::from_string("16.2.0"),
@@ -92,13 +109,13 @@ namespace
 			canonical_value::from_string(digest('5')),
 		});
 		auto environment = canonical_value::from_tuple({canonical_value::from_tuple({
-			canonical_value::from_string("CPATH"),
+			canonical_value::from_string("gcc.cpath"),
 			derived(canonical_value::from_string("project://include")),
 		})});
 		auto unit = canonical_value::from_tuple({
 			canonical_value::from_string("compile-unit:main"),
-			canonical_value::from_string("source-snapshot:one"),
-			canonical_value::from_string("source-file:main"),
+			observed(canonical_value::from_string(*source_snapshot)),
+			canonical_value::from_string(*source_file_id),
 			canonical_value::from_string("project://src/main.cpp"),
 			canonical_value::from_string(source_digest),
 			canonical_value::from_integer(source_size),
@@ -107,26 +124,32 @@ namespace
 			observed(canonical_value::from_tuple({
 				canonical_value::from_string("/opt/gcc-16.2.0/bin/g++"),
 				canonical_value::from_string("-std=c++23"),
-				canonical_value::from_string("project://src/main.cpp"),
+				canonical_value::from_string("/workspace/example/src/main.cpp"),
 			})),
 			observed(canonical_value::from_tuple({})),
 			unavailable("config-files-unobserved", "capture-config-files"),
 			observed(std::move(environment)),
 			observed(canonical_value::from_string("/workspace/example/build")),
+			observed(canonical_value::from_string("gnu++23")),
+			observed(canonical_value::from_string("gnu")),
+			canonical_value::from_string("source-closure:pending"),
 		});
 		auto closure = canonical_value::from_tuple({
-			canonical_value::from_string("source-closure:one"),
+			canonical_value::from_string("source-closure:pending"),
 			canonical_value::from_string(digest('7')),
 			canonical_value::from_string(digest('8')),
 			canonical_value::from_integer(1),
 			canonical_value::from_integer(1),
 			canonical_value::from_integer(source_size),
 			canonical_value::from_tuple({canonical_value::from_tuple({
-				canonical_value::from_string("source-file:main"),
+				canonical_value::from_string(*source_file_id),
 				canonical_value::from_string("project://src/main.cpp"),
 				observed(canonical_value::from_string(source_digest)),
 				observed(canonical_value::from_bytes(std::move(content))),
 				canonical_value::from_integer(source_size),
+				observed(canonical_value::from_string("main")),
+				observed(canonical_value::from_string("utf8")),
+				canonical_value::from_boolean(true),
 			})}),
 		});
 		auto gaps = canonical_value::from_tuple({
@@ -140,7 +163,7 @@ namespace
 			canonical_value::from_string("x86_64-linux-gnu"),
 			canonical_value::from_string("project:gcc-example"),
 			canonical_value::from_tuple({std::move(unit)}),
-			std::move(closure),
+			canonical_value::from_tuple({std::move(closure)}),
 			std::move(gaps),
 			canonical_value::from_string("project://"),
 			observed(canonical_value::from_tuple({canonical_value::from_tuple({
@@ -194,6 +217,30 @@ namespace
 		assert(imported.error().code == "application-analysis.target-unavailable");
 	}
 
+	void duplicate_source_variants_bind_one_closure()
+	{
+		auto bundle = valid_bundle();
+		auto second = bundle.tuple[5].tuple[0];
+		second.tuple[0] = canonical_value::from_string("compile-unit:variant-two");
+		bundle.tuple[5].tuple.push_back(std::move(second));
+		bundle.tuple[7].tuple.insert(bundle.tuple[7].tuple.begin() + 1,
+									 gap("compile_units[1].config_files",
+										 "config-files-unobserved",
+										 "capture-config-files"));
+		auto bytes = canonical_binary(bundle);
+		assert(bytes);
+		auto decoded = cxxlens::sdk::decode_capture_bundle(*bytes);
+		assert(decoded && decoded->compile_unit_count() == 2U);
+
+		auto missing_closure = std::move(bundle);
+		missing_closure.tuple[5].tuple[1].tuple[15] =
+			canonical_value::from_string("source-closure:missing");
+		auto missing_bytes = canonical_binary(missing_closure);
+		assert(missing_bytes);
+		auto missing = cxxlens::sdk::decode_capture_bundle(*missing_bytes);
+		assert(!missing && missing.error().detail == "reference-mismatch");
+	}
+
 	void resource_and_shape_fail_closed()
 	{
 		auto bytes = canonical_binary(valid_bundle());
@@ -219,11 +266,11 @@ namespace
 		assert(!gap_result && gap_result.error().detail == "census-mismatch");
 
 		auto partial_source = valid_bundle();
-		partial_source.tuple[6].tuple[4] = canonical_value::from_integer(0);
-		partial_source.tuple[6].tuple[5] = canonical_value::from_integer(0);
-		partial_source.tuple[6].tuple[6].tuple[0].tuple[3] =
+		partial_source.tuple[6].tuple[0].tuple[4] = canonical_value::from_integer(0);
+		partial_source.tuple[6].tuple[0].tuple[5] = canonical_value::from_integer(0);
+		partial_source.tuple[6].tuple[0].tuple[6].tuple[0].tuple[3] =
 			unavailable("source-bytes-unavailable", "recapture-source-closure");
-		partial_source.tuple[7].tuple.push_back(gap("source_closure.members[0].content",
+		partial_source.tuple[7].tuple.push_back(gap("source_closures[0].members[0].content",
 													"source-bytes-unavailable",
 													"recapture-source-closure"));
 		rebind_source_closure(partial_source);
@@ -233,7 +280,7 @@ namespace
 		assert(partial_source_result && partial_source_result->gaps().size() == 3U);
 
 		auto forged_blob_census = valid_bundle();
-		forged_blob_census.tuple[6].tuple[4] = canonical_value::from_integer(0);
+		forged_blob_census.tuple[6].tuple[0].tuple[4] = canonical_value::from_integer(0);
 		auto forged_blob_census_bytes = canonical_binary(forged_blob_census);
 		assert(forged_blob_census_bytes);
 		auto forged_blob_census_result =
@@ -242,7 +289,7 @@ namespace
 			   forged_blob_census_result.error().detail == "blob-census-mismatch");
 
 		auto tampered_source = valid_bundle();
-		tampered_source.tuple[6].tuple[6].tuple[0].tuple[3] =
+		tampered_source.tuple[6].tuple[0].tuple[6].tuple[0].tuple[3] =
 			observed(canonical_value::from_bytes({std::byte{0x78}}));
 		auto tampered_source_bytes = canonical_binary(tampered_source);
 		assert(tampered_source_bytes);
@@ -251,14 +298,52 @@ namespace
 			   tampered_source_result.error().detail == "digest-or-size-mismatch");
 
 		auto missing_source = valid_bundle();
-		missing_source.tuple[6].tuple[6].tuple[0].tuple[0] =
+		missing_source.tuple[6].tuple[0].tuple[6].tuple[0].tuple[0] =
 			canonical_value::from_string("source-file:other");
 		rebind_source_closure(missing_source);
 		auto missing_source_bytes = canonical_binary(missing_source);
 		assert(missing_source_bytes);
 		auto missing_source_result = cxxlens::sdk::decode_capture_bundle(*missing_source_bytes);
 		assert(!missing_source_result &&
-			   missing_source_result.error().detail == "compile-unit-source-missing");
+			   missing_source_result.error().detail == "binding-mismatch");
+
+		auto forged_snapshot = valid_bundle();
+		forged_snapshot.tuple[5].tuple[0].tuple[1] =
+			observed(canonical_value::from_string("source-snapshot:forged"));
+		auto forged_snapshot_bytes = canonical_binary(forged_snapshot);
+		assert(forged_snapshot_bytes);
+		auto forged_snapshot_result = cxxlens::sdk::decode_capture_bundle(*forged_snapshot_bytes);
+		assert(!forged_snapshot_result &&
+			   forged_snapshot_result.error().detail == "source-snapshot-mismatch");
+
+		auto non_main_source = valid_bundle();
+		non_main_source.tuple[6].tuple[0].tuple[6].tuple[0].tuple[5] =
+			observed(canonical_value::from_string("header"));
+		rebind_source_closure(non_main_source);
+		auto non_main_bytes = canonical_binary(non_main_source);
+		assert(non_main_bytes);
+		auto non_main_result = cxxlens::sdk::decode_capture_bundle(*non_main_bytes);
+		assert(!non_main_result &&
+			   non_main_result.error().detail == "compile-unit-source-mismatch");
+
+		auto forged_closure_id = valid_bundle();
+		forged_closure_id.tuple[6].tuple[0].tuple[0] =
+			canonical_value::from_string("source-closure:forged");
+		forged_closure_id.tuple[5].tuple[0].tuple[15] =
+			canonical_value::from_string("source-closure:forged");
+		auto forged_closure_bytes = canonical_binary(forged_closure_id);
+		assert(forged_closure_bytes);
+		auto forged_closure_result = cxxlens::sdk::decode_capture_bundle(*forged_closure_bytes);
+		assert(!forged_closure_result &&
+			   forged_closure_result.error().detail == "binding-mismatch");
+
+		auto raw_environment_name = valid_bundle();
+		raw_environment_name.tuple[5].tuple[0].tuple[11].tuple[1].tuple[0].tuple[0] =
+			canonical_value::from_string("CPATH");
+		auto raw_environment_bytes = canonical_binary(raw_environment_name);
+		assert(raw_environment_bytes);
+		auto raw_environment_result = cxxlens::sdk::decode_capture_bundle(*raw_environment_bytes);
+		assert(!raw_environment_result && raw_environment_result.error().field.ends_with(".name"));
 
 		auto recursive = valid_bundle();
 		recursive.tuple[5].tuple[0].tuple[9] = observed(canonical_value::from_tuple({
@@ -401,6 +486,7 @@ namespace
 int main()
 {
 	positive_decode_and_unavailable_import();
+	duplicate_source_variants_bind_one_closure();
 	resource_and_shape_fail_closed();
 	materialization_request_factory_validates_authority();
 }

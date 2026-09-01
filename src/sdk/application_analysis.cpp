@@ -440,10 +440,52 @@ namespace cxxlens::sdk
 
 		struct compile_source_binding
 		{
+			std::optional<std::string> source_snapshot_id;
+			std::string file_id;
 			std::string logical_path;
 			std::string content_digest;
 			std::uint64_t size_bytes{};
+			std::string source_closure_id;
 		};
+
+		[[nodiscard]] result<std::string>
+		application_source_file_id(const std::string_view logical_path)
+		{
+			constexpr std::string_view root{"project://"};
+			if (!logical_path.starts_with(root) || logical_path.size() == root.size())
+				return unexpected(invalid("source.logical_path", "project-relative"));
+			const std::array fields{
+				canonical_value::from_string("project"),
+				canonical_value::from_string(std::string{logical_path.substr(root.size())}),
+				canonical_value::from_string("cxxlens.logical-path.v1"),
+			};
+			return canonical_identity_digest("file", fields);
+		}
+
+		[[nodiscard]] result<std::string>
+		application_source_snapshot_id(const std::string_view file_id,
+									   const std::string_view content,
+									   const std::string_view encoding)
+		{
+			const std::array fields{
+				canonical_value::from_string(std::string{file_id}),
+				canonical_value::from_string(std::string{content}),
+				canonical_value::from_string(std::string{encoding}),
+			};
+			return canonical_identity_digest("source-snapshot", fields);
+		}
+
+		[[nodiscard]] bool source_role(const std::string_view value) noexcept
+		{
+			return value == "main" || value == "header" || value == "generated" ||
+				value == "forced-include" || value == "macro-file";
+		}
+
+		[[nodiscard]] bool source_encoding(const std::string_view value) noexcept
+		{
+			return value == "utf8" || value == "utf16le" || value == "utf16be" ||
+				value == "locale_dependent" || value == "binary_or_unknown";
+		}
 
 		[[nodiscard]] result<validated_bundle_projection>
 		validate_bundle_shape(const canonical_value& root, const import_limits& limits)
@@ -480,7 +522,7 @@ namespace cxxlens::sdk
 				!valid)
 				return unexpected(std::move(valid.error()));
 			if ((*toolchain.value())[2].tuple[1].type == canonical_value::kind::utf8_string &&
-				!absolute_native_path((*toolchain.value())[2].tuple[1].text, *family == "msvc"))
+				!canonical_native_path((*toolchain.value())[2].tuple[1].text, *family == "msvc"))
 				return unexpected(invalid("production_toolchain.canonical_binary_path",
 										  "not-canonical-absolute"));
 			if (auto valid = validate_captured((*toolchain.value())[3],
@@ -502,6 +544,10 @@ namespace cxxlens::sdk
 											   generated_gaps);
 				!valid)
 				return unexpected(std::move(valid.error()));
+			if ((*toolchain.value())[5].tuple[1].type == canonical_value::kind::utf8_string &&
+				!canonical_native_path((*toolchain.value())[5].tuple[1].text, *family == "msvc"))
+				return unexpected(
+					invalid("production_toolchain.sysroot", "not-canonical-absolute"));
 			for (const auto index : {6U, 7U, 8U, 9U})
 				if (auto valid =
 						require_digest((*toolchain.value())[index],
@@ -529,7 +575,7 @@ namespace cxxlens::sdk
 			output.target_abi = *abi;
 			output.project_id = *project;
 			auto logical_root = require_text((*tuple.value())[8], "logical_project_root");
-			if (!logical_root || !logical_path(*logical_root))
+			if (!logical_root || !logical_path(*logical_root) || *logical_root != "project://")
 				return unexpected(logical_root ? invalid("logical_project_root", "machine-path")
 											   : std::move(logical_root.error()));
 			output.logical_project_root = *logical_root;
@@ -582,30 +628,40 @@ namespace cxxlens::sdk
 				units.tuple.size() > limits.maximum_compile_units)
 				return unexpected(limit("compile_units", "count"));
 			std::set<std::string, std::less<>> unit_ids;
-			std::set<std::string, std::less<>> source_paths;
-			std::map<std::string, compile_source_binding, std::less<>> source_bindings;
+			std::vector<compile_source_binding> source_bindings;
+			source_bindings.reserve(units.tuple.size());
 			std::string previous_unit;
 			for (std::size_t index{}; index < units.tuple.size(); ++index)
 			{
 				const auto prefix = "compile_units[" + std::to_string(index) + "]";
-				auto unit = require_tuple(units.tuple[index], prefix, 13U);
+				auto unit = require_tuple(units.tuple[index], prefix, 16U);
 				if (!unit)
 					return unexpected(std::move(unit.error()));
 				auto id = require_text((*unit.value())[0], prefix + ".compile_unit_id");
 				auto path = require_text((*unit.value())[3], prefix + ".source_logical_path");
 				if (!id || !path || !logical_path(*path) ||
 					!logical_at_or_below(*path, *logical_root) || !unit_ids.emplace(*id).second ||
-					!source_paths.emplace(*path).second ||
 					(!previous_unit.empty() && previous_unit >= *id))
 					return unexpected(
 						!id ? std::move(id.error())
 							: (!path ? std::move(path.error())
 									 : invalid(prefix, "duplicate-or-noncanonical-order")));
 				previous_unit = *id;
-				for (const auto field_index : {0U, 1U, 2U, 7U})
+				for (const auto field_index : {0U, 2U, 7U})
 					if (auto valid =
 							require_strong_id((*unit.value())[field_index],
 											  prefix + "[" + std::to_string(field_index) + "]");
+						!valid)
+						return unexpected(std::move(valid.error()));
+				if (auto valid = validate_captured((*unit.value())[1],
+												   prefix + ".source_snapshot_id",
+												   canonical_value::kind::utf8_string,
+												   generated_gaps);
+					!valid)
+					return unexpected(std::move(valid.error()));
+				if ((*unit.value())[1].tuple[1].type == canonical_value::kind::utf8_string)
+					if (auto valid = require_strong_id((*unit.value())[1].tuple[1],
+													   prefix + ".source_snapshot_id");
 						!valid)
 						return unexpected(std::move(valid.error()));
 				if (auto valid =
@@ -621,13 +677,33 @@ namespace cxxlens::sdk
 										  ? std::move(source_file_id.error())
 										  : (!source_digest ? std::move(source_digest.error())
 															: std::move(source_size.error())));
-				if (!source_bindings
-						 .emplace(std::string{*source_file_id},
-								  compile_source_binding{std::string{*path},
-														 std::string{*source_digest},
-														 *source_size})
-						 .second)
-					return unexpected(invalid(prefix + ".source_file_id", "duplicate"));
+				auto source_closure =
+					require_text((*unit.value())[15], prefix + ".source_closure_id");
+				if (!source_closure)
+					return unexpected(std::move(source_closure.error()));
+				if (auto valid =
+						require_strong_id((*unit.value())[15], prefix + ".source_closure_id");
+					!valid)
+					return unexpected(std::move(valid.error()));
+				std::optional<std::string> source_snapshot;
+				if ((*unit.value())[1].tuple[1].type == canonical_value::kind::utf8_string)
+					source_snapshot = (*unit.value())[1].tuple[1].text;
+				source_bindings.push_back({std::move(source_snapshot),
+										   std::string{*source_file_id},
+										   std::string{*path},
+										   std::string{*source_digest},
+										   *source_size,
+										   std::string{*source_closure}});
+				const auto& added_binding = source_bindings.back();
+				for (const auto& prior :
+					 std::span{source_bindings}.first(source_bindings.size() - 1U))
+					if (prior.source_closure_id == added_binding.source_closure_id &&
+						prior.file_id == added_binding.file_id &&
+						(prior.source_snapshot_id != added_binding.source_snapshot_id ||
+						 prior.logical_path != added_binding.logical_path ||
+						 prior.content_digest != added_binding.content_digest ||
+						 prior.size_bytes != added_binding.size_bytes))
+						return unexpected(invalid(prefix, "conflicting-shared-source-closure"));
 				auto working =
 					require_text((*unit.value())[6], prefix + ".logical_working_directory");
 				if (!working || !logical_path(*working) ||
@@ -685,7 +761,8 @@ namespace cxxlens::sdk
 						if (!effect)
 							return unexpected(std::move(effect.error()));
 						auto name = require_text((*effect.value())[0], effect_prefix + ".name");
-						if (!name || (!previous_name.empty() && previous_name >= *name))
+						if (!name || !validate_registered_symbol(*name) ||
+							(!previous_name.empty() && previous_name >= *name))
 							return unexpected(name ? invalid(effect_prefix + ".name", "order")
 												   : std::move(name.error()));
 						previous_name = *name;
@@ -720,132 +797,233 @@ namespace cxxlens::sdk
 						return unexpected(invalid(prefix + ".captured_working_directory",
 												  "unmapped-physical-path"));
 				}
+				for (const auto& [field_index, field_name] : {
+						 std::pair{13U, std::string_view{"language_standard"}},
+						 std::pair{14U, std::string_view{"extension_mode"}},
+					 })
+				{
+					if (auto valid = validate_captured((*unit.value())[field_index],
+													   prefix + "." + std::string{field_name},
+													   canonical_value::kind::utf8_string,
+													   generated_gaps);
+						!valid)
+						return unexpected(std::move(valid.error()));
+				}
+				for (const auto field_index : {13U, 14U})
+					if ((*unit.value())[field_index].tuple[1].type ==
+						canonical_value::kind::utf8_string)
+						if (auto valid =
+								require_strong_id((*unit.value())[field_index].tuple[1],
+												  prefix +
+													  (field_index == 13U ? ".language_standard"
+																		  : ".extension_mode"));
+							!valid)
+							return unexpected(std::move(valid.error()));
+				const auto& extension = (*unit.value())[14].tuple[1];
+				if (extension.type == canonical_value::kind::utf8_string &&
+					((*family == "gcc" && extension.text != "strict" && extension.text != "gnu") ||
+					 (*family == "msvc" && extension.text != "strict" && extension.text != "msvc")))
+					return unexpected(invalid(prefix + ".extension_mode", "toolchain-mismatch"));
 			}
 			output.compile_unit_count = units.tuple.size();
 
-			auto closure = require_tuple((*tuple.value())[6], "source_closure", 7U);
-			if (!closure)
-				return unexpected(std::move(closure.error()));
-			if (auto valid = require_strong_id((*closure.value())[0], "source_closure.closure_id");
-				!valid)
-				return unexpected(std::move(valid.error()));
-			if (auto valid = require_digest((*closure.value())[1], "source_closure.closure_digest");
-				!valid)
-				return unexpected(std::move(valid.error()));
-			if (auto valid =
-					require_digest((*closure.value())[2], "source_closure.manifest_digest");
-				!valid)
-				return unexpected(std::move(valid.error()));
-			auto members = require_count((*closure.value())[3], "source_closure.member_count");
-			auto blobs = require_count((*closure.value())[4], "source_closure.blob_count");
-			auto bytes = require_count((*closure.value())[5], "source_closure.unique_blob_bytes");
-			if (!members || !blobs || !bytes)
-				return unexpected(
-					!members ? std::move(members.error())
-							 : (!blobs ? std::move(blobs.error()) : std::move(bytes.error())));
-			if (*members > limits.maximum_source_closure_members ||
-				*blobs > limits.maximum_source_closure_blobs ||
-				*bytes > limits.maximum_source_closure_bytes || *blobs > *members)
-				return unexpected(limit("source_closure", "census"));
+			const auto& closures = (*tuple.value())[6];
+			if (closures.type != canonical_value::kind::ordered_tuple || closures.tuple.empty() ||
+				closures.tuple.size() > limits.maximum_source_closures)
+				return unexpected(limit("source_closures", "count"));
+			std::set<std::string, std::less<>> referenced_closures;
+			for (const auto& binding : source_bindings)
+				referenced_closures.emplace(binding.source_closure_id);
+			std::set<std::string, std::less<>> admitted_closures;
+			std::uint64_t total_members{};
+			std::uint64_t total_blobs{};
+			std::uint64_t total_bytes{};
+			std::string previous_closure_id;
+			for (std::size_t closure_index{}; closure_index < closures.tuple.size();
+				 ++closure_index)
+			{
+				const auto closure_prefix =
+					"source_closures[" + std::to_string(closure_index) + "]";
+				auto closure = require_tuple(closures.tuple[closure_index], closure_prefix, 7U);
+				if (!closure)
+					return unexpected(std::move(closure.error()));
+				auto closure_id =
+					require_text((*closure.value())[0], closure_prefix + ".closure_id");
+				if (!closure_id ||
+					(!previous_closure_id.empty() && previous_closure_id >= *closure_id) ||
+					!admitted_closures.emplace(*closure_id).second ||
+					!referenced_closures.contains(*closure_id))
+					return unexpected(invalid(closure_prefix, "unreferenced-or-noncanonical"));
+				previous_closure_id = *closure_id;
+				if (auto valid =
+						require_strong_id((*closure.value())[0], closure_prefix + ".closure_id");
+					!valid)
+					return unexpected(std::move(valid.error()));
+				if (auto valid =
+						require_digest((*closure.value())[1], closure_prefix + ".closure_digest");
+					!valid)
+					return unexpected(std::move(valid.error()));
+				if (auto valid =
+						require_digest((*closure.value())[2], closure_prefix + ".manifest_digest");
+					!valid)
+					return unexpected(std::move(valid.error()));
+				auto members =
+					require_count((*closure.value())[3], closure_prefix + ".member_count");
+				auto blobs = require_count((*closure.value())[4], closure_prefix + ".blob_count");
+				auto bytes =
+					require_count((*closure.value())[5], closure_prefix + ".unique_blob_bytes");
+				if (!members || !blobs || !bytes || *members == 0U || *blobs > *members ||
+					*members > limits.maximum_source_closure_members - total_members ||
+					*blobs > limits.maximum_source_closure_blobs - total_blobs ||
+					*bytes > limits.maximum_source_closure_bytes - total_bytes)
+					return unexpected(limit(closure_prefix, "census"));
+				total_members += *members;
+				total_blobs += *blobs;
+				total_bytes += *bytes;
 
-			const auto& closure_members = (*closure.value())[6];
-			if (closure_members.type != canonical_value::kind::ordered_tuple ||
-				closure_members.tuple.size() != *members)
-				return unexpected(invalid("source_closure.members", "census-mismatch"));
-			std::set<std::string, std::less<>> member_ids;
-			std::set<std::string, std::less<>> member_paths;
-			std::map<std::string, std::uint64_t, std::less<>> unique_blobs;
-			std::uint64_t recomputed_bytes{};
-			std::string previous_member_id;
-			for (std::size_t index{}; index < closure_members.tuple.size(); ++index)
-			{
-				const auto prefix = "source_closure.members[" + std::to_string(index) + "]";
-				auto member = require_tuple(closure_members.tuple[index], prefix, 5U);
-				if (!member)
-					return unexpected(std::move(member.error()));
-				auto file_id = require_text((*member.value())[0], prefix + ".file_id");
-				auto path = require_text((*member.value())[1], prefix + ".logical_path");
-				if (!file_id || !path || !logical_path(*path) ||
-					!logical_at_or_below(*path, *logical_root) ||
-					!member_ids.emplace(*file_id).second || !member_paths.emplace(*path).second ||
-					(!previous_member_id.empty() && previous_member_id >= *file_id))
-					return unexpected(
-						!file_id ? std::move(file_id.error())
-								 : (!path ? std::move(path.error())
-										  : invalid(prefix, "duplicate-or-noncanonical-order")));
-				previous_member_id = *file_id;
-				if (auto valid = require_strong_id((*member.value())[0], prefix + ".file_id");
-					!valid)
-					return unexpected(std::move(valid.error()));
-				if (auto valid = validate_captured((*member.value())[2],
-												   prefix + ".content_digest",
-												   canonical_value::kind::utf8_string,
-												   generated_gaps);
-					!valid)
-					return unexpected(std::move(valid.error()));
-				if ((*member.value())[2].tuple[1].type == canonical_value::kind::utf8_string &&
-					!digest_like((*member.value())[2].tuple[1].text))
-					return unexpected(invalid(prefix + ".content_digest", "digest"));
-				if (auto valid = validate_captured((*member.value())[3],
-												   prefix + ".content",
-												   canonical_value::kind::bytes,
-												   generated_gaps);
-					!valid)
-					return unexpected(std::move(valid.error()));
-				auto size = require_count((*member.value())[4], prefix + ".size_bytes");
-				if (!size)
-					return unexpected(std::move(size.error()));
-				const auto& digest_value = (*member.value())[2].tuple[1];
-				const auto& content_value = (*member.value())[3].tuple[1];
-				if (content_value.type == canonical_value::kind::bytes)
+				const auto& closure_members = (*closure.value())[6];
+				if (closure_members.type != canonical_value::kind::ordered_tuple ||
+					closure_members.tuple.size() != *members)
+					return unexpected(invalid(closure_prefix + ".members", "census-mismatch"));
+				std::set<std::string, std::less<>> member_ids;
+				std::set<std::string, std::less<>> member_paths;
+				std::map<std::string, std::uint64_t, std::less<>> unique_blobs;
+				std::uint64_t recomputed_bytes{};
+				std::string previous_member_id;
+				for (std::size_t index{}; index < closure_members.tuple.size(); ++index)
 				{
-					if (digest_value.type != canonical_value::kind::utf8_string ||
-						content_value.byte_string.size() != *size ||
-						content_digest(content_value.byte_string) != digest_value.text)
-						return unexpected(invalid(prefix + ".content", "digest-or-size-mismatch"));
-					if (const auto [found, inserted] =
-							unique_blobs.emplace(digest_value.text, *size);
-						!inserted && found->second != *size)
-						return unexpected(invalid(prefix + ".content", "duplicate-digest-size"));
-					else if (inserted)
+					const auto prefix = closure_prefix + ".members[" + std::to_string(index) + "]";
+					auto member = require_tuple(closure_members.tuple[index], prefix, 8U);
+					if (!member)
+						return unexpected(std::move(member.error()));
+					auto file_id = require_text((*member.value())[0], prefix + ".file_id");
+					auto path = require_text((*member.value())[1], prefix + ".logical_path");
+					if (!file_id || !path || !logical_path(*path) ||
+						!logical_at_or_below(*path, *logical_root) ||
+						!member_ids.emplace(*file_id).second ||
+						!member_paths.emplace(*path).second ||
+						(!previous_member_id.empty() && previous_member_id >= *file_id))
+						return unexpected(invalid(prefix, "duplicate-or-noncanonical-order"));
+					previous_member_id = *file_id;
+					auto expected_file_id = application_source_file_id(*path);
+					if (!expected_file_id || *expected_file_id != *file_id)
+						return unexpected(invalid(prefix + ".file_id", "binding-mismatch"));
+					for (const auto& [field_index, field_name] : {
+							 std::pair{2U, std::string_view{"content_digest"}},
+							 std::pair{5U, std::string_view{"role"}},
+							 std::pair{6U, std::string_view{"encoding"}},
+						 })
+						if (auto valid = validate_captured((*member.value())[field_index],
+														   prefix + "." + std::string{field_name},
+														   canonical_value::kind::utf8_string,
+														   generated_gaps);
+							!valid)
+							return unexpected(std::move(valid.error()));
+					const auto& digest_value = (*member.value())[2].tuple[1];
+					const auto& role_value = (*member.value())[5].tuple[1];
+					const auto& encoding_value = (*member.value())[6].tuple[1];
+					if (digest_value.type == canonical_value::kind::utf8_string &&
+						!digest_like(digest_value.text))
+						return unexpected(invalid(prefix + ".content_digest", "digest"));
+					if (role_value.type == canonical_value::kind::utf8_string &&
+						!source_role(role_value.text))
+						return unexpected(invalid(prefix + ".role", "enum"));
+					if (encoding_value.type == canonical_value::kind::utf8_string &&
+						!source_encoding(encoding_value.text))
+						return unexpected(invalid(prefix + ".encoding", "enum"));
+					if ((*member.value())[7].type != canonical_value::kind::boolean ||
+						!(*member.value())[7].boolean)
+						return unexpected(invalid(prefix + ".read_only", "required-true"));
+					if (auto valid = validate_captured((*member.value())[3],
+													   prefix + ".content",
+													   canonical_value::kind::bytes,
+													   generated_gaps);
+						!valid)
+						return unexpected(std::move(valid.error()));
+					auto size = require_count((*member.value())[4], prefix + ".size_bytes");
+					if (!size)
+						return unexpected(std::move(size.error()));
+					const auto& content_value = (*member.value())[3].tuple[1];
+					if (content_value.type == canonical_value::kind::bytes)
 					{
-						if (*size > limits.maximum_source_closure_bytes - recomputed_bytes)
-							return unexpected(limit("source_closure", "byte-overflow"));
-						recomputed_bytes += *size;
+						if (digest_value.type != canonical_value::kind::utf8_string ||
+							content_value.byte_string.size() != *size ||
+							content_digest(content_value.byte_string) != digest_value.text)
+							return unexpected(
+								invalid(prefix + ".content", "digest-or-size-mismatch"));
+						if (const auto [found, inserted] =
+								unique_blobs.emplace(digest_value.text, *size);
+							!inserted && found->second != *size)
+							return unexpected(
+								invalid(prefix + ".content", "duplicate-digest-size"));
+						else if (inserted)
+						{
+							if (*size > limits.maximum_source_closure_bytes - recomputed_bytes)
+								return unexpected(limit(closure_prefix, "byte-overflow"));
+							recomputed_bytes += *size;
+						}
 					}
+
+					const auto binding = std::ranges::find_if(
+						source_bindings,
+						[&](const auto& candidate)
+						{
+							return candidate.source_closure_id == *closure_id &&
+								candidate.file_id == *file_id;
+						});
+					if (binding != source_bindings.end())
+					{
+						if (binding->logical_path != *path || binding->size_bytes != *size ||
+							digest_value.type != canonical_value::kind::utf8_string ||
+							binding->content_digest != digest_value.text ||
+							role_value.type != canonical_value::kind::utf8_string ||
+							role_value.text != "main")
+							return unexpected(invalid(prefix, "compile-unit-source-mismatch"));
+						if (binding->source_snapshot_id)
+						{
+							if (encoding_value.type != canonical_value::kind::utf8_string)
+								return unexpected(
+									invalid(prefix + ".encoding", "snapshot-binding-missing"));
+							auto snapshot = application_source_snapshot_id(
+								*file_id, digest_value.text, encoding_value.text);
+							if (!snapshot || *snapshot != *binding->source_snapshot_id)
+								return unexpected(invalid(prefix, "source-snapshot-mismatch"));
+						}
+					}
+					else if (role_value.type == canonical_value::kind::utf8_string &&
+							 role_value.text == "main")
+						return unexpected(invalid(prefix + ".role", "unbound-main"));
 				}
-				const auto source = source_bindings.find(*file_id);
-				if (source != source_bindings.end() &&
-					(source->second.logical_path != *path || source->second.size_bytes != *size ||
-					 digest_value.type != canonical_value::kind::utf8_string ||
-					 source->second.content_digest != digest_value.text))
-					return unexpected(invalid(prefix, "compile-unit-source-mismatch"));
-			}
-			if (unique_blobs.size() != *blobs || recomputed_bytes != *bytes)
-				return unexpected(invalid("source_closure", "blob-census-mismatch"));
-			auto encoded_members = canonical_binary(closure_members);
-			if (!encoded_members)
-				return unexpected(invalid("source_closure.members", "canonical-encoding"));
-			const auto recomputed_manifest = content_digest(*encoded_members);
-			if ((*closure.value())[2].text != recomputed_manifest)
-				return unexpected(invalid("source_closure.manifest_digest", "binding-mismatch"));
-			const std::array closure_fields{
-				canonical_value::from_string(recomputed_manifest),
-				canonical_value::from_integer(static_cast<std::int64_t>(*members)),
-				canonical_value::from_integer(static_cast<std::int64_t>(*blobs)),
-				canonical_value::from_integer(static_cast<std::int64_t>(*bytes)),
-			};
-			auto recomputed_closure =
-				canonical_identity_digest("application-source-closure", closure_fields);
-			if (!recomputed_closure || (*closure.value())[1].text != *recomputed_closure)
-				return unexpected(invalid("source_closure.closure_digest", "binding-mismatch"));
-			for (const auto& [file_id, binding] : source_bindings)
-			{
-				static_cast<void>(binding);
-				if (!member_ids.contains(file_id))
+
+				if (unique_blobs.size() != *blobs || recomputed_bytes != *bytes)
+					return unexpected(invalid(closure_prefix, "blob-census-mismatch"));
+				auto encoded_members = canonical_binary(closure_members);
+				if (!encoded_members)
+					return unexpected(invalid(closure_prefix + ".members", "canonical-encoding"));
+				const auto recomputed_manifest = content_digest(*encoded_members);
+				if ((*closure.value())[2].text != recomputed_manifest)
 					return unexpected(
-						invalid("source_closure.members", "compile-unit-source-missing"));
+						invalid(closure_prefix + ".manifest_digest", "binding-mismatch"));
+				const std::array closure_fields{
+					canonical_value::from_string(recomputed_manifest),
+					canonical_value::from_integer(static_cast<std::int64_t>(*members)),
+					canonical_value::from_integer(static_cast<std::int64_t>(*blobs)),
+					canonical_value::from_integer(static_cast<std::int64_t>(*bytes)),
+				};
+				auto recomputed_closure =
+					canonical_identity_digest("application-source-closure", closure_fields);
+				if (!recomputed_closure || (*closure.value())[1].text != *recomputed_closure ||
+					*closure_id != "source-closure:" + *recomputed_closure)
+					return unexpected(
+						invalid(closure_prefix + ".closure_digest", "binding-mismatch"));
+				for (const auto& binding : source_bindings)
+					if (binding.source_closure_id == *closure_id &&
+						!member_ids.contains(binding.file_id))
+						return unexpected(
+							invalid(closure_prefix + ".members", "compile-unit-source-missing"));
 			}
+			if (admitted_closures != referenced_closures)
+				return unexpected(invalid("source_closures", "reference-mismatch"));
 
 			const auto& declared = (*tuple.value())[7];
 			if (declared.type != canonical_value::kind::ordered_tuple ||
@@ -893,8 +1071,8 @@ namespace cxxlens::sdk
 			maximum_arguments_per_unit == 0U || maximum_auxiliary_files_per_unit == 0U ||
 			maximum_environment_effects_per_unit == 0U || maximum_path_mappings == 0U ||
 			maximum_string_bytes == 0U || maximum_total_metadata_bytes == 0U ||
-			maximum_source_closure_members == 0U || maximum_source_closure_blobs == 0U ||
-			maximum_source_closure_bytes == 0U)
+			maximum_source_closure_members == 0U || maximum_source_closures == 0U ||
+			maximum_source_closure_blobs == 0U || maximum_source_closure_bytes == 0U)
 			return unexpected(error{"application-analysis.import-limits-invalid", "limits", {}});
 		return {};
 	}

@@ -1,5 +1,5 @@
 schema: cxxlens.build-capture-bundle.v1
-document_version: 1.0.0
+document_version: 1.1.0
 maturity: experimental
 encoding: cxxlens-canonical-tuple-v1
 purpose: Detached observations of an application build performed by a production compiler.
@@ -14,7 +14,7 @@ root_tuple:
   - {index: 3, name: target_abi, type: strong-id}
   - {index: 4, name: project_id, type: strong-id}
   - {index: 5, name: compile_units, type: ordered-tuple-of-compile-unit}
-  - {index: 6, name: source_closure, type: source-closure-tuple}
+  - {index: 6, name: source_closures, type: ordered-tuple-of-source-closure}
   - {index: 7, name: gaps, type: ordered-tuple-of-gap}
   - {index: 8, name: logical_project_root, type: logical-path}
   - {index: 9, name: path_mappings, type: captured-path-mapping-tuple}
@@ -33,7 +33,7 @@ toolchain_tuple:
 compile_unit_tuple:
   fields:
     - {index: 0, name: compile_unit_id, type: strong-id}
-    - {index: 1, name: source_snapshot_id, type: strong-id}
+    - {index: 1, name: source_snapshot_id, type: captured-string}
     - {index: 2, name: source_file_id, type: strong-id}
     - {index: 3, name: source_logical_path, type: logical-path}
     - {index: 4, name: source_content_digest, type: digest}
@@ -45,6 +45,9 @@ compile_unit_tuple:
     - {index: 10, name: config_files, type: captured-auxiliary-file-tuple}
     - {index: 11, name: environment_effects, type: captured-environment-effect-tuple}
     - {index: 12, name: captured_working_directory, type: captured-string}
+    - {index: 13, name: language_standard, type: captured-string}
+    - {index: 14, name: extension_mode, type: captured-string}
+    - {index: 15, name: source_closure_id, type: strong-id}
 path_mapping_tuple:
   fields:
     - {index: 0, name: captured_physical_prefix, type: native-absolute-path}
@@ -65,6 +68,9 @@ source_closure_member_tuple:
     - {index: 2, name: content_digest, type: captured-digest}
     - {index: 3, name: content, type: captured-bytes}
     - {index: 4, name: size_bytes, type: nonnegative-integer}
+    - {index: 5, name: role, type: captured-string, values: [main, header, generated, forced-include, macro-file]}
+    - {index: 6, name: encoding, type: captured-string, values: [utf8, utf16le, utf16be, locale_dependent, binary_or_unknown]}
+    - {index: 7, name: read_only, type: boolean, const: true}
 captured_value_tuple:
   fields:
     - {index: 0, name: state, type: enum, values: [observed, derived, redacted, unavailable]}
@@ -101,23 +107,26 @@ bounds:
   string_bytes: 4096
   total_metadata_bytes: 67108864
   source_closure_members: 4096
+  source_closures: 4096
   source_closure_blobs: 4096
   source_closure_bytes: 50331648
 invariants:
   - all-external-counts-are-checked-before-allocation
-  - compile-unit-ids-and-logical-paths-are-unique
+  - compile-unit-ids-are-unique-and-ordered-while-one-source-may-have-multiple-variants
   - logical-source-working-auxiliary-and-closure-paths-are-under-the-logical-project-root
   - captured-working-directories-are-absolute-and-covered-by-one-explicit-path-mapping
   - path-mappings-use-canonical-order-and-have-no-overlapping-physical-or-logical-prefixes
   - original-argv-order-is-preserved
   - compile-units-auxiliary-files-environment-effects-and-gaps-use-canonical-order
   - auxiliary-file-parent-graph-is-acyclic-and-depth-bounded
-  - source-closure-members-use-canonical-file-id-order-and-unique-logical-paths
+  - source-closures-use-canonical-closure-id-order-and-bind-each-compile-unit-explicitly
+  - source-closure-members-use-canonical-file-id-order-and-unique-logical-paths-within-the-closure
+  - every-source-closure-has-one-main-member-and-retains-role-encoding-and-read-only-policy
   - observed-source-bytes-match-their-declared-size-and-content-digest
   - source-closure-member-blob-and-byte-censuses-are-recomputed-before-acceptance
   - source-closure-manifest-is-the-content-digest-of-the-canonical-members-tuple
   - source-closure-digest-binds-manifest-and-all-three-recomputed-censuses
-  - every-compile-unit-source-is-bound-to-an-exact-source-closure-member
+  - every-compile-unit-source-is-bound-to-the-main-member-of-its-exact-source-closure
   - environment-is-deny-by-default-and-only-normalized-effects-are-carried
   - machine-root-pid-time-and-unordered-order-do-not-contribute-to-semantic-identity
   - missing-and-redacted-are-never-reconstructed-from-placeholders
