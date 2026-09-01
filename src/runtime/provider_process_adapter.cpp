@@ -1356,7 +1356,8 @@ namespace cxxlens::sdk::provider
 															  invocation.working_directory,
 															  absolute_wall_deadline_ns,
 															  std::nullopt,
-															  std::nullopt});
+															  std::nullopt,
+															  std::stop_token{}});
 			if (verified)
 				return verified;
 			if (verified.error().code == "runtime.sealed-executable-timeout")

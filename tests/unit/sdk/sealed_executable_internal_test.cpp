@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
+#include <stop_token>
 #include <string>
 
 #if defined(__linux__) && defined(__GLIBC__)
@@ -99,6 +100,13 @@ int main()
 		auto expired = open_sealed_executable(expired_request);
 		require(!expired && expired.error().code == "runtime.sealed-executable-timeout",
 				"expired absolute deadline did not fail before opening the image");
+		std::stop_source stopped;
+		stopped.request_stop();
+		auto cancelled_request = request;
+		cancelled_request.cancellation = stopped.get_token();
+		auto cancelled = open_sealed_executable(cancelled_request);
+		require(!cancelled && cancelled.error().code == "runtime.sealed-executable-cancelled",
+				"cancelled executable measurement did not stop before opening the image");
 
 		const auto non_executable = root / "not-executable";
 		fs::copy_file("/bin/true", non_executable, fs::copy_options::overwrite_existing);

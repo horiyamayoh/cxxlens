@@ -36,6 +36,11 @@ namespace cxxlens::sdk::detail
 			return {"runtime.sealed-executable-timeout", "executable", "wall-deadline"};
 		}
 
+		[[nodiscard]] error cancelled_error()
+		{
+			return {"runtime.sealed-executable-cancelled", "executable", "cancelled"};
+		}
+
 		[[nodiscard]] bool
 		deadline_expired(const std::optional<std::uint64_t> absolute_wall_deadline_ns) noexcept
 		{
@@ -331,6 +336,8 @@ namespace cxxlens::sdk::detail
 			if (request.executable_path.empty() || request.executable_path.contains('\0') ||
 				request.working_directory.contains('\0'))
 				return unexpected(sealed_error("request", "invalid-path"));
+			if (request.cancellation.stop_requested())
+				return unexpected(cancelled_error());
 			if (deadline_expired(request.absolute_wall_deadline_ns))
 				return unexpected(timeout_error());
 
@@ -383,6 +390,8 @@ namespace cxxlens::sdk::detail
 			std::uint64_t byte_count{};
 			for (;;)
 			{
+				if (request.cancellation.stop_requested())
+					return unexpected(cancelled_error());
 				if (deadline_expired(request.absolute_wall_deadline_ns))
 					return unexpected(timeout_error());
 				const auto count = ::read(source.get(), buffer.data(), buffer.size());
@@ -404,6 +413,8 @@ namespace cxxlens::sdk::detail
 				std::size_t offset{};
 				while (offset < received)
 				{
+					if (request.cancellation.stop_requested())
+						return unexpected(cancelled_error());
 					const auto written =
 						::write(image.get(), buffer.data() + offset, received - offset);
 					if (written > 0)

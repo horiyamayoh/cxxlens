@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 
@@ -28,6 +29,7 @@ namespace cxxlens::sdk::detail
 		std::optional<std::uint64_t> absolute_wall_deadline_ns;
 		std::optional<std::uint64_t> maximum_image_bytes;
 		std::optional<std::size_t> maximum_canonical_path_bytes;
+		std::stop_token cancellation;
 	};
 
 	/** Exact bytes that were measured and can only be executed from the sealed descriptor. */

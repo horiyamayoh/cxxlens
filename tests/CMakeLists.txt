@@ -165,6 +165,24 @@ set_tests_properties(
     "unit;sdk;runtime;process;identity;bounded;negative;determinism;resource;security"
 )
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-gcc-probe-process
+                            unit/sdk/gcc_probe_process_port_internal_test.cpp)
+target_sources(cxxlens-unit-sdk-gcc-probe-process
+               PRIVATE $<TARGET_OBJECTS:cxxlens_process_authority_internal>)
+target_link_libraries(cxxlens-unit-sdk-gcc-probe-process PRIVATE cxxlens::base)
+target_include_directories(cxxlens-unit-sdk-gcc-probe-process
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-gcc-probe-process
+         COMMAND cxxlens-unit-sdk-gcc-probe-process)
+set_tests_properties(
+  unit.sdk-gcc-probe-process
+  PROPERTIES
+    TIMEOUT
+    20
+    LABELS
+    "unit;sdk;capture;gcc;runtime;process;identity;bounded;fault;determinism;resource;security"
+)
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-bounded-json
                             unit/sdk/bounded_json_internal_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-bounded-json PRIVATE cxxlens::base)
@@ -2172,6 +2190,7 @@ foreach(
         unit.sdk-compile-commands-capture
         unit.sdk-gcc-capture-files
         unit.sdk-sealed-executable
+        unit.sdk-gcc-probe-process
         unit.sdk-application-analysis
         sdk.example-application_analysis
         sdk.example-typed_query
@@ -2258,6 +2277,7 @@ set(_cxxlens_ng_test_binary_candidates
     cxxlens-unit-sdk-compile-commands-capture
     cxxlens-unit-sdk-gcc-capture-files
     cxxlens-unit-sdk-sealed-executable
+    cxxlens-unit-sdk-gcc-probe-process
     cxxlens-unit-sdk-materialization-task
     cxxlens-unit-sdk-provider-runtime
     cxxlens-sdk-doctor-authority-consumer

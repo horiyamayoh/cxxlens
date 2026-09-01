@@ -322,8 +322,10 @@ add_library(
   cxxlens_provider_process_internal OBJECT
   EXCLUDE_FROM_ALL src/runtime/provider_process_adapter.cpp
   src/sdk/provider_ng1_spill_port_internal.cpp)
-add_library(cxxlens_process_authority_internal OBJECT
-            EXCLUDE_FROM_ALL src/runtime/sealed_executable_internal.cpp)
+add_library(
+  cxxlens_process_authority_internal OBJECT
+  EXCLUDE_FROM_ALL src/runtime/sealed_executable_internal.cpp
+  src/runtime/gcc_probe_process_port_internal.cpp)
 foreach(
   target IN
   ITEMS cxxlens_provider_runtime_core_internal
