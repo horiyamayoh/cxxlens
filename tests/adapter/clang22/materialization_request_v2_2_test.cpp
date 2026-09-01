@@ -711,7 +711,7 @@ namespace
 		assert(validated->unique_blob_bytes == 7U);
 		assert(validated->build_captures.size() == 1U);
 		const auto& capture = validated->build_captures.front();
-		const auto& capture_value = capture.value();
+		[[maybe_unused]] const auto& capture_value = capture.value();
 		assert(capture_value.project_id == validated->authority.project.project_id);
 		assert(capture_value.catalog.catalog_digest ==
 			   validated->authority.project.catalog.catalog_digest);
