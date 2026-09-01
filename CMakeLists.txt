@@ -343,6 +343,7 @@ add_library(
   src/sdk/application_analysis.cpp
   src/sdk/application_analysis_service.cpp
   src/sdk/build_capture_internal.cpp
+  src/sdk/compile_commands_capture_internal.cpp
   src/sdk/materialization_task_internal.cpp)
 add_library(cxxlens::sdk ALIAS cxxlens_sdk)
 cxxlens_configure_component(cxxlens_sdk sdk)

@@ -120,6 +120,20 @@ set_tests_properties(
   PROPERTIES LABELS
              "unit;sdk;capture;compiler-neutral;determinism;resource;security")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-compile-commands-capture
+                            unit/sdk/compile_commands_capture_internal_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-compile-commands-capture
+                      PRIVATE cxxlens::sdk)
+target_include_directories(cxxlens-unit-sdk-compile-commands-capture
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-compile-commands-capture
+         COMMAND cxxlens-unit-sdk-compile-commands-capture)
+set_tests_properties(
+  unit.sdk-compile-commands-capture
+  PROPERTIES
+    LABELS
+    "unit;sdk;capture;gcc;json;bounded;negative;determinism;resource;security")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-bounded-json
                             unit/sdk/bounded_json_internal_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-bounded-json PRIVATE cxxlens::base)
@@ -2124,6 +2138,7 @@ foreach(
         public-api.cxxlens-header
         public-api.sdk-header
         unit.sdk-bounded-json
+        unit.sdk-compile-commands-capture
         unit.sdk-application-analysis
         sdk.example-application_analysis
         sdk.example-typed_query
@@ -2207,6 +2222,7 @@ set(_cxxlens_ng_test_binary_candidates
     cxxlens-public-header-sdk
     cxxlens-unit-sdk
     cxxlens-unit-sdk-bounded-json
+    cxxlens-unit-sdk-compile-commands-capture
     cxxlens-unit-sdk-materialization-task
     cxxlens-unit-sdk-provider-runtime
     cxxlens-sdk-doctor-authority-consumer
