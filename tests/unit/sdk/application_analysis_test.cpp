@@ -111,10 +111,10 @@ namespace
 			observed(canonical_value::from_string(digest('1'))),
 			canonical_value::from_string("x86_64-linux-gnu"),
 			unavailable("no-sysroot", "capture-effective-sysroot"),
-			canonical_value::from_string(digest('2')),
-			canonical_value::from_string(digest('3')),
-			canonical_value::from_string(digest('4')),
-			canonical_value::from_string(digest('5')),
+			observed(canonical_value::from_string(digest('2'))),
+			observed(canonical_value::from_string(digest('3'))),
+			observed(canonical_value::from_string(digest('4'))),
+			observed(canonical_value::from_string(digest('5'))),
 		});
 		auto environment = canonical_value::from_tuple({canonical_value::from_tuple({
 			canonical_value::from_string("gcc.cpath"),
@@ -302,6 +302,39 @@ namespace
 		auto empty_argv_import = cxxlens::sdk::import_capture(*empty_argv_bundle);
 		require(!empty_argv_import &&
 				empty_argv_import.error().code == "application-analysis.target-unavailable");
+	}
+
+	void toolchain_observation_gaps_are_preserved()
+	{
+		auto missing = valid_bundle();
+		missing.tuple[1].tuple[7] =
+			unavailable("builtin-headers-unobserved", "capture-builtin-header-identity");
+		missing.tuple[7].tuple.insert(missing.tuple[7].tuple.end() - 1,
+									  gap("production_toolchain.builtin_headers_digest",
+										  "builtin-headers-unobserved",
+										  "capture-builtin-header-identity"));
+		auto missing_bytes = canonical_binary(missing);
+		require(missing_bytes);
+		auto missing_result = cxxlens::sdk::decode_capture_bundle(*missing_bytes);
+		require(missing_result && has_reason(missing_result->gaps(), "builtin-headers-unobserved"));
+
+		auto direct_value = valid_bundle();
+		direct_value.tuple[1].tuple[6] = canonical_value::from_string(digest('2'));
+		auto direct_bytes = canonical_binary(direct_value);
+		require(direct_bytes);
+		auto direct_result = cxxlens::sdk::decode_capture_bundle(*direct_bytes);
+		require(!direct_result &&
+				direct_result.error().field == "production_toolchain.abi_digest" &&
+				direct_result.error().detail == "tuple-shape");
+
+		auto malformed = valid_bundle();
+		malformed.tuple[1].tuple[9] = observed(canonical_value::from_string("sha256:not-a-digest"));
+		auto malformed_bytes = canonical_binary(malformed);
+		require(malformed_bytes);
+		auto malformed_result = cxxlens::sdk::decode_capture_bundle(*malformed_bytes);
+		require(!malformed_result &&
+				malformed_result.error().field == "production_toolchain.include_search_digest" &&
+				malformed_result.error().detail == "digest");
 	}
 
 	void duplicate_source_variants_bind_one_closure()
@@ -587,6 +620,7 @@ int main()
 {
 	positive_decode_and_deterministic_import();
 	replay_fidelity_and_import_bounds_fail_closed();
+	toolchain_observation_gaps_are_preserved();
 	duplicate_source_variants_bind_one_closure();
 	resource_and_shape_fail_closed();
 	materialization_request_factory_validates_authority();

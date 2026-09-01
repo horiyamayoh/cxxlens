@@ -1,5 +1,5 @@
 schema: cxxlens.build-capture-bundle.v1
-document_version: 1.1.0
+document_version: 1.2.0
 maturity: experimental
 encoding: cxxlens-canonical-tuple-v1
 purpose: Detached observations of an application build performed by a production compiler.
@@ -26,10 +26,10 @@ toolchain_tuple:
     - {index: 3, name: binary_digest, type: captured-digest}
     - {index: 4, name: target_triple, type: strong-id}
     - {index: 5, name: sysroot, type: captured-string}
-    - {index: 6, name: abi_digest, type: digest}
-    - {index: 7, name: builtin_headers_digest, type: digest}
-    - {index: 8, name: builtin_macros_digest, type: digest}
-    - {index: 9, name: include_search_digest, type: digest}
+    - {index: 6, name: abi_digest, type: captured-digest}
+    - {index: 7, name: builtin_headers_digest, type: captured-digest}
+    - {index: 8, name: builtin_macros_digest, type: captured-digest}
+    - {index: 9, name: include_search_digest, type: captured-digest}
 compile_unit_tuple:
   fields:
     - {index: 0, name: compile_unit_id, type: strong-id}

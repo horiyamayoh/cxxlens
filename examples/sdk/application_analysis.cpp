@@ -63,10 +63,10 @@ int main()
 		observed(canonical_value::from_string(digest('1'))),
 		canonical_value::from_string("x86_64-linux-gnu"),
 		observed(canonical_value::from_string("/opt/gcc-16.2.0/sysroot")),
-		canonical_value::from_string(digest('2')),
-		canonical_value::from_string(digest('3')),
-		canonical_value::from_string(digest('4')),
-		canonical_value::from_string(digest('5')),
+		observed(canonical_value::from_string(digest('2'))),
+		observed(canonical_value::from_string(digest('3'))),
+		observed(canonical_value::from_string(digest('4'))),
+		observed(canonical_value::from_string(digest('5'))),
 	});
 	auto unit = canonical_value::from_tuple({
 		canonical_value::from_string("compile-unit:main"),

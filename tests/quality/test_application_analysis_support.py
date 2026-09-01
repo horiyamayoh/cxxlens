@@ -125,6 +125,11 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
         self.assertIn("replay-fidelity", capture["authority"]["not_authoritative_for"])
         self.assertIn("production-compiler-exactness", replay["authority"]["not_authoritative_for"])
         self.assertIn("store-publication", detached["authority"]["not_authoritative_for"])
+        self.assertEqual(capture["document_version"], "1.2.0")
+        self.assertEqual(
+            [field["type"] for field in capture["toolchain_tuple"]["fields"][6:]],
+            ["captured-digest"] * 4,
+        )
         self.assertEqual(
             replay["option_mapping_tuple"]["fields"][2]["values"],
             ["exact", "semantics_preserving", "approximation", "unsupported", "nonsemantic"],

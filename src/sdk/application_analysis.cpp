@@ -540,12 +540,40 @@ namespace cxxlens::sdk
 				!canonical_native_path((*toolchain.value())[5].tuple[1].text, *family == "msvc"))
 				return unexpected(
 					invalid("production_toolchain.sysroot", "not-canonical-absolute"));
-			for (const auto index : {6U, 7U, 8U, 9U})
-				if (auto valid =
-						require_digest((*toolchain.value())[index],
-									   "production_toolchain[" + std::to_string(index) + "]");
+			auto capture_digest = [&](const std::size_t index,
+									  const std::string_view name,
+									  std::optional<std::string>& destination) -> result<void>
+			{
+				const auto field = "production_toolchain." + std::string{name};
+				if (auto valid = validate_captured((*toolchain.value())[index],
+												   field,
+												   canonical_value::kind::utf8_string,
+												   generated_gaps);
 					!valid)
-					return unexpected(std::move(valid.error()));
+					return valid;
+				const auto& captured = (*toolchain.value())[index].tuple[1];
+				if (captured.type == canonical_value::kind::utf8_string)
+				{
+					if (auto valid = require_digest(captured, field); !valid)
+						return valid;
+					destination = captured.text;
+				}
+				return {};
+			};
+			if (auto valid = capture_digest(6U, "abi_digest", output.decoded.abi_digest); !valid)
+				return unexpected(std::move(valid.error()));
+			if (auto valid = capture_digest(
+					7U, "builtin_headers_digest", output.decoded.builtin_headers_digest);
+				!valid)
+				return unexpected(std::move(valid.error()));
+			if (auto valid = capture_digest(
+					8U, "builtin_macros_digest", output.decoded.builtin_macros_digest);
+				!valid)
+				return unexpected(std::move(valid.error()));
+			if (auto valid = capture_digest(
+					9U, "include_search_digest", output.decoded.include_search_digest);
+				!valid)
+				return unexpected(std::move(valid.error()));
 
 			auto adapter = require_text((*tuple.value())[2], "capture_adapter");
 			auto abi = require_text((*tuple.value())[3], "target_abi");

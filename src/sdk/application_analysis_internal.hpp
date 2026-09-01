@@ -43,6 +43,10 @@ namespace cxxlens::sdk::detail
 		std::string toolchain_family;
 		std::string toolchain_version;
 		std::string target_triple;
+		std::optional<std::string> abi_digest;
+		std::optional<std::string> builtin_headers_digest;
+		std::optional<std::string> builtin_macros_digest;
+		std::optional<std::string> include_search_digest;
 		std::string target_abi;
 		std::string project_id;
 		std::string logical_project_root;
