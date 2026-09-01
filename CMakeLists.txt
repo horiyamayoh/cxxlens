@@ -305,30 +305,34 @@ target_link_libraries(cxxlens INTERFACE cxxlens::base cxxlens::kernel
                                         cxxlens::query cxxlens::cpp)
 set_target_properties(cxxlens PROPERTIES EXPORT_NAME cxxlens)
 
-# The provider launch/validation core is compiled once and reused by the public
-# SDK and by source-private worker/test closures. In shared builds the object is
-# also embedded into consumers that cannot resolve implementation symbols across
-# DSO boundaries. The target is neither installed nor exported.
+# Provider runtime ownership is split by change reason. The platform-neutral
+# runtime core owns logical validation and result adoption, NG1 owns its
+# lifecycle state machines, and the process target owns Linux/process/filesystem
+# effects. These targets are assembled only through the private closure below;
+# none is installed or exported.
+add_library(cxxlens_provider_runtime_core_internal OBJECT
+            EXCLUDE_FROM_ALL src/sdk/provider_runtime.cpp)
 add_library(
-  cxxlens_provider_runtime_internal OBJECT
-  EXCLUDE_FROM_ALL
-  src/sdk/provider_runtime.cpp
-  src/runtime/provider_process_adapter.cpp
-  src/sdk/provider_ng1_transport.cpp
-  src/sdk/provider_ng1_validation.cpp
-  src/sdk/provider_ng1_recovery.cpp
-  src/sdk/provider_ng1_spill_port_internal.cpp
-  src/sdk/provider_ng1_session.cpp
-  src/sdk/provider_ng1_live_driver.cpp)
-target_link_libraries(cxxlens_provider_runtime_internal
-                      PRIVATE cxxlens::cxxlens cxxlens::recipes)
-target_include_directories(cxxlens_provider_runtime_internal
-                           PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_provider_runtime_internal PRIVATE cxx_std_23)
-set_target_properties(cxxlens_provider_runtime_internal
-                      PROPERTIES POSITION_INDEPENDENT_CODE ON)
-cxxlens_set_project_warnings(cxxlens_provider_runtime_internal)
-cxxlens_enable_sanitizers(cxxlens_provider_runtime_internal)
+  cxxlens_provider_ng1_runtime_internal OBJECT
+  EXCLUDE_FROM_ALL src/sdk/provider_ng1_transport.cpp
+  src/sdk/provider_ng1_validation.cpp src/sdk/provider_ng1_recovery.cpp
+  src/sdk/provider_ng1_session.cpp src/sdk/provider_ng1_live_driver.cpp)
+add_library(
+  cxxlens_provider_process_internal OBJECT
+  EXCLUDE_FROM_ALL src/runtime/provider_process_adapter.cpp
+  src/sdk/provider_ng1_spill_port_internal.cpp)
+foreach(
+  target IN
+  ITEMS cxxlens_provider_runtime_core_internal
+        cxxlens_provider_ng1_runtime_internal cxxlens_provider_process_internal)
+  target_link_libraries(${target} PRIVATE cxxlens::cxxlens cxxlens::recipes)
+  target_include_directories(${target}
+                             PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(${target} PRIVATE cxx_std_23)
+  set_target_properties(${target} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  cxxlens_set_project_warnings(${target})
+  cxxlens_enable_sanitizers(${target})
+endforeach()
 
 add_library(
   cxxlens_sdk
@@ -422,9 +426,24 @@ set_target_properties(
              VISIBILITY_INLINES_HIDDEN YES)
 cxxlens_set_project_warnings(cxxlens_provider_protocol_v2_internal)
 cxxlens_enable_sanitizers(cxxlens_provider_protocol_v2_internal)
-target_sources(
-  cxxlens_sdk PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
-                      $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
+
+# The only runtime implementation closure consumed by production and private
+# fixtures. Keeping the assembly here prevents workers/tests from reconstructing
+# a second object graph or omitting one of the protocol/lifecycle/process
+# owners.
+set(CXXLENS_PROVIDER_RUNTIME_PRIVATE_OBJECTS
+    $<TARGET_OBJECTS:cxxlens_provider_runtime_core_internal>
+    $<TARGET_OBJECTS:cxxlens_provider_ng1_runtime_internal>
+    $<TARGET_OBJECTS:cxxlens_provider_process_internal>
+    $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
+add_library(cxxlens_provider_runtime_private_closure INTERFACE)
+target_sources(cxxlens_provider_runtime_private_closure
+               INTERFACE ${CXXLENS_PROVIDER_RUNTIME_PRIVATE_OBJECTS})
+target_link_libraries(cxxlens_provider_runtime_private_closure
+                      INTERFACE cxxlens_protocol_v2)
+# Embed the private implementation into the installed SDK itself so static and
+# shared packages remain self-contained without exporting an internal target.
+target_sources(cxxlens_sdk PRIVATE ${CXXLENS_PROVIDER_RUNTIME_PRIVATE_OBJECTS})
 target_link_libraries(cxxlens_sdk PUBLIC cxxlens_protocol_v2)
 
 add_library(cxxlens_clang22_provider_sdk ${CXXLENS_LIBRARY_TYPE}
@@ -619,14 +638,6 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     cxxlens_clang22_worker_core
     PUBLIC cxxlens::clang22_provider_sdk
     PRIVATE cxxlens_clang22_materialization_codecs)
-  if(CXXLENS_BUILD_SHARED)
-    target_sources(
-      cxxlens_clang22_worker_core
-      PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
-              $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
-    target_link_libraries(cxxlens_clang22_worker_core
-                          PRIVATE cxxlens_protocol_v2)
-  endif()
   target_include_directories(cxxlens_clang22_worker_core
                              PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_features(cxxlens_clang22_worker_core PRIVATE cxx_std_23)
@@ -657,6 +668,10 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
             cxxlens_clang22_materializer_occurrence_support
             cxxlens_clang22_materializer_v4_claims
             cxxlens_materialization_writer_internal)
+  if(CXXLENS_BUILD_SHARED)
+    target_link_libraries(cxxlens_clang22_materializer_ingress
+                          PRIVATE cxxlens_provider_runtime_private_closure)
+  endif()
   target_include_directories(cxxlens_clang22_materializer_ingress
                              PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_features(cxxlens_clang22_materializer_ingress
@@ -701,11 +716,10 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
                                     cxxlens_clang22_materialization_codecs)
   if(CXXLENS_BUILD_SHARED)
     # The worker SDK is a static private closure when the public SDK is shared.
-    # Its provider implementation references the hidden runtime objects.  Put
-    # those objects on the final executable as well as in worker_core so archive
-    # ordering cannot leave the incremental transcript symbols unresolved.
-    target_sources(cxxlens-clang-worker-22
-                   PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+    # Its provider implementation references the hidden runtime boundary, so
+    # consume the same private closure instead of rebuilding its object list.
+    target_link_libraries(cxxlens-clang-worker-22
+                          PRIVATE cxxlens_provider_runtime_private_closure)
   endif()
   target_include_directories(cxxlens-clang-worker-22
                              PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -776,11 +790,28 @@ cxxlens_assert_direct_project_dependencies(cxxlens cxxlens_base cxxlens_kernel
 cxxlens_assert_direct_project_dependencies(cxxlens_protocol_v2 cxxlens_base)
 cxxlens_assert_direct_project_dependencies(cxxlens_provider_protocol_v2_internal
                                            cxxlens_protocol_v2)
-cxxlens_assert_direct_project_dependencies(cxxlens_provider_runtime_internal
+cxxlens_assert_direct_project_dependencies(
+  cxxlens_provider_runtime_core_internal cxxlens cxxlens_recipes)
+cxxlens_assert_direct_project_dependencies(cxxlens_provider_ng1_runtime_internal
+                                           cxxlens cxxlens_recipes)
+cxxlens_assert_direct_project_dependencies(cxxlens_provider_process_internal
                                            cxxlens cxxlens_recipes)
 cxxlens_assert_direct_project_dependencies(
-  cxxlens_sdk cxxlens cxxlens_recipes cxxlens_protocol_v2
-  cxxlens_provider_runtime_internal cxxlens_provider_protocol_v2_internal)
+  cxxlens_provider_runtime_private_closure
+  cxxlens_provider_runtime_core_internal
+  cxxlens_provider_ng1_runtime_internal
+  cxxlens_provider_process_internal
+  cxxlens_provider_protocol_v2_internal
+  cxxlens_protocol_v2)
+cxxlens_assert_direct_project_dependencies(
+  cxxlens_sdk
+  cxxlens
+  cxxlens_recipes
+  cxxlens_protocol_v2
+  cxxlens_provider_runtime_core_internal
+  cxxlens_provider_ng1_runtime_internal
+  cxxlens_provider_process_internal
+  cxxlens_provider_protocol_v2_internal)
 cxxlens_assert_direct_project_dependencies(cxxlens_clang22_provider_sdk
                                            cxxlens_sdk)
 
@@ -790,7 +821,9 @@ set(CXXLENS_COMPILED_TARGETS
     cxxlens_kernel
     cxxlens_query
     cxxlens_recipes
-    cxxlens_provider_runtime_internal
+    cxxlens_provider_runtime_core_internal
+    cxxlens_provider_ng1_runtime_internal
+    cxxlens_provider_process_internal
     cxxlens_provider_protocol_v2_internal
     cxxlens_sdk
     cxxlens_cli

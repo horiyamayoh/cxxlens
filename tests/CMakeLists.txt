@@ -22,17 +22,12 @@ add_test(
 set_tests_properties(configure.dev-core-no-dependencies
                      PROPERTIES LABELS "configure;core;llvm-free")
 
-# Shared SDK consumers must embed the provider implementation objects; static
-# consumers can use the same closure directly. Centralizing this wiring keeps
-# provider tests from compiling individual runtime sources again.
+# Source-private consumers use the same production runtime closure. The closure
+# owns the exact protocol/runtime/NG1/process object set, so tests cannot
+# assemble a divergent implementation graph.
 function(cxxlens_add_provider_runtime_closure target)
-  target_sources(${target}
-                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
-  if(CXXLENS_BUILD_SHARED)
-    target_sources(
-      ${target} PRIVATE $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
-    target_link_libraries(${target} PRIVATE cxxlens_protocol_v2)
-  endif()
+  target_link_libraries(${target}
+                        PRIVATE cxxlens_provider_runtime_private_closure)
 endfunction()
 
 # Provider transcript fault harnesses are test support, not part of the
@@ -1300,8 +1295,7 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   target_link_libraries(cxxlens-clang22-observation-v2
                         PRIVATE cxxlens_clang22_worker_core)
   if(CXXLENS_BUILD_SHARED)
-    target_sources(cxxlens-clang22-observation-v2
-                   PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+    cxxlens_add_provider_runtime_closure(cxxlens-clang22-observation-v2)
   endif()
   add_test(NAME adapter.clang22-observation-v2
            COMMAND cxxlens-clang22-observation-v2)
@@ -1314,8 +1308,7 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   target_link_libraries(cxxlens-clang22-unicode-nfc
                         PRIVATE cxxlens_clang22_worker_core)
   if(CXXLENS_BUILD_SHARED)
-    target_sources(cxxlens-clang22-unicode-nfc
-                   PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+    cxxlens_add_provider_runtime_closure(cxxlens-clang22-unicode-nfc)
   endif()
   add_test(NAME adapter.clang22-unicode-nfc COMMAND cxxlens-clang22-unicode-nfc)
   set_tests_properties(
@@ -1445,8 +1438,7 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   target_link_libraries(cxxlens-clang22-provider-worker-v4
                         PRIVATE cxxlens_clang22_worker_core)
   if(CXXLENS_BUILD_SHARED)
-    target_sources(cxxlens-clang22-provider-worker-v4
-                   PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+    cxxlens_add_provider_runtime_closure(cxxlens-clang22-provider-worker-v4)
   endif()
   if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG22_LIBRARY_DIRS)
     list(GET CXXLENS_CLANG22_LIBRARY_DIRS 0 _cxxlens_worker_v4_test_lib_dir)
@@ -1494,8 +1486,8 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   target_link_libraries(cxxlens-clang22-provider-worker-v4-ast-observer
                         PRIVATE cxxlens_clang22_worker_core)
   if(CXXLENS_BUILD_SHARED)
-    target_sources(cxxlens-clang22-provider-worker-v4-ast-observer
-                   PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+    cxxlens_add_provider_runtime_closure(
+      cxxlens-clang22-provider-worker-v4-ast-observer)
   endif()
   if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG22_LIBRARY_DIRS)
     list(GET CXXLENS_CLANG22_LIBRARY_DIRS 0 _cxxlens_ast_observer_lib_dir)
@@ -1539,8 +1531,8 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   target_link_libraries(cxxlens-clang22-provider-worker-v4-output-normalizer
                         PRIVATE cxxlens_clang22_worker_core)
   if(CXXLENS_BUILD_SHARED)
-    target_sources(cxxlens-clang22-provider-worker-v4-output-normalizer
-                   PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+    cxxlens_add_provider_runtime_closure(
+      cxxlens-clang22-provider-worker-v4-output-normalizer)
   endif()
   if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG22_LIBRARY_DIRS)
     list(GET CXXLENS_CLANG22_LIBRARY_DIRS 0 _cxxlens_v4_normalizer_lib_dir)
@@ -1585,14 +1577,10 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     PRIVATE cxxlens_clang22_materialization_codecs cxxlens::sdk)
   if(CXXLENS_BUILD_SHARED)
     # The channel launch helper is source-private and intentionally hidden from
-    # the installed provider SDK. Embed its runtime object closure for this
-    # process-boundary fixture, matching the worker executable.
-    target_sources(
-      cxxlens-clang22-provider-worker-channel
-      PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
-              $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
-    target_link_libraries(cxxlens-clang22-provider-worker-channel
-                          PRIVATE cxxlens_protocol_v2)
+    # the installed provider SDK. Consume the production private closure used by
+    # the worker executable.
+    cxxlens_add_provider_runtime_closure(
+      cxxlens-clang22-provider-worker-channel)
   endif()
   if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG22_LIBRARY_DIRS)
     list(GET CXXLENS_CLANG22_LIBRARY_DIRS 0 _cxxlens_worker_channel_lib_dir)
@@ -1644,13 +1632,7 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   target_link_libraries(cxxlens-clang22-source-closure-native
                         PRIVATE cxxlens_clang22_worker_core)
   if(CXXLENS_BUILD_SHARED)
-    # The worker-private provider SDK is a static closure.  Its provider.cpp
-    # references hidden transcript/runtime definitions that cannot be resolved
-    # from the public shared SDK.  Place the exact private runtime objects on
-    # the final native-fixture link after that closure, matching the sealed
-    # worker.
-    target_sources(cxxlens-clang22-source-closure-native
-                   PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+    cxxlens_add_provider_runtime_closure(cxxlens-clang22-source-closure-native)
   endif()
   if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG22_LIBRARY_DIRS)
     list(GET CXXLENS_CLANG22_LIBRARY_DIRS 0 _cxxlens_native_test_lib_dir)
@@ -1700,11 +1682,7 @@ target_sources(cxxlens-r2-vertical-slice
                PRIVATE $<TARGET_OBJECTS:cxxlens-test-sdk-support>)
 target_link_libraries(cxxlens-r2-vertical-slice PRIVATE cxxlens::sdk)
 if(CXXLENS_BUILD_SHARED)
-  target_sources(
-    cxxlens-r2-vertical-slice
-    PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>
-            $<TARGET_OBJECTS:cxxlens_provider_protocol_v2_internal>)
-  target_link_libraries(cxxlens-r2-vertical-slice PRIVATE cxxlens_protocol_v2)
+  cxxlens_add_provider_runtime_closure(cxxlens-r2-vertical-slice)
 endif()
 add_test(NAME integration.r2-vertical-slice COMMAND cxxlens-r2-vertical-slice)
 set_tests_properties(
