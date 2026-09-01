@@ -692,18 +692,6 @@ namespace
 			received->request.authority.worker.executable = std::string{worker_path};
 			received->request.authority.worker.installed_binary_digest =
 				executable_digest(worker_path);
-			const auto& member = received->receiver.snapshot.members.front();
-			received->request.authority.tasks.front().source = {
-				received->receiver.snapshot.snapshot_id,
-				member.file_id,
-				member.logical_path,
-				member.content_digest,
-				member.size_bytes,
-				"utf8",
-				"line-index:sha256:" + std::string(64U, '4'),
-				true};
-			received->request.request.base_tasks.front().source =
-				received->request.authority.tasks.front().source;
 			auto execution = run_materializer_worker(std::move(*received), issuer);
 			if (!execution || !execution->outcome.succeeded())
 			{

@@ -202,6 +202,7 @@ namespace cxxlens::detail::clang22
 
 		[[nodiscard]] sdk::result<json_value>
 		worker_output_value(const provider_task_v4_task_authority& task,
+							const sdk::detail::build_capture_draft& capture,
 							const sdk::provider::manifest& manifest,
 							const std::string_view semantic_contract_digest,
 							const std::array<const sdk::relation_descriptor*, 6U>& descriptors)
@@ -222,7 +223,7 @@ namespace cxxlens::detail::clang22
 			const auto maximum_bytes = std::min<std::uint64_t>(task.budget.output_bytes,
 															   std::uint64_t{16U} * 1024U * 1024U);
 			return object({
-				{"compile_unit_id", text(task.compile_unit_id).value()},
+				{"compile_unit_id", text(capture.compile_unit_id).value()},
 				{"dependency_groups", json_value::array(std::move(groups))},
 				{"descriptor_digests", json_value::array(std::move(descriptor_digests))},
 				{"maximum_output_bytes", json_value::unsigned_integer(maximum_bytes)},
@@ -231,7 +232,7 @@ namespace cxxlens::detail::clang22
 				{"provider_version", text(manifest.provider_version.string()).value()},
 				{"requested_descriptor_ids", json_value::array(std::move(descriptor_ids))},
 				{"semantic_contract_digest", text(semantic_contract_digest).value()},
-				{"toolchain_context_id", text(task.toolchain_context_id).value()},
+				{"toolchain_context_id", text(capture.toolchain_context_id).value()},
 			});
 		}
 
@@ -298,8 +299,9 @@ namespace cxxlens::detail::clang22
 			return identity->substr(separator + 1U);
 		}
 
-		[[nodiscard]] sdk::result<materializer_basis_authority>
-		make_materializer_basis_authority(const provider_task_v4_request_authority& authority)
+		[[nodiscard]] sdk::result<materializer_basis_authority> make_materializer_basis_authority(
+			const provider_task_v4_request_authority& authority,
+			const std::span<const sdk::detail::validated_build_capture> captures)
 		{
 			const auto& tool = authority.tool;
 			auto materializer_semantics = semantic_digest_projection(
@@ -321,14 +323,19 @@ namespace cxxlens::detail::clang22
 				}));
 
 			std::vector<sdk::canonical_value> semantic_tasks;
+			if (authority.tasks.empty() || authority.tasks.size() != captures.size())
+				return sdk::unexpected(
+					failure("materialization.task-census-invalid", "build-captures"));
 			semantic_tasks.reserve(authority.tasks.size());
-			for (const auto& task : authority.tasks)
+			for (std::size_t index{}; index < authority.tasks.size(); ++index)
 			{
+				const auto& task = authority.tasks[index];
+				const auto& capture = captures[index].value();
 				auto context = sdk::canonical_value::from_tuple({
 					canonical_text(task.provider_task_id),
 					canonical_text(task.task_input_digest),
-					canonical_text(task.selected_catalog_compile_unit_id),
-					canonical_text(task.compile_unit_id),
+					canonical_text(capture.selected_catalog_compile_unit_id),
+					canonical_text(capture.compile_unit_id),
 					canonical_text(task.condition_universe_id),
 					canonical_text(task.condition_id),
 					canonical_text(task.interpretation_domain),
@@ -356,9 +363,9 @@ namespace cxxlens::detail::clang22
 					canonical_strings(authority.worker.required_features),
 				}),
 				sdk::canonical_value::from_tuple(
-					{canonical_text(authority.project.project_id),
-					 canonical_text(authority.project.catalog.catalog_id),
-					 canonical_text(authority.project.catalog.catalog_digest)}),
+					{canonical_text(captures.front().value().project_id),
+					 canonical_text(captures.front().value().catalog.catalog_id),
+					 canonical_text(captures.front().value().catalog.catalog_digest)}),
 				sdk::canonical_value::from_tuple(
 					{canonical_text(authority.engine.generation_contract),
 					 canonical_text(authority.engine.engine_generation_id),
@@ -401,7 +408,7 @@ namespace cxxlens::detail::clang22
 												*base_transform,
 												"assumption-set:" + *assumption_digest,
 												{"exact",
-												 authority.project.project_id,
+												 captures.front().value().project_id,
 												 "assumption-set:" + *assumption_digest,
 												 {"clang22.materialization-sealed.v1",
 												  "provider.transcript-sealed.v1",
@@ -894,6 +901,7 @@ namespace cxxlens::detail::clang22
 		make_worker_claim(const materializer_worker_execution& execution,
 						  const sdk::relation_engine& engine,
 						  const provider_task_v4_task_authority& task,
+						  const sdk::detail::build_capture_draft& capture,
 						  const provider_task_v4_base_task& base,
 						  const provider_task_v4& extension,
 						  const materialization::source_closure_manifest& manifest,
@@ -927,7 +935,7 @@ namespace cxxlens::detail::clang22
 			binding.relation_descriptor_id = std::string{descriptor_id};
 			// Store partitions are project-scoped; compile-unit identity remains in the
 			// task association and coverage records.
-			binding.scope = task.project_id;
+			binding.scope = capture.project_id;
 			binding.interpretation = task.interpretation_domain;
 			binding.precision_profile = "exact";
 
@@ -1002,11 +1010,19 @@ namespace cxxlens::detail::clang22
 		{
 			const auto& request = ingress.request.request;
 			const auto& authority = ingress.request.authority;
-			if (task_index >= request.base_tasks.size() || task_index >= authority.tasks.size())
+			if (task_index >= request.base_tasks.size() || task_index >= authority.tasks.size() ||
+				task_index >= ingress.request.build_captures.size())
 				return sdk::unexpected(failure("provider.worker-v4-input-invalid", "task-index"));
 			const auto& base = request.base_tasks[task_index];
 			const auto& extension = request.task_extensions[task_index];
 			const auto& task = authority.tasks[task_index];
+			const auto& validated_capture = ingress.request.build_captures[task_index];
+			if (auto valid = materialization::validate_provider_task_v4_build_capture_binding(
+					task, validated_capture);
+				!valid)
+				return sdk::unexpected(std::move(valid.error()));
+			const auto& capture = validated_capture.value();
+			const auto& invocation = capture.invocation;
 			if (extension.source_closure.source_closure_id != ingress.binding.closure_id)
 				return sdk::unexpected(
 					failure("source-closure.task-binding-mismatch", "task", "closure"));
@@ -1026,9 +1042,9 @@ namespace cxxlens::detail::clang22
 				std::as_bytes(std::span{base_text.data(), base_text.size()}).begin(),
 				std::as_bytes(std::span{base_text.data(), base_text.size()}).end()};
 			input.task_input_digest = task.task_input_digest;
-			input.normalized_invocation_digest = task.normalized_invocation_digest;
-			input.toolchain_digest = task.toolchain_digest;
-			input.environment_digest = task.environment_digest;
+			input.normalized_invocation_digest = invocation.effective_invocation_digest;
+			input.toolchain_digest = capture.toolchain_digest;
+			input.environment_digest = invocation.environment_digest;
 			input.closure = ingress.receiver.snapshot;
 			input.main_logical_path = extension.main_logical_path;
 			input.logical_working_directory = extension.logical_working_directory;
@@ -1047,14 +1063,17 @@ namespace cxxlens::detail::clang22
 				return sdk::unexpected(std::move(task_document.error()));
 			auto authority_value = object({
 				{"effective_arguments",
-				 array_strings(task.input_authority.effective_arguments).value()},
-				{"logical_working_directory", text(task.working_directory).value()},
-				{"normalized_invocation_digest", text(task.normalized_invocation_digest).value()},
-				{"qualified_read_roots",
-				 array_strings(task.input_authority.qualified_read_roots).value()},
+				 array_strings(*invocation.effective_replay_arguments.value).value()},
+				{"logical_working_directory", text(invocation.logical_working_directory).value()},
+				{"normalized_invocation_digest",
+				 text(invocation.effective_invocation_digest).value()},
+				{"qualified_read_roots", array_strings(invocation.qualified_read_roots).value()},
 			});
-			auto output_value = worker_output_value(
-				task, manifest, authority.worker.semantic_contract_digest, output_descriptors());
+			auto output_value = worker_output_value(task,
+													capture,
+													manifest,
+													authority.worker.semantic_contract_digest,
+													output_descriptors());
 			if (!authority_value || !output_value)
 				return sdk::unexpected(!authority_value ? std::move(authority_value.error())
 														: std::move(output_value.error()));
@@ -1265,6 +1284,7 @@ namespace cxxlens::detail::clang22
 							const std::string_view relation_descriptor_id,
 							const std::vector<sdk::detached_row>& rows,
 							const provider_task_v4_task_authority& task,
+							const sdk::detail::build_capture_draft& capture,
 							const materializer_worker_execution& execution,
 							const materializer_basis_authority& basis,
 							std::vector<sdk::claim>* reference_claims)
@@ -1275,13 +1295,13 @@ namespace cxxlens::detail::clang22
 											   std::string{relation_descriptor_id}));
 			sdk::partition_draft output;
 			output.relation_descriptor_id = std::string{relation_descriptor_id};
-			output.scope = task.project_id;
+			output.scope = capture.project_id;
 			output.condition = {task.condition_universe_id, {task.condition_id}};
 			output.interpretation = task.interpretation_domain;
 			output.producer_semantics = basis.materializer_semantics_digest;
 			output.precision_profile = "exact";
 			output.assumption_set_id = basis.assumption_set_id;
-			output.coverage = {{"compile-unit", task.compile_unit_id, "covered", {}}};
+			output.coverage = {{"compile-unit", capture.compile_unit_id, "covered", {}}};
 			output.claims.reserve(rows.size());
 			for (const auto& row : rows)
 			{
@@ -1311,22 +1331,21 @@ namespace cxxlens::detail::clang22
 		}
 
 		[[nodiscard]] sdk::result<sdk::detached_row>
-		make_base_project_row(const provider_task_v4_request_authority& authority,
-							  const provider_task_v4_task_authority& task)
+		make_base_project_row(const sdk::detail::build_capture_draft& capture)
 		{
 			using relation = build::relations::project;
 			relation::builder builder;
 			for (auto result : {
 					 builder.set<relation::project_column>(
-						 sdk::detached_cell::typed("project_id", task.project_id)),
+						 sdk::detached_cell::typed("project_id", capture.project_id)),
 					 builder.set<relation::catalog>(
-						 sdk::detached_cell::typed("catalog_id", task.catalog_id)),
+						 sdk::detached_cell::typed("catalog_id", capture.catalog.catalog_id)),
 					 builder.set<relation::catalog_digest>(
-						 base_digest_cell(authority.project.catalog.catalog_digest)),
+						 base_digest_cell(capture.catalog.catalog_digest)),
 					 builder.set<relation::logical_root>(sdk::detached_cell::typed(
-						 "logical_path_id", authority.project.catalog.logical_root)),
+						 "logical_path_id", capture.catalog.logical_root)),
 					 builder.set<relation::environment_digest>(
-						 base_digest_cell(authority.project.catalog.environment_digest)),
+						 base_digest_cell(capture.catalog.environment_digest)),
 				 })
 				if (!result)
 					return sdk::unexpected(std::move(result.error()));
@@ -1334,32 +1353,33 @@ namespace cxxlens::detail::clang22
 		}
 
 		[[nodiscard]] sdk::result<sdk::detached_row>
-		make_base_toolchain_row(const provider_task_v4_task_authority& task)
+		make_base_toolchain_row(const sdk::detail::build_capture_draft& capture)
 		{
 			using relation = build::relations::toolchain_context;
 			relation::builder builder;
 			for (auto result : {
 					 builder.set<relation::toolchain>(sdk::detached_cell::typed(
-						 "toolchain_context_id", task.toolchain_context_id)),
+						 "toolchain_context_id", capture.toolchain_context_id)),
 					 builder.set<relation::family>(base_symbol_cell(sdk::scalar_kind::open_symbol,
 																	"build.toolchain-family/1",
-																	task.toolchain.family)),
+																	capture.toolchain.family)),
 					 builder.set<relation::exact_version>(
-						 sdk::detached_cell::utf8(task.toolchain.exact_version)),
+						 sdk::detached_cell::utf8(capture.toolchain.exact_version)),
 					 builder.set<relation::target_triple>(
-						 sdk::detached_cell::utf8(task.toolchain.target_triple)),
+						 sdk::detached_cell::utf8(capture.toolchain.target_triple)),
 					 builder.set<relation::builtin_headers_digest>(
-						 base_digest_cell(task.toolchain.builtin_headers_digest)),
-					 builder.set<relation::abi_digest>(base_digest_cell(task.toolchain.abi_digest)),
+						 base_digest_cell(capture.toolchain.builtin_headers_digest)),
+					 builder.set<relation::abi_digest>(
+						 base_digest_cell(capture.toolchain.abi_digest)),
 					 builder.set<relation::plugin_spec_digest>(
-						 base_digest_cell(task.toolchain.plugin_spec_digest)),
+						 base_digest_cell(capture.toolchain.plugin_spec_digest)),
 				 })
 				if (!result)
 					return sdk::unexpected(std::move(result.error()));
-			if (task.toolchain.sysroot)
+			if (capture.toolchain.sysroot)
 			{
 				auto result = builder.set<relation::sysroot>(
-					base_optional_typed_cell("logical_path_id", *task.toolchain.sysroot));
+					base_optional_typed_cell("logical_path_id", *capture.toolchain.sysroot));
 				if (!result)
 					return sdk::unexpected(std::move(result.error()));
 			}
@@ -1367,31 +1387,32 @@ namespace cxxlens::detail::clang22
 		}
 
 		[[nodiscard]] sdk::result<sdk::detached_row>
-		make_base_variant_row(const provider_task_v4_task_authority& task)
+		make_base_variant_row(const sdk::detail::build_capture_draft& capture)
 		{
 			using relation = build::relations::variant;
 			relation::builder builder;
 			for (auto result : {
 					 builder.set<relation::variant_column>(
-						 sdk::detached_cell::typed("build_variant_id", task.build_variant_id)),
+						 sdk::detached_cell::typed("build_variant_id", capture.build_variant_id)),
 					 builder.set<relation::project>(
-						 sdk::detached_cell::typed("project_id", task.project_id)),
+						 sdk::detached_cell::typed("project_id", capture.project_id)),
 					 builder.set<relation::toolchain>(sdk::detached_cell::typed(
-						 "toolchain_context_id", task.toolchain_context_id)),
-					 builder.set<relation::language>(base_symbol_cell(
-						 sdk::scalar_kind::open_symbol, "build.language/1", task.variant.language)),
+						 "toolchain_context_id", capture.toolchain_context_id)),
+					 builder.set<relation::language>(base_symbol_cell(sdk::scalar_kind::open_symbol,
+																	  "build.language/1",
+																	  capture.variant.language)),
 					 builder.set<relation::language_standard>(
 						 base_symbol_cell(sdk::scalar_kind::open_symbol,
 										  "build.language-standard/1",
-										  task.variant.language_standard)),
+										  capture.variant.language_standard)),
 					 builder.set<relation::target_triple>(
-						 sdk::detached_cell::utf8(task.variant.target_triple)),
+						 sdk::detached_cell::utf8(capture.variant.target_triple)),
 					 builder.set<relation::predefined_macros_digest>(
-						 base_digest_cell(task.variant.predefined_macros_digest)),
+						 base_digest_cell(capture.variant.predefined_macros_digest)),
 					 builder.set<relation::include_search_digest>(
-						 base_digest_cell(task.variant.include_search_digest)),
+						 base_digest_cell(capture.variant.include_search_digest)),
 					 builder.set<relation::semantic_flags_digest>(
-						 base_digest_cell(task.variant.semantic_flags_digest)),
+						 base_digest_cell(capture.variant.semantic_flags_digest)),
 				 })
 				if (!result)
 					return sdk::unexpected(std::move(result.error()));
@@ -1399,58 +1420,59 @@ namespace cxxlens::detail::clang22
 		}
 
 		[[nodiscard]] sdk::result<sdk::detached_row>
-		make_base_source_file_row(const provider_task_v4_request_authority& authority,
-								  const provider_task_v4_task_authority& task)
+		make_base_source_file_row(const sdk::detail::build_capture_draft& capture)
 		{
 			using relation = source::relations::file;
 			relation::builder builder;
 			for (auto result : {
 					 builder.set<relation::snapshot>(sdk::detached_cell::typed(
-						 "source_snapshot_id", task.source.source_snapshot_id)),
+						 "source_snapshot_id", capture.source.source_snapshot_id)),
 					 builder.set<relation::file_column>(
-						 sdk::detached_cell::typed("file_id", task.source.file_id)),
+						 sdk::detached_cell::typed("file_id", capture.source.file_id)),
 					 builder.set<relation::project>(
-						 sdk::detached_cell::typed("project_id", task.project_id)),
+						 sdk::detached_cell::typed("project_id", capture.project_id)),
 					 builder.set<relation::logical_path>(
-						 sdk::detached_cell::typed("logical_path_id", task.source.logical_path)),
-					 builder.set<relation::content>(base_digest_cell(task.source.content_digest)),
+						 sdk::detached_cell::typed("logical_path_id", capture.source.logical_path)),
+					 builder.set<relation::content>(
+						 base_digest_cell(capture.source.content_digest)),
 					 builder.set<relation::size>(
-						 sdk::detached_cell::unsigned_integer(task.source.size_bytes)),
-					 builder.set<relation::encoding>(base_symbol_cell(
-						 sdk::scalar_kind::open_symbol, "source.encoding/1", task.source.encoding)),
+						 sdk::detached_cell::unsigned_integer(capture.source.size_bytes)),
+					 builder.set<relation::encoding>(base_symbol_cell(sdk::scalar_kind::open_symbol,
+																	  "source.encoding/1",
+																	  capture.source.encoding)),
 					 builder.set<relation::line_index>(
-						 sdk::detached_cell::typed("line_index_id", task.source.line_index_id)),
+						 sdk::detached_cell::typed("line_index_id", capture.source.line_index_id)),
 					 builder.set<relation::read_only>(
-						 sdk::detached_cell::boolean(task.source.read_only)),
+						 sdk::detached_cell::boolean(capture.source.read_only)),
 				 })
 				if (!result)
 					return sdk::unexpected(std::move(result.error()));
-			(void)authority;
 			return std::move(builder).finish();
 		}
 
 		[[nodiscard]] sdk::result<sdk::detached_row>
-		make_base_compile_unit_row(const provider_task_v4_task_authority& task)
+		make_base_compile_unit_row(const sdk::detail::build_capture_draft& capture)
 		{
 			using relation = build::relations::compile_unit;
 			relation::builder builder;
 			for (auto result : {
 					 builder.set<relation::compile_unit_column>(
-						 sdk::detached_cell::typed("compile_unit_id", task.compile_unit_id)),
+						 sdk::detached_cell::typed("compile_unit_id", capture.compile_unit_id)),
 					 builder.set<relation::project>(
-						 sdk::detached_cell::typed("project_id", task.project_id)),
+						 sdk::detached_cell::typed("project_id", capture.project_id)),
 					 builder.set<relation::main_source>(sdk::detached_cell::typed(
-						 "source_snapshot_id", task.source.source_snapshot_id)),
+						 "source_snapshot_id", capture.source.source_snapshot_id)),
 					 builder.set<relation::variant>(
-						 sdk::detached_cell::typed("build_variant_id", task.build_variant_id)),
+						 sdk::detached_cell::typed("build_variant_id", capture.build_variant_id)),
 					 builder.set<relation::toolchain>(sdk::detached_cell::typed(
-						 "toolchain_context_id", task.toolchain_context_id)),
+						 "toolchain_context_id", capture.toolchain_context_id)),
 					 builder.set<relation::effective_invocation_digest>(
-						 base_digest_cell(task.normalized_invocation_digest)),
-					 builder.set<relation::language>(base_symbol_cell(
-						 sdk::scalar_kind::open_symbol, "build.language/1", task.language)),
-					 builder.set<relation::working_directory>(
-						 sdk::detached_cell::typed("logical_path_id", task.working_directory)),
+						 base_digest_cell(capture.invocation.effective_invocation_digest)),
+					 builder.set<relation::language>(base_symbol_cell(sdk::scalar_kind::open_symbol,
+																	  "build.language/1",
+																	  capture.invocation.language)),
+					 builder.set<relation::working_directory>(sdk::detached_cell::typed(
+						 "logical_path_id", capture.invocation.logical_working_directory)),
 				 })
 				if (!result)
 					return sdk::unexpected(std::move(result.error()));
@@ -1482,8 +1504,8 @@ namespace cxxlens::detail::clang22
 
 		[[nodiscard]] sdk::result<std::vector<sdk::partition_draft>>
 		make_base_partitions(const sdk::relation_engine& engine,
-							 const provider_task_v4_request_authority& authority,
 							 const provider_task_v4_task_authority& task,
+							 const sdk::detail::build_capture_draft& capture,
 							 const materializer_worker_execution& execution,
 							 const std::span<const sdk::claim> claims,
 							 const materializer_basis_authority& basis,
@@ -1499,39 +1521,39 @@ namespace cxxlens::detail::clang22
 				std::vector<sdk::detached_row> rows;
 				rows.push_back(std::move(*row));
 				auto partition = make_base_partition(
-					engine, descriptor_id, rows, task, execution, basis, reference_claims);
+					engine, descriptor_id, rows, task, capture, execution, basis, reference_claims);
 				if (!partition)
 					return sdk::unexpected(std::move(partition.error()));
 				output.push_back(std::move(*partition));
 				return {};
 			};
-			if (auto value = add(build::relations::project::descriptor().id,
-								 make_base_project_row(authority, task));
+			if (auto value =
+					add(build::relations::project::descriptor().id, make_base_project_row(capture));
 				!value)
 				return sdk::unexpected(std::move(value.error()));
 			if (auto value = add(build::relations::toolchain_context::descriptor().id,
-								 make_base_toolchain_row(task));
+								 make_base_toolchain_row(capture));
 				!value)
 				return sdk::unexpected(std::move(value.error()));
 			if (auto value =
-					add(build::relations::variant::descriptor().id, make_base_variant_row(task));
+					add(build::relations::variant::descriptor().id, make_base_variant_row(capture));
 				!value)
 				return sdk::unexpected(std::move(value.error()));
 			if (auto value = add(source::relations::file::descriptor().id,
-								 make_base_source_file_row(authority, task));
+								 make_base_source_file_row(capture));
 				!value)
 				return sdk::unexpected(std::move(value.error()));
 			if (auto value = add(build::relations::compile_unit::descriptor().id,
-								 make_base_compile_unit_row(task));
+								 make_base_compile_unit_row(capture));
 				!value)
 				return sdk::unexpected(std::move(value.error()));
 
 			std::map<std::string, materialization::observation_v2_primary_span, std::less<>> spans;
 			const materialization::observation_v2_task_authority observation_authority{
-				task.compile_unit_id,
-				task.source.source_snapshot_id,
-				task.source.file_id,
-				task.source.size_bytes};
+				capture.compile_unit_id,
+				capture.source.source_snapshot_id,
+				capture.source.file_id,
+				capture.source.size_bytes};
 			for (const auto& claim : claims)
 			{
 				if (claim.descriptor != materialization::entity_observation_v2_descriptor().id &&
@@ -1565,6 +1587,7 @@ namespace cxxlens::detail::clang22
 													 source::relations::span::descriptor().id,
 													 rows,
 													 task,
+													 capture,
 													 execution,
 													 basis,
 													 reference_claims);
@@ -1608,9 +1631,11 @@ namespace cxxlens::detail::clang22
 	run_materializer_worker(installed_materializer_source_closure_result ingress,
 							provider_trust_issuer_port& issuer)
 	{
-		if (ingress.request.authority.tasks.empty())
+		if (ingress.request.authority.tasks.empty() || ingress.request.build_captures.empty() ||
+			ingress.request.authority.tasks.size() != ingress.request.build_captures.size())
 			return sdk::unexpected(failure("provider.worker-v4-input-invalid", "tasks", "empty"));
 		const auto& task = ingress.request.authority.tasks.front();
+		const auto& capture = ingress.request.build_captures.front().value();
 		auto manifest = make_manifest(ingress.request.authority.worker);
 		if (!manifest)
 			return sdk::unexpected(std::move(manifest.error()));
@@ -1709,9 +1734,9 @@ namespace cxxlens::detail::clang22
 		request.task_id = ingress.binding.task_id;
 		request.payload = std::move(*envelope);
 		request.task_input_digest = envelope_digest;
-		request.normalized_invocation_digest = task.normalized_invocation_digest;
-		request.toolchain_digest = task.toolchain_digest;
-		request.environment_digest = task.environment_digest;
+		request.normalized_invocation_digest = capture.invocation.effective_invocation_digest;
+		request.toolchain_digest = capture.toolchain_digest;
+		request.environment_digest = capture.invocation.environment_digest;
 		request.sandbox = {sdk::provider::sandbox_assurance::enforced,
 						   ingress.request.authority.worker.sandbox_policy_digest};
 		request.budget = task.budget;
@@ -1754,7 +1779,8 @@ namespace cxxlens::detail::clang22
 			return sdk::unexpected(failure("materialization.transcript-invalid", "worker"));
 		auto& request = execution.ingress.request.request;
 		auto& authority = execution.ingress.request.authority;
-		if (request.task_extensions.size() != 1U || authority.tasks.size() != 1U)
+		if (request.task_extensions.size() != 1U || authority.tasks.size() != 1U ||
+			execution.ingress.request.build_captures.size() != 1U)
 			return sdk::unexpected(
 				failure("materialization.task-census-invalid", "tasks", "one-task-ingress"));
 		auto engine = make_materializer_relation_engine(authority);
@@ -1766,7 +1792,14 @@ namespace cxxlens::detail::clang22
 		const auto& base = request.base_tasks.front();
 		const auto& extension = request.task_extensions.front();
 		const auto& task = authority.tasks.front();
-		auto basis = make_materializer_basis_authority(authority);
+		const auto& validated_capture = execution.ingress.request.build_captures.front();
+		if (auto valid = materialization::validate_provider_task_v4_build_capture_binding(
+				task, validated_capture);
+			!valid)
+			return sdk::unexpected(std::move(valid.error()));
+		const auto& capture = validated_capture.value();
+		auto basis =
+			make_materializer_basis_authority(authority, execution.ingress.request.build_captures);
 		if (!basis)
 			return sdk::unexpected(std::move(basis.error()));
 		std::vector<sdk::claim> raw_output_claims;
@@ -1782,7 +1815,7 @@ namespace cxxlens::detail::clang22
 		}
 		std::vector<sdk::claim> base_reference_claims;
 		auto base_partitions = make_base_partitions(
-			*engine, authority, task, execution, raw_output_claims, *basis, &base_reference_claims);
+			*engine, task, capture, execution, raw_output_claims, *basis, &base_reference_claims);
 		if (!base_partitions)
 			return sdk::unexpected(std::move(base_partitions.error()));
 		std::vector<sdk::claim> reference_claims;
@@ -1803,6 +1836,7 @@ namespace cxxlens::detail::clang22
 			auto claim = make_worker_claim(execution,
 										   *engine,
 										   task,
+										   capture,
 										   base,
 										   extension,
 										   *manifest,
@@ -1835,10 +1869,10 @@ namespace cxxlens::detail::clang22
 							  authority.publication.publication_target};
 		output.snapshot = {authority.publication.selector,
 						   {1U, 0U, 0U},
-						   authority.project.catalog.catalog_digest,
+						   capture.catalog.catalog_digest,
 						   authority.publication.expected_parent_publication};
 		auto key_domain = sdk::semantic_digest("cxxlens.clang22.materializer-key-domain.v1",
-											   task.compile_unit_id);
+											   capture.compile_unit_id);
 		if (!key_domain)
 			return sdk::unexpected(std::move(key_domain.error()));
 		for (auto& claim : claims)

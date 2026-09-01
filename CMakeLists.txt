@@ -330,8 +330,9 @@ set_target_properties(cxxlens_provider_runtime_internal
 cxxlens_set_project_warnings(cxxlens_provider_runtime_internal)
 cxxlens_enable_sanitizers(cxxlens_provider_runtime_internal)
 
-add_library(cxxlens_sdk ${CXXLENS_LIBRARY_TYPE} src/sdk/provider.cpp
-                        src/sdk/incremental.cpp)
+add_library(
+  cxxlens_sdk ${CXXLENS_LIBRARY_TYPE} src/sdk/provider.cpp
+              src/sdk/incremental.cpp src/sdk/build_capture_internal.cpp)
 add_library(cxxlens::sdk ALIAS cxxlens_sdk)
 cxxlens_configure_component(cxxlens_sdk sdk)
 target_link_libraries(cxxlens_sdk PUBLIC cxxlens::cxxlens cxxlens::recipes)

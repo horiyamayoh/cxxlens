@@ -1581,6 +1581,138 @@ namespace cxxlens::detail::clang22::materialization
 		return output;
 	}
 
+	sdk::result<std::vector<sdk::detail::validated_build_capture>>
+	adapt_provider_task_v4_build_captures(const provider_task_v4_request_authority& authority,
+										  const std::span<const provider_task_v4> task_extensions)
+	{
+		if (authority.tasks.size() != task_extensions.size())
+			return sdk::unexpected(mismatch("build-captures", "task-census"));
+		std::vector<sdk::detail::build_capture_draft> drafts;
+		drafts.reserve(authority.tasks.size());
+		for (std::size_t index{}; index < authority.tasks.size(); ++index)
+		{
+			const auto& task = authority.tasks[index];
+			const auto& extension = task_extensions[index];
+			sdk::detail::build_capture_draft draft;
+			draft.project_id = task.project_id;
+			draft.catalog = authority.project.catalog;
+			draft.selected_catalog_compile_unit_id = task.selected_catalog_compile_unit_id;
+			draft.compile_unit_id = task.compile_unit_id;
+			draft.build_variant_id = task.build_variant_id;
+			draft.toolchain_context_id = task.toolchain_context_id;
+			draft.toolchain_digest = task.toolchain_digest;
+			draft.toolchain = {
+				task.toolchain.family,
+				task.toolchain.exact_version,
+				task.toolchain.target_triple,
+				task.toolchain.builtin_headers_digest,
+				task.toolchain.sysroot,
+				task.toolchain.abi_digest,
+				task.toolchain.plugin_spec_digest,
+				sdk::detail::captured_value<std::string>::unavailable(
+					"not-carried-by-clang22-request-v2_2", "capture-production-compiler-path"),
+				sdk::detail::captured_value<std::string>::unavailable(
+					"not-carried-by-clang22-request-v2_2",
+					"capture-production-compiler-binary-digest")};
+			draft.variant = {task.variant.language,
+							 task.variant.language_standard,
+							 task.variant.target_triple,
+							 task.variant.predefined_macros_digest,
+							 task.variant.include_search_digest,
+							 task.variant.semantic_flags_digest};
+			draft.invocation.original_arguments =
+				sdk::detail::captured_value<std::vector<std::string>>::unavailable(
+					"not-carried-by-clang22-request-v2_2", "recapture-original-argv");
+			draft.invocation.normalized_semantic_options = sdk::detail::
+				captured_value<std::vector<sdk::detail::normalized_build_option>>::unavailable(
+					"not-carried-by-clang22-request-v2_2", "recapture-normalized-options");
+			draft.invocation.effective_replay_arguments =
+				sdk::detail::captured_value<std::vector<std::string>>::observed(
+					task.input_authority.effective_arguments);
+			draft.invocation.response_files = sdk::detail::
+				captured_value<std::vector<sdk::detail::build_capture_auxiliary_file>>::unavailable(
+					"not-carried-by-clang22-request-v2_2", "recapture-response-files");
+			draft.invocation.config_files = sdk::detail::
+				captured_value<std::vector<sdk::detail::build_capture_auxiliary_file>>::unavailable(
+					"not-carried-by-clang22-request-v2_2", "recapture-config-files");
+			draft.invocation.environment_effects = sdk::detail::captured_value<
+				std::vector<sdk::detail::build_capture_environment_effect>>::
+				unavailable("environment-values-not-carried-by-clang22-request-v2_2",
+							"recapture-allowlisted-environment-effects");
+			draft.invocation.effective_invocation_digest = task.normalized_invocation_digest;
+			draft.invocation.environment_digest = task.environment_digest;
+			draft.invocation.language = task.language;
+			draft.invocation.logical_working_directory = task.working_directory;
+			draft.invocation.qualified_read_roots = task.input_authority.qualified_read_roots;
+			draft.source = {task.source.source_snapshot_id,
+							task.source.file_id,
+							task.source.logical_path,
+							task.source.content_digest,
+							task.source.size_bytes,
+							task.source.encoding,
+							task.source.line_index_id,
+							task.source.read_only};
+			draft.source_closure = {extension.source_closure.source_closure_id,
+									extension.source_closure.source_closure_digest,
+									extension.source_closure.manifest_digest,
+									extension.source_closure.member_count,
+									extension.source_closure.blob_count,
+									extension.source_closure.unique_blob_bytes};
+			drafts.push_back(std::move(draft));
+		}
+		return sdk::detail::validate_build_capture_set(std::move(drafts));
+	}
+
+	sdk::result<void> validate_provider_task_v4_build_capture_binding(
+		const provider_task_v4_task_authority& task,
+		const sdk::detail::validated_build_capture& capture)
+	{
+		const auto& value = capture.value();
+		const provider_task_v4_toolchain_authority toolchain{value.toolchain.family,
+															 value.toolchain.exact_version,
+															 value.toolchain.target_triple,
+															 value.toolchain.builtin_headers_digest,
+															 value.toolchain.sysroot,
+															 value.toolchain.abi_digest,
+															 value.toolchain.plugin_spec_digest};
+		const provider_task_v4_variant_authority variant{value.variant.language,
+														 value.variant.language_standard,
+														 value.variant.target_triple,
+														 value.variant.predefined_macros_digest,
+														 value.variant.include_search_digest,
+														 value.variant.semantic_flags_digest};
+		const provider_task_v4_source source{value.source.source_snapshot_id,
+											 value.source.file_id,
+											 value.source.logical_path,
+											 value.source.content_digest,
+											 value.source.size_bytes,
+											 value.source.encoding,
+											 value.source.line_index_id,
+											 value.source.read_only};
+		const provider_task_v4_input_authority input{
+			value.invocation.effective_invocation_digest,
+			value.invocation.logical_working_directory,
+			*value.invocation.effective_replay_arguments.value,
+			value.invocation.qualified_read_roots};
+		if (task.project_id != value.project_id || task.catalog_id != value.catalog.catalog_id ||
+			task.catalog_digest != value.catalog.catalog_digest ||
+			task.selected_catalog_compile_unit_id != value.selected_catalog_compile_unit_id ||
+			task.compile_unit_id != value.compile_unit_id ||
+			task.build_variant_id != value.build_variant_id ||
+			task.toolchain_context_id != value.toolchain_context_id ||
+			task.toolchain_digest != value.toolchain_digest || task.toolchain != toolchain ||
+			task.variant != variant ||
+			task.normalized_invocation_digest != value.invocation.effective_invocation_digest ||
+			task.environment_digest != value.invocation.environment_digest ||
+			task.language != value.invocation.language ||
+			task.working_directory != value.invocation.logical_working_directory ||
+			task.source != source || task.input_authority != input)
+			return sdk::unexpected(sdk::error{"materialization.build-capture-binding-mismatch",
+											  "task",
+											  "transport-generic-divergence"});
+		return {};
+	}
+
 	std::vector<std::string> materialization_request_v2_2_required_features()
 	{
 		return {"task-input-chunks-v2", "task-source-closure-v2"};
@@ -1805,7 +1937,14 @@ namespace cxxlens::detail::clang22::materialization
 			request.request_id != "materialization-request:" + *expected)
 			return sdk::unexpected(sdk::error{
 				"materialization.identity-mismatch", "request_id", "request-v2_2-digest"});
-		return validated_materialization_request_v2_2{
-			std::move(request), std::move(*authority), std::move(*negotiated), *total};
+		auto build_captures =
+			adapt_provider_task_v4_build_captures(*authority, request.task_extensions);
+		if (!build_captures)
+			return sdk::unexpected(std::move(build_captures.error()));
+		return validated_materialization_request_v2_2{std::move(request),
+													  std::move(*authority),
+													  std::move(*build_captures),
+													  std::move(*negotiated),
+													  *total};
 	}
 } // namespace cxxlens::detail::clang22::materialization

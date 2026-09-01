@@ -114,6 +114,17 @@ foreach(case IN LISTS cxxlens_sdk_cases)
                                   PROCESSORS 1)
 endforeach()
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-build-capture
+                            unit/sdk/build_capture_internal_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-build-capture PRIVATE cxxlens::sdk)
+target_include_directories(cxxlens-unit-sdk-build-capture
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-build-capture COMMAND cxxlens-unit-sdk-build-capture)
+set_tests_properties(
+  unit.sdk-build-capture
+  PROPERTIES LABELS
+             "unit;sdk;capture;compiler-neutral;determinism;resource;security")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-store unit/sdk/store_test.cpp)
 target_sources(
   cxxlens-unit-sdk-store

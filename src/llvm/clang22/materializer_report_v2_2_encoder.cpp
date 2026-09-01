@@ -301,6 +301,57 @@ namespace cxxlens::detail::clang22
 				std::as_bytes(std::span{canonical.data(), canonical.size()}));
 		}
 
+		/** Compatibility projection for the established v2.2 report schema.
+		 *
+		 * Provider lifecycle fields remain task-v4 authority. Build semantics are copied from the
+		 * validated compiler-neutral capture so report encoding cannot revive the transport task as
+		 * a second production authority.
+		 */
+		[[nodiscard]] provider_task_v4_task_authority
+		task_report_projection(const provider_task_v4_task_authority& task,
+							   const sdk::detail::build_capture_draft& capture)
+		{
+			auto output = task;
+			output.project_id = capture.project_id;
+			output.catalog_id = capture.catalog.catalog_id;
+			output.catalog_digest = capture.catalog.catalog_digest;
+			output.selected_catalog_compile_unit_id = capture.selected_catalog_compile_unit_id;
+			output.compile_unit_id = capture.compile_unit_id;
+			output.build_variant_id = capture.build_variant_id;
+			output.toolchain_context_id = capture.toolchain_context_id;
+			output.toolchain_digest = capture.toolchain_digest;
+			output.toolchain = {capture.toolchain.family,
+								capture.toolchain.exact_version,
+								capture.toolchain.target_triple,
+								capture.toolchain.builtin_headers_digest,
+								capture.toolchain.sysroot,
+								capture.toolchain.abi_digest,
+								capture.toolchain.plugin_spec_digest};
+			output.variant = {capture.variant.language,
+							  capture.variant.language_standard,
+							  capture.variant.target_triple,
+							  capture.variant.predefined_macros_digest,
+							  capture.variant.include_search_digest,
+							  capture.variant.semantic_flags_digest};
+			output.normalized_invocation_digest = capture.invocation.effective_invocation_digest;
+			output.environment_digest = capture.invocation.environment_digest;
+			output.language = capture.invocation.language;
+			output.working_directory = capture.invocation.logical_working_directory;
+			output.input_authority = {capture.invocation.effective_invocation_digest,
+									  capture.invocation.logical_working_directory,
+									  *capture.invocation.effective_replay_arguments.value,
+									  capture.invocation.qualified_read_roots};
+			output.source = {capture.source.source_snapshot_id,
+							 capture.source.file_id,
+							 capture.source.logical_path,
+							 capture.source.content_digest,
+							 capture.source.size_bytes,
+							 capture.source.encoding,
+							 capture.source.line_index_id,
+							 capture.source.read_only};
+			return output;
+		}
+
 		[[nodiscard]] json_value task_context_value(const provider_task_v4_task_authority& task)
 		{
 			return object(
@@ -2263,32 +2314,30 @@ namespace cxxlens::detail::clang22
 				}
 				return std::nullopt;
 			}
-			for (const auto& origin_task : execution.worker.ingress.request.authority.tasks)
+			for (const auto& validated_capture : execution.worker.ingress.request.build_captures)
 			{
+				const auto& capture = validated_capture.value();
 				bool matches = descriptor == "build.project.v1" ||
 					(descriptor == "build.toolchain_context.v1" &&
-					 identity == origin_task.toolchain_context_id) ||
-					(descriptor == "build.variant.v1" &&
-					 identity == origin_task.build_variant_id) ||
-					(descriptor == "source.file.v1" && identity == origin_task.source.file_id) ||
-					(descriptor == "build.compile_unit.v1" &&
-					 identity == origin_task.compile_unit_id);
+					 identity == capture.toolchain_context_id) ||
+					(descriptor == "build.variant.v1" && identity == capture.build_variant_id) ||
+					(descriptor == "source.file.v1" && identity == capture.source.file_id) ||
+					(descriptor == "build.compile_unit.v1" && identity == capture.compile_unit_id);
 				if (!matches)
 					continue;
 				std::string evidence;
 				if (descriptor == "build.project.v1")
-					evidence = origin_task.catalog_digest;
+					evidence = capture.catalog.catalog_digest;
 				else if (descriptor == "build.toolchain_context.v1")
-					evidence = origin_task.toolchain_digest;
+					evidence = capture.toolchain_digest;
 				else if (descriptor == "build.variant.v1")
 					evidence = base_row_digest(descriptor, row);
 				else if (descriptor == "source.file.v1")
-					evidence = origin_task.source.content_digest;
+					evidence = capture.source.content_digest;
 				else
 				{
-					for (const auto& entry :
-						 execution.worker.ingress.request.authority.project.catalog.compile_units)
-						if (entry.compile_unit_id == origin_task.selected_catalog_compile_unit_id)
+					for (const auto& entry : capture.catalog.compile_units)
+						if (entry.compile_unit_id == capture.selected_catalog_compile_unit_id)
 							evidence =
 								semantic_projection_digest(
 									"cxxlens.clang22-catalog-entry-evidence.v1",
@@ -2340,7 +2389,13 @@ namespace cxxlens::detail::clang22
 												   const json_value& guarantee_digest)
 		{
 			const auto& authority = execution.worker.ingress.request.authority;
-			const auto& tasks = authority.tasks;
+			const auto& captures = execution.worker.ingress.request.build_captures;
+			std::vector<provider_task_v4_task_authority> tasks;
+			tasks.reserve(std::min(authority.tasks.size(), captures.size()));
+			for (std::size_t index{}; index < authority.tasks.size() && index < captures.size();
+				 ++index)
+				tasks.push_back(
+					task_report_projection(authority.tasks[index], captures[index].value()));
 			std::vector<json_value> descriptor_results;
 			std::vector<json_value> descriptor_ids;
 			std::uint64_t total_rows{};
@@ -2419,33 +2474,36 @@ namespace cxxlens::detail::clang22
 					}
 					else
 					{
-						for (const auto& task : tasks)
+						for (std::size_t index{}; index < tasks.size() && index < captures.size();
+							 ++index)
 						{
+							const auto& task = tasks[index];
+							const auto& capture = captures[index].value();
 							bool matches = descriptor == "build.project.v1" ||
 								(descriptor == "build.toolchain_context.v1" &&
-								 row_identity == task.toolchain_context_id) ||
+								 row_identity == capture.toolchain_context_id) ||
 								(descriptor == "build.variant.v1" &&
-								 row_identity == task.build_variant_id) ||
+								 row_identity == capture.build_variant_id) ||
 								(descriptor == "source.file.v1" &&
-								 row_identity == task.source.file_id) ||
+								 row_identity == capture.source.file_id) ||
 								(descriptor == "build.compile_unit.v1" &&
-								 row_identity == task.compile_unit_id);
+								 row_identity == capture.compile_unit_id);
 							if (!matches)
 								continue;
 							std::string evidence;
 							if (descriptor == "build.project.v1")
-								evidence = task.catalog_digest;
+								evidence = capture.catalog.catalog_digest;
 							else if (descriptor == "build.toolchain_context.v1")
-								evidence = task.toolchain_digest;
+								evidence = capture.toolchain_digest;
 							else if (descriptor == "build.variant.v1")
 								evidence = row_digest;
 							else if (descriptor == "source.file.v1")
-								evidence = task.source.content_digest;
+								evidence = capture.source.content_digest;
 							else
 							{
-								for (const auto& entry : authority.project.catalog.compile_units)
+								for (const auto& entry : capture.catalog.compile_units)
 									if (entry.compile_unit_id ==
-										task.selected_catalog_compile_unit_id)
+										capture.selected_catalog_compile_unit_id)
 										evidence =
 											semantic_projection_digest(
 												"cxxlens.clang22-catalog-entry-evidence.v1",
@@ -2625,9 +2683,16 @@ namespace cxxlens::detail::clang22
 		const auto& request = execution.worker.ingress.request.request;
 		const auto& authority = execution.worker.ingress.request.authority;
 		if (authority.tasks.size() != 1U || request.base_tasks.size() != 1U ||
-			request.task_extensions.size() != 1U)
+			request.task_extensions.size() != 1U ||
+			execution.worker.ingress.request.build_captures.size() != 1U)
 			return sdk::unexpected(failure("success", "task-census"));
-		const auto& task = authority.tasks.front();
+		if (auto valid = materialization::validate_provider_task_v4_build_capture_binding(
+				authority.tasks.front(), execution.worker.ingress.request.build_captures.front());
+			!valid)
+			return sdk::unexpected(std::move(valid.error()));
+		const auto task =
+			task_report_projection(authority.tasks.front(),
+								   execution.worker.ingress.request.build_captures.front().value());
 		const auto& sealed = *execution.worker.outcome.sealed;
 
 		auto request_binding =

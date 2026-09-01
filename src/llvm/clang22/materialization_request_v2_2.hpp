@@ -11,6 +11,7 @@
 
 #include "materialization_json.hpp"
 #include "provider_task_v4.hpp"
+#include "sdk/build_capture_internal.hpp"
 
 namespace cxxlens::detail::clang22::materialization
 {
@@ -76,6 +77,7 @@ namespace cxxlens::detail::clang22::materialization
 	{
 		materialization_request_v2_2 request;
 		provider_task_v4_request_authority authority;
+		std::vector<sdk::detail::validated_build_capture> build_captures;
 		std::vector<std::string> negotiated_features;
 		std::uint64_t unique_blob_bytes{};
 
@@ -96,6 +98,16 @@ namespace cxxlens::detail::clang22::materialization
 	 */
 	[[nodiscard]] sdk::result<provider_task_v4_request_authority>
 	decode_provider_task_v4_request_authority(const json_value& root);
+
+	/** Adapt validated Clang v2.2 transport authority to compiler-neutral build captures. */
+	[[nodiscard]] sdk::result<std::vector<sdk::detail::validated_build_capture>>
+	adapt_provider_task_v4_build_captures(const provider_task_v4_request_authority& authority,
+										  std::span<const provider_task_v4> task_extensions);
+
+	/** Reject post-admission divergence between the retained v2.2 task and generic authority. */
+	[[nodiscard]] sdk::result<void> validate_provider_task_v4_build_capture_binding(
+		const provider_task_v4_task_authority& task,
+		const sdk::detail::validated_build_capture& capture);
 
 	/** Negotiate Protocol 2.0 and the two required request capabilities. */
 	[[nodiscard]] sdk::result<std::vector<std::string>>

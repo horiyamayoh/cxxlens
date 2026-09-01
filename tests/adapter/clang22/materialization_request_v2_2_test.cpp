@@ -709,6 +709,34 @@ namespace
 		assert(validated);
 		assert(validated->negotiated_features == materialization_request_v2_2_required_features());
 		assert(validated->unique_blob_bytes == 7U);
+		assert(validated->build_captures.size() == 1U);
+		const auto& capture = validated->build_captures.front();
+		const auto& capture_value = capture.value();
+		assert(capture_value.project_id == validated->authority.project.project_id);
+		assert(capture_value.catalog.catalog_digest ==
+			   validated->authority.project.catalog.catalog_digest);
+		assert(capture_value.compile_unit_id == validated->authority.tasks.front().compile_unit_id);
+		assert(capture_value.invocation.effective_replay_arguments.value ==
+			   validated->authority.tasks.front().input_authority.effective_arguments);
+		assert(capture_value.source_closure.closure_id == manifest.closure_id);
+		assert(!capture.semantic_identity().empty());
+		assert(std::ranges::any_of(capture.gaps(),
+								   [](const auto& gap)
+								   {
+									   return gap.field == "invocation.original_arguments" &&
+										   gap.state ==
+										   cxxlens::sdk::detail::capture_field_state::unavailable;
+								   }));
+		const std::vector<provider_task_v4> no_extensions;
+		auto mismatched =
+			adapt_provider_task_v4_build_captures(validated->authority, no_extensions);
+		assert(!mismatched && mismatched.error().detail == "task-census");
+		auto stale_task = validated->authority.tasks.front();
+		stale_task.source.content_digest = content('0');
+		auto stale_binding = validate_provider_task_v4_build_capture_binding(
+			stale_task, validated->build_captures.front());
+		assert(!stale_binding &&
+			   stale_binding.error().code == "materialization.build-capture-binding-mismatch");
 		auto same = derive_materialization_request_v2_2_digest(request);
 		assert(same && *same == request.request_digest);
 	}
