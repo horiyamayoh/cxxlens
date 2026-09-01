@@ -86,8 +86,8 @@ int main()
 		observed(canonical_value::from_tuple({})),
 		observed(canonical_value::from_tuple({})),
 		observed(canonical_value::from_string("/workspace/example/build")),
-		observed(canonical_value::from_string("gnu++23")),
-		observed(canonical_value::from_string("gnu")),
+		observed(canonical_value::from_string("c++23")),
+		observed(canonical_value::from_string("strict")),
 		canonical_value::from_string("source-closure:pending"),
 	});
 	auto closure = canonical_value::from_tuple({
@@ -141,7 +141,9 @@ int main()
 	auto capture = cxxlens::sdk::decode_capture_bundle(*encoded);
 	if (!capture || capture->compile_unit_count() != 1U || !capture->gaps().empty())
 		return 2;
-	// Phase 3.0 exposes the bounded capture surface while the target remains explicitly planned.
 	auto imported = cxxlens::sdk::import_capture(*capture);
-	return !imported && imported.error().code == "application-analysis.target-unavailable" ? 0 : 3;
+	if (!imported || imported->replay_plans().size() != 1U ||
+		imported->replay_plans().front().analysis_frontend() != "clang-23.1.0-gcc-mode")
+		return 3;
+	return 0;
 }
