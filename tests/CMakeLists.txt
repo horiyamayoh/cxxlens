@@ -125,6 +125,20 @@ set_tests_properties(
   PROPERTIES LABELS
              "unit;sdk;capture;compiler-neutral;determinism;resource;security")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-materialization-task
+                            unit/sdk/materialization_task_internal_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-materialization-task
+                      PRIVATE cxxlens::sdk)
+target_include_directories(cxxlens-unit-sdk-materialization-task
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-materialization-task
+         COMMAND cxxlens-unit-sdk-materialization-task)
+set_tests_properties(
+  unit.sdk-materialization-task
+  PROPERTIES
+    LABELS
+    "unit;sdk;materialization;compiler-neutral;determinism;resource;security")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-store unit/sdk/store_test.cpp)
 target_sources(
   cxxlens-unit-sdk-store
@@ -2196,12 +2210,16 @@ set(_cxxlens_ng_test_binary_candidates
     cxxlens-clang22-provider-worker-channel
     cxxlens-r2-vertical-slice
     cxxlens-provider-process-fixture
+    cxxlens-provider-ng1-heartbeat-fixture
+    cxxlens-provider-ng1-resume-fixture
     cxxlens-public-header-cxxlens
     cxxlens-public-header-provider-clang22
     cxxlens-public-api-provider-clang22-translation-unit-input
     cxxlens-public-header-sdk
     cxxlens-unit-sdk
+    cxxlens-unit-sdk-materialization-task
     cxxlens-unit-sdk-provider-runtime
+    cxxlens-sdk-doctor-authority-consumer
     cxxlens-unit-sdk-provider-ng1-validation
     cxxlens-unit-sdk-provider-ng1-spill-port
     cxxlens-unit-sdk-provider-ng1-transport

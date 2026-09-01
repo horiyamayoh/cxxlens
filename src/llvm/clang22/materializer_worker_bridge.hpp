@@ -14,6 +14,7 @@
 #include "materialization_rooted_vfs.hpp"
 #include "materialization_v4_store_source.hpp"
 #include "provider_trust_issuer_internal.hpp"
+#include "sdk/materialization_task_internal.hpp"
 #include "sdk/provider_runtime_internal.hpp"
 
 namespace cxxlens::detail::clang22
@@ -47,14 +48,17 @@ namespace cxxlens::detail::clang22
 	struct materializer_worker_execution
 	{
 		installed_materializer_source_closure_result ingress;
+		sdk::detail::validated_materialization_task task;
 		sdk::provider::detail::provider_process_validation_outcome outcome;
 		provider_trust_issuance trust;
 
 		materializer_worker_execution(
 			installed_materializer_source_closure_result ingress,
+			sdk::detail::validated_materialization_task task,
 			sdk::provider::detail::provider_process_validation_outcome outcome,
 			provider_trust_issuance trust)
-			: ingress{std::move(ingress)}, outcome{std::move(outcome)}, trust{std::move(trust)}
+			: ingress{std::move(ingress)}, task{std::move(task)}, outcome{std::move(outcome)},
+			  trust{std::move(trust)}
 		{
 		}
 
@@ -80,6 +84,7 @@ namespace cxxlens::detail::clang22
 		/** All validated reference occurrences used by canonical adoption and Store staging. */
 		std::vector<sdk::claim> reference_claims;
 		materializer_task_output_receipt receipt;
+		sdk::detail::validated_materialization_result result;
 		materialization::materialization_v4_store_publication publication;
 		/** Exact committed parent observed before the invocation publication, when non-genesis. */
 		std::optional<sdk::publication_record> observed_parent_record;
@@ -95,6 +100,7 @@ namespace cxxlens::detail::clang22
 			std::vector<sdk::partition_draft> base_partitions,
 			std::vector<sdk::claim> reference_claims,
 			materializer_task_output_receipt receipt,
+			sdk::detail::validated_materialization_result result,
 			materialization::materialization_v4_store_publication publication,
 			std::optional<sdk::publication_record> observed_parent_record,
 			std::string canonical_export_digest,
@@ -103,7 +109,7 @@ namespace cxxlens::detail::clang22
 			: worker{std::move(worker)}, claims{std::move(claims)},
 			  base_partitions{std::move(base_partitions)},
 			  reference_claims{std::move(reference_claims)}, receipt{std::move(receipt)},
-			  publication{std::move(publication)},
+			  result{std::move(result)}, publication{std::move(publication)},
 			  observed_parent_record{std::move(observed_parent_record)},
 			  canonical_export_digest{std::move(canonical_export_digest)},
 			  sqlite_effect_root_receipt{std::move(sqlite_effect_root_receipt)}

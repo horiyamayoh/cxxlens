@@ -415,6 +415,140 @@ namespace cxxlens::detail::clang22
 												  "sdk.claim-envelope-validated.v1"}}};
 		}
 
+		[[nodiscard]] sdk::result<sdk::detail::validated_materialization_task>
+		make_generic_materialization_task(
+			const installed_materializer_source_closure_result& ingress,
+			const sdk::relation_engine& engine,
+			const materializer_basis_authority& basis,
+			const std::string_view measured_worker_digest,
+			const std::string_view provider_input_digest)
+		{
+			const auto& authority = ingress.request.authority;
+			if (authority.tasks.size() != 1U || ingress.request.build_captures.size() != 1U)
+				return sdk::unexpected(
+					failure("materialization.task-census-invalid", "generic-task", "one-task"));
+			const auto& frontend_task = authority.tasks.front();
+			auto generic_provider_id = authority.worker.provider_id;
+			std::ranges::replace(generic_provider_id, ':', '.');
+			const auto& capture = ingress.request.build_captures.front();
+			const auto& capture_value = capture.value();
+			const auto descriptor_pointers = output_descriptors();
+			std::vector<sdk::relation_descriptor> descriptors;
+			descriptors.reserve(descriptor_pointers.size());
+			for (const auto* descriptor : descriptor_pointers)
+				descriptors.push_back(*descriptor);
+
+			sdk::provider::provider_session session{generic_provider_id,
+													authority.worker.provider_version,
+													authority.worker.semantic_contract_digest,
+													descriptors,
+													{},
+													{frontend_task.interpretation_domain},
+													"capture",
+													"observation"};
+			auto portable_task = sdk::provider::task::make(std::move(session),
+														   capture_value.catalog,
+														   descriptors,
+														   frontend_task.condition_id,
+														   frontend_task.interpretation_domain,
+														   frontend_task.dependency_groups);
+			if (!portable_task)
+				return sdk::unexpected(std::move(portable_task.error()));
+
+			auto condition_universe_digest =
+				semantic_digest_projection("cxxlens.materialization.condition-universe.v1",
+										   canonical_text(frontend_task.condition_universe_id));
+			auto variant_digest = semantic_digest_projection(
+				"cxxlens.build-capture.variant.v1",
+				sdk::canonical_value::from_tuple({
+					canonical_text(capture_value.variant.language),
+					canonical_text(capture_value.variant.language_standard),
+					canonical_text(capture_value.variant.target_triple),
+					canonical_text(capture_value.variant.predefined_macros_digest),
+					canonical_text(capture_value.variant.include_search_digest),
+					canonical_text(capture_value.variant.semantic_flags_digest),
+				}));
+			auto refresh_policy_digest = semantic_digest_projection(
+				"cxxlens.materialization.refresh-policy.v1", canonical_text("exact-input-change"));
+			auto assumption_digest =
+				semantic_digest_projection("cxxlens.materialization.assumption-set.v1",
+										   canonical_text(basis.assumption_set_id));
+			if (!condition_universe_digest || !variant_digest || !refresh_policy_digest ||
+				!assumption_digest)
+				return sdk::unexpected(
+					failure("materialization.identity-mismatch", "generic-task"));
+
+			std::vector<sdk::detail::materialization_partition_request> partitions;
+			partitions.reserve(descriptors.size());
+			for (const auto& descriptor : descriptors)
+			{
+				auto request_partition_id = sdk::canonical_identity_digest(
+					"materialization-request-partition",
+					std::array{canonical_text(ingress.request.request.materialization_request_id),
+							   canonical_text(descriptor.id),
+							   canonical_text(capture_value.project_id),
+							   canonical_text(frontend_task.condition_universe_id),
+							   canonical_text(frontend_task.condition_id),
+							   canonical_text(frontend_task.interpretation_domain)});
+				auto requested_coverage_digest = semantic_digest_projection(
+					"cxxlens.materialization.requested-coverage.v1",
+					sdk::canonical_value::from_tuple({canonical_text("compile-unit"),
+													  canonical_text(capture_value.project_id),
+													  canonical_text("covered")}));
+				if (!request_partition_id || !requested_coverage_digest)
+					return sdk::unexpected(
+						failure("materialization.identity-mismatch", "generic-task.partition"));
+				sdk::incremental::input_fingerprint fingerprint{
+					capture_value.source.content_digest,
+					capture_value.source_closure.closure_digest,
+					capture_value.invocation.effective_invocation_digest,
+					capture_value.toolchain_digest,
+					*condition_universe_digest,
+					*variant_digest,
+					authority.trust_policy.trust_policy_digest,
+					std::string{engine.registry_digest()},
+					authority.interpretation_policy.interpretation_policy_digest,
+					*refresh_policy_digest,
+					capture_value.invocation.environment_digest,
+					std::string{measured_worker_digest},
+					authority.worker.semantic_contract_digest,
+					descriptor.descriptor_digest,
+					"clang22-task-v4-output-normalizer.v1",
+					authority.publication.output_plan_digest,
+					*assumption_digest,
+					"exact"};
+				partitions.push_back({descriptor.id,
+									  {{*request_partition_id,
+										std::move(fingerprint),
+										*requested_coverage_digest,
+										capture_value.source_closure.closure_digest,
+										false},
+									   std::nullopt}});
+			}
+			sdk::detail::materialization_task_draft draft{
+				ingress.request.request.materialization_request_id,
+				std::string{provider_input_digest},
+				capture,
+				std::move(*portable_task),
+				std::move(partitions),
+				{generic_provider_id,
+				 authority.worker.provider_version,
+				 std::string{measured_worker_digest},
+				 authority.worker.semantic_contract_digest,
+				 authority.trust_policy.required_qualification,
+				 authority.trust_policy.trust_policy_digest,
+				 frontend_task.sandbox,
+				 frontend_task.budget},
+				{{authority.publication.selector,
+				  {1U, 0U, 0U},
+				  capture_value.catalog.catalog_digest,
+				  authority.publication.expected_parent_publication},
+				 authority.publication.recipe_digest,
+				 authority.publication.output_plan_digest,
+				 authority.publication.publication_target}};
+			return sdk::detail::validate_materialization_task(std::move(draft));
+		}
+
 		[[nodiscard]] sdk::result<std::vector<std::byte>>
 		closure_transcript(const source_closure_transfer_binding& binding,
 						   const source_closure_snapshot& snapshot,
@@ -1728,6 +1862,17 @@ namespace cxxlens::detail::clang22
 		for (const auto* descriptor : descriptors)
 			descriptor_values.push_back(*descriptor);
 		const auto envelope_digest = sdk::content_digest(*envelope);
+		auto engine = make_materializer_relation_engine(ingress.request.authority);
+		if (!engine)
+			return sdk::unexpected(std::move(engine.error()));
+		auto basis = make_materializer_basis_authority(ingress.request.authority,
+													   ingress.request.build_captures);
+		if (!basis)
+			return sdk::unexpected(std::move(basis.error()));
+		auto generic_task = make_generic_materialization_task(
+			ingress, *engine, *basis, *measured_worker, envelope_digest);
+		if (!generic_task)
+			return sdk::unexpected(std::move(generic_task.error()));
 		sdk::provider::process_task_request request;
 		request.selection = std::move(*selection);
 		request.output_descriptors = std::move(descriptor_values);
@@ -1767,8 +1912,10 @@ namespace cxxlens::detail::clang22
 		if (!outcome->succeeded())
 			return sdk::unexpected(
 				failure("provider.transcript-invalid", "worker", outcome->terminal));
-		return materializer_worker_execution{
-			std::move(ingress), std::move(*outcome), std::move(*issuance)};
+		return materializer_worker_execution{std::move(ingress),
+											 std::move(*generic_task),
+											 std::move(*outcome),
+											 std::move(*issuance)};
 	}
 
 	sdk::result<materializer_store_execution>
@@ -1892,6 +2039,46 @@ namespace cxxlens::detail::clang22
 				std::string{execution.outcome.runtime_receipt->raw_stdout_sha256()};
 			output.closures.push_back(std::move(closure));
 		}
+		sdk::detail::materialization_result_draft generic_result;
+		generic_result.terminal = receipt->complete
+			? sdk::detail::materialization_terminal::complete
+			: sdk::detail::materialization_terminal::partial;
+		generic_result.task_id = execution.task.id();
+		generic_result.task_input_digest = execution.task.input_binding_digest();
+		generic_result.runtime = sdk::detail::materialization_runtime_binding{
+			execution.task.value().provider.provider_id,
+			execution.task.value().provider.provider_version,
+			execution.outcome.measured_executable_digest,
+			authority.worker.semantic_contract_digest,
+			execution.outcome.task_input_digest,
+			std::string{execution.outcome.runtime_receipt->sealed_transcript_digest()}};
+		generic_result.partitions.reserve(claims.size());
+		for (const auto& claim : claims)
+		{
+			generic_result.partitions.push_back(claim.translation.partition);
+			for (const auto& unresolved : claim.translation.batch.unresolved)
+				generic_result.unresolved.push_back(
+					{unresolved.reason,
+					 unresolved.source_assertion,
+					 unresolved.source_relation + "->" + unresolved.target_relation});
+			generic_result.conflicts.insert(generic_result.conflicts.end(),
+											claim.translation.batch.conflicts.begin(),
+											claim.translation.batch.conflicts.end());
+			generic_result.differential_disagreements.insert(
+				generic_result.differential_disagreements.end(),
+				claim.translation.batch.differential_disagreements.begin(),
+				claim.translation.batch.differential_disagreements.end());
+		}
+		generic_result.coverage = {{"compile-unit",
+									capture.project_id,
+									receipt->complete ? "covered" : "unresolved",
+									receipt->complete ? std::string{} : "provider-partial"}};
+		if (receipt->complete)
+			generic_result.closures = output.closures;
+		auto validated_generic_result = sdk::detail::validate_materialization_result(
+			*engine, execution.task, std::move(generic_result));
+		if (!validated_generic_result)
+			return sdk::unexpected(std::move(validated_generic_result.error()));
 		// Keep the production bridge on the typed v4 Store-source path.  The source constructor
 		// revalidates every sealed task, partition manifest, binding, receipt, closure certificate,
 		// and publication authority before opening a writer; callers must not bypass that boundary
@@ -2003,6 +2190,7 @@ namespace cxxlens::detail::clang22
 											std::move(*base_partitions),
 											std::move(reference_claims),
 											std::move(*receipt),
+											std::move(*validated_generic_result),
 											std::move(publication),
 											std::move(observed_parent_record),
 											canonical_export_digest,

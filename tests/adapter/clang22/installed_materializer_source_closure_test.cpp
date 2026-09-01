@@ -703,6 +703,12 @@ namespace
 							  << '\n';
 				std::abort();
 			}
+			if (execution->task.plan().frontend_provider_executions !=
+					task_v4_output_descriptor_ids.size() ||
+				execution->task.value().provider_input_digest !=
+					execution->outcome.task_input_digest ||
+				execution->task.value().provider.provider_id != "provider.clang22")
+				std::abort();
 			auto published = publish_materializer_worker(std::move(*execution));
 			if (!published)
 			{
@@ -718,6 +724,9 @@ namespace
 				expected_partition_count)
 				std::abort();
 			if (published->receipt.batch_receipts.size() != task_v4_output_descriptor_ids.size() ||
+				published->result.terminal() != sdk::detail::materialization_terminal::complete ||
+				published->result.partitions().size() != task_v4_output_descriptor_ids.size() ||
+				published->result.closures().size() != task_v4_output_descriptor_ids.size() ||
 				published->publication.output_batch_count != task_v4_output_descriptor_ids.size() ||
 				published->publication.output_receipt_digest != published->receipt.receipt_digest ||
 				published->receipt.claim_count == 0U || !published->receipt.complete)
