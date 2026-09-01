@@ -6,7 +6,7 @@
 
 #include <cxxlens/sdk/common.hpp>
 
-#include "materialization_io.hpp"
+#include "sdk/materialization_io_internal.hpp"
 
 namespace cxxlens::detail::clang22::materialization
 {
@@ -30,10 +30,12 @@ namespace cxxlens::detail::clang22::materialization
 		return {"materialization.spool-failure", std::move(phase), std::move(detail)};
 	}
 
-	[[nodiscard]] inline sdk::error materialization_admission_io_failure(
-		const materialization_io_failure& failure, std::string phase, std::string detail)
+	[[nodiscard]] inline sdk::error
+	materialization_admission_io_failure(const sdk::detail::materialization_io_failure& failure,
+										 std::string phase,
+										 std::string detail)
 	{
-		if (!is_materialization_actual_io_or_hash_failure(failure))
+		if (!sdk::detail::is_materialization_actual_io_or_hash_failure(failure))
 			return materialization_admission_no_response();
 		return materialization_admission_spool_failure(std::move(phase), std::move(detail));
 	}

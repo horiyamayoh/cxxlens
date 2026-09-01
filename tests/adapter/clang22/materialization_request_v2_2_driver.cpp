@@ -7,13 +7,14 @@
 #include <string>
 #include <string_view>
 
-#include "llvm/clang22/materialization_io.hpp"
 #include "llvm/clang22/materialization_json.hpp"
 #include "llvm/clang22/materialization_request_v2_2.hpp"
+#include "sdk/materialization_io_internal.hpp"
 
 namespace
 {
 	using namespace cxxlens::detail::clang22::materialization;
+	using namespace cxxlens::sdk::detail;
 
 	class stdin_reader final : public materialization_byte_reader
 	{

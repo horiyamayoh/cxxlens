@@ -1,9 +1,8 @@
-#include "materialization_v4_store_source.hpp"
+#include "materialization_writer_internal.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <set>
@@ -13,31 +12,25 @@
 #include <utility>
 #include <vector>
 
-#include "materialization_store_candidate_bridge.hpp"
 #include "sdk/bounded_store_v6_internal.hpp"
 #include "sdk/bounded_store_v6_memory_internal.hpp"
 #include "sdk/bounded_store_v6_sqlite_internal.hpp"
+#include "sdk/materialization_store_candidate_bridge_internal.hpp"
 #include "sdk/store_backend_lifetime_internal.hpp"
 #include "sdk/store_operation_port_internal.hpp"
 
-namespace cxxlens::detail::clang22::materialization
+namespace cxxlens::sdk::detail
 {
 	namespace
 	{
 		[[nodiscard]] sdk::error invalid(std::string field, std::string detail = {})
 		{
-			return {"materialization.v4-store-source-invalid", std::move(field), std::move(detail)};
+			return {"materialization.writer-source-invalid", std::move(field), std::move(detail)};
 		}
 
 		[[nodiscard]] sdk::error mismatch(std::string field, std::string detail = {})
 		{
-			return {
-				"materialization.v4-store-source-mismatch", std::move(field), std::move(detail)};
-		}
-
-		[[nodiscard]] sdk::error incomplete(std::string field)
-		{
-			return {"materialization.v4-store-source-incomplete", std::move(field), {}};
+			return {"materialization.writer-source-mismatch", std::move(field), std::move(detail)};
 		}
 
 		[[nodiscard]] sdk::result<void> strong(std::string_view value, std::string field)
@@ -48,32 +41,13 @@ namespace cxxlens::detail::clang22::materialization
 		}
 
 		[[nodiscard]] sdk::result<void>
-		add_checked(std::uint64_t& total, const std::uint64_t value, std::string field)
-		{
-			if (value > std::numeric_limits<std::uint64_t>::max() - total)
-				return sdk::unexpected(invalid(std::move(field), "overflow"));
-			total += value;
-			return {};
-		}
-
-		[[nodiscard]] sdk::result<void>
 		validate_authority(const sdk::relation_engine& engine,
-						   const materialization_v4_incremental_receipt& receipt,
-						   const materialization_v4_provider_output_authority& authority)
+						   const materialization_publication_requirement& authority)
 		{
-			if (authority.schema != materialization_v4_provider_output_authority_schema)
-				return sdk::unexpected(invalid("authority.schema", "unsupported"));
-			if (auto valid = strong(authority.materialization_request_id,
-									"authority.materialization-request-id");
-				!valid)
-				return valid;
-			if (authority.materialization_request_id != receipt.materialization_request_id)
-				return sdk::unexpected(mismatch("authority.materialization-request-id", "receipt"));
-
 			const std::array<std::pair<std::string_view, std::string_view>, 3U> publication_ids{{
-				{"analysis-recipe", authority.publication.analysis_recipe_digest},
-				{"output-plan", authority.publication.output_plan_digest},
-				{"publication-target", authority.publication.publication_target},
+				{"analysis-recipe", authority.analysis_recipe_digest},
+				{"output-plan", authority.output_plan_digest},
+				{"publication-target", authority.publication_target},
 			}};
 			for (const auto& [field, value] : publication_ids)
 				if (auto valid = strong(value, "authority.publication." + std::string{field});
@@ -91,77 +65,12 @@ namespace cxxlens::detail::clang22::materialization
 										"authority.snapshot.expected-parent");
 					!valid)
 					return valid;
-			if (authority.closures.size() > materialization_v4_store_max_closures)
-				return sdk::unexpected(invalid("authority.closures", "bound"));
 			if (authority.snapshot.series.engine_generation_id != engine.generation())
 				return sdk::unexpected(
 					mismatch("authority.snapshot.series.engine-generation", "engine"));
 			if (authority.snapshot.series.relation_registry_digest != engine.registry_digest())
 				return sdk::unexpected(
 					mismatch("authority.snapshot.series.registry-digest", "engine"));
-			return {};
-		}
-
-		[[nodiscard]] sdk::result<void>
-		validate_receipt_shape(const materialization_v4_incremental_receipt& receipt)
-		{
-			if (receipt.schema != materialization_v4_incremental_receipt_schema)
-				return sdk::unexpected(invalid("receipt.schema", "unsupported"));
-			if (receipt.task_count == 0U ||
-				receipt.task_count > materialization_v4_incremental_max_tasks)
-				return sdk::unexpected(invalid("receipt.task-count", "bound"));
-			if (receipt.task_count != receipt.task_receipts.size())
-				return sdk::unexpected(mismatch("receipt.task-count", "task-receipts"));
-			if (auto valid = strong(receipt.materialization_request_id, "receipt.request-id");
-				!valid)
-				return valid;
-			if (auto valid = strong(receipt.receipt_digest, "receipt.digest"); !valid)
-				return valid;
-			if (!receipt.complete)
-				return sdk::unexpected(incomplete("receipt"));
-			return {};
-		}
-
-		[[nodiscard]] sdk::result<void>
-		validate_partition_receipt(const materialization_v4_store_partition& value,
-								   const materialization_v4_claim_receipt& aggregate,
-								   const std::size_t expected_index)
-		{
-			if (value.task_index != expected_index || value.receipt.task_index != expected_index)
-				return sdk::unexpected(mismatch("partition.task-index", "order"));
-			if (value.receipt.materialization_request_id != aggregate.materialization_request_id)
-				return sdk::unexpected(mismatch("partition.request-id", "receipt"));
-			if (value.receipt.partition_id != value.manifest.partition_id ||
-				value.receipt.partition_content_digest != value.manifest.content_digest ||
-				value.receipt.coverage_digest != value.manifest.coverage_digest ||
-				value.receipt.claim_count != value.manifest.claim_count ||
-				value.receipt.complete != value.manifest.complete ||
-				value.receipt.unresolved_count != value.draft.unresolved.size())
-				return sdk::unexpected(mismatch("partition.receipt", "manifest"));
-			return {};
-		}
-
-		[[nodiscard]] sdk::result<void>
-		validate_grouped_output_receipt(const materialization_v4_store_partition& value,
-										const materialization_v4_claim_receipt& task_receipt)
-		{
-			if (!value.has_receipt)
-				return {};
-			if (value.receipt.materialization_request_id !=
-					task_receipt.materialization_request_id ||
-				value.receipt.task_index != task_receipt.task_index ||
-				value.receipt.task_id != task_receipt.task_id ||
-				value.receipt.task_v4_digest != task_receipt.task_v4_digest)
-				return sdk::unexpected(mismatch("partition.receipt", "group-task-binding"));
-			if (!value.receipt.complete)
-				return sdk::unexpected(incomplete("partition.receipt"));
-			if (value.receipt.partition_id != value.manifest.partition_id ||
-				value.receipt.partition_content_digest != value.manifest.content_digest ||
-				value.receipt.coverage_digest != value.manifest.coverage_digest ||
-				value.receipt.claim_count != value.manifest.claim_count ||
-				value.receipt.complete != value.manifest.complete ||
-				value.receipt.unresolved_count != value.draft.unresolved.size())
-				return sdk::unexpected(mismatch("partition.receipt", "manifest"));
 			return {};
 		}
 
@@ -181,7 +90,7 @@ namespace cxxlens::detail::clang22::materialization
 		}
 
 		[[nodiscard]] sdk::result<std::vector<bounded_store_record>>
-		make_expected_candidate_records(const materialization_v4_store_source& source)
+		make_expected_candidate_records(const validated_materialization_publication_source& source)
 		{
 			std::vector<sdk::detail::snapshot_candidate_projection_record> records;
 			const auto add = [&](std::string kind, std::string key, std::vector<std::byte> payload)
@@ -233,7 +142,7 @@ namespace cxxlens::detail::clang22::materialization
 					add("unresolved", unresolved.source_assertion, std::move(*item));
 				}
 			}
-			for (const auto& closure : source.authority().closures)
+			for (const auto& closure : source.closures())
 			{
 				auto payload = sdk::detail::encode_snapshot_candidate_closure(closure);
 				if (!payload)
@@ -625,54 +534,34 @@ namespace cxxlens::detail::clang22::materialization
 	} // namespace
 
 	sdk::result<void>
-	materialization_v4_store_source::validate(const sdk::relation_engine& engine) const
+	validated_materialization_publication_source::validate(const sdk::relation_engine& engine) const
 	{
-		if (auto valid = validate_receipt_shape(receipt_); !valid)
+		if (auto valid = validate_authority(engine, authority_); !valid)
 			return valid;
-		if (auto valid = validate_authority(engine, receipt_, authority_); !valid)
-			return valid;
-		const bool grouped = std::ranges::any_of(partitions_,
-												 [](const materialization_v4_store_partition& value)
-												 {
-													 return !value.has_receipt;
-												 });
-		if (!grouped && partitions_.size() != receipt_.task_count)
-			return sdk::unexpected(mismatch("partitions", "receipt.task-count"));
-		if (grouped && (receipt_.task_count != 1U || receipt_.task_receipts.size() != 1U))
-			return sdk::unexpected(mismatch("partitions", "grouped-task-receipt"));
+		for (const auto& [field, value] :
+			 {std::pair{std::string_view{"materialization-request-id"},
+						std::string_view{materialization_request_id_}},
+			  std::pair{std::string_view{"task-id"}, std::string_view{task_id_}},
+			  std::pair{std::string_view{"task-input-digest"},
+						std::string_view{task_input_digest_}},
+			  std::pair{std::string_view{"result-digest"}, std::string_view{result_digest_}},
+			  std::pair{std::string_view{"source-receipt-digest"},
+						std::string_view{source_receipt_digest_}}})
+			if (auto valid = strong(value, std::string{field}); !valid)
+				return valid;
+		if (terminal_ != materialization_terminal::complete &&
+			terminal_ != materialization_terminal::partial)
+			return sdk::unexpected(invalid("terminal", "not-publishable"));
+		if (partitions_.empty())
+			return sdk::unexpected(invalid("partitions", "empty"));
 
-		std::uint64_t claim_count{};
-		std::uint64_t unresolved_count{};
-		std::uint64_t conflict_count{};
-		std::uint64_t differential_disagreement_count{};
 		std::set<std::string, std::less<>> partition_ids;
-		for (std::size_t index{}; index < partitions_.size(); ++index)
+		for (const auto& value : partitions_)
 		{
-			const auto& value = partitions_[index];
-			if (grouped)
-			{
-				if (value.has_receipt)
-				{
-					if (auto valid =
-							validate_grouped_output_receipt(value, receipt_.task_receipts.front());
-						!valid)
-						return valid;
-				}
-			}
-			else
-			{
-				if (value.receipt != receipt_.task_receipts[index])
-					return sdk::unexpected(mismatch("partition.receipt", "aggregate"));
-				if (auto valid =
-						validate_partition_receipt(value, receipt_.task_receipts[index], index);
-					!valid)
-					return valid;
-			}
 			if (!partition_ids.insert(value.manifest.partition_id).second)
 				return sdk::unexpected(mismatch("partition.partition-id", "duplicate"));
 			if (value.draft.condition.universe != authority_.snapshot.series.condition_universe_id)
 				return sdk::unexpected(mismatch("partition.condition-universe", "snapshot"));
-
 			auto manifest = sdk::make_partition_manifest(engine, value.draft);
 			if (!manifest)
 				return sdk::unexpected(std::move(manifest.error()));
@@ -681,45 +570,17 @@ namespace cxxlens::detail::clang22::materialization
 			auto subject = sdk::make_partition_certificate_subject(value.manifest, value.binding);
 			if (!subject)
 				return sdk::unexpected(std::move(subject.error()));
-			if (value.has_receipt)
-			{
-				if (auto valid =
-						add_checked(claim_count, value.receipt.claim_count, "receipt.claim-count");
-					!valid)
-					return valid;
-				if (auto valid = add_checked(unresolved_count,
-											 value.receipt.unresolved_count,
-											 "receipt.unresolved-count");
-					!valid)
-					return valid;
-				if (auto valid = add_checked(
-						conflict_count, value.receipt.conflict_count, "receipt.conflict-count");
-					!valid)
-					return valid;
-				if (auto valid = add_checked(differential_disagreement_count,
-											 value.receipt.differential_disagreement_count,
-											 "receipt.differential-disagreement-count");
-					!valid)
-					return valid;
-			}
 		}
 
-		if (!grouped &&
-			(claim_count != receipt_.claim_count || unresolved_count != receipt_.unresolved_count ||
-			 conflict_count != receipt_.conflict_count ||
-			 differential_disagreement_count != receipt_.differential_disagreement_count))
-			return sdk::unexpected(mismatch("receipt.counters", "partitions"));
-
 		std::set<std::string, std::less<>> closure_ids;
-		for (const auto& closure : authority_.closures)
+		for (const auto& closure : closures_)
 		{
-			const auto partition =
-				std::ranges::find(partitions_,
-								  closure.subject_partition_id,
-								  [](const materialization_v4_store_partition& value)
-								  {
-									  return value.manifest.partition_id;
-								  });
+			const auto partition = std::ranges::find(partitions_,
+													 closure.subject_partition_id,
+													 [](const auto& value)
+													 {
+														 return value.manifest.partition_id;
+													 });
 			if (partition == partitions_.end())
 				return sdk::unexpected(mismatch("closure.subject-partition", "missing"));
 			auto subject =
@@ -735,73 +596,42 @@ namespace cxxlens::detail::clang22::materialization
 		return {};
 	}
 
-	sdk::result<materialization_v4_store_source> make_materialization_v4_store_source(
+	sdk::result<validated_materialization_publication_source>
+	make_materialization_publication_source(
 		const sdk::relation_engine& engine,
-		const materialization_v4_incremental_receipt& receipt,
-		const std::span<const materialization_v4_claim_sealed* const> sealed_tasks,
-		materialization_v4_provider_output_authority authority)
+		const validated_materialization_task& task,
+		const validated_materialization_result& result,
+		const std::span<const sdk::partition_draft> host_partitions,
+		std::string source_receipt_digest)
 	{
-		auto admitted = admit_materialization_v4_store_ingress(
-			engine, receipt, sealed_tasks, authority.publication);
-		if (!admitted)
-			return sdk::unexpected(std::move(admitted.error()));
-		if (authority.materialization_request_id != receipt.materialization_request_id)
-			return sdk::unexpected(mismatch("authority.materialization-request-id", "receipt"));
-
-		std::vector<materialization_v4_store_partition> partitions;
-		partitions.reserve(sealed_tasks.size());
-		for (std::size_t index{}; index < sealed_tasks.size(); ++index)
-		{
-			const auto* sealed = sealed_tasks[index];
-			if (sealed == nullptr)
-				return sdk::unexpected(invalid("sealed-tasks", "null"));
-			partitions.push_back({sealed->translation.binding.task_index,
-								  sealed->translation.partition,
-								  sealed->partition_manifest,
-								  sealed->partition_binding,
-								  sealed->receipt});
-		}
-
-		materialization_v4_store_source source{
-			std::move(authority), receipt, std::move(partitions)};
-		if (auto valid = source.validate(engine); !valid)
+		if (result.task_id() != task.id() ||
+			result.task_input_digest() != task.input_binding_digest())
+			return sdk::unexpected(mismatch("result", "task-binding"));
+		if (result.terminal() != materialization_terminal::complete &&
+			result.terminal() != materialization_terminal::partial)
+			return sdk::unexpected(invalid("result.terminal", "not-publishable"));
+		if (auto valid = strong(source_receipt_digest, "source-receipt-digest"); !valid)
 			return sdk::unexpected(std::move(valid.error()));
-		return source;
-	}
 
-	sdk::result<materialization_v4_store_source> make_materialization_v4_grouped_store_source(
-		const sdk::relation_engine& engine,
-		const materialization_v4_incremental_receipt& receipt,
-		const std::span<const materialization_v4_claim_sealed* const> sealed_tasks,
-		const std::span<const sdk::partition_draft> base_partitions,
-		const std::span<const sdk::claim> existing,
-		materialization_v4_provider_output_authority authority)
-	{
-		if (sealed_tasks.empty() || base_partitions.empty())
-			return sdk::unexpected(invalid("grouped-source", "empty"));
-		if (receipt.task_count != 1U || receipt.task_receipts.size() != 1U)
-			return sdk::unexpected(mismatch("grouped-source", "task-receipt"));
-		const std::array<const materialization_v4_claim_sealed*, 1U> receipt_task{
-			sealed_tasks.front()};
-		if (auto admitted = admit_materialization_v4_store_ingress(
-				engine, receipt, receipt_task, authority.publication, existing);
-			!admitted)
-			return sdk::unexpected(std::move(admitted.error()));
-		if (authority.materialization_request_id != receipt.materialization_request_id)
-			return sdk::unexpected(mismatch("authority.materialization-request-id", "receipt"));
-
-		std::vector<materialization_v4_store_partition> partitions;
-		partitions.reserve(base_partitions.size() + sealed_tasks.size());
-		for (const auto& draft : base_partitions)
+		std::vector<materialization_writer_partition> partitions;
+		partitions.reserve(host_partitions.size() + result.partitions().size());
+		std::set<std::string, std::less<>> relation_ids;
+		const auto append = [&](const sdk::partition_draft& draft,
+								const sdk::partition_manifest& manifest,
+								const sdk::snapshot_partition_binding& binding) -> sdk::result<void>
+		{
+			if (!relation_ids.insert(draft.relation_descriptor_id).second)
+				return sdk::unexpected(mismatch("partition.relation", "duplicate"));
+			partitions.push_back({draft, manifest, binding});
+			return {};
+		};
+		for (const auto& draft : host_partitions)
 		{
 			if (draft.claims.empty())
-				return sdk::unexpected(invalid("grouped-source.base-partition", "empty"));
+				return sdk::unexpected(invalid("host-partition", "empty"));
 			auto manifest = sdk::make_partition_manifest(engine, draft);
 			if (!manifest)
 				return sdk::unexpected(std::move(manifest.error()));
-			// Base partitions are already canonical claims produced by the host-side planner. Their
-			// source identity is re-derived here, but they deliberately do not masquerade as worker
-			// task receipts.
 			sdk::snapshot_partition_binding binding{manifest->partition_id,
 													draft.relation_descriptor_id,
 													draft.scope,
@@ -811,51 +641,44 @@ namespace cxxlens::detail::clang22::materialization
 													draft.producer_input_basis_digest,
 													draft.precision_profile,
 													draft.assumption_set_id};
-			partitions.push_back({0U, draft, *manifest, std::move(binding), {}, false});
+			if (auto added = append(draft, *manifest, binding); !added)
+				return sdk::unexpected(std::move(added.error()));
 		}
-		for (const auto* sealed : sealed_tasks)
-		{
-			if (sealed == nullptr)
-				return sdk::unexpected(invalid("grouped-source.sealed-tasks", "null"));
-			if (auto valid = validate_materialization_v4_claim_receipt(engine, *sealed, existing);
-				!valid)
-				return sdk::unexpected(std::move(valid.error()));
-			if (sealed->receipt.materialization_request_id != receipt.materialization_request_id ||
-				sealed->receipt.task_index != receipt.task_receipts.front().task_index ||
-				sealed->receipt.task_id != receipt.task_receipts.front().task_id ||
-				sealed->receipt.task_v4_digest != receipt.task_receipts.front().task_v4_digest)
-				return sdk::unexpected(mismatch("grouped-source.task-binding", "receipt"));
-			partitions.push_back({sealed->translation.binding.task_index,
-								  sealed->translation.partition,
-								  sealed->partition_manifest,
-								  sealed->partition_binding,
-								  sealed->receipt,
-								  true});
-		}
+		for (const auto& partition : result.partitions())
+			if (auto added = append(partition.draft, partition.manifest, partition.binding); !added)
+				return sdk::unexpected(std::move(added.error()));
 
-		materialization_v4_store_source source{
-			std::move(authority), receipt, std::move(partitions)};
+		validated_materialization_publication_source source{
+			task.value().publication,
+			task.value().materialization_request_id,
+			std::string{result.task_id()},
+			std::string{result.task_input_digest()},
+			std::string{result.result_digest()},
+			std::move(source_receipt_digest),
+			result.terminal(),
+			std::move(partitions),
+			std::vector<sdk::closure_candidate>{result.closures().begin(),
+												result.closures().end()}};
 		if (auto valid = source.validate(engine); !valid)
 			return sdk::unexpected(std::move(valid.error()));
 		return source;
 	}
 
-	sdk::result<materialization_v4_store_publication>
-	publish_materialization_v4_store_source(const sdk::relation_engine& engine,
-											sdk::snapshot_store& store,
-											materialization_v4_store_source source,
-											std::optional<std::string> v6_sqlite_path)
+	sdk::result<materialization_store_publication>
+	publish_materialization_source(const sdk::relation_engine& engine,
+								   sdk::snapshot_store& store,
+								   validated_materialization_publication_source source,
+								   std::optional<std::string> v6_sqlite_path)
 	{
 		if (auto valid = source.validate(engine); !valid)
 			return sdk::unexpected(std::move(valid.error()));
-		const bool grouped_output =
-			std::ranges::any_of(source.partitions_,
-								[](const materialization_v4_store_partition& partition)
-								{
-									return !partition.has_receipt;
-								});
 		const auto output_authority = source.authority_;
-		const auto output_receipt = source.receipt_;
+		const auto materialization_request_id = source.materialization_request_id_;
+		const auto task_id = source.task_id_;
+		const auto task_input_digest = source.task_input_digest_;
+		const auto result_digest = source.result_digest_;
+		const auto source_receipt_digest = source.source_receipt_digest_;
+		const auto source_terminal = source.terminal_;
 		auto expected_records = make_expected_candidate_records(source);
 		if (!expected_records)
 			return sdk::unexpected(std::move(expected_records.error()));
@@ -868,7 +691,7 @@ namespace cxxlens::detail::clang22::materialization
 			if (auto staged = writer->stage(std::move(partition.draft)); !staged)
 				return sdk::unexpected(std::move(staged.error()));
 		}
-		for (auto& closure : source.authority_.closures)
+		for (auto& closure : source.closures_)
 		{
 			if (auto staged = writer->add_closure(std::move(closure)); !staged)
 				return sdk::unexpected(std::move(staged.error()));
@@ -877,7 +700,7 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(std::move(valid.error()));
 		// Run the bounded v6 phase core against a value-owned expected projection and the
 		// backend-derived physical candidate before the ordinary Store publication.  This is a
-		// prepublication gate: the v4 writer remains the sole durable effect, while v6 supplies
+		// prepublication gate: this writer remains the sole durable effect, while v6 supplies
 		// the independent cursor comparison, resource accounting, and one-shot cleanup boundary.
 		auto actual_projection =
 			sdk::snapshot_store_backend_lifetime_access::candidate_projection(*writer);
@@ -895,23 +718,26 @@ namespace cxxlens::detail::clang22::materialization
 										   output_authority.snapshot.series.engine_generation_id,
 										   std::span<const bounded_store_record>{expected_for_v6},
 										   std::span<const bounded_store_record>{actual_records},
-										   output_receipt.receipt_digest);
+										   result_digest);
 			!preflight)
 		{
 			writer->cancel();
 			return sdk::unexpected(std::move(preflight.error()));
 		}
-		const std::string task_payload_text = output_receipt.receipt_digest;
-		const auto task_payload =
-			std::as_bytes(std::span{task_payload_text.data(), task_payload_text.size()});
+		auto task_payload = sdk::canonical_binary(sdk::canonical_value::from_tuple({
+			sdk::canonical_value::from_string(task_id),
+			sdk::canonical_value::from_string(task_input_digest),
+			sdk::canonical_value::from_string(result_digest),
+			sdk::canonical_value::from_string(source_receipt_digest),
+		}));
+		if (!task_payload)
+			return sdk::unexpected(std::move(task_payload.error()));
 		// The candidate census covers logical task bytes, while its digest covers the exact
 		// bounded-store input frame (kind/key/payload plus the frame checksum).  Keeping those
 		// authorities separate is what lets the candidate reject a transport framing change
 		// without confusing it with a change to the sealed task payload itself.
 		const bounded_store_record task_record{
-			bounded_store_record_kind::task_result,
-			"0",
-			std::vector<std::byte>{task_payload.begin(), task_payload.end()}};
+			bounded_store_record_kind::task_result, "0", *task_payload};
 		auto encoded_task_record = encode_bounded_store_record(task_record);
 		if (!encoded_task_record)
 			return sdk::unexpected(std::move(encoded_task_record.error()));
@@ -919,13 +745,13 @@ namespace cxxlens::detail::clang22::materialization
 		std::optional<sdk::snapshot_handle> published;
 		std::optional<sdk::error> publish_error;
 		materialization_store_candidate_bridge_request bridge;
-		bridge.staging_session_id =
-			"materialization-candidate:" + output_receipt.materialization_request_id;
+		bridge.staging_session_id = "materialization-candidate:" + materialization_request_id;
 		bridge.expected_head = output_authority.snapshot.expected_parent_publication.value_or(
 			"genesis:" + output_authority.snapshot.series.id());
 		bridge.external_census = {
-			1U, static_cast<std::uint64_t>(task_payload.size()), input_frame_digest};
-		bridge.replay_tasks = [task_payload](const auto& consume) -> sdk::result<void>
+			1U, static_cast<std::uint64_t>(task_payload->size()), input_frame_digest};
+		bridge.replay_tasks =
+			[task_payload = std::move(*task_payload)](const auto& consume) -> sdk::result<void>
 		{
 			return consume(task_payload);
 		};
@@ -958,9 +784,9 @@ namespace cxxlens::detail::clang22::materialization
 		};
 		bridge.write_exact_outcome_report =
 			[](bounded_store_report_writer& report,
-			   const bounded_store_publication_terminal terminal) -> sdk::result<void>
+			   const bounded_store_publication_terminal publication_terminal) -> sdk::result<void>
 		{
-			const auto value = std::to_string(static_cast<unsigned>(terminal));
+			const auto value = std::to_string(static_cast<unsigned>(publication_terminal));
 			return report.append(std::as_bytes(std::span{value.data(), value.size()}));
 		};
 		bridge.cleanup = [&writer]() -> sdk::result<void>
@@ -976,7 +802,7 @@ namespace cxxlens::detail::clang22::materialization
 			 &postpublish_error,
 			 expected_for_postpublish,
 			 &output_authority,
-			 &output_receipt,
+			 &result_digest,
 			 v6_sqlite_path](std::string_view,
 							 std::string_view) -> bounded_store_publication_terminal
 		{
@@ -993,30 +819,30 @@ namespace cxxlens::detail::clang22::materialization
 				sdk::snapshot_store_backend_lifetime_access::published_projection(*published);
 			if (!actual)
 			{
-				postpublish_error = sdk::error{
-					"materialization.v4-store-source-postpublish-mismatch",
-					"published-projection",
-					actual.error().code + ":" + actual.error().field + ":" + actual.error().detail};
+				postpublish_error = sdk::error{"materialization.writer-postpublish-mismatch",
+											   "published-projection",
+											   actual.error().code + ":" + actual.error().field +
+												   ":" + actual.error().detail};
 				return bounded_store_publication_terminal::committed_unverified;
 			}
-			std::vector<bounded_store_record> actual_records;
-			actual_records.reserve(actual->records.size());
+			std::vector<bounded_store_record> published_records;
+			published_records.reserve(actual->records.size());
 			for (auto& record : actual->records)
-				actual_records.emplace_back(bounded_store_record{projection_kind(record.kind),
-																 std::move(record.key),
-																 std::move(record.payload)});
+				published_records.emplace_back(bounded_store_record{projection_kind(record.kind),
+																	std::move(record.key),
+																	std::move(record.payload)});
 			if (auto verified = run_v6_candidate_preflight(
 					output_authority.snapshot.series,
 					output_authority.snapshot.series.engine_generation_id,
 					std::span<const bounded_store_record>{expected_for_postpublish},
-					std::span<const bounded_store_record>{actual_records},
-					output_receipt.receipt_digest,
+					std::span<const bounded_store_record>{published_records},
+					result_digest,
 					v6_sqlite_path ? std::optional<std::string_view>{*v6_sqlite_path}
 								   : std::nullopt);
 				!verified)
 			{
 				postpublish_error =
-					sdk::error{"materialization.v4-store-source-postpublish-mismatch",
+					sdk::error{"materialization.writer-postpublish-mismatch",
 							   "physical-projection",
 							   verified.error().code + ":" + verified.error().field + ":" +
 								   verified.error().detail};
@@ -1034,14 +860,14 @@ namespace cxxlens::detail::clang22::materialization
 		if (!published)
 			return sdk::unexpected(
 				sdk::error{"materialization.store-publication-missing", "publish", "missing"});
-		const auto output_receipt_digest =
-			grouped_output ? output_receipt.receipt_digest : std::string{};
-		const auto output_batch_count = grouped_output ? output_receipt.task_count : 0U;
-		return materialization_v4_store_publication{std::move(*published),
-													output_authority,
-													output_receipt,
-													output_receipt_digest,
-													output_batch_count,
-													true};
+		return materialization_store_publication{std::move(*published),
+												 output_authority,
+												 materialization_request_id,
+												 task_id,
+												 task_input_digest,
+												 result_digest,
+												 source_receipt_digest,
+												 source_terminal,
+												 true};
 	}
-} // namespace cxxlens::detail::clang22::materialization
+} // namespace cxxlens::sdk::detail

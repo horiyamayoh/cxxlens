@@ -1,7 +1,7 @@
 #pragma once
 
 /**
- * @file materialization_store_candidate.hpp
+ * @file materialization_store_candidate_internal.hpp
  * @brief Source-private bounded Store candidate and claim projection ports.
  *
  * The port deliberately stays below the installed SDK ABI.  It supplies one bounded staging
@@ -22,9 +22,9 @@
 
 #include <cxxlens/sdk/common.hpp>
 
-#include "materialization_io.hpp"
+#include "materialization_io_internal.hpp"
 
-namespace cxxlens::detail::clang22::materialization
+namespace cxxlens::sdk::detail
 {
 	inline constexpr std::uint64_t bounded_store_max_tasks = 4096U;
 	inline constexpr std::uint64_t bounded_store_max_aggregate_bytes =
@@ -280,4 +280,4 @@ namespace cxxlens::detail::clang22::materialization
 								  std::unique_ptr<bounded_store_record_spool> expected,
 								  std::unique_ptr<bounded_store_record_spool> actual,
 								  std::function<sdk::result<void>()> cleanup = {});
-} // namespace cxxlens::detail::clang22::materialization
+} // namespace cxxlens::sdk::detail

@@ -34,8 +34,6 @@
 #include "materialization_json.hpp"
 #include "materialization_rooted_vfs.hpp"
 #include "materialization_v4_claim_binding.hpp"
-#include "materialization_v4_incremental_ingress.hpp"
-#include "materialization_v4_store_source.hpp"
 #include "observation_v2.hpp"
 #include "protocol_v2/closure.hpp"
 #include "provider_task_v4.hpp"
@@ -1999,29 +1997,12 @@ namespace cxxlens::detail::clang22
 			return sdk::unexpected(std::move(receipt.error()));
 		if (auto valid = receipt->validate(); !valid)
 			return sdk::unexpected(std::move(valid.error()));
-		// The generic v4 incremental receipt is task-oriented: this worker receives one task and
-		// emits six descriptor batches for that task. Keep the complete six-batch aggregate above
-		// as the publication authority, while using one descriptor as the task receipt so the
-		// receipt's task-index sequence remains canonical (0..task_count-1).
-		const std::array<const materialization::materialization_v4_claim_sealed*, 1U> task_receipt{
-			&claims.front()};
-		auto incremental_receipt = materialization::make_materialization_v4_incremental_receipt(
-			*engine, task_receipt, reference_claims);
-		if (!incremental_receipt)
-			return sdk::unexpected(std::move(incremental_receipt.error()));
-		materialization::materialization_v4_provider_output_authority output;
-		output.materialization_request_id = request.materialization_request_id;
-		output.publication = {authority.publication.recipe_digest,
-							  authority.publication.output_plan_digest,
-							  authority.publication.publication_target};
-		output.snapshot = {authority.publication.selector,
-						   {1U, 0U, 0U},
-						   capture.catalog.catalog_digest,
-						   authority.publication.expected_parent_publication};
 		auto key_domain = sdk::semantic_digest("cxxlens.clang22.materializer-key-domain.v1",
 											   capture.compile_unit_id);
 		if (!key_domain)
 			return sdk::unexpected(std::move(key_domain.error()));
+		std::vector<sdk::closure_candidate> closures;
+		closures.reserve(claims.size());
 		for (auto& claim : claims)
 		{
 			sdk::closure_candidate closure;
@@ -2037,7 +2018,7 @@ namespace cxxlens::detail::clang22
 			closure.producer_semantics = claim.partition_binding.producer_semantics;
 			closure.evidence_digest =
 				std::string{execution.outcome.runtime_receipt->raw_stdout_sha256()};
-			output.closures.push_back(std::move(closure));
+			closures.push_back(std::move(closure));
 		}
 		sdk::detail::materialization_result_draft generic_result;
 		generic_result.terminal = receipt->complete
@@ -2074,26 +2055,20 @@ namespace cxxlens::detail::clang22
 									receipt->complete ? "covered" : "unresolved",
 									receipt->complete ? std::string{} : "provider-partial"}};
 		if (receipt->complete)
-			generic_result.closures = output.closures;
+			generic_result.closures = closures;
 		auto validated_generic_result = sdk::detail::validate_materialization_result(
 			*engine, execution.task, std::move(generic_result));
 		if (!validated_generic_result)
 			return sdk::unexpected(std::move(validated_generic_result.error()));
-		// Keep the production bridge on the typed v4 Store-source path.  The source constructor
-		// revalidates every sealed task, partition manifest, binding, receipt, closure certificate,
-		// and publication authority before opening a writer; callers must not bypass that boundary
-		// by staging the raw claim vector directly.
-		std::vector<const materialization::materialization_v4_claim_sealed*> sealed_tasks;
-		sealed_tasks.reserve(claims.size());
-		for (const auto& claim : claims)
-			sealed_tasks.push_back(&claim);
+		// The compiler-neutral writer accepts only the validated task/result pair. The v4 receipts
+		// remain frontend provenance and are bound as an opaque strong source receipt; they no
+		// longer constitute a second Store publication authority.
 		auto source =
-			materialization::make_materialization_v4_grouped_store_source(*engine,
-																		  *incremental_receipt,
-																		  sealed_tasks,
-																		  *base_partitions,
-																		  reference_claims,
-																		  std::move(output));
+			sdk::detail::make_materialization_publication_source(*engine,
+																 execution.task,
+																 *validated_generic_result,
+																 *base_partitions,
+																 receipt->receipt_digest);
 		if (!source)
 			return sdk::unexpected(std::move(source.error()));
 		// snapshot_store takes ownership of its engine. Retain an immutable validation copy for the
@@ -2141,7 +2116,7 @@ namespace cxxlens::detail::clang22
 				return sdk::unexpected(std::move(parent.error()));
 			observed_parent_record = parent->publication();
 		}
-		auto published_source = materialization::publish_materialization_v4_store_source(
+		auto published_source = sdk::detail::publish_materialization_source(
 			publication_engine,
 			*store,
 			std::move(*source),
@@ -2150,7 +2125,7 @@ namespace cxxlens::detail::clang22
 				: std::nullopt);
 		if (!published_source)
 			return sdk::unexpected(std::move(published_source.error()));
-		auto snapshot = std::move(published_source->snapshot);
+		auto& snapshot = published_source->snapshot;
 		// A committed handle is not sufficient for the installed success boundary.  Re-open the
 		// current selector, publication, and snapshot while the backend is still owned so a caller
 		// cannot report success for a commit that is immediately unreadable or bound to another
@@ -2176,22 +2151,13 @@ namespace cxxlens::detail::clang22
 			return sdk::unexpected(std::move(canonical_export.error()));
 		const auto canonical_export_digest = sdk::content_digest(
 			std::as_bytes(std::span{canonical_export->data(), canonical_export->size()}));
-		// Retain the established single-task receipt field for generic publication consumers while
-		// exposing the complete six-batch receipt on the installed bridge publication.
-		materialization::materialization_v4_store_publication publication{
-			std::move(snapshot),
-			std::move(published_source->authority),
-			std::move(published_source->receipt),
-			receipt->receipt_digest,
-			static_cast<std::uint64_t>(claims.size()),
-			published_source->publication_verified};
 		return materializer_store_execution{std::move(execution),
 											std::move(claims),
 											std::move(*base_partitions),
 											std::move(reference_claims),
 											std::move(*receipt),
 											std::move(*validated_generic_result),
-											std::move(publication),
+											std::move(*published_source),
 											std::move(observed_parent_record),
 											canonical_export_digest,
 											std::move(sqlite_effect_root_receipt)};

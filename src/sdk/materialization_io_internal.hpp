@@ -1,5 +1,9 @@
 #pragma once
 
+/** @file materialization_io_internal.hpp
+ *  @brief Compiler-neutral bounded materialization input and spool ports.
+ */
+
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -8,7 +12,7 @@
 #include <utility>
 #include <variant>
 
-namespace cxxlens::detail::clang22::materialization
+namespace cxxlens::sdk::detail
 {
 	inline constexpr std::uint64_t maximum_raw_request_bytes = 1U << 30U;
 	inline constexpr std::size_t default_stream_chunk_bytes = std::size_t{64U} * 1024U;
@@ -279,4 +283,4 @@ namespace cxxlens::detail::clang22::materialization
 	capture_bounded_input(materialization_byte_reader& input,
 						  materialization_private_spool& spool,
 						  bounded_input_options options = {});
-} // namespace cxxlens::detail::clang22::materialization
+} // namespace cxxlens::sdk::detail

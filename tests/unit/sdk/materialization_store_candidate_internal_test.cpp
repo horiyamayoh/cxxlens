@@ -1,4 +1,4 @@
-#include "llvm/clang22/materialization_store_candidate.hpp"
+#include "sdk/materialization_store_candidate_internal.hpp"
 
 #include <algorithm>
 #include <array>
@@ -16,7 +16,7 @@
 
 namespace
 {
-	using namespace cxxlens::detail::clang22::materialization;
+	using namespace cxxlens::sdk::detail;
 	using cxxlens::sdk::error;
 	using cxxlens::sdk::result;
 

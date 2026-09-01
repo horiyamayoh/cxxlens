@@ -27,8 +27,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "materialization_io.hpp"
 #include "materialization_sqlite_abi.hpp"
+#include "sdk/materialization_io_internal.hpp"
 #include "sdk/sqlite_backend_effect_gate_internal.hpp"
 #include "sdk/sqlite_backend_observation_internal.hpp"
 #include "sdk/sqlite_private_snapshot_internal.hpp"
@@ -46,6 +46,8 @@
 
 namespace cxxlens::detail::clang22::materialization
 {
+	using namespace sdk::detail;
+
 	namespace
 	{
 		constexpr int sqlite_ok = 0;

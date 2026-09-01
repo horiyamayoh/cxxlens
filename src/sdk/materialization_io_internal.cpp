@@ -1,4 +1,4 @@
-#include "materialization_io.hpp"
+#include "materialization_io_internal.hpp"
 
 #include <algorithm>
 #include <array>
@@ -22,7 +22,7 @@
 #include <sys/syscall.h>
 #endif
 
-namespace cxxlens::detail::clang22::materialization
+namespace cxxlens::sdk::detail
 {
 	namespace
 	{
@@ -615,4 +615,4 @@ namespace cxxlens::detail::clang22::materialization
 		incremental_sha256 digest;
 		return capture_bounded_input(input, spool, digest, options);
 	}
-} // namespace cxxlens::detail::clang22::materialization
+} // namespace cxxlens::sdk::detail

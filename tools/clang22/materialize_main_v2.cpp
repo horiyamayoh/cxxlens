@@ -15,18 +15,19 @@
 
 #include "llvm/clang22/installed_materializer_source_closure.hpp"
 #include "llvm/clang22/materialization_admission_error.hpp"
-#include "llvm/clang22/materialization_io.hpp"
 #include "llvm/clang22/materialization_json.hpp"
 #include "llvm/clang22/materialization_occurrence.hpp"
 #include "llvm/clang22/materialization_request_v2_2.hpp"
 #include "llvm/clang22/materializer_report_v2_2_encoder.hpp"
 #include "llvm/clang22/materializer_worker_bridge.hpp"
+#include "sdk/materialization_io_internal.hpp"
 
 namespace
 {
 	using namespace cxxlens;
 	using namespace cxxlens::detail::clang22;
 	using namespace cxxlens::detail::clang22::materialization;
+	using namespace cxxlens::sdk::detail;
 
 	[[nodiscard]] sdk::result<json_value> text_value(const std::string_view value)
 	{

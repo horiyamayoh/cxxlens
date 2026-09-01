@@ -727,8 +727,9 @@ namespace
 				published->result.terminal() != sdk::detail::materialization_terminal::complete ||
 				published->result.partitions().size() != task_v4_output_descriptor_ids.size() ||
 				published->result.closures().size() != task_v4_output_descriptor_ids.size() ||
-				published->publication.output_batch_count != task_v4_output_descriptor_ids.size() ||
-				published->publication.output_receipt_digest != published->receipt.receipt_digest ||
+				published->publication.source_receipt_digest != published->receipt.receipt_digest ||
+				published->publication.result_digest != published->result.result_digest() ||
+				published->publication.task_id != published->result.task_id() ||
 				published->receipt.claim_count == 0U || !published->receipt.complete)
 				std::abort();
 		}

@@ -1,4 +1,4 @@
-#include "llvm/clang22/materialization_io.hpp"
+#include "sdk/materialization_io_internal.hpp"
 
 #include <algorithm>
 #include <array>
@@ -24,7 +24,7 @@
 
 namespace
 {
-	using namespace cxxlens::detail::clang22::materialization;
+	using namespace cxxlens::sdk::detail;
 
 	void require(const bool condition, const std::string_view message)
 	{

@@ -1,19 +1,27 @@
 #include "sdk/materialization_task_internal.hpp"
 
 #include <cstdlib>
+#include <iostream>
+#include <source_location>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "sdk/materialization_writer_internal.hpp"
 
 namespace
 {
 	using namespace cxxlens::sdk;
 	using namespace cxxlens::sdk::detail;
 
-	void require(const bool condition)
+	void require(const bool condition,
+				 const std::source_location location = std::source_location::current())
 	{
 		if (!condition)
+		{
+			std::cerr << location.file_name() << ':' << location.line() << '\n';
 			std::abort();
+		}
 	}
 
 	[[nodiscard]] std::string content(const char digit)
@@ -204,7 +212,7 @@ namespace
 										   {}},
 										  {{{"catalog:series",
 											 "channel:main",
-											 "engine-generation:one",
+											 std::string{engine.generation()},
 											 "condition-universe:one",
 											 std::string{engine.registry_digest()},
 											 semantic('2'),
@@ -319,10 +327,48 @@ namespace
 		auto atomic_reject = validate_materialization_result(engine, *task, std::move(malformed));
 		require(!atomic_reject);
 	}
+
+	void single_writer_publication_and_rejection()
+	{
+		const auto relation = descriptor();
+		const auto engine = engine_for(relation);
+		auto task = validate_materialization_task(task_draft(relation, engine));
+		require(task.has_value());
+		materialization_result_draft complete;
+		complete.terminal = materialization_terminal::complete;
+		complete.task_id = task->id();
+		complete.task_input_digest = task->input_binding_digest();
+		complete.runtime = runtime_for(*task);
+		complete.partitions = {partition_for(relation)};
+		complete.coverage = {{"relation", relation.id, "covered", {}}};
+		auto result = validate_materialization_result(engine, *task, std::move(complete));
+		require(result.has_value());
+		auto source =
+			make_materialization_publication_source(engine, *task, *result, {}, semantic('e'));
+		if (!source)
+			std::cerr << source.error().code << ':' << source.error().field << ':'
+					  << source.error().detail << '\n';
+		require(source.has_value());
+		auto store = make_in_memory_snapshot_store(engine);
+		require(store.has_value());
+		auto published = publish_materialization_source(engine, *store, std::move(*source));
+		require(published.has_value());
+		require(published->publication_verified);
+		require(published->snapshot.publication().state == publication_state::committed);
+		require(published->task_id == result->task_id());
+		require(published->result_digest == result->result_digest());
+		require(published->source_receipt_digest == semantic('e'));
+
+		const auto empty_host = partition_for(relation);
+		auto rejected_host = make_materialization_publication_source(
+			engine, *task, *result, std::span{&empty_host, 1U}, semantic('e'));
+		require(!rejected_host && rejected_host.error().detail == "empty");
+	}
 } // namespace
 
 int main()
 {
 	task_authority_and_determinism();
 	result_terminals_and_atomic_rejection();
+	single_writer_publication_and_rejection();
 }

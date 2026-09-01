@@ -12,9 +12,10 @@
 
 #include "installed_materializer_source_closure.hpp"
 #include "materialization_rooted_vfs.hpp"
-#include "materialization_v4_store_source.hpp"
+#include "materialization_v4_claim_binding.hpp"
 #include "provider_trust_issuer_internal.hpp"
 #include "sdk/materialization_task_internal.hpp"
+#include "sdk/materialization_writer_internal.hpp"
 #include "sdk/provider_runtime_internal.hpp"
 
 namespace cxxlens::detail::clang22
@@ -85,7 +86,7 @@ namespace cxxlens::detail::clang22
 		std::vector<sdk::claim> reference_claims;
 		materializer_task_output_receipt receipt;
 		sdk::detail::validated_materialization_result result;
-		materialization::materialization_v4_store_publication publication;
+		sdk::detail::materialization_store_publication publication;
 		/** Exact committed parent observed before the invocation publication, when non-genesis. */
 		std::optional<sdk::publication_record> observed_parent_record;
 		/** SDK canonical export identity captured before the backend lifetime is released. */
@@ -101,7 +102,7 @@ namespace cxxlens::detail::clang22
 			std::vector<sdk::claim> reference_claims,
 			materializer_task_output_receipt receipt,
 			sdk::detail::validated_materialization_result result,
-			materialization::materialization_v4_store_publication publication,
+			sdk::detail::materialization_store_publication publication,
 			std::optional<sdk::publication_record> observed_parent_record,
 			std::string canonical_export_digest,
 			std::optional<materialization::materialization_rooted_vfs_receipt>

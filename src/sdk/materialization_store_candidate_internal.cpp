@@ -1,4 +1,4 @@
-#include "materialization_store_candidate.hpp"
+#include "materialization_store_candidate_internal.hpp"
 
 #include <algorithm>
 #include <array>
@@ -10,7 +10,7 @@
 #include <string_view>
 #include <utility>
 
-namespace cxxlens::detail::clang22::materialization
+namespace cxxlens::sdk::detail
 {
 	namespace
 	{
@@ -980,4 +980,4 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(allocation_failure("candidate"));
 		}
 	}
-} // namespace cxxlens::detail::clang22::materialization
+} // namespace cxxlens::sdk::detail

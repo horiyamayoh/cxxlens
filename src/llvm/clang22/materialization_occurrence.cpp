@@ -21,11 +21,13 @@
 #endif
 
 #include "materialization_identity.hpp"
-#include "materialization_io.hpp"
 #include "materialization_json.hpp"
+#include "sdk/materialization_io_internal.hpp"
 
 namespace cxxlens::detail::clang22::materialization
 {
+	using namespace sdk::detail;
+
 	namespace
 	{
 		constexpr std::array<std::string_view, 13U> static_roles{

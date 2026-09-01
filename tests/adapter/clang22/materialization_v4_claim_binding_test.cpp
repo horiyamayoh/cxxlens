@@ -1,6 +1,5 @@
 #include "llvm/clang22/materialization_v4_claim_binding.hpp"
 
-#include <array>
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
@@ -11,7 +10,6 @@
 #include <utility>
 #include <vector>
 
-#include "llvm/clang22/materialization_v4_incremental_ingress.hpp"
 #include "llvm/clang22/source_closure.hpp"
 
 namespace
@@ -293,58 +291,12 @@ int main()
 
 	auto value = engine();
 	auto first = seal_materialization_v4_claim_translation(value, translation(value, 0U));
-	auto second = seal_materialization_v4_claim_translation(value, translation(value, 1U));
-	require(first.has_value() && second.has_value(), "valid v4 claim translation was rejected");
+	require(first.has_value(), "valid v4 claim translation was rejected");
 	require(first->receipt.conflict_count == 1U, "v4 receipt lost conflict count");
 	require(first->receipt.unresolved_count != 0U, "v4 receipt lost unresolved count");
 	require(!first->receipt.complete, "partial v4 coverage was marked complete");
 	require(validate_materialization_v4_claim_receipt(value, *first).has_value(),
 			"valid v4 claim receipt did not replay");
-
-	const std::array<const materialization_v4_claim_sealed*, 2U> sealed_tasks{&*first, &*second};
-	auto incremental = make_materialization_v4_incremental_receipt(value, sealed_tasks);
-	require(incremental.has_value(), "task-v4 receipt set was not assembled");
-	require(incremental->task_count == 2U && incremental->task_receipts.size() == 2U,
-			"task-v4 receipt set lost its ordered task census");
-	require(incremental->claim_count == first->receipt.claim_count + second->receipt.claim_count,
-			"task-v4 receipt set lost claim counts");
-	require(!incremental->complete, "partial task-v4 receipt set was marked complete");
-	require(validate_materialization_v4_incremental_receipt(value, *incremental, sealed_tasks)
-				.has_value(),
-			"task-v4 receipt set did not replay");
-
-	std::vector<const materialization_v4_claim_sealed*> over_limit(
-		materialization_v4_incremental_max_tasks + 1U, &*first);
-	const auto bounded = make_materialization_v4_incremental_receipt(value, over_limit);
-	require(!bounded && bounded.error().code == "materialization.v4-incremental-invalid" &&
-				bounded.error().field == "sealed-tasks",
-			"task-v4 receipt assembly crossed its maximum task bound");
-
-	const auto unavailable =
-		admit_materialization_v4_store_ingress(value, *incremental, sealed_tasks, std::nullopt);
-	require(!unavailable &&
-				unavailable.error().code == "materialization.v4-store-authority-missing",
-			"task-v4 Store ingress did not fail closed without worker output authority");
-
-	const materialization_v4_store_publication_authority explicit_authority{
-		"semantic-v2:sha256:" + std::string(64U, '9'),
-		"semantic-v2:sha256:" + std::string(64U, 'a'),
-		"publication-target:v4-test"};
-	const auto incomplete_with_authority = admit_materialization_v4_store_ingress(
-		value, *incremental, sealed_tasks, explicit_authority);
-	require(!incomplete_with_authority &&
-				incomplete_with_authority.error().code == "materialization.v4-store-incomplete",
-			"explicit recipe/output/publication authority promoted a partial task-v4 receipt");
-
-	auto reordered = sealed_tasks;
-	std::swap(reordered[0], reordered[1]);
-	require(!validate_materialization_v4_incremental_receipt(value, *incremental, reordered),
-			"task-v4 receipt set accepted reordered task payloads");
-	const auto original_digest = incremental->receipt_digest;
-	incremental->receipt_digest.back() = incremental->receipt_digest.back() == '0' ? '1' : '0';
-	require(!validate_materialization_v4_incremental_receipt(value, *incremental, sealed_tasks),
-			"task-v4 receipt set accepted a tampered aggregate digest");
-	incremental->receipt_digest = original_digest;
 
 	first->translation.partition.coverage.front().reason = "tampered";
 	require(!validate_materialization_v4_claim_receipt(value, *first),

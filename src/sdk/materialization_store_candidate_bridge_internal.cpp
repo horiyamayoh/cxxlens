@@ -1,10 +1,10 @@
-#include "materialization_store_candidate_bridge.hpp"
+#include "materialization_store_candidate_bridge_internal.hpp"
 
 #include <memory>
 #include <new>
 #include <utility>
 
-namespace cxxlens::detail::clang22::materialization
+namespace cxxlens::sdk::detail
 {
 	namespace
 	{
@@ -189,4 +189,4 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(std::move(*publication_error));
 		return output;
 	}
-} // namespace cxxlens::detail::clang22::materialization
+} // namespace cxxlens::sdk::detail

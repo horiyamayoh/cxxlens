@@ -1,4 +1,4 @@
-#include "llvm/clang22/materialization_store_candidate_bridge.hpp"
+#include "sdk/materialization_store_candidate_bridge_internal.hpp"
 
 #include <array>
 #include <cstdlib>
@@ -10,7 +10,7 @@
 
 namespace
 {
-	using namespace cxxlens::detail::clang22::materialization;
+	using namespace cxxlens::sdk::detail;
 	using cxxlens::sdk::result;
 
 	void require(const bool condition, const char* message)
@@ -120,7 +120,7 @@ namespace
 
 int main()
 {
-	using namespace cxxlens::detail::clang22::materialization;
+	using namespace cxxlens::sdk::detail;
 	{
 		auto result = run_materialization_store_candidate_bridge(make_request(false, false));
 		require(result.has_value(), "positive bridge failed");

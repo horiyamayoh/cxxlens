@@ -1,7 +1,7 @@
 #pragma once
 
 /**
- * @file materialization_store_candidate_bridge.hpp
+ * @file materialization_store_candidate_bridge_internal.hpp
  * @brief The narrow production bridge between materializer streams and the bounded Store port.
  *
  * This file intentionally owns no SDK writer, SQLite cursor, report DOM, or protocol codec.  The
@@ -20,9 +20,9 @@
 
 #include <cxxlens/sdk/common.hpp>
 
-#include "materialization_store_candidate.hpp"
+#include "materialization_store_candidate_internal.hpp"
 
-namespace cxxlens::detail::clang22::materialization
+namespace cxxlens::sdk::detail
 {
 	using materialization_store_bridge_task_consumer =
 		std::function<sdk::result<void>(std::span<const std::byte>)>;
@@ -87,4 +87,4 @@ namespace cxxlens::detail::clang22::materialization
 	[[nodiscard]] sdk::result<materialization_store_candidate_bridge_result>
 	run_materialization_store_candidate_bridge(
 		materialization_store_candidate_bridge_request request);
-} // namespace cxxlens::detail::clang22::materialization
+} // namespace cxxlens::sdk::detail

@@ -28,7 +28,7 @@ namespace cxxlens::detail::clang22
 		using materialization::materialization_occurrence_file;
 		using materialization::materialization_occurrence_manifest_path;
 		using materialization::measured_materialization_occurrence;
-		using materialization::raw_input_observation;
+		using sdk::detail::raw_input_observation;
 		namespace provider_detail = sdk::provider::detail;
 
 		[[nodiscard]] sdk::error failure(std::string field, std::string detail = {})
