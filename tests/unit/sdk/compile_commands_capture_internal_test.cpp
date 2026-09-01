@@ -1,14 +1,21 @@
 #include "sdk/compile_commands_capture_internal.hpp"
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdlib>
 #include <iostream>
+#include <ranges>
 #include <source_location>
 #include <string>
 #include <string_view>
+#include <vector>
+
+#include "sdk/gcc_capture_bundle_internal.hpp"
 
 namespace
 {
 	using cxxlens::sdk::detail::decode_compile_commands;
+	using cxxlens::sdk::detail::encode_gcc_compile_commands_bundle;
 
 	void require(const bool condition,
 				 const std::source_location location = std::source_location::current())
@@ -128,6 +135,150 @@ namespace
 					  "string-byte-limit",
 					  limits);
 	}
+
+	[[nodiscard]] cxxlens::sdk::detail::captured_text_observation observed(std::string value)
+	{
+		return {
+			cxxlens::sdk::detail::capture_observation_state::observed, std::move(value), {}, {}};
+	}
+
+	[[nodiscard]] cxxlens::sdk::detail::gcc_compile_commands_bundle_input bundle_input()
+	{
+		const std::string source{"int main() { return 0; }\n"};
+		cxxlens::sdk::detail::gcc_compile_commands_bundle_input input;
+		input.project_id = "project:gcc-compile-commands";
+		input.physical_project_root = "/work";
+		input.toolchain.exact_version = "16.2.0";
+		input.toolchain.canonical_binary_path = observed("/opt/gcc-16.2.0/bin/g++");
+		input.toolchain.binary_digest = observed("sha256:" + std::string(64U, '1'));
+		input.toolchain.target_triple = "x86_64-linux-gnu";
+		input.toolchain.sysroot = observed("/opt/gcc-16.2.0/sysroot");
+		input.toolchain.abi_digest = observed("sha256:" + std::string(64U, '2'));
+		input.toolchain.builtin_headers_digest = observed("sha256:" + std::string(64U, '3'));
+		input.toolchain.builtin_macros_digest = observed("sha256:" + std::string(64U, '4'));
+		input.toolchain.include_search_digest = observed("sha256:" + std::string(64U, '5'));
+		input.sources.push_back(
+			{std::vector<std::byte>{
+				 reinterpret_cast<const std::byte*>(source.data()),
+				 reinterpret_cast<const std::byte*>(source.data() + source.size())},
+			 "utf8"});
+		return input;
+	}
+
+	[[nodiscard]] bool has_gap(const cxxlens::sdk::capture_bundle& bundle,
+							   const std::string_view field,
+							   const std::string_view reason)
+	{
+		return std::ranges::any_of(bundle.gaps(),
+								   [&](const auto& gap)
+								   {
+									   return gap.field == field && gap.reason == reason;
+								   });
+	}
+
+	void canonical_bundle_projection_is_validated_and_deterministic()
+	{
+		constexpr std::string_view database = R"json([
+  {"directory":"/work/build","file":"../src/main.cpp",
+   "arguments":["/opt/gcc-16.2.0/bin/g++","-std=gnu++23","-I/host/a",
+                "--sysroot=/machine/a","-c","../src/main.cpp"]}
+])json";
+		auto capture = decode_compile_commands(database);
+		require(static_cast<bool>(capture));
+		auto input = bundle_input();
+		input.toolchain.sysroot = observed("/machine/a");
+		auto encoded = encode_gcc_compile_commands_bundle(*capture, input);
+		auto repeated = encode_gcc_compile_commands_bundle(*capture, input);
+		require(encoded && repeated && *encoded == *repeated);
+		auto relocated_capture = decode_compile_commands(R"json([
+  {"directory":"/mirror/build","file":"../src/main.cpp",
+   "arguments":["/opt/gcc-16.2.0/bin/g++","-std=gnu++23","-I/host/b",
+                "--sysroot=/machine/b","-c","../src/main.cpp"]}
+])json");
+		require(static_cast<bool>(relocated_capture));
+		auto relocated_input = input;
+		relocated_input.physical_project_root = "/mirror";
+		relocated_input.toolchain.sysroot = observed("/machine/b");
+		auto relocated = encode_gcc_compile_commands_bundle(*relocated_capture, relocated_input);
+		require(static_cast<bool>(relocated));
+		auto encoded_value = cxxlens::sdk::canonical_binary_decode(*encoded);
+		auto relocated_value = cxxlens::sdk::canonical_binary_decode(*relocated);
+		require(encoded_value && relocated_value);
+		require(encoded_value->tuple[5].tuple[0].tuple[0].text ==
+				relocated_value->tuple[5].tuple[0].tuple[0].text);
+
+		auto decoded = cxxlens::sdk::decode_capture_bundle(*encoded);
+		require(static_cast<bool>(decoded));
+		require(decoded->production_compiler() == "gcc-16.2.0");
+		require(decoded->capture_adapter() == "compile-commands");
+		require(decoded->project_id() == "project:gcc-compile-commands");
+		require(decoded->compile_unit_count() == 1U);
+		require(has_gap(
+			*decoded, "source_closures[0].membership_coverage", "dependency-output-unobserved"));
+		require(has_gap(
+			*decoded, "compile_units[0].environment_effects", "environment-effects-unobserved"));
+		auto imported = cxxlens::sdk::import_capture(*decoded);
+		require(imported && imported->replay_plans().size() == 1U);
+		require(std::ranges::any_of(imported->unresolved(),
+									[](const auto& gap)
+									{
+										return gap.reason == "dependency-output-unobserved";
+									}));
+	}
+
+	void projection_rejects_mismatched_or_untrusted_observations()
+	{
+		constexpr std::string_view database = R"json([
+  {"directory":"/work/build","file":"../src/main.cpp",
+   "arguments":["g++","-std=c++23","-c","../src/main.cpp"]}
+])json";
+		auto capture = decode_compile_commands(database);
+		require(static_cast<bool>(capture));
+
+		auto missing_source = bundle_input();
+		missing_source.sources.clear();
+		auto missing = encode_gcc_compile_commands_bundle(*capture, missing_source);
+		require(!missing && missing.error().detail == "compile-unit-count-mismatch");
+
+		auto unpinned = bundle_input();
+		unpinned.toolchain.exact_version = "16.2.1";
+		auto wrong_version = encode_gcc_compile_commands_bundle(*capture, unpinned);
+		require(!wrong_version && wrong_version.error().detail == "not-pinned");
+
+		auto outside_capture = decode_compile_commands(
+			R"([{"directory":"/outside","file":"main.cpp","arguments":["g++","main.cpp"]}])");
+		require(static_cast<bool>(outside_capture));
+		auto outside = encode_gcc_compile_commands_bundle(*outside_capture, bundle_input());
+		require(!outside && outside.error().detail == "path-outside-project-root");
+
+		auto bounded = bundle_input();
+		auto limits = cxxlens::sdk::import_limits{};
+		limits.maximum_source_closure_bytes = 4U;
+		auto too_large = encode_gcc_compile_commands_bundle(*capture, bounded, limits);
+		require(!too_large && too_large.error().detail == "byte-count");
+	}
+
+	void duplicate_source_variants_share_one_canonical_closure()
+	{
+		constexpr std::string_view database = R"json([
+  {"directory":"/work/build","file":"../src/main.cpp",
+   "arguments":["g++","-DVARIANT=one","-std=c++23","../src/main.cpp"]},
+  {"directory":"/work/build","file":"../src/main.cpp",
+   "arguments":["g++","-DVARIANT=two","-std=c++23","../src/main.cpp"]}
+])json";
+		auto capture = decode_compile_commands(database);
+		require(static_cast<bool>(capture));
+		auto input = bundle_input();
+		input.sources.push_back(input.sources.front());
+		auto encoded = encode_gcc_compile_commands_bundle(*capture, input);
+		require(static_cast<bool>(encoded));
+		auto value = cxxlens::sdk::canonical_binary_decode(*encoded);
+		require(static_cast<bool>(value));
+		require(value->tuple[5].tuple.size() == 2U);
+		require(value->tuple[6].tuple.size() == 1U);
+		require(value->tuple[5].tuple[0].tuple[0].text != value->tuple[5].tuple[1].tuple[0].text);
+		require(value->tuple[5].tuple[0].tuple[15].text == value->tuple[5].tuple[1].tuple[15].text);
+	}
 } // namespace
 
 int main()
@@ -136,4 +287,7 @@ int main()
 	command_form_is_decoded_without_shell_expansion();
 	malformed_and_shell_dependent_inputs_fail_closed();
 	explicit_bounds_apply_before_adoption();
+	canonical_bundle_projection_is_validated_and_deterministic();
+	projection_rejects_mismatched_or_untrusted_observations();
+	duplicate_source_variants_share_one_canonical_closure();
 }
