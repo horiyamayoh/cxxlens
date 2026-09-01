@@ -1,0 +1,77 @@
+schema: cxxlens.application-analysis-support.v1
+document_version: 1.0.0
+maturity: experimental
+host_package_support:
+  authority: schemas/cxxlens_support_matrix.yaml
+  disposition: unchanged
+toolchain_pins:
+  gcc:
+    family: gcc
+    exact_version: 16.2.0
+    source: https://gcc.gnu.org/pub/gcc/releases/gcc-16.2.0/
+  msvc:
+    family: msvc
+    exact_version: 19.51.36247
+    source: https://learn.microsoft.com/en-us/visualstudio/releases/2026/release-history
+    distribution_version: 18.9.2
+    distribution_build: "12120.119"
+    toolset_version: 14.51.36247
+  windows_sdk:
+    family: windows-sdk
+    exact_version: 10.0.28000.2705
+    source: https://learn.microsoft.com/en-us/windows/apps/windows-sdk/downloads
+  clang_replay:
+    family: clang
+    exact_version: 23.1.0
+    source: https://github.com/llvm/llvm-project/releases/tag/llvmorg-23.1.0
+  windows_runner:
+    label: windows-2025-vs2026
+    ambient_defaults_authoritative: false
+    exact_toolchain_assertion: required
+targets:
+  - id: gcc-x86_64-linux
+    implementation_state: planned
+    availability: unavailable
+    production_compiler: gcc-16.2.0
+    capture_adapters: [compile-commands, shell-free-wrapper]
+    analysis_frontend: clang-23.1.0-gcc-mode
+    target_abi: x86_64-linux-gnu
+    relations:
+      - build.project.v1
+      - build.compile_unit.v1
+      - build.variant.v1
+      - build.toolchain_context.v1
+      - source.file.v1
+      - source.span.v1
+      - cc.entity.v1
+      - cc.declaration.v1
+      - cc.type.v1
+      - cc.call_site.v1
+      - cc.call_direct_target.v1
+    interpretation: cc.clang23-gcc-replay-1
+    guarantee_floor: frontend-replayed
+    incomplete_result: partial
+    completion_action: Capture the missing compiler effect or use a qualified native gap provider.
+  - id: msvc-x64-windows
+    implementation_state: planned
+    availability: unavailable
+    production_compiler: msvc-19.51.36247
+    capture_adapters: [msbuild-cltool-proxy]
+    analysis_frontend: clang-cl-23.1.0
+    target_abi: x86_64-pc-windows-msvc
+    relations:
+      - build.project.v1
+      - build.compile_unit.v1
+      - build.variant.v1
+      - build.toolchain_context.v1
+      - source.file.v1
+      - source.span.v1
+      - cc.entity.v1
+      - cc.declaration.v1
+      - cc.type.v1
+      - cc.call_site.v1
+      - cc.call_direct_target.v1
+    interpretation: cc.clangcl23-msvc-replay-1
+    guarantee_floor: frontend-replayed
+    incomplete_result: partial
+    completion_action: Recapture missing MSVC inputs or provide a complete replay dependency bundle.

@@ -1,0 +1,107 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.application-analysis-support.v1
+title: cxxlens application analysis support contract
+type: object
+additionalProperties: false
+required: [schema, document_version, maturity, host_package_support, toolchain_pins, targets]
+properties:
+  schema: {const: cxxlens.application-analysis-support.v1}
+  document_version: {$ref: '#/$defs/version'}
+  maturity: {const: experimental}
+  host_package_support:
+    type: object
+    additionalProperties: false
+    required: [authority, disposition]
+    properties:
+      authority: {const: schemas/cxxlens_support_matrix.yaml}
+      disposition: {const: unchanged}
+  toolchain_pins:
+    type: object
+    additionalProperties: false
+    required: [gcc, msvc, windows_sdk, clang_replay, windows_runner]
+    properties:
+      gcc: {$ref: '#/$defs/toolchain'}
+      msvc:
+        allOf:
+          - {$ref: '#/$defs/toolchain'}
+          - type: object
+            required: [distribution_version, distribution_build, toolset_version]
+            properties:
+              distribution_version: {$ref: '#/$defs/version'}
+              distribution_build: {type: string, pattern: '^[0-9]+\.[0-9]+$'}
+              toolset_version: {type: string, pattern: '^14\.[0-9]+\.[0-9]+$'}
+      windows_sdk: {$ref: '#/$defs/toolchain'}
+      clang_replay: {$ref: '#/$defs/toolchain'}
+      windows_runner:
+        type: object
+        additionalProperties: false
+        required: [label, ambient_defaults_authoritative, exact_toolchain_assertion]
+        properties:
+          label: {const: windows-2025-vs2026}
+          ambient_defaults_authoritative: {const: false}
+          exact_toolchain_assertion: {const: required}
+  targets:
+    type: array
+    minItems: 2
+    maxItems: 2
+    items: {$ref: '#/$defs/target'}
+$defs:
+  version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+  id: {type: string, pattern: '^[a-z][a-z0-9_.-]+$'}
+  toolchain:
+    type: object
+    additionalProperties: false
+    required: [family, exact_version, source]
+    properties:
+      family: {enum: [gcc, msvc, windows-sdk, clang]}
+      exact_version: {type: string, minLength: 1, maxLength: 64}
+      source: {type: string, format: uri, pattern: '^https://'}
+      distribution_version: {$ref: '#/$defs/version'}
+      distribution_build: {type: string}
+      toolset_version: {type: string}
+  target:
+    type: object
+    additionalProperties: false
+    required:
+      - id
+      - implementation_state
+      - availability
+      - production_compiler
+      - capture_adapters
+      - analysis_frontend
+      - target_abi
+      - relations
+      - interpretation
+      - guarantee_floor
+      - incomplete_result
+      - completion_action
+    properties:
+      id: {enum: [gcc-x86_64-linux, msvc-x64-windows]}
+      implementation_state:
+        enum: [planned, capture-ready, replay-ready, materialization-ready]
+      availability: {enum: [unavailable, experimental]}
+      production_compiler: {$ref: '#/$defs/id'}
+      capture_adapters:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {enum: [compile-commands, shell-free-wrapper, msbuild-cltool-proxy]}
+      analysis_frontend: {$ref: '#/$defs/id'}
+      target_abi: {$ref: '#/$defs/id'}
+      relations:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {type: string, pattern: '^[a-z][a-z0-9_.]+\.v[1-9][0-9]*$'}
+      interpretation: {$ref: '#/$defs/id'}
+      guarantee_floor: {enum: [frontend-replayed]}
+      incomplete_result: {enum: [partial, unknown, conflicting]}
+      completion_action: {type: string, minLength: 1, maxLength: 512}
+    allOf:
+      - if:
+          properties: {implementation_state: {const: materialization-ready}}
+          required: [implementation_state]
+        then:
+          properties: {availability: {const: experimental}}
+        else:
+          properties: {availability: {const: unavailable}}

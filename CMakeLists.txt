@@ -909,6 +909,8 @@ install(
 # vectors, differential corpora, compatibility fixtures, and retired protocol
 # schemas; those are development inputs rather than installed product data.
 set(CXXLENS_PRODUCT_SCHEMA_FILES
+    schemas/cxxlens_application_analysis_support.schema.yaml
+    schemas/cxxlens_application_analysis_support.yaml
     schemas/cxxlens_ng_claim_envelope.schema.yaml
     schemas/cxxlens_ng_clang22_materialization_contract.yaml
     schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml

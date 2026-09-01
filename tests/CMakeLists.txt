@@ -1859,6 +1859,14 @@ foreach(
 endforeach()
 
 add_test(
+  NAME quality.application-analysis-support
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/quality/test_application_analysis_support.py")
+set_tests_properties(quality.application-analysis-support
+                     PROPERTIES LABELS "quality;contract;application-analysis")
+
+add_test(
   NAME quality.relation-idl-reproducibility
   COMMAND "${Python3_EXECUTABLE}"
           "${PROJECT_SOURCE_DIR}/tests/quality/test_relation_idl_compiler.py")
