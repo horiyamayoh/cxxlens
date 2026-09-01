@@ -1,5 +1,5 @@
 schema: cxxlens.build-capture-bundle.v1
-document_version: 1.2.0
+document_version: 1.3.0
 maturity: experimental
 encoding: cxxlens-canonical-tuple-v1
 purpose: Detached observations of an application build performed by a production compiler.
@@ -61,6 +61,7 @@ source_closure_tuple:
     - {index: 4, name: blob_count, type: nonnegative-integer}
     - {index: 5, name: unique_blob_bytes, type: nonnegative-integer}
     - {index: 6, name: members, type: ordered-tuple-of-source-closure-member}
+    - {index: 7, name: membership_coverage, type: captured-string, values: [complete]}
 source_closure_member_tuple:
   fields:
     - {index: 0, name: file_id, type: strong-id}
@@ -125,7 +126,8 @@ invariants:
   - observed-source-bytes-match-their-declared-size-and-content-digest
   - source-closure-member-blob-and-byte-censuses-are-recomputed-before-acceptance
   - source-closure-manifest-is-the-content-digest-of-the-canonical-members-tuple
-  - source-closure-digest-binds-manifest-and-all-three-recomputed-censuses
+  - source-closure-digest-binds-manifest-all-three-recomputed-censuses-and-membership-coverage
+  - incomplete-source-closure-membership-is-preserved-as-an-actionable-gap
   - every-compile-unit-source-is-bound-to-the-main-member-of-its-exact-source-closure
   - environment-is-deny-by-default-and-only-normalized-effects-are-carried
   - machine-root-pid-time-and-unordered-order-do-not-contribute-to-semantic-identity

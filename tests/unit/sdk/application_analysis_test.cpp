@@ -74,8 +74,11 @@ namespace
 		require(encoded_members);
 		closure.tuple[2] =
 			canonical_value::from_string(cxxlens::sdk::content_digest(*encoded_members));
-		const std::array fields{
-			closure.tuple[2], closure.tuple[3], closure.tuple[4], closure.tuple[5]};
+		const std::array fields{closure.tuple[2],
+								closure.tuple[3],
+								closure.tuple[4],
+								closure.tuple[5],
+								closure.tuple[7]};
 		auto closure_digest =
 			cxxlens::sdk::canonical_identity_digest("application-source-closure", fields);
 		require(closure_digest);
@@ -159,6 +162,7 @@ namespace
 				observed(canonical_value::from_string("utf8")),
 				canonical_value::from_boolean(true),
 			})}),
+			observed(canonical_value::from_string("complete")),
 		});
 		auto gaps = canonical_value::from_tuple({
 			gap("compile_units[0].config_files", "config-files-unobserved", "capture-config-files"),
@@ -410,6 +414,46 @@ namespace
 		require(partial_source_bytes);
 		auto partial_source_result = cxxlens::sdk::decode_capture_bundle(*partial_source_bytes);
 		require(partial_source_result && partial_source_result->gaps().size() == 3U);
+
+		auto unobserved_membership = valid_bundle();
+		unobserved_membership.tuple[6].tuple[0].tuple[7] =
+			unavailable("dependency-output-unobserved",
+						"recapture-with-shell-free-wrapper-or-run-dependency-probe");
+		unobserved_membership.tuple[7].tuple.push_back(
+			gap("source_closures[0].membership_coverage",
+				"dependency-output-unobserved",
+				"recapture-with-shell-free-wrapper-or-run-dependency-probe"));
+		rebind_source_closure(unobserved_membership);
+		auto unobserved_membership_bytes = canonical_binary(unobserved_membership);
+		require(unobserved_membership_bytes);
+		auto unobserved_membership_result =
+			cxxlens::sdk::decode_capture_bundle(*unobserved_membership_bytes);
+		require(unobserved_membership_result &&
+				has_reason(unobserved_membership_result->gaps(), "dependency-output-unobserved"));
+
+		auto invalid_membership = valid_bundle();
+		invalid_membership.tuple[6].tuple[0].tuple[7] =
+			observed(canonical_value::from_string("partial"));
+		rebind_source_closure(invalid_membership);
+		auto invalid_membership_bytes = canonical_binary(invalid_membership);
+		require(invalid_membership_bytes);
+		auto invalid_membership_result =
+			cxxlens::sdk::decode_capture_bundle(*invalid_membership_bytes);
+		require(!invalid_membership_result &&
+				invalid_membership_result.error().field ==
+					"source_closures[0].membership_coverage" &&
+				invalid_membership_result.error().detail == "enum");
+
+		auto direct_membership = valid_bundle();
+		direct_membership.tuple[6].tuple[0].tuple[7] = canonical_value::from_string("complete");
+		auto direct_membership_bytes = canonical_binary(direct_membership);
+		require(direct_membership_bytes);
+		auto direct_membership_result =
+			cxxlens::sdk::decode_capture_bundle(*direct_membership_bytes);
+		require(!direct_membership_result &&
+				direct_membership_result.error().field ==
+					"source_closures[0].membership_coverage" &&
+				direct_membership_result.error().detail == "tuple-shape");
 
 		auto forged_blob_census = valid_bundle();
 		forged_blob_census.tuple[6].tuple[0].tuple[4] = canonical_value::from_integer(0);

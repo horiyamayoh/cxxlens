@@ -125,7 +125,7 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
         self.assertIn("replay-fidelity", capture["authority"]["not_authoritative_for"])
         self.assertIn("production-compiler-exactness", replay["authority"]["not_authoritative_for"])
         self.assertIn("store-publication", detached["authority"]["not_authoritative_for"])
-        self.assertEqual(capture["document_version"], "1.2.0")
+        self.assertEqual(capture["document_version"], "1.3.0")
         self.assertEqual(
             [field["type"] for field in capture["toolchain_tuple"]["fields"][6:]],
             ["captured-digest"] * 4,
@@ -149,6 +149,13 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
                 "read_only",
             ],
         )
+        source_closure_fields = capture["source_closure_tuple"]["fields"]
+        self.assertEqual(
+            [field["index"] for field in source_closure_fields], list(range(8))
+        )
+        self.assertEqual(source_closure_fields[-1]["name"], "membership_coverage")
+        self.assertEqual(source_closure_fields[-1]["type"], "captured-string")
+        self.assertEqual(source_closure_fields[-1]["values"], ["complete"])
         compile_unit_fields = capture["compile_unit_tuple"]["fields"]
         self.assertEqual(
             [field["name"] for field in compile_unit_fields[-4:]],

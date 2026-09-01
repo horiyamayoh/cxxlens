@@ -107,13 +107,14 @@ int main()
 			observed(canonical_value::from_string("utf8")),
 			canonical_value::from_boolean(true),
 		})}),
+		observed(canonical_value::from_string("complete")),
 	});
 	auto encoded_members = cxxlens::sdk::canonical_binary(closure.tuple[6]);
 	if (!encoded_members)
 		return 1;
 	closure.tuple[2] = canonical_value::from_string(cxxlens::sdk::content_digest(*encoded_members));
 	const std::array closure_fields{
-		closure.tuple[2], closure.tuple[3], closure.tuple[4], closure.tuple[5]};
+		closure.tuple[2], closure.tuple[3], closure.tuple[4], closure.tuple[5], closure.tuple[7]};
 	auto closure_digest =
 		cxxlens::sdk::canonical_identity_digest("application-source-closure", closure_fields);
 	if (!closure_digest)

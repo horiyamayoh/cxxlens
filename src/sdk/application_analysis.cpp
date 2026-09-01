@@ -894,7 +894,7 @@ namespace cxxlens::sdk
 			{
 				const auto closure_prefix =
 					"source_closures[" + std::to_string(closure_index) + "]";
-				auto closure = require_tuple(closures.tuple[closure_index], closure_prefix, 7U);
+				auto closure = require_tuple(closures.tuple[closure_index], closure_prefix, 8U);
 				if (!closure)
 					return unexpected(std::move(closure.error()));
 				auto closure_id =
@@ -1047,6 +1047,16 @@ namespace cxxlens::sdk
 
 				if (unique_blobs.size() != *blobs || recomputed_bytes != *bytes)
 					return unexpected(invalid(closure_prefix, "blob-census-mismatch"));
+				if (auto valid = validate_captured((*closure.value())[7],
+												   closure_prefix + ".membership_coverage",
+												   canonical_value::kind::utf8_string,
+												   generated_gaps);
+					!valid)
+					return unexpected(std::move(valid.error()));
+				const auto& membership_coverage = (*closure.value())[7].tuple[1];
+				if (membership_coverage.type == canonical_value::kind::utf8_string &&
+					membership_coverage.text != "complete")
+					return unexpected(invalid(closure_prefix + ".membership_coverage", "enum"));
 				auto encoded_members = canonical_binary(closure_members);
 				if (!encoded_members)
 					return unexpected(invalid(closure_prefix + ".members", "canonical-encoding"));
@@ -1059,6 +1069,7 @@ namespace cxxlens::sdk
 					canonical_value::from_integer(static_cast<std::int64_t>(*members)),
 					canonical_value::from_integer(static_cast<std::int64_t>(*blobs)),
 					canonical_value::from_integer(static_cast<std::int64_t>(*bytes)),
+					(*closure.value())[7],
 				};
 				auto recomputed_closure =
 					canonical_identity_digest("application-source-closure", closure_fields);
