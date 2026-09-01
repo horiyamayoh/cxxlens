@@ -3,13 +3,15 @@
 #include <cstddef>
 #include <cstdint>
 #include <iomanip>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
 
 namespace cxxlens::sdk::detail
 {
-	[[nodiscard]] inline bool valid_utf8(const std::string_view input) noexcept
+	[[nodiscard]] inline std::optional<std::size_t>
+	invalid_utf8_offset(const std::string_view input) noexcept
 	{
 		std::size_t index{};
 		while (index < input.size())
@@ -42,22 +44,27 @@ namespace cxxlens::sdk::detail
 				minimum = 0x10000U;
 			}
 			else
-				return false;
-			if (index + width > input.size())
-				return false;
+				return index;
+			if (width > input.size() - index)
+				return index;
 			for (std::size_t offset = 1U; offset < width; ++offset)
 			{
 				const auto continuation = static_cast<unsigned char>(input[index + offset]);
 				if ((continuation & 0xc0U) != 0x80U)
-					return false;
+					return index + offset;
 				code_point = (code_point << 6U) | (continuation & 0x3fU);
 			}
 			if (code_point < minimum || code_point > 0x10ffffU ||
 				(code_point >= 0xd800U && code_point <= 0xdfffU))
-				return false;
+				return index;
 			index += width;
 		}
-		return true;
+		return std::nullopt;
+	}
+
+	[[nodiscard]] inline bool valid_utf8(const std::string_view input) noexcept
+	{
+		return !invalid_utf8_offset(input).has_value();
 	}
 
 	inline void append_json_hex_escape(std::ostringstream& output, const unsigned char byte)

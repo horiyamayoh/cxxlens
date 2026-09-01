@@ -1,337 +1,42 @@
 #include <algorithm>
 #include <array>
-#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <map>
 #include <ranges>
 #include <set>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include <cxxlens/sdk/query.hpp>
 
-#include "json_internal.hpp"
+#include "bounded_json_internal.hpp"
 
 namespace cxxlens::sdk::query
 {
 	namespace
 	{
+		using json_value = cxxlens::sdk::detail::json_value;
+
 		[[nodiscard]] error decode_error(std::string field, std::string detail)
 		{
 			return {"sdk.query-argument-invalid", std::move(field), std::move(detail)};
 		}
 
-		struct json_value
+		[[nodiscard]] result<const json_value::object_type*> as_object(const json_value& value,
+																	   const std::string_view field)
 		{
-			using array = std::vector<json_value>;
-			using object = std::map<std::string, json_value, std::less<>>;
-			std::variant<std::monostate,
-						 bool,
-						 std::int64_t,
-						 std::uint64_t,
-						 std::string,
-						 array,
-						 object>
-				value;
-		};
-
-		void append_utf8(std::string& output, const std::uint32_t code_point)
-		{
-			if (code_point <= 0x7fU)
-				output.push_back(static_cast<char>(code_point));
-			else if (code_point <= 0x7ffU)
-			{
-				output.push_back(static_cast<char>(0xc0U | (code_point >> 6U)));
-				output.push_back(static_cast<char>(0x80U | (code_point & 0x3fU)));
-			}
-			else if (code_point <= 0xffffU)
-			{
-				output.push_back(static_cast<char>(0xe0U | (code_point >> 12U)));
-				output.push_back(static_cast<char>(0x80U | ((code_point >> 6U) & 0x3fU)));
-				output.push_back(static_cast<char>(0x80U | (code_point & 0x3fU)));
-			}
-			else
-			{
-				output.push_back(static_cast<char>(0xf0U | (code_point >> 18U)));
-				output.push_back(static_cast<char>(0x80U | ((code_point >> 12U) & 0x3fU)));
-				output.push_back(static_cast<char>(0x80U | ((code_point >> 6U) & 0x3fU)));
-				output.push_back(static_cast<char>(0x80U | (code_point & 0x3fU)));
-			}
-		}
-
-		class json_parser
-		{
-		  public:
-			explicit json_parser(const std::string_view input) : input_{input} {}
-
-			[[nodiscard]] result<json_value> parse()
-			{
-				if (input_.size() > std::size_t{4U} * 1024U * 1024U)
-					return unexpected(decode_error("arguments", "size-limit"));
-				auto output = value(0U);
-				space();
-				if (!output || position_ != input_.size())
-					return unexpected(decode_error("arguments", "trailing-data"));
-				return output;
-			}
-
-		  private:
-			[[nodiscard]] result<json_value> value(const std::size_t depth)
-			{
-				if (depth > 64U)
-					return unexpected(decode_error("arguments", "depth-limit"));
-				space();
-				if (position_ >= input_.size())
-					return unexpected(decode_error("arguments", "value-missing"));
-				switch (input_[position_])
-				{
-					case '{':
-						return object(depth);
-					case '[':
-						return array(depth);
-					case '"':
-					{
-						auto decoded = string();
-						if (!decoded)
-							return unexpected(std::move(decoded.error()));
-						return json_value{std::move(*decoded)};
-					}
-					case 't':
-						return literal("true", json_value{true});
-					case 'f':
-						return literal("false", json_value{false});
-					case 'n':
-						return literal("null", json_value{});
-					default:
-						return number();
-				}
-			}
-
-			[[nodiscard]] result<json_value> object(const std::size_t depth)
-			{
-				++position_;
-				json_value::object output;
-				space();
-				if (consume('}'))
-					return json_value{std::move(output)};
-				while (true)
-				{
-					auto key = string();
-					space();
-					if (!key || !consume(':'))
-						return unexpected(decode_error("arguments", "object-key"));
-					auto child = value(depth + 1U);
-					if (!child)
-						return unexpected(std::move(child.error()));
-					if (!output.emplace(std::move(*key), std::move(*child)).second)
-						return unexpected(decode_error("arguments", "duplicate-key"));
-					space();
-					if (consume('}'))
-						break;
-					if (!consume(','))
-						return unexpected(decode_error("arguments", "object-comma"));
-					space();
-				}
-				return json_value{std::move(output)};
-			}
-
-			[[nodiscard]] result<json_value> array(const std::size_t depth)
-			{
-				++position_;
-				json_value::array output;
-				space();
-				if (consume(']'))
-					return json_value{std::move(output)};
-				while (true)
-				{
-					auto child = value(depth + 1U);
-					if (!child)
-						return unexpected(std::move(child.error()));
-					output.push_back(std::move(*child));
-					space();
-					if (consume(']'))
-						break;
-					if (!consume(','))
-						return unexpected(decode_error("arguments", "array-comma"));
-				}
-				return json_value{std::move(output)};
-			}
-
-			[[nodiscard]] result<std::string> string()
-			{
-				if (!consume('"'))
-					return unexpected(decode_error("arguments", "string-expected"));
-				std::string output;
-				while (position_ < input_.size())
-				{
-					const auto byte = static_cast<unsigned char>(input_[position_++]);
-					if (byte == '"')
-					{
-						if (!cxxlens::sdk::detail::valid_utf8(output))
-							return unexpected(decode_error("arguments", "invalid-utf8"));
-						return output;
-					}
-					if (byte < 0x20U)
-						return unexpected(decode_error("arguments", "control-character"));
-					if (byte != '\\')
-					{
-						output.push_back(static_cast<char>(byte));
-						continue;
-					}
-					if (position_ >= input_.size())
-						return unexpected(decode_error("arguments", "short-escape"));
-					switch (const auto escaped = input_[position_++])
-					{
-						case '"':
-						case '\\':
-						case '/':
-							output.push_back(escaped);
-							break;
-						case 'b':
-							output.push_back('\b');
-							break;
-						case 'f':
-							output.push_back('\f');
-							break;
-						case 'n':
-							output.push_back('\n');
-							break;
-						case 'r':
-							output.push_back('\r');
-							break;
-						case 't':
-							output.push_back('\t');
-							break;
-						case 'u':
-						{
-							auto code_point = hexadecimal_quad();
-							if (!code_point)
-								return unexpected(decode_error("arguments", "unicode-escape"));
-							if (*code_point >= 0xd800U && *code_point <= 0xdbffU)
-							{
-								if (position_ + 2U > input_.size() || input_[position_] != '\\' ||
-									input_[position_ + 1U] != 'u')
-									return unexpected(decode_error("arguments", "surrogate-pair"));
-								position_ += 2U;
-								auto low = hexadecimal_quad();
-								if (!low || *low < 0xdc00U || *low > 0xdfffU)
-									return unexpected(decode_error("arguments", "surrogate-pair"));
-								*code_point =
-									0x10000U + ((*code_point - 0xd800U) << 10U) + (*low - 0xdc00U);
-							}
-							else if (*code_point >= 0xdc00U && *code_point <= 0xdfffU)
-								return unexpected(decode_error("arguments", "surrogate-pair"));
-							append_utf8(output, *code_point);
-							break;
-						}
-						default:
-							return unexpected(decode_error("arguments", "unsupported-escape"));
-					}
-				}
-				return unexpected(decode_error("arguments", "unterminated-string"));
-			}
-
-			[[nodiscard]] result<std::uint32_t> hexadecimal_quad()
-			{
-				if (position_ + 4U > input_.size())
-					return unexpected(decode_error("arguments", "short-unicode"));
-				std::uint32_t output{};
-				for (std::size_t index = 0U; index < 4U; ++index)
-				{
-					const auto byte = input_[position_++];
-					output <<= 4U;
-					if (byte >= '0' && byte <= '9')
-						output |= static_cast<std::uint32_t>(byte - '0');
-					else if (byte >= 'a' && byte <= 'f')
-						output |= static_cast<std::uint32_t>(byte - 'a' + 10);
-					else if (byte >= 'A' && byte <= 'F')
-						output |= static_cast<std::uint32_t>(byte - 'A' + 10);
-					else
-						return unexpected(decode_error("arguments", "unicode-hex"));
-				}
-				return output;
-			}
-
-			[[nodiscard]] result<json_value> number()
-			{
-				const auto begin = position_;
-				if (position_ < input_.size() && input_[position_] == '-')
-					++position_;
-				const auto digits_begin = position_;
-				while (position_ < input_.size() && input_[position_] >= '0' &&
-					   input_[position_] <= '9')
-					++position_;
-				if (digits_begin == position_ ||
-					(position_ - digits_begin > 1U && input_[digits_begin] == '0') ||
-					(position_ < input_.size() &&
-					 std::string_view{".eE+"}.contains(input_[position_])))
-					return unexpected(decode_error("arguments", "integer-expected"));
-				const auto token = input_.substr(begin, position_ - begin);
-				if (token.starts_with('-'))
-				{
-					std::int64_t output{};
-					const auto converted =
-						std::from_chars(token.data(), token.data() + token.size(), output);
-					if (converted.ec != std::errc{} || converted.ptr != token.data() + token.size())
-						return unexpected(decode_error("arguments", "signed-integer"));
-					return json_value{output};
-				}
-				std::uint64_t output{};
-				const auto converted =
-					std::from_chars(token.data(), token.data() + token.size(), output);
-				if (converted.ec != std::errc{} || converted.ptr != token.data() + token.size())
-					return unexpected(decode_error("arguments", "unsigned-integer"));
-				return json_value{output};
-			}
-
-			[[nodiscard]] result<json_value> literal(const std::string_view expected,
-													 json_value value)
-			{
-				if (input_.substr(position_, expected.size()) != expected)
-					return unexpected(decode_error("arguments", "literal"));
-				position_ += expected.size();
-				return value;
-			}
-
-			void space()
-			{
-				while (position_ < input_.size() &&
-					   (input_[position_] == ' ' || input_[position_] == '\t' ||
-						input_[position_] == '\n' || input_[position_] == '\r'))
-					++position_;
-			}
-
-			[[nodiscard]] bool consume(const char expected)
-			{
-				if (position_ < input_.size() && input_[position_] == expected)
-				{
-					++position_;
-					return true;
-				}
-				return false;
-			}
-
-			std::string_view input_;
-			std::size_t position_{};
-		};
-
-		[[nodiscard]] result<const json_value::object*> as_object(const json_value& value,
-																  const std::string_view field)
-		{
-			if (const auto* output = std::get_if<json_value::object>(&value.value))
+			if (const auto* output = value.as_object())
 				return output;
 			return unexpected(decode_error(std::string{field}, "object-required"));
 		}
 
-		[[nodiscard]] result<const json_value::array*> as_array(const json_value& value,
-																const std::string_view field)
+		[[nodiscard]] result<const json_value::array_type*> as_array(const json_value& value,
+																	 const std::string_view field)
 		{
-			if (const auto* output = std::get_if<json_value::array>(&value.value))
+			if (const auto* output = value.as_array())
 				return output;
 			return unexpected(decode_error(std::string{field}, "array-required"));
 		}
@@ -339,7 +44,7 @@ namespace cxxlens::sdk::query
 		[[nodiscard]] result<std::string> as_string(const json_value& value,
 													const std::string_view field)
 		{
-			if (const auto* output = std::get_if<std::string>(&value.value))
+			if (const auto* output = value.as_string())
 				return *output;
 			return unexpected(decode_error(std::string{field}, "string-required"));
 		}
@@ -347,12 +52,12 @@ namespace cxxlens::sdk::query
 		[[nodiscard]] result<std::uint64_t> as_unsigned(const json_value& value,
 														const std::string_view field)
 		{
-			if (const auto* output = std::get_if<std::uint64_t>(&value.value))
+			if (const auto* output = value.as_unsigned_integer())
 				return *output;
 			return unexpected(decode_error(std::string{field}, "unsigned-required"));
 		}
 
-		[[nodiscard]] result<const json_value*> required(const json_value::object& object,
+		[[nodiscard]] result<const json_value*> required(const json_value::object_type& object,
 														 const std::string_view name)
 		{
 			const auto found = object.find(name);
@@ -361,7 +66,7 @@ namespace cxxlens::sdk::query
 			return &found->second;
 		}
 
-		[[nodiscard]] result<void> exact_keys(const json_value::object& object,
+		[[nodiscard]] result<void> exact_keys(const json_value::object_type& object,
 											  const std::initializer_list<std::string_view> keys,
 											  const std::string_view field)
 		{
@@ -445,16 +150,16 @@ namespace cxxlens::sdk::query
 			scalar_value decoded;
 			if (*type == "bool")
 			{
-				const auto* boolean = std::get_if<bool>(&(*scalar)->value);
+				const auto* boolean = (*scalar)->as_boolean();
 				if (boolean == nullptr)
 					return unexpected(decode_error("literal.value", "bool"));
 				decoded = *boolean;
 			}
 			else if (*type == "int64")
 			{
-				if (const auto* signed_value = std::get_if<std::int64_t>(&(*scalar)->value))
+				if (const auto* signed_value = (*scalar)->as_signed_integer())
 					decoded = *signed_value;
-				else if (const auto* unsigned_value = std::get_if<std::uint64_t>(&(*scalar)->value);
+				else if (const auto* unsigned_value = (*scalar)->as_unsigned_integer();
 						 unsigned_value != nullptr &&
 						 *unsigned_value <=
 							 static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
@@ -464,7 +169,7 @@ namespace cxxlens::sdk::query
 			}
 			else if (*type == "uint64")
 			{
-				const auto* unsigned_value = std::get_if<std::uint64_t>(&(*scalar)->value);
+				const auto* unsigned_value = (*scalar)->as_unsigned_integer();
 				if (unsigned_value == nullptr)
 					return unexpected(decode_error("literal.value", "uint64"));
 				decoded = *unsigned_value;
@@ -575,9 +280,28 @@ namespace cxxlens::sdk::query
 			return output;
 		}
 
-		[[nodiscard]] result<json_value::object> parse_object(const ir_node& node)
+		[[nodiscard]] result<json_value::object_type> parse_object(const ir_node& node)
 		{
-			auto parsed = json_parser{node.arguments}.parse();
+			constexpr std::size_t maximum_arguments_bytes = std::size_t{4U} * 1024U * 1024U;
+			const cxxlens::sdk::detail::json_limits limits{
+				.max_input_bytes = maximum_arguments_bytes,
+				.max_depth = 64U,
+				.max_array_elements = maximum_arguments_bytes,
+				.max_object_members = maximum_arguments_bytes,
+				.max_string_bytes = maximum_arguments_bytes,
+				.max_total_string_bytes = maximum_arguments_bytes,
+				.max_total_values = maximum_arguments_bytes,
+			};
+			const cxxlens::sdk::detail::json_parse_contract contract{
+				.error_code = "sdk.query-argument-invalid",
+				.error_field = "arguments",
+				.include_byte_offset = false,
+				.require_top_level_object = false,
+				.reject_utf8_bom = true,
+				.numbers = cxxlens::sdk::detail::json_number_syntax::integer_tokens,
+				.depth = cxxlens::sdk::detail::json_depth_semantics::all_values,
+			};
+			auto parsed = cxxlens::sdk::detail::parse_json_value(node.arguments, limits, contract);
 			if (!parsed)
 				return unexpected(std::move(parsed.error()));
 			auto object = as_object(*parsed, "arguments");

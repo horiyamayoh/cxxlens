@@ -185,7 +185,8 @@ function(cxxlens_configure_installed_clang22_tool target)
   endif()
 endfunction()
 
-add_library(cxxlens_base ${CXXLENS_LIBRARY_TYPE} src/sdk/common.cpp)
+add_library(cxxlens_base ${CXXLENS_LIBRARY_TYPE} src/sdk/common.cpp
+                         src/sdk/bounded_json_internal.cpp)
 add_library(cxxlens::base ALIAS cxxlens_base)
 cxxlens_configure_component(cxxlens_base base)
 
@@ -529,7 +530,6 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   # and materialization, without importing the Clang parser implementation.
   add_library(
     cxxlens_clang22_materialization_codecs STATIC
-    src/llvm/clang22/materialization_json.cpp
     src/llvm/clang22/provider_task_v4.cpp
     src/llvm/clang22/observation_v2.cpp
     src/llvm/clang22/source_closure.cpp

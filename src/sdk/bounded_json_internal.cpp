@@ -1,77 +1,38 @@
-#include "materialization_json.hpp"
+#include "bounded_json_internal.hpp"
 
 #include <algorithm>
 #include <array>
 #include <charconv>
 #include <limits>
-#include <optional>
+#include <new>
+#include <stdexcept>
 #include <utility>
 
-namespace cxxlens::detail::clang22::materialization
+#include "json_internal.hpp"
+
+namespace cxxlens::sdk::detail
 {
 	namespace
 	{
-		constexpr std::string_view json_error_code = "materialization.json-invalid";
 		constexpr std::size_t contract_maximum_depth = 64U;
 
-		[[nodiscard]] std::optional<std::size_t>
-		invalid_utf8_offset(const std::string_view input) noexcept
+		[[nodiscard]] error json_error(const json_parse_contract& contract,
+									   const std::string_view reason,
+									   const std::size_t offset)
 		{
-			std::size_t index{};
-			while (index < input.size())
-			{
-				const auto first = static_cast<unsigned char>(input[index]);
-				if (first <= 0x7fU)
-				{
-					++index;
-					continue;
-				}
-
-				std::size_t width{};
-				std::uint32_t code_point{};
-				std::uint32_t minimum{};
-				if (first >= 0xc2U && first <= 0xdfU)
-				{
-					width = 2U;
-					code_point = first & 0x1fU;
-					minimum = 0x80U;
-				}
-				else if (first >= 0xe0U && first <= 0xefU)
-				{
-					width = 3U;
-					code_point = first & 0x0fU;
-					minimum = 0x800U;
-				}
-				else if (first >= 0xf0U && first <= 0xf4U)
-				{
-					width = 4U;
-					code_point = first & 0x07U;
-					minimum = 0x10000U;
-				}
-				else
-					return index;
-
-				if (width > input.size() - index)
-					return index;
-				for (std::size_t offset = 1U; offset < width; ++offset)
-				{
-					const auto continuation = static_cast<unsigned char>(input[index + offset]);
-					if ((continuation & 0xc0U) != 0x80U)
-						return index + offset;
-					code_point = (code_point << 6U) | (continuation & 0x3fU);
-				}
-				if (code_point < minimum || code_point > 0x10ffffU ||
-					(code_point >= 0xd800U && code_point <= 0xdfffU))
-					return index;
-				index += width;
-			}
-			return std::nullopt;
+			auto detail = std::string{reason};
+			if (contract.include_byte_offset)
+				detail += ":byte=" + std::to_string(offset);
+			return {std::string{contract.error_code},
+					std::string{contract.error_field},
+					std::move(detail)};
 		}
 
-		[[nodiscard]] sdk::error json_error(const std::string_view reason, const std::size_t offset)
+		[[nodiscard]] error json_value_error(const std::string_view reason,
+											 const std::size_t offset)
 		{
-			return {std::string{json_error_code},
-					"input",
+			return {"sdk.json-value-invalid",
+					"value",
 					std::string{reason} + ":byte=" + std::to_string(offset)};
 		}
 
@@ -102,49 +63,56 @@ namespace cxxlens::detail::clang22::materialization
 		class strict_json_parser
 		{
 		  public:
-			strict_json_parser(const std::string_view input, const json_limits& limits)
-				: input_{input}, limits_{limits}
+			strict_json_parser(const std::string_view input,
+							   const json_limits& limits,
+							   const json_parse_contract& contract)
+				: input_{input}, limits_{limits}, contract_{contract}
 			{
 			}
 
-			[[nodiscard]] sdk::result<json_value> parse()
+			[[nodiscard]] result<json_value> parse()
 			{
 				auto root = parse_value(0U);
 				if (!root)
 					return root;
 				space();
 				if (position_ != input_.size())
-					return sdk::unexpected(json_error("trailing-data", position_));
-				if (root->as_object() == nullptr)
-					return sdk::unexpected(json_error("top-level-object-required", 0U));
+					return unexpected(json_error(contract_, "trailing-data", position_));
+				if (contract_.require_top_level_object && root->as_object() == nullptr)
+					return unexpected(json_error(contract_, "top-level-object-required", 0U));
 				return root;
 			}
 
 		  private:
-			[[nodiscard]] sdk::result<json_value> parse_value(const std::size_t depth)
+			[[nodiscard]] result<json_value> parse_value(const std::size_t depth)
 			{
 				space();
+				if (contract_.depth == json_depth_semantics::all_values &&
+					depth > std::min(limits_.max_depth, contract_maximum_depth))
+					return unexpected(json_error(contract_, "depth-limit", position_));
 				if (position_ >= input_.size())
-					return sdk::unexpected(json_error("value-missing", position_));
+					return unexpected(json_error(contract_, "value-missing", position_));
 				if (value_count_ >= limits_.max_total_values)
-					return sdk::unexpected(json_error("value-count-limit", position_));
+					return unexpected(json_error(contract_, "value-count-limit", position_));
 				++value_count_;
 
 				switch (input_[position_])
 				{
 					case '{':
-						if (depth >= std::min(limits_.max_depth, contract_maximum_depth))
-							return sdk::unexpected(json_error("depth-limit", position_));
+						if (contract_.depth == json_depth_semantics::containers &&
+							depth >= std::min(limits_.max_depth, contract_maximum_depth))
+							return unexpected(json_error(contract_, "depth-limit", position_));
 						return parse_object(depth + 1U);
 					case '[':
-						if (depth >= std::min(limits_.max_depth, contract_maximum_depth))
-							return sdk::unexpected(json_error("depth-limit", position_));
+						if (contract_.depth == json_depth_semantics::containers &&
+							depth >= std::min(limits_.max_depth, contract_maximum_depth))
+							return unexpected(json_error(contract_, "depth-limit", position_));
 						return parse_array(depth + 1U);
 					case '"':
 					{
 						auto decoded = parse_string();
 						if (!decoded)
-							return sdk::unexpected(std::move(decoded.error()));
+							return unexpected(std::move(decoded.error()));
 						return json_value::string(std::move(*decoded));
 					}
 					case 't':
@@ -158,7 +126,7 @@ namespace cxxlens::detail::clang22::materialization
 				}
 			}
 
-			[[nodiscard]] sdk::result<json_value> parse_object(const std::size_t depth)
+			[[nodiscard]] result<json_value> parse_object(const std::size_t depth)
 			{
 				++position_;
 				json_value::object_type output;
@@ -171,29 +139,29 @@ namespace cxxlens::detail::clang22::materialization
 					const auto key_offset = position_;
 					auto key = parse_string();
 					if (!key)
-						return sdk::unexpected(std::move(key.error()));
+						return unexpected(std::move(key.error()));
 					if (output.contains(*key))
-						return sdk::unexpected(json_error("duplicate-member", key_offset));
+						return unexpected(json_error(contract_, "duplicate-member", key_offset));
 					if (output.size() >= limits_.max_object_members)
-						return sdk::unexpected(json_error("object-member-limit", key_offset));
+						return unexpected(json_error(contract_, "object-member-limit", key_offset));
 					space();
 					if (!consume(':'))
-						return sdk::unexpected(json_error("object-colon", position_));
+						return unexpected(json_error(contract_, "object-colon", position_));
 					auto child = parse_value(depth);
 					if (!child)
-						return sdk::unexpected(std::move(child.error()));
+						return unexpected(std::move(child.error()));
 					output.emplace(std::move(*key), std::move(*child));
 					space();
 					if (consume('}'))
 						break;
 					if (!consume(','))
-						return sdk::unexpected(json_error("object-comma", position_));
+						return unexpected(json_error(contract_, "object-comma", position_));
 					space();
 				}
 				return json_value::object(std::move(output));
 			}
 
-			[[nodiscard]] sdk::result<json_value> parse_array(const std::size_t depth)
+			[[nodiscard]] result<json_value> parse_array(const std::size_t depth)
 			{
 				++position_;
 				json_value::array_type output;
@@ -204,16 +172,16 @@ namespace cxxlens::detail::clang22::materialization
 				while (true)
 				{
 					if (output.size() >= limits_.max_array_elements)
-						return sdk::unexpected(json_error("array-element-limit", position_));
+						return unexpected(json_error(contract_, "array-element-limit", position_));
 					auto child = parse_value(depth);
 					if (!child)
-						return sdk::unexpected(std::move(child.error()));
+						return unexpected(std::move(child.error()));
 					output.push_back(std::move(*child));
 					space();
 					if (consume(']'))
 						break;
 					if (!consume(','))
-						return sdk::unexpected(json_error("array-comma", position_));
+						return unexpected(json_error(contract_, "array-comma", position_));
 				}
 				return json_value::array(std::move(output));
 			}
@@ -228,11 +196,11 @@ namespace cxxlens::detail::clang22::materialization
 					current <= limits_.max_total_string_bytes - amount - total_string_bytes_;
 			}
 
-			[[nodiscard]] sdk::result<std::string> parse_string()
+			[[nodiscard]] result<std::string> parse_string()
 			{
 				const auto begin = position_;
 				if (!consume('"'))
-					return sdk::unexpected(json_error("string-required", position_));
+					return unexpected(json_error(contract_, "string-required", position_));
 				std::string output;
 				while (position_ < input_.size())
 				{
@@ -243,77 +211,88 @@ namespace cxxlens::detail::clang22::materialization
 						return output;
 					}
 					if (byte < 0x20U)
-						return sdk::unexpected(json_error("raw-control-character", position_ - 1U));
+						return unexpected(
+							json_error(contract_, "raw-control-character", position_ - 1U));
 					if (byte != '\\')
 					{
 						if (!can_append(output.size(), 1U))
-							return sdk::unexpected(json_error("string-byte-limit", begin));
+							return unexpected(json_error(contract_, "string-byte-limit", begin));
 						output.push_back(static_cast<char>(byte));
 						continue;
 					}
 
 					if (position_ >= input_.size())
-						return sdk::unexpected(json_error("short-escape", position_));
+						return unexpected(json_error(contract_, "short-escape", position_));
 					switch (const auto escaped = input_[position_++])
 					{
 						case '"':
 						case '\\':
 						case '/':
 							if (!append_ascii(output, escaped, begin))
-								return sdk::unexpected(json_error("string-byte-limit", begin));
+								return unexpected(
+									json_error(contract_, "string-byte-limit", begin));
 							break;
 						case 'b':
 							if (!append_ascii(output, '\b', begin))
-								return sdk::unexpected(json_error("string-byte-limit", begin));
+								return unexpected(
+									json_error(contract_, "string-byte-limit", begin));
 							break;
 						case 'f':
 							if (!append_ascii(output, '\f', begin))
-								return sdk::unexpected(json_error("string-byte-limit", begin));
+								return unexpected(
+									json_error(contract_, "string-byte-limit", begin));
 							break;
 						case 'n':
 							if (!append_ascii(output, '\n', begin))
-								return sdk::unexpected(json_error("string-byte-limit", begin));
+								return unexpected(
+									json_error(contract_, "string-byte-limit", begin));
 							break;
 						case 'r':
 							if (!append_ascii(output, '\r', begin))
-								return sdk::unexpected(json_error("string-byte-limit", begin));
+								return unexpected(
+									json_error(contract_, "string-byte-limit", begin));
 							break;
 						case 't':
 							if (!append_ascii(output, '\t', begin))
-								return sdk::unexpected(json_error("string-byte-limit", begin));
+								return unexpected(
+									json_error(contract_, "string-byte-limit", begin));
 							break;
 						case 'u':
 						{
 							auto code_point = hexadecimal_quad();
 							if (!code_point)
-								return sdk::unexpected(std::move(code_point.error()));
+								return unexpected(std::move(code_point.error()));
 							if (*code_point >= 0xd800U && *code_point <= 0xdbffU)
 							{
-								if (position_ + 2U > input_.size() || input_[position_] != '\\' ||
+								if (2U > input_.size() - position_ || input_[position_] != '\\' ||
 									input_[position_ + 1U] != 'u')
-									return sdk::unexpected(json_error("surrogate-pair", position_));
+									return unexpected(
+										json_error(contract_, "surrogate-pair", position_));
 								position_ += 2U;
 								auto low = hexadecimal_quad();
 								if (!low || *low < 0xdc00U || *low > 0xdfffU)
-									return sdk::unexpected(json_error("surrogate-pair", position_));
+									return unexpected(
+										json_error(contract_, "surrogate-pair", position_));
 								*code_point =
 									0x10000U + ((*code_point - 0xd800U) << 10U) + (*low - 0xdc00U);
 							}
 							else if (*code_point >= 0xdc00U && *code_point <= 0xdfffU)
-								return sdk::unexpected(json_error("surrogate-pair", position_));
+								return unexpected(
+									json_error(contract_, "surrogate-pair", position_));
 							std::string encoded;
 							append_utf8(encoded, *code_point);
 							if (!can_append(output.size(), encoded.size()))
-								return sdk::unexpected(json_error("string-byte-limit", begin));
+								return unexpected(
+									json_error(contract_, "string-byte-limit", begin));
 							output += encoded;
 							break;
 						}
 						default:
-							return sdk::unexpected(
-								json_error("unsupported-escape", position_ - 1U));
+							return unexpected(
+								json_error(contract_, "unsupported-escape", position_ - 1U));
 					}
 				}
-				return sdk::unexpected(json_error("unterminated-string", begin));
+				return unexpected(json_error(contract_, "unterminated-string", begin));
 			}
 
 			[[nodiscard]] bool
@@ -325,11 +304,11 @@ namespace cxxlens::detail::clang22::materialization
 				return true;
 			}
 
-			[[nodiscard]] sdk::result<std::uint32_t> hexadecimal_quad()
+			[[nodiscard]] result<std::uint32_t> hexadecimal_quad()
 			{
 				const auto begin = position_;
-				if (position_ + 4U > input_.size())
-					return sdk::unexpected(json_error("short-unicode-escape", begin));
+				if (4U > input_.size() - position_)
+					return unexpected(json_error(contract_, "short-unicode-escape", begin));
 				std::uint32_t output{};
 				for (std::size_t index = 0U; index < 4U; ++index)
 				{
@@ -342,12 +321,12 @@ namespace cxxlens::detail::clang22::materialization
 					else if (byte >= 'A' && byte <= 'F')
 						output |= static_cast<std::uint32_t>(byte - 'A' + 10);
 					else
-						return sdk::unexpected(json_error("unicode-escape", position_ - 1U));
+						return unexpected(json_error(contract_, "unicode-escape", position_ - 1U));
 				}
 				return output;
 			}
 
-			[[nodiscard]] sdk::result<json_value> parse_number()
+			[[nodiscard]] result<json_value> parse_number()
 			{
 				const auto begin = position_;
 				const bool negative = consume('-');
@@ -356,9 +335,36 @@ namespace cxxlens::detail::clang22::materialization
 					   input_[position_] <= '9')
 					++position_;
 				const auto integer_end = position_;
+				const auto syntax_reason = contract_.numbers == json_number_syntax::integer_tokens
+					? std::string_view{"integer-expected"}
+					: std::string_view{"number-syntax"};
 				if (integer_begin == integer_end ||
 					(integer_end - integer_begin > 1U && input_[integer_begin] == '0'))
-					return sdk::unexpected(json_error("number-syntax", begin));
+					return unexpected(json_error(contract_, syntax_reason, begin));
+
+				if (contract_.numbers == json_number_syntax::integer_tokens)
+				{
+					if (position_ < input_.size() &&
+						std::string_view{".eE+"}.contains(input_[position_]))
+						return unexpected(json_error(contract_, "integer-expected", begin));
+					const auto token = input_.substr(begin, position_ - begin);
+					if (negative)
+					{
+						std::int64_t output{};
+						const auto converted =
+							std::from_chars(token.data(), token.data() + token.size(), output);
+						if (converted.ec != std::errc{} ||
+							converted.ptr != token.data() + token.size())
+							return unexpected(json_error(contract_, "signed-integer", begin));
+						return json_value::signed_integer(output);
+					}
+					std::uint64_t output{};
+					const auto converted =
+						std::from_chars(token.data(), token.data() + token.size(), output);
+					if (converted.ec != std::errc{} || converted.ptr != token.data() + token.size())
+						return unexpected(json_error(contract_, "unsigned-integer", begin));
+					return json_value::unsigned_integer(output);
+				}
 
 				std::size_t fraction_begin = position_;
 				std::size_t fraction_end = position_;
@@ -370,7 +376,7 @@ namespace cxxlens::detail::clang22::materialization
 						++position_;
 					fraction_end = position_;
 					if (fraction_begin == fraction_end)
-						return sdk::unexpected(json_error("number-syntax", begin));
+						return unexpected(json_error(contract_, "number-syntax", begin));
 				}
 
 				bool exponent_negative{};
@@ -388,13 +394,13 @@ namespace cxxlens::detail::clang22::materialization
 						   input_[position_] <= '9')
 						++position_;
 					if (exponent_begin == position_)
-						return sdk::unexpected(json_error("number-syntax", begin));
+						return unexpected(json_error(contract_, "number-syntax", begin));
 					const auto converted = std::from_chars(input_.data() + exponent_begin,
 														   input_.data() + position_,
 														   exponent_magnitude);
 					exponent_overflow = converted.ec == std::errc::result_out_of_range;
 					if (converted.ec != std::errc{} && !exponent_overflow)
-						return sdk::unexpected(json_error("number-syntax", begin));
+						return unexpected(json_error(contract_, "number-syntax", begin));
 				}
 
 				const auto integer_count = integer_end - integer_begin;
@@ -414,8 +420,10 @@ namespace cxxlens::detail::clang22::materialization
 				const auto overflow_reason =
 					negative ? "signed-integer-overflow" : "unsigned-integer-overflow";
 				if (exponent_overflow)
-					return sdk::unexpected(json_error(
-						exponent_negative ? "non-integer-number" : overflow_reason, begin));
+					return unexpected(
+						json_error(contract_,
+								   exponent_negative ? "non-integer-number" : overflow_reason,
+								   begin));
 
 				std::size_t retained_base_digits = base_digit_count;
 				std::uint64_t appended_zero_count{};
@@ -424,7 +432,7 @@ namespace cxxlens::detail::clang22::materialization
 					if (exponent_magnitude > base_digit_count ||
 						fraction_count >
 							base_digit_count - static_cast<std::size_t>(exponent_magnitude))
-						return sdk::unexpected(json_error("non-integer-number", begin));
+						return unexpected(json_error(contract_, "non-integer-number", begin));
 					const auto removed =
 						fraction_count + static_cast<std::size_t>(exponent_magnitude);
 					retained_base_digits -= removed;
@@ -437,7 +445,7 @@ namespace cxxlens::detail::clang22::materialization
 
 				for (std::size_t index = retained_base_digits; index < base_digit_count; ++index)
 					if (digit_at(index) != '0')
-						return sdk::unexpected(json_error("non-integer-number", begin));
+						return unexpected(json_error(contract_, "non-integer-number", begin));
 
 				std::size_t first_nonzero{};
 				while (first_nonzero < retained_base_digits && digit_at(first_nonzero) == '0')
@@ -447,7 +455,7 @@ namespace cxxlens::detail::clang22::materialization
 				const auto retained_significant = retained_base_digits - first_nonzero;
 				if (appended_zero_count > 20U ||
 					retained_significant > 20U - static_cast<std::size_t>(appended_zero_count))
-					return sdk::unexpected(json_error(overflow_reason, begin));
+					return unexpected(json_error(contract_, overflow_reason, begin));
 
 				const auto limit = negative
 					? std::uint64_t{std::numeric_limits<std::int64_t>::max()} + 1U
@@ -462,10 +470,10 @@ namespace cxxlens::detail::clang22::materialization
 				};
 				for (std::size_t index = first_nonzero; index < retained_base_digits; ++index)
 					if (!accumulate(static_cast<unsigned int>(digit_at(index) - '0')))
-						return sdk::unexpected(json_error(overflow_reason, begin));
+						return unexpected(json_error(contract_, overflow_reason, begin));
 				for (std::uint64_t index = 0U; index < appended_zero_count; ++index)
 					if (!accumulate(0U))
-						return sdk::unexpected(json_error(overflow_reason, begin));
+						return unexpected(json_error(contract_, overflow_reason, begin));
 
 				if (!negative)
 					return json_value::unsigned_integer(magnitude);
@@ -474,11 +482,11 @@ namespace cxxlens::detail::clang22::materialization
 				return json_value::signed_integer(-static_cast<std::int64_t>(magnitude));
 			}
 
-			[[nodiscard]] sdk::result<json_value> literal(const std::string_view expected,
-														  json_value value)
+			[[nodiscard]] result<json_value> literal(const std::string_view expected,
+													 json_value value)
 			{
 				if (input_.substr(position_, expected.size()) != expected)
-					return sdk::unexpected(json_error("literal", position_));
+					return unexpected(json_error(contract_, "literal", position_));
 				position_ += expected.size();
 				return value;
 			}
@@ -503,57 +511,11 @@ namespace cxxlens::detail::clang22::materialization
 
 			std::string_view input_;
 			const json_limits& limits_;
+			const json_parse_contract& contract_;
 			std::size_t position_{};
 			std::size_t value_count_{};
 			std::size_t total_string_bytes_{};
 		};
-
-		void append_hex_escape(std::string& output, const unsigned char byte)
-		{
-			constexpr std::string_view digits = "0123456789abcdef";
-			output += "\\u00";
-			output.push_back(digits.at((byte >> 4U) & 0x0fU));
-			output.push_back(digits.at(byte & 0x0fU));
-		}
-
-		void append_json_string(std::string& output, const std::string_view value)
-		{
-			output.push_back('"');
-			for (const auto character : value)
-			{
-				const auto byte = static_cast<unsigned char>(character);
-				switch (character)
-				{
-					case '"':
-						output += "\\\"";
-						break;
-					case '\\':
-						output += "\\\\";
-						break;
-					case '\b':
-						output += "\\b";
-						break;
-					case '\f':
-						output += "\\f";
-						break;
-					case '\n':
-						output += "\\n";
-						break;
-					case '\r':
-						output += "\\r";
-						break;
-					case '\t':
-						output += "\\t";
-						break;
-					default:
-						if (byte < 0x20U)
-							append_hex_escape(output, byte);
-						else
-							output.push_back(character);
-				}
-			}
-			output.push_back('"');
-		}
 
 		template <class Integer>
 		void append_integer(std::string& output, const Integer value)
@@ -580,7 +542,7 @@ namespace cxxlens::detail::clang22::materialization
 					append_integer(output, *value.as_unsigned_integer());
 					break;
 				case json_value::kind::string:
-					append_json_string(output, *value.as_string());
+					output += canonical_json_string(*value.as_string());
 					break;
 				case json_value::kind::array:
 				{
@@ -605,7 +567,7 @@ namespace cxxlens::detail::clang22::materialization
 						if (!first)
 							output.push_back(',');
 						first = false;
-						append_json_string(output, key);
+						output += canonical_json_string(key);
 						output.push_back(':');
 						append_canonical_json(output, child);
 					}
@@ -652,10 +614,10 @@ namespace cxxlens::detail::clang22::materialization
 		return json_value{storage_type{std::in_place_type<std::uint64_t>, value}};
 	}
 
-	sdk::result<json_value> json_value::string(std::string value)
+	result<json_value> json_value::string(std::string value)
 	{
 		if (const auto invalid = invalid_utf8_offset(value))
-			return sdk::unexpected(json_error("invalid-utf8", *invalid));
+			return unexpected(json_value_error("invalid-utf8", *invalid));
 		return json_value{storage_type{std::in_place_type<std::string>, std::move(value)}};
 	}
 
@@ -664,13 +626,13 @@ namespace cxxlens::detail::clang22::materialization
 		return json_value{storage_type{std::in_place_type<array_type>, std::move(value)}};
 	}
 
-	sdk::result<json_value> json_value::object(object_type value)
+	result<json_value> json_value::object(object_type value)
 	{
 		for (const auto& [key, child] : value)
 		{
 			(void)child;
 			if (const auto invalid = invalid_utf8_offset(key))
-				return sdk::unexpected(json_error("invalid-utf8-object-key", *invalid));
+				return unexpected(json_value_error("invalid-utf8-object-key", *invalid));
 		}
 		return json_value{storage_type{std::in_place_type<object_type>, std::move(value)}};
 	}
@@ -755,19 +717,38 @@ namespace cxxlens::detail::clang22::materialization
 		return root_;
 	}
 
-	sdk::result<json_document> parse_json_object(std::string raw_bytes, const json_limits& limits)
+	result<json_value> parse_json_value(const std::string_view raw_bytes,
+										const json_limits& limits,
+										const json_parse_contract& contract)
 	{
 		if (raw_bytes.size() > limits.max_input_bytes)
-			return sdk::unexpected(json_error("input-byte-limit", limits.max_input_bytes));
-		if (raw_bytes.starts_with("\xef\xbb\xbf"))
-			return sdk::unexpected(json_error("utf8-bom", 0U));
+			return unexpected(json_error(contract, "input-byte-limit", limits.max_input_bytes));
+		if (contract.reject_utf8_bom && raw_bytes.starts_with("\xef\xbb\xbf"))
+			return unexpected(json_error(contract, "utf8-bom", 0U));
 		if (const auto invalid = invalid_utf8_offset(raw_bytes))
-			return sdk::unexpected(json_error("invalid-utf8", *invalid));
+			return unexpected(json_error(contract, "invalid-utf8", *invalid));
 
-		strict_json_parser parser{raw_bytes, limits};
-		auto root = parser.parse();
+		try
+		{
+			return strict_json_parser{raw_bytes, limits, contract}.parse();
+		}
+		catch (const std::bad_alloc&)
+		{
+			return unexpected(json_error(contract, "allocation-failed", 0U));
+		}
+		catch (const std::length_error&)
+		{
+			return unexpected(json_error(contract, "allocation-length", 0U));
+		}
+	}
+
+	result<json_document> parse_json_document(std::string raw_bytes,
+											  const json_limits& limits,
+											  const json_parse_contract& contract)
+	{
+		auto root = parse_json_value(raw_bytes, limits, contract);
 		if (!root)
-			return sdk::unexpected(std::move(root.error()));
+			return unexpected(std::move(root.error()));
 		return json_document{std::move(raw_bytes), std::move(*root)};
 	}
 
@@ -784,4 +765,4 @@ namespace cxxlens::detail::clang22::materialization
 		output.push_back('\n');
 		return output;
 	}
-} // namespace cxxlens::detail::clang22::materialization
+} // namespace cxxlens::sdk::detail

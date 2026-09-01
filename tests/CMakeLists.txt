@@ -120,6 +120,16 @@ set_tests_properties(
   PROPERTIES LABELS
              "unit;sdk;capture;compiler-neutral;determinism;resource;security")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-bounded-json
+                            unit/sdk/bounded_json_internal_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-bounded-json PRIVATE cxxlens::base)
+target_include_directories(cxxlens-unit-sdk-bounded-json
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-bounded-json COMMAND cxxlens-unit-sdk-bounded-json)
+set_tests_properties(
+  unit.sdk-bounded-json
+  PROPERTIES LABELS "unit;sdk;base;json;bounded;resource;security;determinism")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-application-analysis
                             unit/sdk/application_analysis_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-application-analysis
@@ -2113,6 +2123,7 @@ foreach(
         configure.dev-core-no-dependencies
         public-api.cxxlens-header
         public-api.sdk-header
+        unit.sdk-bounded-json
         unit.sdk-application-analysis
         sdk.example-application_analysis
         sdk.example-typed_query
@@ -2195,6 +2206,7 @@ set(_cxxlens_ng_test_binary_candidates
     cxxlens-public-api-provider-clang22-translation-unit-input
     cxxlens-public-header-sdk
     cxxlens-unit-sdk
+    cxxlens-unit-sdk-bounded-json
     cxxlens-unit-sdk-materialization-task
     cxxlens-unit-sdk-provider-runtime
     cxxlens-sdk-doctor-authority-consumer

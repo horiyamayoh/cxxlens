@@ -1,121 +1,33 @@
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
-#include <map>
-#include <span>
 #include <string>
-#include <string_view>
-#include <variant>
-#include <vector>
+#include <utility>
 
-#include <cxxlens/sdk/common.hpp>
+#include "sdk/bounded_json_internal.hpp"
 
 namespace cxxlens::detail::clang22::materialization
 {
-	/** Canonical Unicode-scalar order for validated UTF-8 strings. */
-	struct utf8_byte_less
-	{
-		using is_transparent = void;
+	using utf8_byte_less = sdk::detail::utf8_byte_less;
+	using json_limits = sdk::detail::json_limits;
+	using json_value = sdk::detail::json_value;
+	using json_document = sdk::detail::json_document;
 
-		[[nodiscard]] bool operator()(std::string_view left, std::string_view right) const noexcept;
-	};
-
-	/** Bounded lexical/DOM limits. Callers select limits for the authenticated phase. */
-	struct json_limits
+	/** Preserve the accepted Clang v2.2 JSON boundary over the shared parser authority. */
+	[[nodiscard]] inline sdk::result<json_document>
+	parse_json_object(std::string raw_bytes, const json_limits& limits = {})
 	{
-		std::size_t max_input_bytes{static_cast<std::size_t>(16U * 1024U * 1024U)};
-		std::size_t max_depth{64U};
-		std::size_t max_array_elements{static_cast<std::size_t>(16U * 1024U)};
-		std::size_t max_object_members{static_cast<std::size_t>(16U * 1024U)};
-		std::size_t max_string_bytes{static_cast<std::size_t>(8U * 1024U * 1024U)};
-		std::size_t max_total_string_bytes{static_cast<std::size_t>(16U * 1024U * 1024U)};
-		std::size_t max_total_values{static_cast<std::size_t>(256U * 1024U)};
-	};
-
-	/** Immutable, value-owned JSON algebra. Floating-point values are intentionally absent. */
-	class json_value
-	{
-	  public:
-		enum class kind : std::uint8_t
-		{
-			null_value,
-			boolean,
-			signed_integer,
-			unsigned_integer,
-			string,
-			array,
-			object,
+		const sdk::detail::json_parse_contract contract{
+			.error_code = "materialization.json-invalid",
+			.error_field = "input",
+			.include_byte_offset = true,
+			.require_top_level_object = true,
+			.reject_utf8_bom = true,
+			.numbers = sdk::detail::json_number_syntax::exact_integer_values,
+			.depth = sdk::detail::json_depth_semantics::containers,
 		};
+		return sdk::detail::parse_json_document(std::move(raw_bytes), limits, contract);
+	}
 
-		using array_type = std::vector<json_value>;
-		using object_type = std::map<std::string, json_value, utf8_byte_less>;
-
-		[[nodiscard]] static json_value null();
-		[[nodiscard]] static json_value boolean(bool value);
-		[[nodiscard]] static json_value signed_integer(std::int64_t value);
-		[[nodiscard]] static json_value unsigned_integer(std::uint64_t value);
-		[[nodiscard]] static sdk::result<json_value> string(std::string value);
-		[[nodiscard]] static json_value array(array_type value);
-		[[nodiscard]] static sdk::result<json_value> object(object_type value);
-
-		[[nodiscard]] kind type() const noexcept;
-		[[nodiscard]] bool is_null() const noexcept;
-		[[nodiscard]] const bool* as_boolean() const noexcept;
-		[[nodiscard]] const std::int64_t* as_signed_integer() const noexcept;
-		[[nodiscard]] const std::uint64_t* as_unsigned_integer() const noexcept;
-		[[nodiscard]] const std::string* as_string() const noexcept;
-		[[nodiscard]] const array_type* as_array() const noexcept;
-		[[nodiscard]] const object_type* as_object() const noexcept;
-
-		/** Return an exact decoded member name, or null for a non-object/missing member. */
-		[[nodiscard]] const json_value* member(std::string_view name) const noexcept;
-		/** Match one exact, duplicate-free decoded member-name set. */
-		[[nodiscard]] bool
-		has_exact_members(std::span<const std::string_view> names) const noexcept;
-
-		[[nodiscard]] bool operator==(const json_value&) const = default;
-
-	  private:
-		using storage_type = std::variant<std::monostate,
-										  bool,
-										  std::int64_t,
-										  std::uint64_t,
-										  std::string,
-										  array_type,
-										  object_type>;
-
-		explicit json_value(storage_type value);
-		storage_type value_;
-	};
-
-	/** Accepted transport document retaining raw occurrence bytes independently of its DOM. */
-	class json_document
-	{
-	  public:
-		[[nodiscard]] const std::string& raw_bytes() const noexcept;
-		[[nodiscard]] const json_value& root() const noexcept;
-
-	  private:
-		json_document(std::string raw_bytes, json_value root);
-
-		std::string raw_bytes_;
-		json_value root_;
-
-		friend sdk::result<json_document> parse_json_object(std::string raw_bytes,
-															const json_limits& limits);
-	};
-
-	/**
-	 * Parse exactly one BOM-free strict UTF-8 top-level JSON object.
-	 * The private `materialization.json-invalid` failure must be mapped by the request/report
-	 * phase.
-	 */
-	[[nodiscard]] sdk::result<json_document> parse_json_object(std::string raw_bytes,
-															   const json_limits& limits = {});
-
-	/** Python-checker-compatible compact JSON (sorted object keys, no final newline). */
-	[[nodiscard]] std::string canonical_json(const json_value& value);
-	/** Response transport form: canonical_json(value) followed by exactly one LF. */
-	[[nodiscard]] std::string canonical_json_line(const json_value& value);
+	using sdk::detail::canonical_json;
+	using sdk::detail::canonical_json_line;
 } // namespace cxxlens::detail::clang22::materialization
