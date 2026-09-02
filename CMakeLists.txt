@@ -359,6 +359,7 @@ add_library(
   src/sdk/application_analysis_service.cpp
   src/sdk/build_capture_internal.cpp
   src/sdk/compile_commands_capture_internal.cpp
+  src/sdk/gcc_capture_command_service_internal.cpp
   src/sdk/gcc_capture_file_service_internal.cpp
   src/sdk/gcc_capture_bundle_internal.cpp
   src/sdk/gcc_toolchain_probe_internal.cpp
@@ -366,6 +367,8 @@ add_library(
   src/sdk/materialization_task_internal.cpp)
 add_library(cxxlens::sdk ALIAS cxxlens_sdk)
 cxxlens_configure_component(cxxlens_sdk sdk)
+target_sources(cxxlens_sdk
+               PRIVATE $<TARGET_OBJECTS:cxxlens_process_authority_internal>)
 target_link_libraries(cxxlens_sdk PUBLIC cxxlens::cxxlens cxxlens::recipes)
 
 # Compiler-neutral materialization I/O and bounded publication sequencing. These
@@ -729,6 +732,8 @@ add_executable(cxxlens_cli tools/sdk/cxxlens_main.cpp
 target_compile_definitions(cxxlens_cli PRIVATE CXXLENS_SDK_DOCTOR_NO_MAIN)
 set_target_properties(cxxlens_cli PROPERTIES OUTPUT_NAME cxxlens)
 target_link_libraries(cxxlens_cli PRIVATE cxxlens::sdk)
+target_include_directories(cxxlens_cli
+                           PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(cxxlens_cli PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens_cli)
 cxxlens_enable_sanitizers(cxxlens_cli)

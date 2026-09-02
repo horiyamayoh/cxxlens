@@ -23,8 +23,11 @@ native target だけが Clang major に opt-in します。
 
 installed `cxxlens` CLI はこの SDK surface の薄い入口です。`doctor` と `run` は同じ
 fail-closed capability resolver を呼び、unknown の理由・coverage・completion action を落としません。
-実際の Clang 22 materialization は sealed worker/materializer boundary に残し、CLI が shell command や
-ambient filesystem を再構成することはありません。
+`capture` は absolute compiler path に束縛した GCC 16.2.0 compile database を source-private SDK service
+へ渡し、canonical capture bundle だけを stdout へ出力します。filesystem、process identity、bounded
+deadline、capture semantics は CLI で再実装しません。実際の Clang 22 materialization は sealed
+worker/materializer boundary に残し、CLI が shell command や ambient filesystem を再構成することは
+ありません。
 
 ## Semantic flow
 

@@ -2014,6 +2014,27 @@ add_test(NAME sdk.cli-usage COMMAND "$<TARGET_FILE:cxxlens_cli>")
 set_tests_properties(sdk.cli-usage PROPERTIES WILL_FAIL TRUE LABELS
                                               "sdk;cli;validation")
 
+cxxlens_add_test_executable(cxxlens-gcc-capture-cli-probe-fixture
+                            unit/sdk/gcc_capture_cli_probe_fixture.cpp)
+cxxlens_add_test_executable(cxxlens-gcc-capture-cli-consumer
+                            unit/sdk/gcc_capture_cli_consumer.cpp)
+target_link_libraries(cxxlens-gcc-capture-cli-consumer PRIVATE cxxlens::sdk)
+add_test(
+  NAME sdk.gcc-capture-cli
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/unit/sdk/check_gcc_capture_cli.py"
+    "$<TARGET_FILE:cxxlens_cli>"
+    "$<TARGET_FILE:cxxlens-gcc-capture-cli-probe-fixture>"
+    "$<TARGET_FILE:cxxlens-gcc-capture-cli-consumer>")
+set_tests_properties(
+  sdk.gcc-capture-cli
+  PROPERTIES
+    LABELS
+    "sdk;cli;capture;gcc;process;filesystem;bounded;negative;determinism;resource;security"
+    TIMEOUT
+    90)
+
 # The production authority keeps trust-anchor storage and rotation outside the
 # repository.  When the host supplies OpenSSL 3, exercise the source-private
 # Ed25519 verifier port with generated keys and malformed-material cases.  The
