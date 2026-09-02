@@ -23,6 +23,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 		std::string replay_input_digest;
 		std::vector<sdk::detached_row> source_spans;
 		std::vector<sdk::detached_row> entities;
+		std::vector<sdk::detached_row> declarations;
 		std::vector<sdk::capture_gap> unresolved;
 
 		[[nodiscard]] bool operator==(const normalized_observation_candidates&) const;

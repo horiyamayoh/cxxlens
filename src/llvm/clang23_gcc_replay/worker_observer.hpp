@@ -64,9 +64,13 @@ namespace cxxlens::detail::clang23_gcc_replay
 		std::string kind;
 		std::string storage;
 		std::string linkage;
+		std::vector<std::string> attributes;
 		observed_source_span source;
+		bool implicit{};
 		bool deleted{};
 		bool defaulted{};
+		bool friend_declaration{};
+		bool exported{};
 
 		[[nodiscard]] bool operator==(const observed_declaration&) const = default;
 	};

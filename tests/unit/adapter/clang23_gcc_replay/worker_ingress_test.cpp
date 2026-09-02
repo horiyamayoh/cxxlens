@@ -52,7 +52,7 @@ namespace
 		detail::decoded_capture_source_member source;
 		source.logical_path = "project://main.cpp";
 		source.content = bytes("#include \"answer.hpp\"\n"
-							   "int answer_value(int value) { return value; }\n"
+							   "[[nodiscard]] int answer_value(int value) { return value; }\n"
 							   "double answer_value(double value) { return value; }\n"
 							   "int main() { return answer_value(answer); }\n");
 		source.content_digest = content_digest(source.content);
@@ -83,7 +83,7 @@ namespace
 		value.source_members.push_back(std::move(header));
 		value.source_closure_digest = "application-source-closure:sha256:" + std::string(64U, '4');
 		value.requested_relation_descriptor_ids = {
-			"cc.entity.v1", "source.file.v1", "source.span.v1"};
+			"cc.declaration.v1", "cc.entity.v1", "source.file.v1", "source.span.v1"};
 		value.interpretation = "cc.clang23-gcc-replay-1";
 		auto validated = detail::validate_gcc_replay_input(std::move(value));
 		require(validated);
@@ -232,6 +232,14 @@ namespace
 				main_entity != parsed->observations.entities.end() &&
 				header_entity != parsed->observations.entities.end() &&
 				header_entity->source.logical_path == "project://include/answer.hpp");
+		const auto attributed = std::ranges::find(
+			parsed->observations.declarations,
+			answer_entity->provider_local_key,
+			&cxxlens::detail::clang23_gcc_replay::observed_declaration::entity_provider_local_key);
+		require(attributed != parsed->observations.declarations.end() &&
+				std::ranges::find(attributed->attributes, std::string_view{"nodiscard"}) !=
+					attributed->attributes.end() &&
+				!attributed->implicit && !attributed->friend_declaration && !attributed->exported);
 		const auto& call = parsed->observations.direct_calls.front();
 		require(call.caller_provider_local_key &&
 				*call.caller_provider_local_key == main_entity->provider_local_key &&
@@ -369,6 +377,16 @@ namespace
 			require(row.descriptor_id == "cc.entity.v1" &&
 					row.cells.at("cc.entity.v1.entity").value.has_value() &&
 					row.cells.at("cc.entity.v1.provider_local_key").value.has_value());
+		require(normalized->declarations.size() == 4U);
+		for (const auto& row : normalized->declarations)
+			require(row.descriptor_id == "cc.declaration.v1" &&
+					row.cells.at("cc.declaration.v1.declaration").value.has_value() &&
+					row.cells.at("cc.declaration.v1.entity").value.has_value() &&
+					row.cells.at("cc.declaration.v1.source").value.has_value() &&
+					row.cells.at("cc.declaration.v1.attributes").value.has_value() &&
+					row.cells.at("cc.declaration.v1.is_implicit").value.has_value() &&
+					row.cells.at("cc.declaration.v1.is_friend").value.has_value() &&
+					row.cells.at("cc.declaration.v1.is_exported").value.has_value());
 		auto repeated = normalize_observation_candidates(value, detached);
 		require(repeated && *repeated == *normalized);
 
@@ -378,6 +396,9 @@ namespace
 		auto failed = detached;
 		failed.error_count = 1U;
 		require(!normalize_observation_candidates(value, failed));
+		auto noncanonical_attributes = detached;
+		noncanonical_attributes.observations.declarations.front().attributes = {"z", "a"};
+		require(!normalize_observation_candidates(value, noncanonical_attributes));
 
 		auto conflicting = detached;
 		conflicting.observations.entities[1].provider_local_key =
@@ -393,7 +414,8 @@ namespace
 		auto unrequested_worker = detached;
 		unrequested_worker.replay_input_digest = std::string{unrequested_input->input_digest()};
 		auto unrequested = normalize_observation_candidates(*unrequested_input, unrequested_worker);
-		require(unrequested && unrequested->source_spans.empty() && unrequested->entities.empty());
+		require(unrequested && unrequested->source_spans.empty() && unrequested->entities.empty() &&
+				unrequested->declarations.empty());
 
 		auto entity_only_draft = value.value();
 		entity_only_draft.requested_relation_descriptor_ids = {"cc.entity.v1"};
@@ -407,6 +429,20 @@ namespace
 				entity_only->entities.size() == 4U);
 		for (const auto& row : entity_only->entities)
 			require(!row.cells.contains("cc.entity.v1.anchor"));
+
+		auto declaration_only_draft = value.value();
+		declaration_only_draft.requested_relation_descriptor_ids = {"cc.declaration.v1"};
+		auto declaration_only_input =
+			cxxlens::sdk::detail::validate_gcc_replay_input(std::move(declaration_only_draft));
+		require(declaration_only_input);
+		auto declaration_only_worker = detached;
+		declaration_only_worker.replay_input_digest =
+			std::string{declaration_only_input->input_digest()};
+		auto declaration_only =
+			normalize_observation_candidates(*declaration_only_input, declaration_only_worker);
+		require(declaration_only && declaration_only->entities.empty() &&
+				declaration_only->source_spans.empty() &&
+				declaration_only->declarations.size() == 4U);
 	}
 } // namespace
 

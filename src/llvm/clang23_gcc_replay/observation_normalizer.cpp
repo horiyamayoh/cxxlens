@@ -1,6 +1,7 @@
 #include "observation_normalizer.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <map>
 #include <new>
 #include <optional>
@@ -11,6 +12,7 @@
 #include <tuple>
 #include <utility>
 
+#include <cxxlens/relations/cc_declaration.hpp>
 #include <cxxlens/relations/cc_entity.hpp>
 #include <cxxlens/relations/source_span.hpp>
 
@@ -63,6 +65,26 @@ namespace cxxlens::detail::clang23_gcc_replay
 			auto output = sdk::detached_cell::bytes({bytes.begin(), bytes.end()});
 			output.type.optional = true;
 			return output;
+		}
+
+		[[nodiscard]] sdk::detached_cell
+		canonical_symbol_set(std::string parameter, const std::span<const std::string> values)
+		{
+			std::vector<std::byte> encoded;
+			for (const auto& value : values)
+			{
+				const auto length = static_cast<std::uint32_t>(value.size());
+				for (std::size_t byte{}; byte < sizeof(length); ++byte)
+					encoded.push_back(
+						static_cast<std::byte>((length >> (byte * 8U)) & std::uint32_t{0xffU}));
+				for (const auto character : value)
+					encoded.push_back(
+						static_cast<std::byte>(static_cast<unsigned char>(character)));
+			}
+			return {{sdk::scalar_kind::set, std::move(parameter), false},
+					sdk::cell_state::present,
+					sdk::scalar_value{std::move(encoded)},
+					std::nullopt};
 		}
 
 		[[nodiscard]] bool requested(const sdk::detail::validated_gcc_replay_input& input,
@@ -189,6 +211,53 @@ namespace cxxlens::detail::clang23_gcc_replay
 			return row;
 		}
 
+		[[nodiscard]] sdk::result<sdk::detached_row>
+		declaration_row(const observed_declaration& value,
+						const std::string_view entity,
+						const bound_source_span& source)
+		{
+			using relation = cc::relations::declaration;
+			relation::builder builder;
+			for (auto result : {
+					 builder.set<relation::declaration_column>(
+						 sdk::detached_cell::typed("cc_declaration_id", "pending")),
+					 builder.set<relation::entity>(
+						 sdk::detached_cell::typed("cc_entity_id", std::string{entity})),
+					 builder.set<relation::source>(
+						 sdk::detached_cell::typed("source_span_id", source.span_id)),
+					 builder.set<relation::kind>(symbol(
+						 sdk::scalar_kind::open_symbol, "cc.declaration-kind/1", value.kind)),
+					 builder.set<relation::storage>(symbol(
+						 sdk::scalar_kind::open_symbol, "cc.storage-class/1", value.storage)),
+					 builder.set<relation::linkage>(
+						 symbol(sdk::scalar_kind::open_symbol, "cc.linkage/1", value.linkage)),
+					 builder.set<relation::attributes>(
+						 canonical_symbol_set("open_symbol<cc.attribute/1>", value.attributes)),
+					 builder.set<relation::is_implicit>(
+						 sdk::detached_cell::boolean(value.implicit)),
+					 builder.set<relation::is_deleted>(sdk::detached_cell::boolean(value.deleted)),
+					 builder.set<relation::is_defaulted>(
+						 sdk::detached_cell::boolean(value.defaulted)),
+					 builder.set<relation::is_friend>(
+						 sdk::detached_cell::boolean(value.friend_declaration)),
+					 builder.set<relation::is_exported>(
+						 sdk::detached_cell::boolean(value.exported)),
+				 })
+				if (!result)
+					return sdk::unexpected(std::move(result.error()));
+			auto row = std::move(builder).finish();
+			if (!row)
+				return sdk::unexpected(std::move(row.error()));
+			auto identity = sdk::derive_domain_identity(relation::descriptor(), *row);
+			if (!identity)
+				return sdk::unexpected(std::move(identity.error()));
+			row->cells.at("cc.declaration.v1.declaration") =
+				sdk::detached_cell::typed("cc_declaration_id", std::move(*identity));
+			if (auto valid = sdk::validate_domain_identity(relation::descriptor(), *row); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			return row;
+		}
+
 		void sort_rows(std::vector<sdk::detached_row>& rows)
 		{
 			std::ranges::sort(rows, {}, &sdk::detached_row::canonical_form);
@@ -233,7 +302,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 		};
 		return replay_input_digest == other.replay_input_digest &&
 			same_rows(source_spans, other.source_spans) && same_rows(entities, other.entities) &&
-			unresolved == other.unresolved;
+			same_rows(declarations, other.declarations) && unresolved == other.unresolved;
 	}
 
 	sdk::result<normalized_observation_candidates>
@@ -275,7 +344,12 @@ namespace cxxlens::detail::clang23_gcc_replay
 				sort_rows(output.source_spans);
 			}
 
-			if (requested(input, cc::relations::entity::descriptor().id))
+			const bool entities_requested =
+				requested(input, cc::relations::entity::descriptor().id);
+			const bool declarations_requested =
+				requested(input, cc::relations::declaration::descriptor().id);
+			std::map<std::string_view, std::string, std::less<>> entity_ids;
+			if (entities_requested || declarations_requested)
 			{
 				std::map<std::string_view, const observed_entity*, std::less<>> selected;
 				for (const auto& entity : worker.observations.entities)
@@ -289,10 +363,10 @@ namespace cxxlens::detail::clang23_gcc_replay
 					if (entity_preference(entity) < entity_preference(*found->second))
 						found->second = &entity;
 				}
-				output.entities.reserve(selected.size());
+				if (entities_requested)
+					output.entities.reserve(selected.size());
 				for (const auto& [key, entity] : selected)
 				{
-					(void)key;
 					const auto* source = find_source(*bound, entity->source);
 					if (source == nullptr)
 						return sdk::unexpected(
@@ -300,9 +374,40 @@ namespace cxxlens::detail::clang23_gcc_replay
 					auto row = entity_row(input, *entity, *source, source_spans_requested);
 					if (!row)
 						return sdk::unexpected(std::move(row.error()));
-					output.entities.push_back(std::move(*row));
+					const auto& identity_cell = row->cells.at("cc.entity.v1.entity");
+					const auto* identity = identity_cell.value
+						? std::get_if<std::string>(&*identity_cell.value)
+						: nullptr;
+					if (identity == nullptr)
+						return sdk::unexpected(
+							failure(std::string{key}, "entity-identity-invalid"));
+					entity_ids.emplace(key, *identity);
+					if (entities_requested)
+						output.entities.push_back(std::move(*row));
 				}
-				sort_rows(output.entities);
+				if (entities_requested)
+					sort_rows(output.entities);
+			}
+
+			if (declarations_requested)
+			{
+				output.declarations.reserve(worker.observations.declarations.size());
+				for (const auto& declaration : worker.observations.declarations)
+				{
+					const auto entity = entity_ids.find(declaration.entity_provider_local_key);
+					if (entity == entity_ids.end())
+						return sdk::unexpected(failure(declaration.entity_provider_local_key,
+													   "declaration-entity-unbound"));
+					const auto* source = find_source(*bound, declaration.source);
+					if (source == nullptr)
+						return sdk::unexpected(failure(declaration.entity_provider_local_key,
+													   "declaration-source-unbound"));
+					auto row = declaration_row(declaration, entity->second, *source);
+					if (!row)
+						return sdk::unexpected(std::move(row.error()));
+					output.declarations.push_back(std::move(*row));
+				}
+				sort_rows(output.declarations);
 			}
 			sort_unresolved(output.unresolved);
 			return output;

@@ -1,5 +1,7 @@
 #include "worker_observer.hpp"
 
+#include <algorithm>
+#include <limits>
 #include <new>
 #include <optional>
 #include <string>
@@ -7,6 +9,7 @@
 #include <utility>
 
 #include <clang/AST/ASTContext.h>
+#include <clang/AST/Attr.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/PrettyPrinter.h>
@@ -196,6 +199,29 @@ namespace cxxlens::detail::clang23_gcc_replay
 			return callee->isOverloadedOperator() ? "operator" : "direct_member";
 		}
 
+		[[nodiscard]] sdk::result<std::vector<std::string>>
+		declaration_attributes(const clang::FunctionDecl& value)
+		{
+			std::vector<std::string> output;
+			output.reserve(value.getAttrs().size());
+			for (const auto* attribute : value.attrs())
+			{
+				if (attribute == nullptr)
+					continue;
+				const auto* spelling = attribute->getSpelling();
+				if (spelling == nullptr || *spelling == '\0')
+					return sdk::unexpected(
+						failure("declaration.attribute", "spelling-unavailable"));
+				std::string detached{spelling};
+				if (detached.size() > maximum_clang_text_bytes)
+					return sdk::unexpected(resource_failure("clang-text"));
+				output.push_back(std::move(detached));
+			}
+			std::ranges::sort(output);
+			output.erase(std::ranges::unique(output).begin(), output.end());
+			return output;
+		}
+
 		class visitor final : public clang::RecursiveASTVisitor<visitor>
 		{
 			using base = clang::RecursiveASTVisitor<visitor>;
@@ -300,16 +326,32 @@ namespace cxxlens::detail::clang23_gcc_replay
 					return false;
 				output_.entities.push_back(std::move(entity));
 
+				auto attributes = declaration_attributes(*value);
+				if (!attributes)
+					return reject(std::move(attributes.error()));
 				observed_declaration declaration{*key,
 												 declaration_kind(*value),
 												 storage_class(*value),
 												 linkage(*value),
+												 std::move(*attributes),
 												 *source,
+												 value->isImplicit(),
 												 value->isDeleted(),
-												 value->isExplicitlyDefaulted()};
+												 value->isExplicitlyDefaulted(),
+												 value->getFriendObjectKind() !=
+													 clang::Decl::FOK_None,
+												 value->isInExportDeclContext()};
+				std::size_t attribute_bytes{};
+				for (const auto& attribute : declaration.attributes)
+				{
+					if (attribute.size() >
+						std::numeric_limits<std::size_t>::max() - attribute_bytes)
+						return reject(resource_failure("logical-bytes"));
+					attribute_bytes += attribute.size();
+				}
 				if (!accept(bounds_.observe(declaration.entity_provider_local_key.size() +
 											declaration.kind.size() + declaration.storage.size() +
-											declaration.linkage.size() +
+											declaration.linkage.size() + attribute_bytes +
 											declaration.source.logical_path.size())))
 					return false;
 				output_.declarations.push_back(std::move(declaration));

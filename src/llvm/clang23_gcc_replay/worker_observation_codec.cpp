@@ -15,7 +15,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 	namespace
 	{
 		using namespace protocol_v2;
-		constexpr std::string_view schema = "cxxlens.clang23-gcc-replay-observations.v1";
+		constexpr std::string_view schema = "cxxlens.clang23-gcc-replay-observations.v2";
 
 		[[nodiscard]] sdk::error invalid(std::string field, std::string detail)
 		{
@@ -90,13 +90,23 @@ namespace cxxlens::detail::clang23_gcc_replay
 			cbor::array output;
 			output.reserve(observations.declarations.size());
 			for (const auto& value : observations.declarations)
+			{
+				cbor::array attributes;
+				attributes.reserve(value.attributes.size());
+				for (const auto& attribute : value.attributes)
+					attributes.emplace_back(attribute);
 				output.emplace_back(cbor::array{text(value.entity_provider_local_key),
 												text(value.kind),
 												text(value.storage),
 												text(value.linkage),
+												cbor::value{std::move(attributes)},
 												span_value(value.source),
+												cbor::value{value.implicit},
 												cbor::value{value.deleted},
-												cbor::value{value.defaulted}});
+												cbor::value{value.defaulted},
+												cbor::value{value.friend_declaration},
+												cbor::value{value.exported}});
+			}
 			return output;
 		}
 
@@ -213,6 +223,13 @@ namespace cxxlens::detail::clang23_gcc_replay
 										 std::string_view{item.storage},
 										 std::string_view{item.linkage}})
 					if (auto valid = add_text(field, total, "declaration", limits); !valid)
+						return valid;
+				if (!std::ranges::is_sorted(item.attributes) ||
+					std::ranges::adjacent_find(item.attributes) != item.attributes.end())
+					return sdk::unexpected(invalid("declaration.attributes", "canonical-order"));
+				for (const auto& attribute : item.attributes)
+					if (auto valid = add_text(attribute, total, "declaration.attribute", limits);
+						!valid)
 						return valid;
 				if (auto valid = validate_span(item.source, total, limits); !valid)
 					return valid;
@@ -336,25 +353,45 @@ namespace cxxlens::detail::clang23_gcc_replay
 			output.declarations.reserve((*declarations)->size());
 			for (const auto& encoded : **declarations)
 			{
-				auto fields = fixed_array(encoded, 7U, "declaration");
+				auto fields = fixed_array(encoded, 11U, "declaration");
 				if (!fields)
 					return sdk::unexpected(std::move(fields.error()));
 				auto key = item<std::string>(**fields, 0U, "declaration.key");
 				auto kind = item<std::string>(**fields, 1U, "declaration.kind");
 				auto storage = item<std::string>(**fields, 2U, "declaration.storage");
 				auto linkage = item<std::string>(**fields, 3U, "declaration.linkage");
-				auto source = decode_span((**fields)[4U]);
-				auto deleted = item<bool>(**fields, 5U, "declaration.deleted");
-				auto defaulted = item<bool>(**fields, 6U, "declaration.defaulted");
-				if (!key || !kind || !storage || !linkage || !source || !deleted || !defaulted)
+				auto encoded_attributes = item<cbor::array>(**fields, 4U, "declaration.attributes");
+				if (!encoded_attributes)
+					return sdk::unexpected(std::move(encoded_attributes.error()));
+				std::vector<std::string> attributes;
+				attributes.reserve((*encoded_attributes)->size());
+				for (const auto& encoded_attribute : **encoded_attributes)
+				{
+					const auto* attribute = std::get_if<std::string>(&encoded_attribute.data);
+					if (attribute == nullptr)
+						return sdk::unexpected(invalid("declaration.attribute", "type"));
+					attributes.push_back(*attribute);
+				}
+				auto source = decode_span((**fields)[5U]);
+				auto implicit = item<bool>(**fields, 6U, "declaration.implicit");
+				auto deleted = item<bool>(**fields, 7U, "declaration.deleted");
+				auto defaulted = item<bool>(**fields, 8U, "declaration.defaulted");
+				auto friend_declaration = item<bool>(**fields, 9U, "declaration.friend");
+				auto exported = item<bool>(**fields, 10U, "declaration.exported");
+				if (!key || !kind || !storage || !linkage || !source || !implicit || !deleted ||
+					!defaulted || !friend_declaration || !exported)
 					return sdk::unexpected(invalid("declaration", "field"));
 				output.declarations.push_back({**key,
 											   **kind,
 											   **storage,
 											   **linkage,
+											   std::move(attributes),
 											   std::move(*source),
+											   **implicit,
 											   **deleted,
-											   **defaulted});
+											   **defaulted,
+											   **friend_declaration,
+											   **exported});
 			}
 
 			output.types.reserve((*types)->size());
