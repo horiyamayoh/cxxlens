@@ -221,17 +221,34 @@ namespace cxxlens::sdk::detail
 								const context path_context,
 								const std::uint64_t maximum_capture_bytes,
 								const import_limits limits,
-								const bool dependency_output_bound_to_invocation)
+								const bool dependency_output_bound_to_invocation,
+								const bool strict_response_files = false)
 				: files_{files}, working_directory_{path_context.working_directory},
 				  project_root_{path_context.project_root}, main_source_{path_context.main_source},
 				  remaining_bytes_{maximum_capture_bytes}, limits_{limits},
-				  dependency_output_bound_to_invocation_{dependency_output_bound_to_invocation}
+				  dependency_output_bound_to_invocation_{dependency_output_bound_to_invocation},
+				  strict_response_files_{strict_response_files}
 			{
 			}
 
-			[[nodiscard]] result<gcc_auxiliary_capture>
-			capture(const std::span<const std::string> arguments)
+			[[nodiscard]] result<gcc_prepared_response_capture>
+			prepare_responses(const std::span<const std::string> arguments)
 			{
+				auto expanded = expand(arguments, std::nullopt, 0U);
+				if (!expanded)
+					return unexpected(std::move(expanded.error()));
+				return gcc_prepared_response_capture{std::move(*expanded),
+													 std::move(response_files_),
+													 std::move(closure_members_),
+													 captured_bytes_};
+			}
+
+			[[nodiscard]] result<gcc_auxiliary_capture>
+			capture(const std::span<const std::string> arguments,
+					gcc_prepared_response_capture prepared_responses = {})
+			{
+				if (auto seeded = seed(arguments, std::move(prepared_responses)); !seeded)
+					return unexpected(std::move(seeded.error()));
 				auto expanded = expand(arguments, std::nullopt, 0U);
 				if (!expanded)
 					return unexpected(std::move(expanded.error()));
@@ -262,6 +279,28 @@ namespace cxxlens::sdk::detail
 			}
 
 		  private:
+			[[nodiscard]] result<void> seed(const std::span<const std::string> arguments,
+											gcc_prepared_response_capture prepared)
+			{
+				const bool has_prepared_capture = !prepared.expanded_arguments.empty() ||
+					!prepared.response_files.empty() || !prepared.closure_members.empty() ||
+					prepared.captured_bytes != 0U;
+				if (has_prepared_capture &&
+					!std::ranges::equal(arguments, prepared.expanded_arguments))
+					return unexpected(invalid("response_files", "execution-binding-mismatch"));
+				if (prepared.captured_bytes > remaining_bytes_)
+					return unexpected(limit("response_file.content", "byte-count"));
+				remaining_bytes_ -= prepared.captured_bytes;
+				captured_bytes_ = prepared.captured_bytes;
+				response_files_ = std::move(prepared.response_files);
+				saw_response_ = !response_files_.empty();
+				closure_members_ = std::move(prepared.closure_members);
+				for (const auto& member : closure_members_)
+					closure_member_paths_.emplace(
+						logical_path_for(member.canonical_path, project_root_));
+				return {};
+			}
+
 			[[nodiscard]] result<std::vector<std::string>>
 			expand(const std::span<const std::string> arguments,
 				   const std::optional<std::size_t> parent,
@@ -327,6 +366,9 @@ namespace cxxlens::sdk::detail
 					{
 						if (snapshot.error().code != capture_file_unavailable_code)
 							return unexpected(std::move(snapshot.error()));
+						if (strict_response_files_)
+							return unexpected(
+								invalid("response_file.path", "unreadable-before-execution"));
 						const auto logical = logical_path_for(*path, project_root_);
 						response_files_.push_back(
 							{logical,
@@ -596,6 +638,7 @@ namespace cxxlens::sdk::detail
 			std::uint64_t remaining_bytes_{};
 			import_limits limits_;
 			bool dependency_output_bound_to_invocation_{};
+			bool strict_response_files_{};
 			std::size_t response_expansions_{};
 			std::uint64_t captured_bytes_{};
 			bool saw_response_{};
@@ -1170,6 +1213,41 @@ namespace cxxlens::sdk::detail
 		}
 	}
 
+	result<gcc_prepared_response_capture>
+	prepare_gcc_16_2_response_files(gcc_capture_file_port& files,
+									const std::span<const std::string> arguments,
+									const std::string_view canonical_working_directory,
+									const std::string_view canonical_project_root,
+									const std::uint64_t maximum_capture_bytes,
+									const import_limits limits)
+	{
+		if (auto valid = limits.validate(); !valid)
+			return unexpected(std::move(valid.error()));
+		try
+		{
+			if (!at_or_below(canonical_working_directory, canonical_project_root))
+				return unexpected(
+					invalid("capture.working_directory", "path-outside-project-root"));
+			return auxiliary_collector{files,
+									   {.working_directory = canonical_working_directory,
+										.project_root = canonical_project_root,
+										.main_source = {}},
+									   maximum_capture_bytes,
+									   limits,
+									   false,
+									   true}
+				.prepare_responses(arguments);
+		}
+		catch (const std::bad_alloc&)
+		{
+			return unexpected(limit("response_file", "allocation"));
+		}
+		catch (const std::length_error&)
+		{
+			return unexpected(limit("response_file", "allocation-length"));
+		}
+	}
+
 	result<gcc_auxiliary_capture>
 	capture_gcc_auxiliary_files(gcc_capture_file_port& files,
 								const std::span<const std::string> arguments,
@@ -1178,7 +1256,8 @@ namespace cxxlens::sdk::detail
 								const std::string_view canonical_main_source,
 								const std::uint64_t maximum_capture_bytes,
 								const import_limits limits,
-								const bool dependency_output_bound_to_invocation)
+								const bool dependency_output_bound_to_invocation,
+								gcc_prepared_response_capture prepared_responses)
 	{
 		if (auto valid = limits.validate(); !valid)
 			return unexpected(std::move(valid.error()));
@@ -1196,7 +1275,7 @@ namespace cxxlens::sdk::detail
 									   maximum_capture_bytes,
 									   limits,
 									   dependency_output_bound_to_invocation}
-				.capture(arguments);
+				.capture(arguments, std::move(prepared_responses));
 		}
 		catch (const std::bad_alloc&)
 		{

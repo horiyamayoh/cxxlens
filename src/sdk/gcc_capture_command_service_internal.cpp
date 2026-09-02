@@ -1,9 +1,11 @@
 #include "gcc_capture_command_service_internal.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <limits>
 #include <new>
+#include <span>
 #include <stdexcept>
 #include <string_view>
 #include <utility>
@@ -54,6 +56,18 @@ namespace cxxlens::sdk::detail
 					return "exited";
 			}
 			return "unknown";
+		}
+
+		[[nodiscard]] bool
+		requests_unstaged_specs(const std::span<const std::string> arguments) noexcept
+		{
+			return std::ranges::any_of(arguments,
+									   [](const std::string_view token)
+									   {
+										   return token == "-specs" || token == "--specs" ||
+											   token.starts_with("-specs=") ||
+											   token.starts_with("--specs=");
+									   });
 		}
 
 		[[nodiscard]] result<std::uint64_t> capture_deadline()
@@ -148,12 +162,25 @@ namespace cxxlens::sdk::detail
 			auto environment = read_current_process_environment(4096U, std::size_t{1024U} * 1024U);
 			if (!environment)
 				return unexpected(std::move(environment.error()));
-			auto plan = plan_gcc_16_2_invocation({request.compiler_arguments,
+			auto prepared = prepare_gcc_16_2_response_files(*files,
+															request.compiler_arguments,
+															*working,
+															*root,
+															limits.maximum_source_closure_bytes,
+															limits);
+			if (!prepared)
+				return unexpected(std::move(prepared.error()));
+			if (requests_unstaged_specs(prepared->expanded_arguments))
+				return unexpected({"application-analysis.capture-input-invalid",
+								   "invocation.config_file",
+								   "staging-required"});
+			auto plan = plan_gcc_16_2_invocation({prepared->expanded_arguments,
 												  request.compiler_path,
 												  (*workspace)->dependency_output_path()},
 												 limits);
 			if (!plan)
 				return unexpected(std::move(plan.error()));
+			prepared->expanded_arguments = plan->capture_arguments;
 			auto effects = capture_gcc_16_2_environment_effects(*files,
 																{*environment,
 																 *working,
@@ -196,7 +223,8 @@ namespace cxxlens::sdk::detail
 			capture.absolute_wall_deadline_ns = *deadline;
 			capture.expected_compiler_path = executed->executable_path;
 			capture.expected_compiler_digest = executed->executable_digest;
-			auto bundle = capture_gcc_invocation(*files, *processes, capture, limits);
+			auto bundle = capture_gcc_invocation(
+				*files, *processes, capture, limits, {}, std::move(*prepared));
 			if (!bundle)
 				return unexpected(std::move(bundle.error()));
 			auto published = (*workspace)->publish_bundle(*bundle);

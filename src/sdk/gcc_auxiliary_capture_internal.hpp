@@ -27,6 +27,14 @@ namespace cxxlens::sdk::detail
 		std::uint64_t captured_bytes{};
 	};
 
+	struct gcc_prepared_response_capture
+	{
+		std::vector<std::string> expanded_arguments;
+		std::vector<build_capture_auxiliary_file> response_files;
+		std::vector<gcc_source_closure_member_observation> closure_members;
+		std::uint64_t captured_bytes{};
+	};
+
 	struct gcc_environment_capture_request
 	{
 		std::span<const std::string> environment;
@@ -76,6 +84,15 @@ namespace cxxlens::sdk::detail
 	[[nodiscard]] result<gcc_invocation_plan>
 	plan_gcc_16_2_invocation(const gcc_invocation_plan_request& request, import_limits limits = {});
 
+	/** Snapshot and recursively expand every GCC response file before compiler execution. */
+	[[nodiscard]] result<gcc_prepared_response_capture>
+	prepare_gcc_16_2_response_files(gcc_capture_file_port& files,
+									std::span<const std::string> arguments,
+									std::string_view canonical_working_directory,
+									std::string_view canonical_project_root,
+									std::uint64_t maximum_capture_bytes,
+									import_limits limits = {});
+
 	/** Capture explicit response/spec/dependency files reachable from one original GCC argv. */
 	[[nodiscard]] result<gcc_auxiliary_capture>
 	capture_gcc_auxiliary_files(gcc_capture_file_port& files,
@@ -85,5 +102,6 @@ namespace cxxlens::sdk::detail
 								std::string_view canonical_main_source,
 								std::uint64_t maximum_capture_bytes,
 								import_limits limits = {},
-								bool dependency_output_bound_to_invocation = false);
+								bool dependency_output_bound_to_invocation = false,
+								gcc_prepared_response_capture prepared_responses = {});
 } // namespace cxxlens::sdk::detail

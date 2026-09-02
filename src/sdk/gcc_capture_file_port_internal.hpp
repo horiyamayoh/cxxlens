@@ -14,6 +14,7 @@
 #include <string_view>
 #include <vector>
 
+#include "gcc_auxiliary_capture_internal.hpp"
 #include "gcc_toolchain_probe_internal.hpp"
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -109,7 +110,8 @@ namespace cxxlens::sdk::detail
 						   gcc_probe_process_port& processes,
 						   const gcc_invocation_capture_request& request,
 						   import_limits limits = {},
-						   const std::stop_token& cancellation = {});
+						   const std::stop_token& cancellation = {},
+						   gcc_prepared_response_capture prepared_responses = {});
 
 	/** Linux production adapter. Unsupported hosts return structured-unavailable failures. */
 	[[nodiscard]] std::unique_ptr<gcc_capture_file_port> make_system_gcc_capture_file_port();

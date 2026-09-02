@@ -69,6 +69,35 @@ def run_wrapper(
     )
 
 
+def run_response_wrapper(
+    cli: pathlib.Path,
+    root: pathlib.Path,
+    compiler: pathlib.Path,
+    capture_directory: pathlib.Path,
+):
+    return subprocess.run(
+        [
+            str(cli),
+            "capture",
+            "--project-id",
+            "project:cli-capture",
+            "--project-root",
+            str(root),
+            "--capture-directory",
+            str(capture_directory),
+            "--compiler",
+            str(compiler),
+            "--",
+            str(compiler),
+            "@wrapper-outer.rsp",
+        ],
+        cwd=root / "build",
+        capture_output=True,
+        check=False,
+        timeout=45,
+    )
+
+
 def main() -> int:
     require(
         len(sys.argv) in (4, 5),
@@ -103,6 +132,13 @@ def main() -> int:
         )
         (root / "build" / "custom.spec").write_text(
             "%rename link old_link\n\n*link:\n%(old_link)\n", encoding="utf-8"
+        )
+        (root / "build" / "wrapper-outer.rsp").write_text(
+            "@wrapper-nested.rsp -std=gnu++23 -c ../src/main.cpp -o response.o\n",
+            encoding="utf-8",
+        )
+        (root / "build" / "wrapper-nested.rsp").write_text(
+            "-I../include\n", encoding="utf-8"
         )
 
         database = [
@@ -189,6 +225,30 @@ def main() -> int:
             f"SDK rejected wrapper bundle: {wrapped_admitted.stderr!r}",
         )
 
+        response_directory = root / "response-captures"
+        response_directory.mkdir()
+        response_first = run_response_wrapper(cli, root, compiler, response_directory)
+        response_second = run_response_wrapper(cli, root, compiler, response_directory)
+        require(response_first.returncode == 0, f"response wrapper failed: {response_first.stderr!r}")
+        require(response_second.returncode == 0, f"repeated response wrapper failed: {response_second.stderr!r}")
+        require(
+            response_first.stdout == b""
+            and response_first.stderr == b""
+            and response_second.stdout == b""
+            and response_second.stderr == b"",
+            "response wrapper polluted compiler streams",
+        )
+        response_bundles = list(response_directory.glob("capture-*.cxxlens"))
+        require(len(response_bundles) == 1, "response capture was empty or nondeterministic")
+        require((root / "build" / "response.o").is_file(), "expanded response argv was not executed")
+        response_admitted = subprocess.run(
+            [str(consumer), str(response_bundles[0]), "--expect-wrapper"],
+            capture_output=True,
+            check=False,
+            timeout=15,
+        )
+        require(response_admitted.returncode == 0, "SDK rejected response wrapper bundle")
+
         failure_directory = root / "failed-captures"
         failure_directory.mkdir()
         if not require_production_build:
@@ -221,8 +281,35 @@ def main() -> int:
         )
         require(
             rejected_response.returncode == 2
-            and b"response-not-expanded" in rejected_response.stderr,
-            "wrapper accepted an ambient response file",
+            and b"staging-required" in rejected_response.stderr,
+            "wrapper executed an unstaged GCC specs file",
+        )
+
+        missing_response = subprocess.run(
+            [
+                str(cli),
+                "capture",
+                "--project-id",
+                "project:cli-capture",
+                "--project-root",
+                str(root),
+                "--capture-directory",
+                str(failure_directory),
+                "--compiler",
+                str(compiler),
+                "--",
+                str(compiler),
+                "@missing.rsp",
+            ],
+            cwd=root / "build",
+            capture_output=True,
+            check=False,
+            timeout=15,
+        )
+        require(
+            missing_response.returncode == 2
+            and b"unreadable-before-execution" in missing_response.stderr,
+            "wrapper did not reject a missing response file before compiler execution",
         )
 
         missing_capture_directory = run_wrapper(

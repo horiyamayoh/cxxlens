@@ -532,6 +532,31 @@ namespace
 		files.files.emplace(
 			"/physical/project/include/a.hpp",
 			capture_file_snapshot{"/physical/project/include/a.hpp", bytes("#pragma once\n")});
+		const std::vector<std::string> original_arguments{"/opt/gcc-16.2.0/bin/g++",
+														  "@outer.rsp",
+														  "-MMD",
+														  "-MF",
+														  "deps.d",
+														  "-c",
+														  "../src/main.cpp"};
+		auto prepared = cxxlens::sdk::detail::prepare_gcc_16_2_response_files(
+			files,
+			original_arguments,
+			"/physical/project/build",
+			"/physical/project",
+			cxxlens::sdk::import_limits{}.maximum_source_closure_bytes);
+		require(prepared && prepared->response_files.size() == 2U &&
+				prepared->closure_members.size() == 2U && prepared->captured_bytes != 0U &&
+				prepared->expanded_arguments ==
+					std::vector<std::string>{"/opt/gcc-16.2.0/bin/g++",
+											 "-I../include",
+											 "--specs=custom.spec",
+											 "-DNAME=a b",
+											 "-MMD",
+											 "-MF",
+											 "deps.d",
+											 "-c",
+											 "../src/main.cpp"});
 
 		auto captured = capture_with_valid_probe(files, request());
 		auto repeated = capture_with_valid_probe(files, request());
@@ -671,6 +696,46 @@ namespace
 				value->tuple[5].tuple.front().tuple[11].tuple[1].tuple.size() == 1U &&
 				value->tuple[6].tuple.front().tuple[3].integer == 2);
 
+		files.files.emplace("/physical/project/build/compile.rsp",
+							capture_file_snapshot{"/physical/project/build/compile.rsp",
+												  bytes("-I../include -c ../src/main.cpp\n")});
+		auto response_input = input;
+		response_input.original_arguments = {input.compiler_path, "@compile.rsp"};
+		auto prepared = cxxlens::sdk::detail::prepare_gcc_16_2_response_files(
+			files,
+			response_input.original_arguments,
+			input.working_directory,
+			input.project_root,
+			cxxlens::sdk::import_limits{}.maximum_source_closure_bytes);
+		require(prepared && prepared->response_files.size() == 1U);
+		response_input.capture_arguments = prepared->expanded_arguments;
+		response_input.capture_arguments.insert(response_input.capture_arguments.end(),
+												{"-MMD", "-MF", "deps.d"});
+		prepared->expanded_arguments = response_input.capture_arguments;
+		auto mismatched_prepared = *prepared;
+		mismatched_prepared.expanded_arguments.emplace_back("-DFORGED=1");
+		auto rejected_binding = cxxlens::sdk::detail::capture_gcc_auxiliary_files(
+			files,
+			response_input.capture_arguments,
+			input.working_directory,
+			input.project_root,
+			"/physical/project/src/main.cpp",
+			cxxlens::sdk::import_limits{}.maximum_source_closure_bytes,
+			{},
+			true,
+			std::move(mismatched_prepared));
+		require(!rejected_binding &&
+				rejected_binding.error().detail == "execution-binding-mismatch");
+		fake_process_port response_processes{valid_probe_outputs()};
+		auto response_capture = cxxlens::sdk::detail::capture_gcc_invocation(
+			files, response_processes, response_input, {}, {}, std::move(*prepared));
+		require(static_cast<bool>(response_capture));
+		auto response_value = cxxlens::sdk::canonical_binary_decode(*response_capture);
+		require(response_value &&
+				response_value->tuple[5].tuple.front().tuple[9].tuple[0].text == "observed" &&
+				response_value->tuple[5].tuple.front().tuple[9].tuple[1].tuple.size() == 1U &&
+				response_value->tuple[6].tuple.front().tuple[3].integer == 3);
+
 		auto missing_files = files;
 		missing_files.files.erase("/physical/project/build/deps.d");
 		fake_process_port missing_processes{valid_probe_outputs()};
@@ -742,6 +807,15 @@ namespace
 				has_gap(*missing_decoded,
 						"compile_units[0].response_files[0].content_digest",
 						"response-file-unreadable"));
+		const std::vector<std::string> strict_arguments{
+			"/opt/gcc-16.2.0/bin/g++", "@outer.rsp", "-c", "../src/main.cpp"};
+		auto strict_missing = cxxlens::sdk::detail::prepare_gcc_16_2_response_files(
+			files,
+			strict_arguments,
+			"/physical/project/build",
+			"/physical/project",
+			cxxlens::sdk::import_limits{}.maximum_source_closure_bytes);
+		require(!strict_missing && strict_missing.error().detail == "unreadable-before-execution");
 
 		auto recursive = files;
 		recursive.files.emplace(
