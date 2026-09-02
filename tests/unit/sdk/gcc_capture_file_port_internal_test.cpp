@@ -195,6 +195,14 @@ namespace
 			require(probe.argv.front() == input.compiler_path &&
 					probe.working_directory == "/physical/project" &&
 					probe.absolute_wall_deadline_ns == input.absolute_wall_deadline_ns);
+
+		auto alias_input = input;
+		alias_input.compiler_path = "/alias/g++";
+		fake_process_port alias_processes{valid_probe_outputs()};
+		auto alias_capture =
+			cxxlens::sdk::detail::capture_gcc_compile_commands(files, alias_processes, alias_input);
+		require(static_cast<bool>(alias_capture) && !alias_processes.requests.empty() &&
+				alias_processes.requests.front().argv.front() == alias_input.compiler_path);
 	}
 
 	void fake_port_failures_and_canonical_escape_fail_closed()
@@ -221,7 +229,7 @@ namespace
 		escaped.directories.emplace("/physical/project/build", "/physical/project/build");
 		constexpr std::string_view database = R"json([
   {"directory":"/physical/project/build","file":"../src/main.cpp",
-   "arguments":["g++","-c","../src/main.cpp"]}
+	   "arguments":["/opt/gcc-16.2.0/bin/g++","-c","../src/main.cpp"]}
 ])json";
 		escaped.files.emplace("/physical/project/build/compile_commands.json",
 							  capture_file_snapshot{"/physical/project/build/compile_commands.json",
@@ -259,6 +267,44 @@ namespace
 		auto independently_path_limited = capture_with_valid_probe(oversized_path, request());
 		require(!independently_path_limited &&
 				independently_path_limited.error().detail == "path-bytes");
+
+		auto unbound = escaped;
+		unbound.file_limits.clear();
+		unbound.required_roots.clear();
+		constexpr std::string_view unbound_database = R"json([
+  {"directory":"/physical/project/build","file":"../src/main.cpp",
+   "arguments":["g++","-c","../src/main.cpp"]}
+])json";
+		unbound.files.at("/physical/project/build/compile_commands.json").content =
+			bytes(unbound_database);
+		auto unbound_result = capture_with_valid_probe(unbound, request());
+		require(!unbound_result &&
+				unbound_result.error().field == "compile_commands[0].arguments[0]" &&
+				unbound_result.error().detail == "absolute-compiler-path-required" &&
+				unbound.file_limits.size() == 1U);
+
+		auto mismatched = unbound;
+		mismatched.file_limits.clear();
+		constexpr std::string_view mismatched_database = R"json([
+  {"directory":"/physical/project/build","file":"../src/main.cpp",
+   "arguments":["/different/g++","-c","../src/main.cpp"]}
+])json";
+		mismatched.files.at("/physical/project/build/compile_commands.json").content =
+			bytes(mismatched_database);
+		auto mismatched_result = capture_with_valid_probe(mismatched, request());
+		require(!mismatched_result &&
+				mismatched_result.error().field == "compile_commands[0].arguments[0]" &&
+				mismatched_result.error().detail == "compiler-identity-mismatch" &&
+				mismatched.file_limits.size() == 1U);
+
+		auto relative_request = request();
+		relative_request.compiler_path = "g++";
+		fake_file_port untouched;
+		fake_process_port unused_processes{valid_probe_outputs()};
+		auto relative_result = cxxlens::sdk::detail::capture_gcc_compile_commands(
+			untouched, unused_processes, relative_request);
+		require(!relative_result && relative_result.error().field == "compiler_path" &&
+				untouched.directory_limits.empty() && unused_processes.requests.empty());
 	}
 
 	class temporary_tree
@@ -301,10 +347,11 @@ namespace
 		std::filesystem::create_directories(tree.path() / "build");
 		std::filesystem::create_directories(tree.path() / "src");
 		write(tree.path() / "src/main.cpp", "int main() { return 0; }\n");
-		const auto database = std::string{R"([{"directory":")"} + (tree.path() / "build").string() +
-			R"json(","file":"../src/main.cpp","arguments":["g++","-std=c++23","-c","../src/main.cpp"]}])json";
-		write(tree.path() / "build/compile_commands.json", database);
 		auto input = request(tree.path().string());
+		const auto database = std::string{R"([{"directory":")"} + (tree.path() / "build").string() +
+			R"json(","file":"../src/main.cpp","arguments":[")json" + input.compiler_path +
+			R"json(","-std=c++23","-c","../src/main.cpp"]}])json";
+		write(tree.path() / "build/compile_commands.json", database);
 		auto port = cxxlens::sdk::detail::make_system_gcc_capture_file_port();
 		auto captured = capture_with_valid_probe(*port, input);
 		require(static_cast<bool>(captured));

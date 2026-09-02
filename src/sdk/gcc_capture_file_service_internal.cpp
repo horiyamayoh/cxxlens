@@ -29,6 +29,31 @@ namespace cxxlens::sdk::detail
 				 (root == "/" || path[root.size()] == '/'));
 		}
 
+		[[nodiscard]] result<void>
+		validate_compiler_bindings(const compile_commands_capture& capture,
+								   const gcc_compile_commands_capture_request& request,
+								   const gcc_toolchain_observation& toolchain)
+		{
+			if (request.compiler_path.empty() || request.compiler_path.front() != '/' ||
+				request.compiler_path.contains('\0'))
+				return unexpected(invalid("compiler_path", "absolute-path-required"));
+			if (!toolchain.canonical_binary_path.value ||
+				toolchain.canonical_binary_path.state != capture_observation_state::observed)
+				return unexpected(invalid("compiler_path", "measured-identity-missing"));
+
+			for (std::size_t index{}; index < capture.entries().size(); ++index)
+			{
+				const auto& compiler = capture.entries()[index].arguments.front();
+				const auto field = "compile_commands[" + std::to_string(index) + "].arguments[0]";
+				if (compiler.empty() || compiler.front() != '/')
+					return unexpected(invalid(field, "absolute-compiler-path-required"));
+				if (compiler != request.compiler_path &&
+					compiler != *toolchain.canonical_binary_path.value)
+					return unexpected(invalid(field, "compiler-identity-mismatch"));
+			}
+			return {};
+		}
+
 		[[nodiscard]] result<std::string> source_path(const compile_command_entry& entry,
 													  const std::string_view canonical_directory)
 		{
@@ -60,6 +85,9 @@ namespace cxxlens::sdk::detail
 	{
 		if (auto valid = limits.validate(); !valid)
 			return unexpected(std::move(valid.error()));
+		if (request.compiler_path.empty() || request.compiler_path.front() != '/' ||
+			request.compiler_path.contains('\0'))
+			return unexpected(invalid("compiler_path", "absolute-path-required"));
 		try
 		{
 			auto root =
@@ -93,6 +121,8 @@ namespace cxxlens::sdk::detail
 			auto decoded = decode_compile_commands(database_text, limits);
 			if (!decoded)
 				return unexpected(std::move(decoded.error()));
+			if (auto bound = validate_compiler_bindings(*decoded, request, *toolchain); !bound)
+				return unexpected(std::move(bound.error()));
 
 			gcc_compile_commands_bundle_input input;
 			input.project_id = request.project_id;
