@@ -16,6 +16,8 @@
 
 namespace cxxlens::sdk::detail
 {
+	inline constexpr std::size_t gcc_16_2_maximum_response_expansions{1999U};
+
 	class gcc_capture_file_port;
 
 	struct gcc_auxiliary_capture

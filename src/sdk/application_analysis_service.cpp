@@ -8,7 +8,7 @@
 #include <cxxlens/sdk/application_analysis.hpp>
 
 #include "application_analysis_internal.hpp"
-#include "gcc_auxiliary_capture_internal.hpp"
+#include "gcc_replay_planner_internal.hpp"
 
 namespace cxxlens::sdk
 {
@@ -84,177 +84,6 @@ namespace cxxlens::sdk
 			values.erase(std::ranges::unique(values).begin(), values.end());
 		}
 
-		void append_gap(std::vector<capture_gap>& values,
-						std::string field,
-						std::string reason,
-						std::string action)
-		{
-			values.push_back(
-				{std::move(field), "unavailable", std::move(reason), std::move(action)});
-		}
-
-		[[nodiscard]] std::optional<std::string>
-		logical_path_for(const detail::decoded_capture_projection& capture,
-						 std::string_view physical);
-
-		[[nodiscard]] result<std::string>
-		logical_auxiliary_path(const detail::decoded_capture_projection& capture,
-							   const detail::decoded_capture_unit& unit,
-							   const std::string_view value)
-		{
-			if (value.empty() || value.contains('\0') || value.contains('\\'))
-				return unexpected(invalid("response_file.path", "logical-path-required"));
-			if (value.starts_with('/'))
-			{
-				auto mapped = logical_path_for(capture, value);
-				if (!mapped)
-					return unexpected(invalid("response_file.path", "outside-project-root"));
-				return *mapped;
-			}
-			std::string relative;
-			if (value.starts_with("project://"))
-				relative = std::string{value.substr(std::string_view{"project://"}.size())};
-			else
-			{
-				if (!unit.logical_working_directory.starts_with("project://"))
-					return unexpected(invalid("response_file.path", "working-directory"));
-				relative =
-					unit.logical_working_directory.substr(std::string_view{"project://"}.size());
-				if (!relative.empty())
-					relative.push_back('/');
-				relative += value;
-			}
-			std::vector<std::string_view> segments;
-			std::size_t offset{};
-			while (offset < relative.size())
-			{
-				const auto next = relative.find('/', offset);
-				const auto segment = std::string_view{relative}.substr(
-					offset, next == std::string::npos ? relative.size() - offset : next - offset);
-				if (segment.empty())
-					return unexpected(invalid("response_file.path", "empty-segment"));
-				if (segment == "..")
-				{
-					if (segments.empty())
-						return unexpected(invalid("response_file.path", "outside-project-root"));
-					segments.pop_back();
-				}
-				else if (segment != ".")
-					segments.push_back(segment);
-				if (next == std::string::npos)
-					break;
-				offset = next + 1U;
-			}
-			std::string output{"project://"};
-			for (std::size_t index{}; index < segments.size(); ++index)
-			{
-				if (index != 0U)
-					output.push_back('/');
-				output += segments[index];
-			}
-			return output;
-		}
-
-		class gcc_response_expander
-		{
-		  public:
-			gcc_response_expander(const detail::decoded_capture_projection& capture,
-								  const detail::decoded_capture_unit& unit,
-								  const detail::decoded_capture_source_closure& closure,
-								  const import_limits& limits)
-				: capture_{capture}, unit_{unit}, closure_{closure}, limits_{limits}
-			{
-			}
-
-			[[nodiscard]] result<std::vector<std::string>>
-			expand(const std::span<const std::string> arguments, const std::size_t depth)
-			{
-				std::vector<std::string> output;
-				for (const auto& argument : arguments)
-				{
-					if (!argument.starts_with('@') || argument.size() == 1U)
-					{
-						if (output.size() >= limits_.maximum_arguments_per_unit)
-							return unexpected(error{"application-analysis.import-limit-exceeded",
-													"response_file.arguments",
-													"count"});
-						output.push_back(argument);
-						continue;
-					}
-					if (++expansions_ > 1999U)
-						return unexpected(error{"application-analysis.import-limit-exceeded",
-												"response_files",
-												"gcc-expansion-count"});
-					if (depth >= limits_.maximum_nesting_depth)
-						return unexpected(error{"application-analysis.import-limit-exceeded",
-												"response_files",
-												"depth"});
-					auto path = logical_auxiliary_path(
-						capture_, unit_, std::string_view{argument}.substr(1U));
-					if (!path)
-						return unexpected(std::move(path.error()));
-					const auto metadata =
-						std::ranges::find(unit_.response_files,
-										  *path,
-										  &detail::decoded_capture_auxiliary_file::logical_path);
-					if (metadata == unit_.response_files.end() || !metadata->content_digest)
-					{
-						if (output.size() >= limits_.maximum_arguments_per_unit)
-							return unexpected(error{"application-analysis.import-limit-exceeded",
-													"response_file.arguments",
-													"count"});
-						output.push_back(argument);
-						continue;
-					}
-					const auto member =
-						std::ranges::find(closure_.members,
-										  *path,
-										  &detail::decoded_capture_source_member::logical_path);
-					if (member == closure_.members.end())
-						return unexpected(
-							invalid("response_files", "source-closure-binding-mismatch"));
-					if (!active_.emplace(*path).second)
-						return unexpected(invalid("response_files", "recursive-reference"));
-					auto parsed =
-						detail::parse_gcc_16_2_response_arguments(member->content, limits_);
-					if (!parsed)
-						return unexpected(std::move(parsed.error()));
-					auto nested = expand(*parsed, depth + 1U);
-					active_.erase(*path);
-					if (!nested)
-						return unexpected(std::move(nested.error()));
-					if (nested->size() > limits_.maximum_arguments_per_unit - output.size())
-						return unexpected(error{"application-analysis.import-limit-exceeded",
-												"response_file.arguments",
-												"count"});
-					output.insert(output.end(), nested->begin(), nested->end());
-				}
-				return output;
-			}
-
-		  private:
-			const detail::decoded_capture_projection& capture_;
-			const detail::decoded_capture_unit& unit_;
-			const detail::decoded_capture_source_closure& closure_;
-			const import_limits& limits_;
-			std::set<std::string, std::less<>> active_;
-			std::size_t expansions_{};
-		};
-
-		[[nodiscard]] result<std::vector<std::string>>
-		expand_gcc_response_arguments(const detail::decoded_capture_projection& capture,
-									  const detail::decoded_capture_unit& unit,
-									  const import_limits& limits)
-		{
-			const auto closure = std::ranges::find(capture.source_closures,
-												   unit.source_closure_id,
-												   &detail::decoded_capture_source_closure::id);
-			if (closure == capture.source_closures.end())
-				return unexpected(invalid("source_closure", "missing-validated-binding"));
-			return gcc_response_expander{capture, unit, *closure, limits}.expand(
-				*unit.original_arguments, 0U);
-		}
-
 		[[nodiscard]] std::vector<capture_gap>
 		capture_gaps_for_unit(const std::span<const capture_gap> gaps, const std::size_t unit_index)
 		{
@@ -264,26 +93,6 @@ namespace cxxlens::sdk
 				if (!gap.field.starts_with("compile_units[") || gap.field.starts_with(unit_prefix))
 					output.push_back(gap);
 			return output;
-		}
-
-		[[nodiscard]] std::optional<std::string>
-		logical_path_for(const detail::decoded_capture_projection& capture,
-						 const std::string_view physical)
-		{
-			for (const auto& mapping : capture.path_mappings)
-			{
-				if (!physical.starts_with(mapping.physical_prefix))
-					continue;
-				if (physical.size() != mapping.physical_prefix.size() &&
-					mapping.physical_prefix.back() != '/' &&
-					physical[mapping.physical_prefix.size()] != '/')
-					continue;
-				auto suffix = physical.substr(mapping.physical_prefix.size());
-				if (mapping.logical_prefix.ends_with('/') && suffix.starts_with('/'))
-					suffix.remove_prefix(1U);
-				return mapping.logical_prefix + std::string{suffix};
-			}
-			return std::nullopt;
 		}
 
 		[[nodiscard]] canonical_value mapping_value(const detail::replay_option_mapping& value)
@@ -317,17 +126,10 @@ namespace cxxlens::sdk
 							 const std::size_t unit_index,
 							 const import_limits& limits)
 		{
-			if (!unit.original_arguments || unit.original_arguments->empty())
-				return unexpected(error{"application-analysis.target-unavailable",
-										"original_argv",
-										"recapture the GCC compile unit with its exact argv"});
-			if (unit.original_arguments->size() > limits.maximum_arguments_per_unit)
-				return unexpected(
-					error{"application-analysis.import-limit-exceeded", "original_argv", "count"});
-			auto expanded_arguments =
-				expand_gcc_response_arguments(bundle.projection, unit, limits);
-			if (!expanded_arguments)
-				return unexpected(std::move(expanded_arguments.error()));
+			auto mapped =
+				detail::map_gcc_16_2_replay_arguments(bundle.projection, unit, unit_index, limits);
+			if (!mapped)
+				return unexpected(std::move(mapped.error()));
 
 			auto value = std::make_shared<replay_plan::implementation>();
 			value->capture_bundle_digest = bundle.digest;
@@ -339,124 +141,11 @@ namespace cxxlens::sdk
 				return unexpected(error{"application-analysis.capture-invalid",
 										"source_closure",
 										"missing-validated-binding"});
+			value->effective_arguments = std::move(mapped->effective_arguments);
+			value->option_mappings = std::move(mapped->option_mappings);
 			value->unresolved = capture_gaps_for_unit(bundle.gaps, unit_index);
-			value->effective_arguments.reserve(expanded_arguments->size() + 1U);
-			value->option_mappings.reserve(expanded_arguments->size());
-
-			bool source_bound = false;
-			bool output_argument = false;
-			for (std::size_t index{}; index < expanded_arguments->size(); ++index)
-			{
-				const auto& token = (*expanded_arguments)[index];
-				if (token.size() > limits.maximum_string_bytes)
-					return unexpected(error{"application-analysis.import-limit-exceeded",
-											"original_argv",
-											"string-bytes"});
-				detail::replay_option_mapping mapping;
-				mapping.production_token = token;
-				const auto field = "compile_units[" + std::to_string(unit_index) +
-					"].expanded_argv[" + std::to_string(index) + "]";
-
-				if (index == 0U)
-				{
-					mapping.replay_tokens = {"clang++", "-fsyntax-only"};
-					mapping.fidelity = replay_fidelity::approximation;
-					mapping.affected_scope = unit.compile_unit_id;
-					mapping.reason = "analysis-frontend-differs-from-production-compiler";
-					mapping.completion_action = "use-a-qualified-gcc-native-gap-provider";
-					value->effective_arguments.insert(value->effective_arguments.end(),
-													  mapping.replay_tokens.begin(),
-													  mapping.replay_tokens.end());
-					append_gap(value->unresolved, field, mapping.reason, mapping.completion_action);
-				}
-				else if (output_argument)
-				{
-					mapping.fidelity = replay_fidelity::nonsemantic;
-					output_argument = false;
-				}
-				else if (token == "-c")
-					mapping.fidelity = replay_fidelity::nonsemantic;
-				else if (token == "-o")
-				{
-					mapping.fidelity = replay_fidelity::nonsemantic;
-					output_argument = true;
-				}
-				else if (token.starts_with("-std="))
-				{
-					const auto standard = token.substr(5U);
-					const bool matches =
-						unit.language_standard && *unit.language_standard == standard;
-					const bool strict = unit.extension_mode && *unit.extension_mode == "strict";
-					if (matches && strict && standard == "c++23")
-					{
-						mapping.replay_tokens = {token};
-						mapping.fidelity = replay_fidelity::exact;
-						value->effective_arguments.push_back(token);
-					}
-					else if (matches && unit.extension_mode && *unit.extension_mode == "gnu" &&
-							 standard == "gnu++23")
-					{
-						mapping.replay_tokens = {token};
-						mapping.fidelity = replay_fidelity::approximation;
-						mapping.affected_scope = unit.compile_unit_id;
-						mapping.reason = "gcc-extension-fidelity-not-proved-for-clang-replay";
-						mapping.completion_action =
-							"compare-the-required-extension-or-use-native-gap-provider";
-						value->effective_arguments.push_back(token);
-						append_gap(
-							value->unresolved, field, mapping.reason, mapping.completion_action);
-					}
-					else
-					{
-						mapping.fidelity = replay_fidelity::unsupported;
-						mapping.affected_scope = unit.compile_unit_id;
-						mapping.reason = "language-mode-capture-mismatch-or-unsupported";
-						mapping.completion_action = "recapture-a-pinned-cxx23-language-mode";
-						append_gap(
-							value->unresolved, field, mapping.reason, mapping.completion_action);
-					}
-				}
-				else
-				{
-					auto logical = logical_path_for(bundle.projection, token);
-					if ((logical && *logical == unit.source_logical_path) ||
-						token == unit.source_logical_path)
-					{
-						const auto replay = logical ? *logical : token;
-						mapping.replay_tokens = {replay};
-						mapping.fidelity = logical ? replay_fidelity::semantics_preserving
-												   : replay_fidelity::exact;
-						value->effective_arguments.push_back(replay);
-						source_bound = true;
-					}
-					else
-					{
-						mapping.fidelity = replay_fidelity::unsupported;
-						mapping.affected_scope = unit.compile_unit_id;
-						mapping.reason = token.starts_with('@')
-							? "response-file-expansion-unavailable"
-							: "gcc-option-not-classified";
-						mapping.completion_action = token.starts_with('@')
-							? "capture-and-expand-the-response-file"
-							: "add-a-versioned-gcc16-option-mapping";
-						append_gap(
-							value->unresolved, field, mapping.reason, mapping.completion_action);
-					}
-				}
-				value->option_mappings.push_back(std::move(mapping));
-			}
-			if (output_argument)
-				return unexpected(error{"application-analysis.capture-invalid",
-										"original_argv",
-										"missing-output-path"});
-			if (!source_bound)
-			{
-				value->effective_arguments.push_back(unit.source_logical_path);
-				append_gap(value->unresolved,
-						   "compile_units[" + std::to_string(unit_index) + "].original_argv",
-						   "source-token-not-bound",
-						   "recapture-the-exact-production-source-token");
-			}
+			value->unresolved.insert(
+				value->unresolved.end(), mapped->unresolved.begin(), mapped->unresolved.end());
 			canonicalize_gaps(value->unresolved);
 
 			std::vector<canonical_value> effective;

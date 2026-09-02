@@ -15,7 +15,6 @@ namespace cxxlens::sdk::detail
 {
 	namespace
 	{
-		constexpr std::size_t gcc_16_2_maximum_response_expansions{1999U};
 		[[nodiscard]] error invalid(std::string field, std::string detail)
 		{
 			return {

@@ -148,6 +148,20 @@ set_tests_properties(
     "unit;sdk;capture;gcc;filesystem;bounded;fault;determinism;resource;security"
 )
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-gcc-replay-planner
+                            unit/sdk/gcc_replay_planner_internal_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-gcc-replay-planner PRIVATE cxxlens::sdk)
+target_include_directories(cxxlens-unit-sdk-gcc-replay-planner
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-gcc-replay-planner
+         COMMAND cxxlens-unit-sdk-gcc-replay-planner)
+set_tests_properties(
+  unit.sdk-gcc-replay-planner
+  PROPERTIES
+    LABELS
+    "unit;sdk;application-analysis;gcc;replay;bounded;negative;determinism;resource;security"
+)
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-sealed-executable
                             unit/sdk/sealed_executable_internal_test.cpp)
 target_sources(cxxlens-unit-sdk-sealed-executable
