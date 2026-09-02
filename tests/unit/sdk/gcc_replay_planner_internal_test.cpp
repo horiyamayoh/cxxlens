@@ -151,6 +151,26 @@ namespace
 				mapped->effective_arguments.end());
 	}
 
+	void captured_environment_effects_remain_actionable_without_guessing()
+	{
+		auto capture = projection();
+		auto unit = unit_with({"/opt/gcc-16.2.0/bin/g++", "/workspace/example/src/main.cpp"});
+		unit.environment_effects.push_back({"gcc.cpath", "derived", "project://include", {}, {}});
+		unit.environment_effects.push_back(
+			{"gcc.secret-mode", "redacted", std::nullopt, "secret", "provide-safely"});
+		auto mapped = cxxlens::sdk::detail::map_gcc_16_2_replay_arguments(capture, unit, 0U);
+		require(mapped);
+		require(has_reason(mapped->unresolved, "gcc-environment-effect-not-replayed"));
+		require(std::ranges::count_if(mapped->unresolved,
+									  [](const auto& gap)
+									  {
+										  return gap.reason ==
+											  "gcc-environment-effect-not-replayed";
+									  }) == 1U);
+		require(std::ranges::find(mapped->effective_arguments, "project://include") ==
+				mapped->effective_arguments.end());
+	}
+
 	void malformed_pairs_and_effective_output_overflow_fail_closed()
 	{
 		auto capture = projection();
@@ -186,5 +206,6 @@ int main()
 	exact_and_semantics_preserving_options_are_mapped_in_order();
 	response_files_use_the_same_bounded_mapping_authority();
 	unsupported_options_remain_actionable_and_are_not_replayed();
+	captured_environment_effects_remain_actionable_without_guessing();
 	malformed_pairs_and_effective_output_overflow_fail_closed();
 }

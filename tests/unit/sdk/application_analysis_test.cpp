@@ -295,6 +295,7 @@ namespace
 			has_reason(plan.unresolved(), "analysis-frontend-differs-from-production-compiler"));
 		require(
 			has_reason(plan.unresolved(), "gcc-extension-fidelity-not-proved-for-clang-replay"));
+		require(has_reason(plan.unresolved(), "gcc-environment-effect-not-replayed"));
 		require(imported->unresolved().size() == plan.unresolved().size());
 	}
 

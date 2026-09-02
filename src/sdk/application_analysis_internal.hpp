@@ -44,6 +44,15 @@ namespace cxxlens::sdk::detail
 		std::vector<decoded_capture_source_member> members;
 	};
 
+	struct decoded_capture_environment_effect
+	{
+		std::string name;
+		std::string state;
+		std::optional<std::string> semantic_value;
+		std::string reason;
+		std::string completion_action;
+	};
+
 	struct decoded_capture_unit
 	{
 		std::string compile_unit_id;
@@ -57,6 +66,7 @@ namespace cxxlens::sdk::detail
 		std::optional<std::vector<std::string>> original_arguments;
 		std::vector<decoded_capture_auxiliary_file> response_files;
 		std::vector<decoded_capture_auxiliary_file> config_files;
+		std::vector<decoded_capture_environment_effect> environment_effects;
 		std::optional<std::string> language_standard;
 		std::optional<std::string> extension_mode;
 		std::string source_closure_id;

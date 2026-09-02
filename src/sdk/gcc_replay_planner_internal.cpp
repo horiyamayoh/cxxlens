@@ -214,6 +214,19 @@ namespace cxxlens::sdk::detail
 		gcc_replay_mapping_result output;
 		output.effective_arguments.reserve(expanded->size() + 1U);
 		output.option_mappings.reserve(expanded->size());
+		for (std::size_t effect_index{}; effect_index < unit.environment_effects.size();
+			 ++effect_index)
+		{
+			const auto& effect = unit.environment_effects[effect_index];
+			if (effect.state != "observed" && effect.state != "derived")
+				continue;
+			output.unresolved.push_back({"compile_units[" + std::to_string(unit_index) +
+											 "].environment_effects[" +
+											 std::to_string(effect_index) + "]",
+										 "unavailable",
+										 "gcc-environment-effect-not-replayed",
+										 "add-a-versioned-gcc16-environment-effect-mapping"});
+		}
 		const auto push_effective = [&](const std::span<const std::string> tokens) -> result<void>
 		{
 			if (tokens.size() >

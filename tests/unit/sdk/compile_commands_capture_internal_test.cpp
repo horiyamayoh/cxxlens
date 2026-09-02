@@ -431,6 +431,19 @@ namespace
 		require(has_gap(*decoded,
 						"compile_units[0].environment_effects[1].semantic_value",
 						"secret-semantic-effect"));
+		auto imported = cxxlens::sdk::import_capture(*decoded);
+		require(imported && imported->replay_plans().size() == 1U);
+		require(std::ranges::count_if(imported->unresolved(),
+									  [](const auto& gap)
+									  {
+										  return gap.reason ==
+											  "gcc-environment-effect-not-replayed";
+									  }) == 1U);
+		require(std::ranges::count_if(imported->unresolved(),
+									  [](const auto& gap)
+									  {
+										  return gap.reason == "secret-semantic-effect";
+									  }) == 1U);
 
 		auto recursive = input;
 		const auto recursive_content = bytes("@options.rsp");

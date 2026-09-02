@@ -881,6 +881,23 @@ namespace cxxlens::sdk
 				}
 				decoded_unit.response_files = std::move(*response_files);
 				decoded_unit.config_files = std::move(*config_files);
+				if ((*unit.value())[11].tuple[1].type == canonical_value::kind::ordered_tuple)
+				{
+					decoded_unit.environment_effects.reserve(
+						(*unit.value())[11].tuple[1].tuple.size());
+					for (const auto& effect_value : (*unit.value())[11].tuple[1].tuple)
+					{
+						const auto& captured = effect_value.tuple[1];
+						detail::decoded_capture_environment_effect effect;
+						effect.name = effect_value.tuple[0].text;
+						effect.state = captured.tuple[0].text;
+						if (captured.tuple[1].type == canonical_value::kind::utf8_string)
+							effect.semantic_value = captured.tuple[1].text;
+						effect.reason = captured.tuple[2].text;
+						effect.completion_action = captured.tuple[3].text;
+						decoded_unit.environment_effects.push_back(std::move(effect));
+					}
+				}
 				if ((*unit.value())[13].tuple[1].type == canonical_value::kind::utf8_string)
 					decoded_unit.language_standard = (*unit.value())[13].tuple[1].text;
 				if (extension.type == canonical_value::kind::utf8_string)
