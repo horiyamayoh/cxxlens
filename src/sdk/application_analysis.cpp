@@ -2,7 +2,9 @@
 #include <array>
 #include <limits>
 #include <map>
+#include <new>
 #include <set>
+#include <stdexcept>
 #include <tuple>
 #include <utility>
 
@@ -1240,33 +1242,44 @@ namespace cxxlens::sdk
 	result<capture_bundle> decode_capture_bundle(const std::span<const std::byte> input,
 												 const import_limits limits)
 	{
-		if (auto valid = limits.validate(); !valid)
-			return unexpected(std::move(valid.error()));
-		if (input.empty() || input.size() > limits.maximum_bundle_bytes)
-			return unexpected(limit("bundle", "bytes"));
-		if (auto valid = preflight_value(input, 1U, limits); !valid)
-			return unexpected(std::move(valid.error()));
-		auto decoded = canonical_binary_decode(input);
-		if (!decoded)
-			return unexpected(invalid("binary", decoded.error().detail));
-		metadata_budget budget{limits};
-		if (auto valid = account_strings(*decoded, budget, "root"); !valid)
-			return unexpected(std::move(valid.error()));
-		auto value = std::make_shared<capture_bundle::implementation>();
-		value->root = std::move(*decoded);
-		auto projection = validate_bundle_shape(value->root, limits);
-		if (!projection)
-			return unexpected(std::move(projection.error()));
-		value->production_compiler = std::move(projection->production_compiler);
-		value->capture_adapter = std::move(projection->capture_adapter);
-		value->target_abi = std::move(projection->target_abi);
-		value->project_id = std::move(projection->project_id);
-		value->logical_project_root = std::move(projection->logical_project_root);
-		value->compile_unit_count = projection->compile_unit_count;
-		value->gaps = std::move(projection->gaps);
-		value->projection = std::move(projection->decoded);
-		value->digest = content_digest(input);
-		return capture_bundle{std::move(value)};
+		try
+		{
+			if (auto valid = limits.validate(); !valid)
+				return unexpected(std::move(valid.error()));
+			if (input.empty() || input.size() > limits.maximum_bundle_bytes)
+				return unexpected(limit("bundle", "bytes"));
+			if (auto valid = preflight_value(input, 1U, limits); !valid)
+				return unexpected(std::move(valid.error()));
+			auto decoded = canonical_binary_decode(input);
+			if (!decoded)
+				return unexpected(invalid("binary", decoded.error().detail));
+			metadata_budget budget{limits};
+			if (auto valid = account_strings(*decoded, budget, "root"); !valid)
+				return unexpected(std::move(valid.error()));
+			auto value = std::make_shared<capture_bundle::implementation>();
+			value->root = std::move(*decoded);
+			auto projection = validate_bundle_shape(value->root, limits);
+			if (!projection)
+				return unexpected(std::move(projection.error()));
+			value->production_compiler = std::move(projection->production_compiler);
+			value->capture_adapter = std::move(projection->capture_adapter);
+			value->target_abi = std::move(projection->target_abi);
+			value->project_id = std::move(projection->project_id);
+			value->logical_project_root = std::move(projection->logical_project_root);
+			value->compile_unit_count = projection->compile_unit_count;
+			value->gaps = std::move(projection->gaps);
+			value->projection = std::move(projection->decoded);
+			value->digest = content_digest(input);
+			return capture_bundle{std::move(value)};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return unexpected(limit("bundle", "allocation"));
+		}
+		catch (const std::length_error&)
+		{
+			return unexpected(limit("bundle", "allocation-length"));
+		}
 	}
 
 } // namespace cxxlens::sdk

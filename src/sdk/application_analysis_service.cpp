@@ -1,5 +1,7 @@
 #include <algorithm>
+#include <new>
 #include <set>
+#include <stdexcept>
 #include <tuple>
 #include <utility>
 
@@ -542,42 +544,56 @@ namespace cxxlens::sdk
 	result<imported_project> import_capture(const capture_bundle& bundle,
 											const import_limits limits)
 	{
-		if (auto valid = limits.validate(); !valid)
-			return unexpected(std::move(valid.error()));
-		if (bundle.value_->projection.toolchain_family != "gcc")
-			return unexpected(error{"application-analysis.target-unavailable",
-									"replay-planner",
-									"MSVC replay is not configured"});
-		if (bundle.value_->projection.compile_units.size() > limits.maximum_compile_units)
-			return unexpected(
-				error{"application-analysis.import-limit-exceeded", "compile_units", "count"});
-
-		auto value = std::make_shared<imported_project::implementation>();
-		value->capture_bundle_digest = bundle.value_->digest;
-		value->replay_plans.reserve(bundle.value_->projection.compile_units.size());
-		for (std::size_t index{}; index < bundle.value_->projection.compile_units.size(); ++index)
+		try
 		{
-			auto plan_value = make_gcc_replay_plan(
-				*bundle.value_, bundle.value_->projection.compile_units[index], index, limits);
-			if (!plan_value)
-				return unexpected(std::move(plan_value.error()));
-			replay_plan plan{std::move(*plan_value)};
-			value->unresolved.insert(
-				value->unresolved.end(), plan.unresolved().begin(), plan.unresolved().end());
-			value->replay_plans.push_back(std::move(plan));
+			if (auto valid = limits.validate(); !valid)
+				return unexpected(std::move(valid.error()));
+			if (bundle.value_->projection.toolchain_family != "gcc")
+				return unexpected(error{"application-analysis.target-unavailable",
+										"replay-planner",
+										"MSVC replay is not configured"});
+			if (bundle.value_->projection.compile_units.size() > limits.maximum_compile_units)
+				return unexpected(
+					error{"application-analysis.import-limit-exceeded", "compile_units", "count"});
+
+			auto value = std::make_shared<imported_project::implementation>();
+			value->capture_bundle_digest = bundle.value_->digest;
+			value->replay_plans.reserve(bundle.value_->projection.compile_units.size());
+			for (std::size_t index{}; index < bundle.value_->projection.compile_units.size();
+				 ++index)
+			{
+				auto plan_value = make_gcc_replay_plan(
+					*bundle.value_, bundle.value_->projection.compile_units[index], index, limits);
+				if (!plan_value)
+					return unexpected(std::move(plan_value.error()));
+				replay_plan plan{std::move(*plan_value)};
+				value->unresolved.insert(
+					value->unresolved.end(), plan.unresolved().begin(), plan.unresolved().end());
+				value->replay_plans.push_back(std::move(plan));
+			}
+			canonicalize_gaps(value->unresolved);
+			std::vector<canonical_value> fields;
+			fields.reserve(value->replay_plans.size() + 1U);
+			fields.push_back(canonical_value::from_string(value->capture_bundle_digest));
+			for (const auto& plan : value->replay_plans)
+				fields.push_back(canonical_value::from_string(std::string{plan.digest()}));
+			auto identity = canonical_identity_digest("application-imported-project", fields);
+			if (!identity)
+				return unexpected(
+					error{"application-analysis.capture-invalid", "imported_project", "identity"});
+			value->id = "imported-project:" + *identity;
+			return imported_project{std::move(value)};
 		}
-		canonicalize_gaps(value->unresolved);
-		std::vector<canonical_value> fields;
-		fields.reserve(value->replay_plans.size() + 1U);
-		fields.push_back(canonical_value::from_string(value->capture_bundle_digest));
-		for (const auto& plan : value->replay_plans)
-			fields.push_back(canonical_value::from_string(std::string{plan.digest()}));
-		auto identity = canonical_identity_digest("application-imported-project", fields);
-		if (!identity)
+		catch (const std::bad_alloc&)
+		{
 			return unexpected(
-				error{"application-analysis.capture-invalid", "imported_project", "identity"});
-		value->id = "imported-project:" + *identity;
-		return imported_project{std::move(value)};
+				error{"application-analysis.import-limit-exceeded", "replay_plan", "allocation"});
+		}
+		catch (const std::length_error&)
+		{
+			return unexpected(error{
+				"application-analysis.import-limit-exceeded", "replay_plan", "allocation-length"});
+		}
 	}
 
 	materialization_request::materialization_request(std::shared_ptr<const implementation> value)

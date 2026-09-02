@@ -2,11 +2,56 @@
 #include <array>
 #include <cstddef>
 #include <cstdlib>
+#include <new>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include <cxxlens/sdk/application_analysis.hpp>
+
+#if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
+namespace
+{
+	thread_local bool fail_next_allocation{};
+} // namespace
+
+void* operator new(const std::size_t size)
+{
+	if (fail_next_allocation)
+	{
+		fail_next_allocation = false;
+		throw std::bad_alloc{};
+	}
+	if (auto* allocation = std::malloc(size == 0U ? 1U : size); allocation != nullptr)
+		return allocation;
+	throw std::bad_alloc{};
+}
+
+void* operator new[](const std::size_t size)
+{
+	return ::operator new(size);
+}
+
+void operator delete(void* allocation) noexcept
+{
+	std::free(allocation);
+}
+
+void operator delete[](void* allocation) noexcept
+{
+	::operator delete(allocation);
+}
+
+void operator delete(void* allocation, std::size_t) noexcept
+{
+	std::free(allocation);
+}
+
+void operator delete[](void* allocation, std::size_t) noexcept
+{
+	::operator delete(allocation);
+}
+#endif
 
 namespace
 {
@@ -306,6 +351,34 @@ namespace
 		auto empty_argv_import = cxxlens::sdk::import_capture(*empty_argv_bundle);
 		require(!empty_argv_import &&
 				empty_argv_import.error().code == "application-analysis.target-unavailable");
+	}
+
+	void allocation_failures_are_typed_at_external_boundaries()
+	{
+#if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
+		auto bytes = canonical_binary(valid_bundle());
+		require(bytes);
+		auto admitted = cxxlens::sdk::decode_capture_bundle(*bytes);
+		require(admitted);
+
+		fail_next_allocation = true;
+		auto decode_failure = cxxlens::sdk::decode_capture_bundle(*bytes);
+		const auto decode_fault_was_injected = !fail_next_allocation;
+		fail_next_allocation = false;
+		require(decode_fault_was_injected && !decode_failure &&
+				decode_failure.error().code == "application-analysis.import-limit-exceeded" &&
+				decode_failure.error().field == "bundle" &&
+				decode_failure.error().detail == "allocation");
+
+		fail_next_allocation = true;
+		auto import_failure = cxxlens::sdk::import_capture(*admitted);
+		const auto import_fault_was_injected = !fail_next_allocation;
+		fail_next_allocation = false;
+		require(import_fault_was_injected && !import_failure &&
+				import_failure.error().code == "application-analysis.import-limit-exceeded" &&
+				import_failure.error().field == "replay_plan" &&
+				import_failure.error().detail == "allocation");
+#endif
 	}
 
 	void toolchain_observation_gaps_are_preserved()
@@ -664,6 +737,7 @@ int main()
 {
 	positive_decode_and_deterministic_import();
 	replay_fidelity_and_import_bounds_fail_closed();
+	allocation_failures_are_typed_at_external_boundaries();
 	toolchain_observation_gaps_are_preserved();
 	duplicate_source_variants_bind_one_closure();
 	resource_and_shape_fail_closed();

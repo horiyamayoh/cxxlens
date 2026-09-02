@@ -214,6 +214,11 @@ cxxlens_add_test_executable(cxxlens-unit-sdk-application-analysis
                             unit/sdk/application_analysis_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-application-analysis
                       PRIVATE cxxlens::sdk)
+if(CXXLENS_ENABLE_TSAN)
+  target_compile_definitions(
+    cxxlens-unit-sdk-application-analysis
+    PRIVATE CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED=1)
+endif()
 add_test(NAME unit.sdk-application-analysis
          COMMAND cxxlens-unit-sdk-application-analysis)
 set_tests_properties(
