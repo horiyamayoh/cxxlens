@@ -247,6 +247,7 @@ namespace cxxlens::sdk
 
 			auto value = std::make_shared<imported_project::implementation>();
 			value->capture_bundle_digest = bundle.value_->digest;
+			value->capture = bundle.value_;
 			value->replay_plans.reserve(bundle.value_->projection.compile_units.size());
 			for (std::size_t index{}; index < bundle.value_->projection.compile_units.size();
 				 ++index)

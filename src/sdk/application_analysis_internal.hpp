@@ -134,6 +134,7 @@ namespace cxxlens::sdk
 	{
 		std::string id;
 		std::string capture_bundle_digest;
+		std::shared_ptr<const capture_bundle::implementation> capture;
 		std::vector<replay_plan> replay_plans;
 		std::vector<capture_gap> unresolved;
 	};

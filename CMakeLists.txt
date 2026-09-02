@@ -363,6 +363,7 @@ add_library(
   src/sdk/gcc_capture_command_service_internal.cpp
   src/sdk/gcc_capture_file_service_internal.cpp
   src/sdk/gcc_capture_bundle_internal.cpp
+  src/sdk/gcc_replay_input_internal.cpp
   src/sdk/gcc_replay_planner_internal.cpp
   src/sdk/gcc_toolchain_probe_internal.cpp
   src/runtime/gcc_capture_file_port.cpp
@@ -952,6 +953,7 @@ set(CXXLENS_PRODUCT_SCHEMA_FILES
     schemas/cxxlens_build_capture_bundle.yaml
     schemas/cxxlens_compiler_replay_plan.yaml
     schemas/cxxlens_detached_provider_run.yaml
+    schemas/cxxlens_gcc_replay_input.yaml
     schemas/cxxlens_ng_claim_envelope.schema.yaml
     schemas/cxxlens_ng_clang22_materialization_contract.yaml
     schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml
