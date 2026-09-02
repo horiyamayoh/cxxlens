@@ -206,6 +206,133 @@ namespace
 		bool enforce_limits{true};
 	};
 
+	[[nodiscard]] const cxxlens::sdk::detail::build_capture_environment_effect*
+	find_effect(const std::vector<cxxlens::sdk::detail::build_capture_environment_effect>& effects,
+				const std::string_view name)
+	{
+		const auto found = std::ranges::find(
+			effects, name, &cxxlens::sdk::detail::build_capture_environment_effect::name);
+		return found == effects.end() ? nullptr : &*found;
+	}
+
+	void gcc_environment_is_allowlisted_logical_and_deterministic()
+	{
+		fake_file_port files;
+		for (const auto& path : {"/physical/project/build",
+								 "/physical/project/include",
+								 "/physical/project/shared",
+								 "/physical/project/lib",
+								 "/physical/project/tool:prefix",
+								 "/opt/gcc/bin"})
+			files.directories.emplace(path, path);
+		std::vector<std::string> environment{
+			"SECRET_TOKEN=do-not-persist",
+			"SOURCE_DATE_EPOCH=00042",
+			"LC_CTYPE=ignored-by-lc-all",
+			"LC_ALL=C.UTF-8",
+			"C_INCLUDE_PATH=/physical/project/c-only",
+			"CPLUS_INCLUDE_PATH=../include:",
+			"CPATH=/physical/project/shared",
+			"COMPILER_PATH=/opt/gcc/bin",
+			"GCC_EXEC_PREFIX=/physical/project/tool:prefix",
+			"LIBRARY_PATH=/physical/project/lib",
+		};
+		const auto original_environment = environment;
+		const cxxlens::sdk::detail::gcc_environment_capture_request request{
+			environment,
+			"/physical/project/build",
+			"/physical/project",
+			"c++",
+			32U,
+			4096U,
+			4096U,
+		};
+		auto captured = cxxlens::sdk::detail::capture_gcc_16_2_environment_effects(files, request);
+		require(captured && environment == original_environment && captured->size() == 7U &&
+				std::ranges::is_sorted(
+					*captured, {}, &cxxlens::sdk::detail::build_capture_environment_effect::name));
+
+		const auto* compiler = find_effect(*captured, "gcc.compiler-path");
+		const auto* cpath = find_effect(*captured, "gcc.cpath");
+		const auto* cplus = find_effect(*captured, "gcc.cplus-include-path");
+		const auto* prefix = find_effect(*captured, "gcc.exec-prefix");
+		const auto* library = find_effect(*captured, "gcc.library-path");
+		const auto* locale = find_effect(*captured, "gcc.locale-ctype");
+		const auto* epoch = find_effect(*captured, "gcc.source-date-epoch");
+		require(compiler &&
+				compiler->semantic_value.state ==
+					cxxlens::sdk::detail::capture_field_state::redacted &&
+				!compiler->semantic_value.value &&
+				compiler->semantic_value.reason == "machine-local-environment-path");
+		require(prefix && prefix->semantic_value.value &&
+				prefix->semantic_value.value->find("project://tool:prefix") != std::string::npos);
+		for (const auto* effect : {cpath, cplus, library})
+			require(effect && effect->semantic_value.value &&
+					effect->semantic_value.value->starts_with("path-list-v1|") &&
+					effect->semantic_value.value->find("project://") != std::string::npos &&
+					effect->semantic_value.value->find("/physical/") == std::string::npos);
+		require(cplus->semantic_value.value->find("project://include") != std::string::npos &&
+				cplus->semantic_value.value->find("project://") != std::string::npos);
+		require(locale && locale->semantic_value.value == "C.UTF-8" && epoch &&
+				epoch->semantic_value.value == "42" &&
+				find_effect(*captured, "SECRET_TOKEN") == nullptr &&
+				find_effect(*captured, "gcc.c-include-path") == nullptr);
+
+		std::ranges::reverse(environment);
+		const cxxlens::sdk::detail::gcc_environment_capture_request reordered_request{
+			environment, "/physical/project/build", "/physical/project", "c++", 32U, 4096U, 4096U};
+		auto reordered =
+			cxxlens::sdk::detail::capture_gcc_16_2_environment_effects(files, reordered_request);
+		require(reordered && *reordered == *captured);
+	}
+
+	void gcc_environment_bounds_and_malformed_values_fail_closed()
+	{
+		fake_file_port files;
+		files.directories.emplace("/physical/project/build", "/physical/project/build");
+		files.directories.emplace("/physical/project/include", "/physical/project/include");
+		std::vector<std::string> environment{"CPATH=../include"};
+		cxxlens::sdk::detail::gcc_environment_capture_request request{
+			environment, "/physical/project/build", "/physical/project", "c++", 8U, 1024U, 4096U};
+		auto valid = cxxlens::sdk::detail::capture_gcc_16_2_environment_effects(files, request);
+		require(valid && valid->size() == 1U);
+
+		auto limits = cxxlens::sdk::import_limits{};
+		limits.maximum_string_bytes = 8U;
+		auto string_limited =
+			cxxlens::sdk::detail::capture_gcc_16_2_environment_effects(files, request, limits);
+		require(!string_limited && string_limited.error().detail == "string-bytes");
+		request.maximum_environment_count = 0U;
+		auto zero = cxxlens::sdk::detail::capture_gcc_16_2_environment_effects(files, request);
+		require(!zero && zero.error().detail == "zero");
+		request.maximum_environment_count = 8U;
+		request.maximum_environment_bytes = 2U;
+		auto byte_limited =
+			cxxlens::sdk::detail::capture_gcc_16_2_environment_effects(files, request);
+		require(!byte_limited && byte_limited.error().detail == "bytes");
+
+		request.maximum_environment_bytes = 1024U;
+		environment = {"CPATH=../include", "CPATH=../include"};
+		request.environment = environment;
+		auto duplicate = cxxlens::sdk::detail::capture_gcc_16_2_environment_effects(files, request);
+		require(!duplicate && duplicate.error().detail == "duplicate-name");
+		environment = {"MALFORMED"};
+		request.environment = environment;
+		auto malformed = cxxlens::sdk::detail::capture_gcc_16_2_environment_effects(files, request);
+		require(!malformed && malformed.error().detail == "name-value");
+		environment = {"SOURCE_DATE_EPOCH=not-a-number"};
+		request.environment = environment;
+		auto invalid_epoch =
+			cxxlens::sdk::detail::capture_gcc_16_2_environment_effects(files, request);
+		require(invalid_epoch && invalid_epoch->size() == 1U &&
+				invalid_epoch->front().semantic_value.state ==
+					cxxlens::sdk::detail::capture_field_state::unavailable);
+		request.language = "fortran";
+		auto unsupported =
+			cxxlens::sdk::detail::capture_gcc_16_2_environment_effects(files, request);
+		require(!unsupported && unsupported.error().detail == "canonical-context");
+	}
+
 	[[nodiscard]] bool has_gap(const cxxlens::sdk::capture_bundle& bundle,
 							   const std::string_view field,
 							   const std::string_view reason)
@@ -713,6 +840,8 @@ int main() noexcept
 	{
 		gcc_16_2_response_grammar_is_exact_and_bounded();
 		gcc_16_2_dependency_output_is_exact_and_bounded();
+		gcc_environment_is_allowlisted_logical_and_deterministic();
+		gcc_environment_bounds_and_malformed_values_fail_closed();
 		fake_port_drives_canonical_projection_and_exact_bounds();
 		response_and_spec_files_are_captured_recursively_without_claiming_closure();
 		shell_free_invocation_owns_complete_dependency_membership();

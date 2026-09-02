@@ -27,6 +27,17 @@ namespace cxxlens::sdk::detail
 		std::uint64_t captured_bytes{};
 	};
 
+	struct gcc_environment_capture_request
+	{
+		std::span<const std::string> environment;
+		std::string_view canonical_working_directory;
+		std::string_view canonical_project_root;
+		std::string_view language;
+		std::size_t maximum_environment_count{};
+		std::size_t maximum_environment_bytes{};
+		std::size_t maximum_canonical_path_bytes{};
+	};
+
 	/** Parse bytes with the exact GCC 16.2 libiberty buildargv quoting rules. */
 	[[nodiscard]] result<std::vector<std::string>>
 	parse_gcc_16_2_response_arguments(std::span<const std::byte> content,
@@ -35,6 +46,13 @@ namespace cxxlens::sdk::detail
 	/** Parse the first GCC 16.2 Make dependency rule into its ordered prerequisites. */
 	[[nodiscard]] result<std::vector<std::string>>
 	parse_gcc_16_2_dependency_output(std::span<const std::byte> content, import_limits limits = {});
+
+	/** Normalize only allowlisted GCC semantic environment effects; raw values are never returned.
+	 */
+	[[nodiscard]] result<std::vector<build_capture_environment_effect>>
+	capture_gcc_16_2_environment_effects(gcc_capture_file_port& files,
+										 const gcc_environment_capture_request& request,
+										 import_limits limits = {});
 
 	/** Capture explicit response/spec/dependency files reachable from one original GCC argv. */
 	[[nodiscard]] result<gcc_auxiliary_capture>

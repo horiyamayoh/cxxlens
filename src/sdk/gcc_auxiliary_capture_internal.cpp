@@ -1,12 +1,16 @@
 #include "gcc_auxiliary_capture_internal.hpp"
 
 #include <algorithm>
+#include <array>
+#include <charconv>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <new>
 #include <optional>
 #include <set>
 #include <stdexcept>
+#include <tuple>
 #include <utility>
 
 #include "gcc_capture_file_port_internal.hpp"
@@ -103,6 +107,75 @@ namespace cxxlens::sdk::detail
 				return "project://";
 			const auto offset = root == "/" ? 1U : root.size() + 1U;
 			return "project://" + std::string{physical.substr(offset)};
+		}
+
+		[[nodiscard]] result<std::string>
+		path_list_value(gcc_capture_file_port& files,
+						const std::string_view value,
+						const gcc_environment_capture_request& request,
+						const import_limits& limits,
+						const bool split_paths,
+						bool& machine_local,
+						bool& unavailable)
+		{
+			std::vector<std::string> logical_paths;
+			std::size_t offset{};
+			for (;;)
+			{
+				const auto separator =
+					split_paths ? value.find(':', offset) : std::string_view::npos;
+				const auto component =
+					value.substr(offset,
+								 separator == std::string_view::npos ? value.size() - offset
+																	 : separator - offset);
+				auto resolved = component.empty()
+					? result<std::string>{std::string{request.canonical_working_directory}}
+					: resolve_path(
+						  component,
+						  {request.canonical_working_directory, "capture.environment.path"});
+				if (!resolved)
+				{
+					unavailable = true;
+					return std::string{};
+				}
+				auto canonical =
+					files.canonical_directory(*resolved, request.maximum_canonical_path_bytes);
+				if (!canonical)
+				{
+					unavailable = true;
+					return std::string{};
+				}
+				if (!at_or_below(*canonical, request.canonical_project_root))
+				{
+					machine_local = true;
+					return std::string{};
+				}
+				logical_paths.push_back(
+					logical_path_for(*canonical, request.canonical_project_root));
+				if (logical_paths.size() > limits.maximum_path_mappings)
+					return unexpected(limit("capture.environment.path-list", "count"));
+				if (separator == std::string_view::npos)
+					break;
+				offset = separator + 1U;
+			}
+
+			std::string output{"path-list-v1"};
+			if (output.size() > limits.maximum_string_bytes)
+				return unexpected(limit("capture.environment.path-list", "string-bytes"));
+			const auto append = [&](const std::string_view part) -> bool
+			{
+				if (part.size() > limits.maximum_string_bytes - output.size())
+					return false;
+				output.append(part);
+				return true;
+			};
+			for (const auto& path : logical_paths)
+			{
+				const auto length = std::to_string(path.size());
+				if (!append("|") || !append(length) || !append(":") || !append(path))
+					return unexpected(limit("capture.environment.path-list", "string-bytes"));
+			}
+			return output;
 		}
 
 		[[nodiscard]] std::string source_encoding(const std::vector<std::byte>& content)
@@ -736,6 +809,159 @@ namespace cxxlens::sdk::detail
 		catch (const std::length_error&)
 		{
 			return unexpected(limit("dependency_output", "allocation-length"));
+		}
+	}
+
+	result<std::vector<build_capture_environment_effect>>
+	capture_gcc_16_2_environment_effects(gcc_capture_file_port& files,
+										 const gcc_environment_capture_request& request,
+										 const import_limits limits)
+	{
+		if (auto valid = limits.validate(); !valid)
+			return unexpected(std::move(valid.error()));
+		if (request.maximum_environment_count == 0U || request.maximum_environment_bytes == 0U ||
+			request.maximum_canonical_path_bytes == 0U)
+			return unexpected(invalid("capture.environment.limits", "zero"));
+		if (request.environment.size() > request.maximum_environment_count)
+			return unexpected(limit("capture.environment", "count"));
+		if ((request.language != "c" && request.language != "c++") ||
+			request.canonical_working_directory.empty() ||
+			!request.canonical_working_directory.starts_with('/') ||
+			request.canonical_project_root.empty() ||
+			!request.canonical_project_root.starts_with('/') ||
+			!at_or_below(request.canonical_working_directory, request.canonical_project_root))
+			return unexpected(invalid("capture.environment.context", "canonical-context"));
+		try
+		{
+			std::map<std::string, std::string_view, std::less<>> environment;
+			std::size_t environment_bytes{};
+			for (const auto& entry : request.environment)
+			{
+				if (entry.contains('\0') ||
+					entry.size() == std::numeric_limits<std::size_t>::max() ||
+					entry.size() + 1U > request.maximum_environment_bytes - environment_bytes)
+					return unexpected(limit("capture.environment", "bytes"));
+				environment_bytes += entry.size() + 1U;
+				const auto separator = entry.find('=');
+				if (separator == 0U || separator == std::string::npos)
+					return unexpected(invalid("capture.environment", "name-value"));
+				auto [position, inserted] = environment.emplace(
+					entry.substr(0U, separator), std::string_view{entry}.substr(separator + 1U));
+				if (!inserted)
+					return unexpected(invalid("capture.environment", "duplicate-name"));
+			}
+
+			std::vector<build_capture_environment_effect> output;
+			const auto add_path_effect = [&](const std::string_view variable,
+											 const std::string_view effect_name,
+											 const bool split_paths = true) -> result<void>
+			{
+				const auto found = environment.find(variable);
+				if (found == environment.end())
+					return {};
+				bool machine_local{};
+				bool unavailable_value{};
+				auto normalized = path_list_value(files,
+												  found->second,
+												  request,
+												  limits,
+												  split_paths,
+												  machine_local,
+												  unavailable_value);
+				if (!normalized)
+					return unexpected(std::move(normalized.error()));
+				build_capture_environment_effect effect;
+				effect.name = effect_name;
+				if (machine_local)
+					effect.semantic_value = captured_value<std::string>::redacted(
+						"machine-local-environment-path",
+						"provide-a-logical-toolchain-path-mapping");
+				else if (unavailable_value)
+					effect.semantic_value = captured_value<std::string>::unavailable(
+						"environment-path-unavailable",
+						"recapture-when-the-environment-path-exists");
+				else
+					effect.semantic_value =
+						captured_value<std::string>::observed(std::move(*normalized));
+				output.push_back(std::move(effect));
+				return {};
+			};
+
+			for (const auto& [variable, effect, split_paths] :
+				 {std::tuple{std::string_view{"COMPILER_PATH"},
+							 std::string_view{"gcc.compiler-path"},
+							 true},
+				  std::tuple{std::string_view{"CPATH"}, std::string_view{"gcc.cpath"}, true},
+				  std::tuple{std::string_view{"GCC_EXEC_PREFIX"},
+							 std::string_view{"gcc.exec-prefix"},
+							 false},
+				  std::tuple{std::string_view{"LIBRARY_PATH"},
+							 std::string_view{"gcc.library-path"},
+							 true}})
+				if (auto added = add_path_effect(variable, effect, split_paths); !added)
+					return unexpected(std::move(added.error()));
+			if (request.language == "c")
+			{
+				if (auto added = add_path_effect("C_INCLUDE_PATH", "gcc.c-include-path"); !added)
+					return unexpected(std::move(added.error()));
+			}
+			else if (auto added = add_path_effect("CPLUS_INCLUDE_PATH", "gcc.cplus-include-path");
+					 !added)
+				return unexpected(std::move(added.error()));
+
+			const auto locale_value = [&]() -> std::optional<std::string_view>
+			{
+				for (const auto name : {std::string_view{"LC_ALL"},
+										std::string_view{"LC_CTYPE"},
+										std::string_view{"LANG"}})
+				{
+					const auto found = environment.find(name);
+					if (found != environment.end() && !found->second.empty())
+						return found->second;
+				}
+				return std::nullopt;
+			}();
+			if (locale_value)
+			{
+				if (locale_value->size() > limits.maximum_string_bytes)
+					return unexpected(limit("capture.environment.locale", "string-bytes"));
+				output.push_back(
+					{"gcc.locale-ctype",
+					 captured_value<std::string>::observed(std::string{*locale_value})});
+			}
+
+			if (const auto source_epoch = environment.find("SOURCE_DATE_EPOCH");
+				source_epoch != environment.end())
+			{
+				std::uint64_t seconds{};
+				const auto [end, parse_error] =
+					std::from_chars(source_epoch->second.data(),
+									source_epoch->second.data() + source_epoch->second.size(),
+									seconds);
+				if (parse_error != std::errc{} ||
+					end != source_epoch->second.data() + source_epoch->second.size())
+					output.push_back(
+						{"gcc.source-date-epoch",
+						 captured_value<std::string>::unavailable(
+							 "source-date-epoch-invalid", "supply-a-bounded-decimal-epoch")});
+				else
+					output.push_back(
+						{"gcc.source-date-epoch",
+						 captured_value<std::string>::observed(std::to_string(seconds))});
+			}
+
+			std::ranges::sort(output, {}, &build_capture_environment_effect::name);
+			if (output.size() > limits.maximum_environment_effects_per_unit)
+				return unexpected(limit("capture.environment.effects", "count"));
+			return output;
+		}
+		catch (const std::bad_alloc&)
+		{
+			return unexpected(limit("capture.environment", "allocation"));
+		}
+		catch (const std::length_error&)
+		{
+			return unexpected(limit("capture.environment", "allocation-length"));
 		}
 	}
 
