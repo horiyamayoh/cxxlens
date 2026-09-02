@@ -15,8 +15,9 @@ namespace cxxlens::detail::clang23_gcc_replay
 	/**
 	 * Read and revalidate exactly one canonical replay input.
 	 *
-	 * Success emits only the canonical input digest. Parsing and provider output are later worker
-	 * stages; this boundary cannot claim relation coverage or publish Store state.
+	 * Success emits only the canonical input digest after the source-closure-only parser succeeds.
+	 * Provider output is a later worker stage; this boundary cannot claim relation coverage or
+	 * publish Store state.
 	 */
 	[[nodiscard]] sdk::result<void> validate_worker_ingress(std::istream& input,
 															std::ostream& output,

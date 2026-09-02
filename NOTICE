@@ -2,9 +2,10 @@ cxxlens
 Copyright 2026 cxxlens contributors
 
 This product includes software developed by the cxxlens contributors.
-LLVM and Clang are optional build-time and runtime dependencies and are not
-redistributed by the cxxlens source or binary package. Their names are
-trademarks of their respective owners.
+LLVM and Clang are optional build-time and runtime dependencies. The Clang 23
+GCC replay worker component redistributes libclang-cpp 23.1.0 under the Apache
+License 2.0 with LLVM Exceptions; see LLVM-LICENSE.TXT in the installed
+documentation. Their names are trademarks of their respective owners.
 
 The installed Clang 22 materialization tools statically include ICU.
 

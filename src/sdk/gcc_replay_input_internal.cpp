@@ -336,6 +336,11 @@ namespace cxxlens::sdk::detail
 			}
 			if (main_count != 1U)
 				return unexpected(invalid("source_members", "exactly-one-main"));
+			const auto main = std::ranges::find(draft.source_members,
+												std::string_view{"main"},
+												&decoded_capture_source_member::role);
+			if (std::ranges::count(draft.effective_arguments, main->logical_path) != 1)
+				return unexpected(invalid("effective_argv", "main-source-binding"));
 			if (draft.requested_relation_descriptor_ids.empty() ||
 				draft.requested_relation_descriptor_ids.size() > maximum_requested_relations)
 				return unexpected(limit("requested_relations", "count"));

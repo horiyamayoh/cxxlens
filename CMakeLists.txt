@@ -399,11 +399,24 @@ target_sources(cxxlens_sdk
 target_link_libraries(cxxlens_sdk PUBLIC cxxlens::cxxlens cxxlens::recipes)
 
 if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
-  add_library(cxxlens_clang23_gcc_replay_ingress STATIC
-              src/llvm/clang23_gcc_replay/worker_ingress.cpp)
-  target_link_libraries(cxxlens_clang23_gcc_replay_ingress PUBLIC cxxlens::sdk)
+  add_library(
+    cxxlens_clang23_gcc_replay_ingress STATIC
+    src/llvm/clang23_gcc_replay/worker_ingress.cpp
+    src/llvm/clang23_gcc_replay/worker_parser.cpp)
+  target_link_libraries(
+    cxxlens_clang23_gcc_replay_ingress
+    PUBLIC cxxlens::sdk
+    PRIVATE clang-cpp)
   target_include_directories(cxxlens_clang23_gcc_replay_ingress
                              PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_include_directories(cxxlens_clang23_gcc_replay_ingress SYSTEM
+                             PRIVATE ${LLVM_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS})
+  target_compile_definitions(
+    cxxlens_clang23_gcc_replay_ingress
+    PRIVATE __STDC_CONSTANT_MACROS __STDC_FORMAT_MACROS __STDC_LIMIT_MACROS)
+  if(NOT LLVM_ENABLE_RTTI)
+    target_compile_options(cxxlens_clang23_gcc_replay_ingress PRIVATE -fno-rtti)
+  endif()
   target_compile_features(cxxlens_clang23_gcc_replay_ingress PRIVATE cxx_std_23)
   cxxlens_set_project_warnings(cxxlens_clang23_gcc_replay_ingress)
   cxxlens_enable_sanitizers(cxxlens_clang23_gcc_replay_ingress)
@@ -416,6 +429,12 @@ if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
   cxxlens_set_project_warnings(cxxlens-clang-gcc-replay-worker-23)
   cxxlens_enable_sanitizers(cxxlens-clang-gcc-replay-worker-23)
   cxxlens_configure_installed_tool(cxxlens-clang-gcc-replay-worker-23)
+  if(UNIX AND NOT APPLE)
+    set_target_properties(
+      cxxlens-clang-gcc-replay-worker-23
+      PROPERTIES INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}"
+                 INSTALL_RPATH_USE_LINK_PATH FALSE)
+  endif()
 endif()
 
 # Compiler-neutral materialization I/O and bounded publication sequencing. These
@@ -979,6 +998,29 @@ if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
   install(TARGETS cxxlens-clang-gcc-replay-worker-23
           RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
                   COMPONENT clang23-gcc-replay-worker)
+  get_target_property(_cxxlens_clang23_runtime clang-cpp
+                      IMPORTED_LOCATION_RELEASE)
+  if(NOT _cxxlens_clang23_runtime OR NOT EXISTS "${_cxxlens_clang23_runtime}")
+    message(FATAL_ERROR "The exact Clang 23 runtime artifact is unavailable")
+  endif()
+  find_file(
+    _cxxlens_clang23_license
+    NAMES LICENSE.TXT
+    PATHS ${LLVM_INCLUDE_DIRS}/llvm/Support
+    NO_DEFAULT_PATH NO_CACHE REQUIRED)
+  install(
+    FILES "${_cxxlens_clang23_runtime}"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    COMPONENT clang23-gcc-replay-worker)
+  install(
+    FILES LICENSE NOTICE
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/cxxlens"
+    COMPONENT clang23-gcc-replay-worker)
+  install(
+    FILES "${_cxxlens_clang23_license}"
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/cxxlens"
+    RENAME LLVM-LICENSE.TXT
+    COMPONENT clang23-gcc-replay-worker)
 endif()
 install(
   PROGRAMS tools/sdk/relation_idl_compiler.py

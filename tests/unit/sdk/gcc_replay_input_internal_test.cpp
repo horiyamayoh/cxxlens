@@ -97,6 +97,20 @@ namespace
 		auto path = detail::validate_gcc_replay_input(std::move(escaping));
 		require(!path && path.error().detail == "canonical-unique");
 
+		auto wrong_main = draft();
+		wrong_main.effective_arguments.back() = "project://src/other.cpp";
+		auto binding = detail::validate_gcc_replay_input(std::move(wrong_main));
+		require(!binding && binding.error().field == "effective_argv" &&
+				binding.error().detail == "main-source-binding");
+		auto duplicate_main = draft();
+		duplicate_main.effective_arguments.push_back("project://src/main.cpp");
+		auto duplicate_binding = detail::validate_gcc_replay_input(std::move(duplicate_main));
+		require(!duplicate_binding && duplicate_binding.error().detail == "main-source-binding");
+		auto source_before_option = draft();
+		source_before_option.effective_arguments.push_back("-DVALUE=1");
+		auto ordered = detail::validate_gcc_replay_input(std::move(source_before_option));
+		require(ordered);
+
 		auto duplicate_relation = draft();
 		duplicate_relation.requested_relation_descriptor_ids = {"source.file.v1", "source.file.v1"};
 		auto duplicate = detail::validate_gcc_replay_input(std::move(duplicate_relation));

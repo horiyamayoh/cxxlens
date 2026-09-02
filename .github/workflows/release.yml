@@ -132,7 +132,13 @@ jobs:
           cmake --install build/clang23-gcc-replay \
             --prefix "${RUNNER_TEMP}/cxxlens-clang23-worker-install" \
             --component clang23-gcc-replay-worker
-          test -x "${RUNNER_TEMP}/cxxlens-clang23-worker-install/bin/cxxlens-clang-gcc-replay-worker-23"
+          if "${RUNNER_TEMP}/cxxlens-clang23-worker-install/bin/cxxlens-clang-gcc-replay-worker-23" \
+              </dev/null 2>"${RUNNER_TEMP}/cxxlens-clang23-worker-relocation.stderr"; then
+            exit 1
+          fi
+          grep -Fx 'application-analysis.replay-worker-ingress-failed:stdin' \
+            "${RUNNER_TEMP}/cxxlens-clang23-worker-relocation.stderr"
+          test -f "${RUNNER_TEMP}/cxxlens-clang23-worker-install/share/doc/cxxlens/LLVM-LICENSE.TXT"
           cmake -S . -B build/clang23-gcc-replay-asan -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DBUILD_TESTING=ON \

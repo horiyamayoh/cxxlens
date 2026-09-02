@@ -11,6 +11,8 @@
 #include <utility>
 #include <vector>
 
+#include "worker_parser.hpp"
+
 namespace cxxlens::detail::clang23_gcc_replay
 {
 	namespace
@@ -62,6 +64,11 @@ namespace cxxlens::detail::clang23_gcc_replay
 			auto decoded = sdk::detail::decode_gcc_replay_input(encoded, limits);
 			if (!decoded)
 				return sdk::unexpected(std::move(decoded.error()));
+			auto parsed = parse_replay_input(*decoded);
+			if (!parsed)
+				return sdk::unexpected(std::move(parsed.error()));
+			if (parsed->terminal != parse_terminal::parsed)
+				return sdk::unexpected(failure("translation_unit", "syntax-rejected"));
 			output << decoded->input_digest() << '\n';
 			if (!output)
 				return sdk::unexpected(failure("stdout", "write-failed"));
