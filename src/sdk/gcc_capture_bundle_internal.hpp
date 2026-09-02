@@ -76,12 +76,11 @@ namespace cxxlens::sdk::detail
 		captured_value<std::vector<build_capture_environment_effect>> environment_effects =
 			captured_value<std::vector<build_capture_environment_effect>>::unavailable(
 				"environment-effects-unobserved", "recapture-with-shell-free-wrapper");
-		/**
-		 * Non-main members of the exact dependency closure. A present value, including an empty
-		 * vector, asserts complete membership; compilation-database capture leaves it unavailable.
-		 */
-		captured_value<std::vector<gcc_source_closure_member_observation>> source_closure_members =
-			captured_value<std::vector<gcc_source_closure_member_observation>>::unavailable(
+		/** Observed non-main members; they may be retained even when membership is incomplete. */
+		std::vector<gcc_source_closure_member_observation> source_closure_members;
+		/** Exact membership coverage is independent from the retained member observations. */
+		captured_value<std::string> source_closure_membership =
+			captured_value<std::string>::unavailable(
 				"dependency-output-unobserved",
 				"recapture-with-shell-free-wrapper-or-run-dependency-probe");
 	};

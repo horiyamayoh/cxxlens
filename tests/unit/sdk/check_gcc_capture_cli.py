@@ -46,12 +46,25 @@ def main() -> int:
         (root / "src" / "main.cpp").write_text(
             "int main() { return 0; }\n", encoding="utf-8"
         )
+        (root / "build" / "outer.rsp").write_text(
+            "@nested.rsp --specs=custom.spec '-DNAME=a b'\n", encoding="utf-8"
+        )
+        (root / "build" / "nested.rsp").write_text(
+            "-I../include\n", encoding="utf-8"
+        )
+        (root / "build" / "custom.spec").write_text("*link:\n", encoding="utf-8")
 
         database = [
             {
-                "directory": str(root),
-                "file": "src/main.cpp",
-                "arguments": [str(compiler), "-std=gnu++23", "-c", "src/main.cpp"],
+                "directory": str(root / "build"),
+                "file": "../src/main.cpp",
+                "arguments": [
+                    str(compiler),
+                    "@outer.rsp",
+                    "-std=gnu++23",
+                    "-c",
+                    "../src/main.cpp",
+                ],
             }
         ]
         database_path = root / "build" / "compile_commands.json"

@@ -4,6 +4,7 @@
 #include <string>
 #include <utility>
 
+#include "gcc_auxiliary_capture_internal.hpp"
 #include "gcc_capture_file_port_internal.hpp"
 
 namespace cxxlens::sdk::detail
@@ -129,6 +130,7 @@ namespace cxxlens::sdk::detail
 			input.physical_project_root = std::move(*root);
 			input.toolchain = std::move(*toolchain);
 			input.sources.reserve(decoded->entries().size());
+			input.invocations.reserve(decoded->entries().size());
 			std::uint64_t remaining = limits.maximum_source_closure_bytes;
 			for (const auto& entry : decoded->entries())
 			{
@@ -161,6 +163,22 @@ namespace cxxlens::sdk::detail
 									   "byte-count"});
 				remaining -= static_cast<std::uint64_t>(source->content.size());
 				const auto encoding = source_encoding(source->content);
+				auto auxiliary = capture_gcc_auxiliary_files(files,
+															 entry.arguments,
+															 *working,
+															 input.physical_project_root,
+															 remaining,
+															 limits);
+				if (!auxiliary)
+					return unexpected(std::move(auxiliary.error()));
+				if (auxiliary->captured_bytes > remaining)
+					return unexpected({"application-analysis.import-limit-exceeded",
+									   "capture.auxiliary_files",
+									   "byte-count"});
+				remaining -= auxiliary->captured_bytes;
+				auxiliary->invocation.source_closure_members =
+					std::move(auxiliary->closure_members);
+				input.invocations.push_back(std::move(auxiliary->invocation));
 				input.sources.push_back({std::move(source->content),
 										 encoding,
 										 std::move(source->canonical_path),

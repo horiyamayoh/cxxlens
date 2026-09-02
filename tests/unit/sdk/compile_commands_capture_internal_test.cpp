@@ -290,9 +290,10 @@ namespace
 				 1U,
 				 std::nullopt},
 			});
-			observation.source_closure_members = cxxlens::sdk::detail::captured_value<
-				std::vector<cxxlens::sdk::detail::gcc_source_closure_member_observation>>::
-				observed({{"/work/include/shared.hpp", bytes("#pragma once\n"), "utf8", "header"}});
+			observation.source_closure_members = {
+				{"/work/include/shared.hpp", bytes("#pragma once\n"), "utf8", "header"}};
+			observation.source_closure_membership =
+				cxxlens::sdk::detail::captured_value<std::string>::observed("complete");
 			input.invocations.push_back(std::move(observation));
 		}
 		auto encoded = encode_gcc_compile_commands_bundle(*capture, input);
@@ -329,11 +330,12 @@ namespace
 		require(static_cast<bool>(capture));
 		auto input = bundle_input();
 		cxxlens::sdk::detail::gcc_invocation_observation invocation;
-		invocation.source_closure_members = cxxlens::sdk::detail::captured_value<
-			std::vector<cxxlens::sdk::detail::gcc_source_closure_member_observation>>::observed({
+		invocation.source_closure_members = {
 			{"/work/build/options.rsp", bytes("-DVALUE=1\n"), "utf8", "generated"},
 			{"/work/include/shared.hpp", bytes("-DVALUE=1\n"), "utf8", "header"},
-		});
+		};
+		invocation.source_closure_membership =
+			cxxlens::sdk::detail::captured_value<std::string>::observed("complete");
 		input.invocations.push_back(invocation);
 
 		auto encoded = encode_gcc_compile_commands_bundle(*capture, input);
@@ -360,14 +362,14 @@ namespace
 									   }));
 
 		auto permuted = input;
-		std::ranges::reverse(*permuted.invocations.front().source_closure_members.value);
+		std::ranges::reverse(permuted.invocations.front().source_closure_members);
 		auto permuted_encoded = encode_gcc_compile_commands_bundle(*capture, permuted);
 		require(permuted_encoded && *permuted_encoded == *encoded);
 
 		auto main_only = bundle_input();
 		cxxlens::sdk::detail::gcc_invocation_observation main_only_invocation;
-		main_only_invocation.source_closure_members = cxxlens::sdk::detail::captured_value<
-			std::vector<cxxlens::sdk::detail::gcc_source_closure_member_observation>>::observed({});
+		main_only_invocation.source_closure_membership =
+			cxxlens::sdk::detail::captured_value<std::string>::observed("complete");
 		main_only.invocations.push_back(std::move(main_only_invocation));
 		auto main_only_encoded = encode_gcc_compile_commands_bundle(*capture, main_only);
 		require(static_cast<bool>(main_only_encoded));
@@ -376,19 +378,19 @@ namespace
 				main_only_value->tuple[6].tuple.front().tuple[7].tuple[1].text == "complete");
 
 		auto duplicate = input;
-		duplicate.invocations.front().source_closure_members.value->back().canonical_path =
+		duplicate.invocations.front().source_closure_members.back().canonical_path =
 			"/work/build/options.rsp";
 		auto duplicate_result = encode_gcc_compile_commands_bundle(*capture, duplicate);
 		require(!duplicate_result && duplicate_result.error().detail == "duplicate-logical-path");
 
 		auto outside = input;
-		outside.invocations.front().source_closure_members.value->front().canonical_path =
+		outside.invocations.front().source_closure_members.front().canonical_path =
 			"/outside/options.rsp";
 		auto outside_result = encode_gcc_compile_commands_bundle(*capture, outside);
 		require(!outside_result && outside_result.error().detail == "path-outside-project-root");
 
 		auto invalid_role = input;
-		invalid_role.invocations.front().source_closure_members.value->front().role = "main";
+		invalid_role.invocations.front().source_closure_members.front().role = "main";
 		auto role_result = encode_gcc_compile_commands_bundle(*capture, invalid_role);
 		require(!role_result && role_result.error().detail == "enum");
 
@@ -495,14 +497,15 @@ namespace
 				forged_toolchain_result.error().detail == "captured-value-shape");
 
 		auto forged_closure = input;
-		forged_closure.invocations.front().source_closure_members =
-			cxxlens::sdk::detail::captured_value<
-				std::vector<cxxlens::sdk::detail::gcc_source_closure_member_observation>>::
-				observed({{"/work/include/a.hpp", bytes("#pragma once\n"), "utf8", "header"}});
-		forged_closure.invocations.front().source_closure_members.state =
+		forged_closure.invocations.front().source_closure_members = {
+			{"/work/include/a.hpp", bytes("#pragma once\n"), "utf8", "header"}};
+		forged_closure.invocations.front().source_closure_membership =
+			cxxlens::sdk::detail::captured_value<std::string>::observed("complete");
+		forged_closure.invocations.front().source_closure_membership.state =
 			cxxlens::sdk::detail::capture_field_state::unavailable;
-		forged_closure.invocations.front().source_closure_members.reason = "not-observed";
-		forged_closure.invocations.front().source_closure_members.completion_action = "recapture";
+		forged_closure.invocations.front().source_closure_membership.reason = "not-observed";
+		forged_closure.invocations.front().source_closure_membership.completion_action =
+			"recapture";
 		auto forged_closure_result = encode_gcc_compile_commands_bundle(*capture, forged_closure);
 		require(!forged_closure_result &&
 				forged_closure_result.error().detail == "captured-value-shape");

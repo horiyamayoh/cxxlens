@@ -359,6 +359,7 @@ add_library(
   src/sdk/application_analysis_service.cpp
   src/sdk/build_capture_internal.cpp
   src/sdk/compile_commands_capture_internal.cpp
+  src/sdk/gcc_auxiliary_capture_internal.cpp
   src/sdk/gcc_capture_command_service_internal.cpp
   src/sdk/gcc_capture_file_service_internal.cpp
   src/sdk/gcc_capture_bundle_internal.cpp

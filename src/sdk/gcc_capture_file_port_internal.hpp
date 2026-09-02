@@ -23,6 +23,9 @@
 
 namespace cxxlens::sdk::detail
 {
+	inline constexpr std::string_view capture_file_unavailable_code{
+		"application-analysis.capture-file-unavailable"};
+
 	struct capture_file_snapshot
 	{
 		std::string canonical_path;

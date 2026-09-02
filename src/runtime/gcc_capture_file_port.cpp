@@ -32,6 +32,12 @@ namespace cxxlens::sdk::detail
 				"application-analysis.import-limit-exceeded", std::move(field), std::move(detail)};
 		}
 
+		[[nodiscard]] error unavailable_error(std::string field, std::string detail)
+		{
+			return {
+				std::string{capture_file_unavailable_code}, std::move(field), std::move(detail)};
+		}
+
 #if defined(__linux__)
 		class descriptor
 		{
@@ -128,7 +134,14 @@ namespace cxxlens::sdk::detail
 					const std::string owned{path};
 					descriptor file{::open(owned.c_str(), O_RDONLY | O_CLOEXEC)};
 					if (file.get() < 0)
+					{
+						if (errno == ENOENT || errno == ENOTDIR)
+							return unexpected(unavailable_error("capture.file", "missing"));
+						if (errno == EACCES || errno == EPERM)
+							return unexpected(
+								unavailable_error("capture.file", "permission-denied"));
 						return unexpected(io_error("capture.file", "open"));
+					}
 					struct stat before{};
 					if (::fstat(file.get(), &before) != 0)
 						return unexpected(io_error("capture.file", "metadata"));

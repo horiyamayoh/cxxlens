@@ -1,17 +1,21 @@
 #include "sdk/gcc_capture_file_port_internal.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <ranges>
 #include <source_location>
 #include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
+
+#include "sdk/gcc_auxiliary_capture_internal.hpp"
 
 namespace
 {
@@ -36,6 +40,30 @@ namespace
 	{
 		return {reinterpret_cast<const std::byte*>(value.data()),
 				reinterpret_cast<const std::byte*>(value.data() + value.size())};
+	}
+
+	void gcc_16_2_response_grammar_is_exact_and_bounded()
+	{
+		const std::string input{"'a\\$VAR' '\\\"' \"\\$VAR\" \"\\n\" ef\\\ngh ''\0ignored",
+								sizeof("'a\\$VAR' '\\\"' \"\\$VAR\" \"\\n\" ef\\\ngh ''\0ignored") -
+									1U};
+		auto parsed = cxxlens::sdk::detail::parse_gcc_16_2_response_arguments(bytes(input));
+		require(parsed &&
+				*parsed == std::vector<std::string>{"a\\$VAR", "\\\"", "$VAR", "\\n", "efgh", ""});
+
+		auto limits = cxxlens::sdk::import_limits{};
+		limits.maximum_arguments_per_unit = 1U;
+		auto count_limited =
+			cxxlens::sdk::detail::parse_gcc_16_2_response_arguments(bytes("one two"), limits);
+		require(!count_limited && count_limited.error().detail == "count");
+		limits = {};
+		limits.maximum_string_bytes = 2U;
+		auto string_limited =
+			cxxlens::sdk::detail::parse_gcc_16_2_response_arguments(bytes("abc"), limits);
+		require(!string_limited && string_limited.error().detail == "string-bytes");
+
+		auto whitespace = cxxlens::sdk::detail::parse_gcc_16_2_response_arguments(bytes(" \t\r\n"));
+		require(whitespace && whitespace->empty());
 	}
 
 	[[nodiscard]] gcc_probe_process_output probe_success(std::string standard_output = {},
@@ -137,7 +165,10 @@ namespace
 			required_roots.emplace_back(limits.required_canonical_root);
 			const auto found = files.find(std::string{path});
 			if (found == files.end())
-				return cxxlens::sdk::unexpected({"test.capture-io", "file", "missing"});
+				return cxxlens::sdk::unexpected(
+					{std::string{cxxlens::sdk::detail::capture_file_unavailable_code},
+					 "file",
+					 "missing"});
 			if (enforce_limits && found->second.content.size() > limits.maximum_file_bytes)
 				return cxxlens::sdk::unexpected(
 					{"application-analysis.import-limit-exceeded", "capture.file", "byte-count"});
@@ -151,6 +182,17 @@ namespace
 		std::vector<std::string> required_roots;
 		bool enforce_limits{true};
 	};
+
+	[[nodiscard]] bool has_gap(const cxxlens::sdk::capture_bundle& bundle,
+							   const std::string_view field,
+							   const std::string_view reason)
+	{
+		return std::ranges::any_of(bundle.gaps(),
+								   [&](const auto& gap)
+								   {
+									   return gap.field == field && gap.reason == reason;
+								   });
+	}
 
 	[[nodiscard]] cxxlens::sdk::result<std::vector<std::byte>> capture_with_valid_probe(
 		gcc_capture_file_port& files,
@@ -203,6 +245,121 @@ namespace
 			cxxlens::sdk::detail::capture_gcc_compile_commands(files, alias_processes, alias_input);
 		require(static_cast<bool>(alias_capture) && !alias_processes.requests.empty() &&
 				alias_processes.requests.front().argv.front() == alias_input.compiler_path);
+	}
+
+	void response_and_spec_files_are_captured_recursively_without_claiming_closure()
+	{
+		fake_file_port files;
+		files.directories.emplace("/physical/project", "/physical/project");
+		files.directories.emplace("/physical/project/build", "/physical/project/build");
+		constexpr std::string_view database = R"json([
+  {"directory":"/physical/project/build","file":"../src/main.cpp",
+   "arguments":["/opt/gcc-16.2.0/bin/g++","@outer.rsp","-c","../src/main.cpp"]}
+])json";
+		files.files.emplace("/physical/project/build/compile_commands.json",
+							capture_file_snapshot{"/physical/project/build/compile_commands.json",
+												  bytes(database)});
+		files.files.emplace("/physical/project/build/../src/main.cpp",
+							capture_file_snapshot{"/physical/project/src/main.cpp",
+												  bytes("int main() { return 0; }\n")});
+		files.files.emplace(
+			"/physical/project/build/outer.rsp",
+			capture_file_snapshot{"/physical/project/build/outer.rsp",
+								  bytes("@nested.rsp --specs=custom.spec '-DNAME=a b'\n")});
+		files.files.emplace(
+			"/physical/project/build/nested.rsp",
+			capture_file_snapshot{"/physical/project/build/nested.rsp", bytes("-I../include\n")});
+		files.files.emplace(
+			"/physical/project/build/custom.spec",
+			capture_file_snapshot{"/physical/project/build/custom.spec", bytes("*link:\n")});
+
+		auto captured = capture_with_valid_probe(files, request());
+		auto repeated = capture_with_valid_probe(files, request());
+		require(captured && repeated && *captured == *repeated);
+		auto decoded = cxxlens::sdk::decode_capture_bundle(*captured);
+		require(static_cast<bool>(decoded));
+		require(!has_gap(*decoded, "compile_units[0].response_files", "response-files-unobserved"));
+		require(!has_gap(*decoded, "compile_units[0].config_files", "config-files-unobserved"));
+		require(has_gap(
+			*decoded, "source_closures[0].membership_coverage", "dependency-output-unobserved"));
+
+		auto value = cxxlens::sdk::canonical_binary_decode(*captured);
+		require(static_cast<bool>(value));
+		const auto& unit = value->tuple[5].tuple.front().tuple;
+		require(unit[9].tuple[0].text == "observed" && unit[9].tuple[1].tuple.size() == 2U);
+		require(unit[9].tuple[1].tuple[0].tuple[3].type ==
+				cxxlens::sdk::canonical_value::kind::null_value);
+		require(unit[9].tuple[1].tuple[1].tuple[3].integer == 0);
+		require(unit[10].tuple[0].text == "observed" && unit[10].tuple[1].tuple.size() == 1U);
+		const auto& closure = value->tuple[6].tuple.front().tuple;
+		require(closure[3].integer == 4 &&
+				closure[7].tuple[1].type == cxxlens::sdk::canonical_value::kind::null_value);
+
+		auto include_files = files;
+		include_files.files["/physical/project/build/custom.spec"].content =
+			bytes("%include <nested.spec>\n");
+		auto include_capture = capture_with_valid_probe(include_files, request());
+		require(static_cast<bool>(include_capture));
+		auto include_decoded = cxxlens::sdk::decode_capture_bundle(*include_capture);
+		require(include_decoded &&
+				has_gap(*include_decoded,
+						"compile_units[0].config_files",
+						"spec-include-search-unobserved"));
+	}
+
+	void response_file_missing_recursion_and_bounds_fail_closed()
+	{
+		fake_file_port files;
+		files.directories.emplace("/physical/project", "/physical/project");
+		files.directories.emplace("/physical/project/build", "/physical/project/build");
+		constexpr std::string_view database = R"json([
+  {"directory":"/physical/project/build","file":"../src/main.cpp",
+   "arguments":["/opt/gcc-16.2.0/bin/g++","@outer.rsp","-c","../src/main.cpp"]}
+])json";
+		files.files.emplace("/physical/project/build/compile_commands.json",
+							capture_file_snapshot{"/physical/project/build/compile_commands.json",
+												  bytes(database)});
+		files.files.emplace("/physical/project/build/../src/main.cpp",
+							capture_file_snapshot{"/physical/project/src/main.cpp",
+												  bytes("int main() { return 0; }\n")});
+
+		auto missing = capture_with_valid_probe(files, request());
+		require(static_cast<bool>(missing));
+		auto missing_decoded = cxxlens::sdk::decode_capture_bundle(*missing);
+		require(missing_decoded &&
+				has_gap(*missing_decoded,
+						"compile_units[0].response_files[0].content_digest",
+						"response-file-unreadable"));
+
+		auto recursive = files;
+		recursive.files.emplace(
+			"/physical/project/build/outer.rsp",
+			capture_file_snapshot{"/physical/project/build/outer.rsp", bytes("@outer.rsp\n")});
+		auto recursive_result = capture_with_valid_probe(recursive, request());
+		require(!recursive_result && recursive_result.error().detail == "recursive-reference");
+
+		auto nested = recursive;
+		nested.files["/physical/project/build/outer.rsp"].content = bytes("@nested.rsp\n");
+		nested.files.emplace(
+			"/physical/project/build/nested.rsp",
+			capture_file_snapshot{"/physical/project/build/nested.rsp", bytes("-DVALUE=1\n")});
+		auto deep = nested;
+		deep.files["/physical/project/build/outer.rsp"].content = bytes("@depth-0.rsp\n");
+		for (std::size_t index{}; index < 32U; ++index)
+		{
+			const auto name = "/physical/project/build/depth-" + std::to_string(index) + ".rsp";
+			const auto next = index + 1U < 32U ? "@depth-" + std::to_string(index + 1U) + ".rsp\n"
+											   : "-DVALUE=1\n";
+			deep.files.emplace(name, capture_file_snapshot{name, bytes(next)});
+		}
+		auto depth_limited = capture_with_valid_probe(deep, request());
+		require(!depth_limited && depth_limited.error().detail == "depth");
+
+		auto limits = cxxlens::sdk::import_limits{};
+		limits.maximum_source_closure_bytes =
+			files.files.at("/physical/project/build/../src/main.cpp").content.size();
+		auto byte_limited = capture_with_valid_probe(nested, request(), limits);
+		require(!byte_limited && byte_limited.error().detail == "byte-count");
 	}
 
 	void fake_port_failures_and_canonical_escape_fail_closed()
@@ -376,7 +533,10 @@ int main() noexcept
 {
 	try
 	{
+		gcc_16_2_response_grammar_is_exact_and_bounded();
 		fake_port_drives_canonical_projection_and_exact_bounds();
+		response_and_spec_files_are_captured_recursively_without_claiming_closure();
+		response_file_missing_recursion_and_bounds_fail_closed();
 		fake_port_failures_and_canonical_escape_fail_closed();
 		system_port_reads_one_stable_snapshot_and_rejects_escape();
 		return EXIT_SUCCESS;
