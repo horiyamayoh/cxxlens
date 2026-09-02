@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "llvm/clang23_gcc_replay/observation_normalizer.hpp"
 #include "llvm/clang23_gcc_replay/source_authority_binder.hpp"
 #include "llvm/clang23_gcc_replay/worker_observation_codec.hpp"
 #include "llvm/clang23_gcc_replay/worker_parser.hpp"
@@ -81,7 +82,8 @@ namespace
 		header.source_snapshot_id = *header_snapshot;
 		value.source_members.push_back(std::move(header));
 		value.source_closure_digest = "application-source-closure:sha256:" + std::string(64U, '4');
-		value.requested_relation_descriptor_ids = {"source.file.v1"};
+		value.requested_relation_descriptor_ids = {
+			"cc.entity.v1", "source.file.v1", "source.span.v1"};
 		value.interpretation = "cc.clang23-gcc-replay-1";
 		auto validated = detail::validate_gcc_replay_input(std::move(value));
 		require(validated);
@@ -352,6 +354,60 @@ namespace
 		auto stale_snapshot = bind_observation_sources(*stale_input, detached.observations);
 		require(!stale_snapshot && stale_snapshot.error().detail == "snapshot-identity-mismatch");
 	}
+
+	void detached_observations_normalize_to_existing_relation_contracts()
+	{
+		using namespace cxxlens::detail::clang23_gcc_replay;
+		auto value = input();
+		auto detached = execute(value);
+		auto normalized = normalize_observation_candidates(value, detached);
+		require(normalized && normalized->replay_input_digest == value.input_digest() &&
+				!normalized->source_spans.empty() && normalized->entities.size() == 4U);
+		for (const auto& row : normalized->source_spans)
+			require(row.descriptor_id == "source.span.v1");
+		for (const auto& row : normalized->entities)
+			require(row.descriptor_id == "cc.entity.v1" &&
+					row.cells.at("cc.entity.v1.entity").value.has_value() &&
+					row.cells.at("cc.entity.v1.provider_local_key").value.has_value());
+		auto repeated = normalize_observation_candidates(value, detached);
+		require(repeated && *repeated == *normalized);
+
+		auto mismatched = detached;
+		mismatched.replay_input_digest = "sha256:" + std::string(64U, 'a');
+		require(!normalize_observation_candidates(value, mismatched));
+		auto failed = detached;
+		failed.error_count = 1U;
+		require(!normalize_observation_candidates(value, failed));
+
+		auto conflicting = detached;
+		conflicting.observations.entities[1].provider_local_key =
+			conflicting.observations.entities.front().provider_local_key;
+		conflicting.observations.entities[1].canonical_type = "conflicting-type";
+		require(!normalize_observation_candidates(value, conflicting));
+
+		auto unrequested_draft = value.value();
+		unrequested_draft.requested_relation_descriptor_ids = {"source.file.v1"};
+		auto unrequested_input =
+			cxxlens::sdk::detail::validate_gcc_replay_input(std::move(unrequested_draft));
+		require(unrequested_input);
+		auto unrequested_worker = detached;
+		unrequested_worker.replay_input_digest = std::string{unrequested_input->input_digest()};
+		auto unrequested = normalize_observation_candidates(*unrequested_input, unrequested_worker);
+		require(unrequested && unrequested->source_spans.empty() && unrequested->entities.empty());
+
+		auto entity_only_draft = value.value();
+		entity_only_draft.requested_relation_descriptor_ids = {"cc.entity.v1"};
+		auto entity_only_input =
+			cxxlens::sdk::detail::validate_gcc_replay_input(std::move(entity_only_draft));
+		require(entity_only_input);
+		auto entity_only_worker = detached;
+		entity_only_worker.replay_input_digest = std::string{entity_only_input->input_digest()};
+		auto entity_only = normalize_observation_candidates(*entity_only_input, entity_only_worker);
+		require(entity_only && entity_only->source_spans.empty() &&
+				entity_only->entities.size() == 4U);
+		for (const auto& row : entity_only->entities)
+			require(!row.cells.contains("cc.entity.v1.anchor"));
+	}
 } // namespace
 
 int main()
@@ -361,4 +417,5 @@ int main()
 	malformed_and_oversized_input_fail_without_output();
 	parser_uses_only_the_bound_source_closure();
 	observations_bind_only_to_capture_source_authority();
+	detached_observations_normalize_to_existing_relation_contracts();
 }

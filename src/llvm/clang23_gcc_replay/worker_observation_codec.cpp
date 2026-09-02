@@ -164,8 +164,8 @@ namespace cxxlens::detail::clang23_gcc_replay
 		}
 
 		[[nodiscard]] sdk::result<void>
-		validate_output(const worker_observation_output& value,
-						const worker_observation_codec_limits& limits)
+		validate_output_impl(const worker_observation_output& value,
+							 const worker_observation_codec_limits& limits)
 		{
 			if (value.replay_input_digest.size() != 71U ||
 				!value.replay_input_digest.starts_with("sha256:") ||
@@ -417,6 +417,17 @@ namespace cxxlens::detail::clang23_gcc_replay
 		return {};
 	}
 
+	sdk::result<void>
+	validate_worker_observation_output(const worker_observation_output& value,
+									   const worker_observation_codec_limits limits)
+	{
+		if (auto valid = limits.validate(); !valid)
+			return sdk::unexpected(std::move(valid.error()));
+		if (value.error_count != 0U)
+			return sdk::unexpected(invalid("error_count", "nonzero-success-output"));
+		return validate_output_impl(value, limits);
+	}
+
 	sdk::result<std::vector<std::byte>>
 	encode_worker_observations(const std::string_view replay_input_digest,
 							   const parse_result& parsed,
@@ -433,7 +444,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 												parsed.warning_count,
 												parsed.error_count,
 												parsed.observations};
-			if (auto valid = validate_output(candidate, limits); !valid)
+			if (auto valid = validate_worker_observation_output(candidate, limits); !valid)
 				return sdk::unexpected(std::move(valid.error()));
 			cbor::map root{
 				{"schema", text(std::string{schema})},
@@ -504,9 +515,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 				return sdk::unexpected(invalid("root", "field"));
 			worker_observation_output output{
 				**digest, *declarations, *warnings, *errors, std::move(*observations)};
-			if (output.error_count != 0U)
-				return sdk::unexpected(invalid("error_count", "nonzero-success-output"));
-			if (auto valid = validate_output(output, limits); !valid)
+			if (auto valid = validate_worker_observation_output(output, limits); !valid)
 				return sdk::unexpected(std::move(valid.error()));
 			return output;
 		}

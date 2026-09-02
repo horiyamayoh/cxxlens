@@ -37,6 +37,11 @@ namespace cxxlens::detail::clang23_gcc_replay
 		[[nodiscard]] bool operator==(const worker_observation_output&) const = default;
 	};
 
+	/** Revalidate a detached aggregate before any host-side semantic projection. */
+	[[nodiscard]] sdk::result<void>
+	validate_worker_observation_output(const worker_observation_output& value,
+									   worker_observation_codec_limits limits = {});
+
 	/** Encode one successfully parsed, AST-detached observation batch. */
 	[[nodiscard]] sdk::result<std::vector<std::byte>>
 	encode_worker_observations(std::string_view replay_input_digest,
