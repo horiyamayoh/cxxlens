@@ -30,6 +30,30 @@ option(CXXLENS_BUILD_DOCS "Enable Doxygen documentation targets" OFF)
 option(CXXLENS_BUILD_QUALITY_TOOLS "Enable local quality targets" ON)
 option(CXXLENS_BUILD_CLANG22_COMPONENTS
        "Build Clang 22 native provider, materializer, and worker components" ON)
+option(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER
+       "Build the exact Clang 23.1.0 GCC-mode replay worker" OFF)
+
+if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
+  if(CXXLENS_BUILD_CLANG22_COMPONENTS)
+    message(
+      FATAL_ERROR
+        "The Clang 23 GCC replay worker must be configured separately from Clang 22 components"
+    )
+  endif()
+  if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
+     OR NOT CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL "23.1.0")
+    message(
+      FATAL_ERROR
+        "The GCC replay worker requires the exact Clang 23.1.0 compiler")
+  endif()
+  find_package(LLVM 23.1.0 EXACT CONFIG REQUIRED)
+  find_package(Clang 23.1.0 EXACT CONFIG REQUIRED)
+  if(NOT LLVM_PACKAGE_VERSION VERSION_EQUAL "23.1.0")
+    message(
+      FATAL_ERROR "The GCC replay worker requires exact LLVM 23.1.0 packages")
+  endif()
+  message(STATUS "Enabled exact Clang 23.1.0 GCC replay worker")
+endif()
 
 set(CXXLENS_SOURCE_REVISION
     ""
@@ -374,6 +398,26 @@ target_sources(cxxlens_sdk
                PRIVATE $<TARGET_OBJECTS:cxxlens_process_authority_internal>)
 target_link_libraries(cxxlens_sdk PUBLIC cxxlens::cxxlens cxxlens::recipes)
 
+if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
+  add_library(cxxlens_clang23_gcc_replay_ingress STATIC
+              src/llvm/clang23_gcc_replay/worker_ingress.cpp)
+  target_link_libraries(cxxlens_clang23_gcc_replay_ingress PUBLIC cxxlens::sdk)
+  target_include_directories(cxxlens_clang23_gcc_replay_ingress
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang23_gcc_replay_ingress PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_clang23_gcc_replay_ingress)
+  cxxlens_enable_sanitizers(cxxlens_clang23_gcc_replay_ingress)
+
+  add_executable(cxxlens-clang-gcc-replay-worker-23
+                 src/llvm/clang23_gcc_replay/worker_main.cpp)
+  target_link_libraries(cxxlens-clang-gcc-replay-worker-23
+                        PRIVATE cxxlens_clang23_gcc_replay_ingress)
+  target_compile_features(cxxlens-clang-gcc-replay-worker-23 PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens-clang-gcc-replay-worker-23)
+  cxxlens_enable_sanitizers(cxxlens-clang-gcc-replay-worker-23)
+  cxxlens_configure_installed_tool(cxxlens-clang-gcc-replay-worker-23)
+endif()
+
 # Compiler-neutral materialization I/O and bounded publication sequencing. These
 # targets are source-private implementation closures shared by frontend
 # adapters; they are not installed or exported.
@@ -492,7 +536,6 @@ else()
   target_compile_definitions(cxxlens_clang22_provider_sdk
                              PRIVATE CXXLENS_HAS_CLANG22=0)
 endif()
-
 find_package(Threads REQUIRED)
 
 # Native Clang 22 materialization and worker components are kept out of the
@@ -931,6 +974,11 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
   install(TARGETS cxxlens-clang-worker-22 cxxlens-clang22-materialize
           RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+endif()
+if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
+  install(TARGETS cxxlens-clang-gcc-replay-worker-23
+          RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+                  COMPONENT clang23-gcc-replay-worker)
 endif()
 install(
   PROGRAMS tools/sdk/relation_idl_compiler.py

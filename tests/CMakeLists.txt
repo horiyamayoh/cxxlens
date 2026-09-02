@@ -176,6 +176,24 @@ set_tests_properties(
     "unit;sdk;application-analysis;gcc;replay;codec;bounded;negative;fault;determinism;resource;security"
 )
 
+if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
+  cxxlens_add_test_executable(
+    cxxlens-unit-clang23-gcc-replay-worker-ingress
+    unit/adapter/clang23_gcc_replay/worker_ingress_test.cpp)
+  target_link_libraries(cxxlens-unit-clang23-gcc-replay-worker-ingress
+                        PRIVATE cxxlens_clang23_gcc_replay_ingress)
+  target_include_directories(cxxlens-unit-clang23-gcc-replay-worker-ingress
+                             PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  add_test(NAME adapter.clang23-gcc-replay-worker-ingress
+           COMMAND cxxlens-unit-clang23-gcc-replay-worker-ingress)
+  set_tests_properties(
+    adapter.clang23-gcc-replay-worker-ingress
+    PROPERTIES
+      LABELS
+      "unit;adapter;application-analysis;clang23;gcc;replay;worker;codec;bounded;negative;fault;determinism;resource;security"
+  )
+endif()
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-sealed-executable
                             unit/sdk/sealed_executable_internal_test.cpp)
 target_sources(cxxlens-unit-sdk-sealed-executable
@@ -2362,6 +2380,7 @@ set(_cxxlens_ng_test_binary_candidates
     cxxlens-unit-sdk-compile-commands-capture
     cxxlens-unit-sdk-gcc-capture-files
     cxxlens-unit-sdk-gcc-replay-input
+    cxxlens-unit-clang23-gcc-replay-worker-ingress
     cxxlens-unit-sdk-gcc-replay-planner
     cxxlens-unit-sdk-sealed-executable
     cxxlens-unit-sdk-gcc-probe-process

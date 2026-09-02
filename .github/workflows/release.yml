@@ -108,11 +108,70 @@ jobs:
           profile: none
           python-dependencies: "false"
       - uses: ./.github/actions/setup-clang23-gcc-replay
-      - name: Verify exact replay frontend
+      - name: Build and test the exact replay worker ingress
         run: |
           python3 tools/ci/bootstrap_application_analysis_toolchain.py \
             verify-clang-gcc-replay \
             --prefix "${CXXLENS_CLANG_GCC_REPLAY_ROOT}"
+          cmake -S . -B build/clang23-gcc-replay -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=ON \
+            -DCXXLENS_BUILD_QUALITY_TOOLS=OFF \
+            -DCXXLENS_WARNINGS_AS_ERRORS=ON \
+            -DCXXLENS_BUILD_CLANG22_COMPONENTS=OFF \
+            -DCXXLENS_CLANG_ADAPTER=OFF \
+            -DCXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER=ON \
+            -DCMAKE_CXX_COMPILER="${CXXLENS_CLANG_GCC_REPLAY_ROOT}/bin/clang++" \
+            -DLLVM_DIR="${CXXLENS_CLANG_GCC_REPLAY_ROOT}/lib/cmake/llvm" \
+            -DClang_DIR="${CXXLENS_CLANG_GCC_REPLAY_ROOT}/lib/cmake/clang"
+          cmake --build build/clang23-gcc-replay \
+            --target cxxlens-clang-gcc-replay-worker-23 \
+                     cxxlens-unit-clang23-gcc-replay-worker-ingress
+          ctest --test-dir build/clang23-gcc-replay --output-on-failure \
+            -R '^adapter\.clang23-gcc-replay-worker-ingress$'
+          cmake --install build/clang23-gcc-replay \
+            --prefix "${RUNNER_TEMP}/cxxlens-clang23-worker-install" \
+            --component clang23-gcc-replay-worker
+          test -x "${RUNNER_TEMP}/cxxlens-clang23-worker-install/bin/cxxlens-clang-gcc-replay-worker-23"
+          cmake -S . -B build/clang23-gcc-replay-asan -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_TESTING=ON \
+            -DCXXLENS_BUILD_QUALITY_TOOLS=OFF \
+            -DCXXLENS_WARNINGS_AS_ERRORS=ON \
+            -DCXXLENS_BUILD_CLANG22_COMPONENTS=OFF \
+            -DCXXLENS_CLANG_ADAPTER=OFF \
+            -DCXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER=ON \
+            -DCXXLENS_ENABLE_ASAN=ON \
+            -DCXXLENS_ENABLE_UBSAN=ON \
+            -DCMAKE_CXX_COMPILER="${CXXLENS_CLANG_GCC_REPLAY_ROOT}/bin/clang++" \
+            -DLLVM_DIR="${CXXLENS_CLANG_GCC_REPLAY_ROOT}/lib/cmake/llvm" \
+            -DClang_DIR="${CXXLENS_CLANG_GCC_REPLAY_ROOT}/lib/cmake/clang"
+          cmake --build build/clang23-gcc-replay-asan \
+            --target cxxlens-unit-clang23-gcc-replay-worker-ingress \
+                     cxxlens-sanitizer-canary
+          ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:exitcode=86:handle_segv=0:symbolize=1 \
+          UBSAN_OPTIONS=halt_on_error=1:exitcode=86:print_stacktrace=1:symbolize=1 \
+          ASAN_SYMBOLIZER_PATH="${CXXLENS_CLANG_GCC_REPLAY_ROOT}/bin/llvm-symbolizer" \
+            ctest --test-dir build/clang23-gcc-replay-asan --output-on-failure \
+              -R '^(adapter\.clang23-gcc-replay-worker-ingress|sanitizer\.canary-(address|undefined))$'
+          cmake -S . -B build/clang23-gcc-replay-tsan -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_TESTING=ON \
+            -DCXXLENS_BUILD_QUALITY_TOOLS=OFF \
+            -DCXXLENS_WARNINGS_AS_ERRORS=ON \
+            -DCXXLENS_BUILD_CLANG22_COMPONENTS=OFF \
+            -DCXXLENS_CLANG_ADAPTER=OFF \
+            -DCXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER=ON \
+            -DCXXLENS_ENABLE_TSAN=ON \
+            -DCMAKE_CXX_COMPILER="${CXXLENS_CLANG_GCC_REPLAY_ROOT}/bin/clang++" \
+            -DLLVM_DIR="${CXXLENS_CLANG_GCC_REPLAY_ROOT}/lib/cmake/llvm" \
+            -DClang_DIR="${CXXLENS_CLANG_GCC_REPLAY_ROOT}/lib/cmake/clang"
+          cmake --build build/clang23-gcc-replay-tsan \
+            --target cxxlens-unit-clang23-gcc-replay-worker-ingress \
+                     cxxlens-tsan-test-canary cxxlens-tsan-provider-canary
+          TSAN_OPTIONS=halt_on_error=1:exitcode=86:handle_segv=0:second_deadlock_stack=1:symbolize=1 \
+            ctest --test-dir build/clang23-gcc-replay-tsan --output-on-failure \
+              -R '^(adapter\.clang23-gcc-replay-worker-ingress|sanitizer\.canary-thread-(test|provider))$'
 
   asan-ubsan:
     name: ASan and UBSan

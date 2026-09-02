@@ -1497,8 +1497,8 @@ namespace cxxlens::sdk
 		}
 
 		template <class Operation>
-		[[nodiscard]] result<void> with_immediate_transaction(sqlite_database& database,
-															  Operation&& operation)
+		[[maybe_unused, nodiscard]] result<void>
+		with_immediate_transaction(sqlite_database& database, Operation&& operation)
 		{
 			if (auto begun = database.execute("BEGIN IMMEDIATE;"); !begun)
 				return begun;
