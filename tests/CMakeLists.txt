@@ -2344,8 +2344,10 @@ set(_cxxlens_ng_test_binary_candidates
     cxxlens-public-header-sdk
     cxxlens-unit-sdk
     cxxlens-unit-sdk-bounded-json
+    cxxlens-unit-sdk-build-capture
     cxxlens-unit-sdk-compile-commands-capture
     cxxlens-unit-sdk-gcc-capture-files
+    cxxlens-unit-sdk-gcc-replay-planner
     cxxlens-unit-sdk-sealed-executable
     cxxlens-unit-sdk-gcc-probe-process
     cxxlens-unit-sdk-gcc-toolchain-probe
