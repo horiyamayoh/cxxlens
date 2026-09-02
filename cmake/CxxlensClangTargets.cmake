@@ -31,8 +31,11 @@ function(cxxlens_create_clang22_worker_static_closure)
   # image, not the relocated installation prefix. Keep the public shared SDK
   # unchanged, but make the worker's cxxlens-owned implementation a private
   # static closure so the sealed image never needs lib/cxxlens DSOs.
-  add_library(cxxlens_clang22_worker_base_internal STATIC EXCLUDE_FROM_ALL
-              src/sdk/common.cpp src/sdk/bounded_json_internal.cpp)
+  add_library(
+    cxxlens_clang22_worker_base_internal STATIC EXCLUDE_FROM_ALL
+    src/sdk/common.cpp
+    src/sdk/bounded_json_internal.cpp
+    src/sdk/source_identity_internal.cpp)
   cxxlens_configure_clang22_worker_static_component(
     cxxlens_clang22_worker_base_internal)
 
