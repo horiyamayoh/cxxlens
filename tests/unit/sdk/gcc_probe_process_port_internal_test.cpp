@@ -15,6 +15,7 @@
 
 #if defined(__linux__) && defined(__GLIBC__)
 #include <sys/prctl.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
@@ -26,6 +27,7 @@ namespace
 	using cxxlens::sdk::detail::gcc_probe_process_limits;
 	using cxxlens::sdk::detail::gcc_probe_process_request;
 	using cxxlens::sdk::detail::gcc_probe_process_terminal;
+	using cxxlens::sdk::detail::gcc_process_standard_stream_mode;
 	using cxxlens::sdk::detail::run_gcc_probe_process;
 
 	void require(const bool condition, const std::string& message)
@@ -58,11 +60,20 @@ namespace
 				const std::filesystem::path& working_directory,
 				std::string mode)
 	{
-		return {{executable, std::move(mode)},
-				working_directory.string(),
-				{"LC_ALL=C", "CXXLENS_PROBE_TOKEN=explicit"},
-				limits(),
-				deadline_after(std::chrono::seconds{2})};
+		gcc_probe_process_request request{{executable, std::move(mode)},
+										  working_directory.string(),
+										  {"LC_ALL=C", "CXXLENS_PROBE_TOKEN=explicit"},
+										  limits(),
+										  deadline_after(std::chrono::seconds{2})};
+		// LeakSanitizer cannot inspect the sealed self-exec child in this fixture. The
+		// instrumented parent remains leak-checked; child ASan/UBSan/TSan findings stay fatal.
+		if (std::getenv("ASAN_OPTIONS") != nullptr)
+			request.environment.emplace_back("ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:exitcode="
+											 "86:handle_segv=0:symbolize=1");
+		for (const std::string_view name : {"UBSAN_OPTIONS", "TSAN_OPTIONS"})
+			if (const auto* value = std::getenv(name.data()); value != nullptr)
+				request.environment.emplace_back(std::string{name} + '=' + value);
+		return request;
 	}
 
 #if defined(__linux__) && defined(__GLIBC__)
@@ -80,6 +91,22 @@ namespace
 		}
 		if (mode == "--child-exit")
 			return 7;
+		if (mode == "--child-inherit")
+		{
+			const auto* token = std::getenv("CXXLENS_PROBE_TOKEN");
+			struct stat standard_output{};
+			struct stat standard_error{};
+			if (::fstat(STDOUT_FILENO, &standard_output) != 0 ||
+				::fstat(STDERR_FILENO, &standard_error) != 0)
+				return 12;
+			std::ofstream ready{"inherited-ready"};
+			ready << (token == nullptr ? "absent" : token) << '\n'
+				  << static_cast<std::uintmax_t>(standard_output.st_dev) << ' '
+				  << static_cast<std::uintmax_t>(standard_output.st_ino) << '\n'
+				  << static_cast<std::uintmax_t>(standard_error.st_dev) << ' '
+				  << static_cast<std::uintmax_t>(standard_error.st_ino) << '\n';
+			return 11;
+		}
 		if (mode == "--child-crash")
 		{
 			(void)::kill(::getpid(), SIGKILL);
@@ -164,6 +191,34 @@ int main(const int argc, char** argv)
 		require(exit_result && exit_result->terminal == gcc_probe_process_terminal::exited &&
 					exit_result->exit_code == 7,
 				"nonzero compiler exit was not preserved");
+		auto inherited_request = request_for(executable, root, "--child-inherit");
+		inherited_request.standard_stream_mode = gcc_process_standard_stream_mode::inherited;
+		struct stat parent_standard_output{};
+		struct stat parent_standard_error{};
+		require(::fstat(STDOUT_FILENO, &parent_standard_output) == 0 &&
+					::fstat(STDERR_FILENO, &parent_standard_error) == 0,
+				"could not identify parent standard streams");
+		auto inherited = run_gcc_probe_process(inherited_request);
+		require(inherited && inherited->terminal == gcc_probe_process_terminal::exited &&
+					inherited->exit_code == 11 && inherited->standard_output.empty() &&
+					inherited->standard_error.empty() &&
+					inherited->executable_digest == observed->executable_digest,
+				"inherited stream execution lost its exact terminal or executable binding");
+		std::ifstream inherited_ready{root / "inherited-ready"};
+		std::string inherited_token;
+		std::uintmax_t child_stdout_device{};
+		std::uintmax_t child_stdout_inode{};
+		std::uintmax_t child_stderr_device{};
+		std::uintmax_t child_stderr_inode{};
+		inherited_ready >> inherited_token >> child_stdout_device >> child_stdout_inode >>
+			child_stderr_device >> child_stderr_inode;
+		require(
+			inherited_token == "explicit" &&
+				child_stdout_device == static_cast<std::uintmax_t>(parent_standard_output.st_dev) &&
+				child_stdout_inode == static_cast<std::uintmax_t>(parent_standard_output.st_ino) &&
+				child_stderr_device == static_cast<std::uintmax_t>(parent_standard_error.st_dev) &&
+				child_stderr_inode == static_cast<std::uintmax_t>(parent_standard_error.st_ino),
+			"inherited stream execution lost its explicit cwd, environment, or streams");
 		auto crash_result = run_gcc_probe_process(request_for(executable, root, "--child-crash"));
 		require(crash_result && crash_result->terminal == gcc_probe_process_terminal::crashed &&
 					crash_result->signal == SIGKILL,
@@ -244,6 +299,13 @@ int main(const int argc, char** argv)
 		auto too_many_arguments = run_gcc_probe_process(argument_limit);
 		require(!too_many_arguments && too_many_arguments.error().field == "invocation",
 				"argument count bound was not enforced");
+		auto unknown_stream_mode = observed_request;
+		unknown_stream_mode.standard_stream_mode =
+			static_cast<gcc_process_standard_stream_mode>(255U);
+		auto rejected_stream_mode = run_gcc_probe_process(unknown_stream_mode);
+		require(!rejected_stream_mode &&
+					rejected_stream_mode.error().field == "standard-stream-mode",
+				"unknown standard stream mode was accepted");
 		auto image_limit = observed_request;
 		image_limit.limits.maximum_executable_image_bytes = 1U;
 		image_limit.absolute_wall_deadline_ns = deadline_after(std::chrono::seconds{2});

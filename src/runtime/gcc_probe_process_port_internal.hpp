@@ -32,6 +32,12 @@ namespace cxxlens::sdk::detail
 		unavailable,
 	};
 
+	enum class gcc_process_standard_stream_mode : std::uint8_t
+	{
+		captured,
+		inherited,
+	};
+
 	struct CXXLENS_RUNTIME_DETAIL_HIDDEN gcc_probe_process_limits
 	{
 		std::size_t maximum_argument_count{};
@@ -50,6 +56,8 @@ namespace cxxlens::sdk::detail
 		std::vector<std::string> environment;
 		gcc_probe_process_limits limits;
 		std::uint64_t absolute_wall_deadline_ns{};
+		gcc_process_standard_stream_mode standard_stream_mode{
+			gcc_process_standard_stream_mode::captured};
 	};
 
 	struct CXXLENS_RUNTIME_DETAIL_HIDDEN gcc_probe_process_output

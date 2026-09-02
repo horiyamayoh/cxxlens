@@ -55,6 +55,14 @@ namespace cxxlens::sdk::detail
 
 		[[nodiscard]] result<void> validate_request(const gcc_probe_process_request& request)
 		{
+			switch (request.standard_stream_mode)
+			{
+				case gcc_process_standard_stream_mode::captured:
+				case gcc_process_standard_stream_mode::inherited:
+					break;
+				default:
+					return unexpected(request_error("standard-stream-mode", "unknown"));
+			}
 			const auto& limits = request.limits;
 			if (limits.maximum_argument_count == 0U || limits.maximum_argument_bytes == 0U ||
 				limits.maximum_environment_count == 0U || limits.maximum_environment_bytes == 0U ||
@@ -351,29 +359,39 @@ namespace cxxlens::sdk::detail
 			output.executable_digest = executable->digest();
 			output.executable_bytes = executable->byte_count();
 
-			auto standard_output = make_pipe("stdout");
-			if (!standard_output)
+			const bool capture_standard_streams =
+				request.standard_stream_mode == gcc_process_standard_stream_mode::captured;
+			pipe_pair standard_output;
+			pipe_pair standard_error;
+			descriptor null_input;
+			if (capture_standard_streams)
 			{
-				output.terminal = gcc_probe_process_terminal::launch_failed;
-				output.failure_stage = standard_output.error().field;
-				output.failure_detail = standard_output.error().detail;
-				return output;
-			}
-			auto standard_error = make_pipe("stderr");
-			if (!standard_error)
-			{
-				output.terminal = gcc_probe_process_terminal::launch_failed;
-				output.failure_stage = standard_error.error().field;
-				output.failure_detail = standard_error.error().detail;
-				return output;
-			}
-			descriptor null_input{::open("/dev/null", O_RDONLY | O_CLOEXEC)};
-			if (null_input.get() < 0)
-			{
-				output.terminal = gcc_probe_process_terminal::launch_failed;
-				output.failure_stage = "stdin";
-				output.failure_detail = "open:" + std::to_string(errno);
-				return output;
+				auto output_pipe = make_pipe("stdout");
+				if (!output_pipe)
+				{
+					output.terminal = gcc_probe_process_terminal::launch_failed;
+					output.failure_stage = output_pipe.error().field;
+					output.failure_detail = output_pipe.error().detail;
+					return output;
+				}
+				standard_output = std::move(*output_pipe);
+				auto error_pipe = make_pipe("stderr");
+				if (!error_pipe)
+				{
+					output.terminal = gcc_probe_process_terminal::launch_failed;
+					output.failure_stage = error_pipe.error().field;
+					output.failure_detail = error_pipe.error().detail;
+					return output;
+				}
+				standard_error = std::move(*error_pipe);
+				null_input = descriptor{::open("/dev/null", O_RDONLY | O_CLOEXEC)};
+				if (null_input.get() < 0)
+				{
+					output.terminal = gcc_probe_process_terminal::launch_failed;
+					output.failure_stage = "stdin";
+					output.failure_detail = "open:" + std::to_string(errno);
+					return output;
+				}
 			}
 			file_actions actions;
 			spawn_attributes attributes;
@@ -385,15 +403,15 @@ namespace cxxlens::sdk::detail
 			}
 			auto action_result =
 				::posix_spawn_file_actions_adddup2(actions.get(), executable->native_handle(), 3);
-			if (action_result == 0)
+			if (action_result == 0 && capture_standard_streams)
 				action_result = ::posix_spawn_file_actions_adddup2(
 					actions.get(), null_input.get(), STDIN_FILENO);
-			if (action_result == 0)
+			if (action_result == 0 && capture_standard_streams)
 				action_result = ::posix_spawn_file_actions_adddup2(
-					actions.get(), standard_output->write.get(), STDOUT_FILENO);
-			if (action_result == 0)
+					actions.get(), standard_output.write.get(), STDOUT_FILENO);
+			if (action_result == 0 && capture_standard_streams)
 				action_result = ::posix_spawn_file_actions_adddup2(
-					actions.get(), standard_error->write.get(), STDERR_FILENO);
+					actions.get(), standard_error.write.get(), STDERR_FILENO);
 			if (action_result == 0)
 				action_result = ::posix_spawn_file_actions_addchdir_np(
 					actions.get(), request.working_directory.c_str());
@@ -428,10 +446,10 @@ namespace cxxlens::sdk::detail
 				output.failure_detail = std::to_string(spawn_result);
 				return output;
 			}
-			standard_output->write.reset();
-			standard_error->write.reset();
-			bool stdout_ended{};
-			bool stderr_ended{};
+			standard_output.write.reset();
+			standard_error.write.reset();
+			bool stdout_ended{!capture_standard_streams};
+			bool stderr_ended{!capture_standard_streams};
 			bool leader_exited{};
 			child_process_state child_state{child, 0};
 			child_group_guard child_guard{child_state};
@@ -450,29 +468,38 @@ namespace cxxlens::sdk::detail
 					child_guard.terminate();
 					return output;
 				}
-				std::array<pollfd, 2U> descriptors{{{standard_output->read.get(), POLLIN, 0},
-													{standard_error->read.get(), POLLIN, 0}}};
-				(void)::poll(descriptors.data(), descriptors.size(), 10);
-				const auto stdout_drain = drain_descriptor(standard_output->read.get(),
-														   output.standard_output,
-														   total,
-														   request.limits.maximum_output_bytes);
-				const auto stderr_drain = drain_descriptor(standard_error->read.get(),
-														   output.standard_error,
-														   total,
-														   request.limits.maximum_output_bytes);
-				stdout_ended = stdout_ended || stdout_drain.terminal == drain_terminal::ended;
-				stderr_ended = stderr_ended || stderr_drain.terminal == drain_terminal::ended;
-				if (stdout_drain.terminal == drain_terminal::failed ||
-					stderr_drain.terminal == drain_terminal::failed)
+				drain_result stdout_drain{drain_terminal::ended, 0};
+				drain_result stderr_drain{drain_terminal::ended, 0};
+				if (capture_standard_streams)
 				{
-					output.terminal = gcc_probe_process_terminal::launch_failed;
-					output.failure_stage = "output-read";
-					output.failure_detail = stdout_drain.terminal == drain_terminal::failed
-						? "stdout:" + std::to_string(stdout_drain.failure)
-						: "stderr:" + std::to_string(stderr_drain.failure);
-					child_guard.terminate();
-					return output;
+					std::array<pollfd, 2U> descriptors{{{standard_output.read.get(), POLLIN, 0},
+														{standard_error.read.get(), POLLIN, 0}}};
+					(void)::poll(descriptors.data(), descriptors.size(), 10);
+					stdout_drain = drain_descriptor(standard_output.read.get(),
+													output.standard_output,
+													total,
+													request.limits.maximum_output_bytes);
+					stderr_drain = drain_descriptor(standard_error.read.get(),
+													output.standard_error,
+													total,
+													request.limits.maximum_output_bytes);
+					stdout_ended = stdout_ended || stdout_drain.terminal == drain_terminal::ended;
+					stderr_ended = stderr_ended || stderr_drain.terminal == drain_terminal::ended;
+					if (stdout_drain.terminal == drain_terminal::failed ||
+						stderr_drain.terminal == drain_terminal::failed)
+					{
+						output.terminal = gcc_probe_process_terminal::launch_failed;
+						output.failure_stage = "output-read";
+						output.failure_detail = stdout_drain.terminal == drain_terminal::failed
+							? "stdout:" + std::to_string(stdout_drain.failure)
+							: "stderr:" + std::to_string(stderr_drain.failure);
+						child_guard.terminate();
+						return output;
+					}
+				}
+				else
+				{
+					(void)::poll(nullptr, 0, 10);
 				}
 				if (stdout_drain.terminal == drain_terminal::limit ||
 					stderr_drain.terminal == drain_terminal::limit)
