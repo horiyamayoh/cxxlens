@@ -147,10 +147,12 @@ namespace cxxlens::sdk::detail
 			auxiliary_collector(gcc_capture_file_port& files,
 								const context path_context,
 								const std::uint64_t maximum_capture_bytes,
-								const import_limits limits)
+								const import_limits limits,
+								const bool dependency_output_bound_to_invocation)
 				: files_{files}, working_directory_{path_context.working_directory},
 				  project_root_{path_context.project_root}, main_source_{path_context.main_source},
-				  remaining_bytes_{maximum_capture_bytes}, limits_{limits}
+				  remaining_bytes_{maximum_capture_bytes}, limits_{limits},
+				  dependency_output_bound_to_invocation_{dependency_output_bound_to_invocation}
 			{
 			}
 
@@ -447,23 +449,38 @@ namespace cxxlens::sdk::detail
 					return {};
 				}
 
-				dependency_membership_ = captured_value<std::string>::unavailable(
-					"dependency-output-not-bound-to-invocation",
-					"recapture-with-shell-free-wrapper");
+				std::optional<std::pair<std::string, std::string>> incomplete_member;
 				for (const auto& prerequisite : *prerequisites)
 				{
 					auto member_path = resolve_path(
 						prerequisite,
 						{.directory = working_directory_, .field = "dependency_output.member"});
-					if (!member_path || !at_or_below(*member_path, project_root_))
+					if (!member_path)
+					{
+						if (!incomplete_member)
+							incomplete_member = {"dependency-member-invalid",
+												 "regenerate-the-dependency-output-and-recapture"};
 						continue;
+					}
+					if (!at_or_below(*member_path, project_root_))
+					{
+						if (!incomplete_member)
+							incomplete_member = {"dependency-member-outside-project-root",
+												 "recapture-with-a-qualified-logical-read-root"};
+						continue;
+					}
 					auto member = files_.read_regular_file(
 						*member_path,
 						{remaining_bytes_, limits_.maximum_string_bytes, project_root_});
 					if (!member)
 					{
 						if (member.error().code == capture_file_unavailable_code)
+						{
+							if (!incomplete_member)
+								incomplete_member = {"dependency-member-unreadable",
+													 "restore-the-dependency-member-and-recapture"};
 							continue;
+						}
 						return unexpected(std::move(member.error()));
 					}
 					if (member->canonical_path == main_source_)
@@ -481,6 +498,15 @@ namespace cxxlens::sdk::detail
 												encoding,
 												"header"});
 				}
+				if (!dependency_output_bound_to_invocation_)
+					dependency_membership_ = captured_value<std::string>::unavailable(
+						"dependency-output-not-bound-to-invocation",
+						"recapture-with-shell-free-wrapper");
+				else if (incomplete_member)
+					dependency_membership_ = captured_value<std::string>::unavailable(
+						std::move(incomplete_member->first), std::move(incomplete_member->second));
+				else
+					dependency_membership_ = captured_value<std::string>::observed("complete");
 				return {};
 			}
 
@@ -496,6 +522,7 @@ namespace cxxlens::sdk::detail
 			std::string main_source_;
 			std::uint64_t remaining_bytes_{};
 			import_limits limits_;
+			bool dependency_output_bound_to_invocation_{};
 			std::size_t response_expansions_{};
 			std::uint64_t captured_bytes_{};
 			bool saw_response_{};
@@ -719,7 +746,8 @@ namespace cxxlens::sdk::detail
 								const std::string_view canonical_project_root,
 								const std::string_view canonical_main_source,
 								const std::uint64_t maximum_capture_bytes,
-								const import_limits limits)
+								const import_limits limits,
+								const bool dependency_output_bound_to_invocation)
 	{
 		if (auto valid = limits.validate(); !valid)
 			return unexpected(std::move(valid.error()));
@@ -735,7 +763,8 @@ namespace cxxlens::sdk::detail
 										.project_root = canonical_project_root,
 										.main_source = canonical_main_source},
 									   maximum_capture_bytes,
-									   limits}
+									   limits,
+									   dependency_output_bound_to_invocation}
 				.capture(arguments);
 		}
 		catch (const std::bad_alloc&)

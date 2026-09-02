@@ -234,6 +234,51 @@ namespace cxxlens::sdk::detail
 		return entries_;
 	}
 
+	result<compile_commands_capture> make_explicit_compile_capture(compile_command_entry entry,
+																   const import_limits limits)
+	{
+		if (auto valid = limits.validate(); !valid)
+			return unexpected(std::move(valid.error()));
+		try
+		{
+			metadata_budget budget{limits};
+			if (!posix_absolute_path(entry.directory))
+				return unexpected(invalid("invocation.directory", "absolute-path-required"));
+			if (auto bounded = budget.add(entry.directory, "invocation.directory"); !bounded)
+				return unexpected(std::move(bounded.error()));
+			if (auto bounded = budget.add(entry.file, "invocation.file"); !bounded)
+				return unexpected(std::move(bounded.error()));
+			if (entry.output)
+				if (auto bounded = budget.add(*entry.output, "invocation.output"); !bounded)
+					return unexpected(std::move(bounded.error()));
+			if (entry.decoded_from_command)
+				return unexpected(invalid("invocation", "tokenized-arguments-required"));
+			if (entry.arguments.empty() || entry.arguments.front().empty())
+				return unexpected(invalid("invocation.arguments", "compiler-argument-missing"));
+			if (entry.arguments.size() > limits.maximum_arguments_per_unit)
+				return unexpected(limit("invocation.arguments", "argument-count"));
+			for (std::size_t index{}; index < entry.arguments.size(); ++index)
+			{
+				if (auto bounded = budget.add(entry.arguments[index],
+											  "invocation.arguments[" + std::to_string(index) + "]",
+											  true);
+					!bounded)
+					return unexpected(std::move(bounded.error()));
+			}
+			std::vector<compile_command_entry> entries;
+			entries.push_back(std::move(entry));
+			return compile_commands_capture{std::move(entries)};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return unexpected(limit("invocation", "allocation"));
+		}
+		catch (const std::length_error&)
+		{
+			return unexpected(limit("invocation", "allocation-length"));
+		}
+	}
+
 	result<compile_commands_capture> decode_compile_commands(const std::string_view input,
 															 const import_limits limits)
 	{

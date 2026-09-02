@@ -589,6 +589,9 @@ namespace cxxlens::sdk::detail
 			return unexpected(invalid("capture.sources", "compile-unit-count-mismatch"));
 		if (!input.invocations.empty() && input.invocations.size() != capture.entries().size())
 			return unexpected(invalid("capture.invocations", "compile-unit-count-mismatch"));
+		if (input.capture_adapter != "compile-commands" &&
+			input.capture_adapter != "shell-free-wrapper")
+			return unexpected(invalid("capture_adapter", "enum"));
 		if (input.toolchain.exact_version != "16.2.0")
 			return unexpected(invalid("production_toolchain.exact_version", "not-pinned"));
 		for (const auto& [observation, field] : {
@@ -630,6 +633,7 @@ namespace cxxlens::sdk::detail
 			for (const auto value : {
 					 path_field{input.project_id, "project_id"},
 					 path_field{input.physical_project_root, "physical_project_root"},
+					 path_field{input.capture_adapter, "capture_adapter"},
 					 path_field{input.toolchain.exact_version,
 								"production_toolchain.exact_version"},
 					 path_field{input.toolchain.target_triple,
@@ -1070,7 +1074,7 @@ namespace cxxlens::sdk::detail
 			auto root = canonical_value::from_tuple({
 				canonical_value::from_string("cxxlens.build-capture-bundle.v1"),
 				std::move(toolchain),
-				canonical_value::from_string("compile-commands"),
+				canonical_value::from_string(input.capture_adapter),
 				canonical_value::from_string("x86_64-linux-gnu"),
 				canonical_value::from_string(input.project_id),
 				canonical_value::from_tuple(std::move(units)),

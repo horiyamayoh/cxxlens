@@ -59,6 +59,20 @@ namespace cxxlens::sdk::detail
 		std::uint64_t absolute_wall_deadline_ns{};
 	};
 
+	struct CXXLENS_SDK_DETAIL_HIDDEN gcc_invocation_capture_request
+	{
+		std::string project_id;
+		std::string project_root;
+		std::string working_directory;
+		std::string source_path;
+		std::string compiler_path;
+		std::vector<std::string> original_arguments;
+		std::vector<std::string> capture_arguments;
+		std::vector<build_capture_environment_effect> environment_effects;
+		gcc_probe_process_limits process_limits;
+		std::uint64_t absolute_wall_deadline_ns{};
+	};
+
 	/** Probe one exact GCC toolchain, then read its compilation database and main sources. */
 	[[nodiscard]] result<std::vector<std::byte>>
 	capture_gcc_compile_commands(gcc_capture_file_port& files,
@@ -66,6 +80,14 @@ namespace cxxlens::sdk::detail
 								 const gcc_compile_commands_capture_request& request,
 								 import_limits limits = {},
 								 const std::stop_token& cancellation = {});
+
+	/** Capture one shell-free invocation whose dependency output came from that execution. */
+	[[nodiscard]] result<std::vector<std::byte>>
+	capture_gcc_invocation(gcc_capture_file_port& files,
+						   gcc_probe_process_port& processes,
+						   const gcc_invocation_capture_request& request,
+						   import_limits limits = {},
+						   const std::stop_token& cancellation = {});
 
 	/** Linux production adapter. Unsupported hosts return structured-unavailable failures. */
 	[[nodiscard]] std::unique_ptr<gcc_capture_file_port> make_system_gcc_capture_file_port();

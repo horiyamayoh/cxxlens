@@ -89,6 +89,7 @@ namespace cxxlens::sdk::detail
 	{
 		std::string project_id;
 		std::string physical_project_root;
+		std::string capture_adapter{"compile-commands"};
 		gcc_toolchain_observation toolchain;
 		std::vector<gcc_source_observation> sources;
 		/** Empty selects the compilation-database unavailable observations for every unit. */

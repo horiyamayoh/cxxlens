@@ -36,9 +36,15 @@ namespace cxxlens::sdk::detail
 
 		friend result<compile_commands_capture> decode_compile_commands(std::string_view,
 																		import_limits);
+		friend result<compile_commands_capture> make_explicit_compile_capture(compile_command_entry,
+																			  import_limits);
 	};
 
 	/** Decode one Clang-compatible compilation database without invoking a shell. */
 	[[nodiscard]] result<compile_commands_capture>
 	decode_compile_commands(std::string_view input, import_limits limits = {});
+
+	/** Validate one already tokenized shell-free compiler invocation. */
+	[[nodiscard]] result<compile_commands_capture>
+	make_explicit_compile_capture(compile_command_entry entry, import_limits limits = {});
 } // namespace cxxlens::sdk::detail

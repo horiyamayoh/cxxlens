@@ -44,5 +44,6 @@ namespace cxxlens::sdk::detail
 								std::string_view canonical_project_root,
 								std::string_view canonical_main_source,
 								std::uint64_t maximum_capture_bytes,
-								import_limits limits = {});
+								import_limits limits = {},
+								bool dependency_output_bound_to_invocation = false);
 } // namespace cxxlens::sdk::detail

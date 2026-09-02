@@ -388,6 +388,103 @@ namespace
 						"dependency-output-invalid"));
 	}
 
+	void shell_free_invocation_owns_complete_dependency_membership()
+	{
+		fake_file_port files;
+		files.directories.emplace("/physical/project", "/physical/project");
+		files.directories.emplace("/physical/project/build", "/physical/project/build");
+		files.files.emplace(
+			"/physical/project/build/../src/main.cpp",
+			capture_file_snapshot{"/physical/project/src/main.cpp",
+								  bytes("#include \"a.hpp\"\nint main() { return value; }\n")});
+		files.files.emplace(
+			"/physical/project/src/main.cpp",
+			capture_file_snapshot{"/physical/project/src/main.cpp",
+								  bytes("#include \"a.hpp\"\nint main() { return value; }\n")});
+		files.files.emplace(
+			"/physical/project/build/deps.d",
+			capture_file_snapshot{"/physical/project/build/deps.d",
+								  bytes("main.o: ../src/main.cpp ../include/a.hpp\n")});
+		files.files.emplace("/physical/project/include/a.hpp",
+							capture_file_snapshot{"/physical/project/include/a.hpp",
+												  bytes("inline constexpr int value = 0;\n")});
+
+		cxxlens::sdk::detail::gcc_invocation_capture_request input;
+		input.project_id = "project:gcc-wrapper";
+		input.project_root = "/physical/project";
+		input.working_directory = "/physical/project/build";
+		input.source_path = "../src/main.cpp";
+		input.compiler_path = "/opt/gcc-16.2.0/bin/g++";
+		input.original_arguments = {input.compiler_path, "-I../include", "-c", input.source_path};
+		input.capture_arguments = {
+			input.compiler_path, "-I../include", "-MMD", "-MF", "deps.d", "-c", input.source_path};
+		input.environment_effects = {{
+			"gcc.cpath",
+			cxxlens::sdk::detail::captured_value<std::string>::observed("sha256:" +
+																		std::string(64U, '2')),
+		}};
+		input.process_limits = request().process_limits;
+		input.absolute_wall_deadline_ns = request().absolute_wall_deadline_ns;
+		fake_process_port processes{valid_probe_outputs()};
+		auto captured = cxxlens::sdk::detail::capture_gcc_invocation(files, processes, input);
+		fake_process_port repeated_processes{valid_probe_outputs()};
+		auto repeated =
+			cxxlens::sdk::detail::capture_gcc_invocation(files, repeated_processes, input);
+		require(captured && repeated && *captured == *repeated);
+		auto decoded = cxxlens::sdk::decode_capture_bundle(*captured);
+		require(decoded && decoded->capture_adapter() == "shell-free-wrapper" &&
+				decoded->compile_unit_count() == 1U);
+		require(std::ranges::none_of(decoded->gaps(),
+									 [](const auto& gap)
+									 {
+										 return gap.field ==
+											 "source_closures[0].membership_coverage";
+									 }));
+		auto value = cxxlens::sdk::canonical_binary_decode(*captured);
+		require(value && value->tuple[5].tuple.front().tuple[11].tuple[0].text == "observed" &&
+				value->tuple[5].tuple.front().tuple[11].tuple[1].tuple.size() == 1U &&
+				value->tuple[6].tuple.front().tuple[3].integer == 2);
+
+		auto missing_files = files;
+		missing_files.files.erase("/physical/project/build/deps.d");
+		fake_process_port missing_processes{valid_probe_outputs()};
+		auto missing =
+			cxxlens::sdk::detail::capture_gcc_invocation(missing_files, missing_processes, input);
+		require(static_cast<bool>(missing));
+		auto missing_decoded = cxxlens::sdk::decode_capture_bundle(*missing);
+		require(missing_decoded &&
+				has_gap(*missing_decoded,
+						"source_closures[0].membership_coverage",
+						"dependency-output-unreadable"));
+
+		auto missing_member_files = files;
+		missing_member_files.files.erase("/physical/project/include/a.hpp");
+		fake_process_port missing_member_processes{valid_probe_outputs()};
+		auto missing_member = cxxlens::sdk::detail::capture_gcc_invocation(
+			missing_member_files, missing_member_processes, input);
+		require(static_cast<bool>(missing_member));
+		auto missing_member_decoded = cxxlens::sdk::decode_capture_bundle(*missing_member);
+		require(missing_member_decoded &&
+				has_gap(*missing_member_decoded,
+						"source_closures[0].membership_coverage",
+						"dependency-member-unreadable"));
+
+		auto mismatched = input;
+		mismatched.capture_arguments.front() = "/different/g++";
+		fake_process_port unused_processes{valid_probe_outputs()};
+		auto mismatch =
+			cxxlens::sdk::detail::capture_gcc_invocation(files, unused_processes, mismatched);
+		require(!mismatch && mismatch.error().detail == "compiler-identity-mismatch" &&
+				unused_processes.requests.empty());
+
+		auto limits = cxxlens::sdk::import_limits{};
+		limits.maximum_arguments_per_unit = 2U;
+		fake_process_port limited_processes{valid_probe_outputs()};
+		auto limited =
+			cxxlens::sdk::detail::capture_gcc_invocation(files, limited_processes, input, limits);
+		require(!limited && limited.error().detail == "argument-count");
+	}
+
 	void response_file_missing_recursion_and_bounds_fail_closed()
 	{
 		fake_file_port files;
@@ -618,6 +715,7 @@ int main() noexcept
 		gcc_16_2_dependency_output_is_exact_and_bounded();
 		fake_port_drives_canonical_projection_and_exact_bounds();
 		response_and_spec_files_are_captured_recursively_without_claiming_closure();
+		shell_free_invocation_owns_complete_dependency_membership();
 		response_file_missing_recursion_and_bounds_fail_closed();
 		fake_port_failures_and_canonical_escape_fail_closed();
 		system_port_reads_one_stable_snapshot_and_rejects_escape();
