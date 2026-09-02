@@ -10,7 +10,9 @@
 #include <utility>
 #include <vector>
 
+#include "llvm/clang23_gcc_replay/source_authority_binder.hpp"
 #include "llvm/clang23_gcc_replay/worker_parser.hpp"
+#include "sdk/source_identity_internal.hpp"
 
 namespace
 {
@@ -53,6 +55,14 @@ namespace
 							   "int main() { return answer_value(answer); }\n");
 		source.content_digest = content_digest(source.content);
 		source.role = "main";
+		source.encoding = "utf8";
+		auto source_file = detail::derive_source_file_id("main.cpp");
+		require(source_file);
+		source.file_id = *source_file;
+		auto source_snapshot = detail::derive_source_snapshot_id(
+			source.file_id, source.content_digest, *source.encoding);
+		require(source_snapshot);
+		source.source_snapshot_id = *source_snapshot;
 		value.source_members.push_back(std::move(source));
 		detail::decoded_capture_source_member header;
 		header.logical_path = "project://include/answer.hpp";
@@ -60,6 +70,14 @@ namespace
 							   "inline int header_answer() { return answer; }\n");
 		header.content_digest = content_digest(header.content);
 		header.role = "header";
+		header.encoding = "utf8";
+		auto header_file = detail::derive_source_file_id("include/answer.hpp");
+		require(header_file);
+		header.file_id = *header_file;
+		auto header_snapshot = detail::derive_source_snapshot_id(
+			header.file_id, header.content_digest, *header.encoding);
+		require(header_snapshot);
+		header.source_snapshot_id = *header_snapshot;
 		value.source_members.push_back(std::move(header));
 		value.source_closure_digest = "application-source-closure:sha256:" + std::string(64U, '4');
 		value.requested_relation_descriptor_ids = {"source.file.v1"};
@@ -224,6 +242,60 @@ namespace
 					cxxlens::detail::clang23_gcc_replay::parse_terminal::rejected &&
 				unavailable->error_count > 0U);
 	}
+
+	void observations_bind_only_to_capture_source_authority()
+	{
+		using namespace cxxlens::detail::clang23_gcc_replay;
+		auto value = input();
+		auto parsed = parse_replay_input(value);
+		require(parsed && parsed->terminal == parse_terminal::parsed);
+		auto bound = bind_observation_sources(value, parsed->observations);
+		require(bound && bound->replay_input_digest == value.input_digest() &&
+				!bound->spans.empty());
+		for (const auto& span : bound->spans)
+		{
+			require(span.observed.logical_path.starts_with("project://") &&
+					span.observed.begin <= span.observed.end && span.role == "spelling" &&
+					span.read_only && span.span_id.starts_with("source-span:") &&
+					span.source_snapshot_id.starts_with("source-snapshot:") &&
+					span.file_id.starts_with("file:"));
+		}
+		auto repeated = bind_observation_sources(value, parsed->observations);
+		require(repeated && *repeated == *bound);
+
+		auto unknown = parsed->observations;
+		unknown.entities.front().source.logical_path = "project://missing.cpp";
+		auto missing = bind_observation_sources(value, unknown);
+		require(!missing && missing.error().detail == "not-in-source-closure");
+
+		auto outside = parsed->observations;
+		outside.declarations.front().source.end = 1000000U;
+		auto out_of_bounds = bind_observation_sources(value, outside);
+		require(!out_of_bounds && out_of_bounds.error().detail == "range-out-of-bounds");
+
+		using namespace cxxlens::sdk;
+		detail::gcc_replay_input_draft unavailable = value.value();
+		unavailable.source_members.front().source_snapshot_id.reset();
+		auto unbound_input = detail::validate_gcc_replay_input(std::move(unavailable));
+		require(unbound_input);
+		auto unbound = bind_observation_sources(*unbound_input, parsed->observations);
+		require(!unbound && unbound.error().detail == "capture-identity-unavailable");
+
+		detail::gcc_replay_input_draft forged = value.value();
+		forged.source_members.front().file_id = "file:sha256:" + std::string(64U, 'a');
+		auto forged_input = detail::validate_gcc_replay_input(std::move(forged));
+		require(forged_input);
+		auto mismatch = bind_observation_sources(*forged_input, parsed->observations);
+		require(!mismatch && mismatch.error().detail == "file-identity-mismatch");
+
+		detail::gcc_replay_input_draft stale = value.value();
+		stale.source_members.front().source_snapshot_id =
+			"source-snapshot:sha256:" + std::string(64U, 'b');
+		auto stale_input = detail::validate_gcc_replay_input(std::move(stale));
+		require(stale_input);
+		auto stale_snapshot = bind_observation_sources(*stale_input, parsed->observations);
+		require(!stale_snapshot && stale_snapshot.error().detail == "snapshot-identity-mismatch");
+	}
 } // namespace
 
 int main()
@@ -231,4 +303,5 @@ int main()
 	valid_input_emits_only_bound_digest();
 	malformed_and_oversized_input_fail_without_output();
 	parser_uses_only_the_bound_source_closure();
+	observations_bind_only_to_capture_source_authority();
 }

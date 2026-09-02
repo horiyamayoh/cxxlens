@@ -402,6 +402,7 @@ target_link_libraries(cxxlens_sdk PUBLIC cxxlens::cxxlens cxxlens::recipes)
 if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
   add_library(
     cxxlens_clang23_gcc_replay_ingress STATIC
+    src/llvm/clang23_gcc_replay/source_authority_binder.cpp
     src/llvm/clang23_gcc_replay/worker_ingress.cpp
     src/llvm/clang23_gcc_replay/worker_observer.cpp
     src/llvm/clang23_gcc_replay/worker_parser.cpp)
