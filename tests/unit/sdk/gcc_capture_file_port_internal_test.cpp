@@ -282,6 +282,13 @@ namespace
 		require(!has_gap(*decoded, "compile_units[0].config_files", "config-files-unobserved"));
 		require(has_gap(
 			*decoded, "source_closures[0].membership_coverage", "dependency-output-unobserved"));
+		auto imported = cxxlens::sdk::import_capture(*decoded);
+		require(imported && imported->replay_plans().size() == 1U);
+		require(std::ranges::none_of(imported->replay_plans().front().unresolved(),
+									 [](const auto& gap)
+									 {
+										 return gap.reason == "response-file-expansion-unavailable";
+									 }));
 
 		auto value = cxxlens::sdk::canonical_binary_decode(*captured);
 		require(static_cast<bool>(value));
@@ -294,6 +301,14 @@ namespace
 		const auto& closure = value->tuple[6].tuple.front().tuple;
 		require(closure[3].integer == 4 &&
 				closure[7].tuple[1].type == cxxlens::sdk::canonical_value::kind::null_value);
+		auto forged = *value;
+		forged.tuple[5].tuple.front().tuple[9].tuple[1].tuple.front().tuple[1].tuple[1] =
+			cxxlens::sdk::canonical_value::from_string("sha256:" + std::string(64U, '0'));
+		auto forged_bytes = cxxlens::sdk::canonical_binary(forged);
+		require(static_cast<bool>(forged_bytes));
+		auto forged_result = cxxlens::sdk::decode_capture_bundle(*forged_bytes);
+		require(!forged_result &&
+				forged_result.error().detail == "source-closure-binding-mismatch");
 
 		auto include_files = files;
 		include_files.files["/physical/project/build/custom.spec"].content =

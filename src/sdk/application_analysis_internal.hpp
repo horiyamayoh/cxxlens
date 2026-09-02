@@ -5,6 +5,7 @@
  * @brief Source-private immutable projection shared by capture decode and replay planning.
  */
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -21,6 +22,28 @@ namespace cxxlens::sdk::detail
 		std::string logical_prefix;
 	};
 
+	struct decoded_capture_auxiliary_file
+	{
+		std::string logical_path;
+		std::optional<std::string> content_digest;
+		std::uint64_t size_bytes{};
+		std::optional<std::size_t> parent_index;
+	};
+
+	struct decoded_capture_source_member
+	{
+		std::string logical_path;
+		std::string content_digest;
+		std::vector<std::byte> content;
+		std::string role;
+	};
+
+	struct decoded_capture_source_closure
+	{
+		std::string id;
+		std::vector<decoded_capture_source_member> members;
+	};
+
 	struct decoded_capture_unit
 	{
 		std::string compile_unit_id;
@@ -32,6 +55,8 @@ namespace cxxlens::sdk::detail
 		std::string logical_working_directory;
 		std::string language;
 		std::optional<std::vector<std::string>> original_arguments;
+		std::vector<decoded_capture_auxiliary_file> response_files;
+		std::vector<decoded_capture_auxiliary_file> config_files;
 		std::optional<std::string> language_standard;
 		std::optional<std::string> extension_mode;
 		std::string source_closure_id;
@@ -52,6 +77,7 @@ namespace cxxlens::sdk::detail
 		std::string logical_project_root;
 		std::vector<decoded_capture_path_mapping> path_mappings;
 		std::vector<decoded_capture_unit> compile_units;
+		std::vector<decoded_capture_source_closure> source_closures;
 	};
 
 	struct replay_option_mapping

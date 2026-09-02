@@ -346,24 +346,27 @@ namespace cxxlens::sdk
 			return {};
 		}
 
-		[[nodiscard]] result<void> validate_auxiliary_files(const canonical_value& captured,
-															const std::string& field,
-															const import_limits& limits,
-															const std::string_view logical_root,
-															std::vector<capture_gap>& gaps)
+		[[nodiscard]] result<std::vector<detail::decoded_capture_auxiliary_file>>
+		decode_auxiliary_files(const canonical_value& captured,
+							   const std::string& field,
+							   const import_limits& limits,
+							   const std::string_view logical_root,
+							   std::vector<capture_gap>& gaps)
 		{
 			if (auto valid =
 					validate_captured(captured, field, canonical_value::kind::ordered_tuple, gaps);
 				!valid)
-				return valid;
+				return unexpected(std::move(valid.error()));
 			const auto& tuple = captured.tuple[1];
 			if (tuple.type == canonical_value::kind::null_value)
-				return {};
+				return std::vector<detail::decoded_capture_auxiliary_file>{};
 			if (tuple.tuple.size() > limits.maximum_auxiliary_files_per_unit)
 				return unexpected(limit(field, "count"));
 			std::set<std::string, std::less<>> paths;
 			std::vector<std::optional<std::size_t>> parents;
+			std::vector<detail::decoded_capture_auxiliary_file> output;
 			parents.reserve(tuple.tuple.size());
+			output.reserve(tuple.tuple.size());
 			for (std::size_t index{}; index < tuple.tuple.size(); ++index)
 			{
 				const auto prefix = field + "[" + std::to_string(index) + "]";
@@ -381,11 +384,12 @@ namespace cxxlens::sdk
 												   canonical_value::kind::utf8_string,
 												   gaps);
 					!valid)
-					return valid;
+					return unexpected(std::move(valid.error()));
 				if ((*item.value())[1].tuple[1].type == canonical_value::kind::utf8_string &&
 					!digest_like((*item.value())[1].tuple[1].text))
 					return unexpected(invalid(prefix + ".content_digest", "digest"));
-				if (auto size = require_count((*item.value())[2], prefix + ".size_bytes"); !size)
+				auto size = require_count((*item.value())[2], prefix + ".size_bytes");
+				if (!size)
 					return unexpected(std::move(size.error()));
 				const auto& parent = (*item.value())[3];
 				std::optional<std::size_t> parent_value;
@@ -398,6 +402,11 @@ namespace cxxlens::sdk
 					parent_value = static_cast<std::size_t>(*parent_index);
 				}
 				parents.push_back(parent_value);
+				std::optional<std::string> content_digest;
+				if ((*item.value())[1].tuple[1].type == canonical_value::kind::utf8_string)
+					content_digest = (*item.value())[1].tuple[1].text;
+				output.push_back(
+					{std::string{*path}, std::move(content_digest), *size, parent_value});
 			}
 			for (std::size_t index{}; index < parents.size(); ++index)
 			{
@@ -413,7 +422,7 @@ namespace cxxlens::sdk
 					cursor = parents[*cursor];
 				}
 			}
-			return {};
+			return output;
 		}
 
 		struct validated_bundle_projection
@@ -749,20 +758,20 @@ namespace cxxlens::sdk
 														   limits.maximum_arguments_per_unit);
 						!valid)
 						return unexpected(std::move(valid.error()));
-				if (auto valid = validate_auxiliary_files((*unit.value())[9],
-														  prefix + ".response_files",
-														  limits,
-														  *logical_root,
-														  generated_gaps);
-					!valid)
-					return unexpected(std::move(valid.error()));
-				if (auto valid = validate_auxiliary_files((*unit.value())[10],
-														  prefix + ".config_files",
-														  limits,
-														  *logical_root,
-														  generated_gaps);
-					!valid)
-					return unexpected(std::move(valid.error()));
+				auto response_files = decode_auxiliary_files((*unit.value())[9],
+															 prefix + ".response_files",
+															 limits,
+															 *logical_root,
+															 generated_gaps);
+				if (!response_files)
+					return unexpected(std::move(response_files.error()));
+				auto config_files = decode_auxiliary_files((*unit.value())[10],
+														   prefix + ".config_files",
+														   limits,
+														   *logical_root,
+														   generated_gaps);
+				if (!config_files)
+					return unexpected(std::move(config_files.error()));
 				if (auto valid = validate_captured((*unit.value())[11],
 												   prefix + ".environment_effects",
 												   canonical_value::kind::ordered_tuple,
@@ -868,6 +877,8 @@ namespace cxxlens::sdk
 						arguments.push_back(argument.text);
 					decoded_unit.original_arguments = std::move(arguments);
 				}
+				decoded_unit.response_files = std::move(*response_files);
+				decoded_unit.config_files = std::move(*config_files);
 				if ((*unit.value())[13].tuple[1].type == canonical_value::kind::utf8_string)
 					decoded_unit.language_standard = (*unit.value())[13].tuple[1].text;
 				if (extension.type == canonical_value::kind::utf8_string)
@@ -905,6 +916,8 @@ namespace cxxlens::sdk
 					!referenced_closures.contains(*closure_id))
 					return unexpected(invalid(closure_prefix, "unreferenced-or-noncanonical"));
 				previous_closure_id = *closure_id;
+				detail::decoded_capture_source_closure decoded_closure;
+				decoded_closure.id = *closure_id;
 				if (auto valid =
 						require_strong_id((*closure.value())[0], closure_prefix + ".closure_id");
 					!valid)
@@ -1012,6 +1025,11 @@ namespace cxxlens::sdk
 								return unexpected(limit(closure_prefix, "byte-overflow"));
 							recomputed_bytes += *size;
 						}
+						if (role_value.type == canonical_value::kind::utf8_string)
+							decoded_closure.members.push_back({std::string{*path},
+															   digest_value.text,
+															   content_value.byte_string,
+															   role_value.text});
 					}
 
 					const auto binding = std::ranges::find_if(
@@ -1085,6 +1103,47 @@ namespace cxxlens::sdk
 						!member_ids.contains(binding.file_id))
 						return unexpected(
 							invalid(closure_prefix + ".members", "compile-unit-source-missing"));
+				output.decoded.source_closures.push_back(std::move(decoded_closure));
+			}
+			for (std::size_t unit_index{}; unit_index < output.decoded.compile_units.size();
+				 ++unit_index)
+			{
+				const auto& unit = output.decoded.compile_units[unit_index];
+				const auto closure = std::ranges::find(output.decoded.source_closures,
+													   unit.source_closure_id,
+													   &detail::decoded_capture_source_closure::id);
+				if (closure == output.decoded.source_closures.end())
+					return unexpected(invalid("source_closures", "reference-mismatch"));
+				const auto validate_auxiliary_binding =
+					[&](const std::span<const detail::decoded_capture_auxiliary_file> files,
+						const std::string_view name) -> result<void>
+				{
+					for (std::size_t index{}; index < files.size(); ++index)
+					{
+						const auto& file = files[index];
+						if (!file.content_digest)
+							continue;
+						const auto member =
+							std::ranges::find(closure->members,
+											  file.logical_path,
+											  &detail::decoded_capture_source_member::logical_path);
+						if (member == closure->members.end() ||
+							member->content_digest != *file.content_digest ||
+							member->content.size() != file.size_bytes ||
+							member->role != "generated")
+							return unexpected(
+								invalid("compile_units[" + std::to_string(unit_index) + "]." +
+											std::string{name} + "[" + std::to_string(index) + "]",
+										"source-closure-binding-mismatch"));
+					}
+					return {};
+				};
+				if (auto valid = validate_auxiliary_binding(unit.response_files, "response_files");
+					!valid)
+					return unexpected(std::move(valid.error()));
+				if (auto valid = validate_auxiliary_binding(unit.config_files, "config_files");
+					!valid)
+					return unexpected(std::move(valid.error()));
 			}
 			if (admitted_closures != referenced_closures)
 				return unexpected(invalid("source_closures", "reference-mismatch"));

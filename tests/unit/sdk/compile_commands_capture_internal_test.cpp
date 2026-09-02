@@ -11,6 +11,8 @@
 #include <string_view>
 #include <vector>
 
+#include <cxxlens/sdk/common.hpp>
+
 #include "sdk/gcc_capture_bundle_internal.hpp"
 
 namespace
@@ -279,22 +281,13 @@ namespace
 		require(static_cast<bool>(capture));
 		auto input = bundle_input();
 		input.sources.push_back(input.sources.front());
-		for (const char variant : {'1', '2'})
+		input.invocations.resize(capture->entries().size());
+		for (auto& observation : input.invocations)
 		{
-			cxxlens::sdk::detail::gcc_invocation_observation observation;
-			observation.response_files = cxxlens::sdk::detail::captured_value<
-				std::vector<cxxlens::sdk::detail::build_capture_auxiliary_file>>::observed({
-				{"project://build/options-" + std::string(1U, variant) + ".rsp",
-				 cxxlens::sdk::detail::captured_value<std::string>::observed(
-					 "sha256:" + std::string(64U, variant)),
-				 1U,
-				 std::nullopt},
-			});
 			observation.source_closure_members = {
 				{"/work/include/shared.hpp", bytes("#pragma once\n"), "utf8", "header"}};
 			observation.source_closure_membership =
 				cxxlens::sdk::detail::captured_value<std::string>::observed("complete");
-			input.invocations.push_back(std::move(observation));
 		}
 		auto encoded = encode_gcc_compile_commands_bundle(*capture, input);
 		require(static_cast<bool>(encoded));
@@ -306,18 +299,7 @@ namespace
 		require(value->tuple[5].tuple[0].tuple[0].text != value->tuple[5].tuple[1].tuple[0].text);
 		require(value->tuple[5].tuple[0].tuple[15].text == value->tuple[5].tuple[1].tuple[15].text);
 		for (const auto& unit : value->tuple[5].tuple)
-		{
-			const auto& arguments = unit.tuple[8].tuple[1].tuple;
-			const auto first_variant =
-				std::ranges::any_of(arguments,
-									[](const auto& argument)
-									{
-										return argument.text == "-DVARIANT=one";
-									});
-			const auto expected_response =
-				first_variant ? "project://build/options-1.rsp" : "project://build/options-2.rsp";
-			require(unit.tuple[9].tuple[1].tuple.front().tuple.front().text == expected_response);
-		}
+			require(unit.tuple[9].tuple[1].type == cxxlens::sdk::canonical_value::kind::null_value);
 	}
 
 	void observed_source_closure_is_complete_canonical_and_bounded()
@@ -413,13 +395,14 @@ namespace
 		auto capture = decode_compile_commands(database);
 		require(static_cast<bool>(capture));
 		auto input = bundle_input();
+		const auto response_content = bytes("-DVALUE=1 -Wall\n");
 		cxxlens::sdk::detail::gcc_invocation_observation invocation;
 		invocation.response_files = cxxlens::sdk::detail::captured_value<
 			std::vector<cxxlens::sdk::detail::build_capture_auxiliary_file>>::observed({
 			{"project://build/options.rsp",
-			 cxxlens::sdk::detail::captured_value<std::string>::observed("sha256:" +
-																		 std::string(64U, '6')),
-			 17U,
+			 cxxlens::sdk::detail::captured_value<std::string>::observed(
+				 cxxlens::sdk::content_digest(response_content)),
+			 static_cast<std::uint64_t>(response_content.size()),
 			 std::nullopt},
 		});
 		invocation.config_files = cxxlens::sdk::detail::captured_value<
@@ -433,6 +416,8 @@ namespace
 			 cxxlens::sdk::detail::captured_value<std::string>::redacted(
 				 "secret-semantic-effect", "supply-workspace-local-fingerprint")},
 		});
+		invocation.source_closure_members = {
+			{"/work/build/options.rsp", response_content, "utf8", "generated"}};
 		input.invocations.push_back(std::move(invocation));
 
 		auto encoded = encode_gcc_compile_commands_bundle(*capture, input);
@@ -446,6 +431,21 @@ namespace
 		require(has_gap(*decoded,
 						"compile_units[0].environment_effects[1].semantic_value",
 						"secret-semantic-effect"));
+
+		auto recursive = input;
+		const auto recursive_content = bytes("@options.rsp");
+		recursive.invocations.front().source_closure_members.front().content = recursive_content;
+		recursive.invocations.front().response_files.value->front().content_digest =
+			cxxlens::sdk::detail::captured_value<std::string>::observed(
+				cxxlens::sdk::content_digest(recursive_content));
+		recursive.invocations.front().response_files.value->front().size_bytes =
+			static_cast<std::uint64_t>(recursive_content.size());
+		auto recursive_encoded = encode_gcc_compile_commands_bundle(*capture, recursive);
+		require(static_cast<bool>(recursive_encoded));
+		auto recursive_decoded = cxxlens::sdk::decode_capture_bundle(*recursive_encoded);
+		require(static_cast<bool>(recursive_decoded));
+		auto recursive_import = cxxlens::sdk::import_capture(*recursive_decoded);
+		require(!recursive_import && recursive_import.error().detail == "recursive-reference");
 
 		auto malformed = input;
 		malformed.invocations.front().response_files.value->front().parent_index = 0U;
