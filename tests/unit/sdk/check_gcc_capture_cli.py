@@ -34,10 +34,18 @@ def run_capture(cli: pathlib.Path, root: pathlib.Path, compiler: pathlib.Path):
 
 
 def main() -> int:
-    require(len(sys.argv) == 4, "expected CLI, probe fixture, and consumer")
+    require(
+        len(sys.argv) in (4, 5),
+        "expected CLI, compiler, consumer, and optional --require-production-build",
+    )
+    require(
+        len(sys.argv) == 4 or sys.argv[4] == "--require-production-build",
+        "unknown GCC capture CLI test option",
+    )
     cli = pathlib.Path(sys.argv[1]).resolve()
     compiler = pathlib.Path(sys.argv[2]).resolve()
     consumer = pathlib.Path(sys.argv[3]).resolve()
+    require_production_build = len(sys.argv) == 5
 
     with tempfile.TemporaryDirectory(prefix="cxxlens-gcc-capture-cli-") as raw_root:
         root = pathlib.Path(raw_root).resolve()
@@ -52,7 +60,9 @@ def main() -> int:
         (root / "build" / "nested.rsp").write_text(
             "-I../include\n", encoding="utf-8"
         )
-        (root / "build" / "custom.spec").write_text("*link:\n", encoding="utf-8")
+        (root / "build" / "custom.spec").write_text(
+            "%rename link old_link\n\n*link:\n%(old_link)\n", encoding="utf-8"
+        )
 
         database = [
             {
@@ -69,6 +79,19 @@ def main() -> int:
         ]
         database_path = root / "build" / "compile_commands.json"
         database_path.write_text(json.dumps(database), encoding="utf-8")
+
+        if require_production_build:
+            production = subprocess.run(
+                [*database[0]["arguments"], "-o", "main.o"],
+                cwd=root / "build",
+                capture_output=True,
+                check=False,
+                timeout=45,
+            )
+            require(
+                production.returncode == 0 and (root / "build" / "main.o").is_file(),
+                f"production GCC build failed: {production.stderr!r}",
+            )
 
         first = run_capture(cli, root, compiler)
         second = run_capture(cli, root, compiler)

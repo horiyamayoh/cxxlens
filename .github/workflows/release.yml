@@ -75,6 +75,28 @@ jobs:
           g++ -std=c++23 -Wall -Wextra -Wpedantic -Werror -Iinclude \
             -fsyntax-only tests/public_headers/sdk_header_test.cpp
 
+  gcc-application-capture:
+    name: Exact GCC 16.2 application capture
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: developer
+      - uses: ./.github/actions/setup-gcc16-capture
+      - name: Capture and import an exact GCC-built fixture
+        env:
+          CXX: clang++-22
+        run: |
+          cmake --preset ci-quick
+          cmake --build --preset ci-quick --target \
+            cxxlens cxxlens-gcc-capture-cli-consumer
+          python3 tests/unit/sdk/check_gcc_capture_cli.py \
+            build/ci-quick/cxxlens "$(command -v g++)" \
+            build/ci-quick/tests/cxxlens-gcc-capture-cli-consumer \
+            --require-production-build
+
   asan-ubsan:
     name: ASan and UBSan
     runs-on: ubuntu-24.04
@@ -198,7 +220,7 @@ jobs:
 
   package:
     name: Package after every release test
-    needs: [main-tests, contract-and-docs, gcc-public-headers, asan-ubsan,
+    needs: [main-tests, contract-and-docs, gcc-public-headers, gcc-application-capture, asan-ubsan,
             tsan, static-analysis, stress-and-repeat, maximum-scale, real-projects]
     runs-on: ubuntu-24.04
     steps:

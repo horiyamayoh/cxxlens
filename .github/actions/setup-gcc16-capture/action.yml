@@ -1,0 +1,19 @@
+name: Exact GCC 16.2 capture setup
+description: Build or restore the source-pinned GCC used by application-analysis capture tests.
+runs:
+  using: composite
+  steps:
+    - name: Restore exact GCC 16.2 installation
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: ~/.cache/cxxlens/toolchains/gcc-16.2.0
+        key: cxxlens-gcc16-source-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/ci/application-analysis-toolchains.lock.json', 'tools/ci/bootstrap_application_analysis_toolchain.py') }}
+
+    - name: Build or verify exact GCC 16.2
+      shell: bash
+      run: |
+        python3 tools/ci/bootstrap_application_analysis_toolchain.py install-gcc \
+          --prefix "${HOME}/.cache/cxxlens/toolchains/gcc-16.2.0" \
+          --work-directory "${RUNNER_TEMP}/cxxlens-gcc16-build" \
+          --jobs "${CXXLENS_BUILD_JOBS:-4}"
+        echo "${HOME}/.cache/cxxlens/toolchains/gcc-16.2.0/bin" >> "${GITHUB_PATH}"

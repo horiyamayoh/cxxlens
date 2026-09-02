@@ -1,0 +1,45 @@
+{
+  "document_version": "1.0.0",
+  "gcc": {
+    "build_targets": [
+      "all-gcc",
+      "all-target-libstdc++-v3"
+    ],
+    "configure_arguments": [
+      "--disable-bootstrap",
+      "--disable-libatomic",
+      "--disable-libcc1",
+      "--disable-libgomp",
+      "--disable-libitm",
+      "--disable-libquadmath",
+      "--disable-libsanitizer",
+      "--disable-libssp",
+      "--disable-libvtv",
+      "--disable-multilib",
+      "--disable-nls",
+      "--enable-checking=release",
+      "--enable-languages=c,c++",
+      "--without-isl"
+    ],
+    "exact_version": "16.2.0",
+    "install_targets": [
+      "install-gcc",
+      "install-target-libstdc++-v3"
+    ],
+    "prerequisite_checksums_sha256": "b9a526818fb03ad5c1935c18ebaced35337696b91b7d1581a8532d3dcd99952d",
+    "prerequisite_script_sha256": "2fe0517be56fc3a0b9addbbfe51ffae8ad75c4e147f3ee5f0e7769ed3cc98b5f",
+    "source_archive_bytes": 107200820,
+    "source_sha512": "c51c30ca7422d0cbecf504b2e0f33c3aca31e0f90a76b65217f465163fa6fa17b3f5de39e145c47e5bab90ac0ce7fff3b03c8d553ae36e01faaea5a50f8648d1",
+    "source_url": "https://gcc.gnu.org/pub/gcc/releases/gcc-16.2.0/gcc-16.2.0.tar.xz",
+    "target_triples": [
+      "x86_64-linux-gnu",
+      "x86_64-pc-linux-gnu"
+    ]
+  },
+  "runner": {
+    "architecture": "X64",
+    "label": "ubuntu-24.04",
+    "os": "Linux"
+  },
+  "schema": "cxxlens.application-analysis-toolchain-lock.v1"
+}
