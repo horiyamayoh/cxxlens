@@ -11,6 +11,7 @@
 #include <cxxlens/sdk/application_analysis.hpp>
 
 #include "application_analysis_internal.hpp"
+#include "source_identity_internal.hpp"
 
 namespace cxxlens::sdk
 {
@@ -455,12 +456,7 @@ namespace cxxlens::sdk
 			constexpr std::string_view root{"project://"};
 			if (!logical_path.starts_with(root) || logical_path.size() == root.size())
 				return unexpected(invalid("source.logical_path", "project-relative"));
-			const std::array fields{
-				canonical_value::from_string("project"),
-				canonical_value::from_string(std::string{logical_path.substr(root.size())}),
-				canonical_value::from_string("cxxlens.logical-path.v1"),
-			};
-			return canonical_identity_digest("file", fields);
+			return detail::derive_source_file_id(logical_path.substr(root.size()));
 		}
 
 		[[nodiscard]] result<std::string>
@@ -468,12 +464,7 @@ namespace cxxlens::sdk
 									   const std::string_view content,
 									   const std::string_view encoding)
 		{
-			const std::array fields{
-				canonical_value::from_string(std::string{file_id}),
-				canonical_value::from_string(std::string{content}),
-				canonical_value::from_string(std::string{encoding}),
-			};
-			return canonical_identity_digest("source-snapshot", fields);
+			return detail::derive_source_snapshot_id(file_id, content, encoding);
 		}
 
 		[[nodiscard]] bool source_role(const std::string_view value) noexcept
@@ -1045,10 +1036,25 @@ namespace cxxlens::sdk
 							recomputed_bytes += *size;
 						}
 						if (role_value.type == canonical_value::kind::utf8_string)
-							decoded_closure.members.push_back({std::string{*path},
-															   digest_value.text,
-															   content_value.byte_string,
-															   role_value.text});
+						{
+							detail::decoded_capture_source_member decoded_member;
+							decoded_member.file_id = *file_id;
+							decoded_member.logical_path = *path;
+							decoded_member.content_digest = digest_value.text;
+							decoded_member.content = content_value.byte_string;
+							decoded_member.role = role_value.text;
+							decoded_member.read_only = true;
+							if (encoding_value.type == canonical_value::kind::utf8_string)
+							{
+								decoded_member.encoding = encoding_value.text;
+								auto snapshot = application_source_snapshot_id(
+									*file_id, digest_value.text, encoding_value.text);
+								if (!snapshot)
+									return unexpected(std::move(snapshot.error()));
+								decoded_member.source_snapshot_id = std::move(*snapshot);
+							}
+							decoded_closure.members.push_back(std::move(decoded_member));
+						}
 					}
 
 					const auto binding = std::ranges::find_if(

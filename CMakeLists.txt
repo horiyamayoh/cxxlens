@@ -390,6 +390,7 @@ add_library(
   src/sdk/gcc_replay_input_internal.cpp
   src/sdk/gcc_replay_planner_internal.cpp
   src/sdk/gcc_toolchain_probe_internal.cpp
+  src/sdk/source_identity_internal.cpp
   src/runtime/gcc_capture_file_port.cpp
   src/sdk/materialization_task_internal.cpp)
 add_library(cxxlens::sdk ALIAS cxxlens_sdk)

@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "sdk/source_identity_internal.hpp"
 #include "unicode_nfc.hpp"
 
 namespace cxxlens::detail::clang22
@@ -211,12 +212,7 @@ namespace cxxlens::detail::clang22
 		auto relative = source_closure_relative_path(logical_path);
 		if (!relative)
 			return sdk::unexpected(std::move(relative.error()));
-		const std::array fields{
-			sdk::canonical_value::from_string("project"),
-			sdk::canonical_value::from_string(std::move(*relative)),
-			sdk::canonical_value::from_string("cxxlens.logical-path.v1"),
-		};
-		return sdk::canonical_identity_digest("file", fields);
+		return sdk::detail::derive_source_file_id(*relative);
 	}
 
 	sdk::result<std::string>

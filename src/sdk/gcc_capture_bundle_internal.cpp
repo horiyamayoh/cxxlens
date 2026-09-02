@@ -9,6 +9,8 @@
 #include <tuple>
 #include <utility>
 
+#include "source_identity_internal.hpp"
+
 namespace cxxlens::sdk::detail
 {
 	namespace
@@ -729,17 +731,11 @@ namespace cxxlens::sdk::detail
 				const auto logical_working = logical_path_for(*directory, *physical_root);
 				const auto source_digest = content_digest(source.content);
 				auto source_file =
-					identity("file",
-							 {canonical_value::from_string("project"),
-							  canonical_value::from_string(
-								  logical_source.substr(std::string{"project://"}.size())),
-							  canonical_value::from_string("cxxlens.logical-path.v1")});
+					derive_source_file_id(logical_source.substr(std::string{"project://"}.size()));
 				if (!source_file)
 					return unexpected(std::move(source_file.error()));
-				auto source_snapshot = identity("source-snapshot",
-												{canonical_value::from_string(*source_file),
-												 canonical_value::from_string(source_digest),
-												 canonical_value::from_string(source.encoding)});
+				auto source_snapshot =
+					derive_source_snapshot_id(*source_file, source_digest, source.encoding);
 				if (!source_snapshot)
 					return unexpected(std::move(source_snapshot.error()));
 
@@ -814,12 +810,8 @@ namespace cxxlens::sdk::detail
 								limit(prefix + ".source_closure", "unique-byte-count"));
 						unique_blob_bytes += member_size;
 					}
-					auto member_file =
-						identity("file",
-								 {canonical_value::from_string("project"),
-								  canonical_value::from_string(
-									  logical_member.substr(std::string{"project://"}.size())),
-								  canonical_value::from_string("cxxlens.logical-path.v1")});
+					auto member_file = derive_source_file_id(
+						logical_member.substr(std::string{"project://"}.size()));
 					if (!member_file)
 						return unexpected(std::move(member_file.error()));
 					members.push_back(canonical_value::from_tuple({

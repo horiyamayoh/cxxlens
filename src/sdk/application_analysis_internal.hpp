@@ -32,10 +32,14 @@ namespace cxxlens::sdk::detail
 
 	struct decoded_capture_source_member
 	{
+		std::string file_id;
+		std::optional<std::string> source_snapshot_id;
 		std::string logical_path;
 		std::string content_digest;
 		std::vector<std::byte> content;
 		std::string role;
+		std::optional<std::string> encoding;
+		bool read_only{true};
 	};
 
 	struct decoded_capture_source_closure

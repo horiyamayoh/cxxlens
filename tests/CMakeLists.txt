@@ -120,6 +120,17 @@ set_tests_properties(
   PROPERTIES LABELS
              "unit;sdk;capture;compiler-neutral;determinism;resource;security")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-source-identity
+                            unit/sdk/source_identity_internal_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-source-identity PRIVATE cxxlens::sdk)
+target_include_directories(cxxlens-unit-sdk-source-identity
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-source-identity COMMAND cxxlens-unit-sdk-source-identity)
+set_tests_properties(
+  unit.sdk-source-identity
+  PROPERTIES LABELS
+             "unit;sdk;source;identity;compiler-neutral;negative;determinism")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-compile-commands-capture
                             unit/sdk/compile_commands_capture_internal_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-compile-commands-capture
