@@ -51,8 +51,13 @@ def main() -> int:
         root = pathlib.Path(raw_root).resolve()
         (root / "src").mkdir()
         (root / "build").mkdir()
+        (root / "include").mkdir()
+        (root / "include" / "fixture.hpp").write_text(
+            "#pragma once\ninline constexpr int fixture_value = 0;\n", encoding="utf-8"
+        )
         (root / "src" / "main.cpp").write_text(
-            "int main() { return 0; }\n", encoding="utf-8"
+            '#include "fixture.hpp"\nint main() { return fixture_value; }\n',
+            encoding="utf-8",
         )
         (root / "build" / "outer.rsp").write_text(
             "@nested.rsp --specs=custom.spec '-DNAME=a b'\n", encoding="utf-8"
@@ -72,6 +77,9 @@ def main() -> int:
                     str(compiler),
                     "@outer.rsp",
                     "-std=gnu++23",
+                    "-MMD",
+                    "-MF",
+                    "main.d",
                     "-c",
                     "../src/main.cpp",
                 ],
@@ -103,7 +111,11 @@ def main() -> int:
         bundle_path = root / "capture.cxxlens"
         bundle_path.write_bytes(first.stdout)
         admitted = subprocess.run(
-            [str(consumer), str(bundle_path)],
+            [
+                str(consumer),
+                str(bundle_path),
+                *(["--expect-dependency-output"] if require_production_build else []),
+            ],
             capture_output=True,
             check=False,
             timeout=15,

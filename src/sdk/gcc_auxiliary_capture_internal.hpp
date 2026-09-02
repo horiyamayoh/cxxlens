@@ -2,7 +2,7 @@
 
 /**
  * @file gcc_auxiliary_capture_internal.hpp
- * @brief Bounded GCC 16.2 response/spec-file capture.
+ * @brief Bounded GCC 16.2 response, spec, and dependency-file capture.
  */
 
 #include <cstddef>
@@ -32,12 +32,17 @@ namespace cxxlens::sdk::detail
 	parse_gcc_16_2_response_arguments(std::span<const std::byte> content,
 									  import_limits limits = {});
 
-	/** Capture explicit response/spec files reachable from one original GCC argv. */
+	/** Parse the first GCC 16.2 Make dependency rule into its ordered prerequisites. */
+	[[nodiscard]] result<std::vector<std::string>>
+	parse_gcc_16_2_dependency_output(std::span<const std::byte> content, import_limits limits = {});
+
+	/** Capture explicit response/spec/dependency files reachable from one original GCC argv. */
 	[[nodiscard]] result<gcc_auxiliary_capture>
 	capture_gcc_auxiliary_files(gcc_capture_file_port& files,
 								std::span<const std::string> arguments,
 								std::string_view canonical_working_directory,
 								std::string_view canonical_project_root,
+								std::string_view canonical_main_source,
 								std::uint64_t maximum_capture_bytes,
 								import_limits limits = {});
 } // namespace cxxlens::sdk::detail

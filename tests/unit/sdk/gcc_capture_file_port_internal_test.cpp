@@ -66,6 +66,29 @@ namespace
 		require(whitespace && whitespace->empty());
 	}
 
+	void gcc_16_2_dependency_output_is_exact_and_bounded()
+	{
+		auto parsed = cxxlens::sdk::detail::parse_gcc_16_2_dependency_output(
+			bytes("obj\\ file.o: ../src/main.cpp ../include/a\\ b.hpp \\\n"
+				  " ../include/price$$.hpp\nphony: ignored.hpp\n"));
+		require(parsed &&
+				*parsed ==
+					std::vector<std::string>{
+						"../src/main.cpp", "../include/a b.hpp", "../include/price$.hpp"});
+
+		auto malformed = cxxlens::sdk::detail::parse_gcc_16_2_dependency_output(bytes("no-rule\n"));
+		require(!malformed && malformed.error().detail == "target-rule");
+		constexpr char with_nul_text[]{"target: source.cpp\0hidden.hpp"};
+		const std::string with_nul{with_nul_text, sizeof(with_nul_text) - 1U};
+		auto nul = cxxlens::sdk::detail::parse_gcc_16_2_dependency_output(bytes(with_nul));
+		require(!nul && nul.error().detail == "nul-byte");
+		auto limits = cxxlens::sdk::import_limits{};
+		limits.maximum_source_closure_members = 1U;
+		auto count = cxxlens::sdk::detail::parse_gcc_16_2_dependency_output(
+			bytes("target: first.hpp second.hpp\n"), limits);
+		require(!count && count.error().detail == "count");
+	}
+
 	[[nodiscard]] gcc_probe_process_output probe_success(std::string standard_output = {},
 														 std::string standard_error = {})
 	{
@@ -254,12 +277,15 @@ namespace
 		files.directories.emplace("/physical/project/build", "/physical/project/build");
 		constexpr std::string_view database = R"json([
   {"directory":"/physical/project/build","file":"../src/main.cpp",
-   "arguments":["/opt/gcc-16.2.0/bin/g++","@outer.rsp","-c","../src/main.cpp"]}
+	   "arguments":["/opt/gcc-16.2.0/bin/g++","@outer.rsp","-MMD","-MF","deps.d","-c","../src/main.cpp"]}
 ])json";
 		files.files.emplace("/physical/project/build/compile_commands.json",
 							capture_file_snapshot{"/physical/project/build/compile_commands.json",
 												  bytes(database)});
 		files.files.emplace("/physical/project/build/../src/main.cpp",
+							capture_file_snapshot{"/physical/project/src/main.cpp",
+												  bytes("int main() { return 0; }\n")});
+		files.files.emplace("/physical/project/src/main.cpp",
 							capture_file_snapshot{"/physical/project/src/main.cpp",
 												  bytes("int main() { return 0; }\n")});
 		files.files.emplace(
@@ -272,6 +298,14 @@ namespace
 		files.files.emplace(
 			"/physical/project/build/custom.spec",
 			capture_file_snapshot{"/physical/project/build/custom.spec", bytes("*link:\n")});
+		files.files.emplace(
+			"/physical/project/build/deps.d",
+			capture_file_snapshot{
+				"/physical/project/build/deps.d",
+				bytes("main.o: ../src/main.cpp ../include/a.hpp /outside/external.hpp\n")});
+		files.files.emplace(
+			"/physical/project/include/a.hpp",
+			capture_file_snapshot{"/physical/project/include/a.hpp", bytes("#pragma once\n")});
 
 		auto captured = capture_with_valid_probe(files, request());
 		auto repeated = capture_with_valid_probe(files, request());
@@ -280,8 +314,9 @@ namespace
 		require(static_cast<bool>(decoded));
 		require(!has_gap(*decoded, "compile_units[0].response_files", "response-files-unobserved"));
 		require(!has_gap(*decoded, "compile_units[0].config_files", "config-files-unobserved"));
-		require(has_gap(
-			*decoded, "source_closures[0].membership_coverage", "dependency-output-unobserved"));
+		require(has_gap(*decoded,
+						"source_closures[0].membership_coverage",
+						"dependency-output-not-bound-to-invocation"));
 		auto imported = cxxlens::sdk::import_capture(*decoded);
 		require(imported && imported->replay_plans().size() == 1U);
 		require(std::ranges::none_of(imported->replay_plans().front().unresolved(),
@@ -299,8 +334,16 @@ namespace
 		require(unit[9].tuple[1].tuple[1].tuple[3].integer == 0);
 		require(unit[10].tuple[0].text == "observed" && unit[10].tuple[1].tuple.size() == 1U);
 		const auto& closure = value->tuple[6].tuple.front().tuple;
-		require(closure[3].integer == 4 &&
+		require(closure[3].integer == 5 &&
 				closure[7].tuple[1].type == cxxlens::sdk::canonical_value::kind::null_value);
+		require(std::ranges::any_of(closure[6].tuple,
+									[](const auto& member)
+									{
+										return member.tuple[1].text == "project://include/a.hpp" &&
+											member.tuple[5].tuple[1].text == "header" &&
+											member.tuple[3].tuple[1].byte_string ==
+											bytes("#pragma once\n");
+									}));
 		auto forged = *value;
 		forged.tuple[5].tuple.front().tuple[9].tuple[1].tuple.front().tuple[1].tuple[1] =
 			cxxlens::sdk::canonical_value::from_string("sha256:" + std::string(64U, '0'));
@@ -320,6 +363,29 @@ namespace
 				has_gap(*include_decoded,
 						"compile_units[0].config_files",
 						"spec-include-search-unobserved"));
+
+		auto missing_dependency = files;
+		missing_dependency.files.erase("/physical/project/build/deps.d");
+		auto missing_dependency_capture = capture_with_valid_probe(missing_dependency, request());
+		require(static_cast<bool>(missing_dependency_capture));
+		auto missing_dependency_decoded =
+			cxxlens::sdk::decode_capture_bundle(*missing_dependency_capture);
+		require(missing_dependency_decoded &&
+				has_gap(*missing_dependency_decoded,
+						"source_closures[0].membership_coverage",
+						"dependency-output-unreadable"));
+
+		auto invalid_dependency = files;
+		invalid_dependency.files["/physical/project/build/deps.d"].content =
+			bytes("truncated dependency output\n");
+		auto invalid_dependency_capture = capture_with_valid_probe(invalid_dependency, request());
+		require(static_cast<bool>(invalid_dependency_capture));
+		auto invalid_dependency_decoded =
+			cxxlens::sdk::decode_capture_bundle(*invalid_dependency_capture);
+		require(invalid_dependency_decoded &&
+				has_gap(*invalid_dependency_decoded,
+						"source_closures[0].membership_coverage",
+						"dependency-output-invalid"));
 	}
 
 	void response_file_missing_recursion_and_bounds_fail_closed()
@@ -549,6 +615,7 @@ int main() noexcept
 	try
 	{
 		gcc_16_2_response_grammar_is_exact_and_bounded();
+		gcc_16_2_dependency_output_is_exact_and_bounded();
 		fake_port_drives_canonical_projection_and_exact_bounds();
 		response_and_spec_files_are_captured_recursively_without_claiming_closure();
 		response_file_missing_recursion_and_bounds_fail_closed();

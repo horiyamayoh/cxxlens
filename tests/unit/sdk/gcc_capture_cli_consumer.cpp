@@ -1,8 +1,10 @@
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <string_view>
 #include <vector>
 
 #include <cxxlens/sdk/application_analysis.hpp>
@@ -11,7 +13,10 @@ namespace
 {
 	int run(const int argc, char** argv)
 	{
-		if (argc != 2)
+		if (argc != 2 && argc != 3)
+			return 2;
+		const bool expect_dependency = argc == 3;
+		if (expect_dependency && std::string_view{argv[2]} != "--expect-dependency-output")
 			return 2;
 		std::ifstream input{argv[1], std::ios::binary | std::ios::ate};
 		if (!input)
@@ -37,11 +42,20 @@ namespace
 					  << bundle.error().detail << '\n';
 			return 6;
 		}
+		const bool dependency_observed =
+			std::any_of(bundle->gaps().begin(),
+						bundle->gaps().end(),
+						[](const auto& gap)
+						{
+							return gap.field == "source_closures[0].membership_coverage" &&
+								gap.reason == "dependency-output-not-bound-to-invocation";
+						});
 		return bundle->production_compiler() == "gcc-16.2.0" &&
 				bundle->capture_adapter() == "compile-commands" &&
 				bundle->target_abi() == "x86_64-linux-gnu" &&
 				bundle->project_id() == "project:cli-capture" &&
-				bundle->compile_unit_count() == 1U && !bundle->gaps().empty()
+				bundle->compile_unit_count() == 1U && !bundle->gaps().empty() &&
+				(!expect_dependency || dependency_observed)
 			? 0
 			: 7;
 	}

@@ -141,6 +141,7 @@ namespace cxxlens::sdk::detail
 			{
 				std::string_view working_directory;
 				std::string_view project_root;
+				std::string_view main_source;
 			};
 
 			auxiliary_collector(gcc_capture_file_port& files,
@@ -148,8 +149,8 @@ namespace cxxlens::sdk::detail
 								const std::uint64_t maximum_capture_bytes,
 								const import_limits limits)
 				: files_{files}, working_directory_{path_context.working_directory},
-				  project_root_{path_context.project_root}, remaining_bytes_{maximum_capture_bytes},
-				  limits_{limits}
+				  project_root_{path_context.project_root}, main_source_{path_context.main_source},
+				  remaining_bytes_{maximum_capture_bytes}, limits_{limits}
 			{
 			}
 
@@ -160,6 +161,8 @@ namespace cxxlens::sdk::detail
 				if (!expanded)
 					return unexpected(std::move(expanded.error()));
 				if (auto captured = capture_specs(*expanded); !captured)
+					return unexpected(std::move(captured.error()));
+				if (auto captured = capture_dependency_output(*expanded); !captured)
 					return unexpected(std::move(captured.error()));
 
 				gcc_auxiliary_capture output;
@@ -176,6 +179,8 @@ namespace cxxlens::sdk::detail
 						captured_value<std::vector<build_capture_auxiliary_file>>::unavailable(
 							"spec-include-search-unobserved",
 							"recapture-with-shell-free-wrapper-and-toolchain-search-paths");
+				if (saw_dependency_output_)
+					output.invocation.source_closure_membership = std::move(dependency_membership_);
 				output.closure_members = std::move(closure_members_);
 				output.captured_bytes = captured_bytes_;
 				return output;
@@ -386,6 +391,99 @@ namespace cxxlens::sdk::detail
 				return {};
 			}
 
+			[[nodiscard]] result<void>
+			capture_dependency_output(const std::span<const std::string> arguments)
+			{
+				std::optional<std::string_view> dependency_path;
+				for (std::size_t index{}; index < arguments.size(); ++index)
+				{
+					const auto& token = arguments[index];
+					if (token == "-MF")
+					{
+						if (index + 1U >= arguments.size())
+							return unexpected(
+								invalid("dependency_output.path", "missing-option-argument"));
+						dependency_path = arguments[++index];
+					}
+					else if (token.starts_with("-MF") && token.size() > 3U)
+						dependency_path = std::string_view{token}.substr(3U);
+				}
+				if (!dependency_path)
+					return {};
+
+				saw_dependency_output_ = true;
+				dependency_membership_ = captured_value<std::string>::unavailable(
+					"dependency-output-unreadable", "restore-dependency-output-and-recapture");
+				auto path = resolve_path(
+					*dependency_path,
+					{.directory = working_directory_, .field = "dependency_output.path"});
+				if (!path)
+					return unexpected(std::move(path.error()));
+				if (!at_or_below(*path, project_root_))
+				{
+					dependency_membership_ = captured_value<std::string>::unavailable(
+						"dependency-output-outside-project-root",
+						"write-the-dependency-output-below-the-project-root-and-recapture");
+					return {};
+				}
+				auto snapshot = files_.read_regular_file(
+					*path, {remaining_bytes_, limits_.maximum_string_bytes, project_root_});
+				if (!snapshot)
+				{
+					if (snapshot.error().code == capture_file_unavailable_code)
+						return {};
+					return unexpected(std::move(snapshot.error()));
+				}
+				if (snapshot->content.size() > remaining_bytes_)
+					return unexpected(limit("dependency_output.content", "byte-count"));
+				remaining_bytes_ -= static_cast<std::uint64_t>(snapshot->content.size());
+				captured_bytes_ += static_cast<std::uint64_t>(snapshot->content.size());
+				auto prerequisites = parse_gcc_16_2_dependency_output(snapshot->content, limits_);
+				if (!prerequisites)
+				{
+					dependency_membership_ = captured_value<std::string>::unavailable(
+						"dependency-output-invalid",
+						"regenerate-the-GCC-dependency-output-and-recapture");
+					return {};
+				}
+
+				dependency_membership_ = captured_value<std::string>::unavailable(
+					"dependency-output-not-bound-to-invocation",
+					"recapture-with-shell-free-wrapper");
+				for (const auto& prerequisite : *prerequisites)
+				{
+					auto member_path = resolve_path(
+						prerequisite,
+						{.directory = working_directory_, .field = "dependency_output.member"});
+					if (!member_path || !at_or_below(*member_path, project_root_))
+						continue;
+					auto member = files_.read_regular_file(
+						*member_path,
+						{remaining_bytes_, limits_.maximum_string_bytes, project_root_});
+					if (!member)
+					{
+						if (member.error().code == capture_file_unavailable_code)
+							continue;
+						return unexpected(std::move(member.error()));
+					}
+					if (member->canonical_path == main_source_)
+						continue;
+					const auto logical = logical_path_for(member->canonical_path, project_root_);
+					if (!closure_member_paths_.emplace(logical).second)
+						continue;
+					if (member->content.size() > remaining_bytes_)
+						return unexpected(limit("dependency_output.member", "byte-count"));
+					remaining_bytes_ -= static_cast<std::uint64_t>(member->content.size());
+					captured_bytes_ += static_cast<std::uint64_t>(member->content.size());
+					const auto encoding = source_encoding(member->content);
+					closure_members_.push_back({std::move(member->canonical_path),
+												std::move(member->content),
+												encoding,
+												"header"});
+				}
+				return {};
+			}
+
 			struct cached_response
 			{
 				std::size_t index{};
@@ -395,6 +493,7 @@ namespace cxxlens::sdk::detail
 			gcc_capture_file_port& files_;
 			std::string working_directory_;
 			std::string project_root_;
+			std::string main_source_;
 			std::uint64_t remaining_bytes_{};
 			import_limits limits_;
 			std::size_t response_expansions_{};
@@ -402,6 +501,8 @@ namespace cxxlens::sdk::detail
 			bool saw_response_{};
 			bool saw_specs_{};
 			bool spec_include_unresolved_{};
+			bool saw_dependency_output_{};
+			captured_value<std::string> dependency_membership_;
 			std::vector<build_capture_auxiliary_file> response_files_;
 			std::vector<build_capture_auxiliary_file> config_files_;
 			std::vector<gcc_source_closure_member_observation> closure_members_;
@@ -500,11 +601,123 @@ namespace cxxlens::sdk::detail
 		}
 	}
 
+	result<std::vector<std::string>>
+	parse_gcc_16_2_dependency_output(const std::span<const std::byte> content,
+									 const import_limits limits)
+	{
+		if (auto valid = limits.validate(); !valid)
+			return unexpected(std::move(valid.error()));
+		try
+		{
+			if (std::ranges::find(content, std::byte{}) != content.end())
+				return unexpected(invalid("dependency_output", "nul-byte"));
+			const auto input =
+				std::string_view{reinterpret_cast<const char*>(content.data()), content.size()};
+			std::size_t colon{std::string_view::npos};
+			bool escaped{};
+			for (std::size_t index{}; index < input.size(); ++index)
+			{
+				const auto byte = input[index];
+				if (escaped)
+				{
+					escaped = false;
+					continue;
+				}
+				if (byte == '\\')
+				{
+					escaped = true;
+					continue;
+				}
+				if (byte == ':')
+				{
+					colon = index;
+					break;
+				}
+				if (byte == '\n' || byte == '\r')
+					return unexpected(invalid("dependency_output", "target-rule"));
+			}
+			if (colon == std::string_view::npos)
+				return unexpected(invalid("dependency_output", "target-rule"));
+
+			std::vector<std::string> output;
+			std::string token;
+			std::size_t metadata_bytes{};
+			const auto append = [&]() -> result<void>
+			{
+				if (token.empty())
+					return {};
+				if (output.size() >= limits.maximum_source_closure_members)
+					return unexpected(limit("dependency_output.members", "count"));
+				if (token.size() > limits.maximum_string_bytes)
+					return unexpected(limit("dependency_output.member", "string-bytes"));
+				if (token.size() > limits.maximum_total_metadata_bytes - metadata_bytes)
+					return unexpected(limit("dependency_output.members", "metadata-bytes"));
+				metadata_bytes += token.size();
+				output.push_back(std::move(token));
+				token.clear();
+				return {};
+			};
+			for (std::size_t index = colon + 1U; index < input.size(); ++index)
+			{
+				const auto byte = input[index];
+				if (byte == '\\')
+				{
+					if (index + 1U >= input.size())
+						return unexpected(invalid("dependency_output", "dangling-escape"));
+					if (input[index + 1U] == '\n')
+					{
+						++index;
+						continue;
+					}
+					if (input[index + 1U] == '\r' && index + 2U < input.size() &&
+						input[index + 2U] == '\n')
+					{
+						index += 2U;
+						continue;
+					}
+					token.push_back(input[++index]);
+				}
+				else if (byte == '$' && index + 1U < input.size() && input[index + 1U] == '$')
+				{
+					token.push_back('$');
+					++index;
+				}
+				else if (byte == '#')
+					break;
+				else if (byte == '\n' || byte == '\r')
+					break;
+				else if (ascii_space(static_cast<unsigned char>(byte)))
+				{
+					if (auto added = append(); !added)
+						return unexpected(std::move(added.error()));
+				}
+				else
+					token.push_back(byte);
+				if (token.size() > limits.maximum_string_bytes)
+					return unexpected(limit("dependency_output.member", "string-bytes"));
+			}
+			if (auto added = append(); !added)
+				return unexpected(std::move(added.error()));
+			if (output.empty())
+				return unexpected(invalid("dependency_output", "empty-prerequisites"));
+			return output;
+		}
+		catch (const std::bad_alloc&)
+		{
+			return unexpected(limit("dependency_output", "allocation"));
+		}
+		catch (const std::length_error&)
+		{
+			return unexpected(limit("dependency_output", "allocation-length"));
+		}
+	}
+
 	result<gcc_auxiliary_capture>
 	capture_gcc_auxiliary_files(gcc_capture_file_port& files,
 								const std::span<const std::string> arguments,
 								const std::string_view canonical_working_directory,
 								const std::string_view canonical_project_root,
+								const std::string_view canonical_main_source,
 								const std::uint64_t maximum_capture_bytes,
 								const import_limits limits)
 	{
@@ -515,9 +728,12 @@ namespace cxxlens::sdk::detail
 			if (!at_or_below(canonical_working_directory, canonical_project_root))
 				return unexpected(
 					invalid("capture.working_directory", "path-outside-project-root"));
+			if (!at_or_below(canonical_main_source, canonical_project_root))
+				return unexpected(invalid("capture.main_source", "path-outside-project-root"));
 			return auxiliary_collector{files,
 									   {.working_directory = canonical_working_directory,
-										.project_root = canonical_project_root},
+										.project_root = canonical_project_root,
+										.main_source = canonical_main_source},
 									   maximum_capture_bytes,
 									   limits}
 				.capture(arguments);

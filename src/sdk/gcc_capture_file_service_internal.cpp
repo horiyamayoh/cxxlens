@@ -167,6 +167,7 @@ namespace cxxlens::sdk::detail
 															 entry.arguments,
 															 *working,
 															 input.physical_project_root,
+															 source->canonical_path,
 															 remaining,
 															 limits);
 				if (!auxiliary)
