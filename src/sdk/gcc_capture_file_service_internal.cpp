@@ -53,8 +53,10 @@ namespace cxxlens::sdk::detail
 
 	result<std::vector<std::byte>>
 	capture_gcc_compile_commands(gcc_capture_file_port& files,
+								 gcc_probe_process_port& processes,
 								 const gcc_compile_commands_capture_request& request,
-								 const import_limits limits)
+								 const import_limits limits,
+								 const std::stop_token& cancellation)
 	{
 		if (auto valid = limits.validate(); !valid)
 			return unexpected(std::move(valid.error()));
@@ -67,6 +69,14 @@ namespace cxxlens::sdk::detail
 			if (root->size() > limits.maximum_string_bytes)
 				return unexpected(
 					{"application-analysis.import-limit-exceeded", "capture.path", "path-bytes"});
+			auto toolchain = probe_gcc_toolchain(processes,
+												 {request.compiler_path,
+												  *root,
+												  request.process_limits,
+												  request.absolute_wall_deadline_ns},
+												 cancellation);
+			if (!toolchain)
+				return unexpected(std::move(toolchain.error()));
 			auto database = files.read_regular_file(
 				request.compile_commands_path,
 				{limits.maximum_bundle_bytes, limits.maximum_string_bytes, {}});
@@ -87,7 +97,7 @@ namespace cxxlens::sdk::detail
 			gcc_compile_commands_bundle_input input;
 			input.project_id = request.project_id;
 			input.physical_project_root = std::move(*root);
-			input.toolchain = request.toolchain;
+			input.toolchain = std::move(*toolchain);
 			input.sources.reserve(decoded->entries().size());
 			std::uint64_t remaining = limits.maximum_source_closure_bytes;
 			for (const auto& entry : decoded->entries())
