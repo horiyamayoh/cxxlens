@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -39,6 +40,15 @@ namespace cxxlens::sdk::detail
 		std::string_view required_canonical_root;
 	};
 
+	class gcc_capture_workspace
+	{
+	  public:
+		virtual ~gcc_capture_workspace() = default;
+		[[nodiscard]] virtual std::string_view dependency_output_path() const noexcept = 0;
+		[[nodiscard]] virtual result<std::string>
+		publish_bundle(std::span<const std::byte> content) = 0;
+	};
+
 	class gcc_capture_file_port
 	{
 	  public:
@@ -47,6 +57,14 @@ namespace cxxlens::sdk::detail
 		canonical_directory(std::string_view path, std::size_t maximum_path_bytes) = 0;
 		[[nodiscard]] virtual result<capture_file_snapshot>
 		read_regular_file(std::string_view path, capture_file_read_limits limits) = 0;
+		[[nodiscard]] virtual result<std::unique_ptr<gcc_capture_workspace>>
+		create_workspace(std::string_view capture_directory, std::size_t maximum_path_bytes)
+		{
+			(void)capture_directory;
+			(void)maximum_path_bytes;
+			return unexpected(
+				{std::string{capture_file_unavailable_code}, "capture.workspace", "unsupported"});
+		}
 	};
 
 	struct CXXLENS_SDK_DETAIL_HIDDEN gcc_compile_commands_capture_request
@@ -55,6 +73,7 @@ namespace cxxlens::sdk::detail
 		std::string project_root;
 		std::string compile_commands_path;
 		std::string compiler_path;
+		std::vector<std::string> execution_environment;
 		gcc_probe_process_limits process_limits;
 		std::uint64_t absolute_wall_deadline_ns{};
 	};
@@ -69,8 +88,11 @@ namespace cxxlens::sdk::detail
 		std::vector<std::string> original_arguments;
 		std::vector<std::string> capture_arguments;
 		std::vector<build_capture_environment_effect> environment_effects;
+		std::vector<std::string> execution_environment;
 		gcc_probe_process_limits process_limits;
 		std::uint64_t absolute_wall_deadline_ns{};
+		std::string expected_compiler_path;
+		std::string expected_compiler_digest;
 	};
 
 	/** Probe one exact GCC toolchain, then read its compilation database and main sources. */

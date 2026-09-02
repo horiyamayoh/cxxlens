@@ -23,6 +23,8 @@
 #include <poll.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+extern char** environ;
 #endif
 
 namespace cxxlens::sdk::detail
@@ -552,6 +554,42 @@ namespace cxxlens::sdk::detail
 		output.failure_stage = "platform";
 		output.failure_detail = "unsupported";
 		return output;
+#endif
+	}
+
+	result<std::vector<std::string>>
+	read_current_process_environment(const std::size_t maximum_count,
+									 const std::size_t maximum_bytes)
+	{
+		if (maximum_count == 0U || maximum_bytes == 0U)
+			return unexpected(request_error("environment", "zero-bound"));
+#if defined(__linux__) && defined(__GLIBC__)
+		try
+		{
+			std::vector<std::string> output;
+			std::size_t bytes{};
+			for (std::size_t index{}; environ[index] != nullptr; ++index)
+			{
+				if (index >= maximum_count)
+					return unexpected(request_error("environment", "count"));
+				const std::string_view entry{environ[index]};
+				if (entry.size() == std::numeric_limits<std::size_t>::max() ||
+					!add_bounded(bytes, entry.size() + 1U, maximum_bytes))
+					return unexpected(request_error("environment", "bytes"));
+				output.emplace_back(entry);
+			}
+			return output;
+		}
+		catch (const std::bad_alloc&)
+		{
+			return unexpected(request_error("environment", "allocation"));
+		}
+		catch (const std::length_error&)
+		{
+			return unexpected(request_error("environment", "allocation-length"));
+		}
+#else
+		return unexpected(request_error("environment", "unsupported-platform"));
 #endif
 	}
 

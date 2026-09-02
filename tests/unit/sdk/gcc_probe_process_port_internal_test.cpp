@@ -28,6 +28,7 @@ namespace
 	using cxxlens::sdk::detail::gcc_probe_process_request;
 	using cxxlens::sdk::detail::gcc_probe_process_terminal;
 	using cxxlens::sdk::detail::gcc_process_standard_stream_mode;
+	using cxxlens::sdk::detail::read_current_process_environment;
 	using cxxlens::sdk::detail::run_gcc_probe_process;
 
 	void require(const bool condition, const std::string& message)
@@ -169,6 +170,18 @@ int main(const int argc, char** argv)
 	{
 		std::filesystem::create_directories(root);
 		const std::string executable = std::filesystem::canonical("/proc/self/exe").string();
+		auto current_environment = read_current_process_environment(4096U, 1024U * 1024U);
+		require(current_environment && !current_environment->empty(),
+				"bounded current environment snapshot was unavailable");
+		require(!read_current_process_environment(0U, 1U) &&
+					!read_current_process_environment(1U, 0U),
+				"zero environment bounds were accepted");
+		auto environment_count_limit = read_current_process_environment(1U, 1024U * 1024U);
+		require(!environment_count_limit && environment_count_limit.error().detail == "count",
+				"current environment count bound was not enforced");
+		auto environment_byte_limit = read_current_process_environment(4096U, 1U);
+		require(!environment_byte_limit && environment_byte_limit.error().detail == "bytes",
+				"current environment byte bound was not enforced");
 
 		auto observed_request = request_for(executable, root, "--child-observe");
 		auto observed = run_gcc_probe_process(observed_request);

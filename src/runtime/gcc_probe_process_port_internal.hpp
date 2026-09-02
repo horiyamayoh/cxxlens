@@ -90,6 +90,10 @@ namespace cxxlens::sdk::detail
 	/** Linux/glibc production adapter; other hosts return structured unavailable. */
 	[[nodiscard]] CXXLENS_RUNTIME_DETAIL_HIDDEN std::unique_ptr<gcc_probe_process_port>
 	make_system_gcc_probe_process_port();
+
+	/** Snapshot the current process environment with explicit aggregate bounds. */
+	[[nodiscard]] CXXLENS_RUNTIME_DETAIL_HIDDEN result<std::vector<std::string>>
+	read_current_process_environment(std::size_t maximum_count, std::size_t maximum_bytes);
 } // namespace cxxlens::sdk::detail
 
 #undef CXXLENS_RUNTIME_DETAIL_HIDDEN

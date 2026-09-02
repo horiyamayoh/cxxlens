@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <stop_token>
 #include <string>
+#include <vector>
 
 #include "gcc_capture_bundle_internal.hpp"
 #include "runtime/gcc_probe_process_port_internal.hpp"
@@ -23,6 +24,7 @@ namespace cxxlens::sdk::detail
 	{
 		std::string compiler_path;
 		std::string working_directory;
+		std::vector<std::string> execution_environment;
 		gcc_probe_process_limits process_limits;
 		std::uint64_t absolute_wall_deadline_ns{};
 	};

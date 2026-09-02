@@ -703,6 +703,14 @@ namespace
 		require(!mismatch && mismatch.error().detail == "compiler-identity-mismatch" &&
 				unused_processes.requests.empty());
 
+		auto identity_mismatch = input;
+		identity_mismatch.expected_compiler_digest = "sha256:" + std::string(64U, '0');
+		fake_process_port identity_processes{valid_probe_outputs()};
+		auto rejected_identity = cxxlens::sdk::detail::capture_gcc_invocation(
+			files, identity_processes, identity_mismatch);
+		require(!rejected_identity &&
+				rejected_identity.error().detail == "executed-identity-mismatch");
+
 		auto limits = cxxlens::sdk::import_limits{};
 		limits.maximum_arguments_per_unit = 2U;
 		fake_process_port limited_processes{valid_probe_outputs()};

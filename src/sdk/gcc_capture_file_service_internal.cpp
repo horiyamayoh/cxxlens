@@ -191,6 +191,7 @@ namespace cxxlens::sdk::detail
 			auto toolchain = probe_gcc_toolchain(processes,
 												 {request.compiler_path,
 												  *root,
+												  request.execution_environment,
 												  request.process_limits,
 												  request.absolute_wall_deadline_ns},
 												 cancellation);
@@ -271,11 +272,19 @@ namespace cxxlens::sdk::detail
 			auto toolchain = probe_gcc_toolchain(processes,
 												 {request.compiler_path,
 												  *working,
+												  request.execution_environment,
 												  request.process_limits,
 												  request.absolute_wall_deadline_ns},
 												 cancellation);
 			if (!toolchain)
 				return unexpected(std::move(toolchain.error()));
+			if ((!request.expected_compiler_path.empty() &&
+				 (!toolchain->canonical_binary_path.value ||
+				  *toolchain->canonical_binary_path.value != request.expected_compiler_path)) ||
+				(!request.expected_compiler_digest.empty() &&
+				 (!toolchain->binary_digest.value ||
+				  *toolchain->binary_digest.value != request.expected_compiler_digest)))
+				return unexpected(invalid("compiler_path", "executed-identity-mismatch"));
 			compile_command_entry entry;
 			entry.directory = *working;
 			entry.file = request.source_path;

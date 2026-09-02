@@ -1,4 +1,6 @@
+#include <fstream>
 #include <iostream>
+#include <string>
 #include <string_view>
 
 int main(const int argc, char** argv)
@@ -30,6 +32,40 @@ int main(const int argc, char** argv)
 				  << " /usr/include\n"
 				  << "End of search list.\n";
 		return 0;
+	}
+	std::string dependency;
+	std::string object;
+	std::string source;
+	bool compile{};
+	for (int index = 1; index < argc; ++index)
+	{
+		const std::string_view token{argv[index]};
+		if (token == "-DFAIL_COMPILE")
+			return 23;
+		if (token == "-c")
+			compile = true;
+		else if (token == "-MF" && index + 1 < argc)
+			dependency = argv[++index];
+		else if (token == "-o" && index + 1 < argc)
+			object = argv[++index];
+		else if (!token.starts_with('-') && (token.ends_with(".c") || token.ends_with(".cpp")))
+			source = token;
+	}
+	if (compile && !dependency.empty() && !source.empty())
+	{
+		if (!object.empty())
+		{
+			std::ofstream output{object, std::ios::binary};
+			if (!output)
+				return 10;
+			output << "fixture-object";
+		}
+		std::ofstream dependencies{dependency};
+		if (!dependencies)
+			return 11;
+		dependencies << (object.empty() ? "main.o" : object) << ": " << source
+					 << " ../include/fixture.hpp\n";
+		return dependencies ? 0 : 12;
 	}
 	return 9;
 }

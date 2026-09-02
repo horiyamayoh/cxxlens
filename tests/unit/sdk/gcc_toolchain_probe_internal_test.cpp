@@ -96,6 +96,7 @@ namespace
 	{
 		return {compiler,
 				"/work",
+				{},
 				{32U,
 				 std::size_t{16U} * 1024U,
 				 8U,
@@ -122,7 +123,9 @@ int main()
 		const std::string prefix{"/toolchain-a"};
 		const std::string sysroot{"/machine-a/sysroot"};
 		fake_process_port processes{valid_outputs(prefix, sysroot)};
-		auto observed = probe_gcc_toolchain(processes, request(prefix + "/bin/g++"));
+		auto probe_request = request(prefix + "/bin/g++");
+		probe_request.execution_environment = {"ASAN_OPTIONS=detect_leaks=0", "LC_ALL=ambient"};
+		auto observed = probe_gcc_toolchain(processes, probe_request);
 		require(observed && observed->exact_version == "16.2.0" &&
 					observed->target_triple == "x86_64-linux-gnu",
 				"pinned GCC observation failed");
@@ -156,7 +159,8 @@ int main()
 		for (const auto& process_request : processes.requests)
 			require(process_request.argv.front() == prefix + "/bin/g++" &&
 						process_request.working_directory == "/work" &&
-						process_request.environment == std::vector<std::string>{"LC_ALL=C"} &&
+						process_request.environment ==
+							std::vector<std::string>{"ASAN_OPTIONS=detect_leaks=0", "LC_ALL=C"} &&
 						process_request.absolute_wall_deadline_ns == 123456789U,
 					"probe did not preserve explicit binary/environment/deadline authority");
 		require(processes.requests[0].argv ==

@@ -8,10 +8,14 @@
 #include <utility>
 #include <vector>
 
+#include <cxxlens/sdk/common.hpp>
+
 #include "sdk/gcc_capture_file_port_internal.hpp"
 #include "sealed_executable_internal.hpp"
 
 #if defined(__linux__)
+#include <cstdio>
+
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -88,6 +92,78 @@ namespace cxxlens::sdk::detail
 				(path.size() > root.size() && path.starts_with(root) &&
 				 (root == "/" || path[root.size()] == '/'));
 		}
+
+		class system_capture_workspace final : public gcc_capture_workspace
+		{
+		  public:
+			system_capture_workspace(std::string directory,
+									 std::string workspace,
+									 const std::size_t maximum_path_bytes)
+				: directory_{std::move(directory)}, workspace_{std::move(workspace)},
+				  dependency_{workspace_ + "/dependencies.d"}, staging_{workspace_ + "/bundle.tmp"},
+				  maximum_path_bytes_{maximum_path_bytes}
+			{
+			}
+			~system_capture_workspace() override
+			{
+				(void)::unlink(dependency_.c_str());
+				(void)::unlink(staging_.c_str());
+				(void)::rmdir(workspace_.c_str());
+			}
+			[[nodiscard]] std::string_view dependency_output_path() const noexcept override
+			{
+				return dependency_;
+			}
+			[[nodiscard]] result<std::string>
+			publish_bundle(const std::span<const std::byte> content) override
+			{
+				try
+				{
+					const auto digest = content_digest(content);
+					if (!digest.starts_with("sha256:") || digest.size() != 71U)
+						return unexpected(io_error("capture.bundle", "digest"));
+					const auto destination =
+						directory_ + "/capture-" + digest.substr(7U) + ".cxxlens";
+					if (destination.size() > maximum_path_bytes_)
+						return unexpected(limit_error("capture.bundle", "path-bytes"));
+					descriptor output{
+						::open(staging_.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600)};
+					if (output.get() < 0)
+						return unexpected(io_error("capture.bundle", "create"));
+					std::size_t offset{};
+					while (offset < content.size())
+					{
+						const auto count =
+							::write(output.get(), content.data() + offset, content.size() - offset);
+						if (count < 0 && errno == EINTR)
+							continue;
+						if (count <= 0)
+							return unexpected(io_error("capture.bundle", "write"));
+						offset += static_cast<std::size_t>(count);
+					}
+					if (::fsync(output.get()) != 0)
+						return unexpected(io_error("capture.bundle", "fsync"));
+					if (::rename(staging_.c_str(), destination.c_str()) != 0)
+						return unexpected(io_error("capture.bundle", "rename"));
+					return destination;
+				}
+				catch (const std::bad_alloc&)
+				{
+					return unexpected(io_error("capture.bundle", "allocation"));
+				}
+				catch (const std::length_error&)
+				{
+					return unexpected(io_error("capture.bundle", "allocation-length"));
+				}
+			}
+
+		  private:
+			std::string directory_;
+			std::string workspace_;
+			std::string dependency_;
+			std::string staging_;
+			std::size_t maximum_path_bytes_{};
+		};
 #endif
 
 		class system_gcc_capture_file_port final : public gcc_capture_file_port
@@ -200,6 +276,40 @@ namespace cxxlens::sdk::detail
 				(void)path;
 				(void)limits;
 				return unexpected(io_error("capture.file", "unsupported-platform"));
+#endif
+			}
+
+			result<std::unique_ptr<gcc_capture_workspace>>
+			create_workspace(const std::string_view capture_directory,
+							 const std::size_t maximum_path_bytes) override
+			{
+#if defined(__linux__)
+				auto canonical = canonical_directory(capture_directory, maximum_path_bytes);
+				if (!canonical)
+					return unexpected(std::move(canonical.error()));
+				try
+				{
+					if (maximum_path_bytes < 25U || canonical->size() > maximum_path_bytes - 25U)
+						return unexpected(limit_error("capture.workspace", "path-bytes"));
+					std::string pattern = *canonical + "/.cxxlens-capture-XXXXXX";
+					if (::mkdtemp(pattern.data()) == nullptr)
+						return unexpected(io_error("capture.workspace", "create"));
+					return std::unique_ptr<gcc_capture_workspace>{
+						std::make_unique<system_capture_workspace>(
+							std::move(*canonical), std::move(pattern), maximum_path_bytes)};
+				}
+				catch (const std::bad_alloc&)
+				{
+					return unexpected(io_error("capture.workspace", "allocation"));
+				}
+				catch (const std::length_error&)
+				{
+					return unexpected(io_error("capture.workspace", "allocation-length"));
+				}
+#else
+				(void)capture_directory;
+				(void)maximum_path_bytes;
+				return unexpected(unavailable_error("capture.workspace", "unsupported-platform"));
 #endif
 			}
 		};

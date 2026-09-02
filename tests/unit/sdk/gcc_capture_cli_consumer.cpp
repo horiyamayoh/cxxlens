@@ -15,8 +15,10 @@ namespace
 	{
 		if (argc != 2 && argc != 3)
 			return 2;
-		const bool expect_dependency = argc == 3;
-		if (expect_dependency && std::string_view{argv[2]} != "--expect-dependency-output")
+		const std::string_view expectation = argc == 3 ? argv[2] : "";
+		const bool expect_dependency = expectation == "--expect-dependency-output";
+		const bool expect_wrapper = expectation == "--expect-wrapper";
+		if (argc == 3 && !expect_dependency && !expect_wrapper)
 			return 2;
 		std::ifstream input{argv[1], std::ios::binary | std::ios::ate};
 		if (!input)
@@ -51,11 +53,13 @@ namespace
 								gap.reason == "dependency-output-not-bound-to-invocation";
 						});
 		return bundle->production_compiler() == "gcc-16.2.0" &&
-				bundle->capture_adapter() == "compile-commands" &&
+				bundle->capture_adapter() ==
+					(expect_wrapper ? "shell-free-wrapper" : "compile-commands") &&
 				bundle->target_abi() == "x86_64-linux-gnu" &&
 				bundle->project_id() == "project:cli-capture" &&
-				bundle->compile_unit_count() == 1U && !bundle->gaps().empty() &&
-				(!expect_dependency || dependency_observed)
+				bundle->compile_unit_count() == 1U && (expect_wrapper || !bundle->gaps().empty()) &&
+				(!expect_dependency || dependency_observed) &&
+				(!expect_wrapper || !dependency_observed)
 			? 0
 			: 7;
 	}

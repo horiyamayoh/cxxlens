@@ -112,6 +112,15 @@ namespace cxxlens::sdk::detail
 										std::make_move_iterator(arguments.begin()),
 										std::make_move_iterator(arguments.end()));
 			process_request.working_directory = request.working_directory;
+			process_request.environment.reserve(request.execution_environment.size() + 1U);
+			for (const auto& entry : request.execution_environment)
+			{
+				const auto separator = entry.find('=');
+				if (separator != std::string::npos &&
+					std::string_view{entry.data(), separator} == "LC_ALL")
+					continue;
+				process_request.environment.push_back(entry);
+			}
 			process_request.environment.emplace_back("LC_ALL=C");
 			process_request.limits = request.process_limits;
 			process_request.absolute_wall_deadline_ns = request.absolute_wall_deadline_ns;

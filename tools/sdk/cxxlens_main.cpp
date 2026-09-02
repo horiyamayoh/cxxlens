@@ -3,6 +3,7 @@
 #include <limits>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "sdk/gcc_capture_command_service_internal.hpp"
 #include "sdk_doctor_entry.hpp"
@@ -18,7 +19,10 @@ namespace
 				  << "       cxxlens run --project <project.json> --use-case <id> "
 					 "[--format json|markdown]\n"
 				  << "       cxxlens capture --project-id <id> --project-root <absolute-path> "
-					 "--compile-commands <path> --compiler <absolute-path>\n";
+					 "--compile-commands <path> --compiler <absolute-path>\n"
+				  << "       cxxlens capture --project-id <id> --project-root <absolute-path> "
+					 "--capture-directory <path> --compiler <absolute-path> -- "
+					 "<absolute-compiler> <arguments>...\n";
 	}
 
 	[[nodiscard]] bool assign_once(std::string& output, bool& assigned, const char* value)
@@ -33,13 +37,22 @@ namespace
 	int capture(int argc, char** argv)
 	{
 		cxxlens::sdk::detail::gcc_capture_command_request request;
+		std::string capture_directory_value;
+		std::vector<std::string> compiler_arguments;
 		bool project_id{};
 		bool project_root{};
 		bool compile_commands{};
+		bool capture_directory{};
 		bool compiler{};
 		for (int index = 2; index < argc; ++index)
 		{
 			const std::string_view option{argv[index]};
+			if (option == "--")
+			{
+				for (++index; index < argc; ++index)
+					compiler_arguments.emplace_back(argv[index]);
+				break;
+			}
 			if (index + 1 >= argc)
 			{
 				print_usage();
@@ -52,6 +65,8 @@ namespace
 				 assign_once(request.project_root, project_root, value)) ||
 				(option == "--compile-commands" &&
 				 assign_once(request.compile_commands_path, compile_commands, value)) ||
+				(option == "--capture-directory" &&
+				 assign_once(capture_directory_value, capture_directory, value)) ||
 				(option == "--compiler" && assign_once(request.compiler_path, compiler, value));
 			if (!accepted)
 			{
@@ -59,13 +74,40 @@ namespace
 				return 2;
 			}
 		}
-		if (!project_id || !project_root || !compile_commands || !compiler)
+		if (!project_id || !project_root || !compiler || compile_commands == capture_directory ||
+			(compile_commands && !compiler_arguments.empty()) ||
+			(capture_directory &&
+			 (compiler_arguments.empty() || compiler_arguments.front() != request.compiler_path)))
 		{
 			print_usage();
 			return 2;
 		}
 
-		auto captured = cxxlens::sdk::detail::capture_gcc_command(request);
+		if (capture_directory)
+		{
+			cxxlens::sdk::detail::gcc_wrapper_command_request wrapper;
+			wrapper.project_id = std::move(request.project_id);
+			wrapper.project_root = std::move(request.project_root);
+			wrapper.capture_directory = std::move(capture_directory_value);
+			wrapper.compiler_path = std::move(request.compiler_path);
+			wrapper.compiler_arguments = std::move(compiler_arguments);
+			auto captured = cxxlens::sdk::detail::capture_gcc_wrapper_command(wrapper);
+			if (!captured)
+			{
+				const auto& failure = captured.error();
+				std::cerr << "cxxlens: " << failure.code << ": " << failure.field << ": "
+						  << failure.detail << '\n';
+				return 2;
+			}
+			return captured->compiler_exit_code;
+		}
+
+		cxxlens::sdk::detail::gcc_capture_command_request database_request;
+		database_request.project_id = std::move(request.project_id);
+		database_request.project_root = std::move(request.project_root);
+		database_request.compile_commands_path = std::move(request.compile_commands_path);
+		database_request.compiler_path = std::move(request.compiler_path);
+		auto captured = cxxlens::sdk::detail::capture_gcc_command(database_request);
 		if (!captured)
 		{
 			const auto& failure = captured.error();
