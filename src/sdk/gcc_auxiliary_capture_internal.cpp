@@ -965,6 +965,211 @@ namespace cxxlens::sdk::detail
 		}
 	}
 
+	result<gcc_invocation_plan> plan_gcc_16_2_invocation(const gcc_invocation_plan_request& request,
+														 const import_limits limits)
+	{
+		if (auto valid = limits.validate(); !valid)
+			return unexpected(std::move(valid.error()));
+		if (request.compiler_path.empty() || !request.compiler_path.starts_with('/') ||
+			request.compiler_path.contains('\0') || request.expanded_arguments.empty() ||
+			request.expanded_arguments.front() != request.compiler_path)
+			return unexpected(invalid("invocation.compiler", "absolute-identity-mismatch"));
+		if (request.expanded_arguments.size() > limits.maximum_arguments_per_unit)
+			return unexpected(limit("invocation.arguments", "count"));
+		try
+		{
+			std::size_t metadata_bytes{};
+			for (const auto& argument : request.expanded_arguments)
+			{
+				if (argument.contains('\0'))
+					return unexpected(invalid("invocation.argument", "nul-byte"));
+				if (argument.size() > limits.maximum_string_bytes)
+					return unexpected(limit("invocation.argument", "string-bytes"));
+				if (argument.size() > limits.maximum_total_metadata_bytes - metadata_bytes)
+					return unexpected(limit("invocation.arguments", "metadata-bytes"));
+				metadata_bytes += argument.size();
+			}
+
+			std::optional<std::string> source;
+			std::optional<std::string> current_language;
+			std::optional<std::string> source_language;
+			std::optional<std::string> dependency_output;
+			bool compile_only{};
+			bool dependency_mode{};
+			bool after_options{};
+			const auto language_for = [](const std::string_view path) -> std::string_view
+			{
+				if (path.ends_with(".c") || path.ends_with(".i"))
+					return "c";
+				for (const auto extension : {std::string_view{".C"},
+											 std::string_view{".cc"},
+											 std::string_view{".cp"},
+											 std::string_view{".cpp"},
+											 std::string_view{".CPP"},
+											 std::string_view{".c++"},
+											 std::string_view{".cxx"},
+											 std::string_view{".ii"}})
+					if (path.ends_with(extension))
+						return "c++";
+				return {};
+			};
+			const auto option_has_separate_value = [](const std::string_view option) noexcept
+			{
+				return option == "-o" || option == "-include" || option == "-imacros" ||
+					option == "-MT" || option == "-MQ" || option == "-I" || option == "-L" ||
+					option == "-B" || option == "-D" || option == "-U" || option == "-A" ||
+					option == "-isystem" || option == "-iquote" || option == "-idirafter" ||
+					option == "-iprefix" || option == "-iwithprefix" ||
+					option == "-iwithprefixbefore" || option == "-isysroot" ||
+					option == "--sysroot" || option == "-specs" || option == "--specs" ||
+					option == "-Xpreprocessor" || option == "-Xassembler" || option == "-Xlinker" ||
+					option == "-aux-info" || option == "-dumpbase" || option == "-dumpdir" ||
+					option == "-fplugin";
+			};
+			for (std::size_t index{1U}; index < request.expanded_arguments.size(); ++index)
+			{
+				const auto& token = request.expanded_arguments[index];
+				if (token.starts_with('@'))
+					return unexpected(invalid("invocation.arguments", "response-not-expanded"));
+				if (!after_options && token == "--")
+				{
+					after_options = true;
+					continue;
+				}
+				if (!after_options && token == "-c")
+				{
+					compile_only = true;
+					continue;
+				}
+				if (!after_options &&
+					(token == "-E" || token == "-S" || token == "-M" || token == "-MM" ||
+					 token == "-fsyntax-only"))
+					return unexpected(invalid("invocation.phase", "object-compile-required"));
+				if (!after_options && (token == "-MD" || token == "-MMD"))
+				{
+					dependency_mode = true;
+					continue;
+				}
+				if (!after_options && token.starts_with("-Wp,-M"))
+					return unexpected(
+						invalid("invocation.dependency_output", "preprocessor-option-unsupported"));
+				if (!after_options && token == "-MF")
+				{
+					if (index + 1U >= request.expanded_arguments.size())
+						return unexpected(invalid("invocation.dependency_output", "missing-value"));
+					if (dependency_output)
+						return unexpected(invalid("invocation.dependency_output", "duplicate"));
+					dependency_output = request.expanded_arguments[++index];
+					continue;
+				}
+				if (!after_options && token.starts_with("-MF") && token.size() > 3U)
+				{
+					if (dependency_output)
+						return unexpected(invalid("invocation.dependency_output", "duplicate"));
+					dependency_output = token.substr(3U);
+					continue;
+				}
+				if (!after_options && token == "-x")
+				{
+					if (index + 1U >= request.expanded_arguments.size())
+						return unexpected(invalid("invocation.language", "missing-value"));
+					const auto& value = request.expanded_arguments[++index];
+					if (value == "none")
+						current_language.reset();
+					else if (value == "c" || value == "c++")
+						current_language = value;
+					else
+						return unexpected(invalid("invocation.language", "unsupported"));
+					continue;
+				}
+				if (!after_options && token.starts_with("-x") && token.size() > 2U)
+				{
+					const auto value = std::string_view{token}.substr(2U);
+					if (value == "none")
+						current_language.reset();
+					else if (value == "c" || value == "c++")
+						current_language = value;
+					else
+						return unexpected(invalid("invocation.language", "unsupported"));
+					continue;
+				}
+				if (!after_options && option_has_separate_value(token))
+				{
+					if (index + 1U >= request.expanded_arguments.size())
+						return unexpected(invalid("invocation.option", "missing-value"));
+					++index;
+					continue;
+				}
+				if (!after_options && token.starts_with('-'))
+				{
+					continue;
+				}
+				const auto language = language_for(token);
+				if (language.empty() && !current_language)
+					continue;
+				if (source)
+					return unexpected(invalid("invocation.source", "multiple"));
+				source = token;
+				source_language = current_language ? *current_language : std::string{language};
+			}
+			if (!compile_only)
+				return unexpected(invalid("invocation.phase", "compile-only-required"));
+			if (!source || !source_language)
+				return unexpected(invalid("invocation.source", "unique-c-or-cxx-source-required"));
+
+			gcc_invocation_plan output;
+			output.source_path = std::move(*source);
+			output.language = std::move(*source_language);
+			output.capture_arguments.assign(request.expanded_arguments.begin(),
+											request.expanded_arguments.end());
+			if (dependency_output)
+			{
+				if (dependency_output->empty())
+					return unexpected(invalid("invocation.dependency_output", "empty-value"));
+				output.dependency_output_path = std::move(*dependency_output);
+				if (!dependency_mode)
+				{
+					output.capture_arguments.emplace_back("-MMD");
+					output.dependency_arguments_injected = true;
+				}
+			}
+			else
+			{
+				if (request.injected_dependency_output_path.empty() ||
+					!request.injected_dependency_output_path.starts_with('/') ||
+					request.injected_dependency_output_path.contains('\0'))
+					return unexpected(
+						invalid("invocation.dependency_output", "injection-path-required"));
+				if (!dependency_mode)
+					output.capture_arguments.emplace_back("-MMD");
+				output.capture_arguments.emplace_back("-MF");
+				output.capture_arguments.emplace_back(request.injected_dependency_output_path);
+				output.dependency_output_path = request.injected_dependency_output_path;
+				output.dependency_arguments_injected = true;
+			}
+			if (output.capture_arguments.size() > limits.maximum_arguments_per_unit)
+				return unexpected(limit("invocation.capture_arguments", "count"));
+			metadata_bytes = 0U;
+			for (const auto& argument : output.capture_arguments)
+			{
+				if (argument.size() > limits.maximum_string_bytes)
+					return unexpected(limit("invocation.capture_argument", "string-bytes"));
+				if (argument.size() > limits.maximum_total_metadata_bytes - metadata_bytes)
+					return unexpected(limit("invocation.capture_arguments", "metadata-bytes"));
+				metadata_bytes += argument.size();
+			}
+			return output;
+		}
+		catch (const std::bad_alloc&)
+		{
+			return unexpected(limit("invocation.plan", "allocation"));
+		}
+		catch (const std::length_error&)
+		{
+			return unexpected(limit("invocation.plan", "allocation-length"));
+		}
+	}
+
 	result<gcc_auxiliary_capture>
 	capture_gcc_auxiliary_files(gcc_capture_file_port& files,
 								const std::span<const std::string> arguments,

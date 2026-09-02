@@ -333,6 +333,105 @@ namespace
 		require(!unsupported && unsupported.error().detail == "canonical-context");
 	}
 
+	void gcc_invocation_planner_selects_one_source_and_dependency_output()
+	{
+		const std::vector<std::string> with_dependency{"/opt/gcc-16.2.0/bin/g++",
+													   "-I",
+													   "../include",
+													   "-x",
+													   "c++",
+													   "-MMD",
+													   "-MF",
+													   "main.d",
+													   "-c",
+													   "../src/main.c"};
+		auto existing = cxxlens::sdk::detail::plan_gcc_16_2_invocation(
+			{with_dependency, "/opt/gcc-16.2.0/bin/g++", "/project/.capture/private.d"});
+		require(existing && existing->source_path == "../src/main.c" &&
+				existing->language == "c++" && existing->capture_arguments == with_dependency &&
+				existing->dependency_output_path == "main.d" &&
+				!existing->dependency_arguments_injected);
+
+		const std::vector<std::string> inject{
+			"/opt/gcc-16.2.0/bin/gcc", "-D", "VALUE=1", "-c", "src/main.c"};
+		auto injected = cxxlens::sdk::detail::plan_gcc_16_2_invocation(
+			{inject, "/opt/gcc-16.2.0/bin/gcc", "/project/.capture/private.d"});
+		require(injected && injected->source_path == "src/main.c" && injected->language == "c" &&
+				injected->dependency_arguments_injected &&
+				injected->dependency_output_path == "/project/.capture/private.d" &&
+				injected->capture_arguments ==
+					std::vector<std::string>{"/opt/gcc-16.2.0/bin/gcc",
+											 "-D",
+											 "VALUE=1",
+											 "-c",
+											 "src/main.c",
+											 "-MMD",
+											 "-MF",
+											 "/project/.capture/private.d"});
+
+		const std::vector<std::string> attached{
+			"/opt/gcc-16.2.0/bin/g++", "-MMD", "-MFmain.d", "-c", "src/main.cpp"};
+		auto attached_plan = cxxlens::sdk::detail::plan_gcc_16_2_invocation(
+			{attached, "/opt/gcc-16.2.0/bin/g++", {}});
+		require(attached_plan && attached_plan->dependency_output_path == "main.d" &&
+				attached_plan->language == "c++");
+		const std::vector<std::string> path_without_mode{
+			"/opt/gcc-16.2.0/bin/g++", "-MF", "main.d", "-c", "src/main.cpp"};
+		auto completed = cxxlens::sdk::detail::plan_gcc_16_2_invocation(
+			{path_without_mode, "/opt/gcc-16.2.0/bin/g++", {}});
+		require(completed && completed->dependency_arguments_injected &&
+				completed->capture_arguments.back() == "-MMD");
+
+		const std::vector<std::string> explicit_custom_source{"/opt/gcc-16.2.0/bin/g++",
+															  "-x",
+															  "c++",
+															  "-include",
+															  "forced.cpp",
+															  "-c",
+															  "src/main.generated"};
+		auto custom = cxxlens::sdk::detail::plan_gcc_16_2_invocation(
+			{explicit_custom_source, "/opt/gcc-16.2.0/bin/g++", "/project/.capture/private.d"});
+		require(custom && custom->source_path == "src/main.generated" && custom->language == "c++");
+	}
+
+	void gcc_invocation_planner_rejects_ambiguous_or_noncompile_input()
+	{
+		const auto plan = [](std::vector<std::string> arguments,
+							 const std::string_view injected = "/project/.capture/private.d")
+		{
+			return cxxlens::sdk::detail::plan_gcc_16_2_invocation(
+				{arguments, "/opt/gcc/bin/g++", injected});
+		};
+		auto multiple = plan({"/opt/gcc/bin/g++", "-c", "src/a.cpp", "src/b.cpp"});
+		require(!multiple && multiple.error().detail == "multiple");
+		auto no_compile = plan({"/opt/gcc/bin/g++", "src/a.cpp"});
+		require(!no_compile && no_compile.error().detail == "compile-only-required");
+		auto preprocessing = plan({"/opt/gcc/bin/g++", "-E", "-c", "src/a.cpp"});
+		require(!preprocessing && preprocessing.error().detail == "object-compile-required");
+		auto unknown_language =
+			plan({"/opt/gcc/bin/g++", "-x", "objective-c++", "-c", "src/a.cpp"});
+		require(!unknown_language && unknown_language.error().detail == "unsupported");
+		auto duplicate_dependency =
+			plan({"/opt/gcc/bin/g++", "-MF", "a.d", "-MFb.d", "-c", "src/a.cpp"});
+		require(!duplicate_dependency && duplicate_dependency.error().detail == "duplicate");
+		auto preprocessor_dependency =
+			plan({"/opt/gcc/bin/g++", "-Wp,-MMD,a.d", "-c", "src/a.cpp"});
+		require(!preprocessor_dependency &&
+				preprocessor_dependency.error().detail == "preprocessor-option-unsupported");
+		auto not_expanded = plan({"/opt/gcc/bin/g++", "@compile.rsp", "-c", "src/a.cpp"});
+		require(!not_expanded && not_expanded.error().detail == "response-not-expanded");
+		auto missing_injection = plan({"/opt/gcc/bin/g++", "-c", "src/a.cpp"}, {});
+		require(!missing_injection &&
+				missing_injection.error().detail == "injection-path-required");
+
+		auto limits = cxxlens::sdk::import_limits{};
+		limits.maximum_arguments_per_unit = 5U;
+		const std::vector<std::string> bounded_arguments{"/opt/gcc/bin/g++", "-c", "src/a.cpp"};
+		auto bounded = cxxlens::sdk::detail::plan_gcc_16_2_invocation(
+			{bounded_arguments, "/opt/gcc/bin/g++", "/project/.capture/private.d"}, limits);
+		require(!bounded && bounded.error().detail == "count");
+	}
+
 	[[nodiscard]] bool has_gap(const cxxlens::sdk::capture_bundle& bundle,
 							   const std::string_view field,
 							   const std::string_view reason)
@@ -842,6 +941,8 @@ int main() noexcept
 		gcc_16_2_dependency_output_is_exact_and_bounded();
 		gcc_environment_is_allowlisted_logical_and_deterministic();
 		gcc_environment_bounds_and_malformed_values_fail_closed();
+		gcc_invocation_planner_selects_one_source_and_dependency_output();
+		gcc_invocation_planner_rejects_ambiguous_or_noncompile_input();
 		fake_port_drives_canonical_projection_and_exact_bounds();
 		response_and_spec_files_are_captured_recursively_without_claiming_closure();
 		shell_free_invocation_owns_complete_dependency_membership();

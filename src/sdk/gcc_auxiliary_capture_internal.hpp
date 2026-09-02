@@ -38,6 +38,24 @@ namespace cxxlens::sdk::detail
 		std::size_t maximum_canonical_path_bytes{};
 	};
 
+	struct gcc_invocation_plan_request
+	{
+		std::span<const std::string> expanded_arguments;
+		std::string_view compiler_path;
+		std::string_view injected_dependency_output_path;
+	};
+
+	struct gcc_invocation_plan
+	{
+		std::string source_path;
+		std::string language;
+		std::vector<std::string> capture_arguments;
+		std::string dependency_output_path;
+		bool dependency_arguments_injected{};
+
+		[[nodiscard]] bool operator==(const gcc_invocation_plan&) const = default;
+	};
+
 	/** Parse bytes with the exact GCC 16.2 libiberty buildargv quoting rules. */
 	[[nodiscard]] result<std::vector<std::string>>
 	parse_gcc_16_2_response_arguments(std::span<const std::byte> content,
@@ -53,6 +71,10 @@ namespace cxxlens::sdk::detail
 	capture_gcc_16_2_environment_effects(gcc_capture_file_port& files,
 										 const gcc_environment_capture_request& request,
 										 import_limits limits = {});
+
+	/** Plan one ordinary GCC 16.2 compile without a shell or implicit source selection. */
+	[[nodiscard]] result<gcc_invocation_plan>
+	plan_gcc_16_2_invocation(const gcc_invocation_plan_request& request, import_limits limits = {});
 
 	/** Capture explicit response/spec/dependency files reachable from one original GCC argv. */
 	[[nodiscard]] result<gcc_auxiliary_capture>
