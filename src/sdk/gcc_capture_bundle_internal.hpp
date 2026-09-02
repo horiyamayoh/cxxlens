@@ -55,6 +55,15 @@ namespace cxxlens::sdk::detail
 		std::string canonical_working_directory;
 	};
 
+	/** One captured non-main member of a compile unit's complete source closure. */
+	struct gcc_source_closure_member_observation
+	{
+		std::string canonical_path;
+		std::vector<std::byte> content;
+		std::string encoding{"binary_or_unknown"};
+		std::string role{"header"};
+	};
+
 	/** Invocation details supplied by the capture adapter rather than reconstructed later. */
 	struct gcc_invocation_observation
 	{
@@ -67,6 +76,14 @@ namespace cxxlens::sdk::detail
 		captured_value<std::vector<build_capture_environment_effect>> environment_effects =
 			captured_value<std::vector<build_capture_environment_effect>>::unavailable(
 				"environment-effects-unobserved", "recapture-with-shell-free-wrapper");
+		/**
+		 * Non-main members of the exact dependency closure. A present value, including an empty
+		 * vector, asserts complete membership; compilation-database capture leaves it unavailable.
+		 */
+		captured_value<std::vector<gcc_source_closure_member_observation>> source_closure_members =
+			captured_value<std::vector<gcc_source_closure_member_observation>>::unavailable(
+				"dependency-output-unobserved",
+				"recapture-with-shell-free-wrapper-or-run-dependency-probe");
 	};
 
 	struct gcc_compile_commands_bundle_input

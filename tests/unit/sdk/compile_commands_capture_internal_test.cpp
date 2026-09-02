@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <ranges>
@@ -140,6 +141,12 @@ namespace
 	{
 		return {
 			cxxlens::sdk::detail::capture_observation_state::observed, std::move(value), {}, {}};
+	}
+
+	[[nodiscard]] std::vector<std::byte> bytes(const std::string_view value)
+	{
+		return {reinterpret_cast<const std::byte*>(value.data()),
+				reinterpret_cast<const std::byte*>(value.data() + value.size())};
 	}
 
 	[[nodiscard]] cxxlens::sdk::detail::gcc_compile_commands_bundle_input bundle_input()
@@ -283,6 +290,9 @@ namespace
 				 1U,
 				 std::nullopt},
 			});
+			observation.source_closure_members = cxxlens::sdk::detail::captured_value<
+				std::vector<cxxlens::sdk::detail::gcc_source_closure_member_observation>>::
+				observed({{"/work/include/shared.hpp", bytes("#pragma once\n"), "utf8", "header"}});
 			input.invocations.push_back(std::move(observation));
 		}
 		auto encoded = encode_gcc_compile_commands_bundle(*capture, input);
@@ -291,6 +301,7 @@ namespace
 		require(static_cast<bool>(value));
 		require(value->tuple[5].tuple.size() == 2U);
 		require(value->tuple[6].tuple.size() == 1U);
+		require(value->tuple[6].tuple.front().tuple[7].tuple[1].text == "complete");
 		require(value->tuple[5].tuple[0].tuple[0].text != value->tuple[5].tuple[1].tuple[0].text);
 		require(value->tuple[5].tuple[0].tuple[15].text == value->tuple[5].tuple[1].tuple[15].text);
 		for (const auto& unit : value->tuple[5].tuple)
@@ -306,6 +317,89 @@ namespace
 				first_variant ? "project://build/options-1.rsp" : "project://build/options-2.rsp";
 			require(unit.tuple[9].tuple[1].tuple.front().tuple.front().text == expected_response);
 		}
+	}
+
+	void observed_source_closure_is_complete_canonical_and_bounded()
+	{
+		constexpr std::string_view database = R"json([
+  {"directory":"/work/build","file":"../src/main.cpp",
+   "arguments":["g++","@options.rsp","-std=c++23","../src/main.cpp"]}
+])json";
+		auto capture = decode_compile_commands(database);
+		require(static_cast<bool>(capture));
+		auto input = bundle_input();
+		cxxlens::sdk::detail::gcc_invocation_observation invocation;
+		invocation.source_closure_members = cxxlens::sdk::detail::captured_value<
+			std::vector<cxxlens::sdk::detail::gcc_source_closure_member_observation>>::observed({
+			{"/work/build/options.rsp", bytes("-DVALUE=1\n"), "utf8", "generated"},
+			{"/work/include/shared.hpp", bytes("-DVALUE=1\n"), "utf8", "header"},
+		});
+		input.invocations.push_back(invocation);
+
+		auto encoded = encode_gcc_compile_commands_bundle(*capture, input);
+		require(static_cast<bool>(encoded));
+		auto decoded = cxxlens::sdk::decode_capture_bundle(*encoded);
+		require(static_cast<bool>(decoded));
+		require(!has_gap(
+			*decoded, "source_closures[0].membership_coverage", "dependency-output-unobserved"));
+		auto value = cxxlens::sdk::canonical_binary_decode(*encoded);
+		require(static_cast<bool>(value));
+		const auto& closure = value->tuple[6].tuple.front().tuple;
+		require(closure[3].integer == 3);
+		require(closure[4].integer == 2);
+		require(closure[5].integer ==
+				static_cast<std::int64_t>(input.sources.front().content.size() +
+										  bytes("-DVALUE=1\n").size()));
+		require(closure[7].tuple[0].text == "observed" && closure[7].tuple[1].text == "complete");
+		const auto& members = closure[6].tuple;
+		require(std::ranges::is_sorted(members,
+									   [](const auto& left, const auto& right)
+									   {
+										   return left.tuple.front().text <
+											   right.tuple.front().text;
+									   }));
+
+		auto permuted = input;
+		std::ranges::reverse(*permuted.invocations.front().source_closure_members.value);
+		auto permuted_encoded = encode_gcc_compile_commands_bundle(*capture, permuted);
+		require(permuted_encoded && *permuted_encoded == *encoded);
+
+		auto main_only = bundle_input();
+		cxxlens::sdk::detail::gcc_invocation_observation main_only_invocation;
+		main_only_invocation.source_closure_members = cxxlens::sdk::detail::captured_value<
+			std::vector<cxxlens::sdk::detail::gcc_source_closure_member_observation>>::observed({});
+		main_only.invocations.push_back(std::move(main_only_invocation));
+		auto main_only_encoded = encode_gcc_compile_commands_bundle(*capture, main_only);
+		require(static_cast<bool>(main_only_encoded));
+		auto main_only_value = cxxlens::sdk::canonical_binary_decode(*main_only_encoded);
+		require(main_only_value && main_only_value->tuple[6].tuple.front().tuple[3].integer == 1 &&
+				main_only_value->tuple[6].tuple.front().tuple[7].tuple[1].text == "complete");
+
+		auto duplicate = input;
+		duplicate.invocations.front().source_closure_members.value->back().canonical_path =
+			"/work/build/options.rsp";
+		auto duplicate_result = encode_gcc_compile_commands_bundle(*capture, duplicate);
+		require(!duplicate_result && duplicate_result.error().detail == "duplicate-logical-path");
+
+		auto outside = input;
+		outside.invocations.front().source_closure_members.value->front().canonical_path =
+			"/outside/options.rsp";
+		auto outside_result = encode_gcc_compile_commands_bundle(*capture, outside);
+		require(!outside_result && outside_result.error().detail == "path-outside-project-root");
+
+		auto invalid_role = input;
+		invalid_role.invocations.front().source_closure_members.value->front().role = "main";
+		auto role_result = encode_gcc_compile_commands_bundle(*capture, invalid_role);
+		require(!role_result && role_result.error().detail == "enum");
+
+		auto limits = cxxlens::sdk::import_limits{};
+		limits.maximum_source_closure_members = 2U;
+		auto member_bounded = encode_gcc_compile_commands_bundle(*capture, input, limits);
+		require(!member_bounded && member_bounded.error().detail == "count");
+		limits = {};
+		limits.maximum_source_closure_bytes = input.sources.front().content.size();
+		auto byte_bounded = encode_gcc_compile_commands_bundle(*capture, input, limits);
+		require(!byte_bounded && byte_bounded.error().detail == "byte-count");
 	}
 
 	void adapter_observations_replace_only_their_actionable_gaps()
@@ -399,6 +493,19 @@ namespace
 			encode_gcc_compile_commands_bundle(*capture, forged_toolchain);
 		require(!forged_toolchain_result &&
 				forged_toolchain_result.error().detail == "captured-value-shape");
+
+		auto forged_closure = input;
+		forged_closure.invocations.front().source_closure_members =
+			cxxlens::sdk::detail::captured_value<
+				std::vector<cxxlens::sdk::detail::gcc_source_closure_member_observation>>::
+				observed({{"/work/include/a.hpp", bytes("#pragma once\n"), "utf8", "header"}});
+		forged_closure.invocations.front().source_closure_members.state =
+			cxxlens::sdk::detail::capture_field_state::unavailable;
+		forged_closure.invocations.front().source_closure_members.reason = "not-observed";
+		forged_closure.invocations.front().source_closure_members.completion_action = "recapture";
+		auto forged_closure_result = encode_gcc_compile_commands_bundle(*capture, forged_closure);
+		require(!forged_closure_result &&
+				forged_closure_result.error().detail == "captured-value-shape");
 	}
 } // namespace
 
@@ -411,5 +518,6 @@ int main()
 	canonical_bundle_projection_is_validated_and_deterministic();
 	projection_rejects_mismatched_or_untrusted_observations();
 	duplicate_source_variants_share_one_canonical_closure();
+	observed_source_closure_is_complete_canonical_and_bounded();
 	adapter_observations_replace_only_their_actionable_gaps();
 }

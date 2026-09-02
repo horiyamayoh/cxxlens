@@ -2272,6 +2272,7 @@ endif()
 
 add_custom_target(cxxlens-ng-test-binaries)
 set(_cxxlens_ng_test_binary_candidates
+    cxxlens_cli
     cxxlens-sdk-doctor
     cxxlens-clang-worker-22
     cxxlens-clang22-materialize
@@ -2318,6 +2319,8 @@ set(_cxxlens_ng_test_binary_candidates
     cxxlens-unit-sdk-sealed-executable
     cxxlens-unit-sdk-gcc-probe-process
     cxxlens-unit-sdk-gcc-toolchain-probe
+    cxxlens-gcc-capture-cli-probe-fixture
+    cxxlens-gcc-capture-cli-consumer
     cxxlens-unit-sdk-application-analysis
     cxxlens-unit-sdk-materialization-task
     cxxlens-unit-sdk-provider-runtime

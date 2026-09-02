@@ -1,8 +1,10 @@
 #include "gcc_capture_bundle_internal.hpp"
 
 #include <algorithm>
+#include <map>
 #include <new>
 #include <ranges>
+#include <set>
 #include <stdexcept>
 #include <tuple>
 #include <utility>
@@ -101,6 +103,11 @@ namespace cxxlens::sdk::detail
 				return valid;
 			if (auto valid = validate_observation_shape(
 					observation.environment_effects, std::string{field} + ".environment_effects");
+				!valid)
+				return valid;
+			if (auto valid =
+					validate_observation_shape(observation.source_closure_members,
+											   std::string{field} + ".source_closure_members");
 				!valid)
 				return valid;
 			for (const auto* files : {&observation.response_files, &observation.config_files})
@@ -377,6 +384,18 @@ namespace cxxlens::sdk::detail
 			return "project://" + std::string{physical.substr(offset)};
 		}
 
+		[[nodiscard]] bool source_role(const std::string_view value) noexcept
+		{
+			return value == "header" || value == "generated" || value == "forced-include" ||
+				value == "macro-file";
+		}
+
+		[[nodiscard]] bool source_encoding(const std::string_view value) noexcept
+		{
+			return value == "utf8" || value == "utf16le" || value == "utf16be" ||
+				value == "locale_dependent" || value == "binary_or_unknown";
+		}
+
 		struct language_projection
 		{
 			std::string language;
@@ -642,6 +661,7 @@ namespace cxxlens::sdk::detail
 				return unexpected(std::move(physical_root.error()));
 
 			std::uint64_t source_bytes{};
+			std::uint64_t source_members{};
 			std::vector<prepared_unit> prepared;
 			prepared.reserve(capture.entries().size());
 			for (std::size_t index{}; index < capture.entries().size(); ++index)
@@ -649,6 +669,9 @@ namespace cxxlens::sdk::detail
 				const auto prefix = "compile_commands[" + std::to_string(index) + "]";
 				const auto& entry = capture.entries()[index];
 				const auto& source = input.sources[index];
+				const gcc_invocation_observation default_invocation;
+				const auto& invocation =
+					input.invocations.empty() ? default_invocation : input.invocations[index];
 				if (auto bounded = add_metadata({entry.directory, prefix + ".directory"}); !bounded)
 					return unexpected(std::move(bounded.error()));
 				if (auto bounded = add_metadata({entry.file, prefix + ".file"}); !bounded)
@@ -659,6 +682,13 @@ namespace cxxlens::sdk::detail
 				if (source.content.size() > limits.maximum_source_closure_bytes - source_bytes)
 					return unexpected(limit("sources", "byte-count"));
 				source_bytes += source.content.size();
+				const auto extra_member_count = invocation.source_closure_members.value
+					? invocation.source_closure_members.value->size()
+					: 0U;
+				if (source_members >= limits.maximum_source_closure_members ||
+					extra_member_count >= limits.maximum_source_closure_members - source_members)
+					return unexpected(limit(prefix + ".source_closure_members", "count"));
+				source_members += extra_member_count + 1U;
 				if (entry.arguments.size() > limits.maximum_arguments_per_unit)
 					return unexpected(limit(prefix + ".arguments", "count"));
 				for (const auto& argument : entry.arguments)
@@ -707,7 +737,9 @@ namespace cxxlens::sdk::detail
 				if (!source_snapshot)
 					return unexpected(std::move(source_snapshot.error()));
 
-				auto member = canonical_value::from_tuple({
+				std::vector<canonical_value> members;
+				members.reserve(extra_member_count + 1U);
+				members.push_back(canonical_value::from_tuple({
 					canonical_value::from_string(*source_file),
 					canonical_value::from_string(logical_source),
 					present(capture_observation_state::derived,
@@ -720,26 +752,121 @@ namespace cxxlens::sdk::detail
 					present(capture_observation_state::observed,
 							canonical_value::from_string(source.encoding)),
 					canonical_value::from_boolean(true),
-				});
-				auto members = canonical_value::from_tuple({std::move(member)});
-				auto encoded_members = canonical_binary(members);
+				}));
+				std::set<std::string, std::less<>> logical_member_paths{logical_source};
+				std::map<std::string, std::uint64_t, std::less<>> unique_blobs{
+					{source_digest, static_cast<std::uint64_t>(source.content.size())}};
+				std::uint64_t unique_blob_bytes{static_cast<std::uint64_t>(source.content.size())};
+				if (invocation.source_closure_members.value)
+					for (std::size_t member_index{};
+						 member_index < invocation.source_closure_members.value->size();
+						 ++member_index)
+					{
+						const auto member_prefix = prefix + ".source_closure_members[" +
+							std::to_string(member_index) + "]";
+						const auto& observed_member =
+							(*invocation.source_closure_members.value)[member_index];
+						if (!source_role(observed_member.role))
+							return unexpected(invalid(member_prefix + ".role", "enum"));
+						if (!source_encoding(observed_member.encoding))
+							return unexpected(invalid(member_prefix + ".encoding", "enum"));
+						if (auto bounded = add_metadata({observed_member.canonical_path,
+														 member_prefix + ".canonical_path"});
+							!bounded)
+							return unexpected(std::move(bounded.error()));
+						if (auto bounded = add_metadata(
+								{observed_member.encoding, member_prefix + ".encoding"});
+							!bounded)
+							return unexpected(std::move(bounded.error()));
+						if (auto bounded =
+								add_metadata({observed_member.role, member_prefix + ".role"});
+							!bounded)
+							return unexpected(std::move(bounded.error()));
+						auto physical_member = canonical_posix_path(
+							{observed_member.canonical_path, member_prefix + ".canonical_path"});
+						if (!physical_member)
+							return unexpected(std::move(physical_member.error()));
+						if (!at_or_below(*physical_member, *physical_root))
+							return unexpected(invalid(member_prefix, "path-outside-project-root"));
+						const auto logical_member =
+							logical_path_for(*physical_member, *physical_root);
+						if (!logical_member_paths.emplace(logical_member).second)
+							return unexpected(invalid(member_prefix, "duplicate-logical-path"));
+						if (observed_member.content.size() >
+							limits.maximum_source_closure_bytes - source_bytes)
+							return unexpected(limit(member_prefix + ".content", "byte-count"));
+						source_bytes += observed_member.content.size();
+						const auto member_digest = content_digest(observed_member.content);
+						const auto member_size =
+							static_cast<std::uint64_t>(observed_member.content.size());
+						if (const auto [found, inserted] =
+								unique_blobs.emplace(member_digest, member_size);
+							!inserted && found->second != member_size)
+							return unexpected(
+								invalid(member_prefix + ".content", "digest-size-conflict"));
+						else if (inserted)
+						{
+							if (member_size >
+								limits.maximum_source_closure_bytes - unique_blob_bytes)
+								return unexpected(
+									limit(prefix + ".source_closure", "unique-byte-count"));
+							unique_blob_bytes += member_size;
+						}
+						auto member_file =
+							identity("file",
+									 {canonical_value::from_string("project"),
+									  canonical_value::from_string(
+										  logical_member.substr(std::string{"project://"}.size())),
+									  canonical_value::from_string("cxxlens.logical-path.v1")});
+						if (!member_file)
+							return unexpected(std::move(member_file.error()));
+						members.push_back(canonical_value::from_tuple({
+							canonical_value::from_string(*member_file),
+							canonical_value::from_string(logical_member),
+							present(capture_observation_state::derived,
+									canonical_value::from_string(member_digest)),
+							present(capture_observation_state::observed,
+									canonical_value::from_bytes(observed_member.content)),
+							canonical_value::from_integer(static_cast<std::int64_t>(member_size)),
+							present(capture_observation_state::derived,
+									canonical_value::from_string(observed_member.role)),
+							present(capture_observation_state::observed,
+									canonical_value::from_string(observed_member.encoding)),
+							canonical_value::from_boolean(true),
+						}));
+					}
+				std::ranges::sort(members,
+								  [](const canonical_value& left, const canonical_value& right)
+								  {
+									  return left.tuple.front().text < right.tuple.front().text;
+								  });
+				auto member_values = canonical_value::from_tuple(std::move(members));
+				auto encoded_members = canonical_binary(member_values);
 				if (!encoded_members)
 					return unexpected(std::move(encoded_members.error()));
 				const auto manifest_digest = content_digest(*encoded_members);
-				std::vector<capture_gap> ignored_gaps;
-				auto membership =
-					unavailable({"dependency-output-unobserved",
-								 "recapture-with-shell-free-wrapper-or-run-dependency-probe",
-								 "membership_coverage"},
-								ignored_gaps);
-				auto closure_digest =
-					identity("application-source-closure",
-							 {canonical_value::from_string(manifest_digest),
-							  canonical_value::from_integer(1),
-							  canonical_value::from_integer(1),
-							  canonical_value::from_integer(
-								  static_cast<std::int64_t>(source.content.size())),
-							  membership});
+				const bool complete_membership =
+					invocation.source_closure_members.state == capture_field_state::observed ||
+					invocation.source_closure_members.state == capture_field_state::derived;
+				auto membership = canonical_value::from_tuple({
+					canonical_value::from_string(
+						std::string{state_name(invocation.source_closure_members.state)}),
+					complete_membership ? canonical_value::from_string("complete")
+										: canonical_value::null(),
+					canonical_value::from_string(invocation.source_closure_members.reason),
+					canonical_value::from_string(
+						invocation.source_closure_members.completion_action),
+				});
+				const auto member_count = extra_member_count + 1U;
+				if (unique_blobs.size() > limits.maximum_source_closure_blobs)
+					return unexpected(limit(prefix + ".source_closure", "blob-count"));
+				auto closure_digest = identity(
+					"application-source-closure",
+					{canonical_value::from_string(manifest_digest),
+					 canonical_value::from_integer(static_cast<std::int64_t>(member_count)),
+					 canonical_value::from_integer(static_cast<std::int64_t>(unique_blobs.size())),
+					 canonical_value::from_integer(static_cast<std::int64_t>(unique_blob_bytes)),
+					 membership});
 				if (!closure_digest)
 					return unexpected(std::move(closure_digest.error()));
 				const auto closure_id = "source-closure:" + *closure_digest;
@@ -747,10 +874,10 @@ namespace cxxlens::sdk::detail
 					canonical_value::from_string(closure_id),
 					canonical_value::from_string(*closure_digest),
 					canonical_value::from_string(manifest_digest),
-					canonical_value::from_integer(1),
-					canonical_value::from_integer(1),
-					canonical_value::from_integer(static_cast<std::int64_t>(source.content.size())),
-					std::move(members),
+					canonical_value::from_integer(static_cast<std::int64_t>(member_count)),
+					canonical_value::from_integer(static_cast<std::int64_t>(unique_blobs.size())),
+					canonical_value::from_integer(static_cast<std::int64_t>(unique_blob_bytes)),
+					std::move(member_values),
 					std::move(membership),
 				});
 
@@ -914,11 +1041,16 @@ namespace cxxlens::sdk::detail
 					.begin(),
 				closures.end());
 			for (std::size_t index{}; index < closures.size(); ++index)
-				gaps.push_back(
-					{"source_closures[" + std::to_string(index) + "].membership_coverage",
-					 "unavailable",
-					 "dependency-output-unobserved",
-					 "recapture-with-shell-free-wrapper-or-run-dependency-probe"});
+			{
+				const auto& membership = closures[index].tuple[7];
+				if (membership.tuple[1].type == canonical_value::kind::null_value)
+					gaps.push_back({
+						"source_closures[" + std::to_string(index) + "].membership_coverage",
+						membership.tuple[0].text,
+						membership.tuple[2].text,
+						membership.tuple[3].text,
+					});
+			}
 
 			std::ranges::sort(
 				gaps,
