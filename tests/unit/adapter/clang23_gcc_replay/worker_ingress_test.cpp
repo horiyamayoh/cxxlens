@@ -47,13 +47,17 @@ namespace
 									 "project://main.cpp"};
 		detail::decoded_capture_source_member source;
 		source.logical_path = "project://main.cpp";
-		source.content = bytes("#include \"answer.hpp\"\nint main() { return answer; }\n");
+		source.content = bytes("#include \"answer.hpp\"\n"
+							   "int answer_value(int value) { return value; }\n"
+							   "double answer_value(double value) { return value; }\n"
+							   "int main() { return answer_value(answer); }\n");
 		source.content_digest = content_digest(source.content);
 		source.role = "main";
 		value.source_members.push_back(std::move(source));
 		detail::decoded_capture_source_member header;
 		header.logical_path = "project://include/answer.hpp";
-		header.content = bytes("inline constexpr int answer = 0;\n");
+		header.content = bytes("inline constexpr int answer = 0;\n"
+							   "inline int header_answer() { return answer; }\n");
 		header.content_digest = content_digest(header.content);
 		header.role = "header";
 		value.source_members.push_back(std::move(header));
@@ -116,12 +120,78 @@ namespace
 		auto parsed = cxxlens::detail::clang23_gcc_replay::parse_replay_input(value);
 		require(parsed &&
 				parsed->terminal == cxxlens::detail::clang23_gcc_replay::parse_terminal::parsed &&
-				parsed->declaration_count > 0U && parsed->error_count == 0U);
+				parsed->declaration_count > 0U && parsed->error_count == 0U &&
+				parsed->observations.entities.size() == 4U &&
+				parsed->observations.declarations.size() == 4U &&
+				parsed->observations.types.size() == 4U &&
+				parsed->observations.direct_calls.size() == 1U &&
+				parsed->observations.limitations.empty() &&
+				parsed->observations.traversal_entries > 0U);
+		const auto answer_entity =
+			std::ranges::find_if(parsed->observations.entities,
+								 [](const auto& entity)
+								 {
+									 return entity.qualified_name == "answer_value" &&
+										 entity.canonical_type.contains("int (int)");
+								 });
+		const auto overload =
+			std::ranges::find_if(parsed->observations.entities,
+								 [](const auto& entity)
+								 {
+									 return entity.qualified_name == "answer_value" &&
+										 entity.canonical_type.contains("double (double)");
+								 });
+		const auto main_entity = std::ranges::find(
+			parsed->observations.entities,
+			std::string_view{"main"},
+			&cxxlens::detail::clang23_gcc_replay::observed_entity::qualified_name);
+		const auto header_entity = std::ranges::find(
+			parsed->observations.entities,
+			std::string_view{"header_answer"},
+			&cxxlens::detail::clang23_gcc_replay::observed_entity::qualified_name);
+		require(answer_entity != parsed->observations.entities.end() &&
+				overload != parsed->observations.entities.end() &&
+				answer_entity->provider_local_key != overload->provider_local_key &&
+				main_entity != parsed->observations.entities.end() &&
+				header_entity != parsed->observations.entities.end() &&
+				header_entity->source.logical_path == "project://include/answer.hpp");
+		const auto& call = parsed->observations.direct_calls.front();
+		require(call.caller_provider_local_key &&
+				*call.caller_provider_local_key == main_entity->provider_local_key &&
+				call.target_provider_local_key == answer_entity->provider_local_key &&
+				call.kind == "direct_function" &&
+				call.source.logical_path == "project://main.cpp" &&
+				call.source.begin < call.source.end);
 		auto repeated = cxxlens::detail::clang23_gcc_replay::parse_replay_input(value);
 		require(repeated && repeated->terminal == parsed->terminal &&
 				repeated->declaration_count == parsed->declaration_count &&
 				repeated->warning_count == parsed->warning_count &&
-				repeated->error_count == parsed->error_count);
+				repeated->error_count == parsed->error_count &&
+				repeated->observations == parsed->observations);
+
+		cxxlens::detail::clang23_gcc_replay::observer_limits observation_limits;
+		observation_limits.maximum_observations = 1U;
+		auto bounded =
+			cxxlens::detail::clang23_gcc_replay::parse_replay_input(value, observation_limits);
+		require(!bounded &&
+				bounded.error().code == "application-analysis.replay-observation-resource-limit" &&
+				bounded.error().detail == "observations");
+		observation_limits = {};
+		observation_limits.maximum_traversal_entries = 1U;
+		auto traversal =
+			cxxlens::detail::clang23_gcc_replay::parse_replay_input(value, observation_limits);
+		require(!traversal && traversal.error().detail == "traversal-entries");
+		observation_limits = {};
+		observation_limits.maximum_logical_bytes = 1U;
+		auto logical_bytes =
+			cxxlens::detail::clang23_gcc_replay::parse_replay_input(value, observation_limits);
+		require(!logical_bytes && logical_bytes.error().detail == "logical-bytes");
+		observation_limits = {};
+		observation_limits.maximum_traversal_depth = 0U;
+		auto invalid_limits =
+			cxxlens::detail::clang23_gcc_replay::parse_replay_input(value, observation_limits);
+		require(!invalid_limits && invalid_limits.error().field == "maximum_traversal_depth" &&
+				invalid_limits.error().detail == "outside-product-bound");
 
 		using namespace cxxlens::sdk;
 		detail::gcc_replay_input_draft invalid = value.value();

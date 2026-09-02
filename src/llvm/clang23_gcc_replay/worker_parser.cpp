@@ -12,6 +12,7 @@
 #include <vector>
 
 #include <clang/AST/ASTConsumer.h>
+#include <clang/AST/ASTContext.h>
 #include <clang/AST/DeclGroup.h>
 #include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/FileManager.h>
@@ -54,10 +55,21 @@ namespace cxxlens::detail::clang23_gcc_replay
 			return std::string{argument};
 		}
 
+		struct observation_state
+		{
+			std::optional<observation_batch> observations;
+			std::optional<sdk::error> error;
+		};
+
 		class counting_consumer final : public clang::ASTConsumer
 		{
 		  public:
-			explicit counting_consumer(std::size_t& declarations) : declarations_{declarations} {}
+			counting_consumer(std::size_t& declarations,
+							  observation_state& observations,
+							  observer_limits limits)
+				: declarations_{declarations}, observations_{observations}, limits_{limits}
+			{
+			}
 
 			bool HandleTopLevelDecl(const clang::DeclGroupRef group) override
 			{
@@ -66,24 +78,42 @@ namespace cxxlens::detail::clang23_gcc_replay
 				return true;
 			}
 
+			void HandleTranslationUnit(clang::ASTContext& context) override
+			{
+				auto observed = observe_translation_unit(context, limits_);
+				if (observed)
+					observations_.observations = std::move(*observed);
+				else
+					observations_.error = std::move(observed.error());
+			}
+
 		  private:
 			std::size_t& declarations_;
+			observation_state& observations_;
+			observer_limits limits_;
 		};
 
 		class counting_action final : public clang::ASTFrontendAction
 		{
 		  public:
-			explicit counting_action(std::size_t& declarations) : declarations_{declarations} {}
+			counting_action(std::size_t& declarations,
+							observation_state& observations,
+							observer_limits limits)
+				: declarations_{declarations}, observations_{observations}, limits_{limits}
+			{
+			}
 
 		  protected:
 			std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(clang::CompilerInstance&,
 																  llvm::StringRef) override
 			{
-				return std::make_unique<counting_consumer>(declarations_);
+				return std::make_unique<counting_consumer>(declarations_, observations_, limits_);
 			}
 
 		  private:
 			std::size_t& declarations_;
+			observation_state& observations_;
+			observer_limits limits_;
 		};
 
 		class counting_diagnostics final : public clang::DiagnosticConsumer
@@ -111,10 +141,13 @@ namespace cxxlens::detail::clang23_gcc_replay
 	} // namespace
 
 	sdk::result<parse_result>
-	parse_replay_input(const sdk::detail::validated_gcc_replay_input& input)
+	parse_replay_input(const sdk::detail::validated_gcc_replay_input& input,
+					   const observer_limits limits)
 	{
 		try
 		{
+			if (auto valid = limits.validate(); !valid)
+				return sdk::unexpected(std::move(valid.error()));
 			const auto& value = input.value();
 			const auto main = std::ranges::find(value.source_members,
 												std::string_view{"main"},
@@ -150,14 +183,24 @@ namespace cxxlens::detail::clang23_gcc_replay
 			auto file_manager =
 				llvm::makeIntrusiveRefCnt<clang::FileManager>(filesystem_options, filesystem);
 			parse_result result;
+			observation_state observations;
 			counting_diagnostics diagnostics{result.warning_count, result.error_count};
-			auto action = std::make_unique<counting_action>(result.declaration_count);
+			auto action =
+				std::make_unique<counting_action>(result.declaration_count, observations, limits);
 			clang::tooling::ToolInvocation invocation{
 				std::move(arguments), std::move(action), file_manager.get()};
 			invocation.setDiagnosticConsumer(&diagnostics);
 			const auto succeeded = invocation.run();
 			result.terminal = succeeded && result.error_count == 0U ? parse_terminal::parsed
 																	: parse_terminal::rejected;
+			if (observations.error)
+				return sdk::unexpected(std::move(*observations.error));
+			if (result.terminal == parse_terminal::parsed)
+			{
+				if (!observations.observations)
+					return sdk::unexpected(failure("translation_unit", "observation-missing"));
+				result.observations = std::move(*observations.observations);
+			}
 			return result;
 		}
 		catch (const std::bad_alloc&)

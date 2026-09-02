@@ -190,7 +190,7 @@ if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
     adapter.clang23-gcc-replay-worker-ingress
     PROPERTIES
       LABELS
-      "unit;adapter;application-analysis;clang23;gcc;replay;worker;codec;bounded;negative;fault;determinism;resource;security"
+      "unit;adapter;application-analysis;clang23;gcc;replay;worker;codec;ast;lifetime;identity;bounded;negative;fault;determinism;resource;security"
   )
 endif()
 

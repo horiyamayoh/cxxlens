@@ -8,6 +8,7 @@
 #include <cstddef>
 
 #include "sdk/gcc_replay_input_internal.hpp"
+#include "worker_observer.hpp"
 
 namespace cxxlens::detail::clang23_gcc_replay
 {
@@ -24,9 +25,11 @@ namespace cxxlens::detail::clang23_gcc_replay
 		std::size_t declaration_count{};
 		std::size_t warning_count{};
 		std::size_t error_count{};
+		observation_batch observations;
 	};
 
 	/** Parse only files bound by the canonical source closure. */
 	[[nodiscard]] sdk::result<parse_result>
-	parse_replay_input(const sdk::detail::validated_gcc_replay_input& input);
+	parse_replay_input(const sdk::detail::validated_gcc_replay_input& input,
+					   observer_limits limits = {});
 } // namespace cxxlens::detail::clang23_gcc_replay
