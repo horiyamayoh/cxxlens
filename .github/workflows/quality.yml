@@ -119,3 +119,20 @@ jobs:
             build/ci-quick/cxxlens "$(command -v g++)" \
             build/ci-quick/tests/cxxlens-gcc-capture-cli-consumer \
             --require-production-build
+
+  clang-gcc-replay-toolchain:
+    name: Exact Clang 23.1.0 GCC replay frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: ./.github/actions/setup-ci
+        with:
+          profile: none
+          python-dependencies: "false"
+      - uses: ./.github/actions/setup-clang23-gcc-replay
+      - name: Verify exact replay frontend
+        run: |
+          python3 tools/ci/bootstrap_application_analysis_toolchain.py \
+            verify-clang-gcc-replay \
+            --prefix "${CXXLENS_CLANG_GCC_REPLAY_ROOT}"

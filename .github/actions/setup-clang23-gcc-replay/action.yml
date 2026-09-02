@@ -1,0 +1,19 @@
+name: Exact Clang 23.1.0 GCC replay setup
+description: Restore, verify, and extract the official Clang used for GCC-mode replay.
+runs:
+  using: composite
+  steps:
+    - name: Restore exact Clang 23.1.0 replay archive
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: ~/.cache/cxxlens/toolchains/LLVM-23.1.0-Linux-X64.tar.xz
+        key: cxxlens-clang23-gcc-replay-archive-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/ci/application-analysis-toolchains.lock.json', 'tools/ci/bootstrap_application_analysis_toolchain.py') }}
+
+    - name: Install or verify exact Clang 23.1.0 replay frontend
+      shell: bash
+      run: |
+        python3 tools/ci/bootstrap_application_analysis_toolchain.py \
+          install-clang-gcc-replay \
+          --prefix "${RUNNER_TEMP}/cxxlens-toolchains/LLVM-23.1.0-Linux-X64" \
+          --archive-cache "${HOME}/.cache/cxxlens/toolchains/LLVM-23.1.0-Linux-X64.tar.xz"
+        echo "CXXLENS_CLANG_GCC_REPLAY_ROOT=${RUNNER_TEMP}/cxxlens-toolchains/LLVM-23.1.0-Linux-X64" >> "${GITHUB_ENV}"

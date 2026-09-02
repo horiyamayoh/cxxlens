@@ -62,11 +62,22 @@ def load_lock(path: pathlib.Path = LOCK_PATH) -> dict[str, Any]:
         raise ToolchainError("unknown toolchain lock schema")
     if value.get("document_version") != "1.0.0":
         raise ToolchainError("unknown toolchain lock document version")
-    if set(value) != {"document_version", "gcc", "runner", "schema"}:
+    if set(value) != {
+        "clang_gcc_replay",
+        "document_version",
+        "gcc",
+        "runner",
+        "schema",
+    }:
         raise ToolchainError("unknown toolchain lock field")
     runner = value.get("runner")
     gcc = value.get("gcc")
-    if not isinstance(runner, dict) or not isinstance(gcc, dict):
+    clang_gcc_replay = value.get("clang_gcc_replay")
+    if (
+        not isinstance(runner, dict)
+        or not isinstance(gcc, dict)
+        or not isinstance(clang_gcc_replay, dict)
+    ):
         raise ToolchainError("toolchain lock sections are missing")
     if runner != {
         "architecture": "X64",
@@ -145,6 +156,39 @@ def load_lock(path: pathlib.Path = LOCK_PATH) -> dict[str, Any]:
         "install-target-libstdc++-v3",
     ]:
         raise ToolchainError("GCC install target lock differs")
+    expected_clang_fields = {
+        "archive_root",
+        "asset_archive_bytes",
+        "asset_sha256",
+        "asset_url",
+        "exact_version",
+        "target_triples",
+    }
+    if set(clang_gcc_replay) != expected_clang_fields:
+        raise ToolchainError("unknown Clang GCC replay toolchain lock field")
+    if clang_gcc_replay.get("exact_version") != "23.1.0":
+        raise ToolchainError("Clang GCC replay version lock differs")
+    if clang_gcc_replay.get("archive_root") != "LLVM-23.1.0-Linux-X64":
+        raise ToolchainError("Clang GCC replay archive root differs")
+    asset_url = require_string(
+        clang_gcc_replay.get("asset_url"), "Clang GCC replay asset URL"
+    )
+    if asset_url != (
+        "https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.0/"
+        "LLVM-23.1.0-Linux-X64.tar.xz"
+    ):
+        raise ToolchainError("Clang GCC replay asset authority differs")
+    require_digest(
+        clang_gcc_replay.get("asset_sha256"),
+        64,
+        "Clang GCC replay asset SHA-256",
+    )
+    if clang_gcc_replay.get("asset_archive_bytes") != 2014511320:
+        raise ToolchainError("Clang GCC replay asset byte count differs")
+    if require_unique_strings(
+        clang_gcc_replay.get("target_triples"), "Clang GCC replay targets"
+    ) != ["x86_64-unknown-linux-gnu"]:
+        raise ToolchainError("Clang GCC replay target lock differs")
     return value
 
 
@@ -192,7 +236,7 @@ def assert_runner() -> None:
     if values.get("ID", "").strip('"') != "ubuntu" or values.get(
         "VERSION_ID", ""
     ).strip('"') != "24.04":
-        raise ToolchainError("GCC lock requires Ubuntu 24.04")
+        raise ToolchainError("application-analysis toolchain lock requires Ubuntu 24.04")
 
 
 def verify_gcc(prefix: pathlib.Path, lock: dict[str, Any]) -> None:
@@ -211,6 +255,37 @@ def verify_gcc(prefix: pathlib.Path, lock: dict[str, Any]) -> None:
     if target not in gcc["target_triples"]:
         raise ToolchainError(f"installed GCC target differs: {target}")
     with tempfile.TemporaryDirectory(prefix="cxxlens-gcc16-canary-") as temporary:
+        source = pathlib.Path(temporary) / "canary.cpp"
+        executable = pathlib.Path(temporary) / "canary"
+        source.write_text(
+            "#include <version>\n"
+            "static_assert(__cplusplus > 202002L);\n"
+            "int main() { return 0; }\n",
+            encoding="utf-8",
+        )
+        run(
+            [str(compiler), "-std=c++23", str(source), "-o", str(executable)],
+            cwd=pathlib.Path(temporary),
+        )
+        run([str(executable)], cwd=pathlib.Path(temporary))
+
+
+def verify_clang_gcc_replay(prefix: pathlib.Path, lock: dict[str, Any]) -> None:
+    compiler = prefix / "bin/clang++"
+    llvm_config = prefix / "lib/cmake/llvm/LLVMConfig.cmake"
+    clang_config = prefix / "lib/cmake/clang/ClangConfig.cmake"
+    if not compiler.is_file():
+        raise ToolchainError("installed Clang GCC replay compiler is missing")
+    if not llvm_config.is_file() or not clang_config.is_file():
+        raise ToolchainError("installed Clang GCC replay CMake packages are missing")
+    clang = lock["clang_gcc_replay"]
+    version = run([str(compiler), "-dumpversion"], cwd=prefix, capture=True)
+    target = run([str(compiler), "-dumpmachine"], cwd=prefix, capture=True)
+    if version != clang["exact_version"]:
+        raise ToolchainError(f"installed Clang GCC replay version differs: {version}")
+    if target not in clang["target_triples"]:
+        raise ToolchainError(f"installed Clang GCC replay target differs: {target}")
+    with tempfile.TemporaryDirectory(prefix="cxxlens-clang23-replay-canary-") as temporary:
         source = pathlib.Path(temporary) / "canary.cpp"
         executable = pathlib.Path(temporary) / "canary"
         source.write_text(
@@ -256,6 +331,110 @@ def download_source(destination: pathlib.Path, lock: dict[str, Any]) -> None:
     if destination.stat().st_size != gcc["source_archive_bytes"]:
         raise ToolchainError("GCC source byte count mismatch")
     verify_file(destination, "sha512", gcc["source_sha512"], "GCC source")
+
+
+def download_clang_gcc_replay(
+    destination: pathlib.Path, lock: dict[str, Any]
+) -> None:
+    clang = lock["clang_gcc_replay"]
+    request = urllib.request.Request(
+        clang["asset_url"], headers={"User-Agent": "cxxlens-toolchain-bootstrap/1"}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response, destination.open(
+            "wb"
+        ) as output:
+            declared_length = response.headers.get("Content-Length")
+            if declared_length is not None:
+                try:
+                    declared_bytes = int(declared_length)
+                except ValueError as error:
+                    raise ToolchainError(
+                        "Clang GCC replay asset declared byte count is invalid"
+                    ) from error
+                if declared_bytes != clang["asset_archive_bytes"]:
+                    raise ToolchainError(
+                        "Clang GCC replay asset declared byte count mismatch"
+                    )
+            received = 0
+            while chunk := response.read(1024 * 1024):
+                received += len(chunk)
+                if received > clang["asset_archive_bytes"]:
+                    raise ToolchainError(
+                        "Clang GCC replay asset exceeds the byte limit"
+                    )
+                output.write(chunk)
+    except (OSError, urllib.error.URLError) as error:
+        raise ToolchainError(
+            f"could not download Clang GCC replay asset: {error}"
+        ) from error
+    if destination.stat().st_size != clang["asset_archive_bytes"]:
+        raise ToolchainError("Clang GCC replay asset byte count mismatch")
+    verify_file(
+        destination,
+        "sha256",
+        clang["asset_sha256"],
+        "Clang GCC replay asset",
+    )
+
+
+def install_clang_gcc_replay(
+    prefix: pathlib.Path, archive_cache: pathlib.Path
+) -> None:
+    lock = load_lock()
+    assert_runner()
+    if not prefix.is_absolute() or not archive_cache.is_absolute():
+        raise ToolchainError("toolchain paths must be absolute")
+    if prefix.exists():
+        verify_clang_gcc_replay(prefix, lock)
+        return
+    prefix.parent.mkdir(parents=True, exist_ok=True)
+    archive_cache.parent.mkdir(parents=True, exist_ok=True)
+    clang = lock["clang_gcc_replay"]
+    if archive_cache.exists():
+        if archive_cache.stat().st_size != clang["asset_archive_bytes"]:
+            raise ToolchainError("cached Clang GCC replay asset byte count mismatch")
+        verify_file(
+            archive_cache,
+            "sha256",
+            clang["asset_sha256"],
+            "cached Clang GCC replay asset",
+        )
+    else:
+        temporary_archive = archive_cache.with_suffix(archive_cache.suffix + ".partial")
+        if temporary_archive.exists():
+            raise ToolchainError("partial Clang GCC replay download already exists")
+        try:
+            download_clang_gcc_replay(temporary_archive, lock)
+            os.replace(temporary_archive, archive_cache)
+        except Exception:
+            temporary_archive.unlink(missing_ok=True)
+            raise
+    with tempfile.TemporaryDirectory(
+        prefix="cxxlens-clang23-replay-extract-", dir=prefix.parent
+    ) as temporary:
+        extraction_root = pathlib.Path(temporary)
+        try:
+            with tarfile.open(archive_cache, mode="r|xz") as asset_archive:
+                archive_root = clang["archive_root"]
+                member_count = 0
+                for member in asset_archive:
+                    member_count += 1
+                    if pathlib.PurePosixPath(member.name).parts[:1] != (
+                        archive_root,
+                    ):
+                        raise ToolchainError("Clang GCC replay archive root mismatch")
+                    asset_archive.extract(member, extraction_root, filter="data")
+                if member_count == 0:
+                    raise ToolchainError("Clang GCC replay archive is empty")
+        except (OSError, tarfile.TarError) as error:
+            raise ToolchainError(
+                f"could not extract Clang GCC replay asset: {error}"
+            ) from error
+        extracted = extraction_root / archive_root
+        verify_clang_gcc_replay(extracted, lock)
+        extracted.rename(prefix)
+    verify_clang_gcc_replay(prefix, lock)
 
 
 def install_gcc(prefix: pathlib.Path, work_directory: pathlib.Path, jobs: int) -> None:
@@ -321,6 +500,11 @@ def parse_arguments() -> argparse.Namespace:
     install.add_argument("--prefix", type=pathlib.Path, required=True)
     install.add_argument("--work-directory", type=pathlib.Path, required=True)
     install.add_argument("--jobs", type=int, default=4)
+    verify_clang = subcommands.add_parser("verify-clang-gcc-replay")
+    verify_clang.add_argument("--prefix", type=pathlib.Path, required=True)
+    install_clang = subcommands.add_parser("install-clang-gcc-replay")
+    install_clang.add_argument("--prefix", type=pathlib.Path, required=True)
+    install_clang.add_argument("--archive-cache", type=pathlib.Path, required=True)
     return parser.parse_args()
 
 
@@ -334,6 +518,12 @@ def main() -> int:
         verify_gcc(arguments.prefix, lock)
     elif arguments.command == "install-gcc":
         install_gcc(arguments.prefix, arguments.work_directory, arguments.jobs)
+    elif arguments.command == "verify-clang-gcc-replay":
+        lock = load_lock()
+        assert_runner()
+        verify_clang_gcc_replay(arguments.prefix, lock)
+    elif arguments.command == "install-clang-gcc-replay":
+        install_clang_gcc_replay(arguments.prefix, arguments.archive_cache)
     else:
         raise ToolchainError("unknown command")
     return 0

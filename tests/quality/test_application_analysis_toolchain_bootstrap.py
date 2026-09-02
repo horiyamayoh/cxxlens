@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import pathlib
+import tarfile
 import tempfile
 import unittest
 from unittest import mock
@@ -39,6 +41,9 @@ class ApplicationAnalysisToolchainBootstrapTest(unittest.TestCase):
     def test_tracked_lock_is_accepted(self) -> None:
         admitted = self.bootstrap.load_lock()
         self.assertEqual(admitted["gcc"]["exact_version"], "16.2.0")
+        self.assertEqual(
+            admitted["clang_gcc_replay"]["exact_version"], "23.1.0"
+        )
         self.assertEqual(admitted["runner"]["label"], "ubuntu-24.04")
 
     def test_malformed_source_identity_and_build_recipe_drift_fail_closed(self) -> None:
@@ -65,6 +70,26 @@ class ApplicationAnalysisToolchainBootstrapTest(unittest.TestCase):
             ):
                 self.bootstrap.load_lock(self.write_lock(directory, unknown_field))
 
+            wrong_clang_digest = json.loads(json.dumps(self.lock))
+            wrong_clang_digest["clang_gcc_replay"]["asset_sha256"] = "0" * 63
+            with self.assertRaisesRegex(
+                self.bootstrap.ToolchainError, "asset SHA-256"
+            ):
+                self.bootstrap.load_lock(
+                    self.write_lock(directory, wrong_clang_digest)
+                )
+
+            wrong_clang_asset = json.loads(json.dumps(self.lock))
+            wrong_clang_asset["clang_gcc_replay"]["asset_url"] = (
+                "https://example.invalid/LLVM.tar.xz"
+            )
+            with self.assertRaisesRegex(
+                self.bootstrap.ToolchainError, "asset authority differs"
+            ):
+                self.bootstrap.load_lock(
+                    self.write_lock(directory, wrong_clang_asset)
+                )
+
     def test_archive_checksum_mismatch_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as raw_directory:
             archive = pathlib.Path(raw_directory) / "archive"
@@ -74,6 +99,15 @@ class ApplicationAnalysisToolchainBootstrapTest(unittest.TestCase):
             ):
                 self.bootstrap.verify_file(
                     archive, "sha512", self.lock["gcc"]["source_sha512"], "GCC source"
+                )
+            with self.assertRaisesRegex(
+                self.bootstrap.ToolchainError, "checksum mismatch"
+            ):
+                self.bootstrap.verify_file(
+                    archive,
+                    "sha256",
+                    self.lock["clang_gcc_replay"]["asset_sha256"],
+                    "Clang GCC replay asset",
                 )
 
     def test_download_declared_size_mismatch_fails_before_body_read(self) -> None:
@@ -91,6 +125,70 @@ class ApplicationAnalysisToolchainBootstrapTest(unittest.TestCase):
             ):
                 self.bootstrap.download_source(destination, lock)
         response.read.assert_not_called()
+
+    def test_clang_download_declared_size_mismatch_fails_before_body_read(self) -> None:
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.headers = {"Content-Length": "9"}
+        lock = json.loads(json.dumps(self.lock))
+        lock["clang_gcc_replay"]["asset_archive_bytes"] = 8
+        with tempfile.TemporaryDirectory() as raw_directory:
+            destination = pathlib.Path(raw_directory) / "clang.tar.xz"
+            with mock.patch.object(
+                self.bootstrap.urllib.request, "urlopen", return_value=response
+            ), self.assertRaisesRegex(
+                self.bootstrap.ToolchainError, "declared byte count mismatch"
+            ):
+                self.bootstrap.download_clang_gcc_replay(destination, lock)
+        response.read.assert_not_called()
+
+    def test_clang_archive_with_an_unexpected_root_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_directory:
+            directory = pathlib.Path(raw_directory)
+            archive = directory / "clang.tar.xz"
+            with tarfile.open(archive, mode="w:xz") as output:
+                member = tarfile.TarInfo("unexpected-root/bin/clang++")
+                payload = b"not-a-compiler"
+                member.size = len(payload)
+                output.addfile(member, io.BytesIO(payload))
+            lock = json.loads(json.dumps(self.lock))
+            lock["clang_gcc_replay"]["asset_archive_bytes"] = archive.stat().st_size
+            with mock.patch.object(
+                self.bootstrap, "load_lock", return_value=lock
+            ), mock.patch.object(self.bootstrap, "assert_runner"), mock.patch.object(
+                self.bootstrap, "verify_file"
+            ):
+                with self.assertRaisesRegex(
+                    self.bootstrap.ToolchainError, "archive root mismatch"
+                ):
+                    self.bootstrap.install_clang_gcc_replay(
+                        directory / "prefix", archive
+                    )
+
+    def test_clang_archive_traversal_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_directory:
+            directory = pathlib.Path(raw_directory)
+            archive = directory / "clang.tar.xz"
+            archive_root = self.lock["clang_gcc_replay"]["archive_root"]
+            with tarfile.open(archive, mode="w:xz") as output:
+                member = tarfile.TarInfo(f"{archive_root}/../escaped")
+                payload = b"must-not-escape"
+                member.size = len(payload)
+                output.addfile(member, io.BytesIO(payload))
+            lock = json.loads(json.dumps(self.lock))
+            lock["clang_gcc_replay"]["asset_archive_bytes"] = archive.stat().st_size
+            with mock.patch.object(
+                self.bootstrap, "load_lock", return_value=lock
+            ), mock.patch.object(self.bootstrap, "assert_runner"), mock.patch.object(
+                self.bootstrap, "verify_file"
+            ):
+                with self.assertRaisesRegex(
+                    self.bootstrap.ToolchainError, "could not extract"
+                ):
+                    self.bootstrap.install_clang_gcc_replay(
+                        directory / "prefix", archive
+                    )
+            self.assertFalse((directory / "escaped").exists())
 
 
 if __name__ == "__main__":

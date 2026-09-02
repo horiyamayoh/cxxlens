@@ -1,5 +1,15 @@
 {
   "document_version": "1.0.0",
+  "clang_gcc_replay": {
+    "archive_root": "LLVM-23.1.0-Linux-X64",
+    "asset_archive_bytes": 2014511320,
+    "asset_sha256": "18da30f77f475688a18f7704d23f9f155ae007ed9922dbed6850a9419d9fec8c",
+    "asset_url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.0/LLVM-23.1.0-Linux-X64.tar.xz",
+    "exact_version": "23.1.0",
+    "target_triples": [
+      "x86_64-unknown-linux-gnu"
+    ]
+  },
   "gcc": {
     "build_targets": [
       "all-gcc",
