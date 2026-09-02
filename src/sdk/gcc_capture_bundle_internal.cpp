@@ -39,6 +39,22 @@ namespace cxxlens::sdk::detail
 			return {};
 		}
 
+		[[nodiscard]] std::string_view state_name(const capture_field_state state) noexcept
+		{
+			switch (state)
+			{
+				case capture_field_state::observed:
+					return "observed";
+				case capture_field_state::derived:
+					return "derived";
+				case capture_field_state::redacted:
+					return "redacted";
+				case capture_field_state::unavailable:
+					return "unavailable";
+			}
+			return {};
+		}
+
 		[[nodiscard]] canonical_value captured_text(const captured_text_observation& observation,
 													const std::string_view field,
 													std::vector<capture_gap>& gaps)
@@ -85,6 +101,103 @@ namespace cxxlens::sdk::detail
 			observation.reason = description.reason;
 			observation.completion_action = description.action;
 			return captured_text(observation, description.field, gaps);
+		}
+
+		template <class T, class Encoder>
+		[[nodiscard]] canonical_value captured_sequence(const captured_value<T>& observation,
+														const std::string_view field,
+														std::vector<capture_gap>& gaps,
+														Encoder&& encode)
+		{
+			const bool present_value = observation.state == capture_field_state::observed ||
+				observation.state == capture_field_state::derived;
+			if (!present_value)
+				gaps.push_back({std::string{field},
+								std::string{state_name(observation.state)},
+								observation.reason,
+								observation.completion_action});
+			return canonical_value::from_tuple({
+				canonical_value::from_string(std::string{state_name(observation.state)}),
+				present_value && observation.value ? encode(*observation.value)
+												   : canonical_value::null(),
+				canonical_value::from_string(observation.reason),
+				canonical_value::from_string(observation.completion_action),
+			});
+		}
+
+		[[nodiscard]] canonical_value
+		captured_digest(const captured_value<std::string>& observation,
+						const std::string_view field,
+						std::vector<capture_gap>& gaps)
+		{
+			return captured_sequence(observation,
+									 field,
+									 gaps,
+									 [](const std::string& value)
+									 {
+										 return canonical_value::from_string(value);
+									 });
+		}
+
+		[[nodiscard]] canonical_value auxiliary_files(
+			const captured_value<std::vector<build_capture_auxiliary_file>>& observation,
+			const std::string_view field,
+			std::vector<capture_gap>& gaps)
+		{
+			return captured_sequence(
+				observation,
+				field,
+				gaps,
+				[&](const std::vector<build_capture_auxiliary_file>& values)
+				{
+					std::vector<canonical_value> encoded;
+					encoded.reserve(values.size());
+					for (std::size_t index{}; index < values.size(); ++index)
+					{
+						const auto item_field =
+							std::string{field} + "[" + std::to_string(index) + "]";
+						const auto& value = values[index];
+						encoded.push_back(canonical_value::from_tuple({
+							canonical_value::from_string(value.logical_path),
+							captured_digest(
+								value.content_digest, item_field + ".content_digest", gaps),
+							canonical_value::from_integer(
+								static_cast<std::int64_t>(value.size_bytes)),
+							value.parent_index ? canonical_value::from_integer(
+													 static_cast<std::int64_t>(*value.parent_index))
+											   : canonical_value::null(),
+						}));
+					}
+					return canonical_value::from_tuple(std::move(encoded));
+				});
+		}
+
+		[[nodiscard]] canonical_value environment_effects(
+			const captured_value<std::vector<build_capture_environment_effect>>& observation,
+			const std::string_view field,
+			std::vector<capture_gap>& gaps)
+		{
+			return captured_sequence(
+				observation,
+				field,
+				gaps,
+				[&](const std::vector<build_capture_environment_effect>& values)
+				{
+					std::vector<canonical_value> encoded;
+					encoded.reserve(values.size());
+					for (std::size_t index{}; index < values.size(); ++index)
+					{
+						const auto item_field =
+							std::string{field} + "[" + std::to_string(index) + "]";
+						const auto& value = values[index];
+						encoded.push_back(canonical_value::from_tuple({
+							canonical_value::from_string(value.name),
+							captured_digest(
+								value.semantic_value, item_field + ".semantic_value", gaps),
+						}));
+					}
+					return canonical_value::from_tuple(std::move(encoded));
+				});
 		}
 
 		[[nodiscard]] bool at_or_below(const std::string_view path,
@@ -350,6 +463,7 @@ namespace cxxlens::sdk::detail
 
 		struct prepared_unit
 		{
+			std::size_t input_index{};
 			std::string compile_unit_id;
 			std::string source_snapshot_id;
 			std::string source_file_id;
@@ -381,6 +495,8 @@ namespace cxxlens::sdk::detail
 		if (capture.entries().empty() || capture.entries().size() > limits.maximum_compile_units ||
 			capture.entries().size() != input.sources.size())
 			return unexpected(invalid("capture.sources", "compile-unit-count-mismatch"));
+		if (!input.invocations.empty() && input.invocations.size() != capture.entries().size())
+			return unexpected(invalid("capture.invocations", "compile-unit-count-mismatch"));
 		if (input.toolchain.exact_version != "16.2.0")
 			return unexpected(invalid("production_toolchain.exact_version", "not-pinned"));
 
@@ -584,7 +700,8 @@ namespace cxxlens::sdk::detail
 				if (!compile_unit_digest)
 					return unexpected(std::move(compile_unit_digest.error()));
 
-				prepared.push_back({"compile-unit:" + *compile_unit_digest,
+				prepared.push_back({index,
+									"compile-unit:" + *compile_unit_digest,
 									*source_snapshot,
 									*source_file,
 									logical_source,
@@ -634,6 +751,21 @@ namespace cxxlens::sdk::detail
 			{
 				const auto prefix = "compile_units[" + std::to_string(index) + "]";
 				auto& unit = prepared[index];
+				const gcc_invocation_observation default_invocation;
+				const auto& invocation = input.invocations.empty()
+					? default_invocation
+					: input.invocations[unit.input_index];
+				if ((invocation.response_files.value &&
+					 invocation.response_files.value->size() >
+						 limits.maximum_auxiliary_files_per_unit) ||
+					(invocation.config_files.value &&
+					 invocation.config_files.value->size() >
+						 limits.maximum_auxiliary_files_per_unit))
+					return unexpected(limit(prefix, "auxiliary-file-count"));
+				if (invocation.environment_effects.value &&
+					invocation.environment_effects.value->size() >
+						limits.maximum_environment_effects_per_unit)
+					return unexpected(limit(prefix, "environment-effect-count"));
 				std::vector<canonical_value> argv;
 				argv.reserve(unit.arguments.size());
 				for (const auto& argument : unit.arguments)
@@ -664,18 +796,10 @@ namespace cxxlens::sdk::detail
 					canonical_value::from_string(unit.language.language),
 					present(capture_observation_state::observed,
 							canonical_value::from_tuple(std::move(argv))),
-					unavailable({"response-files-unobserved",
-								 "recapture-with-shell-free-wrapper",
-								 prefix + ".response_files"},
-								gaps),
-					unavailable({"config-files-unobserved",
-								 "recapture-with-shell-free-wrapper",
-								 prefix + ".config_files"},
-								gaps),
-					unavailable({"environment-effects-unobserved",
-								 "recapture-with-shell-free-wrapper",
-								 prefix + ".environment_effects"},
-								gaps),
+					auxiliary_files(invocation.response_files, prefix + ".response_files", gaps),
+					auxiliary_files(invocation.config_files, prefix + ".config_files", gaps),
+					environment_effects(
+						invocation.environment_effects, prefix + ".environment_effects", gaps),
 					present(capture_observation_state::observed,
 							canonical_value::from_string(unit.captured_working_directory)),
 					std::move(language_standard),

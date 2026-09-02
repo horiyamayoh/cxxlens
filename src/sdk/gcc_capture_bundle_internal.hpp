@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "build_capture_internal.hpp"
 #include "compile_commands_capture_internal.hpp"
 
 namespace cxxlens::sdk::detail
@@ -54,12 +55,28 @@ namespace cxxlens::sdk::detail
 		std::string canonical_working_directory;
 	};
 
+	/** Invocation details supplied by the capture adapter rather than reconstructed later. */
+	struct gcc_invocation_observation
+	{
+		captured_value<std::vector<build_capture_auxiliary_file>> response_files =
+			captured_value<std::vector<build_capture_auxiliary_file>>::unavailable(
+				"response-files-unobserved", "recapture-with-shell-free-wrapper");
+		captured_value<std::vector<build_capture_auxiliary_file>> config_files =
+			captured_value<std::vector<build_capture_auxiliary_file>>::unavailable(
+				"config-files-unobserved", "recapture-with-shell-free-wrapper");
+		captured_value<std::vector<build_capture_environment_effect>> environment_effects =
+			captured_value<std::vector<build_capture_environment_effect>>::unavailable(
+				"environment-effects-unobserved", "recapture-with-shell-free-wrapper");
+	};
+
 	struct gcc_compile_commands_bundle_input
 	{
 		std::string project_id;
 		std::string physical_project_root;
 		gcc_toolchain_observation toolchain;
 		std::vector<gcc_source_observation> sources;
+		/** Empty selects the compilation-database unavailable observations for every unit. */
+		std::vector<gcc_invocation_observation> invocations;
 	};
 
 	/**

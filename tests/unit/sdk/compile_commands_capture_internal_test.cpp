@@ -272,6 +272,19 @@ namespace
 		require(static_cast<bool>(capture));
 		auto input = bundle_input();
 		input.sources.push_back(input.sources.front());
+		for (const char variant : {'1', '2'})
+		{
+			cxxlens::sdk::detail::gcc_invocation_observation observation;
+			observation.response_files = cxxlens::sdk::detail::captured_value<
+				std::vector<cxxlens::sdk::detail::build_capture_auxiliary_file>>::observed({
+				{"project://build/options-" + std::string(1U, variant) + ".rsp",
+				 cxxlens::sdk::detail::captured_value<std::string>::observed(
+					 "sha256:" + std::string(64U, variant)),
+				 1U,
+				 std::nullopt},
+			});
+			input.invocations.push_back(std::move(observation));
+		}
 		auto encoded = encode_gcc_compile_commands_bundle(*capture, input);
 		require(static_cast<bool>(encoded));
 		auto value = cxxlens::sdk::canonical_binary_decode(*encoded);
@@ -280,6 +293,85 @@ namespace
 		require(value->tuple[6].tuple.size() == 1U);
 		require(value->tuple[5].tuple[0].tuple[0].text != value->tuple[5].tuple[1].tuple[0].text);
 		require(value->tuple[5].tuple[0].tuple[15].text == value->tuple[5].tuple[1].tuple[15].text);
+		for (const auto& unit : value->tuple[5].tuple)
+		{
+			const auto& arguments = unit.tuple[8].tuple[1].tuple;
+			const auto first_variant =
+				std::ranges::any_of(arguments,
+									[](const auto& argument)
+									{
+										return argument.text == "-DVARIANT=one";
+									});
+			const auto expected_response =
+				first_variant ? "project://build/options-1.rsp" : "project://build/options-2.rsp";
+			require(unit.tuple[9].tuple[1].tuple.front().tuple.front().text == expected_response);
+		}
+	}
+
+	void adapter_observations_replace_only_their_actionable_gaps()
+	{
+		constexpr std::string_view database = R"json([
+  {"directory":"/work/build","file":"../src/main.cpp",
+   "arguments":["g++","@options.rsp","-std=c++23","../src/main.cpp"]}
+])json";
+		auto capture = decode_compile_commands(database);
+		require(static_cast<bool>(capture));
+		auto input = bundle_input();
+		cxxlens::sdk::detail::gcc_invocation_observation invocation;
+		invocation.response_files = cxxlens::sdk::detail::captured_value<
+			std::vector<cxxlens::sdk::detail::build_capture_auxiliary_file>>::observed({
+			{"project://build/options.rsp",
+			 cxxlens::sdk::detail::captured_value<std::string>::observed("sha256:" +
+																		 std::string(64U, '6')),
+			 17U,
+			 std::nullopt},
+		});
+		invocation.config_files = cxxlens::sdk::detail::captured_value<
+			std::vector<cxxlens::sdk::detail::build_capture_auxiliary_file>>::observed({});
+		invocation.environment_effects = cxxlens::sdk::detail::captured_value<
+			std::vector<cxxlens::sdk::detail::build_capture_environment_effect>>::observed({
+			{"cpath",
+			 cxxlens::sdk::detail::captured_value<std::string>::derived("sha256:" +
+																		std::string(64U, '7'))},
+			{"secret-mode",
+			 cxxlens::sdk::detail::captured_value<std::string>::redacted(
+				 "secret-semantic-effect", "supply-workspace-local-fingerprint")},
+		});
+		input.invocations.push_back(std::move(invocation));
+
+		auto encoded = encode_gcc_compile_commands_bundle(*capture, input);
+		require(static_cast<bool>(encoded));
+		auto decoded = cxxlens::sdk::decode_capture_bundle(*encoded);
+		require(static_cast<bool>(decoded));
+		require(!has_gap(*decoded, "compile_units[0].response_files", "response-files-unobserved"));
+		require(!has_gap(*decoded, "compile_units[0].config_files", "config-files-unobserved"));
+		require(!has_gap(
+			*decoded, "compile_units[0].environment_effects", "environment-effects-unobserved"));
+		require(has_gap(*decoded,
+						"compile_units[0].environment_effects[1].semantic_value",
+						"secret-semantic-effect"));
+
+		auto malformed = input;
+		malformed.invocations.front().response_files.value->front().parent_index = 0U;
+		auto rejected = encode_gcc_compile_commands_bundle(*capture, malformed);
+		require(!rejected && rejected.error().detail == "recursive-reference");
+
+		auto mismatch = input;
+		mismatch.invocations.push_back({});
+		auto mismatched = encode_gcc_compile_commands_bundle(*capture, mismatch);
+		require(!mismatched && mismatched.error().detail == "compile-unit-count-mismatch");
+
+		auto bounded = input;
+		bounded.invocations.front().response_files.value->push_back(
+			{"project://build/more.rsp",
+			 cxxlens::sdk::detail::captured_value<std::string>::observed("sha256:" +
+																		 std::string(64U, '8')),
+			 1U,
+			 std::nullopt});
+		auto limits = cxxlens::sdk::import_limits{};
+		limits.maximum_auxiliary_files_per_unit = 1U;
+		auto over_limit = encode_gcc_compile_commands_bundle(*capture, bounded, limits);
+		require(!over_limit && over_limit.error().detail == "auxiliary-file-count");
 	}
 } // namespace
 
@@ -292,4 +384,5 @@ int main()
 	canonical_bundle_projection_is_validated_and_deterministic();
 	projection_rejects_mismatched_or_untrusted_observations();
 	duplicate_source_variants_share_one_canonical_closure();
+	adapter_observations_replace_only_their_actionable_gaps();
 }
