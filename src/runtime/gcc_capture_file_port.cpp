@@ -108,11 +108,51 @@ namespace cxxlens::sdk::detail
 			{
 				(void)::unlink(dependency_.c_str());
 				(void)::unlink(staging_.c_str());
+				for (const auto& path : staged_specifications_)
+					(void)::unlink(path.c_str());
 				(void)::rmdir(workspace_.c_str());
 			}
 			[[nodiscard]] std::string_view dependency_output_path() const noexcept override
 			{
 				return dependency_;
+			}
+			[[nodiscard]] result<std::string>
+			stage_specification(const std::span<const std::byte> content,
+								const std::size_t index) override
+			{
+				try
+				{
+					auto path = workspace_ + "/spec-" + std::to_string(index) + ".spec";
+					if (path.size() > maximum_path_bytes_)
+						return unexpected(limit_error("capture.specification", "path-bytes"));
+					staged_specifications_.push_back(path);
+					descriptor output{
+						::open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600)};
+					if (output.get() < 0)
+						return unexpected(io_error("capture.specification", "create"));
+					std::size_t offset{};
+					while (offset < content.size())
+					{
+						const auto count =
+							::write(output.get(), content.data() + offset, content.size() - offset);
+						if (count < 0 && errno == EINTR)
+							continue;
+						if (count <= 0)
+							return unexpected(io_error("capture.specification", "write"));
+						offset += static_cast<std::size_t>(count);
+					}
+					if (::fsync(output.get()) != 0)
+						return unexpected(io_error("capture.specification", "fsync"));
+					return path;
+				}
+				catch (const std::bad_alloc&)
+				{
+					return unexpected(io_error("capture.specification", "allocation"));
+				}
+				catch (const std::length_error&)
+				{
+					return unexpected(io_error("capture.specification", "allocation-length"));
+				}
 			}
 			[[nodiscard]] result<std::string>
 			publish_bundle(const std::span<const std::byte> content) override
@@ -162,6 +202,7 @@ namespace cxxlens::sdk::detail
 			std::string workspace_;
 			std::string dependency_;
 			std::string staging_;
+			std::vector<std::string> staged_specifications_;
 			std::size_t maximum_path_bytes_{};
 		};
 #endif

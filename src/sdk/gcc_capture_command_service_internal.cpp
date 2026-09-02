@@ -1,11 +1,9 @@
 #include "gcc_capture_command_service_internal.hpp"
 
-#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <limits>
 #include <new>
-#include <span>
 #include <stdexcept>
 #include <string_view>
 #include <utility>
@@ -56,18 +54,6 @@ namespace cxxlens::sdk::detail
 					return "exited";
 			}
 			return "unknown";
-		}
-
-		[[nodiscard]] bool
-		requests_unstaged_specs(const std::span<const std::string> arguments) noexcept
-		{
-			return std::ranges::any_of(arguments,
-									   [](const std::string_view token)
-									   {
-										   return token == "-specs" || token == "--specs" ||
-											   token.starts_with("-specs=") ||
-											   token.starts_with("--specs=");
-									   });
 		}
 
 		[[nodiscard]] result<std::uint64_t> capture_deadline()
@@ -170,10 +156,15 @@ namespace cxxlens::sdk::detail
 															limits);
 			if (!prepared)
 				return unexpected(std::move(prepared.error()));
-			if (requests_unstaged_specs(prepared->expanded_arguments))
-				return unexpected({"application-analysis.capture-input-invalid",
-								   "invocation.config_file",
-								   "staging-required"});
+			prepared = prepare_gcc_16_2_spec_files(*files,
+												   **workspace,
+												   std::move(*prepared),
+												   *working,
+												   *root,
+												   limits.maximum_source_closure_bytes,
+												   limits);
+			if (!prepared)
+				return unexpected(std::move(prepared.error()));
 			auto plan = plan_gcc_16_2_invocation({prepared->expanded_arguments,
 												  request.compiler_path,
 												  (*workspace)->dependency_output_path()},

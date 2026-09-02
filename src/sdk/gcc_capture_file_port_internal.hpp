@@ -47,6 +47,8 @@ namespace cxxlens::sdk::detail
 		virtual ~gcc_capture_workspace() = default;
 		[[nodiscard]] virtual std::string_view dependency_output_path() const noexcept = 0;
 		[[nodiscard]] virtual result<std::string>
+		stage_specification(std::span<const std::byte> content, std::size_t index) = 0;
+		[[nodiscard]] virtual result<std::string>
 		publish_bundle(std::span<const std::byte> content) = 0;
 	};
 
@@ -111,7 +113,7 @@ namespace cxxlens::sdk::detail
 						   const gcc_invocation_capture_request& request,
 						   import_limits limits = {},
 						   const std::stop_token& cancellation = {},
-						   gcc_prepared_response_capture prepared_responses = {});
+						   gcc_prepared_auxiliary_capture prepared_auxiliary = {});
 
 	/** Linux production adapter. Unsupported hosts return structured-unavailable failures. */
 	[[nodiscard]] std::unique_ptr<gcc_capture_file_port> make_system_gcc_capture_file_port();

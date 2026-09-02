@@ -19,6 +19,7 @@ namespace cxxlens::sdk::detail
 	inline constexpr std::size_t gcc_16_2_maximum_response_expansions{1999U};
 
 	class gcc_capture_file_port;
+	class gcc_capture_workspace;
 
 	struct gcc_auxiliary_capture
 	{
@@ -27,10 +28,11 @@ namespace cxxlens::sdk::detail
 		std::uint64_t captured_bytes{};
 	};
 
-	struct gcc_prepared_response_capture
+	struct gcc_prepared_auxiliary_capture
 	{
 		std::vector<std::string> expanded_arguments;
 		std::vector<build_capture_auxiliary_file> response_files;
+		std::vector<build_capture_auxiliary_file> config_files;
 		std::vector<gcc_source_closure_member_observation> closure_members;
 		std::uint64_t captured_bytes{};
 	};
@@ -85,13 +87,23 @@ namespace cxxlens::sdk::detail
 	plan_gcc_16_2_invocation(const gcc_invocation_plan_request& request, import_limits limits = {});
 
 	/** Snapshot and recursively expand every GCC response file before compiler execution. */
-	[[nodiscard]] result<gcc_prepared_response_capture>
+	[[nodiscard]] result<gcc_prepared_auxiliary_capture>
 	prepare_gcc_16_2_response_files(gcc_capture_file_port& files,
 									std::span<const std::string> arguments,
 									std::string_view canonical_working_directory,
 									std::string_view canonical_project_root,
 									std::uint64_t maximum_capture_bytes,
 									import_limits limits = {});
+
+	/** Snapshot GCC specs and rewrite only the execution argv to sealed private copies. */
+	[[nodiscard]] result<gcc_prepared_auxiliary_capture>
+	prepare_gcc_16_2_spec_files(gcc_capture_file_port& files,
+								gcc_capture_workspace& workspace,
+								gcc_prepared_auxiliary_capture prepared,
+								std::string_view canonical_working_directory,
+								std::string_view canonical_project_root,
+								std::uint64_t maximum_capture_bytes,
+								import_limits limits = {});
 
 	/** Capture explicit response/spec/dependency files reachable from one original GCC argv. */
 	[[nodiscard]] result<gcc_auxiliary_capture>
@@ -103,5 +115,5 @@ namespace cxxlens::sdk::detail
 								std::uint64_t maximum_capture_bytes,
 								import_limits limits = {},
 								bool dependency_output_bound_to_invocation = false,
-								gcc_prepared_response_capture prepared_responses = {});
+								gcc_prepared_auxiliary_capture prepared_auxiliary = {});
 } // namespace cxxlens::sdk::detail

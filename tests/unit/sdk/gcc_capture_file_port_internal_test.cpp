@@ -21,6 +21,7 @@ namespace
 {
 	using cxxlens::sdk::detail::capture_file_snapshot;
 	using cxxlens::sdk::detail::gcc_capture_file_port;
+	using cxxlens::sdk::detail::gcc_capture_workspace;
 	using cxxlens::sdk::detail::gcc_probe_process_output;
 	using cxxlens::sdk::detail::gcc_probe_process_port;
 	using cxxlens::sdk::detail::gcc_probe_process_request;
@@ -41,6 +42,34 @@ namespace
 		return {reinterpret_cast<const std::byte*>(value.data()),
 				reinterpret_cast<const std::byte*>(value.data() + value.size())};
 	}
+
+	class fake_capture_workspace final : public gcc_capture_workspace
+	{
+	  public:
+		[[nodiscard]] std::string_view dependency_output_path() const noexcept override
+		{
+			return "/physical/project/.capture/dependencies.d";
+		}
+
+		cxxlens::sdk::result<std::string>
+		stage_specification(const std::span<const std::byte> content,
+							const std::size_t index) override
+		{
+			if (fail_staging)
+				return cxxlens::sdk::error{
+					"application-analysis.capture-io-failed", "capture.specification", "write"};
+			staged.emplace_back(content.begin(), content.end());
+			return "/physical/project/.capture/spec-" + std::to_string(index) + ".spec";
+		}
+
+		cxxlens::sdk::result<std::string> publish_bundle(const std::span<const std::byte>) override
+		{
+			return std::string{"/physical/project/capture.cxxlens"};
+		}
+
+		std::vector<std::vector<std::byte>> staged;
+		bool fail_staging{};
+	};
 
 	void gcc_16_2_response_grammar_is_exact_and_bounded()
 	{
@@ -557,6 +586,71 @@ namespace
 											 "deps.d",
 											 "-c",
 											 "../src/main.cpp"});
+		fake_capture_workspace workspace;
+		auto staged = cxxlens::sdk::detail::prepare_gcc_16_2_spec_files(
+			files,
+			workspace,
+			std::move(*prepared),
+			"/physical/project/build",
+			"/physical/project",
+			cxxlens::sdk::import_limits{}.maximum_source_closure_bytes);
+		require(staged && workspace.staged.size() == 1U && staged->config_files.size() == 1U &&
+				staged->closure_members.size() == 3U &&
+				staged->expanded_arguments[2] == "--specs=/physical/project/.capture/spec-0.spec" &&
+				workspace.staged.front() ==
+					files.files.at("/physical/project/build/custom.spec").content);
+
+		auto staged_include_files = files;
+		staged_include_files.files["/physical/project/build/custom.spec"].content =
+			bytes("%include other.spec\n");
+		auto include_response = cxxlens::sdk::detail::prepare_gcc_16_2_response_files(
+			staged_include_files,
+			original_arguments,
+			"/physical/project/build",
+			"/physical/project",
+			cxxlens::sdk::import_limits{}.maximum_source_closure_bytes);
+		auto rejected_include = cxxlens::sdk::detail::prepare_gcc_16_2_spec_files(
+			staged_include_files,
+			workspace,
+			std::move(*include_response),
+			"/physical/project/build",
+			"/physical/project",
+			cxxlens::sdk::import_limits{}.maximum_source_closure_bytes);
+		require(!rejected_include && rejected_include.error().detail == "include-staging-required");
+		auto missing_spec_files = files;
+		missing_spec_files.files.erase("/physical/project/build/custom.spec");
+		auto missing_spec_response = cxxlens::sdk::detail::prepare_gcc_16_2_response_files(
+			missing_spec_files,
+			original_arguments,
+			"/physical/project/build",
+			"/physical/project",
+			cxxlens::sdk::import_limits{}.maximum_source_closure_bytes);
+		auto rejected_missing_spec = cxxlens::sdk::detail::prepare_gcc_16_2_spec_files(
+			missing_spec_files,
+			workspace,
+			std::move(*missing_spec_response),
+			"/physical/project/build",
+			"/physical/project",
+			cxxlens::sdk::import_limits{}.maximum_source_closure_bytes);
+		require(!rejected_missing_spec &&
+				rejected_missing_spec.error().detail == "unreadable-before-execution");
+		auto staging_failure_response = cxxlens::sdk::detail::prepare_gcc_16_2_response_files(
+			files,
+			original_arguments,
+			"/physical/project/build",
+			"/physical/project",
+			cxxlens::sdk::import_limits{}.maximum_source_closure_bytes);
+		fake_capture_workspace failing_workspace;
+		failing_workspace.fail_staging = true;
+		auto rejected_staging_failure = cxxlens::sdk::detail::prepare_gcc_16_2_spec_files(
+			files,
+			failing_workspace,
+			std::move(*staging_failure_response),
+			"/physical/project/build",
+			"/physical/project",
+			cxxlens::sdk::import_limits{}.maximum_source_closure_bytes);
+		require(!rejected_staging_failure &&
+				rejected_staging_failure.error().code == "application-analysis.capture-io-failed");
 
 		auto captured = capture_with_valid_probe(files, request());
 		auto repeated = capture_with_valid_probe(files, request());

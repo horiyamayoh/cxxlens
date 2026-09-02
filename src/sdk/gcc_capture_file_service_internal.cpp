@@ -92,7 +92,7 @@ namespace cxxlens::sdk::detail
 						gcc_toolchain_observation toolchain,
 						const import_limits limits,
 						const entry_capture_options options,
-						gcc_prepared_response_capture prepared_responses = {})
+						gcc_prepared_auxiliary_capture prepared_auxiliary = {})
 		{
 			gcc_compile_commands_bundle_input input;
 			input.project_id = std::move(project_id);
@@ -145,7 +145,7 @@ namespace cxxlens::sdk::detail
 												remaining,
 												limits,
 												options.dependency_output_bound_to_invocation,
-												std::move(prepared_responses));
+												std::move(prepared_auxiliary));
 				if (!auxiliary)
 					return unexpected(std::move(auxiliary.error()));
 				if (auxiliary->captured_bytes > remaining)
@@ -243,7 +243,7 @@ namespace cxxlens::sdk::detail
 						   const gcc_invocation_capture_request& request,
 						   const import_limits limits,
 						   const std::stop_token& cancellation,
-						   gcc_prepared_response_capture prepared_responses)
+						   gcc_prepared_auxiliary_capture prepared_auxiliary)
 	{
 		if (auto valid = limits.validate(); !valid)
 			return unexpected(std::move(valid.error()));
@@ -309,7 +309,7 @@ namespace cxxlens::sdk::detail
 									.capture_arguments = request.capture_arguments,
 									.environment_effects = &request.environment_effects,
 									.dependency_output_bound_to_invocation = true},
-								   std::move(prepared_responses));
+								   std::move(prepared_auxiliary));
 		}
 		catch (const std::bad_alloc&)
 		{

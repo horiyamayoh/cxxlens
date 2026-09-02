@@ -133,6 +133,9 @@ def main() -> int:
         (root / "build" / "custom.spec").write_text(
             "%rename link old_link\n\n*link:\n%(old_link)\n", encoding="utf-8"
         )
+        (root / "build" / "included.spec").write_text(
+            "%include custom.spec\n", encoding="utf-8"
+        )
         (root / "build" / "wrapper-outer.rsp").write_text(
             "@wrapper-nested.rsp -std=gnu++23 -c ../src/main.cpp -o response.o\n",
             encoding="utf-8",
@@ -256,7 +259,9 @@ def main() -> int:
             require(failed.returncode == 23, "wrapper did not preserve compiler failure")
             require(not list(failure_directory.iterdir()), "failed compiler published a bundle")
 
-        rejected_response = subprocess.run(
+        specs_directory = root / "specs-captures"
+        specs_directory.mkdir()
+        staged_specs = subprocess.run(
             [
                 str(cli),
                 "capture",
@@ -265,7 +270,7 @@ def main() -> int:
                 "--project-root",
                 str(root),
                 "--capture-directory",
-                str(failure_directory),
+                str(specs_directory),
                 "--compiler",
                 str(compiler),
                 "--",
@@ -279,10 +284,63 @@ def main() -> int:
             check=False,
             timeout=15,
         )
+        repeated_specs = subprocess.run(
+            staged_specs.args,
+            cwd=root / "build",
+            capture_output=True,
+            check=False,
+            timeout=15,
+        )
         require(
-            rejected_response.returncode == 2
-            and b"staging-required" in rejected_response.stderr,
-            "wrapper executed an unstaged GCC specs file",
+            staged_specs.returncode == 0
+            and staged_specs.stdout == b""
+            and staged_specs.stderr == b""
+            and repeated_specs.returncode == 0
+            and repeated_specs.stdout == b""
+            and repeated_specs.stderr == b"",
+            f"wrapper did not execute a staged GCC specs file: {staged_specs.stderr!r}",
+        )
+        specs_bundles = list(specs_directory.glob("capture-*.cxxlens"))
+        require(len(specs_bundles) == 1, "staged GCC specs did not publish one bundle")
+        specs_admitted = subprocess.run(
+            [str(consumer), str(specs_bundles[0]), "--expect-wrapper"],
+            capture_output=True,
+            check=False,
+            timeout=15,
+        )
+        require(specs_admitted.returncode == 0, "SDK rejected staged GCC specs bundle")
+        require(
+            not list(specs_directory.glob(".cxxlens-capture-*")),
+            "wrapper left a staged GCC specs copy reachable",
+        )
+
+        rejected_include = subprocess.run(
+            [
+                str(cli),
+                "capture",
+                "--project-id",
+                "project:cli-capture",
+                "--project-root",
+                str(root),
+                "--capture-directory",
+                str(failure_directory),
+                "--compiler",
+                str(compiler),
+                "--",
+                str(compiler),
+                "--specs=included.spec",
+                "-c",
+                "../src/main.cpp",
+            ],
+            cwd=root / "build",
+            capture_output=True,
+            check=False,
+            timeout=15,
+        )
+        require(
+            rejected_include.returncode == 2
+            and b"include-staging-required" in rejected_include.stderr,
+            "wrapper executed an unbound GCC specs include",
         )
 
         missing_response = subprocess.run(

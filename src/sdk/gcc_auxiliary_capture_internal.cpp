@@ -231,29 +231,98 @@ namespace cxxlens::sdk::detail
 			{
 			}
 
-			[[nodiscard]] result<gcc_prepared_response_capture>
+			[[nodiscard]] result<gcc_prepared_auxiliary_capture>
 			prepare_responses(const std::span<const std::string> arguments)
 			{
 				auto expanded = expand(arguments, std::nullopt, 0U);
 				if (!expanded)
 					return unexpected(std::move(expanded.error()));
-				return gcc_prepared_response_capture{std::move(*expanded),
-													 std::move(response_files_),
-													 std::move(closure_members_),
-													 captured_bytes_};
+				return gcc_prepared_auxiliary_capture{std::move(*expanded),
+													  std::move(response_files_),
+													  {},
+													  std::move(closure_members_),
+													  captured_bytes_};
+			}
+
+			[[nodiscard]] result<gcc_prepared_auxiliary_capture>
+			prepare_specs(gcc_capture_workspace& workspace, gcc_prepared_auxiliary_capture prepared)
+			{
+				auto execution_arguments = prepared.expanded_arguments;
+				if (auto seeded = seed(execution_arguments, std::move(prepared)); !seeded)
+					return unexpected(std::move(seeded.error()));
+				for (std::size_t index{}; index < execution_arguments.size(); ++index)
+				{
+					std::string_view path;
+					enum class spelling : std::uint8_t
+					{
+						single_dash,
+						double_dash,
+						separate
+					};
+					std::optional<spelling> form;
+					if (execution_arguments[index].starts_with("-specs=") &&
+						execution_arguments[index].size() > 7U)
+					{
+						path = std::string_view{execution_arguments[index]}.substr(7U);
+						form = spelling::single_dash;
+					}
+					else if (execution_arguments[index].starts_with("--specs=") &&
+							 execution_arguments[index].size() > 8U)
+					{
+						path = std::string_view{execution_arguments[index]}.substr(8U);
+						form = spelling::double_dash;
+					}
+					else if (execution_arguments[index] == "--specs")
+					{
+						if (index + 1U >= execution_arguments.size())
+							return unexpected(
+								invalid("config_file.path", "missing-option-argument"));
+						path = execution_arguments[index + 1U];
+						form = spelling::separate;
+					}
+					else if (execution_arguments[index] == "-specs" ||
+							 execution_arguments[index] == "-specs=" ||
+							 execution_arguments[index] == "--specs=")
+						return unexpected(invalid("config_file.path", "missing-option-argument"));
+					if (!form)
+						continue;
+					auto staged = capture_spec(path, &workspace, config_files_.size());
+					if (!staged)
+						return unexpected(std::move(staged.error()));
+					if (!*staged)
+						return unexpected(invalid("config_file.path", "staging-failed"));
+					if ((**staged).empty() || !(**staged).starts_with('/') ||
+						(**staged).contains('\0'))
+						return unexpected(
+							invalid("config_file.staged_path", "absolute-path-required"));
+					if ((**staged).size() > limits_.maximum_string_bytes)
+						return unexpected(limit("config_file.staged_path", "string-bytes"));
+					if (*form == spelling::single_dash)
+						execution_arguments[index] = "-specs=" + **staged;
+					else if (*form == spelling::double_dash)
+						execution_arguments[index] = "--specs=" + **staged;
+					else
+						execution_arguments[++index] = std::move(**staged);
+				}
+				return gcc_prepared_auxiliary_capture{std::move(execution_arguments),
+													  std::move(response_files_),
+													  std::move(config_files_),
+													  std::move(closure_members_),
+													  captured_bytes_};
 			}
 
 			[[nodiscard]] result<gcc_auxiliary_capture>
 			capture(const std::span<const std::string> arguments,
-					gcc_prepared_response_capture prepared_responses = {})
+					gcc_prepared_auxiliary_capture prepared_auxiliary = {})
 			{
-				if (auto seeded = seed(arguments, std::move(prepared_responses)); !seeded)
+				if (auto seeded = seed(arguments, std::move(prepared_auxiliary)); !seeded)
 					return unexpected(std::move(seeded.error()));
 				auto expanded = expand(arguments, std::nullopt, 0U);
 				if (!expanded)
 					return unexpected(std::move(expanded.error()));
-				if (auto captured = capture_specs(*expanded); !captured)
-					return unexpected(std::move(captured.error()));
+				if (!specs_prepared_)
+					if (auto captured = capture_specs(*expanded); !captured)
+						return unexpected(std::move(captured.error()));
 				if (auto captured = capture_dependency_output(*expanded); !captured)
 					return unexpected(std::move(captured.error()));
 
@@ -280,11 +349,11 @@ namespace cxxlens::sdk::detail
 
 		  private:
 			[[nodiscard]] result<void> seed(const std::span<const std::string> arguments,
-											gcc_prepared_response_capture prepared)
+											gcc_prepared_auxiliary_capture prepared)
 			{
 				const bool has_prepared_capture = !prepared.expanded_arguments.empty() ||
-					!prepared.response_files.empty() || !prepared.closure_members.empty() ||
-					prepared.captured_bytes != 0U;
+					!prepared.response_files.empty() || !prepared.config_files.empty() ||
+					!prepared.closure_members.empty() || prepared.captured_bytes != 0U;
 				if (has_prepared_capture &&
 					!std::ranges::equal(arguments, prepared.expanded_arguments))
 					return unexpected(invalid("response_files", "execution-binding-mismatch"));
@@ -294,6 +363,9 @@ namespace cxxlens::sdk::detail
 				captured_bytes_ = prepared.captured_bytes;
 				response_files_ = std::move(prepared.response_files);
 				saw_response_ = !response_files_.empty();
+				config_files_ = std::move(prepared.config_files);
+				saw_specs_ = !config_files_.empty();
+				specs_prepared_ = saw_specs_;
 				closure_members_ = std::move(prepared.closure_members);
 				for (const auto& member : closure_members_)
 					closure_member_paths_.emplace(
@@ -452,12 +524,15 @@ namespace cxxlens::sdk::detail
 					saw_specs_ = true;
 					auto captured = capture_spec(path);
 					if (!captured)
-						return captured;
+						return unexpected(std::move(captured.error()));
 				}
 				return {};
 			}
 
-			[[nodiscard]] result<void> capture_spec(const std::string_view value)
+			[[nodiscard]] result<std::optional<std::string>>
+			capture_spec(const std::string_view value,
+						 gcc_capture_workspace* workspace = nullptr,
+						 const std::size_t staging_index = 0U)
 			{
 				auto path = resolve_path(
 					value, {.directory = working_directory_, .field = "config_file.path"});
@@ -465,8 +540,19 @@ namespace cxxlens::sdk::detail
 					return unexpected(std::move(path.error()));
 				if (!at_or_below(*path, project_root_))
 					return unexpected(invalid("config_file.path", "path-outside-project-root"));
+				const auto requested_path = *path;
 				if (captured_spec_paths_.contains(*path))
-					return {};
+				{
+					if (workspace != nullptr)
+					{
+						const auto existing = staged_spec_paths_.find(*path);
+						if (existing == staged_spec_paths_.end())
+							return unexpected(
+								invalid("config_file.path", "staging-binding-missing"));
+						return std::optional<std::string>{existing->second};
+					}
+					return std::optional<std::string>{};
+				}
 				if (config_files_.size() >= limits_.maximum_auxiliary_files_per_unit)
 					return unexpected(limit("config_files", "count"));
 				auto snapshot = files_.read_regular_file(
@@ -475,6 +561,9 @@ namespace cxxlens::sdk::detail
 				{
 					if (snapshot.error().code != capture_file_unavailable_code)
 						return unexpected(std::move(snapshot.error()));
+					if (workspace != nullptr)
+						return unexpected(
+							invalid("config_file.path", "unreadable-before-execution"));
 					config_files_.push_back(
 						{logical_path_for(*path, project_root_),
 						 captured_value<std::string>::unavailable(
@@ -482,10 +571,24 @@ namespace cxxlens::sdk::detail
 						 0U,
 						 std::nullopt});
 					captured_spec_paths_.emplace(*path);
-					return {};
+					return std::optional<std::string>{};
 				}
 				if (!at_or_below(snapshot->canonical_path, project_root_))
 					return unexpected(invalid("config_file.path", "path-outside-project-root"));
+				if (captured_spec_paths_.contains(snapshot->canonical_path))
+				{
+					captured_spec_paths_.emplace(requested_path);
+					if (workspace != nullptr)
+					{
+						const auto existing = staged_spec_paths_.find(snapshot->canonical_path);
+						if (existing == staged_spec_paths_.end())
+							return unexpected(
+								invalid("config_file.path", "staging-binding-missing"));
+						staged_spec_paths_.emplace(requested_path, existing->second);
+						return std::optional<std::string>{existing->second};
+					}
+					return std::optional<std::string>{};
+				}
 				if (snapshot->content.size() > remaining_bytes_)
 					return unexpected(limit("config_file.content", "byte-count"));
 				remaining_bytes_ -= static_cast<std::uint64_t>(snapshot->content.size());
@@ -497,7 +600,23 @@ namespace cxxlens::sdk::detail
 										 static_cast<std::uint64_t>(snapshot->content.size()),
 										 std::nullopt});
 				if (has_spec_include(snapshot->content))
+				{
+					if (workspace != nullptr)
+						return unexpected(
+							invalid("config_file.content", "include-staging-required"));
 					spec_include_unresolved_ = true;
+				}
+				std::optional<std::string> staged;
+				if (workspace != nullptr)
+				{
+					auto staged_path =
+						workspace->stage_specification(snapshot->content, staging_index);
+					if (!staged_path)
+						return unexpected(std::move(staged_path.error()));
+					staged = std::move(*staged_path);
+					staged_spec_paths_.emplace(snapshot->canonical_path, *staged);
+					staged_spec_paths_.emplace(requested_path, *staged);
+				}
 				const auto encoding = source_encoding(snapshot->content);
 				if (closure_member_paths_.emplace(logical).second)
 					closure_members_.push_back({snapshot->canonical_path,
@@ -505,7 +624,8 @@ namespace cxxlens::sdk::detail
 												encoding,
 												"generated"});
 				captured_spec_paths_.emplace(snapshot->canonical_path);
-				return {};
+				captured_spec_paths_.emplace(requested_path);
+				return staged;
 			}
 
 			[[nodiscard]] result<void>
@@ -639,6 +759,7 @@ namespace cxxlens::sdk::detail
 			import_limits limits_;
 			bool dependency_output_bound_to_invocation_{};
 			bool strict_response_files_{};
+			bool specs_prepared_{};
 			std::size_t response_expansions_{};
 			std::uint64_t captured_bytes_{};
 			bool saw_response_{};
@@ -648,6 +769,7 @@ namespace cxxlens::sdk::detail
 			captured_value<std::string> dependency_membership_;
 			std::vector<build_capture_auxiliary_file> response_files_;
 			std::vector<build_capture_auxiliary_file> config_files_;
+			std::map<std::string, std::string, std::less<>> staged_spec_paths_;
 			std::vector<gcc_source_closure_member_observation> closure_members_;
 			std::map<std::string, cached_response, std::less<>> response_cache_;
 			std::set<std::string, std::less<>> unavailable_response_paths_;
@@ -1213,7 +1335,7 @@ namespace cxxlens::sdk::detail
 		}
 	}
 
-	result<gcc_prepared_response_capture>
+	result<gcc_prepared_auxiliary_capture>
 	prepare_gcc_16_2_response_files(gcc_capture_file_port& files,
 									const std::span<const std::string> arguments,
 									const std::string_view canonical_working_directory,
@@ -1248,6 +1370,42 @@ namespace cxxlens::sdk::detail
 		}
 	}
 
+	result<gcc_prepared_auxiliary_capture>
+	prepare_gcc_16_2_spec_files(gcc_capture_file_port& files,
+								gcc_capture_workspace& workspace,
+								gcc_prepared_auxiliary_capture prepared,
+								const std::string_view canonical_working_directory,
+								const std::string_view canonical_project_root,
+								const std::uint64_t maximum_capture_bytes,
+								const import_limits limits)
+	{
+		if (auto valid = limits.validate(); !valid)
+			return unexpected(std::move(valid.error()));
+		try
+		{
+			if (!at_or_below(canonical_working_directory, canonical_project_root))
+				return unexpected(
+					invalid("capture.working_directory", "path-outside-project-root"));
+			return auxiliary_collector{files,
+									   {.working_directory = canonical_working_directory,
+										.project_root = canonical_project_root,
+										.main_source = {}},
+									   maximum_capture_bytes,
+									   limits,
+									   false,
+									   true}
+				.prepare_specs(workspace, std::move(prepared));
+		}
+		catch (const std::bad_alloc&)
+		{
+			return unexpected(limit("config_file", "allocation"));
+		}
+		catch (const std::length_error&)
+		{
+			return unexpected(limit("config_file", "allocation-length"));
+		}
+	}
+
 	result<gcc_auxiliary_capture>
 	capture_gcc_auxiliary_files(gcc_capture_file_port& files,
 								const std::span<const std::string> arguments,
@@ -1257,7 +1415,7 @@ namespace cxxlens::sdk::detail
 								const std::uint64_t maximum_capture_bytes,
 								const import_limits limits,
 								const bool dependency_output_bound_to_invocation,
-								gcc_prepared_response_capture prepared_responses)
+								gcc_prepared_auxiliary_capture prepared_auxiliary)
 	{
 		if (auto valid = limits.validate(); !valid)
 			return unexpected(std::move(valid.error()));
@@ -1275,7 +1433,7 @@ namespace cxxlens::sdk::detail
 									   maximum_capture_bytes,
 									   limits,
 									   dependency_output_bound_to_invocation}
-				.capture(arguments, std::move(prepared_responses));
+				.capture(arguments, std::move(prepared_auxiliary));
 		}
 		catch (const std::bad_alloc&)
 		{
