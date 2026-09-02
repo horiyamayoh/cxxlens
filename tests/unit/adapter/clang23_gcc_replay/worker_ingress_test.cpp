@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "llvm/clang23_gcc_replay/source_authority_binder.hpp"
+#include "llvm/clang23_gcc_replay/worker_observation_codec.hpp"
 #include "llvm/clang23_gcc_replay/worker_parser.hpp"
 #include "sdk/source_identity_internal.hpp"
 
@@ -100,14 +101,70 @@ namespace
 		return output;
 	}
 
-	void valid_input_emits_only_bound_digest()
+	[[nodiscard]] std::vector<std::byte>
+	execute_bytes(const cxxlens::sdk::detail::validated_gcc_replay_input& value)
 	{
-		auto value = input();
 		std::istringstream source{string(value.bytes())};
 		std::ostringstream output;
-		auto result = cxxlens::detail::clang23_gcc_replay::validate_worker_ingress(source, output);
+		auto result = cxxlens::detail::clang23_gcc_replay::execute_worker_ingress(source, output);
 		require(result);
-		require(output.str() == std::string{value.input_digest()} + "\n");
+		return bytes(output.str());
+	}
+
+	[[nodiscard]] cxxlens::detail::clang23_gcc_replay::worker_observation_output
+	execute(const cxxlens::sdk::detail::validated_gcc_replay_input& value)
+	{
+		auto decoded =
+			cxxlens::detail::clang23_gcc_replay::decode_worker_observations(execute_bytes(value));
+		require(decoded);
+		return std::move(*decoded);
+	}
+
+	void valid_input_emits_bound_detached_observations()
+	{
+		auto value = input();
+		auto output = execute(value);
+		require(output.replay_input_digest == value.input_digest() && output.error_count == 0U &&
+				output.declaration_count > 0U && output.observations.entities.size() == 4U &&
+				output.observations.declarations.size() == 4U &&
+				output.observations.types.size() == 4U &&
+				output.observations.direct_calls.size() == 1U);
+		auto repeated = execute(value);
+		require(repeated == output);
+		require(execute_bytes(value) == execute_bytes(value));
+	}
+
+	void worker_output_codec_is_bounded_and_strict()
+	{
+		using namespace cxxlens::detail::clang23_gcc_replay;
+		auto value = input();
+		auto encoded = execute_bytes(value);
+		auto truncated = encoded;
+		truncated.pop_back();
+		require(!decode_worker_observations(truncated));
+		auto trailing = encoded;
+		trailing.push_back(std::byte{});
+		require(!decode_worker_observations(trailing));
+		auto wrong_root = encoded;
+		wrong_root.front() = std::byte{0x80};
+		require(!decode_worker_observations(wrong_root));
+
+		worker_observation_codec_limits limits;
+		limits.maximum_bytes = encoded.size() - 1U;
+		auto bounded = decode_worker_observations(encoded, limits);
+		require(!bounded && bounded.error().field == "binary");
+		limits = {};
+		limits.maximum_observations = 1U;
+		auto bounded_items = decode_worker_observations(encoded, limits);
+		require(!bounded_items && bounded_items.error().field == "binary");
+
+		auto parsed = parse_replay_input(value);
+		require(parsed);
+		auto bounded_output = encode_worker_observations(value.input_digest(), *parsed, limits);
+		require(!bounded_output && bounded_output.error().field == "observations");
+		parsed->terminal = parse_terminal::rejected;
+		auto rejected = encode_worker_observations(value.input_digest(), *parsed);
+		require(!rejected && rejected.error().field == "parse_terminal");
 	}
 
 	void malformed_and_oversized_input_fail_without_output()
@@ -117,7 +174,7 @@ namespace
 		malformed.pop_back();
 		std::istringstream truncated{malformed};
 		std::ostringstream truncated_output;
-		auto rejected = cxxlens::detail::clang23_gcc_replay::validate_worker_ingress(
+		auto rejected = cxxlens::detail::clang23_gcc_replay::execute_worker_ingress(
 			truncated, truncated_output);
 		require(!rejected && truncated_output.str().empty());
 
@@ -125,7 +182,7 @@ namespace
 		limits.maximum_bundle_bytes = value.bytes().size() - 1U;
 		std::istringstream large{string(value.bytes())};
 		std::ostringstream large_output;
-		auto bounded = cxxlens::detail::clang23_gcc_replay::validate_worker_ingress(
+		auto bounded = cxxlens::detail::clang23_gcc_replay::execute_worker_ingress(
 			large, large_output, limits);
 		require(!bounded && bounded.error().code == "application-analysis.import-limit-exceeded" &&
 				bounded.error().detail == "input-bytes");
@@ -225,7 +282,7 @@ namespace
 				rejected->error_count > 0U);
 		std::istringstream syntax_stream{string(syntax_input->bytes())};
 		std::ostringstream syntax_output;
-		auto worker_rejected = cxxlens::detail::clang23_gcc_replay::validate_worker_ingress(
+		auto worker_rejected = cxxlens::detail::clang23_gcc_replay::execute_worker_ingress(
 			syntax_stream, syntax_output);
 		require(!worker_rejected && worker_rejected.error().field == "translation_unit" &&
 				syntax_output.str().empty());
@@ -247,9 +304,8 @@ namespace
 	{
 		using namespace cxxlens::detail::clang23_gcc_replay;
 		auto value = input();
-		auto parsed = parse_replay_input(value);
-		require(parsed && parsed->terminal == parse_terminal::parsed);
-		auto bound = bind_observation_sources(value, parsed->observations);
+		auto detached = execute(value);
+		auto bound = bind_observation_sources(value, detached.observations);
 		require(bound && bound->replay_input_digest == value.input_digest() &&
 				!bound->spans.empty());
 		for (const auto& span : bound->spans)
@@ -260,15 +316,15 @@ namespace
 					span.source_snapshot_id.starts_with("source-snapshot:") &&
 					span.file_id.starts_with("file:"));
 		}
-		auto repeated = bind_observation_sources(value, parsed->observations);
+		auto repeated = bind_observation_sources(value, detached.observations);
 		require(repeated && *repeated == *bound);
 
-		auto unknown = parsed->observations;
+		auto unknown = detached.observations;
 		unknown.entities.front().source.logical_path = "project://missing.cpp";
 		auto missing = bind_observation_sources(value, unknown);
 		require(!missing && missing.error().detail == "not-in-source-closure");
 
-		auto outside = parsed->observations;
+		auto outside = detached.observations;
 		outside.declarations.front().source.end = 1000000U;
 		auto out_of_bounds = bind_observation_sources(value, outside);
 		require(!out_of_bounds && out_of_bounds.error().detail == "range-out-of-bounds");
@@ -278,14 +334,14 @@ namespace
 		unavailable.source_members.front().source_snapshot_id.reset();
 		auto unbound_input = detail::validate_gcc_replay_input(std::move(unavailable));
 		require(unbound_input);
-		auto unbound = bind_observation_sources(*unbound_input, parsed->observations);
+		auto unbound = bind_observation_sources(*unbound_input, detached.observations);
 		require(!unbound && unbound.error().detail == "capture-identity-unavailable");
 
 		detail::gcc_replay_input_draft forged = value.value();
 		forged.source_members.front().file_id = "file:sha256:" + std::string(64U, 'a');
 		auto forged_input = detail::validate_gcc_replay_input(std::move(forged));
 		require(forged_input);
-		auto mismatch = bind_observation_sources(*forged_input, parsed->observations);
+		auto mismatch = bind_observation_sources(*forged_input, detached.observations);
 		require(!mismatch && mismatch.error().detail == "file-identity-mismatch");
 
 		detail::gcc_replay_input_draft stale = value.value();
@@ -293,14 +349,15 @@ namespace
 			"source-snapshot:sha256:" + std::string(64U, 'b');
 		auto stale_input = detail::validate_gcc_replay_input(std::move(stale));
 		require(stale_input);
-		auto stale_snapshot = bind_observation_sources(*stale_input, parsed->observations);
+		auto stale_snapshot = bind_observation_sources(*stale_input, detached.observations);
 		require(!stale_snapshot && stale_snapshot.error().detail == "snapshot-identity-mismatch");
 	}
 } // namespace
 
 int main()
 {
-	valid_input_emits_only_bound_digest();
+	valid_input_emits_bound_detached_observations();
+	worker_output_codec_is_bounded_and_strict();
 	malformed_and_oversized_input_fail_without_output();
 	parser_uses_only_the_bound_source_closure();
 	observations_bind_only_to_capture_source_authority();

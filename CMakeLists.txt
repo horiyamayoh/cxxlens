@@ -404,12 +404,13 @@ if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
     cxxlens_clang23_gcc_replay_ingress STATIC
     src/llvm/clang23_gcc_replay/source_authority_binder.cpp
     src/llvm/clang23_gcc_replay/worker_ingress.cpp
+    src/llvm/clang23_gcc_replay/worker_observation_codec.cpp
     src/llvm/clang23_gcc_replay/worker_observer.cpp
     src/llvm/clang23_gcc_replay/worker_parser.cpp)
   target_link_libraries(
     cxxlens_clang23_gcc_replay_ingress
     PUBLIC cxxlens::sdk
-    PRIVATE clang-cpp)
+    PRIVATE clang-cpp cxxlens_protocol_v2)
   target_include_directories(cxxlens_clang23_gcc_replay_ingress
                              PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_include_directories(cxxlens_clang23_gcc_replay_ingress SYSTEM
@@ -917,6 +918,10 @@ cxxlens_assert_direct_project_dependencies(
   cxxlens_provider_protocol_v2_internal)
 cxxlens_assert_direct_project_dependencies(cxxlens_clang22_provider_sdk
                                            cxxlens_sdk)
+if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
+  cxxlens_assert_direct_project_dependencies(cxxlens_clang23_gcc_replay_ingress
+                                             cxxlens_sdk cxxlens_protocol_v2)
+endif()
 
 set(CXXLENS_COMPILED_TARGETS
     cxxlens_base
@@ -935,6 +940,9 @@ set(CXXLENS_COMPILED_TARGETS
 if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   list(APPEND CXXLENS_COMPILED_TARGETS cxxlens_clang22_materialization_codecs
        cxxlens_clang22_worker_core cxxlens_clang22_materializer_ingress)
+endif()
+if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
+  list(APPEND CXXLENS_COMPILED_TARGETS cxxlens_clang23_gcc_replay_ingress)
 endif()
 
 if(CXXLENS_ENABLE_CLANG_TIDY)

@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "worker_observation_codec.hpp"
 #include "worker_parser.hpp"
 
 namespace cxxlens::detail::clang23_gcc_replay
@@ -31,9 +32,9 @@ namespace cxxlens::detail::clang23_gcc_replay
 		}
 	} // namespace
 
-	sdk::result<void> validate_worker_ingress(std::istream& input,
-											  std::ostream& output,
-											  const sdk::import_limits limits)
+	sdk::result<void> execute_worker_ingress(std::istream& input,
+											 std::ostream& output,
+											 const sdk::import_limits limits)
 	{
 		try
 		{
@@ -69,7 +70,11 @@ namespace cxxlens::detail::clang23_gcc_replay
 				return sdk::unexpected(std::move(parsed.error()));
 			if (parsed->terminal != parse_terminal::parsed)
 				return sdk::unexpected(failure("translation_unit", "syntax-rejected"));
-			output << decoded->input_digest() << '\n';
+			auto observation_output = encode_worker_observations(decoded->input_digest(), *parsed);
+			if (!observation_output)
+				return sdk::unexpected(std::move(observation_output.error()));
+			output.write(reinterpret_cast<const char*>(observation_output->data()),
+						 static_cast<std::streamsize>(observation_output->size()));
 			if (!output)
 				return sdk::unexpected(failure("stdout", "write-failed"));
 			return {};

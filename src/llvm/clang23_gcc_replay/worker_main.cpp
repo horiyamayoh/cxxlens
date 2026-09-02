@@ -6,7 +6,7 @@
 int main()
 {
 	auto validated =
-		cxxlens::detail::clang23_gcc_replay::validate_worker_ingress(std::cin, std::cout);
+		cxxlens::detail::clang23_gcc_replay::execute_worker_ingress(std::cin, std::cout);
 	if (!validated)
 	{
 		std::cerr << validated.error().code << ':' << validated.error().field << '\n';
