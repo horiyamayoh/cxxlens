@@ -55,6 +55,75 @@ namespace cxxlens::sdk::detail
 			return {};
 		}
 
+		[[nodiscard]] result<void>
+		validate_observation_shape(const captured_text_observation& observation,
+								   const std::string_view field)
+		{
+			const bool present_value = observation.state == capture_observation_state::observed ||
+				observation.state == capture_observation_state::derived;
+			if ((present_value &&
+				 (!observation.value || !observation.reason.empty() ||
+				  !observation.completion_action.empty())) ||
+				(!present_value &&
+				 (observation.value || observation.reason.empty() ||
+				  observation.completion_action.empty())))
+				return unexpected(invalid(std::string{field}, "captured-value-shape"));
+			return {};
+		}
+
+		template <class T>
+		[[nodiscard]] result<void> validate_observation_shape(const captured_value<T>& observation,
+															  const std::string_view field)
+		{
+			const bool present_value = observation.state == capture_field_state::observed ||
+				observation.state == capture_field_state::derived;
+			if ((present_value &&
+				 (!observation.value || !observation.reason.empty() ||
+				  !observation.completion_action.empty())) ||
+				(!present_value &&
+				 (observation.value || observation.reason.empty() ||
+				  observation.completion_action.empty())))
+				return unexpected(invalid(std::string{field}, "captured-value-shape"));
+			return {};
+		}
+
+		[[nodiscard]] result<void>
+		validate_invocation_observation(const gcc_invocation_observation& observation,
+										const std::string_view field)
+		{
+			if (auto valid = validate_observation_shape(observation.response_files,
+														std::string{field} + ".response_files");
+				!valid)
+				return valid;
+			if (auto valid = validate_observation_shape(observation.config_files,
+														std::string{field} + ".config_files");
+				!valid)
+				return valid;
+			if (auto valid = validate_observation_shape(
+					observation.environment_effects, std::string{field} + ".environment_effects");
+				!valid)
+				return valid;
+			for (const auto* files : {&observation.response_files, &observation.config_files})
+				if (files->value)
+					for (std::size_t index{}; index < files->value->size(); ++index)
+						if (auto valid = validate_observation_shape(
+								(*files->value)[index].content_digest,
+								std::string{field} + ".auxiliary_files[" + std::to_string(index) +
+									"].content_digest");
+							!valid)
+							return valid;
+			if (observation.environment_effects.value)
+				for (std::size_t index{}; index < observation.environment_effects.value->size();
+					 ++index)
+					if (auto valid = validate_observation_shape(
+							(*observation.environment_effects.value)[index].semantic_value,
+							std::string{field} + ".environment_effects[" + std::to_string(index) +
+								"].semantic_value");
+						!valid)
+						return valid;
+			return {};
+		}
+
 		[[nodiscard]] canonical_value captured_text(const captured_text_observation& observation,
 													const std::string_view field,
 													std::vector<capture_gap>& gaps)
@@ -499,6 +568,29 @@ namespace cxxlens::sdk::detail
 			return unexpected(invalid("capture.invocations", "compile-unit-count-mismatch"));
 		if (input.toolchain.exact_version != "16.2.0")
 			return unexpected(invalid("production_toolchain.exact_version", "not-pinned"));
+		for (const auto& [observation, field] : {
+				 std::pair{&input.toolchain.canonical_binary_path,
+						   std::string_view{"production_toolchain.canonical_binary_path"}},
+				 std::pair{&input.toolchain.binary_digest,
+						   std::string_view{"production_toolchain.binary_digest"}},
+				 std::pair{&input.toolchain.sysroot,
+						   std::string_view{"production_toolchain.sysroot"}},
+				 std::pair{&input.toolchain.abi_digest,
+						   std::string_view{"production_toolchain.abi_digest"}},
+				 std::pair{&input.toolchain.builtin_headers_digest,
+						   std::string_view{"production_toolchain.builtin_headers_digest"}},
+				 std::pair{&input.toolchain.builtin_macros_digest,
+						   std::string_view{"production_toolchain.builtin_macros_digest"}},
+				 std::pair{&input.toolchain.include_search_digest,
+						   std::string_view{"production_toolchain.include_search_digest"}},
+			 })
+			if (auto valid = validate_observation_shape(*observation, field); !valid)
+				return unexpected(std::move(valid.error()));
+		for (std::size_t index{}; index < input.invocations.size(); ++index)
+			if (auto valid = validate_invocation_observation(
+					input.invocations[index], "capture.invocations[" + std::to_string(index) + "]");
+				!valid)
+				return unexpected(std::move(valid.error()));
 
 		try
 		{

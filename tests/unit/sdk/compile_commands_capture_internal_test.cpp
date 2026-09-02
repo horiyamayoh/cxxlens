@@ -372,6 +372,33 @@ namespace
 		limits.maximum_auxiliary_files_per_unit = 1U;
 		auto over_limit = encode_gcc_compile_commands_bundle(*capture, bounded, limits);
 		require(!over_limit && over_limit.error().detail == "auxiliary-file-count");
+
+		auto forged_absent = input;
+		forged_absent.invocations.front().response_files.state =
+			cxxlens::sdk::detail::capture_field_state::unavailable;
+		forged_absent.invocations.front().response_files.reason = "not-observed";
+		forged_absent.invocations.front().response_files.completion_action = "recapture";
+		auto forged_absent_result = encode_gcc_compile_commands_bundle(*capture, forged_absent);
+		require(!forged_absent_result &&
+				forged_absent_result.error().detail == "captured-value-shape");
+
+		auto forged_nested = input;
+		forged_nested.invocations.front()
+			.response_files.value->front()
+			.content_digest.completion_action = "must-be-empty-when-observed";
+		auto forged_nested_result = encode_gcc_compile_commands_bundle(*capture, forged_nested);
+		require(!forged_nested_result &&
+				forged_nested_result.error().detail == "captured-value-shape");
+
+		auto forged_toolchain = input;
+		forged_toolchain.toolchain.binary_digest.state =
+			cxxlens::sdk::detail::capture_observation_state::redacted;
+		forged_toolchain.toolchain.binary_digest.reason = "secret";
+		forged_toolchain.toolchain.binary_digest.completion_action = "supply-digest";
+		auto forged_toolchain_result =
+			encode_gcc_compile_commands_bundle(*capture, forged_toolchain);
+		require(!forged_toolchain_result &&
+				forged_toolchain_result.error().detail == "captured-value-shape");
 	}
 } // namespace
 
