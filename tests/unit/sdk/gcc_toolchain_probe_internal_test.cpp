@@ -167,6 +167,23 @@ int main()
 							prefix + "/bin/g++", "-dM", "-E", "-x", "c++", "-std=gnu++23", "-"},
 				"probe argv was not shell-free and exact");
 
+		auto official_source_outputs = valid_outputs(prefix, sysroot);
+		official_source_outputs[1].standard_output = "x86_64-pc-linux-gnu\n";
+		fake_process_port official_source{std::move(official_source_outputs)};
+		auto official_source_observation =
+			probe_gcc_toolchain(official_source, request(prefix + "/bin/g++"));
+		require(official_source_observation &&
+					official_source_observation->target_triple == "x86_64-pc-linux-gnu",
+				"official-source GCC vendor token was not accepted or was silently rewritten");
+		const auto official_source_abi =
+			digest("gcc-abi-observation-v1",
+				   {canonical_value::from_string("16.2.0"),
+					canonical_value::from_string("x86_64-pc-linux-gnu"),
+					canonical_value::from_string(expected_macros)});
+		require(official_source_observation->abi_digest.value == official_source_abi &&
+					official_source_observation->abi_digest.value != observed->abi_digest.value,
+				"raw GCC target triple was not retained in the exact toolchain identity");
+
 		fake_process_port relocated{valid_outputs("/relocated/gcc", "/other/sysroot")};
 		auto relocated_observation =
 			probe_gcc_toolchain(relocated, request("/relocated/gcc/bin/g++"));
@@ -203,6 +220,16 @@ int main()
 		require(!wrong && wrong.error().code == "application-analysis.gcc-toolchain-unavailable" &&
 					wrong.error().field == "exact-version",
 				"unpinned GCC version was accepted");
+
+		auto wrong_target_outputs = valid_outputs(prefix, sysroot);
+		wrong_target_outputs[1].standard_output = "aarch64-linux-gnu\n";
+		fake_process_port wrong_target{std::move(wrong_target_outputs)};
+		auto wrong_target_result = probe_gcc_toolchain(wrong_target, request(prefix + "/bin/g++"));
+		require(!wrong_target_result &&
+					wrong_target_result.error().code ==
+						"application-analysis.gcc-toolchain-unavailable" &&
+					wrong_target_result.error().field == "target-triple",
+				"different GCC target ABI was accepted");
 
 		auto malformed_outputs = valid_outputs(prefix, sysroot);
 		malformed_outputs[4].standard_error = "no include search markers\n";

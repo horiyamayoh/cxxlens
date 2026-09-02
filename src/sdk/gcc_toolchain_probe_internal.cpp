@@ -17,7 +17,15 @@ namespace cxxlens::sdk::detail
 	namespace
 	{
 		constexpr std::string_view pinned_version{"16.2.0"};
-		constexpr std::string_view pinned_target{"x86_64-linux-gnu"};
+		constexpr std::array pinned_target_triples{
+			std::string_view{"x86_64-linux-gnu"},
+			std::string_view{"x86_64-pc-linux-gnu"},
+		};
+
+		[[nodiscard]] bool pinned_target_abi(const std::string_view value) noexcept
+		{
+			return std::ranges::find(pinned_target_triples, value) != pinned_target_triples.end();
+		}
 
 		[[nodiscard]] error unavailable(std::string field, std::string detail)
 		{
@@ -274,9 +282,9 @@ namespace cxxlens::sdk::detail
 			auto target = single_line(target_output->standard_output, "target-triple");
 			if (!target)
 				return unexpected(std::move(target.error()));
-			if (*target != pinned_target)
-				return unexpected(
-					unavailable("target-triple", "expected-x86_64-linux-gnu:observed-" + *target));
+			if (!pinned_target_abi(*target))
+				return unexpected(unavailable("target-triple",
+											  "expected-x86_64-linux-gnu-abi:observed-" + *target));
 
 			auto sysroot_output = execute_probe(
 				processes, request, {"--print-sysroot"}, "sysroot", identity, cancellation);
