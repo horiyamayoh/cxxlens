@@ -44,6 +44,14 @@ class ApplicationAnalysisToolchainBootstrapTest(unittest.TestCase):
         self.assertEqual(
             admitted["clang_gcc_replay"]["exact_version"], "23.1.0"
         )
+        self.assertEqual(admitted["clang_cl_replay"]["exact_version"], "23.1.0")
+        self.assertEqual(admitted["msvc"]["exact_version"], "19.51.36247")
+        self.assertEqual(
+            admitted["windows_sdk"]["exact_version"], "10.0.28000.2705"
+        )
+        self.assertEqual(
+            admitted["windows_runner"]["label"], "windows-2025-vs2026"
+        )
         self.assertEqual(admitted["runner"]["label"], "ubuntu-24.04")
 
     def test_malformed_source_identity_and_build_recipe_drift_fail_closed(self) -> None:
@@ -89,6 +97,22 @@ class ApplicationAnalysisToolchainBootstrapTest(unittest.TestCase):
                 self.bootstrap.load_lock(
                     self.write_lock(directory, wrong_clang_asset)
                 )
+
+            wrong_clang_cl_asset = json.loads(json.dumps(self.lock))
+            wrong_clang_cl_asset["clang_cl_replay"]["asset_sha256"] = "0" * 64
+            with self.assertRaisesRegex(
+                self.bootstrap.ToolchainError, "Clang-cl replay lock differs"
+            ):
+                self.bootstrap.load_lock(
+                    self.write_lock(directory, wrong_clang_cl_asset)
+                )
+
+            wrong_msvc = json.loads(json.dumps(self.lock))
+            wrong_msvc["msvc"]["toolset_version"] = "14.52"
+            with self.assertRaisesRegex(
+                self.bootstrap.ToolchainError, "MSVC toolchain lock differs"
+            ):
+                self.bootstrap.load_lock(self.write_lock(directory, wrong_msvc))
 
     def test_archive_checksum_mismatch_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as raw_directory:

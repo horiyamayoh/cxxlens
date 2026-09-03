@@ -295,6 +295,24 @@ set_tests_properties(
     LABELS
     "unit;sdk;application-analysis;capture;fault;determinism;resource;security")
 
+cxxlens_add_test_executable(cxxlens-msvc-canonical-vector
+                            ../src/msvc_worker/capture_main.cpp)
+target_sources(cxxlens-msvc-canonical-vector
+               PRIVATE ../src/runtime/msvc_capture_file_port.cpp)
+target_link_libraries(cxxlens-msvc-canonical-vector PRIVATE cxxlens::sdk)
+target_include_directories(cxxlens-msvc-canonical-vector
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(
+  NAME unit.application-analysis-msvc-canonical-vector
+  COMMAND
+    cxxlens-msvc-canonical-vector --check-vector
+    "${PROJECT_SOURCE_DIR}/tests/fixtures/msvc_application_analysis/canonical_capture.sha256"
+)
+set_tests_properties(
+  unit.application-analysis-msvc-canonical-vector
+  PROPERTIES LABELS
+             "unit;application-analysis;msvc;codec;determinism;portability")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-materialization-task
                             unit/sdk/materialization_task_internal_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-materialization-task

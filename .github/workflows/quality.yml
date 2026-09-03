@@ -177,3 +177,7 @@ jobs:
           grep -Fx 'application-analysis.replay-provider-failed:environment' \
             "${RUNNER_TEMP}/cxxlens-clang23-worker-relocation.stderr"
           test -f "${RUNNER_TEMP}/cxxlens-clang23-worker-install/share/doc/cxxlens/LLVM-LICENSE.TXT"
+
+  msvc-application-worker:
+    name: Exact MSVC capture and clang-cl 23 worker
+    uses: ./.github/workflows/msvc-application-worker.yml

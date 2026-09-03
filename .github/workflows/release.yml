@@ -198,6 +198,10 @@ jobs:
             ctest --test-dir build/clang23-gcc-replay-tsan --output-on-failure \
               -R '^(adapter\.clang23-gcc-replay-worker-ingress|unit\.sdk-(application-analysis|gcc-capture-files)|sanitizer\.canary-thread-(test|provider))$'
 
+  msvc-application-worker:
+    name: Exact MSVC capture and clang-cl 23 worker
+    uses: ./.github/workflows/msvc-application-worker.yml
+
   asan-ubsan:
     name: ASan and UBSan
     runs-on: ubuntu-24.04
@@ -322,7 +326,7 @@ jobs:
   package:
     name: Package after every release test
     needs: [main-tests, contract-and-docs, gcc-public-headers, gcc-application-capture,
-            clang-gcc-replay-toolchain, asan-ubsan, tsan, static-analysis, stress-and-repeat,
+            clang-gcc-replay-toolchain, msvc-application-worker, asan-ubsan, tsan, static-analysis, stress-and-repeat,
             maximum-scale, real-projects]
     runs-on: ubuntu-24.04
     steps:

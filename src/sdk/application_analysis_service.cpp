@@ -11,6 +11,7 @@
 #include "application_materialization_adoption_internal.hpp"
 #include "application_materialization_execution_internal.hpp"
 #include "gcc_replay_planner_internal.hpp"
+#include "msvc_replay_planner_internal.hpp"
 #include "provider_runtime_internal.hpp"
 
 namespace cxxlens::sdk
@@ -160,31 +161,53 @@ namespace cxxlens::sdk
 		}
 
 		[[nodiscard]] result<std::shared_ptr<replay_plan::implementation>>
-		make_gcc_replay_plan(const capture_bundle::implementation& bundle,
-							 const detail::decoded_capture_unit& unit,
-							 const std::size_t unit_index,
-							 const import_limits& limits)
+		make_replay_plan(const capture_bundle::implementation& bundle,
+						 const detail::decoded_capture_unit& unit,
+						 const std::size_t unit_index,
+						 const import_limits& limits)
 		{
-			auto mapped =
-				detail::map_gcc_16_2_replay_arguments(bundle.projection, unit, unit_index, limits);
-			if (!mapped)
-				return unexpected(std::move(mapped.error()));
+			std::vector<std::string> effective_arguments;
+			std::vector<detail::replay_option_mapping> option_mappings;
+			std::vector<capture_gap> mapping_unresolved;
+			std::string analysis_frontend;
+			if (bundle.projection.toolchain_family == "gcc")
+			{
+				auto mapped = detail::map_gcc_16_2_replay_arguments(
+					bundle.projection, unit, unit_index, limits);
+				if (!mapped)
+					return unexpected(std::move(mapped.error()));
+				effective_arguments = std::move(mapped->effective_arguments);
+				option_mappings = std::move(mapped->option_mappings);
+				mapping_unresolved = std::move(mapped->unresolved);
+				analysis_frontend = "clang-23.1.0-gcc-mode";
+			}
+			else
+			{
+				auto mapped = detail::map_msvc_19_51_replay_arguments(
+					bundle.projection, unit, unit_index, limits);
+				if (!mapped)
+					return unexpected(std::move(mapped.error()));
+				effective_arguments = std::move(mapped->effective_arguments);
+				option_mappings = std::move(mapped->option_mappings);
+				mapping_unresolved = std::move(mapped->unresolved);
+				analysis_frontend = "clang-cl-23.1.0-msvc-mode";
+			}
 
 			auto value = std::make_shared<replay_plan::implementation>();
 			value->capture_bundle_digest = bundle.digest;
 			value->compile_unit_id = unit.compile_unit_id;
-			value->analysis_frontend = "clang-23.1.0-gcc-mode";
+			value->analysis_frontend = std::move(analysis_frontend);
 			value->target_abi = bundle.target_abi;
 			value->source_closure_digest = unit.source_closure_digest;
 			if (value->source_closure_digest.empty())
 				return unexpected(error{"application-analysis.capture-invalid",
 										"source_closure",
 										"missing-validated-binding"});
-			value->effective_arguments = std::move(mapped->effective_arguments);
-			value->option_mappings = std::move(mapped->option_mappings);
+			value->effective_arguments = std::move(effective_arguments);
+			value->option_mappings = std::move(option_mappings);
 			value->unresolved = capture_gaps_for_unit(bundle.gaps, unit_index);
 			value->unresolved.insert(
-				value->unresolved.end(), mapped->unresolved.begin(), mapped->unresolved.end());
+				value->unresolved.end(), mapping_unresolved.begin(), mapping_unresolved.end());
 			canonicalize_gaps(value->unresolved);
 
 			std::vector<canonical_value> effective;
@@ -280,10 +303,6 @@ namespace cxxlens::sdk
 		{
 			if (auto valid = limits.validate(); !valid)
 				return unexpected(std::move(valid.error()));
-			if (bundle.value_->projection.toolchain_family != "gcc")
-				return unexpected(error{"application-analysis.target-unavailable",
-										"replay-planner",
-										"MSVC replay is not configured"});
 			if (bundle.value_->projection.compile_units.size() > limits.maximum_compile_units)
 				return unexpected(
 					error{"application-analysis.import-limit-exceeded", "compile_units", "count"});
@@ -300,7 +319,7 @@ namespace cxxlens::sdk
 			for (std::size_t index{}; index < bundle.value_->projection.compile_units.size();
 				 ++index)
 			{
-				auto plan_value = make_gcc_replay_plan(
+				auto plan_value = make_replay_plan(
 					*bundle.value_, bundle.value_->projection.compile_units[index], index, limits);
 				if (!plan_value)
 					return unexpected(std::move(plan_value.error()));

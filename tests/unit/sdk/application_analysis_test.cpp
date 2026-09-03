@@ -25,6 +25,7 @@
 #include <cxxlens/relations/source_span.hpp>
 #include <cxxlens/sdk/application_analysis.hpp>
 
+#include "msvc_worker/msvc_capture_bundle.hpp"
 #include "sdk/application_materialization_execution_internal.hpp"
 
 #if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
@@ -270,6 +271,41 @@ namespace
 		return bundle;
 	}
 
+	[[nodiscard]] canonical_value valid_msvc_bundle()
+	{
+		auto bundle = valid_bundle();
+		bundle.tuple[1].tuple[0] = canonical_value::from_string("msvc");
+		bundle.tuple[1].tuple[1] = canonical_value::from_string("19.51.36247");
+		bundle.tuple[1].tuple[2] =
+			observed(canonical_value::from_string("C:\\VS\\VC\\Tools\\MSVC\\14.51\\bin\\cl.exe"));
+		bundle.tuple[1].tuple[4] = canonical_value::from_string("x86_64-pc-windows-msvc");
+		bundle.tuple[2] = canonical_value::from_string("msbuild-cltool-proxy");
+		bundle.tuple[3] = canonical_value::from_string("x86_64-pc-windows-msvc");
+		bundle.tuple[4] = canonical_value::from_string("project:msvc-example");
+		auto& unit = bundle.tuple[5].tuple[0];
+		unit.tuple[8] = observed(canonical_value::from_tuple({
+			canonical_value::from_string("C:\\VS\\VC\\Tools\\MSVC\\14.51\\bin\\cl.exe"),
+			canonical_value::from_string("/nologo"),
+			canonical_value::from_string("/std:c++latest"),
+			canonical_value::from_string("/D"),
+			canonical_value::from_string("SEPARATED_DEFINE=1"),
+			canonical_value::from_string("/I"),
+			canonical_value::from_string("C:\\workspace\\example\\include"),
+			canonical_value::from_string("/IC:\\workspace\\example\\include"),
+			canonical_value::from_string("C:\\workspace\\example\\src\\main.cpp"),
+			canonical_value::from_string("/c"),
+		}));
+		unit.tuple[11] = observed(canonical_value::from_tuple({}));
+		unit.tuple[12] = observed(canonical_value::from_string("C:\\workspace\\example\\build"));
+		unit.tuple[13] = observed(canonical_value::from_string("c++latest"));
+		unit.tuple[14] = observed(canonical_value::from_string("msvc"));
+		bundle.tuple[9] = observed(canonical_value::from_tuple({canonical_value::from_tuple({
+			canonical_value::from_string("C:\\workspace\\example"),
+			canonical_value::from_string("project://"),
+		})}));
+		return bundle;
+	}
+
 	[[nodiscard]] cxxlens::sdk::relation_descriptor request_descriptor()
 	{
 		cxxlens::sdk::relation_descriptor value;
@@ -436,6 +472,106 @@ namespace
 		auto empty_argv_import = cxxlens::sdk::import_capture(*empty_argv_bundle);
 		require(!empty_argv_import &&
 				empty_argv_import.error().code == "application-analysis.target-unavailable");
+	}
+
+	void msvc_capture_import_preserves_replay_fidelity()
+	{
+		auto bytes = canonical_binary(valid_msvc_bundle());
+		require(bytes);
+		auto decoded = cxxlens::sdk::decode_capture_bundle(*bytes);
+		require(decoded);
+		require(decoded->production_compiler() == "msvc-19.51.36247");
+		require(decoded->capture_adapter() == "msbuild-cltool-proxy");
+		require(decoded->target_abi() == "x86_64-pc-windows-msvc");
+		auto imported = cxxlens::sdk::import_capture(*decoded);
+		require(imported && imported->replay_plans().size() == 1U);
+		const auto& plan = imported->replay_plans().front();
+		require(plan.analysis_frontend() == "clang-cl-23.1.0-msvc-mode");
+		require(plan.target_abi() == "x86_64-pc-windows-msvc");
+		require(
+			has_reason(plan.unresolved(), "analysis-frontend-differs-from-production-compiler"));
+		require(!has_reason(plan.unresolved(), "msvc-input-path-not-bound"));
+
+		auto unsupported = valid_msvc_bundle();
+		unsupported.tuple[5].tuple[0].tuple[8].tuple[1].tuple.insert(
+			unsupported.tuple[5].tuple[0].tuple[8].tuple[1].tuple.begin() + 2,
+			canonical_value::from_string("/vendorUnknown"));
+		unsupported.tuple[5].tuple[0].tuple[8].tuple[1].tuple.insert(
+			unsupported.tuple[5].tuple[0].tuple[8].tuple[1].tuple.begin() + 3,
+			canonical_value::from_string("/Yucommon.hpp"));
+		auto unsupported_bytes = canonical_binary(unsupported);
+		require(unsupported_bytes);
+		auto unsupported_bundle = cxxlens::sdk::decode_capture_bundle(*unsupported_bytes);
+		require(unsupported_bundle);
+		auto unsupported_import = cxxlens::sdk::import_capture(*unsupported_bundle);
+		require(unsupported_import);
+		require(has_reason(unsupported_import->unresolved(), "msvc-option-not-classified"));
+		require(has_reason(unsupported_import->unresolved(),
+						   "msvc-pch-or-module-input-not-replayable"));
+	}
+
+	void portable_msvc_encoder_round_trips_through_host_authority()
+	{
+		using namespace cxxlens::application_analysis_worker;
+		const auto text_bytes = [](const std::string_view text)
+		{
+			std::vector<std::byte> output;
+			output.reserve(text.size());
+			for (const auto byte : text)
+				output.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
+			return output;
+		};
+		msvc_capture_input input;
+		input.project_id = "project:msvc-portable-vector";
+		input.canonical_project_root = "C:\\workspace\\unicode-project";
+		input.canonical_working_directory = "C:\\workspace\\unicode-project\\build space";
+		input.canonical_compiler_path =
+			"C:\\VS\\VC\\Tools\\MSVC\\14.51.36247\\bin\\Hostx64\\x64\\cl.exe";
+		input.compiler_binary_digest = digest('1');
+		input.windows_sdk_root = "C:\\Program Files (x86)\\Windows Kits\\10";
+		input.abi_digest = digest('2');
+		input.builtin_headers_digest = digest('3');
+		input.builtin_macros_digest = digest('4');
+		input.include_search_digest = digest('5');
+		input.original_arguments = {
+			input.canonical_compiler_path,
+			"@C:\\workspace\\unicode-project\\build space\\options.rsp",
+			"C:\\workspace\\unicode-project\\src\\main.cpp",
+			"/c",
+		};
+		input.main_source = {"C:\\workspace\\unicode-project\\src\\main.cpp",
+							 text_bytes("#include <model.hpp>\nint main(){return model();}\n"),
+							 "main",
+							 "utf8"};
+		input.dependency_sources = {{"C:\\workspace\\unicode-project\\include\\model.hpp",
+									 text_bytes("inline int model(){return 0;}\n"),
+									 "header",
+									 "utf8"}};
+		input.response_files = {{"C:\\workspace\\unicode-project\\build space\\options.rsp",
+								 text_bytes("/std:c++latest /DUNICODE=1"),
+								 std::nullopt}};
+
+		auto encoded = encode_msvc_capture_bundle(input);
+		auto encoded_again = encode_msvc_capture_bundle(input);
+		require(encoded && encoded_again && *encoded == *encoded_again);
+		auto decoded = cxxlens::sdk::decode_capture_bundle(*encoded);
+		require(decoded && decoded->digest() == cxxlens::sdk::content_digest(*encoded));
+		auto imported = cxxlens::sdk::import_capture(*decoded);
+		require(imported && imported->replay_plans().size() == 1U);
+		require(imported->replay_plans().front().analysis_frontend() ==
+				"clang-cl-23.1.0-msvc-mode");
+
+		auto outside = input;
+		outside.main_source.canonical_path = "D:\\foreign\\main.cpp";
+		auto rejected = encode_msvc_capture_bundle(outside);
+		require(!rejected && rejected.error().code == "application-analysis.msvc-capture-invalid");
+
+		auto bounded = input;
+		msvc_capture_limits limits;
+		limits.maximum_arguments = 2U;
+		auto limited = encode_msvc_capture_bundle(bounded, limits);
+		require(!limited &&
+				limited.error().code == "application-analysis.msvc-capture-limit-exceeded");
 	}
 
 	void allocation_failures_are_typed_at_external_boundaries()
@@ -1092,6 +1228,14 @@ namespace
 		if (!result)
 			std::cerr << result.error().code << ':' << result.error().field << ':'
 					  << result.error().detail << '\n';
+		else if (result->terminal() != materialization_terminal::published_partial)
+		{
+			std::cerr << "unexpected materialization terminal: "
+					  << static_cast<int>(result->terminal()) << '\n';
+			for (const auto& unresolved : result->unresolved())
+				std::cerr << unresolved.code << ':' << unresolved.subject << ':'
+						  << unresolved.detail << '\n';
+		}
 		require(result && result->terminal() == materialization_terminal::published_partial);
 		require(result->published_snapshot() && result->provenance());
 		require(!result->published_snapshot()->unresolved_items().empty());
@@ -1136,6 +1280,8 @@ int main()
 {
 	positive_decode_and_deterministic_import();
 	replay_fidelity_and_import_bounds_fail_closed();
+	msvc_capture_import_preserves_replay_fidelity();
+	portable_msvc_encoder_round_trips_through_host_authority();
 	allocation_failures_are_typed_at_external_boundaries();
 	toolchain_observation_gaps_are_preserved();
 	duplicate_source_variants_bind_one_closure();

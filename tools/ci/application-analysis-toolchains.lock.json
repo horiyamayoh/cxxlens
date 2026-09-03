@@ -1,5 +1,15 @@
 {
-  "document_version": "1.0.0",
+  "document_version": "1.1.0",
+  "clang_cl_replay": {
+    "archive_root": "clang+llvm-23.1.0-x86_64-pc-windows-msvc",
+    "asset_archive_bytes": 490116109,
+    "asset_sha256": "1aebf024b959b3835c3bd936da2fa58cd002c61ccf47fce1714447b900bd9837",
+    "asset_url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.0/clang%2Bllvm-23.1.0-x86_64-pc-windows-msvc.tar.zst",
+    "exact_version": "23.1.0",
+    "target_triples": [
+      "x86_64-pc-windows-msvc"
+    ]
+  },
   "clang_gcc_replay": {
     "archive_root": "LLVM-23.1.0-Linux-X64",
     "asset_archive_bytes": 2014511320,
@@ -46,10 +56,24 @@
       "x86_64-pc-linux-gnu"
     ]
   },
+  "msvc": {
+    "distribution_build": "12120.119",
+    "distribution_version": "18.9.2",
+    "exact_version": "19.51.36247",
+    "toolset_version": "14.51.36247"
+  },
   "runner": {
     "architecture": "X64",
     "label": "ubuntu-24.04",
     "os": "Linux"
+  },
+  "windows_runner": {
+    "architecture": "X64",
+    "label": "windows-2025-vs2026",
+    "os": "Windows"
+  },
+  "windows_sdk": {
+    "exact_version": "10.0.28000.2705"
   },
   "schema": "cxxlens.application-analysis-toolchain-lock.v1"
 }

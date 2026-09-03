@@ -1,0 +1,77 @@
+name: MSVC application worker
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  native-windows:
+    name: Native Windows worker
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Cache exact clang-cl 23.1.0 archive
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: ~/.cache/cxxlens/toolchains/clang+llvm-23.1.0-x86_64-pc-windows-msvc.tar.zst
+          key: cxxlens-clangcl23-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/ci/application-analysis-toolchains.lock.json') }}
+      - name: Verify pinned MSVC, Windows SDK, and clang-cl toolchains
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -products * -version '[18.9.2,18.9.3)' -property installationPath
+          if (-not $vs) { throw 'Visual Studio 18.9.2 is unavailable' }
+          $catalog = Get-Content (Join-Path $vs 'catalog.json') -Raw | ConvertFrom-Json
+          if ($catalog.info.productDisplayVersion -ne '18.9.2' -or
+              $catalog.buildVersion -ne '12120.119') {
+            throw "Visual Studio pin differs: $($catalog.info.productDisplayVersion) $($catalog.buildVersion)"
+          }
+          $toolset = (Get-Content (Join-Path $vs 'VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt') -Raw).Trim()
+          if ($toolset -ne '14.51.36247') { throw "MSVC toolset pin differs: $toolset" }
+          $cl = Join-Path $vs "VC\Tools\MSVC\$toolset\bin\Hostx64\x64\cl.exe"
+          $clVersion = (Get-Item $cl).VersionInfo.ProductVersion
+          if (-not $clVersion.StartsWith('19.51.36247')) { throw "cl.exe pin differs: $clVersion" }
+          $sdkRc = "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.0.28000.0\x64\rc.exe"
+          $sdkVersion = (Get-Item $sdkRc).VersionInfo.ProductVersion
+          if (-not $sdkVersion.StartsWith('10.0.28000.2705')) { throw "Windows SDK pin differs: $sdkVersion" }
+          $archive = Join-Path $env:USERPROFILE '.cache\cxxlens\toolchains\clang+llvm-23.1.0-x86_64-pc-windows-msvc.tar.zst'
+          New-Item -ItemType Directory -Force (Split-Path $archive) | Out-Null
+          if (-not (Test-Path $archive)) {
+            curl.exe -fL --retry 3 --output $archive 'https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.0/clang%2Bllvm-23.1.0-x86_64-pc-windows-msvc.tar.zst'
+          }
+          if ((Get-Item $archive).Length -ne 490116109) { throw 'clang-cl archive byte count differs' }
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne
+              '1aebf024b959b3835c3bd936da2fa58cd002c61ccf47fce1714447b900bd9837') {
+            throw 'clang-cl archive digest differs'
+          }
+          $toolchains = Join-Path $env:RUNNER_TEMP 'cxxlens-toolchains'
+          New-Item -ItemType Directory -Force $toolchains | Out-Null
+          tar.exe -xf $archive -C $toolchains
+          $clangRoot = Join-Path $toolchains 'clang+llvm-23.1.0-x86_64-pc-windows-msvc'
+          $clang = Join-Path $clangRoot 'bin\clang-cl.exe'
+          if ((& $clang --version | Select-Object -First 1) -notmatch '23\.1\.0') {
+            throw 'clang-cl version differs'
+          }
+          "CXXLENS_CLANG_CL_ROOT=$clangRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CXXLENS_VS_ROOT=$vs" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Build, test, and relocate the minimal Windows component
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Import-Module "$env:CXXLENS_VS_ROOT\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+          Enter-VsDevShell -VsInstallPath $env:CXXLENS_VS_ROOT -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64'
+          cmake -S workers/msvc -B build/msvc-worker -G Ninja `
+            -DBUILD_TESTING=ON `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_CXX_COMPILER="$env:CXXLENS_CLANG_CL_ROOT\bin\clang-cl.exe"
+          cmake --build build/msvc-worker
+          ctest --test-dir build/msvc-worker --output-on-failure
+          $prefix = Join-Path $env:RUNNER_TEMP 'cxxlens worker relocated'
+          cmake --install build/msvc-worker --prefix $prefix `
+            --component application-analysis-msvc-worker
+          & "$prefix\bin\cxxlens-msvc-capture.exe" --check-vector `
+            tests/fixtures/msvc_application_analysis/canonical_capture.sha256
