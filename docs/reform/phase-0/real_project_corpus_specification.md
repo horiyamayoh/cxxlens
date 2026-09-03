@@ -16,6 +16,18 @@ Phase 0–1 ではこの repository 内の deterministic fixture を使う。GCC
 solution、外部 real-project collection は Phase 3 の別 gateで追加し、Phase 1 の native
 support を暗黙に拡張しない。
 
+## Phase 3 の GCC-built corpus
+
+`tests/fixtures/gcc_application_analysis_corpus` は、header、static library、executable、3 TU、
+template、virtual dispatch、direct call を含む固定 CMake project である。exact GCC 16.2.0 で
+configure・build・run した実際の compilation database を capture し、Clang 23.1.0 GCC-mode
+worker、generic materialization、Memory Store、public query まで通す。試験時の network access
+や外部 checkout は使用しない。
+
+compile database と shell-free wrapper は別々に capture し、両経路とも replay、publication、
+query まで到達させる。Clang replay で回収できない compiler effect は `partial` と scope 付き
+unresolved のまま保持し、GCC exact claim へ昇格しない。
+
 ## 固定する入力
 
 - fixture revision と license は repository の履歴で管理する。

@@ -50,34 +50,40 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
         )
         self.assertFalse(any(row["os"] == "windows" for row in support["entries"]))
 
-    def test_unimplemented_targets_are_unavailable(self) -> None:
+    def test_target_availability_tracks_implementation(self) -> None:
         self.assertEqual(
             {target["id"] for target in self.contract["targets"]},
             {"gcc-x86_64-linux", "msvc-x64-windows"},
         )
-        for target in self.contract["targets"]:
-            self.assertEqual(target["implementation_state"], "planned")
-            self.assertEqual(target["availability"], "unavailable")
+        by_id = {target["id"]: target for target in self.contract["targets"]}
+        self.assertEqual(
+            (by_id["gcc-x86_64-linux"]["implementation_state"],
+             by_id["gcc-x86_64-linux"]["availability"]),
+            ("materialization-ready", "experimental"),
+        )
+        self.assertEqual(
+            (by_id["msvc-x64-windows"]["implementation_state"],
+             by_id["msvc-x64-windows"]["availability"]),
+            ("planned", "unavailable"),
+        )
+        for target in by_id.values():
             self.assertEqual(target["guarantee_floor"], "frontend-replayed")
 
     def test_only_materialization_ready_targets_can_be_available(self) -> None:
         targets = self.contract["targets"]
-        for index, target in enumerate(targets):
-            candidate = dict(target)
-            candidate["availability"] = "experimental"
-            candidates = list(targets)
-            candidates[index] = candidate
-            with self.assertRaises(jsonschema.ValidationError):
-                jsonschema.Draft202012Validator(self.schema).validate(
-                    {**self.contract, "targets": candidates}
-                )
+        planned_but_available = dict(targets[1])
+        planned_but_available["availability"] = "experimental"
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(self.schema).validate(
+                {**self.contract, "targets": [targets[0], planned_but_available]}
+            )
 
-        ready = dict(targets[0])
-        ready["implementation_state"] = "materialization-ready"
-        ready["availability"] = "experimental"
-        jsonschema.Draft202012Validator(self.schema).validate(
-            {**self.contract, "targets": [ready, targets[1]]}
-        )
+        ready_but_unavailable = dict(targets[0])
+        ready_but_unavailable["availability"] = "unavailable"
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(self.schema).validate(
+                {**self.contract, "targets": [ready_but_unavailable, targets[1]]}
+            )
 
     def test_initial_relation_subset_is_existing_and_equal(self) -> None:
         registry = yaml.safe_load(

@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
@@ -7,6 +8,7 @@
 #include <iterator>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <cxxlens/relations/build_compile_unit.hpp>
@@ -32,7 +34,8 @@ namespace
 		return "sha256:" + std::string(64U, digit);
 	}
 
-	[[nodiscard]] result<std::vector<std::byte>> read_bounded(const std::string& path)
+	[[nodiscard]] result<std::vector<std::byte>> read_bounded(const std::string& path,
+															  const std::uint64_t maximum_bytes)
 	{
 		std::ifstream input{path, std::ios::binary | std::ios::ate};
 		if (!input)
@@ -40,7 +43,6 @@ namespace
 						 "bundle",
 						 "capture bundle could not be opened"};
 		const auto end = input.tellg();
-		constexpr std::uint64_t maximum_bytes{std::uint64_t{64U} * 1024U * 1024U};
 		if (end <= std::streampos{})
 			return error{
 				"application-analysis.fixture-size-invalid", "bundle", "capture bundle was empty"};
@@ -140,18 +142,30 @@ namespace
 
 	int run(const int argc, char** argv)
 	{
-		if (argc != 3)
+		if (argc != 4)
 			return 2;
-		auto bundle_bytes = read_bounded(argv[1]);
-		auto worker_bytes = read_bounded(argv[2]);
+		std::size_t expected_units{};
+		const std::string_view expected_text{argv[3]};
+		const auto parsed = std::from_chars(
+			expected_text.data(), expected_text.data() + expected_text.size(), expected_units);
+		if (parsed.ec != std::errc{} || parsed.ptr != expected_text.data() + expected_text.size() ||
+			expected_units == 0U || expected_units > 32U)
+			return 2;
+		constexpr std::uint64_t maximum_bundle_bytes{std::uint64_t{64U} * 1024U * 1024U};
+		constexpr std::uint64_t maximum_worker_bytes{std::uint64_t{256U} * 1024U * 1024U};
+		auto bundle_bytes = read_bounded(argv[1], maximum_bundle_bytes);
+		auto worker_bytes = read_bounded(argv[2], maximum_worker_bytes);
 		if (!bundle_bytes || !worker_bytes)
 			return 3;
 		auto bundle = decode_capture_bundle(*bundle_bytes);
 		if (!bundle || bundle->production_compiler() != "gcc-16.2.0" ||
-			bundle->capture_adapter() != "compile-commands" || bundle->compile_unit_count() != 2U)
+			(bundle->capture_adapter() != "compile-commands" &&
+			 bundle->capture_adapter() != "shell-free-wrapper") ||
+			bundle->compile_unit_count() != expected_units)
 			return 4;
 		auto project = import_capture(*bundle);
-		if (!project || project->replay_plans().size() != 2U || project->unresolved().empty())
+		if (!project || project->replay_plans().size() != expected_units ||
+			project->unresolved().empty())
 			return 5;
 
 		const std::array descriptors{
@@ -191,6 +205,13 @@ namespace
 			{provider::sandbox_assurance::enforced, policies.front().policy_digest()},
 			true,
 			std::nullopt};
+		provider::execution_budget execution_budget;
+#if defined(CXXLENS_SANITIZER_INSTRUMENTED)
+		// Sanitizer runtimes reserve a large virtual address range and create helper threads.
+		// Keep production defaults intact while exercising the instrumented process boundary.
+		execution_budget.address_space_bytes = std::numeric_limits<std::uint64_t>::max();
+		execution_budget.subprocesses = 1024U;
+#endif
 		snapshot_draft publication{{"catalog:gcc-application-analysis-e2e",
 									"experimental",
 									std::string{engine->generation()},
@@ -201,8 +222,13 @@ namespace
 								   {1U, 0U, 0U},
 								   std::string{project->catalog_semantic_digest()},
 								   std::nullopt};
-		auto request = materialization_request::make(
-			*engine, publication, relation_ids, "cc.clang23-gcc-replay-1", selection, {candidate});
+		auto request = materialization_request::make(*engine,
+													 publication,
+													 relation_ids,
+													 "cc.clang23-gcc-replay-1",
+													 selection,
+													 {candidate},
+													 execution_budget);
 		auto store = make_in_memory_snapshot_store(*engine);
 		if (!request || !store)
 			return 8;
@@ -223,6 +249,9 @@ namespace
 					  << " provenance=" << result->provenance().has_value()
 					  << " unresolved=" << result->unresolved().size()
 					  << " generations=" << store->retained_generation_count() << '\n';
+			for (const auto& unresolved : result->unresolved())
+				std::cerr << unresolved.code << ':' << unresolved.subject << ':'
+						  << unresolved.detail << '\n';
 			return 9;
 		}
 		if (result->provenance()->provider_binary_digest != worker_digest ||
@@ -238,7 +267,10 @@ namespace
 		if (!entities)
 			std::cerr << entities.error().code << ':' << entities.error().field << ':'
 					  << entities.error().detail << '\n';
-		return source_files && *source_files >= 3U && entities && *entities >= 2U ? 0 : 11;
+		return source_files && *source_files >= expected_units + 1U && entities &&
+				*entities >= expected_units
+			? 0
+			: 11;
 	}
 } // namespace
 

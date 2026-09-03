@@ -1,5 +1,5 @@
 schema: cxxlens.application-analysis-support.v1
-document_version: 1.0.0
+document_version: 1.1.0
 maturity: experimental
 host_package_support:
   authority: schemas/cxxlens_support_matrix.yaml
@@ -30,8 +30,8 @@ toolchain_pins:
     exact_toolchain_assertion: required
 targets:
   - id: gcc-x86_64-linux
-    implementation_state: planned
-    availability: unavailable
+    implementation_state: materialization-ready
+    availability: experimental
     production_compiler: gcc-16.2.0
     capture_adapters: [compile-commands, shell-free-wrapper]
     analysis_frontend: clang-23.1.0-gcc-mode

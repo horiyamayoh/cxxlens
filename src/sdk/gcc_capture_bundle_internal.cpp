@@ -492,9 +492,26 @@ namespace cxxlens::sdk::detail
 			output.push_back(canonical_value::from_string("$production-compiler"));
 			bool output_path{};
 			bool separated_include_path{};
+			bool dependency_option_value{};
 			for (std::size_t index{1U}; index < entry.arguments.size(); ++index)
 			{
 				const auto& token = entry.arguments[index];
+				if (dependency_option_value)
+				{
+					dependency_option_value = false;
+					continue;
+				}
+				if (token == "-MD" || token == "-MMD" || token == "-MP")
+					continue;
+				if (token == "-MF" || token == "-MT" || token == "-MQ")
+				{
+					dependency_option_value = true;
+					continue;
+				}
+				if ((token.starts_with("-MF") || token.starts_with("-MT") ||
+					 token.starts_with("-MQ")) &&
+					token.size() > 3U)
+					continue;
 				if (output_path)
 				{
 					output_path = false;
@@ -724,7 +741,23 @@ namespace cxxlens::sdk::detail
 					!at_or_below(*source_path, *physical_root))
 					return unexpected(invalid(prefix, "path-outside-project-root"));
 
-				auto language = project_language(entry, prefix + ".language");
+				compile_command_entry effective_entry = entry;
+				if (!invocation.effective_arguments.empty())
+				{
+					if (invocation.effective_arguments.size() > limits.maximum_arguments_per_unit)
+						return unexpected(limit(prefix + ".effective_arguments", "count"));
+					for (const auto& argument : invocation.effective_arguments)
+					{
+						if (argument.size() > limits.maximum_string_bytes ||
+							argument.size() > limits.maximum_total_metadata_bytes - metadata_bytes)
+							return unexpected(
+								limit(prefix + ".effective_arguments", "metadata-bytes"));
+						metadata_bytes += argument.size();
+					}
+					effective_entry.arguments = invocation.effective_arguments;
+				}
+
+				auto language = project_language(effective_entry, prefix + ".language");
 				if (!language)
 					return unexpected(std::move(language.error()));
 				const auto logical_source = logical_path_for(*source_path, *physical_root);
@@ -876,7 +909,7 @@ namespace cxxlens::sdk::detail
 				});
 
 				auto semantic_argv = canonical_value::from_tuple(
-					semantic_arguments(entry, {*directory, *physical_root}));
+					semantic_arguments(effective_entry, {*directory, *physical_root}));
 				std::vector<capture_gap> identity_gaps;
 				auto sysroot_identity_observation = input.toolchain.sysroot;
 				if (sysroot_identity_observation.value)

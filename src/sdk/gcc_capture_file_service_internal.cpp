@@ -79,6 +79,7 @@ namespace cxxlens::sdk::detail
 		struct entry_capture_options
 		{
 			std::string_view adapter{"compile-commands"};
+			std::span<const std::string> effective_arguments;
 			std::span<const std::string> capture_arguments;
 			const std::vector<build_capture_environment_effect>* environment_effects{};
 			bool dependency_output_bound_to_invocation{};
@@ -157,6 +158,9 @@ namespace cxxlens::sdk::detail
 					auxiliary->invocation.environment_effects =
 						captured_value<std::vector<build_capture_environment_effect>>::observed(
 							*options.environment_effects);
+				if (!options.effective_arguments.empty())
+					auxiliary->invocation.effective_arguments.assign(
+						options.effective_arguments.begin(), options.effective_arguments.end());
 				auxiliary->invocation.source_closure_members =
 					std::move(auxiliary->closure_members);
 				input.invocations.push_back(std::move(auxiliary->invocation));
@@ -254,8 +258,10 @@ namespace cxxlens::sdk::detail
 		if (request.compiler_path.empty() || request.compiler_path.front() != '/' ||
 			request.compiler_path.contains('\0'))
 			return unexpected(invalid("compiler_path", "absolute-path-required"));
-		if (request.original_arguments.empty() || request.capture_arguments.empty() ||
+		if (request.original_arguments.empty() || request.effective_arguments.empty() ||
+			request.capture_arguments.empty() ||
 			request.original_arguments.front() != request.compiler_path ||
+			request.effective_arguments.front() != request.compiler_path ||
 			request.capture_arguments.front() != request.compiler_path)
 			return unexpected(invalid("invocation.arguments", "compiler-identity-mismatch"));
 		try
@@ -314,6 +320,7 @@ namespace cxxlens::sdk::detail
 								   std::move(*toolchain),
 								   limits,
 								   {.adapter = "shell-free-wrapper",
+									.effective_arguments = request.effective_arguments,
 									.capture_arguments = request.capture_arguments,
 									.environment_effects = &request.environment_effects,
 									.dependency_output_bound_to_invocation = true},

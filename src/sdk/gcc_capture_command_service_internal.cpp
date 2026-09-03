@@ -156,6 +156,7 @@ namespace cxxlens::sdk::detail
 															limits);
 			if (!prepared)
 				return unexpected(std::move(prepared.error()));
+			const auto effective_arguments = prepared->expanded_arguments;
 			prepared = prepare_gcc_16_2_spec_files(*files,
 												   **workspace,
 												   std::move(*prepared),
@@ -207,6 +208,7 @@ namespace cxxlens::sdk::detail
 			capture.source_path = plan->source_path;
 			capture.compiler_path = request.compiler_path;
 			capture.original_arguments = request.compiler_arguments;
+			capture.effective_arguments = effective_arguments;
 			capture.capture_arguments = plan->capture_arguments;
 			capture.environment_effects = std::move(*effects);
 			capture.execution_environment = *environment;

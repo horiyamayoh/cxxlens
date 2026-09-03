@@ -139,6 +139,11 @@ jobs:
             --require-production-build \
             --materializer build/clang23-gcc-replay/tests/cxxlens-gcc-application-analysis-e2e \
             --worker build/clang23-gcc-replay/cxxlens-clang-gcc-replay-worker-23
+          python3 tests/integration/check_gcc_application_analysis_corpus.py \
+            build/clang23-gcc-replay/cxxlens "$(command -v g++)" \
+            build/clang23-gcc-replay/tests/cxxlens-gcc-application-analysis-e2e \
+            build/clang23-gcc-replay/cxxlens-clang-gcc-replay-worker-23 \
+            tests/fixtures/gcc_application_analysis_corpus
           cmake --install build/clang23-gcc-replay \
             --prefix "${RUNNER_TEMP}/cxxlens-clang23-worker-install" \
             --component clang23-gcc-replay-worker
@@ -165,12 +170,13 @@ jobs:
           cmake --build build/clang23-gcc-replay-asan \
             --target cxxlens-unit-clang23-gcc-replay-worker-ingress \
                      cxxlens-unit-sdk-application-analysis \
+                     cxxlens-unit-sdk-gcc-capture-files \
                      cxxlens-sanitizer-canary
           ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:exitcode=86:handle_segv=0:symbolize=1 \
           UBSAN_OPTIONS=halt_on_error=1:exitcode=86:print_stacktrace=1:symbolize=1 \
           ASAN_SYMBOLIZER_PATH="${CXXLENS_CLANG_GCC_REPLAY_ROOT}/bin/llvm-symbolizer" \
             ctest --test-dir build/clang23-gcc-replay-asan --output-on-failure \
-              -R '^(adapter\.clang23-gcc-replay-worker-ingress|unit\.sdk-application-analysis|sanitizer\.canary-(address|undefined))$'
+              -R '^(adapter\.clang23-gcc-replay-worker-ingress|unit\.sdk-(application-analysis|gcc-capture-files)|sanitizer\.canary-(address|undefined))$'
           cmake -S . -B build/clang23-gcc-replay-tsan -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DBUILD_TESTING=ON \
@@ -186,10 +192,11 @@ jobs:
           cmake --build build/clang23-gcc-replay-tsan \
             --target cxxlens-unit-clang23-gcc-replay-worker-ingress \
                      cxxlens-unit-sdk-application-analysis \
+                     cxxlens-unit-sdk-gcc-capture-files \
                      cxxlens-tsan-test-canary cxxlens-tsan-provider-canary
           TSAN_OPTIONS=halt_on_error=1:exitcode=86:handle_segv=0:second_deadlock_stack=1:symbolize=1 \
             ctest --test-dir build/clang23-gcc-replay-tsan --output-on-failure \
-              -R '^(adapter\.clang23-gcc-replay-worker-ingress|unit\.sdk-application-analysis|sanitizer\.canary-thread-(test|provider))$'
+              -R '^(adapter\.clang23-gcc-replay-worker-ingress|unit\.sdk-(application-analysis|gcc-capture-files)|sanitizer\.canary-thread-(test|provider))$'
 
   asan-ubsan:
     name: ASan and UBSan

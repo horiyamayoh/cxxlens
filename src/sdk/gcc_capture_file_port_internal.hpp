@@ -104,6 +104,7 @@ namespace cxxlens::sdk::detail
 		std::string source_path;
 		std::string compiler_path;
 		std::vector<std::string> original_arguments;
+		std::vector<std::string> effective_arguments;
 		std::vector<std::string> capture_arguments;
 		std::vector<build_capture_environment_effect> environment_effects;
 		std::vector<std::string> execution_environment;

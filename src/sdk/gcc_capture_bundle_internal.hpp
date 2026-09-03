@@ -67,6 +67,9 @@ namespace cxxlens::sdk::detail
 	/** Invocation details supplied by the capture adapter rather than reconstructed later. */
 	struct gcc_invocation_observation
 	{
+		/** Expanded semantic argv before capture-only rewrites; the original argv remains retained.
+		 */
+		std::vector<std::string> effective_arguments;
 		captured_value<std::vector<build_capture_auxiliary_file>> response_files =
 			captured_value<std::vector<build_capture_auxiliary_file>>::unavailable(
 				"response-files-unobserved", "recapture-with-shell-free-wrapper");

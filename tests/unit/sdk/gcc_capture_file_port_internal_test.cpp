@@ -780,9 +780,17 @@ namespace
 		input.working_directory = "/physical/project/build";
 		input.source_path = "../src/main.cpp";
 		input.compiler_path = "/opt/gcc-16.2.0/bin/g++";
-		input.original_arguments = {input.compiler_path, "-I../include", "-c", input.source_path};
-		input.capture_arguments = {
-			input.compiler_path, "-I../include", "-MMD", "-MF", "deps.d", "-c", input.source_path};
+		input.original_arguments = {
+			input.compiler_path, "-I../include", "-std=gnu++23", "-c", input.source_path};
+		input.effective_arguments = input.original_arguments;
+		input.capture_arguments = {input.compiler_path,
+								   "-I../include",
+								   "-std=gnu++23",
+								   "-MMD",
+								   "-MF",
+								   "deps.d",
+								   "-c",
+								   input.source_path};
 		input.environment_effects = {{
 			"gcc.cpath",
 			cxxlens::sdk::detail::captured_value<std::string>::observed("sha256:" +
@@ -795,7 +803,24 @@ namespace
 		fake_process_port repeated_processes{valid_probe_outputs()};
 		auto repeated =
 			cxxlens::sdk::detail::capture_gcc_invocation(files, repeated_processes, input);
-		require(captured && repeated && *captured == *repeated);
+		files.files.emplace(
+			"/physical/project/build/other.d",
+			capture_file_snapshot{"/physical/project/build/other.d",
+								  bytes("main.o: ../src/main.cpp ../include/a.hpp\n")});
+		auto alternate_dependency = input;
+		alternate_dependency.effective_arguments = {input.compiler_path,
+													"-I../include",
+													"-std=gnu++23",
+													"-MMD",
+													"-MFother.d",
+													"-c",
+													input.source_path};
+		alternate_dependency.capture_arguments = alternate_dependency.effective_arguments;
+		fake_process_port alternate_processes{valid_probe_outputs()};
+		auto alternate = cxxlens::sdk::detail::capture_gcc_invocation(
+			files, alternate_processes, alternate_dependency);
+		require(captured && repeated && alternate && *captured == *repeated &&
+				*captured == *alternate);
 		auto decoded = cxxlens::sdk::decode_capture_bundle(*captured);
 		require(decoded && decoded->capture_adapter() == "shell-free-wrapper" &&
 				decoded->compile_unit_count() == 1U);
@@ -806,13 +831,18 @@ namespace
 											 "source_closures[0].membership_coverage";
 									 }));
 		auto value = cxxlens::sdk::canonical_binary_decode(*captured);
-		require(value && value->tuple[5].tuple.front().tuple[11].tuple[0].text == "observed" &&
+		require(value &&
+				value->tuple[5].tuple.front().tuple[8].tuple[1].tuple[2].text == "-std=gnu++23" &&
+				value->tuple[5].tuple.front().tuple[13].tuple[1].text == "gnu++23" &&
+				value->tuple[5].tuple.front().tuple[14].tuple[1].text == "gnu" &&
+				value->tuple[5].tuple.front().tuple[11].tuple[0].text == "observed" &&
 				value->tuple[5].tuple.front().tuple[11].tuple[1].tuple.size() == 1U &&
 				value->tuple[6].tuple.front().tuple[3].integer == 2);
 
-		files.files.emplace("/physical/project/build/compile.rsp",
-							capture_file_snapshot{"/physical/project/build/compile.rsp",
-												  bytes("-I../include -c ../src/main.cpp\n")});
+		files.files.emplace(
+			"/physical/project/build/compile.rsp",
+			capture_file_snapshot{"/physical/project/build/compile.rsp",
+								  bytes("-I../include -std=gnu++23 -c ../src/main.cpp\n")});
 		auto response_input = input;
 		response_input.original_arguments = {input.compiler_path, "@compile.rsp"};
 		auto prepared = cxxlens::sdk::detail::prepare_gcc_16_2_response_files(
@@ -823,6 +853,7 @@ namespace
 			cxxlens::sdk::import_limits{}.maximum_source_closure_bytes);
 		require(prepared && prepared->response_files.size() == 1U);
 		response_input.capture_arguments = prepared->expanded_arguments;
+		response_input.effective_arguments = prepared->expanded_arguments;
 		response_input.capture_arguments.insert(response_input.capture_arguments.end(),
 												{"-MMD", "-MF", "deps.d"});
 		prepared->expanded_arguments = response_input.capture_arguments;

@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 
 import json
+import os
 import pathlib
 import subprocess
 import sys
 import tempfile
+
+
+SHORT_PROCESS_TIMEOUT = 60 if os.getenv("ASAN_OPTIONS") or os.getenv("TSAN_OPTIONS") else 15
 
 
 def require(condition: bool, message: str) -> None:
@@ -95,6 +99,25 @@ def run_response_wrapper(
         capture_output=True,
         check=False,
         timeout=45,
+    )
+
+
+def run_materializer(
+    materializer: pathlib.Path,
+    bundle: pathlib.Path,
+    worker: pathlib.Path,
+    expected_units: int,
+) -> None:
+    analyzed = subprocess.run(
+        [str(materializer), str(bundle), str(worker), str(expected_units)],
+        capture_output=True,
+        check=False,
+        timeout=60,
+    )
+    require(
+        analyzed.returncode == 0,
+        "GCC capture/replay/materialize/query failed "
+        f"with exit {analyzed.returncode}: {analyzed.stderr!r}",
     )
 
 
@@ -230,21 +253,11 @@ def main() -> int:
             ],
             capture_output=True,
             check=False,
-            timeout=15,
+            timeout=SHORT_PROCESS_TIMEOUT,
         )
         require(admitted.returncode == 0, f"SDK rejected CLI bundle: {admitted.stderr!r}")
         if materializer is not None and worker is not None:
-            analyzed = subprocess.run(
-                [str(materializer), str(bundle_path), str(worker)],
-                capture_output=True,
-                check=False,
-                timeout=60,
-            )
-            require(
-                analyzed.returncode == 0,
-                "GCC capture/replay/materialize/query failed "
-                f"with exit {analyzed.returncode}: {analyzed.stderr!r}",
-            )
+            run_materializer(materializer, bundle_path, worker, 2)
 
         wrapper_directory = root / "wrapper-captures"
         wrapper_directory.mkdir()
@@ -270,12 +283,14 @@ def main() -> int:
             [str(consumer), str(bundles[0]), "--expect-wrapper"],
             capture_output=True,
             check=False,
-            timeout=15,
+            timeout=SHORT_PROCESS_TIMEOUT,
         )
         require(
             wrapped_admitted.returncode == 0,
             f"SDK rejected wrapper bundle: {wrapped_admitted.stderr!r}",
         )
+        if materializer is not None and worker is not None:
+            run_materializer(materializer, bundles[0], worker, 1)
 
         response_directory = root / "response-captures"
         response_directory.mkdir()
@@ -297,9 +312,11 @@ def main() -> int:
             [str(consumer), str(response_bundles[0]), "--expect-wrapper"],
             capture_output=True,
             check=False,
-            timeout=15,
+            timeout=SHORT_PROCESS_TIMEOUT,
         )
         require(response_admitted.returncode == 0, "SDK rejected response wrapper bundle")
+        if materializer is not None and worker is not None:
+            run_materializer(materializer, response_bundles[0], worker, 1)
 
         failure_directory = root / "failed-captures"
         failure_directory.mkdir()
@@ -331,14 +348,14 @@ def main() -> int:
             cwd=root / "build",
             capture_output=True,
             check=False,
-            timeout=15,
+            timeout=SHORT_PROCESS_TIMEOUT,
         )
         repeated_specs = subprocess.run(
             staged_specs.args,
             cwd=root / "build",
             capture_output=True,
             check=False,
-            timeout=15,
+            timeout=SHORT_PROCESS_TIMEOUT,
         )
         require(
             staged_specs.returncode == 0
@@ -355,7 +372,7 @@ def main() -> int:
             [str(consumer), str(specs_bundles[0]), "--expect-wrapper"],
             capture_output=True,
             check=False,
-            timeout=15,
+            timeout=SHORT_PROCESS_TIMEOUT,
         )
         require(specs_admitted.returncode == 0, "SDK rejected staged GCC specs bundle")
         require(
@@ -384,7 +401,7 @@ def main() -> int:
             cwd=root / "build",
             capture_output=True,
             check=False,
-            timeout=15,
+            timeout=SHORT_PROCESS_TIMEOUT,
         )
         require(
             rejected_include.returncode == 2
@@ -411,7 +428,7 @@ def main() -> int:
             cwd=root / "build",
             capture_output=True,
             check=False,
-            timeout=15,
+            timeout=SHORT_PROCESS_TIMEOUT,
         )
         require(
             missing_response.returncode == 2
@@ -441,7 +458,7 @@ def main() -> int:
             [str(cli), "capture", "--project-id", "project:cli-capture"],
             capture_output=True,
             check=False,
-            timeout=15,
+            timeout=SHORT_PROCESS_TIMEOUT,
         )
         require(invalid.returncode == 2 and invalid.stdout == b"", "incomplete CLI input was accepted")
 
