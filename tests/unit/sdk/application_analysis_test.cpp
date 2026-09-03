@@ -284,6 +284,8 @@ namespace
 		require(imported && imported_again);
 		require(imported->id() == imported_again->id());
 		require(imported->capture_bundle_digest() == decoded->digest());
+		require(!imported->catalog_semantic_digest().empty());
+		require(imported->catalog_semantic_digest() == imported_again->catalog_semantic_digest());
 		require(imported->replay_plans().size() == 1U);
 		const auto& plan = imported->replay_plans().front();
 		require(plan.digest() == imported_again->replay_plans().front().digest());

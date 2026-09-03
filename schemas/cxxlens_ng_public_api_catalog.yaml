@@ -108,7 +108,7 @@ entries:
     symbols:
       - name: application-analysis.capture
         kind: function-family
-        signature: 'import_limits; capture_gap; class capture_bundle with logical_project_root; result<capture_bundle> decode_capture_bundle(span<const byte>, import_limits); enum replay_fidelity; class replay_plan; class imported_project; result<imported_project> import_capture(const capture_bundle&, import_limits)'
+        signature: 'import_limits; capture_gap; class capture_bundle with logical_project_root; result<capture_bundle> decode_capture_bundle(span<const byte>, import_limits); enum replay_fidelity; class replay_plan; class imported_project with catalog_semantic_digest; result<imported_project> import_capture(const capture_bundle&, import_limits)'
       - name: application-analysis.materialization
         kind: function-family
         signature: 'class materialization_request; enum materialization_terminal; application_analysis_provenance; class materialization_result; result<materialization_result> materialize(snapshot_store&, const imported_project&, const materialization_request&)'

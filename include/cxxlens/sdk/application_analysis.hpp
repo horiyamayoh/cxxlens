@@ -107,6 +107,8 @@ namespace cxxlens::sdk
 		struct implementation;
 		[[nodiscard]] std::string_view id() const noexcept;
 		[[nodiscard]] std::string_view capture_bundle_digest() const noexcept;
+		/** @brief Semantic digest of the sole validated project catalog used by materialization. */
+		[[nodiscard]] std::string_view catalog_semantic_digest() const noexcept;
 		[[nodiscard]] std::span<const replay_plan> replay_plans() const noexcept;
 		[[nodiscard]] std::span<const capture_gap> unresolved() const noexcept;
 

@@ -519,6 +519,8 @@ namespace cxxlens::sdk
 				!canonical_native_path((*toolchain.value())[2].tuple[1].text, *family == "msvc"))
 				return unexpected(invalid("production_toolchain.canonical_binary_path",
 										  "not-canonical-absolute"));
+			if ((*toolchain.value())[2].tuple[1].type == canonical_value::kind::utf8_string)
+				output.decoded.production_compiler_path = (*toolchain.value())[2].tuple[1].text;
 			if (auto valid = validate_captured((*toolchain.value())[3],
 											   "production_toolchain.binary_digest",
 											   canonical_value::kind::utf8_string,
@@ -528,6 +530,9 @@ namespace cxxlens::sdk
 			if ((*toolchain.value())[3].tuple[1].type == canonical_value::kind::utf8_string &&
 				!digest_like((*toolchain.value())[3].tuple[1].text))
 				return unexpected(invalid("production_toolchain.binary_digest", "digest"));
+			if ((*toolchain.value())[3].tuple[1].type == canonical_value::kind::utf8_string)
+				output.decoded.production_compiler_binary_digest =
+					(*toolchain.value())[3].tuple[1].text;
 			if (auto valid = require_strong_id((*toolchain.value())[4],
 											   "production_toolchain.target_triple");
 				!valid)
@@ -542,6 +547,8 @@ namespace cxxlens::sdk
 				!canonical_native_path((*toolchain.value())[5].tuple[1].text, *family == "msvc"))
 				return unexpected(
 					invalid("production_toolchain.sysroot", "not-canonical-absolute"));
+			if ((*toolchain.value())[5].tuple[1].type == canonical_value::kind::utf8_string)
+				output.decoded.sysroot = (*toolchain.value())[5].tuple[1].text;
 			auto capture_digest = [&](const std::size_t index,
 									  const std::string_view name,
 									  std::optional<std::string>& destination) -> result<void>
@@ -928,6 +935,8 @@ namespace cxxlens::sdk
 				previous_closure_id = *closure_id;
 				detail::decoded_capture_source_closure decoded_closure;
 				decoded_closure.id = *closure_id;
+				decoded_closure.digest = (*closure.value())[1].text;
+				decoded_closure.manifest_digest = (*closure.value())[2].text;
 				if (auto valid =
 						require_strong_id((*closure.value())[0], closure_prefix + ".closure_id");
 					!valid)
@@ -953,6 +962,9 @@ namespace cxxlens::sdk
 				total_members += *members;
 				total_blobs += *blobs;
 				total_bytes += *bytes;
+				decoded_closure.member_count = *members;
+				decoded_closure.blob_count = *blobs;
+				decoded_closure.unique_blob_bytes = *bytes;
 
 				const auto& closure_members = (*closure.value())[6];
 				if (closure_members.type != canonical_value::kind::ordered_tuple ||

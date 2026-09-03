@@ -84,6 +84,41 @@ namespace cxxlens::sdk
 			values.erase(std::ranges::unique(values).begin(), values.end());
 		}
 
+		[[nodiscard]] result<std::string> invocation_digest(const replay_plan::implementation& plan)
+		{
+			std::vector<canonical_value> values;
+			values.reserve(plan.effective_arguments.size());
+			for (const auto& argument : plan.effective_arguments)
+				values.push_back(canonical_value::from_string(argument));
+			auto encoded = canonical_binary(canonical_value::from_tuple(std::move(values)));
+			if (!encoded)
+				return unexpected(std::move(encoded.error()));
+			return semantic_digest(
+				"application-analysis-effective-invocation.v1",
+				std::string{reinterpret_cast<const char*>(encoded->data()), encoded->size()});
+		}
+
+		[[nodiscard]] result<std::string>
+		environment_digest(const detail::decoded_capture_unit& unit)
+		{
+			std::vector<canonical_value> values;
+			values.reserve(unit.environment_effects.size());
+			for (const auto& effect : unit.environment_effects)
+				values.push_back(canonical_value::from_tuple({
+					canonical_value::from_string(effect.name),
+					canonical_value::from_string(effect.state),
+					canonical_value::from_string(effect.semantic_value.value_or("")),
+					canonical_value::from_string(effect.reason),
+					canonical_value::from_string(effect.completion_action),
+				}));
+			auto encoded = canonical_binary(canonical_value::from_tuple(std::move(values)));
+			if (!encoded)
+				return unexpected(std::move(encoded.error()));
+			return semantic_digest(
+				"application-analysis-environment.v1",
+				std::string{reinterpret_cast<const char*>(encoded->data()), encoded->size()});
+		}
+
 		[[nodiscard]] std::vector<capture_gap>
 		capture_gaps_for_unit(const std::span<const capture_gap> gaps, const std::size_t unit_index)
 		{
@@ -221,6 +256,10 @@ namespace cxxlens::sdk
 	{
 		return value_->capture_bundle_digest;
 	}
+	std::string_view imported_project::catalog_semantic_digest() const noexcept
+	{
+		return value_->catalog.catalog_digest;
+	}
 	std::span<const replay_plan> imported_project::replay_plans() const noexcept
 	{
 		return value_->replay_plans;
@@ -249,6 +288,10 @@ namespace cxxlens::sdk
 			value->capture_bundle_digest = bundle.value_->digest;
 			value->capture = bundle.value_;
 			value->replay_plans.reserve(bundle.value_->projection.compile_units.size());
+			std::vector<catalog_compile_unit> catalog_units;
+			catalog_units.reserve(bundle.value_->projection.compile_units.size());
+			std::vector<canonical_value> catalog_environments;
+			catalog_environments.reserve(bundle.value_->projection.compile_units.size());
 			for (std::size_t index{}; index < bundle.value_->projection.compile_units.size();
 				 ++index)
 			{
@@ -257,10 +300,39 @@ namespace cxxlens::sdk
 				if (!plan_value)
 					return unexpected(std::move(plan_value.error()));
 				replay_plan plan{std::move(*plan_value)};
+				auto invocation = invocation_digest(*plan.value_);
+				auto environment =
+					environment_digest(bundle.value_->projection.compile_units[index]);
+				if (!invocation || !environment)
+					return unexpected(!invocation ? std::move(invocation.error())
+												  : std::move(environment.error()));
+				catalog_units.push_back(
+					{std::string{plan.compile_unit_id()},
+					 std::move(*invocation),
+					 bundle.value_->projection.compile_units[index].source_content_digest,
+					 *environment});
+				catalog_environments.push_back(
+					canonical_value::from_string(std::move(*environment)));
 				value->unresolved.insert(
 					value->unresolved.end(), plan.unresolved().begin(), plan.unresolved().end());
 				value->replay_plans.push_back(std::move(plan));
 			}
+			auto encoded_environments =
+				canonical_binary(canonical_value::from_tuple(std::move(catalog_environments)));
+			if (!encoded_environments)
+				return unexpected(std::move(encoded_environments.error()));
+			auto catalog_environment = semantic_digest(
+				"application-analysis-project-environment.v1",
+				std::string{reinterpret_cast<const char*>(encoded_environments->data()),
+							encoded_environments->size()});
+			if (!catalog_environment)
+				return unexpected(std::move(catalog_environment.error()));
+			auto catalog = project_catalog::make(bundle.value_->logical_project_root,
+												 std::move(*catalog_environment),
+												 std::move(catalog_units));
+			if (!catalog)
+				return unexpected(std::move(catalog.error()));
+			value->catalog = std::move(*catalog);
 			canonicalize_gaps(value->unresolved);
 			std::vector<canonical_value> fields;
 			fields.reserve(value->replay_plans.size() + 1U);

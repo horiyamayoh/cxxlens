@@ -45,6 +45,11 @@ namespace cxxlens::sdk::detail
 	struct decoded_capture_source_closure
 	{
 		std::string id;
+		std::string digest;
+		std::string manifest_digest;
+		std::uint64_t member_count{};
+		std::uint64_t blob_count{};
+		std::uint64_t unique_blob_bytes{};
 		std::vector<decoded_capture_source_member> members;
 	};
 
@@ -81,7 +86,10 @@ namespace cxxlens::sdk::detail
 	{
 		std::string toolchain_family;
 		std::string toolchain_version;
+		std::optional<std::string> production_compiler_path;
+		std::optional<std::string> production_compiler_binary_digest;
 		std::string target_triple;
+		std::optional<std::string> sysroot;
 		std::optional<std::string> abi_digest;
 		std::optional<std::string> builtin_headers_digest;
 		std::optional<std::string> builtin_macros_digest;
@@ -139,6 +147,7 @@ namespace cxxlens::sdk
 		std::string id;
 		std::string capture_bundle_digest;
 		std::shared_ptr<const capture_bundle::implementation> capture;
+		project_catalog catalog;
 		std::vector<replay_plan> replay_plans;
 		std::vector<capture_gap> unresolved;
 	};
