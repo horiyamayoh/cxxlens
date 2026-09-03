@@ -12,6 +12,8 @@
 #include <tuple>
 #include <utility>
 
+#include <cxxlens/relations/cc_call_direct_target.hpp>
+#include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_declaration.hpp>
 #include <cxxlens/relations/cc_entity.hpp>
 #include <cxxlens/relations/source_span.hpp>
@@ -260,6 +262,113 @@ namespace cxxlens::detail::clang23_gcc_replay
 			return row;
 		}
 
+		[[nodiscard]] sdk::result<std::vector<std::byte>>
+		canonical_call_form(const observed_direct_call& value)
+		{
+			std::vector<sdk::canonical_value> origins;
+			origins.reserve(value.origins.size());
+			for (const auto& origin : value.origins)
+				origins.push_back(sdk::canonical_value::from_tuple({
+					sdk::canonical_value::from_string(origin.kind),
+					sdk::canonical_value::from_string(origin.logical_path),
+					sdk::canonical_value::from_integer(static_cast<std::int64_t>(origin.begin)),
+					sdk::canonical_value::from_integer(static_cast<std::int64_t>(origin.end)),
+					sdk::canonical_value::from_boolean(origin.read_only),
+				}));
+			return sdk::canonical_binary(sdk::canonical_value::from_tuple({
+				value.caller_provider_local_key
+					? sdk::canonical_value::from_string(*value.caller_provider_local_key)
+					: sdk::canonical_value::null(),
+				sdk::canonical_value::from_string(value.target_provider_local_key),
+				sdk::canonical_value::from_string(value.kind),
+				sdk::canonical_value::from_tuple({
+					sdk::canonical_value::from_string(value.source.logical_path),
+					sdk::canonical_value::from_integer(
+						static_cast<std::int64_t>(value.source.begin)),
+					sdk::canonical_value::from_integer(static_cast<std::int64_t>(value.source.end)),
+					sdk::canonical_value::from_string(value.source.role),
+				}),
+				sdk::canonical_value::from_tuple(std::move(origins)),
+			}));
+		}
+
+		struct prepared_call
+		{
+			const observed_direct_call* observed{};
+			const bound_source_span* source{};
+			std::optional<std::string> caller;
+			std::vector<std::byte> canonical_form;
+		};
+
+		[[nodiscard]] auto occurrence_class(const sdk::detail::validated_gcc_replay_input& input,
+											const prepared_call& value)
+		{
+			return std::tuple{std::string_view{input.value().compile_unit_id},
+							  std::string_view{value.source->span_id},
+							  std::string_view{value.observed->kind},
+							  value.caller};
+		}
+
+		[[nodiscard]] sdk::result<sdk::detached_row>
+		call_site_row(const sdk::detail::validated_gcc_replay_input& input,
+					  const prepared_call& value,
+					  const std::uint64_t ordinal)
+		{
+			using relation = cc::relations::call_site;
+			relation::builder builder;
+			for (auto result : {
+					 builder.set<relation::call>(
+						 sdk::detached_cell::typed("cc_call_id", "pending")),
+					 builder.set<relation::compile_unit>(sdk::detached_cell::typed(
+						 "compile_unit_id", input.value().compile_unit_id)),
+					 builder.set<relation::kind>(symbol(
+						 sdk::scalar_kind::open_symbol, "cc.call-kind/1", value.observed->kind)),
+					 builder.set<relation::source>(
+						 sdk::detached_cell::typed("source_span_id", value.source->span_id)),
+					 builder.set<relation::ordinal>(sdk::detached_cell::unsigned_integer(ordinal)),
+				 })
+				if (!result)
+					return sdk::unexpected(std::move(result.error()));
+			if (value.caller)
+				if (auto result = builder.set<relation::caller>(
+						optional_typed("cc_entity_id", *value.caller));
+					!result)
+					return sdk::unexpected(std::move(result.error()));
+			auto row = std::move(builder).finish();
+			if (!row)
+				return sdk::unexpected(std::move(row.error()));
+			auto identity = sdk::derive_domain_identity(relation::descriptor(), *row);
+			if (!identity)
+				return sdk::unexpected(std::move(identity.error()));
+			row->cells.at("cc.call_site.v1.call") =
+				sdk::detached_cell::typed("cc_call_id", std::move(*identity));
+			if (auto valid = sdk::validate_domain_identity(relation::descriptor(), *row); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			return row;
+		}
+
+		[[nodiscard]] sdk::result<sdk::detached_row>
+		direct_target_row(const std::string_view call, const std::string_view target)
+		{
+			using relation = cc::relations::call_direct_target;
+			relation::builder builder;
+			for (auto result : {
+					 builder.set<relation::call>(
+						 sdk::detached_cell::typed("cc_call_id", std::string{call})),
+					 builder.set<relation::target>(
+						 sdk::detached_cell::typed("cc_entity_id", std::string{target})),
+					 builder.set<relation::resolution>(symbol(sdk::scalar_kind::open_symbol,
+															  "cc.direct-target-resolution/1",
+															  "syntactic_direct")),
+				 })
+				if (!result)
+					return sdk::unexpected(std::move(result.error()));
+			auto row = std::move(builder).finish();
+			if (!row)
+				return sdk::unexpected(std::move(row.error()));
+			return row;
+		}
+
 		void sort_rows(std::vector<sdk::detached_row>& rows)
 		{
 			std::ranges::sort(rows, {}, &sdk::detached_row::canonical_form);
@@ -304,7 +413,9 @@ namespace cxxlens::detail::clang23_gcc_replay
 		};
 		return replay_input_digest == other.replay_input_digest &&
 			same_rows(source_spans, other.source_spans) && same_rows(entities, other.entities) &&
-			same_rows(declarations, other.declarations) && unresolved == other.unresolved;
+			same_rows(declarations, other.declarations) &&
+			same_rows(call_sites, other.call_sites) &&
+			same_rows(direct_targets, other.direct_targets) && unresolved == other.unresolved;
 	}
 
 	sdk::result<normalized_observation_candidates>
@@ -350,8 +461,13 @@ namespace cxxlens::detail::clang23_gcc_replay
 				requested(input, cc::relations::entity::descriptor().id);
 			const bool declarations_requested =
 				requested(input, cc::relations::declaration::descriptor().id);
+			const bool call_sites_requested =
+				requested(input, cc::relations::call_site::descriptor().id);
+			const bool direct_targets_requested =
+				requested(input, cc::relations::call_direct_target::descriptor().id);
 			std::map<std::string_view, std::string, std::less<>> entity_ids;
-			if (entities_requested || declarations_requested)
+			if (entities_requested || declarations_requested || call_sites_requested ||
+				direct_targets_requested)
 			{
 				std::map<std::string_view, const observed_entity*, std::less<>> selected;
 				for (const auto& entity : worker.observations.entities)
@@ -410,6 +526,87 @@ namespace cxxlens::detail::clang23_gcc_replay
 					output.declarations.push_back(std::move(*row));
 				}
 				sort_rows(output.declarations);
+			}
+
+			if (call_sites_requested || direct_targets_requested)
+			{
+				std::vector<prepared_call> calls;
+				calls.reserve(worker.observations.direct_calls.size());
+				for (const auto& call : worker.observations.direct_calls)
+				{
+					const auto* source = find_source(*bound, call.source);
+					if (source == nullptr)
+						return sdk::unexpected(
+							failure(call.target_provider_local_key, "call-source-unbound"));
+					prepared_call prepared{&call, source, std::nullopt, {}};
+					if (call.caller_provider_local_key)
+					{
+						const auto caller = entity_ids.find(*call.caller_provider_local_key);
+						if (caller == entity_ids.end())
+							return sdk::unexpected(
+								failure(*call.caller_provider_local_key, "call-caller-unbound"));
+						prepared.caller = caller->second;
+					}
+					auto canonical = canonical_call_form(call);
+					if (!canonical)
+						return sdk::unexpected(std::move(canonical.error()));
+					prepared.canonical_form = std::move(*canonical);
+					calls.push_back(std::move(prepared));
+				}
+				std::ranges::sort(
+					calls,
+					[&](const prepared_call& left, const prepared_call& right)
+					{
+						return std::tuple{occurrence_class(input, left), left.canonical_form} <
+							std::tuple{occurrence_class(input, right), right.canonical_form};
+					});
+				if (call_sites_requested)
+					output.call_sites.reserve(calls.size());
+				if (direct_targets_requested)
+					output.direct_targets.reserve(calls.size());
+				std::optional<decltype(occurrence_class(input, calls.front()))> previous;
+				std::uint64_t ordinal{};
+				for (const auto& call : calls)
+				{
+					const auto current = occurrence_class(input, call);
+					if (!previous || *previous != current)
+					{
+						previous = current;
+						ordinal = 0U;
+					}
+					auto site = call_site_row(input, call, ordinal++);
+					if (!site)
+						return sdk::unexpected(std::move(site.error()));
+					const auto& identity_cell = site->cells.at("cc.call_site.v1.call");
+					const auto* identity = identity_cell.value
+						? std::get_if<std::string>(&*identity_cell.value)
+						: nullptr;
+					if (identity == nullptr)
+						return sdk::unexpected(failure(call.observed->target_provider_local_key,
+													   "call-identity-invalid"));
+					const auto call_id = *identity;
+					if (call_sites_requested)
+						output.call_sites.push_back(std::move(*site));
+					if (!direct_targets_requested)
+						continue;
+					const auto target = entity_ids.find(call.observed->target_provider_local_key);
+					if (target == entity_ids.end())
+					{
+						output.unresolved.push_back(
+							{"cc.call_direct_target.v1.target",
+							 "unavailable",
+							 "direct-callee-entity-unbound:" +
+								 call.observed->target_provider_local_key,
+							 "recapture-with-a-worker-that-detaches-the-direct-callee-entity"});
+						continue;
+					}
+					auto direct = direct_target_row(call_id, target->second);
+					if (!direct)
+						return sdk::unexpected(std::move(direct.error()));
+					output.direct_targets.push_back(std::move(*direct));
+				}
+				sort_rows(output.call_sites);
+				sort_rows(output.direct_targets);
 			}
 			sort_unresolved(output.unresolved);
 			return output;

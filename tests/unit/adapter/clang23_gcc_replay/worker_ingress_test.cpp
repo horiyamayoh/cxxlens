@@ -2,12 +2,14 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <iterator>
 #include <span>
 #include <sstream>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "llvm/clang23_gcc_replay/observation_normalizer.hpp"
@@ -83,8 +85,12 @@ namespace
 		header.source_snapshot_id = *header_snapshot;
 		value.source_members.push_back(std::move(header));
 		value.source_closure_digest = "application-source-closure:sha256:" + std::string(64U, '4');
-		value.requested_relation_descriptor_ids = {
-			"cc.declaration.v1", "cc.entity.v1", "source.file.v1", "source.span.v1"};
+		value.requested_relation_descriptor_ids = {"cc.call_direct_target.v1",
+												   "cc.call_site.v1",
+												   "cc.declaration.v1",
+												   "cc.entity.v1",
+												   "source.file.v1",
+												   "source.span.v1"};
 		value.interpretation = "cc.clang23-gcc-replay-1";
 		auto validated = detail::validate_gcc_replay_input(std::move(value));
 		require(validated);
@@ -415,6 +421,24 @@ namespace
 								   std::string_view{"expansion"},
 								   &detail::clang23_gcc_replay::bound_source_span::role) == 1);
 		require(execute_bytes(*value) == execute_bytes(*value));
+		auto normalized =
+			detail::clang23_gcc_replay::normalize_observation_candidates(*value, detached);
+		require(normalized && normalized->call_sites.size() == 2U &&
+				normalized->direct_targets.size() == 2U);
+		std::vector<std::uint64_t> ordinals;
+		for (const auto& row : normalized->call_sites)
+		{
+			const auto& ordinal_value = row.cells.at("cc.call_site.v1.ordinal").value;
+			require(ordinal_value && std::holds_alternative<std::uint64_t>(*ordinal_value));
+			ordinals.push_back(std::get<std::uint64_t>(*ordinal_value));
+		}
+		std::ranges::sort(ordinals);
+		require(ordinals == std::vector<std::uint64_t>{0U, 1U});
+		auto reversed = detached;
+		std::ranges::reverse(reversed.observations.direct_calls);
+		auto reversed_normalized =
+			detail::clang23_gcc_replay::normalize_observation_candidates(*value, reversed);
+		require(reversed_normalized && *reversed_normalized == *normalized);
 	}
 
 	void detached_observations_normalize_to_existing_relation_contracts()
@@ -441,6 +465,9 @@ namespace
 					row.cells.at("cc.declaration.v1.is_implicit").value.has_value() &&
 					row.cells.at("cc.declaration.v1.is_friend").value.has_value() &&
 					row.cells.at("cc.declaration.v1.is_exported").value.has_value());
+		require(normalized->call_sites.size() == 1U && normalized->direct_targets.size() == 1U);
+		require(normalized->call_sites.front().descriptor_id == "cc.call_site.v1" &&
+				normalized->direct_targets.front().descriptor_id == "cc.call_direct_target.v1");
 		auto repeated = normalize_observation_candidates(value, detached);
 		require(repeated && *repeated == *normalized);
 
@@ -469,7 +496,8 @@ namespace
 		unrequested_worker.replay_input_digest = std::string{unrequested_input->input_digest()};
 		auto unrequested = normalize_observation_candidates(*unrequested_input, unrequested_worker);
 		require(unrequested && unrequested->source_spans.empty() && unrequested->entities.empty() &&
-				unrequested->declarations.empty());
+				unrequested->declarations.empty() && unrequested->call_sites.empty() &&
+				unrequested->direct_targets.empty());
 
 		auto entity_only_draft = value.value();
 		entity_only_draft.requested_relation_descriptor_ids = {"cc.entity.v1"};
@@ -497,6 +525,38 @@ namespace
 		require(declaration_only && declaration_only->entities.empty() &&
 				declaration_only->source_spans.empty() &&
 				declaration_only->declarations.size() == 4U);
+
+		auto calls_only_draft = value.value();
+		calls_only_draft.requested_relation_descriptor_ids = {"cc.call_direct_target.v1",
+															  "cc.call_site.v1"};
+		auto calls_only_input =
+			cxxlens::sdk::detail::validate_gcc_replay_input(std::move(calls_only_draft));
+		require(calls_only_input);
+		auto calls_only_worker = detached;
+		calls_only_worker.replay_input_digest = std::string{calls_only_input->input_digest()};
+		auto missing_target = calls_only_worker;
+		const auto target =
+			missing_target.observations.direct_calls.front().target_provider_local_key;
+		std::erase_if(missing_target.observations.entities,
+					  [&](const auto& entity)
+					  {
+						  return entity.provider_local_key == target;
+					  });
+		auto partial = normalize_observation_candidates(*calls_only_input, missing_target);
+		require(partial && partial->call_sites.size() == 1U && partial->direct_targets.empty() &&
+				std::ranges::any_of(partial->unresolved,
+									[](const auto& gap)
+									{
+										return gap.field == "cc.call_direct_target.v1.target" &&
+											gap.state == "unavailable" &&
+											gap.completion_action ==
+											"recapture-with-a-worker-that-detaches-the-direct-"
+											"callee-entity";
+									}));
+		auto missing_caller = calls_only_worker;
+		missing_caller.observations.direct_calls.front().caller_provider_local_key =
+			"missing-caller";
+		require(!normalize_observation_candidates(*calls_only_input, missing_caller));
 	}
 } // namespace
 
