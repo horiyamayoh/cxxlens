@@ -523,55 +523,62 @@ namespace cxxlens::sdk
 			request.value_->cancellation);
 		if (!plan)
 			return unexpected(std::move(plan.error()));
-		if (plan->units.size() != 1U)
-			return unexpected(error{"application-analysis.target-unavailable",
-									"materialization",
-									"multi-unit atomic publication is not configured"});
-
-		auto& unit = plan->units.front();
 		auto processes = provider::make_system_provider_process_port();
 		if (!processes)
 			return unexpected(error{"application-analysis.target-unavailable",
 									"provider-runtime",
 									"system process port is unavailable"});
-		auto executed = provider::detail::execute_provider_process(*processes, unit.process);
-		if (!executed)
-			return unexpected(std::move(executed.error()));
-		if (!executed->succeeded())
+		std::vector<detail::prepared_application_materialization> prepared;
+		prepared.reserve(plan->units.size());
+		for (auto& unit : plan->units)
 		{
-			auto value = std::make_shared<materialization_result::implementation>();
-			value->terminal = executed->terminal == "provider.cancelled"
-				? materialization_terminal::cancelled
-				: (executed->sealing_error ? materialization_terminal::rejected
-										   : materialization_terminal::failed);
-			value->unresolved = std::move(executed->diagnostics);
-			return materialization_result{std::move(value)};
+			auto executed = provider::detail::execute_provider_process(*processes, unit.process);
+			if (!executed)
+				return unexpected(std::move(executed.error()));
+			if (!executed->succeeded())
+			{
+				auto value = std::make_shared<materialization_result::implementation>();
+				value->terminal = executed->terminal == "provider.cancelled"
+					? materialization_terminal::cancelled
+					: (executed->sealing_error ? materialization_terminal::rejected
+											   : materialization_terminal::failed);
+				value->unresolved = std::move(executed->diagnostics);
+				return materialization_result{std::move(value)};
+			}
+			if (auto valid = provider::detail::validate_provider_process_runtime_binding(
+					*executed, unit.process);
+				!valid)
+				return unexpected(std::move(valid.error()));
+			auto runtime_receipt =
+				provider::detail::provider_runtime_receipt_digest(*executed->runtime_receipt);
+			if (!runtime_receipt)
+				return unexpected(std::move(runtime_receipt.error()));
+			const auto& manifest = unit.process.selection.selected_candidate().description;
+			detail::materialization_runtime_binding runtime{
+				manifest.provider_id,
+				manifest.provider_version,
+				executed->measured_executable_digest,
+				manifest.provider_semantic_contract_digest,
+				unit.process.task_input_digest,
+				*runtime_receipt};
+			auto unit_prepared =
+				detail::prepare_sealed_application_materialization(request.value_->engine,
+																   unit.task,
+																   *executed->sealed,
+																   std::move(runtime),
+																   *runtime_receipt,
+																   unit.replay_plan_digest,
+																   unit.host_partitions);
+			if (!unit_prepared)
+				return unexpected(std::move(unit_prepared.error()));
+			prepared.push_back(std::move(*unit_prepared));
 		}
-		if (auto valid = provider::detail::validate_provider_process_runtime_binding(*executed,
-																					 unit.process);
-			!valid)
-			return unexpected(std::move(valid.error()));
-		auto runtime_receipt =
-			provider::detail::provider_runtime_receipt_digest(*executed->runtime_receipt);
-		if (!runtime_receipt)
-			return unexpected(std::move(runtime_receipt.error()));
-		const auto& manifest = unit.process.selection.selected_candidate().description;
-		detail::materialization_runtime_binding runtime{manifest.provider_id,
-														manifest.provider_version,
-														executed->measured_executable_digest,
-														manifest.provider_semantic_contract_digest,
-														unit.process.task_input_digest,
-														*runtime_receipt};
-		auto adopted = detail::adopt_sealed_application_materialization(request.value_->engine,
-																		store,
-																		unit.task,
-																		*executed->sealed,
-																		std::move(runtime),
-																		*runtime_receipt,
-																		unit.replay_plan_digest,
-																		unit.host_partitions);
+		auto adopted = detail::publish_prepared_application_materializations(
+			request.value_->engine, store, std::move(prepared));
 		if (!adopted)
 			return unexpected(std::move(adopted.error()));
+		const auto& manifest =
+			plan->units.front().process.selection.selected_candidate().description;
 
 		auto value = std::make_shared<materialization_result::implementation>();
 		value->terminal =
@@ -586,11 +593,11 @@ namespace cxxlens::sdk
 		value->provenance =
 			application_analysis_provenance{manifest.provider_id,
 											manifest.provider_version,
-											executed->measured_executable_digest,
+											manifest.provider_binary_digest,
 											manifest.provider_semantic_contract_digest,
-											unit.process.task_input_digest,
-											unit.replay_plan_digest,
-											*runtime_receipt};
+											adopted->provider_input_digest,
+											adopted->replay_plan_digest,
+											adopted->runtime_receipt_digest};
 		return materialization_result{std::move(value)};
 	}
 } // namespace cxxlens::sdk

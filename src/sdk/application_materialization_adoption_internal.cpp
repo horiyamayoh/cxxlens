@@ -94,9 +94,8 @@ namespace cxxlens::sdk::detail
 		}
 	} // namespace
 
-	result<application_materialization_adoption> adopt_sealed_application_materialization(
+	result<prepared_application_materialization> prepare_sealed_application_materialization(
 		const relation_engine& engine,
-		snapshot_store& store,
 		const validated_materialization_task& task,
 		const provider::detail::sealed_provider_transcript& sealed,
 		materialization_runtime_binding runtime,
@@ -201,18 +200,105 @@ namespace cxxlens::sdk::detail
 			engine, task, *validated, host_partitions, source_receipt_digest);
 		if (!source)
 			return unexpected(std::move(source.error()));
-		auto published = publish_materialization_source(engine, store, std::move(*source));
-		if (!published)
-			return unexpected(std::move(published.error()));
-
-		return application_materialization_adoption{
-			std::move(*published),
+		return prepared_application_materialization{
+			std::move(*source),
 			{validated->coverage().begin(), validated->coverage().end()},
 			{validated->unresolved().begin(), validated->unresolved().end()},
 			{validated->conflicts().begin(), validated->conflicts().end()},
 			{validated->differential_disagreements().begin(),
 			 validated->differential_disagreements().end()},
 			std::move(runtime),
+			std::move(replay_plan_digest),
 		};
+	}
+
+	result<application_materialization_adoption> publish_prepared_application_materializations(
+		const relation_engine& engine,
+		snapshot_store& store,
+		std::vector<prepared_application_materialization> prepared)
+	{
+		if (prepared.empty())
+			return unexpected(adoption_error("prepared", "empty"));
+		std::ranges::sort(prepared,
+						  {},
+						  [](const auto& value)
+						  {
+							  return value.source.task_id();
+						  });
+
+		std::map<std::pair<std::string, std::string>, provider::coverage_unit> coverage;
+		std::vector<provider::unresolved_item> unresolved;
+		std::vector<claim_conflict> conflicts;
+		std::vector<differential_disagreement> disagreements;
+		std::vector<canonical_value> replay_digests;
+		std::vector<validated_materialization_publication_source> sources;
+		sources.reserve(prepared.size());
+		const auto state_rank = [](const std::string_view state)
+		{
+			if (state == "failed")
+				return 4;
+			if (state == "unresolved")
+				return 3;
+			if (state == "excluded")
+				return 2;
+			if (state == "not_applicable")
+				return 1;
+			return 0;
+		};
+		for (auto& value : prepared)
+		{
+			for (auto& unit : value.coverage)
+			{
+				auto [found, inserted] = coverage.try_emplace(std::pair{unit.kind, unit.id}, unit);
+				if (!inserted && state_rank(unit.state) > state_rank(found->second.state))
+					found->second = unit;
+			}
+			unresolved.insert(unresolved.end(),
+							  std::make_move_iterator(value.unresolved.begin()),
+							  std::make_move_iterator(value.unresolved.end()));
+			conflicts.insert(conflicts.end(),
+							 std::make_move_iterator(value.conflicts.begin()),
+							 std::make_move_iterator(value.conflicts.end()));
+			disagreements.insert(disagreements.end(),
+								 std::make_move_iterator(value.differential_disagreements.begin()),
+								 std::make_move_iterator(value.differential_disagreements.end()));
+			replay_digests.push_back(canonical_value::from_string(value.replay_plan_digest));
+			sources.push_back(std::move(value.source));
+		}
+		auto replay_digest = prepared.size() == 1U
+			? result<std::string>{prepared.front().replay_plan_digest}
+			: canonical_identity_digest(
+				  "application-analysis-replay-plan-set",
+				  std::array{canonical_value::from_tuple(std::move(replay_digests))});
+		if (!replay_digest)
+			return unexpected(std::move(replay_digest.error()));
+		auto combined = combine_materialization_publication_sources(engine, std::move(sources));
+		if (!combined)
+			return unexpected(std::move(combined.error()));
+		const auto provider_input_digest = std::string{combined->task_input_digest()};
+		const auto runtime_receipt_digest = std::string{combined->source_receipt_digest()};
+		auto published = publish_materialization_source(engine, store, std::move(*combined));
+		if (!published)
+			return unexpected(std::move(published.error()));
+
+		std::vector<provider::coverage_unit> coverage_units;
+		coverage_units.reserve(coverage.size());
+		for (auto& [key, unit] : coverage)
+			coverage_units.push_back(std::move(unit));
+		std::ranges::sort(unresolved,
+						  {},
+						  [](const auto& value)
+						  {
+							  return std::tie(value.code, value.subject, value.detail);
+						  });
+		unresolved.erase(std::ranges::unique(unresolved).begin(), unresolved.end());
+		return application_materialization_adoption{std::move(*published),
+													std::move(coverage_units),
+													std::move(unresolved),
+													std::move(conflicts),
+													std::move(disagreements),
+													std::move(provider_input_digest),
+													std::move(runtime_receipt_digest),
+													std::move(*replay_digest)};
 	}
 } // namespace cxxlens::sdk::detail

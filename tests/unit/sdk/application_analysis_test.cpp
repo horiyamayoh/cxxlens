@@ -248,6 +248,21 @@ namespace
 		return bundle;
 	}
 
+	[[nodiscard]] canonical_value valid_two_unit_bundle()
+	{
+		auto bundle = valid_bundle();
+		auto second = bundle.tuple[5].tuple.front();
+		second.tuple[0] = canonical_value::from_string("compile-unit:secondary");
+		second.tuple[8].tuple[1].tuple.push_back(
+			canonical_value::from_string("-DSECONDARY_UNIT=1"));
+		bundle.tuple[5].tuple.push_back(std::move(second));
+		bundle.tuple[7].tuple.insert(bundle.tuple[7].tuple.begin() + 1,
+									 gap("compile_units[1].config_files",
+										 "config-files-unobserved",
+										 "capture-config-files"));
+		return bundle;
+	}
+
 	[[nodiscard]] cxxlens::sdk::relation_descriptor request_descriptor()
 	{
 		cxxlens::sdk::relation_descriptor value;
@@ -923,6 +938,27 @@ namespace
 																		{},
 																		{});
 		require(!relative && relative.error().detail == "absolute-path-required");
+
+		auto two_unit_bytes = canonical_binary(valid_two_unit_bundle());
+		require(two_unit_bytes);
+		auto two_unit_bundle = decode_capture_bundle(*two_unit_bytes);
+		require(two_unit_bundle && two_unit_bundle->compile_unit_count() == 2U);
+		auto two_unit_project = import_capture(*two_unit_bundle);
+		require(two_unit_project);
+		const auto& two_unit_value =
+			application_analysis_imported_value_internal(*two_unit_project);
+		publication.catalog_semantic_digest = two_unit_value.catalog.catalog_digest;
+		auto two_unit_plan =
+			detail::make_gcc_application_materialization_execution_plan(two_unit_value,
+																		*engine,
+																		publication,
+																		{&descriptor.id, 1U},
+																		"cc.clang23-gcc-replay-1",
+																		*selection,
+																		{},
+																		{});
+		require(two_unit_plan && two_unit_plan->units.size() == 2U);
+		require(two_unit_plan->units[0].task.id() != two_unit_plan->units[1].task.id());
 	}
 
 #if defined(CXXLENS_TEST_CLANG23_WORKER_PATH)
@@ -967,12 +1003,12 @@ namespace
 		auto engine = registry.build("application-analysis-clang23-test");
 		require(engine);
 
-		auto bundle_bytes = canonical_binary(valid_bundle());
+		auto bundle_bytes = canonical_binary(valid_two_unit_bundle());
 		require(bundle_bytes);
 		auto bundle = decode_capture_bundle(*bundle_bytes);
 		require(bundle);
 		auto project = import_capture(*bundle);
-		require(project);
+		require(project && project->replay_plans().size() == 2U);
 		const auto policies = provider::builtin_sandbox_policies();
 		require(!policies.empty());
 		const std::string worker{CXXLENS_TEST_CLANG23_WORKER_PATH};
@@ -1042,6 +1078,7 @@ namespace
 					  << result.error().detail << '\n';
 		require(result && result->terminal() == materialization_terminal::published_partial);
 		require(result->published_snapshot() && result->provenance());
+		require(store->retained_generation_count() == 1U);
 		require(std::ranges::any_of(result->coverage(),
 									[](const provider::coverage_unit& unit)
 									{
@@ -1052,6 +1089,27 @@ namespace
 		require(result->provenance()->provider_id == manifest.provider_id);
 		require(result->provenance()->provider_binary_digest == manifest.provider_binary_digest);
 		require(!result->provenance()->runtime_receipt_digest.empty());
+
+		const std::string failing_worker{"/bin/false"};
+		auto failed_candidate = candidate;
+		failed_candidate.description.provider_binary_digest = executable_digest(failing_worker);
+		failed_candidate.executable_argv = {failing_worker};
+		auto failed_provider_request = provider_request;
+		failed_provider_request.provider_binary_digest =
+			failed_candidate.description.provider_binary_digest;
+		auto failed_request = materialization_request::make(*engine,
+															publication,
+															relation_ids,
+															"cc.clang23-gcc-replay-1",
+															failed_provider_request,
+															{failed_candidate});
+		require(failed_request);
+		auto empty_store = make_in_memory_snapshot_store(*engine);
+		require(empty_store);
+		auto failed = materialize(*empty_store, *project, *failed_request);
+		require(failed && failed->terminal() == materialization_terminal::failed);
+		require(!failed->published_snapshot());
+		require(!empty_store->current(publication.series));
 	}
 #endif
 } // namespace

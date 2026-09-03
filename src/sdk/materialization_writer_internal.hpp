@@ -117,6 +117,9 @@ namespace cxxlens::sdk::detail
 									   snapshot_store&,
 									   validated_materialization_publication_source,
 									   std::optional<std::string>);
+		friend result<validated_materialization_publication_source>
+		combine_materialization_publication_sources(
+			const relation_engine&, std::vector<validated_materialization_publication_source>);
 	};
 
 	[[nodiscard]] result<validated_materialization_publication_source>
@@ -125,6 +128,15 @@ namespace cxxlens::sdk::detail
 											const validated_materialization_result& result,
 											std::span<const partition_draft> host_partitions,
 											std::string source_receipt_digest);
+
+	/**
+	 * Combine independently validated unit sources into one prepublication transaction source.
+	 * Every source must carry the same public request and Store authority. No Store effect occurs.
+	 */
+	[[nodiscard]] result<validated_materialization_publication_source>
+	combine_materialization_publication_sources(
+		const relation_engine& engine,
+		std::vector<validated_materialization_publication_source> sources);
 
 	struct materialization_store_publication
 	{

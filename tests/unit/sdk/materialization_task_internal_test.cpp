@@ -472,6 +472,32 @@ namespace
 			std::cerr << source.error().code << ':' << source.error().field << ':'
 					  << source.error().detail << '\n';
 		require(source.has_value());
+		auto empty_combination = combine_materialization_publication_sources(engine, {});
+		require(!empty_combination && empty_combination.error().detail == "empty");
+		auto duplicate_combination =
+			combine_materialization_publication_sources(engine, {*source, *source});
+		require(!duplicate_combination && duplicate_combination.error().detail == "duplicate");
+
+		auto other_task_draft = task_draft(relation, engine);
+		other_task_draft.publication.publication_target = "snapshot:other";
+		auto other_task = validate_materialization_task(std::move(other_task_draft));
+		require(other_task.has_value());
+		materialization_result_draft other_complete;
+		other_complete.terminal = materialization_terminal::complete;
+		other_complete.task_id = other_task->id();
+		other_complete.task_input_digest = other_task->input_binding_digest();
+		other_complete.runtime = runtime_for(*other_task);
+		other_complete.partitions = {partition_for(relation)};
+		other_complete.coverage = {{"relation", relation.id, "covered", {}}};
+		auto other_result =
+			validate_materialization_result(engine, *other_task, std::move(other_complete));
+		require(other_result.has_value());
+		auto other_source = make_materialization_publication_source(
+			engine, *other_task, *other_result, {}, semantic('f'));
+		require(other_source.has_value());
+		auto authority_mismatch =
+			combine_materialization_publication_sources(engine, {*source, *other_source});
+		require(!authority_mismatch && authority_mismatch.error().detail == "different");
 		auto store = make_in_memory_snapshot_store(engine);
 		require(store.has_value());
 		auto published = publish_materialization_source(engine, *store, std::move(*source));
@@ -527,10 +553,13 @@ namespace
 
 		auto runtime = runtime_for(*task);
 		runtime.runtime_receipt_digest = semantic('e');
+		auto prepared = prepare_sealed_application_materialization(
+			engine, *task, *transcript->sealed(), runtime, semantic('e'), semantic('f'));
+		require(prepared.has_value());
 		auto store = make_in_memory_snapshot_store(engine);
-		require(store.has_value());
-		auto adopted = adopt_sealed_application_materialization(
-			engine, *store, *task, *transcript->sealed(), runtime, semantic('e'), semantic('f'));
+		require(store.has_value() && !store->current(task->value().publication.snapshot.series));
+		auto adopted =
+			publish_prepared_application_materializations(engine, *store, {std::move(*prepared)});
 		if (!adopted)
 			std::cerr << adopted.error().code << ':' << adopted.error().field << ':'
 					  << adopted.error().detail << '\n';
@@ -539,23 +568,16 @@ namespace
 				adopted->coverage.size() == 2U && adopted->unresolved.empty());
 		auto repeated_store = make_in_memory_snapshot_store(engine);
 		require(repeated_store.has_value());
-		auto repeated = adopt_sealed_application_materialization(engine,
-																 *repeated_store,
-																 *task,
-																 *transcript->sealed(),
-																 runtime,
-																 semantic('e'),
-																 semantic('f'));
+		auto repeated_prepared = prepare_sealed_application_materialization(
+			engine, *task, *transcript->sealed(), runtime, semantic('e'), semantic('f'));
+		require(repeated_prepared.has_value());
+		auto repeated = publish_prepared_application_materializations(
+			engine, *repeated_store, {std::move(*repeated_prepared)});
 		require(repeated &&
 				repeated->publication.snapshot.id() == adopted->publication.snapshot.id());
 
-		auto rejected = adopt_sealed_application_materialization(engine,
-																 *store,
-																 *task,
-																 *transcript->sealed(),
-																 std::move(runtime),
-																 semantic('0'),
-																 semantic('f'));
+		auto rejected = prepare_sealed_application_materialization(
+			engine, *task, *transcript->sealed(), std::move(runtime), semantic('0'), semantic('f'));
 		require(!rejected && rejected.error().field == "runtime_receipt");
 	}
 } // namespace

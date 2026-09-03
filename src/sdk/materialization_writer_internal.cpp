@@ -664,6 +664,98 @@ namespace cxxlens::sdk::detail
 		return source;
 	}
 
+	sdk::result<validated_materialization_publication_source>
+	combine_materialization_publication_sources(
+		const sdk::relation_engine& engine,
+		std::vector<validated_materialization_publication_source> sources)
+	{
+		if (sources.empty())
+			return sdk::unexpected(invalid("sources", "empty"));
+		for (const auto& source : sources)
+			if (auto valid = source.validate(engine); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+		if (sources.size() == 1U)
+			return std::move(sources.front());
+
+		std::ranges::sort(sources,
+						  {},
+						  [](const auto& source)
+						  {
+							  return source.task_id_;
+						  });
+		const auto& first = sources.front();
+		const auto same_authority = [&](const auto& source)
+		{
+			const auto& left = first.authority_;
+			const auto& right = source.authority_;
+			return source.materialization_request_id_ == first.materialization_request_id_ &&
+				left.snapshot.series == right.snapshot.series &&
+				left.snapshot.snapshot_semantics_version ==
+				right.snapshot.snapshot_semantics_version &&
+				left.snapshot.catalog_semantic_digest == right.snapshot.catalog_semantic_digest &&
+				left.snapshot.expected_parent_publication ==
+				right.snapshot.expected_parent_publication &&
+				left.analysis_recipe_digest == right.analysis_recipe_digest &&
+				left.output_plan_digest == right.output_plan_digest &&
+				left.publication_target == right.publication_target;
+		};
+		if (!std::ranges::all_of(sources, same_authority))
+			return sdk::unexpected(mismatch("sources.authority", "different"));
+
+		std::vector<sdk::canonical_value> task_ids;
+		std::vector<sdk::canonical_value> input_digests;
+		std::vector<sdk::canonical_value> result_digests;
+		std::vector<sdk::canonical_value> receipt_digests;
+		std::vector<materialization_writer_partition> partitions;
+		std::vector<sdk::closure_candidate> closures;
+		materialization_terminal terminal = materialization_terminal::complete;
+		for (auto& source : sources)
+		{
+			task_ids.push_back(sdk::canonical_value::from_string(source.task_id_));
+			input_digests.push_back(sdk::canonical_value::from_string(source.task_input_digest_));
+			result_digests.push_back(sdk::canonical_value::from_string(source.result_digest_));
+			receipt_digests.push_back(
+				sdk::canonical_value::from_string(source.source_receipt_digest_));
+			if (source.terminal_ == materialization_terminal::partial)
+				terminal = materialization_terminal::partial;
+			partitions.insert(partitions.end(),
+							  std::make_move_iterator(source.partitions_.begin()),
+							  std::make_move_iterator(source.partitions_.end()));
+			closures.insert(closures.end(),
+							std::make_move_iterator(source.closures_.begin()),
+							std::make_move_iterator(source.closures_.end()));
+		}
+		const auto derive =
+			[](const std::string_view domain, std::vector<sdk::canonical_value> values)
+		{
+			return sdk::canonical_identity_digest(
+				domain, std::array{sdk::canonical_value::from_tuple(std::move(values))});
+		};
+		auto task_id =
+			derive("application-analysis-materialization-batch-task", std::move(task_ids));
+		auto input_digest =
+			derive("application-analysis-materialization-batch-input", std::move(input_digests));
+		auto result_digest =
+			derive("application-analysis-materialization-batch-result", std::move(result_digests));
+		auto receipt_digest = derive("application-analysis-materialization-batch-receipt",
+									 std::move(receipt_digests));
+		if (!task_id || !input_digest || !result_digest || !receipt_digest)
+			return sdk::unexpected(invalid("sources.identity", "derivation-failed"));
+
+		validated_materialization_publication_source combined{first.authority_,
+															  first.materialization_request_id_,
+															  std::move(*task_id),
+															  std::move(*input_digest),
+															  std::move(*result_digest),
+															  std::move(*receipt_digest),
+															  terminal,
+															  std::move(partitions),
+															  std::move(closures)};
+		if (auto valid = combined.validate(engine); !valid)
+			return sdk::unexpected(std::move(valid.error()));
+		return combined;
+	}
+
 	sdk::result<materialization_store_publication>
 	publish_materialization_source(const sdk::relation_engine& engine,
 								   sdk::snapshot_store& store,
