@@ -288,6 +288,12 @@ cxxlens_add_test_executable(cxxlens-unit-sdk-materialization-task
                             unit/sdk/materialization_task_internal_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-materialization-task
                       PRIVATE cxxlens::sdk)
+if(CXXLENS_BUILD_SHARED)
+  # This source-private test exercises the immutable Protocol-v2 seal directly.
+  # Hidden runtime symbols are intentionally not exported by the shared SDK, so
+  # consume the one production private closure instead of widening the ABI.
+  cxxlens_add_provider_runtime_closure(cxxlens-unit-sdk-materialization-task)
+endif()
 target_include_directories(cxxlens-unit-sdk-materialization-task
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME unit.sdk-materialization-task
