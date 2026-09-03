@@ -111,7 +111,7 @@ entries:
         signature: 'import_limits; capture_gap; class capture_bundle with logical_project_root; result<capture_bundle> decode_capture_bundle(span<const byte>, import_limits); enum replay_fidelity; class replay_plan; class imported_project with catalog_semantic_digest; result<imported_project> import_capture(const capture_bundle&, import_limits)'
       - name: application-analysis.materialization
         kind: function-family
-        signature: 'class materialization_request; enum materialization_terminal; application_analysis_provenance; class materialization_result; result<materialization_result> materialize(snapshot_store&, const imported_project&, const materialization_request&)'
+        signature: 'class materialization_request with validated explicit provider candidate overload; enum materialization_terminal; application_analysis_provenance; class materialization_result; result<materialization_result> materialize(snapshot_store&, const imported_project&, const materialization_request&)'
     errors: [application-analysis.capture-invalid, application-analysis.import-limit-exceeded, application-analysis.import-limits-invalid, application-analysis.request-invalid, application-analysis.target-unavailable]
     lifetime: [capture-replay-project-request-and-result-values-own-or-share-immutable-detached-data, no-compiler-native-pointer-or-process-handle-crosses-the-header]
     threading: [immutable-values-are-concurrent-readable, materialize-follows-snapshot-store-writer-threading]

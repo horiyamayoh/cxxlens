@@ -253,6 +253,50 @@ namespace
 		return value;
 	}
 
+	[[nodiscard]] cxxlens::sdk::provider::provider_candidate
+	application_provider_candidate(const cxxlens::sdk::relation_descriptor& descriptor,
+								   const std::string& binary_digest,
+								   const bool trust_valid = true)
+	{
+		using namespace cxxlens::sdk::provider;
+		const auto policies = builtin_sandbox_policies();
+		require(!policies.empty());
+		manifest description;
+		description.provider_id = "cxxlens.gcc-replay";
+		description.provider_version = {1U, 0U, 0U};
+		description.package_identity = "cxxlens.gcc-replay.package";
+		description.publisher = "cxxlens";
+		description.license = "Apache-2.0";
+		description.protocol = {protocol_v2_major,
+								protocol_v2_minor,
+								protocol_v2_minor,
+								{"credit-backpressure", "task-input-chunks-v2"},
+								{}};
+		description.platform_tuples = {"linux-glibc"};
+		description.provider_binary_digest = binary_digest;
+		description.provider_semantic_contract_digest = digest('b');
+		description.offered_relations = {descriptor.id};
+		description.interpretation_domains = {"cc.clang23-gcc-replay-1"};
+		description.invalidation_contract = digest('f');
+		description.determinism_contract = digest('9');
+		description.resource_class = "provider.application-analysis";
+		description.sandbox_minimum = "enforced";
+		description.requested_qualifications = {"canonical-semantic-qualified"};
+		return {std::move(description),
+				discovery_source::explicit_path,
+				{"/opt/cxxlens/bin/cxxlens-clang-gcc-replay-worker-23"},
+				true,
+				trust_valid,
+				true,
+				{"canonical-semantic-qualified"},
+				{"linux-glibc",
+				 policies.front().mechanisms,
+				 sandbox_assurance::enforced,
+				 policies.front().policy_digest(),
+				 digest('8')},
+				{}};
+	}
+
 	[[nodiscard]] bool has_reason(const std::span<const cxxlens::sdk::capture_gap> gaps,
 								  const std::string_view reason)
 	{
@@ -696,7 +740,7 @@ namespace
 		const auto policies = cxxlens::sdk::provider::builtin_sandbox_policies();
 		require(!policies.empty());
 		cxxlens::sdk::provider::provider_selection_request provider;
-		provider.provider_id = "provider:gcc-replay";
+		provider.provider_id = "cxxlens.gcc-replay";
 		provider.provider_version = {1U, 0U, 0U};
 		provider.provider_binary_digest = digest('a');
 		provider.provider_semantic_contract_digest = digest('b');
@@ -717,6 +761,40 @@ namespace
 		require(request);
 		require(request->relation_descriptor_ids().size() == 1U);
 		require(request->interpretation() == "cc.clang23-gcc-replay-1");
+		auto candidate = application_provider_candidate(descriptor, digest('a'));
+		auto configured = cxxlens::sdk::materialization_request::make(*engine,
+																	  publication,
+																	  {descriptor.id},
+																	  "cc.clang23-gcc-replay-1",
+																	  provider,
+																	  {candidate});
+		require(configured);
+		auto undiscovered = cxxlens::sdk::materialization_request::make(
+			*engine,
+			publication,
+			{descriptor.id},
+			"cc.clang23-gcc-replay-1",
+			provider,
+			std::vector<cxxlens::sdk::provider::provider_candidate>{});
+		require(!undiscovered && undiscovered.error().code == "provider.not-found");
+
+		auto wrong_identity = candidate;
+		wrong_identity.description.provider_binary_digest = digest('0');
+		auto mismatched = cxxlens::sdk::materialization_request::make(*engine,
+																	  publication,
+																	  {descriptor.id},
+																	  "cc.clang23-gcc-replay-1",
+																	  provider,
+																	  {wrong_identity});
+		require(!mismatched && mismatched.error().code == "provider.not-found");
+		auto untrusted_candidate = application_provider_candidate(descriptor, digest('a'), false);
+		auto untrusted = cxxlens::sdk::materialization_request::make(*engine,
+																	 publication,
+																	 {descriptor.id},
+																	 "cc.clang23-gcc-replay-1",
+																	 provider,
+																	 {untrusted_candidate});
+		require(!untrusted && untrusted.error().code == "security.downgrade-forbidden");
 
 		auto duplicate = cxxlens::sdk::materialization_request::make(*engine,
 																	 publication,

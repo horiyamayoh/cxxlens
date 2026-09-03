@@ -141,6 +141,16 @@ namespace cxxlens::sdk
 			 provider::provider_selection_request provider,
 			 provider::execution_budget budget = {},
 			 const std::stop_token& cancellation = {});
+		/** @brief Validate and retain one explicit provider selection without ambient discovery. */
+		[[nodiscard]] static result<materialization_request>
+		make(relation_engine engine,
+			 snapshot_draft publication,
+			 std::vector<std::string> relation_descriptor_ids,
+			 std::string interpretation,
+			 provider::provider_selection_request provider,
+			 std::vector<provider::provider_candidate> candidates,
+			 provider::execution_budget budget = {},
+			 const std::stop_token& cancellation = {});
 		[[nodiscard]] std::span<const std::string> relation_descriptor_ids() const noexcept;
 		[[nodiscard]] std::string_view interpretation() const noexcept;
 		[[nodiscard]] const provider::execution_budget& budget() const noexcept;

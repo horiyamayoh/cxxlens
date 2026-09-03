@@ -19,6 +19,7 @@ namespace cxxlens::sdk
 		std::vector<std::string> relation_descriptor_ids;
 		std::string interpretation;
 		provider::provider_selection_request provider;
+		std::optional<provider::provider_selection> selection;
 		provider::execution_budget budget;
 		std::stop_token cancellation;
 	};
@@ -409,8 +410,36 @@ namespace cxxlens::sdk
 															std::move(relation_descriptor_ids),
 															std::move(interpretation),
 															std::move(provider),
+															std::nullopt,
 															budget,
 															cancellation});
+		return materialization_request{std::move(value)};
+	}
+
+	result<materialization_request>
+	materialization_request::make(relation_engine engine,
+								  snapshot_draft publication,
+								  std::vector<std::string> relation_descriptor_ids,
+								  std::string interpretation,
+								  provider::provider_selection_request provider,
+								  std::vector<provider::provider_candidate> candidates,
+								  provider::execution_budget budget,
+								  const std::stop_token& cancellation)
+	{
+		auto request = make(std::move(engine),
+							std::move(publication),
+							std::move(relation_descriptor_ids),
+							std::move(interpretation),
+							std::move(provider),
+							budget,
+							cancellation);
+		if (!request)
+			return unexpected(std::move(request.error()));
+		auto selection = provider::select_provider(request->value_->provider, candidates);
+		if (!selection)
+			return unexpected(std::move(selection.error()));
+		auto value = std::make_shared<implementation>(*request->value_);
+		value->selection = std::move(*selection);
 		return materialization_request{std::move(value)};
 	}
 
