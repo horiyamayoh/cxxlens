@@ -96,8 +96,10 @@ namespace cxxlens::detail::clang23_gcc_replay
 
 		[[nodiscard]] auto source_key(const observed_source_span& value)
 		{
-			return std::tuple{
-				std::string_view{value.logical_path}, value.begin, value.end, value.macro_spelling};
+			return std::tuple{std::string_view{value.logical_path},
+							  value.begin,
+							  value.end,
+							  std::string_view{value.role}};
 		}
 
 		[[nodiscard]] const bound_source_span* find_source(const bound_observation_sources& bound,

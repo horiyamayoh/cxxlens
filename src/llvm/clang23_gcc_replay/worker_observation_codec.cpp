@@ -15,7 +15,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 	namespace
 	{
 		using namespace protocol_v2;
-		constexpr std::string_view schema = "cxxlens.clang23-gcc-replay-observations.v2";
+		constexpr std::string_view schema = "cxxlens.clang23-gcc-replay-observations.v3";
 
 		[[nodiscard]] sdk::error invalid(std::string field, std::string detail)
 		{
@@ -68,7 +68,16 @@ namespace cxxlens::detail::clang23_gcc_replay
 			return cbor::value{cbor::array{text(value.logical_path),
 										   cbor::value{value.begin},
 										   cbor::value{value.end},
-										   cbor::value{value.macro_spelling}}};
+										   text(value.role)}};
+		}
+
+		[[nodiscard]] cbor::value origin_value(const observed_source_origin& value)
+		{
+			return cbor::value{cbor::array{text(value.kind),
+										   text(value.logical_path),
+										   cbor::value{value.begin},
+										   cbor::value{value.end},
+										   cbor::value{value.read_only}}};
 		}
 
 		[[nodiscard]] cbor::array entity_values(const observation_batch& observations)
@@ -128,13 +137,20 @@ namespace cxxlens::detail::clang23_gcc_replay
 			cbor::array output;
 			output.reserve(observations.direct_calls.size());
 			for (const auto& value : observations.direct_calls)
+			{
+				cbor::array origins;
+				origins.reserve(value.origins.size());
+				for (const auto& origin : value.origins)
+					origins.push_back(origin_value(origin));
 				output.emplace_back(cbor::array{
 					value.caller_provider_local_key ? text(*value.caller_provider_local_key)
 													: cbor::value{nullptr},
 					text(value.target_provider_local_key),
 					text(value.kind),
 					span_value(value.source),
+					cbor::value{std::move(origins)},
 				});
+			}
 			return output;
 		}
 
@@ -168,7 +184,10 @@ namespace cxxlens::detail::clang23_gcc_replay
 			if (auto valid = add_text(value.logical_path, total, "source.logical_path", limits);
 				!valid)
 				return valid;
-			if (!value.logical_path.starts_with("project://") || value.end < value.begin)
+			if (auto valid = add_text(value.role, total, "source.role", limits); !valid)
+				return valid;
+			if (!value.logical_path.starts_with("project://") || value.end < value.begin ||
+				(value.role != "spelling" && value.role != "expansion"))
 				return sdk::unexpected(invalid("source", "range"));
 			return {};
 		}
@@ -254,6 +273,21 @@ namespace cxxlens::detail::clang23_gcc_replay
 						return valid;
 				if (auto valid = validate_span(item.source, total, limits); !valid)
 					return valid;
+				if (item.origins.size() > limits.maximum_observations - count)
+					return sdk::unexpected(resource("observations", "origin-count"));
+				count += item.origins.size();
+				for (const auto& origin : item.origins)
+				{
+					for (const auto field :
+						 {std::string_view{origin.kind}, std::string_view{origin.logical_path}})
+						if (auto valid = add_text(field, total, "call.origin", limits); !valid)
+							return valid;
+					if (!origin.logical_path.starts_with("project://") ||
+						origin.end < origin.begin || !origin.read_only ||
+						(origin.kind != "macro-spelling" && origin.kind != "macro-spelling-begin" &&
+						 origin.kind != "macro-spelling-end"))
+						return sdk::unexpected(invalid("call.origin", "range"));
+				}
 			}
 			for (const auto& item : value.observations.limitations)
 				if (auto valid = add_text(item, total, "limitation", limits); !valid)
@@ -314,10 +348,25 @@ namespace cxxlens::detail::clang23_gcc_replay
 			auto path = item<std::string>(**fields, 0U, "source.logical_path");
 			auto begin = item<std::uint64_t>(**fields, 1U, "source.begin");
 			auto end = item<std::uint64_t>(**fields, 2U, "source.end");
-			auto macro = item<bool>(**fields, 3U, "source.macro_spelling");
-			if (!path || !begin || !end || !macro)
+			auto role = item<std::string>(**fields, 3U, "source.role");
+			if (!path || !begin || !end || !role)
 				return sdk::unexpected(invalid("source", "field"));
-			return observed_source_span{**path, **begin, **end, **macro};
+			return observed_source_span{**path, **begin, **end, **role};
+		}
+
+		[[nodiscard]] sdk::result<observed_source_origin> decode_origin(const cbor::value& value)
+		{
+			auto fields = fixed_array(value, 5U, "call.origin");
+			if (!fields)
+				return sdk::unexpected(std::move(fields.error()));
+			auto kind = item<std::string>(**fields, 0U, "call.origin.kind");
+			auto path = item<std::string>(**fields, 1U, "call.origin.logical_path");
+			auto begin = item<std::uint64_t>(**fields, 2U, "call.origin.begin");
+			auto end = item<std::uint64_t>(**fields, 3U, "call.origin.end");
+			auto read_only = item<bool>(**fields, 4U, "call.origin.read_only");
+			if (!kind || !path || !begin || !end || !read_only)
+				return sdk::unexpected(invalid("call.origin", "field"));
+			return observed_source_origin{**kind, **path, **begin, **end, **read_only};
 		}
 
 		[[nodiscard]] sdk::result<observation_batch> decode_batch(const cbor::map& root)
@@ -413,7 +462,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 			output.direct_calls.reserve((*calls)->size());
 			for (const auto& encoded : **calls)
 			{
-				auto fields = fixed_array(encoded, 4U, "direct_call");
+				auto fields = fixed_array(encoded, 5U, "direct_call");
 				if (!fields)
 					return sdk::unexpected(std::move(fields.error()));
 				std::optional<std::string> caller;
@@ -424,10 +473,20 @@ namespace cxxlens::detail::clang23_gcc_replay
 				auto target = item<std::string>(**fields, 1U, "direct_call.target");
 				auto kind = item<std::string>(**fields, 2U, "direct_call.kind");
 				auto source = decode_span((**fields)[3U]);
-				if (!target || !kind || !source)
+				auto encoded_origins = item<cbor::array>(**fields, 4U, "direct_call.origins");
+				if (!target || !kind || !source || !encoded_origins)
 					return sdk::unexpected(invalid("direct_call", "field"));
+				std::vector<observed_source_origin> origins;
+				origins.reserve((*encoded_origins)->size());
+				for (const auto& encoded_origin : **encoded_origins)
+				{
+					auto origin = decode_origin(encoded_origin);
+					if (!origin)
+						return sdk::unexpected(std::move(origin.error()));
+					origins.push_back(std::move(*origin));
+				}
 				output.direct_calls.push_back(
-					{std::move(caller), **target, **kind, std::move(*source)});
+					{std::move(caller), **target, **kind, std::move(*source), std::move(origins)});
 			}
 
 			output.limitations.reserve((*limitations)->size());

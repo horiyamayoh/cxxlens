@@ -28,6 +28,8 @@ namespace cxxlens::detail::clang23_gcc_replay
 		constexpr std::string_view synthetic_prefix{"/__cxxlens_gcc_replay__/"};
 		constexpr std::string_view logical_prefix{"project://"};
 		constexpr std::size_t maximum_clang_text_bytes{1024U * 1024U};
+		constexpr std::size_t maximum_macro_origin_depth{128U};
+		constexpr std::size_t maximum_macro_origins{256U};
 
 		[[nodiscard]] sdk::error failure(std::string field, std::string detail)
 		{
@@ -101,7 +103,6 @@ namespace cxxlens::detail::clang23_gcc_replay
 		{
 			if (range.isInvalid())
 				return std::nullopt;
-			const bool macro = range.getBegin().isMacroID() || range.getEnd().isMacroID();
 			const auto begin = sources.getSpellingLoc(range.getBegin());
 			const auto last = sources.getSpellingLoc(range.getEnd());
 			if (begin.isInvalid() || last.isInvalid() ||
@@ -118,9 +119,127 @@ namespace cxxlens::detail::clang23_gcc_replay
 				std::string{logical_prefix} + filename.drop_front(synthetic_prefix.size()).str();
 			output.begin = sources.getFileOffset(begin);
 			output.end = sources.getFileOffset(after);
-			output.macro_spelling = macro;
+			output.role = "spelling";
 			if (output.end < output.begin)
 				return std::nullopt;
+			return output;
+		}
+
+		struct call_source_attachment
+		{
+			observed_source_span primary;
+			std::vector<observed_source_origin> origins;
+		};
+
+		[[nodiscard]] sdk::result<std::string>
+		logical_path_for(const clang::SourceManager& sources, const clang::SourceLocation location)
+		{
+			if (location.isInvalid())
+				return sdk::unexpected(failure("call.source", "invalid-location"));
+			const auto filename = sources.getFilename(location);
+			if (!filename.starts_with(synthetic_prefix))
+				return sdk::unexpected(failure("call.source", "outside-replay-vfs"));
+			if (filename.size() - synthetic_prefix.size() > maximum_clang_text_bytes)
+				return sdk::unexpected(resource_failure("clang-text"));
+			return std::string{logical_prefix} + filename.drop_front(synthetic_prefix.size()).str();
+		}
+
+		[[nodiscard]] sdk::result<call_source_attachment>
+		call_source_for(const clang::SourceManager& sources,
+						const clang::LangOptions& language,
+						const clang::SourceRange range)
+		{
+			if (range.isInvalid())
+				return sdk::unexpected(failure("call.source", "invalid-range"));
+			const auto expansion = sources.getExpansionRange(range);
+			const auto begin = sources.getExpansionLoc(expansion.getBegin());
+			auto end = sources.getExpansionLoc(expansion.getEnd());
+			if (expansion.isTokenRange())
+				end = clang::Lexer::getLocForEndOfToken(end, 0U, sources, language);
+			if (begin.isInvalid() || end.isInvalid() || !sources.isWrittenInSameFile(begin, end))
+				return sdk::unexpected(failure("call.source", "expansion-range"));
+			auto primary_path = logical_path_for(sources, begin);
+			if (!primary_path)
+				return sdk::unexpected(std::move(primary_path.error()));
+			call_source_attachment output;
+			output.primary = {std::move(*primary_path),
+							  sources.getFileOffset(begin),
+							  sources.getFileOffset(end),
+							  "expansion"};
+			if (output.primary.end < output.primary.begin)
+				return sdk::unexpected(failure("call.source", "expansion-offset"));
+
+			std::size_t origin_bytes{};
+			auto origin_begin = range.getBegin();
+			auto origin_end = range.getEnd();
+			for (std::size_t depth{}; depth < maximum_macro_origin_depth &&
+				 (origin_begin.isMacroID() || origin_end.isMacroID());
+				 ++depth)
+			{
+				const auto spelling_begin = sources.getSpellingLoc(origin_begin);
+				const auto spelling_end_token = sources.getSpellingLoc(origin_end);
+				const auto spelling_end =
+					clang::Lexer::getLocForEndOfToken(spelling_end_token, 0U, sources, language);
+				if (spelling_begin.isInvalid() || spelling_end.isInvalid())
+					return sdk::unexpected(failure("call.origin", "range"));
+				auto append = [&](std::string kind,
+								  const clang::SourceLocation origin_start,
+								  const clang::SourceLocation origin_finish) -> sdk::result<void>
+				{
+					if (output.origins.size() >= maximum_macro_origins)
+						return sdk::unexpected(resource_failure("macro-origins"));
+					auto path = logical_path_for(sources, origin_start);
+					if (!path)
+						return sdk::unexpected(std::move(path.error()));
+					if (kind.size() > observer_product_maximum_logical_bytes - origin_bytes ||
+						path->size() >
+							observer_product_maximum_logical_bytes - origin_bytes - kind.size())
+						return sdk::unexpected(resource_failure("macro-origin-bytes"));
+					origin_bytes += kind.size() + path->size();
+					const auto origin_start_offset = sources.getFileOffset(origin_start);
+					const auto origin_finish_offset = sources.getFileOffset(origin_finish);
+					if (origin_finish_offset < origin_start_offset)
+						return sdk::unexpected(failure("call.origin", "offset"));
+					output.origins.push_back({std::move(kind),
+											  std::move(*path),
+											  origin_start_offset,
+											  origin_finish_offset,
+											  true});
+					return {};
+				};
+				if (sources.isWrittenInSameFile(spelling_begin, spelling_end))
+				{
+					if (auto appended = append("macro-spelling", spelling_begin, spelling_end);
+						!appended)
+						return sdk::unexpected(std::move(appended.error()));
+				}
+				else
+				{
+					const auto begin_end =
+						clang::Lexer::getLocForEndOfToken(spelling_begin, 0U, sources, language);
+					if (begin_end.isInvalid())
+						return sdk::unexpected(failure("call.origin", "begin-token"));
+					if (auto appended = append("macro-spelling-begin", spelling_begin, begin_end);
+						!appended)
+						return sdk::unexpected(std::move(appended.error()));
+					if (auto appended =
+							append("macro-spelling-end", spelling_end_token, spelling_end);
+						!appended)
+						return sdk::unexpected(std::move(appended.error()));
+				}
+				const auto next_begin = origin_begin.isMacroID()
+					? sources.getImmediateExpansionRange(origin_begin).getBegin()
+					: origin_begin;
+				const auto next_end = origin_end.isMacroID()
+					? sources.getImmediateExpansionRange(origin_end).getEnd()
+					: origin_end;
+				if (next_begin == origin_begin && next_end == origin_end)
+					break;
+				origin_begin = next_begin;
+				origin_end = next_end;
+			}
+			if (origin_begin.isMacroID() || origin_end.isMacroID())
+				return sdk::unexpected(resource_failure("macro-origin-depth"));
 			return output;
 		}
 
@@ -378,24 +497,32 @@ namespace cxxlens::detail::clang23_gcc_replay
 			{
 				if (value == nullptr || value->getDirectCallee() == nullptr)
 					return true;
-				auto source = span_for(
+				auto source = call_source_for(
 					context_.getSourceManager(), context_.getLangOpts(), value->getSourceRange());
 				if (!source)
-					return true;
+					return source.error().code ==
+							"application-analysis.replay-observation-resource-limit"
+						? reject(std::move(source.error()))
+						: limitation("call-source-unavailable:" + source.error().detail);
 				auto target = provider_local_key(*value->getDirectCallee());
 				if (!target)
-					return limitation("direct-callee-usr-unavailable:" + source->logical_path);
+					return limitation("direct-callee-usr-unavailable:" +
+									  source->primary.logical_path);
 				observed_direct_call call;
 				if (!current_function_.empty())
 					call.caller_provider_local_key = current_function_;
 				call.target_provider_local_key = std::move(*target);
 				call.kind = call_kind(*value);
-				call.source = std::move(*source);
+				call.source = std::move(source->primary);
+				call.origins = std::move(source->origins);
 				const auto caller_bytes =
 					call.caller_provider_local_key ? call.caller_provider_local_key->size() : 0U;
 				if (!accept(bounds_.observe(caller_bytes + call.target_provider_local_key.size() +
 											call.kind.size() + call.source.logical_path.size())))
 					return false;
+				for (const auto& origin : call.origins)
+					if (!accept(bounds_.observe(origin.kind.size() + origin.logical_path.size())))
+						return false;
 				output_.direct_calls.push_back(std::move(call));
 				return true;
 			}

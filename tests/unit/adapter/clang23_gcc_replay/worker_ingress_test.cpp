@@ -54,7 +54,8 @@ namespace
 		source.content = bytes("#include \"answer.hpp\"\n"
 							   "[[nodiscard]] int answer_value(int value) { return value; }\n"
 							   "double answer_value(double value) { return value; }\n"
-							   "int main() { return answer_value(answer); }\n");
+							   "#define CALL_ANSWER(v) answer_value(v)\n"
+							   "int main() { return CALL_ANSWER(answer); }\n");
 		source.content_digest = content_digest(source.content);
 		source.role = "main";
 		source.encoding = "utf8";
@@ -246,7 +247,12 @@ namespace
 				call.target_provider_local_key == answer_entity->provider_local_key &&
 				call.kind == "direct_function" &&
 				call.source.logical_path == "project://main.cpp" &&
-				call.source.begin < call.source.end);
+				call.source.begin < call.source.end && call.source.role == "expansion" &&
+				!call.origins.empty());
+		for (const auto& origin : call.origins)
+			require(origin.kind.starts_with("macro-spelling") &&
+					origin.logical_path == "project://main.cpp" && origin.begin < origin.end &&
+					origin.read_only);
 		auto repeated = cxxlens::detail::clang23_gcc_replay::parse_replay_input(value);
 		require(repeated && repeated->terminal == parsed->terminal &&
 				repeated->declaration_count == parsed->declaration_count &&
@@ -318,14 +324,18 @@ namespace
 		auto bound = bind_observation_sources(value, detached.observations);
 		require(bound && bound->replay_input_digest == value.input_digest() &&
 				!bound->spans.empty());
+		bool saw_expansion{};
 		for (const auto& span : bound->spans)
 		{
 			require(span.observed.logical_path.starts_with("project://") &&
-					span.observed.begin <= span.observed.end && span.role == "spelling" &&
-					span.read_only && span.span_id.starts_with("source-span:") &&
+					span.observed.begin <= span.observed.end &&
+					(span.role == "spelling" || span.role == "expansion") && span.read_only &&
+					span.span_id.starts_with("source-span:") &&
 					span.source_snapshot_id.starts_with("source-snapshot:") &&
 					span.file_id.starts_with("file:"));
+			saw_expansion = saw_expansion || span.role == "expansion";
 		}
+		require(saw_expansion);
 		auto repeated = bind_observation_sources(value, detached.observations);
 		require(repeated && *repeated == *bound);
 
@@ -338,6 +348,15 @@ namespace
 		outside.declarations.front().source.end = 1000000U;
 		auto out_of_bounds = bind_observation_sources(value, outside);
 		require(!out_of_bounds && out_of_bounds.error().detail == "range-out-of-bounds");
+
+		auto outside_origin = detached.observations;
+		outside_origin.direct_calls.front().origins.front().logical_path = "project://missing.cpp";
+		auto missing_origin = bind_observation_sources(value, outside_origin);
+		require(!missing_origin && missing_origin.error().detail == "origin-not-in-source-closure");
+		auto invalid_origin = detached.observations;
+		invalid_origin.direct_calls.front().origins.front().kind = "invented";
+		auto rejected_origin = bind_observation_sources(value, invalid_origin);
+		require(!rejected_origin && rejected_origin.error().detail == "origin-kind-invalid");
 
 		using namespace cxxlens::sdk;
 		detail::gcc_replay_input_draft unavailable = value.value();
@@ -361,6 +380,41 @@ namespace
 		require(stale_input);
 		auto stale_snapshot = bind_observation_sources(*stale_input, detached.observations);
 		require(!stale_snapshot && stale_snapshot.error().detail == "snapshot-identity-mismatch");
+	}
+
+	void same_expansion_macro_calls_retain_distinct_ordered_origins()
+	{
+		using namespace cxxlens;
+		auto base = input();
+		auto draft = base.value();
+		auto main = std::ranges::find(draft.source_members,
+									  std::string_view{"main"},
+									  &sdk::detail::decoded_capture_source_member::role);
+		require(main != draft.source_members.end());
+		main->content = bytes("int answer_value(int value) { return value; }\n"
+							  "#define TWICE(v) (answer_value(v) + answer_value(v))\n"
+							  "int main() { return TWICE(1); }\n");
+		main->content_digest = sdk::content_digest(main->content);
+		auto snapshot = sdk::detail::derive_source_snapshot_id(
+			main->file_id, main->content_digest, *main->encoding);
+		require(snapshot);
+		main->source_snapshot_id = std::move(*snapshot);
+		auto value = sdk::detail::validate_gcc_replay_input(std::move(draft));
+		require(value);
+		auto detached = execute(*value);
+		require(detached.observations.direct_calls.size() == 2U);
+		const auto& first = detached.observations.direct_calls[0];
+		const auto& second = detached.observations.direct_calls[1];
+		require(first.source == second.source && first.source.role == "expansion" &&
+				!first.origins.empty() && !second.origins.empty() &&
+				first.origins != second.origins);
+		auto bound =
+			detail::clang23_gcc_replay::bind_observation_sources(*value, detached.observations);
+		require(bound &&
+				std::ranges::count(bound->spans,
+								   std::string_view{"expansion"},
+								   &detail::clang23_gcc_replay::bound_source_span::role) == 1);
+		require(execute_bytes(*value) == execute_bytes(*value));
 	}
 
 	void detached_observations_normalize_to_existing_relation_contracts()
@@ -453,5 +507,6 @@ int main()
 	malformed_and_oversized_input_fail_without_output();
 	parser_uses_only_the_bound_source_closure();
 	observations_bind_only_to_capture_source_authority();
+	same_expansion_macro_calls_retain_distinct_ordered_origins();
 	detached_observations_normalize_to_existing_relation_contracts();
 }

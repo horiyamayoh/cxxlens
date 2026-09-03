@@ -33,11 +33,11 @@ namespace cxxlens::detail::clang23_gcc_replay
 					std::move(detail)};
 		}
 
-		[[nodiscard]] sdk::detached_cell role_cell()
+		[[nodiscard]] sdk::detached_cell role_cell(const std::string_view role)
 		{
 			return {{sdk::scalar_kind::open_symbol, "source.range-role/1", false},
 					sdk::cell_state::present,
-					sdk::scalar_value{std::string{"spelling"}},
+					sdk::scalar_value{std::string{role}},
 					std::nullopt};
 		}
 
@@ -56,7 +56,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 					 builder.set<relation::begin>(
 						 sdk::detached_cell::unsigned_integer(observed.begin)),
 					 builder.set<relation::end>(sdk::detached_cell::unsigned_integer(observed.end)),
-					 builder.set<relation::role>(role_cell()),
+					 builder.set<relation::role>(role_cell(observed.role)),
 					 builder.set<relation::read_only>(
 						 sdk::detached_cell::boolean(member.read_only)),
 				 })
@@ -110,6 +110,8 @@ namespace cxxlens::detail::clang23_gcc_replay
 			output.spans.reserve(count);
 			auto bind = [&](const observed_source_span& observed) -> sdk::result<void>
 			{
+				if (observed.role != "spelling" && observed.role != "expansion")
+					return sdk::unexpected(failure(observed.role, "unsupported-range-role"));
 				const auto found = members.find(observed.logical_path);
 				if (found == members.end())
 					return sdk::unexpected(failure(observed.logical_path, "not-in-source-closure"));
@@ -123,7 +125,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 										std::move(*identity),
 										*member.source_snapshot_id,
 										member.file_id,
-										"spelling",
+										observed.role,
 										member.read_only});
 				return {};
 			};
@@ -134,8 +136,24 @@ namespace cxxlens::detail::clang23_gcc_replay
 				if (auto result = bind(value.source); !result)
 					return sdk::unexpected(std::move(result.error()));
 			for (const auto& value : observations.direct_calls)
+			{
 				if (auto result = bind(value.source); !result)
 					return sdk::unexpected(std::move(result.error()));
+				for (const auto& origin : value.origins)
+				{
+					if (origin.kind != "macro-spelling" && origin.kind != "macro-spelling-begin" &&
+						origin.kind != "macro-spelling-end")
+						return sdk::unexpected(failure(origin.kind, "origin-kind-invalid"));
+					const auto found = members.find(origin.logical_path);
+					if (found == members.end())
+						return sdk::unexpected(
+							failure(origin.logical_path, "origin-not-in-source-closure"));
+					if (!origin.read_only || origin.end < origin.begin ||
+						origin.end > found->second->content.size())
+						return sdk::unexpected(
+							failure(origin.logical_path, "origin-range-invalid"));
+				}
+			}
 
 			std::ranges::sort(output.spans,
 							  [](const auto& left, const auto& right)
@@ -143,11 +161,11 @@ namespace cxxlens::detail::clang23_gcc_replay
 								  return std::tie(left.observed.logical_path,
 												  left.observed.begin,
 												  left.observed.end,
-												  left.observed.macro_spelling) <
+												  left.observed.role) <
 									  std::tie(right.observed.logical_path,
 											   right.observed.begin,
 											   right.observed.end,
-											   right.observed.macro_spelling);
+											   right.observed.role);
 							  });
 			output.spans.erase(std::ranges::unique(output.spans).begin(), output.spans.end());
 			return output;

@@ -41,9 +41,20 @@ namespace cxxlens::detail::clang23_gcc_replay
 		std::string logical_path;
 		std::uint64_t begin{};
 		std::uint64_t end{};
-		bool macro_spelling{};
+		std::string role;
 
 		[[nodiscard]] bool operator==(const observed_source_span&) const = default;
+	};
+
+	struct observed_source_origin
+	{
+		std::string kind;
+		std::string logical_path;
+		std::uint64_t begin{};
+		std::uint64_t end{};
+		bool read_only{true};
+
+		[[nodiscard]] bool operator==(const observed_source_origin&) const = default;
 	};
 
 	struct observed_entity
@@ -92,6 +103,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 		std::string target_provider_local_key;
 		std::string kind;
 		observed_source_span source;
+		std::vector<observed_source_origin> origins;
 
 		[[nodiscard]] bool operator==(const observed_direct_call&) const = default;
 	};
