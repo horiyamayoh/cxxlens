@@ -5,7 +5,9 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <new>
+#include <source_location>
 #include <string>
 #include <utility>
 #include <vector>
@@ -75,10 +77,15 @@ namespace
 	using cxxlens::sdk::canonical_value;
 
 	template <class value_type>
-	void require(const value_type& condition)
+	void require(const value_type& condition,
+				 const std::source_location location = std::source_location::current())
 	{
 		if (!static_cast<bool>(condition))
+		{
+			std::cerr << "require failed at " << location.file_name() << ':' << location.line()
+					  << '\n';
 			std::abort();
+		}
 	}
 
 	[[nodiscard]] std::string digest(const char digit)
@@ -1053,6 +1060,14 @@ namespace
 			{provider::sandbox_assurance::enforced, policies.front().policy_digest()},
 			true,
 			std::nullopt};
+		provider::execution_budget execution_budget;
+#if defined(CXXLENS_SANITIZER_INSTRUMENTED)
+		// Sanitizer runtimes reserve a large virtual address range and create helper threads.
+		// Keep the production defaults intact while allowing the fully instrumented worker to
+		// cross the same process boundary exercised by this test.
+		execution_budget.address_space_bytes = std::numeric_limits<std::uint64_t>::max();
+		execution_budget.subprocesses = 1024U;
+#endif
 		snapshot_draft publication{{"catalog:application-analysis",
 									"experimental",
 									std::string{engine->generation()},
@@ -1068,7 +1083,8 @@ namespace
 													 relation_ids,
 													 "cc.clang23-gcc-replay-1",
 													 provider_request,
-													 {candidate});
+													 {candidate},
+													 execution_budget);
 		require(request);
 		auto store = make_in_memory_snapshot_store(*engine);
 		require(store);
@@ -1078,6 +1094,7 @@ namespace
 					  << result.error().detail << '\n';
 		require(result && result->terminal() == materialization_terminal::published_partial);
 		require(result->published_snapshot() && result->provenance());
+		require(!result->published_snapshot()->unresolved_items().empty());
 		require(store->retained_generation_count() == 1U);
 		require(std::ranges::any_of(result->coverage(),
 									[](const provider::coverage_unit& unit)
@@ -1102,7 +1119,8 @@ namespace
 															relation_ids,
 															"cc.clang23-gcc-replay-1",
 															failed_provider_request,
-															{failed_candidate});
+															{failed_candidate},
+															execution_budget);
 		require(failed_request);
 		auto empty_store = make_in_memory_snapshot_store(*engine);
 		require(empty_store);

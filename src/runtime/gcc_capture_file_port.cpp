@@ -1,5 +1,7 @@
+#include <algorithm>
 #include <cerrno>
 #include <cstdint>
+#include <filesystem>
 #include <limits>
 #include <memory>
 #include <new>
@@ -317,6 +319,105 @@ namespace cxxlens::sdk::detail
 				(void)path;
 				(void)limits;
 				return unexpected(io_error("capture.file", "unsupported-platform"));
+#endif
+			}
+
+			result<std::string>
+			digest_regular_tree(const std::string_view path,
+								const capture_tree_digest_limits limits) override
+			{
+#if defined(__linux__)
+				if (path.empty() || path.contains('\0') || limits.maximum_files == 0U ||
+					limits.maximum_total_bytes == 0U || limits.maximum_path_bytes == 0U)
+					return unexpected(io_error("capture.tree", "invalid-request"));
+				try
+				{
+					auto root = canonical_directory(path, limits.maximum_path_bytes);
+					if (!root)
+						return unexpected(std::move(root.error()));
+					auto enumerate = [&]() -> result<std::vector<std::string>>
+					{
+						std::vector<std::string> paths;
+						std::error_code failure;
+						std::filesystem::recursive_directory_iterator iterator{
+							*root, std::filesystem::directory_options::none, failure};
+						const std::filesystem::recursive_directory_iterator end;
+						if (failure)
+							return unexpected(io_error("capture.tree", "enumerate"));
+						for (; iterator != end; iterator.increment(failure))
+						{
+							if (failure)
+								return unexpected(io_error("capture.tree", "enumerate"));
+							const auto status = iterator->symlink_status(failure);
+							if (failure)
+								return unexpected(io_error("capture.tree", "metadata"));
+							if (std::filesystem::is_symlink(status))
+							{
+								if (std::filesystem::is_directory(iterator->status(failure)))
+									iterator.disable_recursion_pending();
+								return unexpected(io_error("capture.tree", "symlink"));
+							}
+							if (!std::filesystem::is_regular_file(status))
+								continue;
+							auto entry = iterator->path().string();
+							if (entry.size() > limits.maximum_path_bytes)
+								return unexpected(limit_error("capture.tree", "path-bytes"));
+							paths.push_back(std::move(entry));
+							if (paths.size() > limits.maximum_files)
+								return unexpected(limit_error("capture.tree", "file-count"));
+						}
+						std::ranges::sort(paths);
+						return paths;
+					};
+					auto paths = enumerate();
+					if (!paths)
+						return unexpected(std::move(paths.error()));
+					std::uint64_t remaining = limits.maximum_total_bytes;
+					std::vector<canonical_value> entries;
+					entries.reserve(paths->size());
+					for (const auto& entry : *paths)
+					{
+						auto file =
+							read_regular_file(entry, {remaining, limits.maximum_path_bytes, *root});
+						if (!file)
+							return unexpected(std::move(file.error()));
+						if (file->content.size() > remaining)
+							return unexpected(limit_error("capture.tree", "byte-count"));
+						remaining -= static_cast<std::uint64_t>(file->content.size());
+						std::error_code relative_failure;
+						const auto relative = std::filesystem::relative(
+							file->canonical_path, *root, relative_failure);
+						if (relative_failure || relative.empty() ||
+							relative.string().starts_with(".."))
+							return unexpected(io_error("capture.tree", "relative-path"));
+						entries.push_back(canonical_value::from_tuple({
+							canonical_value::from_string(relative.generic_string()),
+							canonical_value::from_string(content_digest(file->content)),
+							canonical_value::from_integer(
+								static_cast<std::int64_t>(file->content.size())),
+						}));
+					}
+					auto rechecked = enumerate();
+					if (!rechecked || *rechecked != *paths)
+						return unexpected(io_error("capture.tree", "changed-during-read"));
+					auto encoded =
+						canonical_binary(canonical_value::from_tuple(std::move(entries)));
+					if (!encoded)
+						return unexpected(std::move(encoded.error()));
+					return content_digest(*encoded);
+				}
+				catch (const std::bad_alloc&)
+				{
+					return unexpected(io_error("capture.tree", "allocation"));
+				}
+				catch (const std::length_error&)
+				{
+					return unexpected(io_error("capture.tree", "allocation-length"));
+				}
+#else
+				(void)path;
+				(void)limits;
+				return unexpected(unavailable_error("capture.tree", "unsupported-platform"));
 #endif
 			}
 

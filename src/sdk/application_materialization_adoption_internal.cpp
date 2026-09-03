@@ -32,6 +32,7 @@ namespace cxxlens::sdk::detail
 							 const validated_materialization_task& task,
 							 const provider::detail::sealed_provider_batch& batch,
 							 const std::span<const provider::coverage_unit> coverage,
+							 const std::span<const provider::unresolved_item> unresolved,
 							 const std::string_view source_receipt_digest,
 							 const std::string_view replay_plan_digest,
 							 const bool partial,
@@ -68,7 +69,10 @@ namespace cxxlens::sdk::detail
 				};
 				if (auto added = transaction_claims.add_observation(engine, std::move(value));
 					!added)
-					return unexpected(std::move(added.error()));
+					return unexpected(adoption_error(std::string{batch.descriptor_id()},
+													 added.error().code + ":" +
+														 added.error().field + ":" +
+														 added.error().detail));
 			}
 
 			partition_draft output;
@@ -90,6 +94,29 @@ namespace cxxlens::sdk::detail
 			if (output.coverage.empty())
 				return unexpected(
 					adoption_error(std::string{batch.descriptor_id()}, "coverage-missing"));
+			if (std::ranges::any_of(output.coverage,
+									[](const auto& unit)
+									{
+										return unit.state != "covered";
+									}))
+				for (const auto& item : unresolved)
+				{
+					const std::array fields{
+						canonical_value::from_string(std::string{task.id()}),
+						canonical_value::from_string(std::string{batch.descriptor_id()}),
+						canonical_value::from_string(item.code),
+						canonical_value::from_string(item.subject),
+						canonical_value::from_string(item.detail),
+					};
+					auto id = canonical_identity_digest("application-analysis-unresolved", fields);
+					if (!id)
+						return unexpected(std::move(id.error()));
+					output.unresolved.push_back({"unresolved:" + *id,
+												 std::string{batch.descriptor_id()},
+												 item.subject,
+												 {},
+												 item.code + ":" + item.detail});
+				}
 			return output;
 		}
 	} // namespace
@@ -153,6 +180,7 @@ namespace cxxlens::sdk::detail
 												  task,
 												  batch,
 												  sealed.coverage(),
+												  sealed.unresolved(),
 												  source_receipt_digest,
 												  replay_plan_digest,
 												  partial,

@@ -131,6 +131,7 @@ jobs:
           profile: none
           python-dependencies: "false"
       - uses: ./.github/actions/setup-clang23-gcc-replay
+      - uses: ./.github/actions/setup-gcc16-capture
       - name: Build and test the exact replay worker ingress
         run: |
           python3 tools/ci/bootstrap_application_analysis_toolchain.py \
@@ -148,11 +149,19 @@ jobs:
             -DLLVM_DIR="${CXXLENS_CLANG_GCC_REPLAY_ROOT}/lib/cmake/llvm" \
             -DClang_DIR="${CXXLENS_CLANG_GCC_REPLAY_ROOT}/lib/cmake/clang"
           cmake --build build/clang23-gcc-replay \
-            --target cxxlens-clang-gcc-replay-worker-23 \
+            --target cxxlens cxxlens-gcc-capture-cli-consumer \
+                     cxxlens-gcc-application-analysis-e2e \
+                     cxxlens-clang-gcc-replay-worker-23 \
                      cxxlens-unit-clang23-gcc-replay-worker-ingress \
                      cxxlens-unit-sdk-application-analysis
           ctest --test-dir build/clang23-gcc-replay --output-on-failure \
             -R '^(adapter\.clang23-gcc-replay-worker-ingress|unit\.sdk-application-analysis)$'
+          python3 tests/unit/sdk/check_gcc_capture_cli.py \
+            build/clang23-gcc-replay/cxxlens "$(command -v g++)" \
+            build/clang23-gcc-replay/tests/cxxlens-gcc-capture-cli-consumer \
+            --require-production-build \
+            --materializer build/clang23-gcc-replay/tests/cxxlens-gcc-application-analysis-e2e \
+            --worker build/clang23-gcc-replay/cxxlens-clang-gcc-replay-worker-23
           cmake --install build/clang23-gcc-replay \
             --prefix "${RUNNER_TEMP}/cxxlens-clang23-worker-install" \
             --component clang23-gcc-replay-worker

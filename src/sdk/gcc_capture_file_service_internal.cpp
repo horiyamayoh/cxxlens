@@ -195,8 +195,12 @@ namespace cxxlens::sdk::detail
 												  *root,
 												  request.execution_environment,
 												  request.process_limits,
-												  request.absolute_wall_deadline_ns},
-												 cancellation);
+												  request.absolute_wall_deadline_ns,
+												  limits.maximum_source_closure_members,
+												  limits.maximum_source_closure_bytes,
+												  limits.maximum_string_bytes},
+												 cancellation,
+												 &files);
 			if (!toolchain)
 				return unexpected(std::move(toolchain.error()));
 			auto database = files.read_regular_file(
@@ -277,8 +281,12 @@ namespace cxxlens::sdk::detail
 												  *working,
 												  request.execution_environment,
 												  request.process_limits,
-												  request.absolute_wall_deadline_ns},
-												 cancellation);
+												  request.absolute_wall_deadline_ns,
+												  limits.maximum_source_closure_members,
+												  limits.maximum_source_closure_bytes,
+												  limits.maximum_string_bytes},
+												 cancellation,
+												 &files);
 			if (!toolchain)
 				return unexpected(std::move(toolchain.error()));
 			if ((!request.expected_compiler_path.empty() &&

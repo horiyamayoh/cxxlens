@@ -41,6 +41,13 @@ namespace cxxlens::sdk::detail
 		std::string_view required_canonical_root;
 	};
 
+	struct capture_tree_digest_limits
+	{
+		std::uint64_t maximum_total_bytes{};
+		std::size_t maximum_files{};
+		std::size_t maximum_path_bytes{};
+	};
+
 	class gcc_capture_workspace
 	{
 	  public:
@@ -60,6 +67,14 @@ namespace cxxlens::sdk::detail
 		canonical_directory(std::string_view path, std::size_t maximum_path_bytes) = 0;
 		[[nodiscard]] virtual result<capture_file_snapshot>
 		read_regular_file(std::string_view path, capture_file_read_limits limits) = 0;
+		[[nodiscard]] virtual result<std::string>
+		digest_regular_tree(std::string_view path, capture_tree_digest_limits limits)
+		{
+			(void)path;
+			(void)limits;
+			return unexpected(
+				{std::string{capture_file_unavailable_code}, "capture.tree", "unsupported"});
+		}
 		[[nodiscard]] virtual result<std::unique_ptr<gcc_capture_workspace>>
 		create_workspace(std::string_view capture_directory, std::size_t maximum_path_bytes)
 		{

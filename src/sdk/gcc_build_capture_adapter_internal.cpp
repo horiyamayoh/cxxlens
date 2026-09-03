@@ -6,6 +6,11 @@
 #include <string_view>
 #include <tuple>
 
+#include <cxxlens/relations/build_compile_unit.hpp>
+#include <cxxlens/relations/build_project.hpp>
+#include <cxxlens/relations/build_toolchain_context.hpp>
+#include <cxxlens/relations/build_variant.hpp>
+
 namespace cxxlens::sdk::detail
 {
 	namespace
@@ -139,6 +144,140 @@ namespace cxxlens::sdk::detail
 			if (const auto* gap = find_gap(gaps, field); gap != nullptr)
 				return unexpected(unavailable(std::string{field}, gap->reason));
 			return unexpected(unavailable(std::string{field}, "capture-field-unavailable"));
+		}
+
+		[[nodiscard]] detached_cell digest_cell(std::string value)
+		{
+			return {{scalar_kind::digest, {}, false},
+					cell_state::present,
+					scalar_value{std::move(value)},
+					{}};
+		}
+
+		[[nodiscard]] detached_cell symbol_cell(std::string contract, std::string value)
+		{
+			return {{scalar_kind::open_symbol, std::move(contract), false},
+					cell_state::present,
+					scalar_value{std::move(value)},
+					{}};
+		}
+
+		[[nodiscard]] detached_cell optional_path(const std::optional<std::string>& value)
+		{
+			value_type type{scalar_kind::typed_id, "logical_path_id", true};
+			return value
+				? detached_cell{std::move(type), cell_state::present, scalar_value{*value}, {}}
+				: detached_cell::absent(std::move(type));
+		}
+
+		[[nodiscard]] result<void> bind_relation_identities(build_capture_draft& draft)
+		{
+			detached_row project{
+				build::relations::project::descriptor().id,
+				{{"build.project.v1.project",
+				  detached_cell::typed("project_id", "identity:pending")},
+				 {"build.project.v1.catalog",
+				  detached_cell::typed("catalog_id", draft.catalog.catalog_id)},
+				 {"build.project.v1.catalog_digest", digest_cell(draft.catalog.catalog_digest)},
+				 {"build.project.v1.logical_root",
+				  detached_cell::typed("logical_path_id", draft.catalog.logical_root)},
+				 {"build.project.v1.environment_digest",
+				  digest_cell(draft.catalog.environment_digest)}}};
+			auto project_id =
+				derive_domain_identity(build::relations::project::descriptor(), project);
+			if (!project_id)
+				return unexpected(unavailable("build.project",
+											  project_id.error().code + ":" +
+												  project_id.error().field + ":" +
+												  project_id.error().detail));
+			draft.project_id = *project_id;
+
+			detached_row toolchain{
+				build::relations::toolchain_context::descriptor().id,
+				{{"build.toolchain_context.v1.toolchain",
+				  detached_cell::typed("toolchain_context_id", "identity:pending")},
+				 {"build.toolchain_context.v1.family",
+				  symbol_cell("build.toolchain-family/1", draft.toolchain.family)},
+				 {"build.toolchain_context.v1.exact_version",
+				  detached_cell::utf8(draft.toolchain.exact_version)},
+				 {"build.toolchain_context.v1.target_triple",
+				  detached_cell::utf8(draft.toolchain.target_triple)},
+				 {"build.toolchain_context.v1.builtin_headers_digest",
+				  digest_cell(draft.toolchain.builtin_headers_digest)},
+				 {"build.toolchain_context.v1.sysroot", optional_path(draft.toolchain.sysroot)},
+				 {"build.toolchain_context.v1.abi_digest", digest_cell(draft.toolchain.abi_digest)},
+				 {"build.toolchain_context.v1.plugin_spec_digest",
+				  digest_cell(draft.toolchain.plugin_spec_digest)}}};
+			for (const auto& [column, cell] : toolchain.cells)
+				if (auto valid = cell.validate(); !valid)
+					return unexpected(unavailable(column,
+												  valid.error().code + ":" + valid.error().field +
+													  ":" + valid.error().detail));
+			auto toolchain_id = derive_domain_identity(
+				build::relations::toolchain_context::descriptor(), toolchain);
+			if (!toolchain_id)
+				return unexpected(unavailable("build.toolchain_context",
+											  toolchain_id.error().code + ":" +
+												  toolchain_id.error().field + ":" +
+												  toolchain_id.error().detail));
+			draft.toolchain_context_id = *toolchain_id;
+
+			detached_row variant{
+				build::relations::variant::descriptor().id,
+				{{"build.variant.v1.variant",
+				  detached_cell::typed("build_variant_id", "identity:pending")},
+				 {"build.variant.v1.project", detached_cell::typed("project_id", draft.project_id)},
+				 {"build.variant.v1.toolchain",
+				  detached_cell::typed("toolchain_context_id", draft.toolchain_context_id)},
+				 {"build.variant.v1.language",
+				  symbol_cell("build.language/1", draft.variant.language)},
+				 {"build.variant.v1.language_standard",
+				  symbol_cell("build.language-standard/1", draft.variant.language_standard)},
+				 {"build.variant.v1.target_triple",
+				  detached_cell::utf8(draft.variant.target_triple)},
+				 {"build.variant.v1.predefined_macros_digest",
+				  digest_cell(draft.variant.predefined_macros_digest)},
+				 {"build.variant.v1.include_search_digest",
+				  digest_cell(draft.variant.include_search_digest)},
+				 {"build.variant.v1.semantic_flags_digest",
+				  digest_cell(draft.variant.semantic_flags_digest)}}};
+			auto variant_id =
+				derive_domain_identity(build::relations::variant::descriptor(), variant);
+			if (!variant_id)
+				return unexpected(unavailable("build.variant",
+											  variant_id.error().code + ":" +
+												  variant_id.error().field + ":" +
+												  variant_id.error().detail));
+			draft.build_variant_id = *variant_id;
+
+			detached_row compile_unit{
+				build::relations::compile_unit::descriptor().id,
+				{{"build.compile_unit.v1.compile_unit",
+				  detached_cell::typed("compile_unit_id", "identity:pending")},
+				 {"build.compile_unit.v1.project",
+				  detached_cell::typed("project_id", draft.project_id)},
+				 {"build.compile_unit.v1.main_source",
+				  detached_cell::typed("source_snapshot_id", draft.source.source_snapshot_id)},
+				 {"build.compile_unit.v1.variant",
+				  detached_cell::typed("build_variant_id", draft.build_variant_id)},
+				 {"build.compile_unit.v1.toolchain",
+				  detached_cell::typed("toolchain_context_id", draft.toolchain_context_id)},
+				 {"build.compile_unit.v1.effective_invocation_digest",
+				  digest_cell(draft.invocation.effective_invocation_digest)},
+				 {"build.compile_unit.v1.language",
+				  symbol_cell("build.language/1", draft.invocation.language)},
+				 {"build.compile_unit.v1.working_directory",
+				  detached_cell::typed("logical_path_id",
+									   draft.invocation.logical_working_directory)}}};
+			auto compile_unit_id =
+				derive_domain_identity(build::relations::compile_unit::descriptor(), compile_unit);
+			if (!compile_unit_id)
+				return unexpected(unavailable("build.compile_unit",
+											  compile_unit_id.error().code + ":" +
+												  compile_unit_id.error().field + ":" +
+												  compile_unit_id.error().detail));
+			draft.compile_unit_id = *compile_unit_id;
+			return {};
 		}
 	} // namespace
 
@@ -363,6 +502,8 @@ namespace cxxlens::sdk::detail
 								closure->member_count,
 								closure->blob_count,
 								closure->unique_blob_bytes};
+		if (auto bound = bind_relation_identities(draft); !bound)
+			return unexpected(std::move(bound.error()));
 		return validate_build_capture(std::move(draft), limits);
 	}
 } // namespace cxxlens::sdk::detail

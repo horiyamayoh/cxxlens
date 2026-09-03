@@ -78,5 +78,6 @@ namespace cxxlens::sdk::detail
 						  const replay_plan::implementation& plan,
 						  std::span<const std::string> requested_relation_descriptor_ids,
 						  std::string_view interpretation,
-						  import_limits limits = {});
+						  import_limits limits = {},
+						  std::string_view materialized_compile_unit_id = {});
 } // namespace cxxlens::sdk::detail

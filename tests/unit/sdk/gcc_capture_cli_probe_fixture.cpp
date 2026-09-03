@@ -1,3 +1,4 @@
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -31,6 +32,18 @@ int main(const int argc, char** argv)
 		std::cerr << "#include <...> search starts here:\n"
 				  << " /usr/include\n"
 				  << "End of search list.\n";
+		return 0;
+	}
+	if (argc == 2 && std::string_view{argv[1]} == "-print-file-name=include")
+	{
+		std::error_code failure;
+		const auto relative =
+			std::filesystem::is_directory("include", failure) ? "include" : "../include";
+		failure.clear();
+		const auto include = std::filesystem::canonical(relative, failure);
+		if (failure)
+			return 8;
+		std::cout << include.string() << '\n';
 		return 0;
 	}
 	std::string dependency;

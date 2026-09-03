@@ -100,17 +100,25 @@ def run_response_wrapper(
 
 def main() -> int:
     require(
-        len(sys.argv) in (4, 5),
-        "expected CLI, compiler, consumer, and optional --require-production-build",
+        len(sys.argv) in (4, 5, 9),
+        "expected CLI, compiler, consumer, optional production build, and optional materializer",
     )
     require(
-        len(sys.argv) == 4 or sys.argv[4] == "--require-production-build",
+        len(sys.argv) == 4
+        or sys.argv[4] == "--require-production-build",
         "unknown GCC capture CLI test option",
+    )
+    require(
+        len(sys.argv) != 9
+        or (sys.argv[5] == "--materializer" and sys.argv[7] == "--worker"),
+        "expected --materializer EXECUTABLE --worker EXECUTABLE",
     )
     cli = pathlib.Path(sys.argv[1]).resolve()
     compiler = pathlib.Path(sys.argv[2]).resolve()
     consumer = pathlib.Path(sys.argv[3]).resolve()
-    require_production_build = len(sys.argv) == 5
+    require_production_build = len(sys.argv) >= 5
+    materializer = pathlib.Path(sys.argv[6]).resolve() if len(sys.argv) == 9 else None
+    worker = pathlib.Path(sys.argv[8]).resolve() if len(sys.argv) == 9 else None
 
     with tempfile.TemporaryDirectory(prefix="cxxlens-gcc-capture-cli-") as raw_root:
         root = pathlib.Path(raw_root).resolve()
@@ -118,10 +126,15 @@ def main() -> int:
         (root / "build").mkdir()
         (root / "include").mkdir()
         (root / "include" / "fixture.hpp").write_text(
-            "#pragma once\ninline constexpr int fixture_value = 0;\n", encoding="utf-8"
+            "#pragma once\ninline constexpr int fixture_value = 0;\nint model_value();\n",
+            encoding="utf-8",
         )
         (root / "src" / "main.cpp").write_text(
-            '#include "fixture.hpp"\nint main() { return fixture_value; }\n',
+            '#include "fixture.hpp"\nint main() { return fixture_value + model_value(); }\n',
+            encoding="utf-8",
+        )
+        (root / "src" / "model.cpp").write_text(
+            '#include "fixture.hpp"\nint model_value() { return 0; }\n',
             encoding="utf-8",
         )
         (root / "build" / "outer.rsp").write_text(
@@ -157,23 +170,47 @@ def main() -> int:
                     "main.d",
                     "-c",
                     "../src/main.cpp",
+                    "-o",
+                    "main.o",
                 ],
-            }
+            },
+            {
+                "directory": str(root / "build"),
+                "file": "../src/model.cpp",
+                "arguments": [
+                    str(compiler),
+                    "-I../include",
+                    "-std=gnu++23",
+                    "-MMD",
+                    "-MF",
+                    "model.d",
+                    "-c",
+                    "../src/model.cpp",
+                    "-o",
+                    "model.o",
+                ],
+            },
         ]
         database_path = root / "build" / "compile_commands.json"
         database_path.write_text(json.dumps(database), encoding="utf-8")
 
         if require_production_build:
-            production = subprocess.run(
-                [*database[0]["arguments"], "-o", "main.o"],
-                cwd=root / "build",
-                capture_output=True,
-                check=False,
-                timeout=45,
-            )
+            for compile_unit in database:
+                production = subprocess.run(
+                    compile_unit["arguments"],
+                    cwd=root / "build",
+                    capture_output=True,
+                    check=False,
+                    timeout=45,
+                )
+                require(
+                    production.returncode == 0,
+                    f"production GCC build failed: {production.stderr!r}",
+                )
             require(
-                production.returncode == 0 and (root / "build" / "main.o").is_file(),
-                f"production GCC build failed: {production.stderr!r}",
+                (root / "build" / "main.o").is_file()
+                and (root / "build" / "model.o").is_file(),
+                "production GCC build did not emit both corpus objects",
             )
 
         first = run_capture(cli, root, compiler)
@@ -196,6 +233,18 @@ def main() -> int:
             timeout=15,
         )
         require(admitted.returncode == 0, f"SDK rejected CLI bundle: {admitted.stderr!r}")
+        if materializer is not None and worker is not None:
+            analyzed = subprocess.run(
+                [str(materializer), str(bundle_path), str(worker)],
+                capture_output=True,
+                check=False,
+                timeout=60,
+            )
+            require(
+                analyzed.returncode == 0,
+                "GCC capture/replay/materialize/query failed "
+                f"with exit {analyzed.returncode}: {analyzed.stderr!r}",
+            )
 
         wrapper_directory = root / "wrapper-captures"
         wrapper_directory.mkdir()

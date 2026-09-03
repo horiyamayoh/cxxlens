@@ -2105,6 +2105,9 @@ cxxlens_add_test_executable(cxxlens-gcc-capture-cli-probe-fixture
 cxxlens_add_test_executable(cxxlens-gcc-capture-cli-consumer
                             unit/sdk/gcc_capture_cli_consumer.cpp)
 target_link_libraries(cxxlens-gcc-capture-cli-consumer PRIVATE cxxlens::sdk)
+cxxlens_add_test_executable(cxxlens-gcc-application-analysis-e2e
+                            integration/gcc_application_analysis_e2e.cpp)
+target_link_libraries(cxxlens-gcc-application-analysis-e2e PRIVATE cxxlens::sdk)
 add_test(
   NAME sdk.gcc-capture-cli
   COMMAND
@@ -2412,6 +2415,7 @@ set(_cxxlens_ng_test_binary_candidates
     cxxlens-unit-sdk-gcc-toolchain-probe
     cxxlens-gcc-capture-cli-probe-fixture
     cxxlens-gcc-capture-cli-consumer
+    cxxlens-gcc-application-analysis-e2e
     cxxlens-unit-sdk-application-analysis
     cxxlens-unit-sdk-materialization-task
     cxxlens-unit-sdk-provider-runtime

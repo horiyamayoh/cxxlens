@@ -49,7 +49,8 @@ namespace
 						bundle->gaps().end(),
 						[](const auto& gap)
 						{
-							return gap.field == "source_closures[0].membership_coverage" &&
+							return gap.field.starts_with("source_closures[") &&
+								gap.field.ends_with("].membership_coverage") &&
 								gap.reason == "dependency-output-not-bound-to-invocation";
 						});
 		return bundle->production_compiler() == "gcc-16.2.0" &&
@@ -57,7 +58,8 @@ namespace
 					(expect_wrapper ? "shell-free-wrapper" : "compile-commands") &&
 				bundle->target_abi() == "x86_64-linux-gnu" &&
 				bundle->project_id() == "project:cli-capture" &&
-				bundle->compile_unit_count() == 1U && (expect_wrapper || !bundle->gaps().empty()) &&
+				bundle->compile_unit_count() == (expect_wrapper ? 1U : 2U) &&
+				(expect_wrapper || !bundle->gaps().empty()) &&
 				(!expect_dependency || dependency_observed) &&
 				(!expect_wrapper || !dependency_observed)
 			? 0

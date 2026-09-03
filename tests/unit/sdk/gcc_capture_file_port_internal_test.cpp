@@ -143,6 +143,7 @@ namespace
 						  " /opt/gcc-16.2.0/include/c++/16.2.0\n"
 						  " /opt/gcc-16.2.0/sysroot/usr/include\n"
 						  "End of search list.\n"),
+			probe_success("/opt/gcc-16.2.0/lib/gcc/x86_64-linux-gnu/16.2.0/include\n"),
 		};
 	}
 
@@ -227,11 +228,22 @@ namespace
 			return found->second;
 		}
 
+		cxxlens::sdk::result<std::string>
+		digest_regular_tree(const std::string_view path,
+							const cxxlens::sdk::detail::capture_tree_digest_limits limits) override
+		{
+			tree_paths.emplace_back(path);
+			tree_limits.push_back(limits);
+			return "sha256:" + std::string(64U, '7');
+		}
+
 		std::map<std::string, std::string> directories;
 		std::map<std::string, capture_file_snapshot> files;
 		std::vector<std::size_t> directory_limits;
 		std::vector<std::pair<std::uint64_t, std::size_t>> file_limits;
 		std::vector<std::string> required_roots;
+		std::vector<std::string> tree_paths;
+		std::vector<cxxlens::sdk::detail::capture_tree_digest_limits> tree_limits;
 		bool enforce_limits{true};
 	};
 
@@ -475,9 +487,13 @@ namespace
 	[[nodiscard]] cxxlens::sdk::result<std::vector<std::byte>> capture_with_valid_probe(
 		gcc_capture_file_port& files,
 		const cxxlens::sdk::detail::gcc_compile_commands_capture_request& input,
-		const cxxlens::sdk::import_limits limits = {})
+		const cxxlens::sdk::import_limits limits = {},
+		const std::string_view builtin_directory = {})
 	{
-		fake_process_port processes{valid_probe_outputs()};
+		auto outputs = valid_probe_outputs();
+		if (!builtin_directory.empty())
+			outputs.back().standard_output = std::string{builtin_directory} + '\n';
+		fake_process_port processes{std::move(outputs)};
 		return cxxlens::sdk::detail::capture_gcc_compile_commands(files, processes, input, limits);
 	}
 
@@ -510,7 +526,11 @@ namespace
 		require(files.required_roots.size() == 2U && files.required_roots[0].empty() &&
 				files.required_roots[1] == "/physical/project");
 		require(files.directory_limits.size() == 2U);
-		require(processes.requests.size() == 5U);
+		require(processes.requests.size() == 6U);
+		require(files.tree_paths ==
+					std::vector<std::string>{
+						"/opt/gcc-16.2.0/lib/gcc/x86_64-linux-gnu/16.2.0/include"} &&
+				files.tree_limits.size() == 1U);
 		for (const auto& probe : processes.requests)
 			require(probe.argv.front() == input.compiler_path &&
 					probe.working_directory == "/physical/project" &&
@@ -1083,14 +1103,34 @@ namespace
 		temporary_tree tree;
 		std::filesystem::create_directories(tree.path() / "build");
 		std::filesystem::create_directories(tree.path() / "src");
+		std::filesystem::create_directories(tree.path() / "builtin/nested");
 		write(tree.path() / "src/main.cpp", "int main() { return 0; }\n");
+		write(tree.path() / "builtin/a.h", "#define A 1\n");
+		write(tree.path() / "builtin/nested/b.h", "#define B 2\n");
 		auto input = request(tree.path().string());
 		const auto database = std::string{R"([{"directory":")"} + (tree.path() / "build").string() +
 			R"json(","file":"../src/main.cpp","arguments":[")json" + input.compiler_path +
 			R"json(","-std=c++23","-c","../src/main.cpp"]}])json";
 		write(tree.path() / "build/compile_commands.json", database);
 		auto port = cxxlens::sdk::detail::make_system_gcc_capture_file_port();
-		auto captured = capture_with_valid_probe(*port, input);
+		const cxxlens::sdk::detail::capture_tree_digest_limits tree_limits{1024U, 4U, 4096U};
+		auto first_tree =
+			port->digest_regular_tree((tree.path() / "builtin").string(), tree_limits);
+		auto repeated_tree =
+			port->digest_regular_tree((tree.path() / "builtin").string(), tree_limits);
+		require(first_tree && repeated_tree && *first_tree == *repeated_tree);
+		write(tree.path() / "builtin/nested/b.h", "#define B 3\n");
+		auto changed_tree =
+			port->digest_regular_tree((tree.path() / "builtin").string(), tree_limits);
+		require(changed_tree && *changed_tree != *first_tree);
+		auto file_limited =
+			port->digest_regular_tree((tree.path() / "builtin").string(), {1024U, 1U, 4096U});
+		auto byte_limited =
+			port->digest_regular_tree((tree.path() / "builtin").string(), {1U, 4U, 4096U});
+		require(!file_limited && file_limited.error().detail == "file-count" && !byte_limited &&
+				byte_limited.error().detail == "byte-count");
+		auto captured =
+			capture_with_valid_probe(*port, input, {}, (tree.path() / "builtin").string());
 		require(static_cast<bool>(captured));
 
 		temporary_tree outside;
@@ -1098,12 +1138,14 @@ namespace
 		std::filesystem::remove(tree.path() / "src/main.cpp");
 		std::filesystem::create_symlink(outside.path() / "escape.cpp",
 										tree.path() / "src/main.cpp");
-		auto escaped = capture_with_valid_probe(*port, input);
+		auto escaped =
+			capture_with_valid_probe(*port, input, {}, (tree.path() / "builtin").string());
 		require(!escaped && escaped.error().detail == "path-outside-project-root");
 
 		auto non_regular_input = input;
 		non_regular_input.compile_commands_path = (tree.path() / "build").string();
-		auto non_regular = capture_with_valid_probe(*port, non_regular_input);
+		auto non_regular = capture_with_valid_probe(
+			*port, non_regular_input, {}, (tree.path() / "builtin").string());
 		require(!non_regular && non_regular.error().detail == "not-regular-file");
 #endif
 	}

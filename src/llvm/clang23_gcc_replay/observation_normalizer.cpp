@@ -525,7 +525,9 @@ namespace cxxlens::detail::clang23_gcc_replay
 				{
 					auto row = source_span_row(source);
 					if (!row)
-						return sdk::unexpected(std::move(row.error()));
+						return sdk::unexpected(failure("source.span",
+													   row.error().code + ":" + row.error().field +
+														   ":" + row.error().detail));
 					output.source_spans.push_back(std::move(*row));
 				}
 				sort_rows(output.source_spans);
@@ -566,7 +568,9 @@ namespace cxxlens::detail::clang23_gcc_replay
 							failure(entity->provider_local_key, "source-unbound"));
 					auto row = entity_row(input, *entity, *source, source_spans_requested);
 					if (!row)
-						return sdk::unexpected(std::move(row.error()));
+						return sdk::unexpected(failure("cc.entity",
+													   row.error().code + ":" + row.error().field +
+														   ":" + row.error().detail));
 					const auto& identity_cell = row->cells.at("cc.entity.v1.entity");
 					const auto* identity = identity_cell.value
 						? std::get_if<std::string>(&*identity_cell.value)
@@ -597,7 +601,9 @@ namespace cxxlens::detail::clang23_gcc_replay
 													   "declaration-source-unbound"));
 					auto row = declaration_row(declaration, entity->second, *source);
 					if (!row)
-						return sdk::unexpected(std::move(row.error()));
+						return sdk::unexpected(failure("cc.declaration",
+													   row.error().code + ":" + row.error().field +
+														   ":" + row.error().detail));
 					output.declarations.push_back(std::move(*row));
 				}
 				sort_rows(output.declarations);
@@ -624,7 +630,9 @@ namespace cxxlens::detail::clang23_gcc_replay
 					}
 					auto row = type_row(type);
 					if (!row)
-						return sdk::unexpected(std::move(row.error()));
+						return sdk::unexpected(failure("cc.type",
+													   row.error().code + ":" + row.error().field +
+														   ":" + row.error().detail));
 					const auto& identity_cell = row->cells.at("cc.type.v1.type");
 					const auto* identity = identity_cell.value
 						? std::get_if<std::string>(&*identity_cell.value)
@@ -681,7 +689,9 @@ namespace cxxlens::detail::clang23_gcc_replay
 					output.call_sites.reserve(calls.size());
 				if (direct_targets_requested)
 					output.direct_targets.reserve(calls.size());
-				std::optional<decltype(occurrence_class(input, calls.front()))> previous;
+				using occurrence_type =
+					decltype(occurrence_class(input, std::declval<const prepared_call&>()));
+				std::optional<occurrence_type> previous;
 				std::uint64_t ordinal{};
 				for (const auto& call : calls)
 				{
@@ -693,7 +703,10 @@ namespace cxxlens::detail::clang23_gcc_replay
 					}
 					auto site = call_site_row(input, call, ordinal++);
 					if (!site)
-						return sdk::unexpected(std::move(site.error()));
+						return sdk::unexpected(failure("cc.call_site",
+													   site.error().code + ":" +
+														   site.error().field + ":" +
+														   site.error().detail));
 					const auto& identity_cell = site->cells.at("cc.call_site.v1.call");
 					const auto* identity = identity_cell.value
 						? std::get_if<std::string>(&*identity_cell.value)

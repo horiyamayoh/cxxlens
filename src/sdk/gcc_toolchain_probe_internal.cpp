@@ -12,6 +12,8 @@
 #include <utility>
 #include <vector>
 
+#include "gcc_capture_file_port_internal.hpp"
+
 namespace cxxlens::sdk::detail
 {
 	namespace
@@ -169,7 +171,12 @@ namespace cxxlens::sdk::detail
 		observation_digest(const std::string_view domain,
 						   const std::span<const canonical_value> fields)
 		{
-			return canonical_identity_digest(domain, fields);
+			auto encoded = canonical_binary(canonical_value::from_tuple(
+				std::vector<canonical_value>{fields.begin(), fields.end()}));
+			if (!encoded)
+				return unexpected(std::move(encoded.error()));
+			return semantic_digest(
+				domain, {reinterpret_cast<const char*>(encoded->data()), encoded->size()});
 		}
 
 		[[nodiscard]] bool path_prefix(const std::string_view path,
@@ -264,7 +271,8 @@ namespace cxxlens::sdk::detail
 	result<gcc_toolchain_observation>
 	probe_gcc_toolchain(gcc_probe_process_port& processes,
 						const gcc_toolchain_probe_request& request,
-						const std::stop_token& cancellation)
+						const std::stop_token& cancellation,
+						gcc_capture_file_port* files)
 	{
 		try
 		{
@@ -338,6 +346,32 @@ namespace cxxlens::sdk::detail
 			auto include_digest = observation_digest("gcc-include-search-v1", include_fields);
 			if (!include_digest)
 				return unexpected(std::move(include_digest.error()));
+			captured_text_observation builtin_headers = missing(
+				"builtin-header-content-unobserved", "capture-builtin-header-source-closure");
+			if (files != nullptr)
+			{
+				auto builtin_directory_output = execute_probe(processes,
+															  request,
+															  {"-print-file-name=include"},
+															  "builtin-header-directory",
+															  identity,
+															  cancellation);
+				if (!builtin_directory_output)
+					return unexpected(std::move(builtin_directory_output.error()));
+				auto builtin_directory = single_line(builtin_directory_output->standard_output,
+													 "builtin-header-directory");
+				if (!builtin_directory || builtin_directory->front() != '/')
+					return unexpected(!builtin_directory
+										  ? std::move(builtin_directory.error())
+										  : invalid("builtin-header-directory", "non-absolute"));
+				auto tree_digest = files->digest_regular_tree(*builtin_directory,
+															  {request.maximum_builtin_header_bytes,
+															   request.maximum_builtin_header_files,
+															   request.maximum_path_bytes});
+				if (!tree_digest)
+					return unexpected(std::move(tree_digest.error()));
+				builtin_headers = observed(std::move(*tree_digest));
+			}
 			const std::array abi_fields{canonical_value::from_string(*version),
 										canonical_value::from_string(*target),
 										canonical_value::from_string(*macros_digest)};
@@ -354,8 +388,7 @@ namespace cxxlens::sdk::detail
 				? missing("compiler-reported-empty-sysroot", "capture-effective-system-roots")
 				: observed(std::move(*sysroot));
 			observation.abi_digest = observed(std::move(*abi_digest));
-			observation.builtin_headers_digest = missing("builtin-header-content-unobserved",
-														 "capture-builtin-header-source-closure");
+			observation.builtin_headers_digest = std::move(builtin_headers);
 			observation.builtin_macros_digest = observed(std::move(*macros_digest));
 			observation.include_search_digest = observed(std::move(*include_digest));
 			return observation;

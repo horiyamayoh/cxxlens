@@ -11,7 +11,6 @@
 
 namespace
 {
-	using cxxlens::sdk::canonical_identity_digest;
 	using cxxlens::sdk::canonical_value;
 	using cxxlens::sdk::error;
 	using cxxlens::sdk::result;
@@ -110,7 +109,11 @@ namespace
 	[[nodiscard]] std::string digest(const std::string_view domain,
 									 std::vector<canonical_value> fields)
 	{
-		auto value = canonical_identity_digest(domain, fields);
+		auto encoded =
+			cxxlens::sdk::canonical_binary(canonical_value::from_tuple(std::move(fields)));
+		require(static_cast<bool>(encoded), "test digest encoding failed");
+		auto value = cxxlens::sdk::semantic_digest(
+			domain, {reinterpret_cast<const char*>(encoded->data()), encoded->size()});
 		require(static_cast<bool>(value), "test digest construction failed");
 		return std::move(*value);
 	}

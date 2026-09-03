@@ -6,7 +6,10 @@
 #include <set>
 #include <utility>
 
+#include <cxxlens/relations/build_compile_unit.hpp>
 #include <cxxlens/relations/build_project.hpp>
+#include <cxxlens/relations/build_toolchain_context.hpp>
+#include <cxxlens/relations/build_variant.hpp>
 #include <cxxlens/relations/source_file.hpp>
 
 #include "gcc_build_capture_adapter_internal.hpp"
@@ -47,6 +50,14 @@ namespace cxxlens::sdk::detail
 			return {std::move(type), cell_state::present, scalar_value{std::move(value)}, {}};
 		}
 
+		[[nodiscard]] detached_cell optional_path_cell(const std::optional<std::string>& value)
+		{
+			value_type type{scalar_kind::typed_id, "logical_path_id", true};
+			return value
+				? detached_cell{std::move(type), cell_state::present, scalar_value{*value}, {}}
+				: detached_cell::absent(std::move(type));
+		}
+
 		[[nodiscard]] result<detached_row> project_row(const validated_build_capture& capture)
 		{
 			const auto& descriptor = build::relations::project::descriptor();
@@ -69,20 +80,134 @@ namespace cxxlens::sdk::detail
 				return unexpected(std::move(identity.error()));
 			row.cells.at("build.project.v1.project") =
 				detached_cell::typed("project_id", std::move(*identity));
+			const auto* project_id =
+				std::get_if<std::string>(&*row.cells.at("build.project.v1.project").value);
+			if (project_id == nullptr || *project_id != capture.value().project_id)
+				return unexpected(execution_error("host.project", "capture-identity-mismatch"));
 			if (auto valid = validate_domain_identity(descriptor, row); !valid)
-				return unexpected(std::move(valid.error()));
+				return unexpected(execution_error("host.project",
+												  valid.error().code + ":" + valid.error().field +
+													  ":" + valid.error().detail));
 			return row;
 		}
 
-		[[nodiscard]] result<detached_row> source_file_row(const validated_build_capture& capture,
-														   const std::string_view project_id)
+		[[nodiscard]] result<detached_row> toolchain_row(const validated_build_capture& capture)
 		{
-			const auto& source = capture.value().source;
+			const auto& value = capture.value();
+			const auto& descriptor = build::relations::toolchain_context::descriptor();
+			detached_row row{
+				descriptor.id,
+				{{"build.toolchain_context.v1.toolchain",
+				  detached_cell::typed("toolchain_context_id", value.toolchain_context_id)},
+				 {"build.toolchain_context.v1.family",
+				  text_cell({scalar_kind::open_symbol, "build.toolchain-family/1", false},
+							value.toolchain.family)},
+				 {"build.toolchain_context.v1.exact_version",
+				  detached_cell::utf8(value.toolchain.exact_version)},
+				 {"build.toolchain_context.v1.target_triple",
+				  detached_cell::utf8(value.toolchain.target_triple)},
+				 {"build.toolchain_context.v1.builtin_headers_digest",
+				  text_cell({scalar_kind::digest, {}, false},
+							value.toolchain.builtin_headers_digest)},
+				 {"build.toolchain_context.v1.sysroot",
+				  optional_path_cell(value.toolchain.sysroot)},
+				 {"build.toolchain_context.v1.abi_digest",
+				  text_cell({scalar_kind::digest, {}, false}, value.toolchain.abi_digest)},
+				 {"build.toolchain_context.v1.plugin_spec_digest",
+				  text_cell({scalar_kind::digest, {}, false},
+							value.toolchain.plugin_spec_digest)}}};
+			if (auto valid = validate_domain_identity(descriptor, row); !valid)
+				return unexpected(execution_error("host.toolchain",
+												  valid.error().code + ":" + valid.error().field +
+													  ":" + valid.error().detail));
+			return row;
+		}
+
+		[[nodiscard]] result<detached_row> variant_row(const validated_build_capture& capture)
+		{
+			const auto& value = capture.value();
+			const auto& descriptor = build::relations::variant::descriptor();
+			detached_row row{
+				descriptor.id,
+				{{"build.variant.v1.variant",
+				  detached_cell::typed("build_variant_id", value.build_variant_id)},
+				 {"build.variant.v1.project", detached_cell::typed("project_id", value.project_id)},
+				 {"build.variant.v1.toolchain",
+				  detached_cell::typed("toolchain_context_id", value.toolchain_context_id)},
+				 {"build.variant.v1.language",
+				  text_cell({scalar_kind::open_symbol, "build.language/1", false},
+							value.variant.language)},
+				 {"build.variant.v1.language_standard",
+				  text_cell({scalar_kind::open_symbol, "build.language-standard/1", false},
+							value.variant.language_standard)},
+				 {"build.variant.v1.target_triple",
+				  detached_cell::utf8(value.variant.target_triple)},
+				 {"build.variant.v1.predefined_macros_digest",
+				  text_cell({scalar_kind::digest, {}, false},
+							value.variant.predefined_macros_digest)},
+				 {"build.variant.v1.include_search_digest",
+				  text_cell({scalar_kind::digest, {}, false}, value.variant.include_search_digest)},
+				 {"build.variant.v1.semantic_flags_digest",
+				  text_cell({scalar_kind::digest, {}, false},
+							value.variant.semantic_flags_digest)}}};
+			if (auto valid = validate_domain_identity(descriptor, row); !valid)
+				return unexpected(execution_error("host.variant",
+												  valid.error().code + ":" + valid.error().field +
+													  ":" + valid.error().detail));
+			return row;
+		}
+
+		[[nodiscard]] result<detached_row> compile_unit_row(const validated_build_capture& capture)
+		{
+			const auto& value = capture.value();
+			const auto& descriptor = build::relations::compile_unit::descriptor();
+			detached_row row{
+				descriptor.id,
+				{{"build.compile_unit.v1.compile_unit",
+				  detached_cell::typed("compile_unit_id", value.compile_unit_id)},
+				 {"build.compile_unit.v1.project",
+				  detached_cell::typed("project_id", value.project_id)},
+				 {"build.compile_unit.v1.main_source",
+				  detached_cell::typed("source_snapshot_id", value.source.source_snapshot_id)},
+				 {"build.compile_unit.v1.variant",
+				  detached_cell::typed("build_variant_id", value.build_variant_id)},
+				 {"build.compile_unit.v1.toolchain",
+				  detached_cell::typed("toolchain_context_id", value.toolchain_context_id)},
+				 {"build.compile_unit.v1.effective_invocation_digest",
+				  text_cell({scalar_kind::digest, {}, false},
+							value.invocation.effective_invocation_digest)},
+				 {"build.compile_unit.v1.language",
+				  text_cell({scalar_kind::open_symbol, "build.language/1", false},
+							value.invocation.language)},
+				 {"build.compile_unit.v1.working_directory",
+				  detached_cell::typed("logical_path_id",
+									   value.invocation.logical_working_directory)}}};
+			if (auto valid = validate_domain_identity(descriptor, row); !valid)
+				return unexpected(execution_error("host.compile_unit",
+												  valid.error().code + ":" + valid.error().field +
+													  ":" + valid.error().detail));
+			return row;
+		}
+
+		[[nodiscard]] result<detached_row>
+		source_member_row(const decoded_capture_source_member& source,
+						  const std::string_view project_id)
+		{
+			if (!source.source_snapshot_id || !source.encoding)
+				return unexpected(
+					execution_error(source.logical_path, "source-identity-incomplete"));
+			auto line_index = canonical_identity_digest(
+				"line-index",
+				std::array{canonical_value::from_string(*source.source_snapshot_id),
+						   canonical_value::from_string(source.content_digest),
+						   canonical_value::from_string(*source.encoding)});
+			if (!line_index)
+				return unexpected(std::move(line_index.error()));
 			const auto& descriptor = source::relations::file::descriptor();
 			detached_row row{
 				descriptor.id,
 				{{"source.file.v1.snapshot",
-				  detached_cell::typed("source_snapshot_id", source.source_snapshot_id)},
+				  detached_cell::typed("source_snapshot_id", *source.source_snapshot_id)},
 				 {"source.file.v1.file", detached_cell::typed("file_id", source.file_id)},
 				 {"source.file.v1.project",
 				  detached_cell::typed("project_id", std::string{project_id})},
@@ -90,21 +215,26 @@ namespace cxxlens::sdk::detail
 				  detached_cell::typed("logical_path_id", source.logical_path)},
 				 {"source.file.v1.content",
 				  text_cell({scalar_kind::digest, {}, false}, source.content_digest)},
-				 {"source.file.v1.size", detached_cell::unsigned_integer(source.size_bytes)},
+				 {"source.file.v1.size",
+				  detached_cell::unsigned_integer(
+					  static_cast<std::uint64_t>(source.content.size()))},
 				 {"source.file.v1.encoding",
 				  text_cell({scalar_kind::open_symbol, "source.encoding/1", false},
-							source.encoding)},
+							*source.encoding)},
 				 {"source.file.v1.line_index",
-				  detached_cell::typed("line_index_id", source.line_index_id)},
+				  detached_cell::typed("line_index_id", std::move(*line_index))},
 				 {"source.file.v1.read_only", detached_cell::boolean(source.read_only)}}};
 			if (auto valid = validate_domain_identity(descriptor, row); !valid)
-				return unexpected(std::move(valid.error()));
+				return unexpected(execution_error("host.source_file",
+												  valid.error().code + ":" + valid.error().field +
+													  ":" + valid.error().detail));
 			return row;
 		}
 
 		[[nodiscard]] result<std::vector<partition_draft>>
 		host_capture_partitions(const relation_engine& engine,
 								const validated_build_capture& capture,
+								const validated_gcc_replay_input& replay,
 								const validated_materialization_task& task,
 								const std::string_view replay_plan_digest)
 		{
@@ -115,9 +245,26 @@ namespace cxxlens::sdk::detail
 				std::get_if<std::string>(&*project->cells.at("build.project.v1.project").value);
 			if (project_identity == nullptr)
 				return unexpected(execution_error("host.project", "identity-missing"));
-			auto source = source_file_row(capture, *project_identity);
-			if (!source)
-				return unexpected(std::move(source.error()));
+			auto toolchain = toolchain_row(capture);
+			auto variant = variant_row(capture);
+			auto compile_unit = compile_unit_row(capture);
+			if (!toolchain || !variant || !compile_unit)
+				return unexpected(!toolchain	 ? std::move(toolchain.error())
+									  : !variant ? std::move(variant.error())
+												 : std::move(compile_unit.error()));
+			std::vector<detached_row> rows;
+			rows.reserve(replay.value().source_members.size() + 4U);
+			rows.push_back(std::move(*project));
+			rows.push_back(std::move(*toolchain));
+			rows.push_back(std::move(*variant));
+			for (const auto& source : replay.value().source_members)
+			{
+				auto row = source_member_row(source, *project_identity);
+				if (!row)
+					return unexpected(std::move(row.error()));
+				rows.push_back(std::move(*row));
+			}
+			rows.push_back(std::move(*compile_unit));
 
 			const bool partial = !capture.gaps().empty();
 			auto assumption =
@@ -135,8 +282,9 @@ namespace cxxlens::sdk::detail
 			if (!basis_digest)
 				return unexpected(std::move(basis_digest.error()));
 			claim_batch claims;
-			for (auto& row : std::array{std::move(*project), std::move(*source)})
+			for (auto& row : rows)
 			{
+				const auto descriptor_id = row.descriptor_id;
 				observation value{std::move(row),
 								  {task.value().publication.snapshot.series.condition_universe_id,
 								   {task.value().provider_task.condition}},
@@ -149,15 +297,23 @@ namespace cxxlens::sdk::detail
 								   assumption_id,
 								   {"generic_build_capture", "validated_capture_bundle"}}};
 				if (auto added = claims.add_observation(engine, std::move(value)); !added)
-					return unexpected(std::move(added.error()));
+					return unexpected(execution_error("host." + descriptor_id,
+													  added.error().code + ":" +
+														  added.error().field + ":" +
+														  added.error().detail));
 			}
 			auto committed = std::move(claims).commit(engine);
 			if (!committed)
 				return unexpected(std::move(committed.error()));
 
 			std::vector<partition_draft> partitions;
-			for (const auto& descriptor_id : {build::relations::project::descriptor().id,
-											  source::relations::file::descriptor().id})
+			for (const auto& descriptor_id : {
+					 build::relations::project::descriptor().id,
+					 build::relations::toolchain_context::descriptor().id,
+					 build::relations::variant::descriptor().id,
+					 source::relations::file::descriptor().id,
+					 build::relations::compile_unit::descriptor().id,
+				 })
 			{
 				partition_draft partition;
 				partition.relation_descriptor_id = descriptor_id;
@@ -275,13 +431,17 @@ namespace cxxlens::sdk::detail
 			if (!plan_value)
 				return unexpected(execution_error("replay_plan", "missing-immutable-value"));
 			const auto& plan = *plan_value;
-			auto provider_input =
-				make_gcc_replay_input(project, plan, relation_ids, interpretation, limits);
-			if (!provider_input)
-				return unexpected(std::move(provider_input.error()));
 			auto capture = make_gcc_build_capture(project, plan);
 			if (!capture)
 				return unexpected(std::move(capture.error()));
+			auto provider_input = make_gcc_replay_input(project,
+														plan,
+														relation_ids,
+														interpretation,
+														limits,
+														capture->value().compile_unit_id);
+			if (!provider_input)
+				return unexpected(std::move(provider_input.error()));
 
 			auto condition_identity =
 				identity("application-analysis-condition",
@@ -338,7 +498,8 @@ namespace cxxlens::sdk::detail
 					"host-relations", "build.project-and-source.file-must-be-requested-together"));
 			if (requests_project)
 			{
-				auto built = host_capture_partitions(engine, *capture, *task, plan.digest);
+				auto built =
+					host_capture_partitions(engine, *capture, *provider_input, *task, plan.digest);
 				if (!built)
 					return unexpected(std::move(built.error()));
 				host_partitions = std::move(*built);

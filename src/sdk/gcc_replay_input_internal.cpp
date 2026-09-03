@@ -581,7 +581,8 @@ namespace cxxlens::sdk::detail
 						  const replay_plan::implementation& plan,
 						  const std::span<const std::string> requested_relation_descriptor_ids,
 						  const std::string_view interpretation,
-						  const import_limits limits)
+						  const import_limits limits,
+						  const std::string_view materialized_compile_unit_id)
 	{
 		if (!project.capture || project.capture_bundle_digest != project.capture->digest ||
 			plan.capture_bundle_digest != project.capture_bundle_digest)
@@ -604,7 +605,9 @@ namespace cxxlens::sdk::detail
 		draft.imported_project_id = project.id;
 		draft.capture_bundle_digest = project.capture_bundle_digest;
 		draft.replay_plan_digest = plan.digest;
-		draft.compile_unit_id = plan.compile_unit_id;
+		draft.compile_unit_id = materialized_compile_unit_id.empty()
+			? plan.compile_unit_id
+			: std::string{materialized_compile_unit_id};
 		draft.analysis_frontend = plan.analysis_frontend;
 		draft.target_abi = plan.target_abi;
 		draft.effective_arguments = plan.effective_arguments;
