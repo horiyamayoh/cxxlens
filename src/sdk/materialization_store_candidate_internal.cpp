@@ -294,7 +294,10 @@ namespace cxxlens::sdk::detail
 				if (!decoded)
 					return sdk::unexpected(std::move(decoded.error()));
 				offset_ += *frame;
-				return std::optional<bounded_store_record>{std::move(*decoded)};
+				return std::optional<bounded_store_record>{std::in_place,
+														   decoded->kind,
+														   std::move(decoded->key),
+														   std::move(decoded->payload)};
 			}
 			catch (const std::bad_alloc&)
 			{
@@ -425,13 +428,12 @@ namespace cxxlens::sdk::detail
 			return sdk::unexpected(failure("store.corrupt", "record", "checksum"));
 		try
 		{
-			bounded_store_record output;
-			output.kind = kind;
-			output.key.assign(reinterpret_cast<const char*>(bytes.data() + key_offset),
-							  static_cast<std::size_t>(key_size));
-			output.payload.assign(bytes.begin() + static_cast<std::ptrdiff_t>(payload_offset),
-								  bytes.begin() + static_cast<std::ptrdiff_t>(digest_offset));
-			return output;
+			std::string key{reinterpret_cast<const char*>(bytes.data() + key_offset),
+							static_cast<std::size_t>(key_size)};
+			std::vector<std::byte> payload(
+				bytes.begin() + static_cast<std::ptrdiff_t>(payload_offset),
+				bytes.begin() + static_cast<std::ptrdiff_t>(digest_offset));
+			return bounded_store_record{kind, std::move(key), std::move(payload)};
 		}
 		catch (const std::bad_alloc&)
 		{
