@@ -24,6 +24,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 		std::vector<sdk::detached_row> source_spans;
 		std::vector<sdk::detached_row> entities;
 		std::vector<sdk::detached_row> declarations;
+		std::vector<sdk::detached_row> types;
 		std::vector<sdk::detached_row> call_sites;
 		std::vector<sdk::detached_row> direct_targets;
 		std::vector<sdk::capture_gap> unresolved;

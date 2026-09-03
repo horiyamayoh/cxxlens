@@ -88,11 +88,35 @@ namespace cxxlens::detail::clang23_gcc_replay
 
 	struct observed_type
 	{
+		struct component
+		{
+			std::string role;
+			std::uint64_t ordinal{};
+			std::string constructor;
+			std::vector<std::string> qualifiers;
+
+			[[nodiscard]] bool operator==(const component&) const = default;
+		};
+
+		struct function_structure
+		{
+			std::vector<std::string> qualifiers;
+			std::vector<component> components;
+			std::string calling_convention;
+			std::string exception_specification;
+			std::string ref_qualifier;
+			bool variadic{};
+
+			[[nodiscard]] bool operator==(const function_structure&) const = default;
+		};
+
 		std::string provider_local_key;
 		std::string owning_entity_provider_local_key;
 		std::string constructor;
 		std::string canonical_spelling;
 		bool dependent{};
+		std::optional<function_structure> structure;
+		std::optional<std::string> unavailable_reason;
 
 		[[nodiscard]] bool operator==(const observed_type&) const = default;
 	};

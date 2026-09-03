@@ -15,7 +15,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 	namespace
 	{
 		using namespace protocol_v2;
-		constexpr std::string_view schema = "cxxlens.clang23-gcc-replay-observations.v3";
+		constexpr std::string_view schema = "cxxlens.clang23-gcc-replay-observations.v4";
 
 		[[nodiscard]] sdk::error invalid(std::string field, std::string detail)
 		{
@@ -124,11 +124,46 @@ namespace cxxlens::detail::clang23_gcc_replay
 			cbor::array output;
 			output.reserve(observations.types.size());
 			for (const auto& value : observations.types)
-				output.emplace_back(cbor::array{text(value.provider_local_key),
-												text(value.owning_entity_provider_local_key),
-												text(value.constructor),
-												text(value.canonical_spelling),
-												cbor::value{value.dependent}});
+			{
+				cbor::value structure{nullptr};
+				if (value.structure)
+				{
+					cbor::array qualifiers;
+					for (const auto& qualifier : value.structure->qualifiers)
+						qualifiers.emplace_back(qualifier);
+					cbor::array components;
+					for (const auto& component : value.structure->components)
+					{
+						cbor::array component_qualifiers;
+						for (const auto& qualifier : component.qualifiers)
+							component_qualifiers.emplace_back(qualifier);
+						components.emplace_back(cbor::array{
+							text(component.role),
+							cbor::value{component.ordinal},
+							text(component.constructor),
+							cbor::value{std::move(component_qualifiers)},
+						});
+					}
+					structure = cbor::value{cbor::array{
+						cbor::value{std::move(qualifiers)},
+						cbor::value{std::move(components)},
+						text(value.structure->calling_convention),
+						text(value.structure->exception_specification),
+						text(value.structure->ref_qualifier),
+						cbor::value{value.structure->variadic},
+					}};
+				}
+				output.emplace_back(cbor::array{
+					text(value.provider_local_key),
+					text(value.owning_entity_provider_local_key),
+					text(value.constructor),
+					text(value.canonical_spelling),
+					cbor::value{value.dependent},
+					std::move(structure),
+					value.unavailable_reason ? text(*value.unavailable_reason)
+											 : cbor::value{nullptr},
+				});
+			}
 			return output;
 		}
 
@@ -189,6 +224,48 @@ namespace cxxlens::detail::clang23_gcc_replay
 			if (!value.logical_path.starts_with("project://") || value.end < value.begin ||
 				(value.role != "spelling" && value.role != "expansion"))
 				return sdk::unexpected(invalid("source", "range"));
+			return {};
+		}
+
+		[[nodiscard]] bool supported_type_qualifier(const std::string_view value)
+		{
+			return value == "const" || value == "restrict" || value == "volatile";
+		}
+
+		[[nodiscard]] bool supported_builtin_constructor(const std::string_view value)
+		{
+			return value == "builtin.void" || value == "builtin.bool" ||
+				value == "builtin.char-unsigned" || value == "builtin.char-signed" ||
+				value == "builtin.unsigned-char" || value == "builtin.signed-char" ||
+				value == "builtin.wchar-unsigned" || value == "builtin.wchar-signed" ||
+				value == "builtin.char8" || value == "builtin.char16" ||
+				value == "builtin.char32" || value == "builtin.unsigned-short" ||
+				value == "builtin.signed-short" || value == "builtin.unsigned-int" ||
+				value == "builtin.signed-int" || value == "builtin.unsigned-long" ||
+				value == "builtin.signed-long" || value == "builtin.unsigned-long-long" ||
+				value == "builtin.signed-long-long" || value == "builtin.unsigned-int128" ||
+				value == "builtin.signed-int128" || value == "builtin.half" ||
+				value == "builtin.float" || value == "builtin.double" ||
+				value == "builtin.long-double" || value == "builtin.float16" ||
+				value == "builtin.bfloat16" || value == "builtin.float128" ||
+				value == "builtin.ibm128" || value == "builtin.nullptr";
+		}
+
+		[[nodiscard]] sdk::result<void>
+		validate_qualifiers(const std::vector<std::string>& values,
+							std::size_t& total,
+							const worker_observation_codec_limits& limits)
+		{
+			if (!std::ranges::is_sorted(values) ||
+				std::ranges::adjacent_find(values) != values.end())
+				return sdk::unexpected(invalid("type.qualifiers", "canonical-order"));
+			for (const auto& value : values)
+			{
+				if (!supported_type_qualifier(value))
+					return sdk::unexpected(invalid("type.qualifiers", "symbol"));
+				if (auto valid = add_text(value, total, "type.qualifier", limits); !valid)
+					return valid;
+			}
 			return {};
 		}
 
@@ -254,12 +331,74 @@ namespace cxxlens::detail::clang23_gcc_replay
 					return valid;
 			}
 			for (const auto& item : value.observations.types)
+			{
 				for (const auto field : {std::string_view{item.provider_local_key},
 										 std::string_view{item.owning_entity_provider_local_key},
 										 std::string_view{item.constructor},
 										 std::string_view{item.canonical_spelling}})
 					if (auto valid = add_text(field, total, "type", limits); !valid)
 						return valid;
+				if (item.constructor != "function" ||
+					item.structure.has_value() == item.unavailable_reason.has_value())
+					return sdk::unexpected(invalid("type", "structural-state"));
+				if (item.unavailable_reason)
+				{
+					if (auto valid =
+							add_text(*item.unavailable_reason, total, "type.unavailable", limits);
+						!valid)
+						return valid;
+					continue;
+				}
+				if (item.dependent)
+					return sdk::unexpected(invalid("type", "dependent-structure"));
+				const auto& structure = *item.structure;
+				if (structure.calling_convention != "c" &&
+					structure.calling_convention != "x86-stdcall" &&
+					structure.calling_convention != "x86-fastcall" &&
+					structure.calling_convention != "x86-thiscall" &&
+					structure.calling_convention != "x86-vectorcall" &&
+					structure.calling_convention != "win64" &&
+					structure.calling_convention != "x86-64-sysv")
+					return sdk::unexpected(invalid("type.calling_convention", "symbol"));
+				if (structure.exception_specification != "none" &&
+					structure.exception_specification != "dynamic-none" &&
+					structure.exception_specification != "ms-nothrow" &&
+					structure.exception_specification != "noexcept" &&
+					structure.exception_specification != "noexcept-false" &&
+					structure.exception_specification != "noexcept-true")
+					return sdk::unexpected(invalid("type.exception_specification", "symbol"));
+				if (structure.ref_qualifier != "none" && structure.ref_qualifier != "lvalue" &&
+					structure.ref_qualifier != "rvalue")
+					return sdk::unexpected(invalid("type.ref_qualifier", "symbol"));
+				for (const auto field : {std::string_view{structure.calling_convention},
+										 std::string_view{structure.exception_specification},
+										 std::string_view{structure.ref_qualifier}})
+					if (auto valid = add_text(field, total, "type.structure", limits); !valid)
+						return valid;
+				if (auto valid = validate_qualifiers(structure.qualifiers, total, limits); !valid)
+					return valid;
+				if (structure.components.empty() ||
+					structure.components.size() > limits.maximum_observations - count)
+					return sdk::unexpected(resource("observations", "type-component-count"));
+				count += structure.components.size();
+				for (std::size_t index{}; index < structure.components.size(); ++index)
+				{
+					const auto& component = structure.components[index];
+					const auto expected_role =
+						index == 0U ? std::string_view{"result"} : std::string_view{"parameter"};
+					const auto expected_ordinal = index == 0U ? 0U : index - 1U;
+					if (component.role != expected_role || component.ordinal != expected_ordinal ||
+						!supported_builtin_constructor(component.constructor))
+						return sdk::unexpected(invalid("type.component", "canonical-shape"));
+					for (const auto field : {std::string_view{component.role},
+											 std::string_view{component.constructor}})
+						if (auto valid = add_text(field, total, "type.component", limits); !valid)
+							return valid;
+					if (auto valid = validate_qualifiers(component.qualifiers, total, limits);
+						!valid)
+						return valid;
+				}
+			}
 			for (const auto& item : value.observations.direct_calls)
 			{
 				if (item.caller_provider_local_key)
@@ -369,6 +508,63 @@ namespace cxxlens::detail::clang23_gcc_replay
 			return observed_source_origin{**kind, **path, **begin, **end, **read_only};
 		}
 
+		[[nodiscard]] sdk::result<std::vector<std::string>>
+		decode_text_array(const cbor::value& value, const std::string_view field)
+		{
+			const auto* encoded = std::get_if<cbor::array>(&value.data);
+			if (encoded == nullptr)
+				return sdk::unexpected(invalid(std::string{field}, "type"));
+			std::vector<std::string> output;
+			output.reserve(encoded->size());
+			for (const auto& item : *encoded)
+			{
+				const auto* text = std::get_if<std::string>(&item.data);
+				if (text == nullptr)
+					return sdk::unexpected(invalid(std::string{field}, "item-type"));
+				output.push_back(*text);
+			}
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<observed_type::function_structure>
+		decode_type_structure(const cbor::value& value)
+		{
+			auto fields = fixed_array(value, 6U, "type.structure");
+			if (!fields)
+				return sdk::unexpected(std::move(fields.error()));
+			auto qualifiers = decode_text_array((**fields)[0U], "type.qualifiers");
+			auto components = item<cbor::array>(**fields, 1U, "type.components");
+			auto convention = item<std::string>(**fields, 2U, "type.calling_convention");
+			auto exceptions = item<std::string>(**fields, 3U, "type.exception_specification");
+			auto ref = item<std::string>(**fields, 4U, "type.ref_qualifier");
+			auto variadic = item<bool>(**fields, 5U, "type.variadic");
+			if (!qualifiers || !components || !convention || !exceptions || !ref || !variadic)
+				return sdk::unexpected(invalid("type.structure", "field"));
+			observed_type::function_structure output;
+			output.qualifiers = std::move(*qualifiers);
+			output.calling_convention = **convention;
+			output.exception_specification = **exceptions;
+			output.ref_qualifier = **ref;
+			output.variadic = **variadic;
+			output.components.reserve((*components)->size());
+			for (const auto& encoded : **components)
+			{
+				auto component = fixed_array(encoded, 4U, "type.component");
+				if (!component)
+					return sdk::unexpected(std::move(component.error()));
+				auto role = item<std::string>(**component, 0U, "type.component.role");
+				auto ordinal = item<std::uint64_t>(**component, 1U, "type.component.ordinal");
+				auto constructor = item<std::string>(**component, 2U, "type.component.constructor");
+				auto component_qualifiers =
+					decode_text_array((**component)[3U], "type.component.qualifiers");
+				if (!role || !ordinal || !constructor || !component_qualifiers)
+					return sdk::unexpected(invalid("type.component", "field"));
+				output.components.push_back(
+					{**role, **ordinal, **constructor, std::move(*component_qualifiers)});
+			}
+			return output;
+		}
+
 		[[nodiscard]] sdk::result<observation_batch> decode_batch(const cbor::map& root)
 		{
 			observation_batch output;
@@ -446,7 +642,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 			output.types.reserve((*types)->size());
 			for (const auto& encoded : **types)
 			{
-				auto fields = fixed_array(encoded, 5U, "type");
+				auto fields = fixed_array(encoded, 7U, "type");
 				if (!fields)
 					return sdk::unexpected(std::move(fields.error()));
 				auto key = item<std::string>(**fields, 0U, "type.key");
@@ -456,7 +652,26 @@ namespace cxxlens::detail::clang23_gcc_replay
 				auto dependent = item<bool>(**fields, 4U, "type.dependent");
 				if (!key || !owner || !constructor || !spelling || !dependent)
 					return sdk::unexpected(invalid("type", "field"));
-				output.types.push_back({**key, **owner, **constructor, **spelling, **dependent});
+				std::optional<observed_type::function_structure> structure;
+				if (!std::holds_alternative<std::monostate>((**fields)[5U].data))
+				{
+					auto decoded = decode_type_structure((**fields)[5U]);
+					if (!decoded)
+						return sdk::unexpected(std::move(decoded.error()));
+					structure = std::move(*decoded);
+				}
+				std::optional<std::string> unavailable_reason;
+				if (const auto* reason = std::get_if<std::string>(&(**fields)[6U].data))
+					unavailable_reason = *reason;
+				else if (!std::holds_alternative<std::monostate>((**fields)[6U].data))
+					return sdk::unexpected(invalid("type.unavailable", "type"));
+				output.types.push_back({**key,
+										**owner,
+										**constructor,
+										**spelling,
+										**dependent,
+										std::move(structure),
+										std::move(unavailable_reason)});
 			}
 
 			output.direct_calls.reserve((*calls)->size());

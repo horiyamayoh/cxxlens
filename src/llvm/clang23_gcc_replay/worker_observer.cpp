@@ -14,6 +14,7 @@
 #include <clang/AST/Expr.h>
 #include <clang/AST/PrettyPrinter.h>
 #include <clang/AST/RecursiveASTVisitor.h>
+#include <clang/AST/Type.h>
 #include <clang/Basic/Linkage.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Lex/Lexer.h>
@@ -43,6 +44,217 @@ namespace cxxlens::detail::clang23_gcc_replay
 			return {"application-analysis.replay-observation-resource-limit",
 					"translation_unit",
 					std::move(detail)};
+		}
+
+		[[nodiscard]] sdk::error type_unavailable(std::string detail)
+		{
+			return {"application-analysis.replay-type-structure-unavailable",
+					"function_type",
+					std::move(detail)};
+		}
+
+		[[nodiscard]] sdk::result<std::string_view> type_symbol(const std::string_view value)
+		{
+			return sdk::result<std::string_view>{value};
+		}
+
+		[[nodiscard]] sdk::result<std::vector<std::string>>
+		qualifier_symbols(clang::Qualifiers qualifiers)
+		{
+			std::vector<std::string> output;
+			if (qualifiers.hasConst())
+				output.emplace_back("const");
+			if (qualifiers.hasRestrict())
+				output.emplace_back("restrict");
+			if (qualifiers.hasVolatile())
+				output.emplace_back("volatile");
+			qualifiers.removeCVRQualifiers();
+			if (!qualifiers.empty())
+				return sdk::unexpected(type_unavailable("unsupported-qualifier"));
+			return output;
+		}
+
+		[[nodiscard]] sdk::result<std::string_view> builtin_constructor(const clang::QualType value)
+		{
+			const auto canonical = value.getCanonicalType().getUnqualifiedType();
+			const auto* builtin = llvm::dyn_cast<clang::BuiltinType>(canonical.getTypePtr());
+			if (builtin == nullptr)
+				return sdk::unexpected(type_unavailable("non-builtin-component"));
+			switch (builtin->getKind())
+			{
+				case clang::BuiltinType::Void:
+					return type_symbol("builtin.void");
+				case clang::BuiltinType::Bool:
+					return type_symbol("builtin.bool");
+				case clang::BuiltinType::Char_U:
+					return type_symbol("builtin.char-unsigned");
+				case clang::BuiltinType::Char_S:
+					return type_symbol("builtin.char-signed");
+				case clang::BuiltinType::UChar:
+					return type_symbol("builtin.unsigned-char");
+				case clang::BuiltinType::SChar:
+					return type_symbol("builtin.signed-char");
+				case clang::BuiltinType::WChar_U:
+					return type_symbol("builtin.wchar-unsigned");
+				case clang::BuiltinType::WChar_S:
+					return type_symbol("builtin.wchar-signed");
+				case clang::BuiltinType::Char8:
+					return type_symbol("builtin.char8");
+				case clang::BuiltinType::Char16:
+					return type_symbol("builtin.char16");
+				case clang::BuiltinType::Char32:
+					return type_symbol("builtin.char32");
+				case clang::BuiltinType::UShort:
+					return type_symbol("builtin.unsigned-short");
+				case clang::BuiltinType::Short:
+					return type_symbol("builtin.signed-short");
+				case clang::BuiltinType::UInt:
+					return type_symbol("builtin.unsigned-int");
+				case clang::BuiltinType::Int:
+					return type_symbol("builtin.signed-int");
+				case clang::BuiltinType::ULong:
+					return type_symbol("builtin.unsigned-long");
+				case clang::BuiltinType::Long:
+					return type_symbol("builtin.signed-long");
+				case clang::BuiltinType::ULongLong:
+					return type_symbol("builtin.unsigned-long-long");
+				case clang::BuiltinType::LongLong:
+					return type_symbol("builtin.signed-long-long");
+				case clang::BuiltinType::UInt128:
+					return type_symbol("builtin.unsigned-int128");
+				case clang::BuiltinType::Int128:
+					return type_symbol("builtin.signed-int128");
+				case clang::BuiltinType::Half:
+					return type_symbol("builtin.half");
+				case clang::BuiltinType::Float:
+					return type_symbol("builtin.float");
+				case clang::BuiltinType::Double:
+					return type_symbol("builtin.double");
+				case clang::BuiltinType::LongDouble:
+					return type_symbol("builtin.long-double");
+				case clang::BuiltinType::Float16:
+					return type_symbol("builtin.float16");
+				case clang::BuiltinType::BFloat16:
+					return type_symbol("builtin.bfloat16");
+				case clang::BuiltinType::Float128:
+					return type_symbol("builtin.float128");
+				case clang::BuiltinType::Ibm128:
+					return type_symbol("builtin.ibm128");
+				case clang::BuiltinType::NullPtr:
+					return type_symbol("builtin.nullptr");
+				default:
+					return sdk::unexpected(type_unavailable("unsupported-builtin-component"));
+			}
+		}
+
+		[[nodiscard]] sdk::result<std::string_view>
+		calling_convention(const clang::CallingConv value)
+		{
+			switch (value)
+			{
+				case clang::CC_C:
+					return type_symbol("c");
+				case clang::CC_X86StdCall:
+					return type_symbol("x86-stdcall");
+				case clang::CC_X86FastCall:
+					return type_symbol("x86-fastcall");
+				case clang::CC_X86ThisCall:
+					return type_symbol("x86-thiscall");
+				case clang::CC_X86VectorCall:
+					return type_symbol("x86-vectorcall");
+				case clang::CC_Win64:
+					return type_symbol("win64");
+				case clang::CC_X86_64SysV:
+					return type_symbol("x86-64-sysv");
+				default:
+					return sdk::unexpected(type_unavailable("unsupported-calling-convention"));
+			}
+		}
+
+		[[nodiscard]] sdk::result<std::string_view>
+		exception_specification(const clang::ExceptionSpecificationType value)
+		{
+			switch (value)
+			{
+				case clang::EST_None:
+					return type_symbol("none");
+				case clang::EST_DynamicNone:
+					return type_symbol("dynamic-none");
+				case clang::EST_NoThrow:
+					return type_symbol("ms-nothrow");
+				case clang::EST_BasicNoexcept:
+					return type_symbol("noexcept");
+				case clang::EST_NoexceptFalse:
+					return type_symbol("noexcept-false");
+				case clang::EST_NoexceptTrue:
+					return type_symbol("noexcept-true");
+				default:
+					return sdk::unexpected(type_unavailable("unsupported-exception-specification"));
+			}
+		}
+
+		[[nodiscard]] std::string ref_qualifier(const clang::RefQualifierKind value)
+		{
+			switch (value)
+			{
+				case clang::RQ_None:
+					return "none";
+				case clang::RQ_LValue:
+					return "lvalue";
+				case clang::RQ_RValue:
+					return "rvalue";
+			}
+			return "invalid";
+		}
+
+		[[nodiscard]] sdk::result<observed_type::function_structure>
+		function_type_structure(const clang::FunctionDecl& value)
+		{
+			const auto* prototype = value.getType()->getAs<clang::FunctionProtoType>();
+			if (prototype == nullptr)
+				return sdk::unexpected(type_unavailable("unprototyped-function"));
+			if (value.getType()->isDependentType())
+				return sdk::unexpected(type_unavailable("dependent-function"));
+			auto qualifiers = qualifier_symbols(prototype->getMethodQuals());
+			auto convention = calling_convention(prototype->getCallConv());
+			auto exceptions = exception_specification(prototype->getExceptionSpecType());
+			if (!qualifiers || !convention || !exceptions)
+				return sdk::unexpected(!qualifiers		 ? std::move(qualifiers.error())
+										   : !convention ? std::move(convention.error())
+														 : std::move(exceptions.error()));
+
+			observed_type::function_structure output;
+			output.qualifiers = std::move(*qualifiers);
+			output.calling_convention = *convention;
+			output.exception_specification = *exceptions;
+			output.ref_qualifier = ref_qualifier(prototype->getRefQualifier());
+			output.variadic = prototype->isVariadic();
+			const auto append_component = [&](const std::string_view role,
+											  const std::uint64_t ordinal,
+											  const clang::QualType type) -> sdk::result<void>
+			{
+				auto component_qualifiers =
+					qualifier_symbols(type.getCanonicalType().getQualifiers());
+				auto constructor = builtin_constructor(type);
+				if (!component_qualifiers || !constructor)
+					return sdk::unexpected(!component_qualifiers
+											   ? std::move(component_qualifiers.error())
+											   : std::move(constructor.error()));
+				output.components.push_back({std::string{role},
+											 ordinal,
+											 std::string{*constructor},
+											 std::move(*component_qualifiers)});
+				return {};
+			};
+			if (auto result = append_component("result", 0U, prototype->getReturnType()); !result)
+				return sdk::unexpected(std::move(result.error()));
+			std::uint64_t ordinal{};
+			for (const auto parameter : prototype->param_types())
+			{
+				if (auto result = append_component("parameter", ordinal++, parameter); !result)
+					return sdk::unexpected(std::move(result.error()));
+			}
+			return output;
 		}
 
 		class budget final
@@ -475,19 +687,55 @@ namespace cxxlens::detail::clang23_gcc_replay
 					return false;
 				output_.declarations.push_back(std::move(declaration));
 
-				auto type_key = sdk::semantic_digest(
-					"clang23.gcc-replay.function-type-observation.v1", *key + "\n" + type);
+				auto type_key =
+					sdk::semantic_digest("clang23.gcc-replay.function-type-observation.v2", *key);
 				if (!type_key)
 					return reject(std::move(type_key.error()));
 				observed_type observed{std::move(*type_key),
 									   *key,
 									   "function",
 									   type,
-									   value->getType()->isDependentType()};
+									   value->getType()->isDependentType(),
+									   std::nullopt,
+									   std::nullopt};
+				auto structure = function_type_structure(*value);
+				if (structure)
+					observed.structure = std::move(*structure);
+				else
+					observed.unavailable_reason = std::move(structure.error().detail);
+				std::size_t structural_bytes{};
+				const auto add_structural_bytes = [&](const std::size_t bytes)
+				{
+					if (bytes > std::numeric_limits<std::size_t>::max() - structural_bytes)
+						return false;
+					structural_bytes += bytes;
+					return true;
+				};
+				if (observed.structure)
+				{
+					for (const auto& qualifier : observed.structure->qualifiers)
+						if (!add_structural_bytes(qualifier.size()))
+							return reject(resource_failure("logical-bytes"));
+					for (const auto& component : observed.structure->components)
+					{
+						if (!add_structural_bytes(component.role.size()) ||
+							!add_structural_bytes(component.constructor.size()))
+							return reject(resource_failure("logical-bytes"));
+						for (const auto& qualifier : component.qualifiers)
+							if (!add_structural_bytes(qualifier.size()))
+								return reject(resource_failure("logical-bytes"));
+					}
+					if (!add_structural_bytes(observed.structure->calling_convention.size()) ||
+						!add_structural_bytes(observed.structure->exception_specification.size()) ||
+						!add_structural_bytes(observed.structure->ref_qualifier.size()))
+						return reject(resource_failure("logical-bytes"));
+				}
+				else if (!add_structural_bytes(observed.unavailable_reason->size()))
+					return reject(resource_failure("logical-bytes"));
 				if (!accept(bounds_.observe(observed.provider_local_key.size() +
 											observed.owning_entity_provider_local_key.size() +
 											observed.constructor.size() +
-											observed.canonical_spelling.size())))
+											observed.canonical_spelling.size() + structural_bytes)))
 					return false;
 				output_.types.push_back(std::move(observed));
 				return true;

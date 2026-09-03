@@ -16,6 +16,7 @@
 #include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_declaration.hpp>
 #include <cxxlens/relations/cc_entity.hpp>
+#include <cxxlens/relations/cc_type.hpp>
 #include <cxxlens/relations/source_span.hpp>
 
 #include "source_authority_binder.hpp"
@@ -292,6 +293,79 @@ namespace cxxlens::detail::clang23_gcc_replay
 			}));
 		}
 
+		[[nodiscard]] sdk::result<std::string>
+		type_component_signature(const observed_type::function_structure& structure)
+		{
+			std::vector<sdk::canonical_value> qualifiers;
+			for (const auto& qualifier : structure.qualifiers)
+				qualifiers.push_back(sdk::canonical_value::from_string(qualifier));
+			std::vector<sdk::canonical_value> components;
+			for (const auto& component : structure.components)
+			{
+				std::vector<sdk::canonical_value> component_qualifiers;
+				for (const auto& qualifier : component.qualifiers)
+					component_qualifiers.push_back(sdk::canonical_value::from_string(qualifier));
+				components.push_back(sdk::canonical_value::from_tuple({
+					sdk::canonical_value::from_string(component.role),
+					sdk::canonical_value::from_integer(
+						static_cast<std::int64_t>(component.ordinal)),
+					sdk::canonical_value::from_string(component.constructor),
+					sdk::canonical_value::from_tuple(std::move(component_qualifiers)),
+				}));
+			}
+			auto canonical = sdk::canonical_binary(sdk::canonical_value::from_tuple({
+				sdk::canonical_value::from_tuple(std::move(qualifiers)),
+				sdk::canonical_value::from_tuple(std::move(components)),
+				sdk::canonical_value::from_string(structure.calling_convention),
+				sdk::canonical_value::from_string(structure.exception_specification),
+				sdk::canonical_value::from_string(structure.ref_qualifier),
+				sdk::canonical_value::from_boolean(structure.variadic),
+			}));
+			if (!canonical)
+				return sdk::unexpected(std::move(canonical.error()));
+			const auto bytes = std::string_view{reinterpret_cast<const char*>(canonical->data()),
+												canonical->size()};
+			return sdk::semantic_digest("cc.type.component-signature.v1", bytes);
+		}
+
+		[[nodiscard]] sdk::result<sdk::detached_row> type_row(const observed_type& value)
+		{
+			if (!value.structure)
+				return sdk::unexpected(
+					failure(value.provider_local_key, "type-structure-unavailable"));
+			auto signature = type_component_signature(*value.structure);
+			if (!signature)
+				return sdk::unexpected(std::move(signature.error()));
+			using relation = cc::relations::type;
+			relation::builder builder;
+			for (auto result : {
+					 builder.set<relation::type_column>(
+						 sdk::detached_cell::typed("cc_type_id", "pending")),
+					 builder.set<relation::constructor>(symbol(sdk::scalar_kind::open_symbol,
+															   "cc.type-constructor/1",
+															   value.constructor)),
+					 builder.set<relation::component_signature_digest>(
+						 symbol(sdk::scalar_kind::digest, {}, std::move(*signature))),
+					 builder.set<relation::qualifiers>(canonical_symbol_set(
+						 "open_symbol<cc.type-qualifier/1>", value.structure->qualifiers)),
+					 builder.set<relation::dependent>(sdk::detached_cell::boolean(value.dependent)),
+					 builder.set<relation::spelling>(optional_utf8(value.canonical_spelling)),
+				 })
+				if (!result)
+					return sdk::unexpected(std::move(result.error()));
+			auto row = std::move(builder).finish();
+			if (!row)
+				return sdk::unexpected(std::move(row.error()));
+			auto identity = sdk::derive_domain_identity(relation::descriptor(), *row);
+			if (!identity)
+				return sdk::unexpected(std::move(identity.error()));
+			row->cells.at("cc.type.v1.type") =
+				sdk::detached_cell::typed("cc_type_id", std::move(*identity));
+			if (auto valid = sdk::validate_domain_identity(relation::descriptor(), *row); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			return row;
+		}
+
 		struct prepared_call
 		{
 			const observed_direct_call* observed{};
@@ -413,7 +487,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 		};
 		return replay_input_digest == other.replay_input_digest &&
 			same_rows(source_spans, other.source_spans) && same_rows(entities, other.entities) &&
-			same_rows(declarations, other.declarations) &&
+			same_rows(declarations, other.declarations) && same_rows(types, other.types) &&
 			same_rows(call_sites, other.call_sites) &&
 			same_rows(direct_targets, other.direct_targets) && unresolved == other.unresolved;
 	}
@@ -465,9 +539,10 @@ namespace cxxlens::detail::clang23_gcc_replay
 				requested(input, cc::relations::call_site::descriptor().id);
 			const bool direct_targets_requested =
 				requested(input, cc::relations::call_direct_target::descriptor().id);
+			const bool types_requested = requested(input, cc::relations::type::descriptor().id);
 			std::map<std::string_view, std::string, std::less<>> entity_ids;
 			if (entities_requested || declarations_requested || call_sites_requested ||
-				direct_targets_requested)
+				direct_targets_requested || types_requested)
 			{
 				std::map<std::string_view, const observed_entity*, std::less<>> selected;
 				for (const auto& entity : worker.observations.entities)
@@ -526,6 +601,48 @@ namespace cxxlens::detail::clang23_gcc_replay
 					output.declarations.push_back(std::move(*row));
 				}
 				sort_rows(output.declarations);
+			}
+
+			if (types_requested)
+			{
+				std::map<std::string, sdk::detached_row, std::less<>> selected_types;
+				for (const auto& type : worker.observations.types)
+				{
+					const auto owner = entity_ids.find(type.owning_entity_provider_local_key);
+					if (owner == entity_ids.end())
+						return sdk::unexpected(
+							failure(type.owning_entity_provider_local_key, "type-owner-unbound"));
+					if (!type.structure)
+					{
+						output.unresolved.push_back(
+							{"cc.type.v1",
+							 "unavailable",
+							 "structural-type-unavailable:" + owner->second + ":" +
+								 *type.unavailable_reason,
+							 "use-a-qualified-native-gap-provider-for-this-type-structure"});
+						continue;
+					}
+					auto row = type_row(type);
+					if (!row)
+						return sdk::unexpected(std::move(row.error()));
+					const auto& identity_cell = row->cells.at("cc.type.v1.type");
+					const auto* identity = identity_cell.value
+						? std::get_if<std::string>(&*identity_cell.value)
+						: nullptr;
+					if (identity == nullptr)
+						return sdk::unexpected(
+							failure(type.provider_local_key, "type-identity-invalid"));
+					auto [found, inserted] = selected_types.emplace(*identity, *row);
+					if (!inserted && row->canonical_form() < found->second.canonical_form())
+						found->second = std::move(*row);
+				}
+				output.types.reserve(selected_types.size());
+				for (auto& [identity, row] : selected_types)
+				{
+					static_cast<void>(identity);
+					output.types.push_back(std::move(row));
+				}
+				sort_rows(output.types);
 			}
 
 			if (call_sites_requested || direct_targets_requested)

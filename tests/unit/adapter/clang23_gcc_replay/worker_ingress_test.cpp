@@ -56,6 +56,7 @@ namespace
 		source.content = bytes("#include \"answer.hpp\"\n"
 							   "[[nodiscard]] int answer_value(int value) { return value; }\n"
 							   "double answer_value(double value) { return value; }\n"
+							   "int* pointer_value(int* value) { return value; }\n"
 							   "#define CALL_ANSWER(v) answer_value(v)\n"
 							   "int main() { return CALL_ANSWER(answer); }\n");
 		source.content_digest = content_digest(source.content);
@@ -89,6 +90,7 @@ namespace
 												   "cc.call_site.v1",
 												   "cc.declaration.v1",
 												   "cc.entity.v1",
+												   "cc.type.v1",
 												   "source.file.v1",
 												   "source.span.v1"};
 		value.interpretation = "cc.clang23-gcc-replay-1";
@@ -134,10 +136,23 @@ namespace
 		auto value = input();
 		auto output = execute(value);
 		require(output.replay_input_digest == value.input_digest() && output.error_count == 0U &&
-				output.declaration_count > 0U && output.observations.entities.size() == 4U &&
-				output.observations.declarations.size() == 4U &&
-				output.observations.types.size() == 4U &&
+				output.declaration_count > 0U && output.observations.entities.size() == 5U &&
+				output.observations.declarations.size() == 5U &&
+				output.observations.types.size() == 5U &&
 				output.observations.direct_calls.size() == 1U);
+		require(std::ranges::count_if(output.observations.types,
+									  [](const auto& type)
+									  {
+										  return type.structure.has_value() &&
+											  !type.unavailable_reason.has_value() &&
+											  !type.structure->components.empty();
+									  }) == 4 &&
+				std::ranges::count_if(output.observations.types,
+									  [](const auto& type)
+									  {
+										  return !type.structure.has_value() &&
+											  type.unavailable_reason == "non-builtin-component";
+									  }) == 1);
 		auto repeated = execute(value);
 		require(repeated == output);
 		require(execute_bytes(value) == execute_bytes(value));
@@ -205,9 +220,9 @@ namespace
 		require(parsed &&
 				parsed->terminal == cxxlens::detail::clang23_gcc_replay::parse_terminal::parsed &&
 				parsed->declaration_count > 0U && parsed->error_count == 0U &&
-				parsed->observations.entities.size() == 4U &&
-				parsed->observations.declarations.size() == 4U &&
-				parsed->observations.types.size() == 4U &&
+				parsed->observations.entities.size() == 5U &&
+				parsed->observations.declarations.size() == 5U &&
+				parsed->observations.types.size() == 5U &&
 				parsed->observations.direct_calls.size() == 1U &&
 				parsed->observations.limitations.empty() &&
 				parsed->observations.traversal_entries > 0U);
@@ -448,14 +463,14 @@ namespace
 		auto detached = execute(value);
 		auto normalized = normalize_observation_candidates(value, detached);
 		require(normalized && normalized->replay_input_digest == value.input_digest() &&
-				!normalized->source_spans.empty() && normalized->entities.size() == 4U);
+				!normalized->source_spans.empty() && normalized->entities.size() == 5U);
 		for (const auto& row : normalized->source_spans)
 			require(row.descriptor_id == "source.span.v1");
 		for (const auto& row : normalized->entities)
 			require(row.descriptor_id == "cc.entity.v1" &&
 					row.cells.at("cc.entity.v1.entity").value.has_value() &&
 					row.cells.at("cc.entity.v1.provider_local_key").value.has_value());
-		require(normalized->declarations.size() == 4U);
+		require(normalized->declarations.size() == 5U);
 		for (const auto& row : normalized->declarations)
 			require(row.descriptor_id == "cc.declaration.v1" &&
 					row.cells.at("cc.declaration.v1.declaration").value.has_value() &&
@@ -468,6 +483,20 @@ namespace
 		require(normalized->call_sites.size() == 1U && normalized->direct_targets.size() == 1U);
 		require(normalized->call_sites.front().descriptor_id == "cc.call_site.v1" &&
 				normalized->direct_targets.front().descriptor_id == "cc.call_direct_target.v1");
+		require(normalized->types.size() == 3U);
+		for (const auto& row : normalized->types)
+			require(row.descriptor_id == "cc.type.v1" &&
+					row.cells.at("cc.type.v1.type").value.has_value() &&
+					row.cells.at("cc.type.v1.component_signature_digest").value.has_value() &&
+					row.cells.at("cc.type.v1.qualifiers").value.has_value() &&
+					row.cells.at("cc.type.v1.spelling").value.has_value());
+		require(std::ranges::any_of(normalized->unresolved,
+									[](const auto& gap)
+									{
+										return gap.field == "cc.type.v1" &&
+											gap.state == "unavailable" &&
+											gap.reason.contains("non-builtin-component");
+									}));
 		auto repeated = normalize_observation_candidates(value, detached);
 		require(repeated && *repeated == *normalized);
 
@@ -480,6 +509,12 @@ namespace
 		auto noncanonical_attributes = detached;
 		noncanonical_attributes.observations.declarations.front().attributes = {"z", "a"};
 		require(!normalize_observation_candidates(value, noncanonical_attributes));
+		auto noncanonical_type = detached;
+		noncanonical_type.observations.types.front().structure->qualifiers = {"volatile", "const"};
+		require(!normalize_observation_candidates(value, noncanonical_type));
+		auto ambiguous_type_state = detached;
+		ambiguous_type_state.observations.types.front().unavailable_reason = "forged";
+		require(!normalize_observation_candidates(value, ambiguous_type_state));
 
 		auto conflicting = detached;
 		conflicting.observations.entities[1].provider_local_key =
@@ -496,8 +531,8 @@ namespace
 		unrequested_worker.replay_input_digest = std::string{unrequested_input->input_digest()};
 		auto unrequested = normalize_observation_candidates(*unrequested_input, unrequested_worker);
 		require(unrequested && unrequested->source_spans.empty() && unrequested->entities.empty() &&
-				unrequested->declarations.empty() && unrequested->call_sites.empty() &&
-				unrequested->direct_targets.empty());
+				unrequested->declarations.empty() && unrequested->types.empty() &&
+				unrequested->call_sites.empty() && unrequested->direct_targets.empty());
 
 		auto entity_only_draft = value.value();
 		entity_only_draft.requested_relation_descriptor_ids = {"cc.entity.v1"};
@@ -508,7 +543,7 @@ namespace
 		entity_only_worker.replay_input_digest = std::string{entity_only_input->input_digest()};
 		auto entity_only = normalize_observation_candidates(*entity_only_input, entity_only_worker);
 		require(entity_only && entity_only->source_spans.empty() &&
-				entity_only->entities.size() == 4U);
+				entity_only->entities.size() == 5U);
 		for (const auto& row : entity_only->entities)
 			require(!row.cells.contains("cc.entity.v1.anchor"));
 
@@ -524,7 +559,26 @@ namespace
 			normalize_observation_candidates(*declaration_only_input, declaration_only_worker);
 		require(declaration_only && declaration_only->entities.empty() &&
 				declaration_only->source_spans.empty() &&
-				declaration_only->declarations.size() == 4U);
+				declaration_only->declarations.size() == 5U);
+
+		auto type_only_draft = value.value();
+		type_only_draft.requested_relation_descriptor_ids = {"cc.type.v1"};
+		auto type_only_input =
+			cxxlens::sdk::detail::validate_gcc_replay_input(std::move(type_only_draft));
+		require(type_only_input);
+		auto type_only_worker = detached;
+		type_only_worker.replay_input_digest = std::string{type_only_input->input_digest()};
+		auto partial_type = normalize_observation_candidates(*type_only_input, type_only_worker);
+		require(partial_type && partial_type->types.size() == 3U &&
+				std::ranges::any_of(partial_type->unresolved,
+									[](const auto& gap)
+									{
+										return gap.field == "cc.type.v1" &&
+											gap.state == "unavailable" &&
+											gap.completion_action ==
+											"use-a-qualified-native-gap-provider-for-this-type-"
+											"structure";
+									}));
 
 		auto calls_only_draft = value.value();
 		calls_only_draft.requested_relation_descriptor_ids = {"cc.call_direct_target.v1",
