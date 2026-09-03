@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "sdk/gcc_build_capture_adapter_internal.hpp"
 #include "sdk/source_identity_internal.hpp"
 
 namespace
@@ -184,6 +185,121 @@ namespace
 		return content_digest(*encoded);
 	}
 
+	[[nodiscard]] std::pair<cxxlens::sdk::imported_project::implementation,
+							cxxlens::sdk::replay_plan::implementation>
+	exact_imported_project()
+	{
+		using namespace cxxlens::sdk;
+		auto input = draft();
+		auto capture = std::make_shared<capture_bundle::implementation>();
+		capture->digest = input.capture_bundle_digest;
+		capture->project_id = "project:gcc-replay";
+		capture->projection.toolchain_family = "gcc";
+		capture->projection.toolchain_version = "16.2.0";
+		capture->projection.production_compiler_path = "/opt/gcc-16.2.0/bin/g++";
+		capture->projection.production_compiler_binary_digest = digest('5');
+		capture->projection.target_triple = "x86_64-linux-gnu";
+		capture->projection.abi_digest = digest('6');
+		capture->projection.builtin_headers_digest = digest('7');
+		capture->projection.builtin_macros_digest = digest('8');
+		capture->projection.include_search_digest = digest('9');
+		capture->projection.target_abi = input.target_abi;
+		capture->projection.logical_project_root = "project://";
+		capture->projection.path_mappings = {{"/workspace/example", "project://"}};
+
+		detail::decoded_capture_source_closure closure;
+		closure.id = "source-closure:main";
+		closure.digest = input.source_closure_digest;
+		closure.manifest_digest = digest('a');
+		closure.member_count = 1U;
+		closure.blob_count = 1U;
+		closure.unique_blob_bytes = input.source_members.front().content.size();
+		closure.members = input.source_members;
+		capture->projection.source_closures.push_back(std::move(closure));
+
+		detail::decoded_capture_unit unit;
+		unit.compile_unit_id = input.compile_unit_id;
+		unit.source_snapshot_id = input.source_members.front().source_snapshot_id;
+		unit.source_file_id = input.source_members.front().file_id;
+		unit.source_logical_path = input.source_members.front().logical_path;
+		unit.source_content_digest = input.source_members.front().content_digest;
+		unit.source_size_bytes = input.source_members.front().content.size();
+		unit.logical_working_directory = "project://build";
+		unit.language = "c++";
+		unit.original_arguments = {
+			"/opt/gcc-16.2.0/bin/g++", "-std=gnu++23", "project://src/main.cpp"};
+		unit.environment_effects = {
+			{"gcc.cpath", "derived", std::string{"project://include"}, {}, {}},
+		};
+		unit.language_standard = "gnu++23";
+		unit.extension_mode = "gnu";
+		unit.source_closure_id = "source-closure:main";
+		unit.source_closure_digest = input.source_closure_digest;
+		capture->projection.compile_units.push_back(std::move(unit));
+
+		replay_plan::implementation plan;
+		plan.capture_bundle_digest = capture->digest;
+		plan.compile_unit_id = input.compile_unit_id;
+		plan.analysis_frontend = input.analysis_frontend;
+		plan.target_abi = input.target_abi;
+		plan.effective_arguments = input.effective_arguments;
+		plan.source_closure_digest = input.source_closure_digest;
+		plan.digest = plan_digest(plan);
+
+		imported_project::implementation project;
+		project.id = input.imported_project_id;
+		project.capture_bundle_digest = capture->digest;
+		project.capture = capture;
+		auto catalog = project_catalog::make("project://",
+											 digest('b'),
+											 {{plan.compile_unit_id,
+											   digest('c'),
+											   input.source_members.front().content_digest,
+											   digest('b')}});
+		require(catalog);
+		project.catalog = std::move(*catalog);
+		return {std::move(project), std::move(plan)};
+	}
+
+	void imported_capture_adapts_to_generic_capture_authority()
+	{
+		using namespace cxxlens::sdk;
+		auto [project, plan] = exact_imported_project();
+		auto first = detail::make_gcc_build_capture(project, plan);
+		require(first);
+		require(first->value().catalog.catalog_digest == project.catalog.catalog_digest);
+		require(first->value().selected_catalog_compile_unit_id == plan.compile_unit_id);
+		require(first->value().toolchain.family == "gcc");
+		require(first->value().toolchain.exact_version == "16.2.0");
+		require(first->value().invocation.effective_replay_arguments.value ==
+				plan.effective_arguments);
+		require(first->value().source_closure.closure_digest == plan.source_closure_digest);
+
+		auto relocated = project;
+		auto relocated_capture = std::make_shared<capture_bundle::implementation>(*project.capture);
+		relocated_capture->projection.production_compiler_path = "/relocated/gcc/bin/g++";
+		relocated_capture->projection.path_mappings = {{"/relocated/project", "project://"}};
+		relocated.capture = std::move(relocated_capture);
+		auto second = detail::make_gcc_build_capture(relocated, plan);
+		require(second && second->semantic_identity() == first->semantic_identity());
+
+		auto incomplete = project;
+		auto incomplete_capture =
+			std::make_shared<capture_bundle::implementation>(*project.capture);
+		incomplete_capture->projection.abi_digest.reset();
+		incomplete.capture = std::move(incomplete_capture);
+		auto rejected = detail::make_gcc_build_capture(incomplete, plan);
+		require(!rejected &&
+				rejected.error().code == "application-analysis.materialization-unavailable" &&
+				rejected.error().field == "production_toolchain.abi_digest");
+
+		auto mismatched_plan = plan;
+		mismatched_plan.target_abi = "aarch64-linux-gnu";
+		auto mismatched = detail::make_gcc_build_capture(project, mismatched_plan);
+		require(!mismatched && mismatched.error().field == "replay_plan" &&
+				mismatched.error().detail == "capture-binding-mismatch");
+	}
+
 	void imported_capture_is_the_only_source_closure_authority()
 	{
 		using namespace cxxlens::sdk;
@@ -242,5 +358,6 @@ int main()
 	deterministic_round_trip_canonicalizes_set_fields();
 	malformed_authority_and_source_content_fail_closed();
 	decoder_rejects_noncanonical_order_truncation_and_depth();
+	imported_capture_adapts_to_generic_capture_authority();
 	imported_capture_is_the_only_source_closure_authority();
 }
