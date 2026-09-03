@@ -2,12 +2,28 @@
 #include <array>
 #include <cstddef>
 #include <cstdlib>
+#include <fstream>
+#include <iostream>
+#include <iterator>
 #include <new>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include <cxxlens/relations/build_compile_unit.hpp>
+#include <cxxlens/relations/build_project.hpp>
+#include <cxxlens/relations/build_toolchain_context.hpp>
+#include <cxxlens/relations/build_variant.hpp>
+#include <cxxlens/relations/cc_call_direct_target.hpp>
+#include <cxxlens/relations/cc_call_site.hpp>
+#include <cxxlens/relations/cc_declaration.hpp>
+#include <cxxlens/relations/cc_entity.hpp>
+#include <cxxlens/relations/cc_type.hpp>
+#include <cxxlens/relations/source_file.hpp>
+#include <cxxlens/relations/source_span.hpp>
 #include <cxxlens/sdk/application_analysis.hpp>
+
+#include "sdk/application_materialization_execution_internal.hpp"
 
 #if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
 namespace
@@ -812,6 +828,232 @@ namespace
 																		  zero_budget);
 		require(!invalid_budget && invalid_budget.error().field == "budget");
 	}
+
+	void execution_plan_binds_capture_task_provider_and_publication_before_effects()
+	{
+		using namespace cxxlens::sdk;
+		auto bytes = canonical_binary(valid_bundle());
+		require(bytes);
+		auto bundle = decode_capture_bundle(*bytes);
+		require(bundle);
+		auto imported = import_capture(*bundle);
+		require(imported);
+
+		relation_registry registry;
+		auto descriptor = request_descriptor();
+		require(registry.add(descriptor));
+		auto engine = registry.build("application-analysis-execution-test");
+		require(engine);
+		const auto policies = provider::builtin_sandbox_policies();
+		require(!policies.empty());
+		auto candidate = application_provider_candidate(descriptor, digest('a'));
+		provider::provider_selection_request provider_request;
+		provider_request.provider_id = candidate.description.provider_id;
+		provider_request.provider_version = candidate.description.provider_version;
+		provider_request.provider_binary_digest = candidate.description.provider_binary_digest;
+		provider_request.provider_semantic_contract_digest =
+			candidate.description.provider_semantic_contract_digest;
+		provider_request.sandbox = {provider::sandbox_assurance::enforced,
+									policies.front().policy_digest()};
+		auto selection = provider::select_provider(provider_request, {&candidate, 1U});
+		require(selection);
+		const auto& project = application_analysis_imported_value_internal(*imported);
+		snapshot_draft publication{{"catalog:test",
+									"experimental",
+									std::string{engine->generation()},
+									"condition:test",
+									std::string{engine->registry_digest()},
+									digest('c'),
+									digest('d')},
+								   {1U, 0U, 0U},
+								   project.catalog.catalog_digest,
+								   std::nullopt};
+		auto first =
+			detail::make_gcc_application_materialization_execution_plan(project,
+																		*engine,
+																		publication,
+																		{&descriptor.id, 1U},
+																		"cc.clang23-gcc-replay-1",
+																		*selection,
+																		{},
+																		{});
+		auto second =
+			detail::make_gcc_application_materialization_execution_plan(project,
+																		*engine,
+																		publication,
+																		{&descriptor.id, 1U},
+																		"cc.clang23-gcc-replay-1",
+																		*selection,
+																		{},
+																		{});
+		require(first && second &&
+				first->materialization_request_id == second->materialization_request_id);
+		require(first->units.size() == 1U);
+		const auto& unit = first->units.front();
+		require(unit.process.task_id == unit.task.value().provider_task.task_id);
+		require(unit.process.task_input_digest == unit.provider_input.input_digest());
+		require(unit.task.value().provider_input_digest == unit.provider_input.input_digest());
+		require(unit.task.value().capture.semantic_identity() == unit.capture.semantic_identity());
+		require(unit.task.value().partitions.front().candidate.current.input.precision_profile ==
+				"under_approximation");
+		require(unit.host_partitions.empty());
+
+		auto unavailable_relation = detail::make_gcc_application_materialization_execution_plan(
+			project,
+			*engine,
+			publication,
+			std::array<std::string, 1U>{"test.unoffered.v1"},
+			"cc.clang23-gcc-replay-1",
+			*selection,
+			{},
+			{});
+		require(!unavailable_relation &&
+				unavailable_relation.error().detail == "provider-relation-unavailable");
+
+		candidate.executable_argv.front() = "relative-worker";
+		auto relative_selection = provider::select_provider(provider_request, {&candidate, 1U});
+		require(relative_selection);
+		auto relative =
+			detail::make_gcc_application_materialization_execution_plan(project,
+																		*engine,
+																		publication,
+																		{&descriptor.id, 1U},
+																		"cc.clang23-gcc-replay-1",
+																		*relative_selection,
+																		{},
+																		{});
+		require(!relative && relative.error().detail == "absolute-path-required");
+	}
+
+#if defined(CXXLENS_TEST_CLANG23_WORKER_PATH)
+	[[nodiscard]] std::string executable_digest(const std::string& path)
+	{
+		std::ifstream input{path, std::ios::binary};
+		require(input);
+		const std::vector<char> characters{std::istreambuf_iterator<char>{input},
+										   std::istreambuf_iterator<char>{}};
+		std::vector<std::byte> bytes;
+		bytes.reserve(characters.size());
+		for (const auto value : characters)
+			bytes.push_back(static_cast<std::byte>(static_cast<unsigned char>(value)));
+		return cxxlens::sdk::content_digest(bytes);
+	}
+
+	void exact_clang23_worker_materializes_through_public_service()
+	{
+		using namespace cxxlens;
+		using namespace cxxlens::sdk;
+		const std::array descriptors{
+			&build::relations::project::descriptor(),
+			&build::relations::compile_unit::descriptor(),
+			&build::relations::variant::descriptor(),
+			&build::relations::toolchain_context::descriptor(),
+			&source::relations::file::descriptor(),
+			&source::relations::span::descriptor(),
+			&cc::relations::entity::descriptor(),
+			&cc::relations::declaration::descriptor(),
+			&cc::relations::type::descriptor(),
+			&cc::relations::call_site::descriptor(),
+			&cc::relations::call_direct_target::descriptor(),
+		};
+		relation_registry registry;
+		std::vector<std::string> relation_ids;
+		for (const auto* descriptor : descriptors)
+		{
+			require(registry.add(*descriptor));
+			relation_ids.push_back(descriptor->id);
+		}
+		std::ranges::sort(relation_ids);
+		auto engine = registry.build("application-analysis-clang23-test");
+		require(engine);
+
+		auto bundle_bytes = canonical_binary(valid_bundle());
+		require(bundle_bytes);
+		auto bundle = decode_capture_bundle(*bundle_bytes);
+		require(bundle);
+		auto project = import_capture(*bundle);
+		require(project);
+		const auto policies = provider::builtin_sandbox_policies();
+		require(!policies.empty());
+		const std::string worker{CXXLENS_TEST_CLANG23_WORKER_PATH};
+		provider::manifest manifest;
+		manifest.provider_id = "cxxlens.clang23-gcc-replay";
+		manifest.provider_version = {1U, 0U, 0U};
+		manifest.package_identity = "cxxlens.clang23-gcc-replay.package";
+		manifest.publisher = "cxxlens.project";
+		manifest.license = "Apache-2.0 WITH LLVM-exception";
+		manifest.protocol = {provider::protocol_v2_major,
+							 provider::protocol_v2_minor,
+							 provider::protocol_v2_minor,
+							 {"credit-backpressure", "task-input-chunks-v2"},
+							 {}};
+		manifest.platform_tuples = {"linux-x86_64-clang23"};
+		manifest.provider_binary_digest = executable_digest(worker);
+		manifest.provider_semantic_contract_digest = "semantic-v2:" + digest('b');
+		manifest.offered_relations = relation_ids;
+		manifest.interpretation_domains = {"cc.clang23-gcc-replay-1"};
+		manifest.invalidation_contract = digest('c');
+		manifest.determinism_contract = digest('d');
+		manifest.resource_class = "provider.application-analysis";
+		manifest.requested_qualifications = {"experimental"};
+		provider::provider_candidate candidate{manifest,
+											   provider::discovery_source::explicit_path,
+											   {worker},
+											   true,
+											   true,
+											   true,
+											   {"experimental"},
+											   {"linux-glibc",
+												policies.front().mechanisms,
+												provider::sandbox_assurance::enforced,
+												policies.front().policy_digest(),
+												digest('e')},
+											   {}};
+		provider::provider_selection_request provider_request{
+			manifest.provider_id,
+			manifest.provider_version,
+			manifest.provider_binary_digest,
+			manifest.provider_semantic_contract_digest,
+			{provider::sandbox_assurance::enforced, policies.front().policy_digest()},
+			true,
+			std::nullopt};
+		snapshot_draft publication{{"catalog:application-analysis",
+									"experimental",
+									std::string{engine->generation()},
+									"condition:application-analysis",
+									std::string{engine->registry_digest()},
+									digest('f'),
+									digest('0')},
+								   {1U, 0U, 0U},
+								   std::string{project->catalog_semantic_digest()},
+								   std::nullopt};
+		auto request = materialization_request::make(*engine,
+													 publication,
+													 relation_ids,
+													 "cc.clang23-gcc-replay-1",
+													 provider_request,
+													 {candidate});
+		require(request);
+		auto store = make_in_memory_snapshot_store(*engine);
+		require(store);
+		auto result = materialize(*store, *project, *request);
+		if (!result)
+			std::cerr << result.error().code << ':' << result.error().field << ':'
+					  << result.error().detail << '\n';
+		require(result && result->terminal() == materialization_terminal::published_partial);
+		require(result->published_snapshot() && result->provenance());
+		require(std::ranges::any_of(result->coverage(),
+									[](const provider::coverage_unit& unit)
+									{
+										return unit.kind == "relation" &&
+											unit.id == source::relations::file::descriptor().id &&
+											unit.state == "covered";
+									}));
+		require(result->provenance()->provider_id == manifest.provider_id);
+		require(result->provenance()->provider_binary_digest == manifest.provider_binary_digest);
+		require(!result->provenance()->runtime_receipt_digest.empty());
+	}
+#endif
 } // namespace
 
 int main()
@@ -823,4 +1065,8 @@ int main()
 	duplicate_source_variants_bind_one_closure();
 	resource_and_shape_fail_closed();
 	materialization_request_factory_validates_authority();
+	execution_plan_binds_capture_task_provider_and_publication_before_effects();
+#if defined(CXXLENS_TEST_CLANG23_WORKER_PATH)
+	exact_clang23_worker_materializes_through_public_service();
+#endif
 }

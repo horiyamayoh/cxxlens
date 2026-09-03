@@ -381,6 +381,7 @@ add_library(
   src/sdk/incremental.cpp
   src/sdk/application_analysis.cpp
   src/sdk/application_analysis_service.cpp
+  src/sdk/application_materialization_execution_internal.cpp
   src/sdk/application_materialization_adoption_internal.cpp
   src/sdk/build_capture_internal.cpp
   src/sdk/compile_commands_capture_internal.cpp

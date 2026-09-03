@@ -460,6 +460,10 @@ namespace cxxlens::sdk::provider::detail
 									  const sealed_provider_transcript&);
 	};
 
+	/** Derive one identity over the complete validated runtime receipt and provenance tuple. */
+	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<std::string>
+	provider_runtime_receipt_digest(const provider_runtime_receipt& receipt);
+
 	/** Construct the runtime receipt in the same pass that owns the immutable output seal. */
 	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<provider_runtime_receipt>
 	make_provider_runtime_receipt(std::uint64_t raw_stdout_byte_count,

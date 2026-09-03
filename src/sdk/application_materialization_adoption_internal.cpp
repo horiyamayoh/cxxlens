@@ -34,7 +34,8 @@ namespace cxxlens::sdk::detail
 							 const std::span<const provider::coverage_unit> coverage,
 							 const std::string_view source_receipt_digest,
 							 const std::string_view replay_plan_digest,
-							 const bool partial)
+							 const bool partial,
+							 claim_batch& transaction_claims)
 		{
 			auto descriptor = engine.require_id(batch.descriptor_id());
 			if (!descriptor ||
@@ -49,7 +50,6 @@ namespace cxxlens::sdk::detail
 			if (!basis_digest)
 				return unexpected(std::move(basis_digest.error()));
 
-			claim_batch claims;
 			for (const auto& row : batch.rows())
 			{
 				observation value{
@@ -66,12 +66,10 @@ namespace cxxlens::sdk::detail
 					 *assumption,
 					 {"clang_gcc_mode_replay", "provider_protocol_v2"}},
 				};
-				if (auto added = claims.add_observation(engine, std::move(value)); !added)
+				if (auto added = transaction_claims.add_observation(engine, std::move(value));
+					!added)
 					return unexpected(std::move(added.error()));
 			}
-			auto committed = std::move(claims).commit(engine);
-			if (!committed)
-				return unexpected(std::move(committed.error()));
 
 			partition_draft output;
 			output.relation_descriptor_id = std::string{batch.descriptor_id()};
@@ -83,8 +81,6 @@ namespace cxxlens::sdk::detail
 			output.producer_input_basis_digest = std::move(*basis_digest);
 			output.precision_profile = partial ? "under_approximation" : "exact";
 			output.assumption_set_id = std::move(*assumption);
-			output.claims = std::move(committed->claims);
-			output.unresolved = std::move(committed->unresolved);
 			for (const auto& unit : coverage)
 				if (unit.kind == "relation" && unit.id == batch.descriptor_id())
 					output.coverage.push_back({unit.kind,
@@ -115,7 +111,14 @@ namespace cxxlens::sdk::detail
 			return unexpected(std::move(valid.error()));
 		if (replay_plan_digest.empty())
 			return unexpected(adoption_error("replay_plan_digest", "empty"));
-		const bool partial = !sealed.unresolved().empty() ||
+		const bool partial =
+			std::ranges::any_of(task.value().partitions,
+								[](const materialization_partition_request& value)
+								{
+									return value.candidate.current.input.precision_profile !=
+										"exact";
+								}) ||
+			!sealed.unresolved().empty() ||
 			std::ranges::any_of(sealed.coverage(),
 								[](const provider::coverage_unit& value)
 								{
@@ -128,10 +131,20 @@ namespace cxxlens::sdk::detail
 		result_draft.task_id = task.id();
 		result_draft.task_input_digest = task.input_binding_digest();
 		result_draft.runtime = runtime;
-		result_draft.coverage.assign(sealed.coverage().begin(), sealed.coverage().end());
+		std::set<std::string, std::less<>> host_relations;
+		for (const auto& partition : host_partitions)
+			host_relations.insert(partition.relation_descriptor_id);
+		for (const auto& unit : sealed.coverage())
+		{
+			if (unit.kind == "relation" && host_relations.contains(unit.id))
+				result_draft.coverage.push_back({unit.kind, unit.id, "covered", {}});
+			else
+				result_draft.coverage.push_back(unit);
+		}
 		result_draft.unresolved.assign(sealed.unresolved().begin(), sealed.unresolved().end());
 
 		std::set<std::string, std::less<>> relations;
+		claim_batch transaction_claims;
 		for (const auto& batch : sealed.batches())
 		{
 			if (!relations.insert(std::string{batch.descriptor_id()}).second)
@@ -143,26 +156,43 @@ namespace cxxlens::sdk::detail
 												  sealed.coverage(),
 												  source_receipt_digest,
 												  replay_plan_digest,
-												  partial);
+												  partial,
+												  transaction_claims);
 			if (!partition)
 				return unexpected(std::move(partition.error()));
-			claim_batch conflict_check;
-			for (const auto& claim : partition->claims)
-				if (auto added = conflict_check.add(claim); !added)
-					return unexpected(std::move(added.error()));
-			auto checked = std::move(conflict_check).commit(engine);
-			if (!checked)
-				return unexpected(std::move(checked.error()));
-			result_draft.conflicts.insert(
-				result_draft.conflicts.end(), checked->conflicts.begin(), checked->conflicts.end());
-			result_draft.differential_disagreements.insert(
-				result_draft.differential_disagreements.end(),
-				checked->differential_disagreements.begin(),
-				checked->differential_disagreements.end());
 			result_draft.partitions.push_back(std::move(*partition));
 		}
 		if (result_draft.partitions.empty())
 			return unexpected(adoption_error("partitions", "empty-provider-result"));
+		std::vector<claim> host_claims;
+		for (const auto& partition : host_partitions)
+			host_claims.insert(host_claims.end(), partition.claims.begin(), partition.claims.end());
+		auto checked = std::move(transaction_claims).commit(engine, host_claims);
+		if (!checked)
+			return unexpected(std::move(checked.error()));
+		const auto partition_for = [&](const std::string_view relation) -> partition_draft*
+		{
+			const auto found = std::ranges::find(
+				result_draft.partitions, relation, &partition_draft::relation_descriptor_id);
+			return found == result_draft.partitions.end() ? nullptr : &*found;
+		};
+		for (auto& claim : checked->claims)
+		{
+			auto* partition = partition_for(claim.descriptor);
+			if (partition == nullptr)
+				return unexpected(adoption_error(claim.descriptor, "claim-partition-missing"));
+			partition->claims.push_back(std::move(claim));
+		}
+		for (auto& unresolved : checked->unresolved)
+		{
+			auto* partition = partition_for(unresolved.source_relation);
+			if (partition == nullptr)
+				return unexpected(
+					adoption_error(unresolved.source_relation, "unresolved-partition-missing"));
+			partition->unresolved.push_back(std::move(unresolved));
+		}
+		result_draft.conflicts = std::move(checked->conflicts);
+		result_draft.differential_disagreements = std::move(checked->differential_disagreements);
 
 		auto validated = validate_materialization_result(engine, task, std::move(result_draft));
 		if (!validated)

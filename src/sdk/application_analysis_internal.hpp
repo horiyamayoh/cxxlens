@@ -111,6 +111,7 @@ namespace cxxlens::sdk::detail
 		std::string reason;
 		std::string completion_action;
 	};
+
 } // namespace cxxlens::sdk::detail
 
 namespace cxxlens::sdk
@@ -149,6 +150,16 @@ namespace cxxlens::sdk
 		std::shared_ptr<const capture_bundle::implementation> capture;
 		project_catalog catalog;
 		std::vector<replay_plan> replay_plans;
+		/** Source-private immutable values retained for execution without reopening public
+		 * wrappers. */
+		std::vector<std::shared_ptr<const replay_plan::implementation>> replay_plan_values;
 		std::vector<capture_gap> unresolved;
 	};
+
+	/** Hidden-friend definition used only by source-private planning tests. */
+	[[nodiscard]] inline const imported_project::implementation&
+	application_analysis_imported_value_internal(const imported_project& value) noexcept
+	{
+		return *value.value_;
+	}
 } // namespace cxxlens::sdk

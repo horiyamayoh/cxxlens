@@ -1114,6 +1114,37 @@ namespace cxxlens::sdk::provider
 			return {};
 		}
 
+		result<std::string> provider_runtime_receipt_digest(const provider_runtime_receipt& receipt)
+		{
+			if (auto valid = receipt.validate(); !valid)
+				return cxxlens::sdk::unexpected(std::move(valid.error()));
+			const auto& provenance = receipt.provenance();
+			const std::array fields{
+				canonical_value::from_string(std::to_string(receipt.raw_stdout_byte_count())),
+				canonical_value::from_string(std::string{receipt.raw_stdout_sha256()}),
+				canonical_value::from_string(std::to_string(receipt.decoded_frame_count())),
+				canonical_value::from_string(std::to_string(receipt.first_frame_sequence())),
+				canonical_value::from_string(std::string{receipt.frame_transcript_digest()}),
+				canonical_value::from_string(std::string{receipt.sealed_transcript_digest()}),
+				canonical_value::from_string(provenance.provider_id),
+				canonical_value::from_string(provenance.provider_version.string()),
+				canonical_value::from_string(provenance.provider_binary_digest),
+				canonical_value::from_string(provenance.provider_semantic_contract_digest),
+				canonical_value::from_string(provenance.protocol_session_id),
+				canonical_value::from_string(provenance.task_id),
+				canonical_value::from_string(provenance.task_input_digest),
+				canonical_value::from_string(provenance.normalized_invocation_digest),
+				canonical_value::from_string(provenance.toolchain_digest),
+				canonical_value::from_string(provenance.environment_digest),
+				canonical_value::from_string(provenance.sandbox_policy_digest),
+				canonical_value::from_string(provenance.dependency_group_id),
+				canonical_value::from_string(provenance.atomic_output_group_id),
+				canonical_value::from_string(provenance.batch_id),
+				canonical_value::from_string(std::to_string(provenance.stream_id)),
+			};
+			return canonical_identity_digest("provider-runtime-receipt", fields);
+		}
+
 		result<provider_runtime_receipt> make_provider_runtime_receipt(
 			const std::uint64_t raw_stdout_byte_count,
 			std::string raw_stdout_sha256,
@@ -1208,7 +1239,7 @@ namespace cxxlens::sdk::provider
 			};
 			if (provider_id.empty() || provider_id.contains('\0') || provider_version.major == 0U ||
 				!canonical_digest(provider_binary_digest) ||
-				!canonical_digest(provider_semantic_contract_digest) ||
+				!protocol_digest(provider_semantic_contract_digest) ||
 				protocol_major != protocol_v2_major || protocol_minor != protocol_v2_minor ||
 				!ordered_unique(required_features) || !protocol_digest(sandbox_policy_digest) ||
 				!ordered_unique(offered_relations) ||

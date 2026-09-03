@@ -3048,6 +3048,26 @@ namespace
 					receipt.frame_transcript_digest() != receipt.sealed_transcript_digest(),
 				"runtime receipt did not bind exact raw bytes, decoded count, and distinct typed "
 				"seals");
+		auto receipt_digest = detail::provider_runtime_receipt_digest(receipt);
+		auto repeated_receipt_digest = detail::provider_runtime_receipt_digest(receipt);
+		require(receipt_digest && repeated_receipt_digest &&
+					*receipt_digest == *repeated_receipt_digest,
+				"runtime receipt identity was not deterministic");
+		auto different_provenance = receipt.provenance();
+		different_provenance.environment_digest =
+			"sha256:9999999999999999999999999999999999999999999999999999999999999999";
+		auto different_receipt =
+			detail::make_provider_runtime_receipt(receipt.raw_stdout_byte_count(),
+												  std::string{receipt.raw_stdout_sha256()},
+												  sealed_execution->frames,
+												  std::move(different_provenance),
+												  sealed_execution->terminal,
+												  *sealed_execution->sealed);
+		require(different_receipt.has_value(),
+				"alternate provider provenance did not produce a valid runtime receipt");
+		auto different_receipt_digest = detail::provider_runtime_receipt_digest(*different_receipt);
+		require(different_receipt_digest && *different_receipt_digest != *receipt_digest,
+				"runtime receipt identity omitted provider provenance");
 		auto corrupt_stdout = raw_stdout;
 		corrupt_stdout.back() ^= std::byte{1U};
 		auto corrupt_decode = decode_frame_stream(corrupt_stdout, receipt_request.limits);

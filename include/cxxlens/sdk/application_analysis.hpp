@@ -118,6 +118,8 @@ namespace cxxlens::sdk
 		friend result<imported_project> import_capture(const capture_bundle&, import_limits);
 		friend result<class materialization_result>
 		materialize(snapshot_store&, const imported_project&, const class materialization_request&);
+		friend const implementation&
+		application_analysis_imported_value_internal(const imported_project&) noexcept;
 	};
 
 	/** @brief Decode and independently validate one complete canonical capture bundle. */

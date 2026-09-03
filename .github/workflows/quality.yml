@@ -149,9 +149,10 @@ jobs:
             -DClang_DIR="${CXXLENS_CLANG_GCC_REPLAY_ROOT}/lib/cmake/clang"
           cmake --build build/clang23-gcc-replay \
             --target cxxlens-clang-gcc-replay-worker-23 \
-                     cxxlens-unit-clang23-gcc-replay-worker-ingress
+                     cxxlens-unit-clang23-gcc-replay-worker-ingress \
+                     cxxlens-unit-sdk-application-analysis
           ctest --test-dir build/clang23-gcc-replay --output-on-failure \
-            -R '^adapter\.clang23-gcc-replay-worker-ingress$'
+            -R '^(adapter\.clang23-gcc-replay-worker-ingress|unit\.sdk-application-analysis)$'
           cmake --install build/clang23-gcc-replay \
             --prefix "${RUNNER_TEMP}/cxxlens-clang23-worker-install" \
             --component clang23-gcc-replay-worker

@@ -271,6 +271,17 @@ cxxlens_add_test_executable(cxxlens-unit-sdk-application-analysis
                             unit/sdk/application_analysis_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-application-analysis
                       PRIVATE cxxlens::sdk)
+target_include_directories(cxxlens-unit-sdk-application-analysis
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+if(TARGET cxxlens-clang-gcc-replay-worker-23)
+  add_dependencies(cxxlens-unit-sdk-application-analysis
+                   cxxlens-clang-gcc-replay-worker-23)
+  target_compile_definitions(
+    cxxlens-unit-sdk-application-analysis
+    PRIVATE
+      CXXLENS_TEST_CLANG23_WORKER_PATH="$<TARGET_FILE:cxxlens-clang-gcc-replay-worker-23>"
+  )
+endif()
 if(CXXLENS_ENABLE_TSAN)
   target_compile_definitions(
     cxxlens-unit-sdk-application-analysis
