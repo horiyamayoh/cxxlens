@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "sdk/application_materialization_adoption_internal.hpp"
 #include "sdk/materialization_writer_internal.hpp"
 
 namespace
@@ -244,6 +245,72 @@ namespace
 				semantic('d')};
 	}
 
+	class transcript_sink final : public provider::frame_sink
+	{
+	  public:
+		result<void> write(const std::span<const std::byte> bytes) override
+		{
+			transcript.insert(transcript.end(), bytes.begin(), bytes.end());
+			return {};
+		}
+
+		std::vector<std::byte> transcript;
+	};
+
+	class application_provider final : public provider::portable_provider
+	{
+	  public:
+		explicit application_provider(relation_descriptor relation) : relation_{std::move(relation)}
+		{
+		}
+
+		[[nodiscard]] std::string_view id() const noexcept override
+		{
+			return "provider.test";
+		}
+		[[nodiscard]] semantic_version version() const noexcept override
+		{
+			return {1U, 0U, 0U};
+		}
+		[[nodiscard]] std::string_view semantic_contract_digest() const noexcept override
+		{
+			return contract_;
+		}
+		result<void> run(const provider::task& task, provider::context& context) override
+		{
+			row_builder builder{relation_};
+			if (auto set = builder.set({relation_.id,
+										relation_.columns.front().id,
+										relation_.columns.front().type,
+										{}},
+									   detached_cell::typed("test_entity_id", "test-entity:one"));
+				!set)
+				return set;
+			auto row = std::move(builder).finish();
+			if (!row)
+				return unexpected(std::move(row.error()));
+			auto output = context.relation(relation_);
+			if (auto begun = output.begin("clang-ast", "atomic:one", "batch:one"); !begun)
+				return begun;
+			if (auto pushed = output.push(*row); !pushed)
+				return pushed;
+			if (auto ended = output.end(); !ended)
+				return ended;
+			context.coverage().request("relation", relation_.id);
+			if (auto classified = context.coverage().classify(
+					{"relation", relation_.id, "covered", "frontend-observed"});
+				!classified)
+				return classified;
+			context.coverage().request("task", task.task_id);
+			return context.coverage().classify(
+				{"task", task.task_id, "covered", "translation-unit-executed"});
+		}
+
+	  private:
+		relation_descriptor relation_;
+		std::string contract_{semantic('5')};
+	};
+
 	void task_authority_and_determinism()
 	{
 		const auto relation = descriptor();
@@ -364,6 +431,77 @@ namespace
 			engine, *task, *result, std::span{&empty_host, 1U}, semantic('e'));
 		require(!rejected_host && rejected_host.error().detail == "empty");
 	}
+
+	void sealed_provider_adoption_is_the_only_application_publication_path()
+	{
+		const auto relation = descriptor();
+		const auto engine = engine_for(relation);
+		auto task = validate_materialization_task(task_draft(relation, engine));
+		require(task.has_value());
+
+		application_provider provider{relation};
+		transcript_sink sink;
+		provider::protocol_writer writer{sink};
+		const provider::protocol_credit credit{64U * 1024U * 1024U, 65536U};
+		writer.grant_credit(credit);
+		require(provider::run_worker(provider, task->value().provider_task, writer).has_value());
+		auto frames = provider::decode_frame_stream(sink.transcript);
+		require(frames.has_value());
+		provider::execution_budget budget;
+		const provider::detail::transcript_validation_request validation{
+			task->value().provider_task.task_id,
+			task->value().provider.provider_id,
+			task->value().provider.provider_version,
+			nullptr,
+			task->value().provider_task.outputs,
+			credit,
+			&budget,
+			false,
+		};
+		auto transcript = provider::detail::validate_provider_transcript(
+			validation, *frames, provider::protocol_limits{});
+		if (!transcript)
+			std::cerr << transcript.error().code << ':' << transcript.error().field << ':'
+					  << transcript.error().detail << '\n';
+		else if (transcript->sealing_error())
+			std::cerr << transcript->sealing_error()->code << ':'
+					  << transcript->sealing_error()->field << ':'
+					  << transcript->sealing_error()->detail << '\n';
+		require(transcript && transcript->sealed() && !transcript->sealing_error());
+
+		auto runtime = runtime_for(*task);
+		runtime.runtime_receipt_digest = semantic('e');
+		auto store = make_in_memory_snapshot_store(engine);
+		require(store.has_value());
+		auto adopted = adopt_sealed_application_materialization(
+			engine, *store, *task, *transcript->sealed(), runtime, semantic('e'), semantic('f'));
+		if (!adopted)
+			std::cerr << adopted.error().code << ':' << adopted.error().field << ':'
+					  << adopted.error().detail << '\n';
+		require(adopted && adopted->publication.publication_verified &&
+				adopted->publication.snapshot.manifest().partitions.size() == 1U &&
+				adopted->coverage.size() == 2U && adopted->unresolved.empty());
+		auto repeated_store = make_in_memory_snapshot_store(engine);
+		require(repeated_store.has_value());
+		auto repeated = adopt_sealed_application_materialization(engine,
+																 *repeated_store,
+																 *task,
+																 *transcript->sealed(),
+																 runtime,
+																 semantic('e'),
+																 semantic('f'));
+		require(repeated &&
+				repeated->publication.snapshot.id() == adopted->publication.snapshot.id());
+
+		auto rejected = adopt_sealed_application_materialization(engine,
+																 *store,
+																 *task,
+																 *transcript->sealed(),
+																 std::move(runtime),
+																 semantic('0'),
+																 semantic('f'));
+		require(!rejected && rejected.error().field == "runtime_receipt");
+	}
 } // namespace
 
 int main()
@@ -371,4 +509,5 @@ int main()
 	task_authority_and_determinism();
 	result_terminals_and_atomic_rejection();
 	single_writer_publication_and_rejection();
+	sealed_provider_adoption_is_the_only_application_publication_path();
 }
