@@ -286,9 +286,8 @@ set_tests_properties(
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-materialization-task
                             unit/sdk/materialization_task_internal_test.cpp)
-target_link_libraries(
-  cxxlens-unit-sdk-materialization-task
-  PRIVATE cxxlens::sdk cxxlens_materialization_writer_internal)
+target_link_libraries(cxxlens-unit-sdk-materialization-task
+                      PRIVATE cxxlens::sdk)
 target_include_directories(cxxlens-unit-sdk-materialization-task
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME unit.sdk-materialization-task
@@ -301,8 +300,7 @@ set_tests_properties(
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-materialization-io
                             unit/sdk/materialization_io_internal_test.cpp)
-target_link_libraries(cxxlens-unit-sdk-materialization-io
-                      PRIVATE cxxlens_materialization_io_internal)
+target_link_libraries(cxxlens-unit-sdk-materialization-io PRIVATE cxxlens::sdk)
 add_test(NAME unit.sdk-materialization-io
          COMMAND cxxlens-unit-sdk-materialization-io)
 set_tests_properties(
@@ -314,7 +312,7 @@ cxxlens_add_test_executable(
   cxxlens-unit-sdk-materialization-store-candidate
   unit/sdk/materialization_store_candidate_internal_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-materialization-store-candidate
-                      PRIVATE cxxlens_materialization_store_candidate_internal)
+                      PRIVATE cxxlens::sdk)
 add_test(NAME unit.sdk-materialization-store-candidate
          COMMAND cxxlens-unit-sdk-materialization-store-candidate)
 set_tests_properties(
@@ -325,7 +323,7 @@ cxxlens_add_test_executable(
   cxxlens-unit-sdk-materialization-store-candidate-bridge
   unit/sdk/materialization_store_candidate_bridge_internal_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-materialization-store-candidate-bridge
-                      PRIVATE cxxlens_materialization_store_candidate_internal)
+                      PRIVATE cxxlens::sdk)
 add_test(NAME unit.sdk-materialization-store-candidate-bridge
          COMMAND cxxlens-unit-sdk-materialization-store-candidate-bridge)
 set_tests_properties(
@@ -1326,8 +1324,7 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     adapter/clang22/materialization_request_v2_2_driver.cpp)
   target_link_libraries(
     cxxlens-clang22-materialization-request-driver
-    PRIVATE cxxlens_materialization_io_internal
-            cxxlens_clang22_materialization_request_v2_2_support)
+    PRIVATE cxxlens::sdk cxxlens_clang22_materialization_request_v2_2_support)
 
   # Reuse the complete typed request document as a normal test fixture.  The
   # fixture build omits the executable's main and exports only the source-free

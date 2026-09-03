@@ -392,7 +392,11 @@ add_library(
   src/sdk/gcc_toolchain_probe_internal.cpp
   src/sdk/source_identity_internal.cpp
   src/runtime/gcc_capture_file_port.cpp
-  src/sdk/materialization_task_internal.cpp)
+  src/sdk/materialization_task_internal.cpp
+  src/sdk/materialization_io_internal.cpp
+  src/sdk/materialization_store_candidate_internal.cpp
+  src/sdk/materialization_store_candidate_bridge_internal.cpp
+  src/sdk/materialization_writer_internal.cpp)
 add_library(cxxlens::sdk ALIAS cxxlens_sdk)
 cxxlens_configure_component(cxxlens_sdk sdk)
 target_sources(cxxlens_sdk
@@ -443,50 +447,16 @@ if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
   endif()
 endif()
 
-# Compiler-neutral materialization I/O and bounded publication sequencing. These
-# targets are source-private implementation closures shared by frontend
-# adapters; they are not installed or exported.
-add_library(cxxlens_materialization_io_internal STATIC EXCLUDE_FROM_ALL
-            src/sdk/materialization_io_internal.cpp)
+# Compiler-neutral materialization I/O, candidate validation, and publication
+# are one source-private SDK lifecycle.  Keeping the implementation in the SDK
+# prevents frontend adapters and focused tests from assembling a second writer
+# authority.
 target_link_libraries(
-  cxxlens_materialization_io_internal
-  PUBLIC cxxlens::base
-  PRIVATE cxxlens::sdk)
-target_include_directories(cxxlens_materialization_io_internal
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_materialization_io_internal PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_materialization_io_internal)
-cxxlens_enable_sanitizers(cxxlens_materialization_io_internal)
-
-add_library(
-  cxxlens_materialization_store_candidate_internal STATIC EXCLUDE_FROM_ALL
-  src/sdk/materialization_store_candidate_internal.cpp
-  src/sdk/materialization_store_candidate_bridge_internal.cpp)
-target_link_libraries(
-  cxxlens_materialization_store_candidate_internal
-  PUBLIC cxxlens::base
-  PRIVATE cxxlens::sdk cxxlens_materialization_io_internal)
-target_include_directories(cxxlens_materialization_store_candidate_internal
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_materialization_store_candidate_internal
-                        PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_materialization_store_candidate_internal)
-cxxlens_enable_sanitizers(cxxlens_materialization_store_candidate_internal)
-
-add_library(cxxlens_materialization_writer_internal STATIC EXCLUDE_FROM_ALL
-            src/sdk/materialization_writer_internal.cpp)
-target_link_libraries(
-  cxxlens_materialization_writer_internal
-  PUBLIC cxxlens::base
-  PRIVATE cxxlens::kernel cxxlens_materialization_store_candidate_internal
-          cxxlens_bounded_store_v6_memory_internal
-          cxxlens_bounded_store_v6_sqlite_internal)
-target_include_directories(cxxlens_materialization_writer_internal
-                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(cxxlens_materialization_writer_internal
-                        PRIVATE cxx_std_23)
-cxxlens_set_project_warnings(cxxlens_materialization_writer_internal)
-cxxlens_enable_sanitizers(cxxlens_materialization_writer_internal)
+  cxxlens_sdk
+  PRIVATE $<BUILD_INTERFACE:cxxlens_bounded_store_v6_memory_internal>
+          $<BUILD_INTERFACE:cxxlens_bounded_store_v6_sqlite_internal>)
+target_include_directories(cxxlens_sdk
+                           PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
 # Protocol 2 is a product transport component.  Its wire codec and closure state
 # machine are independent of repository metadata and are available to
@@ -665,7 +635,7 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     cxxlens_clang22_materializer_rooted_vfs_support
     PUBLIC cxxlens::base
     PRIVATE cxxlens::kernel cxxlens::sdk cxxlens_clang22_materialization_codecs
-            cxxlens_materialization_io_internal)
+            cxxlens::sdk)
   target_include_directories(cxxlens_clang22_materializer_rooted_vfs_support
                              PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_features(cxxlens_clang22_materializer_rooted_vfs_support
@@ -683,7 +653,6 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     cxxlens_clang22_materializer_occurrence_support
     PUBLIC cxxlens::base
     PRIVATE cxxlens::kernel cxxlens::sdk cxxlens_clang22_materialization_codecs
-            cxxlens_materialization_io_internal
             cxxlens_clang22_materializer_rooted_vfs_support)
   target_include_directories(cxxlens_clang22_materializer_occurrence_support
                              PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -747,7 +716,7 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
 
   # The installed materializer boundary owns v2.2 ingress, Protocol 2.0 worker
   # handoff, and Clang claim adaptation. Compiler-neutral Store publication is
-  # owned by cxxlens_materialization_writer_internal.
+  # owned by the compiler-neutral SDK writer lifecycle.
   add_library(
     cxxlens_clang22_materializer_ingress STATIC
     src/llvm/clang22/installed_materializer_source_closure.cpp
@@ -759,15 +728,13 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     PUBLIC cxxlens::base cxxlens::sdk
     PRIVATE cxxlens_clang22_materialization_codecs
             cxxlens_icu_static
-            cxxlens_materialization_io_internal
             cxxlens_clang22_materialization_request_v2_2_support
             cxxlens_clang22_worker_core
             cxxlens_clang22_materializer_rooted_vfs_support
             cxxlens_bounded_store_v6_memory_internal
             cxxlens_bounded_store_v6_sqlite_internal
             cxxlens_clang22_materializer_occurrence_support
-            cxxlens_clang22_materializer_v4_claims
-            cxxlens_materialization_writer_internal)
+            cxxlens_clang22_materializer_v4_claims)
   if(CXXLENS_BUILD_SHARED)
     target_link_libraries(cxxlens_clang22_materializer_ingress
                           PRIVATE cxxlens_provider_runtime_private_closure)
@@ -917,7 +884,9 @@ cxxlens_assert_direct_project_dependencies(
   cxxlens_provider_runtime_core_internal
   cxxlens_provider_ng1_runtime_internal
   cxxlens_provider_process_internal
-  cxxlens_provider_protocol_v2_internal)
+  cxxlens_provider_protocol_v2_internal
+  cxxlens_bounded_store_v6_memory_internal
+  cxxlens_bounded_store_v6_sqlite_internal)
 cxxlens_assert_direct_project_dependencies(cxxlens_clang22_provider_sdk
                                            cxxlens_sdk)
 if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
