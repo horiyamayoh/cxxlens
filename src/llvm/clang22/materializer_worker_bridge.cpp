@@ -436,99 +436,28 @@ namespace cxxlens::detail::clang22
 			for (const auto* descriptor : descriptor_pointers)
 				descriptors.push_back(*descriptor);
 
-			sdk::provider::provider_session session{generic_provider_id,
-													authority.worker.provider_version,
-													authority.worker.semantic_contract_digest,
-													descriptors,
-													{},
-													{frontend_task.interpretation_domain},
-													"capture",
-													"observation"};
-			auto portable_task = sdk::provider::task::make(std::move(session),
-														   capture_value.catalog,
-														   descriptors,
-														   frontend_task.condition_id,
-														   frontend_task.interpretation_domain,
-														   frontend_task.dependency_groups);
-			if (!portable_task)
-				return sdk::unexpected(std::move(portable_task.error()));
-
-			auto condition_universe_digest =
-				semantic_digest_projection("cxxlens.materialization.condition-universe.v1",
-										   canonical_text(frontend_task.condition_universe_id));
-			auto variant_digest = semantic_digest_projection(
-				"cxxlens.build-capture.variant.v1",
-				sdk::canonical_value::from_tuple({
-					canonical_text(capture_value.variant.language),
-					canonical_text(capture_value.variant.language_standard),
-					canonical_text(capture_value.variant.target_triple),
-					canonical_text(capture_value.variant.predefined_macros_digest),
-					canonical_text(capture_value.variant.include_search_digest),
-					canonical_text(capture_value.variant.semantic_flags_digest),
-				}));
-			auto refresh_policy_digest = semantic_digest_projection(
-				"cxxlens.materialization.refresh-policy.v1", canonical_text("exact-input-change"));
-			auto assumption_digest =
-				semantic_digest_projection("cxxlens.materialization.assumption-set.v1",
-										   canonical_text(basis.assumption_set_id));
-			if (!condition_universe_digest || !variant_digest || !refresh_policy_digest ||
-				!assumption_digest)
-				return sdk::unexpected(
-					failure("materialization.identity-mismatch", "generic-task"));
-
-			std::vector<sdk::detail::materialization_partition_request> partitions;
-			partitions.reserve(descriptors.size());
-			for (const auto& descriptor : descriptors)
-			{
-				auto request_partition_id = sdk::canonical_identity_digest(
-					"materialization-request-partition",
-					std::array{canonical_text(ingress.request.request.materialization_request_id),
-							   canonical_text(descriptor.id),
-							   canonical_text(capture_value.project_id),
-							   canonical_text(frontend_task.condition_universe_id),
-							   canonical_text(frontend_task.condition_id),
-							   canonical_text(frontend_task.interpretation_domain)});
-				auto requested_coverage_digest = semantic_digest_projection(
-					"cxxlens.materialization.requested-coverage.v1",
-					sdk::canonical_value::from_tuple({canonical_text("compile-unit"),
-													  canonical_text(capture_value.project_id),
-													  canonical_text("covered")}));
-				if (!request_partition_id || !requested_coverage_digest)
-					return sdk::unexpected(
-						failure("materialization.identity-mismatch", "generic-task.partition"));
-				sdk::incremental::input_fingerprint fingerprint{
-					capture_value.source.content_digest,
-					capture_value.source_closure.closure_digest,
-					capture_value.invocation.effective_invocation_digest,
-					capture_value.toolchain_digest,
-					*condition_universe_digest,
-					*variant_digest,
-					authority.trust_policy.trust_policy_digest,
-					std::string{engine.registry_digest()},
-					authority.interpretation_policy.interpretation_policy_digest,
-					*refresh_policy_digest,
-					capture_value.invocation.environment_digest,
-					std::string{measured_worker_digest},
-					authority.worker.semantic_contract_digest,
-					descriptor.descriptor_digest,
-					"clang22-task-v4-output-normalizer.v1",
-					authority.publication.output_plan_digest,
-					*assumption_digest,
-					"exact"};
-				partitions.push_back({descriptor.id,
-									  {{*request_partition_id,
-										std::move(fingerprint),
-										*requested_coverage_digest,
-										capture_value.source_closure.closure_digest,
-										false},
-									   std::nullopt}});
-			}
-			sdk::detail::materialization_task_draft draft{
+			sdk::detail::generic_materialization_task_request request{
 				ingress.request.request.materialization_request_id,
 				std::string{provider_input_digest},
 				capture,
-				std::move(*portable_task),
-				std::move(partitions),
+				{generic_provider_id,
+				 authority.worker.provider_version,
+				 authority.worker.semantic_contract_digest,
+				 descriptors,
+				 {},
+				 {frontend_task.interpretation_domain},
+				 "capture",
+				 "observation"},
+				descriptors,
+				frontend_task.condition_universe_id,
+				frontend_task.condition_id,
+				frontend_task.interpretation_domain,
+				frontend_task.dependency_groups,
+				"clang22-task-v4-output-normalizer.v1",
+				basis.assumption_set_id,
+				"exact",
+				{"compile-unit", capture_value.project_id, "covered"},
+				{},
 				{generic_provider_id,
 				 authority.worker.provider_version,
 				 std::string{measured_worker_digest},
@@ -544,7 +473,7 @@ namespace cxxlens::detail::clang22
 				 authority.publication.recipe_digest,
 				 authority.publication.output_plan_digest,
 				 authority.publication.publication_target}};
-			return sdk::detail::validate_materialization_task(std::move(draft));
+			return sdk::detail::make_generic_materialization_task(engine, std::move(request));
 		}
 
 		[[nodiscard]] sdk::result<std::vector<std::byte>>

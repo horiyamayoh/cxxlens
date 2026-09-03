@@ -46,6 +46,19 @@ namespace cxxlens::sdk::detail
 			});
 		}
 
+		[[nodiscard]] result<std::string>
+		semantic_projection_digest(const std::string_view domain, const canonical_value& projection)
+		{
+			auto encoded = canonical_binary(projection);
+			if (!encoded)
+				return unexpected(std::move(encoded.error()));
+			std::string bytes;
+			bytes.reserve(encoded->size());
+			for (const auto byte : *encoded)
+				bytes.push_back(static_cast<char>(std::to_integer<unsigned char>(byte)));
+			return semantic_digest(domain, bytes);
+		}
+
 		[[nodiscard]] std::string_view terminal_name(const materialization_terminal terminal)
 		{
 			switch (terminal)
@@ -367,6 +380,130 @@ namespace cxxlens::sdk::detail
 			return unexpected(std::move(task_id.error()));
 		return validated_materialization_task{
 			std::move(draft), std::move(*plan), std::move(*binding), std::move(*task_id)};
+	}
+
+	result<validated_materialization_task>
+	make_generic_materialization_task(const relation_engine& engine,
+									  generic_materialization_task_request request)
+	{
+		const auto& capture = request.capture.value();
+		if (request.condition_universe_id.empty() || request.condition_id.empty() ||
+			request.interpretation.empty() || request.output_normalizer_version.empty() ||
+			request.assumption_set_id.empty() || request.precision_profile.empty() ||
+			request.requested_coverage.kind.empty() || request.requested_coverage.id.empty() ||
+			request.requested_coverage.state.empty())
+			return unexpected(task_error("generic_request", "omitted-authority"));
+		if (request.condition_universe_id !=
+			request.publication.snapshot.series.condition_universe_id)
+			return unexpected(task_error("condition_universe_id", "publication-mismatch"));
+
+		auto portable_task = provider::task::make(std::move(request.session),
+												  capture.catalog,
+												  request.outputs,
+												  request.condition_id,
+												  request.interpretation,
+												  std::move(request.dependency_groups));
+		if (!portable_task)
+			return unexpected(std::move(portable_task.error()));
+
+		auto condition_universe_digest =
+			semantic_projection_digest("cxxlens.materialization.condition-universe.v1",
+									   canonical_value::from_string(request.condition_universe_id));
+		auto variant_digest = semantic_projection_digest(
+			"cxxlens.build-capture.variant.v1",
+			canonical_value::from_tuple({
+				canonical_value::from_string(capture.variant.language),
+				canonical_value::from_string(capture.variant.language_standard),
+				canonical_value::from_string(capture.variant.target_triple),
+				canonical_value::from_string(capture.variant.predefined_macros_digest),
+				canonical_value::from_string(capture.variant.include_search_digest),
+				canonical_value::from_string(capture.variant.semantic_flags_digest),
+			}));
+		auto refresh_policy_digest =
+			semantic_projection_digest("cxxlens.materialization.refresh-policy.v1",
+									   canonical_value::from_string("exact-input-change"));
+		auto assumption_digest =
+			semantic_projection_digest("cxxlens.materialization.assumption-set.v1",
+									   canonical_value::from_string(request.assumption_set_id));
+		if (!condition_universe_digest || !variant_digest || !refresh_policy_digest ||
+			!assumption_digest)
+			return unexpected(task_error("generic_request", "identity-derivation-failed"));
+
+		std::map<std::string, incremental::partition_state, std::less<>> prior;
+		for (auto& item : request.prior_partitions)
+		{
+			if (item.relation_descriptor_id.empty() ||
+				!prior.emplace(item.relation_descriptor_id, std::move(item.state)).second)
+				return unexpected(task_error("prior_partitions", "duplicate-or-omitted"));
+		}
+
+		auto requested_coverage_digest = semantic_projection_digest(
+			"cxxlens.materialization.requested-coverage.v1",
+			canonical_value::from_tuple({
+				canonical_value::from_string(request.requested_coverage.kind),
+				canonical_value::from_string(request.requested_coverage.id),
+				canonical_value::from_string(request.requested_coverage.state),
+			}));
+		if (!requested_coverage_digest)
+			return unexpected(std::move(requested_coverage_digest.error()));
+
+		std::vector<materialization_partition_request> partitions;
+		partitions.reserve(request.outputs.size());
+		for (const auto& descriptor : request.outputs)
+		{
+			auto request_partition_id = canonical_identity_digest(
+				"materialization-request-partition",
+				std::array{canonical_value::from_string(request.materialization_request_id),
+						   canonical_value::from_string(descriptor.id),
+						   canonical_value::from_string(capture.project_id),
+						   canonical_value::from_string(request.condition_universe_id),
+						   canonical_value::from_string(request.condition_id),
+						   canonical_value::from_string(request.interpretation)});
+			if (!request_partition_id)
+				return unexpected(std::move(request_partition_id.error()));
+			incremental::input_fingerprint fingerprint{
+				capture.source.content_digest,
+				capture.source_closure.closure_digest,
+				capture.invocation.effective_invocation_digest,
+				capture.toolchain_digest,
+				*condition_universe_digest,
+				*variant_digest,
+				request.provider.trust_policy_digest,
+				std::string{engine.registry_digest()},
+				request.publication.snapshot.series.interpretation_policy_digest,
+				*refresh_policy_digest,
+				capture.invocation.environment_digest,
+				request.provider.provider_binary_digest,
+				request.provider.provider_semantics_digest,
+				descriptor.descriptor_digest,
+				request.output_normalizer_version,
+				request.publication.output_plan_digest,
+				*assumption_digest,
+				request.precision_profile};
+			std::optional<incremental::partition_state> prior_state;
+			if (auto found = prior.find(descriptor.id); found != prior.end())
+			{
+				prior_state = std::move(found->second);
+				prior.erase(found);
+			}
+			partitions.push_back({descriptor.id,
+								  {{std::move(*request_partition_id),
+									std::move(fingerprint),
+									*requested_coverage_digest,
+									capture.source_closure.closure_digest,
+									false},
+								   std::move(prior_state)}});
+		}
+		if (!prior.empty())
+			return unexpected(task_error("prior_partitions", "unrequested-relation"));
+
+		return validate_materialization_task({std::move(request.materialization_request_id),
+											  std::move(request.provider_input_digest),
+											  std::move(request.capture),
+											  std::move(*portable_task),
+											  std::move(partitions),
+											  std::move(request.provider),
+											  std::move(request.publication)});
 	}
 
 	result<validated_materialization_result>

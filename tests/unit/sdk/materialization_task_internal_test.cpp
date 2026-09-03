@@ -234,6 +234,28 @@ namespace
 		return output;
 	}
 
+	[[nodiscard]] generic_materialization_task_request
+	generic_request(const relation_descriptor& relation, const relation_engine& engine)
+	{
+		auto draft = task_draft(relation, engine);
+		return {std::move(draft.materialization_request_id),
+				std::move(draft.provider_input_digest),
+				std::move(draft.capture),
+				std::move(draft.provider_task.session),
+				std::move(draft.provider_task.outputs),
+				draft.publication.snapshot.series.condition_universe_id,
+				std::move(draft.provider_task.condition),
+				std::move(draft.provider_task.interpretation),
+				std::move(draft.provider_task.dependency_groups),
+				"normalizer-v1",
+				"assumption-set:one",
+				"exact",
+				{"compile-unit", "project:one", "covered"},
+				{},
+				std::move(draft.provider),
+				std::move(draft.publication)};
+	}
+
 	[[nodiscard]] materialization_runtime_binding
 	runtime_for(const validated_materialization_task& task)
 	{
@@ -331,6 +353,40 @@ namespace
 		capture_mismatch.partitions.front().candidate.current.input.source_digest = content('0');
 		auto rejected = validate_materialization_task(std::move(capture_mismatch));
 		require(!rejected && rejected.error().detail == "authority-mismatch");
+	}
+
+	void generic_builder_is_the_only_incremental_identity_authority()
+	{
+		const auto relation = descriptor();
+		const auto engine = engine_for(relation);
+		auto first = make_generic_materialization_task(engine, generic_request(relation, engine));
+		auto second = make_generic_materialization_task(engine, generic_request(relation, engine));
+		require(first && second && first->id() == second->id() &&
+				first->input_binding_digest() == second->input_binding_digest());
+		require(first->plan().frontend_provider_executions == 1U && !first->plan().warm_zero);
+
+		auto warm = generic_request(relation, engine);
+		warm.prior_partitions.push_back(
+			{relation.id, first->value().partitions.front().candidate.current});
+		auto reused = make_generic_materialization_task(engine, std::move(warm));
+		require(reused && reused->plan().warm_zero &&
+				reused->plan().frontend_provider_executions == 0U);
+
+		auto changed_provider = generic_request(relation, engine);
+		changed_provider.provider.provider_binary_digest = content('0');
+		auto invalidated = make_generic_materialization_task(engine, std::move(changed_provider));
+		require(invalidated && invalidated->id() != first->id());
+
+		auto omitted = generic_request(relation, engine);
+		omitted.output_normalizer_version.clear();
+		auto rejected = make_generic_materialization_task(engine, std::move(omitted));
+		require(!rejected && rejected.error().detail == "omitted-authority");
+
+		auto unrelated_prior = generic_request(relation, engine);
+		unrelated_prior.prior_partitions.push_back(
+			{"test.other.v1", first->value().partitions.front().candidate.current});
+		auto unrelated = make_generic_materialization_task(engine, std::move(unrelated_prior));
+		require(!unrelated && unrelated.error().detail == "unrequested-relation");
 	}
 
 	void result_terminals_and_atomic_rejection()
@@ -507,6 +563,7 @@ namespace
 int main()
 {
 	task_authority_and_determinism();
+	generic_builder_is_the_only_incremental_identity_authority();
 	result_terminals_and_atomic_rejection();
 	single_writer_publication_and_rejection();
 	sealed_provider_adoption_is_the_only_application_publication_path();

@@ -66,6 +66,46 @@ namespace cxxlens::sdk::detail
 		materialization_publication_requirement publication;
 	};
 
+	/** Optional prior partition state keyed by its relation descriptor. */
+	struct materialization_prior_partition
+	{
+		std::string relation_descriptor_id;
+		incremental::partition_state state;
+	};
+
+	/** Exact requested coverage projection used by incremental planning. */
+	struct materialization_coverage_requirement
+	{
+		std::string kind;
+		std::string id;
+		std::string state;
+	};
+
+	/**
+	 * Compiler-neutral inputs from which the SDK derives a portable task and every incremental
+	 * partition identity. Frontends supply observations and policy; they do not reproduce the
+	 * identity algorithm.
+	 */
+	struct generic_materialization_task_request
+	{
+		std::string materialization_request_id;
+		std::string provider_input_digest;
+		validated_build_capture capture;
+		provider::provider_session session;
+		std::vector<relation_descriptor> outputs;
+		std::string condition_universe_id;
+		std::string condition_id;
+		std::string interpretation;
+		std::vector<std::string> dependency_groups;
+		std::string output_normalizer_version;
+		std::string assumption_set_id;
+		std::string precision_profile;
+		materialization_coverage_requirement requested_coverage;
+		std::vector<materialization_prior_partition> prior_partitions;
+		materialization_provider_requirement provider;
+		materialization_publication_requirement publication;
+	};
+
 	/** Immutable task with a derived incremental plan and exact input identity. */
 	class validated_materialization_task
 	{
@@ -109,6 +149,11 @@ namespace cxxlens::sdk::detail
 	/** Validate every task authority and derive the only execution input binding. */
 	[[nodiscard]] result<validated_materialization_task>
 	validate_materialization_task(materialization_task_draft draft);
+
+	/** Derive and validate the sole portable task and incremental partition identity projection. */
+	[[nodiscard]] result<validated_materialization_task>
+	make_generic_materialization_task(const relation_engine& engine,
+									  generic_materialization_task_request request);
 
 	/** Closed logical terminal set before any Store effect is attempted. */
 	enum class materialization_terminal : std::uint8_t
