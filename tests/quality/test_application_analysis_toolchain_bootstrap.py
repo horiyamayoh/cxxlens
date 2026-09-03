@@ -47,10 +47,14 @@ class ApplicationAnalysisToolchainBootstrapTest(unittest.TestCase):
         self.assertEqual(admitted["clang_cl_replay"]["exact_version"], "23.1.0")
         self.assertEqual(admitted["msvc"]["exact_version"], "19.51.36247")
         self.assertEqual(
-            admitted["windows_sdk"]["exact_version"], "10.0.28000.2705"
+            admitted["windows_sdk"]["exact_version"], "10.1.26100.8249"
         )
+        self.assertEqual(admitted["windows_sdk"]["kit_version"], "10.0.26100.0")
         self.assertEqual(
             admitted["windows_runner"]["label"], "windows-2025-vs2026"
+        )
+        self.assertEqual(
+            admitted["windows_runner"]["image_version"], "20260824.214.3"
         )
         self.assertEqual(admitted["runner"]["label"], "ubuntu-24.04")
 

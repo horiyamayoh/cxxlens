@@ -30,14 +30,19 @@ properties:
               distribution_version: {$ref: '#/$defs/version'}
               distribution_build: {type: string, pattern: '^[0-9]+\.[0-9]+$'}
               toolset_version: {type: string, pattern: '^14\.[0-9]+\.[0-9]+$'}
-      windows_sdk: {$ref: '#/$defs/toolchain'}
+      windows_sdk:
+        allOf:
+          - {$ref: '#/$defs/toolchain'}
+          - type: object
+            required: [kit_version]
       clang_replay: {$ref: '#/$defs/toolchain'}
       windows_runner:
         type: object
         additionalProperties: false
-        required: [label, ambient_defaults_authoritative, exact_toolchain_assertion]
+        required: [label, image_version, ambient_defaults_authoritative, exact_toolchain_assertion]
         properties:
           label: {const: windows-2025-vs2026}
+          image_version: {const: 20260824.214.3}
           ambient_defaults_authoritative: {const: false}
           exact_toolchain_assertion: {const: required}
   targets:
@@ -46,7 +51,7 @@ properties:
     maxItems: 2
     items: {$ref: '#/$defs/target'}
 $defs:
-  version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+  version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+)?$'}
   id: {type: string, pattern: '^[a-z][a-z0-9_.-]+$'}
   toolchain:
     type: object
@@ -59,6 +64,7 @@ $defs:
       distribution_version: {$ref: '#/$defs/version'}
       distribution_build: {type: string}
       toolset_version: {type: string}
+      kit_version: {type: string, pattern: '^10\.0\.[0-9]+\.0$'}
   target:
     type: object
     additionalProperties: false

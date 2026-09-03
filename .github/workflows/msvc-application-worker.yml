@@ -22,22 +22,24 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $vs = & $vswhere -products * -version '[18.9.2,18.9.3)' -property installationPath
-          if (-not $vs) { throw 'Visual Studio 18.9.2 is unavailable' }
-          $catalog = Get-Content (Join-Path $vs 'catalog.json') -Raw | ConvertFrom-Json
-          if ($catalog.info.productDisplayVersion -ne '18.9.2' -or
-              $catalog.buildVersion -ne '12120.119') {
-            throw "Visual Studio pin differs: $($catalog.info.productDisplayVersion) $($catalog.buildVersion)"
+          if ($env:ImageVersion -ne '20260824.214.3') {
+            throw "Windows runner image pin differs: $env:ImageVersion"
           }
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installations = @(& $vswhere -products * -version '[18.9,18.10)' -format json | ConvertFrom-Json)
+          if ($installations.Count -ne 1) { throw 'Exact Visual Studio 18.9 installation is unavailable' }
+          $installation = $installations[0]
+          if ($installation.installationVersion -ne '18.9.12112.369') {
+            throw "Visual Studio pin differs: $($installation.installationVersion)"
+          }
+          $vs = $installation.installationPath
           $toolset = (Get-Content (Join-Path $vs 'VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt') -Raw).Trim()
           if ($toolset -ne '14.51.36247') { throw "MSVC toolset pin differs: $toolset" }
           $cl = Join-Path $vs "VC\Tools\MSVC\$toolset\bin\Hostx64\x64\cl.exe"
           $clVersion = (Get-Item $cl).VersionInfo.ProductVersion
           if (-not $clVersion.StartsWith('19.51.36247')) { throw "cl.exe pin differs: $clVersion" }
-          $sdkRc = "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.0.28000.0\x64\rc.exe"
-          $sdkVersion = (Get-Item $sdkRc).VersionInfo.ProductVersion
-          if (-not $sdkVersion.StartsWith('10.0.28000.2705')) { throw "Windows SDK pin differs: $sdkVersion" }
+          $sdkRc = "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.0.26100.0\x64\rc.exe"
+          if (-not (Test-Path $sdkRc)) { throw 'Windows SDK 10.0.26100.0 is unavailable' }
           $archive = Join-Path $env:USERPROFILE '.cache\cxxlens\toolchains\clang+llvm-23.1.0-x86_64-pc-windows-msvc.tar.zst'
           New-Item -ItemType Directory -Force (Split-Path $archive) | Out-Null
           if (-not (Test-Path $archive)) {

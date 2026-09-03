@@ -13,12 +13,13 @@ toolchain_pins:
     family: msvc
     exact_version: 19.51.36247
     source: https://learn.microsoft.com/en-us/visualstudio/releases/2026/release-history
-    distribution_version: 18.9.2
-    distribution_build: "12120.119"
+    distribution_version: 18.9.12112.369
+    distribution_build: "12112.369"
     toolset_version: 14.51.36247
   windows_sdk:
     family: windows-sdk
-    exact_version: 10.0.28000.2705
+    exact_version: 10.1.26100.8249
+    kit_version: 10.0.26100.0
     source: https://learn.microsoft.com/en-us/windows/apps/windows-sdk/downloads
   clang_replay:
     family: clang
@@ -26,6 +27,7 @@ toolchain_pins:
     source: https://github.com/llvm/llvm-project/releases/tag/llvmorg-23.1.0
   windows_runner:
     label: windows-2025-vs2026
+    image_version: 20260824.214.3
     ambient_defaults_authoritative: false
     exact_toolchain_assertion: required
 targets:
