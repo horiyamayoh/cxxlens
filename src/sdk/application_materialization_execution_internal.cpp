@@ -346,9 +346,9 @@ namespace cxxlens::sdk::detail
 		snapshot_draft publication,
 		std::span<const std::string> relation_descriptor_ids,
 		std::string interpretation,
-		provider::provider_selection selection,
+		const provider::provider_selection& selection,
 		const provider::execution_budget budget,
-		const std::stop_token cancellation,
+		const std::stop_token& cancellation,
 		const import_limits limits)
 	{
 		if (auto valid = selection.validate(); !valid)

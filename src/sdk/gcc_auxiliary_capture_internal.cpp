@@ -109,15 +109,21 @@ namespace cxxlens::sdk::detail
 			return "project://" + std::string{physical.substr(offset)};
 		}
 
-		[[nodiscard]] result<std::string>
+		struct path_list_projection
+		{
+			std::string value;
+			bool machine_local{};
+			bool unavailable{};
+		};
+
+		[[nodiscard]] result<path_list_projection>
 		path_list_value(gcc_capture_file_port& files,
 						const std::string_view value,
 						const gcc_environment_capture_request& request,
 						const import_limits& limits,
-						const bool split_paths,
-						bool& machine_local,
-						bool& unavailable)
+						const bool split_paths)
 		{
+			path_list_projection output;
 			std::vector<std::string> logical_paths;
 			std::size_t offset{};
 			for (;;)
@@ -135,20 +141,20 @@ namespace cxxlens::sdk::detail
 						  {request.canonical_working_directory, "capture.environment.path"});
 				if (!resolved)
 				{
-					unavailable = true;
-					return std::string{};
+					output.unavailable = true;
+					return output;
 				}
 				auto canonical =
 					files.canonical_directory(*resolved, request.maximum_canonical_path_bytes);
 				if (!canonical)
 				{
-					unavailable = true;
-					return std::string{};
+					output.unavailable = true;
+					return output;
 				}
 				if (!at_or_below(*canonical, request.canonical_project_root))
 				{
-					machine_local = true;
-					return std::string{};
+					output.machine_local = true;
+					return output;
 				}
 				logical_paths.push_back(
 					logical_path_for(*canonical, request.canonical_project_root));
@@ -159,14 +165,14 @@ namespace cxxlens::sdk::detail
 				offset = separator + 1U;
 			}
 
-			std::string output{"path-list-v1"};
-			if (output.size() > limits.maximum_string_bytes)
+			output.value = "path-list-v1";
+			if (output.value.size() > limits.maximum_string_bytes)
 				return unexpected(limit("capture.environment.path-list", "string-bytes"));
 			const auto append = [&](const std::string_view part) -> bool
 			{
-				if (part.size() > limits.maximum_string_bytes - output.size())
+				if (part.size() > limits.maximum_string_bytes - output.value.size())
 					return false;
-				output.append(part);
+				output.value.append(part);
 				return true;
 			};
 			for (const auto& path : logical_paths)
@@ -947,9 +953,7 @@ namespace cxxlens::sdk::detail
 					token.push_back('$');
 					++index;
 				}
-				else if (byte == '#')
-					break;
-				else if (byte == '\n' || byte == '\r')
+				else if (byte == '#' || byte == '\n' || byte == '\r')
 					break;
 				else if (ascii_space(static_cast<unsigned char>(byte)))
 				{
@@ -1016,61 +1020,51 @@ namespace cxxlens::sdk::detail
 					return unexpected(invalid("capture.environment", "duplicate-name"));
 			}
 
-			std::vector<build_capture_environment_effect> output;
-			const auto add_path_effect = [&](const std::string_view variable,
-											 const std::string_view effect_name,
-											 const bool split_paths = true) -> result<void>
+			struct path_effect_spec
 			{
-				const auto found = environment.find(variable);
+				std::string_view variable;
+				std::string_view effect_name;
+				bool split_paths{true};
+			};
+			std::vector<build_capture_environment_effect> output;
+			const auto add_path_effect = [&](const path_effect_spec spec) -> result<void>
+			{
+				const auto found = environment.find(spec.variable);
 				if (found == environment.end())
 					return {};
-				bool machine_local{};
-				bool unavailable_value{};
-				auto normalized = path_list_value(files,
-												  found->second,
-												  request,
-												  limits,
-												  split_paths,
-												  machine_local,
-												  unavailable_value);
+				auto normalized =
+					path_list_value(files, found->second, request, limits, spec.split_paths);
 				if (!normalized)
 					return unexpected(std::move(normalized.error()));
 				build_capture_environment_effect effect;
-				effect.name = effect_name;
-				if (machine_local)
+				effect.name = spec.effect_name;
+				if (normalized->machine_local)
 					effect.semantic_value = captured_value<std::string>::redacted(
 						"machine-local-environment-path",
 						"provide-a-logical-toolchain-path-mapping");
-				else if (unavailable_value)
+				else if (normalized->unavailable)
 					effect.semantic_value = captured_value<std::string>::unavailable(
 						"environment-path-unavailable",
 						"recapture-when-the-environment-path-exists");
 				else
 					effect.semantic_value =
-						captured_value<std::string>::observed(std::move(*normalized));
+						captured_value<std::string>::observed(std::move(normalized->value));
 				output.push_back(std::move(effect));
 				return {};
 			};
 
-			for (const auto& [variable, effect, split_paths] :
-				 {std::tuple{std::string_view{"COMPILER_PATH"},
-							 std::string_view{"gcc.compiler-path"},
-							 true},
-				  std::tuple{std::string_view{"CPATH"}, std::string_view{"gcc.cpath"}, true},
-				  std::tuple{std::string_view{"GCC_EXEC_PREFIX"},
-							 std::string_view{"gcc.exec-prefix"},
-							 false},
-				  std::tuple{std::string_view{"LIBRARY_PATH"},
-							 std::string_view{"gcc.library-path"},
-							 true}})
-				if (auto added = add_path_effect(variable, effect, split_paths); !added)
+			for (const auto spec : {path_effect_spec{"COMPILER_PATH", "gcc.compiler-path"},
+									path_effect_spec{"CPATH", "gcc.cpath"},
+									path_effect_spec{"GCC_EXEC_PREFIX", "gcc.exec-prefix", false},
+									path_effect_spec{"LIBRARY_PATH", "gcc.library-path"}})
+				if (auto added = add_path_effect(spec); !added)
 					return unexpected(std::move(added.error()));
 			if (request.language == "c")
 			{
-				if (auto added = add_path_effect("C_INCLUDE_PATH", "gcc.c-include-path"); !added)
+				if (auto added = add_path_effect({"C_INCLUDE_PATH", "gcc.c-include-path"}); !added)
 					return unexpected(std::move(added.error()));
 			}
-			else if (auto added = add_path_effect("CPLUS_INCLUDE_PATH", "gcc.cplus-include-path");
+			else if (auto added = add_path_effect({"CPLUS_INCLUDE_PATH", "gcc.cplus-include-path"});
 					 !added)
 				return unexpected(std::move(added.error()));
 

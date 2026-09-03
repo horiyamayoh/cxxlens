@@ -113,14 +113,13 @@ namespace cxxlens::sdk::detail
 			return sdk::unexpected(std::move(sealed.error()));
 		}
 		if (auto expected_built =
-				candidate->build_expected_projection(std::move(request.build_expected_projection));
+				candidate->build_expected_projection(request.build_expected_projection);
 			!expected_built)
 		{
 			candidate->abort();
 			return sdk::unexpected(std::move(expected_built.error()));
 		}
-		if (auto actual_built =
-				candidate->build_actual_projection(std::move(request.build_actual_projection));
+		if (auto actual_built = candidate->build_actual_projection(request.build_actual_projection);
 			!actual_built)
 		{
 			candidate->abort();

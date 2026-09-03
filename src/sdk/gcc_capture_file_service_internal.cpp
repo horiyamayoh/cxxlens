@@ -146,7 +146,7 @@ namespace cxxlens::sdk::detail
 												remaining,
 												limits,
 												options.dependency_output_bound_to_invocation,
-												std::move(prepared_auxiliary));
+												std::exchange(prepared_auxiliary, {}));
 				if (!auxiliary)
 					return unexpected(std::move(auxiliary.error()));
 				if (auxiliary->captured_bytes > remaining)

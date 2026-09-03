@@ -47,8 +47,8 @@ namespace cxxlens::sdk::detail
 		snapshot_draft publication,
 		std::span<const std::string> relation_descriptor_ids,
 		std::string interpretation,
-		provider::provider_selection selection,
+		const provider::provider_selection& selection,
 		provider::execution_budget budget,
-		std::stop_token cancellation,
+		const std::stop_token& cancellation,
 		import_limits limits = {});
 } // namespace cxxlens::sdk::detail

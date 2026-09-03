@@ -116,7 +116,7 @@ namespace cxxlens::sdk::detail
 		publish_materialization_source(const relation_engine&,
 									   snapshot_store&,
 									   validated_materialization_publication_source,
-									   std::optional<std::string>);
+									   const std::optional<std::string>&);
 		friend result<validated_materialization_publication_source>
 		combine_materialization_publication_sources(
 			const relation_engine&, std::vector<validated_materialization_publication_source>);
@@ -155,5 +155,5 @@ namespace cxxlens::sdk::detail
 	publish_materialization_source(const relation_engine& engine,
 								   snapshot_store& store,
 								   validated_materialization_publication_source source,
-								   std::optional<std::string> v6_sqlite_path = std::nullopt);
+								   const std::optional<std::string>& v6_sqlite_path = std::nullopt);
 } // namespace cxxlens::sdk::detail

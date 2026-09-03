@@ -210,13 +210,15 @@ namespace cxxlens::sdk::detail
 				return std::nullopt;
 			};
 			std::array<std::byte, 32U> output{};
-			for (std::size_t index{}; index < output.size(); ++index)
+			std::size_t digest_offset{7U};
+			for (auto& byte : output)
 			{
-				auto high = nibble(digest[7U + index * 2U]);
-				auto low = nibble(digest[8U + index * 2U]);
+				auto high = nibble(digest[digest_offset]);
+				auto low = nibble(digest[digest_offset + 1U]);
 				if (!high || !low)
 					return sdk::unexpected(invalid("v6.digest", "hex"));
-				output[index] = static_cast<std::byte>((*high << 4U) | *low);
+				byte = static_cast<std::byte>((*high << 4U) | *low);
+				digest_offset += 2U;
 			}
 			return output;
 		}
@@ -367,7 +369,7 @@ namespace cxxlens::sdk::detail
 				return terminal_ ? sdk::result<void>{}
 								 : sdk::unexpected(invalid("v6.report", "bindings"));
 			}
-			sdk::result<std::uint64_t> sealed_report_bytes() const override
+			[[nodiscard]] sdk::result<std::uint64_t> sealed_report_bytes() const override
 			{
 				if (!reserved_ || !terminal_)
 					return sdk::unexpected(invalid("v6.report", "not-sealed"));
@@ -387,18 +389,23 @@ namespace cxxlens::sdk::detail
 			std::optional<sdk::detail::bounded_store_v6_publication_terminal> terminal_;
 		};
 
+		struct v6_candidate_projections
+		{
+			std::span<const bounded_store_record> expected;
+			std::span<const bounded_store_record> actual;
+		};
+
 		[[nodiscard]] sdk::result<void>
 		run_v6_candidate_preflight(const sdk::snapshot_series_selector& selector,
 								   const std::string_view engine_generation,
-								   const std::span<const bounded_store_record> expected_records,
-								   const std::span<const bounded_store_record> actual_records,
+								   const v6_candidate_projections projections,
 								   const std::string_view authority_binding,
 								   const std::optional<std::string_view> sqlite_path = std::nullopt)
 		{
-			auto expected_frames = make_v6_frames(selector, expected_records);
+			auto expected_frames = make_v6_frames(selector, projections.expected);
 			if (!expected_frames)
 				return sdk::unexpected(std::move(expected_frames.error()));
-			auto actual_frames = make_v6_frames(selector, actual_records);
+			auto actual_frames = make_v6_frames(selector, projections.actual);
 			if (!actual_frames)
 				return sdk::unexpected(std::move(actual_frames.error()));
 			std::vector<std::byte> actual_bytes;
@@ -446,7 +453,7 @@ namespace cxxlens::sdk::detail
 				std::string{"materializer-v6-candidate:"} + std::string{authority_binding},
 				sqlite_path ? std::optional<std::string>{std::string{*sqlite_path}} : std::nullopt,
 				*head};
-			const auto session_metadata = metadata;
+			auto session_metadata = metadata;
 			std::unique_ptr<sdk::detail::bounded_store_v6_backend_port> backend;
 			std::optional<sdk::detail::bounded_store_v6_memory_store> memory_store;
 			if (sqlite_path)
@@ -760,7 +767,7 @@ namespace cxxlens::sdk::detail
 	publish_materialization_source(const sdk::relation_engine& engine,
 								   sdk::snapshot_store& store,
 								   validated_materialization_publication_source source,
-								   std::optional<std::string> v6_sqlite_path)
+								   const std::optional<std::string>& v6_sqlite_path)
 	{
 		if (auto valid = source.validate(engine); !valid)
 			return sdk::unexpected(std::move(valid.error()));
@@ -804,12 +811,15 @@ namespace cxxlens::sdk::detail
 			actual_records.emplace_back(bounded_store_record{
 				projection_kind(record.kind), std::move(record.key), std::move(record.payload)});
 		const auto expected_for_v6 = *expected_records;
+		// Publication moves the independent expected projection into its first validator. Preserve
+		// one immutable copy for verification of the durable backend after that move.
+		// NOLINTNEXTLINE(performance-unnecessary-copy-initialization)
 		const auto expected_for_postpublish = expected_for_v6;
 		if (auto preflight =
 				run_v6_candidate_preflight(output_authority.snapshot.series,
 										   output_authority.snapshot.series.engine_generation_id,
-										   std::span<const bounded_store_record>{expected_for_v6},
-										   std::span<const bounded_store_record>{actual_records},
+										   {std::span<const bounded_store_record>{expected_for_v6},
+											std::span<const bounded_store_record>{actual_records}},
 										   result_digest);
 			!preflight)
 		{
@@ -926,8 +936,8 @@ namespace cxxlens::sdk::detail
 			if (auto verified = run_v6_candidate_preflight(
 					output_authority.snapshot.series,
 					output_authority.snapshot.series.engine_generation_id,
-					std::span<const bounded_store_record>{expected_for_postpublish},
-					std::span<const bounded_store_record>{published_records},
+					{std::span<const bounded_store_record>{expected_for_postpublish},
+					 std::span<const bounded_store_record>{published_records}},
 					result_digest,
 					v6_sqlite_path ? std::optional<std::string_view>{*v6_sqlite_path}
 								   : std::nullopt);

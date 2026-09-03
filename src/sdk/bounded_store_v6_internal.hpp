@@ -28,22 +28,30 @@ namespace cxxlens::sdk::detail
 	// make a supported input fail for an operational reason, while a larger value would invalidate
 	// the bounded-memory contract.
 	inline constexpr std::uint64_t bounded_store_v6_max_tasks = 4'096U;
-	inline constexpr std::uint64_t bounded_store_v6_max_aggregate_bytes = 512U * 1024U * 1024U;
-	inline constexpr std::uint64_t bounded_store_v6_source_window_bytes = 64U * 1024U * 1024U;
-	inline constexpr std::uint64_t bounded_store_v6_sort_arena_bytes = 8U * 1024U * 1024U;
-	inline constexpr std::uint64_t bounded_store_v6_comparator_cursor_bytes = 32U * 1024U;
-	inline constexpr std::uint64_t bounded_store_v6_backend_cursor_bytes = 1024U * 1024U;
-	inline constexpr std::uint64_t bounded_store_v6_codec_hash_bytes = 64U * 1024U;
-	inline constexpr std::uint64_t bounded_store_v6_record_buffer_bytes = 1024U * 1024U;
-	inline constexpr std::uint64_t bounded_store_v6_counter_state_bytes = 4U * 1024U;
+	inline constexpr std::uint64_t bounded_store_v6_max_aggregate_bytes =
+		std::uint64_t{512U} * 1024U * 1024U;
+	inline constexpr std::uint64_t bounded_store_v6_source_window_bytes =
+		std::uint64_t{64U} * 1024U * 1024U;
+	inline constexpr std::uint64_t bounded_store_v6_sort_arena_bytes =
+		std::uint64_t{8U} * 1024U * 1024U;
+	inline constexpr std::uint64_t bounded_store_v6_comparator_cursor_bytes =
+		std::uint64_t{32U} * 1024U;
+	inline constexpr std::uint64_t bounded_store_v6_backend_cursor_bytes =
+		std::uint64_t{1024U} * 1024U;
+	inline constexpr std::uint64_t bounded_store_v6_codec_hash_bytes = std::uint64_t{64U} * 1024U;
+	inline constexpr std::uint64_t bounded_store_v6_record_buffer_bytes =
+		std::uint64_t{1024U} * 1024U;
+	inline constexpr std::uint64_t bounded_store_v6_counter_state_bytes = std::uint64_t{4U} * 1024U;
 	inline constexpr std::uint64_t bounded_store_v6_resident_window_bytes = 77'729'792U;
 	inline constexpr std::uint64_t bounded_store_v6_merge_file_descriptors = 18U;
-	inline constexpr std::uint64_t bounded_store_v6_sqlite_chunk_bytes = 8U * 1024U * 1024U;
+	inline constexpr std::uint64_t bounded_store_v6_sqlite_chunk_bytes =
+		std::uint64_t{8U} * 1024U * 1024U;
 	inline constexpr std::uint64_t bounded_store_v6_stream_header_bytes = 86U;
 	inline constexpr std::uint64_t bounded_store_v6_stream_trailer_bytes = 112U;
 	inline constexpr std::uint64_t bounded_store_v6_record_fixed_bytes = 49U;
 	inline constexpr std::uint64_t bounded_store_v6_exact_report_tail_bytes = 28'321'546U;
-	inline constexpr std::uint64_t bounded_store_v6_max_report_bytes = 1024U * 1024U * 1024U;
+	inline constexpr std::uint64_t bounded_store_v6_max_report_bytes =
+		std::uint64_t{1024U} * 1024U * 1024U;
 	inline constexpr std::uint32_t bounded_store_v6_publication_terminal_count = 6U;
 	inline constexpr std::uint32_t bounded_store_v6_report_section_count = 19U;
 
@@ -613,7 +621,7 @@ namespace cxxlens::sdk::detail
 		reserve_maximum_tail(std::uint64_t exact_tail_bytes,
 							 std::uint64_t maximum_report_bytes) = 0;
 		[[nodiscard]] virtual result<void>
-		append_terminal(const bounded_store_v6_publication_terminal terminal) = 0;
+		append_terminal(bounded_store_v6_publication_terminal terminal) = 0;
 		[[nodiscard]] virtual result<void> validate_full_schema() = 0;
 		[[nodiscard]] virtual result<void>
 		validate_complete_section_census(std::uint32_t exact_section_count) = 0;

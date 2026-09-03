@@ -23,8 +23,6 @@
 #include <poll.h>
 #include <sys/wait.h>
 #include <unistd.h>
-
-extern char** environ;
 #endif
 
 namespace cxxlens::sdk::detail

@@ -755,7 +755,8 @@ namespace cxxlens::sdk::detail
 		return {};
 	}
 
-	sdk::result<void> bounded_store_candidate::build_expected_projection(projection_builder builder)
+	sdk::result<void>
+	bounded_store_candidate::build_expected_projection(const projection_builder& builder)
 	{
 		if (!state_ || state_->phase != bounded_store_candidate_phase::candidate_identity_sealed ||
 			!builder)
@@ -780,7 +781,8 @@ namespace cxxlens::sdk::detail
 		return {};
 	}
 
-	sdk::result<void> bounded_store_candidate::build_actual_projection(projection_builder builder)
+	sdk::result<void>
+	bounded_store_candidate::build_actual_projection(const projection_builder& builder)
 	{
 		if (!state_ || state_->phase != bounded_store_candidate_phase::expected_projection_sealed ||
 			!builder)

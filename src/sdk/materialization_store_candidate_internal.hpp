@@ -35,7 +35,8 @@ namespace cxxlens::sdk::detail
 		std::uint64_t{1024U} * 1024U * 1024U;
 	inline constexpr std::uint64_t bounded_store_sort_arena_bytes =
 		std::uint64_t{8U} * 1024U * 1024U;
-	inline constexpr std::uint64_t bounded_store_comparator_cursor_bytes = 32U * 1024U;
+	inline constexpr std::uint64_t bounded_store_comparator_cursor_bytes =
+		std::uint64_t{32U} * 1024U;
 	inline constexpr std::uint64_t bounded_store_merge_file_descriptors = 18U;
 	inline constexpr std::uint64_t bounded_store_sqlite_chunk_bytes =
 		std::uint64_t{8U} * 1024U * 1024U;
@@ -45,7 +46,7 @@ namespace cxxlens::sdk::detail
 	{
 		std::uint64_t max_tasks{bounded_store_max_tasks};
 		std::uint64_t max_aggregate_bytes{bounded_store_max_aggregate_bytes};
-		std::uint64_t max_record_bytes{1024U * 1024U};
+		std::uint64_t max_record_bytes{std::uint64_t{1024U} * 1024U};
 		std::uint64_t max_spool_bytes{bounded_store_max_aggregate_bytes};
 		std::uint64_t report_tail_bytes{bounded_store_report_tail_bytes};
 		std::uint64_t max_report_bytes{bounded_store_max_report_bytes};
@@ -237,9 +238,10 @@ namespace cxxlens::sdk::detail
 
 		using projection_builder = std::function<sdk::result<void>(bounded_store_record_spool&)>;
 		/** Build expected bytes from immutable external authorities only. */
-		[[nodiscard]] sdk::result<void> build_expected_projection(projection_builder builder);
+		[[nodiscard]] sdk::result<void>
+		build_expected_projection(const projection_builder& builder);
 		/** Build actual bytes from an already authenticated physical-key order. */
-		[[nodiscard]] sdk::result<void> build_actual_projection(projection_builder builder);
+		[[nodiscard]] sdk::result<void> build_actual_projection(const projection_builder& builder);
 		/** Compare the two sealed streams one full framed record at a time. */
 		[[nodiscard]] sdk::result<void> compare_projections();
 

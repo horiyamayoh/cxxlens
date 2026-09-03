@@ -47,7 +47,7 @@ namespace cxxlens::sdk::detail
 		const validated_materialization_task& task,
 		const provider::detail::sealed_provider_transcript& sealed,
 		materialization_runtime_binding runtime,
-		std::string source_receipt_digest,
+		const std::string& source_receipt_digest,
 		std::string replay_plan_digest,
 		std::span<const partition_draft> host_partitions = {});
 

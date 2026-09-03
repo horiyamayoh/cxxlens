@@ -231,19 +231,21 @@ namespace cxxlens::sdk::detail
 				if (!is_valid(mapping.fidelity))
 					return unexpected(invalid("replay_plan.option_mappings", "fidelity"));
 				std::vector<canonical_value> replay_tokens;
+				replay_tokens.reserve(mapping.replay_tokens.size());
 				for (const auto& token : mapping.replay_tokens)
 					replay_tokens.push_back(canonical_value::from_string(token));
 				mappings.push_back(canonical_value::from_tuple({
 					canonical_value::from_string(mapping.production_token),
 					canonical_value::from_tuple(std::move(replay_tokens)),
 					canonical_value::from_string(
-						std::string{fidelity_names[static_cast<std::size_t>(mapping.fidelity)]}),
+						std::string{fidelity_names.at(static_cast<std::size_t>(mapping.fidelity))}),
 					canonical_value::from_string(mapping.affected_scope),
 					canonical_value::from_string(mapping.reason),
 					canonical_value::from_string(mapping.completion_action),
 				}));
 			}
 			std::vector<canonical_value> unresolved;
+			unresolved.reserve(plan.unresolved.size());
 			for (const auto& gap : plan.unresolved)
 				unresolved.push_back(gap_value(gap));
 			auto encoded = canonical_binary(canonical_value::from_tuple({
@@ -396,15 +398,19 @@ namespace cxxlens::sdk::detail
 						return unexpected(std::move(valid.error()));
 
 			std::vector<canonical_value> arguments;
+			arguments.reserve(draft.effective_arguments.size());
 			for (const auto& value : draft.effective_arguments)
 				arguments.push_back(canonical_value::from_string(value));
 			std::vector<canonical_value> members;
+			members.reserve(draft.source_members.size());
 			for (const auto& value : draft.source_members)
 				members.push_back(member_value(value));
 			std::vector<canonical_value> relations;
+			relations.reserve(draft.requested_relation_descriptor_ids.size());
 			for (const auto& value : draft.requested_relation_descriptor_ids)
 				relations.push_back(canonical_value::from_string(value));
 			std::vector<canonical_value> unresolved;
+			unresolved.reserve(draft.unresolved.size());
 			for (const auto& value : draft.unresolved)
 				unresolved.push_back(gap_value(value));
 			auto encoded = canonical_binary(canonical_value::from_tuple({
@@ -550,12 +556,14 @@ namespace cxxlens::sdk::detail
 				capture_gap value;
 				std::array destinations{
 					&value.field, &value.state, &value.reason, &value.completion_action};
-				for (std::size_t index{}; index < destinations.size(); ++index)
+				auto destination = destinations.begin();
+				for (const auto& encoded_field : **gap)
 				{
-					auto decoded = string((**gap)[index], "unresolved");
+					auto decoded = string(encoded_field, "unresolved");
 					if (!decoded)
 						return unexpected(std::move(decoded.error()));
-					*destinations[index] = std::move(*decoded);
+					**destination = std::move(*decoded);
+					++destination;
 				}
 				draft.unresolved.push_back(std::move(value));
 			}

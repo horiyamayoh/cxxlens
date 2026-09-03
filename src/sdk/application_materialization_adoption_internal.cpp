@@ -27,14 +27,19 @@ namespace cxxlens::sdk::detail
 			return canonical_identity_digest("application-analysis-assumptions", fields);
 		}
 
+		struct partition_input_binding
+		{
+			std::string_view source_receipt_digest;
+			std::string_view replay_plan_digest;
+		};
+
 		[[nodiscard]] result<partition_draft>
 		partition_from_batch(const relation_engine& engine,
 							 const validated_materialization_task& task,
 							 const provider::detail::sealed_provider_batch& batch,
 							 const std::span<const provider::coverage_unit> coverage,
 							 const std::span<const provider::unresolved_item> unresolved,
-							 const std::string_view source_receipt_digest,
-							 const std::string_view replay_plan_digest,
+							 const partition_input_binding binding,
 							 const bool partial,
 							 claim_batch& transaction_claims)
 		{
@@ -43,7 +48,7 @@ namespace cxxlens::sdk::detail
 				descriptor->descriptor().descriptor_digest != batch.descriptor_digest())
 				return unexpected(
 					adoption_error(std::string{batch.descriptor_id()}, "descriptor-authority"));
-			auto assumption = assumption_identity(task, replay_plan_digest);
+			auto assumption = assumption_identity(task, binding.replay_plan_digest);
 			if (!assumption)
 				return unexpected(std::move(assumption.error()));
 			const direct_claim_basis basis{task.value().provider_input_digest};
@@ -61,7 +66,7 @@ namespace cxxlens::sdk::detail
 					{task.value().provider.provider_id,
 					 task.value().provider.provider_semantics_digest},
 					basis,
-					std::string{source_receipt_digest},
+					std::string{binding.source_receipt_digest},
 					{partial ? "under_approximation" : "exact",
 					 task.value().capture.value().compile_unit_id,
 					 *assumption,
@@ -126,7 +131,7 @@ namespace cxxlens::sdk::detail
 		const validated_materialization_task& task,
 		const provider::detail::sealed_provider_transcript& sealed,
 		materialization_runtime_binding runtime,
-		std::string source_receipt_digest,
+		const std::string& source_receipt_digest,
 		std::string replay_plan_digest,
 		const std::span<const partition_draft> host_partitions)
 	{
@@ -181,8 +186,7 @@ namespace cxxlens::sdk::detail
 												  batch,
 												  sealed.coverage(),
 												  sealed.unresolved(),
-												  source_receipt_digest,
-												  replay_plan_digest,
+												  {source_receipt_digest, replay_plan_digest},
 												  partial,
 												  transaction_claims);
 			if (!partition)
@@ -303,8 +307,8 @@ namespace cxxlens::sdk::detail
 		auto combined = combine_materialization_publication_sources(engine, std::move(sources));
 		if (!combined)
 			return unexpected(std::move(combined.error()));
-		const auto provider_input_digest = std::string{combined->task_input_digest()};
-		const auto runtime_receipt_digest = std::string{combined->source_receipt_digest()};
+		auto provider_input_digest = std::string{combined->task_input_digest()};
+		auto runtime_receipt_digest = std::string{combined->source_receipt_digest()};
 		auto published = publish_materialization_source(engine, store, std::move(*combined));
 		if (!published)
 			return unexpected(std::move(published.error()));
