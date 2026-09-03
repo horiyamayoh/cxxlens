@@ -107,7 +107,7 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
             "cxxlens_build_capture_bundle": "cxxlens.build-capture-bundle.v1",
             "cxxlens_compiler_replay_plan": "cxxlens.compiler-replay-plan.v1",
             "cxxlens_detached_provider_run": "cxxlens.detached-provider-run.v1",
-            "cxxlens_gcc_replay_input": "cxxlens.gcc-replay-input.v1",
+            "cxxlens_gcc_replay_input": "cxxlens.gcc-replay-input.v2",
         }
         self.assertEqual(
             {name: value["schema"] for name, value in self.wire_contracts.items()},

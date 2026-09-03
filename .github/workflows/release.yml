@@ -136,7 +136,7 @@ jobs:
               </dev/null 2>"${RUNNER_TEMP}/cxxlens-clang23-worker-relocation.stderr"; then
             exit 1
           fi
-          grep -Fx 'application-analysis.replay-worker-ingress-failed:stdin' \
+          grep -Fx 'application-analysis.replay-provider-failed:environment' \
             "${RUNNER_TEMP}/cxxlens-clang23-worker-relocation.stderr"
           test -f "${RUNNER_TEMP}/cxxlens-clang23-worker-install/share/doc/cxxlens/LLVM-LICENSE.TXT"
           cmake -S . -B build/clang23-gcc-replay-asan -G Ninja \

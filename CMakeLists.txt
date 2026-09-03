@@ -403,6 +403,7 @@ if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
   add_library(
     cxxlens_clang23_gcc_replay_ingress STATIC
     src/llvm/clang23_gcc_replay/observation_normalizer.cpp
+    src/llvm/clang23_gcc_replay/provider_worker.cpp
     src/llvm/clang23_gcc_replay/source_authority_binder.cpp
     src/llvm/clang23_gcc_replay/worker_ingress.cpp
     src/llvm/clang23_gcc_replay/worker_observation_codec.cpp

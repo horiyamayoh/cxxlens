@@ -1,5 +1,5 @@
-schema: cxxlens.gcc-replay-input.v1
-document_version: 1.0.0
+schema: cxxlens.gcc-replay-input.v2
+document_version: 2.0.0
 maturity: experimental
 encoding: cxxlens-canonical-tuple-v1
 purpose: Exact host-to-worker input for one validated GCC capture replay plan.
@@ -8,7 +8,7 @@ authority:
   consumer: clang23-gcc-replay-worker
   not_authoritative_for: [provider-trust, relation-registry, store-publication]
 root_tuple:
-  - {index: 0, name: schema, type: string, const: cxxlens.gcc-replay-input.v1}
+  - {index: 0, name: schema, type: string, const: cxxlens.gcc-replay-input.v2}
   - {index: 1, name: imported_project_id, type: strong-id}
   - {index: 2, name: capture_bundle_digest, type: digest}
   - {index: 3, name: replay_plan_digest, type: digest}
@@ -27,6 +27,10 @@ source_member_tuple:
     - {index: 1, name: content_digest, type: digest}
     - {index: 2, name: content, type: bytes}
     - {index: 3, name: role, type: enum, values: [main, header, generated, forced-include, macro-file]}
+    - {index: 4, name: file_id, type: typed-id}
+    - {index: 5, name: source_snapshot_id, type: optional-typed-id}
+    - {index: 6, name: encoding, type: optional-string}
+    - {index: 7, name: read_only, type: boolean}
 unresolved_tuple:
   fields:
     - {index: 0, name: field, type: string}
@@ -37,6 +41,7 @@ invariants:
   - input-digest-is-the-content-digest-of-the-complete-canonical-root
   - replay-plan-digest-binds-effective-argv-source-closure-and-unresolved
   - source-member-content-size-and-digest-are-revalidated-before-worker-use
+  - source-file-and-snapshot-identities-are-carried-from-the-validated-capture
   - logical-paths-are-project-rooted-canonical-and-unique
   - requested-relations-are-host-authority-and-not-inferred-by-the-worker
   - unresolved-is-retained-and-never-promoted-to-exact-by-parse-success

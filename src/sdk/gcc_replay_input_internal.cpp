@@ -185,6 +185,12 @@ namespace cxxlens::sdk::detail
 				canonical_value::from_string(value.content_digest),
 				canonical_value::from_bytes(value.content),
 				canonical_value::from_string(value.role),
+				canonical_value::from_string(value.file_id),
+				value.source_snapshot_id ? canonical_value::from_string(*value.source_snapshot_id)
+										 : canonical_value::null(),
+				value.encoding ? canonical_value::from_string(*value.encoding)
+							   : canonical_value::null(),
+				canonical_value::from_boolean(value.read_only),
 			});
 		}
 
@@ -330,9 +336,17 @@ namespace cxxlens::sdk::detail
 						 std::pair{prefix + ".logical_path", &member.logical_path},
 						 std::pair{prefix + ".content_digest", &member.content_digest},
 						 std::pair{prefix + ".role", &member.role},
+						 std::pair{prefix + ".file_id", &member.file_id},
 					 })
 					if (auto valid = text(*value, field, limits, metadata_bytes); !valid)
 						return unexpected(std::move(valid.error()));
+				for (const auto& [field, value] : {
+						 std::pair{prefix + ".source_snapshot_id", &member.source_snapshot_id},
+						 std::pair{prefix + ".encoding", &member.encoding},
+					 })
+					if (*value)
+						if (auto valid = text(**value, field, limits, metadata_bytes); !valid)
+							return unexpected(std::move(valid.error()));
 			}
 			if (main_count != 1U)
 				return unexpected(invalid("source_members", "exactly-one-main"));
@@ -394,7 +408,7 @@ namespace cxxlens::sdk::detail
 			for (const auto& value : draft.unresolved)
 				unresolved.push_back(gap_value(value));
 			auto encoded = canonical_binary(canonical_value::from_tuple({
-				canonical_value::from_string("cxxlens.gcc-replay-input.v1"),
+				canonical_value::from_string("cxxlens.gcc-replay-input.v2"),
 				canonical_value::from_string(draft.imported_project_id),
 				canonical_value::from_string(draft.capture_bundle_digest),
 				canonical_value::from_string(draft.replay_plan_digest),
@@ -468,7 +482,7 @@ namespace cxxlens::sdk::detail
 				 })
 				if (auto valid = assign(index, field, *destination); !valid)
 					return unexpected(std::move(valid.error()));
-			if (schema != "cxxlens.gcc-replay-input.v1")
+			if (schema != "cxxlens.gcc-replay-input.v2")
 				return unexpected(invalid("schema", "unsupported"));
 			auto arguments = tuple((**fields)[7], "effective_argv", (**fields)[7].tuple.size());
 			auto members = tuple((**fields)[9], "source_members", (**fields)[9].tuple.size());
@@ -486,7 +500,7 @@ namespace cxxlens::sdk::detail
 			}
 			for (std::size_t index{}; index < (*members)->size(); ++index)
 			{
-				auto member = tuple((**members)[index], "source_members", 4U);
+				auto member = tuple((**members)[index], "source_members", 8U);
 				if (!member || (**member)[2].type != canonical_value::kind::bytes)
 					return unexpected(invalid("source_members", "member-shape"));
 				decoded_capture_source_member value;
@@ -494,6 +508,7 @@ namespace cxxlens::sdk::detail
 						 std::tuple{0U, std::string{"logical_path"}, &value.logical_path},
 						 std::tuple{1U, std::string{"content_digest"}, &value.content_digest},
 						 std::tuple{3U, std::string{"role"}, &value.role},
+						 std::tuple{4U, std::string{"file_id"}, &value.file_id},
 					 })
 				{
 					auto decoded = string((**member)[field_index], field);
@@ -502,6 +517,22 @@ namespace cxxlens::sdk::detail
 					*destination = std::move(*decoded);
 				}
 				value.content = (**member)[2].byte_string;
+				for (const auto& [field_index, field, destination] : {
+						 std::tuple{
+							 5U, std::string{"source_snapshot_id"}, &value.source_snapshot_id},
+						 std::tuple{6U, std::string{"encoding"}, &value.encoding},
+					 })
+				{
+					if ((**member)[field_index].type == canonical_value::kind::null_value)
+						continue;
+					auto decoded = string((**member)[field_index], field);
+					if (!decoded)
+						return unexpected(std::move(decoded.error()));
+					*destination = std::move(*decoded);
+				}
+				if ((**member)[7].type != canonical_value::kind::boolean)
+					return unexpected(invalid("source_members.read_only", "boolean"));
+				value.read_only = (**member)[7].boolean;
 				draft.source_members.push_back(std::move(value));
 			}
 			for (const auto& relation : **relations)

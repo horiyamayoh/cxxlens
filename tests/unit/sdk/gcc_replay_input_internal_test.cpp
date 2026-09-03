@@ -10,6 +10,8 @@
 #include <utility>
 #include <vector>
 
+#include "sdk/source_identity_internal.hpp"
+
 namespace
 {
 	template <class value_type>
@@ -48,6 +50,14 @@ namespace
 		source.content = bytes("int main() { return 0; }\n");
 		source.content_digest = content_digest(source.content);
 		source.role = "main";
+		source.encoding = "utf8";
+		auto source_file = detail::derive_source_file_id("src/main.cpp");
+		require(source_file);
+		source.file_id = *source_file;
+		auto source_snapshot = detail::derive_source_snapshot_id(
+			source.file_id, source.content_digest, *source.encoding);
+		require(source_snapshot);
+		source.source_snapshot_id = *source_snapshot;
 		value.source_members.push_back(std::move(source));
 		value.source_closure_digest = "application-source-closure:" + digest('4');
 		value.requested_relation_descriptor_ids = {"source.file.v1", "build.project.v1"};

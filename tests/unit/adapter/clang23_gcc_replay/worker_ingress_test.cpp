@@ -1,6 +1,7 @@
 #include "llvm/clang23_gcc_replay/worker_ingress.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -12,10 +13,20 @@
 #include <variant>
 #include <vector>
 
+#include <cxxlens/relations/cc_call_direct_target.hpp>
+#include <cxxlens/relations/cc_call_site.hpp>
+#include <cxxlens/relations/cc_declaration.hpp>
+#include <cxxlens/relations/cc_entity.hpp>
+#include <cxxlens/relations/cc_type.hpp>
+#include <cxxlens/relations/source_file.hpp>
+#include <cxxlens/relations/source_span.hpp>
+
 #include "llvm/clang23_gcc_replay/observation_normalizer.hpp"
+#include "llvm/clang23_gcc_replay/provider_worker.hpp"
 #include "llvm/clang23_gcc_replay/source_authority_binder.hpp"
 #include "llvm/clang23_gcc_replay/worker_observation_codec.hpp"
 #include "llvm/clang23_gcc_replay/worker_parser.hpp"
+#include "sdk/provider_validation_internal.hpp"
 #include "sdk/source_identity_internal.hpp"
 
 namespace
@@ -129,6 +140,205 @@ namespace
 			cxxlens::detail::clang23_gcc_replay::decode_worker_observations(execute_bytes(value));
 		require(decoded);
 		return std::move(*decoded);
+	}
+
+	[[nodiscard]] cxxlens::sdk::provider::manifest
+	provider_manifest(const std::span<const std::string> relations)
+	{
+		using namespace cxxlens::detail::clang23_gcc_replay;
+		using namespace cxxlens::sdk::provider;
+		manifest value;
+		value.provider_id = provider_id;
+		value.provider_version = provider_version;
+		value.package_identity = "cxxlens.clang23-gcc-replay.package";
+		value.publisher = "cxxlens.project";
+		value.license = "Apache-2.0 WITH LLVM-exception";
+		value.protocol = {protocol_v2_major,
+						  protocol_v2_minor,
+						  protocol_v2_minor,
+						  {"credit-backpressure", "task-input-chunks-v2"},
+						  {}};
+		value.platform_tuples = {"linux-x86_64-clang23"};
+		value.provider_binary_digest = "sha256:" + std::string(64U, 'a');
+		value.provider_semantic_contract_digest = "semantic-v2:sha256:" + std::string(64U, 'b');
+		value.offered_relations.assign(relations.begin(), relations.end());
+		value.interpretation_domains = {"cc.clang23-gcc-replay-1"};
+		value.invalidation_contract = "sha256:" + std::string(64U, 'c');
+		value.determinism_contract = "sha256:" + std::string(64U, 'd');
+		value.resource_class = "provider.application-analysis";
+		value.requested_qualifications = {"experimental"};
+		return value;
+	}
+
+	[[nodiscard]] std::vector<cxxlens::sdk::relation_descriptor>
+	frontend_descriptors(const std::span<const std::string> relations)
+	{
+		using namespace cxxlens;
+		const std::array known{
+			&source::relations::file::descriptor(),
+			&source::relations::span::descriptor(),
+			&cc::relations::entity::descriptor(),
+			&cc::relations::declaration::descriptor(),
+			&cc::relations::type::descriptor(),
+			&cc::relations::call_site::descriptor(),
+			&cc::relations::call_direct_target::descriptor(),
+		};
+		std::vector<sdk::relation_descriptor> output;
+		for (const auto& id : relations)
+		{
+			const auto found = std::ranges::find(known,
+												 id,
+												 [](const auto* value)
+												 {
+													 return value->id;
+												 });
+			require(found != known.end());
+			output.push_back(**found);
+		}
+		return output;
+	}
+
+	struct provider_execution
+	{
+		std::vector<std::byte> host;
+		std::vector<std::byte> output;
+		cxxlens::sdk::provider::manifest manifest;
+		cxxlens::sdk::provider::host_transcript_expectation expectation;
+		cxxlens::sdk::provider::protocol_credit credit;
+	};
+
+	[[nodiscard]] provider_execution
+	execute_provider(const cxxlens::sdk::detail::validated_gcc_replay_input& value)
+	{
+		using namespace cxxlens::detail::clang23_gcc_replay;
+		using namespace cxxlens::sdk;
+		using namespace cxxlens::sdk::provider;
+		provider_execution execution;
+		execution.manifest = provider_manifest(value.value().requested_relation_descriptor_ids);
+		require(execution.manifest.validate());
+		execution.expectation = {execution.manifest.canonical_json(),
+								 {"task:clang23-gcc-replay",
+								  std::string{value.input_digest()},
+								  "semantic-v2:sha256:" + std::string(64U, '1'),
+								  "semantic-v2:sha256:" + std::string(64U, '2'),
+								  "sha256:" + std::string(64U, '3')},
+								 {}};
+		execution.credit = {std::uint64_t{64U} * 1024U * 1024U, 65536U};
+		auto host = encode_host_transcript(
+			{execution.expectation,
+			 execution.credit,
+			 std::vector<std::byte>{value.bytes().begin(), value.bytes().end()}});
+		require(host);
+		execution.host = std::move(*host);
+		std::istringstream input_stream{string(execution.host)};
+		std::ostringstream output_stream;
+		auto result = execute_provider_worker(
+			input_stream,
+			output_stream,
+			{execution.expectation, execution.manifest.provider_semantic_contract_digest});
+		require(result);
+		execution.output = bytes(output_stream.str());
+		return execution;
+	}
+
+	void provider_worker_emits_one_validated_protocol_authority()
+	{
+		using namespace cxxlens::detail::clang23_gcc_replay;
+		using namespace cxxlens::sdk;
+		using namespace cxxlens::sdk::provider;
+		auto value = input();
+		auto execution = execute_provider(value);
+		auto frames = decode_frame_stream(execution.output);
+		require(frames && !frames->empty() && frames->back().type == message_type::task_complete);
+		auto descriptors = frontend_descriptors(value.value().requested_relation_descriptor_ids);
+		execution_budget budget;
+		const cxxlens::sdk::provider::detail::transcript_validation_request request{
+			execution.expectation.task.task_id,
+			std::string{provider_id},
+			provider_version,
+			&execution.manifest,
+			descriptors,
+			execution.credit,
+			&budget,
+			true,
+		};
+		auto validated =
+			cxxlens::sdk::provider::detail::validate_provider_transcript(request, *frames, {});
+		require(validated &&
+				validated->kind ==
+					cxxlens::sdk::provider::detail::transcript_terminal_kind::complete &&
+				validated->sealed() && !validated->sealing_error());
+		const auto& sealed = *validated->sealed();
+		require(sealed.batches().size() == 6U && sealed.coverage().size() == 8U &&
+				std::ranges::any_of(sealed.coverage(),
+									[](const auto& coverage)
+									{
+										return coverage.id == "source.file.v1" &&
+											coverage.state == "unresolved" &&
+											coverage.reason == "host-materialization-authority";
+									}) &&
+				std::ranges::any_of(sealed.unresolved(),
+									[](const auto& unresolved)
+									{
+										return unresolved.code ==
+											"application-analysis.capture-gap" &&
+											unresolved.subject == "cc.type.v1";
+									}) &&
+				std::ranges::any_of(sealed.coverage(),
+									[](const auto& coverage)
+									{
+										return coverage.id == "cc.entity.v1" &&
+											coverage.state == "unresolved" &&
+											coverage.reason == "capture-or-replay-gap";
+									}));
+		auto repeated = execute_provider(value);
+		require(repeated.output == execution.output);
+		auto incomplete_draft = value.value();
+		incomplete_draft.source_members.front().source_snapshot_id.reset();
+		auto incomplete =
+			cxxlens::sdk::detail::validate_gcc_replay_input(std::move(incomplete_draft));
+		require(incomplete);
+		auto partial_execution = execute_provider(*incomplete);
+		auto partial_frames = decode_frame_stream(partial_execution.output);
+		require(partial_frames);
+		auto partial_descriptors =
+			frontend_descriptors(incomplete->value().requested_relation_descriptor_ids);
+		const cxxlens::sdk::provider::detail::transcript_validation_request partial_request{
+			partial_execution.expectation.task.task_id,
+			std::string{provider_id},
+			provider_version,
+			&partial_execution.manifest,
+			partial_descriptors,
+			partial_execution.credit,
+			&budget,
+			true,
+		};
+		auto partial = cxxlens::sdk::provider::detail::validate_provider_transcript(
+			partial_request, *partial_frames, {});
+		require(partial && partial->sealed() && partial->sealed()->batches().empty() &&
+				std::ranges::any_of(partial->sealed()->unresolved(),
+									[](const auto& unresolved)
+									{
+										return unresolved.subject == "source.identity";
+									}));
+
+		auto truncated = execution.host;
+		truncated.pop_back();
+		std::istringstream truncated_stream{string(truncated)};
+		std::ostringstream rejected_output;
+		auto rejected = execute_provider_worker(
+			truncated_stream,
+			rejected_output,
+			{execution.expectation, execution.manifest.provider_semantic_contract_digest});
+		require(!rejected && rejected_output.str().empty());
+
+		std::istringstream valid_host_stream{string(execution.host)};
+		std::ostringstream invalid_authority_output;
+		auto invalid_authority =
+			execute_provider_worker(valid_host_stream,
+									invalid_authority_output,
+									{execution.expectation, "sha256:" + std::string(64U, 'b')});
+		require(!invalid_authority && invalid_authority_output.str().empty());
 	}
 
 	void valid_input_emits_bound_detached_observations()
@@ -616,6 +826,7 @@ namespace
 
 int main()
 {
+	provider_worker_emits_one_validated_protocol_authority();
 	valid_input_emits_bound_detached_observations();
 	worker_output_codec_is_bounded_and_strict();
 	malformed_and_oversized_input_fail_without_output();
