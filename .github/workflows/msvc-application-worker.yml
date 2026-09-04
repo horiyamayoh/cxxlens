@@ -125,4 +125,70 @@ jobs:
             throw 'Failed MSVC compilation published a capture bundle or lost its exit code'
           }
           Pop-Location
+
+          $msbuildFixture = Join-Path $env:RUNNER_TEMP 'cxxlens MSBuild proxy fixture'
+          New-Item -ItemType Directory -Force $msbuildFixture | Out-Null
+          $msbuildCapture = Join-Path $msbuildFixture 'capture bundles'
+          New-Item -ItemType Directory -Force $msbuildCapture | Out-Null
+          $msbuildSource = Join-Path $msbuildFixture 'unicode MSBuild ソース.cpp'
+          $msbuildHeader = Join-Path $msbuildFixture 'fixture header.hpp'
+          $msbuildProject = Join-Path $msbuildFixture 'native proxy.vcxproj'
+          Set-Content -Path $msbuildHeader -Encoding utf8 -Value 'inline int cxxlens_msbuild_value() { return 23; }'
+          Set-Content -Path $msbuildSource -Encoding utf8 -Value @'
+          #include "fixture header.hpp"
+          #include <cstddef>
+          int cxxlens_msbuild_fixture() { return cxxlens_msbuild_value() + static_cast<int>(sizeof(std::size_t)); }
+          '@
+          Set-Content -Path $msbuildProject -Encoding utf8 -Value @'
+          <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+            <ItemGroup Label="ProjectConfigurations">
+              <ProjectConfiguration Include="Release|x64">
+                <Configuration>Release</Configuration>
+                <Platform>x64</Platform>
+              </ProjectConfiguration>
+            </ItemGroup>
+            <PropertyGroup Label="Globals">
+              <ProjectGuid>{4A124C5A-111D-47DA-A807-2B865D1658F3}</ProjectGuid>
+              <Keyword>Win32Proj</Keyword>
+              <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+            </PropertyGroup>
+            <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+            <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+              <ConfigurationType>StaticLibrary</ConfigurationType>
+              <UseDebugLibraries>false</UseDebugLibraries>
+              <PlatformToolset>v145</PlatformToolset>
+            </PropertyGroup>
+            <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+            <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+              <OutDir>$(ProjectDir)out\</OutDir>
+              <IntDir>$(ProjectDir)obj\</IntDir>
+              <TargetName>cxxlens-msbuild-fixture</TargetName>
+            </PropertyGroup>
+            <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+              <ClCompile>
+                <WarningLevel>Level4</WarningLevel>
+                <LanguageStandard>stdcpplatest</LanguageStandard>
+              </ClCompile>
+            </ItemDefinitionGroup>
+            <ItemGroup>
+              <ClCompile Include="unicode MSBuild ソース.cpp" />
+            </ItemGroup>
+            <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+          </Project>
+          '@
+          $env:CXXLENS_MSVC_PROJECT_ID = 'project:native-msbuild-proxy-fixture'
+          $env:CXXLENS_MSVC_PROJECT_ROOT = $msbuildFixture
+          $env:CXXLENS_MSVC_CAPTURE_DIRECTORY = $msbuildCapture
+          Push-Location $msbuildFixture
+          msbuild $msbuildProject /m:1 /t:Rebuild /p:Configuration=Release /p:Platform=x64 `
+            "/p:CLToolExe=cxxlens-msvc-capture.exe" "/p:CLToolPath=$prefix\bin"
+          if ($LASTEXITCODE -ne 0 -or
+              -not (Test-Path (Join-Path $msbuildFixture 'out\cxxlens-msbuild-fixture.lib'))) {
+            throw 'MSBuild did not preserve the native static-library output'
+          }
+          $msbuildBundles = @(Get-ChildItem $msbuildCapture -Filter '*.cxxlens-capture')
+          if ($msbuildBundles.Count -ne 1 -or $msbuildBundles[0].Length -eq 0) {
+            throw 'MSBuild did not select the installed CLToolExe/CLToolPath capture proxy'
+          }
+          Pop-Location
           exit 0
