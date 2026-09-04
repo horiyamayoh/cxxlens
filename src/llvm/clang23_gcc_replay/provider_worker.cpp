@@ -26,6 +26,7 @@
 
 #include "observation_normalizer.hpp"
 #include "replay_frontend_authority.hpp"
+#include "sdk/provider_manifest_codec_internal.hpp"
 #include "worker_parser.hpp"
 
 namespace cxxlens::detail::clang23_gcc_replay
@@ -167,9 +168,9 @@ namespace cxxlens::detail::clang23_gcc_replay
 										std::string{task} + "\n" + std::string{descriptor_id});
 		}
 
-		[[nodiscard]] bool semantic_digest(const std::string_view value)
+		[[nodiscard]] bool content_digest(const std::string_view value)
 		{
-			constexpr std::string_view prefix{"semantic-v2:sha256:"};
+			constexpr std::string_view prefix{"sha256:"};
 			return value.starts_with(prefix) && value.size() == prefix.size() + 64U &&
 				std::ranges::all_of(value.substr(prefix.size()),
 									[](const char byte)
@@ -188,8 +189,17 @@ namespace cxxlens::detail::clang23_gcc_replay
 		{
 			if (auto valid = limits.validate(); !valid)
 				return sdk::unexpected(std::move(valid.error()));
-			if (!semantic_digest(authority.provider_semantic_contract_digest))
+			if (!content_digest(authority.provider_semantic_contract_digest))
 				return sdk::unexpected(failure("provider", "semantic-contract-invalid"));
+			auto provider = sdk::detail::decode_provider_manifest(authority.host.provider_manifest);
+			if (!provider)
+				return sdk::unexpected(std::move(provider.error()));
+			if (provider->provider_id != authority.provider_id ||
+				provider->provider_version != authority.provider_version ||
+				provider->provider_binary_digest != authority.provider_binary_digest ||
+				provider->provider_semantic_contract_digest !=
+					authority.provider_semantic_contract_digest)
+				return sdk::unexpected(failure("provider", "worker-identity-mismatch"));
 			const bool gcc_authority = authority.replay_frontend == gcc_replay_frontend_id &&
 				authority.provider_id == provider_id &&
 				authority.provider_version == provider_version;
@@ -374,9 +384,35 @@ namespace cxxlens::detail::clang23_gcc_replay
 			if (auto sent = writer.send(sdk::provider::message_type::task_complete, *complete);
 				!sent)
 				return sdk::unexpected(std::move(sent.error()));
-			return provider_worker_result{std::move(sink).take(),
+			auto transcript = std::move(sink).take();
+			auto required_features = provider->protocol.required_features;
+			std::ranges::sort(required_features);
+			auto offered_relations = provider->offered_relations;
+			std::ranges::sort(offered_relations);
+			sdk::provider::detail::expected_provider_identity expected_identity{
+				authority.provider_id,
+				authority.provider_version,
+				authority.provider_binary_digest,
+				authority.provider_semantic_contract_digest,
+				authority.host.limits.protocol_major,
+				authority.host.limits.maximum_minor,
+				std::move(required_features),
+				authority.sandbox_policy_digest,
+				std::move(offered_relations)};
+			auto validated =
+				sdk::provider::detail::validate_detached_provider_transcript_from_sealed_input(
+					{std::move(*provider),
+					 std::move(expected_identity),
+					 std::move(descriptors),
+					 authority.host.limits,
+					 budget},
+					std::move(*host_input),
+					transcript);
+			if (!validated)
+				return sdk::unexpected(std::move(validated.error()));
+			return provider_worker_result{std::move(transcript),
 										  std::string{replay->value().replay_plan_digest},
-										  std::move(*host_input)};
+										  std::move(*validated)};
 		}
 		catch (const std::bad_alloc&)
 		{

@@ -455,6 +455,9 @@ int main(const int argument_count, const char* const* arguments)
 	};
 	auto expected_manifest = environment("CXXLENS_PROVIDER_MANIFEST");
 	auto expected_provider_id = environment("CXXLENS_PROVIDER_ID");
+	auto expected_binary_digest = environment("CXXLENS_PROVIDER_BINARY_DIGEST");
+	auto expected_semantic_contract = environment("CXXLENS_PROVIDER_SEMANTIC_CONTRACT_DIGEST");
+	auto expected_sandbox_policy = environment("CXXLENS_PROVIDER_SANDBOX_POLICY_DIGEST");
 	auto expected_task_id = environment("CXXLENS_PROVIDER_TASK_ID");
 	auto expected_task_digest = environment("CXXLENS_PROVIDER_TASK_INPUT_DIGEST");
 	auto expected_invocation = environment("CXXLENS_PROVIDER_NORMALIZED_INVOCATION_DIGEST");
@@ -462,9 +465,10 @@ int main(const int argument_count, const char* const* arguments)
 	auto expected_environment = environment("CXXLENS_PROVIDER_ENVIRONMENT_DIGEST");
 	auto expected_major = environment("CXXLENS_PROVIDER_PROTOCOL_MAJOR");
 	auto expected_minor = environment("CXXLENS_PROVIDER_PROTOCOL_MINOR");
-	if (!expected_manifest || !expected_provider_id || !expected_task_id || !expected_task_digest ||
-		!expected_invocation || !expected_toolchain || !expected_environment || !expected_major ||
-		!expected_minor)
+	if (!expected_manifest || !expected_provider_id || !expected_binary_digest ||
+		!expected_semantic_contract || !expected_sandbox_policy || !expected_task_id ||
+		!expected_task_digest || !expected_invocation || !expected_toolchain ||
+		!expected_environment || !expected_major || !expected_minor)
 		return EXIT_FAILURE;
 	protocol_limits input_limits;
 	const auto parse_version = [](const std::string_view text, std::uint16_t& output)

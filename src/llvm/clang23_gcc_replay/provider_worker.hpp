@@ -13,7 +13,7 @@
 #include <cxxlens/sdk/application_analysis.hpp>
 #include <cxxlens/sdk/provider.hpp>
 
-#include "sdk/provider_validation_internal.hpp"
+#include "sdk/provider_runtime_internal.hpp"
 
 namespace cxxlens::detail::clang23_gcc_replay
 {
@@ -25,7 +25,9 @@ namespace cxxlens::detail::clang23_gcc_replay
 	struct provider_worker_authority
 	{
 		sdk::provider::host_transcript_expectation host;
+		std::string provider_binary_digest;
 		std::string provider_semantic_contract_digest;
+		std::string sandbox_policy_digest;
 		std::string provider_id;
 		sdk::semantic_version provider_version;
 		std::string replay_frontend;
@@ -35,7 +37,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 	{
 		std::vector<std::byte> protocol_transcript;
 		std::string replay_plan_digest;
-		sdk::provider::detail::sealed_host_input host_input;
+		sdk::provider::detail::validated_detached_provider_transcript validated_transcript;
 	};
 
 	/** Execute without an output side effect and retain the exact bounded Protocol-v2 result. */

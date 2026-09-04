@@ -182,7 +182,7 @@ namespace
 						  {}};
 		value.platform_tuples = {msvc ? "windows-x86_64-clangcl23" : "linux-x86_64-clang23"};
 		value.provider_binary_digest = "sha256:" + std::string(64U, 'a');
-		value.provider_semantic_contract_digest = "semantic-v2:sha256:" + std::string(64U, 'b');
+		value.provider_semantic_contract_digest = "sha256:" + std::string(64U, 'b');
 		value.offered_relations.assign(relations.begin(), relations.end());
 		value.interpretation_domains = {msvc ? "cc.clangcl23-msvc-replay-1"
 											 : "cc.clang23-gcc-replay-1"};
@@ -261,10 +261,15 @@ namespace
 			input_stream,
 			output_stream,
 			{execution.expectation,
+			 execution.manifest.provider_binary_digest,
 			 execution.manifest.provider_semantic_contract_digest,
+			 "semantic-v2:sha256:" + std::string(64U, 'e'),
 			 std::string{msvc ? msvc_provider_id : provider_id},
 			 msvc ? msvc_provider_version : provider_version,
 			 std::string{msvc ? msvc_replay_frontend_id : gcc_replay_frontend_id}});
+		if (!result)
+			std::cerr << result.error().code << ':' << result.error().field << ':'
+					  << result.error().detail << '\n';
 		require(result);
 		execution.output = bytes(output_stream.str());
 		return execution;
@@ -280,17 +285,26 @@ namespace
 		std::istringstream retained_input{string(execution.host)};
 		auto retained = run_provider_worker(retained_input,
 											{execution.expectation,
+											 execution.manifest.provider_binary_digest,
 											 execution.manifest.provider_semantic_contract_digest,
+											 "semantic-v2:sha256:" + std::string(64U, 'e'),
 											 std::string{provider_id},
 											 provider_version,
 											 std::string{gcc_replay_frontend_id}});
-		require(retained && retained->protocol_transcript == execution.output &&
-				retained->replay_plan_digest == value.value().replay_plan_digest &&
-				retained->host_input.task() == execution.expectation.task &&
-				retained->host_input.credit().bytes == execution.credit.bytes &&
-				retained->host_input.credit().frames == execution.credit.frames &&
-				retained->host_input.total_bytes() == value.bytes().size() &&
-				!retained->host_input.ordered_chunk_digest_set_digest().empty());
+		require(
+			retained && retained->protocol_transcript == execution.output &&
+			retained->replay_plan_digest == value.value().replay_plan_digest &&
+			retained->validated_transcript.input_seal.task() == execution.expectation.task &&
+			retained->validated_transcript.input_seal.credit().bytes == execution.credit.bytes &&
+			retained->validated_transcript.input_seal.credit().frames == execution.credit.frames &&
+			retained->validated_transcript.input_seal.total_bytes() == value.bytes().size() &&
+			!retained->validated_transcript.input_seal.ordered_chunk_digest_set_digest().empty() &&
+			retained->validated_transcript.runtime_receipt.validate());
+		const auto& provenance = retained->validated_transcript.runtime_receipt.provenance();
+		require(provenance.provider_binary_digest == execution.manifest.provider_binary_digest &&
+				provenance.provider_semantic_contract_digest ==
+					execution.manifest.provider_semantic_contract_digest &&
+				provenance.sandbox_policy_digest == "semantic-v2:sha256:" + std::string(64U, 'e'));
 		auto frames = decode_frame_stream(execution.output);
 		require(frames && !frames->empty() && frames->back().type == message_type::task_complete);
 		auto descriptors = frontend_descriptors(value.value().requested_relation_descriptor_ids);
@@ -379,7 +393,9 @@ namespace
 			execute_provider_worker(truncated_stream,
 									rejected_output,
 									{execution.expectation,
+									 execution.manifest.provider_binary_digest,
 									 execution.manifest.provider_semantic_contract_digest,
+									 "semantic-v2:sha256:" + std::string(64U, 'e'),
 									 std::string{provider_id},
 									 provider_version,
 									 std::string{gcc_replay_frontend_id}});
@@ -387,14 +403,32 @@ namespace
 
 		std::istringstream valid_host_stream{string(execution.host)};
 		std::ostringstream invalid_authority_output;
-		auto invalid_authority = execute_provider_worker(valid_host_stream,
-														 invalid_authority_output,
-														 {execution.expectation,
-														  "sha256:" + std::string(64U, 'b'),
-														  std::string{provider_id},
-														  provider_version,
-														  std::string{gcc_replay_frontend_id}});
+		auto invalid_authority =
+			execute_provider_worker(valid_host_stream,
+									invalid_authority_output,
+									{execution.expectation,
+									 execution.manifest.provider_binary_digest,
+									 "sha256:" + std::string(64U, 'c'),
+									 "semantic-v2:sha256:" + std::string(64U, 'e'),
+									 std::string{provider_id},
+									 provider_version,
+									 std::string{gcc_replay_frontend_id}});
 		require(!invalid_authority && invalid_authority_output.str().empty());
+
+		std::istringstream binary_mismatch_stream{string(execution.host)};
+		std::ostringstream binary_mismatch_output;
+		auto binary_mismatch =
+			execute_provider_worker(binary_mismatch_stream,
+									binary_mismatch_output,
+									{execution.expectation,
+									 "sha256:" + std::string(64U, 'f'),
+									 execution.manifest.provider_semantic_contract_digest,
+									 "semantic-v2:sha256:" + std::string(64U, 'e'),
+									 std::string{provider_id},
+									 provider_version,
+									 std::string{gcc_replay_frontend_id}});
+		require(!binary_mismatch && binary_mismatch_output.str().empty() &&
+				binary_mismatch.error().detail == "worker-identity-mismatch");
 	}
 
 	void gcc_worker_rejects_an_admitted_msvc_frontend_tuple_without_output()
@@ -429,7 +463,9 @@ namespace
 		auto protocol = execute_provider_worker(protocol_input,
 												protocol_output,
 												{expectation,
+												 manifest.provider_binary_digest,
 												 manifest.provider_semantic_contract_digest,
+												 "semantic-v2:sha256:" + std::string(64U, 'e'),
 												 std::string{provider_id},
 												 provider_version,
 												 std::string{gcc_replay_frontend_id}});

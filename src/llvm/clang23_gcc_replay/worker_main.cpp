@@ -28,7 +28,9 @@ int main()
 	using namespace cxxlens::sdk::provider;
 	auto manifest = environment("CXXLENS_PROVIDER_MANIFEST");
 	auto selected_provider = environment("CXXLENS_PROVIDER_ID");
+	auto binary_digest = environment("CXXLENS_PROVIDER_BINARY_DIGEST");
 	auto semantic_contract = environment("CXXLENS_PROVIDER_SEMANTIC_CONTRACT_DIGEST");
+	auto sandbox_policy = environment("CXXLENS_PROVIDER_SANDBOX_POLICY_DIGEST");
 	auto task_id = environment("CXXLENS_PROVIDER_TASK_ID");
 	auto task_digest = environment("CXXLENS_PROVIDER_TASK_INPUT_DIGEST");
 	auto invocation = environment("CXXLENS_PROVIDER_NORMALIZED_INVOCATION_DIGEST");
@@ -36,8 +38,9 @@ int main()
 	auto effective_environment = environment("CXXLENS_PROVIDER_ENVIRONMENT_DIGEST");
 	auto major = environment("CXXLENS_PROVIDER_PROTOCOL_MAJOR");
 	auto minor = environment("CXXLENS_PROVIDER_PROTOCOL_MINOR");
-	if (!manifest || !selected_provider || !semantic_contract || !task_id || !task_digest ||
-		!invocation || !toolchain || !effective_environment || !major || !minor ||
+	if (!manifest || !selected_provider || !binary_digest || !semantic_contract ||
+		!sandbox_policy || !task_id || !task_digest || !invocation || !toolchain ||
+		!effective_environment || !major || !minor ||
 		*selected_provider != cxxlens::detail::clang23_gcc_replay::provider_id)
 	{
 		std::cerr << "application-analysis.replay-provider-failed:environment\n";
@@ -56,7 +59,9 @@ int main()
 		{std::move(*manifest),
 		 {*task_id, *task_digest, *invocation, *toolchain, *effective_environment},
 		 limits},
+		std::move(*binary_digest),
 		std::move(*semantic_contract),
+		std::move(*sandbox_policy),
 		std::string{cxxlens::detail::clang23_gcc_replay::provider_id},
 		cxxlens::detail::clang23_gcc_replay::provider_version,
 		std::string{cxxlens::detail::clang23_gcc_replay::gcc_replay_frontend_id}};

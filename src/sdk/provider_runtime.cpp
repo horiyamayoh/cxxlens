@@ -3026,6 +3026,7 @@ namespace cxxlens::sdk::provider
 				{"CXXLENS_PROVIDER_BINARY_DIGEST", provider.provider_binary_digest},
 				{"CXXLENS_PROVIDER_SEMANTIC_CONTRACT_DIGEST",
 				 provider.provider_semantic_contract_digest},
+				{"CXXLENS_PROVIDER_SANDBOX_POLICY_DIGEST", sandbox->policy_digest},
 				{"CXXLENS_PROVIDER_TASK_ID", request.task_id},
 				{"CXXLENS_PROVIDER_TASK_INPUT_DIGEST", request.task_input_digest},
 				{"CXXLENS_PROVIDER_NORMALIZED_INVOCATION_DIGEST",
