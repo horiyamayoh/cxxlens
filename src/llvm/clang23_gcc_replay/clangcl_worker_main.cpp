@@ -12,8 +12,21 @@ namespace
 {
 	[[nodiscard]] std::optional<std::string> environment(const char* name)
 	{
+#ifdef _WIN32
+		char* raw{};
+		std::size_t bytes{};
+		if (_dupenv_s(&raw, &bytes, name) != 0 || raw == nullptr)
+		{
+			std::free(raw);
+			return std::nullopt;
+		}
+		std::string value{raw};
+		std::free(raw);
+		return value;
+#else
 		const auto* value = std::getenv(name);
 		return value == nullptr ? std::nullopt : std::optional<std::string>{value};
+#endif
 	}
 
 	[[nodiscard]] bool parse_version(const std::string_view text, std::uint16_t& output)
