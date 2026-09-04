@@ -164,14 +164,15 @@ namespace
 	}
 
 	[[nodiscard]] cxxlens::sdk::provider::manifest
-	provider_manifest(const std::span<const std::string> relations)
+	provider_manifest(const std::span<const std::string> relations, const bool msvc = false)
 	{
 		using namespace cxxlens::detail::clang23_gcc_replay;
 		using namespace cxxlens::sdk::provider;
 		manifest value;
-		value.provider_id = provider_id;
-		value.provider_version = provider_version;
-		value.package_identity = "cxxlens.clang23-gcc-replay.package";
+		value.provider_id = msvc ? msvc_provider_id : provider_id;
+		value.provider_version = msvc ? msvc_provider_version : provider_version;
+		value.package_identity =
+			msvc ? "cxxlens.clangcl23-msvc-replay.package" : "cxxlens.clang23-gcc-replay.package";
 		value.publisher = "cxxlens.project";
 		value.license = "Apache-2.0 WITH LLVM-exception";
 		value.protocol = {protocol_v2_major,
@@ -179,11 +180,12 @@ namespace
 						  protocol_v2_minor,
 						  {"credit-backpressure", "task-input-chunks-v2"},
 						  {}};
-		value.platform_tuples = {"linux-x86_64-clang23"};
+		value.platform_tuples = {msvc ? "windows-x86_64-clangcl23" : "linux-x86_64-clang23"};
 		value.provider_binary_digest = "sha256:" + std::string(64U, 'a');
 		value.provider_semantic_contract_digest = "semantic-v2:sha256:" + std::string(64U, 'b');
 		value.offered_relations.assign(relations.begin(), relations.end());
-		value.interpretation_domains = {"cc.clang23-gcc-replay-1"};
+		value.interpretation_domains = {msvc ? "cc.clangcl23-msvc-replay-1"
+											 : "cc.clang23-gcc-replay-1"};
 		value.invalidation_contract = "sha256:" + std::string(64U, 'c');
 		value.determinism_contract = "sha256:" + std::string(64U, 'd');
 		value.resource_class = "provider.application-analysis";
@@ -229,13 +231,15 @@ namespace
 	};
 
 	[[nodiscard]] provider_execution
-	execute_provider(const cxxlens::sdk::detail::validated_compiler_replay_input& value)
+	execute_provider(const cxxlens::sdk::detail::validated_compiler_replay_input& value,
+					 const bool msvc = false)
 	{
 		using namespace cxxlens::detail::clang23_gcc_replay;
 		using namespace cxxlens::sdk;
 		using namespace cxxlens::sdk::provider;
 		provider_execution execution;
-		execution.manifest = provider_manifest(value.value().requested_relation_descriptor_ids);
+		execution.manifest =
+			provider_manifest(value.value().requested_relation_descriptor_ids, msvc);
 		require(execution.manifest.validate());
 		execution.expectation = {execution.manifest.canonical_json(),
 								 {"task:clang23-gcc-replay",
@@ -253,13 +257,14 @@ namespace
 		execution.host = std::move(*host);
 		std::istringstream input_stream{string(execution.host)};
 		std::ostringstream output_stream;
-		auto result = execute_provider_worker(input_stream,
-											  output_stream,
-											  {execution.expectation,
-											   execution.manifest.provider_semantic_contract_digest,
-											   std::string{provider_id},
-											   provider_version,
-											   std::string{gcc_replay_frontend_id}});
+		auto result = execute_provider_worker(
+			input_stream,
+			output_stream,
+			{execution.expectation,
+			 execution.manifest.provider_semantic_contract_digest,
+			 std::string{msvc ? msvc_provider_id : provider_id},
+			 msvc ? msvc_provider_version : provider_version,
+			 std::string{msvc ? msvc_replay_frontend_id : gcc_replay_frontend_id}});
 		require(result);
 		execution.output = bytes(output_stream.str());
 		return execution;
@@ -417,6 +422,21 @@ namespace
 		require(!protocol && protocol.error().field == "replay_input" &&
 				protocol.error().detail == "wrong-worker-frontend" &&
 				protocol_output.str().empty());
+	}
+
+	void msvc_worker_emits_protocol_with_its_own_provenance()
+	{
+		using namespace cxxlens::detail::clang23_gcc_replay;
+		using namespace cxxlens::sdk::provider;
+		auto execution = execute_provider(msvc_input(), true);
+		auto frames = decode_frame_stream(execution.output);
+		require(frames && !frames->empty() && frames->back().type == message_type::task_complete);
+		const auto evidence_frame =
+			std::ranges::find(*frames, message_type::progress, &frame::type);
+		require(evidence_frame != frames->end());
+		auto evidence = decode_evidence_metadata(evidence_frame->control);
+		require(evidence && evidence->size() == 1U && (*evidence)[0].producer == msvc_provider_id &&
+				(*evidence)[0].kind == "application-analysis.replay");
 	}
 
 	void msvc_worker_authority_parses_only_the_admitted_clangcl_tuple()
@@ -935,6 +955,7 @@ int main()
 {
 	provider_worker_emits_one_validated_protocol_authority();
 	gcc_worker_rejects_an_admitted_msvc_frontend_tuple_without_output();
+	msvc_worker_emits_protocol_with_its_own_provenance();
 	msvc_worker_authority_parses_only_the_admitted_clangcl_tuple();
 	valid_input_emits_bound_detached_observations();
 	worker_output_codec_is_bounded_and_strict();

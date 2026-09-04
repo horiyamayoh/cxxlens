@@ -313,7 +313,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 					 gap.state + ":" + gap.reason + ":" + gap.completion_action});
 			context.evidence().add({"application-analysis.replay",
 									replay->value().compile_unit_id,
-									std::string{provider_id},
+									authority.provider_id,
 									std::string{replay->value().replay_plan_digest}});
 			if (auto valid = context.validate(); !valid)
 				return valid;
