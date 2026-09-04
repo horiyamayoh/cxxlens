@@ -562,6 +562,20 @@ namespace
 		require(imported->replay_plans().front().analysis_frontend() ==
 				"clang-cl-23.1.0-msvc-mode");
 
+		auto partial = input;
+		partial.source_closure_membership =
+			unavailable_capture_field{"dependency-member-outside-project-root",
+									  "recapture-with-a-qualified-logical-read-root"};
+		auto partial_encoded = encode_msvc_capture_bundle(partial);
+		require(partial_encoded);
+		auto partial_decoded = cxxlens::sdk::decode_capture_bundle(*partial_encoded);
+		require(partial_decoded &&
+				has_reason(partial_decoded->gaps(), "dependency-member-outside-project-root"));
+		auto partial_imported = cxxlens::sdk::import_capture(*partial_decoded);
+		require(
+			partial_imported &&
+			has_reason(partial_imported->unresolved(), "dependency-member-outside-project-root"));
+
 		auto outside = input;
 		outside.main_source.canonical_path = "D:\\foreign\\main.cpp";
 		auto rejected = encode_msvc_capture_bundle(outside);

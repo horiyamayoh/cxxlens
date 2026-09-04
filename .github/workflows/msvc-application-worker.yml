@@ -87,8 +87,14 @@ jobs:
           $env:CXXLENS_MSVC_CAPTURE_DIRECTORY = $captureDirectory
           $env:CXXLENS_WINDOWS_SDK_ROOT = "${env:ProgramFiles(x86)}\Windows Kits\10"
           $source = Join-Path $fixture 'unicode ソース.cpp'
+          $header = Join-Path $fixture 'fixture header.hpp'
           $object = Join-Path $fixture 'unicode 出力.obj'
-          Set-Content -Path $source -Encoding utf8 -Value 'int cxxlens_proxy_fixture() { return 0; }'
+          Set-Content -Path $header -Encoding utf8 -Value 'inline int cxxlens_fixture_value() { return 0; }'
+          Set-Content -Path $source -Encoding utf8 -Value @'
+          #include "fixture header.hpp"
+          #include <cstddef>
+          int cxxlens_proxy_fixture() { return cxxlens_fixture_value() + static_cast<int>(sizeof(std::size_t)); }
+          '@
           Push-Location $fixture
           & "$prefix\bin\cxxlens-msvc-capture.exe" /nologo /c $source "/Fo$object"
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path $object)) {

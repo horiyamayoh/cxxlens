@@ -101,6 +101,15 @@ namespace cxxlens::application_analysis_worker
 												canonical_value::from_string({})});
 		}
 
+		[[nodiscard]] canonical_value unavailable(const unavailable_capture_field& field)
+		{
+			return canonical_value::from_tuple(
+				{canonical_value::from_string("unavailable"),
+				 canonical_value::null(),
+				 canonical_value::from_string(field.reason),
+				 canonical_value::from_string(field.completion_action)});
+		}
+
 		[[nodiscard]] bool digest_like(const std::string_view value) noexcept
 		{
 			return value.size() == 71U && value.starts_with("sha256:") &&
@@ -261,6 +270,18 @@ namespace cxxlens::application_analysis_worker
 				input.language_standard.size() > limits.maximum_string_bytes ||
 				input.language_standard.contains('\0'))
 				return sdk::unexpected(invalid("metadata", "string"));
+			if (input.source_closure_membership &&
+				(input.source_closure_membership->reason.empty() ||
+				 input.source_closure_membership->completion_action.empty() ||
+				 input.source_closure_membership->reason.size() > limits.maximum_string_bytes ||
+				 input.source_closure_membership->completion_action.size() >
+					 limits.maximum_string_bytes ||
+				 input.source_closure_membership->reason.contains('\0') ||
+				 input.source_closure_membership->completion_action.contains('\0')))
+				return sdk::unexpected(invalid("source_closure_membership", "gap"));
+			if (input.source_closure_membership &&
+				!sdk::validate_registered_symbol(input.source_closure_membership->reason))
+				return sdk::unexpected(invalid("source_closure_membership", "reason"));
 			for (const auto& argument : input.original_arguments)
 				if (argument.size() > limits.maximum_string_bytes || argument.contains('\0'))
 					return sdk::unexpected(limit("original_arguments", "string-bytes"));
@@ -340,7 +361,9 @@ namespace cxxlens::application_analysis_worker
 			if (!member_bytes)
 				return sdk::unexpected(std::move(member_bytes.error()));
 			const auto manifest_digest = sdk::content_digest(*member_bytes);
-			const auto membership = observed(canonical_value::from_string("complete"));
+			const auto membership = input.source_closure_membership
+				? unavailable(*input.source_closure_membership)
+				: observed(canonical_value::from_string("complete"));
 			std::uint64_t unique_bytes{};
 			for (const auto& [digest, size] : unique_blobs)
 			{
@@ -452,6 +475,15 @@ namespace cxxlens::application_analysis_worker
 				observed(canonical_value::from_string(input.builtin_macros_digest)),
 				observed(canonical_value::from_string(input.include_search_digest)),
 			});
+			std::vector<canonical_value> gaps;
+			if (input.source_closure_membership)
+				gaps.push_back(canonical_value::from_tuple({
+					canonical_value::from_string("source_closures[0].membership_coverage"),
+					canonical_value::from_string("unavailable"),
+					canonical_value::from_string(input.source_closure_membership->reason),
+					canonical_value::from_string(
+						input.source_closure_membership->completion_action),
+				}));
 			auto root = canonical_value::from_tuple({
 				canonical_value::from_string("cxxlens.build-capture-bundle.v1"),
 				std::move(toolchain),
@@ -460,7 +492,7 @@ namespace cxxlens::application_analysis_worker
 				canonical_value::from_string(input.project_id),
 				canonical_value::from_tuple({std::move(unit)}),
 				canonical_value::from_tuple({std::move(closure)}),
-				canonical_value::from_tuple({}),
+				canonical_value::from_tuple(std::move(gaps)),
 				canonical_value::from_string("project://"),
 				derived(canonical_value::from_tuple({canonical_value::from_tuple({
 					canonical_value::from_string(input.canonical_project_root),

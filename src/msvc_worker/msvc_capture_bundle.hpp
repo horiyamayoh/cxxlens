@@ -40,6 +40,12 @@ namespace cxxlens::application_analysis_worker
 		std::optional<std::size_t> parent_index;
 	};
 
+	struct unavailable_capture_field
+	{
+		std::string reason;
+		std::string completion_action;
+	};
+
 	struct msvc_capture_input
 	{
 		std::string project_id;
@@ -56,6 +62,7 @@ namespace cxxlens::application_analysis_worker
 		captured_source main_source;
 		std::vector<captured_source> dependency_sources;
 		std::vector<captured_response_file> response_files;
+		std::optional<unavailable_capture_field> source_closure_membership;
 		std::string language_standard{"c++latest"};
 	};
 

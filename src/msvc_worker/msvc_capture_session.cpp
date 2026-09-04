@@ -286,18 +286,35 @@ namespace cxxlens::application_analysis_worker
 					return msvc_capture_command_result{
 						executed->exit_code, std::nullopt, std::move(dependency_value.error())};
 				auto canonical = canonical_worker_file(*dependency_value);
-				if (!canonical || !under(*canonical, *root))
-					return msvc_capture_command_result{
-						executed->exit_code,
-						std::nullopt,
-						capture_error("source_closure", "dependency-outside-project-root")};
+				if (!canonical)
+				{
+					if (!input.source_closure_membership)
+						input.source_closure_membership = unavailable_capture_field{
+							"dependency-member-unreadable",
+							"restore-the-dependency-member-and-recapture"};
+					continue;
+				}
+				if (!under(*canonical, *root))
+				{
+					if (!input.source_closure_membership)
+						input.source_closure_membership = unavailable_capture_field{
+							"dependency-member-outside-project-root",
+							"recapture-with-a-qualified-logical-read-root"};
+					continue;
+				}
 				auto path = utf8(*canonical);
-				auto content = read_worker_binary_file(*canonical, maximum_file_bytes);
-				if (!path || !content)
+				if (!path)
 					return msvc_capture_command_result{
-						executed->exit_code,
-						std::nullopt,
-						capture_error("source_closure", "dependency-read")};
+						executed->exit_code, std::nullopt, std::move(path.error())};
+				auto content = read_worker_binary_file(*canonical, maximum_file_bytes);
+				if (!content)
+				{
+					if (!input.source_closure_membership)
+						input.source_closure_membership = unavailable_capture_field{
+							"dependency-member-unreadable",
+							"restore-the-dependency-member-and-recapture"};
+					continue;
+				}
 				input.dependency_sources.push_back(
 					{std::move(*path), std::move(*content), "header", "binary_or_unknown"});
 			}
