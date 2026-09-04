@@ -69,6 +69,7 @@ add_library(
   "${CXXLENS_ROOT}/src/sdk/compiler_replay_input_internal.cpp"
   "${CXXLENS_ROOT}/src/sdk/provider.cpp"
   "${CXXLENS_ROOT}/src/sdk/provider_protocol_v2_adapter.cpp"
+  "${CXXLENS_ROOT}/src/sdk/provider_runtime.cpp"
   "${CXXLENS_ROOT}/src/sdk/relation.cpp"
   "${CXXLENS_ROOT}/src/sdk/source_identity_internal.cpp"
   "${CXXLENS_ROOT}/src/protocol_v2/cbor.cpp"
@@ -92,7 +93,8 @@ target_compile_definitions(
   cxxlens_clangcl_worker_core PRIVATE __STDC_CONSTANT_MACROS
                                       __STDC_FORMAT_MACROS __STDC_LIMIT_MACROS)
 target_compile_features(cxxlens_clangcl_worker_core PUBLIC cxx_std_23)
-target_compile_options(cxxlens_clangcl_worker_core PRIVATE /W4 /WX /permissive-)
+target_compile_options(cxxlens_clangcl_worker_core PRIVATE /W4 /WX /permissive-
+                                                           /Gy)
 
 add_executable(
   cxxlens-clangcl-worker-23
