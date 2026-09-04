@@ -397,6 +397,7 @@ add_library(
   src/sdk/provider_manifest_codec_internal.cpp
   src/sdk/detached_provider_run_internal.cpp
   src/sdk/detached_provider_run_builder_internal.cpp
+  src/sdk/detached_provider_run_process_builder_internal.cpp
   src/sdk/detached_provider_run_adoption_internal.cpp
   src/sdk/gcc_replay_planner_internal.cpp
   src/sdk/msvc_replay_planner_internal.cpp
