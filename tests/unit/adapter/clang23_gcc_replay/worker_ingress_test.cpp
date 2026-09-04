@@ -110,6 +110,18 @@ namespace
 		return std::move(*validated);
 	}
 
+	[[nodiscard]] cxxlens::sdk::detail::validated_compiler_replay_input msvc_input()
+	{
+		auto draft = input().value();
+		draft.analysis_frontend = "clang-cl-23.1.0";
+		draft.target_abi = "x86_64-pc-windows-msvc";
+		draft.effective_arguments = {"clang-cl", "/Zs", "project://main.cpp"};
+		draft.interpretation = "cc.clangcl23-msvc-replay-1";
+		auto validated = cxxlens::sdk::detail::validate_compiler_replay_input(std::move(draft));
+		require(validated);
+		return std::move(*validated);
+	}
+
 	[[nodiscard]] std::string string(std::span<const std::byte> value)
 	{
 		std::string output;
@@ -269,7 +281,13 @@ namespace
 					cxxlens::sdk::provider::detail::transcript_terminal_kind::complete &&
 				validated->sealed() && !validated->sealing_error());
 		const auto& sealed = *validated->sealed();
-		require(sealed.batches().size() == 6U && sealed.coverage().size() == 8U &&
+		require(sealed.batches().size() == 6U &&
+				std::ranges::all_of(sealed.batches(),
+									[](const auto& batch)
+									{
+										return batch.dependency_group_id() == "clang23-gcc-replay";
+									}) &&
+				sealed.coverage().size() == 8U &&
 				std::ranges::any_of(sealed.coverage(),
 									[](const auto& coverage)
 									{
@@ -339,6 +357,44 @@ namespace
 									invalid_authority_output,
 									{execution.expectation, "sha256:" + std::string(64U, 'b')});
 		require(!invalid_authority && invalid_authority_output.str().empty());
+	}
+
+	void gcc_worker_rejects_an_admitted_msvc_frontend_tuple_without_output()
+	{
+		using namespace cxxlens::detail::clang23_gcc_replay;
+		using namespace cxxlens::sdk::provider;
+		auto value = msvc_input();
+
+		std::istringstream raw_input{string(value.bytes())};
+		std::ostringstream raw_output;
+		auto raw = execute_worker_ingress(raw_input, raw_output);
+		require(!raw && raw.error().field == "replay_input" &&
+				raw.error().detail == "wrong-worker-frontend" && raw_output.str().empty());
+
+		auto manifest = provider_manifest(value.value().requested_relation_descriptor_ids);
+		require(manifest.validate());
+		host_transcript_expectation expectation{manifest.canonical_json(),
+												{"task:clang23-gcc-replay",
+												 std::string{value.input_digest()},
+												 "semantic-v2:sha256:" + std::string(64U, '1'),
+												 "semantic-v2:sha256:" + std::string(64U, '2'),
+												 "sha256:" + std::string(64U, '3')},
+												{}};
+		protocol_credit credit{std::uint64_t{64U} * 1024U * 1024U, 65536U};
+		auto host = encode_host_transcript(
+			{expectation,
+			 credit,
+			 std::vector<std::byte>{value.bytes().begin(), value.bytes().end()}});
+		require(host);
+		std::istringstream protocol_input{string(*host)};
+		std::ostringstream protocol_output;
+		auto protocol =
+			execute_provider_worker(protocol_input,
+									protocol_output,
+									{expectation, manifest.provider_semantic_contract_digest});
+		require(!protocol && protocol.error().field == "replay_input" &&
+				protocol.error().detail == "wrong-worker-frontend" &&
+				protocol_output.str().empty());
 	}
 
 	void valid_input_emits_bound_detached_observations()
@@ -827,6 +883,7 @@ namespace
 int main()
 {
 	provider_worker_emits_one_validated_protocol_authority();
+	gcc_worker_rejects_an_admitted_msvc_frontend_tuple_without_output();
 	valid_input_emits_bound_detached_observations();
 	worker_output_codec_is_bounded_and_strict();
 	malformed_and_oversized_input_fail_without_output();

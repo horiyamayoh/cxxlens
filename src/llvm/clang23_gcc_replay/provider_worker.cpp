@@ -25,6 +25,7 @@
 #include <cxxlens/relations/source_span.hpp>
 
 #include "observation_normalizer.hpp"
+#include "replay_frontend_authority.hpp"
 #include "worker_parser.hpp"
 
 namespace cxxlens::detail::clang23_gcc_replay
@@ -173,6 +174,12 @@ namespace cxxlens::detail::clang23_gcc_replay
 			auto replay = sdk::detail::decode_compiler_replay_input(host->payload, limits);
 			if (!replay)
 				return sdk::unexpected(std::move(replay.error()));
+			auto frontend =
+				sdk::detail::resolve_compiler_replay_frontend(replay->value().analysis_frontend,
+															  replay->value().target_abi,
+															  replay->value().effective_arguments);
+			if (!frontend || frontend->analysis_frontend != replay_frontend_id)
+				return sdk::unexpected(failure("replay_input", "wrong-worker-frontend"));
 			if (replay->input_digest() != host->task.task_input_digest)
 				return sdk::unexpected(failure("replay_input", "host-digest-mismatch"));
 			auto parsed = parse_replay_input(*replay);
@@ -244,11 +251,12 @@ namespace cxxlens::detail::clang23_gcc_replay
 
 			sdk::provider::execution_budget budget;
 			budget.output_bytes = std::min(budget.output_bytes, host->credit.bytes);
-			sdk::provider::context context{writer,
-										   {std::stop_token{}, budget},
-										   host->task.task_id,
-										   descriptors,
-										   std::array<std::string, 1U>{"gcc-replay"}};
+			sdk::provider::context context{
+				writer,
+				{std::stop_token{}, budget},
+				host->task.task_id,
+				descriptors,
+				std::array<std::string, 1U>{std::string{frontend->dependency_group}}};
 			context.coverage().request("task", host->task.task_id);
 			if (auto classified = context.coverage().classify(
 					{"task", host->task.task_id, "covered", "translation-unit-executed"});
@@ -266,7 +274,9 @@ namespace cxxlens::detail::clang23_gcc_replay
 					if (!atomic || !batch)
 						return sdk::unexpected(failure(value.id, "batch-identity"));
 					auto sink_value = context.relation(value);
-					if (auto begun = sink_value.begin("gcc-replay", *atomic, *batch); !begun)
+					if (auto begun = sink_value.begin(
+							std::string{frontend->dependency_group}, *atomic, *batch);
+						!begun)
 						return begun;
 					for (const auto& row : *rows)
 						if (auto pushed = sink_value.push(row); !pushed)
