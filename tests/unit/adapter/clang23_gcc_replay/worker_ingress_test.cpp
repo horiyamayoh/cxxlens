@@ -277,6 +277,15 @@ namespace
 		using namespace cxxlens::sdk::provider;
 		auto value = input();
 		auto execution = execute_provider(value);
+		std::istringstream retained_input{string(execution.host)};
+		auto retained = run_provider_worker(retained_input,
+											{execution.expectation,
+											 execution.manifest.provider_semantic_contract_digest,
+											 std::string{provider_id},
+											 provider_version,
+											 std::string{gcc_replay_frontend_id}});
+		require(retained && retained->protocol_transcript == execution.output &&
+				retained->replay_plan_digest == value.value().replay_plan_digest);
 		auto frames = decode_frame_stream(execution.output);
 		require(frames && !frames->empty() && frames->back().type == message_type::task_complete);
 		auto descriptors = frontend_descriptors(value.value().requested_relation_descriptor_ids);

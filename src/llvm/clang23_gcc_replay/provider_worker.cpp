@@ -38,22 +38,25 @@ namespace cxxlens::detail::clang23_gcc_replay
 				"application-analysis.replay-provider-failed", std::move(field), std::move(detail)};
 		}
 
-		class output_sink final : public sdk::provider::frame_sink
+		class transcript_sink final : public sdk::provider::frame_sink
 		{
 		  public:
-			explicit output_sink(std::ostream& output) : output_{&output} {}
-
 			[[nodiscard]] sdk::result<void> write(const std::span<const std::byte> bytes) override
 			{
-				output_->write(reinterpret_cast<const char*>(bytes.data()),
-							   static_cast<std::streamsize>(bytes.size()));
-				if (!*output_)
-					return sdk::unexpected(failure("stdout", "write-failed"));
+				if (bytes.size() > maximum_bytes_ - bytes_.size())
+					return sdk::unexpected(failure("protocol", "wire-size-limit"));
+				bytes_.insert(bytes_.end(), bytes.begin(), bytes.end());
 				return {};
 			}
 
+			[[nodiscard]] std::vector<std::byte> take() && noexcept
+			{
+				return std::move(bytes_);
+			}
+
 		  private:
-			std::ostream* output_{};
+			static constexpr std::size_t maximum_bytes_{std::size_t{32U} * 1024U * 1024U};
+			std::vector<std::byte> bytes_;
 		};
 
 		[[nodiscard]] sdk::result<std::vector<std::byte>>
@@ -151,10 +154,9 @@ namespace cxxlens::detail::clang23_gcc_replay
 		}
 	} // namespace
 
-	sdk::result<void> execute_provider_worker(std::istream& input,
-											  std::ostream& output,
-											  provider_worker_authority authority,
-											  const sdk::import_limits limits)
+	sdk::result<provider_worker_result> run_provider_worker(std::istream& input,
+															provider_worker_authority authority,
+															const sdk::import_limits limits)
 	{
 		try
 		{
@@ -238,7 +240,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 				descriptors.push_back(std::move(*value));
 			}
 
-			output_sink sink{output};
+			transcript_sink sink;
 			sdk::provider::protocol_writer writer{sink, authority.host.limits};
 			writer.grant_credit(host->credit);
 			auto hello = sdk::provider::encode_control_text(authority.host.provider_manifest);
@@ -249,13 +251,13 @@ namespace cxxlens::detail::clang23_gcc_replay
 			if (!hello || !negotiated || !accepted)
 				return sdk::unexpected(failure("protocol", "control-encoding"));
 			if (auto sent = writer.send(sdk::provider::message_type::hello, *hello); !sent)
-				return sent;
+				return sdk::unexpected(std::move(sent.error()));
 			if (auto sent = writer.send(sdk::provider::message_type::schema_negotiate, *negotiated);
 				!sent)
-				return sent;
+				return sdk::unexpected(std::move(sent.error()));
 			if (auto sent = writer.send(sdk::provider::message_type::task_accepted, *accepted);
 				!sent)
-				return sent;
+				return sdk::unexpected(std::move(sent.error()));
 
 			sdk::provider::execution_budget budget;
 			budget.output_bytes = std::min(budget.output_bytes, host->credit.bytes);
@@ -269,7 +271,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 			if (auto classified = context.coverage().classify(
 					{"task", host->task.task_id, "covered", "translation-unit-executed"});
 				!classified)
-				return classified;
+				return sdk::unexpected(std::move(classified.error()));
 			for (const auto& value : descriptors)
 			{
 				const auto* rows = rows_for(normalized, value.id);
@@ -285,12 +287,12 @@ namespace cxxlens::detail::clang23_gcc_replay
 					if (auto begun = sink_value.begin(
 							std::string{frontend->dependency_group}, *atomic, *batch);
 						!begun)
-						return begun;
+						return sdk::unexpected(std::move(begun.error()));
 					for (const auto& row : *rows)
 						if (auto pushed = sink_value.push(row); !pushed)
-							return pushed;
+							return sdk::unexpected(std::move(pushed.error()));
 					if (auto ended = sink_value.end(); !ended)
-						return ended;
+						return sdk::unexpected(std::move(ended.error()));
 				}
 
 				context.coverage().request("relation", value.id);
@@ -304,7 +306,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 							 : partial ? "capture-or-replay-gap"
 									   : "frontend-observed"});
 					!classified)
-					return classified;
+					return sdk::unexpected(std::move(classified.error()));
 			}
 			for (const auto& gap : normalized.unresolved)
 				context.unresolved().add(
@@ -316,7 +318,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 									authority.provider_id,
 									std::string{replay->value().replay_plan_digest}});
 			if (auto valid = context.validate(); !valid)
-				return valid;
+				return sdk::unexpected(std::move(valid.error()));
 			auto coverage = std::move(context.coverage()).finish();
 			auto unresolved = std::move(context.unresolved()).finish();
 			auto evidence = std::move(context.evidence()).finish();
@@ -333,11 +335,15 @@ namespace cxxlens::detail::clang23_gcc_replay
 					 std::pair{sdk::provider::message_type::progress, &*evidence_control},
 				 })
 				if (auto sent = writer.send(type, *control); !sent)
-					return sent;
+					return sdk::unexpected(std::move(sent.error()));
 			auto complete = sdk::provider::encode_task_complete_metadata({host->task.task_id});
 			if (!complete)
 				return sdk::unexpected(std::move(complete.error()));
-			return writer.send(sdk::provider::message_type::task_complete, *complete);
+			if (auto sent = writer.send(sdk::provider::message_type::task_complete, *complete);
+				!sent)
+				return sdk::unexpected(std::move(sent.error()));
+			return provider_worker_result{std::move(sink).take(),
+										  std::string{replay->value().replay_plan_digest}};
 		}
 		catch (const std::bad_alloc&)
 		{
@@ -347,5 +353,20 @@ namespace cxxlens::detail::clang23_gcc_replay
 		{
 			return sdk::unexpected(failure("memory", "length"));
 		}
+	}
+
+	sdk::result<void> execute_provider_worker(std::istream& input,
+											  std::ostream& output,
+											  provider_worker_authority authority,
+											  const sdk::import_limits limits)
+	{
+		auto result = run_provider_worker(input, std::move(authority), limits);
+		if (!result)
+			return sdk::unexpected(std::move(result.error()));
+		output.write(reinterpret_cast<const char*>(result->protocol_transcript.data()),
+					 static_cast<std::streamsize>(result->protocol_transcript.size()));
+		if (!output)
+			return sdk::unexpected(failure("stdout", "write-failed"));
+		return {};
 	}
 } // namespace cxxlens::detail::clang23_gcc_replay

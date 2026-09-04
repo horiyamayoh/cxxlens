@@ -8,6 +8,7 @@
 #include <istream>
 #include <ostream>
 #include <string>
+#include <vector>
 
 #include <cxxlens/sdk/application_analysis.hpp>
 #include <cxxlens/sdk/provider.hpp>
@@ -27,6 +28,16 @@ namespace cxxlens::detail::clang23_gcc_replay
 		sdk::semantic_version provider_version;
 		std::string replay_frontend;
 	};
+
+	struct provider_worker_result
+	{
+		std::vector<std::byte> protocol_transcript;
+		std::string replay_plan_digest;
+	};
+
+	/** Execute without an output side effect and retain the exact bounded Protocol-v2 result. */
+	[[nodiscard]] sdk::result<provider_worker_result> run_provider_worker(
+		std::istream& input, provider_worker_authority authority, sdk::import_limits limits = {});
 
 	/**
 	 * Validate one host transcript, execute the detached frontend, and emit only Protocol v2.
