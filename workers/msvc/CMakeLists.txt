@@ -92,7 +92,7 @@ target_include_directories(cxxlens_clangcl_worker_core SYSTEM
 target_compile_definitions(
   cxxlens_clangcl_worker_core
   PRIVATE __STDC_CONSTANT_MACROS __STDC_FORMAT_MACROS __STDC_LIMIT_MACROS
-          CXXLENS_PROVIDER_HOST_TRANSCRIPT_ONLY)
+          CXXLENS_PROVIDER_LOGICAL_TRANSCRIPT_ONLY)
 target_compile_features(cxxlens_clangcl_worker_core PUBLIC cxx_std_23)
 target_compile_options(cxxlens_clangcl_worker_core PRIVATE /W4 /WX /permissive-
                                                            /Gy)

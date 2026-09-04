@@ -57,11 +57,12 @@ namespace cxxlens::sdk::provider
 				 canonical_digest(value.substr(semantic_prefix.size())));
 		}
 
-#if !defined(CXXLENS_PROVIDER_HOST_TRANSCRIPT_ONLY)
+#if !defined(CXXLENS_PROVIDER_LOGICAL_TRANSCRIPT_ONLY)
 		[[nodiscard]] std::string json_string(const std::string_view value)
 		{
 			return cxxlens::sdk::detail::canonical_json_string(value);
 		}
+#endif
 
 		[[nodiscard]] bool namespaced(const std::string_view value)
 		{
@@ -137,6 +138,7 @@ namespace cxxlens::sdk::provider
 				stable_terminal_reason(reason);
 		}
 
+#if !defined(CXXLENS_PROVIDER_LOGICAL_TRANSCRIPT_ONLY)
 		// NG1 is a single lifecycle contract.  Treating one of its controls as an ordinary
 		// completed-process feature would silently downgrade liveness, spill, or recovery to the
 		// one-shot provider port.  Keep this list local to the launch boundary so every caller gets
@@ -860,7 +862,6 @@ namespace cxxlens::sdk::provider
 			return semantic_digest("cxxlens.provider-input-chunk-payload-set.v1", bytes);
 		}
 
-#if !defined(CXXLENS_PROVIDER_HOST_TRANSCRIPT_ONLY)
 		[[nodiscard]] canonical_value
 		runtime_string_tuple(const std::span<const std::string> values)
 		{
@@ -1029,12 +1030,10 @@ namespace cxxlens::sdk::provider
 															   sealed.unresolved(),
 															   sealed.evidence());
 		}
-#endif
 	} // namespace
 
 	namespace detail
 	{
-#if !defined(CXXLENS_PROVIDER_HOST_TRANSCRIPT_ONLY)
 		provider_runtime_receipt::provider_runtime_receipt(
 			const std::uint64_t raw_stdout_byte_count,
 			std::string raw_stdout_sha256,
@@ -1254,7 +1253,6 @@ namespace cxxlens::sdk::provider
 					"provider.binary-identity-mismatch", provider_id, "expected-provider-invalid"));
 			return {};
 		}
-#endif
 
 		sealed_host_input::sealed_host_input(
 			open_task_metadata task,
@@ -1616,10 +1614,6 @@ namespace cxxlens::sdk::provider
 									 std::move(*digest)};
 		}
 
-#if defined(CXXLENS_PROVIDER_HOST_TRANSCRIPT_ONLY)
-	} // namespace detail
-} // namespace cxxlens::sdk::provider
-#else
 		sealed_provider_batch::sealed_provider_batch(std::string task_id,
 													 std::string descriptor_id,
 													 std::string descriptor_digest,
@@ -2429,6 +2423,10 @@ namespace cxxlens::sdk::provider
 			return terminal;
 		}
 
+#if defined(CXXLENS_PROVIDER_LOGICAL_TRANSCRIPT_ONLY)
+	} // namespace detail
+} // namespace cxxlens::sdk::provider
+#else
 		result<provider_runtime_closure_channel>
 		provider_runtime_closure_channel::create(provider_protocol_v2_session session)
 		{
