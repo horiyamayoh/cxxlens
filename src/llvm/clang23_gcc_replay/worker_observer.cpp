@@ -327,8 +327,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 			if (after.isInvalid() || sources.getFileID(after) != sources.getFileID(begin))
 				return std::nullopt;
 			observed_source_span output;
-			output.logical_path = std::string{replay_logical_prefix} +
-				filename.drop_front(replay_synthetic_prefix.size()).str();
+			output.logical_path = replay_logical_path(filename.str());
 			output.begin = sources.getFileOffset(begin);
 			output.end = sources.getFileOffset(after);
 			output.role = "spelling";
@@ -353,8 +352,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 				return sdk::unexpected(failure("call.source", "outside-replay-vfs"));
 			if (filename.size() - replay_synthetic_prefix.size() > maximum_clang_text_bytes)
 				return sdk::unexpected(resource_failure("clang-text"));
-			return std::string{replay_logical_prefix} +
-				filename.drop_front(replay_synthetic_prefix.size()).str();
+			return replay_logical_path(filename.str());
 		}
 
 		[[nodiscard]] sdk::result<call_source_attachment>
