@@ -348,7 +348,12 @@ namespace cxxlens::application_analysis_worker
 			auto windows_sdk_value = environment(L"CXXLENS_WINDOWS_SDK_ROOT");
 			auto project_id = configured_project_id();
 			if (!project_root_value || !capture_directory_value || !windows_sdk_value ||
-				!project_id || std::ranges::any_of(arguments, source_dependencies_option))
+				!project_id ||
+				std::ranges::any_of(arguments,
+									[](const auto& argument)
+									{
+										return source_dependencies_option(argument);
+									}))
 			{
 				auto executed = run_msvc_process(compiler, arguments);
 				if (!executed)
