@@ -204,6 +204,21 @@ if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
       "unit;security;sdk;application-analysis;provider;trust;ed25519;openssl;negative;fault;determinism"
   )
 
+  cxxlens_add_test_executable(cxxlens-unit-sdk-detached-run-signing-file-port
+                              unit/sdk/detached_run_signing_file_port_test.cpp)
+  target_link_libraries(cxxlens-unit-sdk-detached-run-signing-file-port
+                        PRIVATE cxxlens_detached_run_signing_file_port_internal)
+  target_include_directories(cxxlens-unit-sdk-detached-run-signing-file-port
+                             PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  add_test(NAME security.sdk-detached-run-signing-file-port
+           COMMAND cxxlens-unit-sdk-detached-run-signing-file-port)
+  set_tests_properties(
+    security.sdk-detached-run-signing-file-port
+    PROPERTIES
+      LABELS
+      "unit;security;sdk;application-analysis;provider;trust;ed25519;filesystem;bounded;negative;fault;determinism"
+  )
+
   cxxlens_add_test_executable(
     cxxlens-unit-clang23-gcc-replay-worker-ingress
     unit/adapter/clang23_gcc_replay/worker_ingress_test.cpp)

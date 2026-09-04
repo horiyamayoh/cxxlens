@@ -79,6 +79,7 @@ add_library(
   "${CXXLENS_ROOT}/src/sdk/provider_runtime.cpp"
   "${CXXLENS_ROOT}/src/sdk/relation.cpp"
   "${CXXLENS_ROOT}/src/sdk/source_identity_internal.cpp"
+  "${CXXLENS_ROOT}/src/runtime/detached_run_signing_file_port_internal.cpp"
   "${CXXLENS_ROOT}/src/protocol_v2/cbor.cpp"
   "${CXXLENS_ROOT}/src/protocol_v2/codec.cpp"
   "${CXXLENS_ROOT}/src/protocol_v2/closure.cpp"
@@ -172,6 +173,19 @@ if(BUILD_TESTING)
                          PRIVATE /W4 /WX /permissive-)
   add_test(NAME application-analysis.openssl-detached-run-crypto
            COMMAND cxxlens-openssl-detached-run-crypto-test)
+  add_executable(
+    cxxlens-detached-run-signing-file-port-test
+    "${CXXLENS_ROOT}/tests/unit/sdk/detached_run_signing_file_port_test.cpp")
+  target_link_libraries(cxxlens-detached-run-signing-file-port-test
+                        PRIVATE cxxlens_clangcl_worker_core)
+  target_include_directories(cxxlens-detached-run-signing-file-port-test
+                             PRIVATE "${CXXLENS_ROOT}/src")
+  target_compile_features(cxxlens-detached-run-signing-file-port-test
+                          PRIVATE cxx_std_23)
+  target_compile_options(cxxlens-detached-run-signing-file-port-test
+                         PRIVATE /W4 /WX /permissive-)
+  add_test(NAME application-analysis.detached-run-signing-file-port
+           COMMAND cxxlens-detached-run-signing-file-port-test)
   add_test(NAME application-analysis.clangcl-worker-version
            COMMAND cxxlens-clangcl-worker-23 --version)
 endif()

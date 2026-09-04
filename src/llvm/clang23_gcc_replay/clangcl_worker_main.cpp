@@ -7,6 +7,8 @@
 
 #include "provider_worker.hpp"
 #include "replay_frontend_authority.hpp"
+#include "runtime/detached_run_signing_file_port_internal.hpp"
+#include "sdk/openssl_detached_run_crypto_internal.hpp"
 
 namespace
 {
@@ -61,9 +63,15 @@ int main(const int argc, char** argv)
 	auto effective_environment = environment("CXXLENS_PROVIDER_ENVIRONMENT_DIGEST");
 	auto major = environment("CXXLENS_PROVIDER_PROTOCOL_MAJOR");
 	auto minor = environment("CXXLENS_PROVIDER_PROTOCOL_MINOR");
+	auto provider_signature = environment("CXXLENS_PROVIDER_SIGNATURE_DIGEST");
+	auto provider_revocation = environment("CXXLENS_PROVIDER_REVOCATION_STATE");
+	auto run_signer = environment("CXXLENS_DETACHED_RUN_SIGNER_ID");
+	auto run_private_key = environment("CXXLENS_DETACHED_RUN_PRIVATE_KEY_FILE");
+	auto run_public_key = environment("CXXLENS_DETACHED_RUN_PUBLIC_KEY_FILE");
 	if (!manifest || !selected_provider || !binary_digest || !semantic_contract ||
 		!sandbox_policy || !task_id || !task_digest || !invocation || !toolchain ||
-		!effective_environment || !major || !minor ||
+		!effective_environment || !major || !minor || !provider_signature || !provider_revocation ||
+		!run_signer || !run_private_key || !run_public_key ||
 		*selected_provider != cxxlens::detail::clang23_gcc_replay::msvc_provider_id)
 	{
 		std::cerr << "application-analysis.replay-provider-failed:environment\n";
@@ -78,18 +86,23 @@ int main(const int argc, char** argv)
 		return EXIT_FAILURE;
 	}
 	limits.minimum_minor = protocol_v2_minor;
-	cxxlens::detail::clang23_gcc_replay::provider_worker_authority authority{
-		{std::move(*manifest),
-		 {*task_id, *task_digest, *invocation, *toolchain, *effective_environment},
-		 limits},
-		std::move(*binary_digest),
-		std::move(*semantic_contract),
-		std::move(*sandbox_policy),
-		std::string{cxxlens::detail::clang23_gcc_replay::msvc_provider_id},
-		cxxlens::detail::clang23_gcc_replay::msvc_provider_version,
-		std::string{cxxlens::detail::clang23_gcc_replay::msvc_replay_frontend_id}};
-	auto validated = cxxlens::detail::clang23_gcc_replay::execute_provider_worker(
-		std::cin, std::cout, std::move(authority));
+	cxxlens::detail::clang23_gcc_replay::detached_provider_worker_authority authority{
+		{{std::move(*manifest),
+		  {*task_id, *task_digest, *invocation, *toolchain, *effective_environment},
+		  limits},
+		 std::move(*binary_digest),
+		 std::move(*semantic_contract),
+		 std::move(*sandbox_policy),
+		 std::string{cxxlens::detail::clang23_gcc_replay::msvc_provider_id},
+		 cxxlens::detail::clang23_gcc_replay::msvc_provider_version,
+		 std::string{cxxlens::detail::clang23_gcc_replay::msvc_replay_frontend_id}},
+		std::move(*provider_signature),
+		std::move(*provider_revocation)};
+	const cxxlens::runtime::detached_run_signing_file_port signing_material{
+		std::move(*run_signer), std::move(*run_private_key), std::move(*run_public_key)};
+	const cxxlens::sdk::detail::openssl_detached_run_signer signer{signing_material};
+	auto validated = cxxlens::detail::clang23_gcc_replay::execute_detached_provider_worker(
+		std::cin, std::cout, std::move(authority), signer);
 	if (!validated)
 	{
 		std::cerr << validated.error().code << ':' << validated.error().field << '\n';
