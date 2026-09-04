@@ -16,6 +16,14 @@ endif()
 
 set(CXXLENS_ROOT "${CMAKE_CURRENT_LIST_DIR}/../..")
 
+# The official Windows LLVM archive exports static component targets whose
+# interfaces name optional compression/XML packages that the archive does not
+# ship. This worker does not use those facilities. Satisfy only CMake's global
+# imported-target validation; any accidental code reference remains an
+# unresolved linker error rather than a fallback implementation.
+add_library(ZLIB::ZLIB INTERFACE IMPORTED)
+add_library(zstd::libzstd_static INTERFACE IMPORTED)
+add_library(LibXml2::LibXml2 INTERFACE IMPORTED)
 find_package(LLVM 23.1.0 EXACT CONFIG REQUIRED)
 find_package(Clang 23.1.0 EXACT CONFIG REQUIRED)
 if(NOT LLVM_PACKAGE_VERSION VERSION_EQUAL "23.1.0")
