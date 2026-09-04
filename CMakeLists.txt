@@ -393,6 +393,7 @@ add_library(
   src/sdk/gcc_capture_bundle_internal.cpp
   src/sdk/compiler_replay_input_internal.cpp
   src/sdk/detached_provider_run_internal.cpp
+  src/sdk/detached_provider_run_adoption_internal.cpp
   src/sdk/gcc_replay_planner_internal.cpp
   src/sdk/msvc_replay_planner_internal.cpp
   src/sdk/gcc_toolchain_probe_internal.cpp

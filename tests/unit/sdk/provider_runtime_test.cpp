@@ -3053,6 +3053,49 @@ namespace
 		require(receipt_digest && repeated_receipt_digest &&
 					*receipt_digest == *repeated_receipt_digest,
 				"runtime receipt identity was not deterministic");
+		auto detached = detail::validate_detached_provider_transcript(
+			receipt_request, sealed_execution->raw_frame_stream);
+		auto detached_receipt_digest = detached
+			? detail::provider_runtime_receipt_digest(detached->runtime_receipt)
+			: result<std::string>{unexpected(detached.error())};
+		require(detached && detached_receipt_digest &&
+					detached->input_seal.task() == sealed_execution->input_seal->task() &&
+					detached->sealed.batches().size() ==
+						sealed_execution->sealed->batches().size() &&
+					*detached_receipt_digest == *receipt_digest,
+				"detached raw transcript did not reuse the exact input/output sealing authority");
+
+		auto detached_tamper = sealed_execution->raw_frame_stream;
+		detached_tamper.back() ^= std::byte{1U};
+		auto detached_tamper_result =
+			detail::validate_detached_provider_transcript(receipt_request, detached_tamper);
+		require(!detached_tamper_result &&
+					detached_tamper_result.error().code == "provider.checksum-mismatch",
+				"mutated detached raw transcript reached an adoption seal");
+		auto wrong_detached_input = receipt_request;
+		wrong_detached_input.payload.front() ^= std::byte{1U};
+		auto wrong_detached_input_result = detail::validate_detached_provider_transcript(
+			wrong_detached_input, sealed_execution->raw_frame_stream);
+		require(!wrong_detached_input_result &&
+					wrong_detached_input_result.error().code == "provider.task-binding-mismatch" &&
+					wrong_detached_input_result.error().field == "task_input_digest",
+				"detached validation accepted payload bytes outside the task-input digest");
+		auto bounded_detached = receipt_request;
+		bounded_detached.budget.transport_bytes = sealed_execution->raw_frame_stream.size() - 1U;
+		auto bounded_detached_result = detail::validate_detached_provider_transcript(
+			bounded_detached, sealed_execution->raw_frame_stream);
+		require(!bounded_detached_result &&
+					bounded_detached_result.error().code == "provider.output-limit",
+				"detached validation allocated beyond the host transport budget");
+		std::stop_source detached_cancellation;
+		detached_cancellation.request_stop();
+		auto cancelled_detached = receipt_request;
+		cancelled_detached.cancellation = detached_cancellation.get_token();
+		auto cancelled_detached_result = detail::validate_detached_provider_transcript(
+			cancelled_detached, sealed_execution->raw_frame_stream);
+		require(!cancelled_detached_result &&
+					cancelled_detached_result.error().code == "provider.cancelled",
+				"detached validation ignored host cancellation");
 		auto different_provenance = receipt.provenance();
 		different_provenance.environment_digest =
 			"sha256:9999999999999999999999999999999999999999999999999999999999999999";

@@ -3709,6 +3709,87 @@ namespace cxxlens::sdk::provider
 		return {};
 	}
 
+	result<detail::validated_detached_provider_transcript>
+	detail::validate_detached_provider_transcript(const process_task_request& request,
+												  const std::span<const std::byte> raw_frame_stream)
+	{
+		if (request.cancellation.stop_requested())
+			return cxxlens::sdk::unexpected(
+				runtime_error("provider.cancelled", request.task_id, "detached-validation"));
+		auto prepared = prepare_provider_process(request);
+		if (!prepared)
+			return cxxlens::sdk::unexpected(std::move(prepared.error()));
+		if (prepared->ng1_live)
+			return cxxlens::sdk::unexpected(runtime_error(
+				"provider.runtime-unavailable", "detached-transcript", "ng1-live-required"));
+		if (request.payload.empty() || content_digest(request.payload) != request.task_input_digest)
+			return cxxlens::sdk::unexpected(runtime_error(
+				"provider.task-binding-mismatch", "task_input_digest", "payload-content"));
+		if (raw_frame_stream.empty() || raw_frame_stream.size() > request.budget.transport_bytes)
+			return cxxlens::sdk::unexpected(runtime_error(
+				"provider.output-limit", request.task_id, "detached-transport-bytes"));
+
+		vector_host_input input{request.payload};
+		vector_frame_output input_transcript;
+		auto input_seal = encode_host_transcript_incremental(
+			prepared->input_profile, request.output_credit, input, input_transcript);
+		if (!input_seal)
+			return cxxlens::sdk::unexpected(std::move(input_seal.error()));
+
+		auto frames = decode_frame_stream(raw_frame_stream, prepared->session_limits);
+		if (!frames)
+			return cxxlens::sdk::unexpected(std::move(frames.error()));
+		const auto& manifest = request.selection.selected_candidate().description;
+		const detail::transcript_validation_request validation{
+			request.task_id,
+			manifest.provider_id,
+			manifest.provider_version,
+			&manifest,
+			request.output_descriptors,
+			request.output_credit,
+			&request.budget,
+			true,
+			&prepared->provider_identity,
+		};
+		auto terminal =
+			detail::validate_provider_transcript(validation, *frames, prepared->session_limits);
+		if (!terminal)
+			return cxxlens::sdk::unexpected(std::move(terminal.error()));
+		if (terminal->kind != detail::transcript_terminal_kind::complete)
+			return cxxlens::sdk::unexpected(
+				runtime_error(terminal->reason, request.task_id, "detached-terminal"));
+		if (terminal->sealing_error())
+			return cxxlens::sdk::unexpected(*terminal->sealing_error());
+		const auto terminal_reason = terminal->reason;
+		auto sealed = std::move(*terminal).take_sealed();
+		if (!sealed)
+			return cxxlens::sdk::unexpected(runtime_error(
+				"provider.protocol-state-invalid", request.task_id, "detached-seal-missing"));
+
+		detail::provider_runtime_provenance provenance;
+		provenance.provider_id = manifest.provider_id;
+		provenance.provider_version = manifest.provider_version;
+		provenance.provider_binary_digest = manifest.provider_binary_digest;
+		provenance.provider_semantic_contract_digest = manifest.provider_semantic_contract_digest;
+		provenance.task_id = request.task_id;
+		provenance.task_input_digest = request.task_input_digest;
+		provenance.normalized_invocation_digest = request.normalized_invocation_digest;
+		provenance.toolchain_digest = request.toolchain_digest;
+		provenance.environment_digest = request.environment_digest;
+		provenance.sandbox_policy_digest = prepared->sandbox.policy_digest;
+		provenance.stream_id = frames->front().stream_id;
+		auto receipt = detail::make_provider_runtime_receipt(raw_frame_stream.size(),
+															 content_digest(raw_frame_stream),
+															 *frames,
+															 std::move(provenance),
+															 terminal_reason,
+															 *sealed);
+		if (!receipt)
+			return cxxlens::sdk::unexpected(std::move(receipt.error()));
+		return detail::validated_detached_provider_transcript{
+			std::move(*input_seal), std::move(*sealed), std::move(*receipt)};
+	}
+
 	result<detail::provider_process_validation_outcome>
 	detail::execute_provider_process(const provider_process_port& processes,
 									 const process_task_request& request)

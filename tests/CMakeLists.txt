@@ -274,6 +274,9 @@ target_link_libraries(cxxlens-unit-sdk-application-analysis
                       PRIVATE cxxlens::sdk)
 target_include_directories(cxxlens-unit-sdk-application-analysis
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
+if(CXXLENS_BUILD_SHARED)
+  cxxlens_add_provider_runtime_closure(cxxlens-unit-sdk-application-analysis)
+endif()
 if(TARGET cxxlens-clang-gcc-replay-worker-23)
   add_dependencies(cxxlens-unit-sdk-application-analysis
                    cxxlens-clang-gcc-replay-worker-23)

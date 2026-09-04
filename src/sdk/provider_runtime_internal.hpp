@@ -557,6 +557,19 @@ namespace cxxlens::sdk::provider::detail
 	};
 
 	/**
+	 * Immutable one-shot detached transcript validated against host-owned process-task authority.
+	 *
+	 * This value proves Protocol-v2 and input/request consistency only. A remote-run signature and
+	 * its revocation state must be verified independently before the seal can reach publication.
+	 */
+	struct CXXLENS_PROVIDER_DETAIL_HIDDEN validated_detached_provider_transcript
+	{
+		sealed_host_input input_seal;
+		sealed_provider_transcript sealed;
+		provider_runtime_receipt runtime_receipt;
+	};
+
+	/**
 	 * Validate the source-private handoff from an accepted process task to materialization.
 	 *
 	 * The validator binds the selected provider, task/input digests, sealed input, and runtime
@@ -567,6 +580,11 @@ namespace cxxlens::sdk::provider::detail
 	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<void>
 	validate_provider_process_runtime_binding(const provider_process_validation_outcome& outcome,
 											  const process_task_request& request);
+
+	/** Re-decode one authenticated remote byte stream through the existing one-shot validator. */
+	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<validated_detached_provider_transcript>
+	validate_detached_provider_transcript(const process_task_request& request,
+										  std::span<const std::byte> raw_frame_stream);
 
 	/** Launch once and share the exact typed validation pass with the public process runtime. */
 	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<provider_process_validation_outcome>
