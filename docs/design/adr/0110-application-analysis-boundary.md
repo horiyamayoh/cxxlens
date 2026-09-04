@@ -25,7 +25,7 @@ interpretation、guarantee floor を独立 axis として表す。
 Phase 3 の固定 toolchain は次とする。
 
 - GCC 16.2.0
-- Visual Studio Enterprise 2026 18.9.12112.369 (build 12112.369)、MSVC toolset 14.51.36231 / compiler 19.51.36231
+- Visual Studio Enterprise 2026 18.9.12112.369 (build 12112.369)、MSVC toolset 14.51.36231 / compiler 19.51.36256
 - Windows SDK package 10.1.26100.8249 (kit 10.0.26100.0)
 - LLVM/clang-cl 23.1.0
 - Windows runner `windows-2025-vs2026` image `20260824.214.3`。job は上記 exact toolchain を検査し、image の

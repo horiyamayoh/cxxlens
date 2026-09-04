@@ -37,7 +37,7 @@ jobs:
           if ($toolset -ne '14.51.36231') { throw "MSVC toolset pin differs: $toolset" }
           $cl = Join-Path $vs "VC\Tools\MSVC\$toolset\bin\Hostx64\x64\cl.exe"
           $clVersion = (Get-Item $cl).VersionInfo.ProductVersion
-          if (-not $clVersion.StartsWith('19.51.36231')) { throw "cl.exe pin differs: $clVersion" }
+          if (-not $clVersion.StartsWith('14.51.36256')) { throw "cl.exe binary pin differs: $clVersion" }
           $sdkRc = "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.0.26100.0\x64\rc.exe"
           if (-not (Test-Path $sdkRc)) { throw 'Windows SDK 10.0.26100.0 is unavailable' }
           $archive = Join-Path $env:USERPROFILE '.cache\cxxlens\toolchains\clang+llvm-23.1.0-x86_64-pc-windows-msvc.tar.zst'

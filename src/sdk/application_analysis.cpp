@@ -506,7 +506,7 @@ namespace cxxlens::sdk
 			output.decoded.toolchain_family = *family;
 			output.decoded.toolchain_version = *version;
 			if ((*family == "gcc" && *version != "16.2.0") ||
-				(*family == "msvc" && *version != "19.51.36231"))
+				(*family == "msvc" && *version != "19.51.36256"))
 				return unexpected(invalid("production_toolchain.exact_version", "not-pinned"));
 			std::vector<capture_gap> generated_gaps;
 			if (auto valid = validate_captured((*toolchain.value())[2],

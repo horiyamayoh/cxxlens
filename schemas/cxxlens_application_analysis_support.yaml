@@ -11,7 +11,7 @@ toolchain_pins:
     source: https://gcc.gnu.org/pub/gcc/releases/gcc-16.2.0/
   msvc:
     family: msvc
-    exact_version: 19.51.36231
+    exact_version: 19.51.36256
     source: https://learn.microsoft.com/en-us/visualstudio/releases/2026/release-history
     distribution_version: 18.9.12112.369
     distribution_build: "12112.369"
@@ -57,7 +57,7 @@ targets:
   - id: msvc-x64-windows
     implementation_state: planned
     availability: unavailable
-    production_compiler: msvc-19.51.36231
+    production_compiler: msvc-19.51.36256
     capture_adapters: [msbuild-cltool-proxy]
     analysis_frontend: clang-cl-23.1.0
     target_abi: x86_64-pc-windows-msvc

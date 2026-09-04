@@ -364,7 +364,7 @@ namespace cxxlens::application_analysis_worker
 					logical_path(input.canonical_working_directory, input.canonical_project_root)),
 				canonical_value::from_tuple(std::move(semantic)),
 				canonical_value::from_string("c++"),
-				canonical_value::from_string("19.51.36231"),
+				canonical_value::from_string("19.51.36256"),
 				canonical_value::from_string("x86_64-pc-windows-msvc"),
 				observed(canonical_value::from_string(input.compiler_binary_digest)),
 				observed(canonical_value::from_string("$captured-windows-sdk")),
@@ -421,7 +421,7 @@ namespace cxxlens::application_analysis_worker
 			});
 			auto toolchain = canonical_value::from_tuple({
 				canonical_value::from_string("msvc"),
-				canonical_value::from_string("19.51.36231"),
+				canonical_value::from_string("19.51.36256"),
 				observed(canonical_value::from_string(input.canonical_compiler_path)),
 				observed(canonical_value::from_string(input.compiler_binary_digest)),
 				canonical_value::from_string("x86_64-pc-windows-msvc"),

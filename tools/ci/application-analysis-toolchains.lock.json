@@ -59,7 +59,7 @@
   "msvc": {
     "distribution_build": "12112.369",
     "distribution_version": "18.9.12112.369",
-    "exact_version": "19.51.36231",
+    "exact_version": "19.51.36256",
     "toolset_version": "14.51.36231"
   },
   "runner": {
