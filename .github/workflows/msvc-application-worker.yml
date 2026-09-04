@@ -104,8 +104,11 @@ jobs:
           }
           $failedSource = Join-Path $fixture 'failed.cpp'
           Set-Content -Path $failedSource -Encoding utf8 -Value 'not valid C++'
+          $ErrorActionPreference = 'Continue'
           & "$prefix\bin\cxxlens-msvc-capture.exe" /nologo /c $failedSource
-          if ($LASTEXITCODE -eq 0 -or @(Get-ChildItem $captureDirectory -Filter '*.cxxlens-capture').Count -ne 1) {
+          $failedExit = $LASTEXITCODE
+          $ErrorActionPreference = 'Stop'
+          if ($failedExit -eq 0 -or @(Get-ChildItem $captureDirectory -Filter '*.cxxlens-capture').Count -ne 1) {
             throw 'Failed MSVC compilation published a capture bundle or lost its exit code'
           }
           Pop-Location
