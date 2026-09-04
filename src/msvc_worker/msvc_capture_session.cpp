@@ -296,6 +296,8 @@ namespace cxxlens::application_analysis_worker
 						const auto detail =
 							parsed.error() == msvc_response_parse_failure::embedded_nul
 							? "embedded-nul"
+							: parsed.error() == msvc_response_parse_failure::invalid_encoding
+							? "invalid-encoding"
 							: parsed.error() == msvc_response_parse_failure::unterminated_quote
 							? "unterminated-quote"
 							: "argument-count";

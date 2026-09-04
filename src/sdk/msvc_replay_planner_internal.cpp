@@ -176,6 +176,10 @@ namespace cxxlens::sdk::detail
 											application_analysis_worker::
 												msvc_response_parse_failure::embedded_nul
 										? "embedded-nul"
+										: parsed.error() ==
+											application_analysis_worker::
+												msvc_response_parse_failure::invalid_encoding
+										? "invalid-encoding"
 										: "unterminated-quote"));
 					}
 					auto nested = expand(*parsed, depth + 1U);

@@ -16,6 +16,7 @@ namespace cxxlens::application_analysis_worker
 	enum class msvc_response_parse_failure
 	{
 		embedded_nul,
+		invalid_encoding,
 		unterminated_quote,
 		argument_count,
 	};

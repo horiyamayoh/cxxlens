@@ -664,6 +664,25 @@ namespace
 		nul.push_back(std::byte{});
 		auto embedded_nul = parse_msvc_response_arguments(nul, 4U);
 		require(!embedded_nul && embedded_nul.error() == msvc_response_parse_failure::embedded_nul);
+
+		std::vector<std::byte> utf16le{std::byte{0xffU}, std::byte{0xfeU}};
+		for (const auto unit : std::u16string_view{u"/DUNICODE=\u65e5\u672c source.cpp"})
+		{
+			utf16le.push_back(static_cast<std::byte>(unit & 0xffU));
+			utf16le.push_back(static_cast<std::byte>(unit >> 8U));
+		}
+		auto unicode = parse_msvc_response_arguments(utf16le, 4U);
+		require(unicode &&
+				*unicode == std::vector<std::string>{"/DUNICODE=\u65e5\u672c", "source.cpp"});
+		utf16le.pop_back();
+		auto malformed_utf16 = parse_msvc_response_arguments(utf16le, 4U);
+		require(!malformed_utf16 &&
+				malformed_utf16.error() == msvc_response_parse_failure::invalid_encoding);
+		const std::vector<std::byte> lone_high_surrogate{
+			std::byte{0xffU}, std::byte{0xfeU}, std::byte{0x00U}, std::byte{0xd8U}};
+		auto malformed_surrogate = parse_msvc_response_arguments(lone_high_surrogate, 4U);
+		require(!malformed_surrogate &&
+				malformed_surrogate.error() == msvc_response_parse_failure::invalid_encoding);
 	}
 
 	void allocation_failures_are_typed_at_external_boundaries()
