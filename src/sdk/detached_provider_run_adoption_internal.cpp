@@ -3,9 +3,9 @@
 #include <algorithm>
 #include <array>
 #include <ranges>
-#include <tuple>
 #include <utility>
 
+#include "detached_provider_run_builder_internal.hpp"
 #include "provider_runtime_internal.hpp"
 
 namespace cxxlens::sdk::detail
@@ -85,79 +85,6 @@ namespace cxxlens::sdk::detail
 			return verification;
 		}
 
-		[[nodiscard]] std::vector<detached_partition_projection>
-		partition_projection(const provider::detail::sealed_provider_transcript& sealed)
-		{
-			std::vector<detached_partition_projection> output;
-			output.reserve(sealed.batches().size());
-			for (const auto& batch : sealed.batches())
-				output.push_back({std::string{batch.descriptor_id()},
-								  std::string{batch.descriptor_digest()},
-								  std::string{batch.dependency_group_id()},
-								  std::string{batch.atomic_output_group_id()},
-								  std::string{batch.batch_id()},
-								  std::string{batch.batch_digest()},
-								  batch.rows().size()});
-			std::ranges::sort(output,
-							  {},
-							  [](const auto& value)
-							  {
-								  return std::tie(value.descriptor_id,
-												  value.dependency_group_id,
-												  value.atomic_output_group_id,
-												  value.batch_id);
-							  });
-			return output;
-		}
-
-		[[nodiscard]] std::vector<detached_coverage_projection>
-		coverage_projection(const provider::detail::sealed_provider_transcript& sealed)
-		{
-			std::vector<detached_coverage_projection> output;
-			output.reserve(sealed.coverage().size());
-			for (const auto& value : sealed.coverage())
-				output.push_back({value.kind, value.id, value.state, value.reason});
-			std::ranges::sort(output,
-							  {},
-							  [](const auto& value)
-							  {
-								  return std::tie(value.kind, value.id);
-							  });
-			return output;
-		}
-
-		[[nodiscard]] std::vector<detached_unresolved_projection>
-		unresolved_projection(const provider::detail::sealed_provider_transcript& sealed)
-		{
-			std::vector<detached_unresolved_projection> output;
-			output.reserve(sealed.unresolved().size());
-			for (const auto& value : sealed.unresolved())
-				output.push_back({value.code, value.subject, value.detail});
-			std::ranges::sort(output,
-							  {},
-							  [](const auto& value)
-							  {
-								  return std::tie(value.code, value.subject, value.detail);
-							  });
-			return output;
-		}
-
-		[[nodiscard]] std::vector<detached_provenance_projection>
-		provenance_projection(const provider::detail::sealed_provider_transcript& sealed)
-		{
-			std::vector<detached_provenance_projection> output;
-			output.reserve(sealed.evidence().size());
-			for (const auto& value : sealed.evidence())
-				output.push_back({value.kind, value.subject, value.producer, value.summary});
-			std::ranges::sort(output,
-							  {},
-							  [](const auto& value)
-							  {
-								  return std::tie(
-									  value.kind, value.subject, value.producer, value.summary);
-							  });
-			return output;
-		}
 	} // namespace
 
 	result<prepared_application_materialization> prepare_detached_application_materialization(
@@ -220,10 +147,9 @@ namespace cxxlens::sdk::detail
 			process_request, run.protocol_transcript);
 		if (!transcript)
 			return unexpected(std::move(transcript.error()));
-		if (partition_projection(transcript->sealed) != run.partitions ||
-			coverage_projection(transcript->sealed) != run.coverage ||
-			unresolved_projection(transcript->sealed) != run.unresolved ||
-			provenance_projection(transcript->sealed) != run.provenance)
+		auto projection = project_detached_provider_transcript(transcript->sealed);
+		if (projection.partitions != run.partitions || projection.coverage != run.coverage ||
+			projection.unresolved != run.unresolved || projection.provenance != run.provenance)
 			return unexpected(adoption_error("projection", "raw-transcript-mismatch"));
 		const bool partial = !transcript->sealed.unresolved().empty() ||
 			std::ranges::any_of(transcript->sealed.coverage(),

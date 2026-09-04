@@ -30,6 +30,7 @@
 #include "msvc_worker/msvc_source_dependencies.hpp"
 #include "sdk/application_materialization_execution_internal.hpp"
 #include "sdk/detached_provider_run_adoption_internal.hpp"
+#include "sdk/detached_provider_run_builder_internal.hpp"
 #include "sdk/provider_runtime_internal.hpp"
 
 #if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
@@ -469,6 +470,34 @@ namespace
 		require(subject);
 		value.authentication.signed_subject_digest = std::move(*subject);
 	}
+
+	class deterministic_detached_run_signer final : public cxxlens::sdk::detail::detached_run_signer
+	{
+	  public:
+		explicit deterministic_detached_run_signer(const bool fail = false) : fail_{fail} {}
+
+		[[nodiscard]] cxxlens::sdk::result<cxxlens::sdk::detail::detached_run_signature>
+		sign(const std::string_view scope,
+			 const std::string_view signed_subject_digest) const override
+		{
+			using namespace cxxlens::sdk;
+			using namespace cxxlens::sdk::detail;
+			if (scope != "detached-provider-run" || !signed_subject_digest.starts_with("sha256:"))
+				return unexpected(error{"test.detached-run-signer-invalid", "request", "binding"});
+			if (fail_)
+				return unexpected(
+					error{"test.detached-run-signer-unavailable", "signer", "unavailable"});
+			detached_run_signature output;
+			output.signer_id = "worker:clang23-gcc-replay";
+			output.key_fingerprint = digest('6');
+			for (std::size_t index{}; index < output.signature.size(); ++index)
+				output.signature[index] = static_cast<std::byte>(index + 1U);
+			return output;
+		}
+
+	  private:
+		bool fail_{};
+	};
 
 	class exact_detached_signature_verifier final
 		: public cxxlens::sdk::detail::trusted_detached_run_signature_verifier
@@ -1420,51 +1449,27 @@ namespace
 		detached_application_provider implementation{descriptor};
 		require(run_worker(implementation, unit.task.value().provider_task, writer));
 
-		auto sealed =
-			provider::detail::validate_detached_provider_transcript(unit.process, sink.transcript);
-		require(sealed);
-		detached_provider_run_draft run_draft;
-		run_draft.task_id = unit.process.task_id;
-		run_draft.task_input_digest = unit.process.task_input_digest;
-		run_draft.replay_plan_digest = unit.replay_plan_digest;
-		run_draft.provider = {candidate.description.provider_id,
-							  candidate.description.provider_version,
-							  candidate.description.provider_binary_digest,
-							  candidate.description.provider_semantic_contract_digest,
-							  *candidate.description.signature,
-							  "not-revoked",
-							  unit.process.sandbox.policy_digest};
-		run_draft.protocol_transcript = sink.transcript;
-		run_draft.terminal = detached_provider_terminal::complete;
-		for (const auto& batch : sealed->sealed.batches())
-			run_draft.partitions.push_back({std::string{batch.descriptor_id()},
-											std::string{batch.descriptor_digest()},
-											std::string{batch.dependency_group_id()},
-											std::string{batch.atomic_output_group_id()},
-											std::string{batch.batch_id()},
-											std::string{batch.batch_digest()},
-											batch.rows().size()});
-		for (const auto& value : sealed->sealed.coverage())
-			run_draft.coverage.push_back({value.kind, value.id, value.state, value.reason});
-		for (const auto& value : sealed->sealed.unresolved())
-			run_draft.unresolved.push_back({value.code, value.subject, value.detail});
-		for (const auto& value : sealed->sealed.evidence())
-			run_draft.provenance.push_back(
-				{value.kind, value.subject, value.producer, value.summary});
-		auto provider_receipt =
-			provider::detail::provider_runtime_receipt_digest(sealed->runtime_receipt);
-		require(provider_receipt);
-		run_draft.runtime_receipt_digest = *provider_receipt;
-		authenticate(run_draft);
-		auto run = validate_detached_provider_run(std::move(run_draft));
-		require(run);
+		deterministic_detached_run_signer signer;
+		auto run = build_detached_provider_run(
+			unit.process, unit.replay_plan_digest, sink.transcript, signer);
+		require(run && run->value().runtime_receipt_digest);
+		auto repeat = build_detached_provider_run(
+			unit.process, unit.replay_plan_digest, sink.transcript, signer);
+		require(repeat && repeat->digest() == run->digest() &&
+				std::ranges::equal(repeat->bytes(), run->bytes()));
+		deterministic_detached_run_signer unavailable_signer{true};
+		auto unsigned_run = build_detached_provider_run(
+			unit.process, unit.replay_plan_digest, sink.transcript, unavailable_signer);
+		require(!unsigned_run &&
+				unsigned_run.error().code == "test.detached-run-signer-unavailable");
+		const auto provider_receipt = *run->value().runtime_receipt_digest;
 		exact_detached_signature_verifier verifier{*run};
 		auto prepared = prepare_detached_application_materialization(
 			*engine, unit.task, unit.provider_input, unit.process, *run, verifier);
 		if (!prepared)
 			std::cerr << prepared.error().code << ':' << prepared.error().field << ':'
 					  << prepared.error().detail << '\n';
-		require(prepared && prepared->runtime.runtime_receipt_digest != *provider_receipt &&
+		require(prepared && prepared->runtime.runtime_receipt_digest != provider_receipt &&
 				prepared->runtime.runtime_receipt_digest.starts_with(
 					"detached-provider-run-adoption-receipt:sha256:"));
 
