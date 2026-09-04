@@ -9,6 +9,8 @@
 #include <tuple>
 #include <utility>
 
+#include "bounded_canonical_binary_internal.hpp"
+
 namespace cxxlens::sdk::detail
 {
 	namespace
@@ -77,88 +79,6 @@ namespace cxxlens::sdk::detail
 			if (auto valid = validate_utf8_text(value); !valid)
 				return unexpected(invalid(field, "utf8"));
 			metadata_bytes += value.size();
-			return {};
-		}
-
-		[[nodiscard]] result<std::uint64_t> read_length(const std::span<const std::byte> input,
-														std::size_t& offset)
-		{
-			if (offset > input.size() || input.size() - offset < 8U)
-				return unexpected(invalid("binary", "truncated-length"));
-			std::uint64_t value{};
-			for (std::size_t index{}; index < 8U; ++index)
-				value = (value << 8U) | std::to_integer<unsigned char>(input[offset + index]);
-			offset += 8U;
-			return value;
-		}
-
-		[[nodiscard]] result<void> preflight(const std::span<const std::byte> input,
-											 const std::size_t depth,
-											 const import_limits& limits)
-		{
-			if (depth > limits.maximum_nesting_depth)
-				return unexpected(limit("binary", "nesting-depth"));
-			if (input.empty())
-				return unexpected(invalid("binary", "missing-tag"));
-			std::size_t offset{1U};
-			switch (std::to_integer<unsigned char>(input.front()))
-			{
-				case 0x00U:
-					break;
-				case 0x01U:
-					if (input.size() - offset != 1U)
-						return unexpected(invalid("binary", "boolean-size"));
-					++offset;
-					break;
-				case 0x02U:
-				{
-					if (offset == input.size())
-						return unexpected(invalid("binary", "integer-sign"));
-					++offset;
-					auto width = read_length(input, offset);
-					if (!width || *width > input.size() - offset)
-						return unexpected(width ? invalid("binary", "integer-width")
-												: std::move(width.error()));
-					offset += static_cast<std::size_t>(*width);
-					break;
-				}
-				case 0x03U:
-				case 0x04U:
-				{
-					auto size = read_length(input, offset);
-					if (!size || *size > input.size() - offset)
-						return unexpected(size ? invalid("binary", "payload-size")
-											   : std::move(size.error()));
-					offset += static_cast<std::size_t>(*size);
-					break;
-				}
-				case 0x05U:
-				{
-					auto count = read_length(input, offset);
-					if (!count || *count > (input.size() - offset) / 9U)
-						return unexpected(count ? invalid("binary", "tuple-count")
-												: std::move(count.error()));
-					for (std::uint64_t index{}; index < *count; ++index)
-					{
-						auto size = read_length(input, offset);
-						if (!size || *size == 0U || *size > input.size() - offset)
-							return unexpected(size ? invalid("binary", "tuple-item-size")
-												   : std::move(size.error()));
-						if (auto valid =
-								preflight(input.subspan(offset, static_cast<std::size_t>(*size)),
-										  depth + 1U,
-										  limits);
-							!valid)
-							return valid;
-						offset += static_cast<std::size_t>(*size);
-					}
-					break;
-				}
-				default:
-					return unexpected(invalid("binary", "unknown-tag"));
-			}
-			if (offset != input.size())
-				return unexpected(invalid("binary", "trailing-bytes"));
 			return {};
 		}
 
@@ -468,11 +388,14 @@ namespace cxxlens::sdk::detail
 				return unexpected(std::move(valid.error()));
 			if (bytes.empty() || bytes.size() > limits.maximum_bundle_bytes)
 				return unexpected(limit("replay_input", "bytes"));
-			if (auto valid = preflight(bytes, 0U, limits); !valid)
-				return unexpected(std::move(valid.error()));
-			auto root = canonical_binary_decode(bytes);
+			auto root =
+				decode_bounded_canonical_binary(bytes,
+												0U,
+												limits.maximum_nesting_depth,
+												"application-analysis.replay-input-invalid",
+												"application-analysis.import-limit-exceeded");
 			if (!root)
-				return unexpected(invalid("binary", root.error().detail));
+				return unexpected(std::move(root.error()));
 			auto fields = tuple(*root, "root", 13U);
 			if (!fields)
 				return unexpected(std::move(fields.error()));

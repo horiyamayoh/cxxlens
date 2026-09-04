@@ -380,6 +380,7 @@ add_library(
   src/sdk/provider.cpp
   src/sdk/incremental.cpp
   src/sdk/application_analysis.cpp
+  src/sdk/bounded_canonical_binary_internal.cpp
   src/sdk/application_analysis_service.cpp
   src/sdk/application_materialization_execution_internal.cpp
   src/sdk/application_materialization_adoption_internal.cpp

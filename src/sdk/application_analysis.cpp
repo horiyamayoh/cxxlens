@@ -11,6 +11,7 @@
 #include <cxxlens/sdk/application_analysis.hpp>
 
 #include "application_analysis_internal.hpp"
+#include "bounded_canonical_binary_internal.hpp"
 #include "source_identity_internal.hpp"
 
 namespace cxxlens::sdk
@@ -39,92 +40,6 @@ namespace cxxlens::sdk
 										   return (byte >= '0' && byte <= '9') ||
 											   (byte >= 'a' && byte <= 'f');
 									   });
-		}
-
-		[[nodiscard]] result<std::uint64_t> read_length(const std::span<const std::byte> input,
-														std::size_t& offset)
-		{
-			if (offset > input.size() || input.size() - offset < 8U)
-				return unexpected(invalid("binary", "truncated-length"));
-			std::uint64_t value{};
-			for (std::size_t index{}; index < 8U; ++index)
-				value = (value << 8U) | std::to_integer<unsigned char>(input[offset + index]);
-			offset += 8U;
-			return value;
-		}
-
-		[[nodiscard]] result<void> preflight_value(const std::span<const std::byte> input,
-												   const std::size_t depth,
-												   const import_limits& limits)
-		{
-			if (depth > limits.maximum_nesting_depth)
-				return unexpected(limit("binary", "nesting-depth"));
-			if (input.empty())
-				return unexpected(invalid("binary", "missing-tag"));
-			std::size_t offset{1U};
-			switch (std::to_integer<unsigned char>(input.front()))
-			{
-				case 0x00U:
-					break;
-				case 0x01U:
-					if (input.size() - offset != 1U)
-						return unexpected(invalid("binary", "boolean-size"));
-					++offset;
-					break;
-				case 0x02U:
-				{
-					if (offset == input.size())
-						return unexpected(invalid("binary", "integer-sign"));
-					++offset;
-					auto width = read_length(input, offset);
-					if (!width)
-						return unexpected(std::move(width.error()));
-					if (*width > input.size() - offset)
-						return unexpected(invalid("binary", "integer-width"));
-					offset += static_cast<std::size_t>(*width);
-					break;
-				}
-				case 0x03U:
-				case 0x04U:
-				{
-					auto size = read_length(input, offset);
-					if (!size)
-						return unexpected(std::move(size.error()));
-					if (*size > input.size() - offset)
-						return unexpected(invalid("binary", "payload-size"));
-					offset += static_cast<std::size_t>(*size);
-					break;
-				}
-				case 0x05U:
-				{
-					auto count = read_length(input, offset);
-					if (!count)
-						return unexpected(std::move(count.error()));
-					if (*count > (input.size() - offset) / 9U)
-						return unexpected(invalid("binary", "tuple-count"));
-					for (std::uint64_t index{}; index < *count; ++index)
-					{
-						auto size = read_length(input, offset);
-						if (!size)
-							return unexpected(std::move(size.error()));
-						if (*size == 0U || *size > input.size() - offset)
-							return unexpected(invalid("binary", "tuple-item-size"));
-						if (auto valid = preflight_value(
-								input.subspan(offset, static_cast<std::size_t>(*size)),
-								depth + 1U,
-								limits);
-							!valid)
-							return valid;
-						offset += static_cast<std::size_t>(*size);
-					}
-					break;
-				}
-				default:
-					return unexpected(invalid("binary", "unknown-tag"));
-			}
-			if (offset != input.size())
-				return unexpected(invalid("binary", "trailing-bytes"));
-			return {};
 		}
 
 		class metadata_budget
@@ -1283,11 +1198,14 @@ namespace cxxlens::sdk
 				return unexpected(std::move(valid.error()));
 			if (input.empty() || input.size() > limits.maximum_bundle_bytes)
 				return unexpected(limit("bundle", "bytes"));
-			if (auto valid = preflight_value(input, 1U, limits); !valid)
-				return unexpected(std::move(valid.error()));
-			auto decoded = canonical_binary_decode(input);
+			auto decoded = detail::decode_bounded_canonical_binary(
+				input,
+				1U,
+				limits.maximum_nesting_depth,
+				"application-analysis.capture-invalid",
+				"application-analysis.import-limit-exceeded");
 			if (!decoded)
-				return unexpected(invalid("binary", decoded.error().detail));
+				return unexpected(std::move(decoded.error()));
 			metadata_budget budget{limits};
 			if (auto valid = account_strings(*decoded, budget, "root"); !valid)
 				return unexpected(std::move(valid.error()));
