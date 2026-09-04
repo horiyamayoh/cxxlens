@@ -130,6 +130,8 @@ jobs:
           New-Item -ItemType Directory -Force $msbuildFixture | Out-Null
           $msbuildCapture = Join-Path $msbuildFixture 'capture bundles'
           New-Item -ItemType Directory -Force $msbuildCapture | Out-Null
+          $msbuildTemp = Join-Path $msbuildFixture 'tool temp'
+          New-Item -ItemType Directory -Force $msbuildTemp | Out-Null
           $msbuildSource = Join-Path $msbuildFixture 'unicode MSBuild ソース.cpp'
           $msbuildHeader = Join-Path $msbuildFixture 'fixture header.hpp'
           $msbuildProject = Join-Path $msbuildFixture 'native proxy.vcxproj'
@@ -179,6 +181,10 @@ jobs:
           $env:CXXLENS_MSVC_PROJECT_ID = 'project:native-msbuild-proxy-fixture'
           $env:CXXLENS_MSVC_PROJECT_ROOT = $msbuildFixture
           $env:CXXLENS_MSVC_CAPTURE_DIRECTORY = $msbuildCapture
+          $previousTemp = $env:TEMP
+          $previousTmp = $env:TMP
+          $env:TEMP = $msbuildTemp
+          $env:TMP = $msbuildTemp
           Push-Location $msbuildFixture
           msbuild $msbuildProject /m:1 /t:Rebuild /p:Configuration=Release /p:Platform=x64 `
             "/p:CLToolExe=cxxlens-msvc-capture.exe" "/p:CLToolPath=$prefix\bin"
@@ -191,4 +197,6 @@ jobs:
             throw 'MSBuild did not select the installed CLToolExe/CLToolPath capture proxy'
           }
           Pop-Location
+          $env:TEMP = $previousTemp
+          $env:TMP = $previousTmp
           exit 0
