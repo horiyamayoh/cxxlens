@@ -22,6 +22,7 @@ add_library(
   "${CXXLENS_ROOT}/src/sdk/bounded_json_internal.cpp"
   "${CXXLENS_ROOT}/src/sdk/source_identity_internal.cpp"
   "${CXXLENS_ROOT}/src/runtime/msvc_capture_file_port.cpp"
+  "${CXXLENS_ROOT}/src/runtime/msvc_process_port.cpp"
   "${CXXLENS_ROOT}/src/msvc_worker/msvc_capture_bundle.cpp")
 target_compile_features(cxxlens_msvc_worker_base PUBLIC cxx_std_23)
 target_include_directories(
@@ -45,6 +46,14 @@ if(BUILD_TESTING)
       cxxlens-msvc-capture --check-vector
       "${CXXLENS_ROOT}/tests/fixtures/msvc_application_analysis/canonical_capture.sha256"
   )
+  add_test(
+    NAME application-analysis.msvc-proxy-self-recursion
+    COMMAND
+      "${CMAKE_COMMAND}" -E env
+      "CXXLENS_MSVC_REAL_CL=$<TARGET_FILE:cxxlens-msvc-capture>"
+      "$<TARGET_FILE:cxxlens-msvc-capture>" /nologo)
+  set_tests_properties(application-analysis.msvc-proxy-self-recursion
+                       PROPERTIES WILL_FAIL TRUE)
 endif()
 
 install(TARGETS cxxlens-msvc-capture

@@ -60,6 +60,7 @@ jobs:
           }
           "CXXLENS_CLANG_CL_ROOT=$clangRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "CXXLENS_VS_ROOT=$vs" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CXXLENS_MSVC_REAL_CL=$cl" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Build, test, and relocate the minimal Windows component
         shell: pwsh
         run: |
@@ -77,3 +78,12 @@ jobs:
             --component application-analysis-msvc-worker
           & "$prefix\bin\cxxlens-msvc-capture.exe" --check-vector `
             tests/fixtures/msvc_application_analysis/canonical_capture.sha256
+          $fixture = Join-Path $env:RUNNER_TEMP 'cxxlens proxy fixture'
+          New-Item -ItemType Directory -Force $fixture | Out-Null
+          $source = Join-Path $fixture 'unicode ソース.cpp'
+          $object = Join-Path $fixture 'unicode 出力.obj'
+          Set-Content -Path $source -Encoding utf8 -Value 'int cxxlens_proxy_fixture() { return 0; }'
+          & "$prefix\bin\cxxlens-msvc-capture.exe" /nologo /c $source "/Fo$object"
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $object)) {
+            throw 'MSVC capture proxy did not preserve the real compiler execution'
+          }

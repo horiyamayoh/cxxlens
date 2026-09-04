@@ -5,6 +5,12 @@
 
 #include "msvc_capture_bundle.hpp"
 #include "runtime/msvc_capture_file_port.hpp"
+#ifdef _WIN32
+#include "runtime/msvc_process_port.hpp"
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#endif
 
 namespace
 {
@@ -57,38 +63,105 @@ namespace
 		return input;
 	}
 
-} // namespace
-
-int main(const int argc, const char* const argv[])
-{
-	if (argc != 3)
+	int vector_command(const int argc, const char* const argv[])
 	{
-		std::cerr << "usage: cxxlens-msvc-capture --check-vector <hex-file> | "
-					 "--emit-vector <bundle-file>\n";
-		return EXIT_FAILURE;
-	}
-	auto encoded = cxxlens::application_analysis_worker::encode_msvc_capture_bundle(vector_input());
-	if (!encoded)
-	{
-		std::cerr << encoded.error().code << ':' << encoded.error().field << ':'
-				  << encoded.error().detail << '\n';
-		return EXIT_FAILURE;
-	}
-	if (std::string_view{argv[1]} == "--emit-vector")
-		return cxxlens::application_analysis_worker::write_worker_binary_file(argv[2], *encoded)
-			? EXIT_SUCCESS
-			: EXIT_FAILURE;
-	if (std::string_view{argv[1]} == "--check-vector")
-	{
-		auto expected = cxxlens::application_analysis_worker::read_worker_text_file(argv[2]);
-		if (!expected)
+		if (argc != 3)
 			return EXIT_FAILURE;
-		if (*expected != cxxlens::sdk::content_digest(*encoded) + '\n')
+		auto encoded =
+			cxxlens::application_analysis_worker::encode_msvc_capture_bundle(vector_input());
+		if (!encoded)
 		{
-			std::cerr << "application-analysis.canonical-vector-mismatch\n";
+			std::cerr << encoded.error().code << ':' << encoded.error().field << ':'
+					  << encoded.error().detail << '\n';
 			return EXIT_FAILURE;
 		}
-		return EXIT_SUCCESS;
+		if (std::string_view{argv[1]} == "--emit-vector")
+			return cxxlens::application_analysis_worker::write_worker_binary_file(argv[2], *encoded)
+				? EXIT_SUCCESS
+				: EXIT_FAILURE;
+		if (std::string_view{argv[1]} == "--check-vector")
+		{
+			auto expected = cxxlens::application_analysis_worker::read_worker_text_file(argv[2]);
+			if (!expected)
+				return EXIT_FAILURE;
+			if (*expected != cxxlens::sdk::content_digest(*encoded) + '\n')
+			{
+				std::cerr << "application-analysis.canonical-vector-mismatch\n";
+				return EXIT_FAILURE;
+			}
+			return EXIT_SUCCESS;
+		}
+		return EXIT_FAILURE;
 	}
-	return EXIT_FAILURE;
+
+#ifdef _WIN32
+	[[nodiscard]] std::string utf8(const std::wstring_view value)
+	{
+		if (value.empty())
+			return {};
+		const auto size = WideCharToMultiByte(CP_UTF8,
+											  WC_ERR_INVALID_CHARS,
+											  value.data(),
+											  static_cast<int>(value.size()),
+											  nullptr,
+											  0,
+											  nullptr,
+											  nullptr);
+		if (size <= 0)
+			return {};
+		std::string output(static_cast<std::size_t>(size), '\0');
+		if (WideCharToMultiByte(CP_UTF8,
+								WC_ERR_INVALID_CHARS,
+								value.data(),
+								static_cast<int>(value.size()),
+								output.data(),
+								size,
+								nullptr,
+								nullptr) != size)
+			return {};
+		return output;
+	}
+#endif
+
+} // namespace
+
+#ifndef _WIN32
+int main(const int argc, const char* const argv[])
+{
+	return vector_command(argc, argv);
 }
+#else
+int wmain(const int argc, wchar_t* argv[])
+{
+	if (argc == 3 &&
+		(std::wstring_view{argv[1]} == L"--check-vector" ||
+		 std::wstring_view{argv[1]} == L"--emit-vector"))
+	{
+		const auto mode = utf8(argv[1]);
+		const auto path = utf8(argv[2]);
+		if (mode.empty() || path.empty())
+			return EXIT_FAILURE;
+		const char* narrow[]{"cxxlens-msvc-capture", mode.c_str(), path.c_str()};
+		return vector_command(3, narrow);
+	}
+	auto compiler = cxxlens::application_analysis_worker::configured_msvc_compiler();
+	if (!compiler)
+	{
+		std::cerr << compiler.error().code << ':' << compiler.error().field << ':'
+				  << compiler.error().detail << '\n';
+		return EXIT_FAILURE;
+	}
+	std::vector<std::wstring> arguments;
+	arguments.reserve(argc > 1 ? static_cast<std::size_t>(argc - 1) : 0U);
+	for (int index{1}; index < argc; ++index)
+		arguments.emplace_back(argv[index]);
+	auto result = cxxlens::application_analysis_worker::run_msvc_process(*compiler, arguments);
+	if (!result)
+	{
+		std::cerr << result.error().code << ':' << result.error().field << ':'
+				  << result.error().detail << '\n';
+		return EXIT_FAILURE;
+	}
+	return static_cast<int>(result->exit_code);
+}
+#endif
