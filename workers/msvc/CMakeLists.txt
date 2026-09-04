@@ -68,6 +68,7 @@ add_library(
   "${CXXLENS_ROOT}/src/sdk/bounded_canonical_binary_internal.cpp"
   "${CXXLENS_ROOT}/src/sdk/compiler_replay_input_internal.cpp"
   "${CXXLENS_ROOT}/src/sdk/provider.cpp"
+  "${CXXLENS_ROOT}/src/sdk/provider_manifest_codec_internal.cpp"
   "${CXXLENS_ROOT}/src/sdk/provider_ng1_transport.cpp"
   "${CXXLENS_ROOT}/src/sdk/provider_ng1_validation.cpp"
   "${CXXLENS_ROOT}/src/sdk/provider_protocol_v2_adapter.cpp"

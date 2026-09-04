@@ -329,6 +329,21 @@ set_tests_properties(
     "unit;sdk;application-analysis;provider;codec;bounded;negative;fault;determinism;resource;security"
 )
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-provider-manifest-codec
+                            unit/sdk/provider_manifest_codec_internal_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-provider-manifest-codec
+                      PRIVATE cxxlens::sdk)
+target_include_directories(cxxlens-unit-sdk-provider-manifest-codec
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-provider-manifest-codec
+         COMMAND cxxlens-unit-sdk-provider-manifest-codec)
+set_tests_properties(
+  unit.sdk-provider-manifest-codec
+  PROPERTIES
+    LABELS
+    "unit;sdk;application-analysis;provider;manifest;codec;bounded;negative;determinism;resource;security"
+)
+
 cxxlens_add_test_executable(cxxlens-msvc-canonical-vector
                             ../src/msvc_worker/capture_main.cpp)
 target_sources(cxxlens-msvc-canonical-vector
