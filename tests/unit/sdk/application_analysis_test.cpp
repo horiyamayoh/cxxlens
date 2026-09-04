@@ -26,6 +26,7 @@
 #include <cxxlens/sdk/application_analysis.hpp>
 
 #include "msvc_worker/msvc_capture_bundle.hpp"
+#include "msvc_worker/msvc_source_dependencies.hpp"
 #include "sdk/application_materialization_execution_internal.hpp"
 
 #if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
@@ -572,6 +573,53 @@ namespace
 		auto limited = encode_msvc_capture_bundle(bounded, limits);
 		require(!limited &&
 				limited.error().code == "application-analysis.msvc-capture-limit-exceeded");
+		auto oversized_token = input;
+		oversized_token.original_arguments.push_back(std::string(4097U, 'x'));
+		auto token_rejected = encode_msvc_capture_bundle(oversized_token);
+		require(!token_rejected && token_rejected.error().field == "original_arguments");
+		auto embedded_nul = input;
+		embedded_nul.original_arguments.push_back(std::string{"/DVALUE=ok\0hidden", 17U});
+		auto nul_rejected = encode_msvc_capture_bundle(embedded_nul);
+		require(!nul_rejected && nul_rejected.error().field == "original_arguments");
+	}
+
+	void msvc_source_dependencies_are_bounded_and_canonical()
+	{
+		using cxxlens::application_analysis_worker::decode_msvc_source_dependencies;
+		constexpr std::string_view document = R"json({
+  "Version": "1.2",
+  "Data": {
+    "Source": "C:\\workspace\\src\\main.cpp",
+    "ProvidedModule": "",
+    "ImportedModules": [],
+    "ImportedHeaderUnits": [],
+    "Includes": [
+      "C:\\workspace\\include\\z.hpp",
+      "C:\\workspace\\include\\a.hpp"
+    ]
+  }
+})json";
+		auto decoded = decode_msvc_source_dependencies(document);
+		require(decoded && decoded->source == "C:\\workspace\\src\\main.cpp" &&
+				decoded->includes ==
+					std::vector<std::string>{"C:\\workspace\\include\\a.hpp",
+											 "C:\\workspace\\include\\z.hpp"});
+
+		auto unsupported = decode_msvc_source_dependencies(
+			R"json({"Version":"2.0","Data":{"Source":"x","Includes":[]}})json");
+		require(!unsupported &&
+				unsupported.error().code ==
+					"application-analysis.msvc-source-dependencies-invalid");
+		auto duplicate = decode_msvc_source_dependencies(
+			R"json({"Version":"1.1","Data":{"Source":"x","Includes":["a","a"]}})json");
+		require(!duplicate && duplicate.error().detail == "duplicate");
+		auto bounded = decode_msvc_source_dependencies(document, 2U, 4096U);
+		require(!bounded &&
+				bounded.error().code ==
+					"application-analysis.msvc-source-dependencies-limit-exceeded");
+		auto malformed = decode_msvc_source_dependencies(
+			R"json({"Version":"1.2","Data":{"Source":"x","Includes":[1]}})json");
+		require(!malformed && malformed.error().field == "Data.Includes[0]");
 	}
 
 	void allocation_failures_are_typed_at_external_boundaries()
@@ -1282,6 +1330,7 @@ int main()
 	replay_fidelity_and_import_bounds_fail_closed();
 	msvc_capture_import_preserves_replay_fidelity();
 	portable_msvc_encoder_round_trips_through_host_authority();
+	msvc_source_dependencies_are_bounded_and_canonical();
 	allocation_failures_are_typed_at_external_boundaries();
 	toolchain_observation_gaps_are_preserved();
 	duplicate_source_variants_bind_one_closure();

@@ -395,6 +395,7 @@ add_library(
   src/sdk/msvc_replay_planner_internal.cpp
   src/sdk/gcc_toolchain_probe_internal.cpp
   src/msvc_worker/msvc_capture_bundle.cpp
+  src/msvc_worker/msvc_source_dependencies.cpp
   src/sdk/source_identity_internal.cpp
   src/runtime/gcc_capture_file_port.cpp
   src/sdk/materialization_task_internal.cpp

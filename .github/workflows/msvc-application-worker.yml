@@ -80,10 +80,30 @@ jobs:
             tests/fixtures/msvc_application_analysis/canonical_capture.sha256
           $fixture = Join-Path $env:RUNNER_TEMP 'cxxlens proxy fixture'
           New-Item -ItemType Directory -Force $fixture | Out-Null
+          $captureDirectory = Join-Path $fixture 'capture bundles'
+          New-Item -ItemType Directory -Force $captureDirectory | Out-Null
+          $env:CXXLENS_MSVC_PROJECT_ID = 'project:native-msvc-proxy-fixture'
+          $env:CXXLENS_MSVC_PROJECT_ROOT = $fixture
+          $env:CXXLENS_MSVC_CAPTURE_DIRECTORY = $captureDirectory
+          $env:CXXLENS_WINDOWS_SDK_ROOT = "${env:ProgramFiles(x86)}\Windows Kits\10"
           $source = Join-Path $fixture 'unicode ソース.cpp'
           $object = Join-Path $fixture 'unicode 出力.obj'
           Set-Content -Path $source -Encoding utf8 -Value 'int cxxlens_proxy_fixture() { return 0; }'
           & "$prefix\bin\cxxlens-msvc-capture.exe" /nologo /c $source "/Fo$object"
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path $object)) {
             throw 'MSVC capture proxy did not preserve the real compiler execution'
+          }
+          $bundles = @(Get-ChildItem $captureDirectory -Filter '*.cxxlens-capture')
+          if ($bundles.Count -ne 1 -or $bundles[0].Length -eq 0) {
+            throw 'Successful MSVC compilation did not publish exactly one capture bundle'
+          }
+          & "$prefix\bin\cxxlens-msvc-capture.exe" /nologo /c $source "/Fo$object"
+          if ($LASTEXITCODE -ne 0 -or @(Get-ChildItem $captureDirectory -Filter '*.cxxlens-capture').Count -ne 1) {
+            throw 'Repeated identical MSVC capture was not deterministic'
+          }
+          $failedSource = Join-Path $fixture 'failed.cpp'
+          Set-Content -Path $failedSource -Encoding utf8 -Value 'not valid C++'
+          & "$prefix\bin\cxxlens-msvc-capture.exe" /nologo /c $failedSource
+          if ($LASTEXITCODE -eq 0 -or @(Get-ChildItem $captureDirectory -Filter '*.cxxlens-capture').Count -ne 1) {
+            throw 'Failed MSVC compilation published a capture bundle or lost its exit code'
           }

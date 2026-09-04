@@ -6,6 +6,7 @@
 #include "msvc_capture_bundle.hpp"
 #include "runtime/msvc_capture_file_port.hpp"
 #ifdef _WIN32
+#include "msvc_capture_session.hpp"
 #include "runtime/msvc_process_port.hpp"
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -155,13 +156,16 @@ int wmain(const int argc, wchar_t* argv[])
 	arguments.reserve(argc > 1 ? static_cast<std::size_t>(argc - 1) : 0U);
 	for (int index{1}; index < argc; ++index)
 		arguments.emplace_back(argv[index]);
-	auto result = cxxlens::application_analysis_worker::run_msvc_process(*compiler, arguments);
+	auto result = cxxlens::application_analysis_worker::capture_msvc_command(*compiler, arguments);
 	if (!result)
 	{
 		std::cerr << result.error().code << ':' << result.error().field << ':'
 				  << result.error().detail << '\n';
 		return EXIT_FAILURE;
 	}
-	return static_cast<int>(result->exit_code);
+	if (result->capture_error)
+		std::cerr << result->capture_error->code << ':' << result->capture_error->field << ':'
+				  << result->capture_error->detail << '\n';
+	return static_cast<int>(result->compiler_exit_code);
 }
 #endif

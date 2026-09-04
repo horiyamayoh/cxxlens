@@ -245,6 +245,9 @@ namespace cxxlens::application_analysis_worker
 	{
 		try
 		{
+			if (limits.maximum_sources == 0U || limits.maximum_arguments == 0U ||
+				limits.maximum_string_bytes == 0U)
+				return sdk::unexpected(limit("limits", "zero"));
 			if (input.original_arguments.empty() ||
 				input.original_arguments.size() > limits.maximum_arguments)
 				return sdk::unexpected(limit("original_arguments", "count"));
@@ -253,12 +256,29 @@ namespace cxxlens::application_analysis_worker
 					limits.maximum_sources - 1U - input.dependency_sources.size() ||
 				input.response_files.size() > limits.maximum_response_files)
 				return sdk::unexpected(limit("source_closure", "count"));
+			if (input.project_id.empty() || input.project_id.size() > limits.maximum_string_bytes ||
+				input.project_id.contains('\0') || input.language_standard.empty() ||
+				input.language_standard.size() > limits.maximum_string_bytes ||
+				input.language_standard.contains('\0'))
+				return sdk::unexpected(invalid("metadata", "string"));
+			for (const auto& argument : input.original_arguments)
+				if (argument.size() > limits.maximum_string_bytes || argument.contains('\0'))
+					return sdk::unexpected(limit("original_arguments", "string-bytes"));
 			for (const auto* path : {&input.canonical_project_root,
 									 &input.canonical_working_directory,
 									 &input.canonical_compiler_path,
 									 &input.windows_sdk_root})
 				if (path->size() > limits.maximum_string_bytes || !canonical_windows_path(*path))
 					return sdk::unexpected(invalid("path", "not-canonical-windows-path"));
+			for (const auto* source : {&input.main_source})
+				if (source->canonical_path.size() > limits.maximum_string_bytes)
+					return sdk::unexpected(limit("source_closure", "path-bytes"));
+			for (const auto& source : input.dependency_sources)
+				if (source.canonical_path.size() > limits.maximum_string_bytes)
+					return sdk::unexpected(limit("source_closure", "path-bytes"));
+			for (const auto& response : input.response_files)
+				if (response.canonical_path.size() > limits.maximum_string_bytes)
+					return sdk::unexpected(limit("response_files", "path-bytes"));
 			if (!at_or_below(input.canonical_working_directory, input.canonical_project_root))
 				return sdk::unexpected(invalid("working_directory", "outside-project-root"));
 			for (const auto* digest : {&input.compiler_binary_digest,
