@@ -6,6 +6,8 @@
  */
 
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <span>
 #include <string_view>
 
@@ -19,10 +21,12 @@ namespace cxxlens::sdk::detail
 	 * The caller supplies its product-specific error domains while this function remains the
 	 * single authority for canonical tag, length, tuple, and nesting validation.
 	 */
-	[[nodiscard]] result<canonical_value>
-	decode_bounded_canonical_binary(std::span<const std::byte> input,
-									std::size_t initial_depth,
-									std::size_t maximum_nesting_depth,
-									std::string_view invalid_error_code,
-									std::string_view limit_error_code);
+	[[nodiscard]] result<canonical_value> decode_bounded_canonical_binary(
+		std::span<const std::byte> input,
+		std::size_t initial_depth,
+		std::size_t maximum_nesting_depth,
+		std::string_view invalid_error_code,
+		std::string_view limit_error_code,
+		std::uint64_t maximum_tuple_items = std::numeric_limits<std::uint64_t>::max(),
+		std::uint64_t maximum_total_values = std::numeric_limits<std::uint64_t>::max());
 } // namespace cxxlens::sdk::detail

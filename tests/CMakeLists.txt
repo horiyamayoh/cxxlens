@@ -296,6 +296,21 @@ set_tests_properties(
     LABELS
     "unit;sdk;application-analysis;capture;fault;determinism;resource;security")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-detached-provider-run
+                            unit/sdk/detached_provider_run_internal_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-detached-provider-run
+                      PRIVATE cxxlens::sdk)
+target_include_directories(cxxlens-unit-sdk-detached-provider-run
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-detached-provider-run
+         COMMAND cxxlens-unit-sdk-detached-provider-run)
+set_tests_properties(
+  unit.sdk-detached-provider-run
+  PROPERTIES
+    LABELS
+    "unit;sdk;application-analysis;provider;codec;bounded;negative;fault;determinism;resource;security"
+)
+
 cxxlens_add_test_executable(cxxlens-msvc-canonical-vector
                             ../src/msvc_worker/capture_main.cpp)
 target_sources(cxxlens-msvc-canonical-vector

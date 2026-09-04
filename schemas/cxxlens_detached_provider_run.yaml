@@ -29,6 +29,37 @@ provider_identity_tuple:
     - {index: 4, name: signature_digest, type: digest}
     - {index: 5, name: revocation_state, type: strong-id}
     - {index: 6, name: sandbox_policy_digest, type: digest}
+partition_candidate_tuple:
+  fields:
+    - {index: 0, name: descriptor_id, type: strong-id}
+    - {index: 1, name: descriptor_digest, type: digest}
+    - {index: 2, name: dependency_group_id, type: strong-id}
+    - {index: 3, name: atomic_output_group_id, type: strong-id}
+    - {index: 4, name: batch_id, type: strong-id}
+    - {index: 5, name: batch_digest, type: digest}
+    - {index: 6, name: row_count, type: uint64}
+coverage_tuple:
+  fields:
+    - {index: 0, name: kind, type: string}
+    - {index: 1, name: id, type: string}
+    - {index: 2, name: state, type: enum, values: [covered, excluded, failed, not_applicable, unresolved]}
+    - {index: 3, name: reason, type: string}
+unresolved_tuple:
+  fields:
+    - {index: 0, name: code, type: registered-symbol}
+    - {index: 1, name: subject, type: string}
+    - {index: 2, name: detail, type: string}
+provenance_tuple:
+  fields:
+    - {index: 0, name: kind, type: registered-symbol}
+    - {index: 1, name: subject, type: string}
+    - {index: 2, name: producer, type: string}
+    - {index: 3, name: summary, type: string}
+projection_invariant:
+  - protocol_transcript-is-the-only-content-authority
+  - partition-coverage-unresolved-and-provenance-are-canonical-comparison-projections
+  - linux-adoption-must-redecode-the-transcript-and-require-exact-projection-equality
+  - projection-mismatch-is-atomic-rejection-and-never-partial
 adoption_invariants:
   - canonical-bundle-digest-is-recomputed-before-adoption
   - task-input-and-replay-plan-bindings-must-match-host-authority

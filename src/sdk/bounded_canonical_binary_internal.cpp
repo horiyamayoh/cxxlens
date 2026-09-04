@@ -11,17 +11,25 @@ namespace cxxlens::sdk::detail
 		  public:
 			decoder(const std::size_t maximum_nesting_depth,
 					std::string_view invalid_error_code,
-					std::string_view limit_error_code)
+					std::string_view limit_error_code,
+					const std::uint64_t maximum_tuple_items,
+					const std::uint64_t maximum_total_values)
 				: maximum_nesting_depth_{maximum_nesting_depth},
+				  maximum_tuple_items_{maximum_tuple_items},
+				  maximum_total_values_{maximum_total_values},
 				  invalid_error_code_{invalid_error_code}, limit_error_code_{limit_error_code}
 			{
 			}
 
 			[[nodiscard]] result<void> preflight(const std::span<const std::byte> input,
-												 const std::size_t depth) const
+												 const std::size_t depth,
+												 std::uint64_t& total_values) const
 			{
 				if (depth > maximum_nesting_depth_)
 					return unexpected(limit("nesting-depth"));
+				if (total_values == maximum_total_values_)
+					return unexpected(limit("total-values"));
+				++total_values;
 				if (input.empty())
 					return unexpected(invalid("missing-tag"));
 				std::size_t offset{1U};
@@ -63,6 +71,8 @@ namespace cxxlens::sdk::detail
 						auto count = read_length(input, offset);
 						if (!count)
 							return unexpected(std::move(count.error()));
+						if (*count > maximum_tuple_items_)
+							return unexpected(limit("tuple-items"));
 						if (*count > (input.size() - offset) / 9U)
 							return unexpected(invalid("tuple-count"));
 						for (std::uint64_t index{}; index < *count; ++index)
@@ -76,7 +86,8 @@ namespace cxxlens::sdk::detail
 								return unexpected(limit("nesting-depth"));
 							if (auto valid = preflight(
 									input.subspan(offset, static_cast<std::size_t>(*size)),
-									depth + 1U);
+									depth + 1U,
+									total_values);
 								!valid)
 								return valid;
 							offset += static_cast<std::size_t>(*size);
@@ -115,6 +126,8 @@ namespace cxxlens::sdk::detail
 			}
 
 			std::size_t maximum_nesting_depth_;
+			std::uint64_t maximum_tuple_items_;
+			std::uint64_t maximum_total_values_;
 			std::string_view invalid_error_code_;
 			std::string_view limit_error_code_;
 		};
@@ -125,10 +138,17 @@ namespace cxxlens::sdk::detail
 									const std::size_t initial_depth,
 									const std::size_t maximum_nesting_depth,
 									const std::string_view invalid_error_code,
-									const std::string_view limit_error_code)
+									const std::string_view limit_error_code,
+									const std::uint64_t maximum_tuple_items,
+									const std::uint64_t maximum_total_values)
 	{
-		const decoder bounded_decoder{maximum_nesting_depth, invalid_error_code, limit_error_code};
-		if (auto valid = bounded_decoder.preflight(input, initial_depth); !valid)
+		const decoder bounded_decoder{maximum_nesting_depth,
+									  invalid_error_code,
+									  limit_error_code,
+									  maximum_tuple_items,
+									  maximum_total_values};
+		std::uint64_t total_values{};
+		if (auto valid = bounded_decoder.preflight(input, initial_depth, total_values); !valid)
 			return unexpected(std::move(valid.error()));
 		auto value = canonical_binary_decode(input);
 		if (!value)
