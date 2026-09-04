@@ -189,6 +189,21 @@ set_tests_properties(
 )
 
 if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
+  cxxlens_add_test_executable(cxxlens-unit-sdk-openssl-detached-run-crypto
+                              unit/sdk/openssl_detached_run_crypto_test.cpp)
+  target_link_libraries(cxxlens-unit-sdk-openssl-detached-run-crypto
+                        PRIVATE cxxlens_detached_run_crypto_internal)
+  target_include_directories(cxxlens-unit-sdk-openssl-detached-run-crypto
+                             PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  add_test(NAME security.sdk-openssl-detached-run-crypto
+           COMMAND cxxlens-unit-sdk-openssl-detached-run-crypto)
+  set_tests_properties(
+    security.sdk-openssl-detached-run-crypto
+    PROPERTIES
+      LABELS
+      "unit;security;sdk;application-analysis;provider;trust;ed25519;openssl;negative;fault;determinism"
+  )
+
   cxxlens_add_test_executable(
     cxxlens-unit-clang23-gcc-replay-worker-ingress
     unit/adapter/clang23_gcc_replay/worker_ingress_test.cpp)

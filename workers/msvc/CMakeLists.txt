@@ -25,6 +25,7 @@ set(CXXLENS_ROOT "${CMAKE_CURRENT_LIST_DIR}/../..")
 add_library(LibXml2::LibXml2 INTERFACE IMPORTED)
 find_package(ZLIB REQUIRED)
 find_package(zstd CONFIG REQUIRED)
+find_package(OpenSSL 3.0 REQUIRED COMPONENTS Crypto)
 if(TARGET zstd::libzstd AND NOT TARGET zstd::libzstd_static)
   add_library(zstd::libzstd_static ALIAS zstd::libzstd)
 endif()
@@ -68,6 +69,7 @@ add_library(
   "${CXXLENS_ROOT}/src/sdk/bounded_canonical_binary_internal.cpp"
   "${CXXLENS_ROOT}/src/sdk/compiler_replay_input_internal.cpp"
   "${CXXLENS_ROOT}/src/sdk/provider.cpp"
+  "${CXXLENS_ROOT}/src/sdk/openssl_detached_run_crypto_internal.cpp"
   "${CXXLENS_ROOT}/src/sdk/provider_manifest_codec_internal.cpp"
   "${CXXLENS_ROOT}/src/sdk/provider_ng1_transport.cpp"
   "${CXXLENS_ROOT}/src/sdk/provider_ng1_validation.cpp"
@@ -85,8 +87,9 @@ add_library(
   "${CXXLENS_ROOT}/src/llvm/clang23_gcc_replay/worker_observation_codec.cpp"
   "${CXXLENS_ROOT}/src/llvm/clang23_gcc_replay/worker_observer.cpp"
   "${CXXLENS_ROOT}/src/llvm/clang23_gcc_replay/worker_parser.cpp")
-target_link_libraries(cxxlens_clangcl_worker_core
-                      PRIVATE clangAST clangFrontend clangIndex clangTooling)
+target_link_libraries(
+  cxxlens_clangcl_worker_core PRIVATE clangAST clangFrontend clangIndex
+                                      clangTooling OpenSSL::Crypto)
 target_include_directories(
   cxxlens_clangcl_worker_core PUBLIC "${CXXLENS_ROOT}/include"
                                      "${CXXLENS_ROOT}/src")
@@ -140,6 +143,19 @@ if(BUILD_TESTING)
                                                              /permissive-)
   add_test(NAME application-analysis.clangcl-worker
            COMMAND cxxlens-clangcl-worker-test)
+  add_executable(
+    cxxlens-openssl-detached-run-crypto-test
+    "${CXXLENS_ROOT}/tests/unit/sdk/openssl_detached_run_crypto_test.cpp")
+  target_link_libraries(cxxlens-openssl-detached-run-crypto-test
+                        PRIVATE cxxlens_clangcl_worker_core)
+  target_include_directories(cxxlens-openssl-detached-run-crypto-test
+                             PRIVATE "${CXXLENS_ROOT}/src")
+  target_compile_features(cxxlens-openssl-detached-run-crypto-test
+                          PRIVATE cxx_std_23)
+  target_compile_options(cxxlens-openssl-detached-run-crypto-test
+                         PRIVATE /W4 /WX /permissive-)
+  add_test(NAME application-analysis.openssl-detached-run-crypto
+           COMMAND cxxlens-openssl-detached-run-crypto-test)
   add_test(NAME application-analysis.clangcl-worker-version
            COMMAND cxxlens-clangcl-worker-23 --version)
 endif()

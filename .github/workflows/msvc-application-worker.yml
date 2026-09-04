@@ -73,7 +73,7 @@ jobs:
           if (-not $vcpkgRevision.StartsWith('f74a2eade1')) {
             throw "Pinned runner vcpkg revision differs: $vcpkgRevision"
           }
-          & $vcpkg install zlib:x64-windows-static zstd:x64-windows-static --clean-after-build
+          & $vcpkg install openssl:x64-windows-static zlib:x64-windows-static zstd:x64-windows-static --clean-after-build
           cmake -S workers/msvc -B build/msvc-worker -G Ninja `
             -DBUILD_TESTING=ON `
             -DCMAKE_BUILD_TYPE=Release `

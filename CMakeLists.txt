@@ -48,6 +48,7 @@ if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
   endif()
   find_package(LLVM 23.1.0 EXACT CONFIG REQUIRED)
   find_package(Clang 23.1.0 EXACT CONFIG REQUIRED)
+  find_package(OpenSSL 3.0 REQUIRED COMPONENTS Crypto)
   if(NOT LLVM_PACKAGE_VERSION VERSION_EQUAL "23.1.0")
     message(
       FATAL_ERROR "The GCC replay worker requires exact LLVM 23.1.0 packages")
@@ -417,6 +418,19 @@ target_sources(cxxlens_sdk
 target_link_libraries(cxxlens_sdk PUBLIC cxxlens::cxxlens cxxlens::recipes)
 
 if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
+  add_library(cxxlens_detached_run_crypto_internal STATIC
+              src/sdk/openssl_detached_run_crypto_internal.cpp)
+  target_link_libraries(
+    cxxlens_detached_run_crypto_internal
+    PUBLIC cxxlens::sdk
+    PRIVATE OpenSSL::Crypto)
+  target_include_directories(cxxlens_detached_run_crypto_internal
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_detached_run_crypto_internal
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_detached_run_crypto_internal)
+  cxxlens_enable_sanitizers(cxxlens_detached_run_crypto_internal)
+
   add_library(
     cxxlens_clang23_gcc_replay_ingress STATIC
     src/llvm/clang23_gcc_replay/observation_normalizer.cpp
@@ -429,7 +443,7 @@ if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
   target_link_libraries(
     cxxlens_clang23_gcc_replay_ingress
     PUBLIC cxxlens::sdk
-    PRIVATE clang-cpp cxxlens_protocol_v2)
+    PRIVATE clang-cpp cxxlens_protocol_v2 cxxlens_detached_run_crypto_internal)
   target_include_directories(cxxlens_clang23_gcc_replay_ingress
                              PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_include_directories(cxxlens_clang23_gcc_replay_ingress SYSTEM
@@ -903,8 +917,11 @@ cxxlens_assert_direct_project_dependencies(
 cxxlens_assert_direct_project_dependencies(cxxlens_clang22_provider_sdk
                                            cxxlens_sdk)
 if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
-  cxxlens_assert_direct_project_dependencies(cxxlens_clang23_gcc_replay_ingress
-                                             cxxlens_sdk cxxlens_protocol_v2)
+  cxxlens_assert_direct_project_dependencies(
+    cxxlens_detached_run_crypto_internal cxxlens_sdk)
+  cxxlens_assert_direct_project_dependencies(
+    cxxlens_clang23_gcc_replay_ingress cxxlens_sdk cxxlens_protocol_v2
+    cxxlens_detached_run_crypto_internal)
 endif()
 
 set(CXXLENS_COMPILED_TARGETS
@@ -926,7 +943,8 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
        cxxlens_clang22_worker_core cxxlens_clang22_materializer_ingress)
 endif()
 if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
-  list(APPEND CXXLENS_COMPILED_TARGETS cxxlens_clang23_gcc_replay_ingress)
+  list(APPEND CXXLENS_COMPILED_TARGETS cxxlens_detached_run_crypto_internal
+       cxxlens_clang23_gcc_replay_ingress)
 endif()
 
 if(CXXLENS_ENABLE_CLANG_TIDY)
