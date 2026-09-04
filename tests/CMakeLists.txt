@@ -173,18 +173,19 @@ set_tests_properties(
     "unit;sdk;application-analysis;gcc;replay;bounded;negative;determinism;resource;security"
 )
 
-cxxlens_add_test_executable(cxxlens-unit-sdk-gcc-replay-input
-                            unit/sdk/gcc_replay_input_internal_test.cpp)
-target_link_libraries(cxxlens-unit-sdk-gcc-replay-input PRIVATE cxxlens::sdk)
-target_include_directories(cxxlens-unit-sdk-gcc-replay-input
+cxxlens_add_test_executable(cxxlens-unit-sdk-compiler-replay-input
+                            unit/sdk/compiler_replay_input_internal_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-compiler-replay-input
+                      PRIVATE cxxlens::sdk)
+target_include_directories(cxxlens-unit-sdk-compiler-replay-input
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
-add_test(NAME unit.sdk-gcc-replay-input
-         COMMAND cxxlens-unit-sdk-gcc-replay-input)
+add_test(NAME unit.sdk-compiler-replay-input
+         COMMAND cxxlens-unit-sdk-compiler-replay-input)
 set_tests_properties(
-  unit.sdk-gcc-replay-input
+  unit.sdk-compiler-replay-input
   PROPERTIES
     LABELS
-    "unit;sdk;application-analysis;gcc;replay;codec;bounded;negative;fault;determinism;resource;security"
+    "unit;sdk;application-analysis;compiler-replay;gcc;msvc;replay;codec;bounded;negative;fault;determinism;resource;security"
 )
 
 if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
@@ -2425,7 +2426,7 @@ set(_cxxlens_ng_test_binary_candidates
     cxxlens-unit-sdk-build-capture
     cxxlens-unit-sdk-compile-commands-capture
     cxxlens-unit-sdk-gcc-capture-files
-    cxxlens-unit-sdk-gcc-replay-input
+    cxxlens-unit-sdk-compiler-replay-input
     cxxlens-unit-clang23-gcc-replay-worker-ingress
     cxxlens-unit-sdk-gcc-replay-planner
     cxxlens-unit-sdk-sealed-executable

@@ -90,7 +90,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 					std::nullopt};
 		}
 
-		[[nodiscard]] bool requested(const sdk::detail::validated_gcc_replay_input& input,
+		[[nodiscard]] bool requested(const sdk::detail::validated_compiler_replay_input& input,
 									 const std::string_view descriptor)
 		{
 			return std::ranges::binary_search(input.value().requested_relation_descriptor_ids,
@@ -162,7 +162,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 		}
 
 		[[nodiscard]] sdk::result<sdk::detached_row>
-		entity_row(const sdk::detail::validated_gcc_replay_input& input,
+		entity_row(const sdk::detail::validated_compiler_replay_input& input,
 				   const observed_entity& value,
 				   const bound_source_span& source,
 				   const bool include_anchor)
@@ -374,8 +374,9 @@ namespace cxxlens::detail::clang23_gcc_replay
 			std::vector<std::byte> canonical_form;
 		};
 
-		[[nodiscard]] auto occurrence_class(const sdk::detail::validated_gcc_replay_input& input,
-											const prepared_call& value)
+		[[nodiscard]] auto
+		occurrence_class(const sdk::detail::validated_compiler_replay_input& input,
+						 const prepared_call& value)
 		{
 			return std::tuple{std::string_view{input.value().compile_unit_id},
 							  std::string_view{value.source->span_id},
@@ -384,7 +385,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 		}
 
 		[[nodiscard]] sdk::result<sdk::detached_row>
-		call_site_row(const sdk::detail::validated_gcc_replay_input& input,
+		call_site_row(const sdk::detail::validated_compiler_replay_input& input,
 					  const prepared_call& value,
 					  const std::uint64_t ordinal)
 		{
@@ -493,7 +494,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 	}
 
 	sdk::result<normalized_observation_candidates>
-	normalize_observation_candidates(const sdk::detail::validated_gcc_replay_input& input,
+	normalize_observation_candidates(const sdk::detail::validated_compiler_replay_input& input,
 									 const worker_observation_output& worker)
 	{
 		try

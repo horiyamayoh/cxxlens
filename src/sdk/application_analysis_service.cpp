@@ -190,7 +190,7 @@ namespace cxxlens::sdk
 				effective_arguments = std::move(mapped->effective_arguments);
 				option_mappings = std::move(mapped->option_mappings);
 				mapping_unresolved = std::move(mapped->unresolved);
-				analysis_frontend = "clang-cl-23.1.0-msvc-mode";
+				analysis_frontend = "clang-cl-23.1.0";
 			}
 
 			auto value = std::make_shared<replay_plan::implementation>();
@@ -531,7 +531,7 @@ namespace cxxlens::sdk
 			return unexpected(error{"application-analysis.target-unavailable",
 									"materialization",
 									"application analysis providers are not configured"});
-		auto plan = detail::make_gcc_application_materialization_execution_plan(
+		auto plan = detail::make_application_materialization_execution_plan(
 			*project.value_,
 			request.value_->engine,
 			request.value_->publication,

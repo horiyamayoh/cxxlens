@@ -488,7 +488,7 @@ namespace
 		auto imported = cxxlens::sdk::import_capture(*decoded);
 		require(imported && imported->replay_plans().size() == 1U);
 		const auto& plan = imported->replay_plans().front();
-		require(plan.analysis_frontend() == "clang-cl-23.1.0-msvc-mode");
+		require(plan.analysis_frontend() == "clang-cl-23.1.0");
 		require(plan.target_abi() == "x86_64-pc-windows-msvc");
 		require(
 			has_reason(plan.unresolved(), "analysis-frontend-differs-from-production-compiler"));
@@ -560,8 +560,7 @@ namespace
 		require(decoded && decoded->digest() == cxxlens::sdk::content_digest(*encoded));
 		auto imported = cxxlens::sdk::import_capture(*decoded);
 		require(imported && imported->replay_plans().size() == 1U);
-		require(imported->replay_plans().front().analysis_frontend() ==
-				"clang-cl-23.1.0-msvc-mode");
+		require(imported->replay_plans().front().analysis_frontend() == "clang-cl-23.1.0");
 
 		auto partial = input;
 		partial.source_closure_membership =
@@ -1138,23 +1137,23 @@ namespace
 								   project.catalog.catalog_digest,
 								   std::nullopt};
 		auto first =
-			detail::make_gcc_application_materialization_execution_plan(project,
-																		*engine,
-																		publication,
-																		{&descriptor.id, 1U},
-																		"cc.clang23-gcc-replay-1",
-																		*selection,
-																		{},
-																		{});
+			detail::make_application_materialization_execution_plan(project,
+																	*engine,
+																	publication,
+																	{&descriptor.id, 1U},
+																	"cc.clang23-gcc-replay-1",
+																	*selection,
+																	{},
+																	{});
 		auto second =
-			detail::make_gcc_application_materialization_execution_plan(project,
-																		*engine,
-																		publication,
-																		{&descriptor.id, 1U},
-																		"cc.clang23-gcc-replay-1",
-																		*selection,
-																		{},
-																		{});
+			detail::make_application_materialization_execution_plan(project,
+																	*engine,
+																	publication,
+																	{&descriptor.id, 1U},
+																	"cc.clang23-gcc-replay-1",
+																	*selection,
+																	{},
+																	{});
 		require(first && second &&
 				first->materialization_request_id == second->materialization_request_id);
 		require(first->units.size() == 1U);
@@ -1167,7 +1166,7 @@ namespace
 				"under_approximation");
 		require(unit.host_partitions.empty());
 
-		auto unavailable_relation = detail::make_gcc_application_materialization_execution_plan(
+		auto unavailable_relation = detail::make_application_materialization_execution_plan(
 			project,
 			*engine,
 			publication,
@@ -1183,14 +1182,14 @@ namespace
 		auto relative_selection = provider::select_provider(provider_request, {&candidate, 1U});
 		require(relative_selection);
 		auto relative =
-			detail::make_gcc_application_materialization_execution_plan(project,
-																		*engine,
-																		publication,
-																		{&descriptor.id, 1U},
-																		"cc.clang23-gcc-replay-1",
-																		*relative_selection,
-																		{},
-																		{});
+			detail::make_application_materialization_execution_plan(project,
+																	*engine,
+																	publication,
+																	{&descriptor.id, 1U},
+																	"cc.clang23-gcc-replay-1",
+																	*relative_selection,
+																	{},
+																	{});
 		require(!relative && relative.error().detail == "absolute-path-required");
 
 		auto two_unit_bytes = canonical_binary(valid_two_unit_bundle());
@@ -1203,14 +1202,14 @@ namespace
 			application_analysis_imported_value_internal(*two_unit_project);
 		publication.catalog_semantic_digest = two_unit_value.catalog.catalog_digest;
 		auto two_unit_plan =
-			detail::make_gcc_application_materialization_execution_plan(two_unit_value,
-																		*engine,
-																		publication,
-																		{&descriptor.id, 1U},
-																		"cc.clang23-gcc-replay-1",
-																		*selection,
-																		{},
-																		{});
+			detail::make_application_materialization_execution_plan(two_unit_value,
+																	*engine,
+																	publication,
+																	{&descriptor.id, 1U},
+																	"cc.clang23-gcc-replay-1",
+																	*selection,
+																	{},
+																	{});
 		require(two_unit_plan && two_unit_plan->units.size() == 2U);
 		require(two_unit_plan->units[0].task.id() != two_unit_plan->units[1].task.id());
 	}

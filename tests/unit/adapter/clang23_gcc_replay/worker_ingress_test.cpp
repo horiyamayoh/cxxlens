@@ -46,10 +46,10 @@ namespace
 		return output;
 	}
 
-	[[nodiscard]] cxxlens::sdk::detail::validated_gcc_replay_input input()
+	[[nodiscard]] cxxlens::sdk::detail::validated_compiler_replay_input input()
 	{
 		using namespace cxxlens::sdk;
-		detail::gcc_replay_input_draft value;
+		detail::compiler_replay_input_draft value;
 		value.imported_project_id = "imported-project:sha256:" + std::string(64U, '1');
 		value.capture_bundle_digest = "sha256:" + std::string(64U, '2');
 		value.replay_plan_digest = "sha256:" + std::string(64U, '3');
@@ -105,7 +105,7 @@ namespace
 												   "source.file.v1",
 												   "source.span.v1"};
 		value.interpretation = "cc.clang23-gcc-replay-1";
-		auto validated = detail::validate_gcc_replay_input(std::move(value));
+		auto validated = detail::validate_compiler_replay_input(std::move(value));
 		require(validated);
 		return std::move(*validated);
 	}
@@ -124,7 +124,7 @@ namespace
 	}
 
 	[[nodiscard]] std::vector<std::byte>
-	execute_bytes(const cxxlens::sdk::detail::validated_gcc_replay_input& value)
+	execute_bytes(const cxxlens::sdk::detail::validated_compiler_replay_input& value)
 	{
 		std::istringstream source{string(value.bytes())};
 		std::ostringstream output;
@@ -134,7 +134,7 @@ namespace
 	}
 
 	[[nodiscard]] cxxlens::detail::clang23_gcc_replay::worker_observation_output
-	execute(const cxxlens::sdk::detail::validated_gcc_replay_input& value)
+	execute(const cxxlens::sdk::detail::validated_compiler_replay_input& value)
 	{
 		auto decoded =
 			cxxlens::detail::clang23_gcc_replay::decode_worker_observations(execute_bytes(value));
@@ -208,7 +208,7 @@ namespace
 	};
 
 	[[nodiscard]] provider_execution
-	execute_provider(const cxxlens::sdk::detail::validated_gcc_replay_input& value)
+	execute_provider(const cxxlens::sdk::detail::validated_compiler_replay_input& value)
 	{
 		using namespace cxxlens::detail::clang23_gcc_replay;
 		using namespace cxxlens::sdk;
@@ -296,7 +296,7 @@ namespace
 		auto incomplete_draft = value.value();
 		incomplete_draft.source_members.front().source_snapshot_id.reset();
 		auto incomplete =
-			cxxlens::sdk::detail::validate_gcc_replay_input(std::move(incomplete_draft));
+			cxxlens::sdk::detail::validate_compiler_replay_input(std::move(incomplete_draft));
 		require(incomplete);
 		auto partial_execution = execute_provider(*incomplete);
 		auto partial_frames = decode_frame_stream(partial_execution.output);
@@ -516,11 +516,11 @@ namespace
 				invalid_limits.error().detail == "outside-product-bound");
 
 		using namespace cxxlens::sdk;
-		detail::gcc_replay_input_draft invalid = value.value();
+		detail::compiler_replay_input_draft invalid = value.value();
 		invalid.source_members.front().content = bytes("int main( { return 0; }\n");
 		invalid.source_members.front().content_digest =
 			content_digest(invalid.source_members.front().content);
-		auto syntax_input = detail::validate_gcc_replay_input(std::move(invalid));
+		auto syntax_input = detail::validate_compiler_replay_input(std::move(invalid));
 		require(syntax_input);
 		auto rejected = cxxlens::detail::clang23_gcc_replay::parse_replay_input(*syntax_input);
 		require(rejected &&
@@ -534,11 +534,11 @@ namespace
 		require(!worker_rejected && worker_rejected.error().field == "translation_unit" &&
 				syntax_output.str().empty());
 
-		detail::gcc_replay_input_draft ambient = value.value();
+		detail::compiler_replay_input_draft ambient = value.value();
 		ambient.source_members.front().content = bytes("#include \"/etc/passwd\"\n");
 		ambient.source_members.front().content_digest =
 			content_digest(ambient.source_members.front().content);
-		auto ambient_input = detail::validate_gcc_replay_input(std::move(ambient));
+		auto ambient_input = detail::validate_compiler_replay_input(std::move(ambient));
 		require(ambient_input);
 		auto unavailable = cxxlens::detail::clang23_gcc_replay::parse_replay_input(*ambient_input);
 		require(unavailable &&
@@ -590,24 +590,24 @@ namespace
 		require(!rejected_origin && rejected_origin.error().detail == "origin-kind-invalid");
 
 		using namespace cxxlens::sdk;
-		detail::gcc_replay_input_draft unavailable = value.value();
+		detail::compiler_replay_input_draft unavailable = value.value();
 		unavailable.source_members.front().source_snapshot_id.reset();
-		auto unbound_input = detail::validate_gcc_replay_input(std::move(unavailable));
+		auto unbound_input = detail::validate_compiler_replay_input(std::move(unavailable));
 		require(unbound_input);
 		auto unbound = bind_observation_sources(*unbound_input, detached.observations);
 		require(!unbound && unbound.error().detail == "capture-identity-unavailable");
 
-		detail::gcc_replay_input_draft forged = value.value();
+		detail::compiler_replay_input_draft forged = value.value();
 		forged.source_members.front().file_id = "file:sha256:" + std::string(64U, 'a');
-		auto forged_input = detail::validate_gcc_replay_input(std::move(forged));
+		auto forged_input = detail::validate_compiler_replay_input(std::move(forged));
 		require(forged_input);
 		auto mismatch = bind_observation_sources(*forged_input, detached.observations);
 		require(!mismatch && mismatch.error().detail == "file-identity-mismatch");
 
-		detail::gcc_replay_input_draft stale = value.value();
+		detail::compiler_replay_input_draft stale = value.value();
 		stale.source_members.front().source_snapshot_id =
 			"source-snapshot:sha256:" + std::string(64U, 'b');
-		auto stale_input = detail::validate_gcc_replay_input(std::move(stale));
+		auto stale_input = detail::validate_compiler_replay_input(std::move(stale));
 		require(stale_input);
 		auto stale_snapshot = bind_observation_sources(*stale_input, detached.observations);
 		require(!stale_snapshot && stale_snapshot.error().detail == "snapshot-identity-mismatch");
@@ -630,7 +630,7 @@ namespace
 			main->file_id, main->content_digest, *main->encoding);
 		require(snapshot);
 		main->source_snapshot_id = std::move(*snapshot);
-		auto value = sdk::detail::validate_gcc_replay_input(std::move(draft));
+		auto value = sdk::detail::validate_compiler_replay_input(std::move(draft));
 		require(value);
 		auto detached = execute(*value);
 		require(detached.observations.direct_calls.size() == 2U);
@@ -735,7 +735,7 @@ namespace
 		auto unrequested_draft = value.value();
 		unrequested_draft.requested_relation_descriptor_ids = {"source.file.v1"};
 		auto unrequested_input =
-			cxxlens::sdk::detail::validate_gcc_replay_input(std::move(unrequested_draft));
+			cxxlens::sdk::detail::validate_compiler_replay_input(std::move(unrequested_draft));
 		require(unrequested_input);
 		auto unrequested_worker = detached;
 		unrequested_worker.replay_input_digest = std::string{unrequested_input->input_digest()};
@@ -747,7 +747,7 @@ namespace
 		auto entity_only_draft = value.value();
 		entity_only_draft.requested_relation_descriptor_ids = {"cc.entity.v1"};
 		auto entity_only_input =
-			cxxlens::sdk::detail::validate_gcc_replay_input(std::move(entity_only_draft));
+			cxxlens::sdk::detail::validate_compiler_replay_input(std::move(entity_only_draft));
 		require(entity_only_input);
 		auto entity_only_worker = detached;
 		entity_only_worker.replay_input_digest = std::string{entity_only_input->input_digest()};
@@ -760,7 +760,7 @@ namespace
 		auto declaration_only_draft = value.value();
 		declaration_only_draft.requested_relation_descriptor_ids = {"cc.declaration.v1"};
 		auto declaration_only_input =
-			cxxlens::sdk::detail::validate_gcc_replay_input(std::move(declaration_only_draft));
+			cxxlens::sdk::detail::validate_compiler_replay_input(std::move(declaration_only_draft));
 		require(declaration_only_input);
 		auto declaration_only_worker = detached;
 		declaration_only_worker.replay_input_digest =
@@ -774,7 +774,7 @@ namespace
 		auto type_only_draft = value.value();
 		type_only_draft.requested_relation_descriptor_ids = {"cc.type.v1"};
 		auto type_only_input =
-			cxxlens::sdk::detail::validate_gcc_replay_input(std::move(type_only_draft));
+			cxxlens::sdk::detail::validate_compiler_replay_input(std::move(type_only_draft));
 		require(type_only_input);
 		auto type_only_worker = detached;
 		type_only_worker.replay_input_digest = std::string{type_only_input->input_digest()};
@@ -794,7 +794,7 @@ namespace
 		calls_only_draft.requested_relation_descriptor_ids = {"cc.call_direct_target.v1",
 															  "cc.call_site.v1"};
 		auto calls_only_input =
-			cxxlens::sdk::detail::validate_gcc_replay_input(std::move(calls_only_draft));
+			cxxlens::sdk::detail::validate_compiler_replay_input(std::move(calls_only_draft));
 		require(calls_only_input);
 		auto calls_only_worker = detached;
 		calls_only_worker.replay_input_digest = std::string{calls_only_input->input_digest()};

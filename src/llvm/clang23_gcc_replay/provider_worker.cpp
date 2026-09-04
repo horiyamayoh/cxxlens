@@ -170,7 +170,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 			auto host = sdk::provider::validate_host_transcript(*frames, authority.host);
 			if (!host)
 				return sdk::unexpected(std::move(host.error()));
-			auto replay = sdk::detail::decode_gcc_replay_input(host->payload, limits);
+			auto replay = sdk::detail::decode_compiler_replay_input(host->payload, limits);
 			if (!replay)
 				return sdk::unexpected(std::move(replay.error()));
 			if (replay->input_digest() != host->task.task_input_digest)

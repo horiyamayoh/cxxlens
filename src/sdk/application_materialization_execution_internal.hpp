@@ -2,7 +2,7 @@
 
 /**
  * @file application_materialization_execution_internal.hpp
- * @brief Pre-effect GCC application materialization plan bound to explicit provider authority.
+ * @brief Pre-effect application materialization plan bound to explicit compiler provider authority.
  */
 
 #include <span>
@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "application_analysis_internal.hpp"
-#include "gcc_replay_input_internal.hpp"
+#include "compiler_replay_input_internal.hpp"
 #include "materialization_task_internal.hpp"
 
 namespace cxxlens::sdk::detail
@@ -20,7 +20,7 @@ namespace cxxlens::sdk::detail
 	struct application_materialization_execution_unit
 	{
 		std::string replay_plan_digest;
-		validated_gcc_replay_input provider_input;
+		validated_compiler_replay_input provider_input;
 		validated_build_capture capture;
 		validated_materialization_task task;
 		provider::process_task_request process;
@@ -41,7 +41,7 @@ namespace cxxlens::sdk::detail
 	 * incremental task, and one publication authority. No process or Store effect occurs here.
 	 */
 	[[nodiscard]] result<application_materialization_execution_plan>
-	make_gcc_application_materialization_execution_plan(
+	make_application_materialization_execution_plan(
 		const imported_project::implementation& project,
 		const relation_engine& engine,
 		snapshot_draft publication,

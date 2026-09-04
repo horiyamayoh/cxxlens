@@ -30,7 +30,7 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
                 "cxxlens_build_capture_bundle",
                 "cxxlens_compiler_replay_plan",
                 "cxxlens_detached_provider_run",
-                "cxxlens_gcc_replay_input",
+                "cxxlens_compiler_replay_input",
             )
         }
 
@@ -115,7 +115,7 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
             "cxxlens_build_capture_bundle": "cxxlens.build-capture-bundle.v1",
             "cxxlens_compiler_replay_plan": "cxxlens.compiler-replay-plan.v1",
             "cxxlens_detached_provider_run": "cxxlens.detached-provider-run.v1",
-            "cxxlens_gcc_replay_input": "cxxlens.gcc-replay-input.v2",
+            "cxxlens_compiler_replay_input": "cxxlens.compiler-replay-input.v1",
         }
         self.assertEqual(
             {name: value["schema"] for name, value in self.wire_contracts.items()},
@@ -132,13 +132,17 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
         capture = self.wire_contracts["cxxlens_build_capture_bundle"]
         replay = self.wire_contracts["cxxlens_compiler_replay_plan"]
         detached = self.wire_contracts["cxxlens_detached_provider_run"]
-        gcc_input = self.wire_contracts["cxxlens_gcc_replay_input"]
+        compiler_input = self.wire_contracts["cxxlens_compiler_replay_input"]
         self.assertIn("replay-fidelity", capture["authority"]["not_authoritative_for"])
         self.assertIn("production-compiler-exactness", replay["authority"]["not_authoritative_for"])
         self.assertIn("store-publication", detached["authority"]["not_authoritative_for"])
-        self.assertIn("store-publication", gcc_input["authority"]["not_authoritative_for"])
-        self.assertEqual(gcc_input["root_tuple"][3]["name"], "replay_plan_digest")
-        self.assertEqual(gcc_input["root_tuple"][8]["name"], "source_closure_digest")
+        self.assertIn("store-publication", compiler_input["authority"]["not_authoritative_for"])
+        self.assertEqual(compiler_input["root_tuple"][3]["name"], "replay_plan_digest")
+        self.assertEqual(compiler_input["root_tuple"][8]["name"], "source_closure_digest")
+        self.assertEqual(
+            compiler_input["root_tuple"][5]["values"],
+            ["clang-23.1.0-gcc-mode", "clang-cl-23.1.0"],
+        )
         self.assertEqual(capture["document_version"], "1.3.0")
         self.assertEqual(
             [field["type"] for field in capture["toolchain_tuple"]["fields"][6:]],

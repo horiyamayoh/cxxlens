@@ -12,7 +12,7 @@
 #include <cxxlens/relations/build_variant.hpp>
 #include <cxxlens/relations/source_file.hpp>
 
-#include "gcc_build_capture_adapter_internal.hpp"
+#include "application_build_capture_adapter_internal.hpp"
 
 namespace cxxlens::sdk::detail
 {
@@ -234,7 +234,7 @@ namespace cxxlens::sdk::detail
 		[[nodiscard]] result<std::vector<partition_draft>>
 		host_capture_partitions(const relation_engine& engine,
 								const validated_build_capture& capture,
-								const validated_gcc_replay_input& replay,
+								const validated_compiler_replay_input& replay,
 								const validated_materialization_task& task,
 								const std::string_view replay_plan_digest)
 		{
@@ -340,7 +340,7 @@ namespace cxxlens::sdk::detail
 	} // namespace
 
 	result<application_materialization_execution_plan>
-	make_gcc_application_materialization_execution_plan(
+	make_application_materialization_execution_plan(
 		const imported_project::implementation& project,
 		const relation_engine& engine,
 		snapshot_draft publication,
@@ -431,15 +431,15 @@ namespace cxxlens::sdk::detail
 			if (!plan_value)
 				return unexpected(execution_error("replay_plan", "missing-immutable-value"));
 			const auto& plan = *plan_value;
-			auto capture = make_gcc_build_capture(project, plan);
+			auto capture = make_application_build_capture(project, plan);
 			if (!capture)
 				return unexpected(std::move(capture.error()));
-			auto provider_input = make_gcc_replay_input(project,
-														plan,
-														relation_ids,
-														interpretation,
-														limits,
-														capture->value().compile_unit_id);
+			auto provider_input = make_compiler_replay_input(project,
+															 plan,
+															 relation_ids,
+															 interpretation,
+															 limits,
+															 capture->value().compile_unit_id);
 			if (!provider_input)
 				return unexpected(std::move(provider_input.error()));
 

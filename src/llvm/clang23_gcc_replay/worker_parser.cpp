@@ -141,7 +141,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 	} // namespace
 
 	sdk::result<parse_result>
-	parse_replay_input(const sdk::detail::validated_gcc_replay_input& input,
+	parse_replay_input(const sdk::detail::validated_compiler_replay_input& input,
 					   const observer_limits limits)
 	{
 		try

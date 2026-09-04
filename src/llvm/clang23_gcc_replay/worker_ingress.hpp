@@ -8,7 +8,7 @@
 #include <istream>
 #include <ostream>
 
-#include "sdk/gcc_replay_input_internal.hpp"
+#include "sdk/compiler_replay_input_internal.hpp"
 
 namespace cxxlens::detail::clang23_gcc_replay
 {

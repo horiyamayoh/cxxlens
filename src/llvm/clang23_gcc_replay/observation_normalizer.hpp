@@ -10,7 +10,7 @@
 
 #include <cxxlens/sdk/relation.hpp>
 
-#include "sdk/gcc_replay_input_internal.hpp"
+#include "sdk/compiler_replay_input_internal.hpp"
 #include "worker_observation_codec.hpp"
 
 namespace cxxlens::detail::clang23_gcc_replay
@@ -37,6 +37,6 @@ namespace cxxlens::detail::clang23_gcc_replay
 	 * descriptors. The result remains non-authoritative until provider adoption and publication.
 	 */
 	[[nodiscard]] sdk::result<normalized_observation_candidates>
-	normalize_observation_candidates(const sdk::detail::validated_gcc_replay_input& input,
+	normalize_observation_candidates(const sdk::detail::validated_compiler_replay_input& input,
 									 const worker_observation_output& worker);
 } // namespace cxxlens::detail::clang23_gcc_replay

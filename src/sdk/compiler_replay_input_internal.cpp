@@ -1,4 +1,4 @@
-#include "gcc_replay_input_internal.hpp"
+#include "compiler_replay_input_internal.hpp"
 
 #include <algorithm>
 #include <array>
@@ -265,8 +265,24 @@ namespace cxxlens::sdk::detail
 		}
 	} // namespace
 
-	result<validated_gcc_replay_input> validate_gcc_replay_input(gcc_replay_input_draft draft,
-																 const import_limits limits)
+	result<void>
+	validate_compiler_replay_frontend(const std::string_view analysis_frontend,
+									  const std::string_view target_abi,
+									  const std::span<const std::string> effective_arguments)
+	{
+		const bool gcc = analysis_frontend == "clang-23.1.0-gcc-mode" &&
+			target_abi == "x86_64-linux-gnu" && effective_arguments.size() >= 2U &&
+			effective_arguments[0] == "clang++" && effective_arguments[1] == "-fsyntax-only";
+		const bool msvc = analysis_frontend == "clang-cl-23.1.0" &&
+			target_abi == "x86_64-pc-windows-msvc" && effective_arguments.size() >= 2U &&
+			effective_arguments[0] == "clang-cl" && effective_arguments[1] == "/Zs";
+		if (!gcc && !msvc)
+			return unexpected(invalid("frontend", "unsupported-tuple"));
+		return {};
+	}
+
+	result<validated_compiler_replay_input>
+	validate_compiler_replay_input(compiler_replay_input_draft draft, const import_limits limits)
 	{
 		try
 		{
@@ -294,14 +310,13 @@ namespace cxxlens::sdk::detail
 			if (!digest_like(draft.capture_bundle_digest) ||
 				!digest_like(draft.replay_plan_digest) || !digest_like(draft.source_closure_digest))
 				return unexpected(invalid("digest", "spelling"));
-			if (draft.analysis_frontend != "clang-23.1.0-gcc-mode" ||
-				draft.target_abi != "x86_64-linux-gnu")
-				return unexpected(invalid("frontend", "unsupported"));
 			if (draft.effective_arguments.size() < 2U ||
-				draft.effective_arguments.size() > limits.maximum_arguments_per_unit ||
-				draft.effective_arguments[0] != "clang++" ||
-				draft.effective_arguments[1] != "-fsyntax-only")
+				draft.effective_arguments.size() > limits.maximum_arguments_per_unit)
 				return unexpected(invalid("effective_argv", "shape"));
+			if (auto valid = validate_compiler_replay_frontend(
+					draft.analysis_frontend, draft.target_abi, draft.effective_arguments);
+				!valid)
+				return unexpected(std::move(valid.error()));
 			for (std::size_t index{}; index < draft.effective_arguments.size(); ++index)
 				if (auto valid = text(draft.effective_arguments[index],
 									  "effective_argv[" + std::to_string(index) + "]",
@@ -414,7 +429,7 @@ namespace cxxlens::sdk::detail
 			for (const auto& value : draft.unresolved)
 				unresolved.push_back(gap_value(value));
 			auto encoded = canonical_binary(canonical_value::from_tuple({
-				canonical_value::from_string("cxxlens.gcc-replay-input.v2"),
+				canonical_value::from_string("cxxlens.compiler-replay-input.v1"),
 				canonical_value::from_string(draft.imported_project_id),
 				canonical_value::from_string(draft.capture_bundle_digest),
 				canonical_value::from_string(draft.replay_plan_digest),
@@ -431,7 +446,7 @@ namespace cxxlens::sdk::detail
 			if (!encoded || encoded->size() > limits.maximum_bundle_bytes)
 				return unexpected(limit("replay_input", "bytes"));
 			auto digest = content_digest(*encoded);
-			return validated_gcc_replay_input{
+			return validated_compiler_replay_input{
 				std::move(draft), std::move(*encoded), std::move(digest)};
 		}
 		catch (const std::bad_alloc&)
@@ -444,8 +459,8 @@ namespace cxxlens::sdk::detail
 		}
 	}
 
-	result<validated_gcc_replay_input>
-	decode_gcc_replay_input(const std::span<const std::byte> bytes, const import_limits limits)
+	result<validated_compiler_replay_input>
+	decode_compiler_replay_input(const std::span<const std::byte> bytes, const import_limits limits)
 	{
 		try
 		{
@@ -461,7 +476,7 @@ namespace cxxlens::sdk::detail
 			auto fields = tuple(*root, "root", 13U);
 			if (!fields)
 				return unexpected(std::move(fields.error()));
-			gcc_replay_input_draft draft;
+			compiler_replay_input_draft draft;
 			auto assign = [&](const std::size_t index,
 							  const std::string& field,
 							  std::string& destination) -> result<void>
@@ -488,7 +503,7 @@ namespace cxxlens::sdk::detail
 				 })
 				if (auto valid = assign(index, field, *destination); !valid)
 					return unexpected(std::move(valid.error()));
-			if (schema != "cxxlens.gcc-replay-input.v2")
+			if (schema != "cxxlens.compiler-replay-input.v1")
 				return unexpected(invalid("schema", "unsupported"));
 			auto arguments = tuple((**fields)[7], "effective_argv", (**fields)[7].tuple.size());
 			auto members = tuple((**fields)[9], "source_members", (**fields)[9].tuple.size());
@@ -567,7 +582,7 @@ namespace cxxlens::sdk::detail
 				}
 				draft.unresolved.push_back(std::move(value));
 			}
-			auto validated = validate_gcc_replay_input(std::move(draft), limits);
+			auto validated = validate_compiler_replay_input(std::move(draft), limits);
 			if (!validated)
 				return unexpected(std::move(validated.error()));
 			if (!std::ranges::equal(validated->bytes(), bytes))
@@ -584,13 +599,13 @@ namespace cxxlens::sdk::detail
 		}
 	}
 
-	result<validated_gcc_replay_input>
-	make_gcc_replay_input(const imported_project::implementation& project,
-						  const replay_plan::implementation& plan,
-						  const std::span<const std::string> requested_relation_descriptor_ids,
-						  const std::string_view interpretation,
-						  const import_limits limits,
-						  const std::string_view materialized_compile_unit_id)
+	result<validated_compiler_replay_input>
+	make_compiler_replay_input(const imported_project::implementation& project,
+							   const replay_plan::implementation& plan,
+							   const std::span<const std::string> requested_relation_descriptor_ids,
+							   const std::string_view interpretation,
+							   const import_limits limits,
+							   const std::string_view materialized_compile_unit_id)
 	{
 		if (!project.capture || project.capture_bundle_digest != project.capture->digest ||
 			plan.capture_bundle_digest != project.capture_bundle_digest)
@@ -609,7 +624,7 @@ namespace cxxlens::sdk::detail
 											   &decoded_capture_source_closure::id);
 		if (closure == project.capture->projection.source_closures.end())
 			return unexpected(invalid("source_closure_digest", "capture-binding-mismatch"));
-		gcc_replay_input_draft draft;
+		compiler_replay_input_draft draft;
 		draft.imported_project_id = project.id;
 		draft.capture_bundle_digest = project.capture_bundle_digest;
 		draft.replay_plan_digest = plan.digest;
@@ -625,6 +640,6 @@ namespace cxxlens::sdk::detail
 													   requested_relation_descriptor_ids.end());
 		draft.interpretation = interpretation;
 		draft.unresolved = plan.unresolved;
-		return validate_gcc_replay_input(std::move(draft), limits);
+		return validate_compiler_replay_input(std::move(draft), limits);
 	}
 } // namespace cxxlens::sdk::detail

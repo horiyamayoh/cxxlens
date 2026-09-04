@@ -1,4 +1,4 @@
-#include "gcc_build_capture_adapter_internal.hpp"
+#include "application_build_capture_adapter_internal.hpp"
 
 #include <algorithm>
 #include <array>
@@ -10,6 +10,8 @@
 #include <cxxlens/relations/build_project.hpp>
 #include <cxxlens/relations/build_toolchain_context.hpp>
 #include <cxxlens/relations/build_variant.hpp>
+
+#include "compiler_replay_input_internal.hpp"
 
 namespace cxxlens::sdk::detail
 {
@@ -282,13 +284,12 @@ namespace cxxlens::sdk::detail
 	} // namespace
 
 	result<validated_build_capture>
-	make_gcc_build_capture(const imported_project::implementation& project,
-						   const replay_plan::implementation& plan,
-						   const build_capture_limits limits)
+	make_application_build_capture(const imported_project::implementation& project,
+								   const replay_plan::implementation& plan,
+								   const build_capture_limits limits)
 	{
 		if (!project.capture || project.capture_bundle_digest != project.capture->digest ||
-			plan.capture_bundle_digest != project.capture_bundle_digest ||
-			plan.analysis_frontend != "clang-23.1.0-gcc-mode")
+			plan.capture_bundle_digest != project.capture_bundle_digest)
 			return unexpected(unavailable("binding", "imported-project-replay-mismatch"));
 		if (auto valid = project.catalog.validate(); !valid)
 			return unexpected(unavailable("project_catalog", valid.error().code));
@@ -304,6 +305,10 @@ namespace cxxlens::sdk::detail
 		if (plan.source_closure_digest != unit.source_closure_digest ||
 			plan.target_abi != project.capture->projection.target_abi)
 			return unexpected(unavailable("replay_plan", "capture-binding-mismatch"));
+		if (auto valid = validate_compiler_replay_frontend(
+				plan.analysis_frontend, plan.target_abi, plan.effective_arguments);
+			!valid)
+			return unexpected(unavailable("replay_plan", valid.error().detail));
 		const auto closure = std::ranges::find(project.capture->projection.source_closures,
 											   unit.source_closure_id,
 											   &decoded_capture_source_closure::id);

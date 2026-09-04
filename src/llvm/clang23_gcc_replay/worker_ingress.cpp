@@ -62,7 +62,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 			if (encoded.empty())
 				return sdk::unexpected(failure("stdin", "empty"));
 
-			auto decoded = sdk::detail::decode_gcc_replay_input(encoded, limits);
+			auto decoded = sdk::detail::decode_compiler_replay_input(encoded, limits);
 			if (!decoded)
 				return sdk::unexpected(std::move(decoded.error()));
 			auto parsed = parse_replay_input(*decoded);
