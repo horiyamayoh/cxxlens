@@ -1678,7 +1678,7 @@ namespace
 							 {}};
 		manifest.platform_tuples = {"linux-x86_64-clang23"};
 		manifest.provider_binary_digest = executable_digest(worker);
-		manifest.provider_semantic_contract_digest = "semantic-v2:" + digest('b');
+		manifest.provider_semantic_contract_digest = digest('b');
 		manifest.offered_relations = relation_ids;
 		manifest.interpretation_domains = {"cc.clang23-gcc-replay-1"};
 		manifest.invalidation_contract = digest('c');

@@ -167,18 +167,6 @@ namespace cxxlens::detail::clang23_gcc_replay
 			return sdk::semantic_digest(domain,
 										std::string{task} + "\n" + std::string{descriptor_id});
 		}
-
-		[[nodiscard]] bool content_digest(const std::string_view value)
-		{
-			constexpr std::string_view prefix{"sha256:"};
-			return value.starts_with(prefix) && value.size() == prefix.size() + 64U &&
-				std::ranges::all_of(value.substr(prefix.size()),
-									[](const char byte)
-									{
-										return (byte >= '0' && byte <= '9') ||
-											(byte >= 'a' && byte <= 'f');
-									});
-		}
 	} // namespace
 
 	sdk::result<provider_worker_result> run_provider_worker(std::istream& input,
@@ -189,8 +177,6 @@ namespace cxxlens::detail::clang23_gcc_replay
 		{
 			if (auto valid = limits.validate(); !valid)
 				return sdk::unexpected(std::move(valid.error()));
-			if (!content_digest(authority.provider_semantic_contract_digest))
-				return sdk::unexpected(failure("provider", "semantic-contract-invalid"));
 			auto provider = sdk::detail::decode_provider_manifest(authority.host.provider_manifest);
 			if (!provider)
 				return sdk::unexpected(std::move(provider.error()));
