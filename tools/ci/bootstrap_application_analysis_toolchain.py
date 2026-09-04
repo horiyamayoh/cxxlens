@@ -211,8 +211,8 @@ def load_lock(path: pathlib.Path = LOCK_PATH) -> dict[str, Any]:
     if value.get("msvc") != {
         "distribution_build": "12112.369",
         "distribution_version": "18.9.12112.369",
-        "exact_version": "19.51.36247",
-        "toolset_version": "14.51.36247",
+        "exact_version": "19.51.36231",
+        "toolset_version": "14.51.36231",
     }:
         raise ToolchainError("MSVC toolchain lock differs")
     if value.get("windows_sdk") != {

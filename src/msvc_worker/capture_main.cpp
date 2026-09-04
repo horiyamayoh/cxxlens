@@ -30,7 +30,7 @@ namespace
 		input.canonical_project_root = "C:\\cxxlens vector\\unicode-project";
 		input.canonical_working_directory = "C:\\cxxlens vector\\unicode-project\\build";
 		input.canonical_compiler_path =
-			"C:\\VS\\VC\\Tools\\MSVC\\14.51.36247\\bin\\Hostx64\\x64\\cl.exe";
+			"C:\\VS\\VC\\Tools\\MSVC\\14.51.36231\\bin\\Hostx64\\x64\\cl.exe";
 		input.compiler_binary_digest = digest('1');
 		input.windows_sdk_root = "C:\\Program Files (x86)\\Windows Kits\\10";
 		input.abi_digest = digest('2');

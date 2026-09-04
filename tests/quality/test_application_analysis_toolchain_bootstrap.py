@@ -45,7 +45,7 @@ class ApplicationAnalysisToolchainBootstrapTest(unittest.TestCase):
             admitted["clang_gcc_replay"]["exact_version"], "23.1.0"
         )
         self.assertEqual(admitted["clang_cl_replay"]["exact_version"], "23.1.0")
-        self.assertEqual(admitted["msvc"]["exact_version"], "19.51.36247")
+        self.assertEqual(admitted["msvc"]["exact_version"], "19.51.36231")
         self.assertEqual(
             admitted["windows_sdk"]["exact_version"], "10.1.26100.8249"
         )

@@ -102,7 +102,7 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
         pins = self.contract["toolchain_pins"]
         self.assertEqual(pins["gcc"]["exact_version"], "16.2.0")
         self.assertEqual(pins["msvc"]["distribution_version"], "18.9.12112.369")
-        self.assertEqual(pins["msvc"]["exact_version"], "19.51.36247")
+        self.assertEqual(pins["msvc"]["exact_version"], "19.51.36231")
         self.assertEqual(pins["windows_sdk"]["exact_version"], "10.1.26100.8249")
         self.assertEqual(pins["windows_sdk"]["kit_version"], "10.0.26100.0")
         self.assertEqual(pins["clang_replay"]["exact_version"], "23.1.0")

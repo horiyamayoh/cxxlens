@@ -275,7 +275,7 @@ namespace
 	{
 		auto bundle = valid_bundle();
 		bundle.tuple[1].tuple[0] = canonical_value::from_string("msvc");
-		bundle.tuple[1].tuple[1] = canonical_value::from_string("19.51.36247");
+		bundle.tuple[1].tuple[1] = canonical_value::from_string("19.51.36231");
 		bundle.tuple[1].tuple[2] =
 			observed(canonical_value::from_string("C:\\VS\\VC\\Tools\\MSVC\\14.51\\bin\\cl.exe"));
 		bundle.tuple[1].tuple[4] = canonical_value::from_string("x86_64-pc-windows-msvc");
@@ -480,7 +480,7 @@ namespace
 		require(bytes);
 		auto decoded = cxxlens::sdk::decode_capture_bundle(*bytes);
 		require(decoded);
-		require(decoded->production_compiler() == "msvc-19.51.36247");
+		require(decoded->production_compiler() == "msvc-19.51.36231");
 		require(decoded->capture_adapter() == "msbuild-cltool-proxy");
 		require(decoded->target_abi() == "x86_64-pc-windows-msvc");
 		auto imported = cxxlens::sdk::import_capture(*decoded);
@@ -526,7 +526,7 @@ namespace
 		input.canonical_project_root = "C:\\workspace\\unicode-project";
 		input.canonical_working_directory = "C:\\workspace\\unicode-project\\build space";
 		input.canonical_compiler_path =
-			"C:\\VS\\VC\\Tools\\MSVC\\14.51.36247\\bin\\Hostx64\\x64\\cl.exe";
+			"C:\\VS\\VC\\Tools\\MSVC\\14.51.36231\\bin\\Hostx64\\x64\\cl.exe";
 		input.compiler_binary_digest = digest('1');
 		input.windows_sdk_root = "C:\\Program Files (x86)\\Windows Kits\\10";
 		input.abi_digest = digest('2');
