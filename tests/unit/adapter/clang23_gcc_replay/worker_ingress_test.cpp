@@ -190,8 +190,29 @@ namespace
 		value.determinism_contract = "sha256:" + std::string(64U, 'd');
 		value.resource_class = "provider.application-analysis";
 		value.requested_qualifications = {"experimental"};
+		value.signature = "sha256:" + std::string(64U, 'f');
 		return value;
 	}
+
+	class deterministic_detached_run_signer final : public cxxlens::sdk::detail::detached_run_signer
+	{
+	  public:
+		[[nodiscard]] cxxlens::sdk::result<cxxlens::sdk::detail::detached_run_signature>
+		sign(const std::string_view scope,
+			 const std::string_view signed_subject_digest) const override
+		{
+			using namespace cxxlens::sdk;
+			using namespace cxxlens::sdk::detail;
+			if (scope != "detached-provider-run" || !signed_subject_digest.starts_with("sha256:"))
+				return unexpected(error{"test.detached-run-signing-invalid", "request", "binding"});
+			detached_run_signature output;
+			output.signer_id = "worker:clangcl23-test";
+			output.key_fingerprint = "sha256:" + std::string(64U, '6');
+			for (std::size_t index{}; index < output.signature.size(); ++index)
+				output.signature[index] = static_cast<std::byte>(index + 1U);
+			return output;
+		}
+	};
 
 	[[nodiscard]] std::vector<cxxlens::sdk::relation_descriptor>
 	frontend_descriptors(const std::span<const std::string> relations)
@@ -487,6 +508,62 @@ namespace
 		auto evidence = decode_evidence_metadata(evidence_frame->control);
 		require(evidence && evidence->size() == 1U && (*evidence)[0].producer == msvc_provider_id &&
 				(*evidence)[0].kind == "application-analysis.replay");
+	}
+
+	void msvc_worker_seals_only_validated_protocol_into_a_detached_run()
+	{
+		using namespace cxxlens::detail::clang23_gcc_replay;
+		using namespace cxxlens::sdk;
+		auto value = msvc_input();
+		auto execution = execute_provider(value, true);
+		const provider_worker_authority worker_authority{
+			execution.expectation,
+			execution.manifest.provider_binary_digest,
+			execution.manifest.provider_semantic_contract_digest,
+			"semantic-v2:sha256:" + std::string(64U, 'e'),
+			std::string{msvc_provider_id},
+			msvc_provider_version,
+			std::string{msvc_replay_frontend_id}};
+		require(execution.manifest.signature);
+		const detached_provider_worker_authority authority{
+			worker_authority, *execution.manifest.signature, "not-revoked"};
+		deterministic_detached_run_signer signer;
+		std::istringstream retained_input{string(execution.host)};
+		auto sealed = run_detached_provider_worker(retained_input, authority, signer);
+		require(sealed && sealed->value().task_id == execution.expectation.task.task_id &&
+				sealed->value().task_input_digest == value.input_digest() &&
+				sealed->value().replay_plan_digest == value.value().replay_plan_digest &&
+				sealed->value().provider.provider_id == msvc_provider_id &&
+				sealed->value().provider.signature_digest == *execution.manifest.signature &&
+				sealed->value().provider.revocation_state == "not-revoked" &&
+				sealed->value().authentication.signer_id == "worker:clangcl23-test" &&
+				sealed->value().protocol_transcript == execution.output);
+		auto decoded = detail::decode_detached_provider_run(sealed->bytes());
+		require(decoded && decoded->digest() == sealed->digest());
+
+		std::istringstream emitted_input{string(execution.host)};
+		std::ostringstream emitted_output;
+		auto emitted =
+			execute_detached_provider_worker(emitted_input, emitted_output, authority, signer);
+		require(emitted && std::ranges::equal(bytes(emitted_output.str()), sealed->bytes()));
+
+		auto wrong_signature = authority;
+		wrong_signature.provider_signature_digest = "sha256:" + std::string(64U, '7');
+		std::istringstream wrong_signature_input{string(execution.host)};
+		std::ostringstream wrong_signature_output;
+		auto signature_rejected = execute_detached_provider_worker(
+			wrong_signature_input, wrong_signature_output, wrong_signature, signer);
+		require(!signature_rejected && wrong_signature_output.str().empty() &&
+				signature_rejected.error().field == "provider_signature");
+
+		auto revoked = authority;
+		revoked.provider_revocation_state = "revoked";
+		std::istringstream revoked_input{string(execution.host)};
+		std::ostringstream revoked_output;
+		auto revocation_rejected =
+			execute_detached_provider_worker(revoked_input, revoked_output, revoked, signer);
+		require(!revocation_rejected && revoked_output.str().empty() &&
+				revocation_rejected.error().field == "provider_revocation");
 	}
 
 	void msvc_worker_authority_parses_only_the_admitted_clangcl_tuple()
@@ -1006,6 +1083,7 @@ int main()
 	provider_worker_emits_one_validated_protocol_authority();
 	gcc_worker_rejects_an_admitted_msvc_frontend_tuple_without_output();
 	msvc_worker_emits_protocol_with_its_own_provenance();
+	msvc_worker_seals_only_validated_protocol_into_a_detached_run();
 	msvc_worker_authority_parses_only_the_admitted_clangcl_tuple();
 	valid_input_emits_bound_detached_observations();
 	worker_output_codec_is_bounded_and_strict();

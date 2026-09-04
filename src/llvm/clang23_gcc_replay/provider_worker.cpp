@@ -375,6 +375,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 			std::ranges::sort(required_features);
 			auto offered_relations = provider->offered_relations;
 			std::ranges::sort(offered_relations);
+			auto provider_signature_digest = provider->signature;
 			sdk::provider::detail::expected_provider_identity expected_identity{
 				authority.provider_id,
 				authority.provider_version,
@@ -398,6 +399,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 				return sdk::unexpected(std::move(validated.error()));
 			return provider_worker_result{std::move(transcript),
 										  std::string{replay->value().replay_plan_digest},
+										  std::move(provider_signature_digest),
 										  std::move(*validated)};
 		}
 		catch (const std::bad_alloc&)
@@ -420,6 +422,58 @@ namespace cxxlens::detail::clang23_gcc_replay
 			return sdk::unexpected(std::move(result.error()));
 		output.write(reinterpret_cast<const char*>(result->protocol_transcript.data()),
 					 static_cast<std::streamsize>(result->protocol_transcript.size()));
+		if (!output)
+			return sdk::unexpected(failure("stdout", "write-failed"));
+		return {};
+	}
+
+	sdk::result<sdk::detail::validated_detached_provider_run>
+	run_detached_provider_worker(std::istream& input,
+								 detached_provider_worker_authority authority,
+								 const sdk::detail::detached_run_signer& signer,
+								 const sdk::import_limits limits)
+	{
+		auto result = run_provider_worker(input, authority.worker, limits);
+		if (!result)
+			return sdk::unexpected(std::move(result.error()));
+		if (!result->provider_signature_digest ||
+			*result->provider_signature_digest != authority.provider_signature_digest)
+			return sdk::unexpected(failure("provider_signature", "launcher-binding-mismatch"));
+		if (authority.provider_revocation_state != "not-revoked")
+			return sdk::unexpected(failure("provider_revocation", "not-trusted"));
+		const auto& task = result->validated_transcript.input_seal.task();
+		return sdk::detail::build_detached_provider_run_from_validated_transcript(
+			{task.task_id,
+			 task.task_input_digest,
+			 task.normalized_invocation_digest,
+			 task.toolchain_digest,
+			 task.environment_digest,
+			 result->replay_plan_digest,
+			 {authority.worker.provider_id,
+			  authority.worker.provider_version,
+			  authority.worker.provider_binary_digest,
+			  authority.worker.provider_semantic_contract_digest,
+			  authority.provider_signature_digest,
+			  authority.provider_revocation_state,
+			  authority.worker.sandbox_policy_digest}},
+			result->protocol_transcript,
+			result->validated_transcript,
+			signer,
+			limits);
+	}
+
+	sdk::result<void>
+	execute_detached_provider_worker(std::istream& input,
+									 std::ostream& output,
+									 detached_provider_worker_authority authority,
+									 const sdk::detail::detached_run_signer& signer,
+									 const sdk::import_limits limits)
+	{
+		auto result = run_detached_provider_worker(input, std::move(authority), signer, limits);
+		if (!result)
+			return sdk::unexpected(std::move(result.error()));
+		output.write(reinterpret_cast<const char*>(result->bytes().data()),
+					 static_cast<std::streamsize>(result->bytes().size()));
 		if (!output)
 			return sdk::unexpected(failure("stdout", "write-failed"));
 		return {};

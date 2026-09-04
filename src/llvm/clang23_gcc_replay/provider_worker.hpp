@@ -6,6 +6,7 @@
  */
 
 #include <istream>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -13,6 +14,7 @@
 #include <cxxlens/sdk/application_analysis.hpp>
 #include <cxxlens/sdk/provider.hpp>
 
+#include "sdk/detached_provider_run_builder_internal.hpp"
 #include "sdk/provider_runtime_internal.hpp"
 
 namespace cxxlens::detail::clang23_gcc_replay
@@ -37,7 +39,16 @@ namespace cxxlens::detail::clang23_gcc_replay
 	{
 		std::vector<std::byte> protocol_transcript;
 		std::string replay_plan_digest;
+		std::optional<std::string> provider_signature_digest;
 		sdk::provider::detail::validated_detached_provider_transcript validated_transcript;
+	};
+
+	/** Trust values supplied by the detached launcher, separately from the provider manifest. */
+	struct detached_provider_worker_authority
+	{
+		provider_worker_authority worker;
+		std::string provider_signature_digest;
+		std::string provider_revocation_state;
 	};
 
 	/** Execute without an output side effect and retain the exact bounded Protocol-v2 result. */
@@ -52,4 +63,19 @@ namespace cxxlens::detail::clang23_gcc_replay
 															std::ostream& output,
 															provider_worker_authority authority,
 															sdk::import_limits limits = {});
+
+	/** Build one authenticated detached envelope without granting Store publication authority. */
+	[[nodiscard]] sdk::result<sdk::detail::validated_detached_provider_run>
+	run_detached_provider_worker(std::istream& input,
+								 detached_provider_worker_authority authority,
+								 const sdk::detail::detached_run_signer& signer,
+								 sdk::import_limits limits = {});
+
+	/** Emit only the canonical authenticated detached-provider-run bytes. */
+	[[nodiscard]] sdk::result<void>
+	execute_detached_provider_worker(std::istream& input,
+									 std::ostream& output,
+									 detached_provider_worker_authority authority,
+									 const sdk::detail::detached_run_signer& signer,
+									 sdk::import_limits limits = {});
 } // namespace cxxlens::detail::clang23_gcc_replay

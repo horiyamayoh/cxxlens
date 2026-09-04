@@ -68,6 +68,8 @@ add_library(
   "${CXXLENS_ROOT}/src/sdk/application_analysis_limits.cpp"
   "${CXXLENS_ROOT}/src/sdk/bounded_canonical_binary_internal.cpp"
   "${CXXLENS_ROOT}/src/sdk/compiler_replay_input_internal.cpp"
+  "${CXXLENS_ROOT}/src/sdk/detached_provider_run_internal.cpp"
+  "${CXXLENS_ROOT}/src/sdk/detached_provider_run_builder_internal.cpp"
   "${CXXLENS_ROOT}/src/sdk/provider.cpp"
   "${CXXLENS_ROOT}/src/sdk/openssl_detached_run_crypto_internal.cpp"
   "${CXXLENS_ROOT}/src/sdk/provider_manifest_codec_internal.cpp"
@@ -143,6 +145,20 @@ if(BUILD_TESTING)
                                                              /permissive-)
   add_test(NAME application-analysis.clangcl-worker
            COMMAND cxxlens-clangcl-worker-test)
+  add_executable(
+    cxxlens-provider-worker-ingress-test
+    "${CXXLENS_ROOT}/tests/unit/adapter/clang23_gcc_replay/worker_ingress_test.cpp"
+  )
+  target_link_libraries(cxxlens-provider-worker-ingress-test
+                        PRIVATE cxxlens_clangcl_worker_core)
+  target_include_directories(cxxlens-provider-worker-ingress-test
+                             PRIVATE "${CXXLENS_ROOT}/src")
+  target_compile_features(cxxlens-provider-worker-ingress-test
+                          PRIVATE cxx_std_23)
+  target_compile_options(cxxlens-provider-worker-ingress-test
+                         PRIVATE /W4 /WX /permissive-)
+  add_test(NAME application-analysis.provider-worker-detached-run
+           COMMAND cxxlens-provider-worker-ingress-test)
   add_executable(
     cxxlens-openssl-detached-run-crypto-test
     "${CXXLENS_ROOT}/tests/unit/sdk/openssl_detached_run_crypto_test.cpp")
