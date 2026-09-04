@@ -17,6 +17,22 @@ namespace cxxlens::sdk::detail
 	{
 		constexpr std::size_t maximum_requested_relations{4096U};
 		constexpr std::size_t maximum_unresolved{10000U};
+		constexpr compiler_replay_frontend_contract gcc_frontend{
+			"clang-23.1.0-gcc-mode",
+			"x86_64-linux-gnu",
+			"clang++",
+			"-fsyntax-only",
+			"clang23-gcc-replay",
+			"clang23-gcc-replay-output-normalizer.v1",
+			"clang_gcc_mode_replay"};
+		constexpr compiler_replay_frontend_contract msvc_frontend{
+			"clang-cl-23.1.0",
+			"x86_64-pc-windows-msvc",
+			"clang-cl",
+			"/Zs",
+			"clangcl23-msvc-replay",
+			"clangcl23-msvc-replay-output-normalizer.v1",
+			"clang_cl_msvc_replay"};
 
 		[[nodiscard]] error invalid(std::string field, std::string detail)
 		{
@@ -185,20 +201,25 @@ namespace cxxlens::sdk::detail
 		}
 	} // namespace
 
-	result<void>
-	validate_compiler_replay_frontend(const std::string_view analysis_frontend,
-									  const std::string_view target_abi,
-									  const std::span<const std::string> effective_arguments)
+	result<compiler_replay_frontend_contract>
+	resolve_compiler_replay_frontend(const std::string_view analysis_frontend,
+									 const std::string_view target_abi,
+									 const std::span<const std::string> effective_arguments)
 	{
-		const bool gcc = analysis_frontend == "clang-23.1.0-gcc-mode" &&
-			target_abi == "x86_64-linux-gnu" && effective_arguments.size() >= 2U &&
-			effective_arguments[0] == "clang++" && effective_arguments[1] == "-fsyntax-only";
-		const bool msvc = analysis_frontend == "clang-cl-23.1.0" &&
-			target_abi == "x86_64-pc-windows-msvc" && effective_arguments.size() >= 2U &&
-			effective_arguments[0] == "clang-cl" && effective_arguments[1] == "/Zs";
-		if (!gcc && !msvc)
-			return unexpected(invalid("frontend", "unsupported-tuple"));
-		return {};
+		for (const auto& contract : {gcc_frontend, msvc_frontend})
+			if (analysis_frontend == contract.analysis_frontend &&
+				target_abi == contract.target_abi && effective_arguments.size() >= 2U &&
+				effective_arguments[0] == contract.executable &&
+				effective_arguments[1] == contract.mode_argument)
+				return contract;
+		return unexpected(invalid("frontend", "unsupported-tuple"));
+	}
+
+	bool
+	is_compiler_replay_observation_technique(const std::string_view observation_technique) noexcept
+	{
+		return observation_technique == gcc_frontend.observation_technique ||
+			observation_technique == msvc_frontend.observation_technique;
 	}
 
 	result<validated_compiler_replay_input>
@@ -233,7 +254,7 @@ namespace cxxlens::sdk::detail
 			if (draft.effective_arguments.size() < 2U ||
 				draft.effective_arguments.size() > limits.maximum_arguments_per_unit)
 				return unexpected(invalid("effective_argv", "shape"));
-			if (auto valid = validate_compiler_replay_frontend(
+			if (auto valid = resolve_compiler_replay_frontend(
 					draft.analysis_frontend, draft.target_abi, draft.effective_arguments);
 				!valid)
 				return unexpected(std::move(valid.error()));

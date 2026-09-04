@@ -138,6 +138,14 @@ namespace
 		msvc.interpretation = "cc.clangcl23-msvc-replay-1";
 		auto validated = detail::validate_compiler_replay_input(msvc);
 		require(validated);
+		auto msvc_contract = detail::resolve_compiler_replay_frontend(
+			msvc.analysis_frontend, msvc.target_abi, msvc.effective_arguments);
+		require(msvc_contract && msvc_contract->dependency_group == "clangcl23-msvc-replay" &&
+				msvc_contract->output_normalizer == "clangcl23-msvc-replay-output-normalizer.v1" &&
+				msvc_contract->observation_technique == "clang_cl_msvc_replay");
+		require(
+			detail::is_compiler_replay_observation_technique(msvc_contract->observation_technique));
+		require(!detail::is_compiler_replay_observation_technique("compiler-replay-unknown"));
 		auto decoded = detail::decode_compiler_replay_input(validated->bytes());
 		require(decoded && decoded->value().analysis_frontend == msvc.analysis_frontend);
 
@@ -149,6 +157,13 @@ namespace
 		mismatched_mode.effective_arguments.front() = "clang++";
 		auto mode = detail::validate_compiler_replay_input(std::move(mismatched_mode));
 		require(!mode && mode.error().detail == "unsupported-tuple");
+
+		auto gcc = draft();
+		auto gcc_contract = detail::resolve_compiler_replay_frontend(
+			gcc.analysis_frontend, gcc.target_abi, gcc.effective_arguments);
+		require(gcc_contract && gcc_contract->dependency_group == "clang23-gcc-replay" &&
+				gcc_contract->output_normalizer == "clang23-gcc-replay-output-normalizer.v1" &&
+				gcc_contract->observation_technique == "clang_gcc_mode_replay");
 	}
 
 	void decoder_rejects_noncanonical_order_truncation_and_depth()

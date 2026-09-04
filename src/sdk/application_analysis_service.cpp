@@ -587,6 +587,7 @@ namespace cxxlens::sdk
 																   std::move(runtime),
 																   *runtime_receipt,
 																   unit.replay_plan_digest,
+																   unit.observation_technique,
 																   unit.host_partitions);
 			if (!unit_prepared)
 				return unexpected(std::move(unit_prepared.error()));

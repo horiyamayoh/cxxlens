@@ -305,7 +305,7 @@ namespace cxxlens::sdk::detail
 		if (plan.source_closure_digest != unit.source_closure_digest ||
 			plan.target_abi != project.capture->projection.target_abi)
 			return unexpected(unavailable("replay_plan", "capture-binding-mismatch"));
-		if (auto valid = validate_compiler_replay_frontend(
+		if (auto valid = resolve_compiler_replay_frontend(
 				plan.analysis_frontend, plan.target_abi, plan.effective_arguments);
 			!valid)
 			return unexpected(unavailable("replay_plan", valid.error().detail));

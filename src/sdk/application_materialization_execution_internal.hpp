@@ -20,6 +20,7 @@ namespace cxxlens::sdk::detail
 	struct application_materialization_execution_unit
 	{
 		std::string replay_plan_digest;
+		std::string observation_technique;
 		validated_compiler_replay_input provider_input;
 		validated_build_capture capture;
 		validated_materialization_task task;

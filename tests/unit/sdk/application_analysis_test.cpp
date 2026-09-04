@@ -1162,6 +1162,9 @@ namespace
 		require(unit.process.task_input_digest == unit.provider_input.input_digest());
 		require(unit.task.value().provider_input_digest == unit.provider_input.input_digest());
 		require(unit.task.value().capture.semantic_identity() == unit.capture.semantic_identity());
+		require(unit.observation_technique == "clang_gcc_mode_replay");
+		require(unit.task.value().provider_task.dependency_groups ==
+				std::vector<std::string>{"clang23-gcc-replay"});
 		require(unit.task.value().partitions.front().candidate.current.input.precision_profile ==
 				"under_approximation");
 		require(unit.host_partitions.empty());

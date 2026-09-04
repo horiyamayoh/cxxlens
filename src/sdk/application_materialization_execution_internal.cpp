@@ -442,6 +442,10 @@ namespace cxxlens::sdk::detail
 															 capture->value().compile_unit_id);
 			if (!provider_input)
 				return unexpected(std::move(provider_input.error()));
+			auto frontend = resolve_compiler_replay_frontend(
+				plan.analysis_frontend, plan.target_abi, plan.effective_arguments);
+			if (!frontend)
+				return unexpected(std::move(frontend.error()));
 
 			auto condition_identity =
 				identity("application-analysis-condition",
@@ -470,8 +474,8 @@ namespace cxxlens::sdk::detail
 				publication.series.condition_universe_id,
 				"condition:" + *condition_identity,
 				interpretation,
-				{"clang23-gcc-replay"},
-				"clang23-gcc-replay-output-normalizer.v1",
+				{std::string{frontend->dependency_group}},
+				std::string{frontend->output_normalizer},
 				"assumption-set:" + *assumption_identity,
 				plan.unresolved.empty() ? "exact" : "under_approximation",
 				{"compile-unit", plan.compile_unit_id, "covered"},
@@ -521,6 +525,7 @@ namespace cxxlens::sdk::detail
 				cancellation,
 				{}};
 			output.units.push_back({plan.digest,
+									std::string{frontend->observation_technique},
 									std::move(*provider_input),
 									std::move(*capture),
 									std::move(*task),
