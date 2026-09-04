@@ -16,11 +16,16 @@ namespace cxxlens::detail::clang23_gcc_replay
 {
 	inline constexpr std::string_view provider_id = "cxxlens.clang23-gcc-replay";
 	inline constexpr sdk::semantic_version provider_version{1U, 0U, 0U};
+	inline constexpr std::string_view msvc_provider_id = "cxxlens.clangcl23-msvc-replay";
+	inline constexpr sdk::semantic_version msvc_provider_version{1U, 0U, 0U};
 
 	struct provider_worker_authority
 	{
 		sdk::provider::host_transcript_expectation host;
 		std::string provider_semantic_contract_digest;
+		std::string provider_id;
+		sdk::semantic_version provider_version;
+		std::string replay_frontend;
 	};
 
 	/**

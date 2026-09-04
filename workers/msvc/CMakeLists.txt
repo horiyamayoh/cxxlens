@@ -16,6 +16,13 @@ endif()
 
 set(CXXLENS_ROOT "${CMAKE_CURRENT_LIST_DIR}/../..")
 
+find_package(LLVM 23.1.0 EXACT CONFIG REQUIRED)
+find_package(Clang 23.1.0 EXACT CONFIG REQUIRED)
+if(NOT LLVM_PACKAGE_VERSION VERSION_EQUAL "23.1.0")
+  message(
+    FATAL_ERROR "The MSVC replay worker requires exact LLVM 23.1.0 packages")
+endif()
+
 add_library(
   cxxlens_msvc_worker_base STATIC
   "${CXXLENS_ROOT}/src/sdk/common.cpp"
@@ -41,6 +48,39 @@ target_include_directories(cxxlens-msvc-capture PRIVATE "${CXXLENS_ROOT}/src")
 target_compile_features(cxxlens-msvc-capture PRIVATE cxx_std_23)
 target_compile_options(cxxlens-msvc-capture PRIVATE /W4 /WX /permissive-)
 
+add_library(
+  cxxlens_clangcl_worker_core STATIC
+  "${CXXLENS_ROOT}/src/sdk/common.cpp"
+  "${CXXLENS_ROOT}/src/sdk/application_analysis_limits.cpp"
+  "${CXXLENS_ROOT}/src/sdk/bounded_canonical_binary_internal.cpp"
+  "${CXXLENS_ROOT}/src/sdk/compiler_replay_input_internal.cpp"
+  "${CXXLENS_ROOT}/src/protocol_v2/cbor.cpp"
+  "${CXXLENS_ROOT}/src/llvm/clang23_gcc_replay/worker_ingress.cpp"
+  "${CXXLENS_ROOT}/src/llvm/clang23_gcc_replay/worker_observation_codec.cpp"
+  "${CXXLENS_ROOT}/src/llvm/clang23_gcc_replay/worker_observer.cpp"
+  "${CXXLENS_ROOT}/src/llvm/clang23_gcc_replay/worker_parser.cpp")
+target_link_libraries(cxxlens_clangcl_worker_core PRIVATE clang-cpp)
+target_include_directories(
+  cxxlens_clangcl_worker_core PUBLIC "${CXXLENS_ROOT}/include"
+                                     "${CXXLENS_ROOT}/src")
+target_include_directories(cxxlens_clangcl_worker_core SYSTEM
+                           PRIVATE ${LLVM_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS})
+target_compile_definitions(
+  cxxlens_clangcl_worker_core PRIVATE __STDC_CONSTANT_MACROS
+                                      __STDC_FORMAT_MACROS __STDC_LIMIT_MACROS)
+target_compile_features(cxxlens_clangcl_worker_core PUBLIC cxx_std_23)
+target_compile_options(cxxlens_clangcl_worker_core PRIVATE /W4 /WX /permissive-)
+
+add_executable(
+  cxxlens-clangcl-worker-23
+  "${CXXLENS_ROOT}/src/llvm/clang23_gcc_replay/clangcl_worker_main.cpp")
+target_link_libraries(cxxlens-clangcl-worker-23
+                      PRIVATE cxxlens_clangcl_worker_core)
+target_include_directories(cxxlens-clangcl-worker-23
+                           PRIVATE "${CXXLENS_ROOT}/src")
+target_compile_features(cxxlens-clangcl-worker-23 PRIVATE cxx_std_23)
+target_compile_options(cxxlens-clangcl-worker-23 PRIVATE /W4 /WX /permissive-)
+
 include(CTest)
 if(BUILD_TESTING)
   add_test(
@@ -57,9 +97,25 @@ if(BUILD_TESTING)
       "$<TARGET_FILE:cxxlens-msvc-capture>" /nologo)
   set_tests_properties(application-analysis.msvc-proxy-self-recursion
                        PROPERTIES WILL_FAIL TRUE)
+
+  add_executable(
+    cxxlens-clangcl-worker-test
+    "${CXXLENS_ROOT}/tests/unit/adapter/clang23_gcc_replay/clangcl_worker_test.cpp"
+  )
+  target_link_libraries(cxxlens-clangcl-worker-test
+                        PRIVATE cxxlens_clangcl_worker_core)
+  target_include_directories(cxxlens-clangcl-worker-test
+                             PRIVATE "${CXXLENS_ROOT}/src")
+  target_compile_features(cxxlens-clangcl-worker-test PRIVATE cxx_std_23)
+  target_compile_options(cxxlens-clangcl-worker-test PRIVATE /W4 /WX
+                                                             /permissive-)
+  add_test(NAME application-analysis.clangcl-worker
+           COMMAND cxxlens-clangcl-worker-test)
+  add_test(NAME application-analysis.clangcl-worker-version
+           COMMAND cxxlens-clangcl-worker-23 --version)
 endif()
 
-install(TARGETS cxxlens-msvc-capture
+install(TARGETS cxxlens-msvc-capture cxxlens-clangcl-worker-23
         RUNTIME DESTINATION bin COMPONENT application-analysis-msvc-worker)
 install(
   FILES "${CXXLENS_ROOT}/LICENSE" "${CXXLENS_ROOT}/NOTICE"

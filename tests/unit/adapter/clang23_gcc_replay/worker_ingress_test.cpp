@@ -5,7 +5,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <iostream>
 #include <iterator>
+#include <source_location>
 #include <span>
 #include <sstream>
 #include <string>
@@ -23,6 +25,7 @@
 
 #include "llvm/clang23_gcc_replay/observation_normalizer.hpp"
 #include "llvm/clang23_gcc_replay/provider_worker.hpp"
+#include "llvm/clang23_gcc_replay/replay_frontend_authority.hpp"
 #include "llvm/clang23_gcc_replay/source_authority_binder.hpp"
 #include "llvm/clang23_gcc_replay/worker_observation_codec.hpp"
 #include "llvm/clang23_gcc_replay/worker_parser.hpp"
@@ -32,10 +35,14 @@
 namespace
 {
 	template <class value_type>
-	void require(const value_type& condition)
+	void require(const value_type& condition,
+				 const std::source_location location = std::source_location::current())
 	{
 		if (!static_cast<bool>(condition))
+		{
+			std::cerr << location.file_name() << ':' << location.line() << ": requirement failed\n";
 			std::abort();
+		}
 	}
 
 	[[nodiscard]] std::vector<std::byte> bytes(const std::string& value)
@@ -115,7 +122,8 @@ namespace
 		auto draft = input().value();
 		draft.analysis_frontend = "clang-cl-23.1.0";
 		draft.target_abi = "x86_64-pc-windows-msvc";
-		draft.effective_arguments = {"clang-cl", "/Zs", "project://main.cpp"};
+		draft.effective_arguments = {
+			"clang-cl", "/Zs", "/Iproject://include", "project://main.cpp"};
 		draft.interpretation = "cc.clangcl23-msvc-replay-1";
 		auto validated = cxxlens::sdk::detail::validate_compiler_replay_input(std::move(draft));
 		require(validated);
@@ -140,7 +148,8 @@ namespace
 	{
 		std::istringstream source{string(value.bytes())};
 		std::ostringstream output;
-		auto result = cxxlens::detail::clang23_gcc_replay::execute_worker_ingress(source, output);
+		auto result = cxxlens::detail::clang23_gcc_replay::execute_worker_ingress(
+			source, output, cxxlens::detail::clang23_gcc_replay::gcc_replay_frontend_id);
 		require(result);
 		return bytes(output.str());
 	}
@@ -244,10 +253,13 @@ namespace
 		execution.host = std::move(*host);
 		std::istringstream input_stream{string(execution.host)};
 		std::ostringstream output_stream;
-		auto result = execute_provider_worker(
-			input_stream,
-			output_stream,
-			{execution.expectation, execution.manifest.provider_semantic_contract_digest});
+		auto result = execute_provider_worker(input_stream,
+											  output_stream,
+											  {execution.expectation,
+											   execution.manifest.provider_semantic_contract_digest,
+											   std::string{provider_id},
+											   provider_version,
+											   std::string{gcc_replay_frontend_id}});
 		require(result);
 		execution.output = bytes(output_stream.str());
 		return execution;
@@ -344,18 +356,25 @@ namespace
 		truncated.pop_back();
 		std::istringstream truncated_stream{string(truncated)};
 		std::ostringstream rejected_output;
-		auto rejected = execute_provider_worker(
-			truncated_stream,
-			rejected_output,
-			{execution.expectation, execution.manifest.provider_semantic_contract_digest});
+		auto rejected =
+			execute_provider_worker(truncated_stream,
+									rejected_output,
+									{execution.expectation,
+									 execution.manifest.provider_semantic_contract_digest,
+									 std::string{provider_id},
+									 provider_version,
+									 std::string{gcc_replay_frontend_id}});
 		require(!rejected && rejected_output.str().empty());
 
 		std::istringstream valid_host_stream{string(execution.host)};
 		std::ostringstream invalid_authority_output;
-		auto invalid_authority =
-			execute_provider_worker(valid_host_stream,
-									invalid_authority_output,
-									{execution.expectation, "sha256:" + std::string(64U, 'b')});
+		auto invalid_authority = execute_provider_worker(valid_host_stream,
+														 invalid_authority_output,
+														 {execution.expectation,
+														  "sha256:" + std::string(64U, 'b'),
+														  std::string{provider_id},
+														  provider_version,
+														  std::string{gcc_replay_frontend_id}});
 		require(!invalid_authority && invalid_authority_output.str().empty());
 	}
 
@@ -367,7 +386,7 @@ namespace
 
 		std::istringstream raw_input{string(value.bytes())};
 		std::ostringstream raw_output;
-		auto raw = execute_worker_ingress(raw_input, raw_output);
+		auto raw = execute_worker_ingress(raw_input, raw_output, gcc_replay_frontend_id);
 		require(!raw && raw.error().field == "replay_input" &&
 				raw.error().detail == "wrong-worker-frontend" && raw_output.str().empty());
 
@@ -388,13 +407,38 @@ namespace
 		require(host);
 		std::istringstream protocol_input{string(*host)};
 		std::ostringstream protocol_output;
-		auto protocol =
-			execute_provider_worker(protocol_input,
-									protocol_output,
-									{expectation, manifest.provider_semantic_contract_digest});
+		auto protocol = execute_provider_worker(protocol_input,
+												protocol_output,
+												{expectation,
+												 manifest.provider_semantic_contract_digest,
+												 std::string{provider_id},
+												 provider_version,
+												 std::string{gcc_replay_frontend_id}});
 		require(!protocol && protocol.error().field == "replay_input" &&
 				protocol.error().detail == "wrong-worker-frontend" &&
 				protocol_output.str().empty());
+	}
+
+	void msvc_worker_authority_parses_only_the_admitted_clangcl_tuple()
+	{
+		using namespace cxxlens::detail::clang23_gcc_replay;
+		auto value = msvc_input();
+		std::istringstream source{string(value.bytes())};
+		std::ostringstream output;
+		auto accepted = execute_worker_ingress(source, output, msvc_replay_frontend_id);
+		require(accepted);
+		auto decoded = decode_worker_observations(bytes(output.str()));
+		require(decoded && decoded->replay_input_digest == value.input_digest() &&
+				decoded->error_count == 0U && decoded->declaration_count > 0U &&
+				!decoded->observations.entities.empty());
+
+		auto gcc = input();
+		std::istringstream foreign_source{string(gcc.bytes())};
+		std::ostringstream foreign_output;
+		auto rejected =
+			execute_worker_ingress(foreign_source, foreign_output, msvc_replay_frontend_id);
+		require(!rejected && rejected.error().field == "replay_input" &&
+				rejected.error().detail == "wrong-worker-frontend" && foreign_output.str().empty());
 	}
 
 	void valid_input_emits_bound_detached_observations()
@@ -465,7 +509,9 @@ namespace
 		std::istringstream truncated{malformed};
 		std::ostringstream truncated_output;
 		auto rejected = cxxlens::detail::clang23_gcc_replay::execute_worker_ingress(
-			truncated, truncated_output);
+			truncated,
+			truncated_output,
+			cxxlens::detail::clang23_gcc_replay::gcc_replay_frontend_id);
 		require(!rejected && truncated_output.str().empty());
 
 		cxxlens::sdk::import_limits limits;
@@ -473,7 +519,10 @@ namespace
 		std::istringstream large{string(value.bytes())};
 		std::ostringstream large_output;
 		auto bounded = cxxlens::detail::clang23_gcc_replay::execute_worker_ingress(
-			large, large_output, limits);
+			large,
+			large_output,
+			cxxlens::detail::clang23_gcc_replay::gcc_replay_frontend_id,
+			limits);
 		require(!bounded && bounded.error().code == "application-analysis.import-limit-exceeded" &&
 				bounded.error().detail == "input-bytes");
 		require(large_output.str().empty());
@@ -586,7 +635,9 @@ namespace
 		std::istringstream syntax_stream{string(syntax_input->bytes())};
 		std::ostringstream syntax_output;
 		auto worker_rejected = cxxlens::detail::clang23_gcc_replay::execute_worker_ingress(
-			syntax_stream, syntax_output);
+			syntax_stream,
+			syntax_output,
+			cxxlens::detail::clang23_gcc_replay::gcc_replay_frontend_id);
 		require(!worker_rejected && worker_rejected.error().field == "translation_unit" &&
 				syntax_output.str().empty());
 
@@ -884,6 +935,7 @@ int main()
 {
 	provider_worker_emits_one_validated_protocol_authority();
 	gcc_worker_rejects_an_admitted_msvc_frontend_tuple_without_output();
+	msvc_worker_authority_parses_only_the_admitted_clangcl_tuple();
 	valid_input_emits_bound_detached_observations();
 	worker_output_codec_is_bounded_and_strict();
 	malformed_and_oversized_input_fail_without_output();

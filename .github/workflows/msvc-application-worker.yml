@@ -70,12 +70,18 @@ jobs:
           cmake -S workers/msvc -B build/msvc-worker -G Ninja `
             -DBUILD_TESTING=ON `
             -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_CXX_COMPILER="$env:CXXLENS_CLANG_CL_ROOT\bin\clang-cl.exe"
+            -DCMAKE_CXX_COMPILER="$env:CXXLENS_CLANG_CL_ROOT\bin\clang-cl.exe" `
+            -DLLVM_DIR="$env:CXXLENS_CLANG_CL_ROOT\lib\cmake\llvm" `
+            -DClang_DIR="$env:CXXLENS_CLANG_CL_ROOT\lib\cmake\clang"
           cmake --build build/msvc-worker
           ctest --test-dir build/msvc-worker --output-on-failure
           $prefix = Join-Path $env:RUNNER_TEMP 'cxxlens worker relocated'
           cmake --install build/msvc-worker --prefix $prefix `
             --component application-analysis-msvc-worker
+          $workerVersion = & "$prefix\bin\cxxlens-clangcl-worker-23.exe" --version
+          if ($LASTEXITCODE -ne 0 -or $workerVersion -ne 'cxxlens-clangcl-worker-23 23.1.0') {
+            throw 'Relocated exact clang-cl replay worker did not execute'
+          }
           & "$prefix\bin\cxxlens-msvc-capture.exe" --check-vector `
             tests/fixtures/msvc_application_analysis/canonical_capture.sha256
           $fixture = Join-Path $env:RUNNER_TEMP 'cxxlens proxy fixture'

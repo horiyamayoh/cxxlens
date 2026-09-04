@@ -204,6 +204,21 @@ if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
       LABELS
       "unit;adapter;application-analysis;clang23;gcc;replay;worker;codec;ast;lifetime;identity;bounded;negative;fault;determinism;resource;security"
   )
+
+  cxxlens_add_test_executable(
+    cxxlens-unit-clangcl23-worker
+    unit/adapter/clang23_gcc_replay/clangcl_worker_test.cpp)
+  target_link_libraries(cxxlens-unit-clangcl23-worker
+                        PRIVATE cxxlens_clang23_gcc_replay_ingress)
+  target_include_directories(cxxlens-unit-clangcl23-worker
+                             PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  add_test(NAME adapter.clangcl23-worker COMMAND cxxlens-unit-clangcl23-worker)
+  set_tests_properties(
+    adapter.clangcl23-worker
+    PROPERTIES
+      LABELS
+      "unit;adapter;application-analysis;clang23;clangcl;msvc;replay;worker;ast;lifetime;identity;bounded;negative;fault;determinism;resource;security"
+  )
 endif()
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-sealed-executable

@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "provider_worker.hpp"
+#include "replay_frontend_authority.hpp"
 
 namespace
 {
@@ -55,7 +56,10 @@ int main()
 		{std::move(*manifest),
 		 {*task_id, *task_digest, *invocation, *toolchain, *effective_environment},
 		 limits},
-		std::move(*semantic_contract)};
+		std::move(*semantic_contract),
+		std::string{cxxlens::detail::clang23_gcc_replay::provider_id},
+		cxxlens::detail::clang23_gcc_replay::provider_version,
+		std::string{cxxlens::detail::clang23_gcc_replay::gcc_replay_frontend_id}};
 	auto validated = cxxlens::detail::clang23_gcc_replay::execute_provider_worker(
 		std::cin, std::cout, std::move(authority));
 	if (!validated)

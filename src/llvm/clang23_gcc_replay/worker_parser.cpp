@@ -26,7 +26,11 @@ namespace cxxlens::detail::clang23_gcc_replay
 	namespace
 	{
 		constexpr std::string_view logical_root{"project://"};
+#if defined(_WIN32)
+		constexpr std::string_view synthetic_root{"C:/__cxxlens_replay__"};
+#else
 		constexpr std::string_view synthetic_root{"/__cxxlens_gcc_replay__"};
+#endif
 
 		[[nodiscard]] sdk::error failure(std::string field, std::string detail)
 		{
@@ -47,6 +51,12 @@ namespace cxxlens::detail::clang23_gcc_replay
 			constexpr std::array<std::string_view, 4U> joined_path_options{
 				"-idirafter", "-isystem", "-iquote", "-I"};
 			for (const auto option : joined_path_options)
+				if (argument.starts_with(option) &&
+					argument.substr(option.size()).starts_with(logical_root))
+					return std::string{option} + native_path(argument.substr(option.size()));
+			constexpr std::array<std::string_view, 3U> joined_msvc_path_options{
+				"/external:I", "/FI", "/I"};
+			for (const auto option : joined_msvc_path_options)
 				if (argument.starts_with(option) &&
 					argument.substr(option.size()).starts_with(logical_root))
 					return std::string{option} + native_path(argument.substr(option.size()));

@@ -162,6 +162,14 @@ namespace cxxlens::detail::clang23_gcc_replay
 				return sdk::unexpected(std::move(valid.error()));
 			if (!semantic_digest(authority.provider_semantic_contract_digest))
 				return sdk::unexpected(failure("provider", "semantic-contract-invalid"));
+			const bool gcc_authority = authority.replay_frontend == gcc_replay_frontend_id &&
+				authority.provider_id == provider_id &&
+				authority.provider_version == provider_version;
+			const bool msvc_authority = authority.replay_frontend == msvc_replay_frontend_id &&
+				authority.provider_id == msvc_provider_id &&
+				authority.provider_version == msvc_provider_version;
+			if (!gcc_authority && !msvc_authority)
+				return sdk::unexpected(failure("provider", "worker-authority-invalid"));
 			auto encoded = read_input(input, limits);
 			if (!encoded)
 				return sdk::unexpected(std::move(encoded.error()));
@@ -178,7 +186,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 				sdk::detail::resolve_compiler_replay_frontend(replay->value().analysis_frontend,
 															  replay->value().target_abi,
 															  replay->value().effective_arguments);
-			if (!frontend || frontend->analysis_frontend != replay_frontend_id)
+			if (!frontend || frontend->analysis_frontend != authority.replay_frontend)
 				return sdk::unexpected(failure("replay_input", "wrong-worker-frontend"));
 			if (replay->input_digest() != host->task.task_input_digest)
 				return sdk::unexpected(failure("replay_input", "host-digest-mismatch"));
@@ -237,7 +245,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 			auto negotiated = sdk::provider::encode_schema_negotiate_metadata(
 				{"cxxlens.provider-protocol.v2", sdk::provider::protocol_v2_minor});
 			auto accepted = sdk::provider::encode_task_accepted_metadata(
-				{std::string{provider_id}, provider_version.string(), host->task.task_id});
+				{authority.provider_id, authority.provider_version.string(), host->task.task_id});
 			if (!hello || !negotiated || !accepted)
 				return sdk::unexpected(failure("protocol", "control-encoding"));
 			if (auto sent = writer.send(sdk::provider::message_type::hello, *hello); !sent)
