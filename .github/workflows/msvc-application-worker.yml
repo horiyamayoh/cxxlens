@@ -88,15 +88,17 @@ jobs:
           $env:CXXLENS_WINDOWS_SDK_ROOT = "${env:ProgramFiles(x86)}\Windows Kits\10"
           $source = Join-Path $fixture 'unicode ソース.cpp'
           $header = Join-Path $fixture 'fixture header.hpp'
+          $response = Join-Path $fixture 'compile options.rsp'
           $object = Join-Path $fixture 'unicode 出力.obj'
           Set-Content -Path $header -Encoding utf8 -Value 'inline int cxxlens_fixture_value() { return 0; }'
+          Set-Content -Path $response -Encoding utf8 -Value '/nologo /std:c++latest /DCXXLENS_RESPONSE_CAPTURE=1'
           Set-Content -Path $source -Encoding utf8 -Value @'
           #include "fixture header.hpp"
           #include <cstddef>
           int cxxlens_proxy_fixture() { return cxxlens_fixture_value() + static_cast<int>(sizeof(std::size_t)); }
           '@
           Push-Location $fixture
-          & "$prefix\bin\cxxlens-msvc-capture.exe" /nologo /c $source "/Fo$object"
+          & "$prefix\bin\cxxlens-msvc-capture.exe" "@$response" /c $source "/Fo$object"
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path $object)) {
             throw 'MSVC capture proxy did not preserve the real compiler execution'
           }
@@ -104,9 +106,14 @@ jobs:
           if ($bundles.Count -ne 1 -or $bundles[0].Length -eq 0) {
             throw 'Successful MSVC compilation did not publish exactly one capture bundle'
           }
-          & "$prefix\bin\cxxlens-msvc-capture.exe" /nologo /c $source "/Fo$object"
+          & "$prefix\bin\cxxlens-msvc-capture.exe" "@$response" /c $source "/Fo$object"
           if ($LASTEXITCODE -ne 0 -or @(Get-ChildItem $captureDirectory -Filter '*.cxxlens-capture').Count -ne 1) {
             throw 'Repeated identical MSVC capture was not deterministic'
+          }
+          Set-Content -Path $response -Encoding utf8 -Value '/nologo /std:c++latest /DCXXLENS_RESPONSE_CAPTURE=2'
+          & "$prefix\bin\cxxlens-msvc-capture.exe" "@$response" /c $source "/Fo$object"
+          if ($LASTEXITCODE -ne 0 -or @(Get-ChildItem $captureDirectory -Filter '*.cxxlens-capture').Count -ne 2) {
+            throw 'Changed MSVC response-file content was not bound into the capture bundle'
           }
           $failedSource = Join-Path $fixture 'failed.cpp'
           Set-Content -Path $failedSource -Encoding utf8 -Value 'not valid C++'
@@ -114,7 +121,7 @@ jobs:
           & "$prefix\bin\cxxlens-msvc-capture.exe" /nologo /c $failedSource
           $failedExit = $LASTEXITCODE
           $ErrorActionPreference = 'Stop'
-          if ($failedExit -eq 0 -or @(Get-ChildItem $captureDirectory -Filter '*.cxxlens-capture').Count -ne 1) {
+          if ($failedExit -eq 0 -or @(Get-ChildItem $captureDirectory -Filter '*.cxxlens-capture').Count -ne 2) {
             throw 'Failed MSVC compilation published a capture bundle or lost its exit code'
           }
           Pop-Location

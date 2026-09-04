@@ -4,9 +4,13 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <cstring>
+#include <cwchar>
 #include <limits>
+#include <map>
 #include <new>
 #include <ranges>
+#include <set>
 #include <span>
 #include <stdexcept>
 #include <string_view>
@@ -17,6 +21,7 @@
 #include <windows.h>
 
 #include "msvc_capture_bundle.hpp"
+#include "msvc_response_arguments.hpp"
 #include "msvc_source_dependencies.hpp"
 #include "runtime/msvc_capture_file_port.hpp"
 #include "runtime/msvc_process_port.hpp"
@@ -115,6 +120,13 @@ namespace cxxlens::application_analysis_worker
 				_wcsnicmp(value.data(), option.data(), option.size()) == 0;
 		}
 
+		[[nodiscard]] bool source_dependencies_option(const std::string_view value) noexcept
+		{
+			constexpr std::string_view option{"/sourceDependencies"};
+			return value.size() >= option.size() &&
+				_strnicmp(value.data(), option.data(), option.size()) == 0;
+		}
+
 		[[nodiscard]] sdk::result<std::string> configured_project_id()
 		{
 			auto value = environment(L"CXXLENS_MSVC_PROJECT_ID");
@@ -145,6 +157,183 @@ namespace cxxlens::application_analysis_worker
 					return argument.substr(5U);
 			return "c++14";
 		}
+
+		struct windows_path_less
+		{
+			[[nodiscard]] bool operator()(const std::wstring& left,
+										  const std::wstring& right) const noexcept
+			{
+				return _wcsicmp(left.c_str(), right.c_str()) < 0;
+			}
+		};
+
+		struct captured_response_snapshot
+		{
+			std::vector<captured_response_file> files;
+			std::vector<std::string> expanded_arguments;
+			std::uint64_t bytes{};
+		};
+
+		class response_file_capture
+		{
+		  public:
+			response_file_capture(std::wstring project_root, const msvc_capture_limits limits)
+				: project_root_{std::move(project_root)}, limits_{limits},
+				  remaining_bytes_{limits.maximum_source_bytes}
+			{
+			}
+
+			[[nodiscard]] sdk::result<captured_response_snapshot>
+			capture(const std::span<const std::wstring> arguments)
+			{
+				if (arguments.size() >= limits_.maximum_arguments)
+					return sdk::unexpected(capture_error("response_files", "argument-count"));
+				auto expanded = capture_arguments(arguments, std::nullopt, 0U);
+				if (!expanded)
+					return sdk::unexpected(std::move(expanded.error()));
+
+				std::map<std::wstring, std::size_t, windows_path_less> indices;
+				std::size_t index{};
+				for (const auto& [path, file] : files_)
+				{
+					(void)file;
+					indices.emplace(path, index++);
+				}
+				captured_response_snapshot output;
+				output.files.reserve(files_.size());
+				output.expanded_arguments.reserve(expanded->size());
+				output.bytes = limits_.maximum_source_bytes - remaining_bytes_;
+				for (const auto& argument : *expanded)
+				{
+					auto argument_text = utf8(argument);
+					if (!argument_text)
+						return sdk::unexpected(std::move(argument_text.error()));
+					output.expanded_arguments.push_back(std::move(*argument_text));
+				}
+				for (auto& [path, file] : files_)
+				{
+					auto path_text = utf8(path);
+					if (!path_text)
+						return sdk::unexpected(std::move(path_text.error()));
+					std::optional<std::size_t> parent;
+					if (file.parent)
+					{
+						const auto found = indices.find(*file.parent);
+						if (found == indices.end())
+							return sdk::unexpected(
+								capture_error("response_files", "parent-binding"));
+						parent = found->second;
+					}
+					output.files.push_back(
+						{std::move(*path_text), std::move(file.content), parent});
+				}
+				return output;
+			}
+
+		  private:
+			struct file_snapshot
+			{
+				std::vector<std::byte> content;
+				std::optional<std::wstring> parent;
+				std::vector<std::wstring> arguments;
+			};
+
+			[[nodiscard]] sdk::result<std::vector<std::wstring>>
+			capture_arguments(const std::span<const std::wstring> arguments,
+							  const std::optional<std::wstring>& parent,
+							  const std::size_t depth)
+			{
+				std::vector<std::wstring> output;
+				for (const auto& argument : arguments)
+				{
+					if (!argument.starts_with(L'@') || argument.size() == 1U)
+					{
+						if (output.size() >= limits_.maximum_arguments)
+							return sdk::unexpected(
+								capture_error("response_files", "expanded-count"));
+						output.push_back(argument);
+						continue;
+					}
+					if (depth >= limits_.maximum_nesting_depth)
+						return sdk::unexpected(capture_error("response_files", "depth"));
+					std::wstring path_argument{argument.substr(1U)};
+					if (path_argument.size() >= 2U && path_argument.front() == L'"' &&
+						path_argument.back() == L'"')
+						path_argument = path_argument.substr(1U, path_argument.size() - 2U);
+					auto canonical = canonical_worker_file(path_argument);
+					if (!canonical || !under(*canonical, project_root_))
+						return sdk::unexpected(
+							capture_error("response_files", "missing-or-outside-project-root"));
+					if (active_.contains(*canonical))
+						return sdk::unexpected(
+							capture_error("response_files", "recursive-reference"));
+					if (const auto prior = files_.find(*canonical); prior != files_.end())
+					{
+						if (prior->second.parent != parent)
+							return sdk::unexpected(
+								capture_error("response_files", "duplicate-parent-binding"));
+						auto descendants =
+							capture_arguments(prior->second.arguments, *canonical, depth + 1U);
+						if (!descendants)
+							return sdk::unexpected(std::move(descendants.error()));
+						if (descendants->size() > limits_.maximum_arguments - output.size())
+							return sdk::unexpected(
+								capture_error("response_files", "expanded-count"));
+						output.insert(output.end(), descendants->begin(), descendants->end());
+						continue;
+					}
+					if (files_.size() >= limits_.maximum_response_files)
+						return sdk::unexpected(capture_error("response_files", "count"));
+					auto content = read_worker_binary_file(
+						*canonical, static_cast<std::size_t>(remaining_bytes_));
+					if (!content)
+						return sdk::unexpected(capture_error("response_files", "read-or-size"));
+					remaining_bytes_ -= static_cast<std::uint64_t>(content->size());
+					auto parsed =
+						parse_msvc_response_arguments(*content, limits_.maximum_arguments);
+					if (!parsed)
+					{
+						const auto detail =
+							parsed.error() == msvc_response_parse_failure::embedded_nul
+							? "embedded-nul"
+							: parsed.error() == msvc_response_parse_failure::unterminated_quote
+							? "unterminated-quote"
+							: "argument-count";
+						return sdk::unexpected(capture_error("response_files", detail));
+					}
+					std::vector<std::wstring> nested;
+					nested.reserve(parsed->size());
+					for (const auto& token : *parsed)
+					{
+						auto wide = utf16(token);
+						if (!wide)
+							return sdk::unexpected(std::move(wide.error()));
+						nested.push_back(std::move(*wide));
+					}
+					const auto [captured, inserted] = files_.emplace(
+						*canonical, file_snapshot{std::move(*content), parent, std::move(nested)});
+					if (!inserted)
+						return sdk::unexpected(
+							capture_error("response_files", "duplicate-canonical-path"));
+					active_.emplace(*canonical);
+					auto descendants =
+						capture_arguments(captured->second.arguments, *canonical, depth + 1U);
+					active_.erase(*canonical);
+					if (!descendants)
+						return sdk::unexpected(std::move(descendants.error()));
+					if (descendants->size() > limits_.maximum_arguments - output.size())
+						return sdk::unexpected(capture_error("response_files", "expanded-count"));
+					output.insert(output.end(), descendants->begin(), descendants->end());
+				}
+				return output;
+			}
+
+			std::wstring project_root_;
+			msvc_capture_limits limits_;
+			std::uint64_t remaining_bytes_{};
+			std::map<std::wstring, file_snapshot, windows_path_less> files_;
+			std::set<std::wstring, windows_path_less> active_;
+		};
 
 	} // namespace
 
@@ -184,6 +373,33 @@ namespace cxxlens::application_analysis_worker
 				return msvc_capture_command_result{executed->exit_code,
 												   std::nullopt,
 												   capture_error("configuration", "invalid-path")};
+			}
+
+			auto response_files =
+				response_file_capture{*root, msvc_capture_limits{}}.capture(arguments);
+			if (!response_files)
+			{
+				auto executed = run_msvc_process(compiler, arguments);
+				if (!executed)
+					return sdk::unexpected(std::move(executed.error()));
+				compiler_exit_code = executed->exit_code;
+				return msvc_capture_command_result{
+					executed->exit_code, std::nullopt, std::move(response_files.error())};
+			}
+			if (std::ranges::any_of(response_files->expanded_arguments,
+									[](const auto& argument)
+									{
+										return source_dependencies_option(argument);
+									}))
+			{
+				auto executed = run_msvc_process(compiler, arguments);
+				if (!executed)
+					return sdk::unexpected(std::move(executed.error()));
+				compiler_exit_code = executed->exit_code;
+				return msvc_capture_command_result{
+					executed->exit_code,
+					std::nullopt,
+					capture_error("configuration", "source-dependencies-conflict")};
 			}
 
 			(*workspace)->clear_dependency_output();
@@ -270,15 +486,20 @@ namespace cxxlens::application_analysis_worker
 				return msvc_capture_command_result{
 					executed->exit_code, std::nullopt, std::move(include_digest.error())};
 			input.include_search_digest = std::move(*include_digest);
-			input.language_standard = language_standard(input.original_arguments);
+			input.language_standard = language_standard(response_files->expanded_arguments);
+			input.response_files = std::move(response_files->files);
 
 			auto source_text = utf8(*source);
-			auto source_bytes = read_worker_binary_file(*source, maximum_file_bytes);
+			const auto remaining_source_bytes =
+				maximum_file_bytes - static_cast<std::size_t>(response_files->bytes);
+			auto source_bytes = read_worker_binary_file(*source, remaining_source_bytes);
 			if (!source_text || !source_bytes)
 				return msvc_capture_command_result{
 					executed->exit_code, std::nullopt, capture_error("source", "read-or-encoding")};
 			input.main_source = {
 				std::move(*source_text), std::move(*source_bytes), "main", "binary_or_unknown"};
+			std::size_t captured_source_bytes =
+				static_cast<std::size_t>(response_files->bytes) + input.main_source.content.size();
 			for (const auto& dependency : dependencies->includes)
 			{
 				auto dependency_value = utf16(dependency);
@@ -306,7 +527,8 @@ namespace cxxlens::application_analysis_worker
 				if (!path)
 					return msvc_capture_command_result{
 						executed->exit_code, std::nullopt, std::move(path.error())};
-				auto content = read_worker_binary_file(*canonical, maximum_file_bytes);
+				auto content =
+					read_worker_binary_file(*canonical, maximum_file_bytes - captured_source_bytes);
 				if (!content)
 				{
 					if (!input.source_closure_membership)
@@ -317,6 +539,7 @@ namespace cxxlens::application_analysis_worker
 				}
 				input.dependency_sources.push_back(
 					{std::move(*path), std::move(*content), "header", "binary_or_unknown"});
+				captured_source_bytes += input.dependency_sources.back().content.size();
 			}
 
 			auto encoded = encode_msvc_capture_bundle(input);

@@ -24,6 +24,7 @@ add_library(
   "${CXXLENS_ROOT}/src/runtime/msvc_capture_file_port.cpp"
   "${CXXLENS_ROOT}/src/runtime/msvc_process_port.cpp"
   "${CXXLENS_ROOT}/src/msvc_worker/msvc_capture_bundle.cpp"
+  "${CXXLENS_ROOT}/src/msvc_worker/msvc_response_arguments.cpp"
   "${CXXLENS_ROOT}/src/msvc_worker/msvc_capture_session.cpp"
   "${CXXLENS_ROOT}/src/msvc_worker/msvc_source_dependencies.cpp")
 target_compile_features(cxxlens_msvc_worker_base PUBLIC cxx_std_23)

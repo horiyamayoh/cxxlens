@@ -1,10 +1,11 @@
 #include "msvc_replay_planner_internal.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <optional>
 #include <set>
 #include <utility>
+
+#include "msvc_worker/msvc_response_arguments.hpp"
 
 namespace cxxlens::sdk::detail
 {
@@ -119,66 +120,6 @@ namespace cxxlens::sdk::detail
 			return output;
 		}
 
-		[[nodiscard]] result<std::vector<std::string>>
-		parse_response(const std::span<const std::byte> bytes, const import_limits& limits)
-		{
-			std::string text;
-			text.reserve(bytes.size());
-			for (const auto byte : bytes)
-			{
-				const auto value = std::to_integer<unsigned char>(byte);
-				if (value == 0U)
-					return unexpected(invalid("response_files", "embedded-nul"));
-				text.push_back(static_cast<char>(value));
-			}
-			std::vector<std::string> output;
-			std::string token;
-			bool quoted{};
-			std::size_t slashes{};
-			const auto flush = [&]() -> result<void>
-			{
-				if (token.empty())
-					return {};
-				if (output.size() >= limits.maximum_arguments_per_unit)
-					return unexpected(limit("response_files", "argument-count"));
-				output.push_back(std::exchange(token, {}));
-				return {};
-			};
-			for (const char byte : text)
-			{
-				if (byte == '\\')
-				{
-					++slashes;
-					continue;
-				}
-				if (byte == '"')
-				{
-					token.append(slashes / 2U, '\\');
-					if (slashes % 2U != 0U)
-						token.push_back('"');
-					else
-						quoted = !quoted;
-					slashes = 0U;
-					continue;
-				}
-				token.append(slashes, '\\');
-				slashes = 0U;
-				if (!quoted && std::isspace(static_cast<unsigned char>(byte)) != 0)
-				{
-					if (auto added = flush(); !added)
-						return unexpected(std::move(added.error()));
-				}
-				else
-					token.push_back(byte);
-			}
-			token.append(slashes, '\\');
-			if (quoted)
-				return unexpected(invalid("response_files", "unterminated-quote"));
-			if (auto added = flush(); !added)
-				return unexpected(std::move(added.error()));
-			return output;
-		}
-
 		class response_expander
 		{
 		  public:
@@ -221,9 +162,22 @@ namespace cxxlens::sdk::detail
 					if (member == closure_.members.end() || !active_.emplace(*path).second)
 						return unexpected(
 							invalid("response_files", "missing-or-recursive-binding"));
-					auto parsed = parse_response(member->content, limits_);
+					auto parsed = application_analysis_worker::parse_msvc_response_arguments(
+						member->content, limits_.maximum_arguments_per_unit);
 					if (!parsed)
-						return unexpected(std::move(parsed.error()));
+					{
+						if (parsed.error() ==
+							application_analysis_worker::msvc_response_parse_failure::
+								argument_count)
+							return unexpected(limit("response_files", "argument-count"));
+						return unexpected(
+							invalid("response_files",
+									parsed.error() ==
+											application_analysis_worker::
+												msvc_response_parse_failure::embedded_nul
+										? "embedded-nul"
+										: "unterminated-quote"));
+					}
 					auto nested = expand(*parsed, depth + 1U);
 					active_.erase(*path);
 					if (!nested)

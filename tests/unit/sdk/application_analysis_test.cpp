@@ -26,6 +26,7 @@
 #include <cxxlens/sdk/application_analysis.hpp>
 
 #include "msvc_worker/msvc_capture_bundle.hpp"
+#include "msvc_worker/msvc_response_arguments.hpp"
 #include "msvc_worker/msvc_source_dependencies.hpp"
 #include "sdk/application_materialization_execution_internal.hpp"
 
@@ -634,6 +635,35 @@ namespace
 		auto malformed = decode_msvc_source_dependencies(
 			R"json({"Version":"1.2","Data":{"Source":"x","Includes":[1]}})json");
 		require(!malformed && malformed.error().field == "Data.Includes[0]");
+	}
+
+	void msvc_response_tokenization_is_shared_and_bounded()
+	{
+		using namespace cxxlens::application_analysis_worker;
+		const auto bytes = [](const std::string_view text)
+		{
+			std::vector<std::byte> output;
+			output.reserve(text.size());
+			for (const auto byte : text)
+				output.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
+			return output;
+		};
+
+		auto parsed = parse_msvc_response_arguments(
+			bytes(R"rsp(/DNAME="a b" /I"C:\Program Files\SDK" source.cpp)rsp"), 4U);
+		require(
+			parsed &&
+			*parsed ==
+				std::vector<std::string>{"/DNAME=a b", "/IC:\\Program Files\\SDK", "source.cpp"});
+		auto bounded = parse_msvc_response_arguments(bytes("one two"), 1U);
+		require(!bounded && bounded.error() == msvc_response_parse_failure::argument_count);
+		auto unterminated = parse_msvc_response_arguments(bytes("\"open"), 4U);
+		require(!unterminated &&
+				unterminated.error() == msvc_response_parse_failure::unterminated_quote);
+		auto nul = bytes("valid");
+		nul.push_back(std::byte{});
+		auto embedded_nul = parse_msvc_response_arguments(nul, 4U);
+		require(!embedded_nul && embedded_nul.error() == msvc_response_parse_failure::embedded_nul);
 	}
 
 	void allocation_failures_are_typed_at_external_boundaries()
@@ -1345,6 +1375,7 @@ int main()
 	msvc_capture_import_preserves_replay_fidelity();
 	portable_msvc_encoder_round_trips_through_host_authority();
 	msvc_source_dependencies_are_bounded_and_canonical();
+	msvc_response_tokenization_is_shared_and_bounded();
 	allocation_failures_are_typed_at_external_boundaries();
 	toolchain_observation_gaps_are_preserved();
 	duplicate_source_variants_bind_one_closure();

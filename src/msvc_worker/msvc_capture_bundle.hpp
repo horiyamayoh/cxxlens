@@ -18,6 +18,7 @@ namespace cxxlens::application_analysis_worker
 	struct msvc_capture_limits
 	{
 		std::size_t maximum_arguments{4096U};
+		std::size_t maximum_nesting_depth{32U};
 		std::size_t maximum_sources{4096U};
 		std::size_t maximum_response_files{4096U};
 		std::size_t maximum_string_bytes{4096U};
