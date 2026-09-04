@@ -1457,6 +1457,34 @@ namespace
 			unit.process, unit.replay_plan_digest, sink.transcript, signer);
 		require(repeat && repeat->digest() == run->digest() &&
 				std::ranges::equal(repeat->bytes(), run->bytes()));
+		auto validated_transcript =
+			provider::detail::validate_detached_provider_transcript(unit.process, sink.transcript);
+		require(validated_transcript && candidate.description.signature);
+		detached_provider_run_authority detached_authority{
+			unit.process.task_id,
+			unit.process.task_input_digest,
+			unit.process.normalized_invocation_digest,
+			unit.process.toolchain_digest,
+			unit.process.environment_digest,
+			unit.replay_plan_digest,
+			{candidate.description.provider_id,
+			 candidate.description.provider_version,
+			 candidate.description.provider_binary_digest,
+			 candidate.description.provider_semantic_contract_digest,
+			 *candidate.description.signature,
+			 "not-revoked",
+			 unit.process.sandbox.policy_digest}};
+		auto direct = build_detached_provider_run_from_validated_transcript(
+			detached_authority, sink.transcript, *validated_transcript, signer);
+		require(direct && direct->digest() == run->digest() &&
+				std::ranges::equal(direct->bytes(), run->bytes()));
+		detached_authority.task_input_digest = digest('f');
+		auto mismatched = build_detached_provider_run_from_validated_transcript(
+			std::move(detached_authority), sink.transcript, *validated_transcript, signer);
+		require(!mismatched &&
+				mismatched.error().code ==
+					"application-analysis.detached-provider-run-build-failed" &&
+				mismatched.error().detail == "runtime-binding-mismatch");
 		deterministic_detached_run_signer unavailable_signer{true};
 		auto unsigned_run = build_detached_provider_run(
 			unit.process, unit.replay_plan_digest, sink.transcript, unavailable_signer);

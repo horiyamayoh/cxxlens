@@ -40,9 +40,34 @@ namespace cxxlens::sdk::detail
 		std::vector<detached_provenance_projection> provenance;
 	};
 
+	/** Compiler-neutral authority required to bind one validated transcript into an envelope. */
+	struct detached_provider_run_authority
+	{
+		std::string task_id;
+		std::string task_input_digest;
+		std::string normalized_invocation_digest;
+		std::string toolchain_digest;
+		std::string environment_digest;
+		std::string replay_plan_digest;
+		detached_provider_identity provider;
+	};
+
 	/** Project only from the logical validator's immutable sealed transcript. */
 	[[nodiscard]] detached_transcript_projection project_detached_provider_transcript(
 		const provider::detail::sealed_provider_transcript& sealed);
+
+	/**
+	 * Bind a shared logical-validator result to an explicit compiler-neutral run authority and
+	 * sign the canonical envelope. The runtime receipt, sealed transcript, and raw bytes are
+	 * cross-checked before the signer is called.
+	 */
+	[[nodiscard]] result<validated_detached_provider_run>
+	build_detached_provider_run_from_validated_transcript(
+		detached_provider_run_authority authority,
+		std::span<const std::byte> protocol_transcript,
+		const provider::detail::validated_detached_provider_transcript& validated,
+		const detached_run_signer& signer,
+		import_limits limits = {});
 
 	/**
 	 * Re-decode and validate one exact Protocol-v2 stream, project it canonically, and sign the
