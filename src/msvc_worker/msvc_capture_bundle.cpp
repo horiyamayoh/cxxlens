@@ -7,6 +7,7 @@
 #include <new>
 #include <ranges>
 #include <set>
+#include <stdexcept>
 #include <tuple>
 #include <utility>
 
