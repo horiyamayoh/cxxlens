@@ -23,6 +23,11 @@ set(CXXLENS_ROOT "${CMAKE_CURRENT_LIST_DIR}/../..")
 # fallback implementation. LLVM Support does use zlib and zstd, so those
 # packages must be supplied by the caller and are deliberately not stubbed.
 add_library(LibXml2::LibXml2 INTERFACE IMPORTED)
+find_package(ZLIB REQUIRED)
+find_package(zstd CONFIG REQUIRED)
+if(TARGET zstd::libzstd AND NOT TARGET zstd::libzstd_static)
+  add_library(zstd::libzstd_static ALIAS zstd::libzstd)
+endif()
 find_package(LLVM 23.1.0 EXACT CONFIG REQUIRED)
 find_package(Clang 23.1.0 EXACT CONFIG REQUIRED)
 if(NOT LLVM_PACKAGE_VERSION VERSION_EQUAL "23.1.0")
