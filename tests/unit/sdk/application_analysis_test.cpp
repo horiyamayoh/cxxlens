@@ -1460,6 +1460,53 @@ namespace
 		auto validated_transcript =
 			provider::detail::validate_detached_provider_transcript(unit.process, sink.transcript);
 		require(validated_transcript && candidate.description.signature);
+		auto required_features = candidate.description.protocol.required_features;
+		std::ranges::sort(required_features);
+		auto offered_relations = candidate.description.offered_relations;
+		std::ranges::sort(offered_relations);
+		provider::detail::detached_provider_transcript_validation_authority
+			direct_validation_authority{candidate.description,
+										{candidate.description.provider_id,
+										 candidate.description.provider_version,
+										 candidate.description.provider_binary_digest,
+										 candidate.description.provider_semantic_contract_digest,
+										 unit.process.limits.protocol_major,
+										 unit.process.limits.maximum_minor,
+										 required_features,
+										 unit.process.sandbox.policy_digest,
+										 offered_relations},
+										unit.process.output_descriptors,
+										unit.process.limits,
+										unit.process.budget};
+		auto direct_validation =
+			provider::detail::validate_detached_provider_transcript_from_sealed_input(
+				direct_validation_authority, validated_transcript->input_seal, sink.transcript);
+		require(direct_validation);
+		auto process_receipt_digest = provider::detail::provider_runtime_receipt_digest(
+			validated_transcript->runtime_receipt);
+		auto direct_receipt_digest =
+			provider::detail::provider_runtime_receipt_digest(direct_validation->runtime_receipt);
+		require(process_receipt_digest && direct_receipt_digest &&
+				*direct_receipt_digest == *process_receipt_digest);
+		auto wrong_identity = direct_validation_authority;
+		wrong_identity.provider_identity.provider_binary_digest = digest('f');
+		auto identity_mismatch =
+			provider::detail::validate_detached_provider_transcript_from_sealed_input(
+				std::move(wrong_identity), validated_transcript->input_seal, sink.transcript);
+		require(!identity_mismatch &&
+				identity_mismatch.error().code == "provider.binary-identity-mismatch");
+		auto empty_stream =
+			provider::detail::validate_detached_provider_transcript_from_sealed_input(
+				direct_validation_authority, validated_transcript->input_seal, {});
+		require(!empty_stream && empty_stream.error().code == "provider.output-limit" &&
+				empty_stream.error().detail == "detached-transport-bytes");
+		auto wrong_protocol = direct_validation_authority;
+		wrong_protocol.session_limits.maximum_minor = 1U;
+		auto protocol_mismatch =
+			provider::detail::validate_detached_provider_transcript_from_sealed_input(
+				std::move(wrong_protocol), validated_transcript->input_seal, sink.transcript);
+		require(!protocol_mismatch &&
+				protocol_mismatch.error().code == "provider.protocol-minor-mismatch");
 		detached_provider_run_authority detached_authority{
 			unit.process.task_id,
 			unit.process.task_input_digest,

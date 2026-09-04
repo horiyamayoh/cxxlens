@@ -569,6 +569,23 @@ namespace cxxlens::sdk::provider::detail
 		provider_runtime_receipt runtime_receipt;
 	};
 
+	/** Value-owned logical authority for one already-executed detached provider stream. */
+	struct CXXLENS_PROVIDER_DETAIL_HIDDEN detached_provider_transcript_validation_authority
+	{
+		manifest provider;
+		expected_provider_identity provider_identity;
+		std::vector<relation_descriptor> output_descriptors;
+		protocol_limits session_limits;
+		execution_budget budget;
+	};
+
+	/** Validate provider output directly from a validator-issued host-input seal. */
+	[[nodiscard]] CXXLENS_PROVIDER_DETAIL_HIDDEN result<validated_detached_provider_transcript>
+	validate_detached_provider_transcript_from_sealed_input(
+		detached_provider_transcript_validation_authority authority,
+		sealed_host_input input_seal,
+		std::span<const std::byte> raw_frame_stream);
+
 	/**
 	 * Validate the source-private handoff from an accepted process task to materialization.
 	 *
