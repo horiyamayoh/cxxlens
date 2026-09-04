@@ -16,13 +16,12 @@ endif()
 
 set(CXXLENS_ROOT "${CMAKE_CURRENT_LIST_DIR}/../..")
 
-# The official Windows LLVM archive exports static component targets whose
-# interfaces name optional compression/XML packages that the archive does not
-# ship. This worker does not use those facilities. Satisfy only CMake's global
-# imported-target validation; any accidental code reference remains an
-# unresolved linker error rather than a fallback implementation.
-add_library(ZLIB::ZLIB INTERFACE IMPORTED)
-add_library(zstd::libzstd_static INTERFACE IMPORTED)
+# The official Windows LLVM archive exports an XML package dependency but does
+# not ship it. The worker does not use the Windows manifest library that owns
+# that dependency. Satisfy only CMake's global imported-target validation; an
+# accidental XML code reference remains an unresolved linker error rather than a
+# fallback implementation. LLVM Support does use zlib and zstd, so those
+# packages must be supplied by the caller and are deliberately not stubbed.
 add_library(LibXml2::LibXml2 INTERFACE IMPORTED)
 find_package(LLVM 23.1.0 EXACT CONFIG REQUIRED)
 find_package(Clang 23.1.0 EXACT CONFIG REQUIRED)
@@ -62,6 +61,7 @@ add_library(
   "${CXXLENS_ROOT}/src/sdk/application_analysis_limits.cpp"
   "${CXXLENS_ROOT}/src/sdk/bounded_canonical_binary_internal.cpp"
   "${CXXLENS_ROOT}/src/sdk/compiler_replay_input_internal.cpp"
+  "${CXXLENS_ROOT}/src/sdk/source_identity_internal.cpp"
   "${CXXLENS_ROOT}/src/protocol_v2/cbor.cpp"
   "${CXXLENS_ROOT}/src/llvm/clang23_gcc_replay/worker_ingress.cpp"
   "${CXXLENS_ROOT}/src/llvm/clang23_gcc_replay/worker_observation_codec.cpp"

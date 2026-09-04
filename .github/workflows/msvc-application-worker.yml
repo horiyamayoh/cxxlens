@@ -68,10 +68,18 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $true
           Import-Module "$env:CXXLENS_VS_ROOT\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
           Enter-VsDevShell -VsInstallPath $env:CXXLENS_VS_ROOT -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64'
+          $vcpkg = Join-Path $env:VCPKG_INSTALLATION_ROOT 'vcpkg.exe'
+          $vcpkgRevision = (& git -C $env:VCPKG_INSTALLATION_ROOT rev-parse HEAD).Trim()
+          if (-not $vcpkgRevision.StartsWith('f74a2eade1')) {
+            throw "Pinned runner vcpkg revision differs: $vcpkgRevision"
+          }
+          & $vcpkg install zlib:x64-windows-static zstd:x64-windows-static --clean-after-build
           cmake -S workers/msvc -B build/msvc-worker -G Ninja `
             -DBUILD_TESTING=ON `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_CXX_COMPILER="$env:CXXLENS_CLANG_CL_ROOT\bin\clang-cl.exe" `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static `
             -DLLVM_DIR="$env:CXXLENS_CLANG_CL_ROOT\lib\cmake\llvm" `
             -DClang_DIR="$env:CXXLENS_CLANG_CL_ROOT\lib\cmake\clang"
           cmake --build build/msvc-worker
