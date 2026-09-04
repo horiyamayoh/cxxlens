@@ -5,6 +5,7 @@
  * @brief Immutable bounded codec for cxxlens.detached-provider-run.v1.
  */
 
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -17,6 +18,8 @@
 
 namespace cxxlens::sdk::detail
 {
+	inline constexpr std::size_t detached_provider_run_signature_bytes{64U};
+
 	enum class detached_provider_terminal : std::uint8_t
 	{
 		complete,
@@ -87,6 +90,18 @@ namespace cxxlens::sdk::detail
 		[[nodiscard]] bool operator==(const detached_provenance_projection&) const = default;
 	};
 
+	struct detached_provider_run_authentication
+	{
+		std::string algorithm{"ed25519"};
+		std::string signer_id;
+		std::string key_fingerprint;
+		std::string signed_subject_digest;
+		std::array<std::byte, detached_provider_run_signature_bytes> signature{};
+		std::string signature_digest;
+
+		[[nodiscard]] bool operator==(const detached_provider_run_authentication&) const = default;
+	};
+
 	struct detached_provider_run_draft
 	{
 		std::string task_id;
@@ -100,9 +115,14 @@ namespace cxxlens::sdk::detail
 		std::vector<detached_unresolved_projection> unresolved;
 		std::vector<detached_provenance_projection> provenance;
 		std::optional<std::string> runtime_receipt_digest;
+		detached_provider_run_authentication authentication;
 
 		[[nodiscard]] bool operator==(const detached_provider_run_draft&) const = default;
 	};
+
+	/** Digest every detached-run field except the authentication tuple itself. */
+	[[nodiscard]] result<std::string>
+	detached_provider_run_signed_subject_digest(const detached_provider_run_draft& draft);
 
 	class validated_detached_provider_run
 	{

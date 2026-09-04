@@ -175,10 +175,54 @@ namespace cxxlens::sdk::detail
 			});
 		}
 
-		[[nodiscard]] result<std::vector<std::byte>>
-		encode(const detached_provider_run_draft& draft)
+		[[nodiscard]] canonical_value
+		authentication_value(const detached_provider_run_authentication& value)
 		{
-			return canonical_binary(canonical_value::from_tuple({
+			return canonical_value::from_tuple({
+				canonical_value::from_string(value.algorithm),
+				canonical_value::from_string(value.signer_id),
+				canonical_value::from_string(value.key_fingerprint),
+				canonical_value::from_string(value.signed_subject_digest),
+				canonical_value::from_bytes({value.signature.begin(), value.signature.end()}),
+				canonical_value::from_string(value.signature_digest),
+			});
+		}
+
+		[[nodiscard]] auto partition_order(const detached_partition_projection& value)
+		{
+			return std::tie(value.descriptor_id,
+							value.dependency_group_id,
+							value.atomic_output_group_id,
+							value.batch_id);
+		}
+
+		[[nodiscard]] auto coverage_order(const detached_coverage_projection& value)
+		{
+			return std::tie(value.kind, value.id);
+		}
+
+		[[nodiscard]] auto unresolved_order(const detached_unresolved_projection& value)
+		{
+			return std::tie(value.code, value.subject, value.detail);
+		}
+
+		[[nodiscard]] auto provenance_order(const detached_provenance_projection& value)
+		{
+			return std::tie(value.kind, value.subject, value.producer, value.summary);
+		}
+
+		void canonicalize_projections(detached_provider_run_draft& draft)
+		{
+			std::ranges::sort(draft.partitions, {}, partition_order);
+			std::ranges::sort(draft.coverage, {}, coverage_order);
+			std::ranges::sort(draft.unresolved, {}, unresolved_order);
+			std::ranges::sort(draft.provenance, {}, provenance_order);
+		}
+
+		[[nodiscard]] std::vector<canonical_value>
+		signed_subject_fields(const detached_provider_run_draft& draft)
+		{
+			return {
 				canonical_value::from_string("cxxlens.detached-provider-run.v1"),
 				canonical_value::from_string(draft.task_id),
 				canonical_value::from_string(draft.task_input_digest),
@@ -193,7 +237,15 @@ namespace cxxlens::sdk::detail
 				draft.runtime_receipt_digest
 					? canonical_value::from_string(*draft.runtime_receipt_digest)
 					: canonical_value::null(),
-			}));
+			};
+		}
+
+		[[nodiscard]] result<std::vector<std::byte>>
+		encode(const detached_provider_run_draft& draft)
+		{
+			auto fields = signed_subject_fields(draft);
+			fields.push_back(authentication_value(draft.authentication));
+			return canonical_binary(canonical_value::from_tuple(std::move(fields)));
 		}
 
 		[[nodiscard]] result<const std::vector<canonical_value>*>
@@ -261,6 +313,29 @@ namespace cxxlens::sdk::detail
 		}
 	} // namespace
 
+	result<std::string>
+	detached_provider_run_signed_subject_digest(const detached_provider_run_draft& draft)
+	{
+		try
+		{
+			auto canonical = draft;
+			canonicalize_projections(canonical);
+			auto encoded =
+				canonical_binary(canonical_value::from_tuple(signed_subject_fields(canonical)));
+			if (!encoded)
+				return unexpected(invalid("run_authentication", "subject-encoding"));
+			return content_digest(*encoded);
+		}
+		catch (const std::bad_alloc&)
+		{
+			return unexpected(limit("run_authentication", "allocation"));
+		}
+		catch (const std::length_error&)
+		{
+			return unexpected(limit("run_authentication", "allocation-length"));
+		}
+	}
+
 	result<validated_detached_provider_run>
 	validate_detached_provider_run(detached_provider_run_draft draft, const import_limits limits)
 	{
@@ -324,7 +399,6 @@ namespace cxxlens::sdk::detail
 				if (!digest_like(*draft.runtime_receipt_digest))
 					return unexpected(invalid("runtime_receipt_digest", "spelling"));
 			}
-
 			std::uint64_t rows{};
 			for (std::size_t index{}; index < draft.partitions.size(); ++index)
 			{
@@ -409,48 +483,50 @@ namespace cxxlens::sdk::detail
 					return unexpected(invalid(prefix + ".kind", "registered-symbol"));
 			}
 
-			const auto partition_order = [](const auto& value)
-			{
-				return std::tie(value.descriptor_id,
-								value.dependency_group_id,
-								value.atomic_output_group_id,
-								value.batch_id);
-			};
-			std::ranges::sort(draft.partitions, {}, partition_order);
-			std::ranges::sort(draft.coverage,
-							  {},
-							  [](const auto& value)
-							  {
-								  return std::tie(value.kind, value.id);
-							  });
-			std::ranges::sort(draft.unresolved,
-							  {},
-							  [](const auto& value)
-							  {
-								  return std::tie(value.code, value.subject, value.detail);
-							  });
-			std::ranges::sort(draft.provenance,
-							  {},
-							  [](const auto& value)
-							  {
-								  return std::tie(
-									  value.kind, value.subject, value.producer, value.summary);
-							  });
-			for (const auto duplicate :
-				 {
+			canonicalize_projections(draft);
+			for (const auto duplicate : {
 					 std::ranges::adjacent_find(draft.partitions, {}, partition_order) !=
 						 draft.partitions.end(),
-					 std::ranges::adjacent_find(draft.coverage,
-												{},
-												[](const auto& value)
-												{
-													return std::tie(value.kind, value.id);
-												}) != draft.coverage.end(),
+					 std::ranges::adjacent_find(draft.coverage, {}, coverage_order) !=
+						 draft.coverage.end(),
 					 std::ranges::adjacent_find(draft.unresolved) != draft.unresolved.end(),
 					 std::ranges::adjacent_find(draft.provenance) != draft.provenance.end(),
 				 })
 				if (duplicate)
 					return unexpected(invalid("projection", "duplicate"));
+
+			for (const auto& [field, value] : {
+					 std::pair{std::string{"run_authentication.algorithm"},
+							   &draft.authentication.algorithm},
+					 std::pair{std::string{"run_authentication.signer_id"},
+							   &draft.authentication.signer_id},
+					 std::pair{std::string{"run_authentication.key_fingerprint"},
+							   &draft.authentication.key_fingerprint},
+					 std::pair{std::string{"run_authentication.signed_subject_digest"},
+							   &draft.authentication.signed_subject_digest},
+					 std::pair{std::string{"run_authentication.signature_digest"},
+							   &draft.authentication.signature_digest},
+				 })
+				if (auto valid = text(*value, field, false, limits, metadata_bytes); !valid)
+					return unexpected(std::move(valid.error()));
+			if (draft.authentication.algorithm != "ed25519")
+				return unexpected(invalid("run_authentication.algorithm", "unsupported"));
+			if (auto valid =
+					strong_id(draft.authentication.signer_id, "run_authentication.signer_id");
+				!valid)
+				return unexpected(std::move(valid.error()));
+			for (const auto* value : {&draft.authentication.key_fingerprint,
+									  &draft.authentication.signed_subject_digest,
+									  &draft.authentication.signature_digest})
+				if (!digest_like(*value))
+					return unexpected(invalid("run_authentication", "digest"));
+			const std::vector<std::byte> signature{draft.authentication.signature.begin(),
+												   draft.authentication.signature.end()};
+			if (content_digest(signature) != draft.authentication.signature_digest)
+				return unexpected(invalid("run_authentication.signature", "digest-mismatch"));
+			auto signed_subject = detached_provider_run_signed_subject_digest(draft);
+			if (!signed_subject || *signed_subject != draft.authentication.signed_subject_digest)
+				return unexpected(invalid("run_authentication", "subject-mismatch"));
 
 			const bool adoptable = draft.terminal == detached_provider_terminal::complete ||
 				draft.terminal == detached_provider_terminal::partial;
@@ -498,7 +574,7 @@ namespace cxxlens::sdk::detail
 				maximum_canonical_values);
 			if (!root)
 				return unexpected(std::move(root.error()));
-			auto fields = tuple(*root, "root", 12U);
+			auto fields = tuple(*root, "root", 13U);
 			if (!fields)
 				return unexpected(std::move(fields.error()));
 			auto schema = string((**fields)[0], "schema");
@@ -681,6 +757,30 @@ namespace cxxlens::sdk::detail
 					return unexpected(std::move(receipt.error()));
 				draft.runtime_receipt_digest = std::move(*receipt);
 			}
+			auto authentication = tuple((**fields)[12], "run_authentication", 6U);
+			if (!authentication || (**authentication)[4].type != canonical_value::kind::bytes ||
+				(**authentication)[4].byte_string.size() != detached_provider_run_signature_bytes)
+				return unexpected(invalid("run_authentication", "tuple-shape"));
+			for (const auto& [index, field, destination] : {
+					 std::tuple{0U, std::string{"algorithm"}, &draft.authentication.algorithm},
+					 std::tuple{1U, std::string{"signer_id"}, &draft.authentication.signer_id},
+					 std::tuple{
+						 2U, std::string{"key_fingerprint"}, &draft.authentication.key_fingerprint},
+					 std::tuple{3U,
+								std::string{"signed_subject_digest"},
+								&draft.authentication.signed_subject_digest},
+					 std::tuple{5U,
+								std::string{"signature_digest"},
+								&draft.authentication.signature_digest},
+				 })
+			{
+				auto decoded = string((**authentication)[index], field);
+				if (!decoded)
+					return unexpected(std::move(decoded.error()));
+				*destination = std::move(*decoded);
+			}
+			std::ranges::copy((**authentication)[4].byte_string,
+							  draft.authentication.signature.begin());
 
 			auto validated = validate_detached_provider_run(std::move(draft), limits);
 			if (!validated)

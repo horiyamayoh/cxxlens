@@ -22,6 +22,22 @@ namespace
 		return "sha256:" + std::string(64U, digit);
 	}
 
+	void authenticate(cxxlens::sdk::detail::detached_provider_run_draft& value)
+	{
+		using namespace cxxlens::sdk;
+		using namespace cxxlens::sdk::detail;
+		value.authentication.signer_id = "worker:clangcl23-msvc-replay";
+		value.authentication.key_fingerprint = digest('e');
+		for (std::size_t index{}; index < value.authentication.signature.size(); ++index)
+			value.authentication.signature[index] = static_cast<std::byte>(index);
+		const std::vector<std::byte> signature{value.authentication.signature.begin(),
+											   value.authentication.signature.end()};
+		value.authentication.signature_digest = content_digest(signature);
+		auto subject = detached_provider_run_signed_subject_digest(value);
+		require(subject);
+		value.authentication.signed_subject_digest = std::move(*subject);
+	}
+
 	[[nodiscard]] cxxlens::sdk::detail::detached_provider_run_draft draft()
 	{
 		using namespace cxxlens::sdk::detail;
@@ -67,6 +83,7 @@ namespace
 			{"application-analysis.capture", "compile-unit:main", "cl.exe-14.51", digest('c')},
 		};
 		value.runtime_receipt_digest = "provider-runtime-receipt:" + digest('d');
+		authenticate(value);
 		return value;
 	}
 
@@ -121,6 +138,7 @@ namespace
 		using namespace cxxlens::sdk::detail;
 		auto failed = draft();
 		failed.terminal = detached_provider_terminal::failed;
+		authenticate(failed);
 		auto publication = validate_detached_provider_run(std::move(failed));
 		require(!publication && publication.error().detail == "publication-candidate-forbidden");
 
@@ -128,12 +146,14 @@ namespace
 		terminal_only.terminal = detached_provider_terminal::failed;
 		terminal_only.partitions.clear();
 		terminal_only.runtime_receipt_digest.reset();
+		authenticate(terminal_only);
 		auto admitted_terminal = validate_detached_provider_run(std::move(terminal_only));
 		require(admitted_terminal);
 
 		auto empty_partial = draft();
 		empty_partial.partitions.clear();
 		empty_partial.unresolved.clear();
+		authenticate(empty_partial);
 		auto partial = validate_detached_provider_run(std::move(empty_partial));
 		require(!partial && partial.error().detail == "empty-partial");
 
@@ -146,6 +166,40 @@ namespace
 		duplicate.coverage.push_back(duplicate.coverage.front());
 		auto duplicate_result = validate_detached_provider_run(std::move(duplicate));
 		require(!duplicate_result && duplicate_result.error().detail == "duplicate");
+	}
+
+	void run_authentication_is_bound_and_fail_closed()
+	{
+		using namespace cxxlens::sdk;
+		using namespace cxxlens::sdk::detail;
+		auto transcript_tamper = draft();
+		transcript_tamper.protocol_transcript.front() ^= std::byte{0x01};
+		auto transcript_result = validate_detached_provider_run(std::move(transcript_tamper));
+		require(!transcript_result && transcript_result.error().detail == "subject-mismatch");
+
+		auto signature_tamper = draft();
+		signature_tamper.authentication.signature.front() ^= std::byte{0x01};
+		auto signature_result = validate_detached_provider_run(std::move(signature_tamper));
+		require(!signature_result &&
+				signature_result.error().field == "run_authentication.signature" &&
+				signature_result.error().detail == "digest-mismatch");
+
+		auto unsupported = draft();
+		unsupported.authentication.algorithm = "rsa";
+		auto algorithm_result = validate_detached_provider_run(std::move(unsupported));
+		require(!algorithm_result &&
+				algorithm_result.error().field == "run_authentication.algorithm");
+
+		auto value = validate_detached_provider_run(draft());
+		require(value);
+		auto root = canonical_binary_decode(value->bytes());
+		require(root);
+		root->tuple[12].tuple[4] = canonical_value::from_bytes({std::byte{0x01}});
+		auto malformed = canonical_binary(*root);
+		require(malformed);
+		auto malformed_result = decode_detached_provider_run(*malformed);
+		require(!malformed_result && malformed_result.error().field == "run_authentication" &&
+				malformed_result.error().detail == "tuple-shape");
 	}
 
 	void resource_limits_are_checked_before_canonical_allocation()
@@ -186,5 +240,6 @@ int main()
 	canonical_round_trip_is_deterministic();
 	malformed_and_noncanonical_wire_fail_closed();
 	terminal_projection_and_identity_rules_are_fail_closed();
+	run_authentication_is_bound_and_fail_closed();
 	resource_limits_are_checked_before_canonical_allocation();
 }
