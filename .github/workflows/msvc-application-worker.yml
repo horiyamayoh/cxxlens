@@ -89,6 +89,7 @@ jobs:
           $source = Join-Path $fixture 'unicode ソース.cpp'
           $object = Join-Path $fixture 'unicode 出力.obj'
           Set-Content -Path $source -Encoding utf8 -Value 'int cxxlens_proxy_fixture() { return 0; }'
+          Push-Location $fixture
           & "$prefix\bin\cxxlens-msvc-capture.exe" /nologo /c $source "/Fo$object"
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path $object)) {
             throw 'MSVC capture proxy did not preserve the real compiler execution'
@@ -107,3 +108,4 @@ jobs:
           if ($LASTEXITCODE -eq 0 -or @(Get-ChildItem $captureDirectory -Filter '*.cxxlens-capture').Count -ne 1) {
             throw 'Failed MSVC compilation published a capture bundle or lost its exit code'
           }
+          Pop-Location
