@@ -57,6 +57,7 @@ namespace cxxlens::sdk::provider
 				 canonical_digest(value.substr(semantic_prefix.size())));
 		}
 
+#if !defined(CXXLENS_PROVIDER_HOST_TRANSCRIPT_ONLY)
 		[[nodiscard]] std::string json_string(const std::string_view value)
 		{
 			return cxxlens::sdk::detail::canonical_json_string(value);
@@ -195,6 +196,7 @@ namespace cxxlens::sdk::provider
 			output.maximum_minor = protocol_v2_minor;
 			return output;
 		}
+#endif
 
 		constexpr std::uint64_t canonical_input_chunk_bytes = 1048576U;
 		constexpr std::uint64_t maximum_logical_input_bytes = 67108864U;
@@ -858,6 +860,7 @@ namespace cxxlens::sdk::provider
 			return semantic_digest("cxxlens.provider-input-chunk-payload-set.v1", bytes);
 		}
 
+#if !defined(CXXLENS_PROVIDER_HOST_TRANSCRIPT_ONLY)
 		[[nodiscard]] canonical_value
 		runtime_string_tuple(const std::span<const std::string> values)
 		{
@@ -1026,10 +1029,12 @@ namespace cxxlens::sdk::provider
 															   sealed.unresolved(),
 															   sealed.evidence());
 		}
+#endif
 	} // namespace
 
 	namespace detail
 	{
+#if !defined(CXXLENS_PROVIDER_HOST_TRANSCRIPT_ONLY)
 		provider_runtime_receipt::provider_runtime_receipt(
 			const std::uint64_t raw_stdout_byte_count,
 			std::string raw_stdout_sha256,
@@ -1249,6 +1254,7 @@ namespace cxxlens::sdk::provider
 					"provider.binary-identity-mismatch", provider_id, "expected-provider-invalid"));
 			return {};
 		}
+#endif
 
 		sealed_host_input::sealed_host_input(
 			open_task_metadata task,
@@ -1610,6 +1616,10 @@ namespace cxxlens::sdk::provider
 									 std::move(*digest)};
 		}
 
+#if defined(CXXLENS_PROVIDER_HOST_TRANSCRIPT_ONLY)
+	} // namespace detail
+} // namespace cxxlens::sdk::provider
+#else
 		sealed_provider_batch::sealed_provider_batch(std::string task_id,
 													 std::string descriptor_id,
 													 std::string descriptor_digest,
@@ -3900,3 +3910,4 @@ namespace cxxlens::sdk::provider
 		return report;
 	}
 } // namespace cxxlens::sdk::provider
+#endif
