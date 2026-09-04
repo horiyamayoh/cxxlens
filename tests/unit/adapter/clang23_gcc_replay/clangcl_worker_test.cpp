@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdlib>
+#include <iostream>
 #include <iterator>
 #include <span>
 #include <sstream>
@@ -17,10 +18,13 @@
 namespace
 {
 	template <class value_type>
-	void require(const value_type& condition)
+	void require(const value_type& condition, const std::string_view detail)
 	{
 		if (!static_cast<bool>(condition))
+		{
+			std::cerr << detail << '\n';
 			std::abort();
+		}
 	}
 
 	[[nodiscard]] std::vector<std::byte> bytes(const std::string_view value)
@@ -69,11 +73,11 @@ namespace
 		source.role = "main";
 		source.encoding = "utf8";
 		auto source_file = detail::derive_source_file_id("main.cpp");
-		require(source_file);
+		require(source_file, "source-file-identity");
 		source.file_id = *source_file;
 		auto source_snapshot = detail::derive_source_snapshot_id(
 			source.file_id, source.content_digest, *source.encoding);
-		require(source_snapshot);
+		require(source_snapshot, "source-snapshot-identity");
 		source.source_snapshot_id = *source_snapshot;
 		draft.source_members.push_back(std::move(source));
 		detail::decoded_capture_source_member header;
@@ -83,11 +87,11 @@ namespace
 		header.role = "header";
 		header.encoding = "utf8";
 		auto header_file = detail::derive_source_file_id("include/answer.hpp");
-		require(header_file);
+		require(header_file, "header-file-identity");
 		header.file_id = *header_file;
 		auto header_snapshot = detail::derive_source_snapshot_id(
 			header.file_id, header.content_digest, *header.encoding);
-		require(header_snapshot);
+		require(header_snapshot, "header-snapshot-identity");
 		header.source_snapshot_id = *header_snapshot;
 		draft.source_members.push_back(std::move(header));
 		draft.source_closure_digest = "application-source-closure:sha256:" + std::string(64U, '4');
@@ -95,7 +99,7 @@ namespace
 		draft.interpretation = frontend == "clang-cl-23.1.0" ? "cc.clangcl23-msvc-replay-1"
 															 : "cc.clang23-gcc-replay-1";
 		auto validated = detail::validate_compiler_replay_input(std::move(draft));
-		require(validated);
+		require(validated, "replay-input-validation");
 		return std::move(*validated);
 	}
 } // namespace
@@ -107,22 +111,27 @@ int main()
 	std::istringstream source{text(msvc.bytes())};
 	std::ostringstream output;
 	auto accepted = execute_worker_ingress(source, output, msvc_replay_frontend_id);
-	require(accepted);
+	if (!accepted)
+		std::cerr << accepted.error().code << ':' << accepted.error().field << ':'
+				  << accepted.error().detail << '\n';
+	require(accepted, "msvc-worker-ingress");
 	auto decoded = decode_worker_observations(bytes(output.str()));
 	require(decoded && decoded->replay_input_digest == msvc.input_digest() &&
-			decoded->error_count == 0U && !decoded->observations.declarations.empty());
+				decoded->error_count == 0U && !decoded->observations.declarations.empty(),
+			"msvc-worker-observations");
 
 	auto gcc = input("clang-23.1.0-gcc-mode", "x86_64-linux-gnu");
 	std::istringstream foreign{text(gcc.bytes())};
 	std::ostringstream rejected_output;
 	auto rejected = execute_worker_ingress(foreign, rejected_output, msvc_replay_frontend_id);
 	require(!rejected && rejected.error().field == "replay_input" &&
-			rejected.error().detail == "wrong-worker-frontend" && rejected_output.str().empty());
+				rejected.error().detail == "wrong-worker-frontend" && rejected_output.str().empty(),
+			"foreign-frontend-rejection");
 
 	auto truncated = text(msvc.bytes());
 	truncated.pop_back();
 	std::istringstream malformed{truncated};
 	std::ostringstream malformed_output;
 	auto invalid = execute_worker_ingress(malformed, malformed_output, msvc_replay_frontend_id);
-	require(!invalid && malformed_output.str().empty());
+	require(!invalid && malformed_output.str().empty(), "truncated-input-rejection");
 }
