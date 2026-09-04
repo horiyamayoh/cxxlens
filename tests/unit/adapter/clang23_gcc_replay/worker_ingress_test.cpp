@@ -285,7 +285,12 @@ namespace
 											 provider_version,
 											 std::string{gcc_replay_frontend_id}});
 		require(retained && retained->protocol_transcript == execution.output &&
-				retained->replay_plan_digest == value.value().replay_plan_digest);
+				retained->replay_plan_digest == value.value().replay_plan_digest &&
+				retained->host_input.task() == execution.expectation.task &&
+				retained->host_input.credit().bytes == execution.credit.bytes &&
+				retained->host_input.credit().frames == execution.credit.frames &&
+				retained->host_input.total_bytes() == value.bytes().size() &&
+				!retained->host_input.ordered_chunk_digest_set_digest().empty());
 		auto frames = decode_frame_stream(execution.output);
 		require(frames && !frames->empty() && frames->back().type == message_type::task_complete);
 		auto descriptors = frontend_descriptors(value.value().requested_relation_descriptor_ids);

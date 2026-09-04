@@ -59,6 +59,32 @@ namespace cxxlens::detail::clang23_gcc_replay
 			std::vector<std::byte> bytes_;
 		};
 
+		class host_payload_sink final : public sdk::provider::detail::host_input_chunk_sink
+		{
+		  public:
+			explicit host_payload_sink(const std::size_t maximum_bytes)
+				: maximum_bytes_{maximum_bytes}
+			{
+			}
+
+			[[nodiscard]] sdk::result<void> append(const std::span<const std::byte> bytes) override
+			{
+				if (bytes_.size() > maximum_bytes_ || bytes.size() > maximum_bytes_ - bytes_.size())
+					return sdk::unexpected(failure("host_input", "payload-size-limit"));
+				bytes_.insert(bytes_.end(), bytes.begin(), bytes.end());
+				return {};
+			}
+
+			[[nodiscard]] const std::vector<std::byte>& bytes() const noexcept
+			{
+				return bytes_;
+			}
+
+		  private:
+			std::size_t maximum_bytes_{};
+			std::vector<std::byte> bytes_;
+		};
+
 		[[nodiscard]] sdk::result<std::vector<std::byte>>
 		read_input(std::istream& input, const sdk::import_limits& limits)
 		{
@@ -178,10 +204,12 @@ namespace cxxlens::detail::clang23_gcc_replay
 			auto frames = sdk::provider::decode_frame_stream(*encoded, authority.host.limits);
 			if (!frames)
 				return sdk::unexpected(std::move(frames.error()));
-			auto host = sdk::provider::validate_host_transcript(*frames, authority.host);
-			if (!host)
-				return sdk::unexpected(std::move(host.error()));
-			auto replay = sdk::detail::decode_compiler_replay_input(host->payload, limits);
+			host_payload_sink host_payload{limits.maximum_bundle_bytes};
+			auto host_input = sdk::provider::detail::validate_host_transcript_incremental(
+				*frames, {authority.host, true}, host_payload);
+			if (!host_input)
+				return sdk::unexpected(std::move(host_input.error()));
+			auto replay = sdk::detail::decode_compiler_replay_input(host_payload.bytes(), limits);
 			if (!replay)
 				return sdk::unexpected(std::move(replay.error()));
 			auto frontend =
@@ -190,7 +218,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 															  replay->value().effective_arguments);
 			if (!frontend || frontend->analysis_frontend != authority.replay_frontend)
 				return sdk::unexpected(failure("replay_input", "wrong-worker-frontend"));
-			if (replay->input_digest() != host->task.task_input_digest)
+			if (replay->input_digest() != host_input->task().task_input_digest)
 				return sdk::unexpected(failure("replay_input", "host-digest-mismatch"));
 			auto parsed = parse_replay_input(*replay);
 			if (!parsed)
@@ -242,12 +270,14 @@ namespace cxxlens::detail::clang23_gcc_replay
 
 			transcript_sink sink;
 			sdk::provider::protocol_writer writer{sink, authority.host.limits};
-			writer.grant_credit(host->credit);
+			writer.grant_credit(host_input->credit());
 			auto hello = sdk::provider::encode_control_text(authority.host.provider_manifest);
 			auto negotiated = sdk::provider::encode_schema_negotiate_metadata(
 				{"cxxlens.provider-protocol.v2", sdk::provider::protocol_v2_minor});
-			auto accepted = sdk::provider::encode_task_accepted_metadata(
-				{authority.provider_id, authority.provider_version.string(), host->task.task_id});
+			auto accepted =
+				sdk::provider::encode_task_accepted_metadata({authority.provider_id,
+															  authority.provider_version.string(),
+															  host_input->task().task_id});
 			if (!hello || !negotiated || !accepted)
 				return sdk::unexpected(failure("protocol", "control-encoding"));
 			if (auto sent = writer.send(sdk::provider::message_type::hello, *hello); !sent)
@@ -260,16 +290,16 @@ namespace cxxlens::detail::clang23_gcc_replay
 				return sdk::unexpected(std::move(sent.error()));
 
 			sdk::provider::execution_budget budget;
-			budget.output_bytes = std::min(budget.output_bytes, host->credit.bytes);
+			budget.output_bytes = std::min(budget.output_bytes, host_input->credit().bytes);
 			sdk::provider::context context{
 				writer,
 				{std::stop_token{}, budget},
-				host->task.task_id,
+				host_input->task().task_id,
 				descriptors,
 				std::array<std::string, 1U>{std::string{frontend->dependency_group}}};
-			context.coverage().request("task", host->task.task_id);
+			context.coverage().request("task", host_input->task().task_id);
 			if (auto classified = context.coverage().classify(
-					{"task", host->task.task_id, "covered", "translation-unit-executed"});
+					{"task", host_input->task().task_id, "covered", "translation-unit-executed"});
 				!classified)
 				return sdk::unexpected(std::move(classified.error()));
 			for (const auto& value : descriptors)
@@ -277,10 +307,11 @@ namespace cxxlens::detail::clang23_gcc_replay
 				const auto* rows = rows_for(normalized, value.id);
 				if (rows != nullptr && source_authority_complete)
 				{
-					auto atomic = batch_identity(
-						"clang23.gcc-replay.atomic-output.v1", host->task.task_id, value.id);
-					auto batch =
-						batch_identity("clang23.gcc-replay.batch.v1", host->task.task_id, value.id);
+					auto atomic = batch_identity("clang23.gcc-replay.atomic-output.v1",
+												 host_input->task().task_id,
+												 value.id);
+					auto batch = batch_identity(
+						"clang23.gcc-replay.batch.v1", host_input->task().task_id, value.id);
 					if (!atomic || !batch)
 						return sdk::unexpected(failure(value.id, "batch-identity"));
 					auto sink_value = context.relation(value);
@@ -336,14 +367,16 @@ namespace cxxlens::detail::clang23_gcc_replay
 				 })
 				if (auto sent = writer.send(type, *control); !sent)
 					return sdk::unexpected(std::move(sent.error()));
-			auto complete = sdk::provider::encode_task_complete_metadata({host->task.task_id});
+			auto complete =
+				sdk::provider::encode_task_complete_metadata({host_input->task().task_id});
 			if (!complete)
 				return sdk::unexpected(std::move(complete.error()));
 			if (auto sent = writer.send(sdk::provider::message_type::task_complete, *complete);
 				!sent)
 				return sdk::unexpected(std::move(sent.error()));
 			return provider_worker_result{std::move(sink).take(),
-										  std::string{replay->value().replay_plan_digest}};
+										  std::string{replay->value().replay_plan_digest},
+										  std::move(*host_input)};
 		}
 		catch (const std::bad_alloc&)
 		{

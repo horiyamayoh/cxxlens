@@ -13,6 +13,8 @@
 #include <cxxlens/sdk/application_analysis.hpp>
 #include <cxxlens/sdk/provider.hpp>
 
+#include "sdk/provider_validation_internal.hpp"
+
 namespace cxxlens::detail::clang23_gcc_replay
 {
 	inline constexpr std::string_view provider_id = "cxxlens.clang23-gcc-replay";
@@ -33,6 +35,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 	{
 		std::vector<std::byte> protocol_transcript;
 		std::string replay_plan_digest;
+		sdk::provider::detail::sealed_host_input host_input;
 	};
 
 	/** Execute without an output side effect and retain the exact bounded Protocol-v2 result. */
