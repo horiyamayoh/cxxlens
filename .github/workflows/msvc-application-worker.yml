@@ -112,3 +112,4 @@ jobs:
             throw 'Failed MSVC compilation published a capture bundle or lost its exit code'
           }
           Pop-Location
+          exit 0
