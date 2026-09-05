@@ -77,7 +77,7 @@ namespace
 	[[nodiscard]] process_invocation system_invocation(const std::string& executable)
 	{
 		auto policies = builtin_sandbox_policies();
-		require(policies.size() == 2U && policies.front().validate().has_value(),
+		require(policies.size() == 3U && policies.front().validate().has_value(),
 				"NG1 system sandbox policy registry is invalid");
 		process_invocation invocation;
 		invocation.argv = {executable};

@@ -99,7 +99,7 @@ namespace
 	[[nodiscard]] sandbox_policy baseline_policy()
 	{
 		auto policies = builtin_sandbox_policies();
-		require(policies.size() == 2U && policies.front().validate().has_value(),
+		require(policies.size() == 3U && policies.front().validate().has_value(),
 				"built-in sandbox policy registry is invalid");
 		return std::move(policies.front());
 	}
@@ -1975,16 +1975,24 @@ namespace
 	[[maybe_unused]] void check_selection(const std::string& executable)
 	{
 		auto policies = builtin_sandbox_policies();
-		require(policies.size() == 2U && policies[0U].id < policies[1U].id &&
+		require(policies.size() == 3U && policies[0U].id < policies[1U].id &&
+					policies[1U].id < policies[2U].id &&
 					policies[0U].policy_digest() ==
 						"semantic-v2:sha256:"
 						"b4e95d8c88cf660fff40c4d9e7e4ae07bcb078013b5370c6b1abb80b0d75d375" &&
 					policies[1U].policy_digest() ==
 						"semantic-v2:sha256:"
 						"6fb3327ee0028e358de90a7ca9f6c1f4d42ac156c06282579579bd0a6d1bbb44" &&
+					policies[2U].id == "cxxlens.sandbox.windows-clangcl-appcontainer" &&
+					policies[2U].validate() &&
 					policies[0U].policy_digest() != policies[1U].policy_digest() &&
+					policies[1U].policy_digest() != policies[2U].policy_digest() &&
 					policies[0U].mechanisms != policies[1U].mechanisms,
 				"built-in sandbox policies are not distinct canonical plans");
+		auto weakened_windows_policy = policies[2U];
+		std::erase(weakened_windows_policy.mechanisms, "appcontainer-network-capability-deny");
+		require(!weakened_windows_policy.validate(),
+				"Windows sandbox policy retained deny-network authority without its mechanism");
 		auto changed_policy = policies.front();
 		changed_policy.id.back() = 'f';
 		require(changed_policy.validate().has_value() &&
@@ -3193,7 +3201,12 @@ namespace
 			return;
 
 		auto policies = builtin_sandbox_policies();
-		const auto& strict_policy = policies.back();
+		const auto strict =
+			std::ranges::find(policies,
+							  std::string_view{"cxxlens.sandbox.linux-provider-strict"},
+							  &sandbox_policy::id);
+		require(strict != policies.end(), "strict sandbox policy is unavailable");
+		const auto& strict_policy = *strict;
 		auto strict_candidate = candidate(executable, "success");
 		strict_candidate.sandbox = make_sandbox(strict_policy, sandbox_assurance::enforced);
 		auto strict_authority = selection_request(executable);

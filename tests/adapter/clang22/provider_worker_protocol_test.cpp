@@ -41,7 +41,7 @@ namespace
 	[[nodiscard]] sandbox_policy baseline_policy()
 	{
 		auto policies = builtin_sandbox_policies();
-		require(policies.size() == 2U && policies.front().validate().has_value(),
+		require(policies.size() == 3U && policies.front().validate().has_value(),
 				"built-in sandbox policy registry is invalid");
 		return std::move(policies.front());
 	}
