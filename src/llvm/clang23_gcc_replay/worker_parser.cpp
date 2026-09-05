@@ -21,13 +21,12 @@
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/VirtualFileSystem.h>
 
+#include "replay_logical_paths.hpp"
+
 namespace cxxlens::detail::clang23_gcc_replay
 {
 	namespace
 	{
-		constexpr std::string_view logical_root{"project://"};
-		constexpr std::string_view synthetic_root{"/__cxxlens_gcc_replay__"};
-
 		[[nodiscard]] sdk::error failure(std::string field, std::string detail)
 		{
 			return {
@@ -36,21 +35,27 @@ namespace cxxlens::detail::clang23_gcc_replay
 
 		[[nodiscard]] std::string native_path(const std::string_view logical)
 		{
-			return std::string{synthetic_root} + "/" +
-				std::string{logical.substr(logical_root.size())};
+			return std::string{replay_synthetic_root} + "/" +
+				std::string{logical.substr(replay_logical_prefix.size())};
 		}
 
 		[[nodiscard]] sdk::result<std::string> compiler_argument(const std::string_view argument)
 		{
-			if (argument.starts_with(logical_root))
+			if (argument.starts_with(replay_logical_prefix))
 				return native_path(argument);
 			constexpr std::array<std::string_view, 4U> joined_path_options{
 				"-idirafter", "-isystem", "-iquote", "-I"};
 			for (const auto option : joined_path_options)
 				if (argument.starts_with(option) &&
-					argument.substr(option.size()).starts_with(logical_root))
+					argument.substr(option.size()).starts_with(replay_logical_prefix))
 					return std::string{option} + native_path(argument.substr(option.size()));
-			if (argument.contains(logical_root))
+			constexpr std::array<std::string_view, 3U> joined_msvc_path_options{
+				"/external:I", "/FI", "/I"};
+			for (const auto option : joined_msvc_path_options)
+				if (argument.starts_with(option) &&
+					argument.substr(option.size()).starts_with(replay_logical_prefix))
+					return std::string{option} + native_path(argument.substr(option.size()));
+			if (argument.contains(replay_logical_prefix))
 				return sdk::unexpected(failure("effective_argv", "unbound-logical-path"));
 			return std::string{argument};
 		}
@@ -141,7 +146,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 	} // namespace
 
 	sdk::result<parse_result>
-	parse_replay_input(const sdk::detail::validated_gcc_replay_input& input,
+	parse_replay_input(const sdk::detail::validated_compiler_replay_input& input,
 					   const observer_limits limits)
 	{
 		try
@@ -166,7 +171,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 						path, 0, llvm::MemoryBuffer::getMemBufferCopy(content, path)))
 					return sdk::unexpected(failure("source_members", "vfs-mount"));
 			}
-			if (const auto error = filesystem->setCurrentWorkingDirectory(synthetic_root))
+			if (const auto error = filesystem->setCurrentWorkingDirectory(replay_synthetic_root))
 				return sdk::unexpected(failure("source_members", error.message()));
 
 			std::vector<std::string> arguments;

@@ -162,6 +162,7 @@ namespace cxxlens::sdk
 		std::shared_ptr<const implementation> value_;
 		friend result<class materialization_result>
 		materialize(snapshot_store&, const imported_project&, const materialization_request&);
+		friend struct application_analysis_materialization_access_internal;
 	};
 
 	/** @brief Public terminal after Store publication has either completed or not occurred. */
@@ -212,6 +213,7 @@ namespace cxxlens::sdk
 		std::shared_ptr<const implementation> value_;
 		friend result<materialization_result>
 		materialize(snapshot_store&, const imported_project&, const materialization_request&);
+		friend struct application_analysis_materialization_access_internal;
 	};
 
 	/** @brief Materialize through the generic provider/runtime/writer path and publish at most

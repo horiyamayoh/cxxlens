@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "replay_frontend_authority.hpp"
 #include "worker_observation_codec.hpp"
 #include "worker_parser.hpp"
 
@@ -34,6 +35,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 
 	sdk::result<void> execute_worker_ingress(std::istream& input,
 											 std::ostream& output,
+											 const std::string_view replay_frontend,
 											 const sdk::import_limits limits)
 	{
 		try
@@ -62,9 +64,17 @@ namespace cxxlens::detail::clang23_gcc_replay
 			if (encoded.empty())
 				return sdk::unexpected(failure("stdin", "empty"));
 
-			auto decoded = sdk::detail::decode_gcc_replay_input(encoded, limits);
+			auto decoded = sdk::detail::decode_compiler_replay_input(encoded, limits);
 			if (!decoded)
 				return sdk::unexpected(std::move(decoded.error()));
+			auto frontend =
+				sdk::detail::resolve_compiler_replay_frontend(decoded->value().analysis_frontend,
+															  decoded->value().target_abi,
+															  decoded->value().effective_arguments);
+			if ((replay_frontend != gcc_replay_frontend_id &&
+				 replay_frontend != msvc_replay_frontend_id) ||
+				!frontend || frontend->analysis_frontend != replay_frontend)
+				return sdk::unexpected(failure("replay_input", "wrong-worker-frontend"));
 			auto parsed = parse_replay_input(*decoded);
 			if (!parsed)
 				return sdk::unexpected(std::move(parsed.error()));

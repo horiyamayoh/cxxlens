@@ -12,7 +12,7 @@
 #include <cxxlens/relations/build_variant.hpp>
 #include <cxxlens/relations/source_file.hpp>
 
-#include "gcc_build_capture_adapter_internal.hpp"
+#include "application_build_capture_adapter_internal.hpp"
 
 namespace cxxlens::sdk::detail
 {
@@ -234,7 +234,7 @@ namespace cxxlens::sdk::detail
 		[[nodiscard]] result<std::vector<partition_draft>>
 		host_capture_partitions(const relation_engine& engine,
 								const validated_build_capture& capture,
-								const validated_gcc_replay_input& replay,
+								const validated_compiler_replay_input& replay,
 								const validated_materialization_task& task,
 								const std::string_view replay_plan_digest)
 		{
@@ -340,7 +340,7 @@ namespace cxxlens::sdk::detail
 	} // namespace
 
 	result<application_materialization_execution_plan>
-	make_gcc_application_materialization_execution_plan(
+	make_application_materialization_execution_plan(
 		const imported_project::implementation& project,
 		const relation_engine& engine,
 		snapshot_draft publication,
@@ -349,8 +349,12 @@ namespace cxxlens::sdk::detail
 		const provider::provider_selection& selection,
 		const provider::execution_budget budget,
 		const std::stop_token& cancellation,
-		const import_limits limits)
+		const import_limits limits,
+		const application_materialization_execution_transport transport)
 	{
+		if (transport != application_materialization_execution_transport::process &&
+			transport != application_materialization_execution_transport::detached)
+			return unexpected(execution_error("transport", "unsupported"));
 		if (auto valid = selection.validate(); !valid)
 			return unexpected(std::move(valid.error()));
 		if (auto valid = budget.validate(); !valid)
@@ -366,9 +370,10 @@ namespace cxxlens::sdk::detail
 
 		const auto& candidate = selection.selected_candidate();
 		const auto& manifest = candidate.description;
-		if (candidate.executable_argv.empty() || candidate.executable_argv.front().empty() ||
-			candidate.executable_argv.front().contains('\0') ||
-			candidate.executable_argv.front().front() != '/')
+		if (transport == application_materialization_execution_transport::process &&
+			(candidate.executable_argv.empty() || candidate.executable_argv.front().empty() ||
+			 candidate.executable_argv.front().contains('\0') ||
+			 candidate.executable_argv.front().front() != '/'))
 			return unexpected(execution_error("provider.executable", "absolute-path-required"));
 		if (!contains(manifest.interpretation_domains, interpretation))
 			return unexpected(execution_error("interpretation", "provider-incompatible"));
@@ -424,24 +429,28 @@ namespace cxxlens::sdk::detail
 		const auto request_id = "materialization-request:" + *request_identity;
 
 		application_materialization_execution_plan output{
-			request_id, *recipe_digest, *output_plan_digest, {}};
+			request_id, *recipe_digest, *output_plan_digest, transport, {}};
 		output.units.reserve(project.replay_plans.size());
 		for (const auto& plan_value : project.replay_plan_values)
 		{
 			if (!plan_value)
 				return unexpected(execution_error("replay_plan", "missing-immutable-value"));
 			const auto& plan = *plan_value;
-			auto capture = make_gcc_build_capture(project, plan);
+			auto capture = make_application_build_capture(project, plan);
 			if (!capture)
 				return unexpected(std::move(capture.error()));
-			auto provider_input = make_gcc_replay_input(project,
-														plan,
-														relation_ids,
-														interpretation,
-														limits,
-														capture->value().compile_unit_id);
+			auto provider_input = make_compiler_replay_input(project,
+															 plan,
+															 relation_ids,
+															 interpretation,
+															 limits,
+															 capture->value().compile_unit_id);
 			if (!provider_input)
 				return unexpected(std::move(provider_input.error()));
+			auto frontend = resolve_compiler_replay_frontend(
+				plan.analysis_frontend, plan.target_abi, plan.effective_arguments);
+			if (!frontend)
+				return unexpected(std::move(frontend.error()));
 
 			auto condition_identity =
 				identity("application-analysis-condition",
@@ -470,8 +479,8 @@ namespace cxxlens::sdk::detail
 				publication.series.condition_universe_id,
 				"condition:" + *condition_identity,
 				interpretation,
-				{"clang23-gcc-replay"},
-				"clang23-gcc-replay-output-normalizer.v1",
+				{std::string{frontend->dependency_group}},
+				std::string{frontend->output_normalizer},
 				"assumption-set:" + *assumption_identity,
 				plan.unresolved.empty() ? "exact" : "under_approximation",
 				{"compile-unit", plan.compile_unit_id, "covered"},
@@ -521,6 +530,7 @@ namespace cxxlens::sdk::detail
 				cancellation,
 				{}};
 			output.units.push_back({plan.digest,
+									std::string{frontend->observation_technique},
 									std::move(*provider_input),
 									std::move(*capture),
 									std::move(*task),

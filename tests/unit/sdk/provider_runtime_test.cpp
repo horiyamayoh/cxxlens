@@ -99,7 +99,7 @@ namespace
 	[[nodiscard]] sandbox_policy baseline_policy()
 	{
 		auto policies = builtin_sandbox_policies();
-		require(policies.size() == 2U && policies.front().validate().has_value(),
+		require(policies.size() == 3U && policies.front().validate().has_value(),
 				"built-in sandbox policy registry is invalid");
 		return std::move(policies.front());
 	}
@@ -1975,16 +1975,24 @@ namespace
 	[[maybe_unused]] void check_selection(const std::string& executable)
 	{
 		auto policies = builtin_sandbox_policies();
-		require(policies.size() == 2U && policies[0U].id < policies[1U].id &&
+		require(policies.size() == 3U && policies[0U].id < policies[1U].id &&
+					policies[1U].id < policies[2U].id &&
 					policies[0U].policy_digest() ==
 						"semantic-v2:sha256:"
 						"b4e95d8c88cf660fff40c4d9e7e4ae07bcb078013b5370c6b1abb80b0d75d375" &&
 					policies[1U].policy_digest() ==
 						"semantic-v2:sha256:"
 						"6fb3327ee0028e358de90a7ca9f6c1f4d42ac156c06282579579bd0a6d1bbb44" &&
+					policies[2U].id == "cxxlens.sandbox.windows-clangcl-appcontainer" &&
+					policies[2U].validate() &&
 					policies[0U].policy_digest() != policies[1U].policy_digest() &&
+					policies[1U].policy_digest() != policies[2U].policy_digest() &&
 					policies[0U].mechanisms != policies[1U].mechanisms,
 				"built-in sandbox policies are not distinct canonical plans");
+		auto weakened_windows_policy = policies[2U];
+		std::erase(weakened_windows_policy.mechanisms, "appcontainer-network-capability-deny");
+		require(!weakened_windows_policy.validate(),
+				"Windows sandbox policy retained deny-network authority without its mechanism");
 		auto changed_policy = policies.front();
 		changed_policy.id.back() = 'f';
 		require(changed_policy.validate().has_value() &&
@@ -3053,6 +3061,49 @@ namespace
 		require(receipt_digest && repeated_receipt_digest &&
 					*receipt_digest == *repeated_receipt_digest,
 				"runtime receipt identity was not deterministic");
+		auto detached = detail::validate_detached_provider_transcript(
+			receipt_request, sealed_execution->raw_frame_stream);
+		auto detached_receipt_digest = detached
+			? detail::provider_runtime_receipt_digest(detached->runtime_receipt)
+			: result<std::string>{unexpected(detached.error())};
+		require(detached && detached_receipt_digest &&
+					detached->input_seal.task() == sealed_execution->input_seal->task() &&
+					detached->sealed.batches().size() ==
+						sealed_execution->sealed->batches().size() &&
+					*detached_receipt_digest == *receipt_digest,
+				"detached raw transcript did not reuse the exact input/output sealing authority");
+
+		auto detached_tamper = sealed_execution->raw_frame_stream;
+		detached_tamper.back() ^= std::byte{1U};
+		auto detached_tamper_result =
+			detail::validate_detached_provider_transcript(receipt_request, detached_tamper);
+		require(!detached_tamper_result &&
+					detached_tamper_result.error().code == "provider.checksum-mismatch",
+				"mutated detached raw transcript reached an adoption seal");
+		auto wrong_detached_input = receipt_request;
+		wrong_detached_input.payload.front() ^= std::byte{1U};
+		auto wrong_detached_input_result = detail::validate_detached_provider_transcript(
+			wrong_detached_input, sealed_execution->raw_frame_stream);
+		require(!wrong_detached_input_result &&
+					wrong_detached_input_result.error().code == "provider.task-binding-mismatch" &&
+					wrong_detached_input_result.error().field == "task_input_digest",
+				"detached validation accepted payload bytes outside the task-input digest");
+		auto bounded_detached = receipt_request;
+		bounded_detached.budget.transport_bytes = sealed_execution->raw_frame_stream.size() - 1U;
+		auto bounded_detached_result = detail::validate_detached_provider_transcript(
+			bounded_detached, sealed_execution->raw_frame_stream);
+		require(!bounded_detached_result &&
+					bounded_detached_result.error().code == "provider.output-limit",
+				"detached validation allocated beyond the host transport budget");
+		std::stop_source detached_cancellation;
+		detached_cancellation.request_stop();
+		auto cancelled_detached = receipt_request;
+		cancelled_detached.cancellation = detached_cancellation.get_token();
+		auto cancelled_detached_result = detail::validate_detached_provider_transcript(
+			cancelled_detached, sealed_execution->raw_frame_stream);
+		require(!cancelled_detached_result &&
+					cancelled_detached_result.error().code == "provider.cancelled",
+				"detached validation ignored host cancellation");
 		auto different_provenance = receipt.provenance();
 		different_provenance.environment_digest =
 			"sha256:9999999999999999999999999999999999999999999999999999999999999999";
@@ -3150,7 +3201,12 @@ namespace
 			return;
 
 		auto policies = builtin_sandbox_policies();
-		const auto& strict_policy = policies.back();
+		const auto strict =
+			std::ranges::find(policies,
+							  std::string_view{"cxxlens.sandbox.linux-provider-strict"},
+							  &sandbox_policy::id);
+		require(strict != policies.end(), "strict sandbox policy is unavailable");
+		const auto& strict_policy = *strict;
 		auto strict_candidate = candidate(executable, "success");
 		strict_candidate.sandbox = make_sandbox(strict_policy, sandbox_assurance::enforced);
 		auto strict_authority = selection_request(executable);

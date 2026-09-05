@@ -20,6 +20,7 @@ root_tuple:
   - {index: 9, name: unresolved, type: ordered-tuple-of-unresolved}
   - {index: 10, name: provenance, type: ordered-tuple-of-provenance}
   - {index: 11, name: runtime_receipt_digest, type: digest-or-null}
+  - {index: 12, name: run_authentication, type: run-authentication-tuple}
 provider_identity_tuple:
   fields:
     - {index: 0, name: provider_id, type: strong-id}
@@ -29,10 +30,57 @@ provider_identity_tuple:
     - {index: 4, name: signature_digest, type: digest}
     - {index: 5, name: revocation_state, type: strong-id}
     - {index: 6, name: sandbox_policy_digest, type: digest}
+partition_candidate_tuple:
+  fields:
+    - {index: 0, name: descriptor_id, type: strong-id}
+    - {index: 1, name: descriptor_digest, type: digest}
+    - {index: 2, name: dependency_group_id, type: strong-id}
+    - {index: 3, name: atomic_output_group_id, type: strong-id}
+    - {index: 4, name: batch_id, type: strong-id}
+    - {index: 5, name: batch_digest, type: digest}
+    - {index: 6, name: row_count, type: uint64}
+coverage_tuple:
+  fields:
+    - {index: 0, name: kind, type: string}
+    - {index: 1, name: id, type: string}
+    - {index: 2, name: state, type: enum, values: [covered, excluded, failed, not_applicable, unresolved]}
+    - {index: 3, name: reason, type: string}
+unresolved_tuple:
+  fields:
+    - {index: 0, name: code, type: registered-symbol}
+    - {index: 1, name: subject, type: string}
+    - {index: 2, name: detail, type: string}
+provenance_tuple:
+  fields:
+    - {index: 0, name: kind, type: registered-symbol}
+    - {index: 1, name: subject, type: string}
+    - {index: 2, name: producer, type: string}
+    - {index: 3, name: summary, type: string}
+run_authentication_tuple:
+  fields:
+    - {index: 0, name: algorithm, type: string, const: ed25519}
+    - {index: 1, name: signer_id, type: strong-id}
+    - {index: 2, name: key_fingerprint, type: digest}
+    - {index: 3, name: signed_subject_digest, type: digest}
+    - {index: 4, name: signature, type: bytes, size: 64}
+    - {index: 5, name: signature_digest, type: digest}
+  signed_subject:
+    encoding: cxxlens-canonical-tuple-v1
+    projection: root_tuple[0:12]
+    digest: sha256
+    signature_message: utf8(signed_subject_digest)
+projection_invariant:
+  - protocol_transcript-is-the-only-content-authority
+  - partition-coverage-unresolved-and-provenance-are-canonical-comparison-projections
+  - linux-adoption-must-redecode-the-transcript-and-require-exact-projection-equality
+  - projection-mismatch-is-atomic-rejection-and-never-partial
+  - run-authentication-is-distinct-from-provider-package-signature
+  - signed-subject-covers-every-root-field-except-run-authentication
 adoption_invariants:
   - canonical-bundle-digest-is-recomputed-before-adoption
   - task-input-and-replay-plan-bindings-must-match-host-authority
   - provider-binary-signature-revocation-and-sandbox-are-validated-before-output
+  - run-signature-and-signing-key-revocation-are-validated-before-output
   - protocol-transcript-is-redecoded-by-the-existing-protocol-v2-validator
   - every-relation-descriptor-and-partition-shape-is-revalidated
   - malformed-output-is-atomically-rejected-and-never-downgraded-to-partial

@@ -7,37 +7,14 @@
 
 #include <cxxlens/sdk/application_analysis.hpp>
 
-#include "application_analysis_internal.hpp"
-#include "application_materialization_adoption_internal.hpp"
+#include "application_analysis_service_internal.hpp"
 #include "application_materialization_execution_internal.hpp"
 #include "gcc_replay_planner_internal.hpp"
+#include "msvc_replay_planner_internal.hpp"
 #include "provider_runtime_internal.hpp"
 
 namespace cxxlens::sdk
 {
-	struct materialization_request::implementation
-	{
-		relation_engine engine;
-		snapshot_draft publication;
-		std::vector<std::string> relation_descriptor_ids;
-		std::string interpretation;
-		provider::provider_selection_request provider;
-		std::optional<provider::provider_selection> selection;
-		provider::execution_budget budget;
-		std::stop_token cancellation;
-	};
-
-	struct materialization_result::implementation
-	{
-		materialization_terminal terminal{materialization_terminal::failed};
-		std::optional<snapshot_handle> published_snapshot;
-		std::vector<provider::coverage_unit> coverage;
-		std::vector<provider::unresolved_item> unresolved;
-		std::vector<claim_conflict> conflicts;
-		std::vector<differential_disagreement> differential_disagreements;
-		std::optional<application_analysis_provenance> provenance;
-	};
-
 	namespace
 	{
 		[[nodiscard]] error invalid(std::string field, std::string detail)
@@ -160,31 +137,53 @@ namespace cxxlens::sdk
 		}
 
 		[[nodiscard]] result<std::shared_ptr<replay_plan::implementation>>
-		make_gcc_replay_plan(const capture_bundle::implementation& bundle,
-							 const detail::decoded_capture_unit& unit,
-							 const std::size_t unit_index,
-							 const import_limits& limits)
+		make_replay_plan(const capture_bundle::implementation& bundle,
+						 const detail::decoded_capture_unit& unit,
+						 const std::size_t unit_index,
+						 const import_limits& limits)
 		{
-			auto mapped =
-				detail::map_gcc_16_2_replay_arguments(bundle.projection, unit, unit_index, limits);
-			if (!mapped)
-				return unexpected(std::move(mapped.error()));
+			std::vector<std::string> effective_arguments;
+			std::vector<detail::replay_option_mapping> option_mappings;
+			std::vector<capture_gap> mapping_unresolved;
+			std::string analysis_frontend;
+			if (bundle.projection.toolchain_family == "gcc")
+			{
+				auto mapped = detail::map_gcc_16_2_replay_arguments(
+					bundle.projection, unit, unit_index, limits);
+				if (!mapped)
+					return unexpected(std::move(mapped.error()));
+				effective_arguments = std::move(mapped->effective_arguments);
+				option_mappings = std::move(mapped->option_mappings);
+				mapping_unresolved = std::move(mapped->unresolved);
+				analysis_frontend = "clang-23.1.0-gcc-mode";
+			}
+			else
+			{
+				auto mapped = detail::map_msvc_19_51_replay_arguments(
+					bundle.projection, unit, unit_index, limits);
+				if (!mapped)
+					return unexpected(std::move(mapped.error()));
+				effective_arguments = std::move(mapped->effective_arguments);
+				option_mappings = std::move(mapped->option_mappings);
+				mapping_unresolved = std::move(mapped->unresolved);
+				analysis_frontend = "clang-cl-23.1.0";
+			}
 
 			auto value = std::make_shared<replay_plan::implementation>();
 			value->capture_bundle_digest = bundle.digest;
 			value->compile_unit_id = unit.compile_unit_id;
-			value->analysis_frontend = "clang-23.1.0-gcc-mode";
+			value->analysis_frontend = std::move(analysis_frontend);
 			value->target_abi = bundle.target_abi;
 			value->source_closure_digest = unit.source_closure_digest;
 			if (value->source_closure_digest.empty())
 				return unexpected(error{"application-analysis.capture-invalid",
 										"source_closure",
 										"missing-validated-binding"});
-			value->effective_arguments = std::move(mapped->effective_arguments);
-			value->option_mappings = std::move(mapped->option_mappings);
+			value->effective_arguments = std::move(effective_arguments);
+			value->option_mappings = std::move(option_mappings);
 			value->unresolved = capture_gaps_for_unit(bundle.gaps, unit_index);
 			value->unresolved.insert(
-				value->unresolved.end(), mapped->unresolved.begin(), mapped->unresolved.end());
+				value->unresolved.end(), mapping_unresolved.begin(), mapping_unresolved.end());
 			canonicalize_gaps(value->unresolved);
 
 			std::vector<canonical_value> effective;
@@ -280,10 +279,6 @@ namespace cxxlens::sdk
 		{
 			if (auto valid = limits.validate(); !valid)
 				return unexpected(std::move(valid.error()));
-			if (bundle.value_->projection.toolchain_family != "gcc")
-				return unexpected(error{"application-analysis.target-unavailable",
-										"replay-planner",
-										"MSVC replay is not configured"});
 			if (bundle.value_->projection.compile_units.size() > limits.maximum_compile_units)
 				return unexpected(
 					error{"application-analysis.import-limit-exceeded", "compile_units", "count"});
@@ -300,7 +295,7 @@ namespace cxxlens::sdk
 			for (std::size_t index{}; index < bundle.value_->projection.compile_units.size();
 				 ++index)
 			{
-				auto plan_value = make_gcc_replay_plan(
+				auto plan_value = make_replay_plan(
 					*bundle.value_, bundle.value_->projection.compile_units[index], index, limits);
 				if (!plan_value)
 					return unexpected(std::move(plan_value.error()));
@@ -503,16 +498,13 @@ namespace cxxlens::sdk
 											   const materialization_request& request)
 	{
 		if (request.value_->cancellation.stop_requested())
-		{
-			auto value = std::make_shared<materialization_result::implementation>();
-			value->terminal = materialization_terminal::cancelled;
-			return materialization_result{std::move(value)};
-		}
+			return detail::application_materialization_terminal_result(
+				materialization_terminal::cancelled);
 		if (!request.value_->selection)
 			return unexpected(error{"application-analysis.target-unavailable",
 									"materialization",
 									"application analysis providers are not configured"});
-		auto plan = detail::make_gcc_application_materialization_execution_plan(
+		auto plan = detail::make_application_materialization_execution_plan(
 			*project.value_,
 			request.value_->engine,
 			request.value_->publication,
@@ -537,13 +529,12 @@ namespace cxxlens::sdk
 				return unexpected(std::move(executed.error()));
 			if (!executed->succeeded())
 			{
-				auto value = std::make_shared<materialization_result::implementation>();
-				value->terminal = executed->terminal == "provider.cancelled"
+				const auto terminal = executed->terminal == "provider.cancelled"
 					? materialization_terminal::cancelled
 					: (executed->sealing_error ? materialization_terminal::rejected
 											   : materialization_terminal::failed);
-				value->unresolved = std::move(executed->diagnostics);
-				return materialization_result{std::move(value)};
+				return detail::application_materialization_terminal_result(
+					terminal, std::move(executed->diagnostics));
 			}
 			if (auto valid = provider::detail::validate_provider_process_runtime_binding(
 					*executed, unit.process);
@@ -568,6 +559,7 @@ namespace cxxlens::sdk
 																   std::move(runtime),
 																   *runtime_receipt,
 																   unit.replay_plan_digest,
+																   unit.observation_technique,
 																   unit.host_partitions);
 			if (!unit_prepared)
 				return unexpected(std::move(unit_prepared.error()));
@@ -580,24 +572,6 @@ namespace cxxlens::sdk
 		const auto& manifest =
 			plan->units.front().process.selection.selected_candidate().description;
 
-		auto value = std::make_shared<materialization_result::implementation>();
-		value->terminal =
-			adopted->publication.terminal == detail::materialization_terminal::complete
-			? materialization_terminal::published_complete
-			: materialization_terminal::published_partial;
-		value->published_snapshot = std::move(adopted->publication.snapshot);
-		value->coverage = std::move(adopted->coverage);
-		value->unresolved = std::move(adopted->unresolved);
-		value->conflicts = std::move(adopted->conflicts);
-		value->differential_disagreements = std::move(adopted->differential_disagreements);
-		value->provenance =
-			application_analysis_provenance{manifest.provider_id,
-											manifest.provider_version,
-											manifest.provider_binary_digest,
-											manifest.provider_semantic_contract_digest,
-											adopted->provider_input_digest,
-											adopted->replay_plan_digest,
-											adopted->runtime_receipt_digest};
-		return materialization_result{std::move(value)};
+		return detail::application_materialization_published_result(std::move(*adopted), manifest);
 	}
 } // namespace cxxlens::sdk

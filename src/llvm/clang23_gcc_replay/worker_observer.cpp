@@ -22,12 +22,12 @@
 #include <llvm/ADT/SmallString.h>
 #include <llvm/ADT/StringRef.h>
 
+#include "replay_logical_paths.hpp"
+
 namespace cxxlens::detail::clang23_gcc_replay
 {
 	namespace
 	{
-		constexpr std::string_view synthetic_prefix{"/__cxxlens_gcc_replay__/"};
-		constexpr std::string_view logical_prefix{"project://"};
 		constexpr std::size_t maximum_clang_text_bytes{1024U * 1024U};
 		constexpr std::size_t maximum_macro_origin_depth{128U};
 		constexpr std::size_t maximum_macro_origins{256U};
@@ -321,14 +321,13 @@ namespace cxxlens::detail::clang23_gcc_replay
 				sources.getFileID(begin) != sources.getFileID(last))
 				return std::nullopt;
 			const auto filename = sources.getFilename(begin);
-			if (!filename.starts_with(synthetic_prefix))
+			if (!filename.starts_with(replay_synthetic_prefix))
 				return std::nullopt;
 			const auto after = clang::Lexer::getLocForEndOfToken(last, 0U, sources, language);
 			if (after.isInvalid() || sources.getFileID(after) != sources.getFileID(begin))
 				return std::nullopt;
 			observed_source_span output;
-			output.logical_path =
-				std::string{logical_prefix} + filename.drop_front(synthetic_prefix.size()).str();
+			output.logical_path = replay_logical_path(filename.str());
 			output.begin = sources.getFileOffset(begin);
 			output.end = sources.getFileOffset(after);
 			output.role = "spelling";
@@ -349,11 +348,11 @@ namespace cxxlens::detail::clang23_gcc_replay
 			if (location.isInvalid())
 				return sdk::unexpected(failure("call.source", "invalid-location"));
 			const auto filename = sources.getFilename(location);
-			if (!filename.starts_with(synthetic_prefix))
+			if (!filename.starts_with(replay_synthetic_prefix))
 				return sdk::unexpected(failure("call.source", "outside-replay-vfs"));
-			if (filename.size() - synthetic_prefix.size() > maximum_clang_text_bytes)
+			if (filename.size() - replay_synthetic_prefix.size() > maximum_clang_text_bytes)
 				return sdk::unexpected(resource_failure("clang-text"));
-			return std::string{logical_prefix} + filename.drop_front(synthetic_prefix.size()).str();
+			return replay_logical_path(filename.str());
 		}
 
 		[[nodiscard]] sdk::result<call_source_attachment>

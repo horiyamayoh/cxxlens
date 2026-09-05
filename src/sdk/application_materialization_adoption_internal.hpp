@@ -49,6 +49,7 @@ namespace cxxlens::sdk::detail
 		materialization_runtime_binding runtime,
 		const std::string& source_receipt_digest,
 		std::string replay_plan_digest,
+		std::string_view observation_technique,
 		std::span<const partition_draft> host_partitions = {});
 
 	/** Publish all fully validated unit sources through one Store transaction. */

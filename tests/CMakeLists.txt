@@ -173,26 +173,87 @@ set_tests_properties(
     "unit;sdk;application-analysis;gcc;replay;bounded;negative;determinism;resource;security"
 )
 
-cxxlens_add_test_executable(cxxlens-unit-sdk-gcc-replay-input
-                            unit/sdk/gcc_replay_input_internal_test.cpp)
-target_link_libraries(cxxlens-unit-sdk-gcc-replay-input PRIVATE cxxlens::sdk)
-target_include_directories(cxxlens-unit-sdk-gcc-replay-input
+cxxlens_add_test_executable(cxxlens-unit-sdk-compiler-replay-input
+                            unit/sdk/compiler_replay_input_internal_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-compiler-replay-input
+                      PRIVATE cxxlens::sdk)
+target_include_directories(cxxlens-unit-sdk-compiler-replay-input
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
-add_test(NAME unit.sdk-gcc-replay-input
-         COMMAND cxxlens-unit-sdk-gcc-replay-input)
+add_test(NAME unit.sdk-compiler-replay-input
+         COMMAND cxxlens-unit-sdk-compiler-replay-input)
 set_tests_properties(
-  unit.sdk-gcc-replay-input
+  unit.sdk-compiler-replay-input
   PROPERTIES
     LABELS
-    "unit;sdk;application-analysis;gcc;replay;codec;bounded;negative;fault;determinism;resource;security"
+    "unit;sdk;application-analysis;compiler-replay;gcc;msvc;replay;codec;bounded;negative;fault;determinism;resource;security"
 )
 
 if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
+  cxxlens_add_test_executable(cxxlens-unit-sdk-openssl-detached-run-crypto
+                              unit/sdk/openssl_detached_run_crypto_test.cpp)
+  target_link_libraries(cxxlens-unit-sdk-openssl-detached-run-crypto
+                        PRIVATE cxxlens_detached_run_crypto_internal)
+  target_include_directories(cxxlens-unit-sdk-openssl-detached-run-crypto
+                             PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  add_test(NAME security.sdk-openssl-detached-run-crypto
+           COMMAND cxxlens-unit-sdk-openssl-detached-run-crypto)
+  set_tests_properties(
+    security.sdk-openssl-detached-run-crypto
+    PROPERTIES
+      LABELS
+      "unit;security;sdk;application-analysis;provider;trust;ed25519;openssl;negative;fault;determinism"
+  )
+
+  cxxlens_add_test_executable(cxxlens-unit-sdk-detached-run-signing-file-port
+                              unit/sdk/detached_run_signing_file_port_test.cpp)
+  target_link_libraries(cxxlens-unit-sdk-detached-run-signing-file-port
+                        PRIVATE cxxlens_detached_run_signing_file_port_internal)
+  target_include_directories(cxxlens-unit-sdk-detached-run-signing-file-port
+                             PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  add_test(NAME security.sdk-detached-run-signing-file-port
+           COMMAND cxxlens-unit-sdk-detached-run-signing-file-port)
+  set_tests_properties(
+    security.sdk-detached-run-signing-file-port
+    PROPERTIES
+      LABELS
+      "unit;security;sdk;application-analysis;provider;trust;ed25519;filesystem;bounded;negative;fault;determinism"
+  )
+
+  cxxlens_add_test_executable(cxxlens-unit-sdk-detached-run-trust-file-port
+                              unit/sdk/detached_run_trust_file_port_test.cpp)
+  target_link_libraries(cxxlens-unit-sdk-detached-run-trust-file-port
+                        PRIVATE cxxlens_detached_run_trust_file_port_internal)
+  target_include_directories(cxxlens-unit-sdk-detached-run-trust-file-port
+                             PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  add_test(NAME security.sdk-detached-run-trust-file-port
+           COMMAND cxxlens-unit-sdk-detached-run-trust-file-port)
+  set_tests_properties(
+    security.sdk-detached-run-trust-file-port
+    PROPERTIES
+      LABELS
+      "unit;security;sdk;application-analysis;provider;trust;ed25519;filesystem;bounded;negative;fault;determinism"
+  )
+
+  cxxlens_add_test_executable(cxxlens-unit-sdk-detached-run-input-file-port
+                              unit/sdk/detached_run_input_file_port_test.cpp)
+  target_link_libraries(cxxlens-unit-sdk-detached-run-input-file-port
+                        PRIVATE cxxlens_detached_run_input_file_port_internal)
+  target_include_directories(cxxlens-unit-sdk-detached-run-input-file-port
+                             PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  add_test(NAME unit.sdk-detached-run-input-file-port
+           COMMAND cxxlens-unit-sdk-detached-run-input-file-port)
+  set_tests_properties(
+    unit.sdk-detached-run-input-file-port
+    PROPERTIES
+      LABELS
+      "unit;sdk;application-analysis;provider;filesystem;bounded;negative;fault;determinism"
+  )
+
   cxxlens_add_test_executable(
     cxxlens-unit-clang23-gcc-replay-worker-ingress
     unit/adapter/clang23_gcc_replay/worker_ingress_test.cpp)
   target_link_libraries(cxxlens-unit-clang23-gcc-replay-worker-ingress
-                        PRIVATE cxxlens_clang23_gcc_replay_ingress)
+                        PRIVATE cxxlens_clangcl_worker_command_internal)
   target_include_directories(cxxlens-unit-clang23-gcc-replay-worker-ingress
                              PRIVATE "${PROJECT_SOURCE_DIR}/src")
   add_test(NAME adapter.clang23-gcc-replay-worker-ingress
@@ -202,6 +263,39 @@ if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
     PROPERTIES
       LABELS
       "unit;adapter;application-analysis;clang23;gcc;replay;worker;codec;ast;lifetime;identity;bounded;negative;fault;determinism;resource;security"
+  )
+
+  cxxlens_add_test_executable(
+    cxxlens-unit-clangcl23-worker
+    unit/adapter/clang23_gcc_replay/clangcl_worker_test.cpp)
+  target_link_libraries(cxxlens-unit-clangcl23-worker
+                        PRIVATE cxxlens_clang23_gcc_replay_ingress)
+  target_include_directories(cxxlens-unit-clangcl23-worker
+                             PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  add_test(NAME adapter.clangcl23-worker COMMAND cxxlens-unit-clangcl23-worker)
+  set_tests_properties(
+    adapter.clangcl23-worker
+    PROPERTIES
+      LABELS
+      "unit;adapter;application-analysis;clang23;clangcl;msvc;replay;worker;ast;lifetime;identity;bounded;negative;fault;determinism;resource;security"
+  )
+
+  cxxlens_add_test_executable(
+    cxxlens-msvc-detached-application-analysis-e2e
+    integration/msvc_detached_application_analysis_e2e.cpp)
+  target_link_libraries(
+    cxxlens-msvc-detached-application-analysis-e2e
+    PRIVATE cxxlens::sdk cxxlens_clangcl_worker_command_internal
+            cxxlens_detached_application_materialization_file_service_internal)
+  target_include_directories(cxxlens-msvc-detached-application-analysis-e2e
+                             PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  add_test(NAME integration.msvc-detached-application-analysis
+           COMMAND cxxlens-msvc-detached-application-analysis-e2e)
+  set_tests_properties(
+    integration.msvc-detached-application-analysis
+    PROPERTIES
+      LABELS
+      "integration;application-analysis;clang23;clangcl;msvc;capture;replay;provider;detached;trust;store;query;bounded;negative;determinism;security"
   )
 endif()
 
@@ -273,9 +367,15 @@ target_link_libraries(cxxlens-unit-sdk-application-analysis
                       PRIVATE cxxlens::sdk)
 target_include_directories(cxxlens-unit-sdk-application-analysis
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
+if(CXXLENS_BUILD_SHARED)
+  cxxlens_add_provider_runtime_closure(cxxlens-unit-sdk-application-analysis)
+endif()
 if(TARGET cxxlens-clang-gcc-replay-worker-23)
   add_dependencies(cxxlens-unit-sdk-application-analysis
                    cxxlens-clang-gcc-replay-worker-23)
+  target_link_libraries(
+    cxxlens-unit-sdk-application-analysis
+    PRIVATE cxxlens_detached_application_materialization_file_service_internal)
   target_compile_definitions(
     cxxlens-unit-sdk-application-analysis
     PRIVATE
@@ -294,6 +394,54 @@ set_tests_properties(
   PROPERTIES
     LABELS
     "unit;sdk;application-analysis;capture;fault;determinism;resource;security")
+
+cxxlens_add_test_executable(cxxlens-unit-sdk-detached-provider-run
+                            unit/sdk/detached_provider_run_internal_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-detached-provider-run
+                      PRIVATE cxxlens::sdk)
+target_include_directories(cxxlens-unit-sdk-detached-provider-run
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-detached-provider-run
+         COMMAND cxxlens-unit-sdk-detached-provider-run)
+set_tests_properties(
+  unit.sdk-detached-provider-run
+  PROPERTIES
+    LABELS
+    "unit;sdk;application-analysis;provider;codec;bounded;negative;fault;determinism;resource;security"
+)
+
+cxxlens_add_test_executable(cxxlens-unit-sdk-provider-manifest-codec
+                            unit/sdk/provider_manifest_codec_internal_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-provider-manifest-codec
+                      PRIVATE cxxlens::sdk)
+target_include_directories(cxxlens-unit-sdk-provider-manifest-codec
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-provider-manifest-codec
+         COMMAND cxxlens-unit-sdk-provider-manifest-codec)
+set_tests_properties(
+  unit.sdk-provider-manifest-codec
+  PROPERTIES
+    LABELS
+    "unit;sdk;application-analysis;provider;manifest;codec;bounded;negative;determinism;resource;security"
+)
+
+cxxlens_add_test_executable(cxxlens-msvc-canonical-vector
+                            ../src/msvc_worker/capture_main.cpp)
+target_sources(cxxlens-msvc-canonical-vector
+               PRIVATE ../src/runtime/msvc_capture_file_port.cpp)
+target_link_libraries(cxxlens-msvc-canonical-vector PRIVATE cxxlens::sdk)
+target_include_directories(cxxlens-msvc-canonical-vector
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(
+  NAME unit.application-analysis-msvc-canonical-vector
+  COMMAND
+    cxxlens-msvc-canonical-vector --check-vector
+    "${PROJECT_SOURCE_DIR}/tests/fixtures/msvc_application_analysis/canonical_capture.sha256"
+)
+set_tests_properties(
+  unit.application-analysis-msvc-canonical-vector
+  PROPERTIES LABELS
+             "unit;application-analysis;msvc;codec;determinism;portability")
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-materialization-task
                             unit/sdk/materialization_task_internal_test.cpp)
@@ -2407,7 +2555,7 @@ set(_cxxlens_ng_test_binary_candidates
     cxxlens-unit-sdk-build-capture
     cxxlens-unit-sdk-compile-commands-capture
     cxxlens-unit-sdk-gcc-capture-files
-    cxxlens-unit-sdk-gcc-replay-input
+    cxxlens-unit-sdk-compiler-replay-input
     cxxlens-unit-clang23-gcc-replay-worker-ingress
     cxxlens-unit-sdk-gcc-replay-planner
     cxxlens-unit-sdk-sealed-executable

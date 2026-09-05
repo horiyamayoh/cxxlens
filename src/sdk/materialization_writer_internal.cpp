@@ -164,9 +164,8 @@ namespace cxxlens::sdk::detail
 			std::vector<bounded_store_record> output;
 			output.reserve(records.size());
 			for (auto& record : records)
-				output.emplace_back(bounded_store_record{projection_kind(record.kind),
-														 std::move(record.key),
-														 std::move(record.payload)});
+				output.emplace_back(
+					projection_kind(record.kind), std::move(record.key), std::move(record.payload));
 			return output;
 		}
 
@@ -808,8 +807,8 @@ namespace cxxlens::sdk::detail
 		std::vector<bounded_store_record> actual_records;
 		actual_records.reserve(actual_projection->records.size());
 		for (auto& record : actual_projection->records)
-			actual_records.emplace_back(bounded_store_record{
-				projection_kind(record.kind), std::move(record.key), std::move(record.payload)});
+			actual_records.emplace_back(
+				projection_kind(record.kind), std::move(record.key), std::move(record.payload));
 		const auto expected_for_v6 = *expected_records;
 		// Publication moves the independent expected projection into its first validator. Preserve
 		// one immutable copy for verification of the durable backend after that move.
@@ -873,9 +872,8 @@ namespace cxxlens::sdk::detail
 			std::vector<bounded_store_record> records;
 			records.reserve(projection->records.size());
 			for (auto& record : projection->records)
-				records.emplace_back(bounded_store_record{projection_kind(record.kind),
-														  std::move(record.key),
-														  std::move(record.payload)});
+				records.emplace_back(
+					projection_kind(record.kind), std::move(record.key), std::move(record.payload));
 			return append_candidate_records(spool, records);
 		};
 		bridge.write_publication_independent_report =
@@ -930,9 +928,8 @@ namespace cxxlens::sdk::detail
 			std::vector<bounded_store_record> published_records;
 			published_records.reserve(actual->records.size());
 			for (auto& record : actual->records)
-				published_records.emplace_back(bounded_store_record{projection_kind(record.kind),
-																	std::move(record.key),
-																	std::move(record.payload)});
+				published_records.emplace_back(
+					projection_kind(record.kind), std::move(record.key), std::move(record.payload));
 			if (auto verified = run_v6_candidate_preflight(
 					output_authority.snapshot.series,
 					output_authority.snapshot.series.engine_generation_id,

@@ -2,6 +2,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -25,7 +26,18 @@
 #include <cxxlens/relations/source_span.hpp>
 #include <cxxlens/sdk/application_analysis.hpp>
 
+#include "msvc_worker/msvc_capture_bundle.hpp"
+#include "msvc_worker/msvc_response_arguments.hpp"
+#include "msvc_worker/msvc_source_dependencies.hpp"
 #include "sdk/application_materialization_execution_internal.hpp"
+#include "sdk/detached_provider_run_adoption_internal.hpp"
+#include "sdk/detached_provider_run_builder_internal.hpp"
+#include "sdk/provider_runtime_internal.hpp"
+
+#if defined(CXXLENS_TEST_CLANG23_WORKER_PATH)
+#include "runtime/detached_application_materialization_file_service_internal.hpp"
+#include "sdk/openssl_detached_run_crypto_internal.hpp"
+#endif
 
 #if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
 namespace
@@ -270,6 +282,41 @@ namespace
 		return bundle;
 	}
 
+	[[nodiscard]] canonical_value valid_msvc_bundle()
+	{
+		auto bundle = valid_bundle();
+		bundle.tuple[1].tuple[0] = canonical_value::from_string("msvc");
+		bundle.tuple[1].tuple[1] = canonical_value::from_string("19.51.36256");
+		bundle.tuple[1].tuple[2] =
+			observed(canonical_value::from_string("C:\\VS\\VC\\Tools\\MSVC\\14.51\\bin\\cl.exe"));
+		bundle.tuple[1].tuple[4] = canonical_value::from_string("x86_64-pc-windows-msvc");
+		bundle.tuple[2] = canonical_value::from_string("msbuild-cltool-proxy");
+		bundle.tuple[3] = canonical_value::from_string("x86_64-pc-windows-msvc");
+		bundle.tuple[4] = canonical_value::from_string("project:msvc-example");
+		auto& unit = bundle.tuple[5].tuple[0];
+		unit.tuple[8] = observed(canonical_value::from_tuple({
+			canonical_value::from_string("C:\\VS\\VC\\Tools\\MSVC\\14.51\\bin\\cl.exe"),
+			canonical_value::from_string("/nologo"),
+			canonical_value::from_string("/std:c++latest"),
+			canonical_value::from_string("/D"),
+			canonical_value::from_string("SEPARATED_DEFINE=1"),
+			canonical_value::from_string("/I"),
+			canonical_value::from_string("C:\\workspace\\example\\include"),
+			canonical_value::from_string("/IC:\\workspace\\example\\include"),
+			canonical_value::from_string("C:\\workspace\\example\\src\\main.cpp"),
+			canonical_value::from_string("/c"),
+		}));
+		unit.tuple[11] = observed(canonical_value::from_tuple({}));
+		unit.tuple[12] = observed(canonical_value::from_string("C:\\workspace\\example\\build"));
+		unit.tuple[13] = observed(canonical_value::from_string("c++latest"));
+		unit.tuple[14] = observed(canonical_value::from_string("msvc"));
+		bundle.tuple[9] = observed(canonical_value::from_tuple({canonical_value::from_tuple({
+			canonical_value::from_string("C:\\workspace\\example"),
+			canonical_value::from_string("project://"),
+		})}));
+		return bundle;
+	}
+
 	[[nodiscard]] cxxlens::sdk::relation_descriptor request_descriptor()
 	{
 		cxxlens::sdk::relation_descriptor value;
@@ -305,6 +352,7 @@ namespace
 		description.package_identity = "cxxlens.gcc-replay.package";
 		description.publisher = "cxxlens";
 		description.license = "Apache-2.0";
+		description.signature = digest('7');
 		description.protocol = {protocol_v2_major,
 								protocol_v2_minor,
 								protocol_v2_minor,
@@ -334,6 +382,297 @@ namespace
 				 digest('8')},
 				{}};
 	}
+
+	class detached_transcript_sink final : public cxxlens::sdk::provider::frame_sink
+	{
+	  public:
+		cxxlens::sdk::result<void> write(const std::span<const std::byte> bytes) override
+		{
+			transcript.insert(transcript.end(), bytes.begin(), bytes.end());
+			return {};
+		}
+
+		std::vector<std::byte> transcript;
+	};
+
+	class detached_application_provider final : public cxxlens::sdk::provider::portable_provider
+	{
+	  public:
+		explicit detached_application_provider(cxxlens::sdk::relation_descriptor descriptor)
+			: descriptor_{std::move(descriptor)}
+		{
+		}
+
+		[[nodiscard]] std::string_view id() const noexcept override
+		{
+			return "cxxlens.gcc-replay";
+		}
+		[[nodiscard]] cxxlens::sdk::semantic_version version() const noexcept override
+		{
+			return {1U, 0U, 0U};
+		}
+		[[nodiscard]] std::string_view semantic_contract_digest() const noexcept override
+		{
+			return contract_;
+		}
+		cxxlens::sdk::result<void> run(const cxxlens::sdk::provider::task& task,
+									   cxxlens::sdk::provider::context& context) override
+		{
+			using namespace cxxlens::sdk;
+			row_builder builder{descriptor_};
+			if (auto set = builder.set({descriptor_.id,
+										descriptor_.columns.front().id,
+										descriptor_.columns.front().type,
+										{}},
+									   detached_cell::utf8("observed"));
+				!set)
+				return set;
+			auto row = std::move(builder).finish();
+			if (!row)
+				return unexpected(std::move(row.error()));
+			auto output = context.relation(descriptor_);
+			if (auto begun = output.begin("clang23-gcc-replay",
+										  "atomic:application-analysis",
+										  "batch:application-analysis");
+				!begun)
+				return begun;
+			if (auto pushed = output.push(*row); !pushed)
+				return pushed;
+			if (auto ended = output.end(); !ended)
+				return ended;
+			context.coverage().request("relation", descriptor_.id);
+			if (auto covered = context.coverage().classify(
+					{"relation", descriptor_.id, "covered", "frontend-observed"});
+				!covered)
+				return covered;
+			context.coverage().request("task", task.task_id);
+			if (auto covered = context.coverage().classify(
+					{"task", task.task_id, "covered", "translation-unit-executed"});
+				!covered)
+				return covered;
+			context.evidence().add({"application-analysis.replay",
+									"compile-unit:main",
+									"clang-23.1.0-gcc-mode",
+									"detached-test"});
+			return {};
+		}
+
+	  private:
+		cxxlens::sdk::relation_descriptor descriptor_;
+		std::string contract_{digest('b')};
+	};
+
+	void authenticate(cxxlens::sdk::detail::detached_provider_run_draft& value,
+					  const std::string_view signer = "worker:clang23-gcc-replay")
+	{
+		using namespace cxxlens::sdk;
+		using namespace cxxlens::sdk::detail;
+		value.authentication.signer_id = signer;
+		value.authentication.key_fingerprint = digest('6');
+		for (std::size_t index{}; index < value.authentication.signature.size(); ++index)
+			value.authentication.signature[index] = static_cast<std::byte>(index + 1U);
+		value.authentication.signature_digest = content_digest(value.authentication.signature);
+		auto subject = detached_provider_run_signed_subject_digest(value);
+		require(subject);
+		value.authentication.signed_subject_digest = std::move(*subject);
+	}
+
+	class deterministic_detached_run_signer final : public cxxlens::sdk::detail::detached_run_signer
+	{
+	  public:
+		explicit deterministic_detached_run_signer(const bool fail = false) : fail_{fail} {}
+
+		[[nodiscard]] cxxlens::sdk::result<cxxlens::sdk::detail::detached_run_signature>
+		sign(const std::string_view scope,
+			 const std::string_view signed_subject_digest) const override
+		{
+			using namespace cxxlens::sdk;
+			using namespace cxxlens::sdk::detail;
+			if (scope != "detached-provider-run" || !signed_subject_digest.starts_with("sha256:"))
+				return unexpected(error{"test.detached-run-signer-invalid", "request", "binding"});
+			if (fail_)
+				return unexpected(
+					error{"test.detached-run-signer-unavailable", "signer", "unavailable"});
+			detached_run_signature output;
+			output.signer_id = "worker:clang23-gcc-replay";
+			output.key_fingerprint = digest('6');
+			for (std::size_t index{}; index < output.signature.size(); ++index)
+				output.signature[index] = static_cast<std::byte>(index + 1U);
+			return output;
+		}
+
+	  private:
+		bool fail_{};
+	};
+
+#if defined(CXXLENS_TEST_CLANG23_WORKER_PATH)
+	[[nodiscard]] std::byte test_hex_nibble(const char value)
+	{
+		if (value >= '0' && value <= '9')
+			return static_cast<std::byte>(value - '0');
+		if (value >= 'a' && value <= 'f')
+			return static_cast<std::byte>(value - 'a' + 10);
+		require(false);
+		return {};
+	}
+
+	template <std::size_t Size>
+	[[nodiscard]] std::array<std::byte, Size> test_hex_bytes(const std::string_view hex)
+	{
+		require(hex.size() == Size * 2U);
+		std::array<std::byte, Size> output{};
+		for (std::size_t index{}; index < output.size(); ++index)
+			output[index] =
+				(test_hex_nibble(hex[index * 2U]) << 4U) | test_hex_nibble(hex[index * 2U + 1U]);
+		return output;
+	}
+
+	class test_ed25519_material_port final
+		: public cxxlens::sdk::detail::detached_run_ed25519_signing_material_port
+	{
+	  public:
+		test_ed25519_material_port()
+		{
+			value_.scope = "detached-provider-run";
+			value_.signer_id = "worker:clang23-gcc-replay";
+			value_.private_key = test_hex_bytes<32U>("9d61b19deffd5a60ba844af492ec2cc4"
+													 "4449c5697b326919703bac031cae7f60");
+			value_.public_key = test_hex_bytes<32U>("d75a980182b10ab7d54bfed3c964073a"
+													"0ee172f3daa62325af021a68f707511a");
+		}
+
+		[[nodiscard]] cxxlens::sdk::result<
+			cxxlens::sdk::detail::detached_run_ed25519_signing_material>
+		load(const std::string_view, const std::string_view) const override
+		{
+			return value_;
+		}
+
+		[[nodiscard]] const std::array<std::byte, 32U>& public_key() const noexcept
+		{
+			return value_.public_key;
+		}
+
+	  private:
+		cxxlens::sdk::detail::detached_run_ed25519_signing_material value_;
+	};
+
+	class detached_run_test_directory final
+	{
+	  public:
+		detached_run_test_directory()
+		{
+			path_ = std::filesystem::temp_directory_path() /
+				("cxxlens detached adoption " + std::to_string(std::rand()));
+			std::error_code error;
+			std::filesystem::create_directories(path_, error);
+			require(!error);
+		}
+
+		~detached_run_test_directory()
+		{
+			std::error_code ignored;
+			std::filesystem::remove_all(path_, ignored);
+		}
+
+		[[nodiscard]] const std::filesystem::path& path() const noexcept
+		{
+			return path_;
+		}
+
+	  private:
+		std::filesystem::path path_;
+	};
+
+	void write_binary(const std::filesystem::path& path, const std::span<const std::byte> bytes)
+	{
+		std::ofstream output{path, std::ios::binary | std::ios::trunc};
+		output.write(reinterpret_cast<const char*>(bytes.data()),
+					 static_cast<std::streamsize>(bytes.size()));
+		require(static_cast<bool>(output));
+	}
+#endif
+
+	class exact_detached_signature_verifier final
+		: public cxxlens::sdk::detail::trusted_detached_run_signature_verifier
+	{
+	  public:
+		explicit exact_detached_signature_verifier(
+			const cxxlens::sdk::detail::validated_detached_provider_run& run,
+			const cxxlens::sdk::detail::detached_run_signature_verdict verdict =
+				cxxlens::sdk::detail::detached_run_signature_verdict::verified)
+			: authentication_{run.value().authentication}, verdict_{verdict}
+		{
+		}
+
+		[[nodiscard]] cxxlens::sdk::detail::detached_run_signature_verification
+		verify(const std::string_view scope,
+			   const std::string_view signer_id,
+			   const std::string_view key_fingerprint,
+			   const std::string_view signed_subject_digest,
+			   const std::span<const std::byte> signature,
+			   const std::string_view signature_digest) const override
+		{
+			using namespace cxxlens::sdk::detail;
+			if (scope != "detached-provider-run" || signer_id != authentication_.signer_id ||
+				key_fingerprint != authentication_.key_fingerprint ||
+				signed_subject_digest != authentication_.signed_subject_digest ||
+				signature_digest != authentication_.signature_digest ||
+				!std::ranges::equal(signature, authentication_.signature))
+			{
+				detached_run_signature_verification rejected;
+				rejected.verdict = detached_run_signature_verdict::rejected;
+				return rejected;
+			}
+			return {verdict_,
+					"test:detached-ed25519-verifier",
+					digest('5'),
+					std::string{signer_id},
+					std::string{key_fingerprint},
+					std::string{signed_subject_digest},
+					std::string{signature_digest}};
+		}
+
+	  private:
+		cxxlens::sdk::detail::detached_provider_run_authentication authentication_;
+		cxxlens::sdk::detail::detached_run_signature_verdict verdict_;
+	};
+
+	class deterministic_multi_run_verifier final
+		: public cxxlens::sdk::detail::trusted_detached_run_signature_verifier
+	{
+	  public:
+		[[nodiscard]] cxxlens::sdk::detail::detached_run_signature_verification
+		verify(const std::string_view scope,
+			   const std::string_view signer_id,
+			   const std::string_view key_fingerprint,
+			   const std::string_view signed_subject_digest,
+			   const std::span<const std::byte> signature,
+			   const std::string_view signature_digest) const override
+		{
+			using namespace cxxlens::sdk;
+			using namespace cxxlens::sdk::detail;
+			std::array<std::byte, detached_provider_run_signature_bytes> expected{};
+			for (std::size_t index{}; index < expected.size(); ++index)
+				expected[index] = static_cast<std::byte>(index + 1U);
+			if (scope != "detached-provider-run" || signer_id != "worker:clang23-gcc-replay" ||
+				key_fingerprint != digest('6') || !signed_subject_digest.starts_with("sha256:") ||
+				!std::ranges::equal(signature, expected) ||
+				signature_digest != content_digest(expected))
+			{
+				detached_run_signature_verification rejected;
+				rejected.verdict = detached_run_signature_verdict::rejected;
+				return rejected;
+			}
+			return {detached_run_signature_verdict::verified,
+					"test:detached-ed25519-verifier",
+					digest('5'),
+					std::string{signer_id},
+					std::string{key_fingerprint},
+					std::string{signed_subject_digest},
+					std::string{signature_digest}};
+		}
+	};
 
 	[[nodiscard]] bool has_reason(const std::span<const cxxlens::sdk::capture_gap> gaps,
 								  const std::string_view reason)
@@ -436,6 +775,214 @@ namespace
 		auto empty_argv_import = cxxlens::sdk::import_capture(*empty_argv_bundle);
 		require(!empty_argv_import &&
 				empty_argv_import.error().code == "application-analysis.target-unavailable");
+	}
+
+	void msvc_capture_import_preserves_replay_fidelity()
+	{
+		auto bytes = canonical_binary(valid_msvc_bundle());
+		require(bytes);
+		auto decoded = cxxlens::sdk::decode_capture_bundle(*bytes);
+		require(decoded);
+		require(decoded->production_compiler() == "msvc-19.51.36256");
+		require(decoded->capture_adapter() == "msbuild-cltool-proxy");
+		require(decoded->target_abi() == "x86_64-pc-windows-msvc");
+		auto imported = cxxlens::sdk::import_capture(*decoded);
+		require(imported && imported->replay_plans().size() == 1U);
+		const auto& plan = imported->replay_plans().front();
+		require(plan.analysis_frontend() == "clang-cl-23.1.0");
+		require(plan.target_abi() == "x86_64-pc-windows-msvc");
+		require(
+			has_reason(plan.unresolved(), "analysis-frontend-differs-from-production-compiler"));
+		require(!has_reason(plan.unresolved(), "msvc-input-path-not-bound"));
+
+		auto unsupported = valid_msvc_bundle();
+		unsupported.tuple[5].tuple[0].tuple[8].tuple[1].tuple.insert(
+			unsupported.tuple[5].tuple[0].tuple[8].tuple[1].tuple.begin() + 2,
+			canonical_value::from_string("/vendorUnknown"));
+		unsupported.tuple[5].tuple[0].tuple[8].tuple[1].tuple.insert(
+			unsupported.tuple[5].tuple[0].tuple[8].tuple[1].tuple.begin() + 3,
+			canonical_value::from_string("/Yucommon.hpp"));
+		auto unsupported_bytes = canonical_binary(unsupported);
+		require(unsupported_bytes);
+		auto unsupported_bundle = cxxlens::sdk::decode_capture_bundle(*unsupported_bytes);
+		require(unsupported_bundle);
+		auto unsupported_import = cxxlens::sdk::import_capture(*unsupported_bundle);
+		require(unsupported_import);
+		require(has_reason(unsupported_import->unresolved(), "msvc-option-not-classified"));
+		require(has_reason(unsupported_import->unresolved(),
+						   "msvc-pch-or-module-input-not-replayable"));
+	}
+
+	void portable_msvc_encoder_round_trips_through_host_authority()
+	{
+		using namespace cxxlens::application_analysis_worker;
+		const auto text_bytes = [](const std::string_view text)
+		{
+			std::vector<std::byte> output;
+			output.reserve(text.size());
+			for (const auto byte : text)
+				output.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
+			return output;
+		};
+		msvc_capture_input input;
+		input.project_id = "project:msvc-portable-vector";
+		input.canonical_project_root = "C:\\workspace\\unicode-project";
+		input.canonical_working_directory = "C:\\workspace\\unicode-project\\build space";
+		input.canonical_compiler_path =
+			"C:\\VS\\VC\\Tools\\MSVC\\14.51.36231\\bin\\Hostx64\\x64\\cl.exe";
+		input.compiler_binary_digest = digest('1');
+		input.windows_sdk_root = "C:\\Program Files (x86)\\Windows Kits\\10";
+		input.abi_digest = digest('2');
+		input.builtin_headers_digest = digest('3');
+		input.builtin_macros_digest = digest('4');
+		input.include_search_digest = digest('5');
+		input.original_arguments = {
+			input.canonical_compiler_path,
+			"@C:\\workspace\\unicode-project\\build space\\options.rsp",
+			"C:\\workspace\\unicode-project\\src\\main.cpp",
+			"/c",
+		};
+		input.main_source = {"C:\\workspace\\unicode-project\\src\\main.cpp",
+							 text_bytes("#include <model.hpp>\nint main(){return model();}\n"),
+							 "main",
+							 "utf8"};
+		input.dependency_sources = {{"C:\\workspace\\unicode-project\\include\\model.hpp",
+									 text_bytes("inline int model(){return 0;}\n"),
+									 "header",
+									 "utf8"}};
+		input.response_files = {{"C:\\workspace\\unicode-project\\build space\\options.rsp",
+								 text_bytes("/std:c++latest /DUNICODE=1"),
+								 std::nullopt}};
+
+		auto encoded = encode_msvc_capture_bundle(input);
+		auto encoded_again = encode_msvc_capture_bundle(input);
+		require(encoded && encoded_again && *encoded == *encoded_again);
+		auto decoded = cxxlens::sdk::decode_capture_bundle(*encoded);
+		require(decoded && decoded->digest() == cxxlens::sdk::content_digest(*encoded));
+		auto imported = cxxlens::sdk::import_capture(*decoded);
+		require(imported && imported->replay_plans().size() == 1U);
+		require(imported->replay_plans().front().analysis_frontend() == "clang-cl-23.1.0");
+
+		auto partial = input;
+		partial.source_closure_membership =
+			unavailable_capture_field{"dependency-member-outside-project-root",
+									  "recapture-with-a-qualified-logical-read-root"};
+		auto partial_encoded = encode_msvc_capture_bundle(partial);
+		require(partial_encoded);
+		auto partial_decoded = cxxlens::sdk::decode_capture_bundle(*partial_encoded);
+		require(partial_decoded &&
+				has_reason(partial_decoded->gaps(), "dependency-member-outside-project-root"));
+		auto partial_imported = cxxlens::sdk::import_capture(*partial_decoded);
+		require(
+			partial_imported &&
+			has_reason(partial_imported->unresolved(), "dependency-member-outside-project-root"));
+
+		auto outside = input;
+		outside.main_source.canonical_path = "D:\\foreign\\main.cpp";
+		auto rejected = encode_msvc_capture_bundle(outside);
+		require(!rejected && rejected.error().code == "application-analysis.msvc-capture-invalid");
+
+		auto bounded = input;
+		msvc_capture_limits limits;
+		limits.maximum_arguments = 2U;
+		auto limited = encode_msvc_capture_bundle(bounded, limits);
+		require(!limited &&
+				limited.error().code == "application-analysis.msvc-capture-limit-exceeded");
+		auto oversized_token = input;
+		oversized_token.original_arguments.push_back(std::string(4097U, 'x'));
+		auto token_rejected = encode_msvc_capture_bundle(oversized_token);
+		require(!token_rejected && token_rejected.error().field == "original_arguments");
+		auto embedded_nul = input;
+		embedded_nul.original_arguments.push_back(std::string{"/DVALUE=ok\0hidden", 17U});
+		auto nul_rejected = encode_msvc_capture_bundle(embedded_nul);
+		require(!nul_rejected && nul_rejected.error().field == "original_arguments");
+	}
+
+	void msvc_source_dependencies_are_bounded_and_canonical()
+	{
+		using cxxlens::application_analysis_worker::decode_msvc_source_dependencies;
+		constexpr std::string_view document = R"json({
+  "Version": "1.2",
+  "Data": {
+    "Source": "C:\\workspace\\src\\main.cpp",
+    "ProvidedModule": "",
+    "ImportedModules": [],
+    "ImportedHeaderUnits": [],
+    "Includes": [
+      "C:\\workspace\\include\\z.hpp",
+      "C:\\workspace\\include\\a.hpp"
+    ]
+  }
+})json";
+		auto decoded = decode_msvc_source_dependencies(document);
+		require(decoded && decoded->source == "C:\\workspace\\src\\main.cpp" &&
+				decoded->includes ==
+					std::vector<std::string>{"C:\\workspace\\include\\a.hpp",
+											 "C:\\workspace\\include\\z.hpp"});
+
+		auto unsupported = decode_msvc_source_dependencies(
+			R"json({"Version":"2.0","Data":{"Source":"x","Includes":[]}})json");
+		require(!unsupported &&
+				unsupported.error().code ==
+					"application-analysis.msvc-source-dependencies-invalid");
+		auto duplicate = decode_msvc_source_dependencies(
+			R"json({"Version":"1.1","Data":{"Source":"x","Includes":["a","a"]}})json");
+		require(!duplicate && duplicate.error().detail == "duplicate");
+		auto bounded = decode_msvc_source_dependencies(document, 2U, 4096U);
+		require(!bounded &&
+				bounded.error().code ==
+					"application-analysis.msvc-source-dependencies-limit-exceeded");
+		auto malformed = decode_msvc_source_dependencies(
+			R"json({"Version":"1.2","Data":{"Source":"x","Includes":[1]}})json");
+		require(!malformed && malformed.error().field == "Data.Includes[0]");
+	}
+
+	void msvc_response_tokenization_is_shared_and_bounded()
+	{
+		using namespace cxxlens::application_analysis_worker;
+		const auto bytes = [](const std::string_view text)
+		{
+			std::vector<std::byte> output;
+			output.reserve(text.size());
+			for (const auto byte : text)
+				output.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
+			return output;
+		};
+
+		auto parsed = parse_msvc_response_arguments(
+			bytes(R"rsp(/DNAME="a b" /I"C:\Program Files\SDK" source.cpp)rsp"), 4U);
+		require(
+			parsed &&
+			*parsed ==
+				std::vector<std::string>{"/DNAME=a b", "/IC:\\Program Files\\SDK", "source.cpp"});
+		auto bounded = parse_msvc_response_arguments(bytes("one two"), 1U);
+		require(!bounded && bounded.error() == msvc_response_parse_failure::argument_count);
+		auto unterminated = parse_msvc_response_arguments(bytes("\"open"), 4U);
+		require(!unterminated &&
+				unterminated.error() == msvc_response_parse_failure::unterminated_quote);
+		auto nul = bytes("valid");
+		nul.push_back(std::byte{});
+		auto embedded_nul = parse_msvc_response_arguments(nul, 4U);
+		require(!embedded_nul && embedded_nul.error() == msvc_response_parse_failure::embedded_nul);
+
+		std::vector<std::byte> utf16le{std::byte{0xffU}, std::byte{0xfeU}};
+		for (const auto unit : std::u16string_view{u"/DUNICODE=\u65e5\u672c source.cpp"})
+		{
+			utf16le.push_back(static_cast<std::byte>(unit & 0xffU));
+			utf16le.push_back(static_cast<std::byte>(unit >> 8U));
+		}
+		auto unicode = parse_msvc_response_arguments(utf16le, 4U);
+		require(unicode &&
+				*unicode == std::vector<std::string>{"/DUNICODE=\u65e5\u672c", "source.cpp"});
+		utf16le.pop_back();
+		auto malformed_utf16 = parse_msvc_response_arguments(utf16le, 4U);
+		require(!malformed_utf16 &&
+				malformed_utf16.error() == msvc_response_parse_failure::invalid_encoding);
+		const std::vector<std::byte> lone_high_surrogate{
+			std::byte{0xffU}, std::byte{0xfeU}, std::byte{0x00U}, std::byte{0xd8U}};
+		auto malformed_surrogate = parse_msvc_response_arguments(lone_high_surrogate, 4U);
+		require(!malformed_surrogate &&
+				malformed_surrogate.error() == msvc_response_parse_failure::invalid_encoding);
 	}
 
 	void allocation_failures_are_typed_at_external_boundaries()
@@ -891,36 +1438,41 @@ namespace
 								   project.catalog.catalog_digest,
 								   std::nullopt};
 		auto first =
-			detail::make_gcc_application_materialization_execution_plan(project,
-																		*engine,
-																		publication,
-																		{&descriptor.id, 1U},
-																		"cc.clang23-gcc-replay-1",
-																		*selection,
-																		{},
-																		{});
+			detail::make_application_materialization_execution_plan(project,
+																	*engine,
+																	publication,
+																	{&descriptor.id, 1U},
+																	"cc.clang23-gcc-replay-1",
+																	*selection,
+																	{},
+																	{});
 		auto second =
-			detail::make_gcc_application_materialization_execution_plan(project,
-																		*engine,
-																		publication,
-																		{&descriptor.id, 1U},
-																		"cc.clang23-gcc-replay-1",
-																		*selection,
-																		{},
-																		{});
+			detail::make_application_materialization_execution_plan(project,
+																	*engine,
+																	publication,
+																	{&descriptor.id, 1U},
+																	"cc.clang23-gcc-replay-1",
+																	*selection,
+																	{},
+																	{});
 		require(first && second &&
 				first->materialization_request_id == second->materialization_request_id);
+		require(first->transport ==
+				cxxlens::sdk::detail::application_materialization_execution_transport::process);
 		require(first->units.size() == 1U);
 		const auto& unit = first->units.front();
 		require(unit.process.task_id == unit.task.value().provider_task.task_id);
 		require(unit.process.task_input_digest == unit.provider_input.input_digest());
 		require(unit.task.value().provider_input_digest == unit.provider_input.input_digest());
 		require(unit.task.value().capture.semantic_identity() == unit.capture.semantic_identity());
+		require(unit.observation_technique == "clang_gcc_mode_replay");
+		require(unit.task.value().provider_task.dependency_groups ==
+				std::vector<std::string>{"clang23-gcc-replay"});
 		require(unit.task.value().partitions.front().candidate.current.input.precision_profile ==
 				"under_approximation");
 		require(unit.host_partitions.empty());
 
-		auto unavailable_relation = detail::make_gcc_application_materialization_execution_plan(
+		auto unavailable_relation = detail::make_application_materialization_execution_plan(
 			project,
 			*engine,
 			publication,
@@ -936,15 +1488,48 @@ namespace
 		auto relative_selection = provider::select_provider(provider_request, {&candidate, 1U});
 		require(relative_selection);
 		auto relative =
-			detail::make_gcc_application_materialization_execution_plan(project,
-																		*engine,
-																		publication,
-																		{&descriptor.id, 1U},
-																		"cc.clang23-gcc-replay-1",
-																		*relative_selection,
-																		{},
-																		{});
+			detail::make_application_materialization_execution_plan(project,
+																	*engine,
+																	publication,
+																	{&descriptor.id, 1U},
+																	"cc.clang23-gcc-replay-1",
+																	*relative_selection,
+																	{},
+																	{});
 		require(!relative && relative.error().detail == "absolute-path-required");
+
+		auto detached_candidate = candidate;
+		detached_candidate.executable_argv.clear();
+		auto detached_selection =
+			provider::select_provider(provider_request, {&detached_candidate, 1U});
+		require(detached_selection);
+		auto detached = detail::make_application_materialization_execution_plan(
+			project,
+			*engine,
+			publication,
+			{&descriptor.id, 1U},
+			"cc.clang23-gcc-replay-1",
+			*detached_selection,
+			{},
+			{},
+			{},
+			detail::application_materialization_execution_transport::detached);
+		require(detached &&
+				detached->transport ==
+					detail::application_materialization_execution_transport::detached);
+		auto invalid_transport = detail::make_application_materialization_execution_plan(
+			project,
+			*engine,
+			publication,
+			{&descriptor.id, 1U},
+			"cc.clang23-gcc-replay-1",
+			*selection,
+			{},
+			{},
+			{},
+			static_cast<detail::application_materialization_execution_transport>(255U));
+		require(!invalid_transport && invalid_transport.error().field == "transport" &&
+				invalid_transport.error().detail == "unsupported");
 
 		auto two_unit_bytes = canonical_binary(valid_two_unit_bundle());
 		require(two_unit_bytes);
@@ -956,16 +1541,376 @@ namespace
 			application_analysis_imported_value_internal(*two_unit_project);
 		publication.catalog_semantic_digest = two_unit_value.catalog.catalog_digest;
 		auto two_unit_plan =
-			detail::make_gcc_application_materialization_execution_plan(two_unit_value,
-																		*engine,
-																		publication,
-																		{&descriptor.id, 1U},
-																		"cc.clang23-gcc-replay-1",
-																		*selection,
-																		{},
-																		{});
+			detail::make_application_materialization_execution_plan(two_unit_value,
+																	*engine,
+																	publication,
+																	{&descriptor.id, 1U},
+																	"cc.clang23-gcc-replay-1",
+																	*selection,
+																	{},
+																	{});
 		require(two_unit_plan && two_unit_plan->units.size() == 2U);
 		require(two_unit_plan->units[0].task.id() != two_unit_plan->units[1].task.id());
+	}
+
+	void authenticated_detached_run_is_revalidated_before_publication()
+	{
+		using namespace cxxlens::sdk;
+		using namespace cxxlens::sdk::detail;
+		using namespace cxxlens::sdk::provider;
+		auto bytes = canonical_binary(valid_bundle());
+		require(bytes);
+		auto bundle = decode_capture_bundle(*bytes);
+		require(bundle);
+		auto imported = import_capture(*bundle);
+		require(imported);
+
+		relation_registry registry;
+		auto descriptor = request_descriptor();
+		require(registry.add(descriptor));
+		auto engine = registry.build("application-analysis-detached-adoption-test");
+		require(engine);
+		auto candidate = application_provider_candidate(descriptor, digest('a'));
+		provider_selection_request provider_request;
+		provider_request.provider_id = candidate.description.provider_id;
+		provider_request.provider_version = candidate.description.provider_version;
+		provider_request.provider_binary_digest = candidate.description.provider_binary_digest;
+		provider_request.provider_semantic_contract_digest =
+			candidate.description.provider_semantic_contract_digest;
+		provider_request.sandbox = {sandbox_assurance::enforced, candidate.sandbox.policy_digest};
+		auto selection = select_provider(provider_request, {&candidate, 1U});
+		require(selection);
+		const auto& project = application_analysis_imported_value_internal(*imported);
+		snapshot_draft publication{{"catalog:detached-test",
+									"experimental",
+									std::string{engine->generation()},
+									"condition:detached-test",
+									std::string{engine->registry_digest()},
+									digest('c'),
+									digest('d')},
+								   {1U, 0U, 0U},
+								   project.catalog.catalog_digest,
+								   std::nullopt};
+		candidate.executable_argv.clear();
+		auto detached_selection = select_provider(provider_request, {&candidate, 1U});
+		require(detached_selection);
+		auto plan = make_application_materialization_execution_plan(
+			project,
+			*engine,
+			publication,
+			{&descriptor.id, 1U},
+			"cc.clang23-gcc-replay-1",
+			*detached_selection,
+			{},
+			{},
+			{},
+			application_materialization_execution_transport::detached);
+		require(plan && plan->units.size() == 1U &&
+				plan->transport == application_materialization_execution_transport::detached);
+		auto& unit = plan->units.front();
+
+		detached_transcript_sink sink;
+		protocol_writer writer{sink, unit.process.limits};
+		writer.grant_credit(unit.process.output_credit);
+		writer.set_output_budget(unit.process.budget.output_bytes);
+		auto hello = encode_control_text(candidate.description.canonical_json());
+		auto schema =
+			encode_schema_negotiate_metadata({"cxxlens.provider-protocol.v2", protocol_v2_minor});
+		require(hello && schema && writer.send(message_type::hello, *hello) &&
+				writer.send(message_type::schema_negotiate, *schema));
+		detached_application_provider implementation{descriptor};
+		require(run_worker(implementation, unit.task.value().provider_task, writer));
+
+		deterministic_detached_run_signer signer;
+		auto run = build_detached_provider_run(
+			unit.process, unit.replay_plan_digest, sink.transcript, signer);
+		require(run && run->value().runtime_receipt_digest);
+		auto repeat = build_detached_provider_run(
+			unit.process, unit.replay_plan_digest, sink.transcript, signer);
+		require(repeat && repeat->digest() == run->digest() &&
+				std::ranges::equal(repeat->bytes(), run->bytes()));
+		auto validated_transcript =
+			provider::detail::validate_detached_provider_transcript(unit.process, sink.transcript);
+		require(validated_transcript && candidate.description.signature);
+		auto required_features = candidate.description.protocol.required_features;
+		std::ranges::sort(required_features);
+		auto offered_relations = candidate.description.offered_relations;
+		std::ranges::sort(offered_relations);
+		provider::detail::detached_provider_transcript_validation_authority
+			direct_validation_authority{candidate.description,
+										{candidate.description.provider_id,
+										 candidate.description.provider_version,
+										 candidate.description.provider_binary_digest,
+										 candidate.description.provider_semantic_contract_digest,
+										 unit.process.limits.protocol_major,
+										 unit.process.limits.maximum_minor,
+										 required_features,
+										 unit.process.sandbox.policy_digest,
+										 offered_relations},
+										unit.process.output_descriptors,
+										unit.process.limits,
+										unit.process.budget};
+		auto direct_validation =
+			provider::detail::validate_detached_provider_transcript_from_sealed_input(
+				direct_validation_authority, validated_transcript->input_seal, sink.transcript);
+		require(direct_validation);
+		auto process_receipt_digest = provider::detail::provider_runtime_receipt_digest(
+			validated_transcript->runtime_receipt);
+		auto direct_receipt_digest =
+			provider::detail::provider_runtime_receipt_digest(direct_validation->runtime_receipt);
+		require(process_receipt_digest && direct_receipt_digest &&
+				*direct_receipt_digest == *process_receipt_digest);
+		auto wrong_identity = direct_validation_authority;
+		wrong_identity.provider_identity.provider_binary_digest = digest('f');
+		auto identity_mismatch =
+			provider::detail::validate_detached_provider_transcript_from_sealed_input(
+				std::move(wrong_identity), validated_transcript->input_seal, sink.transcript);
+		require(!identity_mismatch &&
+				identity_mismatch.error().code == "provider.binary-identity-mismatch");
+		auto empty_stream =
+			provider::detail::validate_detached_provider_transcript_from_sealed_input(
+				direct_validation_authority, validated_transcript->input_seal, {});
+		require(!empty_stream && empty_stream.error().code == "provider.output-limit" &&
+				empty_stream.error().detail == "detached-transport-bytes");
+		auto wrong_protocol = direct_validation_authority;
+		wrong_protocol.session_limits.maximum_minor = 1U;
+		auto protocol_mismatch =
+			provider::detail::validate_detached_provider_transcript_from_sealed_input(
+				std::move(wrong_protocol), validated_transcript->input_seal, sink.transcript);
+		require(!protocol_mismatch &&
+				protocol_mismatch.error().code == "provider.protocol-minor-mismatch");
+		detached_provider_run_authority detached_authority{
+			unit.process.task_id,
+			unit.process.task_input_digest,
+			unit.process.normalized_invocation_digest,
+			unit.process.toolchain_digest,
+			unit.process.environment_digest,
+			unit.replay_plan_digest,
+			{candidate.description.provider_id,
+			 candidate.description.provider_version,
+			 candidate.description.provider_binary_digest,
+			 candidate.description.provider_semantic_contract_digest,
+			 *candidate.description.signature,
+			 "not-revoked",
+			 unit.process.sandbox.policy_digest}};
+		auto direct = build_detached_provider_run_from_validated_transcript(
+			detached_authority, sink.transcript, *validated_transcript, signer);
+		require(direct && direct->digest() == run->digest() &&
+				std::ranges::equal(direct->bytes(), run->bytes()));
+		detached_authority.task_input_digest = digest('f');
+		auto mismatched = build_detached_provider_run_from_validated_transcript(
+			std::move(detached_authority), sink.transcript, *validated_transcript, signer);
+		require(!mismatched &&
+				mismatched.error().code ==
+					"application-analysis.detached-provider-run-build-failed" &&
+				mismatched.error().detail == "runtime-binding-mismatch");
+		deterministic_detached_run_signer unavailable_signer{true};
+		auto unsigned_run = build_detached_provider_run(
+			unit.process, unit.replay_plan_digest, sink.transcript, unavailable_signer);
+		require(!unsigned_run &&
+				unsigned_run.error().code == "test.detached-run-signer-unavailable");
+		const auto provider_receipt = *run->value().runtime_receipt_digest;
+		exact_detached_signature_verifier verifier{*run};
+		auto prepared = prepare_detached_application_materialization(
+			*engine, unit.task, unit.provider_input, unit.process, *run, verifier);
+		if (!prepared)
+			std::cerr << prepared.error().code << ':' << prepared.error().field << ':'
+					  << prepared.error().detail << '\n';
+		require(prepared && prepared->runtime.runtime_receipt_digest != provider_receipt &&
+				prepared->runtime.runtime_receipt_digest.starts_with(
+					"detached-provider-run-adoption-receipt:sha256:"));
+
+		auto projection_tamper = run->value();
+		++projection_tamper.partitions.front().row_count;
+		authenticate(projection_tamper);
+		auto projection_run = validate_detached_provider_run(std::move(projection_tamper));
+		require(projection_run);
+		exact_detached_signature_verifier projection_verifier{*projection_run};
+		auto projection_rejected =
+			prepare_detached_application_materialization(*engine,
+														 unit.task,
+														 unit.provider_input,
+														 unit.process,
+														 *projection_run,
+														 projection_verifier);
+		require(!projection_rejected && projection_rejected.error().field == "projection");
+		auto receipt_tamper = run->value();
+		receipt_tamper.runtime_receipt_digest = digest('0');
+		authenticate(receipt_tamper);
+		auto receipt_run = validate_detached_provider_run(std::move(receipt_tamper));
+		require(receipt_run);
+		exact_detached_signature_verifier receipt_verifier{*receipt_run};
+		auto receipt_rejected = prepare_detached_application_materialization(
+			*engine, unit.task, unit.provider_input, unit.process, *receipt_run, receipt_verifier);
+		require(!receipt_rejected && receipt_rejected.error().field == "runtime_receipt_digest");
+
+		exact_detached_signature_verifier revoked{*run, detached_run_signature_verdict::revoked};
+		auto revoked_result = prepare_detached_application_materialization(
+			*engine, unit.task, unit.provider_input, unit.process, *run, revoked);
+		require(!revoked_result && revoked_result.error().detail == "signing-key-revoked");
+		exact_detached_signature_verifier unavailable{*run,
+													  detached_run_signature_verdict::unavailable};
+		auto unavailable_result = prepare_detached_application_materialization(
+			*engine, unit.task, unit.provider_input, unit.process, *run, unavailable);
+		require(!unavailable_result &&
+				unavailable_result.error().code ==
+					"application-analysis.detached-run-authentication-unavailable");
+
+		auto inflated_process = unit.process;
+		++inflated_process.budget.rows;
+		auto inflated_result = prepare_detached_application_materialization(
+			*engine, unit.task, unit.provider_input, inflated_process, *run, verifier);
+		require(!inflated_result && inflated_result.error().field == "provider_identity");
+
+		auto transcript_tamper = run->value();
+		transcript_tamper.protocol_transcript.back() ^= std::byte{1U};
+		authenticate(transcript_tamper);
+		auto transcript_run = validate_detached_provider_run(std::move(transcript_tamper));
+		require(transcript_run);
+		exact_detached_signature_verifier transcript_verifier{*transcript_run};
+		auto transcript_rejected =
+			prepare_detached_application_materialization(*engine,
+														 unit.task,
+														 unit.provider_input,
+														 unit.process,
+														 *transcript_run,
+														 transcript_verifier);
+		require(!transcript_rejected &&
+				transcript_rejected.error().code == "provider.checksum-mismatch");
+
+		auto store = make_in_memory_snapshot_store(*engine);
+		require(store && !store->current(publication.series));
+		auto process_plan = *plan;
+		process_plan.transport = application_materialization_execution_transport::process;
+		auto wrong_transport = publish_detached_application_materializations(
+			*engine, *store, process_plan, std::span<const std::vector<std::byte>>{}, verifier);
+		require(!wrong_transport && wrong_transport.error().field == "plan" &&
+				wrong_transport.error().detail == "detached-transport-required" &&
+				!store->current(publication.series));
+		std::vector<std::vector<std::byte>> missing;
+		auto missing_run = publish_detached_application_materializations(
+			*engine, *store, *plan, missing, verifier);
+		require(!missing_run && !store->current(publication.series));
+		std::vector<std::vector<std::byte>> malformed{
+			{run->bytes().begin(), run->bytes().end() - 1}};
+		auto malformed_run = publish_detached_application_materializations(
+			*engine, *store, *plan, malformed, verifier);
+		require(!malformed_run && !store->current(publication.series));
+		std::vector<std::vector<std::byte>> detached_runs{
+			{run->bytes().begin(), run->bytes().end()}};
+		import_limits byte_limited;
+		byte_limited.maximum_total_metadata_bytes = detached_runs.front().size() - 1U;
+		auto over_limit = publish_detached_application_materializations(
+			*engine, *store, *plan, detached_runs, verifier, byte_limited);
+		require(!over_limit && over_limit.error().detail == "total-byte-limit" &&
+				!store->current(publication.series));
+		auto adopted = publish_detached_application_materializations(
+			*engine, *store, *plan, detached_runs, verifier);
+		require(adopted && adopted->publication.publication_verified &&
+				adopted->publication.snapshot.publication().state == publication_state::committed);
+
+#if defined(CXXLENS_TEST_CLANG23_WORKER_PATH)
+		test_ed25519_material_port signing_material;
+		const openssl_detached_run_signer trusted_signer{signing_material};
+		auto trusted_run = build_detached_provider_run(
+			unit.process, unit.replay_plan_digest, sink.transcript, trusted_signer);
+		require(trusted_run);
+		const detached_run_test_directory directory;
+		const auto run_path = directory.path() / "compile-unit.run";
+		const auto key_path = directory.path() / "trusted-public-key.raw";
+		write_binary(run_path, trusted_run->bytes());
+		write_binary(key_path, signing_material.public_key());
+		cxxlens::runtime::detached_application_materialization_file_request file_request{
+			{run_path.string()},
+			"worker:clang23-gcc-replay",
+			key_path.string(),
+			detached_run_public_key_state::trusted,
+			{}};
+		auto public_file_request = materialization_request::make(*engine,
+																 publication,
+																 {descriptor.id},
+																 "cc.clang23-gcc-replay-1",
+																 provider_request,
+																 {candidate});
+		require(public_file_request);
+		auto file_store = make_in_memory_snapshot_store(*engine);
+		require(file_store);
+		auto file_adopted = cxxlens::runtime::materialize_detached_application_from_files(
+			*file_store, *imported, *public_file_request, file_request);
+		require(file_adopted &&
+				file_adopted->terminal() ==
+					cxxlens::sdk::materialization_terminal::published_partial &&
+				file_adopted->published_snapshot() && file_adopted->provenance() &&
+				file_store->current(publication.series));
+
+		file_request.public_key_state = detached_run_public_key_state::revoked;
+		auto revoked_store = make_in_memory_snapshot_store(*engine);
+		require(revoked_store);
+		auto file_revoked = cxxlens::runtime::materialize_detached_application_from_files(
+			*revoked_store, *imported, *public_file_request, file_request);
+		require(!file_revoked && file_revoked.error().detail == "signing-key-revoked" &&
+				!revoked_store->current(publication.series));
+#endif
+
+		auto multi_bytes = canonical_binary(valid_two_unit_bundle());
+		require(multi_bytes);
+		auto multi_bundle = decode_capture_bundle(*multi_bytes);
+		require(multi_bundle);
+		auto multi_imported = import_capture(*multi_bundle);
+		require(multi_imported);
+		const auto& multi_project = application_analysis_imported_value_internal(*multi_imported);
+		publication.series.catalog_id = "catalog:detached-multi-test";
+		publication.catalog_semantic_digest = multi_project.catalog.catalog_digest;
+		auto multi_plan = make_application_materialization_execution_plan(
+			multi_project,
+			*engine,
+			publication,
+			{&descriptor.id, 1U},
+			"cc.clang23-gcc-replay-1",
+			*detached_selection,
+			{},
+			{},
+			{},
+			application_materialization_execution_transport::detached);
+		require(multi_plan && multi_plan->units.size() == 2U &&
+				multi_plan->transport == application_materialization_execution_transport::detached);
+		std::vector<validated_detached_provider_run> multi_runs;
+		for (const auto& multi_unit : multi_plan->units)
+		{
+			detached_transcript_sink multi_sink;
+			protocol_writer multi_writer{multi_sink, multi_unit.process.limits};
+			multi_writer.grant_credit(multi_unit.process.output_credit);
+			multi_writer.set_output_budget(multi_unit.process.budget.output_bytes);
+			auto multi_hello = encode_control_text(candidate.description.canonical_json());
+			auto multi_schema = encode_schema_negotiate_metadata(
+				{"cxxlens.provider-protocol.v2", protocol_v2_minor});
+			require(multi_hello && multi_schema &&
+					multi_writer.send(message_type::hello, *multi_hello) &&
+					multi_writer.send(message_type::schema_negotiate, *multi_schema));
+			detached_application_provider multi_provider{descriptor};
+			require(
+				run_worker(multi_provider, multi_unit.task.value().provider_task, multi_writer));
+			auto multi_run = build_detached_provider_run(
+				multi_unit.process, multi_unit.replay_plan_digest, multi_sink.transcript, signer);
+			require(multi_run);
+			multi_runs.push_back(std::move(*multi_run));
+		}
+		std::vector<std::vector<std::byte>> duplicate_runs{
+			{multi_runs[0].bytes().begin(), multi_runs[0].bytes().end()},
+			{multi_runs[0].bytes().begin(), multi_runs[0].bytes().end()}};
+		auto multi_store = make_in_memory_snapshot_store(*engine);
+		require(multi_store);
+		const deterministic_multi_run_verifier multi_verifier;
+		auto duplicate = publish_detached_application_materializations(
+			*engine, *multi_store, *multi_plan, duplicate_runs, multi_verifier);
+		require(!duplicate && !multi_store->current(publication.series));
+		std::vector<std::vector<std::byte>> permuted_runs{
+			{multi_runs[1].bytes().begin(), multi_runs[1].bytes().end()},
+			{multi_runs[0].bytes().begin(), multi_runs[0].bytes().end()}};
+		auto multi_adopted = publish_detached_application_materializations(
+			*engine, *multi_store, *multi_plan, permuted_runs, multi_verifier);
+		require(multi_adopted && multi_adopted->publication.publication_verified &&
+				multi_store->current(publication.series));
 	}
 
 #if defined(CXXLENS_TEST_CLANG23_WORKER_PATH)
@@ -1032,7 +1977,7 @@ namespace
 							 {}};
 		manifest.platform_tuples = {"linux-x86_64-clang23"};
 		manifest.provider_binary_digest = executable_digest(worker);
-		manifest.provider_semantic_contract_digest = "semantic-v2:" + digest('b');
+		manifest.provider_semantic_contract_digest = digest('b');
 		manifest.offered_relations = relation_ids;
 		manifest.interpretation_domains = {"cc.clang23-gcc-replay-1"};
 		manifest.invalidation_contract = digest('c');
@@ -1092,6 +2037,14 @@ namespace
 		if (!result)
 			std::cerr << result.error().code << ':' << result.error().field << ':'
 					  << result.error().detail << '\n';
+		else if (result->terminal() != materialization_terminal::published_partial)
+		{
+			std::cerr << "unexpected materialization terminal: "
+					  << static_cast<int>(result->terminal()) << '\n';
+			for (const auto& unresolved : result->unresolved())
+				std::cerr << unresolved.code << ':' << unresolved.subject << ':'
+						  << unresolved.detail << '\n';
+		}
 		require(result && result->terminal() == materialization_terminal::published_partial);
 		require(result->published_snapshot() && result->provenance());
 		require(!result->published_snapshot()->unresolved_items().empty());
@@ -1132,16 +2085,26 @@ namespace
 #endif
 } // namespace
 
-int main()
+int main(const int argc, const char* const* argv)
 {
+	if (argc == 2 && std::string_view{argv[1]} == "--detached-adoption-only")
+	{
+		authenticated_detached_run_is_revalidated_before_publication();
+		return EXIT_SUCCESS;
+	}
 	positive_decode_and_deterministic_import();
 	replay_fidelity_and_import_bounds_fail_closed();
+	msvc_capture_import_preserves_replay_fidelity();
+	portable_msvc_encoder_round_trips_through_host_authority();
+	msvc_source_dependencies_are_bounded_and_canonical();
+	msvc_response_tokenization_is_shared_and_bounded();
 	allocation_failures_are_typed_at_external_boundaries();
 	toolchain_observation_gaps_are_preserved();
 	duplicate_source_variants_bind_one_closure();
 	resource_and_shape_fail_closed();
 	materialization_request_factory_validates_authority();
 	execution_plan_binds_capture_task_provider_and_publication_before_effects();
+	authenticated_detached_run_is_revalidated_before_publication();
 #if defined(CXXLENS_TEST_CLANG23_WORKER_PATH)
 	exact_clang23_worker_materializes_through_public_service();
 #endif

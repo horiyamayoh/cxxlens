@@ -5,6 +5,8 @@
 #include <string_view>
 #include <utility>
 
+#include "sdk/application_analysis_command_service_internal.hpp"
+#include "sdk/application_analysis_run_command_service_internal.hpp"
 #include "sdk/gcc_capture_command_service_internal.hpp"
 #include "sdk_doctor_entry.hpp"
 
@@ -18,6 +20,9 @@ namespace
 					 "[--format json|markdown]\n"
 				  << "       cxxlens run --project <project.json> --use-case <id> "
 					 "[--format json|markdown]\n"
+				  << "       cxxlens run --bundle <capture-bundle> --worker <absolute-path> "
+					 "--trusted-worker-digest <sha256-digest>\n"
+				  << "       cxxlens import --bundle <capture-bundle>\n"
 				  << "       cxxlens capture --project-id <id> --project-root <absolute-path> "
 					 "--compile-commands <path> --compiler <absolute-path>\n"
 				  << "       cxxlens capture --project-id <id> --project-root <absolute-path> "
@@ -132,6 +137,100 @@ namespace
 		}
 		return 0;
 	}
+
+	int import_capture(int argc, char** argv)
+	{
+		cxxlens::sdk::detail::application_analysis_import_command_request request;
+		bool bundle{};
+		for (int index = 2; index < argc; ++index)
+		{
+			const std::string_view option{argv[index]};
+			if (index + 1 >= argc || option != "--bundle")
+			{
+				print_usage();
+				return 2;
+			}
+			++index;
+			if (!assign_once(request.bundle_path, bundle, argv[index]))
+			{
+				print_usage();
+				return 2;
+			}
+		}
+		if (!bundle)
+		{
+			print_usage();
+			return 2;
+		}
+		auto imported = cxxlens::sdk::detail::import_application_analysis_command(request);
+		if (!imported)
+		{
+			const auto& failure = imported.error();
+			std::cerr << "cxxlens: " << failure.code << ": " << failure.field << ": "
+					  << failure.detail << '\n';
+			return 2;
+		}
+		std::cout << *imported;
+		std::cout.flush();
+		if (!std::cout)
+		{
+			std::cerr << "cxxlens: application-analysis.import-output-failed: stdout: write\n";
+			return 2;
+		}
+		return 0;
+	}
+
+	int run_application_analysis(int argc, char** argv)
+	{
+		cxxlens::sdk::detail::application_analysis_run_command_request request;
+		bool bundle{};
+		bool worker{};
+		bool trusted_worker_digest{};
+		for (int index = 2; index < argc; ++index)
+		{
+			const std::string_view option{argv[index]};
+			if (index + 1 >= argc)
+			{
+				print_usage();
+				return 2;
+			}
+			const auto* value = argv[++index];
+			const bool accepted =
+				(option == "--bundle" && assign_once(request.bundle_path, bundle, value)) ||
+				(option == "--worker" && assign_once(request.worker_path, worker, value)) ||
+				(option == "--trusted-worker-digest" &&
+				 assign_once(request.trusted_worker_digest, trusted_worker_digest, value));
+			if (!accepted)
+			{
+				print_usage();
+				return 2;
+			}
+		}
+		if (!bundle || !worker || !trusted_worker_digest)
+		{
+			print_usage();
+			return 2;
+		}
+		auto analyzed = cxxlens::sdk::detail::run_application_analysis_command(request);
+		if (!analyzed)
+		{
+			const auto& failure = analyzed.error();
+			std::cerr << "cxxlens: " << failure.code << ": " << failure.field << ": "
+					  << failure.detail << '\n';
+			return 2;
+		}
+		std::cout << analyzed->canonical_json;
+		std::cout.flush();
+		if (!std::cout)
+		{
+			std::cerr << "cxxlens: application-analysis.run-output-failed: stdout: write\n";
+			return 2;
+		}
+		return analyzed->terminal == cxxlens::sdk::materialization_terminal::published_complete ||
+				analyzed->terminal == cxxlens::sdk::materialization_terminal::published_partial
+			? 0
+			: 1;
+	}
 } // namespace
 
 namespace
@@ -159,6 +258,8 @@ namespace
 		}
 		if (command == "capture")
 			return capture(argc, argv);
+		if (command == "import")
+			return import_capture(argc, argv);
 		if (command == "run")
 		{
 			if (argc < 3)
@@ -166,6 +267,8 @@ namespace
 				print_usage();
 				return 2;
 			}
+			if (std::string_view{argv[2]} == "--bundle")
+				return run_application_analysis(argc, argv);
 			// `run` is the thin product entrypoint for the currently admitted
 			// materialize-and-query capability. Until the native orchestration service
 			// is selected, use the same fail-closed capability resolution as `doctor

@@ -48,6 +48,7 @@ if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
   endif()
   find_package(LLVM 23.1.0 EXACT CONFIG REQUIRED)
   find_package(Clang 23.1.0 EXACT CONFIG REQUIRED)
+  find_package(OpenSSL 3.0 REQUIRED COMPONENTS Crypto)
   if(NOT LLVM_PACKAGE_VERSION VERSION_EQUAL "23.1.0")
     message(
       FATAL_ERROR "The GCC replay worker requires exact LLVM 23.1.0 packages")
@@ -380,19 +381,32 @@ add_library(
   src/sdk/provider.cpp
   src/sdk/incremental.cpp
   src/sdk/application_analysis.cpp
+  src/sdk/application_analysis_limits.cpp
+  src/sdk/application_analysis_command_service_internal.cpp
+  src/sdk/application_analysis_run_command_service_internal.cpp
+  src/sdk/bounded_canonical_binary_internal.cpp
   src/sdk/application_analysis_service.cpp
   src/sdk/application_materialization_execution_internal.cpp
   src/sdk/application_materialization_adoption_internal.cpp
   src/sdk/build_capture_internal.cpp
   src/sdk/compile_commands_capture_internal.cpp
   src/sdk/gcc_auxiliary_capture_internal.cpp
-  src/sdk/gcc_build_capture_adapter_internal.cpp
+  src/sdk/application_build_capture_adapter_internal.cpp
   src/sdk/gcc_capture_command_service_internal.cpp
   src/sdk/gcc_capture_file_service_internal.cpp
   src/sdk/gcc_capture_bundle_internal.cpp
-  src/sdk/gcc_replay_input_internal.cpp
+  src/sdk/compiler_replay_input_internal.cpp
+  src/sdk/provider_manifest_codec_internal.cpp
+  src/sdk/detached_provider_run_internal.cpp
+  src/sdk/detached_provider_run_builder_internal.cpp
+  src/sdk/detached_provider_run_process_builder_internal.cpp
+  src/sdk/detached_provider_run_adoption_internal.cpp
   src/sdk/gcc_replay_planner_internal.cpp
+  src/sdk/msvc_replay_planner_internal.cpp
   src/sdk/gcc_toolchain_probe_internal.cpp
+  src/msvc_worker/msvc_capture_bundle.cpp
+  src/msvc_worker/msvc_response_arguments.cpp
+  src/msvc_worker/msvc_source_dependencies.cpp
   src/sdk/source_identity_internal.cpp
   src/runtime/gcc_capture_file_port.cpp
   src/sdk/materialization_task_internal.cpp
@@ -407,6 +421,72 @@ target_sources(cxxlens_sdk
 target_link_libraries(cxxlens_sdk PUBLIC cxxlens::cxxlens cxxlens::recipes)
 
 if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
+  add_library(cxxlens_detached_run_crypto_internal STATIC
+              src/sdk/openssl_detached_run_crypto_internal.cpp)
+  target_link_libraries(
+    cxxlens_detached_run_crypto_internal
+    PUBLIC cxxlens::sdk
+    PRIVATE OpenSSL::Crypto)
+  target_include_directories(cxxlens_detached_run_crypto_internal
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_detached_run_crypto_internal
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_detached_run_crypto_internal)
+  cxxlens_enable_sanitizers(cxxlens_detached_run_crypto_internal)
+
+  add_library(cxxlens_detached_run_signing_file_port_internal STATIC
+              src/runtime/detached_run_signing_file_port_internal.cpp)
+  target_link_libraries(cxxlens_detached_run_signing_file_port_internal
+                        PUBLIC cxxlens::sdk)
+  target_include_directories(cxxlens_detached_run_signing_file_port_internal
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_detached_run_signing_file_port_internal
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_detached_run_signing_file_port_internal)
+  cxxlens_enable_sanitizers(cxxlens_detached_run_signing_file_port_internal)
+
+  add_library(cxxlens_detached_run_trust_file_port_internal STATIC
+              src/runtime/detached_run_trust_file_port_internal.cpp)
+  target_link_libraries(cxxlens_detached_run_trust_file_port_internal
+                        PUBLIC cxxlens::sdk)
+  target_include_directories(cxxlens_detached_run_trust_file_port_internal
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_detached_run_trust_file_port_internal
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_detached_run_trust_file_port_internal)
+  cxxlens_enable_sanitizers(cxxlens_detached_run_trust_file_port_internal)
+
+  add_library(cxxlens_detached_run_input_file_port_internal STATIC
+              src/runtime/detached_run_input_file_port_internal.cpp)
+  target_link_libraries(cxxlens_detached_run_input_file_port_internal
+                        PUBLIC cxxlens::sdk)
+  target_include_directories(cxxlens_detached_run_input_file_port_internal
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_detached_run_input_file_port_internal
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_detached_run_input_file_port_internal)
+  cxxlens_enable_sanitizers(cxxlens_detached_run_input_file_port_internal)
+
+  add_library(
+    cxxlens_detached_application_materialization_file_service_internal STATIC
+    src/runtime/detached_application_materialization_file_service_internal.cpp)
+  target_link_libraries(
+    cxxlens_detached_application_materialization_file_service_internal
+    PUBLIC cxxlens::sdk
+    PRIVATE cxxlens_detached_run_crypto_internal
+            cxxlens_detached_run_input_file_port_internal
+            cxxlens_detached_run_trust_file_port_internal)
+  target_include_directories(
+    cxxlens_detached_application_materialization_file_service_internal
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(
+    cxxlens_detached_application_materialization_file_service_internal
+    PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(
+    cxxlens_detached_application_materialization_file_service_internal)
+  cxxlens_enable_sanitizers(
+    cxxlens_detached_application_materialization_file_service_internal)
+
   add_library(
     cxxlens_clang23_gcc_replay_ingress STATIC
     src/llvm/clang23_gcc_replay/observation_normalizer.cpp
@@ -419,7 +499,7 @@ if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
   target_link_libraries(
     cxxlens_clang23_gcc_replay_ingress
     PUBLIC cxxlens::sdk
-    PRIVATE clang-cpp cxxlens_protocol_v2)
+    PRIVATE clang-cpp cxxlens_protocol_v2 cxxlens_detached_run_crypto_internal)
   target_include_directories(cxxlens_clang23_gcc_replay_ingress
                              PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_include_directories(cxxlens_clang23_gcc_replay_ingress SYSTEM
@@ -433,6 +513,20 @@ if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
   target_compile_features(cxxlens_clang23_gcc_replay_ingress PRIVATE cxx_std_23)
   cxxlens_set_project_warnings(cxxlens_clang23_gcc_replay_ingress)
   cxxlens_enable_sanitizers(cxxlens_clang23_gcc_replay_ingress)
+
+  add_library(cxxlens_clangcl_worker_command_internal STATIC
+              src/llvm/clang23_gcc_replay/clangcl_worker_command_internal.cpp)
+  target_link_libraries(
+    cxxlens_clangcl_worker_command_internal
+    PUBLIC cxxlens_clang23_gcc_replay_ingress
+    PRIVATE cxxlens_detached_run_signing_file_port_internal
+            cxxlens_detached_run_crypto_internal)
+  target_include_directories(cxxlens_clangcl_worker_command_internal
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clangcl_worker_command_internal
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_clangcl_worker_command_internal)
+  cxxlens_enable_sanitizers(cxxlens_clangcl_worker_command_internal)
 
   add_executable(cxxlens-clang-gcc-replay-worker-23
                  src/llvm/clang23_gcc_replay/worker_main.cpp)
@@ -893,8 +987,27 @@ cxxlens_assert_direct_project_dependencies(
 cxxlens_assert_direct_project_dependencies(cxxlens_clang22_provider_sdk
                                            cxxlens_sdk)
 if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
-  cxxlens_assert_direct_project_dependencies(cxxlens_clang23_gcc_replay_ingress
-                                             cxxlens_sdk cxxlens_protocol_v2)
+  cxxlens_assert_direct_project_dependencies(
+    cxxlens_detached_run_crypto_internal cxxlens_sdk)
+  cxxlens_assert_direct_project_dependencies(
+    cxxlens_detached_run_signing_file_port_internal cxxlens_sdk)
+  cxxlens_assert_direct_project_dependencies(
+    cxxlens_detached_run_trust_file_port_internal cxxlens_sdk)
+  cxxlens_assert_direct_project_dependencies(
+    cxxlens_detached_run_input_file_port_internal cxxlens_sdk)
+  cxxlens_assert_direct_project_dependencies(
+    cxxlens_detached_application_materialization_file_service_internal
+    cxxlens_sdk
+    cxxlens_detached_run_crypto_internal
+    cxxlens_detached_run_input_file_port_internal
+    cxxlens_detached_run_trust_file_port_internal)
+  cxxlens_assert_direct_project_dependencies(
+    cxxlens_clang23_gcc_replay_ingress cxxlens_sdk cxxlens_protocol_v2
+    cxxlens_detached_run_crypto_internal)
+  cxxlens_assert_direct_project_dependencies(
+    cxxlens_clangcl_worker_command_internal cxxlens_clang23_gcc_replay_ingress
+    cxxlens_detached_run_signing_file_port_internal
+    cxxlens_detached_run_crypto_internal)
 endif()
 
 set(CXXLENS_COMPILED_TARGETS
@@ -916,7 +1029,16 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
        cxxlens_clang22_worker_core cxxlens_clang22_materializer_ingress)
 endif()
 if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
-  list(APPEND CXXLENS_COMPILED_TARGETS cxxlens_clang23_gcc_replay_ingress)
+  list(
+    APPEND
+    CXXLENS_COMPILED_TARGETS
+    cxxlens_detached_run_crypto_internal
+    cxxlens_detached_run_signing_file_port_internal
+    cxxlens_detached_run_trust_file_port_internal
+    cxxlens_detached_run_input_file_port_internal
+    cxxlens_detached_application_materialization_file_service_internal
+    cxxlens_clang23_gcc_replay_ingress
+    cxxlens_clangcl_worker_command_internal)
 endif()
 
 if(CXXLENS_ENABLE_CLANG_TIDY)
@@ -1028,7 +1150,7 @@ set(CXXLENS_PRODUCT_SCHEMA_FILES
     schemas/cxxlens_build_capture_bundle.yaml
     schemas/cxxlens_compiler_replay_plan.yaml
     schemas/cxxlens_detached_provider_run.yaml
-    schemas/cxxlens_gcc_replay_input.yaml
+    schemas/cxxlens_compiler_replay_input.yaml
     schemas/cxxlens_ng_claim_envelope.schema.yaml
     schemas/cxxlens_ng_clang22_materialization_contract.yaml
     schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml
