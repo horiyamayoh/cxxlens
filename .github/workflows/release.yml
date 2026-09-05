@@ -340,6 +340,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/cxxlens-packages"
+          archive_ref="${GITHUB_REF_NAME//\//-}"
           for linkage in static shared; do
             shared=OFF
             test "$linkage" = shared && shared=ON
@@ -349,7 +350,7 @@ jobs:
               -DCXXLENS_CLANG_ADAPTER=ON -DCXXLENS_BUILD_SHARED="$shared"
             cmake --build "$build"
             cmake --install "$build" --prefix "$prefix"
-            tar -C "$prefix" -czf "$RUNNER_TEMP/cxxlens-packages/cxxlens-${GITHUB_REF_NAME}-$linkage.tar.gz" .
+            tar -C "$prefix" -czf "$RUNNER_TEMP/cxxlens-packages/cxxlens-$archive_ref-$linkage.tar.gz" .
           done
       - name: Publish packages for a version tag
         if: startsWith(github.ref, 'refs/tags/v')
