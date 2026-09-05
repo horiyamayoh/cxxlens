@@ -83,6 +83,24 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
             "c1dab9c04fcd269920477cdc9d6bf7329229c390be48f0854b2af425d3692b74",
         )
 
+    def test_msvc_execution_provider_uses_detached_host_trust(self) -> None:
+        provider = self.contract["execution_providers"]["msvc_clangcl23_replay"]
+        self.assertEqual(provider["provider_id"], "cxxlens.clangcl23-msvc-replay")
+        self.assertEqual(provider["provider_version"], "1.0.0")
+        self.assertEqual(
+            provider["trust_authority"], "explicit-host-trusted-ed25519-public-key"
+        )
+        self.assertEqual(
+            provider["execution_revalidation"],
+            "authenticated-detached-transcript-binding",
+        )
+        self.assertEqual(provider["qualification"], "planned")
+        self.assertEqual(provider["semantic_contract_digest_algorithm"], "sha256")
+        self.assertEqual(
+            hashlib.sha256(provider["semantic_contract_subject"].encode("utf-8")).hexdigest(),
+            "6f5da8c225005d18bbb218a9653c74c1e2c71a796fc61e31dea562d0ca1ae679",
+        )
+
     def test_only_materialization_ready_targets_can_be_available(self) -> None:
         targets = self.contract["targets"]
         planned_but_available = dict(targets[1])

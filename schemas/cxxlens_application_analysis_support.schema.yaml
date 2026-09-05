@@ -18,7 +18,7 @@ properties:
   execution_providers:
     type: object
     additionalProperties: false
-    required: [gcc_clang23_replay]
+    required: [gcc_clang23_replay, msvc_clangcl23_replay]
     properties:
       gcc_clang23_replay:
         type: object
@@ -39,6 +39,25 @@ properties:
           trust_authority: {const: explicit-host-trusted-worker-digest}
           execution_revalidation: {const: sealed-executable-content-digest}
           qualification: {const: experimental}
+      msvc_clangcl23_replay:
+        type: object
+        additionalProperties: false
+        required:
+          - provider_id
+          - provider_version
+          - semantic_contract_digest_algorithm
+          - semantic_contract_subject
+          - trust_authority
+          - execution_revalidation
+          - qualification
+        properties:
+          provider_id: {const: cxxlens.clangcl23-msvc-replay}
+          provider_version: {const: 1.0.0}
+          semantic_contract_digest_algorithm: {const: sha256}
+          semantic_contract_subject: {const: "cxxlens.clangcl23-msvc-replay-provider.v1\nclang-cl-23.1.0-msvc-mode"}
+          trust_authority: {const: explicit-host-trusted-ed25519-public-key}
+          execution_revalidation: {const: authenticated-detached-transcript-binding}
+          qualification: {const: planned}
   toolchain_pins:
     type: object
     additionalProperties: false

@@ -13,6 +13,14 @@ execution_providers:
     trust_authority: explicit-host-trusted-worker-digest
     execution_revalidation: sealed-executable-content-digest
     qualification: experimental
+  msvc_clangcl23_replay:
+    provider_id: cxxlens.clangcl23-msvc-replay
+    provider_version: 1.0.0
+    semantic_contract_digest_algorithm: sha256
+    semantic_contract_subject: "cxxlens.clangcl23-msvc-replay-provider.v1\nclang-cl-23.1.0-msvc-mode"
+    trust_authority: explicit-host-trusted-ed25519-public-key
+    execution_revalidation: authenticated-detached-transcript-binding
+    qualification: planned
 toolchain_pins:
   gcc:
     family: gcc

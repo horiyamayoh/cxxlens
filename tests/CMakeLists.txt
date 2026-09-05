@@ -279,6 +279,24 @@ if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
       LABELS
       "unit;adapter;application-analysis;clang23;clangcl;msvc;replay;worker;ast;lifetime;identity;bounded;negative;fault;determinism;resource;security"
   )
+
+  cxxlens_add_test_executable(
+    cxxlens-msvc-detached-application-analysis-e2e
+    integration/msvc_detached_application_analysis_e2e.cpp)
+  target_link_libraries(
+    cxxlens-msvc-detached-application-analysis-e2e
+    PRIVATE cxxlens::sdk cxxlens_clangcl_worker_command_internal
+            cxxlens_detached_application_materialization_file_service_internal)
+  target_include_directories(cxxlens-msvc-detached-application-analysis-e2e
+                             PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  add_test(NAME integration.msvc-detached-application-analysis
+           COMMAND cxxlens-msvc-detached-application-analysis-e2e)
+  set_tests_properties(
+    integration.msvc-detached-application-analysis
+    PROPERTIES
+      LABELS
+      "integration;application-analysis;clang23;clangcl;msvc;capture;replay;provider;detached;trust;store;query;bounded;negative;determinism;security"
+  )
 endif()
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-sealed-executable
