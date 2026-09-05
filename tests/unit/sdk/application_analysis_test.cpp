@@ -544,6 +544,42 @@ namespace
 		cxxlens::sdk::detail::detached_run_signature_verdict verdict_;
 	};
 
+	class deterministic_multi_run_verifier final
+		: public cxxlens::sdk::detail::trusted_detached_run_signature_verifier
+	{
+	  public:
+		[[nodiscard]] cxxlens::sdk::detail::detached_run_signature_verification
+		verify(const std::string_view scope,
+			   const std::string_view signer_id,
+			   const std::string_view key_fingerprint,
+			   const std::string_view signed_subject_digest,
+			   const std::span<const std::byte> signature,
+			   const std::string_view signature_digest) const override
+		{
+			using namespace cxxlens::sdk;
+			using namespace cxxlens::sdk::detail;
+			std::array<std::byte, detached_provider_run_signature_bytes> expected{};
+			for (std::size_t index{}; index < expected.size(); ++index)
+				expected[index] = static_cast<std::byte>(index + 1U);
+			if (scope != "detached-provider-run" || signer_id != "worker:clang23-gcc-replay" ||
+				key_fingerprint != digest('6') || !signed_subject_digest.starts_with("sha256:") ||
+				!std::ranges::equal(signature, expected) ||
+				signature_digest != content_digest(expected))
+			{
+				detached_run_signature_verification rejected;
+				rejected.verdict = detached_run_signature_verdict::rejected;
+				return rejected;
+			}
+			return {detached_run_signature_verdict::verified,
+					"test:detached-ed25519-verifier",
+					digest('5'),
+					std::string{signer_id},
+					std::string{key_fingerprint},
+					std::string{signed_subject_digest},
+					std::string{signature_digest}};
+		}
+	};
+
 	[[nodiscard]] bool has_reason(const std::span<const cxxlens::sdk::capture_gap> gaps,
 								  const std::string_view reason)
 	{
@@ -1608,10 +1644,83 @@ namespace
 
 		auto store = make_in_memory_snapshot_store(*engine);
 		require(store && !store->current(publication.series));
-		auto adopted =
-			publish_prepared_application_materializations(*engine, *store, {std::move(*prepared)});
+		std::vector<std::vector<std::byte>> missing;
+		auto missing_run = publish_detached_application_materializations(
+			*engine, *store, *plan, missing, verifier);
+		require(!missing_run && !store->current(publication.series));
+		std::vector<std::vector<std::byte>> malformed{
+			{run->bytes().begin(), run->bytes().end() - 1}};
+		auto malformed_run = publish_detached_application_materializations(
+			*engine, *store, *plan, malformed, verifier);
+		require(!malformed_run && !store->current(publication.series));
+		std::vector<std::vector<std::byte>> detached_runs{
+			{run->bytes().begin(), run->bytes().end()}};
+		import_limits byte_limited;
+		byte_limited.maximum_total_metadata_bytes = detached_runs.front().size() - 1U;
+		auto over_limit = publish_detached_application_materializations(
+			*engine, *store, *plan, detached_runs, verifier, byte_limited);
+		require(!over_limit && over_limit.error().detail == "total-byte-limit" &&
+				!store->current(publication.series));
+		auto adopted = publish_detached_application_materializations(
+			*engine, *store, *plan, detached_runs, verifier);
 		require(adopted && adopted->publication.publication_verified &&
 				adopted->publication.snapshot.publication().state == publication_state::committed);
+
+		auto multi_bytes = canonical_binary(valid_two_unit_bundle());
+		require(multi_bytes);
+		auto multi_bundle = decode_capture_bundle(*multi_bytes);
+		require(multi_bundle);
+		auto multi_imported = import_capture(*multi_bundle);
+		require(multi_imported);
+		const auto& multi_project = application_analysis_imported_value_internal(*multi_imported);
+		publication.series.catalog_id = "catalog:detached-multi-test";
+		publication.catalog_semantic_digest = multi_project.catalog.catalog_digest;
+		auto multi_plan = make_application_materialization_execution_plan(multi_project,
+																		  *engine,
+																		  publication,
+																		  {&descriptor.id, 1U},
+																		  "cc.clang23-gcc-replay-1",
+																		  *selection,
+																		  {},
+																		  {});
+		require(multi_plan && multi_plan->units.size() == 2U);
+		std::vector<validated_detached_provider_run> multi_runs;
+		for (const auto& multi_unit : multi_plan->units)
+		{
+			detached_transcript_sink multi_sink;
+			protocol_writer multi_writer{multi_sink, multi_unit.process.limits};
+			multi_writer.grant_credit(multi_unit.process.output_credit);
+			multi_writer.set_output_budget(multi_unit.process.budget.output_bytes);
+			auto multi_hello = encode_control_text(candidate.description.canonical_json());
+			auto multi_schema = encode_schema_negotiate_metadata(
+				{"cxxlens.provider-protocol.v2", protocol_v2_minor});
+			require(multi_hello && multi_schema &&
+					multi_writer.send(message_type::hello, *multi_hello) &&
+					multi_writer.send(message_type::schema_negotiate, *multi_schema));
+			detached_application_provider multi_provider{descriptor};
+			require(
+				run_worker(multi_provider, multi_unit.task.value().provider_task, multi_writer));
+			auto multi_run = build_detached_provider_run(
+				multi_unit.process, multi_unit.replay_plan_digest, multi_sink.transcript, signer);
+			require(multi_run);
+			multi_runs.push_back(std::move(*multi_run));
+		}
+		std::vector<std::vector<std::byte>> duplicate_runs{
+			{multi_runs[0].bytes().begin(), multi_runs[0].bytes().end()},
+			{multi_runs[0].bytes().begin(), multi_runs[0].bytes().end()}};
+		auto multi_store = make_in_memory_snapshot_store(*engine);
+		require(multi_store);
+		const deterministic_multi_run_verifier multi_verifier;
+		auto duplicate = publish_detached_application_materializations(
+			*engine, *multi_store, *multi_plan, duplicate_runs, multi_verifier);
+		require(!duplicate && !multi_store->current(publication.series));
+		std::vector<std::vector<std::byte>> permuted_runs{
+			{multi_runs[1].bytes().begin(), multi_runs[1].bytes().end()},
+			{multi_runs[0].bytes().begin(), multi_runs[0].bytes().end()}};
+		auto multi_adopted = publish_detached_application_materializations(
+			*engine, *multi_store, *multi_plan, permuted_runs, multi_verifier);
+		require(multi_adopted && multi_adopted->publication.publication_verified &&
+				multi_store->current(publication.series));
 	}
 
 #if defined(CXXLENS_TEST_CLANG23_WORKER_PATH)

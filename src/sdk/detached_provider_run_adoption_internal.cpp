@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <array>
+#include <new>
 #include <ranges>
+#include <stdexcept>
 #include <utility>
 
 #include "detached_provider_run_builder_internal.hpp"
@@ -200,5 +202,94 @@ namespace cxxlens::sdk::detail
 														  run.replay_plan_digest,
 														  frontend->observation_technique,
 														  host_partitions);
+	}
+
+	result<application_materialization_adoption> publish_detached_application_materializations(
+		const relation_engine& engine,
+		snapshot_store& store,
+		const application_materialization_execution_plan& plan,
+		const std::span<const std::vector<std::byte>> detached_runs,
+		const trusted_detached_run_signature_verifier& signature_verifier,
+		const import_limits limits)
+	{
+		if (auto valid = limits.validate(); !valid)
+			return unexpected(std::move(valid.error()));
+		if (plan.units.empty() || detached_runs.size() != plan.units.size() ||
+			detached_runs.size() > limits.maximum_compile_units)
+			return unexpected(adoption_error("detached_runs", "compile-unit-set-mismatch"));
+		try
+		{
+			std::size_t total_bytes{};
+			std::vector<validated_detached_provider_run> decoded;
+			decoded.reserve(detached_runs.size());
+			for (const auto& bytes : detached_runs)
+			{
+				if (bytes.size() > limits.maximum_total_metadata_bytes - total_bytes)
+					return unexpected(adoption_error("detached_runs", "total-byte-limit"));
+				total_bytes += bytes.size();
+				auto run = decode_detached_provider_run(bytes, limits);
+				if (!run)
+					return unexpected(std::move(run.error()));
+				decoded.push_back(std::move(*run));
+			}
+			std::ranges::sort(decoded,
+							  {},
+							  [](const validated_detached_provider_run& run)
+							  {
+								  return run.value().task_id;
+							  });
+			if (std::ranges::adjacent_find(decoded,
+										   [](const auto& left, const auto& right)
+										   {
+											   return left.value().task_id == right.value().task_id;
+										   }) != decoded.end())
+				return unexpected(adoption_error("detached_runs", "duplicate-task"));
+			std::vector<std::string_view> expected_tasks;
+			expected_tasks.reserve(plan.units.size());
+			for (const auto& unit : plan.units)
+				expected_tasks.push_back(unit.process.task_id);
+			std::ranges::sort(expected_tasks);
+			if (std::ranges::adjacent_find(expected_tasks) != expected_tasks.end())
+				return unexpected(adoption_error("plan", "duplicate-task"));
+			for (std::size_t index{}; index < expected_tasks.size(); ++index)
+				if (expected_tasks[index] != decoded[index].value().task_id)
+					return unexpected(adoption_error("detached_runs", "task-set-mismatch"));
+
+			std::vector<prepared_application_materialization> prepared;
+			prepared.reserve(plan.units.size());
+			for (const auto& unit : plan.units)
+			{
+				const auto found =
+					std::ranges::lower_bound(decoded,
+											 unit.process.task_id,
+											 {},
+											 [](const validated_detached_provider_run& run)
+											 {
+												 return run.value().task_id;
+											 });
+				if (found == decoded.end() || found->value().task_id != unit.process.task_id)
+					return unexpected(adoption_error("detached_runs", "task-set-mismatch"));
+				auto value = prepare_detached_application_materialization(engine,
+																		  unit.task,
+																		  unit.provider_input,
+																		  unit.process,
+																		  *found,
+																		  signature_verifier,
+																		  unit.host_partitions);
+				if (!value)
+					return unexpected(std::move(value.error()));
+				prepared.push_back(std::move(*value));
+			}
+			return publish_prepared_application_materializations(
+				engine, store, std::move(prepared));
+		}
+		catch (const std::bad_alloc&)
+		{
+			return unexpected(adoption_error("detached_runs", "allocation"));
+		}
+		catch (const std::length_error&)
+		{
+			return unexpected(adoption_error("detached_runs", "allocation-length"));
+		}
 	}
 } // namespace cxxlens::sdk::detail

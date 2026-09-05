@@ -9,8 +9,10 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "application_materialization_adoption_internal.hpp"
+#include "application_materialization_execution_internal.hpp"
 #include "compiler_replay_input_internal.hpp"
 #include "detached_provider_run_internal.hpp"
 
@@ -62,4 +64,18 @@ namespace cxxlens::sdk::detail
 		const validated_detached_provider_run& detached_run,
 		const trusted_detached_run_signature_verifier& signature_verifier,
 		std::span<const partition_draft> host_partitions = {});
+
+	/**
+	 * Decode and prepare every detached compile-unit result before one atomic Store publication.
+	 * Runs are matched by task ID, not caller order. A missing, duplicate, extra, unauthenticated,
+	 * or malformed run leaves the Store unchanged.
+	 */
+	[[nodiscard]] result<application_materialization_adoption>
+	publish_detached_application_materializations(
+		const relation_engine& engine,
+		snapshot_store& store,
+		const application_materialization_execution_plan& plan,
+		std::span<const std::vector<std::byte>> detached_runs,
+		const trusted_detached_run_signature_verifier& signature_verifier,
+		import_limits limits = {});
 } // namespace cxxlens::sdk::detail
