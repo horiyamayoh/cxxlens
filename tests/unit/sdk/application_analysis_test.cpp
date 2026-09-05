@@ -2,6 +2,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -32,6 +33,11 @@
 #include "sdk/detached_provider_run_adoption_internal.hpp"
 #include "sdk/detached_provider_run_builder_internal.hpp"
 #include "sdk/provider_runtime_internal.hpp"
+
+#if defined(CXXLENS_TEST_CLANG23_WORKER_PATH)
+#include "runtime/detached_application_materialization_file_service_internal.hpp"
+#include "sdk/openssl_detached_run_crypto_internal.hpp"
+#endif
 
 #if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
 namespace
@@ -498,6 +504,94 @@ namespace
 	  private:
 		bool fail_{};
 	};
+
+#if defined(CXXLENS_TEST_CLANG23_WORKER_PATH)
+	[[nodiscard]] std::byte test_hex_nibble(const char value)
+	{
+		if (value >= '0' && value <= '9')
+			return static_cast<std::byte>(value - '0');
+		if (value >= 'a' && value <= 'f')
+			return static_cast<std::byte>(value - 'a' + 10);
+		require(false);
+		return {};
+	}
+
+	template <std::size_t Size>
+	[[nodiscard]] std::array<std::byte, Size> test_hex_bytes(const std::string_view hex)
+	{
+		require(hex.size() == Size * 2U);
+		std::array<std::byte, Size> output{};
+		for (std::size_t index{}; index < output.size(); ++index)
+			output[index] =
+				(test_hex_nibble(hex[index * 2U]) << 4U) | test_hex_nibble(hex[index * 2U + 1U]);
+		return output;
+	}
+
+	class test_ed25519_material_port final
+		: public cxxlens::sdk::detail::detached_run_ed25519_signing_material_port
+	{
+	  public:
+		test_ed25519_material_port()
+		{
+			value_.scope = "detached-provider-run";
+			value_.signer_id = "worker:clang23-gcc-replay";
+			value_.private_key = test_hex_bytes<32U>("9d61b19deffd5a60ba844af492ec2cc4"
+													 "4449c5697b326919703bac031cae7f60");
+			value_.public_key = test_hex_bytes<32U>("d75a980182b10ab7d54bfed3c964073a"
+													"0ee172f3daa62325af021a68f707511a");
+		}
+
+		[[nodiscard]] cxxlens::sdk::result<
+			cxxlens::sdk::detail::detached_run_ed25519_signing_material>
+		load(const std::string_view, const std::string_view) const override
+		{
+			return value_;
+		}
+
+		[[nodiscard]] const std::array<std::byte, 32U>& public_key() const noexcept
+		{
+			return value_.public_key;
+		}
+
+	  private:
+		cxxlens::sdk::detail::detached_run_ed25519_signing_material value_;
+	};
+
+	class detached_run_test_directory final
+	{
+	  public:
+		detached_run_test_directory()
+		{
+			path_ = std::filesystem::temp_directory_path() /
+				("cxxlens detached adoption " + std::to_string(std::rand()));
+			std::error_code error;
+			std::filesystem::create_directories(path_, error);
+			require(!error);
+		}
+
+		~detached_run_test_directory()
+		{
+			std::error_code ignored;
+			std::filesystem::remove_all(path_, ignored);
+		}
+
+		[[nodiscard]] const std::filesystem::path& path() const noexcept
+		{
+			return path_;
+		}
+
+	  private:
+		std::filesystem::path path_;
+	};
+
+	void write_binary(const std::filesystem::path& path, const std::span<const std::byte> bytes)
+	{
+		std::ofstream output{path, std::ios::binary | std::ios::trunc};
+		output.write(reinterpret_cast<const char*>(bytes.data()),
+					 static_cast<std::streamsize>(bytes.size()));
+		require(static_cast<bool>(output));
+	}
+#endif
 
 	class exact_detached_signature_verifier final
 		: public cxxlens::sdk::detail::trusted_detached_run_signature_verifier
@@ -1666,6 +1760,41 @@ namespace
 		require(adopted && adopted->publication.publication_verified &&
 				adopted->publication.snapshot.publication().state == publication_state::committed);
 
+#if defined(CXXLENS_TEST_CLANG23_WORKER_PATH)
+		test_ed25519_material_port signing_material;
+		const openssl_detached_run_signer trusted_signer{signing_material};
+		auto trusted_run = build_detached_provider_run(
+			unit.process, unit.replay_plan_digest, sink.transcript, trusted_signer);
+		require(trusted_run);
+		const detached_run_test_directory directory;
+		const auto run_path = directory.path() / "compile-unit.run";
+		const auto key_path = directory.path() / "trusted-public-key.raw";
+		write_binary(run_path, trusted_run->bytes());
+		write_binary(key_path, signing_material.public_key());
+		cxxlens::runtime::detached_application_materialization_file_request file_request{
+			{run_path.string()},
+			"worker:clang23-gcc-replay",
+			key_path.string(),
+			detached_run_public_key_state::trusted,
+			{}};
+		auto file_store = make_in_memory_snapshot_store(*engine);
+		require(file_store);
+		auto file_adopted =
+			cxxlens::runtime::publish_detached_application_materializations_from_files(
+				*engine, *file_store, *plan, file_request);
+		require(file_adopted && file_adopted->publication.publication_verified &&
+				file_store->current(publication.series));
+
+		file_request.public_key_state = detached_run_public_key_state::revoked;
+		auto revoked_store = make_in_memory_snapshot_store(*engine);
+		require(revoked_store);
+		auto file_revoked =
+			cxxlens::runtime::publish_detached_application_materializations_from_files(
+				*engine, *revoked_store, *plan, file_request);
+		require(!file_revoked && file_revoked.error().detail == "signing-key-revoked" &&
+				!revoked_store->current(publication.series));
+#endif
+
 		auto multi_bytes = canonical_binary(valid_two_unit_bundle());
 		require(multi_bytes);
 		auto multi_bundle = decode_capture_bundle(*multi_bytes);
@@ -1895,8 +2024,13 @@ namespace
 #endif
 } // namespace
 
-int main()
+int main(const int argc, const char* const* argv)
 {
+	if (argc == 2 && std::string_view{argv[1]} == "--detached-adoption-only")
+	{
+		authenticated_detached_run_is_revalidated_before_publication();
+		return EXIT_SUCCESS;
+	}
 	positive_decode_and_deterministic_import();
 	replay_fidelity_and_import_bounds_fail_closed();
 	msvc_capture_import_preserves_replay_fidelity();
