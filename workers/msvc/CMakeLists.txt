@@ -100,6 +100,7 @@ target_link_libraries(
           clangTooling
           OpenSSL::Crypto
           advapi32
+          ole32
           userenv)
 target_include_directories(
   cxxlens_clangcl_worker_core PUBLIC "${CXXLENS_ROOT}/include"

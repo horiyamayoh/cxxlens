@@ -20,6 +20,7 @@
 #include <vector>
 
 #include <aclapi.h>
+#include <sddl.h>
 #include <userenv.h>
 #include <windows.h>
 
@@ -105,6 +106,15 @@ namespace cxxlens::detail::clang23_gcc_replay
 			}
 		};
 		using unique_local = std::unique_ptr<void, local_deleter>;
+
+		struct co_task_mem_deleter
+		{
+			void operator()(void* value) const noexcept
+			{
+				CoTaskMemFree(value);
+			}
+		};
+		using unique_co_task_mem = std::unique_ptr<void, co_task_mem_deleter>;
 
 		class attribute_list
 		{
@@ -202,6 +212,22 @@ namespace cxxlens::detail::clang23_gcc_replay
 			return unique_sid{raw};
 		}
 
+		[[nodiscard]] sdk::result<std::filesystem::path> appcontainer_folder(PSID sid)
+		{
+			LPWSTR raw_sid_text{};
+			if (ConvertSidToStringSidW(sid, &raw_sid_text) == FALSE)
+				return sdk::unexpected(
+					failure("appcontainer_folder", win32_detail(GetLastError())));
+			unique_local sid_text{raw_sid_text};
+			PWSTR raw_path{};
+			const auto found =
+				GetAppContainerFolderPath(static_cast<PCWSTR>(sid_text.get()), &raw_path);
+			if (FAILED(found))
+				return sdk::unexpected(failure("appcontainer_folder", "profile-path-unavailable"));
+			unique_co_task_mem path{raw_path};
+			return std::filesystem::path{static_cast<PCWSTR>(path.get())};
+		}
+
 		[[nodiscard]] sdk::result<void> grant_appcontainer_access(const std::filesystem::path& path,
 																  PSID sid)
 		{
@@ -283,9 +309,14 @@ namespace cxxlens::detail::clang23_gcc_replay
 
 		[[nodiscard]] std::vector<wchar_t>
 		environment_block(const provider_worker_authority& authority,
-						  const sdk::import_limits limits)
+						  const sdk::import_limits limits,
+						  const std::filesystem::path& profile_folder)
 		{
+			const auto profile_temp = profile_folder / L"Temp";
 			std::vector<std::pair<std::wstring, std::wstring>> values{
+				{L"LOCALAPPDATA", profile_folder.wstring()},
+				{L"TEMP", profile_temp.wstring()},
+				{L"TMP", profile_temp.wstring()},
 				{L"CXXLENS_PROVIDER_MANIFEST", widen_ascii(authority.host.provider_manifest)},
 				{L"CXXLENS_PROVIDER_ID", widen_ascii(authority.provider_id)},
 				{L"CXXLENS_PROVIDER_BINARY_DIGEST", widen_ascii(authority.provider_binary_digest)},
@@ -333,18 +364,11 @@ namespace cxxlens::detail::clang23_gcc_replay
 				{L"CXXLENS_IMPORT_MAXIMUM_SOURCE_CLOSURE_BYTES",
 				 std::to_wstring(limits.maximum_source_closure_bytes)},
 			};
-			const std::array windows_bootstrap_environment{L"ALLUSERSPROFILE",
-														   L"APPDATA",
-														   L"LOCALAPPDATA",
-														   L"ProgramData",
-														   L"ProgramFiles",
+			const std::array windows_bootstrap_environment{L"ProgramFiles",
 														   L"ProgramFiles(x86)",
 														   L"ProgramW6432",
 														   L"SystemDrive",
 														   L"SystemRoot",
-														   L"TEMP",
-														   L"TMP",
-														   L"USERPROFILE",
 														   L"windir"};
 			for (const auto* name : windows_bootstrap_environment)
 			{
@@ -402,6 +426,13 @@ namespace cxxlens::detail::clang23_gcc_replay
 				auto sid = appcontainer_sid();
 				if (!sid)
 					return sdk::unexpected(std::move(sid.error()));
+				auto profile_folder = appcontainer_folder(sid->get());
+				if (!profile_folder)
+					return sdk::unexpected(std::move(profile_folder.error()));
+				std::error_code profile_error;
+				std::filesystem::create_directories(*profile_folder / L"Temp", profile_error);
+				if (profile_error)
+					return sdk::unexpected(failure("appcontainer_folder", profile_error.message()));
 				auto directory = temporary_directory::create();
 				if (!directory)
 					return sdk::unexpected(std::move(directory.error()));
@@ -486,7 +517,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 				startup.StartupInfo.hStdOutput = stdout_pipe->second.get();
 				startup.StartupInfo.hStdError = stderr_pipe->second.get();
 				startup.lpAttributeList = attributes.get();
-				auto environment = environment_block(authority, limits);
+				auto environment = environment_block(authority, limits, *profile_folder);
 				std::wstring command = L"\"" + executable->wstring() + L"\" --sandbox-child";
 				PROCESS_INFORMATION process{};
 				if (CreateProcessW(executable->c_str(),
