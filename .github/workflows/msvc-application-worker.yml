@@ -124,7 +124,7 @@ jobs:
               $process.StandardInput.BaseStream.Flush()
               $process.StandardInput.Close()
               $process.WaitForExit()
-              $outputCopy.GetAwaiter().GetResult()
+              [void]$outputCopy.GetAwaiter().GetResult()
               $errorText = $errorRead.GetAwaiter().GetResult()
               [System.IO.File]::WriteAllText($ErrorPath, $errorText)
               return $process.ExitCode
