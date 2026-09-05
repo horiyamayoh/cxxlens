@@ -83,6 +83,7 @@ add_library(
   "${CXXLENS_ROOT}/src/protocol_v2/cbor.cpp"
   "${CXXLENS_ROOT}/src/protocol_v2/codec.cpp"
   "${CXXLENS_ROOT}/src/protocol_v2/closure.cpp"
+  "${CXXLENS_ROOT}/src/llvm/clang23_gcc_replay/clangcl_worker_command_internal.cpp"
   "${CXXLENS_ROOT}/src/llvm/clang23_gcc_replay/observation_normalizer.cpp"
   "${CXXLENS_ROOT}/src/llvm/clang23_gcc_replay/provider_worker.cpp"
   "${CXXLENS_ROOT}/src/llvm/clang23_gcc_replay/source_authority_binder.cpp"

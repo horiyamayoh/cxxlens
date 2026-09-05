@@ -470,6 +470,20 @@ if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
   cxxlens_set_project_warnings(cxxlens_clang23_gcc_replay_ingress)
   cxxlens_enable_sanitizers(cxxlens_clang23_gcc_replay_ingress)
 
+  add_library(cxxlens_clangcl_worker_command_internal STATIC
+              src/llvm/clang23_gcc_replay/clangcl_worker_command_internal.cpp)
+  target_link_libraries(
+    cxxlens_clangcl_worker_command_internal
+    PUBLIC cxxlens_clang23_gcc_replay_ingress
+    PRIVATE cxxlens_detached_run_signing_file_port_internal
+            cxxlens_detached_run_crypto_internal)
+  target_include_directories(cxxlens_clangcl_worker_command_internal
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clangcl_worker_command_internal
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_clangcl_worker_command_internal)
+  cxxlens_enable_sanitizers(cxxlens_clangcl_worker_command_internal)
+
   add_executable(cxxlens-clang-gcc-replay-worker-23
                  src/llvm/clang23_gcc_replay/worker_main.cpp)
   target_link_libraries(cxxlens-clang-gcc-replay-worker-23
@@ -936,6 +950,10 @@ if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
   cxxlens_assert_direct_project_dependencies(
     cxxlens_clang23_gcc_replay_ingress cxxlens_sdk cxxlens_protocol_v2
     cxxlens_detached_run_crypto_internal)
+  cxxlens_assert_direct_project_dependencies(
+    cxxlens_clangcl_worker_command_internal cxxlens_clang23_gcc_replay_ingress
+    cxxlens_detached_run_signing_file_port_internal
+    cxxlens_detached_run_crypto_internal)
 endif()
 
 set(CXXLENS_COMPILED_TARGETS
@@ -957,9 +975,10 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
        cxxlens_clang22_worker_core cxxlens_clang22_materializer_ingress)
 endif()
 if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
-  list(APPEND CXXLENS_COMPILED_TARGETS cxxlens_detached_run_crypto_internal
-       cxxlens_detached_run_signing_file_port_internal
-       cxxlens_clang23_gcc_replay_ingress)
+  list(
+    APPEND CXXLENS_COMPILED_TARGETS cxxlens_detached_run_crypto_internal
+    cxxlens_detached_run_signing_file_port_internal
+    cxxlens_clang23_gcc_replay_ingress cxxlens_clangcl_worker_command_internal)
 endif()
 
 if(CXXLENS_ENABLE_CLANG_TIDY)

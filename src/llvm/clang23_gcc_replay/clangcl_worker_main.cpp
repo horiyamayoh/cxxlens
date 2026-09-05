@@ -1,14 +1,12 @@
-#include <charconv>
+#include <array>
 #include <cstdlib>
 #include <iostream>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
-#include "provider_worker.hpp"
-#include "replay_frontend_authority.hpp"
-#include "runtime/detached_run_signing_file_port_internal.hpp"
-#include "sdk/openssl_detached_run_crypto_internal.hpp"
+#include "clangcl_worker_command_internal.hpp"
 
 namespace
 {
@@ -31,11 +29,6 @@ namespace
 #endif
 	}
 
-	[[nodiscard]] bool parse_version(const std::string_view text, std::uint16_t& output)
-	{
-		const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), output);
-		return error == std::errc{} && end == text.data() + text.size();
-	}
 } // namespace
 
 int main(const int argc, char** argv)
@@ -50,59 +43,43 @@ int main(const int argc, char** argv)
 		std::cerr << "application-analysis.replay-provider-failed:arguments\n";
 		return EXIT_FAILURE;
 	}
-	using namespace cxxlens::sdk::provider;
-	auto manifest = environment("CXXLENS_PROVIDER_MANIFEST");
-	auto selected_provider = environment("CXXLENS_PROVIDER_ID");
-	auto binary_digest = environment("CXXLENS_PROVIDER_BINARY_DIGEST");
-	auto semantic_contract = environment("CXXLENS_PROVIDER_SEMANTIC_CONTRACT_DIGEST");
-	auto sandbox_policy = environment("CXXLENS_PROVIDER_SANDBOX_POLICY_DIGEST");
-	auto task_id = environment("CXXLENS_PROVIDER_TASK_ID");
-	auto task_digest = environment("CXXLENS_PROVIDER_TASK_INPUT_DIGEST");
-	auto invocation = environment("CXXLENS_PROVIDER_NORMALIZED_INVOCATION_DIGEST");
-	auto toolchain = environment("CXXLENS_PROVIDER_TOOLCHAIN_DIGEST");
-	auto effective_environment = environment("CXXLENS_PROVIDER_ENVIRONMENT_DIGEST");
-	auto major = environment("CXXLENS_PROVIDER_PROTOCOL_MAJOR");
-	auto minor = environment("CXXLENS_PROVIDER_PROTOCOL_MINOR");
-	auto provider_signature = environment("CXXLENS_PROVIDER_SIGNATURE_DIGEST");
-	auto provider_revocation = environment("CXXLENS_PROVIDER_REVOCATION_STATE");
-	auto run_signer = environment("CXXLENS_DETACHED_RUN_SIGNER_ID");
-	auto run_private_key = environment("CXXLENS_DETACHED_RUN_PRIVATE_KEY_FILE");
-	auto run_public_key = environment("CXXLENS_DETACHED_RUN_PUBLIC_KEY_FILE");
-	if (!manifest || !selected_provider || !binary_digest || !semantic_contract ||
-		!sandbox_policy || !task_id || !task_digest || !invocation || !toolchain ||
-		!effective_environment || !major || !minor || !provider_signature || !provider_revocation ||
-		!run_signer || !run_private_key || !run_public_key ||
-		*selected_provider != cxxlens::detail::clang23_gcc_replay::msvc_provider_id)
+	using configuration = cxxlens::detail::clang23_gcc_replay::clangcl_worker_launch_configuration;
+	configuration launch;
+	const std::array bindings{
+		std::pair{"CXXLENS_PROVIDER_MANIFEST", &configuration::provider_manifest},
+		std::pair{"CXXLENS_PROVIDER_ID", &configuration::provider_id},
+		std::pair{"CXXLENS_PROVIDER_BINARY_DIGEST", &configuration::provider_binary_digest},
+		std::pair{"CXXLENS_PROVIDER_SEMANTIC_CONTRACT_DIGEST",
+				  &configuration::provider_semantic_contract_digest},
+		std::pair{"CXXLENS_PROVIDER_SANDBOX_POLICY_DIGEST", &configuration::sandbox_policy_digest},
+		std::pair{"CXXLENS_PROVIDER_TASK_ID", &configuration::task_id},
+		std::pair{"CXXLENS_PROVIDER_TASK_INPUT_DIGEST", &configuration::task_input_digest},
+		std::pair{"CXXLENS_PROVIDER_NORMALIZED_INVOCATION_DIGEST",
+				  &configuration::normalized_invocation_digest},
+		std::pair{"CXXLENS_PROVIDER_TOOLCHAIN_DIGEST", &configuration::toolchain_digest},
+		std::pair{"CXXLENS_PROVIDER_ENVIRONMENT_DIGEST", &configuration::environment_digest},
+		std::pair{"CXXLENS_PROVIDER_PROTOCOL_MAJOR", &configuration::protocol_major},
+		std::pair{"CXXLENS_PROVIDER_PROTOCOL_MINOR", &configuration::protocol_minor},
+		std::pair{"CXXLENS_PROVIDER_SIGNATURE_DIGEST", &configuration::provider_signature_digest},
+		std::pair{"CXXLENS_PROVIDER_REVOCATION_STATE", &configuration::provider_revocation_state},
+		std::pair{"CXXLENS_DETACHED_RUN_SIGNER_ID", &configuration::detached_run_signer_id},
+		std::pair{"CXXLENS_DETACHED_RUN_PRIVATE_KEY_FILE",
+				  &configuration::detached_run_private_key_file},
+		std::pair{"CXXLENS_DETACHED_RUN_PUBLIC_KEY_FILE",
+				  &configuration::detached_run_public_key_file},
+	};
+	for (const auto& [name, member] : bindings)
 	{
-		std::cerr << "application-analysis.replay-provider-failed:environment\n";
-		return EXIT_FAILURE;
+		auto value = environment(name);
+		if (!value)
+		{
+			std::cerr << "application-analysis.replay-provider-failed:environment\n";
+			return EXIT_FAILURE;
+		}
+		launch.*member = std::move(*value);
 	}
-	protocol_limits limits;
-	if (!parse_version(*major, limits.protocol_major) ||
-		!parse_version(*minor, limits.maximum_minor) ||
-		limits.protocol_major != protocol_v2_major || limits.maximum_minor != protocol_v2_minor)
-	{
-		std::cerr << "application-analysis.replay-provider-failed:protocol-version\n";
-		return EXIT_FAILURE;
-	}
-	limits.minimum_minor = protocol_v2_minor;
-	cxxlens::detail::clang23_gcc_replay::detached_provider_worker_authority authority{
-		{{std::move(*manifest),
-		  {*task_id, *task_digest, *invocation, *toolchain, *effective_environment},
-		  limits},
-		 std::move(*binary_digest),
-		 std::move(*semantic_contract),
-		 std::move(*sandbox_policy),
-		 std::string{cxxlens::detail::clang23_gcc_replay::msvc_provider_id},
-		 cxxlens::detail::clang23_gcc_replay::msvc_provider_version,
-		 std::string{cxxlens::detail::clang23_gcc_replay::msvc_replay_frontend_id}},
-		std::move(*provider_signature),
-		std::move(*provider_revocation)};
-	const cxxlens::runtime::detached_run_signing_file_port signing_material{
-		std::move(*run_signer), std::move(*run_private_key), std::move(*run_public_key)};
-	const cxxlens::sdk::detail::openssl_detached_run_signer signer{signing_material};
-	auto validated = cxxlens::detail::clang23_gcc_replay::execute_detached_provider_worker(
-		std::cin, std::cout, std::move(authority), signer);
+	auto validated = cxxlens::detail::clang23_gcc_replay::execute_clangcl_worker_command(
+		std::cin, std::cout, std::move(launch));
 	if (!validated)
 	{
 		std::cerr << validated.error().code << ':' << validated.error().field << '\n';

@@ -5,6 +5,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <iterator>
 #include <source_location>
@@ -23,12 +25,14 @@
 #include <cxxlens/relations/source_file.hpp>
 #include <cxxlens/relations/source_span.hpp>
 
+#include "llvm/clang23_gcc_replay/clangcl_worker_command_internal.hpp"
 #include "llvm/clang23_gcc_replay/observation_normalizer.hpp"
 #include "llvm/clang23_gcc_replay/provider_worker.hpp"
 #include "llvm/clang23_gcc_replay/replay_frontend_authority.hpp"
 #include "llvm/clang23_gcc_replay/source_authority_binder.hpp"
 #include "llvm/clang23_gcc_replay/worker_observation_codec.hpp"
 #include "llvm/clang23_gcc_replay/worker_parser.hpp"
+#include "sdk/openssl_detached_run_crypto_internal.hpp"
 #include "sdk/provider_validation_internal.hpp"
 #include "sdk/source_identity_internal.hpp"
 
@@ -52,6 +56,75 @@ namespace
 			output.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
 		return output;
 	}
+
+	[[nodiscard]] std::byte hex_nibble(const char value)
+	{
+		if (value >= '0' && value <= '9')
+			return static_cast<std::byte>(value - '0');
+		if (value >= 'a' && value <= 'f')
+			return static_cast<std::byte>(value - 'a' + 10);
+		std::abort();
+	}
+
+	template <std::size_t Size>
+	[[nodiscard]] std::array<std::byte, Size> hex_bytes(const std::string_view value)
+	{
+		require(value.size() == Size * 2U);
+		std::array<std::byte, Size> output{};
+		for (std::size_t index{}; index < Size; ++index)
+			output[index] =
+				(hex_nibble(value[index * 2U]) << 4U) | hex_nibble(value[index * 2U + 1U]);
+		return output;
+	}
+
+	class temporary_directory
+	{
+	  public:
+		temporary_directory()
+		{
+			path_ = std::filesystem::temp_directory_path() /
+				("cxxlens-clangcl-command-" + std::to_string(std::rand()));
+			std::error_code error;
+			std::filesystem::create_directories(path_, error);
+			require(!error);
+		}
+
+		~temporary_directory()
+		{
+			std::error_code ignored;
+			std::filesystem::remove_all(path_, ignored);
+		}
+
+		[[nodiscard]] const std::filesystem::path& path() const noexcept
+		{
+			return path_;
+		}
+
+	  private:
+		std::filesystem::path path_;
+	};
+
+	void write(const std::filesystem::path& path, const std::span<const std::byte> value)
+	{
+		std::ofstream output{path, std::ios::binary | std::ios::trunc};
+		output.write(reinterpret_cast<const char*>(value.data()),
+					 static_cast<std::streamsize>(value.size()));
+		require(static_cast<bool>(output));
+	}
+
+	class exact_public_key_port final
+		: public cxxlens::sdk::detail::trusted_detached_run_ed25519_public_key_port
+	{
+	  public:
+		cxxlens::sdk::detail::trusted_detached_run_ed25519_public_key value;
+
+		[[nodiscard]]
+		std::optional<cxxlens::sdk::detail::trusted_detached_run_ed25519_public_key>
+		lookup(std::string_view, std::string_view, std::string_view) const override
+		{
+			return value;
+		}
+	};
 
 	[[nodiscard]] cxxlens::sdk::detail::validated_compiler_replay_input input()
 	{
@@ -564,6 +637,90 @@ namespace
 			execute_detached_provider_worker(revoked_input, revoked_output, revoked, signer);
 		require(!revocation_rejected && revoked_output.str().empty() &&
 				revocation_rejected.error().field == "provider_revocation");
+	}
+
+	void clangcl_command_emits_one_cryptographically_authenticated_envelope()
+	{
+		using namespace cxxlens::detail::clang23_gcc_replay;
+		using namespace cxxlens::sdk;
+		using namespace cxxlens::sdk::detail;
+		auto value = msvc_input();
+		auto execution = execute_provider(value, true);
+		require(execution.manifest.signature);
+
+		const temporary_directory directory;
+		const auto private_path = directory.path() / "worker private key.raw";
+		const auto public_path = directory.path() / "worker public key.raw";
+		const auto private_key = hex_bytes<detached_run_ed25519_private_key_bytes>(
+			"9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60");
+		const auto public_key = hex_bytes<detached_run_ed25519_public_key_bytes>(
+			"d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
+		write(private_path, private_key);
+		write(public_path, public_key);
+
+		clangcl_worker_launch_configuration configuration{
+			execution.manifest.canonical_json(),
+			std::string{msvc_provider_id},
+			execution.manifest.provider_binary_digest,
+			execution.manifest.provider_semantic_contract_digest,
+			"semantic-v2:sha256:" + std::string(64U, 'e'),
+			execution.expectation.task.task_id,
+			execution.expectation.task.task_input_digest,
+			execution.expectation.task.normalized_invocation_digest,
+			execution.expectation.task.toolchain_digest,
+			execution.expectation.task.environment_digest,
+			"2",
+			"0",
+			*execution.manifest.signature,
+			"not-revoked",
+			"worker:clangcl23-command-test",
+			private_path.string(),
+			public_path.string()};
+		std::istringstream input_stream{string(execution.host)};
+		std::ostringstream output_stream;
+		auto result = execute_clangcl_worker_command(input_stream, output_stream, configuration);
+		require(result);
+		auto run = decode_detached_provider_run(bytes(output_stream.str()));
+		require(run && run->value().task_input_digest == value.input_digest() &&
+				run->value().provider.provider_id == msvc_provider_id &&
+				run->value().provider.signature_digest == *execution.manifest.signature &&
+				run->value().provider.revocation_state == "not-revoked" &&
+				run->value().authentication.signer_id == "worker:clangcl23-command-test");
+
+		exact_public_key_port trust;
+		trust.value = {detached_run_public_key_state::trusted,
+					   "detached-provider-run",
+					   run->value().authentication.signer_id,
+					   run->value().authentication.key_fingerprint,
+					   public_key,
+					   "sha256:" + std::string(64U, 'b')};
+		const openssl_detached_run_signature_verifier verifier{trust};
+		const auto authenticated =
+			verifier.verify("detached-provider-run",
+							run->value().authentication.signer_id,
+							run->value().authentication.key_fingerprint,
+							run->value().authentication.signed_subject_digest,
+							run->value().authentication.signature,
+							run->value().authentication.signature_digest);
+		require(authenticated.verdict == detached_run_signature_verdict::verified);
+
+		auto wrong_protocol = configuration;
+		wrong_protocol.protocol_major = "3";
+		std::istringstream wrong_input{string(execution.host)};
+		std::ostringstream wrong_output;
+		auto rejected =
+			execute_clangcl_worker_command(wrong_input, wrong_output, std::move(wrong_protocol));
+		require(!rejected && rejected.error().field == "protocol_version" &&
+				wrong_output.str().empty());
+
+		std::error_code ignored;
+		std::filesystem::remove(private_path, ignored);
+		std::istringstream missing_key_input{string(execution.host)};
+		std::ostringstream missing_key_output;
+		auto missing_key = execute_clangcl_worker_command(
+			missing_key_input, missing_key_output, std::move(configuration));
+		require(!missing_key && missing_key.error().field == "private_key_file" &&
+				missing_key_output.str().empty());
 	}
 
 	void msvc_worker_authority_parses_only_the_admitted_clangcl_tuple()
@@ -1084,6 +1241,7 @@ int main()
 	gcc_worker_rejects_an_admitted_msvc_frontend_tuple_without_output();
 	msvc_worker_emits_protocol_with_its_own_provenance();
 	msvc_worker_seals_only_validated_protocol_into_a_detached_run();
+	clangcl_command_emits_one_cryptographically_authenticated_envelope();
 	msvc_worker_authority_parses_only_the_admitted_clangcl_tuple();
 	valid_input_emits_bound_detached_observations();
 	worker_output_codec_is_bounded_and_strict();

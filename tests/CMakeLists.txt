@@ -223,7 +223,7 @@ if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
     cxxlens-unit-clang23-gcc-replay-worker-ingress
     unit/adapter/clang23_gcc_replay/worker_ingress_test.cpp)
   target_link_libraries(cxxlens-unit-clang23-gcc-replay-worker-ingress
-                        PRIVATE cxxlens_clang23_gcc_replay_ingress)
+                        PRIVATE cxxlens_clangcl_worker_command_internal)
   target_include_directories(cxxlens-unit-clang23-gcc-replay-worker-ingress
                              PRIVATE "${PROJECT_SOURCE_DIR}/src")
   add_test(NAME adapter.clang23-gcc-replay-worker-ingress
