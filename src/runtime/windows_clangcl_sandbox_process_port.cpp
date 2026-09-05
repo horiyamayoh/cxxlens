@@ -333,12 +333,30 @@ namespace cxxlens::detail::clang23_gcc_replay
 				{L"CXXLENS_IMPORT_MAXIMUM_SOURCE_CLOSURE_BYTES",
 				 std::to_wstring(limits.maximum_source_closure_bytes)},
 			};
-			std::array<wchar_t, 32768U> system_root{};
-			const auto system_root_size = GetEnvironmentVariableW(
-				L"SystemRoot", system_root.data(), static_cast<DWORD>(system_root.size()));
-			if (system_root_size != 0U && system_root_size < system_root.size())
-				values.emplace_back(L"SystemRoot",
-									std::wstring{system_root.data(), system_root_size});
+			const std::array windows_bootstrap_environment{L"ALLUSERSPROFILE",
+														   L"APPDATA",
+														   L"LOCALAPPDATA",
+														   L"ProgramData",
+														   L"ProgramFiles",
+														   L"ProgramFiles(x86)",
+														   L"ProgramW6432",
+														   L"SystemDrive",
+														   L"SystemRoot",
+														   L"TEMP",
+														   L"TMP",
+														   L"USERPROFILE",
+														   L"windir"};
+			for (const auto* name : windows_bootstrap_environment)
+			{
+				const auto required = GetEnvironmentVariableW(name, nullptr, 0U);
+				if (required == 0U)
+					continue;
+				std::vector<wchar_t> value(required);
+				const auto size =
+					GetEnvironmentVariableW(name, value.data(), static_cast<DWORD>(value.size()));
+				if (size != 0U && size < value.size())
+					values.emplace_back(name, std::wstring{value.data(), size});
+			}
 			std::ranges::sort(values, {}, &std::pair<std::wstring, std::wstring>::first);
 			std::vector<wchar_t> block;
 			for (const auto& [name, value] : values)
