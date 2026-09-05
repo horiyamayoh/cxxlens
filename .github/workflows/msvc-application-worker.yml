@@ -139,7 +139,13 @@ jobs:
           $nativeWorkerExit = Invoke-BinaryWorker $worker $hostTranscript $detachedRun $workerError
           if ($nativeWorkerExit -ne 0 -or -not (Test-Path $detachedRun) -or
               (Get-Item $detachedRun).Length -eq 0) {
-            throw "Relocated clang-cl worker process rejected the valid transcript: $(Get-Content $workerError -Raw)"
+            $inputLength = (Get-Item $hostTranscript).Length
+            $outputLength = if (Test-Path $detachedRun) { (Get-Item $detachedRun).Length } else { -1 }
+            $errorLength = if (Test-Path $workerError) { (Get-Item $workerError).Length } else { -1 }
+            $details = "exit=$nativeWorkerExit input-bytes=$inputLength "
+            $details += "output-bytes=$outputLength error-bytes=$errorLength "
+            $details += "stderr=$(Get-Content $workerError -Raw)"
+            throw "Relocated clang-cl worker process rejected the valid transcript: $details"
           }
           & 'build/msvc-worker/cxxlens-provider-worker-ingress-test.exe' `
             --verify-process-output $processFixture $workerDigest
