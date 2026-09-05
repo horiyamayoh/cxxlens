@@ -65,7 +65,7 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
         self.assertEqual(
             (by_id["msvc-x64-windows"]["implementation_state"],
              by_id["msvc-x64-windows"]["availability"]),
-            ("planned", "unavailable"),
+            ("materialization-ready", "experimental"),
         )
         for target in by_id.values():
             self.assertEqual(target["guarantee_floor"], "frontend-replayed")
@@ -94,7 +94,7 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
             provider["execution_revalidation"],
             "authenticated-detached-transcript-binding",
         )
-        self.assertEqual(provider["qualification"], "planned")
+        self.assertEqual(provider["qualification"], "experimental")
         self.assertEqual(provider["semantic_contract_digest_algorithm"], "sha256")
         self.assertEqual(
             hashlib.sha256(provider["semantic_contract_subject"].encode("utf-8")).hexdigest(),
@@ -104,6 +104,7 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
     def test_only_materialization_ready_targets_can_be_available(self) -> None:
         targets = self.contract["targets"]
         planned_but_available = dict(targets[1])
+        planned_but_available["implementation_state"] = "planned"
         planned_but_available["availability"] = "experimental"
         with self.assertRaises(jsonschema.ValidationError):
             jsonschema.Draft202012Validator(self.schema).validate(

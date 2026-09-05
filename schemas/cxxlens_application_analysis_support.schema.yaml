@@ -57,7 +57,7 @@ properties:
           semantic_contract_subject: {const: "cxxlens.clangcl23-msvc-replay-provider.v1\nclang-cl-23.1.0-msvc-mode"}
           trust_authority: {const: explicit-host-trusted-ed25519-public-key}
           execution_revalidation: {const: authenticated-detached-transcript-binding}
-          qualification: {const: planned}
+          qualification: {const: experimental}
   toolchain_pins:
     type: object
     additionalProperties: false

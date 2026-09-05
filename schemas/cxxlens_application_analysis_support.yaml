@@ -1,5 +1,5 @@
 schema: cxxlens.application-analysis-support.v1
-document_version: 1.2.0
+document_version: 1.3.0
 maturity: experimental
 host_package_support:
   authority: schemas/cxxlens_support_matrix.yaml
@@ -20,7 +20,7 @@ execution_providers:
     semantic_contract_subject: "cxxlens.clangcl23-msvc-replay-provider.v1\nclang-cl-23.1.0-msvc-mode"
     trust_authority: explicit-host-trusted-ed25519-public-key
     execution_revalidation: authenticated-detached-transcript-binding
-    qualification: planned
+    qualification: experimental
 toolchain_pins:
   gcc:
     family: gcc
@@ -72,8 +72,8 @@ targets:
     incomplete_result: partial
     completion_action: Capture the missing compiler effect or use a qualified native gap provider.
   - id: msvc-x64-windows
-    implementation_state: planned
-    availability: unavailable
+    implementation_state: materialization-ready
+    availability: experimental
     production_compiler: msvc-19.51.36256
     capture_adapters: [msbuild-cltool-proxy]
     analysis_frontend: clang-cl-23.1.0
