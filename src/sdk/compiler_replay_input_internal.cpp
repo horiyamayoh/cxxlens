@@ -409,12 +409,12 @@ namespace cxxlens::sdk::detail
 				return unexpected(std::move(valid.error()));
 			if (bytes.empty() || bytes.size() > limits.maximum_bundle_bytes)
 				return unexpected(limit("replay_input", "bytes"));
-			auto root =
-				decode_bounded_canonical_binary(bytes,
-												0U,
-												limits.maximum_nesting_depth,
-												"application-analysis.replay-input-invalid",
-												"application-analysis.import-limit-exceeded");
+			auto root = decode_bounded_canonical_binary(
+				bytes,
+				{.initial_depth = 0U,
+				 .maximum_nesting_depth = limits.maximum_nesting_depth,
+				 .invalid_error_code = "application-analysis.replay-input-invalid",
+				 .limit_error_code = "application-analysis.import-limit-exceeded"});
 			if (!root)
 				return unexpected(std::move(root.error()));
 			auto fields = tuple(*root, "root", 13U);

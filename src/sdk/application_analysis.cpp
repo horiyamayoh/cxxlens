@@ -1187,10 +1187,10 @@ namespace cxxlens::sdk
 				return unexpected(limit("bundle", "bytes"));
 			auto decoded = detail::decode_bounded_canonical_binary(
 				input,
-				1U,
-				limits.maximum_nesting_depth,
-				"application-analysis.capture-invalid",
-				"application-analysis.import-limit-exceeded");
+				{.initial_depth = 1U,
+				 .maximum_nesting_depth = limits.maximum_nesting_depth,
+				 .invalid_error_code = "application-analysis.capture-invalid",
+				 .limit_error_code = "application-analysis.import-limit-exceeded"});
 			if (!decoded)
 				return unexpected(std::move(decoded.error()));
 			metadata_budget budget{limits};

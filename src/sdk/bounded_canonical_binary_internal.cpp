@@ -9,15 +9,12 @@ namespace cxxlens::sdk::detail
 		class decoder
 		{
 		  public:
-			decoder(const std::size_t maximum_nesting_depth,
-					std::string_view invalid_error_code,
-					std::string_view limit_error_code,
-					const std::uint64_t maximum_tuple_items,
-					const std::uint64_t maximum_total_values)
-				: maximum_nesting_depth_{maximum_nesting_depth},
-				  maximum_tuple_items_{maximum_tuple_items},
-				  maximum_total_values_{maximum_total_values},
-				  invalid_error_code_{invalid_error_code}, limit_error_code_{limit_error_code}
+			explicit decoder(const bounded_canonical_binary_options& options)
+				: maximum_nesting_depth_{options.maximum_nesting_depth},
+				  maximum_tuple_items_{options.maximum_tuple_items},
+				  maximum_total_values_{options.maximum_total_values},
+				  invalid_error_code_{options.invalid_error_code},
+				  limit_error_code_{options.limit_error_code}
 			{
 			}
 
@@ -135,25 +132,18 @@ namespace cxxlens::sdk::detail
 
 	result<canonical_value>
 	decode_bounded_canonical_binary(const std::span<const std::byte> input,
-									const std::size_t initial_depth,
-									const std::size_t maximum_nesting_depth,
-									const std::string_view invalid_error_code,
-									const std::string_view limit_error_code,
-									const std::uint64_t maximum_tuple_items,
-									const std::uint64_t maximum_total_values)
+									const bounded_canonical_binary_options& options)
 	{
-		const decoder bounded_decoder{maximum_nesting_depth,
-									  invalid_error_code,
-									  limit_error_code,
-									  maximum_tuple_items,
-									  maximum_total_values};
+		const decoder bounded_decoder{options};
 		std::uint64_t total_values{};
-		if (auto valid = bounded_decoder.preflight(input, initial_depth, total_values); !valid)
+		if (auto valid = bounded_decoder.preflight(input, options.initial_depth, total_values);
+			!valid)
 			return unexpected(std::move(valid.error()));
 		auto value = canonical_binary_decode(input);
 		if (!value)
-			return unexpected(
-				error{std::string{invalid_error_code}, "binary", std::move(value.error().detail)});
+			return unexpected(error{std::string{options.invalid_error_code},
+									"binary",
+									std::move(value.error().detail)});
 		return value;
 	}
 } // namespace cxxlens::sdk::detail

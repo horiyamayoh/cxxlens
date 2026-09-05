@@ -145,8 +145,13 @@ namespace
 		for (int index = 2; index < argc; ++index)
 		{
 			const std::string_view option{argv[index]};
-			if (index + 1 >= argc || option != "--bundle" ||
-				!assign_once(request.bundle_path, bundle, argv[++index]))
+			if (index + 1 >= argc || option != "--bundle")
+			{
+				print_usage();
+				return 2;
+			}
+			++index;
+			if (!assign_once(request.bundle_path, bundle, argv[index]))
 			{
 				print_usage();
 				return 2;

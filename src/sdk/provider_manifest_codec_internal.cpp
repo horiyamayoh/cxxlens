@@ -17,7 +17,7 @@ namespace cxxlens::sdk::detail
 {
 	namespace
 	{
-		constexpr std::size_t maximum_manifest_bytes = 64U * 1024U;
+		constexpr std::size_t maximum_manifest_bytes = std::size_t{64U} * 1024U;
 		constexpr std::size_t maximum_manifest_items = 4096U;
 		constexpr std::size_t maximum_id_bytes = 512U;
 
@@ -36,12 +36,18 @@ namespace cxxlens::sdk::detail
 			return {};
 		}
 
-		[[nodiscard]] result<const json_value*>
-		member(const json_value& value, const std::string_view name, const std::string_view field)
+		struct member_request
 		{
-			const auto* found = value.member(name);
+			std::string_view name;
+			std::string_view field;
+		};
+
+		[[nodiscard]] result<const json_value*> member(const json_value& value,
+													   const member_request request)
+		{
+			const auto* found = value.member(request.name);
 			if (found == nullptr)
-				return unexpected(invalid(std::string{field}, "missing"));
+				return unexpected(invalid(std::string{request.field}, "missing"));
 			return found;
 		}
 
@@ -62,7 +68,7 @@ namespace cxxlens::sdk::detail
 					const std::string_view field,
 					const std::size_t maximum_bytes = maximum_id_bytes)
 		{
-			auto found = member(value, name, field);
+			auto found = member(value, {.name = name, .field = field});
 			if (!found)
 				return unexpected(std::move(found.error()));
 			return text(**found, field, maximum_bytes);
@@ -91,7 +97,7 @@ namespace cxxlens::sdk::detail
 		[[nodiscard]] result<std::vector<std::string>> member_string_array(
 			const json_value& value, const std::string_view name, const std::string_view field)
 		{
-			auto found = member(value, name, field);
+			auto found = member(value, {.name = name, .field = field});
 			if (!found)
 				return unexpected(std::move(found.error()));
 			return string_array(**found, field);
@@ -143,7 +149,7 @@ namespace cxxlens::sdk::detail
 																	  const std::string_view name,
 																	  const std::string_view field)
 		{
-			auto found = member(value, name, field);
+			auto found = member(value, {.name = name, .field = field});
 			if (!found)
 				return unexpected(std::move(found.error()));
 			return unsigned_component(**found, field);
@@ -168,18 +174,20 @@ namespace cxxlens::sdk::detail
 				return unexpected(std::move(encoded.error()));
 			std::array<std::uint32_t, 3U> components{};
 			std::size_t begin{};
-			for (std::size_t index{}; index < components.size(); ++index)
+			std::size_t index{};
+			for (auto& component : components)
 			{
 				const auto end =
 					index + 1U == components.size() ? encoded->size() : encoded->find('.', begin);
 				if (end == std::string::npos || end == begin ||
 					(end - begin > 1U && (*encoded)[begin] == '0'))
 					return unexpected(invalid(std::string{field}, "semantic-version"));
-				const auto converted = std::from_chars(
-					encoded->data() + begin, encoded->data() + end, components[index]);
+				const auto converted =
+					std::from_chars(encoded->data() + begin, encoded->data() + end, component);
 				if (converted.ec != std::errc{} || converted.ptr != encoded->data() + end)
 					return unexpected(invalid(std::string{field}, "semantic-version"));
 				begin = end + 1U;
+				++index;
 			}
 			if (begin != encoded->size() + 1U || components[0U] == 0U)
 				return unexpected(invalid(std::string{field}, "semantic-version"));
@@ -188,7 +196,7 @@ namespace cxxlens::sdk::detail
 
 		[[nodiscard]] result<std::optional<std::string>> optional_signature(const json_value& value)
 		{
-			auto found = member(value, "signature", "signature");
+			auto found = member(value, {.name = "signature", .field = "signature"});
 			if (!found)
 				return unexpected(std::move(found.error()));
 			if ((*found)->is_null())
@@ -292,7 +300,8 @@ namespace cxxlens::sdk::detail
 				return unexpected(std::move(license.error()));
 			output.license = std::move(*license);
 
-			auto provider_version_member = member(*root, "provider_version", "provider_version");
+			auto provider_version_member =
+				member(*root, {.name = "provider_version", .field = "provider_version"});
 			if (!provider_version_member)
 				return unexpected(std::move(provider_version_member.error()));
 			auto provider_version =
@@ -305,7 +314,7 @@ namespace cxxlens::sdk::detail
 				return unexpected(std::move(signature.error()));
 			output.signature = std::move(*signature);
 
-			auto protocol = member(*root, "protocol_range", "protocol_range");
+			auto protocol = member(*root, {.name = "protocol_range", .field = "protocol_range"});
 			if (!protocol)
 				return unexpected(std::move(protocol.error()));
 			constexpr std::array<std::string_view, 5U> protocol_fields{"major",
@@ -348,7 +357,7 @@ namespace cxxlens::sdk::detail
 				return unexpected(std::move(optional_features.error()));
 			output.protocol.optional_features = std::move(*optional_features);
 
-			auto task_stage = member(*root, "task_stage", "task_stage");
+			auto task_stage = member(*root, {.name = "task_stage", .field = "task_stage"});
 			if (!task_stage)
 				return unexpected(std::move(task_stage.error()));
 			constexpr std::array<std::string_view, 2U> task_fields{"input", "output"};

@@ -6,6 +6,7 @@
  */
 
 #include <cstddef>
+#include <cstdint>
 #include <expected>
 #include <span>
 #include <string>
@@ -13,7 +14,7 @@
 
 namespace cxxlens::application_analysis_worker
 {
-	enum class msvc_response_parse_failure
+	enum class msvc_response_parse_failure : std::uint8_t
 	{
 		embedded_nul,
 		invalid_encoding,

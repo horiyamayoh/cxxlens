@@ -278,12 +278,14 @@ namespace cxxlens::sdk::detail
 			if (!fields)
 				return unexpected(std::move(fields.error()));
 			std::array<std::uint32_t, 3U> components{};
-			for (std::size_t index{}; index < components.size(); ++index)
+			auto field = (*fields)->begin();
+			for (auto& component_value : components)
 			{
-				auto component = unsigned_integer((**fields)[index], "provider_identity.version");
+				auto component = unsigned_integer(*field, "provider_identity.version");
 				if (!component || *component > std::numeric_limits<std::uint32_t>::max())
 					return unexpected(invalid("provider_identity.version", "component"));
-				components[index] = static_cast<std::uint32_t>(*component);
+				component_value = static_cast<std::uint32_t>(*component);
+				++field;
 			}
 			return semantic_version{components[0], components[1], components[2]};
 		}
@@ -566,12 +568,12 @@ namespace cxxlens::sdk::detail
 				return unexpected(limit("detached_provider_run", "bytes"));
 			auto root = decode_bounded_canonical_binary(
 				bytes,
-				0U,
-				limits.maximum_nesting_depth,
-				"application-analysis.detached-provider-run-invalid",
-				"application-analysis.import-limit-exceeded",
-				maximum_diagnostics,
-				maximum_canonical_values);
+				{.initial_depth = 0U,
+				 .maximum_nesting_depth = limits.maximum_nesting_depth,
+				 .invalid_error_code = "application-analysis.detached-provider-run-invalid",
+				 .limit_error_code = "application-analysis.import-limit-exceeded",
+				 .maximum_tuple_items = maximum_diagnostics,
+				 .maximum_total_values = maximum_canonical_values});
 			if (!root)
 				return unexpected(std::move(root.error()));
 			auto fields = tuple(*root, "root", 13U);
@@ -655,12 +657,14 @@ namespace cxxlens::sdk::detail
 															  &output.atomic_output_group_id,
 															  &output.batch_id,
 															  &output.batch_digest};
-					for (std::size_t index{}; index < destinations.size(); ++index)
+					auto value = (*values)->begin();
+					for (auto* destination : destinations)
 					{
-						auto decoded = string((**values)[index], field);
+						auto decoded = string(*value, field);
 						if (!decoded)
 							return unexpected(std::move(decoded.error()));
-						*destinations[index] = std::move(*decoded);
+						*destination = std::move(*decoded);
+						++value;
 					}
 					auto rows = unsigned_integer((**values)[6], field + ".row_count");
 					if (!rows)
@@ -685,12 +689,14 @@ namespace cxxlens::sdk::detail
 					detached_coverage_projection output;
 					std::array<std::string*, 4U> destinations{
 						&output.kind, &output.id, &output.state, &output.reason};
-					for (std::size_t index{}; index < destinations.size(); ++index)
+					auto value = (*values)->begin();
+					for (auto* destination : destinations)
 					{
-						auto decoded = string((**values)[index], field);
+						auto decoded = string(*value, field);
 						if (!decoded)
 							return unexpected(std::move(decoded.error()));
-						*destinations[index] = std::move(*decoded);
+						*destination = std::move(*decoded);
+						++value;
 					}
 					return output;
 				});
@@ -711,12 +717,14 @@ namespace cxxlens::sdk::detail
 					detached_unresolved_projection output;
 					std::array<std::string*, 3U> destinations{
 						&output.code, &output.subject, &output.detail};
-					for (std::size_t index{}; index < destinations.size(); ++index)
+					auto value = (*values)->begin();
+					for (auto* destination : destinations)
 					{
-						auto decoded = string((**values)[index], field);
+						auto decoded = string(*value, field);
 						if (!decoded)
 							return unexpected(std::move(decoded.error()));
-						*destinations[index] = std::move(*decoded);
+						*destination = std::move(*decoded);
+						++value;
 					}
 					return output;
 				});
@@ -737,12 +745,14 @@ namespace cxxlens::sdk::detail
 					detached_provenance_projection output;
 					std::array<std::string*, 4U> destinations{
 						&output.kind, &output.subject, &output.producer, &output.summary};
-					for (std::size_t index{}; index < destinations.size(); ++index)
+					auto value = (*values)->begin();
+					for (auto* destination : destinations)
 					{
-						auto decoded = string((**values)[index], field);
+						auto decoded = string(*value, field);
 						if (!decoded)
 							return unexpected(std::move(decoded.error()));
-						*destinations[index] = std::move(*decoded);
+						*destination = std::move(*decoded);
+						++value;
 					}
 					return output;
 				});
