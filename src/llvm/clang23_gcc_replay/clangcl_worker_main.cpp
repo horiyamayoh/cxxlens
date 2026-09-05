@@ -1,4 +1,5 @@
 #include <array>
+#include <cstdio>
 #include <cstdlib>
 #include <iostream>
 #include <optional>
@@ -7,6 +8,11 @@
 #include <utility>
 
 #include "clangcl_worker_command_internal.hpp"
+
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
 
 namespace
 {
@@ -29,6 +35,16 @@ namespace
 #endif
 	}
 
+	[[nodiscard]] bool use_binary_protocol_streams() noexcept
+	{
+#ifdef _WIN32
+		return _setmode(_fileno(stdin), _O_BINARY) != -1 &&
+			_setmode(_fileno(stdout), _O_BINARY) != -1;
+#else
+		return true;
+#endif
+	}
+
 } // namespace
 
 int main(const int argc, char** argv)
@@ -41,6 +57,11 @@ int main(const int argc, char** argv)
 	if (argc != 1)
 	{
 		std::cerr << "application-analysis.replay-provider-failed:arguments\n";
+		return EXIT_FAILURE;
+	}
+	if (!use_binary_protocol_streams())
+	{
+		std::cerr << "application-analysis.replay-provider-failed:binary-streams\n";
 		return EXIT_FAILURE;
 	}
 	using configuration = cxxlens::detail::clang23_gcc_replay::clangcl_worker_launch_configuration;
