@@ -9,6 +9,7 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <random>
 #include <source_location>
 #include <span>
 #include <sstream>
@@ -82,11 +83,18 @@ namespace
 	  public:
 		temporary_directory()
 		{
-			path_ = std::filesystem::temp_directory_path() /
-				("cxxlens-clangcl-command-" + std::to_string(std::rand()));
-			std::error_code error;
-			std::filesystem::create_directories(path_, error);
-			require(!error);
+			std::random_device random;
+			for (std::size_t attempt{}; attempt < 32U; ++attempt)
+			{
+				path_ = std::filesystem::temp_directory_path() /
+					("cxxlens-clangcl-command-" + std::to_string(random()) + '-' +
+					 std::to_string(random()));
+				std::error_code error;
+				if (std::filesystem::create_directory(path_, error))
+					return;
+				require(!error || error == std::errc::file_exists);
+			}
+			require(false);
 		}
 
 		~temporary_directory()
@@ -237,6 +245,35 @@ namespace
 							   });
 		return output;
 	}
+
+	[[nodiscard]] std::string windows_sandbox_policy_digest()
+	{
+		auto policies = cxxlens::sdk::provider::builtin_sandbox_policies();
+		const auto found =
+			std::ranges::find(policies,
+							  std::string_view{"cxxlens.sandbox.windows-clangcl-appcontainer"},
+							  &cxxlens::sdk::provider::sandbox_policy::id);
+		require(found != policies.end() && found->validate());
+		return found->policy_digest();
+	}
+
+	class in_process_clangcl_child final
+		: public cxxlens::detail::clang23_gcc_replay::clangcl_sandbox_process_port
+	{
+	  public:
+		[[nodiscard]] cxxlens::sdk::result<std::vector<std::byte>>
+		execute(const std::span<const std::byte> host_transcript,
+				const cxxlens::detail::clang23_gcc_replay::provider_worker_authority& authority,
+				const cxxlens::sdk::import_limits limits) const override
+		{
+			std::istringstream input{string(host_transcript)};
+			auto result =
+				cxxlens::detail::clang23_gcc_replay::run_provider_worker(input, authority, limits);
+			if (!result)
+				return cxxlens::sdk::unexpected(std::move(result.error()));
+			return std::move(result->protocol_transcript);
+		}
+	};
 
 	[[nodiscard]] std::vector<std::byte>
 	execute_bytes(const cxxlens::sdk::detail::validated_compiler_replay_input& value)
@@ -714,7 +751,7 @@ namespace
 			std::string{msvc_provider_id},
 			execution.manifest.provider_binary_digest,
 			execution.manifest.provider_semantic_contract_digest,
-			"semantic-v2:sha256:" + std::string(64U, 'e'),
+			windows_sandbox_policy_digest(),
 			execution.expectation.task.task_id,
 			execution.expectation.task.task_input_digest,
 			execution.expectation.task.normalized_invocation_digest,
@@ -729,7 +766,12 @@ namespace
 			public_path.string()};
 		std::istringstream input_stream{string(execution.host)};
 		std::ostringstream output_stream;
-		auto result = execute_clangcl_worker_command(input_stream, output_stream, configuration);
+		const in_process_clangcl_child child;
+		auto result =
+			execute_clangcl_worker_command(input_stream, output_stream, configuration, child);
+		if (!result)
+			std::cerr << result.error().code << ':' << result.error().field << ':'
+					  << result.error().detail << '\n';
 		require(result);
 		auto run = decode_detached_provider_run(bytes(output_stream.str()));
 		require(run && run->value().task_input_digest == value.input_digest() &&
@@ -759,8 +801,8 @@ namespace
 		wrong_protocol.protocol_major = "3";
 		std::istringstream wrong_input{string(execution.host)};
 		std::ostringstream wrong_output;
-		auto rejected =
-			execute_clangcl_worker_command(wrong_input, wrong_output, std::move(wrong_protocol));
+		auto rejected = execute_clangcl_worker_command(
+			wrong_input, wrong_output, std::move(wrong_protocol), child);
 		require(!rejected && rejected.error().field == "protocol_version" &&
 				wrong_output.str().empty());
 
@@ -769,7 +811,7 @@ namespace
 		std::istringstream missing_key_input{string(execution.host)};
 		std::ostringstream missing_key_output;
 		auto missing_key = execute_clangcl_worker_command(
-			missing_key_input, missing_key_output, std::move(configuration));
+			missing_key_input, missing_key_output, std::move(configuration), child);
 		require(!missing_key && missing_key.error().field == "private_key_file" &&
 				missing_key_output.str().empty());
 	}
@@ -801,8 +843,7 @@ namespace
 			{"CXXLENS_PROVIDER_BINARY_DIGEST", worker_binary_digest},
 			{"CXXLENS_PROVIDER_SEMANTIC_CONTRACT_DIGEST",
 			 execution.manifest.provider_semantic_contract_digest},
-			{"CXXLENS_PROVIDER_SANDBOX_POLICY_DIGEST",
-			 "semantic-v2:sha256:" + std::string(64U, 'e')},
+			{"CXXLENS_PROVIDER_SANDBOX_POLICY_DIGEST", windows_sandbox_policy_digest()},
 			{"CXXLENS_PROVIDER_TASK_ID", execution.expectation.task.task_id},
 			{"CXXLENS_PROVIDER_TASK_INPUT_DIGEST", execution.expectation.task.task_input_digest},
 			{"CXXLENS_PROVIDER_NORMALIZED_INVOCATION_DIGEST",

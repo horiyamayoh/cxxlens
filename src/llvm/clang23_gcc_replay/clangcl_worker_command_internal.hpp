@@ -11,6 +11,8 @@
 
 #include <cxxlens/sdk/application_analysis.hpp>
 
+#include "clangcl_sandbox_process_port_internal.hpp"
+
 namespace cxxlens::detail::clang23_gcc_replay
 {
 	/** Exact launcher authority; none of these values are inferred from the capture payload. */
@@ -35,11 +37,16 @@ namespace cxxlens::detail::clang23_gcc_replay
 		std::string detached_run_public_key_file;
 	};
 
+	/** Validate launcher-owned worker authority independently from detached-run signing. */
+	[[nodiscard]] sdk::result<provider_worker_authority>
+	make_clangcl_worker_authority(const clangcl_worker_launch_configuration& configuration);
+
 	/** Validate launcher authority, execute the worker, and emit only a signed detached envelope.
 	 */
 	[[nodiscard]] sdk::result<void>
 	execute_clangcl_worker_command(std::istream& input,
 								   std::ostream& output,
 								   clangcl_worker_launch_configuration configuration,
+								   const clangcl_sandbox_process_port& process,
 								   sdk::import_limits limits = {});
 } // namespace cxxlens::detail::clang23_gcc_replay

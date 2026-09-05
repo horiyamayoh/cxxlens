@@ -52,6 +52,10 @@ namespace cxxlens::detail::clang23_gcc_replay
 		std::string provider_revocation_state;
 	};
 
+	/** Read exactly one bounded host transcript without interpreting compiler input. */
+	[[nodiscard]] sdk::result<std::vector<std::byte>>
+	read_provider_worker_input(std::istream& input, sdk::import_limits limits = {});
+
 	/** Execute without an output side effect and retain the exact bounded Protocol-v2 result. */
 	[[nodiscard]] sdk::result<provider_worker_result> run_provider_worker(
 		std::istream& input, provider_worker_authority authority, sdk::import_limits limits = {});

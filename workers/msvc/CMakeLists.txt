@@ -80,6 +80,7 @@ add_library(
   "${CXXLENS_ROOT}/src/sdk/relation.cpp"
   "${CXXLENS_ROOT}/src/sdk/source_identity_internal.cpp"
   "${CXXLENS_ROOT}/src/runtime/detached_run_signing_file_port_internal.cpp"
+  "${CXXLENS_ROOT}/src/runtime/windows_clangcl_sandbox_process_port.cpp"
   "${CXXLENS_ROOT}/src/protocol_v2/cbor.cpp"
   "${CXXLENS_ROOT}/src/protocol_v2/codec.cpp"
   "${CXXLENS_ROOT}/src/protocol_v2/closure.cpp"
@@ -92,8 +93,14 @@ add_library(
   "${CXXLENS_ROOT}/src/llvm/clang23_gcc_replay/worker_observer.cpp"
   "${CXXLENS_ROOT}/src/llvm/clang23_gcc_replay/worker_parser.cpp")
 target_link_libraries(
-  cxxlens_clangcl_worker_core PRIVATE clangAST clangFrontend clangIndex
-                                      clangTooling OpenSSL::Crypto)
+  cxxlens_clangcl_worker_core
+  PRIVATE clangAST
+          clangFrontend
+          clangIndex
+          clangTooling
+          OpenSSL::Crypto
+          advapi32
+          userenv)
 target_include_directories(
   cxxlens_clangcl_worker_core PUBLIC "${CXXLENS_ROOT}/include"
                                      "${CXXLENS_ROOT}/src")

@@ -320,15 +320,32 @@ namespace cxxlens::detail::clang23_gcc_replay
 		}
 	} // namespace
 
+	sdk::result<std::vector<std::byte>> read_provider_worker_input(std::istream& input,
+																   const sdk::import_limits limits)
+	{
+		try
+		{
+			if (auto valid = limits.validate(); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			return read_input(input, limits);
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(failure("memory", "allocation"));
+		}
+		catch (const std::length_error&)
+		{
+			return sdk::unexpected(failure("memory", "length"));
+		}
+	}
+
 	sdk::result<provider_worker_result> run_provider_worker(std::istream& input,
 															provider_worker_authority authority,
 															const sdk::import_limits limits)
 	{
 		try
 		{
-			if (auto valid = limits.validate(); !valid)
-				return sdk::unexpected(std::move(valid.error()));
-			auto encoded = read_input(input, limits);
+			auto encoded = read_provider_worker_input(input, limits);
 			if (!encoded)
 				return sdk::unexpected(std::move(encoded.error()));
 			auto prepared = prepare_worker_input(*encoded, authority, limits);

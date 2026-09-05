@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <random>
 #include <source_location>
 #include <span>
 #include <sstream>
@@ -78,6 +79,24 @@ namespace
 		return output;
 	}
 
+	class in_process_clangcl_child final
+		: public cxxlens::detail::clang23_gcc_replay::clangcl_sandbox_process_port
+	{
+	  public:
+		[[nodiscard]] cxxlens::sdk::result<std::vector<std::byte>>
+		execute(const std::span<const std::byte> host_transcript,
+				const cxxlens::detail::clang23_gcc_replay::provider_worker_authority& authority,
+				const cxxlens::sdk::import_limits limits) const override
+		{
+			std::istringstream input{text(host_transcript)};
+			auto result =
+				cxxlens::detail::clang23_gcc_replay::run_provider_worker(input, authority, limits);
+			if (!result)
+				return cxxlens::sdk::unexpected(std::move(result.error()));
+			return std::move(result->protocol_transcript);
+		}
+	};
+
 	[[nodiscard]] std::byte hex_nibble(const char value)
 	{
 		if (value >= '0' && value <= '9')
@@ -104,11 +123,18 @@ namespace
 	  public:
 		temporary_directory()
 		{
-			path_ = std::filesystem::temp_directory_path() /
-				("cxxlens msvc detached e2e " + std::to_string(std::rand()));
-			std::error_code error;
-			std::filesystem::create_directories(path_, error);
-			require(!error);
+			std::random_device random;
+			for (std::size_t attempt{}; attempt < 32U; ++attempt)
+			{
+				path_ = std::filesystem::temp_directory_path() /
+					("cxxlens msvc detached e2e " + std::to_string(random()) + '-' +
+					 std::to_string(random()));
+				std::error_code error;
+				if (std::filesystem::create_directory(path_, error))
+					return;
+				require(!error || error == std::errc::file_exists);
+			}
+			require(false);
 		}
 
 		~temporary_directory()
@@ -241,8 +267,12 @@ int main()
 	auto engine = registry.build("application-analysis-msvc-detached-e2e");
 	require(engine);
 	const auto policies = builtin_sandbox_policies();
-	require(!policies.empty());
-	const auto& policy = policies.front();
+	const auto policy_iterator =
+		std::ranges::find(policies,
+						  std::string_view{"cxxlens.sandbox.windows-clangcl-appcontainer"},
+						  &sandbox_policy::id);
+	require(policy_iterator != policies.end());
+	const auto& policy = *policy_iterator;
 
 	manifest manifest_value;
 	manifest_value.provider_id = std::string{msvc_provider_id};
@@ -354,7 +384,8 @@ int main()
 											   public_path.string()};
 	std::istringstream worker_input{text(*host)};
 	std::ostringstream worker_output;
-	auto executed = execute_clangcl_worker_command(worker_input, worker_output, launch);
+	const in_process_clangcl_child child;
+	auto executed = execute_clangcl_worker_command(worker_input, worker_output, launch, child);
 	if (!executed)
 		std::cerr << executed.error().code << ':' << executed.error().field << ':'
 				  << executed.error().detail << '\n';
@@ -362,7 +393,7 @@ int main()
 	std::istringstream repeated_worker_input{text(*host)};
 	std::ostringstream repeated_worker_output;
 	auto repeated = execute_clangcl_worker_command(
-		repeated_worker_input, repeated_worker_output, std::move(launch));
+		repeated_worker_input, repeated_worker_output, std::move(launch), child);
 	require(repeated && repeated_worker_output.str() == worker_output.str());
 	const auto run_bytes = bytes(worker_output.str());
 	auto detached_run = decode_detached_provider_run(run_bytes);
