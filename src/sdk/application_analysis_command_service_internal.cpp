@@ -141,8 +141,8 @@ namespace cxxlens::sdk::detail
 		}
 	} // namespace
 
-	result<std::string>
-	import_application_analysis_command(const application_analysis_import_command_request& request)
+	result<loaded_application_analysis>
+	load_application_analysis(const application_analysis_import_command_request& request)
 	{
 		try
 		{
@@ -162,7 +162,27 @@ namespace cxxlens::sdk::detail
 			auto project = import_capture(*bundle, request.limits);
 			if (!project)
 				return unexpected(std::move(project.error()));
-			return projection(*bundle, *project);
+			return loaded_application_analysis{std::move(*bundle), std::move(*project)};
+		}
+		catch (const std::bad_alloc&)
+		{
+			return unexpected(command_error("allocation"));
+		}
+		catch (const std::length_error&)
+		{
+			return unexpected(command_error("allocation-length"));
+		}
+	}
+
+	result<std::string>
+	import_application_analysis_command(const application_analysis_import_command_request& request)
+	{
+		auto loaded = load_application_analysis(request);
+		if (!loaded)
+			return unexpected(std::move(loaded.error()));
+		try
+		{
+			return projection(loaded->bundle, loaded->project);
 		}
 		catch (const std::bad_alloc&)
 		{

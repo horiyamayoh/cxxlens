@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import hashlib
 import pathlib
 import unittest
 
@@ -68,6 +69,19 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
         )
         for target in by_id.values():
             self.assertEqual(target["guarantee_floor"], "frontend-replayed")
+
+    def test_gcc_execution_provider_uses_explicit_host_trust(self) -> None:
+        provider = self.contract["execution_providers"]["gcc_clang23_replay"]
+        self.assertEqual(provider["provider_id"], "cxxlens.clang23-gcc-replay")
+        self.assertEqual(provider["provider_version"], "1.0.0")
+        self.assertEqual(provider["trust_authority"], "explicit-host-trusted-worker-digest")
+        self.assertEqual(provider["execution_revalidation"], "sealed-executable-content-digest")
+        self.assertEqual(provider["qualification"], "experimental")
+        self.assertEqual(provider["semantic_contract_digest_algorithm"], "sha256")
+        self.assertEqual(
+            hashlib.sha256(provider["semantic_contract_subject"].encode("utf-8")).hexdigest(),
+            "c1dab9c04fcd269920477cdc9d6bf7329229c390be48f0854b2af425d3692b74",
+        )
 
     def test_only_materialization_ready_targets_can_be_available(self) -> None:
         targets = self.contract["targets"]

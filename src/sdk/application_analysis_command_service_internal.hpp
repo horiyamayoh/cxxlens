@@ -18,6 +18,16 @@ namespace cxxlens::sdk::detail
 		import_limits limits;
 	};
 
+	struct loaded_application_analysis
+	{
+		capture_bundle bundle;
+		imported_project project;
+	};
+
+	/** Read, decode, and import one capture without reconstructing any missing value. */
+	[[nodiscard]] result<loaded_application_analysis>
+	load_application_analysis(const application_analysis_import_command_request& request);
+
 	/** Decode, validate, import, and render one deterministic informational projection. */
 	[[nodiscard]] result<std::string>
 	import_application_analysis_command(const application_analysis_import_command_request& request);

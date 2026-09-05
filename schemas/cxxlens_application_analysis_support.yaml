@@ -1,9 +1,18 @@
 schema: cxxlens.application-analysis-support.v1
-document_version: 1.1.0
+document_version: 1.2.0
 maturity: experimental
 host_package_support:
   authority: schemas/cxxlens_support_matrix.yaml
   disposition: unchanged
+execution_providers:
+  gcc_clang23_replay:
+    provider_id: cxxlens.clang23-gcc-replay
+    provider_version: 1.0.0
+    semantic_contract_digest_algorithm: sha256
+    semantic_contract_subject: "cxxlens.clang23-gcc-replay-provider.v1\nclang-23.1.0-gcc-mode"
+    trust_authority: explicit-host-trusted-worker-digest
+    execution_revalidation: sealed-executable-content-digest
+    qualification: experimental
 toolchain_pins:
   gcc:
     family: gcc

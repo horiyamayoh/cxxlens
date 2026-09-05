@@ -3,7 +3,7 @@ $id: https://cxxlens.dev/schemas/cxxlens.application-analysis-support.v1
 title: cxxlens application analysis support contract
 type: object
 additionalProperties: false
-required: [schema, document_version, maturity, host_package_support, toolchain_pins, targets]
+required: [schema, document_version, maturity, host_package_support, execution_providers, toolchain_pins, targets]
 properties:
   schema: {const: cxxlens.application-analysis-support.v1}
   document_version: {$ref: '#/$defs/version'}
@@ -15,6 +15,30 @@ properties:
     properties:
       authority: {const: schemas/cxxlens_support_matrix.yaml}
       disposition: {const: unchanged}
+  execution_providers:
+    type: object
+    additionalProperties: false
+    required: [gcc_clang23_replay]
+    properties:
+      gcc_clang23_replay:
+        type: object
+        additionalProperties: false
+        required:
+          - provider_id
+          - provider_version
+          - semantic_contract_digest_algorithm
+          - semantic_contract_subject
+          - trust_authority
+          - execution_revalidation
+          - qualification
+        properties:
+          provider_id: {const: cxxlens.clang23-gcc-replay}
+          provider_version: {const: 1.0.0}
+          semantic_contract_digest_algorithm: {const: sha256}
+          semantic_contract_subject: {const: "cxxlens.clang23-gcc-replay-provider.v1\nclang-23.1.0-gcc-mode"}
+          trust_authority: {const: explicit-host-trusted-worker-digest}
+          execution_revalidation: {const: sealed-executable-content-digest}
+          qualification: {const: experimental}
   toolchain_pins:
     type: object
     additionalProperties: false
