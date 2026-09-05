@@ -91,6 +91,52 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $workerVersion -ne 'cxxlens-clangcl-worker-23 23.1.0') {
             throw 'Relocated exact clang-cl replay worker did not execute'
           }
+          $worker = Join-Path $prefix 'bin\cxxlens-clangcl-worker-23.exe'
+          $workerDigest = 'sha256:' + (Get-FileHash $worker -Algorithm SHA256).Hash.ToLowerInvariant()
+          $processFixture = Join-Path $env:RUNNER_TEMP 'cxxlens clangcl process fixture'
+          & 'build/msvc-worker/cxxlens-provider-worker-ingress-test.exe' `
+            --emit-process-fixture $processFixture $workerDigest
+          if ($LASTEXITCODE -ne 0) { throw 'Could not construct the native worker process fixture' }
+          foreach ($line in Get-Content (Join-Path $processFixture 'worker environment.txt')) {
+            $separator = $line.IndexOf('=')
+            if ($separator -le 0) { throw 'Malformed native worker environment fixture' }
+            [Environment]::SetEnvironmentVariable(
+              $line.Substring(0, $separator), $line.Substring($separator + 1), 'Process')
+          }
+          $hostTranscript = Join-Path $processFixture 'host transcript.bin'
+          $detachedRun = Join-Path $processFixture 'detached run.bin'
+          $workerError = Join-Path $processFixture 'worker error.txt'
+          $nativeWorker = Start-Process -FilePath $worker -NoNewWindow -Wait -PassThru `
+            -RedirectStandardInput $hostTranscript -RedirectStandardOutput $detachedRun `
+            -RedirectStandardError $workerError
+          if ($nativeWorker.ExitCode -ne 0 -or -not (Test-Path $detachedRun) -or
+              (Get-Item $detachedRun).Length -eq 0) {
+            throw "Relocated clang-cl worker process rejected the valid transcript: $(Get-Content $workerError -Raw)"
+          }
+          & 'build/msvc-worker/cxxlens-provider-worker-ingress-test.exe' `
+            --verify-process-output $processFixture $workerDigest
+          if ($LASTEXITCODE -ne 0) { throw 'Native worker detached run did not authenticate' }
+          $repeatedRun = Join-Path $processFixture 'detached run repeated.bin'
+          $repeatedError = Join-Path $processFixture 'worker repeated error.txt'
+          $repeatedWorker = Start-Process -FilePath $worker -NoNewWindow -Wait -PassThru `
+            -RedirectStandardInput $hostTranscript -RedirectStandardOutput $repeatedRun `
+            -RedirectStandardError $repeatedError
+          if ($repeatedWorker.ExitCode -ne 0 -or
+              (Get-FileHash $detachedRun -Algorithm SHA256).Hash -ne
+              (Get-FileHash $repeatedRun -Algorithm SHA256).Hash) {
+            throw 'Relocated clang-cl worker process was not deterministic'
+          }
+          $env:CXXLENS_PROVIDER_BINARY_DIGEST = 'sha256:' + ('f' * 64)
+          $rejectedRun = Join-Path $processFixture 'rejected run.bin'
+          $rejectedError = Join-Path $processFixture 'rejected error.txt'
+          $rejectedWorker = Start-Process -FilePath $worker -NoNewWindow -Wait -PassThru `
+            -RedirectStandardInput $hostTranscript -RedirectStandardOutput $rejectedRun `
+            -RedirectStandardError $rejectedError
+          if ($rejectedWorker.ExitCode -eq 0 -or
+              ((Test-Path $rejectedRun) -and (Get-Item $rejectedRun).Length -ne 0)) {
+            throw 'Relocated clang-cl worker accepted a mismatched binary identity'
+          }
+          $env:CXXLENS_PROVIDER_BINARY_DIGEST = $workerDigest
           & "$prefix\bin\cxxlens-msvc-capture.exe" --check-vector `
             tests/fixtures/msvc_application_analysis/canonical_capture.sha256
           $fixture = Join-Path $env:RUNNER_TEMP 'cxxlens proxy fixture'

@@ -112,6 +112,28 @@ namespace
 		require(static_cast<bool>(output));
 	}
 
+	[[nodiscard]] std::vector<std::byte> read(const std::filesystem::path& path)
+	{
+		std::ifstream input{path, std::ios::binary};
+		require(static_cast<bool>(input));
+		const std::string value{std::istreambuf_iterator<char>{input},
+								std::istreambuf_iterator<char>{}};
+		return bytes(value);
+	}
+
+	void write_environment(const std::filesystem::path& path,
+						   const std::span<const std::pair<std::string, std::string>> values)
+	{
+		std::ofstream output{path, std::ios::binary | std::ios::trunc};
+		for (const auto& [name, value] : values)
+		{
+			require(!name.empty() && !name.contains('=') && !name.contains('\n') &&
+					!value.contains('\n') && !value.contains('\r'));
+			output << name << '=' << value << '\n';
+		}
+		require(static_cast<bool>(output));
+	}
+
 	class exact_public_key_port final
 		: public cxxlens::sdk::detail::trusted_detached_run_ed25519_public_key_port
 	{
@@ -237,7 +259,9 @@ namespace
 	}
 
 	[[nodiscard]] cxxlens::sdk::provider::manifest
-	provider_manifest(const std::span<const std::string> relations, const bool msvc = false)
+	provider_manifest(const std::span<const std::string> relations,
+					  const bool msvc = false,
+					  std::string binary_digest = "sha256:" + std::string(64U, 'a'))
 	{
 		using namespace cxxlens::detail::clang23_gcc_replay;
 		using namespace cxxlens::sdk::provider;
@@ -254,7 +278,7 @@ namespace
 						  {"credit-backpressure", "task-input-chunks-v2"},
 						  {}};
 		value.platform_tuples = {msvc ? "windows-x86_64-clangcl23" : "linux-x86_64-clang23"};
-		value.provider_binary_digest = "sha256:" + std::string(64U, 'a');
+		value.provider_binary_digest = std::move(binary_digest);
 		value.provider_semantic_contract_digest = "sha256:" + std::string(64U, 'b');
 		value.offered_relations.assign(relations.begin(), relations.end());
 		value.interpretation_domains = {msvc ? "cc.clangcl23-msvc-replay-1"
@@ -326,14 +350,15 @@ namespace
 
 	[[nodiscard]] provider_execution
 	execute_provider(const cxxlens::sdk::detail::validated_compiler_replay_input& value,
-					 const bool msvc = false)
+					 const bool msvc = false,
+					 std::string binary_digest = "sha256:" + std::string(64U, 'a'))
 	{
 		using namespace cxxlens::detail::clang23_gcc_replay;
 		using namespace cxxlens::sdk;
 		using namespace cxxlens::sdk::provider;
 		provider_execution execution;
-		execution.manifest =
-			provider_manifest(value.value().requested_relation_descriptor_ids, msvc);
+		execution.manifest = provider_manifest(
+			value.value().requested_relation_descriptor_ids, msvc, std::move(binary_digest));
 		require(execution.manifest.validate());
 		execution.expectation = {execution.manifest.canonical_json(),
 								 {"task:clang23-gcc-replay",
@@ -721,6 +746,92 @@ namespace
 			missing_key_input, missing_key_output, std::move(configuration));
 		require(!missing_key && missing_key.error().field == "private_key_file" &&
 				missing_key_output.str().empty());
+	}
+
+	void emit_clangcl_process_fixture(const std::filesystem::path& directory,
+									  const std::string& worker_binary_digest)
+	{
+		using namespace cxxlens::detail::clang23_gcc_replay;
+		using namespace cxxlens::sdk::detail;
+		std::error_code error;
+		std::filesystem::create_directories(directory, error);
+		require(!error);
+
+		auto value = msvc_input();
+		auto execution = execute_provider(value, true, worker_binary_digest);
+		require(execution.manifest.signature);
+		const auto private_key = hex_bytes<detached_run_ed25519_private_key_bytes>(
+			"9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60");
+		const auto public_key = hex_bytes<detached_run_ed25519_public_key_bytes>(
+			"d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
+		const auto private_path = directory / "worker private key.raw";
+		const auto public_path = directory / "worker public key.raw";
+		write(directory / "host transcript.bin", execution.host);
+		write(private_path, private_key);
+		write(public_path, public_key);
+		const std::vector<std::pair<std::string, std::string>> environment{
+			{"CXXLENS_PROVIDER_MANIFEST", execution.manifest.canonical_json()},
+			{"CXXLENS_PROVIDER_ID", std::string{msvc_provider_id}},
+			{"CXXLENS_PROVIDER_BINARY_DIGEST", worker_binary_digest},
+			{"CXXLENS_PROVIDER_SEMANTIC_CONTRACT_DIGEST",
+			 execution.manifest.provider_semantic_contract_digest},
+			{"CXXLENS_PROVIDER_SANDBOX_POLICY_DIGEST",
+			 "semantic-v2:sha256:" + std::string(64U, 'e')},
+			{"CXXLENS_PROVIDER_TASK_ID", execution.expectation.task.task_id},
+			{"CXXLENS_PROVIDER_TASK_INPUT_DIGEST", execution.expectation.task.task_input_digest},
+			{"CXXLENS_PROVIDER_NORMALIZED_INVOCATION_DIGEST",
+			 execution.expectation.task.normalized_invocation_digest},
+			{"CXXLENS_PROVIDER_TOOLCHAIN_DIGEST", execution.expectation.task.toolchain_digest},
+			{"CXXLENS_PROVIDER_ENVIRONMENT_DIGEST", execution.expectation.task.environment_digest},
+			{"CXXLENS_PROVIDER_PROTOCOL_MAJOR", "2"},
+			{"CXXLENS_PROVIDER_PROTOCOL_MINOR", "0"},
+			{"CXXLENS_PROVIDER_SIGNATURE_DIGEST", *execution.manifest.signature},
+			{"CXXLENS_PROVIDER_REVOCATION_STATE", "not-revoked"},
+			{"CXXLENS_DETACHED_RUN_SIGNER_ID", "worker:native-clangcl23-process-test"},
+			{"CXXLENS_DETACHED_RUN_PRIVATE_KEY_FILE", private_path.string()},
+			{"CXXLENS_DETACHED_RUN_PUBLIC_KEY_FILE", public_path.string()},
+		};
+		write_environment(directory / "worker environment.txt", environment);
+	}
+
+	void verify_clangcl_process_output(const std::filesystem::path& directory,
+									   const std::string& worker_binary_digest)
+	{
+		using namespace cxxlens::detail::clang23_gcc_replay;
+		using namespace cxxlens::sdk;
+		using namespace cxxlens::sdk::detail;
+		auto run = decode_detached_provider_run(read(directory / "detached run.bin"));
+		require(run);
+		auto value = msvc_input();
+		require(run->value().task_input_digest == value.input_digest() &&
+				run->value().replay_plan_digest == value.value().replay_plan_digest &&
+				run->value().provider.provider_id == msvc_provider_id &&
+				run->value().provider.provider_version == msvc_provider_version &&
+				run->value().provider.binary_digest == worker_binary_digest &&
+				run->value().provider.revocation_state == "not-revoked" &&
+				run->value().authentication.signer_id == "worker:native-clangcl23-process-test");
+
+		const auto public_key = hex_bytes<detached_run_ed25519_public_key_bytes>(
+			"d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
+		exact_public_key_port trust;
+		trust.value = {detached_run_public_key_state::trusted,
+					   "detached-provider-run",
+					   run->value().authentication.signer_id,
+					   run->value().authentication.key_fingerprint,
+					   public_key,
+					   "sha256:" + std::string(64U, 'b')};
+		const openssl_detached_run_signature_verifier verifier{trust};
+		const auto authenticated =
+			verifier.verify("detached-provider-run",
+							run->value().authentication.signer_id,
+							run->value().authentication.key_fingerprint,
+							run->value().authentication.signed_subject_digest,
+							run->value().authentication.signature,
+							run->value().authentication.signature_digest);
+		require(authenticated.verdict == detached_run_signature_verdict::verified);
+		auto frames = provider::decode_frame_stream(run->value().protocol_transcript);
+		require(frames && !frames->empty() &&
+				frames->back().type == provider::message_type::task_complete);
 	}
 
 	void msvc_worker_authority_parses_only_the_admitted_clangcl_tuple()
@@ -1235,8 +1346,20 @@ namespace
 	}
 } // namespace
 
-int main()
+int main(const int argc, char** argv)
 {
+	if (argc == 4 && std::string_view{argv[1]} == "--emit-process-fixture")
+	{
+		emit_clangcl_process_fixture(argv[2], argv[3]);
+		return EXIT_SUCCESS;
+	}
+	if (argc == 4 && std::string_view{argv[1]} == "--verify-process-output")
+	{
+		verify_clangcl_process_output(argv[2], argv[3]);
+		return EXIT_SUCCESS;
+	}
+	if (argc != 1)
+		return EXIT_FAILURE;
 	provider_worker_emits_one_validated_protocol_authority();
 	gcc_worker_rejects_an_admitted_msvc_frontend_tuple_without_output();
 	msvc_worker_emits_protocol_with_its_own_provenance();
@@ -1250,4 +1373,5 @@ int main()
 	observations_bind_only_to_capture_source_authority();
 	same_expansion_macro_calls_retain_distinct_ordered_origins();
 	detached_observations_normalize_to_existing_relation_contracts();
+	return EXIT_SUCCESS;
 }
