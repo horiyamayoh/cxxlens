@@ -214,6 +214,8 @@ namespace cxxlens::sdk::detail
 	{
 		if (auto valid = limits.validate(); !valid)
 			return unexpected(std::move(valid.error()));
+		if (plan.transport != application_materialization_execution_transport::detached)
+			return unexpected(adoption_error("plan", "detached-transport-required"));
 		if (plan.units.empty() || detached_runs.size() != plan.units.size() ||
 			detached_runs.size() > limits.maximum_compile_units)
 			return unexpected(adoption_error("detached_runs", "compile-unit-set-mismatch"));

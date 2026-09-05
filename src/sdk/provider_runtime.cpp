@@ -2916,14 +2916,23 @@ namespace cxxlens::sdk::provider
 				heartbeat_binding};
 		}
 
+		enum class provider_process_preparation_mode : std::uint8_t
+		{
+			executable_process,
+			detached_transcript
+		};
+
 		[[nodiscard]] result<prepared_provider_process>
-		prepare_provider_process(const process_task_request& request)
+		prepare_provider_process(const process_task_request& request,
+								 const provider_process_preparation_mode mode =
+									 provider_process_preparation_mode::executable_process)
 		{
 			if (auto valid = request.selection.validate(); !valid)
 				return cxxlens::sdk::unexpected(std::move(valid.error()));
 			if (request.task_id.empty() || request.task_id.contains('\0') ||
-				request.selection.selected_candidate().executable_argv.empty() ||
-				request.selection.selected_candidate().executable_argv.front().empty() ||
+				(mode == provider_process_preparation_mode::executable_process &&
+				 (request.selection.selected_candidate().executable_argv.empty() ||
+				  request.selection.selected_candidate().executable_argv.front().empty())) ||
 				!protocol_digest(request.task_input_digest) ||
 				!protocol_digest(request.normalized_invocation_digest) ||
 				!protocol_digest(request.toolchain_digest) ||
@@ -3837,7 +3846,8 @@ namespace cxxlens::sdk::provider
 		if (request.cancellation.stop_requested())
 			return cxxlens::sdk::unexpected(
 				runtime_error("provider.cancelled", request.task_id, "detached-validation"));
-		auto prepared = prepare_provider_process(request);
+		auto prepared = prepare_provider_process(
+			request, provider_process_preparation_mode::detached_transcript);
 		if (!prepared)
 			return cxxlens::sdk::unexpected(std::move(prepared.error()));
 		if (prepared->ng1_live)

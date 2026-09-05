@@ -5,6 +5,7 @@
  * @brief Pre-effect application materialization plan bound to explicit compiler provider authority.
  */
 
+#include <cstdint>
 #include <span>
 #include <stop_token>
 #include <string>
@@ -16,6 +17,13 @@
 
 namespace cxxlens::sdk::detail
 {
+	/** Physical transport authorized to satisfy a prevalidated materialization plan. */
+	enum class application_materialization_execution_transport : std::uint8_t
+	{
+		process,
+		detached
+	};
+
 	/** One compile unit whose payload, generic task, and process request share exact identities. */
 	struct application_materialization_execution_unit
 	{
@@ -34,6 +42,8 @@ namespace cxxlens::sdk::detail
 		std::string materialization_request_id;
 		std::string analysis_recipe_digest;
 		std::string output_plan_digest;
+		application_materialization_execution_transport transport{
+			application_materialization_execution_transport::process};
 		std::vector<application_materialization_execution_unit> units;
 	};
 
@@ -51,5 +61,7 @@ namespace cxxlens::sdk::detail
 		const provider::provider_selection& selection,
 		provider::execution_budget budget,
 		const std::stop_token& cancellation,
-		import_limits limits = {});
+		import_limits limits = {},
+		application_materialization_execution_transport transport =
+			application_materialization_execution_transport::process);
 } // namespace cxxlens::sdk::detail

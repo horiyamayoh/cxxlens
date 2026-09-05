@@ -1457,6 +1457,8 @@ namespace
 																	{});
 		require(first && second &&
 				first->materialization_request_id == second->materialization_request_id);
+		require(first->transport ==
+				cxxlens::sdk::detail::application_materialization_execution_transport::process);
 		require(first->units.size() == 1U);
 		const auto& unit = first->units.front();
 		require(unit.process.task_id == unit.task.value().provider_task.task_id);
@@ -1495,6 +1497,39 @@ namespace
 																	{},
 																	{});
 		require(!relative && relative.error().detail == "absolute-path-required");
+
+		auto detached_candidate = candidate;
+		detached_candidate.executable_argv.clear();
+		auto detached_selection =
+			provider::select_provider(provider_request, {&detached_candidate, 1U});
+		require(detached_selection);
+		auto detached = detail::make_application_materialization_execution_plan(
+			project,
+			*engine,
+			publication,
+			{&descriptor.id, 1U},
+			"cc.clang23-gcc-replay-1",
+			*detached_selection,
+			{},
+			{},
+			{},
+			detail::application_materialization_execution_transport::detached);
+		require(detached &&
+				detached->transport ==
+					detail::application_materialization_execution_transport::detached);
+		auto invalid_transport = detail::make_application_materialization_execution_plan(
+			project,
+			*engine,
+			publication,
+			{&descriptor.id, 1U},
+			"cc.clang23-gcc-replay-1",
+			*selection,
+			{},
+			{},
+			{},
+			static_cast<detail::application_materialization_execution_transport>(255U));
+		require(!invalid_transport && invalid_transport.error().field == "transport" &&
+				invalid_transport.error().detail == "unsupported");
 
 		auto two_unit_bytes = canonical_binary(valid_two_unit_bundle());
 		require(two_unit_bytes);
@@ -1556,15 +1591,22 @@ namespace
 								   {1U, 0U, 0U},
 								   project.catalog.catalog_digest,
 								   std::nullopt};
-		auto plan = make_application_materialization_execution_plan(project,
-																	*engine,
-																	publication,
-																	{&descriptor.id, 1U},
-																	"cc.clang23-gcc-replay-1",
-																	*selection,
-																	{},
-																	{});
-		require(plan && plan->units.size() == 1U);
+		candidate.executable_argv.clear();
+		auto detached_selection = select_provider(provider_request, {&candidate, 1U});
+		require(detached_selection);
+		auto plan = make_application_materialization_execution_plan(
+			project,
+			*engine,
+			publication,
+			{&descriptor.id, 1U},
+			"cc.clang23-gcc-replay-1",
+			*detached_selection,
+			{},
+			{},
+			{},
+			application_materialization_execution_transport::detached);
+		require(plan && plan->units.size() == 1U &&
+				plan->transport == application_materialization_execution_transport::detached);
 		auto& unit = plan->units.front();
 
 		detached_transcript_sink sink;
@@ -1738,6 +1780,13 @@ namespace
 
 		auto store = make_in_memory_snapshot_store(*engine);
 		require(store && !store->current(publication.series));
+		auto process_plan = *plan;
+		process_plan.transport = application_materialization_execution_transport::process;
+		auto wrong_transport = publish_detached_application_materializations(
+			*engine, *store, process_plan, std::span<const std::vector<std::byte>>{}, verifier);
+		require(!wrong_transport && wrong_transport.error().field == "plan" &&
+				wrong_transport.error().detail == "detached-transport-required" &&
+				!store->current(publication.series));
 		std::vector<std::vector<std::byte>> missing;
 		auto missing_run = publish_detached_application_materializations(
 			*engine, *store, *plan, missing, verifier);
@@ -1812,15 +1861,19 @@ namespace
 		const auto& multi_project = application_analysis_imported_value_internal(*multi_imported);
 		publication.series.catalog_id = "catalog:detached-multi-test";
 		publication.catalog_semantic_digest = multi_project.catalog.catalog_digest;
-		auto multi_plan = make_application_materialization_execution_plan(multi_project,
-																		  *engine,
-																		  publication,
-																		  {&descriptor.id, 1U},
-																		  "cc.clang23-gcc-replay-1",
-																		  *selection,
-																		  {},
-																		  {});
-		require(multi_plan && multi_plan->units.size() == 2U);
+		auto multi_plan = make_application_materialization_execution_plan(
+			multi_project,
+			*engine,
+			publication,
+			{&descriptor.id, 1U},
+			"cc.clang23-gcc-replay-1",
+			*detached_selection,
+			{},
+			{},
+			{},
+			application_materialization_execution_transport::detached);
+		require(multi_plan && multi_plan->units.size() == 2U &&
+				multi_plan->transport == application_materialization_execution_transport::detached);
 		std::vector<validated_detached_provider_run> multi_runs;
 		for (const auto& multi_unit : multi_plan->units)
 		{

@@ -52,7 +52,8 @@ namespace cxxlens::runtime
 			*request.selection,
 			request.budget,
 			request.cancellation,
-			files.limits);
+			files.limits,
+			sdk::detail::application_materialization_execution_transport::detached);
 		if (!plan)
 			return sdk::unexpected(std::move(plan.error()));
 		auto adopted = publish_detached_application_materializations_from_files(

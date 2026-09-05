@@ -349,8 +349,12 @@ namespace cxxlens::sdk::detail
 		const provider::provider_selection& selection,
 		const provider::execution_budget budget,
 		const std::stop_token& cancellation,
-		const import_limits limits)
+		const import_limits limits,
+		const application_materialization_execution_transport transport)
 	{
+		if (transport != application_materialization_execution_transport::process &&
+			transport != application_materialization_execution_transport::detached)
+			return unexpected(execution_error("transport", "unsupported"));
 		if (auto valid = selection.validate(); !valid)
 			return unexpected(std::move(valid.error()));
 		if (auto valid = budget.validate(); !valid)
@@ -366,9 +370,10 @@ namespace cxxlens::sdk::detail
 
 		const auto& candidate = selection.selected_candidate();
 		const auto& manifest = candidate.description;
-		if (candidate.executable_argv.empty() || candidate.executable_argv.front().empty() ||
-			candidate.executable_argv.front().contains('\0') ||
-			candidate.executable_argv.front().front() != '/')
+		if (transport == application_materialization_execution_transport::process &&
+			(candidate.executable_argv.empty() || candidate.executable_argv.front().empty() ||
+			 candidate.executable_argv.front().contains('\0') ||
+			 candidate.executable_argv.front().front() != '/'))
 			return unexpected(execution_error("provider.executable", "absolute-path-required"));
 		if (!contains(manifest.interpretation_domains, interpretation))
 			return unexpected(execution_error("interpretation", "provider-incompatible"));
@@ -424,7 +429,7 @@ namespace cxxlens::sdk::detail
 		const auto request_id = "materialization-request:" + *request_identity;
 
 		application_materialization_execution_plan output{
-			request_id, *recipe_digest, *output_plan_digest, {}};
+			request_id, *recipe_digest, *output_plan_digest, transport, {}};
 		output.units.reserve(project.replay_plans.size());
 		for (const auto& plan_value : project.replay_plan_values)
 		{
