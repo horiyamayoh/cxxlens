@@ -37,6 +37,15 @@ def run_capture(cli: pathlib.Path, root: pathlib.Path, compiler: pathlib.Path):
     )
 
 
+def run_import(cli: pathlib.Path, bundle: pathlib.Path):
+    return subprocess.run(
+        [str(cli), "import", "--bundle", str(bundle)],
+        capture_output=True,
+        check=False,
+        timeout=SHORT_PROCESS_TIMEOUT,
+    )
+
+
 def run_wrapper(
     cli: pathlib.Path,
     root: pathlib.Path,
@@ -245,6 +254,60 @@ def main() -> int:
 
         bundle_path = root / "capture.cxxlens"
         bundle_path.write_bytes(first.stdout)
+        imported_first = run_import(cli, bundle_path)
+        imported_second = run_import(cli, bundle_path)
+        require(imported_first.returncode == 0, f"CLI import failed: {imported_first.stderr!r}")
+        require(
+            imported_first.stdout and imported_first.stdout == imported_second.stdout,
+            "CLI import projection was empty or nondeterministic",
+        )
+        require(
+            imported_first.stderr == b"" and imported_second.stderr == b"",
+            "successful CLI import wrote diagnostics",
+        )
+        projection = json.loads(imported_first.stdout)
+        require(set(projection) == {"capture", "imported_project"}, "unexpected import projection")
+        require(projection["capture"]["adapter"] == "compile-commands", "wrong adapter")
+        require(projection["capture"]["compile_unit_count"] == 2, "wrong capture unit count")
+        require(
+            projection["capture"]["production_compiler"].startswith("gcc-16.2.0"),
+            "wrong production compiler",
+        )
+        require(
+            projection["capture"]["digest"]
+            == projection["imported_project"]["capture_digest"],
+            "capture identity was reconstructed",
+        )
+        require(
+            projection["imported_project"]["project_id"].startswith("imported-project:")
+            and len(projection["imported_project"]["replay_plans"]) == 2,
+            "wrong imported project projection",
+        )
+
+        malformed_path = root / "malformed.cxxlens"
+        malformed_path.write_bytes(first.stdout[:-1])
+        malformed = run_import(cli, malformed_path)
+        require(
+            malformed.returncode == 2
+            and malformed.stdout == b""
+            and b"application-analysis" in malformed.stderr,
+            "truncated bundle was accepted by CLI import",
+        )
+        for invalid_arguments in (
+            [str(cli), "import"],
+            [str(cli), "import", "--bundle", str(bundle_path), "--bundle", str(bundle_path)],
+            [str(cli), "import", "--unknown", str(bundle_path)],
+        ):
+            invalid_import = subprocess.run(
+                invalid_arguments,
+                capture_output=True,
+                check=False,
+                timeout=SHORT_PROCESS_TIMEOUT,
+            )
+            require(
+                invalid_import.returncode == 2 and invalid_import.stdout == b"",
+                "invalid CLI import arguments were accepted",
+            )
         admitted = subprocess.run(
             [
                 str(consumer),

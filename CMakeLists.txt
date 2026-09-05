@@ -382,6 +382,7 @@ add_library(
   src/sdk/incremental.cpp
   src/sdk/application_analysis.cpp
   src/sdk/application_analysis_limits.cpp
+  src/sdk/application_analysis_command_service_internal.cpp
   src/sdk/bounded_canonical_binary_internal.cpp
   src/sdk/application_analysis_service.cpp
   src/sdk/application_materialization_execution_internal.cpp

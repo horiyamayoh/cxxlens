@@ -5,6 +5,7 @@
 #include <string_view>
 #include <utility>
 
+#include "sdk/application_analysis_command_service_internal.hpp"
 #include "sdk/gcc_capture_command_service_internal.hpp"
 #include "sdk_doctor_entry.hpp"
 
@@ -18,6 +19,7 @@ namespace
 					 "[--format json|markdown]\n"
 				  << "       cxxlens run --project <project.json> --use-case <id> "
 					 "[--format json|markdown]\n"
+				  << "       cxxlens import --bundle <capture-bundle>\n"
 				  << "       cxxlens capture --project-id <id> --project-root <absolute-path> "
 					 "--compile-commands <path> --compiler <absolute-path>\n"
 				  << "       cxxlens capture --project-id <id> --project-root <absolute-path> "
@@ -132,6 +134,43 @@ namespace
 		}
 		return 0;
 	}
+
+	int import_capture(int argc, char** argv)
+	{
+		cxxlens::sdk::detail::application_analysis_import_command_request request;
+		bool bundle{};
+		for (int index = 2; index < argc; ++index)
+		{
+			const std::string_view option{argv[index]};
+			if (index + 1 >= argc || option != "--bundle" ||
+				!assign_once(request.bundle_path, bundle, argv[++index]))
+			{
+				print_usage();
+				return 2;
+			}
+		}
+		if (!bundle)
+		{
+			print_usage();
+			return 2;
+		}
+		auto imported = cxxlens::sdk::detail::import_application_analysis_command(request);
+		if (!imported)
+		{
+			const auto& failure = imported.error();
+			std::cerr << "cxxlens: " << failure.code << ": " << failure.field << ": "
+					  << failure.detail << '\n';
+			return 2;
+		}
+		std::cout << *imported;
+		std::cout.flush();
+		if (!std::cout)
+		{
+			std::cerr << "cxxlens: application-analysis.import-output-failed: stdout: write\n";
+			return 2;
+		}
+		return 0;
+	}
 } // namespace
 
 namespace
@@ -159,6 +198,8 @@ namespace
 		}
 		if (command == "capture")
 			return capture(argc, argv);
+		if (command == "import")
+			return import_capture(argc, argv);
 		if (command == "run")
 		{
 			if (argc < 3)
