@@ -639,6 +639,32 @@ namespace
 		auto decoded = detail::decode_detached_provider_run(sealed->bytes());
 		require(decoded && decoded->digest() == sealed->digest());
 
+		auto revalidated =
+			validate_provider_worker_transcript(execution.host, execution.output, worker_authority);
+		require(revalidated && revalidated->protocol_transcript == execution.output &&
+				revalidated->replay_plan_digest == value.value().replay_plan_digest &&
+				revalidated->validated_transcript.runtime_receipt.validate() &&
+				revalidated->validated_transcript.input_seal.task() == execution.expectation.task);
+		auto sealed_existing = seal_detached_provider_worker_transcript(
+			execution.host, execution.output, authority, signer);
+		require(sealed_existing && std::ranges::equal(sealed_existing->bytes(), sealed->bytes()));
+
+		auto tampered_protocol = execution.output;
+		tampered_protocol.back() ^= std::byte{1U};
+		auto tampered = seal_detached_provider_worker_transcript(
+			execution.host, tampered_protocol, authority, signer);
+		require(!tampered);
+		auto truncated_protocol = execution.output;
+		truncated_protocol.pop_back();
+		auto truncated = validate_provider_worker_transcript(
+			execution.host, truncated_protocol, worker_authority);
+		require(!truncated);
+		auto wrong_task = worker_authority;
+		wrong_task.host.task.task_id = "task:foreign-clangcl-run";
+		auto mismatched = validate_provider_worker_transcript(
+			execution.host, execution.output, std::move(wrong_task));
+		require(!mismatched);
+
 		std::istringstream emitted_input{string(execution.host)};
 		std::ostringstream emitted_output;
 		auto emitted =

@@ -8,6 +8,7 @@
 #include <istream>
 #include <optional>
 #include <ostream>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -56,6 +57,18 @@ namespace cxxlens::detail::clang23_gcc_replay
 		std::istream& input, provider_worker_authority authority, sdk::import_limits limits = {});
 
 	/**
+	 * Revalidate one already-produced Protocol-v2 stream against the exact bounded host input.
+	 *
+	 * This is the trusted-launcher boundary for a sandbox child: it does not execute Clang and it
+	 * does not accept provider rows until the existing logical validator has sealed both streams.
+	 */
+	[[nodiscard]] sdk::result<provider_worker_result>
+	validate_provider_worker_transcript(std::span<const std::byte> host_transcript,
+										std::span<const std::byte> protocol_transcript,
+										provider_worker_authority authority,
+										sdk::import_limits limits = {});
+
+	/**
 	 * Validate one host transcript, execute the detached frontend, and emit only Protocol v2.
 	 * Relation rows remain candidates; host-side adoption and Store publication are out of scope.
 	 */
@@ -70,6 +83,14 @@ namespace cxxlens::detail::clang23_gcc_replay
 								 detached_provider_worker_authority authority,
 								 const sdk::detail::detached_run_signer& signer,
 								 sdk::import_limits limits = {});
+
+	/** Validate and authenticate an existing sandbox-child transcript without rerunning Clang. */
+	[[nodiscard]] sdk::result<sdk::detail::validated_detached_provider_run>
+	seal_detached_provider_worker_transcript(std::span<const std::byte> host_transcript,
+											 std::span<const std::byte> protocol_transcript,
+											 detached_provider_worker_authority authority,
+											 const sdk::detail::detached_run_signer& signer,
+											 sdk::import_limits limits = {});
 
 	/** Emit only the canonical authenticated detached-provider-run bytes. */
 	[[nodiscard]] sdk::result<void>

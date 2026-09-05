@@ -33,6 +33,8 @@ namespace cxxlens::detail::clang23_gcc_replay
 {
 	namespace
 	{
+		constexpr std::size_t maximum_protocol_transcript_bytes = std::size_t{32U} * 1024U * 1024U;
+
 		[[nodiscard]] sdk::error failure(std::string field, std::string detail)
 		{
 			return {
@@ -56,7 +58,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 			}
 
 		  private:
-			static constexpr std::size_t maximum_bytes_{std::size_t{32U} * 1024U * 1024U};
+			static constexpr std::size_t maximum_bytes_{maximum_protocol_transcript_bytes};
 			std::vector<std::byte> bytes_;
 		};
 
@@ -167,16 +169,29 @@ namespace cxxlens::detail::clang23_gcc_replay
 			return sdk::semantic_digest(domain,
 										std::string{task} + "\n" + std::string{descriptor_id});
 		}
-	} // namespace
 
-	sdk::result<provider_worker_result> run_provider_worker(std::istream& input,
-															provider_worker_authority authority,
-															const sdk::import_limits limits)
-	{
-		try
+		struct prepared_worker_input
 		{
+			sdk::provider::manifest provider;
+			sdk::detail::validated_compiler_replay_input replay;
+			sdk::detail::compiler_replay_frontend_contract frontend;
+			sdk::provider::detail::sealed_host_input host_input;
+			std::vector<sdk::relation_descriptor> descriptors;
+			sdk::provider::execution_budget budget;
+		};
+
+		[[nodiscard]] sdk::result<prepared_worker_input>
+		prepare_worker_input(const std::span<const std::byte> encoded,
+							 const provider_worker_authority& authority,
+							 const sdk::import_limits& limits)
+		{
+			constexpr std::size_t protocol_overhead = std::size_t{1024U} * 1024U;
 			if (auto valid = limits.validate(); !valid)
 				return sdk::unexpected(std::move(valid.error()));
+			if (limits.maximum_bundle_bytes >
+					std::numeric_limits<std::size_t>::max() - protocol_overhead ||
+				encoded.size() > limits.maximum_bundle_bytes + protocol_overhead)
+				return sdk::unexpected(failure("stdin", "wire-size-limit"));
 			auto provider = sdk::detail::decode_provider_manifest(authority.host.provider_manifest);
 			if (!provider)
 				return sdk::unexpected(std::move(provider.error()));
@@ -194,10 +209,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 				authority.provider_version == msvc_provider_version;
 			if (!gcc_authority && !msvc_authority)
 				return sdk::unexpected(failure("provider", "worker-authority-invalid"));
-			auto encoded = read_input(input, limits);
-			if (!encoded)
-				return sdk::unexpected(std::move(encoded.error()));
-			auto frames = sdk::provider::decode_frame_stream(*encoded, authority.host.limits);
+			auto frames = sdk::provider::decode_frame_stream(encoded, authority.host.limits);
 			if (!frames)
 				return sdk::unexpected(std::move(frames.error()));
 			host_payload_sink host_payload{limits.maximum_bundle_bytes};
@@ -216,43 +228,6 @@ namespace cxxlens::detail::clang23_gcc_replay
 				return sdk::unexpected(failure("replay_input", "wrong-worker-frontend"));
 			if (replay->input_digest() != host_input->task().task_input_digest)
 				return sdk::unexpected(failure("replay_input", "host-digest-mismatch"));
-			auto parsed = parse_replay_input(*replay);
-			if (!parsed)
-				return sdk::unexpected(std::move(parsed.error()));
-			if (parsed->terminal != parse_terminal::parsed)
-				return sdk::unexpected(failure("translation_unit", "syntax-rejected"));
-			normalized_observation_candidates normalized;
-			const bool source_authority_complete =
-				std::ranges::all_of(replay->value().source_members,
-									[](const auto& member)
-									{
-										return !member.file_id.empty() &&
-											member.source_snapshot_id.has_value() &&
-											member.encoding.has_value();
-									});
-			if (source_authority_complete)
-			{
-				auto candidate = normalize_observation_candidates(
-					*replay,
-					worker_observation_output{std::string{replay->input_digest()},
-											  parsed->declaration_count,
-											  parsed->warning_count,
-											  parsed->error_count,
-											  std::move(parsed->observations)});
-				if (!candidate)
-					return sdk::unexpected(std::move(candidate.error()));
-				normalized = std::move(*candidate);
-			}
-			else
-			{
-				normalized.replay_input_digest = replay->input_digest();
-				normalized.unresolved = replay->value().unresolved;
-				normalized.unresolved.push_back(
-					{"source.identity",
-					 "unavailable",
-					 "validated-capture-source-identity-incomplete",
-					 "recapture-source-content-with-encoding-and-snapshot-identity"});
-			}
 
 			std::vector<sdk::relation_descriptor> descriptors;
 			descriptors.reserve(replay->value().requested_relation_descriptor_ids.size());
@@ -263,17 +238,150 @@ namespace cxxlens::detail::clang23_gcc_replay
 					return sdk::unexpected(std::move(value.error()));
 				descriptors.push_back(std::move(*value));
 			}
+			sdk::provider::execution_budget budget;
+			budget.output_bytes = std::min(budget.output_bytes, host_input->credit().bytes);
+			return prepared_worker_input{std::move(*provider),
+										 std::move(*replay),
+										 *frontend,
+										 std::move(*host_input),
+										 std::move(descriptors),
+										 budget};
+		}
+
+		[[nodiscard]] sdk::result<provider_worker_result>
+		validate_worker_output(prepared_worker_input prepared,
+							   const provider_worker_authority& authority,
+							   std::vector<std::byte> transcript)
+		{
+			if (transcript.empty() || transcript.size() > maximum_protocol_transcript_bytes)
+				return sdk::unexpected(failure("protocol", "wire-size-limit"));
+			auto required_features = prepared.provider.protocol.required_features;
+			std::ranges::sort(required_features);
+			auto offered_relations = prepared.provider.offered_relations;
+			std::ranges::sort(offered_relations);
+			auto provider_signature_digest = prepared.provider.signature;
+			sdk::provider::detail::expected_provider_identity expected_identity{
+				authority.provider_id,
+				authority.provider_version,
+				authority.provider_binary_digest,
+				authority.provider_semantic_contract_digest,
+				authority.host.limits.protocol_major,
+				authority.host.limits.maximum_minor,
+				std::move(required_features),
+				authority.sandbox_policy_digest,
+				std::move(offered_relations)};
+			auto validated =
+				sdk::provider::detail::validate_detached_provider_transcript_from_sealed_input(
+					{std::move(prepared.provider),
+					 std::move(expected_identity),
+					 std::move(prepared.descriptors),
+					 authority.host.limits,
+					 prepared.budget},
+					std::move(prepared.host_input),
+					transcript);
+			if (!validated)
+				return sdk::unexpected(std::move(validated.error()));
+			return provider_worker_result{std::move(transcript),
+										  std::string{prepared.replay.value().replay_plan_digest},
+										  std::move(provider_signature_digest),
+										  std::move(*validated)};
+		}
+
+		[[nodiscard]] sdk::result<sdk::detail::validated_detached_provider_run>
+		seal_worker_output(provider_worker_result result,
+						   detached_provider_worker_authority authority,
+						   const sdk::detail::detached_run_signer& signer,
+						   const sdk::import_limits& limits)
+		{
+			if (!result.provider_signature_digest ||
+				*result.provider_signature_digest != authority.provider_signature_digest)
+				return sdk::unexpected(failure("provider_signature", "launcher-binding-mismatch"));
+			if (authority.provider_revocation_state != "not-revoked")
+				return sdk::unexpected(failure("provider_revocation", "not-trusted"));
+			const auto& task = result.validated_transcript.input_seal.task();
+			return sdk::detail::build_detached_provider_run_from_validated_transcript(
+				{task.task_id,
+				 task.task_input_digest,
+				 task.normalized_invocation_digest,
+				 task.toolchain_digest,
+				 task.environment_digest,
+				 result.replay_plan_digest,
+				 {authority.worker.provider_id,
+				  authority.worker.provider_version,
+				  authority.worker.provider_binary_digest,
+				  authority.worker.provider_semantic_contract_digest,
+				  authority.provider_signature_digest,
+				  authority.provider_revocation_state,
+				  authority.worker.sandbox_policy_digest}},
+				result.protocol_transcript,
+				result.validated_transcript,
+				signer,
+				limits);
+		}
+	} // namespace
+
+	sdk::result<provider_worker_result> run_provider_worker(std::istream& input,
+															provider_worker_authority authority,
+															const sdk::import_limits limits)
+	{
+		try
+		{
+			if (auto valid = limits.validate(); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			auto encoded = read_input(input, limits);
+			if (!encoded)
+				return sdk::unexpected(std::move(encoded.error()));
+			auto prepared = prepare_worker_input(*encoded, authority, limits);
+			if (!prepared)
+				return sdk::unexpected(std::move(prepared.error()));
+			auto parsed = parse_replay_input(prepared->replay);
+			if (!parsed)
+				return sdk::unexpected(std::move(parsed.error()));
+			if (parsed->terminal != parse_terminal::parsed)
+				return sdk::unexpected(failure("translation_unit", "syntax-rejected"));
+			normalized_observation_candidates normalized;
+			const bool source_authority_complete =
+				std::ranges::all_of(prepared->replay.value().source_members,
+									[](const auto& member)
+									{
+										return !member.file_id.empty() &&
+											member.source_snapshot_id.has_value() &&
+											member.encoding.has_value();
+									});
+			if (source_authority_complete)
+			{
+				auto candidate = normalize_observation_candidates(
+					prepared->replay,
+					worker_observation_output{std::string{prepared->replay.input_digest()},
+											  parsed->declaration_count,
+											  parsed->warning_count,
+											  parsed->error_count,
+											  std::move(parsed->observations)});
+				if (!candidate)
+					return sdk::unexpected(std::move(candidate.error()));
+				normalized = std::move(*candidate);
+			}
+			else
+			{
+				normalized.replay_input_digest = prepared->replay.input_digest();
+				normalized.unresolved = prepared->replay.value().unresolved;
+				normalized.unresolved.push_back(
+					{"source.identity",
+					 "unavailable",
+					 "validated-capture-source-identity-incomplete",
+					 "recapture-source-content-with-encoding-and-snapshot-identity"});
+			}
 
 			transcript_sink sink;
 			sdk::provider::protocol_writer writer{sink, authority.host.limits};
-			writer.grant_credit(host_input->credit());
+			writer.grant_credit(prepared->host_input.credit());
 			auto hello = sdk::provider::encode_control_text(authority.host.provider_manifest);
 			auto negotiated = sdk::provider::encode_schema_negotiate_metadata(
 				{"cxxlens.provider-protocol.v2", sdk::provider::protocol_v2_minor});
 			auto accepted =
 				sdk::provider::encode_task_accepted_metadata({authority.provider_id,
 															  authority.provider_version.string(),
-															  host_input->task().task_id});
+															  prepared->host_input.task().task_id});
 			if (!hello || !negotiated || !accepted)
 				return sdk::unexpected(failure("protocol", "control-encoding"));
 			if (auto sent = writer.send(sdk::provider::message_type::hello, *hello); !sent)
@@ -285,34 +393,35 @@ namespace cxxlens::detail::clang23_gcc_replay
 				!sent)
 				return sdk::unexpected(std::move(sent.error()));
 
-			sdk::provider::execution_budget budget;
-			budget.output_bytes = std::min(budget.output_bytes, host_input->credit().bytes);
 			sdk::provider::context context{
 				writer,
-				{std::stop_token{}, budget},
-				host_input->task().task_id,
-				descriptors,
-				std::array<std::string, 1U>{std::string{frontend->dependency_group}}};
-			context.coverage().request("task", host_input->task().task_id);
-			if (auto classified = context.coverage().classify(
-					{"task", host_input->task().task_id, "covered", "translation-unit-executed"});
+				{std::stop_token{}, prepared->budget},
+				prepared->host_input.task().task_id,
+				prepared->descriptors,
+				std::array<std::string, 1U>{std::string{prepared->frontend.dependency_group}}};
+			context.coverage().request("task", prepared->host_input.task().task_id);
+			if (auto classified = context.coverage().classify({"task",
+															   prepared->host_input.task().task_id,
+															   "covered",
+															   "translation-unit-executed"});
 				!classified)
 				return sdk::unexpected(std::move(classified.error()));
-			for (const auto& value : descriptors)
+			for (const auto& value : prepared->descriptors)
 			{
 				const auto* rows = rows_for(normalized, value.id);
 				if (rows != nullptr && source_authority_complete)
 				{
 					auto atomic = batch_identity("clang23.gcc-replay.atomic-output.v1",
-												 host_input->task().task_id,
+												 prepared->host_input.task().task_id,
 												 value.id);
-					auto batch = batch_identity(
-						"clang23.gcc-replay.batch.v1", host_input->task().task_id, value.id);
+					auto batch = batch_identity("clang23.gcc-replay.batch.v1",
+												prepared->host_input.task().task_id,
+												value.id);
 					if (!atomic || !batch)
 						return sdk::unexpected(failure(value.id, "batch-identity"));
 					auto sink_value = context.relation(value);
 					if (auto begun = sink_value.begin(
-							std::string{frontend->dependency_group}, *atomic, *batch);
+							std::string{prepared->frontend.dependency_group}, *atomic, *batch);
 						!begun)
 						return sdk::unexpected(std::move(begun.error()));
 					for (const auto& row : *rows)
@@ -341,9 +450,9 @@ namespace cxxlens::detail::clang23_gcc_replay
 					 gap.field,
 					 gap.state + ":" + gap.reason + ":" + gap.completion_action});
 			context.evidence().add({"application-analysis.replay",
-									replay->value().compile_unit_id,
+									prepared->replay.value().compile_unit_id,
 									authority.provider_id,
-									std::string{replay->value().replay_plan_digest}});
+									std::string{prepared->replay.value().replay_plan_digest}});
 			if (auto valid = context.validate(); !valid)
 				return sdk::unexpected(std::move(valid.error()));
 			auto coverage = std::move(context.coverage()).finish();
@@ -364,43 +473,43 @@ namespace cxxlens::detail::clang23_gcc_replay
 				if (auto sent = writer.send(type, *control); !sent)
 					return sdk::unexpected(std::move(sent.error()));
 			auto complete =
-				sdk::provider::encode_task_complete_metadata({host_input->task().task_id});
+				sdk::provider::encode_task_complete_metadata({prepared->host_input.task().task_id});
 			if (!complete)
 				return sdk::unexpected(std::move(complete.error()));
 			if (auto sent = writer.send(sdk::provider::message_type::task_complete, *complete);
 				!sent)
 				return sdk::unexpected(std::move(sent.error()));
 			auto transcript = std::move(sink).take();
-			auto required_features = provider->protocol.required_features;
-			std::ranges::sort(required_features);
-			auto offered_relations = provider->offered_relations;
-			std::ranges::sort(offered_relations);
-			auto provider_signature_digest = provider->signature;
-			sdk::provider::detail::expected_provider_identity expected_identity{
-				authority.provider_id,
-				authority.provider_version,
-				authority.provider_binary_digest,
-				authority.provider_semantic_contract_digest,
-				authority.host.limits.protocol_major,
-				authority.host.limits.maximum_minor,
-				std::move(required_features),
-				authority.sandbox_policy_digest,
-				std::move(offered_relations)};
-			auto validated =
-				sdk::provider::detail::validate_detached_provider_transcript_from_sealed_input(
-					{std::move(*provider),
-					 std::move(expected_identity),
-					 std::move(descriptors),
-					 authority.host.limits,
-					 budget},
-					std::move(*host_input),
-					transcript);
-			if (!validated)
-				return sdk::unexpected(std::move(validated.error()));
-			return provider_worker_result{std::move(transcript),
-										  std::string{replay->value().replay_plan_digest},
-										  std::move(provider_signature_digest),
-										  std::move(*validated)};
+			return validate_worker_output(std::move(*prepared), authority, std::move(transcript));
+		}
+		catch (const std::bad_alloc&)
+		{
+			return sdk::unexpected(failure("memory", "allocation"));
+		}
+		catch (const std::length_error&)
+		{
+			return sdk::unexpected(failure("memory", "length"));
+		}
+	}
+
+	sdk::result<provider_worker_result>
+	validate_provider_worker_transcript(const std::span<const std::byte> host_transcript,
+										const std::span<const std::byte> protocol_transcript,
+										provider_worker_authority authority,
+										const sdk::import_limits limits)
+	{
+		try
+		{
+			if (protocol_transcript.empty() ||
+				protocol_transcript.size() > maximum_protocol_transcript_bytes)
+				return sdk::unexpected(failure("protocol", "wire-size-limit"));
+			auto prepared = prepare_worker_input(host_transcript, authority, limits);
+			if (!prepared)
+				return sdk::unexpected(std::move(prepared.error()));
+			return validate_worker_output(
+				std::move(*prepared),
+				authority,
+				std::vector<std::byte>{protocol_transcript.begin(), protocol_transcript.end()});
 		}
 		catch (const std::bad_alloc&)
 		{
@@ -436,30 +545,21 @@ namespace cxxlens::detail::clang23_gcc_replay
 		auto result = run_provider_worker(input, authority.worker, limits);
 		if (!result)
 			return sdk::unexpected(std::move(result.error()));
-		if (!result->provider_signature_digest ||
-			*result->provider_signature_digest != authority.provider_signature_digest)
-			return sdk::unexpected(failure("provider_signature", "launcher-binding-mismatch"));
-		if (authority.provider_revocation_state != "not-revoked")
-			return sdk::unexpected(failure("provider_revocation", "not-trusted"));
-		const auto& task = result->validated_transcript.input_seal.task();
-		return sdk::detail::build_detached_provider_run_from_validated_transcript(
-			{task.task_id,
-			 task.task_input_digest,
-			 task.normalized_invocation_digest,
-			 task.toolchain_digest,
-			 task.environment_digest,
-			 result->replay_plan_digest,
-			 {authority.worker.provider_id,
-			  authority.worker.provider_version,
-			  authority.worker.provider_binary_digest,
-			  authority.worker.provider_semantic_contract_digest,
-			  authority.provider_signature_digest,
-			  authority.provider_revocation_state,
-			  authority.worker.sandbox_policy_digest}},
-			result->protocol_transcript,
-			result->validated_transcript,
-			signer,
-			limits);
+		return seal_worker_output(std::move(*result), std::move(authority), signer, limits);
+	}
+
+	sdk::result<sdk::detail::validated_detached_provider_run>
+	seal_detached_provider_worker_transcript(const std::span<const std::byte> host_transcript,
+											 const std::span<const std::byte> protocol_transcript,
+											 detached_provider_worker_authority authority,
+											 const sdk::detail::detached_run_signer& signer,
+											 const sdk::import_limits limits)
+	{
+		auto result = validate_provider_worker_transcript(
+			host_transcript, protocol_transcript, authority.worker, limits);
+		if (!result)
+			return sdk::unexpected(std::move(result.error()));
+		return seal_worker_output(std::move(*result), std::move(authority), signer, limits);
 	}
 
 	sdk::result<void>
