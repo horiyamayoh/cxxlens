@@ -1,5 +1,5 @@
 schema: cxxlens.application-analysis-support.v1
-document_version: 1.3.0
+document_version: 1.4.0
 maturity: experimental
 host_package_support:
   authority: schemas/cxxlens_support_matrix.yaml
@@ -21,6 +21,17 @@ execution_providers:
     trust_authority: explicit-host-trusted-ed25519-public-key
     execution_revalidation: authenticated-detached-transcript-binding
     qualification: experimental
+native_provider_decisions:
+  gcc:
+    decision: no-go
+    scope: initial-relation-subset
+    reason: no-adopted-corpus-strict-gap
+    retained_solution: clang-23.1.0-gcc-mode-replay
+  msvc:
+    decision: no-go
+    scope: initial-relation-subset
+    reason: no-public-versioned-detached-semantic-extraction-api
+    retained_solution: native-build-evidence-with-clang-cl-23.1.0-replay
 toolchain_pins:
   gcc:
     family: gcc

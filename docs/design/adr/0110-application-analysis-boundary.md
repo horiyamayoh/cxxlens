@@ -53,6 +53,17 @@ GCC native provider は adopted corpus の strict consumer gap が public GCC pl
 compiler ABI、不安定な PDB 内部表現、detached ownership 不成立、または有意な fidelity 改善なし
 なら No-Go とする。
 
+Phase 3 initial relation subset では、GCC native provider は No-Go とする。採用 corpus の
+partiality は compile-database capture が観測しない環境効果を保持したものであり、strict consumer を
+誤答させる GCC 固有 gap ではない。GCC 16.2 の public plugin callback は利用可能だが、native provider
+追加条件を満たさないため、Clang 23.1.0 GCC-mode replay と actionable unresolved を正式解として維持する。
+
+MSVC exact provider も No-Go とする。公開 `/sourceDependencies` は header、PCH、module の source
+closure を提供するが semantic AST extraction API ではなく、DIA SDK は postcompiler PDB debug 情報の
+reader である。initial relation subset を versioned public API から detached ownership で取得する経路が
+ないため、private compiler ABI や PDB 内部表現へ依存せず、native MSVC build evidence と clang-cl
+23.1.0 replay を正式解とする。
+
 ## Consequences
 
 - cxxlens core、SDK、Store、query、Linux provider runtime 全体の GCC build や Windows/MSVC port

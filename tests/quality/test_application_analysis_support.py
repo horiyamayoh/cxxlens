@@ -118,6 +118,33 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
                 {**self.contract, "targets": [ready_but_unavailable, targets[1]]}
             )
 
+    def test_native_provider_decisions_are_closed(self) -> None:
+        self.assertEqual(
+            self.contract["native_provider_decisions"],
+            {
+                "gcc": {
+                    "decision": "no-go",
+                    "scope": "initial-relation-subset",
+                    "reason": "no-adopted-corpus-strict-gap",
+                    "retained_solution": "clang-23.1.0-gcc-mode-replay",
+                },
+                "msvc": {
+                    "decision": "no-go",
+                    "scope": "initial-relation-subset",
+                    "reason": "no-public-versioned-detached-semantic-extraction-api",
+                    "retained_solution": (
+                        "native-build-evidence-with-clang-cl-23.1.0-replay"
+                    ),
+                },
+            },
+        )
+        changed = dict(self.contract["native_provider_decisions"])
+        changed["gcc"] = {**changed["gcc"], "decision": "go"}
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(self.schema).validate(
+                {**self.contract, "native_provider_decisions": changed}
+            )
+
     def test_initial_relation_subset_is_existing_and_equal(self) -> None:
         registry = yaml.safe_load(
             (ROOT / "schemas/cxxlens_ng_relation_registry.yaml").read_text(encoding="utf-8")

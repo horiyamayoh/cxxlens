@@ -3,7 +3,7 @@ $id: https://cxxlens.dev/schemas/cxxlens.application-analysis-support.v1
 title: cxxlens application analysis support contract
 type: object
 additionalProperties: false
-required: [schema, document_version, maturity, host_package_support, execution_providers, toolchain_pins, targets]
+required: [schema, document_version, maturity, host_package_support, execution_providers, native_provider_decisions, toolchain_pins, targets]
 properties:
   schema: {const: cxxlens.application-analysis-support.v1}
   document_version: {$ref: '#/$defs/version'}
@@ -58,6 +58,29 @@ properties:
           trust_authority: {const: explicit-host-trusted-ed25519-public-key}
           execution_revalidation: {const: authenticated-detached-transcript-binding}
           qualification: {const: experimental}
+  native_provider_decisions:
+    type: object
+    additionalProperties: false
+    required: [gcc, msvc]
+    properties:
+      gcc:
+        type: object
+        additionalProperties: false
+        required: [decision, scope, reason, retained_solution]
+        properties:
+          decision: {const: no-go}
+          scope: {const: initial-relation-subset}
+          reason: {const: no-adopted-corpus-strict-gap}
+          retained_solution: {const: clang-23.1.0-gcc-mode-replay}
+      msvc:
+        type: object
+        additionalProperties: false
+        required: [decision, scope, reason, retained_solution]
+        properties:
+          decision: {const: no-go}
+          scope: {const: initial-relation-subset}
+          reason: {const: no-public-versioned-detached-semantic-extraction-api}
+          retained_solution: {const: native-build-evidence-with-clang-cl-23.1.0-replay}
   toolchain_pins:
     type: object
     additionalProperties: false
