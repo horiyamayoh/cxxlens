@@ -120,9 +120,14 @@ jobs:
               $outputCopy = $process.StandardOutput.BaseStream.CopyToAsync($output)
               $errorRead = $process.StandardError.ReadToEndAsync()
               $input = [System.IO.File]::ReadAllBytes($InputPath)
-              $process.StandardInput.BaseStream.Write($input, 0, $input.Length)
-              $process.StandardInput.BaseStream.Flush()
-              $process.StandardInput.Close()
+              try {
+                $process.StandardInput.BaseStream.Write($input, 0, $input.Length)
+                $process.StandardInput.BaseStream.Flush()
+              } catch [System.IO.IOException] {
+                # An authority mismatch may reject before consuming the bounded host transcript.
+              } finally {
+                $process.StandardInput.Close()
+              }
               $process.WaitForExit()
               [void]$outputCopy.GetAwaiter().GetResult()
               $errorText = $errorRead.GetAwaiter().GetResult()
