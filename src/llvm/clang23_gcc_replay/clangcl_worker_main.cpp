@@ -165,7 +165,8 @@ int main(const int argc, char** argv)
 			std::cin, std::cout, std::move(*authority), limits);
 		if (!executed)
 		{
-			std::cerr << executed.error().code << ':' << executed.error().field << '\n';
+			std::cerr << executed.error().code << ':' << executed.error().field << ':'
+					  << executed.error().detail << '\n';
 			return EXIT_FAILURE;
 		}
 		return EXIT_SUCCESS;
@@ -200,7 +201,8 @@ int main(const int argc, char** argv)
 		std::cin, std::cout, std::move(launch), *process);
 	if (!validated)
 	{
-		std::cerr << validated.error().code << ':' << validated.error().field << '\n';
+		std::cerr << validated.error().code << ':' << validated.error().field << ':'
+				  << validated.error().detail << '\n';
 		return EXIT_FAILURE;
 	}
 	return EXIT_SUCCESS;
