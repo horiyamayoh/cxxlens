@@ -31,4 +31,13 @@ namespace cxxlens::runtime
 		sdk::snapshot_store& store,
 		const sdk::detail::application_materialization_execution_plan& plan,
 		const detached_application_materialization_file_request& request);
+
+	/** Public-result service sharing the same request planning and result composition as process
+	 * materialization. */
+	[[nodiscard]] sdk::result<sdk::materialization_result>
+	materialize_detached_application_from_files(
+		sdk::snapshot_store& store,
+		const sdk::imported_project& project,
+		const sdk::materialization_request& materialization,
+		const detached_application_materialization_file_request& files);
 } // namespace cxxlens::runtime

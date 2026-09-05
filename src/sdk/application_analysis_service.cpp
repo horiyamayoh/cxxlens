@@ -7,8 +7,7 @@
 
 #include <cxxlens/sdk/application_analysis.hpp>
 
-#include "application_analysis_internal.hpp"
-#include "application_materialization_adoption_internal.hpp"
+#include "application_analysis_service_internal.hpp"
 #include "application_materialization_execution_internal.hpp"
 #include "gcc_replay_planner_internal.hpp"
 #include "msvc_replay_planner_internal.hpp"
@@ -16,29 +15,6 @@
 
 namespace cxxlens::sdk
 {
-	struct materialization_request::implementation
-	{
-		relation_engine engine;
-		snapshot_draft publication;
-		std::vector<std::string> relation_descriptor_ids;
-		std::string interpretation;
-		provider::provider_selection_request provider;
-		std::optional<provider::provider_selection> selection;
-		provider::execution_budget budget;
-		std::stop_token cancellation;
-	};
-
-	struct materialization_result::implementation
-	{
-		materialization_terminal terminal{materialization_terminal::failed};
-		std::optional<snapshot_handle> published_snapshot;
-		std::vector<provider::coverage_unit> coverage;
-		std::vector<provider::unresolved_item> unresolved;
-		std::vector<claim_conflict> conflicts;
-		std::vector<differential_disagreement> differential_disagreements;
-		std::optional<application_analysis_provenance> provenance;
-	};
-
 	namespace
 	{
 		[[nodiscard]] error invalid(std::string field, std::string detail)
@@ -522,11 +498,8 @@ namespace cxxlens::sdk
 											   const materialization_request& request)
 	{
 		if (request.value_->cancellation.stop_requested())
-		{
-			auto value = std::make_shared<materialization_result::implementation>();
-			value->terminal = materialization_terminal::cancelled;
-			return materialization_result{std::move(value)};
-		}
+			return detail::application_materialization_terminal_result(
+				materialization_terminal::cancelled);
 		if (!request.value_->selection)
 			return unexpected(error{"application-analysis.target-unavailable",
 									"materialization",
@@ -556,13 +529,12 @@ namespace cxxlens::sdk
 				return unexpected(std::move(executed.error()));
 			if (!executed->succeeded())
 			{
-				auto value = std::make_shared<materialization_result::implementation>();
-				value->terminal = executed->terminal == "provider.cancelled"
+				const auto terminal = executed->terminal == "provider.cancelled"
 					? materialization_terminal::cancelled
 					: (executed->sealing_error ? materialization_terminal::rejected
 											   : materialization_terminal::failed);
-				value->unresolved = std::move(executed->diagnostics);
-				return materialization_result{std::move(value)};
+				return detail::application_materialization_terminal_result(
+					terminal, std::move(executed->diagnostics));
 			}
 			if (auto valid = provider::detail::validate_provider_process_runtime_binding(
 					*executed, unit.process);
@@ -600,24 +572,6 @@ namespace cxxlens::sdk
 		const auto& manifest =
 			plan->units.front().process.selection.selected_candidate().description;
 
-		auto value = std::make_shared<materialization_result::implementation>();
-		value->terminal =
-			adopted->publication.terminal == detail::materialization_terminal::complete
-			? materialization_terminal::published_complete
-			: materialization_terminal::published_partial;
-		value->published_snapshot = std::move(adopted->publication.snapshot);
-		value->coverage = std::move(adopted->coverage);
-		value->unresolved = std::move(adopted->unresolved);
-		value->conflicts = std::move(adopted->conflicts);
-		value->differential_disagreements = std::move(adopted->differential_disagreements);
-		value->provenance =
-			application_analysis_provenance{manifest.provider_id,
-											manifest.provider_version,
-											manifest.provider_binary_digest,
-											manifest.provider_semantic_contract_digest,
-											adopted->provider_input_digest,
-											adopted->replay_plan_digest,
-											adopted->runtime_receipt_digest};
-		return materialization_result{std::move(value)};
+		return detail::application_materialization_published_result(std::move(*adopted), manifest);
 	}
 } // namespace cxxlens::sdk

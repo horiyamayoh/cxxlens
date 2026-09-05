@@ -1777,20 +1777,28 @@ namespace
 			key_path.string(),
 			detached_run_public_key_state::trusted,
 			{}};
+		auto public_file_request = materialization_request::make(*engine,
+																 publication,
+																 {descriptor.id},
+																 "cc.clang23-gcc-replay-1",
+																 provider_request,
+																 {candidate});
+		require(public_file_request);
 		auto file_store = make_in_memory_snapshot_store(*engine);
 		require(file_store);
-		auto file_adopted =
-			cxxlens::runtime::publish_detached_application_materializations_from_files(
-				*engine, *file_store, *plan, file_request);
-		require(file_adopted && file_adopted->publication.publication_verified &&
+		auto file_adopted = cxxlens::runtime::materialize_detached_application_from_files(
+			*file_store, *imported, *public_file_request, file_request);
+		require(file_adopted &&
+				file_adopted->terminal() ==
+					cxxlens::sdk::materialization_terminal::published_partial &&
+				file_adopted->published_snapshot() && file_adopted->provenance() &&
 				file_store->current(publication.series));
 
 		file_request.public_key_state = detached_run_public_key_state::revoked;
 		auto revoked_store = make_in_memory_snapshot_store(*engine);
 		require(revoked_store);
-		auto file_revoked =
-			cxxlens::runtime::publish_detached_application_materializations_from_files(
-				*engine, *revoked_store, *plan, file_request);
+		auto file_revoked = cxxlens::runtime::materialize_detached_application_from_files(
+			*revoked_store, *imported, *public_file_request, file_request);
 		require(!file_revoked && file_revoked.error().detail == "signing-key-revoked" &&
 				!revoked_store->current(publication.series));
 #endif
