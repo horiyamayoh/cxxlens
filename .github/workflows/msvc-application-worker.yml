@@ -103,13 +103,41 @@ jobs:
             [Environment]::SetEnvironmentVariable(
               $line.Substring(0, $separator), $line.Substring($separator + 1), 'Process')
           }
+          function Invoke-BinaryWorker([string]$Executable, [string]$InputPath,
+                                       [string]$OutputPath, [string]$ErrorPath) {
+            $start = [System.Diagnostics.ProcessStartInfo]::new()
+            $start.FileName = $Executable
+            $start.UseShellExecute = $false
+            $start.CreateNoWindow = $true
+            $start.RedirectStandardInput = $true
+            $start.RedirectStandardOutput = $true
+            $start.RedirectStandardError = $true
+            $process = [System.Diagnostics.Process]::new()
+            $process.StartInfo = $start
+            if (-not $process.Start()) { throw 'Could not start the relocated clang-cl worker' }
+            $output = [System.IO.File]::Create($OutputPath)
+            try {
+              $outputCopy = $process.StandardOutput.BaseStream.CopyToAsync($output)
+              $errorRead = $process.StandardError.ReadToEndAsync()
+              $input = [System.IO.File]::ReadAllBytes($InputPath)
+              $process.StandardInput.BaseStream.Write($input, 0, $input.Length)
+              $process.StandardInput.BaseStream.Flush()
+              $process.StandardInput.Close()
+              $process.WaitForExit()
+              $outputCopy.GetAwaiter().GetResult()
+              $errorText = $errorRead.GetAwaiter().GetResult()
+              [System.IO.File]::WriteAllText($ErrorPath, $errorText)
+              return $process.ExitCode
+            } finally {
+              $output.Dispose()
+              $process.Dispose()
+            }
+          }
           $hostTranscript = Join-Path $processFixture 'host transcript.bin'
           $detachedRun = Join-Path $processFixture 'detached run.bin'
           $workerError = Join-Path $processFixture 'worker error.txt'
-          $nativeWorker = Start-Process -FilePath $worker -NoNewWindow -Wait -PassThru `
-            -RedirectStandardInput $hostTranscript -RedirectStandardOutput $detachedRun `
-            -RedirectStandardError $workerError
-          if ($nativeWorker.ExitCode -ne 0 -or -not (Test-Path $detachedRun) -or
+          $nativeWorkerExit = Invoke-BinaryWorker $worker $hostTranscript $detachedRun $workerError
+          if ($nativeWorkerExit -ne 0 -or -not (Test-Path $detachedRun) -or
               (Get-Item $detachedRun).Length -eq 0) {
             throw "Relocated clang-cl worker process rejected the valid transcript: $(Get-Content $workerError -Raw)"
           }
@@ -118,10 +146,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native worker detached run did not authenticate' }
           $repeatedRun = Join-Path $processFixture 'detached run repeated.bin'
           $repeatedError = Join-Path $processFixture 'worker repeated error.txt'
-          $repeatedWorker = Start-Process -FilePath $worker -NoNewWindow -Wait -PassThru `
-            -RedirectStandardInput $hostTranscript -RedirectStandardOutput $repeatedRun `
-            -RedirectStandardError $repeatedError
-          if ($repeatedWorker.ExitCode -ne 0 -or
+          $repeatedWorkerExit = Invoke-BinaryWorker $worker $hostTranscript $repeatedRun $repeatedError
+          if ($repeatedWorkerExit -ne 0 -or
               (Get-FileHash $detachedRun -Algorithm SHA256).Hash -ne
               (Get-FileHash $repeatedRun -Algorithm SHA256).Hash) {
             throw 'Relocated clang-cl worker process was not deterministic'
@@ -129,10 +155,8 @@ jobs:
           $env:CXXLENS_PROVIDER_BINARY_DIGEST = 'sha256:' + ('f' * 64)
           $rejectedRun = Join-Path $processFixture 'rejected run.bin'
           $rejectedError = Join-Path $processFixture 'rejected error.txt'
-          $rejectedWorker = Start-Process -FilePath $worker -NoNewWindow -Wait -PassThru `
-            -RedirectStandardInput $hostTranscript -RedirectStandardOutput $rejectedRun `
-            -RedirectStandardError $rejectedError
-          if ($rejectedWorker.ExitCode -eq 0 -or
+          $rejectedWorkerExit = Invoke-BinaryWorker $worker $hostTranscript $rejectedRun $rejectedError
+          if ($rejectedWorkerExit -eq 0 -or
               ((Test-Path $rejectedRun) -and (Get-Item $rejectedRun).Length -ne 0)) {
             throw 'Relocated clang-cl worker accepted a mismatched binary identity'
           }
