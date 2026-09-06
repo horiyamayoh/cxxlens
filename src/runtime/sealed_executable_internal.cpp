@@ -106,6 +106,8 @@ namespace cxxlens::sdk::detail
 						transform(pending_);
 						pending_size_ = 0U;
 					}
+					else
+						return;
 				}
 				while (remaining.size() >= block_bytes)
 				{
@@ -336,6 +338,8 @@ namespace cxxlens::sdk::detail
 			if (request.executable_path.empty() || request.executable_path.contains('\0') ||
 				request.working_directory.contains('\0'))
 				return unexpected(sealed_error("request", "invalid-path"));
+			if (request.read_chunk_bytes == 0U)
+				return unexpected(sealed_error("request", "invalid-read-chunk"));
 			if (request.cancellation.stop_requested())
 				return unexpected(cancelled_error());
 			if (deadline_expired(request.absolute_wall_deadline_ns))
@@ -394,7 +398,8 @@ namespace cxxlens::sdk::detail
 					return unexpected(cancelled_error());
 				if (deadline_expired(request.absolute_wall_deadline_ns))
 					return unexpected(timeout_error());
-				const auto count = ::read(source.get(), buffer.data(), buffer.size());
+				const auto count = ::read(
+					source.get(), buffer.data(), std::min(buffer.size(), request.read_chunk_bytes));
 				if (count == 0)
 					break;
 				if (count < 0)

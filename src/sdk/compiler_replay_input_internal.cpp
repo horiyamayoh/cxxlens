@@ -1,4 +1,4 @@
-#include "gcc_replay_input_internal.hpp"
+#include "compiler_replay_input_internal.hpp"
 
 #include <algorithm>
 #include <array>
@@ -9,12 +9,30 @@
 #include <tuple>
 #include <utility>
 
+#include "bounded_canonical_binary_internal.hpp"
+
 namespace cxxlens::sdk::detail
 {
 	namespace
 	{
 		constexpr std::size_t maximum_requested_relations{4096U};
 		constexpr std::size_t maximum_unresolved{10000U};
+		constexpr compiler_replay_frontend_contract gcc_frontend{
+			"clang-23.1.0-gcc-mode",
+			"x86_64-linux-gnu",
+			"clang++",
+			"-fsyntax-only",
+			"clang23-gcc-replay",
+			"clang23-gcc-replay-output-normalizer.v1",
+			"clang_gcc_mode_replay"};
+		constexpr compiler_replay_frontend_contract msvc_frontend{
+			"clang-cl-23.1.0",
+			"x86_64-pc-windows-msvc",
+			"clang-cl",
+			"/Zs",
+			"clangcl23-msvc-replay",
+			"clangcl23-msvc-replay-output-normalizer.v1",
+			"clang_cl_msvc_replay"};
 
 		[[nodiscard]] error invalid(std::string field, std::string detail)
 		{
@@ -77,88 +95,6 @@ namespace cxxlens::sdk::detail
 			if (auto valid = validate_utf8_text(value); !valid)
 				return unexpected(invalid(field, "utf8"));
 			metadata_bytes += value.size();
-			return {};
-		}
-
-		[[nodiscard]] result<std::uint64_t> read_length(const std::span<const std::byte> input,
-														std::size_t& offset)
-		{
-			if (offset > input.size() || input.size() - offset < 8U)
-				return unexpected(invalid("binary", "truncated-length"));
-			std::uint64_t value{};
-			for (std::size_t index{}; index < 8U; ++index)
-				value = (value << 8U) | std::to_integer<unsigned char>(input[offset + index]);
-			offset += 8U;
-			return value;
-		}
-
-		[[nodiscard]] result<void> preflight(const std::span<const std::byte> input,
-											 const std::size_t depth,
-											 const import_limits& limits)
-		{
-			if (depth > limits.maximum_nesting_depth)
-				return unexpected(limit("binary", "nesting-depth"));
-			if (input.empty())
-				return unexpected(invalid("binary", "missing-tag"));
-			std::size_t offset{1U};
-			switch (std::to_integer<unsigned char>(input.front()))
-			{
-				case 0x00U:
-					break;
-				case 0x01U:
-					if (input.size() - offset != 1U)
-						return unexpected(invalid("binary", "boolean-size"));
-					++offset;
-					break;
-				case 0x02U:
-				{
-					if (offset == input.size())
-						return unexpected(invalid("binary", "integer-sign"));
-					++offset;
-					auto width = read_length(input, offset);
-					if (!width || *width > input.size() - offset)
-						return unexpected(width ? invalid("binary", "integer-width")
-												: std::move(width.error()));
-					offset += static_cast<std::size_t>(*width);
-					break;
-				}
-				case 0x03U:
-				case 0x04U:
-				{
-					auto size = read_length(input, offset);
-					if (!size || *size > input.size() - offset)
-						return unexpected(size ? invalid("binary", "payload-size")
-											   : std::move(size.error()));
-					offset += static_cast<std::size_t>(*size);
-					break;
-				}
-				case 0x05U:
-				{
-					auto count = read_length(input, offset);
-					if (!count || *count > (input.size() - offset) / 9U)
-						return unexpected(count ? invalid("binary", "tuple-count")
-												: std::move(count.error()));
-					for (std::uint64_t index{}; index < *count; ++index)
-					{
-						auto size = read_length(input, offset);
-						if (!size || *size == 0U || *size > input.size() - offset)
-							return unexpected(size ? invalid("binary", "tuple-item-size")
-												   : std::move(size.error()));
-						if (auto valid =
-								preflight(input.subspan(offset, static_cast<std::size_t>(*size)),
-										  depth + 1U,
-										  limits);
-							!valid)
-							return valid;
-						offset += static_cast<std::size_t>(*size);
-					}
-					break;
-				}
-				default:
-					return unexpected(invalid("binary", "unknown-tag"));
-			}
-			if (offset != input.size())
-				return unexpected(invalid("binary", "trailing-bytes"));
 			return {};
 		}
 
@@ -265,8 +201,29 @@ namespace cxxlens::sdk::detail
 		}
 	} // namespace
 
-	result<validated_gcc_replay_input> validate_gcc_replay_input(gcc_replay_input_draft draft,
-																 const import_limits limits)
+	result<compiler_replay_frontend_contract>
+	resolve_compiler_replay_frontend(const std::string_view analysis_frontend,
+									 const std::string_view target_abi,
+									 const std::span<const std::string> effective_arguments)
+	{
+		for (const auto& contract : {gcc_frontend, msvc_frontend})
+			if (analysis_frontend == contract.analysis_frontend &&
+				target_abi == contract.target_abi && effective_arguments.size() >= 2U &&
+				effective_arguments[0] == contract.executable &&
+				effective_arguments[1] == contract.mode_argument)
+				return contract;
+		return unexpected(invalid("frontend", "unsupported-tuple"));
+	}
+
+	bool
+	is_compiler_replay_observation_technique(const std::string_view observation_technique) noexcept
+	{
+		return observation_technique == gcc_frontend.observation_technique ||
+			observation_technique == msvc_frontend.observation_technique;
+	}
+
+	result<validated_compiler_replay_input>
+	validate_compiler_replay_input(compiler_replay_input_draft draft, const import_limits limits)
 	{
 		try
 		{
@@ -294,14 +251,13 @@ namespace cxxlens::sdk::detail
 			if (!digest_like(draft.capture_bundle_digest) ||
 				!digest_like(draft.replay_plan_digest) || !digest_like(draft.source_closure_digest))
 				return unexpected(invalid("digest", "spelling"));
-			if (draft.analysis_frontend != "clang-23.1.0-gcc-mode" ||
-				draft.target_abi != "x86_64-linux-gnu")
-				return unexpected(invalid("frontend", "unsupported"));
 			if (draft.effective_arguments.size() < 2U ||
-				draft.effective_arguments.size() > limits.maximum_arguments_per_unit ||
-				draft.effective_arguments[0] != "clang++" ||
-				draft.effective_arguments[1] != "-fsyntax-only")
+				draft.effective_arguments.size() > limits.maximum_arguments_per_unit)
 				return unexpected(invalid("effective_argv", "shape"));
+			if (auto valid = resolve_compiler_replay_frontend(
+					draft.analysis_frontend, draft.target_abi, draft.effective_arguments);
+				!valid)
+				return unexpected(std::move(valid.error()));
 			for (std::size_t index{}; index < draft.effective_arguments.size(); ++index)
 				if (auto valid = text(draft.effective_arguments[index],
 									  "effective_argv[" + std::to_string(index) + "]",
@@ -414,7 +370,7 @@ namespace cxxlens::sdk::detail
 			for (const auto& value : draft.unresolved)
 				unresolved.push_back(gap_value(value));
 			auto encoded = canonical_binary(canonical_value::from_tuple({
-				canonical_value::from_string("cxxlens.gcc-replay-input.v2"),
+				canonical_value::from_string("cxxlens.compiler-replay-input.v1"),
 				canonical_value::from_string(draft.imported_project_id),
 				canonical_value::from_string(draft.capture_bundle_digest),
 				canonical_value::from_string(draft.replay_plan_digest),
@@ -431,7 +387,7 @@ namespace cxxlens::sdk::detail
 			if (!encoded || encoded->size() > limits.maximum_bundle_bytes)
 				return unexpected(limit("replay_input", "bytes"));
 			auto digest = content_digest(*encoded);
-			return validated_gcc_replay_input{
+			return validated_compiler_replay_input{
 				std::move(draft), std::move(*encoded), std::move(digest)};
 		}
 		catch (const std::bad_alloc&)
@@ -444,8 +400,8 @@ namespace cxxlens::sdk::detail
 		}
 	}
 
-	result<validated_gcc_replay_input>
-	decode_gcc_replay_input(const std::span<const std::byte> bytes, const import_limits limits)
+	result<validated_compiler_replay_input>
+	decode_compiler_replay_input(const std::span<const std::byte> bytes, const import_limits limits)
 	{
 		try
 		{
@@ -453,15 +409,18 @@ namespace cxxlens::sdk::detail
 				return unexpected(std::move(valid.error()));
 			if (bytes.empty() || bytes.size() > limits.maximum_bundle_bytes)
 				return unexpected(limit("replay_input", "bytes"));
-			if (auto valid = preflight(bytes, 0U, limits); !valid)
-				return unexpected(std::move(valid.error()));
-			auto root = canonical_binary_decode(bytes);
+			auto root = decode_bounded_canonical_binary(
+				bytes,
+				{.initial_depth = 0U,
+				 .maximum_nesting_depth = limits.maximum_nesting_depth,
+				 .invalid_error_code = "application-analysis.replay-input-invalid",
+				 .limit_error_code = "application-analysis.import-limit-exceeded"});
 			if (!root)
-				return unexpected(invalid("binary", root.error().detail));
+				return unexpected(std::move(root.error()));
 			auto fields = tuple(*root, "root", 13U);
 			if (!fields)
 				return unexpected(std::move(fields.error()));
-			gcc_replay_input_draft draft;
+			compiler_replay_input_draft draft;
 			auto assign = [&](const std::size_t index,
 							  const std::string& field,
 							  std::string& destination) -> result<void>
@@ -488,7 +447,7 @@ namespace cxxlens::sdk::detail
 				 })
 				if (auto valid = assign(index, field, *destination); !valid)
 					return unexpected(std::move(valid.error()));
-			if (schema != "cxxlens.gcc-replay-input.v2")
+			if (schema != "cxxlens.compiler-replay-input.v1")
 				return unexpected(invalid("schema", "unsupported"));
 			auto arguments = tuple((**fields)[7], "effective_argv", (**fields)[7].tuple.size());
 			auto members = tuple((**fields)[9], "source_members", (**fields)[9].tuple.size());
@@ -567,7 +526,7 @@ namespace cxxlens::sdk::detail
 				}
 				draft.unresolved.push_back(std::move(value));
 			}
-			auto validated = validate_gcc_replay_input(std::move(draft), limits);
+			auto validated = validate_compiler_replay_input(std::move(draft), limits);
 			if (!validated)
 				return unexpected(std::move(validated.error()));
 			if (!std::ranges::equal(validated->bytes(), bytes))
@@ -584,13 +543,13 @@ namespace cxxlens::sdk::detail
 		}
 	}
 
-	result<validated_gcc_replay_input>
-	make_gcc_replay_input(const imported_project::implementation& project,
-						  const replay_plan::implementation& plan,
-						  const std::span<const std::string> requested_relation_descriptor_ids,
-						  const std::string_view interpretation,
-						  const import_limits limits,
-						  const std::string_view materialized_compile_unit_id)
+	result<validated_compiler_replay_input>
+	make_compiler_replay_input(const imported_project::implementation& project,
+							   const replay_plan::implementation& plan,
+							   const std::span<const std::string> requested_relation_descriptor_ids,
+							   const std::string_view interpretation,
+							   const import_limits limits,
+							   const std::string_view materialized_compile_unit_id)
 	{
 		if (!project.capture || project.capture_bundle_digest != project.capture->digest ||
 			plan.capture_bundle_digest != project.capture_bundle_digest)
@@ -609,7 +568,7 @@ namespace cxxlens::sdk::detail
 											   &decoded_capture_source_closure::id);
 		if (closure == project.capture->projection.source_closures.end())
 			return unexpected(invalid("source_closure_digest", "capture-binding-mismatch"));
-		gcc_replay_input_draft draft;
+		compiler_replay_input_draft draft;
 		draft.imported_project_id = project.id;
 		draft.capture_bundle_digest = project.capture_bundle_digest;
 		draft.replay_plan_digest = plan.digest;
@@ -625,6 +584,6 @@ namespace cxxlens::sdk::detail
 													   requested_relation_descriptor_ids.end());
 		draft.interpretation = interpretation;
 		draft.unresolved = plan.unresolved;
-		return validate_gcc_replay_input(std::move(draft), limits);
+		return validate_compiler_replay_input(std::move(draft), limits);
 	}
 } // namespace cxxlens::sdk::detail

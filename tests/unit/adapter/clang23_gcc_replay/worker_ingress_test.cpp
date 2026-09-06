@@ -5,7 +5,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
 #include <iterator>
+#include <random>
+#include <source_location>
 #include <span>
 #include <sstream>
 #include <string>
@@ -21,21 +26,28 @@
 #include <cxxlens/relations/source_file.hpp>
 #include <cxxlens/relations/source_span.hpp>
 
+#include "llvm/clang23_gcc_replay/clangcl_worker_command_internal.hpp"
 #include "llvm/clang23_gcc_replay/observation_normalizer.hpp"
 #include "llvm/clang23_gcc_replay/provider_worker.hpp"
+#include "llvm/clang23_gcc_replay/replay_frontend_authority.hpp"
 #include "llvm/clang23_gcc_replay/source_authority_binder.hpp"
 #include "llvm/clang23_gcc_replay/worker_observation_codec.hpp"
 #include "llvm/clang23_gcc_replay/worker_parser.hpp"
+#include "sdk/openssl_detached_run_crypto_internal.hpp"
 #include "sdk/provider_validation_internal.hpp"
 #include "sdk/source_identity_internal.hpp"
 
 namespace
 {
 	template <class value_type>
-	void require(const value_type& condition)
+	void require(const value_type& condition,
+				 const std::source_location location = std::source_location::current())
 	{
 		if (!static_cast<bool>(condition))
+		{
+			std::cerr << location.file_name() << ':' << location.line() << ": requirement failed\n";
 			std::abort();
+		}
 	}
 
 	[[nodiscard]] std::vector<std::byte> bytes(const std::string& value)
@@ -46,10 +58,108 @@ namespace
 		return output;
 	}
 
-	[[nodiscard]] cxxlens::sdk::detail::validated_gcc_replay_input input()
+	[[nodiscard]] std::byte hex_nibble(const char value)
+	{
+		if (value >= '0' && value <= '9')
+			return static_cast<std::byte>(value - '0');
+		if (value >= 'a' && value <= 'f')
+			return static_cast<std::byte>(value - 'a' + 10);
+		std::abort();
+	}
+
+	template <std::size_t Size>
+	[[nodiscard]] std::array<std::byte, Size> hex_bytes(const std::string_view value)
+	{
+		require(value.size() == Size * 2U);
+		std::array<std::byte, Size> output{};
+		for (std::size_t index{}; index < Size; ++index)
+			output[index] =
+				(hex_nibble(value[index * 2U]) << 4U) | hex_nibble(value[index * 2U + 1U]);
+		return output;
+	}
+
+	class temporary_directory
+	{
+	  public:
+		temporary_directory()
+		{
+			std::random_device random;
+			for (std::size_t attempt{}; attempt < 32U; ++attempt)
+			{
+				path_ = std::filesystem::temp_directory_path() /
+					("cxxlens-clangcl-command-" + std::to_string(random()) + '-' +
+					 std::to_string(random()));
+				std::error_code error;
+				if (std::filesystem::create_directory(path_, error))
+					return;
+				require(!error || error == std::errc::file_exists);
+			}
+			require(false);
+		}
+
+		~temporary_directory()
+		{
+			std::error_code ignored;
+			std::filesystem::remove_all(path_, ignored);
+		}
+
+		[[nodiscard]] const std::filesystem::path& path() const noexcept
+		{
+			return path_;
+		}
+
+	  private:
+		std::filesystem::path path_;
+	};
+
+	void write(const std::filesystem::path& path, const std::span<const std::byte> value)
+	{
+		std::ofstream output{path, std::ios::binary | std::ios::trunc};
+		output.write(reinterpret_cast<const char*>(value.data()),
+					 static_cast<std::streamsize>(value.size()));
+		require(static_cast<bool>(output));
+	}
+
+	[[nodiscard]] std::vector<std::byte> read(const std::filesystem::path& path)
+	{
+		std::ifstream input{path, std::ios::binary};
+		require(static_cast<bool>(input));
+		const std::string value{std::istreambuf_iterator<char>{input},
+								std::istreambuf_iterator<char>{}};
+		return bytes(value);
+	}
+
+	void write_environment(const std::filesystem::path& path,
+						   const std::span<const std::pair<std::string, std::string>> values)
+	{
+		std::ofstream output{path, std::ios::binary | std::ios::trunc};
+		for (const auto& [name, value] : values)
+		{
+			require(!name.empty() && !name.contains('=') && !name.contains('\n') &&
+					!value.contains('\n') && !value.contains('\r'));
+			output << name << '=' << value << '\n';
+		}
+		require(static_cast<bool>(output));
+	}
+
+	class exact_public_key_port final
+		: public cxxlens::sdk::detail::trusted_detached_run_ed25519_public_key_port
+	{
+	  public:
+		cxxlens::sdk::detail::trusted_detached_run_ed25519_public_key value;
+
+		[[nodiscard]]
+		std::optional<cxxlens::sdk::detail::trusted_detached_run_ed25519_public_key>
+		lookup(std::string_view, std::string_view, std::string_view) const override
+		{
+			return value;
+		}
+	};
+
+	[[nodiscard]] cxxlens::sdk::detail::validated_compiler_replay_input input()
 	{
 		using namespace cxxlens::sdk;
-		detail::gcc_replay_input_draft value;
+		detail::compiler_replay_input_draft value;
 		value.imported_project_id = "imported-project:sha256:" + std::string(64U, '1');
 		value.capture_bundle_digest = "sha256:" + std::string(64U, '2');
 		value.replay_plan_digest = "sha256:" + std::string(64U, '3');
@@ -105,7 +215,20 @@ namespace
 												   "source.file.v1",
 												   "source.span.v1"};
 		value.interpretation = "cc.clang23-gcc-replay-1";
-		auto validated = detail::validate_gcc_replay_input(std::move(value));
+		auto validated = detail::validate_compiler_replay_input(std::move(value));
+		require(validated);
+		return std::move(*validated);
+	}
+
+	[[nodiscard]] cxxlens::sdk::detail::validated_compiler_replay_input msvc_input()
+	{
+		auto draft = input().value();
+		draft.analysis_frontend = "clang-cl-23.1.0";
+		draft.target_abi = "x86_64-pc-windows-msvc";
+		draft.effective_arguments = {
+			"clang-cl", "/Zs", "/Iproject://include", "project://main.cpp"};
+		draft.interpretation = "cc.clangcl23-msvc-replay-1";
+		auto validated = cxxlens::sdk::detail::validate_compiler_replay_input(std::move(draft));
 		require(validated);
 		return std::move(*validated);
 	}
@@ -123,18 +246,48 @@ namespace
 		return output;
 	}
 
+	[[nodiscard]] std::string windows_sandbox_policy_digest()
+	{
+		auto policies = cxxlens::sdk::provider::builtin_sandbox_policies();
+		const auto found =
+			std::ranges::find(policies,
+							  std::string_view{"cxxlens.sandbox.windows-clangcl-appcontainer"},
+							  &cxxlens::sdk::provider::sandbox_policy::id);
+		require(found != policies.end() && found->validate());
+		return found->policy_digest();
+	}
+
+	class in_process_clangcl_child final
+		: public cxxlens::detail::clang23_gcc_replay::clangcl_sandbox_process_port
+	{
+	  public:
+		[[nodiscard]] cxxlens::sdk::result<std::vector<std::byte>>
+		execute(const std::span<const std::byte> host_transcript,
+				const cxxlens::detail::clang23_gcc_replay::provider_worker_authority& authority,
+				const cxxlens::sdk::import_limits limits) const override
+		{
+			std::istringstream input{string(host_transcript)};
+			auto result =
+				cxxlens::detail::clang23_gcc_replay::run_provider_worker(input, authority, limits);
+			if (!result)
+				return cxxlens::sdk::unexpected(std::move(result.error()));
+			return std::move(result->protocol_transcript);
+		}
+	};
+
 	[[nodiscard]] std::vector<std::byte>
-	execute_bytes(const cxxlens::sdk::detail::validated_gcc_replay_input& value)
+	execute_bytes(const cxxlens::sdk::detail::validated_compiler_replay_input& value)
 	{
 		std::istringstream source{string(value.bytes())};
 		std::ostringstream output;
-		auto result = cxxlens::detail::clang23_gcc_replay::execute_worker_ingress(source, output);
+		auto result = cxxlens::detail::clang23_gcc_replay::execute_worker_ingress(
+			source, output, cxxlens::detail::clang23_gcc_replay::gcc_replay_frontend_id);
 		require(result);
 		return bytes(output.str());
 	}
 
 	[[nodiscard]] cxxlens::detail::clang23_gcc_replay::worker_observation_output
-	execute(const cxxlens::sdk::detail::validated_gcc_replay_input& value)
+	execute(const cxxlens::sdk::detail::validated_compiler_replay_input& value)
 	{
 		auto decoded =
 			cxxlens::detail::clang23_gcc_replay::decode_worker_observations(execute_bytes(value));
@@ -143,14 +296,17 @@ namespace
 	}
 
 	[[nodiscard]] cxxlens::sdk::provider::manifest
-	provider_manifest(const std::span<const std::string> relations)
+	provider_manifest(const std::span<const std::string> relations,
+					  const bool msvc = false,
+					  std::string binary_digest = "sha256:" + std::string(64U, 'a'))
 	{
 		using namespace cxxlens::detail::clang23_gcc_replay;
 		using namespace cxxlens::sdk::provider;
 		manifest value;
-		value.provider_id = provider_id;
-		value.provider_version = provider_version;
-		value.package_identity = "cxxlens.clang23-gcc-replay.package";
+		value.provider_id = msvc ? msvc_provider_id : provider_id;
+		value.provider_version = msvc ? msvc_provider_version : provider_version;
+		value.package_identity =
+			msvc ? "cxxlens.clangcl23-msvc-replay.package" : "cxxlens.clang23-gcc-replay.package";
 		value.publisher = "cxxlens.project";
 		value.license = "Apache-2.0 WITH LLVM-exception";
 		value.protocol = {protocol_v2_major,
@@ -158,17 +314,39 @@ namespace
 						  protocol_v2_minor,
 						  {"credit-backpressure", "task-input-chunks-v2"},
 						  {}};
-		value.platform_tuples = {"linux-x86_64-clang23"};
-		value.provider_binary_digest = "sha256:" + std::string(64U, 'a');
-		value.provider_semantic_contract_digest = "semantic-v2:sha256:" + std::string(64U, 'b');
+		value.platform_tuples = {msvc ? "windows-x86_64-clangcl23" : "linux-x86_64-clang23"};
+		value.provider_binary_digest = std::move(binary_digest);
+		value.provider_semantic_contract_digest = "sha256:" + std::string(64U, 'b');
 		value.offered_relations.assign(relations.begin(), relations.end());
-		value.interpretation_domains = {"cc.clang23-gcc-replay-1"};
+		value.interpretation_domains = {msvc ? "cc.clangcl23-msvc-replay-1"
+											 : "cc.clang23-gcc-replay-1"};
 		value.invalidation_contract = "sha256:" + std::string(64U, 'c');
 		value.determinism_contract = "sha256:" + std::string(64U, 'd');
 		value.resource_class = "provider.application-analysis";
 		value.requested_qualifications = {"experimental"};
+		value.signature = "sha256:" + std::string(64U, 'f');
 		return value;
 	}
+
+	class deterministic_detached_run_signer final : public cxxlens::sdk::detail::detached_run_signer
+	{
+	  public:
+		[[nodiscard]] cxxlens::sdk::result<cxxlens::sdk::detail::detached_run_signature>
+		sign(const std::string_view scope,
+			 const std::string_view signed_subject_digest) const override
+		{
+			using namespace cxxlens::sdk;
+			using namespace cxxlens::sdk::detail;
+			if (scope != "detached-provider-run" || !signed_subject_digest.starts_with("sha256:"))
+				return unexpected(error{"test.detached-run-signing-invalid", "request", "binding"});
+			detached_run_signature output;
+			output.signer_id = "worker:clangcl23-test";
+			output.key_fingerprint = "sha256:" + std::string(64U, '6');
+			for (std::size_t index{}; index < output.signature.size(); ++index)
+				output.signature[index] = static_cast<std::byte>(index + 1U);
+			return output;
+		}
+	};
 
 	[[nodiscard]] std::vector<cxxlens::sdk::relation_descriptor>
 	frontend_descriptors(const std::span<const std::string> relations)
@@ -208,13 +386,16 @@ namespace
 	};
 
 	[[nodiscard]] provider_execution
-	execute_provider(const cxxlens::sdk::detail::validated_gcc_replay_input& value)
+	execute_provider(const cxxlens::sdk::detail::validated_compiler_replay_input& value,
+					 const bool msvc = false,
+					 std::string binary_digest = "sha256:" + std::string(64U, 'a'))
 	{
 		using namespace cxxlens::detail::clang23_gcc_replay;
 		using namespace cxxlens::sdk;
 		using namespace cxxlens::sdk::provider;
 		provider_execution execution;
-		execution.manifest = provider_manifest(value.value().requested_relation_descriptor_ids);
+		execution.manifest = provider_manifest(
+			value.value().requested_relation_descriptor_ids, msvc, std::move(binary_digest));
 		require(execution.manifest.validate());
 		execution.expectation = {execution.manifest.canonical_json(),
 								 {"task:clang23-gcc-replay",
@@ -235,7 +416,16 @@ namespace
 		auto result = execute_provider_worker(
 			input_stream,
 			output_stream,
-			{execution.expectation, execution.manifest.provider_semantic_contract_digest});
+			{execution.expectation,
+			 execution.manifest.provider_binary_digest,
+			 execution.manifest.provider_semantic_contract_digest,
+			 "semantic-v2:sha256:" + std::string(64U, 'e'),
+			 std::string{msvc ? msvc_provider_id : provider_id},
+			 msvc ? msvc_provider_version : provider_version,
+			 std::string{msvc ? msvc_replay_frontend_id : gcc_replay_frontend_id}});
+		if (!result)
+			std::cerr << result.error().code << ':' << result.error().field << ':'
+					  << result.error().detail << '\n';
 		require(result);
 		execution.output = bytes(output_stream.str());
 		return execution;
@@ -248,6 +438,29 @@ namespace
 		using namespace cxxlens::sdk::provider;
 		auto value = input();
 		auto execution = execute_provider(value);
+		std::istringstream retained_input{string(execution.host)};
+		auto retained = run_provider_worker(retained_input,
+											{execution.expectation,
+											 execution.manifest.provider_binary_digest,
+											 execution.manifest.provider_semantic_contract_digest,
+											 "semantic-v2:sha256:" + std::string(64U, 'e'),
+											 std::string{provider_id},
+											 provider_version,
+											 std::string{gcc_replay_frontend_id}});
+		require(
+			retained && retained->protocol_transcript == execution.output &&
+			retained->replay_plan_digest == value.value().replay_plan_digest &&
+			retained->validated_transcript.input_seal.task() == execution.expectation.task &&
+			retained->validated_transcript.input_seal.credit().bytes == execution.credit.bytes &&
+			retained->validated_transcript.input_seal.credit().frames == execution.credit.frames &&
+			retained->validated_transcript.input_seal.total_bytes() == value.bytes().size() &&
+			!retained->validated_transcript.input_seal.ordered_chunk_digest_set_digest().empty() &&
+			retained->validated_transcript.runtime_receipt.validate());
+		const auto& provenance = retained->validated_transcript.runtime_receipt.provenance();
+		require(provenance.provider_binary_digest == execution.manifest.provider_binary_digest &&
+				provenance.provider_semantic_contract_digest ==
+					execution.manifest.provider_semantic_contract_digest &&
+				provenance.sandbox_policy_digest == "semantic-v2:sha256:" + std::string(64U, 'e'));
 		auto frames = decode_frame_stream(execution.output);
 		require(frames && !frames->empty() && frames->back().type == message_type::task_complete);
 		auto descriptors = frontend_descriptors(value.value().requested_relation_descriptor_ids);
@@ -269,7 +482,13 @@ namespace
 					cxxlens::sdk::provider::detail::transcript_terminal_kind::complete &&
 				validated->sealed() && !validated->sealing_error());
 		const auto& sealed = *validated->sealed();
-		require(sealed.batches().size() == 6U && sealed.coverage().size() == 8U &&
+		require(sealed.batches().size() == 6U &&
+				std::ranges::all_of(sealed.batches(),
+									[](const auto& batch)
+									{
+										return batch.dependency_group_id() == "clang23-gcc-replay";
+									}) &&
+				sealed.coverage().size() == 8U &&
 				std::ranges::any_of(sealed.coverage(),
 									[](const auto& coverage)
 									{
@@ -296,7 +515,7 @@ namespace
 		auto incomplete_draft = value.value();
 		incomplete_draft.source_members.front().source_snapshot_id.reset();
 		auto incomplete =
-			cxxlens::sdk::detail::validate_gcc_replay_input(std::move(incomplete_draft));
+			cxxlens::sdk::detail::validate_compiler_replay_input(std::move(incomplete_draft));
 		require(incomplete);
 		auto partial_execution = execute_provider(*incomplete);
 		auto partial_frames = decode_frame_stream(partial_execution.output);
@@ -326,10 +545,16 @@ namespace
 		truncated.pop_back();
 		std::istringstream truncated_stream{string(truncated)};
 		std::ostringstream rejected_output;
-		auto rejected = execute_provider_worker(
-			truncated_stream,
-			rejected_output,
-			{execution.expectation, execution.manifest.provider_semantic_contract_digest});
+		auto rejected =
+			execute_provider_worker(truncated_stream,
+									rejected_output,
+									{execution.expectation,
+									 execution.manifest.provider_binary_digest,
+									 execution.manifest.provider_semantic_contract_digest,
+									 "semantic-v2:sha256:" + std::string(64U, 'e'),
+									 std::string{provider_id},
+									 provider_version,
+									 std::string{gcc_replay_frontend_id}});
 		require(!rejected && rejected_output.str().empty());
 
 		std::istringstream valid_host_stream{string(execution.host)};
@@ -337,8 +562,365 @@ namespace
 		auto invalid_authority =
 			execute_provider_worker(valid_host_stream,
 									invalid_authority_output,
-									{execution.expectation, "sha256:" + std::string(64U, 'b')});
+									{execution.expectation,
+									 execution.manifest.provider_binary_digest,
+									 "sha256:" + std::string(64U, 'c'),
+									 "semantic-v2:sha256:" + std::string(64U, 'e'),
+									 std::string{provider_id},
+									 provider_version,
+									 std::string{gcc_replay_frontend_id}});
 		require(!invalid_authority && invalid_authority_output.str().empty());
+
+		std::istringstream binary_mismatch_stream{string(execution.host)};
+		std::ostringstream binary_mismatch_output;
+		auto binary_mismatch =
+			execute_provider_worker(binary_mismatch_stream,
+									binary_mismatch_output,
+									{execution.expectation,
+									 "sha256:" + std::string(64U, 'f'),
+									 execution.manifest.provider_semantic_contract_digest,
+									 "semantic-v2:sha256:" + std::string(64U, 'e'),
+									 std::string{provider_id},
+									 provider_version,
+									 std::string{gcc_replay_frontend_id}});
+		require(!binary_mismatch && binary_mismatch_output.str().empty() &&
+				binary_mismatch.error().detail == "worker-identity-mismatch");
+	}
+
+	void gcc_worker_rejects_an_admitted_msvc_frontend_tuple_without_output()
+	{
+		using namespace cxxlens::detail::clang23_gcc_replay;
+		using namespace cxxlens::sdk::provider;
+		auto value = msvc_input();
+
+		std::istringstream raw_input{string(value.bytes())};
+		std::ostringstream raw_output;
+		auto raw = execute_worker_ingress(raw_input, raw_output, gcc_replay_frontend_id);
+		require(!raw && raw.error().field == "replay_input" &&
+				raw.error().detail == "wrong-worker-frontend" && raw_output.str().empty());
+
+		auto manifest = provider_manifest(value.value().requested_relation_descriptor_ids);
+		require(manifest.validate());
+		host_transcript_expectation expectation{manifest.canonical_json(),
+												{"task:clang23-gcc-replay",
+												 std::string{value.input_digest()},
+												 "semantic-v2:sha256:" + std::string(64U, '1'),
+												 "semantic-v2:sha256:" + std::string(64U, '2'),
+												 "sha256:" + std::string(64U, '3')},
+												{}};
+		protocol_credit credit{std::uint64_t{64U} * 1024U * 1024U, 65536U};
+		auto host = encode_host_transcript(
+			{expectation,
+			 credit,
+			 std::vector<std::byte>{value.bytes().begin(), value.bytes().end()}});
+		require(host);
+		std::istringstream protocol_input{string(*host)};
+		std::ostringstream protocol_output;
+		auto protocol = execute_provider_worker(protocol_input,
+												protocol_output,
+												{expectation,
+												 manifest.provider_binary_digest,
+												 manifest.provider_semantic_contract_digest,
+												 "semantic-v2:sha256:" + std::string(64U, 'e'),
+												 std::string{provider_id},
+												 provider_version,
+												 std::string{gcc_replay_frontend_id}});
+		require(!protocol && protocol.error().field == "replay_input" &&
+				protocol.error().detail == "wrong-worker-frontend" &&
+				protocol_output.str().empty());
+	}
+
+	void msvc_worker_emits_protocol_with_its_own_provenance()
+	{
+		using namespace cxxlens::detail::clang23_gcc_replay;
+		using namespace cxxlens::sdk::provider;
+		auto execution = execute_provider(msvc_input(), true);
+		auto frames = decode_frame_stream(execution.output);
+		require(frames && !frames->empty() && frames->back().type == message_type::task_complete);
+		const auto evidence_frame =
+			std::ranges::find(*frames, message_type::progress, &frame::type);
+		require(evidence_frame != frames->end());
+		auto evidence = decode_evidence_metadata(evidence_frame->control);
+		require(evidence && evidence->size() == 1U && (*evidence)[0].producer == msvc_provider_id &&
+				(*evidence)[0].kind == "application-analysis.replay");
+	}
+
+	void msvc_worker_seals_only_validated_protocol_into_a_detached_run()
+	{
+		using namespace cxxlens::detail::clang23_gcc_replay;
+		using namespace cxxlens::sdk;
+		auto value = msvc_input();
+		auto execution = execute_provider(value, true);
+		const provider_worker_authority worker_authority{
+			execution.expectation,
+			execution.manifest.provider_binary_digest,
+			execution.manifest.provider_semantic_contract_digest,
+			"semantic-v2:sha256:" + std::string(64U, 'e'),
+			std::string{msvc_provider_id},
+			msvc_provider_version,
+			std::string{msvc_replay_frontend_id}};
+		require(execution.manifest.signature);
+		const detached_provider_worker_authority authority{
+			worker_authority, *execution.manifest.signature, "not-revoked"};
+		deterministic_detached_run_signer signer;
+		std::istringstream retained_input{string(execution.host)};
+		auto sealed = run_detached_provider_worker(retained_input, authority, signer);
+		require(sealed && sealed->value().task_id == execution.expectation.task.task_id &&
+				sealed->value().task_input_digest == value.input_digest() &&
+				sealed->value().replay_plan_digest == value.value().replay_plan_digest &&
+				sealed->value().provider.provider_id == msvc_provider_id &&
+				sealed->value().provider.signature_digest == *execution.manifest.signature &&
+				sealed->value().provider.revocation_state == "not-revoked" &&
+				sealed->value().authentication.signer_id == "worker:clangcl23-test" &&
+				sealed->value().protocol_transcript == execution.output);
+		auto decoded = detail::decode_detached_provider_run(sealed->bytes());
+		require(decoded && decoded->digest() == sealed->digest());
+
+		auto revalidated =
+			validate_provider_worker_transcript(execution.host, execution.output, worker_authority);
+		require(revalidated && revalidated->protocol_transcript == execution.output &&
+				revalidated->replay_plan_digest == value.value().replay_plan_digest &&
+				revalidated->validated_transcript.runtime_receipt.validate() &&
+				revalidated->validated_transcript.input_seal.task() == execution.expectation.task);
+		auto sealed_existing = seal_detached_provider_worker_transcript(
+			execution.host, execution.output, authority, signer);
+		require(sealed_existing && std::ranges::equal(sealed_existing->bytes(), sealed->bytes()));
+
+		auto tampered_protocol = execution.output;
+		tampered_protocol.back() ^= std::byte{1U};
+		auto tampered = seal_detached_provider_worker_transcript(
+			execution.host, tampered_protocol, authority, signer);
+		require(!tampered);
+		auto truncated_protocol = execution.output;
+		truncated_protocol.pop_back();
+		auto truncated = validate_provider_worker_transcript(
+			execution.host, truncated_protocol, worker_authority);
+		require(!truncated);
+		auto wrong_task = worker_authority;
+		wrong_task.host.task.task_id = "task:foreign-clangcl-run";
+		auto mismatched = validate_provider_worker_transcript(
+			execution.host, execution.output, std::move(wrong_task));
+		require(!mismatched);
+
+		std::istringstream emitted_input{string(execution.host)};
+		std::ostringstream emitted_output;
+		auto emitted =
+			execute_detached_provider_worker(emitted_input, emitted_output, authority, signer);
+		require(emitted && std::ranges::equal(bytes(emitted_output.str()), sealed->bytes()));
+
+		auto wrong_signature = authority;
+		wrong_signature.provider_signature_digest = "sha256:" + std::string(64U, '7');
+		std::istringstream wrong_signature_input{string(execution.host)};
+		std::ostringstream wrong_signature_output;
+		auto signature_rejected = execute_detached_provider_worker(
+			wrong_signature_input, wrong_signature_output, wrong_signature, signer);
+		require(!signature_rejected && wrong_signature_output.str().empty() &&
+				signature_rejected.error().field == "provider_signature");
+
+		auto revoked = authority;
+		revoked.provider_revocation_state = "revoked";
+		std::istringstream revoked_input{string(execution.host)};
+		std::ostringstream revoked_output;
+		auto revocation_rejected =
+			execute_detached_provider_worker(revoked_input, revoked_output, revoked, signer);
+		require(!revocation_rejected && revoked_output.str().empty() &&
+				revocation_rejected.error().field == "provider_revocation");
+	}
+
+	void clangcl_command_emits_one_cryptographically_authenticated_envelope()
+	{
+		using namespace cxxlens::detail::clang23_gcc_replay;
+		using namespace cxxlens::sdk;
+		using namespace cxxlens::sdk::detail;
+		auto value = msvc_input();
+		auto execution = execute_provider(value, true);
+		require(execution.manifest.signature);
+
+		const temporary_directory directory;
+		const auto private_path = directory.path() / "worker private key.raw";
+		const auto public_path = directory.path() / "worker public key.raw";
+		const auto private_key = hex_bytes<detached_run_ed25519_private_key_bytes>(
+			"9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60");
+		const auto public_key = hex_bytes<detached_run_ed25519_public_key_bytes>(
+			"d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
+		write(private_path, private_key);
+		write(public_path, public_key);
+
+		clangcl_worker_launch_configuration configuration{
+			execution.manifest.canonical_json(),
+			std::string{msvc_provider_id},
+			execution.manifest.provider_binary_digest,
+			execution.manifest.provider_semantic_contract_digest,
+			windows_sandbox_policy_digest(),
+			execution.expectation.task.task_id,
+			execution.expectation.task.task_input_digest,
+			execution.expectation.task.normalized_invocation_digest,
+			execution.expectation.task.toolchain_digest,
+			execution.expectation.task.environment_digest,
+			"2",
+			"0",
+			*execution.manifest.signature,
+			"not-revoked",
+			"worker:clangcl23-command-test",
+			private_path.string(),
+			public_path.string()};
+		std::istringstream input_stream{string(execution.host)};
+		std::ostringstream output_stream;
+		const in_process_clangcl_child child;
+		auto result =
+			execute_clangcl_worker_command(input_stream, output_stream, configuration, child);
+		if (!result)
+			std::cerr << result.error().code << ':' << result.error().field << ':'
+					  << result.error().detail << '\n';
+		require(result);
+		auto run = decode_detached_provider_run(bytes(output_stream.str()));
+		require(run && run->value().task_input_digest == value.input_digest() &&
+				run->value().provider.provider_id == msvc_provider_id &&
+				run->value().provider.signature_digest == *execution.manifest.signature &&
+				run->value().provider.revocation_state == "not-revoked" &&
+				run->value().authentication.signer_id == "worker:clangcl23-command-test");
+
+		exact_public_key_port trust;
+		trust.value = {detached_run_public_key_state::trusted,
+					   "detached-provider-run",
+					   run->value().authentication.signer_id,
+					   run->value().authentication.key_fingerprint,
+					   public_key,
+					   "sha256:" + std::string(64U, 'b')};
+		const openssl_detached_run_signature_verifier verifier{trust};
+		const auto authenticated =
+			verifier.verify("detached-provider-run",
+							run->value().authentication.signer_id,
+							run->value().authentication.key_fingerprint,
+							run->value().authentication.signed_subject_digest,
+							run->value().authentication.signature,
+							run->value().authentication.signature_digest);
+		require(authenticated.verdict == detached_run_signature_verdict::verified);
+
+		auto wrong_protocol = configuration;
+		wrong_protocol.protocol_major = "3";
+		std::istringstream wrong_input{string(execution.host)};
+		std::ostringstream wrong_output;
+		auto rejected = execute_clangcl_worker_command(
+			wrong_input, wrong_output, std::move(wrong_protocol), child);
+		require(!rejected && rejected.error().field == "protocol_version" &&
+				wrong_output.str().empty());
+
+		std::error_code ignored;
+		std::filesystem::remove(private_path, ignored);
+		std::istringstream missing_key_input{string(execution.host)};
+		std::ostringstream missing_key_output;
+		auto missing_key = execute_clangcl_worker_command(
+			missing_key_input, missing_key_output, std::move(configuration), child);
+		require(!missing_key && missing_key.error().field == "private_key_file" &&
+				missing_key_output.str().empty());
+	}
+
+	void emit_clangcl_process_fixture(const std::filesystem::path& directory,
+									  const std::string& worker_binary_digest)
+	{
+		using namespace cxxlens::detail::clang23_gcc_replay;
+		using namespace cxxlens::sdk::detail;
+		std::error_code error;
+		std::filesystem::create_directories(directory, error);
+		require(!error);
+
+		auto value = msvc_input();
+		auto execution = execute_provider(value, true, worker_binary_digest);
+		require(execution.manifest.signature);
+		const auto private_key = hex_bytes<detached_run_ed25519_private_key_bytes>(
+			"9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60");
+		const auto public_key = hex_bytes<detached_run_ed25519_public_key_bytes>(
+			"d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
+		const auto private_path = directory / "worker private key.raw";
+		const auto public_path = directory / "worker public key.raw";
+		write(directory / "host transcript.bin", execution.host);
+		write(private_path, private_key);
+		write(public_path, public_key);
+		const std::vector<std::pair<std::string, std::string>> environment{
+			{"CXXLENS_PROVIDER_MANIFEST", execution.manifest.canonical_json()},
+			{"CXXLENS_PROVIDER_ID", std::string{msvc_provider_id}},
+			{"CXXLENS_PROVIDER_BINARY_DIGEST", worker_binary_digest},
+			{"CXXLENS_PROVIDER_SEMANTIC_CONTRACT_DIGEST",
+			 execution.manifest.provider_semantic_contract_digest},
+			{"CXXLENS_PROVIDER_SANDBOX_POLICY_DIGEST", windows_sandbox_policy_digest()},
+			{"CXXLENS_PROVIDER_TASK_ID", execution.expectation.task.task_id},
+			{"CXXLENS_PROVIDER_TASK_INPUT_DIGEST", execution.expectation.task.task_input_digest},
+			{"CXXLENS_PROVIDER_NORMALIZED_INVOCATION_DIGEST",
+			 execution.expectation.task.normalized_invocation_digest},
+			{"CXXLENS_PROVIDER_TOOLCHAIN_DIGEST", execution.expectation.task.toolchain_digest},
+			{"CXXLENS_PROVIDER_ENVIRONMENT_DIGEST", execution.expectation.task.environment_digest},
+			{"CXXLENS_PROVIDER_PROTOCOL_MAJOR", "2"},
+			{"CXXLENS_PROVIDER_PROTOCOL_MINOR", "0"},
+			{"CXXLENS_PROVIDER_SIGNATURE_DIGEST", *execution.manifest.signature},
+			{"CXXLENS_PROVIDER_REVOCATION_STATE", "not-revoked"},
+			{"CXXLENS_DETACHED_RUN_SIGNER_ID", "worker:native-clangcl23-process-test"},
+			{"CXXLENS_DETACHED_RUN_PRIVATE_KEY_FILE", private_path.string()},
+			{"CXXLENS_DETACHED_RUN_PUBLIC_KEY_FILE", public_path.string()},
+		};
+		write_environment(directory / "worker environment.txt", environment);
+	}
+
+	void verify_clangcl_process_output(const std::filesystem::path& directory,
+									   const std::string& worker_binary_digest)
+	{
+		using namespace cxxlens::detail::clang23_gcc_replay;
+		using namespace cxxlens::sdk;
+		using namespace cxxlens::sdk::detail;
+		auto run = decode_detached_provider_run(read(directory / "detached run.bin"));
+		require(run);
+		auto value = msvc_input();
+		require(run->value().task_input_digest == value.input_digest() &&
+				run->value().replay_plan_digest == value.value().replay_plan_digest &&
+				run->value().provider.provider_id == msvc_provider_id &&
+				run->value().provider.provider_version == msvc_provider_version &&
+				run->value().provider.binary_digest == worker_binary_digest &&
+				run->value().provider.revocation_state == "not-revoked" &&
+				run->value().authentication.signer_id == "worker:native-clangcl23-process-test");
+
+		const auto public_key = hex_bytes<detached_run_ed25519_public_key_bytes>(
+			"d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
+		exact_public_key_port trust;
+		trust.value = {detached_run_public_key_state::trusted,
+					   "detached-provider-run",
+					   run->value().authentication.signer_id,
+					   run->value().authentication.key_fingerprint,
+					   public_key,
+					   "sha256:" + std::string(64U, 'b')};
+		const openssl_detached_run_signature_verifier verifier{trust};
+		const auto authenticated =
+			verifier.verify("detached-provider-run",
+							run->value().authentication.signer_id,
+							run->value().authentication.key_fingerprint,
+							run->value().authentication.signed_subject_digest,
+							run->value().authentication.signature,
+							run->value().authentication.signature_digest);
+		require(authenticated.verdict == detached_run_signature_verdict::verified);
+		auto frames = provider::decode_frame_stream(run->value().protocol_transcript);
+		require(frames && !frames->empty() &&
+				frames->back().type == provider::message_type::task_complete);
+	}
+
+	void msvc_worker_authority_parses_only_the_admitted_clangcl_tuple()
+	{
+		using namespace cxxlens::detail::clang23_gcc_replay;
+		auto value = msvc_input();
+		std::istringstream source{string(value.bytes())};
+		std::ostringstream output;
+		auto accepted = execute_worker_ingress(source, output, msvc_replay_frontend_id);
+		require(accepted);
+		auto decoded = decode_worker_observations(bytes(output.str()));
+		require(decoded && decoded->replay_input_digest == value.input_digest() &&
+				decoded->error_count == 0U && decoded->declaration_count > 0U &&
+				!decoded->observations.entities.empty());
+
+		auto gcc = input();
+		std::istringstream foreign_source{string(gcc.bytes())};
+		std::ostringstream foreign_output;
+		auto rejected =
+			execute_worker_ingress(foreign_source, foreign_output, msvc_replay_frontend_id);
+		require(!rejected && rejected.error().field == "replay_input" &&
+				rejected.error().detail == "wrong-worker-frontend" && foreign_output.str().empty());
 	}
 
 	void valid_input_emits_bound_detached_observations()
@@ -409,7 +991,9 @@ namespace
 		std::istringstream truncated{malformed};
 		std::ostringstream truncated_output;
 		auto rejected = cxxlens::detail::clang23_gcc_replay::execute_worker_ingress(
-			truncated, truncated_output);
+			truncated,
+			truncated_output,
+			cxxlens::detail::clang23_gcc_replay::gcc_replay_frontend_id);
 		require(!rejected && truncated_output.str().empty());
 
 		cxxlens::sdk::import_limits limits;
@@ -417,7 +1001,10 @@ namespace
 		std::istringstream large{string(value.bytes())};
 		std::ostringstream large_output;
 		auto bounded = cxxlens::detail::clang23_gcc_replay::execute_worker_ingress(
-			large, large_output, limits);
+			large,
+			large_output,
+			cxxlens::detail::clang23_gcc_replay::gcc_replay_frontend_id,
+			limits);
 		require(!bounded && bounded.error().code == "application-analysis.import-limit-exceeded" &&
 				bounded.error().detail == "input-bytes");
 		require(large_output.str().empty());
@@ -516,11 +1103,11 @@ namespace
 				invalid_limits.error().detail == "outside-product-bound");
 
 		using namespace cxxlens::sdk;
-		detail::gcc_replay_input_draft invalid = value.value();
+		detail::compiler_replay_input_draft invalid = value.value();
 		invalid.source_members.front().content = bytes("int main( { return 0; }\n");
 		invalid.source_members.front().content_digest =
 			content_digest(invalid.source_members.front().content);
-		auto syntax_input = detail::validate_gcc_replay_input(std::move(invalid));
+		auto syntax_input = detail::validate_compiler_replay_input(std::move(invalid));
 		require(syntax_input);
 		auto rejected = cxxlens::detail::clang23_gcc_replay::parse_replay_input(*syntax_input);
 		require(rejected &&
@@ -530,15 +1117,17 @@ namespace
 		std::istringstream syntax_stream{string(syntax_input->bytes())};
 		std::ostringstream syntax_output;
 		auto worker_rejected = cxxlens::detail::clang23_gcc_replay::execute_worker_ingress(
-			syntax_stream, syntax_output);
+			syntax_stream,
+			syntax_output,
+			cxxlens::detail::clang23_gcc_replay::gcc_replay_frontend_id);
 		require(!worker_rejected && worker_rejected.error().field == "translation_unit" &&
 				syntax_output.str().empty());
 
-		detail::gcc_replay_input_draft ambient = value.value();
+		detail::compiler_replay_input_draft ambient = value.value();
 		ambient.source_members.front().content = bytes("#include \"/etc/passwd\"\n");
 		ambient.source_members.front().content_digest =
 			content_digest(ambient.source_members.front().content);
-		auto ambient_input = detail::validate_gcc_replay_input(std::move(ambient));
+		auto ambient_input = detail::validate_compiler_replay_input(std::move(ambient));
 		require(ambient_input);
 		auto unavailable = cxxlens::detail::clang23_gcc_replay::parse_replay_input(*ambient_input);
 		require(unavailable &&
@@ -590,24 +1179,24 @@ namespace
 		require(!rejected_origin && rejected_origin.error().detail == "origin-kind-invalid");
 
 		using namespace cxxlens::sdk;
-		detail::gcc_replay_input_draft unavailable = value.value();
+		detail::compiler_replay_input_draft unavailable = value.value();
 		unavailable.source_members.front().source_snapshot_id.reset();
-		auto unbound_input = detail::validate_gcc_replay_input(std::move(unavailable));
+		auto unbound_input = detail::validate_compiler_replay_input(std::move(unavailable));
 		require(unbound_input);
 		auto unbound = bind_observation_sources(*unbound_input, detached.observations);
 		require(!unbound && unbound.error().detail == "capture-identity-unavailable");
 
-		detail::gcc_replay_input_draft forged = value.value();
+		detail::compiler_replay_input_draft forged = value.value();
 		forged.source_members.front().file_id = "file:sha256:" + std::string(64U, 'a');
-		auto forged_input = detail::validate_gcc_replay_input(std::move(forged));
+		auto forged_input = detail::validate_compiler_replay_input(std::move(forged));
 		require(forged_input);
 		auto mismatch = bind_observation_sources(*forged_input, detached.observations);
 		require(!mismatch && mismatch.error().detail == "file-identity-mismatch");
 
-		detail::gcc_replay_input_draft stale = value.value();
+		detail::compiler_replay_input_draft stale = value.value();
 		stale.source_members.front().source_snapshot_id =
 			"source-snapshot:sha256:" + std::string(64U, 'b');
-		auto stale_input = detail::validate_gcc_replay_input(std::move(stale));
+		auto stale_input = detail::validate_compiler_replay_input(std::move(stale));
 		require(stale_input);
 		auto stale_snapshot = bind_observation_sources(*stale_input, detached.observations);
 		require(!stale_snapshot && stale_snapshot.error().detail == "snapshot-identity-mismatch");
@@ -630,7 +1219,7 @@ namespace
 			main->file_id, main->content_digest, *main->encoding);
 		require(snapshot);
 		main->source_snapshot_id = std::move(*snapshot);
-		auto value = sdk::detail::validate_gcc_replay_input(std::move(draft));
+		auto value = sdk::detail::validate_compiler_replay_input(std::move(draft));
 		require(value);
 		auto detached = execute(*value);
 		require(detached.observations.direct_calls.size() == 2U);
@@ -735,7 +1324,7 @@ namespace
 		auto unrequested_draft = value.value();
 		unrequested_draft.requested_relation_descriptor_ids = {"source.file.v1"};
 		auto unrequested_input =
-			cxxlens::sdk::detail::validate_gcc_replay_input(std::move(unrequested_draft));
+			cxxlens::sdk::detail::validate_compiler_replay_input(std::move(unrequested_draft));
 		require(unrequested_input);
 		auto unrequested_worker = detached;
 		unrequested_worker.replay_input_digest = std::string{unrequested_input->input_digest()};
@@ -747,7 +1336,7 @@ namespace
 		auto entity_only_draft = value.value();
 		entity_only_draft.requested_relation_descriptor_ids = {"cc.entity.v1"};
 		auto entity_only_input =
-			cxxlens::sdk::detail::validate_gcc_replay_input(std::move(entity_only_draft));
+			cxxlens::sdk::detail::validate_compiler_replay_input(std::move(entity_only_draft));
 		require(entity_only_input);
 		auto entity_only_worker = detached;
 		entity_only_worker.replay_input_digest = std::string{entity_only_input->input_digest()};
@@ -760,7 +1349,7 @@ namespace
 		auto declaration_only_draft = value.value();
 		declaration_only_draft.requested_relation_descriptor_ids = {"cc.declaration.v1"};
 		auto declaration_only_input =
-			cxxlens::sdk::detail::validate_gcc_replay_input(std::move(declaration_only_draft));
+			cxxlens::sdk::detail::validate_compiler_replay_input(std::move(declaration_only_draft));
 		require(declaration_only_input);
 		auto declaration_only_worker = detached;
 		declaration_only_worker.replay_input_digest =
@@ -774,7 +1363,7 @@ namespace
 		auto type_only_draft = value.value();
 		type_only_draft.requested_relation_descriptor_ids = {"cc.type.v1"};
 		auto type_only_input =
-			cxxlens::sdk::detail::validate_gcc_replay_input(std::move(type_only_draft));
+			cxxlens::sdk::detail::validate_compiler_replay_input(std::move(type_only_draft));
 		require(type_only_input);
 		auto type_only_worker = detached;
 		type_only_worker.replay_input_digest = std::string{type_only_input->input_digest()};
@@ -794,7 +1383,7 @@ namespace
 		calls_only_draft.requested_relation_descriptor_ids = {"cc.call_direct_target.v1",
 															  "cc.call_site.v1"};
 		auto calls_only_input =
-			cxxlens::sdk::detail::validate_gcc_replay_input(std::move(calls_only_draft));
+			cxxlens::sdk::detail::validate_compiler_replay_input(std::move(calls_only_draft));
 		require(calls_only_input);
 		auto calls_only_worker = detached;
 		calls_only_worker.replay_input_digest = std::string{calls_only_input->input_digest()};
@@ -824,9 +1413,26 @@ namespace
 	}
 } // namespace
 
-int main()
+int main(const int argc, char** argv)
 {
+	if (argc == 4 && std::string_view{argv[1]} == "--emit-process-fixture")
+	{
+		emit_clangcl_process_fixture(argv[2], argv[3]);
+		return EXIT_SUCCESS;
+	}
+	if (argc == 4 && std::string_view{argv[1]} == "--verify-process-output")
+	{
+		verify_clangcl_process_output(argv[2], argv[3]);
+		return EXIT_SUCCESS;
+	}
+	if (argc != 1)
+		return EXIT_FAILURE;
 	provider_worker_emits_one_validated_protocol_authority();
+	gcc_worker_rejects_an_admitted_msvc_frontend_tuple_without_output();
+	msvc_worker_emits_protocol_with_its_own_provenance();
+	msvc_worker_seals_only_validated_protocol_into_a_detached_run();
+	clangcl_command_emits_one_cryptographically_authenticated_envelope();
+	msvc_worker_authority_parses_only_the_admitted_clangcl_tuple();
 	valid_input_emits_bound_detached_observations();
 	worker_output_codec_is_bounded_and_strict();
 	malformed_and_oversized_input_fail_without_output();
@@ -834,4 +1440,5 @@ int main()
 	observations_bind_only_to_capture_source_authority();
 	same_expansion_macro_calls_retain_distinct_ordered_origins();
 	detached_observations_normalize_to_existing_relation_contracts();
+	return EXIT_SUCCESS;
 }

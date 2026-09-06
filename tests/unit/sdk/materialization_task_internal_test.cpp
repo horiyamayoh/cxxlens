@@ -553,8 +553,13 @@ namespace
 
 		auto runtime = runtime_for(*task);
 		runtime.runtime_receipt_digest = semantic('e');
-		auto prepared = prepare_sealed_application_materialization(
-			engine, *task, *transcript->sealed(), runtime, semantic('e'), semantic('f'));
+		auto prepared = prepare_sealed_application_materialization(engine,
+																   *task,
+																   *transcript->sealed(),
+																   runtime,
+																   semantic('e'),
+																   semantic('f'),
+																   "clang_gcc_mode_replay");
 		require(prepared.has_value());
 		auto store = make_in_memory_snapshot_store(engine);
 		require(store.has_value() && !store->current(task->value().publication.snapshot.series));
@@ -568,16 +573,37 @@ namespace
 				adopted->coverage.size() == 2U && adopted->unresolved.empty());
 		auto repeated_store = make_in_memory_snapshot_store(engine);
 		require(repeated_store.has_value());
-		auto repeated_prepared = prepare_sealed_application_materialization(
-			engine, *task, *transcript->sealed(), runtime, semantic('e'), semantic('f'));
+		auto repeated_prepared =
+			prepare_sealed_application_materialization(engine,
+													   *task,
+													   *transcript->sealed(),
+													   runtime,
+													   semantic('e'),
+													   semantic('f'),
+													   "clang_gcc_mode_replay");
 		require(repeated_prepared.has_value());
 		auto repeated = publish_prepared_application_materializations(
 			engine, *repeated_store, {std::move(*repeated_prepared)});
 		require(repeated &&
 				repeated->publication.snapshot.id() == adopted->publication.snapshot.id());
+		auto unsupported_technique =
+			prepare_sealed_application_materialization(engine,
+													   *task,
+													   *transcript->sealed(),
+													   runtime,
+													   semantic('e'),
+													   semantic('f'),
+													   "unknown_replay");
+		require(!unsupported_technique &&
+				unsupported_technique.error().field == "observation_technique");
 
-		auto rejected = prepare_sealed_application_materialization(
-			engine, *task, *transcript->sealed(), std::move(runtime), semantic('0'), semantic('f'));
+		auto rejected = prepare_sealed_application_materialization(engine,
+																   *task,
+																   *transcript->sealed(),
+																   std::move(runtime),
+																   semantic('0'),
+																   semantic('f'),
+																   "clang_gcc_mode_replay");
 		require(!rejected && rejected.error().field == "runtime_receipt");
 	}
 } // namespace

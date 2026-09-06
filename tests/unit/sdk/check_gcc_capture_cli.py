@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import hashlib
 import json
 import os
 import pathlib
@@ -34,6 +35,15 @@ def run_capture(cli: pathlib.Path, root: pathlib.Path, compiler: pathlib.Path):
         capture_output=True,
         check=False,
         timeout=45,
+    )
+
+
+def run_import(cli: pathlib.Path, bundle: pathlib.Path):
+    return subprocess.run(
+        [str(cli), "import", "--bundle", str(bundle)],
+        capture_output=True,
+        check=False,
+        timeout=SHORT_PROCESS_TIMEOUT,
     )
 
 
@@ -245,6 +255,85 @@ def main() -> int:
 
         bundle_path = root / "capture.cxxlens"
         bundle_path.write_bytes(first.stdout)
+        imported_first = run_import(cli, bundle_path)
+        imported_second = run_import(cli, bundle_path)
+        require(imported_first.returncode == 0, f"CLI import failed: {imported_first.stderr!r}")
+        require(
+            imported_first.stdout and imported_first.stdout == imported_second.stdout,
+            "CLI import projection was empty or nondeterministic",
+        )
+        require(
+            imported_first.stderr == b"" and imported_second.stderr == b"",
+            "successful CLI import wrote diagnostics",
+        )
+        projection = json.loads(imported_first.stdout)
+        require(set(projection) == {"capture", "imported_project"}, "unexpected import projection")
+        require(projection["capture"]["adapter"] == "compile-commands", "wrong adapter")
+        require(projection["capture"]["compile_unit_count"] == 2, "wrong capture unit count")
+        require(
+            projection["capture"]["production_compiler"].startswith("gcc-16.2.0"),
+            "wrong production compiler",
+        )
+        require(
+            projection["capture"]["digest"]
+            == projection["imported_project"]["capture_digest"],
+            "capture identity was reconstructed",
+        )
+        require(
+            projection["imported_project"]["project_id"].startswith("imported-project:")
+            and len(projection["imported_project"]["replay_plans"]) == 2,
+            "wrong imported project projection",
+        )
+
+        malformed_path = root / "malformed.cxxlens"
+        malformed_path.write_bytes(first.stdout[:-1])
+        malformed = run_import(cli, malformed_path)
+        require(
+            malformed.returncode == 2
+            and malformed.stdout == b""
+            and b"application-analysis" in malformed.stderr,
+            "truncated bundle was accepted by CLI import",
+        )
+        for invalid_arguments in (
+            [str(cli), "import"],
+            [str(cli), "import", "--bundle", str(bundle_path), "--bundle", str(bundle_path)],
+            [str(cli), "import", "--unknown", str(bundle_path)],
+        ):
+            invalid_import = subprocess.run(
+                invalid_arguments,
+                capture_output=True,
+                check=False,
+                timeout=SHORT_PROCESS_TIMEOUT,
+            )
+            require(
+                invalid_import.returncode == 2 and invalid_import.stdout == b"",
+                "invalid CLI import arguments were accepted",
+            )
+        for invalid_run_arguments in (
+            [str(cli), "run", "--bundle", str(bundle_path)],
+            [
+                str(cli),
+                "run",
+                "--bundle",
+                str(bundle_path),
+                "--worker",
+                "/worker",
+                "--trusted-worker-digest",
+                "sha256:" + "0" * 64,
+                "--worker",
+                "/duplicate",
+            ],
+        ):
+            invalid_run = subprocess.run(
+                invalid_run_arguments,
+                capture_output=True,
+                check=False,
+                timeout=SHORT_PROCESS_TIMEOUT,
+            )
+            require(
+                invalid_run.returncode == 2 and invalid_run.stdout == b"",
+                "invalid CLI run arguments were accepted",
+            )
         admitted = subprocess.run(
             [
                 str(consumer),
@@ -258,6 +347,95 @@ def main() -> int:
         require(admitted.returncode == 0, f"SDK rejected CLI bundle: {admitted.stderr!r}")
         if materializer is not None and worker is not None:
             run_materializer(materializer, bundle_path, worker, 2)
+            worker_digest = "sha256:" + hashlib.sha256(worker.read_bytes()).hexdigest()
+            run_result = subprocess.run(
+                [
+                    str(cli),
+                    "run",
+                    "--bundle",
+                    str(bundle_path),
+                    "--worker",
+                    str(worker),
+                    "--trusted-worker-digest",
+                    worker_digest,
+                ],
+                capture_output=True,
+                check=False,
+                timeout=60,
+            )
+            repeated_run = subprocess.run(
+                run_result.args,
+                capture_output=True,
+                check=False,
+                timeout=60,
+            )
+            require(
+                run_result.returncode == 0 and repeated_run.returncode == 0,
+                f"CLI run failed: stdout={run_result.stdout!r} stderr={run_result.stderr!r}",
+            )
+            require(
+                run_result.stderr == b""
+                and repeated_run.stderr == b""
+                and run_result.stdout == repeated_run.stdout,
+                "successful CLI run wrote diagnostics or was nondeterministic",
+            )
+            run_projection = json.loads(run_result.stdout)
+            expected_semantics = "sha256:" + hashlib.sha256(
+                b"cxxlens.clang23-gcc-replay-provider.v1\nclang-23.1.0-gcc-mode"
+            ).hexdigest()
+            require(
+                run_projection["materialization"]["terminal"] == "published_partial"
+                and run_projection["materialization"]["snapshot_id"]
+                and run_projection["materialization"]["coverage"]
+                and run_projection["materialization"]["provenance"]["provider_binary_digest"]
+                == worker_digest,
+                "CLI run lost its terminal, snapshot, or provider identity",
+            )
+            require(
+                run_projection["materialization"]["provenance"][
+                    "provider_semantics_digest"
+                ]
+                == expected_semantics,
+                "CLI run used an unbound provider semantic contract",
+            )
+            query_rows = {
+                query["relation_id"]: query["row_count"]
+                for query in run_projection["queries"]
+            }
+            require(
+                len(query_rows) == 11
+                and query_rows["source.file.v1"] >= 3
+                and query_rows["cc.entity.v1"] >= 2,
+                "CLI run did not query the initial relation subset",
+            )
+            untrusted = subprocess.run(
+                [
+                    str(cli),
+                    "run",
+                    "--bundle",
+                    str(bundle_path),
+                    "--worker",
+                    str(worker),
+                    "--trusted-worker-digest",
+                    "sha256:" + "0" * 64,
+                ],
+                capture_output=True,
+                check=False,
+                timeout=60,
+            )
+            require(
+                untrusted.returncode == 1 and untrusted.stderr == b"" and untrusted.stdout,
+                "CLI run accepted a worker outside explicit host trust",
+            )
+            untrusted_projection = json.loads(untrusted.stdout)
+            require(
+                untrusted_projection["materialization"]["terminal"] == "failed"
+                and untrusted_projection["materialization"]["snapshot_id"] is None
+                and untrusted_projection["materialization"]["provenance"] is None
+                and "digest"
+                in json.dumps(untrusted_projection["materialization"]["unresolved"]),
+                "untrusted worker failure lost its typed terminal or created a snapshot",
+            )
 
         wrapper_directory = root / "wrapper-captures"
         wrapper_directory.mkdir()

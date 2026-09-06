@@ -18,6 +18,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <cxxlens/sdk/common.hpp>
@@ -77,6 +78,17 @@ namespace cxxlens::sdk::detail
 		bounded_store_record_kind kind{bounded_store_record_kind::partition_begin};
 		std::string key;
 		std::vector<std::byte> payload;
+		bounded_store_record() = default;
+		bounded_store_record(bounded_store_record_kind record_kind,
+							 std::string record_key,
+							 std::vector<std::byte> record_payload)
+			: kind{record_kind}, key{std::move(record_key)}, payload{std::move(record_payload)}
+		{
+		}
+		bounded_store_record(const bounded_store_record&) = default;
+		bounded_store_record(bounded_store_record&&) noexcept = default;
+		bounded_store_record& operator=(const bounded_store_record&) = default;
+		bounded_store_record& operator=(bounded_store_record&&) noexcept = default;
 
 		[[nodiscard]] bool operator==(const bounded_store_record&) const = default;
 	};

@@ -153,9 +153,10 @@ jobs:
                      cxxlens-gcc-application-analysis-e2e \
                      cxxlens-clang-gcc-replay-worker-23 \
                      cxxlens-unit-clang23-gcc-replay-worker-ingress \
-                     cxxlens-unit-sdk-application-analysis
+                     cxxlens-unit-sdk-application-analysis \
+                     cxxlens-msvc-detached-application-analysis-e2e
           ctest --test-dir build/clang23-gcc-replay --output-on-failure \
-            -R '^(adapter\.clang23-gcc-replay-worker-ingress|unit\.sdk-application-analysis)$'
+            -R '^(adapter\.clang23-gcc-replay-worker-ingress|unit\.sdk-application-analysis|integration\.msvc-detached-application-analysis)$'
           python3 tests/unit/sdk/check_gcc_capture_cli.py \
             build/clang23-gcc-replay/cxxlens "$(command -v g++)" \
             build/clang23-gcc-replay/tests/cxxlens-gcc-capture-cli-consumer \
@@ -177,3 +178,7 @@ jobs:
           grep -Fx 'application-analysis.replay-provider-failed:environment' \
             "${RUNNER_TEMP}/cxxlens-clang23-worker-relocation.stderr"
           test -f "${RUNNER_TEMP}/cxxlens-clang23-worker-install/share/doc/cxxlens/LLVM-LICENSE.TXT"
+
+  msvc-application-worker:
+    name: Exact MSVC capture and clang-cl 23 worker
+    uses: ./.github/workflows/msvc-application-worker.yml

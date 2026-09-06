@@ -11,7 +11,7 @@
 #include <string_view>
 #include <vector>
 
-#include "sdk/gcc_replay_input_internal.hpp"
+#include "sdk/compiler_replay_input_internal.hpp"
 #include "worker_parser.hpp"
 
 namespace cxxlens::detail::clang23_gcc_replay

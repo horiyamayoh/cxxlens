@@ -6,6 +6,8 @@
 #include <set>
 #include <utility>
 
+#include "compiler_replay_input_internal.hpp"
+
 namespace cxxlens::sdk::detail
 {
 	namespace
@@ -41,6 +43,7 @@ namespace cxxlens::sdk::detail
 							 const std::span<const provider::unresolved_item> unresolved,
 							 const partition_input_binding binding,
 							 const bool partial,
+							 const std::string_view observation_technique,
 							 claim_batch& transaction_claims)
 		{
 			auto descriptor = engine.require_id(batch.descriptor_id());
@@ -70,7 +73,7 @@ namespace cxxlens::sdk::detail
 					{partial ? "under_approximation" : "exact",
 					 task.value().capture.value().compile_unit_id,
 					 *assumption,
-					 {"clang_gcc_mode_replay", "provider_protocol_v2"}},
+					 {std::string{observation_technique}, "provider_protocol_v2"}},
 				};
 				if (auto added = transaction_claims.add_observation(engine, std::move(value));
 					!added)
@@ -133,6 +136,7 @@ namespace cxxlens::sdk::detail
 		materialization_runtime_binding runtime,
 		const std::string& source_receipt_digest,
 		std::string replay_plan_digest,
+		const std::string_view observation_technique,
 		const std::span<const partition_draft> host_partitions)
 	{
 		if (auto valid = runtime.runtime_receipt_digest == source_receipt_digest
@@ -142,6 +146,8 @@ namespace cxxlens::sdk::detail
 			return unexpected(std::move(valid.error()));
 		if (replay_plan_digest.empty())
 			return unexpected(adoption_error("replay_plan_digest", "empty"));
+		if (!is_compiler_replay_observation_technique(observation_technique))
+			return unexpected(adoption_error("observation_technique", "unsupported"));
 		const bool partial =
 			std::ranges::any_of(task.value().partitions,
 								[](const materialization_partition_request& value)
@@ -188,6 +194,7 @@ namespace cxxlens::sdk::detail
 												  sealed.unresolved(),
 												  {source_receipt_digest, replay_plan_digest},
 												  partial,
+												  observation_technique,
 												  transaction_claims);
 			if (!partition)
 				return unexpected(std::move(partition.error()));

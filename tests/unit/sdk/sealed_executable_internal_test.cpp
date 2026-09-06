@@ -65,6 +65,12 @@ int main()
 				"canonical path did not come from the opened executable descriptor");
 		require(first->byte_count() == fs::file_size(executable),
 				"sealed executable byte count did not bind the complete image");
+		auto fragmented_request = request;
+		fragmented_request.read_chunk_bytes = 1U;
+		auto fragmented = open_sealed_executable(fragmented_request);
+		require(fragmented && fragmented->digest() == first->digest() &&
+					fragmented->byte_count() == first->byte_count(),
+				"fragmented executable reads changed measured identity");
 		const auto seals = ::fcntl(first->native_handle(), F_GET_SEALS);
 		const auto required_seals = F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL;
 		require(seals >= 0 && (seals & required_seals) == required_seals,
@@ -94,6 +100,12 @@ int main()
 		auto limited = open_sealed_executable(limited_request);
 		require(!limited && limited.error().field == "executable-size",
 				"executable image limit was not enforced before copying");
+		auto zero_chunk_request = request;
+		zero_chunk_request.read_chunk_bytes = 0U;
+		auto zero_chunk = open_sealed_executable(zero_chunk_request);
+		require(!zero_chunk && zero_chunk.error().field == "request" &&
+					zero_chunk.error().detail == "invalid-read-chunk",
+				"zero executable read chunk was accepted");
 
 		auto expired_request = request;
 		expired_request.absolute_wall_deadline_ns = 0U;

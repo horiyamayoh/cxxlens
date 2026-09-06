@@ -2600,9 +2600,10 @@ namespace cxxlens::sdk::provider
 		{
 			return std::ranges::find(mechanisms, mechanism) != mechanisms.end();
 		};
+		const bool network_denied = has_mechanism("network-syscall-deny") ||
+			has_mechanism("appcontainer-network-capability-deny");
 		if (!namespaced(id) || !unique_nonempty(mechanisms, true) ||
-			deny_network != has_mechanism("network-syscall-deny") ||
-			zero_core_dump != has_mechanism("core-dump-limit") ||
+			deny_network != network_denied || zero_core_dump != has_mechanism("core-dump-limit") ||
 			zero_locked_memory != has_mechanism("locked-memory-limit"))
 			return cxxlens::sdk::unexpected(
 				provider_error("security.sandbox-policy-mismatch", "policy"));
@@ -2645,9 +2646,23 @@ namespace cxxlens::sdk::provider
 		strict.emplace_back("core-dump-limit");
 		strict.emplace_back("locked-memory-limit");
 		std::ranges::sort(strict);
+		const std::vector<std::string> windows_clangcl{
+			"appcontainer-lowbox-token",
+			"appcontainer-network-capability-deny",
+			"bounded-pipe-output",
+			"explicit-environment",
+			"explicit-handle-list",
+			"job-object-active-process-limit",
+			"job-object-kill-on-close",
+			"job-object-process-memory-limit",
+			"job-object-process-time-limit",
+			"no-shell-argv-exec",
+			"wall-deadline",
+		};
 		return {
 			{"cxxlens.sandbox.linux-provider-baseline", baseline, true, false, false},
 			{"cxxlens.sandbox.linux-provider-strict", std::move(strict), true, true, true},
+			{"cxxlens.sandbox.windows-clangcl-appcontainer", windows_clangcl, true, false, false},
 		};
 	}
 

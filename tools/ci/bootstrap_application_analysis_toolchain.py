@@ -60,14 +60,18 @@ def load_lock(path: pathlib.Path = LOCK_PATH) -> dict[str, Any]:
         raise ToolchainError(f"could not read toolchain lock: {error}") from error
     if value.get("schema") != "cxxlens.application-analysis-toolchain-lock.v1":
         raise ToolchainError("unknown toolchain lock schema")
-    if value.get("document_version") != "1.0.0":
+    if value.get("document_version") != "1.1.0":
         raise ToolchainError("unknown toolchain lock document version")
     if set(value) != {
         "clang_gcc_replay",
+        "clang_cl_replay",
         "document_version",
         "gcc",
+        "msvc",
         "runner",
         "schema",
+        "windows_runner",
+        "windows_sdk",
     }:
         raise ToolchainError("unknown toolchain lock field")
     runner = value.get("runner")
@@ -189,6 +193,40 @@ def load_lock(path: pathlib.Path = LOCK_PATH) -> dict[str, Any]:
         clang_gcc_replay.get("target_triples"), "Clang GCC replay targets"
     ) != ["x86_64-unknown-linux-gnu"]:
         raise ToolchainError("Clang GCC replay target lock differs")
+    clang_cl_replay = value.get("clang_cl_replay")
+    if not isinstance(clang_cl_replay, dict) or set(clang_cl_replay) != expected_clang_fields:
+        raise ToolchainError("unknown Clang-cl replay toolchain lock field")
+    if clang_cl_replay != {
+        "archive_root": "clang+llvm-23.1.0-x86_64-pc-windows-msvc",
+        "asset_archive_bytes": 490116109,
+        "asset_sha256": "1aebf024b959b3835c3bd936da2fa58cd002c61ccf47fce1714447b900bd9837",
+        "asset_url": (
+            "https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.0/"
+            "clang%2Bllvm-23.1.0-x86_64-pc-windows-msvc.tar.zst"
+        ),
+        "exact_version": "23.1.0",
+        "target_triples": ["x86_64-pc-windows-msvc"],
+    }:
+        raise ToolchainError("Clang-cl replay lock differs")
+    if value.get("msvc") != {
+        "distribution_build": "12112.369",
+        "distribution_version": "18.9.12112.369",
+        "exact_version": "19.51.36256",
+        "toolset_version": "14.51.36231",
+    }:
+        raise ToolchainError("MSVC toolchain lock differs")
+    if value.get("windows_sdk") != {
+        "exact_version": "10.1.26100.8249",
+        "kit_version": "10.0.26100.0",
+    }:
+        raise ToolchainError("Windows SDK lock differs")
+    if value.get("windows_runner") != {
+        "architecture": "X64",
+        "image_version": "20260824.214.3",
+        "label": "windows-2025-vs2026",
+        "os": "Windows",
+    }:
+        raise ToolchainError("Windows runner lock differs")
     return value
 
 

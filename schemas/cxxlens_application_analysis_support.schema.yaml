@@ -3,7 +3,7 @@ $id: https://cxxlens.dev/schemas/cxxlens.application-analysis-support.v1
 title: cxxlens application analysis support contract
 type: object
 additionalProperties: false
-required: [schema, document_version, maturity, host_package_support, toolchain_pins, targets]
+required: [schema, document_version, maturity, host_package_support, execution_providers, native_provider_decisions, toolchain_pins, targets]
 properties:
   schema: {const: cxxlens.application-analysis-support.v1}
   document_version: {$ref: '#/$defs/version'}
@@ -15,6 +15,72 @@ properties:
     properties:
       authority: {const: schemas/cxxlens_support_matrix.yaml}
       disposition: {const: unchanged}
+  execution_providers:
+    type: object
+    additionalProperties: false
+    required: [gcc_clang23_replay, msvc_clangcl23_replay]
+    properties:
+      gcc_clang23_replay:
+        type: object
+        additionalProperties: false
+        required:
+          - provider_id
+          - provider_version
+          - semantic_contract_digest_algorithm
+          - semantic_contract_subject
+          - trust_authority
+          - execution_revalidation
+          - qualification
+        properties:
+          provider_id: {const: cxxlens.clang23-gcc-replay}
+          provider_version: {const: 1.0.0}
+          semantic_contract_digest_algorithm: {const: sha256}
+          semantic_contract_subject: {const: "cxxlens.clang23-gcc-replay-provider.v1\nclang-23.1.0-gcc-mode"}
+          trust_authority: {const: explicit-host-trusted-worker-digest}
+          execution_revalidation: {const: sealed-executable-content-digest}
+          qualification: {const: experimental}
+      msvc_clangcl23_replay:
+        type: object
+        additionalProperties: false
+        required:
+          - provider_id
+          - provider_version
+          - semantic_contract_digest_algorithm
+          - semantic_contract_subject
+          - trust_authority
+          - execution_revalidation
+          - qualification
+        properties:
+          provider_id: {const: cxxlens.clangcl23-msvc-replay}
+          provider_version: {const: 1.0.0}
+          semantic_contract_digest_algorithm: {const: sha256}
+          semantic_contract_subject: {const: "cxxlens.clangcl23-msvc-replay-provider.v1\nclang-cl-23.1.0-msvc-mode"}
+          trust_authority: {const: explicit-host-trusted-ed25519-public-key}
+          execution_revalidation: {const: authenticated-detached-transcript-binding}
+          qualification: {const: experimental}
+  native_provider_decisions:
+    type: object
+    additionalProperties: false
+    required: [gcc, msvc]
+    properties:
+      gcc:
+        type: object
+        additionalProperties: false
+        required: [decision, scope, reason, retained_solution]
+        properties:
+          decision: {const: no-go}
+          scope: {const: initial-relation-subset}
+          reason: {const: no-adopted-corpus-strict-gap}
+          retained_solution: {const: clang-23.1.0-gcc-mode-replay}
+      msvc:
+        type: object
+        additionalProperties: false
+        required: [decision, scope, reason, retained_solution]
+        properties:
+          decision: {const: no-go}
+          scope: {const: initial-relation-subset}
+          reason: {const: no-public-versioned-detached-semantic-extraction-api}
+          retained_solution: {const: native-build-evidence-with-clang-cl-23.1.0-replay}
   toolchain_pins:
     type: object
     additionalProperties: false
@@ -30,14 +96,19 @@ properties:
               distribution_version: {$ref: '#/$defs/version'}
               distribution_build: {type: string, pattern: '^[0-9]+\.[0-9]+$'}
               toolset_version: {type: string, pattern: '^14\.[0-9]+\.[0-9]+$'}
-      windows_sdk: {$ref: '#/$defs/toolchain'}
+      windows_sdk:
+        allOf:
+          - {$ref: '#/$defs/toolchain'}
+          - type: object
+            required: [kit_version]
       clang_replay: {$ref: '#/$defs/toolchain'}
       windows_runner:
         type: object
         additionalProperties: false
-        required: [label, ambient_defaults_authoritative, exact_toolchain_assertion]
+        required: [label, image_version, ambient_defaults_authoritative, exact_toolchain_assertion]
         properties:
           label: {const: windows-2025-vs2026}
+          image_version: {const: 20260824.214.3}
           ambient_defaults_authoritative: {const: false}
           exact_toolchain_assertion: {const: required}
   targets:
@@ -46,7 +117,7 @@ properties:
     maxItems: 2
     items: {$ref: '#/$defs/target'}
 $defs:
-  version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+  version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+)?$'}
   id: {type: string, pattern: '^[a-z][a-z0-9_.-]+$'}
   toolchain:
     type: object
@@ -59,6 +130,7 @@ $defs:
       distribution_version: {$ref: '#/$defs/version'}
       distribution_build: {type: string}
       toolset_version: {type: string}
+      kit_version: {type: string, pattern: '^10\.0\.[0-9]+\.0$'}
   target:
     type: object
     additionalProperties: false

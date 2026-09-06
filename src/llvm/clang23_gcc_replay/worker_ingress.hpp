@@ -7,8 +7,9 @@
 
 #include <istream>
 #include <ostream>
+#include <string_view>
 
-#include "sdk/gcc_replay_input_internal.hpp"
+#include "sdk/compiler_replay_input_internal.hpp"
 
 namespace cxxlens::detail::clang23_gcc_replay
 {
@@ -20,5 +21,6 @@ namespace cxxlens::detail::clang23_gcc_replay
 	 */
 	[[nodiscard]] sdk::result<void> execute_worker_ingress(std::istream& input,
 														   std::ostream& output,
+														   std::string_view replay_frontend,
 														   sdk::import_limits limits = {});
 } // namespace cxxlens::detail::clang23_gcc_replay

@@ -521,7 +521,8 @@ namespace cxxlens::sdk::detail
 		void append_integer(std::string& output, const Integer value)
 		{
 			std::array<char, std::numeric_limits<Integer>::digits10 + 4U> buffer{};
-			const auto converted = std::to_chars(buffer.begin(), buffer.end(), value);
+			const auto converted =
+				std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
 			output.append(buffer.data(), converted.ptr);
 		}
 

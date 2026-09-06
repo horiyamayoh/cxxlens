@@ -70,7 +70,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 	} // namespace
 
 	sdk::result<bound_observation_sources>
-	bind_observation_sources(const sdk::detail::validated_gcc_replay_input& input,
+	bind_observation_sources(const sdk::detail::validated_compiler_replay_input& input,
 							 const observation_batch& observations)
 	{
 		try

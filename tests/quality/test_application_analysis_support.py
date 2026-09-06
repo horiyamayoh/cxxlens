@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import hashlib
 import pathlib
 import unittest
 
@@ -30,7 +31,7 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
                 "cxxlens_build_capture_bundle",
                 "cxxlens_compiler_replay_plan",
                 "cxxlens_detached_provider_run",
-                "cxxlens_gcc_replay_input",
+                "cxxlens_compiler_replay_input",
             )
         }
 
@@ -64,14 +65,46 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
         self.assertEqual(
             (by_id["msvc-x64-windows"]["implementation_state"],
              by_id["msvc-x64-windows"]["availability"]),
-            ("planned", "unavailable"),
+            ("materialization-ready", "experimental"),
         )
         for target in by_id.values():
             self.assertEqual(target["guarantee_floor"], "frontend-replayed")
 
+    def test_gcc_execution_provider_uses_explicit_host_trust(self) -> None:
+        provider = self.contract["execution_providers"]["gcc_clang23_replay"]
+        self.assertEqual(provider["provider_id"], "cxxlens.clang23-gcc-replay")
+        self.assertEqual(provider["provider_version"], "1.0.0")
+        self.assertEqual(provider["trust_authority"], "explicit-host-trusted-worker-digest")
+        self.assertEqual(provider["execution_revalidation"], "sealed-executable-content-digest")
+        self.assertEqual(provider["qualification"], "experimental")
+        self.assertEqual(provider["semantic_contract_digest_algorithm"], "sha256")
+        self.assertEqual(
+            hashlib.sha256(provider["semantic_contract_subject"].encode("utf-8")).hexdigest(),
+            "c1dab9c04fcd269920477cdc9d6bf7329229c390be48f0854b2af425d3692b74",
+        )
+
+    def test_msvc_execution_provider_uses_detached_host_trust(self) -> None:
+        provider = self.contract["execution_providers"]["msvc_clangcl23_replay"]
+        self.assertEqual(provider["provider_id"], "cxxlens.clangcl23-msvc-replay")
+        self.assertEqual(provider["provider_version"], "1.0.0")
+        self.assertEqual(
+            provider["trust_authority"], "explicit-host-trusted-ed25519-public-key"
+        )
+        self.assertEqual(
+            provider["execution_revalidation"],
+            "authenticated-detached-transcript-binding",
+        )
+        self.assertEqual(provider["qualification"], "experimental")
+        self.assertEqual(provider["semantic_contract_digest_algorithm"], "sha256")
+        self.assertEqual(
+            hashlib.sha256(provider["semantic_contract_subject"].encode("utf-8")).hexdigest(),
+            "6f5da8c225005d18bbb218a9653c74c1e2c71a796fc61e31dea562d0ca1ae679",
+        )
+
     def test_only_materialization_ready_targets_can_be_available(self) -> None:
         targets = self.contract["targets"]
         planned_but_available = dict(targets[1])
+        planned_but_available["implementation_state"] = "planned"
         planned_but_available["availability"] = "experimental"
         with self.assertRaises(jsonschema.ValidationError):
             jsonschema.Draft202012Validator(self.schema).validate(
@@ -83,6 +116,33 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
         with self.assertRaises(jsonschema.ValidationError):
             jsonschema.Draft202012Validator(self.schema).validate(
                 {**self.contract, "targets": [ready_but_unavailable, targets[1]]}
+            )
+
+    def test_native_provider_decisions_are_closed(self) -> None:
+        self.assertEqual(
+            self.contract["native_provider_decisions"],
+            {
+                "gcc": {
+                    "decision": "no-go",
+                    "scope": "initial-relation-subset",
+                    "reason": "no-adopted-corpus-strict-gap",
+                    "retained_solution": "clang-23.1.0-gcc-mode-replay",
+                },
+                "msvc": {
+                    "decision": "no-go",
+                    "scope": "initial-relation-subset",
+                    "reason": "no-public-versioned-detached-semantic-extraction-api",
+                    "retained_solution": (
+                        "native-build-evidence-with-clang-cl-23.1.0-replay"
+                    ),
+                },
+            },
+        )
+        changed = dict(self.contract["native_provider_decisions"])
+        changed["gcc"] = {**changed["gcc"], "decision": "go"}
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(self.schema).validate(
+                {**self.contract, "native_provider_decisions": changed}
             )
 
     def test_initial_relation_subset_is_existing_and_equal(self) -> None:
@@ -101,19 +161,21 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
     def test_exact_toolchain_pins_are_not_latest_aliases(self) -> None:
         pins = self.contract["toolchain_pins"]
         self.assertEqual(pins["gcc"]["exact_version"], "16.2.0")
-        self.assertEqual(pins["msvc"]["distribution_version"], "18.9.2")
-        self.assertEqual(pins["msvc"]["exact_version"], "19.51.36247")
-        self.assertEqual(pins["windows_sdk"]["exact_version"], "10.0.28000.2705")
+        self.assertEqual(pins["msvc"]["distribution_version"], "18.9.12112.369")
+        self.assertEqual(pins["msvc"]["exact_version"], "19.51.36256")
+        self.assertEqual(pins["windows_sdk"]["exact_version"], "10.1.26100.8249")
+        self.assertEqual(pins["windows_sdk"]["kit_version"], "10.0.26100.0")
         self.assertEqual(pins["clang_replay"]["exact_version"], "23.1.0")
         self.assertNotIn("latest", str(pins).lower())
         self.assertFalse(pins["windows_runner"]["ambient_defaults_authoritative"])
+        self.assertEqual(pins["windows_runner"]["image_version"], "20260824.214.3")
 
     def test_wire_authorities_are_distinct_and_bounded(self) -> None:
         expected = {
             "cxxlens_build_capture_bundle": "cxxlens.build-capture-bundle.v1",
             "cxxlens_compiler_replay_plan": "cxxlens.compiler-replay-plan.v1",
             "cxxlens_detached_provider_run": "cxxlens.detached-provider-run.v1",
-            "cxxlens_gcc_replay_input": "cxxlens.gcc-replay-input.v2",
+            "cxxlens_compiler_replay_input": "cxxlens.compiler-replay-input.v1",
         }
         self.assertEqual(
             {name: value["schema"] for name, value in self.wire_contracts.items()},
@@ -130,13 +192,17 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
         capture = self.wire_contracts["cxxlens_build_capture_bundle"]
         replay = self.wire_contracts["cxxlens_compiler_replay_plan"]
         detached = self.wire_contracts["cxxlens_detached_provider_run"]
-        gcc_input = self.wire_contracts["cxxlens_gcc_replay_input"]
+        compiler_input = self.wire_contracts["cxxlens_compiler_replay_input"]
         self.assertIn("replay-fidelity", capture["authority"]["not_authoritative_for"])
         self.assertIn("production-compiler-exactness", replay["authority"]["not_authoritative_for"])
         self.assertIn("store-publication", detached["authority"]["not_authoritative_for"])
-        self.assertIn("store-publication", gcc_input["authority"]["not_authoritative_for"])
-        self.assertEqual(gcc_input["root_tuple"][3]["name"], "replay_plan_digest")
-        self.assertEqual(gcc_input["root_tuple"][8]["name"], "source_closure_digest")
+        self.assertIn("store-publication", compiler_input["authority"]["not_authoritative_for"])
+        self.assertEqual(compiler_input["root_tuple"][3]["name"], "replay_plan_digest")
+        self.assertEqual(compiler_input["root_tuple"][8]["name"], "source_closure_digest")
+        self.assertEqual(
+            compiler_input["root_tuple"][5]["values"],
+            ["clang-23.1.0-gcc-mode", "clang-cl-23.1.0"],
+        )
         self.assertEqual(capture["document_version"], "1.3.0")
         self.assertEqual(
             [field["type"] for field in capture["toolchain_tuple"]["fields"][6:]],

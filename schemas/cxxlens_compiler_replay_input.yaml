@@ -1,20 +1,20 @@
-schema: cxxlens.gcc-replay-input.v2
-document_version: 2.0.0
+schema: cxxlens.compiler-replay-input.v1
+document_version: 1.0.0
 maturity: experimental
 encoding: cxxlens-canonical-tuple-v1
-purpose: Exact host-to-worker input for one validated GCC capture replay plan.
+purpose: Exact host-to-worker input for one validated compiler replay plan.
 authority:
   producer: linux-application-analysis-host
-  consumer: clang23-gcc-replay-worker
+  consumer: versioned-compiler-replay-worker
   not_authoritative_for: [provider-trust, relation-registry, store-publication]
 root_tuple:
-  - {index: 0, name: schema, type: string, const: cxxlens.gcc-replay-input.v2}
+  - {index: 0, name: schema, type: string, const: cxxlens.compiler-replay-input.v1}
   - {index: 1, name: imported_project_id, type: strong-id}
   - {index: 2, name: capture_bundle_digest, type: digest}
   - {index: 3, name: replay_plan_digest, type: digest}
   - {index: 4, name: compile_unit_id, type: strong-id}
-  - {index: 5, name: analysis_frontend, type: string, const: clang-23.1.0-gcc-mode}
-  - {index: 6, name: target_abi, type: string, const: x86_64-linux-gnu}
+  - {index: 5, name: analysis_frontend, type: string, values: [clang-23.1.0-gcc-mode, clang-cl-23.1.0]}
+  - {index: 6, name: target_abi, type: string, values: [x86_64-linux-gnu, x86_64-pc-windows-msvc]}
   - {index: 7, name: effective_argv, type: ordered-tuple-of-string}
   - {index: 8, name: source_closure_digest, type: digest}
   - {index: 9, name: source_members, type: ordered-tuple-of-source-member}
@@ -38,7 +38,9 @@ unresolved_tuple:
     - {index: 2, name: reason, type: string}
     - {index: 3, name: completion_action, type: string}
 invariants:
+  - frontend-abi-and-executable-mode-form-one-versioned-admitted-tuple
   - input-digest-is-the-content-digest-of-the-complete-canonical-root
+  - gcc-mode-and-msvc-mode-workers-decode-the-same-canonical-payload-shape
   - replay-plan-digest-binds-effective-argv-source-closure-and-unresolved
   - source-member-content-size-and-digest-are-revalidated-before-worker-use
   - source-file-and-snapshot-identities-are-carried-from-the-validated-capture

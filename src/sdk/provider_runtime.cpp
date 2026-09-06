@@ -57,10 +57,12 @@ namespace cxxlens::sdk::provider
 				 canonical_digest(value.substr(semantic_prefix.size())));
 		}
 
+#if !defined(CXXLENS_PROVIDER_LOGICAL_TRANSCRIPT_ONLY)
 		[[nodiscard]] std::string json_string(const std::string_view value)
 		{
 			return cxxlens::sdk::detail::canonical_json_string(value);
 		}
+#endif
 
 		[[nodiscard]] bool namespaced(const std::string_view value)
 		{
@@ -136,6 +138,7 @@ namespace cxxlens::sdk::provider
 				stable_terminal_reason(reason);
 		}
 
+#if !defined(CXXLENS_PROVIDER_LOGICAL_TRANSCRIPT_ONLY)
 		// NG1 is a single lifecycle contract.  Treating one of its controls as an ordinary
 		// completed-process feature would silently downgrade liveness, spill, or recovery to the
 		// one-shot provider port.  Keep this list local to the launch boundary so every caller gets
@@ -195,6 +198,7 @@ namespace cxxlens::sdk::provider
 			output.maximum_minor = protocol_v2_minor;
 			return output;
 		}
+#endif
 
 		constexpr std::uint64_t canonical_input_chunk_bytes = 1048576U;
 		constexpr std::uint64_t maximum_logical_input_bytes = 67108864U;
@@ -2419,6 +2423,122 @@ namespace cxxlens::sdk::provider
 			return terminal;
 		}
 
+		result<validated_detached_provider_transcript>
+		validate_detached_provider_transcript_from_sealed_input(
+			detached_provider_transcript_validation_authority authority,
+			sealed_host_input input_seal,
+			const std::span<const std::byte> raw_frame_stream)
+		{
+			try
+			{
+				if (auto valid = authority.provider.validate(); !valid)
+					return cxxlens::sdk::unexpected(std::move(valid.error()));
+				if (auto valid = authority.provider_identity.validate(); !valid)
+					return cxxlens::sdk::unexpected(std::move(valid.error()));
+				if (auto valid = authority.budget.validate(); !valid)
+					return cxxlens::sdk::unexpected(std::move(valid.error()));
+				if (authority.session_limits.protocol_major != protocol_v2_major ||
+					authority.session_limits.minimum_minor != protocol_v2_minor ||
+					authority.session_limits.maximum_minor != protocol_v2_minor ||
+					authority.provider.protocol.major != protocol_v2_major ||
+					authority.provider.protocol.minimum_minor != protocol_v2_minor ||
+					authority.provider.protocol.maximum_minor != protocol_v2_minor ||
+					input_seal.protocol_major() != authority.session_limits.protocol_major ||
+					input_seal.protocol_minor() != authority.session_limits.maximum_minor)
+					return cxxlens::sdk::unexpected(
+						runtime_error("provider.protocol-minor-mismatch",
+									  "detached-validation",
+									  "protocol-2.0-only"));
+				if (input_seal.task().task_id.empty() || authority.output_descriptors.empty() ||
+					raw_frame_stream.empty() ||
+					raw_frame_stream.size() > authority.budget.transport_bytes)
+					return cxxlens::sdk::unexpected(runtime_error("provider.output-limit",
+																  input_seal.task().task_id,
+																  "detached-transport-bytes"));
+				std::set<std::string, std::less<>> descriptor_ids;
+				for (const auto& descriptor : authority.output_descriptors)
+				{
+					if (auto valid = descriptor.validate(); !valid)
+						return cxxlens::sdk::unexpected(std::move(valid.error()));
+					if (!descriptor_ids.insert(descriptor.id).second ||
+						!offered_relation(authority.provider, descriptor.id))
+						return cxxlens::sdk::unexpected(runtime_error(
+							"provider.relation-incompatible", descriptor.id, "output-descriptor"));
+				}
+
+				auto frames = decode_frame_stream(raw_frame_stream, authority.session_limits);
+				if (!frames)
+					return cxxlens::sdk::unexpected(std::move(frames.error()));
+				const transcript_validation_request validation{
+					input_seal.task().task_id,
+					authority.provider.provider_id,
+					authority.provider.provider_version,
+					&authority.provider,
+					authority.output_descriptors,
+					input_seal.credit(),
+					&authority.budget,
+					true,
+					&authority.provider_identity,
+				};
+				auto terminal =
+					validate_provider_transcript(validation, *frames, authority.session_limits);
+				if (!terminal)
+					return cxxlens::sdk::unexpected(std::move(terminal.error()));
+				if (terminal->kind != transcript_terminal_kind::complete)
+					return cxxlens::sdk::unexpected(runtime_error(
+						terminal->reason, input_seal.task().task_id, "detached-terminal"));
+				if (terminal->sealing_error())
+					return cxxlens::sdk::unexpected(*terminal->sealing_error());
+				const auto terminal_reason = terminal->reason;
+				auto sealed = std::move(*terminal).take_sealed();
+				if (!sealed)
+					return cxxlens::sdk::unexpected(runtime_error("provider.protocol-state-invalid",
+																  input_seal.task().task_id,
+																  "detached-seal-missing"));
+
+				provider_runtime_provenance provenance;
+				provenance.provider_id = authority.provider_identity.provider_id;
+				provenance.provider_version = authority.provider_identity.provider_version;
+				provenance.provider_binary_digest =
+					authority.provider_identity.provider_binary_digest;
+				provenance.provider_semantic_contract_digest =
+					authority.provider_identity.provider_semantic_contract_digest;
+				provenance.task_id = input_seal.task().task_id;
+				provenance.task_input_digest = input_seal.task().task_input_digest;
+				provenance.normalized_invocation_digest =
+					input_seal.task().normalized_invocation_digest;
+				provenance.toolchain_digest = input_seal.task().toolchain_digest;
+				provenance.environment_digest = input_seal.task().environment_digest;
+				provenance.sandbox_policy_digest =
+					authority.provider_identity.sandbox_policy_digest;
+				provenance.stream_id = frames->front().stream_id;
+				auto receipt = make_provider_runtime_receipt(raw_frame_stream.size(),
+															 content_digest(raw_frame_stream),
+															 *frames,
+															 std::move(provenance),
+															 terminal_reason,
+															 *sealed);
+				if (!receipt)
+					return cxxlens::sdk::unexpected(std::move(receipt.error()));
+				return validated_detached_provider_transcript{
+					std::move(input_seal), std::move(*sealed), std::move(*receipt)};
+			}
+			catch (const std::bad_alloc&)
+			{
+				return cxxlens::sdk::unexpected(
+					runtime_error("provider.output-limit", "detached-validation", "allocation"));
+			}
+			catch (const std::length_error&)
+			{
+				return cxxlens::sdk::unexpected(
+					runtime_error("provider.output-limit", "detached-validation", "length"));
+			}
+		}
+
+#if defined(CXXLENS_PROVIDER_LOGICAL_TRANSCRIPT_ONLY)
+	} // namespace detail
+} // namespace cxxlens::sdk::provider
+#else
 		result<provider_runtime_closure_channel>
 		provider_runtime_closure_channel::create(provider_protocol_v2_session session)
 		{
@@ -2796,14 +2916,23 @@ namespace cxxlens::sdk::provider
 				heartbeat_binding};
 		}
 
+		enum class provider_process_preparation_mode : std::uint8_t
+		{
+			executable_process,
+			detached_transcript
+		};
+
 		[[nodiscard]] result<prepared_provider_process>
-		prepare_provider_process(const process_task_request& request)
+		prepare_provider_process(const process_task_request& request,
+								 const provider_process_preparation_mode mode =
+									 provider_process_preparation_mode::executable_process)
 		{
 			if (auto valid = request.selection.validate(); !valid)
 				return cxxlens::sdk::unexpected(std::move(valid.error()));
 			if (request.task_id.empty() || request.task_id.contains('\0') ||
-				request.selection.selected_candidate().executable_argv.empty() ||
-				request.selection.selected_candidate().executable_argv.front().empty() ||
+				(mode == provider_process_preparation_mode::executable_process &&
+				 (request.selection.selected_candidate().executable_argv.empty() ||
+				  request.selection.selected_candidate().executable_argv.front().empty())) ||
 				!protocol_digest(request.task_input_digest) ||
 				!protocol_digest(request.normalized_invocation_digest) ||
 				!protocol_digest(request.toolchain_digest) ||
@@ -2906,6 +3035,7 @@ namespace cxxlens::sdk::provider
 				{"CXXLENS_PROVIDER_BINARY_DIGEST", provider.provider_binary_digest},
 				{"CXXLENS_PROVIDER_SEMANTIC_CONTRACT_DIGEST",
 				 provider.provider_semantic_contract_digest},
+				{"CXXLENS_PROVIDER_SANDBOX_POLICY_DIGEST", sandbox->policy_digest},
 				{"CXXLENS_PROVIDER_TASK_ID", request.task_id},
 				{"CXXLENS_PROVIDER_TASK_INPUT_DIGEST", request.task_input_digest},
 				{"CXXLENS_PROVIDER_NORMALIZED_INVOCATION_DIGEST",
@@ -3709,6 +3839,45 @@ namespace cxxlens::sdk::provider
 		return {};
 	}
 
+	result<detail::validated_detached_provider_transcript>
+	detail::validate_detached_provider_transcript(const process_task_request& request,
+												  const std::span<const std::byte> raw_frame_stream)
+	{
+		if (request.cancellation.stop_requested())
+			return cxxlens::sdk::unexpected(
+				runtime_error("provider.cancelled", request.task_id, "detached-validation"));
+		auto prepared = prepare_provider_process(
+			request, provider_process_preparation_mode::detached_transcript);
+		if (!prepared)
+			return cxxlens::sdk::unexpected(std::move(prepared.error()));
+		if (prepared->ng1_live)
+			return cxxlens::sdk::unexpected(runtime_error(
+				"provider.runtime-unavailable", "detached-transcript", "ng1-live-required"));
+		if (request.payload.empty() || content_digest(request.payload) != request.task_input_digest)
+			return cxxlens::sdk::unexpected(runtime_error(
+				"provider.task-binding-mismatch", "task_input_digest", "payload-content"));
+		if (raw_frame_stream.empty() || raw_frame_stream.size() > request.budget.transport_bytes)
+			return cxxlens::sdk::unexpected(runtime_error(
+				"provider.output-limit", request.task_id, "detached-transport-bytes"));
+
+		vector_host_input input{request.payload};
+		vector_frame_output input_transcript;
+		auto input_seal = encode_host_transcript_incremental(
+			prepared->input_profile, request.output_credit, input, input_transcript);
+		if (!input_seal)
+			return cxxlens::sdk::unexpected(std::move(input_seal.error()));
+
+		const auto& manifest = request.selection.selected_candidate().description;
+		return detail::validate_detached_provider_transcript_from_sealed_input(
+			{manifest,
+			 prepared->provider_identity,
+			 request.output_descriptors,
+			 prepared->session_limits,
+			 request.budget},
+			std::move(*input_seal),
+			raw_frame_stream);
+	}
+
 	result<detail::provider_process_validation_outcome>
 	detail::execute_provider_process(const provider_process_port& processes,
 									 const process_task_request& request)
@@ -3819,3 +3988,4 @@ namespace cxxlens::sdk::provider
 		return report;
 	}
 } // namespace cxxlens::sdk::provider
+#endif

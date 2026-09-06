@@ -30,6 +30,7 @@ namespace cxxlens::sdk::detail
 		std::optional<std::uint64_t> maximum_image_bytes;
 		std::optional<std::size_t> maximum_canonical_path_bytes;
 		std::stop_token cancellation;
+		std::size_t read_chunk_bytes{65536U};
 	};
 
 	/** Exact bytes that were measured and can only be executed from the sealed descriptor. */

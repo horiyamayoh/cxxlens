@@ -25,10 +25,10 @@ interpretation、guarantee floor を独立 axis として表す。
 Phase 3 の固定 toolchain は次とする。
 
 - GCC 16.2.0
-- Visual Studio Build Tools 2026 18.9.2 (build 12120.119)、MSVC 14.51 / compiler 19.51.36247
-- Windows SDK 10.0.28000.2705
+- Visual Studio Enterprise 2026 18.9.12112.369 (build 12112.369)、MSVC toolset 14.51.36231 / compiler 19.51.36256
+- Windows SDK package 10.1.26100.8249 (kit 10.0.26100.0)
 - LLVM/clang-cl 23.1.0
-- Windows runner label `windows-2025-vs2026`。job は上記 exact toolchain を検査し、image の
+- Windows runner `windows-2025-vs2026` image `20260824.214.3`。job は上記 exact toolchain を検査し、image の
   ambient default や `latest` alias を authority にしない
 
 `cxxlens::sdk` に CH-1 Experimental application-analysis surface を追加する。外部 bundle は
@@ -52,6 +52,17 @@ GCC native provider は adopted corpus の strict consumer gap が public GCC pl
 解消できる場合に限り追加する。MSVC exact provider 調査は 10 engineer-days を上限とし、private
 compiler ABI、不安定な PDB 内部表現、detached ownership 不成立、または有意な fidelity 改善なし
 なら No-Go とする。
+
+Phase 3 initial relation subset では、GCC native provider は No-Go とする。採用 corpus の
+partiality は compile-database capture が観測しない環境効果を保持したものであり、strict consumer を
+誤答させる GCC 固有 gap ではない。GCC 16.2 の public plugin callback は利用可能だが、native provider
+追加条件を満たさないため、Clang 23.1.0 GCC-mode replay と actionable unresolved を正式解として維持する。
+
+MSVC exact provider も No-Go とする。公開 `/sourceDependencies` は header、PCH、module の source
+closure を提供するが semantic AST extraction API ではなく、DIA SDK は postcompiler PDB debug 情報の
+reader である。initial relation subset を versioned public API から detached ownership で取得する経路が
+ないため、private compiler ABI や PDB 内部表現へ依存せず、native MSVC build evidence と clang-cl
+23.1.0 replay を正式解とする。
 
 ## Consequences
 

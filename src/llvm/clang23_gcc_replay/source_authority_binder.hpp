@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "sdk/gcc_replay_input_internal.hpp"
+#include "sdk/compiler_replay_input_internal.hpp"
 #include "worker_observer.hpp"
 
 namespace cxxlens::detail::clang23_gcc_replay
@@ -41,6 +41,6 @@ namespace cxxlens::detail::clang23_gcc_replay
 
 	/** Bind every observed source range to an exact capture member or reject atomically. */
 	[[nodiscard]] sdk::result<bound_observation_sources>
-	bind_observation_sources(const sdk::detail::validated_gcc_replay_input& input,
+	bind_observation_sources(const sdk::detail::validated_compiler_replay_input& input,
 							 const observation_batch& observations);
 } // namespace cxxlens::detail::clang23_gcc_replay
