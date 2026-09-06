@@ -49,6 +49,10 @@ positive・negative・fault test で反証可能にする。独立 review は任
 issue は main workflow が green になった時点で、追加コメント・receipt・checkpoint を作らず
 close する。release qualification を implementation issue の完了条件へ遡及させない。
 
+## Plan execution
+
+プランモードで作成したプランを実施する場合、実装を開始する前に `/goal` を設定する。
+
 ## CI and release
 
 - `.github/workflows/quality.yml` は Clang 22 static/shared の全 build と全決定的 CTest、
