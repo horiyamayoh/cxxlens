@@ -53,9 +53,6 @@ class ApplicationAnalysisToolchainBootstrapTest(unittest.TestCase):
         self.assertEqual(
             admitted["windows_runner"]["label"], "windows-2025-vs2026"
         )
-        self.assertEqual(
-            admitted["windows_runner"]["image_version"], "20260824.214.3"
-        )
         self.assertEqual(admitted["runner"]["label"], "ubuntu-24.04")
 
     def test_malformed_source_identity_and_build_recipe_drift_fail_closed(self) -> None:

@@ -824,8 +824,6 @@ namespace
 			{"CXXLENS_PROVIDER_ENVIRONMENT_DIGEST", execution.expectation.task.environment_digest},
 			{"CXXLENS_PROVIDER_PROTOCOL_MAJOR", "2"},
 			{"CXXLENS_PROVIDER_PROTOCOL_MINOR", "0"},
-			{"CXXLENS_PROVIDER_SIGNATURE_DIGEST", *execution.manifest.signature},
-			{"CXXLENS_PROVIDER_REVOCATION_STATE", "not-revoked"},
 			{"CXXLENS_DETACHED_RUN_SIGNER_ID", "worker:native-clangcl23-process-test"},
 			{"CXXLENS_DETACHED_RUN_PRIVATE_KEY_FILE", private_path.string()},
 			{"CXXLENS_DETACHED_RUN_PUBLIC_KEY_FILE", public_path.string()},

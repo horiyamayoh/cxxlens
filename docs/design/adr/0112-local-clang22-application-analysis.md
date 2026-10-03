@@ -6,7 +6,8 @@ CXXMONSTER needs functions, direct calls, build context and source locations fro
 one actual compilation variant. An installed library command accepts a project
 root, a compilation database and an optional explicitly selected source file.
 It rejects ambiguous variants and unsupported compiler inputs with actionable
-errors. The initial route requires Clang 22.1.0 on Linux x86_64.
+errors. The initial route requires Clang 22 on Linux x86_64, with the compiler's
+version matching the Clang frontend used to build the analyzer.
 
 The command uses the existing Clang AST observer and canonical row normalizer,
 then the public SDK claim, immutable Store and query APIs. Compiler-native

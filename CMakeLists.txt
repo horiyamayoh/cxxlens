@@ -861,6 +861,9 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   endif()
   target_include_directories(cxxlens_clang22_application_analyzer
                              PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_include_directories(
+    cxxlens_clang22_application_analyzer SYSTEM
+    PRIVATE $<TARGET_PROPERTY:cxxlens_clang22_worker_core,INCLUDE_DIRECTORIES>)
   target_compile_features(cxxlens_clang22_application_analyzer
                           PRIVATE cxx_std_23)
   cxxlens_set_project_warnings(cxxlens_clang22_application_analyzer)

@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include <clang/Basic/Version.h>
 #include <cxxlens/relations/build_compile_unit.hpp>
 #include <cxxlens/relations/build_project.hpp>
 #include <cxxlens/relations/build_toolchain_context.hpp>
@@ -321,9 +322,19 @@ namespace cxxlens::detail::clang22
 					fail("environment",
 						 std::string{name} + ": put include paths in compile_commands.json");
 			const auto version = probe(compiler, directory, {"--version"});
-			if (!version.standard_output.starts_with("clang version 22.1.0") &&
-				!version.standard_output.starts_with("Ubuntu clang version 22.1.0"))
-				fail("compiler", "Clang 22.1.0 required");
+			const std::string compiler_version{CLANG_VERSION_STRING};
+			const auto expected_version = "clang version " + compiler_version;
+			const auto matches_version = [&](const std::string_view prefix)
+			{
+				return version.standard_output.starts_with(prefix) &&
+					version.standard_output.size() > prefix.size() &&
+					(version.standard_output[prefix.size()] == ' ' ||
+					 version.standard_output[prefix.size()] == '\n');
+			};
+			if (!matches_version(expected_version) &&
+				!matches_version("Ubuntu " + expected_version))
+				fail("compiler",
+					 "Clang " + compiler_version + " required to match the analyzer frontend");
 			const auto resource = files.canonical(
 				trim(probe(compiler, directory, {"-print-resource-dir"}).standard_output));
 			std::string language = source.extension() == ".c" ? "c" : "c++";
@@ -473,9 +484,9 @@ namespace cxxlens::detail::clang22
 				content_digest("LC_ALL=C; explicit includes; no ambient include variables");
 			const auto invocation =
 				digest("cxxlens.local-clang22.invocation.v1", arguments_json(semantic));
-			const auto toolchain_digest =
-				digest("cxxlens.local-clang22.toolchain.v1",
-					   arguments_json({version.executable_digest, "22.1.0", target, builtins}));
+			const auto toolchain_digest = digest(
+				"cxxlens.local-clang22.toolchain.v1",
+				arguments_json({version.executable_digest, compiler_version, target, builtins}));
 			const auto catalog = take(sdk::project_catalog::make(
 				"project://root",
 				environment,
@@ -491,7 +502,7 @@ namespace cxxlens::detail::clang22
 			auto toolchain =
 				row(build::relations::toolchain_context::descriptor(),
 					{{"family", symbol("build.toolchain-family/1", "clang")},
-					 {"exact_version", sdk::detached_cell::utf8("22.1.0")},
+					 {"exact_version", sdk::detached_cell::utf8(compiler_version)},
 					 {"target_triple", sdk::detached_cell::utf8(target)},
 					 {"builtin_headers_digest",
 					  digest_cell(digest("cxxlens.local-clang22.builtin-headers.v1", builtins))},
@@ -616,7 +627,8 @@ namespace cxxlens::detail::clang22
 			auto engine = take(registry.build("cxxlens.local-clang22.v1"));
 			const auto semantics =
 				digest("cxxlens.local-clang22.producer.v1",
-					   "Clang 22.1.0 AST observer v4; canonical normalizer v4; single main source");
+					   "Clang " + compiler_version +
+						   " AST observer v4; canonical normalizer v4; single main source");
 			const auto basis = content_digest(arguments_json(
 				{closure.closure_digest, invocation, toolchain_digest, environment}));
 			const sdk::claim_condition condition{"local-clang22-variant:" + variant_id,
