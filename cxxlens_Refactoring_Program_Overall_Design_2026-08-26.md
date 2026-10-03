@@ -285,7 +285,7 @@ Wire、JSON、filesystem、persistent store、build capture等の外部入力は
 
 - 小変更ごとのADR、Issue、fault matrix
 - 通常buildにおけるexact source revision/tree必須化
-- 全local executionでのbinary digest、signature、sandbox certification必須化
+- 全local executionでのbinary digest、品質署名・認定の必須化
 - SQLiteのすべての稀なWAL/SHM topologyをdefault productで独自証明すること
 - 一つのcontractをYAML、schema、Python checker、C++ source text assertionへ重複投影すること
 - Testのためだけにproduction ownership boundaryを細分化するmicro-target
@@ -825,7 +825,7 @@ Phase 1ではSQLite safety codeを即削除しない。次へ分類する。
 - Verified binary provider
 - Sandboxed/hardened provider
 
-を分け、developer modeでsignature/certification/full sandboxを必須にしない。ただしprovider identity、semantic contract、structured failureは維持する。Local trusted結果をVerified/Hardenedへ自動昇格せず、untrusted providerをLocal trusted経路へsilent fallbackしない。
+を分け、通常のローカル利用に品質署名・認定・運用証跡を要求しない。provider identity、semantic contract、structured failure と必要な実行制限は維持する。利用条件は実際の入力整合性と互換性で判断する。
 
 ### 9.7 Exit gate
 

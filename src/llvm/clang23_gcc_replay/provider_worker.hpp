@@ -40,16 +40,13 @@ namespace cxxlens::detail::clang23_gcc_replay
 	{
 		std::vector<std::byte> protocol_transcript;
 		std::string replay_plan_digest;
-		std::optional<std::string> provider_signature_digest;
 		sdk::provider::detail::validated_detached_provider_transcript validated_transcript;
 	};
 
-	/** Trust values supplied by the detached launcher, separately from the provider manifest. */
+	/** Provider identity supplied by the detached launcher. */
 	struct detached_provider_worker_authority
 	{
 		provider_worker_authority worker;
-		std::string provider_signature_digest;
-		std::string provider_revocation_state;
 	};
 
 	/** Read exactly one bounded host transcript without interpreting compiler input. */

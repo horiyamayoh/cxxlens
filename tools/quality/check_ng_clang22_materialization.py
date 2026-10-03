@@ -824,10 +824,7 @@ DF_0200_EXTERNAL_COMPLETENESS_AUTHORITY = {
             "exact_duplicate_claim_occurrence": "collapse-before-event-enumeration",
             "metadata_distinct_same_content_occurrence": "preserve-as-distinct-event",
             "duplicate_final_full_event_projection": "reject",
-            "qualification_binding": (
-                "cxxlens.df-0200.claim-batch-differential-corpus.v1-raw-sha256-"
-                "f05513d05b0b57788b6f94d9c1a477c88d589b64dd8232d88a5c6c6022a84836"
-            ),
+            "regression_corpus": "cxxlens.df-0200.claim-batch-differential-corpus.v1",
         },
         "shared_implementation_allowlist": [
             "canonical-codecs",
@@ -1189,8 +1186,6 @@ EXPECTED_INSTALLED_OCCURRENCE = {
         "fields": [
             "schema",
             "manifest_version",
-            "source_revision",
-            "source_tree",
             "package_configuration",
             "files",
             "occurrence_payload_digest",
@@ -3375,7 +3370,6 @@ def expected_trust_policy_digest(policy: dict[str, Any]) -> str:
                 _canonical_string(feature)
                 for feature in policy["required_features"]
             ),
-            _canonical_string(policy["required_qualification"]),
             _canonical_string(policy["worker_sandbox_policy_digest"]),
             _canonical_tuple(
                 _canonical_tuple(
@@ -3435,7 +3429,6 @@ def bind_engine_policy_and_selector_identities(request: dict[str, Any]) -> None:
         "protocol_major": request["worker"]["protocol_major"],
         "protocol_minor": request["worker"]["protocol_minor"],
         "required_features": list(request["worker"]["required_features"]),
-        "required_qualification": "canonical-semantic-qualified",
         "worker_sandbox_policy_digest": request["worker"]["sandbox_policy_digest"],
         "task_sandbox_requirements": task_sandbox_requirements(request["tasks"]),
         "trust_policy_digest": "pending",
@@ -5319,8 +5312,6 @@ def installed_occurrence_artifacts(root: pathlib.Path) -> list[dict[str, str]]:
 def fixture_occurrence_manifest(
     root: pathlib.Path,
     *,
-    source_revision: str,
-    source_tree: str,
     configuration: str,
     tool_digest: str,
     worker_digest: str,
@@ -5356,8 +5347,6 @@ def fixture_occurrence_manifest(
     payload = {
         "schema": "cxxlens.clang22-materializer-occurrence-manifest.v1",
         "manifest_version": "1.0.0",
-        "source_revision": source_revision,
-        "source_tree": source_tree,
         "package_configuration": configuration,
         "files": files,
     }
@@ -5440,8 +5429,6 @@ def validate_occurrence_manifest(
 def fixture_occurrence_measurement(
     root: pathlib.Path,
     *,
-    source_revision: str,
-    source_tree: str,
     configuration: str,
     tool_digest: str,
     worker_digest: str,
@@ -5450,8 +5437,6 @@ def fixture_occurrence_measurement(
 
     manifest = fixture_occurrence_manifest(
         root,
-        source_revision=source_revision,
-        source_tree=source_tree,
         configuration=configuration,
         tool_digest=tool_digest,
         worker_digest=worker_digest,
@@ -5462,8 +5447,6 @@ def fixture_occurrence_measurement(
         "manifest_file_digest": content_digest(canonical_json(manifest)),
         "occurrence_payload_digest": manifest["occurrence_payload_digest"],
         "inventory_digest": content_digest(canonical_json(manifest["files"])),
-        "source_revision": source_revision,
-        "source_tree": source_tree,
         "configuration": configuration,
         "files": copy.deepcopy(manifest["files"]),
         "tool": {
@@ -5483,8 +5466,6 @@ def measured_occurrence_manifest(measured: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema": "cxxlens.clang22-materializer-occurrence-manifest.v1",
         "manifest_version": "1.0.0",
-        "source_revision": measured["source_revision"],
-        "source_tree": measured["source_tree"],
         "package_configuration": measured["configuration"],
         "files": copy.deepcopy(measured["files"]),
         "occurrence_payload_digest": measured["occurrence_payload_digest"],
@@ -5504,8 +5485,6 @@ def validate_measured_occurrence(
         or measured["inventory_digest"] != content_digest(canonical_json(files))
         or measured["manifest_file_digest"]
         != request["tool"]["occurrence_manifest_digest"]
-        or measured["source_revision"] != request["tool"]["source_revision"]
-        or measured["source_tree"] != request["tool"]["source_tree"]
         or measured["configuration"]
         != request["tool"]["package_configuration"]
         or measured["tool"]
@@ -6001,8 +5980,6 @@ def sample_request(
     variant_id = derive_base_row_identity(relations["build.variant.v1"], variant_row)
     occurrence = fixture_occurrence_measurement(
         root,
-        source_revision="1" * 40,
-        source_tree="2" * 40,
         configuration=configuration,
         tool_digest="sha256:" + digit * 64,
         worker_digest="sha256:" + digit * 64,
@@ -6017,8 +5994,6 @@ def sample_request(
             "executable": "cxxlens-clang22-materialize",
             "interface_version": MATERIALIZATION_VERSION,
             "distribution_version": "1.0.0",
-            "source_revision": "1" * 40,
-            "source_tree": "2" * 40,
             "installed_executable_digest": "sha256:" + digit * 64,
             "package_configuration": configuration,
             "occurrence_manifest_digest": occurrence["manifest_file_digest"],
@@ -6696,18 +6671,11 @@ def expected_runtime_provider_manifest(
             ],
             "provider_version": identity["provider_version"],
             "publisher": "cxxlens",
-            "requested_qualifications": [
-                "canonical-semantic-qualified",
-                "sandbox-qualified",
-                "schema-conformant",
-            ],
             "required_relations": [],
             "resource_class": "provider.clang22",
             "sandbox_minimum": "enforced",
             "schema": "cxxlens.provider-manifest.v1",
-            "signature": None,
             "task_stage": {"input": "observation", "output": "observation"},
-            "trust_flags": [],
         },
         ensure_ascii=False,
         separators=(",", ":"),
@@ -7956,8 +7924,6 @@ def base_claim_report(
             "executable",
             "interface_version",
             "distribution_version",
-            "source_revision",
-            "source_tree",
         )
     }
     producer_digest = semantic_digest(
@@ -8471,8 +8437,6 @@ def expected_direct_basis(
                 "executable",
                 "interface_version",
                 "distribution_version",
-                "source_revision",
-                "source_tree",
             )
         ),
     )
@@ -10745,10 +10709,6 @@ def sample_report(
         ).isoformat().replace("+00:00", "Z"),
         "process_exit_status": 0,
         "raw_input_observation": raw_input_observation(exact_request_bytes),
-        "source": {
-            "revision": request["tool"]["source_revision"],
-            "tree": request["tool"]["source_tree"],
-        },
         "request": {
             "materialization_request_id": request["materialization_request_id"],
             "request_digest": request["request_digest"],
@@ -10762,8 +10722,6 @@ def sample_report(
             },
             "measured": fixture_occurrence_measurement(
                 root,
-                source_revision=request["tool"]["source_revision"],
-                source_tree=request["tool"]["source_tree"],
                 configuration=configuration,
                 tool_digest=request["tool"]["installed_executable_digest"],
                 worker_digest=request["worker"]["installed_binary_digest"],
@@ -12084,7 +12042,6 @@ def validate_request(root: pathlib.Path, request: dict[str, Any]) -> None:
     if (
         trust["policy_id"] != TRUST_POLICY_ID
         or trust["execution_profile"] != "trust.native-worker"
-        or trust["required_qualification"] != "canonical-semantic-qualified"
         or trust["task_sandbox_requirements"] != task_sandbox_requirements(request["tasks"])
         or trust["trust_policy_digest"] != expected_trust_policy_digest(trust)
     ):
@@ -12411,11 +12368,6 @@ def validate_report(
     validate_request(root, request)
     if report["request"] != _request_binding(request):
         fail("materialization.report-invalid", "report request binding differs")
-    if report["source"] != {
-        "revision": request["tool"]["source_revision"],
-        "tree": request["tool"]["source_tree"],
-    }:
-        fail("materialization.identity-mismatch", "report source revision/tree differs")
     if report["installation"]["requested"] != {
         "occurrence_manifest_digest": request["tool"]["occurrence_manifest_digest"]
     }:

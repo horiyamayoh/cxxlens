@@ -1,0 +1,21 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.application-query-results.v1
+title: Lossless independent application relation scans
+type: object
+additionalProperties: false
+required: [schema, snapshot_id, queries]
+properties:
+  schema: {const: cxxlens.application-query-results.v1}
+  snapshot_id: {$ref: 'cxxlens_ng_query_execution_result.schema.yaml#/$defs/typed_digest'}
+  queries:
+    type: array
+    minItems: 1
+    maxItems: 4096
+    items:
+      type: object
+      additionalProperties: false
+      required: [relation_id, logical_ir, result]
+      properties:
+        relation_id: {type: string, minLength: 1}
+        logical_ir: {$ref: 'cxxlens_ng_logical_query_ir.schema.yaml'}
+        result: {$ref: 'cxxlens_ng_query_execution_result.schema.yaml'}

@@ -22,7 +22,7 @@ policy の 1 byte mutation は `security.sandbox-policy-mismatch` で reject す
 構成し、request digest を report へ echo しない。policy digest は applied policy から再計算する。
 
 evidence digest v2 は resolved policy canonical form、recomputed policy digest、achieved assurance、invocation budget limits、exact
-applied mechanisms を bind する。runtime は report adoption 前に evidence を独立再計算し、enforced/certified report の mechanism
+applied mechanisms を bind する。runtime は report adoption 前に evidence を独立再計算し、enforced report の mechanism
 set が policy と exact に一致することを検証する。required mechanism installation が失敗した child は exit 126 で fail closed し、
 `achieved=none` と `security.sandbox-insufficient` を返す。
 

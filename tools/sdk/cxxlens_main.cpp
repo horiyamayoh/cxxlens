@@ -21,7 +21,7 @@ namespace
 				  << "       cxxlens run --project <project.json> --use-case <id> "
 					 "[--format json|markdown]\n"
 				  << "       cxxlens run --bundle <capture-bundle> --worker <absolute-path> "
-					 "--trusted-worker-digest <sha256-digest>\n"
+					 "--trusted-worker-digest <sha256-digest> [--query-results]\n"
 				  << "       cxxlens import --bundle <capture-bundle>\n"
 				  << "       cxxlens capture --project-id <id> --project-root <absolute-path> "
 					 "--compile-commands <path> --compiler <absolute-path>\n"
@@ -189,6 +189,13 @@ namespace
 		for (int index = 2; index < argc; ++index)
 		{
 			const std::string_view option{argv[index]};
+			if (option == "--query-results")
+			{
+				if (request.query_results)
+					return 2;
+				request.query_results = true;
+				continue;
+			}
 			if (index + 1 >= argc)
 			{
 				print_usage();

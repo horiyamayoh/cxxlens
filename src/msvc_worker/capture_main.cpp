@@ -39,6 +39,7 @@ namespace
 		input.canonical_compiler_path =
 			"C:\\VS\\VC\\Tools\\MSVC\\14.51.36231\\bin\\Hostx64\\x64\\cl.exe";
 		input.compiler_binary_digest = digest('1');
+		input.compiler_version = "19.51.36256";
 		input.windows_sdk_root = "C:\\Program Files (x86)\\Windows Kits\\10";
 		input.abi_digest = digest('2');
 		input.builtin_headers_digest = digest('3');

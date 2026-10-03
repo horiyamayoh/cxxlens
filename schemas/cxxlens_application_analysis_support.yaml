@@ -12,7 +12,7 @@ execution_providers:
     semantic_contract_subject: "cxxlens.clang23-gcc-replay-provider.v1\nclang-23.1.0-gcc-mode"
     trust_authority: explicit-host-trusted-worker-digest
     execution_revalidation: sealed-executable-content-digest
-    qualification: experimental
+    stability: experimental
   msvc_clangcl23_replay:
     provider_id: cxxlens.clangcl23-msvc-replay
     provider_version: 1.0.0
@@ -20,7 +20,7 @@ execution_providers:
     semantic_contract_subject: "cxxlens.clangcl23-msvc-replay-provider.v1\nclang-cl-23.1.0-msvc-mode"
     trust_authority: explicit-host-trusted-ed25519-public-key
     execution_revalidation: authenticated-detached-transcript-binding
-    qualification: experimental
+    stability: experimental
 native_provider_decisions:
   gcc:
     decision: no-go
@@ -39,11 +39,8 @@ toolchain_pins:
     source: https://gcc.gnu.org/pub/gcc/releases/gcc-16.2.0/
   msvc:
     family: msvc
-    exact_version: 19.51.36256
+    version_series: "19.51"
     source: https://learn.microsoft.com/en-us/visualstudio/releases/2026/release-history
-    distribution_version: 18.9.12112.369
-    distribution_build: "12112.369"
-    toolset_version: 14.51.36231
   windows_sdk:
     family: windows-sdk
     exact_version: 10.1.26100.8249
@@ -55,9 +52,6 @@ toolchain_pins:
     source: https://github.com/llvm/llvm-project/releases/tag/llvmorg-23.1.0
   windows_runner:
     label: windows-2025-vs2026
-    image_version: 20260824.214.3
-    ambient_defaults_authoritative: false
-    exact_toolchain_assertion: required
 targets:
   - id: gcc-x86_64-linux
     implementation_state: materialization-ready
@@ -81,11 +75,11 @@ targets:
     interpretation: cc.clang23-gcc-replay-1
     guarantee_floor: frontend-replayed
     incomplete_result: partial
-    completion_action: Capture the missing compiler effect or use a qualified native gap provider.
+    completion_action: Capture the missing compiler effect or use a supported native gap provider.
   - id: msvc-x64-windows
     implementation_state: materialization-ready
     availability: experimental
-    production_compiler: msvc-19.51.36256
+    production_compiler: msvc-19.51
     capture_adapters: [msbuild-cltool-proxy]
     analysis_frontend: clang-cl-23.1.0
     target_abi: x86_64-pc-windows-msvc

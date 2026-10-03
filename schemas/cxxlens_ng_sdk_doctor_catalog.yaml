@@ -40,7 +40,7 @@ capabilities:
     kind: provider
     requires: [input.project-catalog.v1]
     consumers: [provider.source-closure.v1, relation.cc-entity.v1, relation.cc-call-site.v1]
-    completion_action: Select one exact trusted Protocol 2.0 provider support tuple.
+    completion_action: "Configure one compatible Protocol 2.0 provider."
   - id: provider.source-closure.v1
     kind: provider
     requires: [provider.protocol.v2, input.source-closure.v1]
@@ -79,13 +79,6 @@ provider_support:
   required_relations: [cc.call_site.v1, cc.entity.v1]
   required_interpretations: [cc.clang22-canonical-1]
   sandbox_minimum: enforced
-  trust:
-    manifest: exact-digest-required
-    binary: exact-digest-required
-    semantics: exact-digest-required
-    signature: verified-required
-    certification: exact-registry-binding-required
-    revocation: not-revoked-required
   candidate_identity:
     domain: cxxlens.provider-candidate.v1
     encoding: semantic-v2-sha256

@@ -41,8 +41,6 @@ namespace cxxlens::sdk::detail
 		semantic_version provider_version;
 		std::string binary_digest;
 		std::string semantic_contract_digest;
-		std::string signature_digest;
-		std::string revocation_state;
 		std::string sandbox_policy_digest;
 
 		[[nodiscard]] bool operator==(const detached_provider_identity&) const = default;

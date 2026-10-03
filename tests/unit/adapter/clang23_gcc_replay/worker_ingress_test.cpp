@@ -323,8 +323,7 @@ namespace
 		value.invalidation_contract = "sha256:" + std::string(64U, 'c');
 		value.determinism_contract = "sha256:" + std::string(64U, 'd');
 		value.resource_class = "provider.application-analysis";
-		value.requested_qualifications = {"experimental"};
-		value.signature = "sha256:" + std::string(64U, 'f');
+
 		return value;
 	}
 
@@ -659,9 +658,7 @@ namespace
 			std::string{msvc_provider_id},
 			msvc_provider_version,
 			std::string{msvc_replay_frontend_id}};
-		require(execution.manifest.signature);
-		const detached_provider_worker_authority authority{
-			worker_authority, *execution.manifest.signature, "not-revoked"};
+		const detached_provider_worker_authority authority{worker_authority};
 		deterministic_detached_run_signer signer;
 		std::istringstream retained_input{string(execution.host)};
 		auto sealed = run_detached_provider_worker(retained_input, authority, signer);
@@ -669,8 +666,6 @@ namespace
 				sealed->value().task_input_digest == value.input_digest() &&
 				sealed->value().replay_plan_digest == value.value().replay_plan_digest &&
 				sealed->value().provider.provider_id == msvc_provider_id &&
-				sealed->value().provider.signature_digest == *execution.manifest.signature &&
-				sealed->value().provider.revocation_state == "not-revoked" &&
 				sealed->value().authentication.signer_id == "worker:clangcl23-test" &&
 				sealed->value().protocol_transcript == execution.output);
 		auto decoded = detail::decode_detached_provider_run(sealed->bytes());
@@ -707,24 +702,6 @@ namespace
 		auto emitted =
 			execute_detached_provider_worker(emitted_input, emitted_output, authority, signer);
 		require(emitted && std::ranges::equal(bytes(emitted_output.str()), sealed->bytes()));
-
-		auto wrong_signature = authority;
-		wrong_signature.provider_signature_digest = "sha256:" + std::string(64U, '7');
-		std::istringstream wrong_signature_input{string(execution.host)};
-		std::ostringstream wrong_signature_output;
-		auto signature_rejected = execute_detached_provider_worker(
-			wrong_signature_input, wrong_signature_output, wrong_signature, signer);
-		require(!signature_rejected && wrong_signature_output.str().empty() &&
-				signature_rejected.error().field == "provider_signature");
-
-		auto revoked = authority;
-		revoked.provider_revocation_state = "revoked";
-		std::istringstream revoked_input{string(execution.host)};
-		std::ostringstream revoked_output;
-		auto revocation_rejected =
-			execute_detached_provider_worker(revoked_input, revoked_output, revoked, signer);
-		require(!revocation_rejected && revoked_output.str().empty() &&
-				revocation_rejected.error().field == "provider_revocation");
 	}
 
 	void clangcl_command_emits_one_cryptographically_authenticated_envelope()
@@ -734,7 +711,6 @@ namespace
 		using namespace cxxlens::sdk::detail;
 		auto value = msvc_input();
 		auto execution = execute_provider(value, true);
-		require(execution.manifest.signature);
 
 		const temporary_directory directory;
 		const auto private_path = directory.path() / "worker private key.raw";
@@ -759,8 +735,7 @@ namespace
 			execution.expectation.task.environment_digest,
 			"2",
 			"0",
-			*execution.manifest.signature,
-			"not-revoked",
+
 			"worker:clangcl23-command-test",
 			private_path.string(),
 			public_path.string()};
@@ -776,8 +751,6 @@ namespace
 		auto run = decode_detached_provider_run(bytes(output_stream.str()));
 		require(run && run->value().task_input_digest == value.input_digest() &&
 				run->value().provider.provider_id == msvc_provider_id &&
-				run->value().provider.signature_digest == *execution.manifest.signature &&
-				run->value().provider.revocation_state == "not-revoked" &&
 				run->value().authentication.signer_id == "worker:clangcl23-command-test");
 
 		exact_public_key_port trust;
@@ -827,7 +800,6 @@ namespace
 
 		auto value = msvc_input();
 		auto execution = execute_provider(value, true, worker_binary_digest);
-		require(execution.manifest.signature);
 		const auto private_key = hex_bytes<detached_run_ed25519_private_key_bytes>(
 			"9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60");
 		const auto public_key = hex_bytes<detached_run_ed25519_public_key_bytes>(
@@ -852,8 +824,6 @@ namespace
 			{"CXXLENS_PROVIDER_ENVIRONMENT_DIGEST", execution.expectation.task.environment_digest},
 			{"CXXLENS_PROVIDER_PROTOCOL_MAJOR", "2"},
 			{"CXXLENS_PROVIDER_PROTOCOL_MINOR", "0"},
-			{"CXXLENS_PROVIDER_SIGNATURE_DIGEST", *execution.manifest.signature},
-			{"CXXLENS_PROVIDER_REVOCATION_STATE", "not-revoked"},
 			{"CXXLENS_DETACHED_RUN_SIGNER_ID", "worker:native-clangcl23-process-test"},
 			{"CXXLENS_DETACHED_RUN_PRIVATE_KEY_FILE", private_path.string()},
 			{"CXXLENS_DETACHED_RUN_PUBLIC_KEY_FILE", public_path.string()},
@@ -875,7 +845,6 @@ namespace
 				run->value().provider.provider_id == msvc_provider_id &&
 				run->value().provider.provider_version == msvc_provider_version &&
 				run->value().provider.binary_digest == worker_binary_digest &&
-				run->value().provider.revocation_state == "not-revoked" &&
 				run->value().authentication.signer_id == "worker:native-clangcl23-process-test");
 
 		const auto public_key = hex_bytes<detached_run_ed25519_public_key_bytes>(

@@ -30,7 +30,7 @@ unknown、safety receipt を結果から落とさない。
 | Provider wire/runtime | provider protocol/runtime schema と ADR 0107/0015/0038 系列 | shared codec、provider direct tests、bounded/structured failure checks |
 | Source closure | source-closure transport/manifest schema と ADR 0101 | native source-closure tests、provenance and closure checks |
 | Snapshot/Store | snapshot/store/SQLite contract schema と accepted Store ADR | Memory/SQLite C++ suites、migration/recovery/fault tests |
-| Trust/security | security profile/certification schemas と security ADR | OpenSSL verifier、provider identity/sandbox tests |
+| Runtime compatibility | provider protocol と実行制限 | provider identity/protocol/sandbox tests |
 | Support | `schemas/cxxlens_support_matrix.yaml` | support matrix checks; no duplicated baseline artifact |
 | Architecture principles | integrated design and `docs/reform/` phase designs | explanatory guidance only; exact fields remain with the owners above |
 

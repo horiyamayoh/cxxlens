@@ -2608,8 +2608,6 @@ namespace cxxlens::sdk::provider
 				return sandbox_assurance::best_effort;
 			if (value == "enforced")
 				return sandbox_assurance::enforced;
-			if (value == "certified")
-				return sandbox_assurance::certified;
 			return std::nullopt;
 		}
 

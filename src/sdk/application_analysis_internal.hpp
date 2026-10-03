@@ -10,12 +10,24 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <cxxlens/sdk/application_analysis.hpp>
 
 namespace cxxlens::sdk::detail
 {
+	[[nodiscard]] inline bool supported_msvc_toolchain_version(const std::string_view version)
+	{
+		constexpr std::string_view prefix{"19.51."};
+		if (!version.starts_with(prefix) || version.size() == prefix.size() || version.size() > 64U)
+			return false;
+		for (const auto byte : version.substr(prefix.size()))
+			if (byte < '0' || byte > '9')
+				return false;
+		return true;
+	}
+
 	struct decoded_capture_path_mapping
 	{
 		std::string physical_prefix;

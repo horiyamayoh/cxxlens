@@ -49,8 +49,6 @@ namespace
 						  {1U, 0U, 0U},
 						  digest('3'),
 						  "semantic-v2:" + digest('4'),
-						  digest('5'),
-						  "not-revoked",
 						  digest('6')};
 		value.protocol_transcript = {std::byte{0x43}, std::byte{0x58}, std::byte{0x4c}};
 		value.terminal = detached_provider_terminal::partial;

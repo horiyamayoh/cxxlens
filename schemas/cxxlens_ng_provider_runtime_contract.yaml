@@ -61,7 +61,7 @@ runtime:
     direct_run_worker: trusted-callback-logical-limits-and-cooperative-cancellation-only
     unsupported_created_file_count: omitted-not-claimed
   sandbox:
-    assurance_order: [none, best_effort, enforced, certified]
+    assurance_order: [none, best_effort, enforced]
     effective_minimum: max(manifest, request, security-profile)
     insufficient: security.sandbox-insufficient
     report_fields: [platform, mechanisms, achieved, policy_digest, evidence_digest]
@@ -109,14 +109,14 @@ selection:
     mutation: const-accessors-only
     execute_revalidation: required-before-process-effect
     selected_decision: exact-one-and-candidate-bound
-    trust_verdicts: [authoritative-path, validation-error-empty, trust-valid, required-certification-valid, certified-qualifications]
+    candidate_checks: [authoritative-path, validation-error-empty, compatible-manifest]
   precedence: [explicit_path, installation_manifest, project_config, system_registry]
   exact_before_fallback: true
   path_only: reject
   candidate_identity:
     schema: cxxlens.provider-candidate.v1
     digest: cxxlens-semantic-digest-v2
-    fields: [full-canonical-manifest, ordered-executable-argv, authoritative-path, trust-verdict, certification-verdict, canonical-certified-qualifications, canonical-sandbox-report, validation-error]
+    fields: [full-canonical-manifest, ordered-executable-argv, authoritative-path, canonical-sandbox-report, validation-error]
     source_binding: decision-source-plus-candidate-digest
   shadowing:
     distinct-full-identity-same-provider-id-version: reject-all
@@ -127,8 +127,7 @@ selection:
   adjacent_provider_or_version: explicit-policy-only
   fallback_policy:
     representation: named-exact-tuples-not-boolean
-    tuple: [priority, provider_id, provider_version, provider_binary_digest, provider_semantic_contract_digest, direction, require_certification, required_qualifications]
-    qualification_authority: certified-qualifications-not-manifest-self-claims
+    tuple: [priority, provider_id, provider_version, provider_binary_digest, provider_semantic_contract_digest, direction]
     selection_order: [unique-policy-priority, discovery-source-precedence, canonical-identity]
     selection_binding: policy-semantic-digest
   explanation:

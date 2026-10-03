@@ -76,7 +76,7 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
         self.assertEqual(provider["provider_version"], "1.0.0")
         self.assertEqual(provider["trust_authority"], "explicit-host-trusted-worker-digest")
         self.assertEqual(provider["execution_revalidation"], "sealed-executable-content-digest")
-        self.assertEqual(provider["qualification"], "experimental")
+        self.assertEqual(provider["stability"], "experimental")
         self.assertEqual(provider["semantic_contract_digest_algorithm"], "sha256")
         self.assertEqual(
             hashlib.sha256(provider["semantic_contract_subject"].encode("utf-8")).hexdigest(),
@@ -94,7 +94,7 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
             provider["execution_revalidation"],
             "authenticated-detached-transcript-binding",
         )
-        self.assertEqual(provider["qualification"], "experimental")
+        self.assertEqual(provider["stability"], "experimental")
         self.assertEqual(provider["semantic_contract_digest_algorithm"], "sha256")
         self.assertEqual(
             hashlib.sha256(provider["semantic_contract_subject"].encode("utf-8")).hexdigest(),
@@ -161,14 +161,11 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
     def test_exact_toolchain_pins_are_not_latest_aliases(self) -> None:
         pins = self.contract["toolchain_pins"]
         self.assertEqual(pins["gcc"]["exact_version"], "16.2.0")
-        self.assertEqual(pins["msvc"]["distribution_version"], "18.9.12112.369")
-        self.assertEqual(pins["msvc"]["exact_version"], "19.51.36256")
+        self.assertEqual(pins["msvc"]["version_series"], "19.51")
         self.assertEqual(pins["windows_sdk"]["exact_version"], "10.1.26100.8249")
         self.assertEqual(pins["windows_sdk"]["kit_version"], "10.0.26100.0")
         self.assertEqual(pins["clang_replay"]["exact_version"], "23.1.0")
         self.assertNotIn("latest", str(pins).lower())
-        self.assertFalse(pins["windows_runner"]["ambient_defaults_authoritative"])
-        self.assertEqual(pins["windows_runner"]["image_version"], "20260824.214.3")
 
     def test_wire_authorities_are_distinct_and_bounded(self) -> None:
         expected = {

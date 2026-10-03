@@ -18,6 +18,8 @@
 
 #include <cxxlens/provider/clang22.hpp>
 
+#include "sdk/source_identity_internal.hpp"
+
 #if defined(CXXLENS_HAS_CLANG22) && CXXLENS_HAS_CLANG22
 #include <clang/AST/Attr.h>
 #include <clang/AST/DeclCXX.h>
@@ -27,6 +29,7 @@
 #include <clang/AST/PrettyPrinter.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Basic/SourceManager.h>
+#include <clang/Basic/Version.h>
 #include <clang/Index/USRGeneration.h>
 #include <clang/Lex/Lexer.h>
 #include <llvm/ADT/ArrayRef.h>
@@ -39,6 +42,15 @@
 
 namespace cxxlens::detail::clang22
 {
+	std::string_view compiled_clang22_version() noexcept
+	{
+#if defined(CXXLENS_HAS_CLANG22) && CXXLENS_HAS_CLANG22
+		return CLANG_VERSION_STRING;
+#else
+		return {};
+#endif
+	}
+
 	namespace
 	{
 		using namespace std::string_view_literals;
@@ -2601,7 +2613,8 @@ namespace cxxlens::detail::clang22
 	observe_provider_worker_v4_ast(provider::clang22::borrowed_translation_unit& unit,
 								   const source_closure_task_v4_decoded& metadata,
 								   std::string compile_unit,
-								   provider_worker_v4_ast_observer_limits limits)
+								   provider_worker_v4_ast_observer_limits limits,
+								   std::string main_source_snapshot)
 	{
 		try
 		{
@@ -2610,12 +2623,24 @@ namespace cxxlens::detail::clang22
 			const source_closure_member* main{};
 			if (auto valid = validate_task_metadata(metadata, compile_unit, main); !valid)
 				return sdk::unexpected(std::move(valid.error()));
+			if (!main_source_snapshot.empty())
+			{
+				auto expected = sdk::detail::derive_source_snapshot_id(
+					main->file_id, main->content_digest, "utf8");
+				if (!expected || main_source_snapshot != *expected ||
+					main->encoding != source_closure_encoding::utf8)
+					return sdk::unexpected(failure("provider-worker-v4.ast-batch-invalid",
+												   "source-snapshot",
+												   "main-input-mismatch"));
+			}
+			else
+				main_source_snapshot = metadata.input.closure.snapshot_id;
 
 			observer_budget budget{limits};
 			for (const auto text : {std::string_view{metadata.identity.task_id},
 									std::string_view{metadata.identity.task_v4_digest},
 									std::string_view{compile_unit},
-									std::string_view{metadata.input.closure.snapshot_id},
+									std::string_view{main_source_snapshot},
 									std::string_view{main->file_id}})
 				if (auto reserved = budget.reserve_bytes(text.size(), "batch-identity"); !reserved)
 					return sdk::unexpected(std::move(reserved.error()));
@@ -2624,7 +2649,7 @@ namespace cxxlens::detail::clang22
 				metadata.identity.task_id,
 				metadata.identity.task_v4_digest,
 				std::move(compile_unit),
-				metadata.input.closure.snapshot_id,
+				std::move(main_source_snapshot),
 				main->file_id,
 				main->size_bytes,
 				{},

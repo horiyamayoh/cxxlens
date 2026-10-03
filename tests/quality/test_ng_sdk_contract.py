@@ -306,18 +306,7 @@ class NgSdkContractTest(unittest.TestCase):
                 "minimum": "enforced",
                 "policy_digest": "sha256:" + "4" * 64,
             },
-            "trust": {
-                "state": "verified",
-                "registry_sequence": 7,
-                "certificate_id": "certificate.provider.one",
-                "trust_anchor_id": "cxxlens.production-root.v1",
-                "signature_digest": "sha256:" + "5" * 64,
-                "revocation": {
-                    "state": "not-revoked",
-                    "effective_sequence": None,
-                    "reason": None,
-                },
-            },
+
         }
         return {
             "schema": "cxxlens.sdk-doctor-project.v2",
@@ -408,10 +397,7 @@ class NgSdkContractTest(unittest.TestCase):
             "relation.cc-entity.v1": ("proved", "doctor.none"),
             "relation.cc-call-site.v1": ("proved", "doctor.none"),
             "query.logical-ir.v1": ("proved", "doctor.none"),
-            "store.snapshot.v3": (
-                "unknown",
-                "doctor.store-authority-unavailable",
-            ),
+            "store.snapshot.v3": ("unknown", "doctor.unknown-dependency"),
             "recipe.calls-to-function.v1": (
                 "unknown",
                 "doctor.unknown-dependency",
@@ -971,7 +957,6 @@ class NgSdkContractTest(unittest.TestCase):
             "relations",
             "interpretations",
             "sandbox",
-            "trust",
         ):
             project = self.doctor_project()
             project["project"]["provider_candidates"][0].pop(required)
@@ -979,16 +964,6 @@ class NgSdkContractTest(unittest.TestCase):
                 jsonschema.ValidationError
             ):
                 validator.validate(project)
-
-        revoked = self.doctor_project()
-        revoked_trust = revoked["project"]["provider_candidates"][0]["trust"]
-        revoked_trust["revocation"] = {
-            "state": "revoked",
-            "effective_sequence": 8,
-            "reason": "provider-key-compromise",
-        }
-        with self.assertRaises(jsonschema.ValidationError):
-            validator.validate(revoked)
 
         missing_tuple = self.doctor_project()
         missing_tuple["project"]["environment"].pop("linkage")
@@ -1107,20 +1082,8 @@ class NgSdkContractTest(unittest.TestCase):
                 "doctor.unsupported-tuple",
                 "doctor.disproved-dependency",
                 "doctor.unknown-dependency",
-                "doctor.provider-untrusted",
-                "doctor.provider-revoked",
-                "doctor.trust-unknown",
-                "doctor.revocation-unknown",
                 "doctor.conflicting-capability",
-                "doctor.catalog-binding-invalid",
-                "doctor.catalog-unavailable",
-                "doctor.catalog-unverified",
-                "doctor.catalog-rejected",
-                "doctor.catalog-revoked",
-                "doctor.provider-certification-unavailable",
-                "doctor.provider-certification-unverified",
                 "doctor.source-closure-unavailable",
-                "doctor.store-authority-unavailable",
             },
         )
 

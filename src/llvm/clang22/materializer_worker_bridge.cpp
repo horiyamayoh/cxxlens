@@ -39,6 +39,7 @@
 #include "provider_task_v4.hpp"
 #include "provider_worker_v4.hpp"
 #include "provider_worker_v4_output_normalizer.hpp"
+#include "sdk/application_query_export_internal.hpp"
 #include "source_closure_task_v4.hpp"
 #include "source_closure_transport.hpp"
 
@@ -306,9 +307,7 @@ namespace cxxlens::detail::clang22
 				"cxxlens.clang22-materializer-semantics.v1",
 				sdk::canonical_value::from_tuple({canonical_text(tool.executable),
 												  canonical_text(tool.interface_version),
-												  canonical_text(tool.distribution_version),
-												  canonical_text(tool.source_revision),
-												  canonical_text(tool.source_tree)}));
+												  canonical_text(tool.distribution_version)}));
 			if (!materializer_semantics)
 				return sdk::unexpected(std::move(materializer_semantics.error()));
 
@@ -462,7 +461,6 @@ namespace cxxlens::detail::clang22
 				 authority.worker.provider_version,
 				 std::string{measured_worker_digest},
 				 authority.worker.semantic_contract_digest,
-				 authority.trust_policy.required_qualification,
 				 authority.trust_policy.trust_policy_digest,
 				 frontend_task.sandbox,
 				 frontend_task.budget},
@@ -853,8 +851,6 @@ namespace cxxlens::detail::clang22
 				std::as_bytes(std::span{determinism_contract.data(), determinism_contract.size()}));
 			manifest.resource_class = "provider.clang22";
 			manifest.sandbox_minimum = "enforced";
-			manifest.requested_qualifications = {
-				"canonical-semantic-qualified", "sandbox-qualified", "schema-conformant"};
 			if (auto valid = manifest.validate(); !valid)
 				return sdk::unexpected(std::move(valid.error()));
 			return manifest;
@@ -1684,14 +1680,6 @@ namespace cxxlens::detail::clang22
 	sdk::result<materializer_worker_execution>
 	run_materializer_worker(installed_materializer_source_closure_result ingress)
 	{
-		production_provider_trust_issuer issuer;
-		return run_materializer_worker(std::move(ingress), issuer);
-	}
-
-	sdk::result<materializer_worker_execution>
-	run_materializer_worker(installed_materializer_source_closure_result ingress,
-							provider_trust_issuer_port& issuer)
-	{
 		if (ingress.request.authority.tasks.empty() || ingress.request.build_captures.empty() ||
 			ingress.request.authority.tasks.size() != ingress.request.build_captures.size())
 			return sdk::unexpected(failure("provider.worker-v4-input-invalid", "tasks", "empty"));
@@ -1736,20 +1724,6 @@ namespace cxxlens::detail::clang22
 									  ingress.request.authority.worker.installed_binary_digest);
 		if (!measured_worker)
 			return sdk::unexpected(std::move(measured_worker.error()));
-		auto issuance = issuer.issue(
-			candidate.description, *measured_worker, ingress.request.authority.trust_policy);
-		if (!issuance)
-			return sdk::unexpected(std::move(issuance.error()));
-		if (auto valid =
-				issuance->validate(candidate.description.provider_id,
-								   candidate.description.provider_version,
-								   *measured_worker,
-								   ingress.request.authority.trust_policy.required_qualification);
-			!valid)
-			return sdk::unexpected(std::move(valid.error()));
-		candidate.trust_valid = issuance->trust_valid;
-		candidate.certified_qualifications = std::move(issuance->certified_qualifications);
-		candidate.certification_valid = issuance->certification_valid;
 		auto policy = sdk::provider::resolve_sandbox_policy(
 			ingress.request.authority.worker.sandbox_policy_digest);
 		if (!policy)
@@ -1777,7 +1751,6 @@ namespace cxxlens::detail::clang22
 			candidate.description.provider_semantic_contract_digest,
 			{sdk::provider::sandbox_assurance::enforced,
 			 ingress.request.authority.worker.sandbox_policy_digest},
-			true,
 			std::nullopt};
 		auto selection =
 			sdk::provider::select_provider(selection_request, std::span{&candidate, 1U});
@@ -1839,10 +1812,8 @@ namespace cxxlens::detail::clang22
 		if (!outcome->succeeded())
 			return sdk::unexpected(
 				failure("provider.transcript-invalid", "worker", outcome->terminal));
-		return materializer_worker_execution{std::move(ingress),
-											 std::move(*generic_task),
-											 std::move(*outcome),
-											 std::move(*issuance)};
+		return materializer_worker_execution{
+			std::move(ingress), std::move(*generic_task), std::move(*outcome)};
 	}
 
 	sdk::result<materializer_store_execution>
@@ -2080,6 +2051,13 @@ namespace cxxlens::detail::clang22
 			return sdk::unexpected(std::move(canonical_export.error()));
 		const auto canonical_export_digest = sdk::content_digest(
 			std::as_bytes(std::span{canonical_export->data(), canonical_export->size()}));
+		std::vector<std::string> query_relations;
+		for (const auto id : task_v4_engine_descriptor_ids)
+			query_relations.emplace_back(id);
+		auto queries =
+			sdk::detail::encode_application_queries(publication_engine, snapshot, query_relations);
+		if (!queries)
+			return sdk::unexpected(std::move(queries.error()));
 		return materializer_store_execution{std::move(execution),
 											std::move(claims),
 											std::move(*base_partitions),
@@ -2089,6 +2067,7 @@ namespace cxxlens::detail::clang22
 											std::move(*published_source),
 											std::move(observed_parent_record),
 											canonical_export_digest,
+											std::move(*queries),
 											std::move(sqlite_effect_root_receipt)};
 	}
 } // namespace cxxlens::detail::clang22

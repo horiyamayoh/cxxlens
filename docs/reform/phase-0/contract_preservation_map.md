@@ -9,7 +9,7 @@ Phase 1 は contract の意味、identity、wire、persisted format、trust sema
 | Relation | descriptor identity、references、merge/conflict、coverage/closure | relation registry/schema | relation contract、IDL `--check`、static/dynamic examples | `CH-0` |
 | Query | typed/dynamic parity、budget、ordering、unknown/partial result | query IR/runtime contracts | query direct tests、negative/fault vectors、Golden | `CH-0` |
 | Provider protocol | bounded decode、frame/session binding、structured terminal failure | provider protocol schema、ADR 0107 | C++ protocol adapter/process tests、schema boundary | `CH-0` |
-| Provider trust | identity、signature/certification、revocation、sandbox classification | security/provider schemas and ADRs | verifier、runtime、hardened provider tests | `CH-0` |
+| Provider execution | identity、ABI/protocol compatibility、sandbox classification | security/provider schemas and ADRs | runtime/provider tests | `CH-0` |
 | Source closure | detached source identity、coverage、closure、read-only safety receipt | source-closure schemas、ADR 0101 | native source-closure/transport tests | `CH-0` |
 | Store | immutable publication、failed isolation、digest、migration、prior snapshot | snapshot/SQLite schemas and Store ADRs | Memory/SQLite C++ suites、fault/recovery tests | `CH-0` |
 | Build profile | core configure without native dependencies; native unavailable is structured | CMake option/presets and support matrix | `configure.dev-core-no-dependencies`、core/native CTest | `CH-0` |

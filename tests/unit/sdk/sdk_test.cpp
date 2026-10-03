@@ -879,7 +879,7 @@ namespace
 							 "execution_checkpoint::phase");
 		rejects_out_of_range(query::execution_status::failed_before_result, "execution_status");
 		rejects_out_of_range(provider::frame_flag::end_of_stream, "frame_flag");
-		rejects_out_of_range(provider::sandbox_assurance::certified, "sandbox_assurance");
+		rejects_out_of_range(provider::sandbox_assurance::enforced, "sandbox_assurance");
 		rejects_out_of_range(provider::discovery_source::system_registry, "discovery_source");
 		rejects_out_of_range(provider::fallback_direction::same_version_rebuild,
 							 "fallback_direction");

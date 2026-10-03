@@ -11,6 +11,7 @@
 #include <tuple>
 #include <utility>
 
+#include "sdk/application_analysis_internal.hpp"
 #include "sdk/source_identity_internal.hpp"
 
 namespace cxxlens::application_analysis_worker
@@ -254,6 +255,8 @@ namespace cxxlens::application_analysis_worker
 	{
 		try
 		{
+			if (!sdk::detail::supported_msvc_toolchain_version(input.compiler_version))
+				return sdk::unexpected(invalid("compiler_version", "unsupported-msvc-series"));
 			if (limits.maximum_sources == 0U || limits.maximum_arguments == 0U ||
 				limits.maximum_string_bytes == 0U)
 				return sdk::unexpected(limit("limits", "zero"));
@@ -408,7 +411,7 @@ namespace cxxlens::application_analysis_worker
 					logical_path(input.canonical_working_directory, input.canonical_project_root)),
 				canonical_value::from_tuple(std::move(semantic)),
 				canonical_value::from_string("c++"),
-				canonical_value::from_string("19.51.36256"),
+				canonical_value::from_string(input.compiler_version),
 				canonical_value::from_string("x86_64-pc-windows-msvc"),
 				observed(canonical_value::from_string(input.compiler_binary_digest)),
 				observed(canonical_value::from_string("$captured-windows-sdk")),
@@ -465,7 +468,7 @@ namespace cxxlens::application_analysis_worker
 			});
 			auto toolchain = canonical_value::from_tuple({
 				canonical_value::from_string("msvc"),
-				canonical_value::from_string("19.51.36256"),
+				canonical_value::from_string(input.compiler_version),
 				observed(canonical_value::from_string(input.canonical_compiler_path)),
 				observed(canonical_value::from_string(input.compiler_binary_digest)),
 				canonical_value::from_string("x86_64-pc-windows-msvc"),

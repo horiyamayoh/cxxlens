@@ -95,13 +95,11 @@ properties:
   tool:
     type: object
     additionalProperties: false
-    required: [executable, interface_version, distribution_version, source_revision, source_tree, installed_executable_digest, package_configuration, occurrence_manifest_digest]
+    required: ["executable", "interface_version", "distribution_version", "installed_executable_digest", "package_configuration", "occurrence_manifest_digest"]
     properties:
       executable: {const: cxxlens-clang22-materialize}
       interface_version: {const: 2.2.0}
       distribution_version: {const: 1.0.0}
-      source_revision: {type: string, pattern: '^[0-9a-f]{40,64}$'}
-      source_tree: {type: string, pattern: '^[0-9a-f]{40,64}$'}
       installed_executable_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
       package_configuration: {enum: [static, shared]}
       occurrence_manifest_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
@@ -126,7 +124,7 @@ properties:
   trust_policy:
     type: object
     additionalProperties: false
-    required: [policy_id, execution_profile, provider_id, provider_version, semantic_contract_digest, protocol_major, protocol_minor, required_features, required_qualification, worker_sandbox_policy_digest, task_sandbox_requirements, trust_policy_digest]
+    required: ["policy_id", "execution_profile", "provider_id", "provider_version", "semantic_contract_digest", "protocol_major", "protocol_minor", "required_features", "worker_sandbox_policy_digest", "task_sandbox_requirements", "trust_policy_digest"]
     properties:
       policy_id: {const: cxxlens.clang22-installed-native-worker-trust.v1}
       execution_profile: {const: trust.native-worker}
@@ -136,7 +134,6 @@ properties:
       protocol_major: {const: 2}
       protocol_minor: {const: 0}
       required_features: {const: [task-input-chunks-v2, task-source-closure-v2]}
-      required_qualification: {const: canonical-semantic-qualified}
       worker_sandbox_policy_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/content_digest}
       task_sandbox_requirements:
         type: array
@@ -148,7 +145,7 @@ properties:
           additionalProperties: false
           required: [minimum, policy_digest]
           properties:
-            minimum: {enum: [enforced, certified]}
+            minimum: {enum: [none, best_effort, enforced]}
             policy_digest: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/$defs/content_digest}
       trust_policy_digest: {$ref: '#/$defs/semantic_digest'}
   group_topology: {$ref: cxxlens_ng_clang22_materialization_request.schema.yaml#/properties/group_topology}

@@ -18,16 +18,12 @@ additionalProperties: false
 required:
   - schema
   - manifest_version
-  - source_revision
-  - source_tree
   - package_configuration
   - files
   - occurrence_payload_digest
 properties:
   schema: {const: cxxlens.clang22-materializer-occurrence-manifest.v1}
   manifest_version: {const: 1.0.0}
-  source_revision: {$ref: '#/$defs/revision'}
-  source_tree: {$ref: '#/$defs/revision'}
   package_configuration: {enum: [static, shared]}
   files:
     type: array

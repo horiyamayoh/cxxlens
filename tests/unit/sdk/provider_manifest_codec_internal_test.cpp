@@ -33,7 +33,7 @@ namespace
 		value.package_identity = "cxxlens.application-analysis-worker.windows-x64";
 		value.publisher = "cxxlens.project";
 		value.license = "Apache-2.0 WITH LLVM-exception";
-		value.signature = "request-signature:self-claim";
+
 		value.protocol = {protocol_v2_major,
 						  protocol_v2_minor,
 						  protocol_v2_minor,
@@ -49,28 +49,23 @@ namespace
 		value.determinism_contract = digest('4');
 		value.resource_class = "provider.application-analysis";
 		value.sandbox_minimum = "enforced";
-		value.requested_qualifications = {"experimental", "schema-conformant"};
-		value.trust_flags = {"manifest-self-claim", "signature-unverified"};
+
 		value.task_input_stage = "observation";
 		value.task_output_stage = "observation";
 		return value;
 	}
 
-	void round_trip_retains_self_claims_without_promoting_trust()
+	void round_trip_retains_provider_contract()
 	{
 		auto expected = fixture();
 		const auto canonical = expected.canonical_json();
 		auto decoded = decode_provider_manifest(canonical);
 		require(decoded.has_value(), decoded ? "" : decoded.error().detail);
 		require(decoded->canonical_json() == canonical, "manifest canonical round trip drifted");
-		require(decoded->trust_flags == expected.trust_flags &&
-					decoded->requested_qualifications == expected.requested_qualifications &&
-					decoded->signature == expected.signature,
-				"manifest self-claims were not retained exactly");
-
-		expected.signature.reset();
-		decoded = decode_provider_manifest(expected.canonical_json());
-		require(decoded && !decoded->signature, "null signature did not round trip");
+		require(decoded->provider_id == expected.provider_id &&
+					decoded->provider_binary_digest == expected.provider_binary_digest &&
+					decoded->protocol.required_features == expected.protocol.required_features,
+				"manifest executable and protocol changed during round trip");
 	}
 
 	void reject(std::string encoded, const std::string_view detail)
@@ -95,10 +90,9 @@ namespace
 		unknown.insert(1U, R"("added":null,)");
 		reject(std::move(unknown), "member-set");
 		auto missing = canonical;
-		const auto signature = missing.find(R"(,"signature":"request-signature:self-claim")");
-		require(signature != std::string::npos, "fixture signature member was not found");
-		missing.erase(signature,
-					  std::string_view{R"(,"signature":"request-signature:self-claim")"}.size());
+		const auto sandbox = missing.find(R"(,"sandbox_minimum":"enforced")");
+		require(sandbox != std::string::npos, "fixture sandbox member was not found");
+		missing.erase(sandbox, std::string_view{R"(,"sandbox_minimum":"enforced")"}.size());
 		reject(std::move(missing), "member-set");
 
 		auto wrong_kind = canonical;
@@ -145,7 +139,7 @@ namespace
 
 int main()
 {
-	round_trip_retains_self_claims_without_promoting_trust();
+	round_trip_retains_provider_contract();
 	structural_and_canonical_rejections();
 	semantic_and_resource_rejections();
 	return 0;

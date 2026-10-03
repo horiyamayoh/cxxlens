@@ -7,7 +7,7 @@
 ## Context
 
 `process_task_request` は public mutable `provider_selection` を受け取り、runtime は `select_provider()` 由来かを確認しなかった。
-caller は selected candidate の authoritative path、trust/certification verdict、validation error、decision transcript、fallback
+caller は selected candidate の authoritative path、input validation result、validation error、decision transcript、fallback
 policy binding、sandbox requirement を構築後に変更できた。binary content digest の launch-time 検証だけでは discovery と trust
 authority を再現できず、manifest minimum より弱い request sandbox を process invocation に渡せた。
 
@@ -23,8 +23,8 @@ original `provider_selection_request`、全 candidate decisions、fallback used�
 - selected decision が exact に一件で、source/provider ID/version/binary digest と selected candidate に一致する
 - selected reason と fallback used が一致する
 - stored authority request の fallback policy digest と token binding が一致する
-- stored request と immutable candidate を `select_provider()` へ replay し、authoritative path、manifest、validation error、trust、
-  certification、certified qualifications、sandbox report、exact/fallback policy を再度通過する
+- stored request と immutable candidate を `select_provider()` へ replay し、authoritative path、manifest、validation error、
+  protocol compatibility、sandbox report、exact/fallback policy を再度通過する
 
 `process_provider_runtime::execute()` は task validation や process launch より先に token validation を必須とする。process request の
 sandbox policy digest は selection authority request と exact に一致させ、minimum は selection request、process request、manifest
@@ -33,13 +33,13 @@ minimum の assurance 最大値とする。この effective requirement を proc
 
 ## Consequences
 
-- untrusted/path-only/uncertified candidate から execution token を構築できない。
+- incompatible/path-only/invalid candidate から execution token を構築できない。
 - selection 後の candidate、decision、fallback policy 改変は public C++ source API 上不可能になる。
 - default/forged token は `provider.selection-invalid` で process effect 前に reject される。
 - request が弱い sandbox minimum を提示しても manifest/security selection authority の minimum は保持される。
 
 ## Verification
 
-`tests/unit/sdk/provider_runtime_test.cpp` は path/trust/certification/validation-error candidate が token を生成しないこと、token の
+`tests/unit/sdk/provider_runtime_test.cpp` は path/protocol/validation-error candidate が token を生成しないこと、token の
 selected decision replay、public accessor の constness、default token の runtime rejection、sandbox policy mismatch rejection、
 selection/request/manifest maximum の enforced execution、validated exact/fallback token の成功を検証する。

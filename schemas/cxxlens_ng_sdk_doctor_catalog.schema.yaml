@@ -104,7 +104,6 @@ properties:
       - required_relations
       - required_interpretations
       - sandbox_minimum
-      - trust
       - candidate_identity
       - support_tuple_fields
       - supported_tuples
@@ -132,18 +131,6 @@ properties:
         maxItems: 128
         const: [cc.clang22-canonical-1]
       sandbox_minimum: {const: enforced}
-      trust:
-        type: object
-        maxProperties: 128
-        additionalProperties: false
-        required: [manifest, binary, semantics, signature, certification, revocation]
-        properties:
-          manifest: {const: exact-digest-required}
-          binary: {const: exact-digest-required}
-          semantics: {const: exact-digest-required}
-          signature: {const: verified-required}
-          certification: {const: exact-registry-binding-required}
-          revocation: {const: not-revoked-required}
       candidate_identity:
         type: object
         maxProperties: 128

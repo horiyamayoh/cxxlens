@@ -192,7 +192,6 @@ def trust_policy_digest(policy: dict[str, Any]) -> str:
             _canonical_tuple(
                 [_canonical_string(value) for value in policy["required_features"]]
             ),
-            _canonical_string(policy["required_qualification"]),
             _canonical_string(policy["worker_sandbox_policy_digest"]),
             _canonical_tuple(
                 [

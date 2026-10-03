@@ -14,14 +14,14 @@ properties:
     properties:
       decision_adr: {const: docs/design/adr/0011-provider-trust-certification-discovery.md}
       owner: {const: steward.ng-security}
-  mutation: {const: signed-registry-update-only}
+  mutation: {"const": "repository-change"}
   entries:
     type: array
     minItems: 10
     items:
       type: object
       additionalProperties: false
-      required: [id, kind, prefix, owner, authority, grant_source, minimum_qualification]
+      required: ["id", "kind", "prefix", "owner", "authority", "grant_source"]
       properties:
         id: {$ref: '#/$defs/id'}
         kind: {enum: [relation, provider, interpretation]}
@@ -29,7 +29,6 @@ properties:
         owner: {$ref: '#/$defs/id'}
         authority: {enum: [standard, custom, provider-owned]}
         grant_source: {enum: [registry-only, exact-delegation, derived-provider-identity]}
-        minimum_qualification: {enum: [experimental, schema-conformant, canonical-semantic-qualified]}
         status: {enum: [active, conformance-only]}
     uniqueItems: true
   delegated_roots:
@@ -51,7 +50,7 @@ properties:
     properties:
       relation_prefix: {const: 'provider.<publisher>.<provider-id>.'}
       interpretation_prefix: {const: 'provider.<publisher>.<provider-id>.'}
-      derivation: {const: exact-verified-provider-identity}
+      derivation: {"const": "provider-identity"}
       standard_authority: {const: false}
 $defs:
   id: {type: string, minLength: 1, maxLength: 512}

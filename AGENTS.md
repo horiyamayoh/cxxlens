@@ -13,8 +13,13 @@
 製品の方向は、コンパイラの観測結果を再現可能・問い合わせ可能な意味知識へ変換し、
 分からない場合は不足理由を返すことである。claim/provenance、coverage、closure、
 unresolved、conflict、differential disagreement、guarantee、unknown、materialization
-report、SQLite/source-closure の安全 receipt、provider の署名・binary identity・失効・
-sandbox・canonical semantic certification は製品機能として維持する。
+report、入力の整合性、ABI/プロトコル互換性、必要な実行制限は製品機能として維持する。
+
+このライブラリは作者自身のアプリ開発に使う。品質管理は Git、通常のログ、ビルドと
+試験で行う。試験済み SHA の台帳、同一 SHA の試験証跡、provider の品質証明書・認定・
+失効台帳、その検証のための追加システムは作らず、既存のものも削除する。
+新しい検査は実際の入力破損、誤った解析結果、互換性、実行上の障害を防ぐために
+必要かで判断する。利用開始の条件に運用証跡を加えない。この方針は下位の仕様に優先する。
 
 開発・release の運用証跡は [ADR 0106](docs/design/adr/0106-test-only-development-and-release-policy.md)
 に従い、生成・保存・再検証しない。Acceptance Manifest、work-unit、review receipt、
@@ -82,7 +87,7 @@ Compatibility request/report は v2 とし、`os`、`architecture`、`toolchain`
 - unknown は actionable な不足理由と completion plan を含む。
 - mutation/generation は plan、独立 validator、dry-run、transaction の順。
 - public API/relation/provider の変更は catalog/registry、Doxygen、acceptance test、設計 traceability を整合させる。
-- provider trust、claim provenance、runtime receipt の安全条件を generic な運用証跡削除と混同しない。
+- 解析結果の出典や不足情報は保持するが、品質認定の台帳や署名を出典に混ぜない。
 
 ## Forbidden shortcuts
 
@@ -115,8 +120,6 @@ versioned wrapper は `/home/dhuru/.local/bin/clang++-22` と
 
 ```sh
 LLVM22_ROOT=/home/dhuru/.local/opt/LLVM-22.1.0-Linux-X64
-CXXLENS_SOURCE_REVISION="$(git rev-parse HEAD)"
-CXXLENS_SOURCE_TREE="$(git rev-parse HEAD^{tree})"
 "$LLVM22_ROOT/bin/llvm-config" --version
 test -f "$LLVM22_ROOT/lib/cmake/llvm/LLVMConfig.cmake"
 test -f "$LLVM22_ROOT/lib/cmake/clang/ClangConfig.cmake"
@@ -131,15 +134,11 @@ cmake -S . -B build/dev-clang-native -G Ninja \
   -DCMAKE_CXX_COMPILER="$LLVM22_ROOT/bin/clang++" \
   -DCXXLENS_CLANG_FORMAT="$LLVM22_ROOT/bin/clang-format" \
   -DLLVM_DIR="$LLVM22_ROOT/lib/cmake/llvm" \
-  -DClang_DIR="$LLVM22_ROOT/lib/cmake/clang" \
-  -DCXXLENS_SOURCE_REVISION="$CXXLENS_SOURCE_REVISION" \
-  -DCXXLENS_SOURCE_TREE="$CXXLENS_SOURCE_TREE"
+  -DClang_DIR="$LLVM22_ROOT/lib/cmake/clang"
 ```
 
 `Enabled exact LLVM/Clang 22.1.0 adapter` が構成出力に現れることを確認する。上記の
 場所が存在しない場合だけ、同じ version の release 配布物を導入してから再試行する。
-source identity の二つの値は install/package 試験で成果物へ埋め込む値であり、運用証跡
-や report ではない。
 
 `cxxlens-quality` は契約を直接 assert し、終了コードだけを返す。変更固有試験と main
 全件が green であることが実装完了であり、別の evidence/report/checkpoint は作らない。

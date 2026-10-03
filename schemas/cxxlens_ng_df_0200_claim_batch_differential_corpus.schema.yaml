@@ -7,7 +7,6 @@ description: >-
   quality checker parses it without repairing, reordering, or inferring fields.
 x-cxxlens-artifact-binding:
   path: schemas/cxxlens_ng_df_0200_claim_batch_differential_corpus.tsv
-  raw_sha256: sha256:f05513d05b0b57788b6f94d9c1a477c88d589b64dd8232d88a5c6c6022a84836
 type: object
 additionalProperties: false
 required:

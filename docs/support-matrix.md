@@ -12,7 +12,6 @@
 | 1.0.0 | provider-sdk | Linux | x86_64 | Clang 22 | shared |
 
 製品の runtime provenance、claim provenance、coverage、unknown、materialization
-report、SQLite/source-closure の安全 receipt、provider の署名・binary identity・失効・sandbox・
-canonical semantic certification は機能契約として残ります。これらは release 判定用の運用証跡ではありません。
+report、SQLite/source-closure の安全 receipt、入力内容、provider identity、ABI・プロトコル互換性と実行制限 は機能契約として残ります。これらは release 判定用の運用証跡ではありません。
 
 Windows/MSVC、未掲載 OS、architecture、toolchain/provider major、linkage は引き続き unsupported です。

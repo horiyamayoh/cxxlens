@@ -71,7 +71,7 @@ cannot publish output.
 ## Product boundary
 
 Product digests, semantic identity, provenance, closure/coverage/unresolved state, provider binary
-identity/signature/revocation, sandbox policy, and crash/recovery receipts remain authoritative.
+input identity, ABI/protocol compatibility, sandbox policy, and crash/recovery behavior remain authoritative.
 
 ## Verification boundary
 

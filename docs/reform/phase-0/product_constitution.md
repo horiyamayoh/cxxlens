@@ -25,16 +25,16 @@ Product runtime が返す次の情報は、開発・release の運用証跡と�
 - coverage、closure、unresolved reason、conflict、differential disagreement
 - guarantee、interpretation、materialization report
 - SQLite/source-closure の安全 receipt
-- provider の署名、binary identity、失効、sandbox、canonical semantic certification
+- 入力内容、provider identity、ABI・プロトコル互換性と実行制限
 
 `unknown` は actionable な不足理由と観測可能な回復条件を含む。回復条件を確定できない場合、推測した completion plan を返さない。
 
 ## 現行 surface と profile
 
 - Public author surface は `cxxlens::sdk` とする。installed `cxxlens` CLI はこの SDK の薄い入口であり、CLI の capability admission は SDK の意味論を置き換えない。
-- OpenSSL Ed25519 port は provider trust 境界を支える内部実装であり、鍵や trust anchor を CLI・repository に埋め込まない。
+- Provider は明示された設定と ABI・プロトコル互換性で選ぶ。品質証明書や認定レポートを要求しない。
 - Memory reference、SQLite standard、SQLite hardened は profile として分類する。hardened の安全機能は Phase 1 で削除せず、standard が必要とする immutable publication、failed publication isolation、migration safety、prior snapshot preservation は共通 invariant として維持する。
-- Local trusted、verified binary、sandboxed/hardened provider を区別する。local の結果を verified/hardened に自動昇格せず、exact identity、signature、certification、sandbox の欠落を silent fallback で隠さない。
+- Local trusted、verified binary、sandboxed/hardened provider を区別する。local の結果を verified/hardened に自動昇格せず、入力の不一致、互換性エラー、適用できない実行制限を hidden fallback で隠さない。
 
 ## 開発・release 判定
 

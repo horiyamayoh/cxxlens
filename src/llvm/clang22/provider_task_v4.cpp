@@ -472,15 +472,6 @@ namespace cxxlens::detail::clang22
 			return {};
 		}
 
-		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): authority value-field order.
-		[[nodiscard]] sdk::result<void> authority_revision(const std::string_view value,
-														   const std::string_view field)
-		{
-			if (value.size() != 40U || !lower_hex(value))
-				return sdk::unexpected(authority_invalid(std::string{field}, "revision"));
-			return {};
-		}
-
 		[[nodiscard]] sdk::result<void> authority_version(const sdk::semantic_version& actual,
 														  const sdk::semantic_version expected,
 														  const std::string_view field)
@@ -556,8 +547,6 @@ namespace cxxlens::detail::clang22
 			{
 				case sdk::provider::sandbox_assurance::enforced:
 					return "enforced";
-				case sdk::provider::sandbox_assurance::certified:
-					return "certified";
 				default:
 					return {};
 			}
@@ -705,8 +694,6 @@ namespace cxxlens::detail::clang22
 				text(value.executable),
 				text(value.interface_version),
 				text(value.distribution_version),
-				text(value.source_revision),
-				text(value.source_tree),
 				text(value.installed_executable_digest),
 				text(value.package_configuration),
 				text(value.occurrence_manifest_digest),
@@ -816,7 +803,6 @@ namespace cxxlens::detail::clang22
 				sdk::canonical_value::from_integer(static_cast<std::int64_t>(value.protocol_major)),
 				sdk::canonical_value::from_integer(static_cast<std::int64_t>(value.protocol_minor)),
 				strings(value.required_features),
-				text(value.required_qualification),
 				text(value.worker_sandbox_policy_digest),
 				sandbox_requirements_projection(value.task_sandbox_requirements),
 			});
@@ -1199,12 +1185,6 @@ namespace cxxlens::detail::clang22
 			 })
 			if (auto valid = authority_string(value, "tool." + std::string{field}); !valid)
 				return valid;
-		for (const auto [field, value] : {
-				 std::pair{std::string_view{"source_revision"}, std::string_view{source_revision}},
-				 std::pair{std::string_view{"source_tree"}, std::string_view{source_tree}},
-			 })
-			if (auto valid = authority_revision(value, "tool." + std::string{field}); !valid)
-				return valid;
 		if (auto valid = authority_content_digest(installed_executable_digest,
 												  "tool.installed_executable_digest");
 			!valid)
@@ -1262,8 +1242,6 @@ namespace cxxlens::detail::clang22
 				 std::pair{std::string_view{"execution_profile"},
 						   std::string_view{execution_profile}},
 				 std::pair{std::string_view{"provider_id"}, std::string_view{provider_id}},
-				 std::pair{std::string_view{"required_qualification"},
-						   std::string_view{required_qualification}},
 			 })
 			if (auto valid = authority_string(value, "trust_policy." + std::string{field}); !valid)
 				return valid;

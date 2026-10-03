@@ -194,18 +194,6 @@ namespace cxxlens::sdk::detail
 			return semantic_version{components[0U], components[1U], components[2U]};
 		}
 
-		[[nodiscard]] result<std::optional<std::string>> optional_signature(const json_value& value)
-		{
-			auto found = member(value, {.name = "signature", .field = "signature"});
-			if (!found)
-				return unexpected(std::move(found.error()));
-			if ((*found)->is_null())
-				return std::optional<std::string>{};
-			auto value_text = text(**found, "signature", maximum_id_bytes);
-			if (!value_text)
-				return unexpected(std::move(value_text.error()));
-			return std::optional<std::string>{std::move(*value_text)};
-		}
 	} // namespace
 
 	result<provider::manifest> decode_provider_manifest(const std::string_view canonical_bytes)
@@ -234,7 +222,7 @@ namespace cxxlens::sdk::detail
 			if (!root)
 				return unexpected(std::move(root.error()));
 
-			constexpr std::array<std::string_view, 21U> root_fields{
+			constexpr std::array<std::string_view, 18U> root_fields{
 				"determinism_contract",
 				"interpretation_domains",
 				"invalidation_contract",
@@ -248,14 +236,11 @@ namespace cxxlens::sdk::detail
 				"provider_semantic_contract_digest",
 				"provider_version",
 				"publisher",
-				"requested_qualifications",
 				"required_relations",
 				"resource_class",
 				"sandbox_minimum",
 				"schema",
-				"signature",
-				"task_stage",
-				"trust_flags"};
+				"task_stage"};
 			if (auto valid = exact_members(*root, root_fields, "manifest"); !valid)
 				return unexpected(std::move(valid.error()));
 			if (canonical_json(*root) != canonical_bytes)
@@ -309,11 +294,6 @@ namespace cxxlens::sdk::detail
 			if (!provider_version)
 				return unexpected(std::move(provider_version.error()));
 			output.provider_version = *provider_version;
-			auto signature = optional_signature(*root);
-			if (!signature)
-				return unexpected(std::move(signature.error()));
-			output.signature = std::move(*signature);
-
 			auto protocol = member(*root, {.name = "protocol_range", .field = "protocol_range"});
 			if (!protocol)
 				return unexpected(std::move(protocol.error()));
@@ -338,10 +318,7 @@ namespace cxxlens::sdk::detail
 				  std::pair{&output.offered_relations, std::string_view{"offered_relations"}},
 				  std::pair{&output.required_relations, std::string_view{"required_relations"}},
 				  std::pair{&output.interpretation_domains,
-							std::string_view{"interpretation_domains"}},
-				  std::pair{&output.requested_qualifications,
-							std::string_view{"requested_qualifications"}},
-				  std::pair{&output.trust_flags, std::string_view{"trust_flags"}}})
+							std::string_view{"interpretation_domains"}}})
 				if (auto decoded =
 						assign_member_string_array(*binding.first, *root, binding.second);
 					!decoded)

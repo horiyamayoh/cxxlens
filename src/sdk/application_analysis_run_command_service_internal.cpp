@@ -23,6 +23,7 @@
 #include <cxxlens/sdk/query.hpp>
 
 #include "application_analysis_command_service_internal.hpp"
+#include "application_query_export_internal.hpp"
 #include "bounded_json_internal.hpp"
 
 namespace cxxlens::sdk::detail
@@ -239,16 +240,13 @@ namespace cxxlens::sdk::detail
 			manifest.invalidation_contract = std::move(invalidation);
 			manifest.determinism_contract = std::move(determinism);
 			manifest.resource_class = "provider.application-analysis";
-			manifest.requested_qualifications = {"experimental"};
+
 			if (auto valid = manifest.validate(); !valid)
 				return unexpected(std::move(valid.error()));
 			return provider::provider_candidate{std::move(manifest),
 												provider::discovery_source::explicit_path,
 												{request.worker_path},
 												true,
-												true,
-												true,
-												{"experimental"},
 												{"linux-glibc",
 												 policy.mechanisms,
 												 provider::sandbox_assurance::enforced,
@@ -463,7 +461,6 @@ namespace cxxlens::sdk::detail
 				candidate->description.provider_binary_digest,
 				candidate->description.provider_semantic_contract_digest,
 				{provider::sandbox_assurance::enforced, candidate->sandbox.policy_digest},
-				true,
 				std::nullopt};
 			auto materialization = materialization_request::make(context->engine,
 																 std::move(*publication),
@@ -480,7 +477,12 @@ namespace cxxlens::sdk::detail
 			auto analyzed = materialize(*store, loaded->project, *materialization);
 			if (!analyzed)
 				return unexpected(std::move(analyzed.error()));
-			auto encoded = result_projection(*analyzed, context->engine, context->relation_ids);
+			if (request.query_results && !analyzed->published_snapshot())
+				return unexpected(run_error("query-results", "no-published-snapshot"));
+			auto encoded = request.query_results
+				? encode_application_queries(
+					  context->engine, *analyzed->published_snapshot(), context->relation_ids)
+				: result_projection(*analyzed, context->engine, context->relation_ids);
 			if (!encoded)
 				return unexpected(std::move(encoded.error()));
 			return application_analysis_run_command_result{analyzed->terminal(),

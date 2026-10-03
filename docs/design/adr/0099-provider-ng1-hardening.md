@@ -85,5 +85,4 @@ inputs. They are validated by direct tests.
 
 ## Acceptance gate
 
-NG1 の acceptance は Protocol 2.0、署名、binary identity、revocation、sandbox、canonical
-semantic certification の positive・negative・fault test が通ることだけである。
+NG1 の acceptance は Protocol 2.0、入力と binary identity、sandbox の実際の動作を試験することである。品質証明書は要求しない。

@@ -88,14 +88,11 @@ namespace
 		manifest.invalidation_contract = digest('c');
 		manifest.determinism_contract = digest('d');
 		manifest.resource_class = "provider.application-analysis";
-		manifest.requested_qualifications = {"experimental"};
+
 		return {std::move(manifest),
 				provider::discovery_source::explicit_path,
 				{worker},
 				true,
-				true,
-				true,
-				{"experimental"},
 				{"linux-glibc",
 				 policy.mechanisms,
 				 provider::sandbox_assurance::enforced,
@@ -203,7 +200,6 @@ namespace
 			candidate.description.provider_binary_digest,
 			candidate.description.provider_semantic_contract_digest,
 			{provider::sandbox_assurance::enforced, policies.front().policy_digest()},
-			true,
 			std::nullopt};
 		provider::execution_budget execution_budget;
 #if defined(CXXLENS_SANITIZER_INSTRUMENTED)

@@ -31,7 +31,6 @@ namespace cxxlens::sdk::detail
 		semantic_version provider_version;
 		std::string provider_binary_digest;
 		std::string provider_semantics_digest;
-		std::string required_qualification;
 		std::string trust_policy_digest;
 		provider::sandbox_requirement sandbox;
 		provider::execution_budget budget;

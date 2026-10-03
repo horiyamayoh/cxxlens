@@ -156,7 +156,7 @@ namespace
 		{
 			return assurance == cxxlens::sdk::provider::sandbox_assurance::enforced
 				? std::string{"enforced"}
-				: std::string{"certified"};
+				: std::string{"best_effort"};
 		};
 		std::vector<cxxlens::sdk::canonical_value> requirements;
 		for (const auto& requirement : trust.task_sandbox_requirements)
@@ -182,7 +182,6 @@ namespace
 					cxxlens::sdk::canonical_value::from_string(trust.required_features[0]),
 					cxxlens::sdk::canonical_value::from_string(trust.required_features[1]),
 				}),
-				cxxlens::sdk::canonical_value::from_string(trust.required_qualification),
 				cxxlens::sdk::canonical_value::from_string(trust.worker_sandbox_policy_digest),
 				cxxlens::sdk::canonical_value::from_tuple(std::move(requirements)),
 			}));
@@ -210,8 +209,7 @@ namespace
 		request.tool = {"/opt/cxxlens/bin/materializer",
 						"tool-interface-v2.2",
 						"distribution-2.0",
-						std::string(40U, 'a'),
-						std::string(40U, 'b'),
+
 						content('c'),
 						"package-config:clang22",
 						semantic('d')};
@@ -294,7 +292,7 @@ namespace
 								request.worker.protocol_major,
 								request.worker.protocol_minor,
 								request.worker.required_features,
-								"canonical-semantic-qualified",
+
 								request.worker.sandbox_policy_digest,
 								{{cxxlens::sdk::provider::sandbox_assurance::enforced,
 								  request.worker.sandbox_policy_digest}},
@@ -371,7 +369,7 @@ namespace
 			{"minimum",
 			 json_text_value(value.minimum == cxxlens::sdk::provider::sandbox_assurance::enforced
 								 ? "enforced"
-								 : "certified")},
+								 : "best_effort")},
 			{"policy_digest", json_text_value(value.policy_digest)},
 		});
 	}
@@ -553,8 +551,6 @@ namespace
 				 {"executable", json_text_value(request.tool.executable)},
 				 {"interface_version", json_text_value(request.tool.interface_version)},
 				 {"distribution_version", json_text_value(request.tool.distribution_version)},
-				 {"source_revision", json_text_value(request.tool.source_revision)},
-				 {"source_tree", json_text_value(request.tool.source_tree)},
 				 {"installed_executable_digest",
 				  json_text_value(request.tool.installed_executable_digest)},
 				 {"package_configuration", json_text_value(request.tool.package_configuration)},
@@ -623,8 +619,6 @@ namespace
 				 {"protocol_minor",
 				  json_value::unsigned_integer(request.trust_policy.protocol_minor)},
 				 {"required_features", json_strings(request.trust_policy.required_features)},
-				 {"required_qualification",
-				  json_text_value(request.trust_policy.required_qualification)},
 				 {"worker_sandbox_policy_digest",
 				  json_text_value(request.trust_policy.worker_sandbox_policy_digest)},
 				 {"task_sandbox_requirements", json_array_value(std::move(sandbox_requirements))},

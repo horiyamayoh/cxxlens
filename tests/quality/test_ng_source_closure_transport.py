@@ -116,7 +116,7 @@ class SourceClosureTransportTest(unittest.TestCase):
         )
         extension["task_id"] = "task:" + extension["task_v4_digest"]
         worker = {"provider_id": "cxxlens.clang22.reference", "provider_version": "2.0.0", "semantic_contract_digest": "sha256:" + "9" * 64, "protocol_major": 2, "protocol_minor": 0, "required_features": ["task-input-chunks-v2", "task-source-closure-v2"], "sandbox_policy_digest": "sha256:" + "8" * 64}
-        trust = {"policy_id": "cxxlens.clang22-installed-native-worker-trust.v1", "execution_profile": "trust.native-worker", "provider_id": worker["provider_id"], "provider_version": worker["provider_version"], "semantic_contract_digest": worker["semantic_contract_digest"], "protocol_major": 2, "protocol_minor": 0, "required_features": list(worker["required_features"]), "required_qualification": "canonical-semantic-qualified", "worker_sandbox_policy_digest": worker["sandbox_policy_digest"], "task_sandbox_requirements": [base["sandbox"]], "trust_policy_digest": "pending"}
+        trust = {"policy_id": "cxxlens.clang22-installed-native-worker-trust.v1", "execution_profile": "trust.native-worker", "provider_id": worker["provider_id"], "provider_version": worker["provider_version"], "semantic_contract_digest": worker["semantic_contract_digest"], "protocol_major": 2, "protocol_minor": 0, "required_features": list(worker["required_features"]), "worker_sandbox_policy_digest": worker["sandbox_policy_digest"], "task_sandbox_requirements": [base["sandbox"]], "trust_policy_digest": "pending"}
         trust["trust_policy_digest"] = trust_policy_digest(trust)
         request = {
             "schema": "cxxlens.clang22-materialization-request.v2_2",

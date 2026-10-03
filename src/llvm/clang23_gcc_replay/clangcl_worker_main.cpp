@@ -108,8 +108,6 @@ int main(const int argc, char** argv)
 	if (sandbox_child)
 	{
 		const std::array signing_environment{
-			"CXXLENS_PROVIDER_SIGNATURE_DIGEST",
-			"CXXLENS_PROVIDER_REVOCATION_STATE",
 			"CXXLENS_DETACHED_RUN_SIGNER_ID",
 			"CXXLENS_DETACHED_RUN_PRIVATE_KEY_FILE",
 			"CXXLENS_DETACHED_RUN_PUBLIC_KEY_FILE",
@@ -173,8 +171,6 @@ int main(const int argc, char** argv)
 	}
 
 	const std::array signing_bindings{
-		std::pair{"CXXLENS_PROVIDER_SIGNATURE_DIGEST", &configuration::provider_signature_digest},
-		std::pair{"CXXLENS_PROVIDER_REVOCATION_STATE", &configuration::provider_revocation_state},
 		std::pair{"CXXLENS_DETACHED_RUN_SIGNER_ID", &configuration::detached_run_signer_id},
 		std::pair{"CXXLENS_DETACHED_RUN_PRIVATE_KEY_FILE",
 				  &configuration::detached_run_private_key_file},

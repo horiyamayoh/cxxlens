@@ -460,13 +460,18 @@ namespace cxxlens::application_analysis_worker
 			input.canonical_project_root = std::move(*root_text);
 			input.canonical_working_directory = std::move(*working_text);
 			input.canonical_compiler_path = std::move(*compiler_text);
+			auto compiler_version = read_msvc_compiler_version(*canonical_compiler);
+			if (!compiler_version)
+				return msvc_capture_command_result{
+					executed->exit_code, std::nullopt, std::move(compiler_version.error())};
+			input.compiler_version = std::move(*compiler_version);
 			input.windows_sdk_root = std::move(*sdk_text);
 			auto compiler_bytes = read_worker_binary_file(compiler, maximum_file_bytes);
 			if (!compiler_bytes)
 				return msvc_capture_command_result{
 					executed->exit_code, std::nullopt, std::move(compiler_bytes.error())};
 			input.compiler_binary_digest = sdk::content_digest(*compiler_bytes);
-			auto abi_digest = digest_text({"x86_64-pc-windows-msvc", "19.51.36256"});
+			auto abi_digest = digest_text({"x86_64-pc-windows-msvc", input.compiler_version});
 			if (!abi_digest)
 				return msvc_capture_command_result{
 					executed->exit_code, std::nullopt, std::move(abi_digest.error())};
@@ -487,8 +492,9 @@ namespace cxxlens::application_analysis_worker
 				input.original_arguments.push_back(std::move(*argument_text));
 			}
 			input.builtin_macros_digest = input.compiler_binary_digest;
-			auto include_digest = digest_text(
-				{"msvc-19.51.36256", "windows-sdk-10.1.26100.8249", "default-devshell-x64"});
+			auto include_digest = digest_text({"msvc-" + input.compiler_version,
+											   "windows-sdk-10.1.26100.8249",
+											   "default-devshell-x64"});
 			if (!include_digest)
 				return msvc_capture_command_result{
 					executed->exit_code, std::nullopt, std::move(include_digest.error())};

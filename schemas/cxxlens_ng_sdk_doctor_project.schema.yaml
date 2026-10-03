@@ -132,61 +132,6 @@ $defs:
     properties:
       minimum: {$ref: '#/$defs/id'}
       policy_digest: {$ref: '#/$defs/digest'}
-  revocation:
-    type: object
-    maxProperties: 128
-    additionalProperties: false
-    required: [state, effective_sequence, reason]
-    properties:
-      state: {enum: [not-revoked, revoked, unknown]}
-      effective_sequence: {$ref: '#/$defs/nullable_nonnegative_integer'}
-      reason: {$ref: '#/$defs/nullable_id'}
-    allOf:
-      - if:
-          properties: {state: {const: revoked}}
-          required: [state]
-        then:
-          properties:
-            effective_sequence: {$ref: '#/$defs/nonnegative_integer'}
-            reason: {$ref: '#/$defs/id'}
-      - if:
-          properties: {state: {enum: [not-revoked, unknown]}}
-          required: [state]
-        then:
-          properties:
-            effective_sequence: {type: 'null'}
-            reason: {type: 'null'}
-  trust:
-    type: object
-    maxProperties: 128
-    additionalProperties: false
-    required:
-      - state
-      - registry_sequence
-      - certificate_id
-      - trust_anchor_id
-      - signature_digest
-      - revocation
-    properties:
-      state: {enum: [verified, unknown, rejected]}
-      registry_sequence: {$ref: '#/$defs/nonnegative_integer'}
-      certificate_id: {$ref: '#/$defs/nullable_id'}
-      trust_anchor_id: {$ref: '#/$defs/nullable_id'}
-      signature_digest: {$ref: '#/$defs/nullable_digest'}
-      revocation: {$ref: '#/$defs/revocation'}
-    allOf:
-      - if:
-          properties: {state: {const: verified}}
-          required: [state]
-        then:
-          properties:
-            certificate_id: {$ref: '#/$defs/id'}
-            trust_anchor_id: {$ref: '#/$defs/id'}
-            signature_digest: {$ref: '#/$defs/digest'}
-            revocation:
-              allOf:
-                - {$ref: '#/$defs/revocation'}
-                - properties: {state: {const: not-revoked}}
   provider_candidate:
     type: object
     maxProperties: 128
@@ -204,7 +149,6 @@ $defs:
       - relations
       - interpretations
       - sandbox
-      - trust
     properties:
       candidate_id: {$ref: '#/$defs/semantic_digest'}
       provider_id: {$ref: '#/$defs/id'}
@@ -218,4 +162,3 @@ $defs:
       relations: {$ref: '#/$defs/string_set'}
       interpretations: {$ref: '#/$defs/string_set'}
       sandbox: {$ref: '#/$defs/sandbox'}
-      trust: {$ref: '#/$defs/trust'}

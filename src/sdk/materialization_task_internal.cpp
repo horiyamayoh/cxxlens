@@ -104,7 +104,7 @@ namespace cxxlens::sdk::detail
 							std::string_view{value.trust_policy_digest}}})
 				if (auto valid = require_strong(input, std::string{field}); !valid)
 					return valid;
-			if (value.provider_id.empty() || value.required_qualification.empty())
+			if (value.provider_id.empty())
 				return unexpected(task_error("provider", "omitted-authority"));
 			if (value.provider_id != task.session.provider_id ||
 				value.provider_version != task.session.provider_version ||
@@ -173,7 +173,6 @@ namespace cxxlens::sdk::detail
 				version_value(value.provider.provider_version),
 				canonical_value::from_string(value.provider.provider_binary_digest),
 				canonical_value::from_string(value.provider.provider_semantics_digest),
-				canonical_value::from_string(value.provider.required_qualification),
 				canonical_value::from_string(value.provider.trust_policy_digest),
 				canonical_value::from_string(value.provider.sandbox.policy_digest),
 				canonical_value::from_string(value.publication.snapshot.series.id()),

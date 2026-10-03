@@ -220,8 +220,6 @@ identity:
     - interface_version
     - installed_executable_digest
     - distribution_version
-    - source_revision
-    - source_tree
     - package_configuration
     - occurrence_manifest_digest
   exact_worker_identity:
@@ -239,7 +237,7 @@ identity:
     fixed_path: share/cxxlens/materialization/clang22/occurrence-v1.json
     request_authority: expected-exact-manifest-file-digest
     manifest_payload:
-      fields: [schema, manifest_version, source_revision, source_tree, package_configuration, files, occurrence_payload_digest]
+      fields: [schema, manifest_version, package_configuration, files, occurrence_payload_digest]
       files: configuration-closed-exact-ordered-role-prefix-relative-path-and-sha256-digest-records
       configuration_inventory:
         closure: every-installed-materializer-worker-authority-and-package-owned-runtime-artifact-exactly-once
@@ -419,9 +417,8 @@ registry_engine_binding:
   trust_policy:
     policy_id: cxxlens.clang22-installed-native-worker-trust.v1
     execution_profile: trust.native-worker
-    required_qualification: canonical-semantic-qualified
     digest_domain: cxxlens.clang22-installed-native-worker-trust.v1
-    projection: [policy-id, execution-profile, provider-id, provider-version, provider-semantic-contract-digest, protocol-major, protocol-minor, required-features, required-qualification, worker-sandbox-policy-digest, sorted-unique-task-minimum-and-policy-digest-tuples]
+    projection: [policy-id, execution-profile, provider-id, provider-version, provider-semantic-contract-digest, protocol-major, protocol-minor, required-features, worker-sandbox-policy-digest, sorted-unique-task-minimum-and-policy-digest-tuples]
     physical_binary_configuration_prefix_backend_and-path: excluded
   selector:
     exact_fields: [catalog-id, channel-id, engine-generation-id, condition-universe-id, engine-registry-digest, interpretation-policy-digest, trust-policy-digest]
@@ -717,13 +714,12 @@ claim_adoption:
       - unresolved-conflict-and-differential-censuses
       - cxxlens-claim-batch-v2-canonical-encoding-and-content-digest
       digest_only_equality_or_order: forbidden
-      qualification_corpus:
+      test_corpus:
         id: cxxlens.df-0200.claim-batch-differential-corpus.v1
         artifact:
           schema_id: https://cxxlens.dev/schema/ng/df-0200-claim-batch-differential-corpus.schema.yaml
           format: cxxlens.df-0200.claim-batch-differential-corpus.tsv.v1
           artifact_version: 1.0.0
-          raw_sha256: sha256:f05513d05b0b57788b6f94d9c1a477c88d589b64dd8232d88a5c6c6022a84836
         census:
           added_claim_count: 17
           existing_claim_count: 16
@@ -2096,22 +2092,6 @@ report:
       snapshot-path-publication-equality-with-series-paths: not-required
       boolean-only-proof: forbidden
     validation_order: [batch, group, task-side-channel, task-result, task-result-and-raw-frame-sets, global-side-channels, guarantee, claim-stages, global-provenance, base-claim-guarantee-cross-binding, sdk-claim-envelopes-and-canonicalization, complete-final-claim-batch, claim-basis-and-partitions, snapshot-manifest, publication-record, reopened-store-state]
-qualification:
-  configurations: [static, shared]
-  backends: [memory, sqlite]
-  required_matrix: exact-cartesian-product
-  relocated_prefix: required
-  same_project_request_and_worker_semantics: required
-  sqlite_reopened: required
-  memory_sqlite_semantic_parity: required
-  static_shared_semantic_parity: required
-  exact_observation_equivalence: required-zero-non-exact-per-descriptor
-  scale_and_resource_evidence:
-    cases: [one-task, four-thousand-ninety-six-tasks, sixteen-mib-source, five-hundred-twelve-mib-aggregate-source, one-gib-raw-request, arbitrary-short-reads]
-    retained_memory_formula: one-shared-catalog-plus-fixed-buffers-plus-one-task-window-plus-one-source-plus-one-output-window
-    forbidden_residency: [raw-request, aggregate-source, all-task-payloads, task-count-times-catalog-count]
-    spool-failure: zero-effect-before-publication
-  missing_extra_duplicate_matrix_entry: reject
 errors:
   stable:
     - materialization.request-invalid

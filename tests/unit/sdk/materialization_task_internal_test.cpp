@@ -207,7 +207,6 @@ namespace
 										   {1U, 0U, 0U},
 										   content('4'),
 										   semantic('5'),
-										   "provider.release",
 										   semantic('8'),
 										   {provider::sandbox_assurance::enforced, semantic('9')},
 										   {}},

@@ -19,6 +19,11 @@
 `docs/archive/legacy-v1/design/cxxlens_integrated_design_ja.md` と旧 124 API freeze は移行時の provenance であり、
 新規 API、relation、provider、実装 dispatch を認可しない。
 
+品質管理は Git、通常のログ、ビルドと試験で行う。provider の品質証明書・認定・失効台帳、
+試験済み SHA の別台帳、同一 SHA での全試験証跡は設けない。解析器は設定した実行ファイルと
+ABI/プロトコル互換性で利用できる。coverage、unknown、解析入力の整合性は実際の解析の
+意味情報として保持する。本方針は認定を要求していた旧記述に優先する。
+
 ---
 
 ## 文書の位置付け
@@ -37,7 +42,7 @@
 | Provider Protocol Specification | process protocol、manifest、task、batch、failure |
 | Public C++ API Catalog | signature、lifetime、threading、stability |
 | Quality/release workflows | requirement、登録試験、直接判定、終了コード |
-| Security Profile / Trust Registries | namespace ownership、certification、discovery、sandbox、support tuple |
+| Security Profile | namespace ownership、discovery、sandbox、protocol compatibility |
 | ADR | 選択理由、代替案、未確定実装方式 |
 | Examples / Tutorials | 非規範の利用例 |
 
@@ -1506,11 +1511,11 @@ ir.llvm22.optimized/1
 dynamic.runtime-observation/1
 ```
 
-provider implementation version と interpretation domain を同一視しない。certified provider が同じ semantic contract を実装する場合、同じ domain を宣言できる。
+provider implementation version と interpretation domain を同一視しない。provider が同じ semantic contract を実装する場合、同じ domain を宣言できる。
 
 ### 12.2 Provider-owned observation
 
-未 certified provider は provider-owned namespace/domain へ出力する。standard canonical relation を直接出す場合、relation-specific conformance level を満たさなければならない。
+provider の生の観測は provider-owned namespace/domain へ出力する。standard canonical relation を直接出す場合、その relation の型・意味・参照整合性を満たさなければならない。
 
 ### 12.3 Same-domain claim conflict
 
@@ -2838,7 +2843,7 @@ canonical JSON だけを生成する。schema-valid だが runtime-invalid な s
 manifest の publisher、signature、trust flag、conformance level、interpretation domain は provider の request であり、
 authority ではない。署名 subject は provider ID/version、package identity、publisher、manifest digest、binary
 digest、semantic contract digest の exact tuple に bind する。standard namespace と canonical interpretation の
-grant は `cxxlens.namespace-registry.v1` と `cxxlens.provider-certification-registry.v1` だけが行う。
+namespace owner は `cxxlens.namespace-registry.v1` の通常の設定で宣言する。
 
 ### 17.4 Provider task
 
@@ -3419,11 +3424,11 @@ deterministic selection order:
 3. project config
 4. system registry
 
-各 discovery source 内では exact explicitly requested provider、trusted certification、project policy、conformance、
+各 discovery source 内では exact explicitly requested provider、protocol compatibility、project policy、
 descriptor compatibility、provider ID/version/binary digest の順で判定する。PATH-only discovery は authority ではなく
 `security.path-only-discovery` で reject する。同一 provider ID/version に異なる full canonical candidate identity が存在するか、
 同一 source に exact duplicate があれば `security.provider-shadowing` として全候補を reject する。
-上位 source の exact candidate が署名、certificate、sandbox 検証に失敗した場合、下位 source への継続は
+上位 source の exact candidate が入力整合性、protocol、sandbox 検証に失敗した場合、下位 source への継続は
 `security.downgrade-forbidden` で拒否する。
 
 silent adjacent-version fallback 禁止。
@@ -3431,20 +3436,20 @@ silent adjacent-version fallback 禁止。
 候補への fallback は、caller policy が明示的に許可し、選択・棄却理由が explain 可能な場合に限る。
 explanation は全候補の source、candidate digest、exact identity、selection/rejection reason、fallback 使用有無を保持する。
 
-ADR 0081 により candidate identity は manifest 全体、ordered executable argv、authoritative path、trust/certification verdict、
-canonical certified qualifications、sandbox report、validation error を `cxxlens.provider-candidate.v1` の semantic-digest-v2 に bind する。
+ADR 0081 により candidate identity は manifest 全体、ordered executable argv、authoritative path、input validation result、
+sandbox report、validation error を `cxxlens.provider-candidate.v1` の semantic-digest-v2 に bind する。
 source は identity digest へ混入せず decision の source と組にして discovery occurrence を識別する。同じ full identity を異なる source が
 発見した場合だけ source precedence で正規化し、decision order は source、provider ID/version、binary digest、candidate digest の strict total
 order とする。filesystem traversal や caller の列挙順を selection、canonical form、cache、監査証跡の authority にしてはならない。
 bool opt-in は identity authority にならない。ADR 0039 の fallback policy は provider ID/version/binary digest/semantic contract
-digest の exact tuple、requested version に対する direction、unique priority、certification requirement、certified qualification set を
+digest の exact tuple、requested version に対する direction、unique priority、protocol compatibility を
 列挙する。manifest self-claim は qualification の証拠とせず、policy にない同名 provider を候補へ広げない。複数 tuple は policy priority、
 次に discovery source precedence で決定し、selection canonical form は policy semantic digest を保持する。
 
 ADR 0042 により、selection result は `select_provider()` だけが生成できる immutable validated token とする。token は original
 selection request、selected candidate、全 decision、fallback policy digest を value-own し、const accessor 以外で candidate や
 decision を変更できない。process runtime は effect 前に selected decision exact 一件、candidate identity/source、trust、
-certification、authoritative path、validation error、fallback policy を original request へ replay validation する。default token、
+protocol compatibility、configured path、validation error、fallback policy を original request へ replay validation する。default token、
 decision 不一致、policy binding 不一致は `provider.selection-invalid` とし、binary digest 検証だけで selection authority を代替しない。
 
 ### 17.8 In-process providers
@@ -4707,7 +4712,7 @@ experimental baseline:
 stable/versioned baseline:
 
 - `stable` C++ header の source compatibility を原則維持
-- C++ binary ABI は certified compiler/stdlib tuple でのみ別途宣言
+- C++ binary ABI は 対応する compiler/stdlib tuple でのみ別途宣言
 - protocol/schema semantics は独立 versioning
 - third-party C++ plugin ABI は非提供
 
@@ -4894,14 +4899,13 @@ multi-file transaction は「真の全file atomicity」ではなく、lock、jou
 enum class sandbox_assurance {
     none,
     best_effort,
-    enforced,
-    certified
+    enforced
 };
 ```
 
 provider manifest は required minimum、runtime は achieved assurance を報告する。
 
-assurance は `none < best_effort < enforced < certified` の全順序である。effective minimum は manifest、request、
+assurance は `none < best_effort < enforced` の全順序である。effective minimum は manifest、request、
 security profile の最大値とする。runtime evidence は platform、mechanism、achieved、policy digest、evidence digest を
 必ず持つ。minimum を満たせなければ `security.sandbox-insufficient` として provider unavailable。silent degradation
 禁止。
@@ -4916,14 +4920,14 @@ membership を検証する。同じ規則を public closed enum 全体に適用�
 ADR 0046 の policy registry は baseline と strict の canonical policy bytes、semantic-v2 digest、control projection を authority
 として公開する。baseline は network deny と標準 resource limits、strict はさらに core dump と locked memory の zero limit を
 要求する。request digest を report へ echo してはならず、selection report、execution invocation、execution report は同じ
-resolved policy identity に bind する。enforced/certified evidence の mechanism set は policy と exact に一致しなければならない。
+resolved policy identity に bind する。enforced evidence の mechanism set は policy と exact に一致しなければならない。
 
 ADR 0082 により provider executable は working directory を適用した target を一度だけ open し、その source FD から
 executable memfd へ bytes を copy する。copy 後は write/grow/shrink/seal を封じ、exact sealed image bytes の digest を selected
 manifest と照合する。child は verified FD を descriptor 3 に保持し、`execveat(AT_EMPTY_PATH)` で実行する。digest 検証後に path、
 symlink、inode を再解決してはならない。rename、symlink swap、in-place mutation が競合した場合も、実行できるのは hash した sealed
 image のみであり、それ以外は launch reject とする。sandbox evidence v3 は measured executable digest を policy、achieved assurance、
-budget、exact mechanism set と共に bind し、この binding を実証できない process output は enforced/certified として採用しない。
+budget、exact mechanism set と共に bind し、この binding を実証できない process output は enforced として採用しない。
 execution report は measured executable digest を明示し、未測定の pre-launch failure だけ `null` とする。
 
 ### 24.3 Safe defaults
@@ -4938,7 +4942,7 @@ execution report は measured executable digest を明示し、未測定の pre-
 - product plugin/spec execution disabled
 - remote disabled
 - source mutation disabled
-- unsigned provider policy明示
+- configured provider と実行制限を明示
 - provider output fully validated
 
 ### 24.4 Product compiler/plugin trust
@@ -4969,58 +4973,21 @@ product plugin/spec/wrapper を実行する profile は:
 - cleanup failure diagnostic
 - platform-specific Windows path designは support 前に追加
 
-### 24.6 Provider authenticity
+### 24.6 Provider の実行設定
 
-署名対象 record:
+明示的に指定した executable を使用し、ID/version、ABI・プロトコル、入力内容、出力の形と参照整合性を確認する。
+品質証明書、認定・失効台帳、試験済み Git SHA の登録を利用条件にしない。
 
-```text
-provider ID/version
-package identity
-publisher
-manifest digest
-binary digest
-semantic contract digest
-```
+### 24.7 Namespace ownership
 
-production signature は Ed25519、subject digest は domain-separated SHA-256 full 256 bit とする。cryptographic
-verifier は trusted port とし、verifier ID、key fingerprint、signed subject digest、verdict を evidence として返す。
-manifest が自己申告する signature verdict/certification state は authority ではない。
+`cxxlens.namespace-registry.v1` は relation、provider ID、interpretation domain の owner を通常の設定表で示す。
+所有権の変更はコード・仕様の変更として扱い、外部発行者の証明書を必要としない。
 
-### 24.7 Namespace ownership と certification
+### 24.8 Discovery と validation boundary
 
-`cxxlens.namespace-registry.v1` は relation、provider ID、interpretation domain の prefix owner を固定する。
-`build.*`、`source.*`、`cc.*`、`core.*` は standard namespace であり、registry owner と trusted certificate の
-双方が認可した provider だけが canonical authority を得る。`org.*` は exact child owner registration が必要で、
-root の直接 claim を禁止する。`provider.<publisher>.<provider-id>.*` は exact verified provider identity から導出する
-provider-owned namespace であり、standard authority を持たない。
-
-certification level は次を区別する。
-
-```text
-experimental
-schema-conformant
-deterministic
-sandbox-qualified
-canonical-semantic-qualified
-cross-version-qualified
-production-supported
-```
-
-`schema-conformant` は shape validation だけを意味し、`canonical-semantic-qualified` を含意しない。certificate は
-issuer、subject tuple、relation、interpretation、toolchain、platform、validity、registry sequence に bind し、trusted
-registry の issuer/revocation を通る。stale/revoked/subject mismatch は structured rejection とする。本 repository の
-conformance trust anchor は production authority を一切付与しない。
-
-### 24.8 Discovery、support、validation boundary
-
-ADR 0011 により discovery precedence、shadowing、downgrade rule を exact contract とする。selection は
-全候補の理由を explain 可能でなければならない。support は provider ID/version/binary digest、relation、interpretation、
-toolchain、platform の exact tuple を `cxxlens.provider-support-matrix.v1` で公開し、planned/conformance-only を
-production-supported と推測しない。
-
-provider manifest/output、schema/model pack、snapshot/cache は untrusted input とし、size limit、schema digest、
-canonical encoding、reference integrity、trust binding を authority/publication/cache adoption の前に検証する。失敗は
-prior published snapshot を変更しない。
+Configured executable、project configuration、installed configuration の順で候補を解決する。
+ID/version、ABI・プロトコル、必要な relation、実際に適用した sandbox を確認し、曖昧な候補は診断する。
+解析結果、snapshot/cache はサイズ、encoding、reference integrity を検証する。失敗時は既存 snapshot を変更しない。
 
 ### 24.9 Privacy
 
@@ -5069,7 +5036,7 @@ provider が nondeterministic な場合:
 - nondeterministic dimensions
 - reproducibility limitation
 
-を記録し、certified canonical provider として扱わない場合がある。
+を解析結果の不足情報として記録する。
 
 ### 25.2 Canonical export
 
@@ -5160,7 +5127,7 @@ scale、real-project、relocated-install の終了コードだけで判定し、
 
 claim/provenance、coverage、unknown、conflict、materialization report、SQLite/source-
 closure の安全 receipt、provider の署名・binary identity・失効・sandbox・canonical
-semantic certification は製品 runtime semantics なので、この廃止対象ではない。
+品質認定・署名・失効台帳も廃止対象であり、実行に必要な互換性と入力の整合性だけを確認する。
 
 現行の実行条件はこの節、直接試験、`quality.yml`、`release.yml` に限る。
 
@@ -5219,7 +5186,7 @@ CAS artifact plan はそれぞれの product contract と positive・negative・
 
 release の supported surface は通常の全件試験と `schemas/cxxlens_support_matrix.yaml` の
 `{release_version, surface, os, architecture, compiler_provider_major, linkage}` の照合で決める。
-provider の署名、binary identity、失効、sandbox、canonical semantic certification と、materialization の
+provider identity、ABI・プロトコル互換性と実行制限 と、materialization の
 provenance、coverage、unknown、runtime safety receipt は製品契約として各試験から直接検査する。
 
 quality の job は直接試験を実行し、同じ workflow 内で同じ logical test を重複させない。cache hit は試験の成功条件を
@@ -5310,7 +5277,7 @@ request/report は product environment axes のみを扱う。対応環境は
 
 release package の可否は release workflow の全試験終了コードと通常の support table 照合で決める。
 製品 runtime が返す provenance、coverage、unknown、materialization report、安全 receipt、
-provider trust/certification は引き続き normative であり、運用証跡廃止の対象ではない。
+provider の品質証明書・認定・失効台帳は廃止し、利用条件にしない。
 
 ### 28.1 Version axes
 
@@ -5410,25 +5377,11 @@ stable public API は次を満たす。
 - static/dynamic query example
 - provider conformance
 
-### 28.5 Provider certification
+### 28.5 Provider の対応環境
 
-```text
-experimental
-schema-conformant
-deterministic
-sandbox-qualified
-canonical-semantic-qualified
-cross-version-qualified
-production-supported
-```
-
-certification state は provider manifest の自己申告ではなく trusted certification registry に由来する。standard
-namespace authority は `canonical-semantic-qualified` 以上でなければならず、provider の署名、binary identity、失効、sandbox、
-canonical semantic certification は製品の安全機能として保持する。
-release の対応環境は `schemas/cxxlens_support_matrix.yaml` の
-`{release_version, surface, os, architecture, compiler_provider_major, linkage}` を照合する。
-この対応表は binary/evidence digest や `production-supported` qualification を持たず、wildcard、未掲載環境、Windows/MSVC は
-unsupported とする。
+対応環境は `schemas/cxxlens_support_matrix.yaml` の version/surface/environment 表で宣言する。
+品質証明書、認定・失効台帳は作らず、Git、通常のログ、ビルド、回帰試験を使用する。
+query の coverage/closure/provenance は解析結果の意味を表すデータとして保持する。
 
 ### 28.6 Design change procedure
 
@@ -5508,7 +5461,7 @@ identity-contract major とする。
 
 precedence は explicit path、installation manifest、project config、system registry。PATH-only authority、invalid な上位
 candidate から下位 candidate への downgrade、同一 ID/version の異なる binary shadowing を禁止する。署名、namespace、
-certificate、sandbox、support tuple と全 selection/rejection reason は `cxxlens.security-profile.v1` に従う。
+protocol compatibility、sandbox と selection/rejection reason は `cxxlens.security-profile.v1` に従う。
 
 PATH-only authorityは禁止。
 
@@ -5694,8 +5647,7 @@ NG1 default:
 
 - [ ] namespace owner registry が standard/custom/provider-owned authority を分離
 - [ ] schema-conformant が canonical semantic authority を含意しない
-- [ ] certification は trusted issuer/subject/validity/revocation registry に由来
-- [ ] unsigned/self-certified provider は standard authority を取得不能
+- [ ] configured provider の ABI・プロトコル互換性を確認する
 - [ ] discovery precedence と全 selection/rejection reason が explain 可能
 - [ ] PATH-only、duplicate、shadowing、downgrade が structured rejection
 - [ ] sandbox effective minimum と achieved evidence を照合
@@ -5864,8 +5816,6 @@ invalidation_contract: sha256:00000000000000000000000000000000000000000000000000
 determinism_contract: sha256:0000000000000000000000000000000000000000000000000000000000000000
 resource_class: ast-heavy
 sandbox_minimum: enforced
-requested_qualifications: [canonical-semantic-qualified, sandbox-qualified, schema-conformant]
-trust_flags: []
 task_stage: {input: observation, output: assertion}
 ```
 

@@ -384,7 +384,6 @@ def sample_manifest() -> dict[str, Any]:
         "provider_semantic_contract_digest": "sha256:" + "b" * 64,
         "publisher": "cxxlens.project",
         "license": "Apache-2.0 WITH LLVM-exception",
-        "signature": None,
         "protocol_range": {"major": PROTOCOL_MAJOR, "minimum_minor": PROTOCOL_MINOR, "maximum_minor": PROTOCOL_MINOR, "required_features": ["streaming"], "optional_features": ["resume"]},
         "platform_tuples": ["linux-x86_64"],
         "offered_relations": ["cc.entity.v1"],
@@ -394,8 +393,6 @@ def sample_manifest() -> dict[str, Any]:
         "determinism_contract": "sha256:" + "d" * 64,
         "resource_class": "frontend-medium",
         "sandbox_minimum": "process-isolated",
-        "requested_qualifications": ["schema-conformant"],
-        "trust_flags": ["requires-trusted-registry-for-standard-authority"],
         "task_stage": {"input": "observation", "output": "assertion"},
     }
 

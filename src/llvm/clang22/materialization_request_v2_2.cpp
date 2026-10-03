@@ -404,8 +404,6 @@ namespace cxxlens::detail::clang22::materialization
 				return sdk::unexpected(std::move(text.error()));
 			if (*text == "enforced")
 				return sdk::provider::sandbox_assurance::enforced;
-			if (*text == "certified")
-				return sdk::provider::sandbox_assurance::certified;
 			return sdk::unexpected(invalid(std::string{field}, "sandbox-assurance"));
 		}
 
@@ -885,8 +883,6 @@ namespace cxxlens::detail::clang22::materialization
 			constexpr std::array fields{"executable",
 										"interface_version",
 										"distribution_version",
-										"source_revision",
-										"source_tree",
 										"installed_executable_digest",
 										"package_configuration",
 										"occurrence_manifest_digest"};
@@ -897,8 +893,6 @@ namespace cxxlens::detail::clang22::materialization
 				 {std::pair{&output.executable, std::string_view{"executable"}},
 				  std::pair{&output.interface_version, std::string_view{"interface_version"}},
 				  std::pair{&output.distribution_version, std::string_view{"distribution_version"}},
-				  std::pair{&output.source_revision, std::string_view{"source_revision"}},
-				  std::pair{&output.source_tree, std::string_view{"source_tree"}},
 				  std::pair{&output.installed_executable_digest,
 							std::string_view{"installed_executable_digest"}},
 				  std::pair{&output.package_configuration,
@@ -1030,7 +1024,6 @@ namespace cxxlens::detail::clang22::materialization
 										"protocol_major",
 										"protocol_minor",
 										"required_features",
-										"required_qualification",
 										"worker_sandbox_policy_digest",
 										"task_sandbox_requirements",
 										"trust_policy_digest"};
@@ -1043,8 +1036,6 @@ namespace cxxlens::detail::clang22::materialization
 				  std::pair{&output.provider_id, std::string_view{"provider_id"}},
 				  std::pair{&output.semantic_contract_digest,
 							std::string_view{"semantic_contract_digest"}},
-				  std::pair{&output.required_qualification,
-							std::string_view{"required_qualification"}},
 				  std::pair{&output.worker_sandbox_policy_digest,
 							std::string_view{"worker_sandbox_policy_digest"}},
 				  std::pair{&output.trust_policy_digest, std::string_view{"trust_policy_digest"}}})

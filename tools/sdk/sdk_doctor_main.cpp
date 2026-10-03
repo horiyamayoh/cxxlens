@@ -113,9 +113,7 @@ namespace
 		}
 		const auto& checks = std::get<std::vector<cxxlens::sdk::doctor::relation_check>>(checked);
 		const auto json = canonical_json(cxxlens::sdk::doctor::to_json(
-			checks,
-			std::get<cxxlens::sdk::doctor::authenticated_capability_catalog>(
-				std::move(loaded_catalog))));
+			checks, std::get<cxxlens::sdk::doctor::capability_catalog>(std::move(loaded_catalog))));
 		if (!print_document(format, json))
 			return 2;
 		return std::ranges::all_of(checks,
@@ -265,24 +263,10 @@ namespace
 			print_error(std::get<product_error>(loaded_catalog));
 			return 2;
 		}
-		const cxxlens::sdk::doctor::installed_product_authority_loader authority_loader;
-		const cxxlens::sdk::doctor::unavailable_signature_verifier signature_verifier;
-		const cxxlens::sdk::doctor::unavailable_authority_state_port authority_state;
-		const auto authority_source =
-			cxxlens::sdk::doctor::installed_authority_source_from_paths(argv[0]);
-		auto loaded_authority =
-			authority_loader.load(authority_source, signature_verifier, authority_state);
-		if (std::holds_alternative<product_error>(loaded_authority))
-		{
-			print_error(std::get<product_error>(loaded_authority));
-			return 2;
-		}
 		const auto resolved = cxxlens::sdk::doctor::resolve(
 			use_case,
 			std::get<cxxlens::sdk::doctor::project_context>(project),
-			std::get<cxxlens::sdk::doctor::authenticated_capability_catalog>(
-				std::move(loaded_catalog)),
-			std::get<cxxlens::sdk::doctor::installed_product_authority_verifier>(loaded_authority));
+			std::get<cxxlens::sdk::doctor::capability_catalog>(std::move(loaded_catalog)));
 		if (std::holds_alternative<product_error>(resolved))
 		{
 			print_error(std::get<product_error>(resolved));

@@ -37,7 +37,7 @@ central enum/switch、pretty type string identity、opaque custom payload、unor
 portable provider は manifest、typed detached value、relation sink、coverage/provenance builder と同じ test harness を使います。
 filesystem、process、time、hash は port 越しに扱い、selection、binary identity、toolchain、variant、sandbox outcome を明示します。
 native provider の AST/TU pointer は callback-scoped borrowed object とし、保存・所有・別 thread 移送を禁止します。provider の署名、
-失効、sandbox、canonical semantic certification は製品安全条件として回帰試験で守ります。
+入力の整合性、sandbox、ABI・プロトコル互換性 は製品安全条件として回帰試験で守ります。
 
 ## Validation
 

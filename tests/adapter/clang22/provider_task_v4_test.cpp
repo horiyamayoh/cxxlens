@@ -288,7 +288,7 @@ namespace
 		{
 			return assurance == cxxlens::sdk::provider::sandbox_assurance::enforced
 				? std::string{"enforced"}
-				: std::string{"certified"};
+				: std::string{"best_effort"};
 		};
 		std::vector<cxxlens::sdk::canonical_value> requirements;
 		for (const auto& requirement : trust.task_sandbox_requirements)
@@ -314,7 +314,6 @@ namespace
 					cxxlens::sdk::canonical_value::from_string(trust.required_features[0]),
 					cxxlens::sdk::canonical_value::from_string(trust.required_features[1]),
 				}),
-				cxxlens::sdk::canonical_value::from_string(trust.required_qualification),
 				cxxlens::sdk::canonical_value::from_string(trust.worker_sandbox_policy_digest),
 				cxxlens::sdk::canonical_value::from_tuple(std::move(requirements)),
 			}));
@@ -342,8 +341,7 @@ namespace
 		request.tool = {"/opt/cxxlens/bin/materializer",
 						"tool-interface-v2.2",
 						"distribution-2.0",
-						std::string(40U, 'a'),
-						std::string(40U, 'b'),
+
 						content('c'),
 						"package-config:clang22",
 						semantic('d')};
@@ -451,7 +449,7 @@ namespace
 								request.worker.protocol_major,
 								request.worker.protocol_minor,
 								request.worker.required_features,
-								"canonical-semantic-qualified",
+
 								request.worker.sandbox_policy_digest,
 								{{cxxlens::sdk::provider::sandbox_assurance::enforced,
 								  request.worker.sandbox_policy_digest}},

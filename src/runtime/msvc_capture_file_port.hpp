@@ -32,6 +32,7 @@ namespace cxxlens::application_analysis_worker
 
 	[[nodiscard]] sdk::result<std::wstring> canonical_worker_directory(std::wstring_view path);
 	[[nodiscard]] sdk::result<std::wstring> canonical_worker_file(std::wstring_view path);
+	[[nodiscard]] sdk::result<std::string> read_msvc_compiler_version(std::wstring_view path);
 	[[nodiscard]] sdk::result<std::wstring> current_worker_directory();
 	[[nodiscard]] sdk::result<std::vector<std::byte>>
 	read_worker_binary_file(std::wstring_view path, std::size_t maximum_bytes);

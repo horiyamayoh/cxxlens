@@ -89,8 +89,7 @@ int main(const int argument_count, const char* const* arguments)
 		"sha256:7878787878787878787878787878787878787878787878787878787878787878";
 	description.resource_class = "provider.clang22";
 	description.sandbox_minimum = "enforced";
-	description.requested_qualifications = {
-		"canonical-semantic-qualified", "sandbox-qualified", "schema-conformant"};
+
 	require(description.validate().has_value(), "Clang worker manifest is invalid");
 
 	auto sandbox_policy = baseline_policy();
@@ -106,9 +105,6 @@ int main(const int argument_count, const char* const* arguments)
 		discovery_source::explicit_path,
 		{executable},
 		true,
-		true,
-		true,
-		{"canonical-semantic-qualified", "sandbox-qualified", "schema-conformant"},
 		discovered_sandbox,
 		{},
 	};
@@ -118,7 +114,6 @@ int main(const int argument_count, const char* const* arguments)
 		description.provider_binary_digest,
 		description.provider_semantic_contract_digest,
 		{sandbox_assurance::enforced, sandbox_policy.policy_digest()},
-		true,
 		std::nullopt,
 	};
 	auto selection = select_provider(selection_authority, std::span{&candidate, 1U});
