@@ -76,7 +76,7 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
         self.assertEqual(provider["provider_version"], "1.0.0")
         self.assertEqual(provider["trust_authority"], "explicit-host-trusted-worker-digest")
         self.assertEqual(provider["execution_revalidation"], "sealed-executable-content-digest")
-        self.assertEqual(provider["qualification"], "experimental")
+        self.assertEqual(provider["stability"], "experimental")
         self.assertEqual(provider["semantic_contract_digest_algorithm"], "sha256")
         self.assertEqual(
             hashlib.sha256(provider["semantic_contract_subject"].encode("utf-8")).hexdigest(),
@@ -94,7 +94,7 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
             provider["execution_revalidation"],
             "authenticated-detached-transcript-binding",
         )
-        self.assertEqual(provider["qualification"], "experimental")
+        self.assertEqual(provider["stability"], "experimental")
         self.assertEqual(provider["semantic_contract_digest_algorithm"], "sha256")
         self.assertEqual(
             hashlib.sha256(provider["semantic_contract_subject"].encode("utf-8")).hexdigest(),

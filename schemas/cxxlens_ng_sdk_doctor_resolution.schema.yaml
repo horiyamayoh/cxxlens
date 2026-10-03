@@ -252,20 +252,8 @@ $defs:
       - doctor.unsupported-tuple
       - doctor.disproved-dependency
       - doctor.unknown-dependency
-      - doctor.provider-untrusted
-      - doctor.provider-revoked
-      - doctor.trust-unknown
-      - doctor.revocation-unknown
       - doctor.conflicting-capability
-      - doctor.catalog-binding-invalid
-      - doctor.catalog-unavailable
-      - doctor.catalog-unverified
-      - doctor.catalog-rejected
-      - doctor.catalog-revoked
-      - doctor.provider-certification-unavailable
-      - doctor.provider-certification-unverified
       - doctor.source-closure-unavailable
-      - doctor.store-authority-unavailable
   conflict:
     type: object
     maxProperties: 128

@@ -36,6 +36,7 @@
 #include "llvm/clang22/source_closure_transport.hpp"
 #include "materialization_request_v2_2_fixture.hpp"
 #include "protocol_v2/closure.hpp"
+#include "sdk/application_query_export_internal.hpp"
 
 namespace
 {
@@ -43,43 +44,6 @@ namespace
 	using namespace cxxlens::detail::clang22;
 	using namespace cxxlens::detail::clang22::materialization;
 	namespace protocol = ::cxxlens::protocol_v2;
-
-	class conformance_provider_trust_issuer final : public provider_trust_issuer_port
-	{
-	  public:
-		[[nodiscard]] sdk::result<provider_trust_issuance>
-		issue(const sdk::provider::manifest& manifest,
-			  const std::string_view measured_binary_digest,
-			  const provider_task_v4_trust_authority& policy) override
-		{
-			const auto normalized_provider_id = [&]
-			{
-				auto value = policy.provider_id;
-				std::ranges::replace(value, ':', '.');
-				return value;
-			}();
-			if (manifest.provider_id != normalized_provider_id ||
-				manifest.provider_version != policy.provider_version ||
-				manifest.provider_binary_digest != measured_binary_digest ||
-				manifest.provider_semantic_contract_digest !=
-					policy.semantic_contract_digest.substr(std::string_view{"semantic-v2:"}.size()))
-				return sdk::unexpected(sdk::error{
-					"security.certificate-subject-mismatch", "provider", "conformance-subject"});
-			auto subject = provider_trust_subject_digest(manifest.provider_id,
-														 manifest.provider_version,
-														 measured_binary_digest,
-														 policy.required_qualification);
-			if (!subject)
-				return sdk::unexpected(std::move(subject.error()));
-			return provider_trust_issuance{true,
-										   true,
-										   {policy.required_qualification},
-										   std::move(*subject),
-										   "cxxlens.conformance-issuer.v1",
-										   "certificate:conformance-clang22",
-										   "1"};
-		}
-	};
 
 	[[nodiscard]] json_value text(const std::string_view value)
 	{
@@ -688,11 +652,10 @@ namespace
 			std::abort();
 		if (!worker_path.empty())
 		{
-			conformance_provider_trust_issuer issuer;
 			received->request.authority.worker.executable = std::string{worker_path};
 			received->request.authority.worker.installed_binary_digest =
 				executable_digest(worker_path);
-			auto execution = run_materializer_worker(std::move(*received), issuer);
+			auto execution = run_materializer_worker(std::move(*received));
 			if (!execution || !execution->outcome.succeeded())
 			{
 				if (!execution)
@@ -718,6 +681,35 @@ namespace
 			}
 			if (published->publication.snapshot.id().empty())
 				std::abort();
+			auto query_document = sdk::detail::parse_json_value(published->query_results_json);
+			assert(query_document && query_document->member("queries") != nullptr);
+			const auto* queries = query_document->member("queries")->as_array();
+			assert(queries != nullptr && queries->size() == task_v4_engine_descriptor_ids.size());
+			auto engine = runtime_engine();
+			auto runtime = sdk::query::reference_engine::bind(published->publication.snapshot);
+			assert(runtime);
+			for (const auto& entry : *queries)
+			{
+				const auto* id = entry.member("relation_id")->as_string();
+				assert(id != nullptr);
+				auto descriptor = engine.require_id(*id);
+				assert(descriptor);
+				auto builder = sdk::query::builder::from(descriptor->descriptor());
+				assert(builder);
+				const auto ir = std::move(*builder).finish();
+				auto result = runtime->execute(ir);
+				assert(result);
+				assert(canonical_json(*entry.member("logical_ir")) == ir.canonical_form());
+				auto expected_result = sdk::detail::parse_json_value(result->canonical_form());
+				assert(expected_result);
+				assert(canonical_json(*entry.member("result")) == canonical_json(*expected_result));
+			}
+			const std::array<std::string, 1U> entity_relation{"cc.entity.v1"};
+			assert(!sdk::detail::encode_application_queries(
+				engine, published->publication.snapshot, entity_relation, 64U));
+			const std::array<std::string, 2U> duplicate_relations{"cc.entity.v1", "cc.entity.v1"};
+			assert(!sdk::detail::encode_application_queries(
+				engine, published->publication.snapshot, duplicate_relations));
 			const auto expected_partition_count =
 				task_v4_base_descriptor_ids.size() + task_v4_output_descriptor_ids.size();
 			if (published->publication.snapshot.manifest().partitions.size() !=
@@ -736,23 +728,6 @@ namespace
 		std::array<std::byte, 4096U> ack_bytes{};
 		const auto ack_size = ::read(channel.host_read, ack_bytes.data(), ack_bytes.size());
 		if (ack_size <= 0)
-			std::abort();
-		clear_channel_environment();
-	}
-
-	void production_issuer_fails_closed(const std::string_view worker_path)
-	{
-		auto value = make_fixture();
-		socket_channel_endpoints channel;
-		set_channel_environment(value, channel.child_read, channel.child_write);
-		write_all(channel.host_write, value.transcript);
-		auto received = receive_installed_materializer_source_closure(value.root);
-		if (!received)
-			std::abort();
-		received->request.authority.worker.executable = std::string{worker_path};
-		received->request.authority.worker.installed_binary_digest = executable_digest(worker_path);
-		auto execution = run_materializer_worker(std::move(*received));
-		if (execution || execution.error().code != "security.certification-missing")
 			std::abort();
 		clear_channel_environment();
 	}
@@ -796,8 +771,6 @@ int main(const int argc, char** argv)
 	disconnected_is_explicit();
 	duplicate_channel_custody_is_rejected();
 	foreign_task_binding_is_rejected();
-	if (argc == 2)
-		production_issuer_fails_closed(argv[1]);
 	positive_fd_receiver(argc == 2 ? argv[1] : std::string_view{});
 	return 0;
 }

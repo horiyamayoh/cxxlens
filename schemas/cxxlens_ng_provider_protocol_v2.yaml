@@ -219,8 +219,7 @@ product_boundary:
   retained:
     - claim-provenance
     - coverage-closure-unresolved
-    - provider-signature-binary-identity-revocation
+    - provider-binary-identity
     - sandbox-policy
-    - canonical-semantic-certification
     - digest-addressed-source-content
     - bounded-resource-and-crash-safety

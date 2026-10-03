@@ -12,7 +12,7 @@ execution_providers:
     semantic_contract_subject: "cxxlens.clang23-gcc-replay-provider.v1\nclang-23.1.0-gcc-mode"
     trust_authority: explicit-host-trusted-worker-digest
     execution_revalidation: sealed-executable-content-digest
-    qualification: experimental
+    stability: experimental
   msvc_clangcl23_replay:
     provider_id: cxxlens.clangcl23-msvc-replay
     provider_version: 1.0.0
@@ -20,7 +20,7 @@ execution_providers:
     semantic_contract_subject: "cxxlens.clangcl23-msvc-replay-provider.v1\nclang-cl-23.1.0-msvc-mode"
     trust_authority: explicit-host-trusted-ed25519-public-key
     execution_revalidation: authenticated-detached-transcript-binding
-    qualification: experimental
+    stability: experimental
 native_provider_decisions:
   gcc:
     decision: no-go
@@ -81,7 +81,7 @@ targets:
     interpretation: cc.clang23-gcc-replay-1
     guarantee_floor: frontend-replayed
     incomplete_result: partial
-    completion_action: Capture the missing compiler effect or use a qualified native gap provider.
+    completion_action: Capture the missing compiler effect or use a supported native gap provider.
   - id: msvc-x64-windows
     implementation_state: materialization-ready
     availability: experimental

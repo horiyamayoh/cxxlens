@@ -489,7 +489,7 @@ df_0200_materialization_ingress:
           exact_duplicate_claim_occurrence: collapse-before-event-enumeration
           metadata_distinct_same_content_occurrence: preserve-as-distinct-event
           duplicate_final_full_event_projection: reject
-          qualification_binding: cxxlens.df-0200.claim-batch-differential-corpus.v1-raw-sha256-f05513d05b0b57788b6f94d9c1a477c88d589b64dd8232d88a5c6c6022a84836
+          regression_corpus: cxxlens.df-0200.claim-batch-differential-corpus.v1
         shared_implementation_allowlist: [canonical-codecs, identity-functions, field-validators]
         shared_event_enumeration_or_aggregation_control_flow: forbidden
         selected_request_entry_cross_check: exactly-one-entry-whose-task-id-and-canonical-ordinal-equal-this-task-receipt

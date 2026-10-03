@@ -234,7 +234,6 @@ namespace cxxlens::detail::clang22
 		std::uint16_t protocol_major{};
 		std::uint16_t protocol_minor{};
 		std::vector<std::string> required_features;
-		std::string required_qualification;
 		std::string worker_sandbox_policy_digest;
 		std::vector<sdk::provider::sandbox_requirement> task_sandbox_requirements;
 		std::string trust_policy_digest;
@@ -282,8 +281,6 @@ namespace cxxlens::detail::clang22
 		std::string executable;
 		std::string interface_version;
 		std::string distribution_version;
-		std::string source_revision;
-		std::string source_tree;
 		std::string installed_executable_digest;
 		std::string package_configuration;
 		std::string occurrence_manifest_digest;

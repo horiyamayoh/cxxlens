@@ -377,9 +377,10 @@ namespace
 
 } // namespace
 
-int main(const int argc, char**)
+int main(const int argc, char** argv)
 {
-	if (argc != 1)
+	const bool query_results = argc == 2 && std::string_view{argv[1]} == "--query-results";
+	if (argc != 1 && !query_results)
 		return 2;
 	signal_scope signals;
 
@@ -454,8 +455,6 @@ int main(const int argc, char**)
 		const auto& authority_tool = received->request.authority.tool;
 		const auto& authority_worker = received->request.authority.worker;
 		materialization_occurrence_expectation occurrence_expectation{
-			authority_tool.source_revision,
-			authority_tool.source_tree,
 			authority_tool.package_configuration,
 			authority_tool.occurrence_manifest_digest,
 			authority_tool.installed_executable_digest,
@@ -501,6 +500,8 @@ int main(const int argc, char**)
 											  1U,
 											  1U);
 		}
+		if (query_results)
+			return write_response(published->query_results_json) ? 0 : no_response();
 		auto report = encode_materializer_v2_2_success_report(
 			*observed, ingress->root, *published, *occurrence);
 		if (!report)

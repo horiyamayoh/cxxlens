@@ -134,8 +134,6 @@ namespace
 		json_value::object_type payload{
 			{"schema", string_value("cxxlens.clang22-materializer-occurrence-manifest.v1")},
 			{"manifest_version", string_value("1.0.0")},
-			{"source_revision", string_value(std::string(40U, '1'))},
-			{"source_tree", string_value(std::string(40U, '2'))},
 			{"package_configuration", string_value(shared ? "shared" : "static")},
 			{"files", json_value::array(std::move(files))},
 		};
@@ -247,8 +245,6 @@ namespace
 	{
 		const auto expected_rejection = ::getenv(child_shared_reject_name.data()) != nullptr;
 		materialization_occurrence_expectation expected{
-			.source_revision = std::string(40U, '1'),
-			.source_tree = std::string(40U, '2'),
 			.package_configuration = "shared",
 			.occurrence_manifest_digest = required_environment(child_manifest_digest_name),
 			.materializer_executable_digest = required_environment(child_materializer_digest_name),
@@ -375,8 +371,6 @@ namespace
 		const auto worker_digest = required_environment(child_worker_digest_name);
 		const auto worker_path = prefix / std::string{paths[1U]};
 		materialization_occurrence_expectation expected{
-			.source_revision = std::string(40U, '1'),
-			.source_tree = std::string(40U, '2'),
 			.package_configuration = "static",
 			.occurrence_manifest_digest = required_environment(child_manifest_digest_name),
 			.materializer_executable_digest = required_environment(child_materializer_digest_name),
@@ -565,8 +559,6 @@ namespace
 			auto manifest =
 				parse_materialization_occurrence_manifest(bytes, shared ? "shared" : "static");
 			require(manifest && manifest->files.size() == (shared ? 19U : 13U) &&
-						manifest->source_revision == std::string(40U, '1') &&
-						manifest->source_tree == std::string(40U, '2') &&
 						manifest->inventory_digest.starts_with("sha256:"),
 					"exact static/shared occurrence manifest was rejected");
 			require(!parse_materialization_occurrence_manifest(bytes, shared ? "static" : "shared"),

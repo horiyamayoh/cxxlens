@@ -398,11 +398,6 @@ namespace cxxlens::sdk::detail
 			descriptors.push_back(descriptor->descriptor());
 		}
 
-		auto qualifications = candidate.certified_qualifications;
-		std::ranges::sort(qualifications);
-		if (qualifications.empty())
-			return unexpected(execution_error("provider.qualification", "empty"));
-
 		auto selection_digest = semantic_digest(
 			"cxxlens.application-analysis-provider-selection.v1", selection.canonical_form());
 		auto recipe_digest =
@@ -489,7 +484,6 @@ namespace cxxlens::sdk::detail
 				 manifest.provider_version,
 				 manifest.provider_binary_digest,
 				 manifest.provider_semantic_contract_digest,
-				 qualifications.front(),
 				 publication.series.trust_policy_digest,
 				 selection.authority_request().sandbox,
 				 budget},

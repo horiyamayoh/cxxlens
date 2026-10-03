@@ -118,9 +118,7 @@ namespace cxxlens::sdk::detail
 		const auto& manifest = process_request.selection.selected_candidate().description;
 		const auto& requirement = task.value().provider;
 		const auto& capture = task.value().capture.value();
-		if (!manifest.signature || *manifest.signature != run.provider.signature_digest ||
-			run.provider.revocation_state != "not-revoked" ||
-			run.provider.provider_id != manifest.provider_id ||
+		if (run.provider.provider_id != manifest.provider_id ||
 			run.provider.provider_version != manifest.provider_version ||
 			run.provider.binary_digest != manifest.provider_binary_digest ||
 			run.provider.semantic_contract_digest != manifest.provider_semantic_contract_digest ||

@@ -76,7 +76,7 @@ properties:
         type: array
         uniqueItems: true
         items: {type: string, minLength: 1}
-      achieved: {enum: [none, best_effort, enforced, certified]}
+      achieved: {enum: [none, best_effort, enforced]}
       policy_digest: {$ref: '#/$defs/digest'}
       evidence_digest: {$ref: '#/$defs/semantic_digest'}
   frames:

@@ -280,7 +280,7 @@ int main()
 	manifest_value.package_identity = "cxxlens.clangcl23-msvc-replay.package";
 	manifest_value.publisher = "cxxlens.project";
 	manifest_value.license = "Apache-2.0 WITH LLVM-exception";
-	manifest_value.signature = digest('f');
+
 	manifest_value.protocol = {protocol_v2_major,
 							   protocol_v2_minor,
 							   protocol_v2_minor,
@@ -295,15 +295,12 @@ int main()
 	manifest_value.invalidation_contract = digest('c');
 	manifest_value.determinism_contract = digest('d');
 	manifest_value.resource_class = "provider.application-analysis";
-	manifest_value.requested_qualifications = {"experimental"};
+
 	require(manifest_value.validate());
 	provider_candidate candidate{manifest_value,
 								 provider::discovery_source::explicit_path,
 								 {},
 								 true,
-								 true,
-								 true,
-								 {"experimental"},
 								 {"detached-functional-test",
 								  policy.mechanisms,
 								  sandbox_assurance::enforced,
@@ -316,7 +313,6 @@ int main()
 		manifest_value.provider_binary_digest,
 		manifest_value.provider_semantic_contract_digest,
 		{sandbox_assurance::enforced, policy.policy_digest()},
-		true,
 		std::nullopt};
 	auto selection = select_provider(selection_request, {&candidate, 1U});
 	require(selection);
@@ -377,8 +373,7 @@ int main()
 											   unit.process.environment_digest,
 											   "2",
 											   "0",
-											   *manifest_value.signature,
-											   "not-revoked",
+
 											   "worker:clangcl23-msvc-detached-e2e",
 											   private_path.string(),
 											   public_path.string()};

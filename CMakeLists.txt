@@ -56,63 +56,7 @@ if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
   message(STATUS "Enabled exact Clang 23.1.0 GCC replay worker")
 endif()
 
-set(CXXLENS_SOURCE_REVISION
-    ""
-    CACHE STRING
-          "Exact 40-hex source commit embedded in installed occurrence identity"
-)
-set(CXXLENS_SOURCE_TREE
-    ""
-    CACHE STRING
-          "Exact 40-hex source tree embedded in installed occurrence identity")
 if(CXXLENS_BUILD_CLANG22_COMPONENTS)
-  if((CXXLENS_SOURCE_REVISION STREQUAL "" AND NOT CXXLENS_SOURCE_TREE STREQUAL
-                                              "")
-     OR (NOT CXXLENS_SOURCE_REVISION STREQUAL "" AND CXXLENS_SOURCE_TREE
-                                                     STREQUAL ""))
-    message(
-      FATAL_ERROR
-        "CXXLENS_SOURCE_REVISION and CXXLENS_SOURCE_TREE must be supplied together"
-    )
-  endif()
-  if(CXXLENS_SOURCE_REVISION STREQUAL "" AND CXXLENS_SOURCE_TREE STREQUAL "")
-    find_package(Git QUIET)
-    if(NOT Git_FOUND OR NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
-      message(
-        FATAL_ERROR
-          "Source provenance requires either an available git checkout or an explicit revision/tree pair"
-      )
-    endif()
-    execute_process(
-      COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
-      WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-      OUTPUT_VARIABLE _cxxlens_git_revision
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      RESULT_VARIABLE _cxxlens_git_revision_status)
-    execute_process(
-      COMMAND "${GIT_EXECUTABLE}" rev-parse "HEAD^{tree}"
-      WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-      OUTPUT_VARIABLE _cxxlens_git_tree
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      RESULT_VARIABLE _cxxlens_git_tree_status)
-    if(NOT _cxxlens_git_revision_status EQUAL 0 OR NOT _cxxlens_git_tree_status
-                                                   EQUAL 0)
-      message(FATAL_ERROR "Cannot derive exact source provenance from git")
-    endif()
-    set(CXXLENS_SOURCE_REVISION "${_cxxlens_git_revision}")
-    set(CXXLENS_SOURCE_TREE "${_cxxlens_git_tree}")
-  endif()
-  string(LENGTH "${CXXLENS_SOURCE_REVISION}" _cxxlens_source_revision_length)
-  string(LENGTH "${CXXLENS_SOURCE_TREE}" _cxxlens_source_tree_length)
-  if(NOT CXXLENS_SOURCE_REVISION MATCHES "^[0-9a-f]+$"
-     OR NOT CXXLENS_SOURCE_TREE MATCHES "^[0-9a-f]+$"
-     OR NOT _cxxlens_source_revision_length EQUAL 40
-     OR NOT _cxxlens_source_tree_length EQUAL 40)
-    message(
-      FATAL_ERROR
-        "CXXLENS_SOURCE_REVISION and CXXLENS_SOURCE_TREE must be exact 40-hex identities"
-    )
-  endif()
   if(CXXLENS_BUILD_SHARED)
     set(CXXLENS_OCCURRENCE_CONFIGURATION shared)
   else()
@@ -384,6 +328,7 @@ add_library(
   src/sdk/application_analysis_limits.cpp
   src/sdk/application_analysis_command_service_internal.cpp
   src/sdk/application_analysis_run_command_service_internal.cpp
+  src/sdk/application_query_export_internal.cpp
   src/sdk/bounded_canonical_binary_internal.cpp
   src/sdk/application_analysis_service.cpp
   src/sdk/application_materialization_execution_internal.cpp
@@ -818,8 +763,7 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     cxxlens_clang22_materializer_ingress STATIC
     src/llvm/clang22/installed_materializer_source_closure.cpp
     src/llvm/clang22/materializer_report_v2_2_encoder.cpp
-    src/llvm/clang22/materializer_worker_bridge.cpp
-    src/llvm/clang22/provider_trust_issuer_internal.cpp)
+    src/llvm/clang22/materializer_worker_bridge.cpp)
   target_link_libraries(
     cxxlens_clang22_materializer_ingress
     PUBLIC cxxlens::base cxxlens::sdk
@@ -904,6 +848,30 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   cxxlens_set_project_warnings(cxxlens-clang22-materialize)
   cxxlens_enable_sanitizers(cxxlens-clang22-materialize)
   cxxlens_configure_installed_clang22_tool(cxxlens-clang22-materialize)
+
+  add_library(cxxlens_clang22_application_analyzer STATIC
+              src/llvm/clang22/application_analyzer.cpp)
+  target_link_libraries(
+    cxxlens_clang22_application_analyzer
+    PUBLIC cxxlens::sdk
+    PRIVATE cxxlens_clang22_worker_core cxxlens_clang22_materialization_codecs)
+  if(CXXLENS_BUILD_SHARED)
+    target_link_libraries(cxxlens_clang22_application_analyzer
+                          PRIVATE cxxlens_provider_runtime_private_closure)
+  endif()
+  target_include_directories(cxxlens_clang22_application_analyzer
+                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens_clang22_application_analyzer
+                          PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens_clang22_application_analyzer)
+  cxxlens_enable_sanitizers(cxxlens_clang22_application_analyzer)
+  add_executable(cxxlens-clang22-analyze tools/clang22/analyze_main.cpp)
+  target_link_libraries(cxxlens-clang22-analyze
+                        PRIVATE cxxlens_clang22_application_analyzer)
+  target_compile_features(cxxlens-clang22-analyze PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens-clang22-analyze)
+  cxxlens_enable_sanitizers(cxxlens-clang22-analyze)
+  cxxlens_configure_installed_clang22_tool(cxxlens-clang22-analyze)
 endif()
 
 # Keep the product dependency direction executable at configure time.  Alias
@@ -1026,7 +994,8 @@ set(CXXLENS_COMPILED_TARGETS
     cxxlens_clang22_provider_sdk)
 if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   list(APPEND CXXLENS_COMPILED_TARGETS cxxlens_clang22_materialization_codecs
-       cxxlens_clang22_worker_core cxxlens_clang22_materializer_ingress)
+       cxxlens_clang22_worker_core cxxlens_clang22_materializer_ingress
+       cxxlens_clang22_application_analyzer)
 endif()
 if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
   list(
@@ -1099,6 +1068,7 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     INCLUDES
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
   install(TARGETS cxxlens-clang-worker-22 cxxlens-clang22-materialize
+                  cxxlens-clang22-analyze
           RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 endif()
 if(CXXLENS_BUILD_CLANG23_GCC_REPLAY_WORKER)
@@ -1168,8 +1138,6 @@ set(CXXLENS_PRODUCT_SCHEMA_FILES
     schemas/cxxlens_ng_portable_provider_task_contract.schema.yaml
     schemas/cxxlens_ng_project_catalog_contract.yaml
     schemas/cxxlens_ng_project_catalog_contract.schema.yaml
-    schemas/cxxlens_ng_provider_certification_registry.yaml
-    schemas/cxxlens_ng_provider_certification_registry.schema.yaml
     schemas/cxxlens_ng_provider_execution_report.schema.yaml
     schemas/cxxlens_ng_provider_manifest.schema.yaml
     schemas/cxxlens_ng_provider_ng1_hardening.yaml
@@ -1179,12 +1147,11 @@ set(CXXLENS_PRODUCT_SCHEMA_FILES
     schemas/cxxlens_ng_provider_runtime_contract.yaml
     schemas/cxxlens_ng_provider_runtime_contract.schema.yaml
     schemas/cxxlens_ng_provider_spill_fsync_receipt.schema.yaml
-    schemas/cxxlens_ng_provider_support_matrix.yaml
-    schemas/cxxlens_ng_provider_support_matrix.schema.yaml
     schemas/cxxlens_ng_provider_task_v4.schema.yaml
     schemas/cxxlens_ng_public_api_catalog.yaml
     schemas/cxxlens_ng_public_api_catalog.schema.yaml
     schemas/cxxlens_ng_query_execution_result.schema.yaml
+    schemas/cxxlens_application_query_results.schema.yaml
     schemas/cxxlens_ng_query_runtime_contract.yaml
     schemas/cxxlens_ng_query_runtime_contract.schema.yaml
     schemas/cxxlens_ng_relation_registry.yaml

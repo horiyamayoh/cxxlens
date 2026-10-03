@@ -19,5 +19,5 @@ Private vulnerability reporting が利用できる場合はそれを使用して
 - crash、timeout、malformed/oversized output、validation rejection は prior published snapshot を破壊しない。
 
 現在の qualified/unsupported state は [Security Profile](schemas/cxxlens_ng_security_profile.yaml) と
-[Support matrix](docs/support-matrix.md) を参照してください。bootstrap profile は security certification を
+[Support matrix](docs/support-matrix.md) を参照してください。bootstrap profile は実行時の隔離を
 意味しません。

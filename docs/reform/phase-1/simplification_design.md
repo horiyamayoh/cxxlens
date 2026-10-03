@@ -17,7 +17,7 @@ Phase 1 の変更は原則 `CH-0`。公開意味論、identity、protocol、pers
 - `cxxlens::sdk` を単一の public author surface とする。installed `cxxlens` CLI は SDK の薄い入口として保つ。
 - `unknown` と empty、partial と incomplete、conflict と differential disagreement、coverage、closure、unresolved reason、guarantee、provenance を失わない。
 - immutable snapshot、failed publication isolation、semantic identity、detached native value、bounded input を全 backend/provider で保つ。
-- materialization report、SQLite/source-closure の安全 receipt、provider の署名・binary identity・失効・sandbox・canonical semantic certification は製品 runtime の情報として保持する。
+- materialization report、SQLite/source-closure の安全 receipt、入力内容、provider identity、ABI・プロトコル互換性と実行制限 は製品 runtime の情報として保持する。
 - 先行実装済みの OpenSSL Ed25519 port、正規 `stage → validate → publish` writer、Provider Protocol bounded decoder、installed public-header negative check を基準資産として扱う。
 
 ## Workstream A — authority consolidation
@@ -53,9 +53,9 @@ SQLite 固有実装は、共通 semantic invariant、SQLite standard の integri
 
 新しい public enum は追加せず、既存の provider selection/runtime/security contract を次の profile として明文化する。
 
-- `local trusted`: in-process/portable provider。signature、certification、sandbox を要求しないが、結果を verified/hardened と表示しない。
+- `local trusted`: in-process/portable provider。通常のローカル解析を使い、実際の実行制限だけを表示する。
 - `verified binary`: exact binary identity/digest と structured failure を要求する。identity 不明時に local fallback しない。
-- `sandboxed/hardened`: signature、certification、revocation、sandbox の threat model 条件をすべて満たす。receipt/provenance を保持する。
+- `sandboxed/hardened`: 実際に適用した sandbox 条件を報告する。入力や解析結果の出典を保持する。
 
 Provider profile の境界は runtime の trust/security 判定にだけ適用し、claim provenance、coverage、unknown、materialization report を省略する理由にはしない。
 

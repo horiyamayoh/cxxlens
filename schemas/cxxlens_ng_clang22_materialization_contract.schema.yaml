@@ -25,7 +25,6 @@ required:
   - side_channels
   - publication
   - report
-  - qualification
   - errors
   - lifetime
   - acceptance
@@ -601,23 +600,6 @@ properties:
             boolean-only-proof: forbidden
           validation_order: [batch, group, task-side-channel, task-result, task-result-and-raw-frame-sets, global-side-channels, guarantee, claim-stages, global-provenance, base-claim-guarantee-cross-binding, sdk-claim-envelopes-and-canonicalization, complete-final-claim-batch, claim-basis-and-partitions, snapshot-manifest, publication-record, reopened-store-state]
     additionalProperties: true
-  qualification:
-    const:
-      configurations: [static, shared]
-      backends: [memory, sqlite]
-      required_matrix: exact-cartesian-product
-      relocated_prefix: required
-      same_project_request_and_worker_semantics: required
-      sqlite_reopened: required
-      memory_sqlite_semantic_parity: required
-      static_shared_semantic_parity: required
-      exact_observation_equivalence: required-zero-non-exact-per-descriptor
-      scale_and_resource_evidence:
-        cases: [one-task, four-thousand-ninety-six-tasks, sixteen-mib-source, five-hundred-twelve-mib-aggregate-source, one-gib-raw-request, arbitrary-short-reads]
-        retained_memory_formula: one-shared-catalog-plus-fixed-buffers-plus-one-task-window-plus-one-source-plus-one-output-window
-        forbidden_residency: [raw-request, aggregate-source, all-task-payloads, task-count-times-catalog-count]
-        spool-failure: zero-effect-before-publication
-      missing_extra_duplicate_matrix_entry: reject
   errors: {$ref: '#/$defs/nonempty_object'}
   lifetime: {$ref: '#/$defs/nonempty_object'}
   acceptance:
@@ -655,13 +637,12 @@ $defs:
         - unresolved-conflict-and-differential-censuses
         - cxxlens-claim-batch-v2-canonical-encoding-and-content-digest
         digest_only_equality_or_order: forbidden
-        qualification_corpus:
+        test_corpus:
           id: cxxlens.df-0200.claim-batch-differential-corpus.v1
           artifact:
             schema_id: https://cxxlens.dev/schema/ng/df-0200-claim-batch-differential-corpus.schema.yaml
             format: cxxlens.df-0200.claim-batch-differential-corpus.tsv.v1
             artifact_version: 1.0.0
-            raw_sha256: sha256:f05513d05b0b57788b6f94d9c1a477c88d589b64dd8232d88a5c6c6022a84836
           census:
             added_claim_count: 17
             existing_claim_count: 16

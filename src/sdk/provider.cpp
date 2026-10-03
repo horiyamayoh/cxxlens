@@ -723,8 +723,6 @@ namespace cxxlens::sdk::provider
 					return "best_effort";
 				case sandbox_assurance::enforced:
 					return "enforced";
-				case sandbox_assurance::certified:
-					return "certified";
 			}
 			return "invalid";
 		}
@@ -780,8 +778,6 @@ namespace cxxlens::sdk::provider
 				return sandbox_assurance::best_effort;
 			if (value == "enforced")
 				return sandbox_assurance::enforced;
-			if (value == "certified")
-				return sandbox_assurance::certified;
 			return std::nullopt;
 		}
 	} // namespace
@@ -2510,8 +2506,8 @@ namespace cxxlens::sdk::provider
 	result<void> manifest::validate() const
 	{
 		if (!namespaced(provider_id) || provider_version.major == 0U || package_identity.empty() ||
-			publisher.empty() || license.empty() || (signature && signature->empty()) ||
-			protocol.major != protocol_v2_major || protocol.minimum_minor != protocol_v2_minor ||
+			publisher.empty() || license.empty() || protocol.major != protocol_v2_major ||
+			protocol.minimum_minor != protocol_v2_minor ||
 			protocol.maximum_minor != protocol_v2_minor || resource_class.empty() ||
 			sandbox_minimum.empty())
 			return cxxlens::sdk::unexpected(
@@ -2524,26 +2520,11 @@ namespace cxxlens::sdk::provider
 			!unique_nonempty(required_relations) ||
 			!unique_nonempty(interpretation_domains, true) ||
 			!unique_nonempty(protocol.required_features) ||
-			!unique_nonempty(protocol.optional_features) ||
-			!unique_nonempty(requested_qualifications) || !unique_nonempty(trust_flags))
+			!unique_nonempty(protocol.optional_features))
 			return cxxlens::sdk::unexpected(provider_error("provider.manifest-invalid", "set"));
-		static const std::set<std::string, std::less<>> qualifications{
-			"canonical-semantic-qualified",
-			"cross-version-qualified",
-			"deterministic",
-			"experimental",
-			"production-supported",
-			"sandbox-qualified",
-			"schema-conformant",
-		};
 		static const std::set<std::string, std::less<>> stages{
 			"assertion", "canonical_claim", "derived_claim", "observation"};
-		if (std::ranges::any_of(requested_qualifications,
-								[&](const std::string& value)
-								{
-									return !qualifications.contains(value);
-								}) ||
-			!stages.contains(task_input_stage) || !stages.contains(task_output_stage))
+		if (!stages.contains(task_input_stage) || !stages.contains(task_output_stage))
 			return cxxlens::sdk::unexpected(provider_error("provider.manifest-invalid", "enum"));
 		if (std::ranges::find(protocol.required_features, "task-input-chunks-v2") ==
 			protocol.required_features.end())
@@ -2573,14 +2554,12 @@ namespace cxxlens::sdk::provider
 			   << json_string(provider_semantic_contract_digest)
 			   << ",\"provider_version\":" << json_string(provider_version.string())
 			   << ",\"publisher\":" << json_string(publisher)
-			   << ",\"requested_qualifications\":" << canonical_array(requested_qualifications)
 			   << ",\"required_relations\":" << canonical_array(required_relations)
 			   << ",\"resource_class\":" << json_string(resource_class)
 			   << ",\"sandbox_minimum\":" << json_string(sandbox_minimum)
-			   << R"(,"schema":"cxxlens.provider-manifest.v1","signature":)"
-			   << (signature ? json_string(*signature) : "null") << R"(,"task_stage":{"input":)"
+			   << R"(,"schema":"cxxlens.provider-manifest.v1","task_stage":{"input":)"
 			   << json_string(task_input_stage) << ",\"output\":" << json_string(task_output_stage)
-			   << "},\"trust_flags\":" << canonical_array(trust_flags) << '}';
+			   << "}}";
 		return output.str();
 	}
 
@@ -2751,8 +2730,7 @@ namespace cxxlens::sdk::provider
 													: fallback_direction::same_version_rebuild);
 		if (priority == 0U || !namespaced(provider_id) || provider_version.major == 0U ||
 			!canonical_digest(provider_binary_digest) ||
-			!canonical_digest(provider_semantic_contract_digest) || actual_direction != direction ||
-			!unique_nonempty(required_qualifications))
+			!canonical_digest(provider_semantic_contract_digest) || actual_direction != direction)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.fallback-policy-invalid", provider_id));
 		return {};
@@ -2765,9 +2743,7 @@ namespace cxxlens::sdk::provider
 			json_string(provider_binary_digest) + R"(,"provider_id":)" + json_string(provider_id) +
 			R"(,"provider_semantic_contract_digest":)" +
 			json_string(provider_semantic_contract_digest) + R"(,"provider_version":)" +
-			json_string(provider_version.string()) + R"(,"require_certification":)" +
-			(require_certification ? "true" : "false") + R"(,"required_qualifications":)" +
-			canonical_array(required_qualifications) + "}";
+			json_string(provider_version.string()) + "}";
 	}
 
 	result<void> provider_fallback_policy::validate(const semantic_version& requested_version) const
@@ -2850,16 +2826,11 @@ namespace cxxlens::sdk::provider
 		{
 			std::ostringstream output;
 			output << R"({"authoritative_path":)"
-				   << (candidate.authoritative_path ? "true" : "false")
-				   << R"(,"certification_valid":)"
-				   << (candidate.certification_valid ? "true" : "false")
-				   << R"(,"certified_qualifications":)"
-				   << canonical_array(candidate.certified_qualifications)
-				   << R"(,"executable_argv":)" << ordered_json_array(candidate.executable_argv)
-				   << R"(,"manifest":)" << candidate.description.canonical_json()
-				   << R"(,"sandbox":)" << candidate.sandbox.canonical_form()
-				   << R"(,"schema":"cxxlens.provider-candidate.v1","trust_valid":)"
-				   << (candidate.trust_valid ? "true" : "false") << R"(,"validation_error":)"
+				   << (candidate.authoritative_path ? "true" : "false") << R"(,"executable_argv":)"
+				   << ordered_json_array(candidate.executable_argv) << R"(,"manifest":)"
+				   << candidate.description.canonical_json() << R"(,"sandbox":)"
+				   << candidate.sandbox.canonical_form()
+				   << R"(,"schema":"cxxlens.provider-candidate.v1","validation_error":)"
 				   << json_string(candidate.validation_error) << '}';
 			return output.str();
 		}
@@ -3117,12 +3088,6 @@ namespace cxxlens::sdk::provider
 				decision.reason = manifest_valid.error().code;
 			else if (!candidate.validation_error.empty())
 				decision.reason = candidate.validation_error;
-			else if (!candidate.trust_valid)
-				decision.reason = "security.signature-untrusted";
-			else if (!unique_nonempty(candidate.certified_qualifications))
-				decision.reason = "provider.certification-invalid";
-			else if (request.require_certification && !candidate.certification_valid)
-				decision.reason = "security.certification-missing";
 			else if (auto sandbox_valid = candidate.sandbox.validate(); !sandbox_valid)
 				decision.reason = sandbox_valid.error().code;
 			else if (candidate.sandbox.policy_digest != request.sandbox.policy_digest)
@@ -3153,21 +3118,8 @@ namespace cxxlens::sdk::provider
 				{
 					const auto precedence =
 						std::pair{allowed_fallback->priority, source_rank(candidate.source)};
-					const auto qualified = std::ranges::all_of(
-						allowed_fallback->required_qualifications,
-						[&](const std::string& qualification)
-						{
-							return std::ranges::find(candidate.certified_qualifications,
-													 qualification) !=
-								candidate.certified_qualifications.end();
-						});
 					if (fallback_precedence && precedence != *fallback_precedence)
 						decision.reason = "provider.fallback-lower-policy-precedence";
-					else if (allowed_fallback->require_certification &&
-							 !candidate.certification_valid)
-						decision.reason = "security.certification-missing";
-					else if (!qualified)
-						decision.reason = "provider.fallback-qualification-missing";
 					else
 					{
 						decision.selected = true;
@@ -3253,7 +3205,6 @@ namespace cxxlens::sdk::provider
 		generated_manifest.invalidation_contract = zero_digest;
 		generated_manifest.determinism_contract = zero_digest;
 		generated_manifest.resource_class = std::string{"provider"} + ".standard";
-		generated_manifest.requested_qualifications = {"experimental"};
 		generated_manifest.task_output_stage = "assertion";
 		if (auto valid = generated_manifest.validate(); !valid)
 			return cxxlens::sdk::unexpected(

@@ -216,17 +216,6 @@ namespace cxxlens::sdk::doctor
 		[[nodiscard]] bool operator==(const command_spec&) const = default;
 	};
 
-	struct provider_trust_spec
-	{
-		std::string manifest;
-		std::string binary;
-		std::string semantics;
-		std::string signature;
-		std::string certification;
-		std::string revocation;
-		[[nodiscard]] bool operator==(const provider_trust_spec&) const = default;
-	};
-
 	struct candidate_identity_spec
 	{
 		std::string domain;
@@ -256,7 +245,6 @@ namespace cxxlens::sdk::doctor
 		std::vector<std::string> required_relations;
 		std::vector<std::string> required_interpretations;
 		std::string sandbox_minimum;
-		provider_trust_spec trust;
 		candidate_identity_spec candidate_identity;
 		std::vector<std::string> support_tuple_fields;
 		std::vector<support_tuple> supported_tuples;
@@ -282,12 +270,6 @@ namespace cxxlens::sdk::doctor
 		store_support_spec store_support;
 		[[nodiscard]] bool operator==(const capability_catalog&) const = default;
 	};
-
-	// Semantic identity of the shipped product catalog value.  This binds product semantics,
-	// not implementation source bytes; the focused schema test derives the same value from the
-	// installed YAML catalog independently.
-	inline constexpr std::string_view sdk_doctor_catalog_semantic_identity{
-		"semantic-v2:sha256:2b24615bb07b9a3c525a6edf4c95604d4829131b3c6ebd68bc05a4836fa33e8d"};
 
 	[[nodiscard]] inline capability_catalog sdk_doctor_catalog_value()
 	{
@@ -333,7 +315,7 @@ namespace cxxlens::sdk::doctor
 			  {"input.project-catalog.v1"},
 			  {"provider.source-closure.v1", "relation.cc-entity.v1", "relation.cc-call-site.v1"},
 			  {},
-			  "Select one exact trusted Protocol 2.0 provider support tuple."},
+			  "Configure one compatible Protocol 2.0 provider."},
 			 {"provider.source-closure.v1",
 			  capability_kind::provider,
 			  {"provider.protocol.v2", "input.source-closure.v1"},
@@ -377,12 +359,6 @@ namespace cxxlens::sdk::doctor
 			 {"cc.call_site.v1", "cc.entity.v1"},
 			 {"cc.clang22-canonical-1"},
 			 "enforced",
-			 {"exact-digest-required",
-			  "exact-digest-required",
-			  "exact-digest-required",
-			  "verified-required",
-			  "exact-registry-binding-required",
-			  "not-revoked-required"},
 			 {"cxxlens.provider-candidate.v1",
 			  "semantic-v2-sha256",
 			  "provider-discovery",
@@ -406,33 +382,6 @@ namespace cxxlens::sdk::doctor
 			{{"memory", "sqlite"}, "cxxlens.snapshot.v3"}};
 	}
 
-	class installed_product_catalog_loader;
-
-	class authenticated_capability_catalog final
-	{
-	  public:
-		[[nodiscard]] const capability_catalog& catalog() const noexcept
-		{
-			return catalog_;
-		}
-
-		[[nodiscard]] std::string_view semantic_identity() const noexcept
-		{
-			return semantic_identity_;
-		}
-
-	  private:
-		friend class installed_product_catalog_loader;
-
-		authenticated_capability_catalog(capability_catalog catalog, std::string semantic_identity)
-			: catalog_{std::move(catalog)}, semantic_identity_{std::move(semantic_identity)}
-		{
-		}
-
-		capability_catalog catalog_;
-		std::string semantic_identity_;
-	};
-
 	[[nodiscard]] inline std::string_view catalog_kind_token(const capability_kind kind) noexcept
 	{
 		switch (kind)
@@ -453,282 +402,12 @@ namespace cxxlens::sdk::doctor
 		return "invalid";
 	}
 
-	[[nodiscard]] inline json_value::array_type
-	catalog_string_array(std::vector<std::string> values)
-	{
-		json_value::array_type output;
-		output.reserve(values.size());
-		for (auto& value : values)
-			output.push_back(json_value::string_value(std::move(value)));
-		return output;
-	}
-
-	[[nodiscard]] inline bool bounded_capability_catalog(const capability_catalog& catalog) noexcept
-	{
-		std::size_t bytes{};
-		const auto text = [&](const std::string& value)
-		{
-			if (value.size() > maximum_json_string_bytes ||
-				value.size() > maximum_project_bytes - bytes)
-				return false;
-			bytes += value.size();
-			return valid_utf8(value);
-		};
-		const auto texts = [&](const std::vector<std::string>& values)
-		{
-			return values.size() <= maximum_capability_count && std::ranges::all_of(values, text);
-		};
-		if (catalog.commands.empty() || catalog.commands.size() > maximum_capability_count ||
-			catalog.use_cases.empty() || catalog.use_cases.size() > maximum_capability_count ||
-			catalog.capabilities.empty() ||
-			catalog.capabilities.size() > maximum_capability_count || !text(catalog.binding_id) ||
-			!text(catalog.document_version))
-			return false;
-		for (const auto& command : catalog.commands)
-			if (!text(command.id) || !text(command.consumer) || !text(command.output_schema) ||
-				!texts(command.formats))
-				return false;
-		for (const auto& use_case : catalog.use_cases)
-			if (!text(use_case.id) || !text(use_case.consumer) || !text(use_case.question) ||
-				!texts(use_case.capability_path))
-				return false;
-		for (const auto& capability : catalog.capabilities)
-			if (!text(capability.id) || !texts(capability.dependencies) ||
-				!texts(capability.consumers) || !texts(capability.relation_ids) ||
-				!text(capability.completion_action))
-				return false;
-		const auto& provider = catalog.provider_support;
-		if (!text(provider.protocol_downgrade) || !texts(provider.required_features) ||
-			!texts(provider.required_relations) || !texts(provider.required_interpretations) ||
-			!text(provider.sandbox_minimum) || !text(provider.trust.manifest) ||
-			!text(provider.trust.binary) || !text(provider.trust.semantics) ||
-			!text(provider.trust.signature) || !text(provider.trust.certification) ||
-			!text(provider.trust.revocation) || !text(provider.candidate_identity.domain) ||
-			!text(provider.candidate_identity.encoding) ||
-			!text(provider.candidate_identity.producer) ||
-			!text(provider.candidate_identity.input_binding) ||
-			!texts(provider.support_tuple_fields) || !text(provider.conflict_policy.subject) ||
-			!text(provider.conflict_policy.selection) ||
-			!text(provider.conflict_policy.duplicate_identity) ||
-			!text(provider.conflict_policy.same_provider_version_distinct_identity) ||
-			!text(provider.conflict_policy.multiple_valid_candidates) ||
-			!text(provider.conflict_policy.fallback) || provider.supported_tuples.empty() ||
-			provider.supported_tuples.size() > maximum_capability_count ||
-			!texts(catalog.store_support.backends) || !text(catalog.store_support.format))
-			return false;
-		for (const auto& tuple : provider.supported_tuples)
-			if (!text(tuple.release_version) || !text(tuple.surface) || !text(tuple.os) ||
-				!text(tuple.architecture) || !text(tuple.compiler_provider_major) ||
-				!text(tuple.linkage))
-				return false;
-		return true;
-	}
-
-	[[nodiscard]] inline std::variant<std::string, product_error>
-	catalog_semantic_projection(const capability_catalog& input)
-	{
-		if (!bounded_capability_catalog(input))
-			return product_error{"doctor.catalog-invalid", "catalog", "bound"};
-		auto catalog = input;
-		json_value::array_type commands;
-		for (auto& command : catalog.commands)
-			commands.push_back(json_value::object_value({
-				{"consumer", json_value::string_value(std::move(command.consumer))},
-				{"exit_codes",
-				 json_value::object_value({
-					 {"invalid_request",
-					  json_value::unsigned_value(command.exit_codes.invalid_request)},
-					 {"not_proved", json_value::unsigned_value(command.exit_codes.not_proved)},
-					 {"proved", json_value::unsigned_value(command.exit_codes.proved)},
-				 })},
-				{"formats",
-				 json_value::array_value(catalog_string_array(std::move(command.formats)))},
-				{"id", json_value::string_value(std::move(command.id))},
-				{"output_schema", json_value::string_value(std::move(command.output_schema))},
-			}));
-		json_value::array_type use_cases;
-		for (auto& use_case : catalog.use_cases)
-			use_cases.push_back(json_value::object_value({
-				{"capability_path",
-				 json_value::array_value(
-					 catalog_string_array(std::move(use_case.capability_path)))},
-				{"consumer", json_value::string_value(std::move(use_case.consumer))},
-				{"id", json_value::string_value(std::move(use_case.id))},
-				{"question", json_value::string_value(std::move(use_case.question))},
-			}));
-		json_value::array_type capabilities;
-		for (auto& capability : catalog.capabilities)
-		{
-			json_value::object_type projection{
-				{"completion_action",
-				 json_value::string_value(std::move(capability.completion_action))},
-				{"consumers",
-				 json_value::array_value(catalog_string_array(std::move(capability.consumers)))},
-				{"id", json_value::string_value(std::move(capability.id))},
-				{"kind",
-				 json_value::string_value(std::string{catalog_kind_token(capability.kind)})},
-				{"requires",
-				 json_value::array_value(catalog_string_array(std::move(capability.dependencies)))},
-			};
-			if (!capability.relation_ids.empty())
-				projection.emplace("relation_ids",
-								   json_value::array_value(
-									   catalog_string_array(std::move(capability.relation_ids))));
-			capabilities.push_back(json_value::object_value(std::move(projection)));
-		}
-		json_value::array_type tuples;
-		for (auto& tuple : catalog.provider_support.supported_tuples)
-			tuples.push_back(json_value::object_value({
-				{"architecture", json_value::string_value(std::move(tuple.architecture))},
-				{"compiler_provider_major",
-				 json_value::string_value(std::move(tuple.compiler_provider_major))},
-				{"linkage", json_value::string_value(std::move(tuple.linkage))},
-				{"os", json_value::string_value(std::move(tuple.os))},
-				{"release_version", json_value::string_value(std::move(tuple.release_version))},
-				{"surface", json_value::string_value(std::move(tuple.surface))},
-			}));
-		const auto projection = canonical_json(json_value::object_value({
-			{"capabilities", json_value::array_value(std::move(capabilities))},
-			{"commands", json_value::array_value(std::move(commands))},
-			{"document_version", json_value::string_value(std::move(catalog.document_version))},
-			{"provider_support",
-			 json_value::object_value({
-				 {"candidate_identity",
-				  json_value::object_value({
-					  {"domain",
-					   json_value::string_value(
-						   std::move(catalog.provider_support.candidate_identity.domain))},
-					  {"encoding",
-					   json_value::string_value(
-						   std::move(catalog.provider_support.candidate_identity.encoding))},
-					  {"input_binding",
-					   json_value::string_value(
-						   std::move(catalog.provider_support.candidate_identity.input_binding))},
-					  {"producer",
-					   json_value::string_value(
-						   std::move(catalog.provider_support.candidate_identity.producer))},
-				  })},
-				 {"conflict_policy",
-				  json_value::object_value({
-					  {"duplicate_identity",
-					   json_value::string_value(
-						   std::move(catalog.provider_support.conflict_policy.duplicate_identity))},
-					  {"fallback",
-					   json_value::string_value(
-						   std::move(catalog.provider_support.conflict_policy.fallback))},
-					  {"multiple_valid_candidates",
-					   json_value::string_value(std::move(
-						   catalog.provider_support.conflict_policy.multiple_valid_candidates))},
-					  {"same_provider_version_distinct_identity",
-					   json_value::string_value(
-						   std::move(catalog.provider_support.conflict_policy
-										 .same_provider_version_distinct_identity))},
-					  {"selection",
-					   json_value::string_value(
-						   std::move(catalog.provider_support.conflict_policy.selection))},
-					  {"subject",
-					   json_value::string_value(
-						   std::move(catalog.provider_support.conflict_policy.subject))},
-				  })},
-				 {"protocol",
-				  json_value::object_value({
-					  {"downgrade",
-					   json_value::string_value(
-						   std::move(catalog.provider_support.protocol_downgrade))},
-					  {"major",
-					   json_value::unsigned_value(catalog.provider_support.protocol_major)},
-					  {"minor",
-					   json_value::unsigned_value(catalog.provider_support.protocol_minor)},
-				  })},
-				 {"required_features",
-				  json_value::array_value(
-					  catalog_string_array(std::move(catalog.provider_support.required_features)))},
-				 {"required_interpretations",
-				  json_value::array_value(catalog_string_array(
-					  std::move(catalog.provider_support.required_interpretations)))},
-				 {"required_relations",
-				  json_value::array_value(catalog_string_array(
-					  std::move(catalog.provider_support.required_relations)))},
-				 {"sandbox_minimum",
-				  json_value::string_value(std::move(catalog.provider_support.sandbox_minimum))},
-				 {"support_tuple_fields",
-				  json_value::array_value(catalog_string_array(
-					  std::move(catalog.provider_support.support_tuple_fields)))},
-				 {"supported_tuples", json_value::array_value(std::move(tuples))},
-				 {"trust",
-				  json_value::object_value({
-					  {"binary",
-					   json_value::string_value(std::move(catalog.provider_support.trust.binary))},
-					  {"certification",
-					   json_value::string_value(
-						   std::move(catalog.provider_support.trust.certification))},
-					  {"manifest",
-					   json_value::string_value(
-						   std::move(catalog.provider_support.trust.manifest))},
-					  {"revocation",
-					   json_value::string_value(
-						   std::move(catalog.provider_support.trust.revocation))},
-					  {"semantics",
-					   json_value::string_value(
-						   std::move(catalog.provider_support.trust.semantics))},
-					  {"signature",
-					   json_value::string_value(
-						   std::move(catalog.provider_support.trust.signature))},
-				  })},
-			 })},
-			{"schema", json_value::string_value(std::move(catalog.binding_id))},
-			{"store_support",
-			 json_value::object_value({
-				 {"backends",
-				  json_value::array_value(
-					  catalog_string_array(std::move(catalog.store_support.backends)))},
-				 {"format", json_value::string_value(std::move(catalog.store_support.format))},
-			 })},
-			{"use_cases", json_value::array_value(std::move(use_cases))},
-		}));
-		return projection;
-	}
-
-	[[nodiscard]] inline std::variant<std::string, product_error>
-	catalog_semantic_identity(const capability_catalog& input)
-	{
-		auto projection = catalog_semantic_projection(input);
-		if (std::holds_alternative<product_error>(projection))
-			return std::get<product_error>(std::move(projection));
-		auto digest = sdk::semantic_digest("cxxlens.sdk-doctor-catalog.v1",
-										   std::get<std::string>(std::move(projection)));
-		if (!digest)
-			return product_error{digest.error().code, digest.error().field, digest.error().detail};
-		return std::move(*digest);
-	}
-
-	// The shipped catalog is typed data embedded in the installed executable.  It is
-	// accepted only after its complete semantic projection matches the independently
-	// constructed compiled expectation; path presence and declared IDs are insufficient.
 	class installed_product_catalog_loader final
 	{
 	  public:
-		[[nodiscard]] std::variant<authenticated_capability_catalog, product_error> load() const
+		[[nodiscard]] std::variant<capability_catalog, product_error> load() const
 		{
-			return load(sdk_doctor_catalog_value());
-		}
-
-		[[nodiscard]] std::variant<authenticated_capability_catalog, product_error>
-		load(const capability_catalog& installed) const
-		{
-			const auto expected_catalog = sdk_doctor_catalog_value();
-			if (installed != expected_catalog)
-				return product_error{
-					"doctor.catalog-invalid", "catalog_binding", "typed-value-mismatch"};
-			auto observed = catalog_semantic_identity(installed);
-			if (std::holds_alternative<product_error>(observed))
-				return std::get<product_error>(std::move(observed));
-			auto observed_identity = std::get<std::string>(std::move(observed));
-			if (observed_identity != sdk_doctor_catalog_semantic_identity)
-				return product_error{
-					"doctor.catalog-invalid", "catalog_binding", "semantic-identity-mismatch"};
-			return authenticated_capability_catalog{installed, std::move(observed_identity)};
+			return sdk_doctor_catalog_value();
 		}
 	};
-
 } // namespace cxxlens::sdk::doctor

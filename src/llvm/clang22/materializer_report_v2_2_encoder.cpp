@@ -243,8 +243,6 @@ namespace cxxlens::detail::clang22
 				 {"manifest_file_digest", text(value.receipt().manifest_file_digest)},
 				 {"occurrence_payload_digest", text(value.receipt().occurrence_payload_digest)},
 				 {"inventory_digest", text(value.receipt().inventory_digest)},
-				 {"source_revision", text(value.manifest().source_revision)},
-				 {"source_tree", text(value.manifest().source_tree)},
 				 {"configuration", text(configuration)},
 				 {"files", array(std::move(files))},
 				 {"tool", tool_value},
@@ -2400,12 +2398,11 @@ namespace cxxlens::detail::clang22
 			std::vector<json_value> descriptor_ids;
 			std::uint64_t total_rows{};
 			std::uint64_t total_claims{};
-			const auto producer =
-				object({{"executable", text(authority.tool.executable)},
-						{"interface_version", text(authority.tool.interface_version)},
-						{"distribution_version", text(authority.tool.distribution_version)},
-						{"source_revision", text(authority.tool.source_revision)},
-						{"source_tree", text(authority.tool.source_tree)}});
+			const auto producer = object({
+				{"executable", text(authority.tool.executable)},
+				{"interface_version", text(authority.tool.interface_version)},
+				{"distribution_version", text(authority.tool.distribution_version)},
+			});
 			const auto producer_digest =
 				semantic_projection_digest("cxxlens.base-claim-producer.v1", producer).value();
 
@@ -3051,9 +3048,6 @@ namespace cxxlens::detail::clang22
 			 {"generated_at", text(utc_now())},
 			 {"process_exit_status", json_value::unsigned_integer(0U)},
 			 {"raw_input_observation", raw_input_value(raw_input)},
-			 {"source",
-			  object({{"revision", *member(*member(request_root, "tool"), "source_revision")},
-					  {"tree", *member(*member(request_root, "tool"), "source_tree")}})},
 			 {"request", request_binding},
 			 {"installation",
 			  object({{"requested",

@@ -87,17 +87,6 @@ namespace cxxlens::detail::clang22::materialization
 									});
 		}
 
-		[[nodiscard]] bool revision(const std::string_view value)
-		{
-			return value.size() == 40U &&
-				std::ranges::all_of(value,
-									[](const char value)
-									{
-										return (value >= '0' && value <= '9') ||
-											(value >= 'a' && value <= 'f');
-									});
-		}
-
 		[[nodiscard]] sdk::result<std::string> member_text(const json_value& value,
 														   const std::string_view member)
 		{
@@ -386,8 +375,6 @@ namespace cxxlens::detail::clang22::materialization
 		constexpr std::array members{
 			std::string_view{"schema"},
 			std::string_view{"manifest_version"},
-			std::string_view{"source_revision"},
-			std::string_view{"source_tree"},
 			std::string_view{"package_configuration"},
 			std::string_view{"files"},
 			std::string_view{"occurrence_payload_digest"},
@@ -396,14 +383,11 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(occurrence_error("manifest", "member-set"));
 		auto schema = member_text(root, "schema");
 		auto version = member_text(root, "manifest_version");
-		auto source_revision = member_text(root, "source_revision");
-		auto source_tree = member_text(root, "source_tree");
 		auto configuration = member_text(root, "package_configuration");
 		auto payload_digest = member_text(root, "occurrence_payload_digest");
-		if (!schema || !version || !source_revision || !source_tree || !configuration ||
-			!payload_digest || *schema != "cxxlens.clang22-materializer-occurrence-manifest.v1" ||
-			*version != "1.0.0" || !revision(*source_revision) || !revision(*source_tree) ||
-			(*configuration != "static" && *configuration != "shared") ||
+		if (!schema || !version || !configuration || !payload_digest ||
+			*schema != "cxxlens.clang22-materializer-occurrence-manifest.v1" ||
+			*version != "1.0.0" || (*configuration != "static" && *configuration != "shared") ||
 			*configuration != expected_configuration || !lower_digest(*payload_digest))
 			return sdk::unexpected(occurrence_error("manifest", "authority"));
 		const auto* files_value = root.member("files");
@@ -454,9 +438,7 @@ namespace cxxlens::detail::clang22::materialization
 		const auto inventory_bytes = canonical_json(*files_value);
 		const auto inventory_digest =
 			sdk::content_digest(std::as_bytes(std::span{inventory_bytes}));
-		return materialization_occurrence_manifest{std::move(*source_revision),
-												   std::move(*source_tree),
-												   std::move(*configuration),
+		return materialization_occurrence_manifest{std::move(*configuration),
 												   std::move(decoded),
 												   std::move(*payload_digest),
 												   inventory_digest};
@@ -529,8 +511,7 @@ namespace cxxlens::detail::clang22::materialization
 	sdk::result<measured_materialization_occurrence>
 	measure_materialization_occurrence(const materialization_occurrence_expectation& expected)
 	{
-		if (!revision(expected.source_revision) || !revision(expected.source_tree) ||
-			(expected.package_configuration != "static" &&
+		if ((expected.package_configuration != "static" &&
 			 expected.package_configuration != "shared") ||
 			!lower_digest(expected.occurrence_manifest_digest) ||
 			!lower_digest(expected.materializer_executable_digest) ||
@@ -596,10 +577,6 @@ namespace cxxlens::detail::clang22::materialization
 																  expected.package_configuration);
 		if (!manifest)
 			return sdk::unexpected(std::move(manifest.error()));
-		if (manifest->source_revision != expected.source_revision ||
-			manifest->source_tree != expected.source_tree)
-			return sdk::unexpected(occurrence_error("manifest-source", "mismatch"));
-
 		materialization_occurrence_receipt receipt;
 		receipt.manifest_file_digest = manifest_digest;
 		receipt.occurrence_payload_digest = manifest->occurrence_payload_digest;

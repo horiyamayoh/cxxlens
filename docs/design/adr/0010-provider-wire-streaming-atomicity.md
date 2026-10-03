@@ -40,8 +40,7 @@ terminal reason とする。unsealed/invalid dependency group は rollback し�
 既に sealed/validated group を partial task result に残せる。prior published snapshot は一切変更しない。
 
 reuse/invalidation key は provider semantic contract digest と provider binary digest の両方を含む。同じ provider
-ID/version の rebuild を同一 binary と推定しない。将来の binary equivalence relaxation は この契約の署名付き
-certification contract と別 ADR を必要とする。
+ID/version の rebuild を同一 binary と推定しない。binary equivalence の緩和は解析結果の再利用条件を変えるため、意味上の互換性を別 ADR で定義する。
 
 Provider Protocol 2.0 は唯一の現行 wire authority であり、host input は
 `required_features: [task-input-chunks-v2]` と `task-source-closure-v2` を必要な task に対して

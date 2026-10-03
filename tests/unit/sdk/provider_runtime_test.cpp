@@ -424,7 +424,7 @@ namespace
 			"sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
 		value.resource_class = "provider.test";
 		value.sandbox_minimum = "enforced";
-		value.requested_qualifications = {"canonical-semantic-qualified"};
+
 		return value;
 	}
 
@@ -458,9 +458,6 @@ namespace
 				source,
 				{executable, mode},
 				true,
-				true,
-				true,
-				{"canonical-semantic-qualified"},
 				make_sandbox(achieved),
 				{}};
 	}
@@ -472,7 +469,6 @@ namespace
 				selection_fixture_digest(executable),
 				std::string{fixture_contract_digest},
 				{sandbox_assurance::enforced, baseline_policy().policy_digest()},
-				true,
 				std::nullopt};
 	}
 
@@ -1440,9 +1436,7 @@ namespace
 				version > requested
 					? fallback_direction::upgrade
 					: (version < requested ? fallback_direction::downgrade
-										   : fallback_direction::same_version_rebuild),
-				true,
-				{}};
+										   : fallback_direction::same_version_rebuild)};
 	}
 
 	[[nodiscard]] process_task_request task(provider_selection selection)
@@ -2042,9 +2036,6 @@ namespace
 		sandbox_variant.sandbox.evidence_digest =
 			"sha256:7777777777777777777777777777777777777777777777777777777777777777";
 		metadata_variants.push_back(sandbox_variant);
-		auto certification_variant = exact;
-		certification_variant.certification_valid = false;
-		metadata_variants.push_back(certification_variant);
 		for (const auto& variant : metadata_variants)
 		{
 			std::array forward{exact, variant};
@@ -2091,33 +2082,10 @@ namespace
 		require(!path_rejected && path_rejected.error().code == "security.downgrade-forbidden",
 				"PATH-only provider discovery became authority");
 
-		for (auto invalid :
-			 {
-				 [&]
-				 {
-					 auto value = exact;
-					 value.trust_valid = false;
-					 return value;
-				 }(),
-				 [&]
-				 {
-					 auto value = exact;
-					 value.certification_valid = false;
-					 return value;
-				 }(),
-				 [&]
-				 {
-					 auto value = exact;
-					 value.validation_error = "security.signature-mismatch";
-					 return value;
-				 }(),
-			 })
-		{
-			auto verdict_rejected =
-				select_provider(selection_request(executable), std::span{&invalid, 1U});
-			require(!verdict_rejected,
-					"invalid trust/certification verdict produced a selection token");
-		}
+		auto invalid = exact;
+		invalid.validation_error = "provider.executable-unavailable";
+		require(!select_provider(selection_request(executable), std::span{&invalid, 1U}),
+				"invalid executable produced a selection token");
 
 		auto fallback = exact;
 		fallback.description.provider_version = {1U, 1U, 0U};
@@ -2172,22 +2140,13 @@ namespace
 		auto semantic_rejected = select_provider(fallback_request, std::span{&semantic_change, 1U});
 		require(!semantic_rejected && semantic_rejected.error().code == "provider.not-found",
 				"unlisted semantic contract was accepted by fallback policy");
-		semantic_change.certified_qualifications.push_back("cross-version-qualified");
 		auto semantic_entry = fallback_tuple(semantic_change, 1U);
-		semantic_entry.required_qualifications = {"cross-version-qualified"};
 		auto semantic_request = selection_request(executable);
 		semantic_request.fallback_policy =
 			provider_fallback_policy{"company.test.semantic-policy", {std::move(semantic_entry)}};
 		auto semantic_allowed = select_provider(semantic_request, std::span{&semantic_change, 1U});
 		require(semantic_allowed && semantic_allowed->fallback_used(),
-				"qualified listed semantic contract fallback was rejected");
-		auto self_claimed = semantic_change;
-		self_claimed.certified_qualifications = {"canonical-semantic-qualified"};
-		self_claimed.description.requested_qualifications.push_back("cross-version-qualified");
-		auto self_claim_rejected = select_provider(semantic_request, std::span{&self_claimed, 1U});
-		require(!self_claim_rejected && self_claim_rejected.error().code == "provider.not-found",
-				"manifest self-claim substituted for certified fallback qualification");
-
+				"listed semantic contract fallback was rejected");
 		auto preferred = exact;
 		preferred.description.provider_version = {1U, 2U, 0U};
 		auto secondary = fallback;
@@ -2350,10 +2309,8 @@ namespace
 			require(!validation && validation.error().code == "provider.task-invalid",
 					"one execution budget dimension accepted zero");
 		}
-		constexpr std::array levels{sandbox_assurance::none,
-									sandbox_assurance::best_effort,
-									sandbox_assurance::enforced,
-									sandbox_assurance::certified};
+		constexpr std::array levels{
+			sandbox_assurance::none, sandbox_assurance::best_effort, sandbox_assurance::enforced};
 		for (const auto required : levels)
 			for (const auto achieved : levels)
 			{
@@ -2392,7 +2349,7 @@ namespace
 			require(!invalid_achieved &&
 						invalid_achieved.error().code == "provider.sandbox-report-invalid" &&
 						invalid_achieved.error().field == "achieved",
-					"invalid achieved assurance passed certified ordinal comparison");
+					"invalid achieved assurance passed closed-enum ordinal comparison");
 
 			value = candidate(executable, "success");
 			auto token = select_provider(request, std::span{&value, 1U});

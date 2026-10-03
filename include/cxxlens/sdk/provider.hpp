@@ -716,7 +716,7 @@ namespace cxxlens::sdk::provider
 		[[nodiscard]] virtual result<void> run(const task& task, context& context) = 0;
 	};
 
-	/** @brief Provider manifest request; trust and certification remain external authority. */
+	/** @brief Supported protocol version and negotiated features. */
 	struct protocol_range
 	{
 		std::uint32_t major{protocol_v2_major};
@@ -734,7 +734,6 @@ namespace cxxlens::sdk::provider
 		std::string package_identity;
 		std::string publisher;
 		std::string license;
-		std::optional<std::string> signature;
 		protocol_range protocol;
 		std::vector<std::string> platform_tuples;
 		std::string provider_binary_digest;
@@ -746,8 +745,6 @@ namespace cxxlens::sdk::provider
 		std::string determinism_contract;
 		std::string resource_class;
 		std::string sandbox_minimum{"enforced"};
-		std::vector<std::string> requested_qualifications;
-		std::vector<std::string> trust_flags;
 		std::string task_input_stage{"observation"};
 		std::string task_output_stage{"observation"};
 		[[nodiscard]] result<void> validate() const;
@@ -760,12 +757,11 @@ namespace cxxlens::sdk::provider
 		none,
 		best_effort,
 		enforced,
-		certified,
 	};
 	/** @brief Test exact membership in the closed sandbox assurance enum. */
 	[[nodiscard]] constexpr bool is_valid(const sandbox_assurance value) noexcept
 	{
-		return value >= sandbox_assurance::none && value <= sandbox_assurance::certified;
+		return value >= sandbox_assurance::none && value <= sandbox_assurance::enforced;
 	}
 
 	/** @brief Immutable built-in sandbox policy projected into an exact semantic digest. */
@@ -834,16 +830,13 @@ namespace cxxlens::sdk::provider
 			value <= discovery_source::system_registry;
 	}
 
-	/** @brief One discovered candidate before trust, compatibility, and sandbox selection. */
+	/** @brief One discovered candidate before compatibility and execution selection. */
 	struct provider_candidate
 	{
 		manifest description;
 		discovery_source source{discovery_source::system_registry};
 		std::vector<std::string> executable_argv;
 		bool authoritative_path{};
-		bool trust_valid{};
-		bool certification_valid{};
-		std::vector<std::string> certified_qualifications;
 		sandbox_report sandbox;
 		std::string validation_error;
 	};
@@ -871,8 +864,6 @@ namespace cxxlens::sdk::provider
 		std::string provider_binary_digest;
 		std::string provider_semantic_contract_digest;
 		fallback_direction direction{fallback_direction::upgrade};
-		bool require_certification{true};
-		std::vector<std::string> required_qualifications;
 		[[nodiscard]] result<void> validate(const semantic_version& requested_version) const;
 		[[nodiscard]] std::string canonical_form() const;
 	};
@@ -895,7 +886,6 @@ namespace cxxlens::sdk::provider
 		std::string provider_binary_digest;
 		std::string provider_semantic_contract_digest;
 		sandbox_requirement sandbox;
-		bool require_certification{true};
 		std::optional<provider_fallback_policy> fallback_policy;
 	};
 
@@ -906,7 +896,7 @@ namespace cxxlens::sdk::provider
 		std::string provider_id;
 		semantic_version provider_version;
 		std::string binary_digest;
-		/** @brief Full canonical manifest/executable/sandbox/certification identity digest. */
+		/** @brief Full canonical manifest/executable/sandbox identity digest. */
 		std::string candidate_digest;
 		bool selected{};
 		std::string reason;

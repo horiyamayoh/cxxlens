@@ -1,191 +1,23 @@
 schema: cxxlens.security-profile.v1
-kind: security-profile
-document_version: 1.7.0
+document_version: 2.0.0
 maturity: accepted
-authority:
-  design: docs/design/cxxlens_next_generation_integrated_design_ja.md
-  index: docs/design/catalogs/README.md
-  decision_adr: docs/design/adr/0087-provider-budget-surface-parity.md
-  owner: steward.ng-security
-registries:
-  namespace: schemas/cxxlens_ng_namespace_registry.yaml
-  certification: schemas/cxxlens_ng_provider_certification_registry.yaml
-  support_matrix: schemas/cxxlens_ng_provider_support_matrix.yaml
-signature_contract:
-  algorithm: ed25519
-  subject_digest: domain-separated-sha256-full-256
-  domain: cxxlens-provider-signature-subject-v1
-  signed_fields:
-    - provider_id
-    - provider_version
-    - package_identity
-    - publisher
-    - manifest_digest
-    - binary_digest
-    - semantic_contract_digest
-  verifier_boundary: trusted-signature-verifier-port
-  manifest_verdict_authority: forbidden
-qualification:
-  levels:
-    - id: experimental
-      requires: []
-      grant: provider-owned-namespace-only
-    - id: schema-conformant
-      requires: [experimental]
-      grant: validated-shape-only
-    - id: deterministic
-      requires: [schema-conformant]
-      grant: deterministic-contract-qualified
-    - id: sandbox-qualified
-      requires: [schema-conformant]
-      grant: sandbox-profile-qualified
-    - id: canonical-semantic-qualified
-      requires: [deterministic, sandbox-qualified]
-      grant: registry-scoped-standard-authority
-    - id: cross-version-qualified
-      requires: [canonical-semantic-qualified]
-      grant: declared-cross-version-equivalence
-    - id: production-supported
-      requires: [canonical-semantic-qualified]
-      grant: support-matrix-scoped-production
-  canonical_authority_minimum: canonical-semantic-qualified
-  self_assertion: non-authoritative
-  schema_conformance_grants_canonical_authority: false
-discovery:
+provider_selection:
   precedence: [explicit_path, installation_manifest, project_config, system_registry]
-  path_only: forbidden
-  duplicate_exact_identity: reject-same-source-canonical-duplicate-deduplicate-lower-precedence-with-explanation
-  candidate_identity: semantic-v2-full-manifest-argv-trust-certification-sandbox-validation
-  shadowing: reject-provider-version-with-distinct-full-candidate-identity
-  invalid_higher_precedence: blocks-lower-precedence-fallback
-  fallback:
-    authority: explicit-policy-exact-tuple-only
-    tuple_fields: [priority, provider_id, provider_version, binary_digest, semantic_contract_digest, direction, require_certification, required_qualifications]
-    direction: [upgrade, downgrade, same_version_rebuild]
-    qualification_evidence: certification-verdict-only-manifest-self-claim-forbidden
-    selection_order: [unique-policy-priority, discovery-source-precedence, canonical-identity]
-    invalid_higher_policy_priority: blocks-lower-policy-priority
-    selection_evidence: policy-semantic-digest-required
-  explanation: selected-and-rejected-candidates-with-candidate-digest-and-stable-reason-codes
-execution_authority:
-  selection_token: immutable-private-construction-by-select-provider
-  retained_bindings: [original-selection-request, selected-candidate, all-decisions, fallback-policy-digest]
-  runtime_revalidation: before-process-effect
-  selected_decision: exact-one-candidate-identity-and-source-bound
-  candidate_verdicts: [authoritative-path, trust, certification, validation-error, certified-qualifications]
-  sandbox_policy_digest: exact-selection-request-binding
-  sandbox_minimum: max-of-selection-request-process-request-manifest
-  default_or_forged_token: provider.selection-invalid
-sandbox:
-  assurance_order: [none, best_effort, enforced, certified]
-  membership_validation: [requirement, report, selection, effective-minimum, process-output, evidence-digest]
-  ordinal_comparison: validated-operands-only
-  unknown_value: reject-never-map-or-rank
-  stable_errors: {required: provider.sandbox-requirement-invalid, achieved: provider.sandbox-report-invalid}
-  effective_minimum: max-of-manifest-request-security-profile
-  insufficient: provider-unavailable-no-degradation
-  executable_binding:
-    resolve: working-directory-aware-single-open
-    measure: exact-sealed-memfd-bytes
-    execute: verified-fd-without-path-reresolution
-    enforced_without_binding: forbidden
-  evidence_required: [platform, mechanism, achieved, policy_digest, evidence_digest]
-  policy_registry:
-    schema: cxxlens.provider-sandbox-policy.v1
-    digest_domain: cxxlens.provider-sandbox-policy.v1
-    ordering: canonical-policy-id
-    unknown_digest: security.sandbox-policy-mismatch
-    selection_resolution: before-selection-token-construction
-    execution_resolution: before-process-effect
-    policies:
-      - id: cxxlens.sandbox.linux-provider-baseline
-        digest: semantic-v2:sha256:b4e95d8c88cf660fff40c4d9e7e4ae07bcb078013b5370c6b1abb80b0d75d375
-        mechanisms: [address-space-limit, anonymous-readonly-input, cpu-limit, explicit-environment, inherited-fd-close-range, network-syscall-deny, no-new-privileges, no-shell-argv-exec, open-file-limit, output-file-size-limit, process-group-cleanup, seccomp-audit-arch, subprocess-limit]
-        controls: {deny_network: true, zero_core_dump: false, zero_locked_memory: false}
-      - id: cxxlens.sandbox.linux-provider-strict
-        digest: semantic-v2:sha256:6fb3327ee0028e358de90a7ca9f6c1f4d42ac156c06282579579bd0a6d1bbb44
-        mechanisms: [address-space-limit, anonymous-readonly-input, core-dump-limit, cpu-limit, explicit-environment, inherited-fd-close-range, locked-memory-limit, network-syscall-deny, no-new-privileges, no-shell-argv-exec, open-file-limit, output-file-size-limit, process-group-cleanup, seccomp-audit-arch, subprocess-limit]
-        controls: {deny_network: true, zero_core_dump: true, zero_locked_memory: true}
-  applied_evidence:
-    digest_domain: cxxlens.provider-sandbox-evidence.v3
-    binds: [resolved-policy-canonical-form, recomputed-policy-digest, measured-executable-digest, achieved-assurance, invocation-budget-limits, exact-applied-mechanisms]
-    runtime_recompute: required-before-report-adoption
-    request_digest_echo: forbidden
-    mechanism_install_failure: achieved-none-and-security.sandbox-insufficient
-  execution_budget:
-    logical: [output_bytes, rows, diagnostics]
-    process_resources: [wall_ms, cpu_ms, address_space_bytes, transport_bytes, open_files, subprocesses]
-    address_space_is_not_rss: true
-    transport_is_combined_stdout_stderr: true
-    created_file_count_claimed: false
-    direct_callback_resource_preemption: false
-  profiles:
-    - id: trust.kernel-in-process
-      minimum: certified
-      allowed_execution: [statically-linked-compiler-free]
-      network: denied
-    - id: trust.native-worker
-      minimum: enforced
-      allowed_execution: [out-of-process-native-worker]
-      network: denied
-    - id: trust.third-party-provider
-      minimum: enforced
-      allowed_execution: [out-of-process-provider]
-      network: denied
-    - id: trust.remote-provider
-      minimum: certified
-      allowed_execution: []
-      network: unsupported
-product_execution:
-  default: disabled
-  required_opt_in: explicit-per-request
-  digest_binding: exact-executable-plugin-spec-digests
-  audit_fields:
-    - execution_id
-    - executable_digest
-    - plugin_digests
-    - process_tree_digest
-    - environment_digest
-    - network
-    - writable_staging_digest
-    - output_redirection_digest
-validation_boundary:
-  inputs: [provider_manifest, provider_output, schema_pack, model_pack, snapshot, cache]
-  before: authority-or-publication-or-cache-adoption
-  checks: [size_limit, schema_digest, canonical_encoding, reference_integrity, trust_binding]
-  invalid: reject-without-prior-snapshot-mutation
-reason_codes:
-  - security.audit-evidence-incomplete
-  - security.canonical-authority-denied
-  - security.certificate-valid
-  - security.certificate-revoked
-  - security.certificate-stale
-  - security.certificate-subject-mismatch
-  - security.certificate-untrusted-issuer
-  - security.certification-self-asserted
-  - security.discovery-empty
-  - security.downgrade-forbidden
-  - security.duplicate-provider
-  - security.namespace-collision
-  - security.namespace-authorized
-  - security.namespace-unowned
-  - security.opt-in-required
-  - security.path-only-discovery
-  - security.product-execution-authorized
-  - security.provider-selected
-  - security.provider-shadowing
-  - security.sandbox-assurance-invalid
-  - security.sandbox-insufficient
-  - security.sandbox-policy-mismatch
-  - security.sandbox-qualified
-  - security.signature-mismatch
-  - security.signature-missing
-  - security.support-tuple-unsupported
-  - security.support-tuple-qualified
-  - security.untrusted-input-invalid
-  - security.untrusted-input-valid
-backend_authority:
-  implementation: tools/quality/check_ng_security_contract.py
-  vectors: schemas/cxxlens_ng_security_conformance_vectors.yaml
-  report_schema: schemas/cxxlens_ng_security_conformance_report.schema.yaml
-  equality: selection-and-rejection-explanation
+  identity: [provider_id, provider_version, provider_binary_digest, provider_semantic_contract_digest]
+  protocol: version-and-required-features-compatible
+  ambiguous_candidates: reject
+  invalid_explicit_candidate: fail-with-reason
+  fallback: explicitly-configured-identities-only
+execution:
+  command: argv-without-shell
+  executable: measure-content-before-execution
+  sandbox_assurance: [none, best_effort, enforced]
+  sandbox_minimum: caller-and-provider-requirements
+  limits: [wall_ms, cpu_ms, address_space_bytes, output_bytes, open_files, subprocesses]
+  cancellation: terminate-and-clean-up-process-group
+input_validation:
+  encoding: bounded-canonical-protocol
+  required: [size-limits, schema-version, descriptor-binding, reference-integrity, source-content-digest]
+  malformed_input: typed-error-before-publication
+analysis_results:
+  retained: [claim-provenance, coverage, closure, unresolved, conflict, guarantee]

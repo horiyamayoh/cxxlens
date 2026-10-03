@@ -15,7 +15,7 @@
 
 ## Phase 0–1 の保存方針
 
-この作業では、製品 runtime が返す claim/provenance、coverage、closure、unknown、conflict、materialization report、SQLite/source-closure の安全 receipt、provider の trust/identity/certification を維持する。
+この作業では、製品 runtime が返す claim/provenance、coverage、closure、unknown、conflict、materialization report、SQLite/source-closure の安全 receipt、provider identity、ABI・プロトコル互換性と実行制限 を維持する。
 
 一方、開発・release の運用証跡は作らない。Acceptance Manifest、work-unit、review receipt、exact-SHA memo、checksum、qualification JSON、集約 report、phase checkpoint、独自 tag/milestone は Phase の完了条件でも repository artifact でもない。完了判定は変更固有試験、main の決定的 CTest、workflow の終了コード、通常の Git 履歴で行う。
 

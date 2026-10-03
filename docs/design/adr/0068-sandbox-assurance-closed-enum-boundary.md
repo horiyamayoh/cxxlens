@@ -6,9 +6,9 @@
 
 ## Context
 
-`sandbox_assurance` の security order は `none < best_effort < enforced < certified` である。一部の入口は closed-enum
+`sandbox_assurance` の security order は `none < best_effort < enforced` である。一部の入口は closed-enum
 membership を検証していたが、selection と process runtime の比較は underlying `uint8_t` の大小を直接使っていた。さらに evidence
-digest API が範囲外 achieved value を文字列化できたため、future/invalid ordinal が `certified` より強い値として比較されながら、別の
+digest API が範囲外 achieved value を文字列化できたため、future/invalid ordinal が `enforced` より強い値として比較されながら、別の
 canonical text へ bind される余地があった。custom process port、FFI、decoder、public aggregate の直接構築は同じ trust boundary を通る。
 
 ## Decision

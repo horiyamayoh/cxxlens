@@ -25,8 +25,6 @@ namespace cxxlens::detail::clang22::materialization
 
 	struct materialization_occurrence_manifest
 	{
-		std::string source_revision;
-		std::string source_tree;
 		std::string package_configuration;
 		std::vector<materialization_occurrence_file> files;
 		std::string occurrence_payload_digest;
@@ -37,8 +35,6 @@ namespace cxxlens::detail::clang22::materialization
 
 	struct materialization_occurrence_expectation
 	{
-		std::string source_revision;
-		std::string source_tree;
 		std::string package_configuration;
 		std::string occurrence_manifest_digest;
 		std::string materializer_executable_digest;

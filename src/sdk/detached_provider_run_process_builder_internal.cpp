@@ -32,8 +32,6 @@ namespace cxxlens::sdk::detail
 			if (!validated)
 				return unexpected(std::move(validated.error()));
 			const auto& candidate = request.selection.selected_candidate();
-			if (!candidate.trust_valid || !candidate.description.signature)
-				return unexpected(process_builder_error("provider", "trusted-signature-required"));
 
 			return build_detached_provider_run_from_validated_transcript(
 				{request.task_id,
@@ -46,8 +44,6 @@ namespace cxxlens::sdk::detail
 				  candidate.description.provider_version,
 				  candidate.description.provider_binary_digest,
 				  candidate.description.provider_semantic_contract_digest,
-				  *candidate.description.signature,
-				  "not-revoked",
 				  request.sandbox.policy_digest}},
 				protocol_transcript,
 				*validated,

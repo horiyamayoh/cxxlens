@@ -16,9 +16,12 @@ release は、手動実行または `v*` tag の `.github/workflows/release.yml`
 
 - claim/provenance、coverage、unknown、conflict、materialization report
 - SQLite/source-closure の安全 receipt
-- provider の署名、binary identity、失効、sandbox、canonical semantic certification
+- 実行するプログラムの識別、ABI/プロトコル互換性、必要な実行制限
 
-これらは利用者へ返す意味情報・安全判定である。
+これらは利用者へ返す意味情報・実行時の検査である。provider の品質証明書、認定レベル、
+署名された認定台帳、失効管理、試験済み SHA の管理は削除する。利用開始を認定の取得に
+依存させない。解析対象の内容 digest と Git の試験証跡は別物であり、前者は入力の変化を
+検出するために必要な場合だけ使う。
 
 ## Compatibility and support
 

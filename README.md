@@ -66,9 +66,10 @@ target_compile_features(my_analyzer PRIVATE cxx_std_23)
 ```
 
 インストールされる薄い CLI は `cxxlens doctor ...` と `cxxlens run ...` を提供します。
-`doctor` は relation/capability の診断、`run` は現在認定された materialize-and-query 経路の
-fail-closed admission を同じ JSON/Markdown result 契約で返します。provider の署名鍵・trust anchor・
-rotation は CLI やリポジトリへ埋め込まず、外部 authority port が供給します。
+`doctor` は relation/capability の診断、`run` は設定した解析器による materialize-and-query の
+結果を JSON/Markdown で返します。利用条件は実際の ABI・プロトコルと入力の互換性です。
+Clang 22 のローカル解析には `cxxlens-clang22-analyze --project-root ROOT --compile-commands DB
+--file SOURCE` を使えます。結果には独立した public SDK の問い合わせと、不足情報を保持します。
 
 ## Authority
 

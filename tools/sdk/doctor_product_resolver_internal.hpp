@@ -90,8 +90,6 @@ namespace cxxlens::sdk::doctor
 			return 1U;
 		if (assurance == "enforced")
 			return 2U;
-		if (assurance == "certified")
-			return 3U;
 		return std::nullopt;
 	}
 
@@ -140,11 +138,7 @@ namespace cxxlens::sdk::doctor
 				!text(candidate.provider_binary_digest) ||
 				!text(candidate.provider_semantic_contract_digest) || !texts(candidate.features) ||
 				!texts(candidate.relations) || !texts(candidate.interpretations) ||
-				!text(candidate.sandbox_minimum) || !text(candidate.sandbox_policy_digest) ||
-				(candidate.trust.certificate_id && !text(*candidate.trust.certificate_id)) ||
-				(candidate.trust.trust_anchor_id && !text(*candidate.trust.trust_anchor_id)) ||
-				(candidate.trust.signature_digest && !text(*candidate.trust.signature_digest)) ||
-				(candidate.trust.revocation.reason && !text(*candidate.trust.revocation.reason)))
+				!text(candidate.sandbox_minimum) || !text(candidate.sandbox_policy_digest))
 				return false;
 		}
 		return true;
@@ -206,36 +200,9 @@ namespace cxxlens::sdk::doctor
 				candidate.protocol_major == 0U ||
 				!sandbox_assurance_rank(candidate.sandbox_minimum) ||
 				!digest_value(candidate.sandbox_policy_digest) || !valid_set(candidate.features) ||
-				!valid_set(candidate.relations) || !valid_set(candidate.interpretations) ||
-				(candidate.trust.state != trust_state::verified &&
-				 candidate.trust.state != trust_state::unknown &&
-				 candidate.trust.state != trust_state::rejected) ||
-				(candidate.trust.revocation.state != revocation_state::not_revoked &&
-				 candidate.trust.revocation.state != revocation_state::revoked &&
-				 candidate.trust.revocation.state != revocation_state::unknown) ||
-				(candidate.trust.certificate_id && !strict_id(*candidate.trust.certificate_id)) ||
-				(candidate.trust.trust_anchor_id && !strict_id(*candidate.trust.trust_anchor_id)) ||
-				(candidate.trust.signature_digest &&
-				 !digest_value(*candidate.trust.signature_digest)))
+				!valid_set(candidate.relations) || !valid_set(candidate.interpretations))
 				return product_error{
 					"doctor.project-invalid", "provider_candidates", "invalid-direct-candidate"};
-			if (candidate.trust.state == trust_state::verified &&
-				(!candidate.trust.certificate_id || !candidate.trust.trust_anchor_id ||
-				 !candidate.trust.signature_digest ||
-				 candidate.trust.revocation.state != revocation_state::not_revoked))
-				return product_error{
-					"doctor.project-invalid", "provider_candidates", "inconsistent-verified-trust"};
-			const bool revoked = candidate.trust.revocation.state == revocation_state::revoked;
-			if (revoked !=
-					(candidate.trust.revocation.effective_sequence.has_value() &&
-					 candidate.trust.revocation.reason.has_value()) ||
-				(!revoked &&
-				 (candidate.trust.revocation.effective_sequence.has_value() ||
-				  candidate.trust.revocation.reason.has_value())) ||
-				(candidate.trust.revocation.reason &&
-				 !strict_id(*candidate.trust.revocation.reason)))
-				return product_error{
-					"doctor.project-invalid", "provider_candidates", "inconsistent-revocation"};
 		}
 		project_context output = project;
 		for (auto& candidate : output.provider_candidates)
@@ -255,184 +222,16 @@ namespace cxxlens::sdk::doctor
 		return output;
 	}
 
-	struct authority_capability_result
-	{
-		resolution_state state{resolution_state::unknown};
-		diagnosis_reason reason{diagnosis_reason::catalog_unverified};
-	};
-
-	[[nodiscard]] inline authority_capability_result
-	classify_project_catalog(const project_context& project,
-							 const installed_product_authority_verifier& verifier)
-	{
-		const auto binding = verifier.lookup_project_catalog(project.catalog_id);
-		switch (binding.verdict)
-		{
-			case authority_verdict::revoked:
-				return {resolution_state::disproved, diagnosis_reason::catalog_revoked};
-			case authority_verdict::rejected:
-				return {resolution_state::disproved, diagnosis_reason::catalog_rejected};
-			case authority_verdict::absent:
-				return {resolution_state::unknown, diagnosis_reason::catalog_unavailable};
-			case authority_verdict::unverified:
-				return {resolution_state::unknown, diagnosis_reason::catalog_unverified};
-			case authority_verdict::verified:
-				if (binding.catalog_id != project.catalog_id ||
-					binding.catalog_digest != project.catalog_digest ||
-					binding.logical_root != project.logical_root ||
-					binding.environment_digest != project.environment_digest)
-					return {resolution_state::disproved, diagnosis_reason::catalog_binding_invalid};
-				if (!binding.environment)
-					return {resolution_state::unknown, diagnosis_reason::catalog_unverified};
-				if (*binding.environment != project.environment)
-					return {resolution_state::disproved, diagnosis_reason::catalog_binding_invalid};
-				return {resolution_state::proved, diagnosis_reason::none};
-		}
-		return {resolution_state::disproved, diagnosis_reason::catalog_rejected};
-	}
-
-	[[nodiscard]] inline bool
-	exact_provider_certification(const provider_candidate& candidate,
-								 const project_context& project,
-								 const provider_support_spec& support,
-								 provider_certification_authority certification)
-	{
-		std::ranges::sort(certification.features);
-		std::ranges::sort(certification.relations);
-		std::ranges::sort(certification.interpretations);
-		const auto candidate_sandbox = sandbox_assurance_rank(candidate.sandbox_minimum);
-		const auto certified_sandbox = sandbox_assurance_rank(certification.sandbox_assurance);
-		if (project.environment.os != "linux" ||
-			project.environment.compiler_provider_major != "clang22")
-			return false;
-		constexpr std::string_view certification_platform{"linux"};
-		constexpr std::string_view certification_toolchain{"clang-22"};
-		constexpr std::string_view runtime_platform{"linux-glibc"};
-		const auto exact_environment_qualification =
-			[&](const std::string& relation_descriptor, const std::string& interpretation)
-		{
-			const auto relation = descriptor_relation_to_provider_offer(relation_descriptor);
-			if (!relation)
-				return false;
-			return std::ranges::any_of(
-				certification.certified_qualifications,
-				[&](const certification_qualification& qualification)
-				{
-					return qualification.level == "canonical-semantic-qualified" &&
-						qualification.relation == *relation &&
-						qualification.interpretation == interpretation &&
-						std::ranges::find(qualification.toolchains, certification_toolchain) !=
-						qualification.toolchains.end() &&
-						std::ranges::find(qualification.platforms, certification_platform) !=
-						qualification.platforms.end();
-				});
-		};
-		const auto qualified_environment =
-			std::ranges::find(certification.platform_tuples, runtime_platform) !=
-				certification.platform_tuples.end() &&
-			std::ranges::all_of(support.required_relations,
-								[&](const std::string& relation)
-								{
-									return std::ranges::all_of(
-										candidate.interpretations,
-										[&](const std::string& interpretation)
-										{
-											return exact_environment_qualification(relation,
-																				   interpretation);
-										});
-								});
-		return certification.verdict == authority_verdict::verified &&
-			certification.execution_verdict == authority_verdict::verified &&
-			certification.signature_verdict == authority_verdict::verified &&
-			certification.trust_anchor_verdict == authority_verdict::verified &&
-			certification.revocation_verdict == authority_verdict::verified &&
-			certification.registry_id == "cxxlens.provider-certification-registry.v1" &&
-			semantic_digest_value(certification.registry_semantic_identity) &&
-			certification.candidate_id == candidate.candidate_id &&
-			certification.provider_id == candidate.provider_id &&
-			certification.provider_version == candidate.provider_version &&
-			certification.package_identity == candidate.package_identity &&
-			certification.provider_manifest_digest == candidate.provider_manifest_digest &&
-			certification.provider_binary_digest == candidate.provider_binary_digest &&
-			certification.provider_semantic_contract_digest ==
-			candidate.provider_semantic_contract_digest &&
-			certification.protocol_major == candidate.protocol_major &&
-			certification.protocol_minor == candidate.protocol_minor &&
-			certification.features == candidate.features &&
-			certification.relations == candidate.relations &&
-			certification.interpretations == candidate.interpretations && candidate_sandbox &&
-			qualified_environment && certified_sandbox &&
-			*certified_sandbox >= *candidate_sandbox &&
-			certification.sandbox_policy_digest == candidate.sandbox_policy_digest &&
-			candidate.trust.state == trust_state::verified &&
-			candidate.trust.revocation.state == revocation_state::not_revoked &&
-			certification.registry_sequence == candidate.trust.registry_sequence &&
-			certification.certificate_id == candidate.trust.certificate_id &&
-			certification.trust_anchor_id == candidate.trust.trust_anchor_id &&
-			certification.signature_digest == candidate.trust.signature_digest;
-	}
-
-	[[nodiscard]] inline authority_verdict
-	provider_authority_verdict(const provider_certification_authority& certification) noexcept
-	{
-		const std::array verdicts{certification.verdict,
-								  certification.execution_verdict,
-								  certification.signature_verdict,
-								  certification.trust_anchor_verdict,
-								  certification.revocation_verdict};
-		if (!std::ranges::all_of(verdicts, valid_authority_verdict))
-			return authority_verdict::rejected;
-		if (std::ranges::find(verdicts, authority_verdict::revoked) != verdicts.end())
-			return authority_verdict::revoked;
-		if (std::ranges::find(verdicts, authority_verdict::rejected) != verdicts.end())
-			return authority_verdict::rejected;
-		if (certification.verdict == authority_verdict::absent)
-			return authority_verdict::absent;
-		if (std::ranges::find(verdicts, authority_verdict::absent) != verdicts.end())
-			return authority_verdict::absent;
-		if (std::ranges::find(verdicts, authority_verdict::unverified) != verdicts.end())
-			return authority_verdict::unverified;
-		return authority_verdict::verified;
-	}
-
 	[[nodiscard]] inline provider_selection
 	classify_provider_candidate(const provider_candidate& candidate,
 								const project_context& project,
-								const provider_support_spec& support,
-								const installed_product_authority_verifier& verifier)
+								const provider_support_spec& support)
 	{
-		const auto certification = verifier.lookup_provider(candidate.candidate_id);
-		const auto certification_verdict = provider_authority_verdict(certification);
-		if (certification_verdict == authority_verdict::revoked)
-			return {resolution_state::disproved,
-					diagnosis_reason::provider_revoked,
-					&candidate,
-					{candidate.candidate_id}};
-		if (certification_verdict == authority_verdict::rejected)
-			return {resolution_state::disproved,
-					diagnosis_reason::provider_untrusted,
-					&candidate,
-					{candidate.candidate_id}};
-		if (certification_verdict == authority_verdict::absent)
-			return {resolution_state::unknown,
-					diagnosis_reason::provider_certification_unavailable,
-					&candidate,
-					{candidate.candidate_id}};
-		if (certification_verdict == authority_verdict::unverified)
-			return {resolution_state::unknown,
-					diagnosis_reason::provider_certification_unverified,
-					&candidate,
-					{candidate.candidate_id}};
-		if (!exact_provider_certification(candidate, project, support, certification))
-			return {resolution_state::disproved,
-					diagnosis_reason::provider_untrusted,
-					&candidate,
-					{candidate.candidate_id}};
-		const auto offered_sandbox = sandbox_assurance_rank(candidate.sandbox_minimum);
-		const auto required_sandbox = sandbox_assurance_rank(support.sandbox_minimum);
+		const auto offered = sandbox_assurance_rank(candidate.sandbox_minimum);
+		const auto required = sandbox_assurance_rank(support.sandbox_minimum);
 		if (candidate.protocol_major != support.protocol_major ||
-			candidate.protocol_minor != support.protocol_minor || !offered_sandbox ||
-			!required_sandbox || *offered_sandbox < *required_sandbox ||
+			candidate.protocol_minor != support.protocol_minor || !offered || !required ||
+			*offered < *required ||
 			std::ranges::find(support.supported_tuples, project.environment) ==
 				support.supported_tuples.end())
 			return {resolution_state::disproved,
@@ -443,21 +242,18 @@ namespace cxxlens::sdk::doctor
 			resolution_state::proved, diagnosis_reason::none, &candidate, {candidate.candidate_id}};
 	}
 
-	[[nodiscard]] inline provider_selection
-	select_provider(const project_context& project,
-					const provider_support_spec& support,
-					const installed_product_authority_verifier& verifier)
+	[[nodiscard]] inline provider_selection select_provider(const project_context& project,
+															const provider_support_spec& support)
 	{
 		if (project.provider_candidates.empty())
 			return {};
-		// Project candidates are lookup keys only.  Conflict is derived below from two or
-		// more independently authenticated valid candidates, never from JSON shadow claims.
+		// Diagnose configured candidates; this does not execute them or prove query completeness.
 		std::vector<provider_selection> proved;
 		std::vector<provider_selection> unknown;
 		std::vector<provider_selection> disproved;
 		for (const auto& candidate : project.provider_candidates)
 		{
-			auto classified = classify_provider_candidate(candidate, project, support, verifier);
+			auto classified = classify_provider_candidate(candidate, project, support);
 			if (classified.state == resolution_state::proved)
 				proved.push_back(std::move(classified));
 			else if (classified.state == resolution_state::unknown)
@@ -557,9 +353,7 @@ namespace cxxlens::sdk::doctor
 	evaluate_capability(const capability_spec& capability,
 						const project_context& project,
 						const capability_catalog& catalog,
-						const authority_capability_result& project_catalog_authority,
 						const provider_selection& selection,
-						const installed_product_authority_verifier& verifier,
 						const std::map<std::string, capability_result, std::less<>>& prior,
 						const relation_registry& registry)
 	{
@@ -614,8 +408,8 @@ namespace cxxlens::sdk::doctor
 		switch (*probe)
 		{
 			case capability_probe::project_catalog:
-				output.state = project_catalog_authority.state;
-				output.reason = project_catalog_authority.reason;
+				output.state = resolution_state::proved;
+				output.reason = diagnosis_reason::none;
 				break;
 			case capability_probe::source_closure:
 				output.state = resolution_state::unknown;
@@ -679,17 +473,10 @@ namespace cxxlens::sdk::doctor
 						output.state = resolution_state::disproved;
 						output.reason = diagnosis_reason::unsupported_tuple;
 					}
-					else if (verifier.lookup_store(project.store_backend,
-												   project.store_format,
-												   project.catalog_digest))
+					else
 					{
 						output.state = resolution_state::proved;
 						output.reason = diagnosis_reason::none;
-					}
-					else
-					{
-						output.state = resolution_state::unknown;
-						output.reason = diagnosis_reason::store_authority_unavailable;
 					}
 				}
 				break;
@@ -700,8 +487,7 @@ namespace cxxlens::sdk::doctor
 	[[nodiscard]] inline std::variant<resolution, product_error>
 	resolve(const std::string_view use_case_id,
 			const project_context& input_project,
-			const authenticated_capability_catalog& catalog_token,
-			const installed_product_authority_verifier& verifier)
+			const capability_catalog& catalog_token)
 	{
 		if (!strict_id(use_case_id))
 			return product_error{"doctor.unknown-use-case", "use_case_id", "invalid"};
@@ -709,9 +495,7 @@ namespace cxxlens::sdk::doctor
 		if (std::holds_alternative<product_error>(canonicalized_project))
 			return std::get<product_error>(std::move(canonicalized_project));
 		auto project = std::get<project_context>(std::move(canonicalized_project));
-		if (!semantic_digest_value(catalog_token.semantic_identity()))
-			return product_error{"doctor.catalog-invalid", "catalog_binding", "unverified"};
-		auto catalog = catalog_token.catalog();
+		auto catalog = catalog_token;
 		if (catalog.binding_id != "cxxlens.sdk-doctor-catalog.v1" ||
 			catalog.document_version != "1.0.0")
 			return product_error{"doctor.catalog-invalid", "catalog_binding", "unsupported"};
@@ -773,96 +557,22 @@ namespace cxxlens::sdk::doctor
 		auto registry = known_relation_registry();
 		if (!registry)
 			return product_error{registry.error().code, "relation", registry.error().detail};
-		const auto project_catalog_authority = classify_project_catalog(project, verifier);
-		const auto selection = select_provider(project, catalog.provider_support, verifier);
+		const auto selection = select_provider(project, catalog.provider_support);
 		resolution output;
 		output.catalog_binding_id = catalog.binding_id;
 		output.catalog_document_version = catalog.document_version;
 		output.use_case_id = found_use_case->id;
 		output.consumer = found_use_case->consumer;
 		output.question = found_use_case->question;
-		output.provenance.push_back("catalog.semantic-identity=" +
-									std::string{catalog_token.semantic_identity()});
-		const auto catalog_authority = verifier.lookup_project_catalog(project.catalog_id);
-		if (catalog_authority.verdict == authority_verdict::verified)
-		{
-			output.provenance.push_back("project.catalog-id=" + catalog_authority.catalog_id);
-			output.provenance.push_back("project.catalog-digest=" +
-										catalog_authority.catalog_digest);
-			output.provenance.push_back("project.logical-root=" + catalog_authority.logical_root);
-			output.provenance.push_back("project.environment-digest=" +
-										catalog_authority.environment_digest);
-		}
+		output.provenance.push_back("project.catalog-id=" + project.catalog_id);
 		for (const auto& candidate_id : selection.candidate_ids)
-		{
-			const auto certification = verifier.lookup_provider(candidate_id);
-			const auto verdict = provider_authority_verdict(certification);
-			if (verdict == authority_verdict::absent || verdict == authority_verdict::unverified)
-				continue;
 			output.provenance.push_back("provider.candidate-id=" + candidate_id);
-			if (!certification.provider_id.empty())
-				output.provenance.push_back("provider.id=" + certification.provider_id);
-			if (!certification.provider_version.empty())
-				output.provenance.push_back("provider.version=" + certification.provider_version);
-			if (!certification.package_identity.empty())
-				output.provenance.push_back("provider.package-identity=" +
-											certification.package_identity);
-			if (!certification.provider_manifest_digest.empty())
-				output.provenance.push_back("provider.manifest-digest=" +
-											certification.provider_manifest_digest);
-			if (!certification.provider_binary_digest.empty())
-				output.provenance.push_back("provider.binary-digest=" +
-											certification.provider_binary_digest);
-			if (!certification.provider_semantic_contract_digest.empty())
-				output.provenance.push_back("provider.semantic-contract-digest=" +
-											certification.provider_semantic_contract_digest);
-			if (!certification.execution_semantic_identity.empty())
-				output.provenance.push_back("provider.execution-semantic-identity=" +
-											certification.execution_semantic_identity);
-			if (!certification.selection_semantic_identity.empty())
-				output.provenance.push_back("provider.selection-semantic-identity=" +
-											certification.selection_semantic_identity);
-			if (certification.certificate_id)
-			{
-				output.provenance.push_back("provider.certificate-id=" +
-											*certification.certificate_id);
-				output.provenance.push_back("provider.registry-sequence=" +
-											std::to_string(certification.registry_sequence));
-			}
-			if (certification.trust_anchor_id)
-				output.provenance.push_back("provider.trust-anchor-id=" +
-											*certification.trust_anchor_id);
-			if (certification.signature_digest)
-				output.provenance.push_back("provider.signature-digest=" +
-											*certification.signature_digest);
-			if (!certification.registry_id.empty())
-				output.provenance.push_back("provider.registry-id=" + certification.registry_id);
-			if (!certification.registry_semantic_identity.empty())
-				output.provenance.push_back("provider.registry-semantic-identity=" +
-											certification.registry_semantic_identity);
-		}
-		if (const auto store = verifier.lookup_store(
-				project.store_backend, project.store_format, project.catalog_digest))
-		{
-			output.provenance.push_back("store.backend=" + store->backend);
-			output.provenance.push_back("store.snapshot-id=" + store->snapshot_id);
-			output.provenance.push_back("store.publication-id=" + store->publication_id);
-		}
-		std::ranges::sort(output.provenance);
-		output.provenance.erase(std::ranges::unique(output.provenance).begin(),
-								output.provenance.end());
 		std::map<std::string, capability_result, std::less<>> by_id;
 		std::optional<diagnosis_reason> first_actionable_reason;
 		for (const auto& capability : std::get<std::vector<capability_spec>>(path))
 		{
-			auto result = evaluate_capability(capability,
-											  project,
-											  catalog,
-											  project_catalog_authority,
-											  selection,
-											  verifier,
-											  by_id,
-											  *registry);
+			auto result =
+				evaluate_capability(capability, project, catalog, selection, by_id, *registry);
 			by_id.emplace(capability.id, result);
 			output.capability_path.push_back(result);
 			if (result.state == resolution_state::unknown ||
@@ -939,14 +649,10 @@ namespace cxxlens::sdk::doctor
 	resolve(const std::string_view use_case_id, const project_context& project)
 	{
 		const installed_product_catalog_loader loader;
-		const installed_product_authority_verifier verifier;
 		auto loaded = loader.load();
 		if (std::holds_alternative<product_error>(loaded))
 			return std::get<product_error>(std::move(loaded));
-		return resolve(use_case_id,
-					   project,
-					   std::get<authenticated_capability_catalog>(std::move(loaded)),
-					   verifier);
+		return resolve(use_case_id, project, std::get<capability_catalog>(std::move(loaded)));
 	}
 
 	[[nodiscard]] inline json_value to_json(const resolution& value)
@@ -1074,9 +780,9 @@ namespace cxxlens::sdk::doctor
 	}
 
 	[[nodiscard]] inline json_value to_json(const std::vector<relation_check>& checks,
-											const authenticated_capability_catalog& catalog_token)
+											const capability_catalog& catalog_token)
 	{
-		const auto& catalog = catalog_token.catalog();
+		const auto& catalog = catalog_token;
 		json_value::array_type components;
 		std::size_t missing{};
 		for (const auto& item : checks)
@@ -1192,351 +898,4 @@ namespace cxxlens::sdk::doctor
 		return output;
 	}
 
-	// Read the authority shipped beside the executable.  The current distribution
-	// deliberately contains an empty conformance-only registry; non-empty registries
-	// require the typed signed-envelope loader above and are never inferred from YAML.
-	[[nodiscard]] inline installed_authority_source
-	installed_authority_source_from_paths(const std::string_view executable_path)
-	{
-		installed_authority_source output;
-		if (executable_path.empty() || executable_path.size() > maximum_project_bytes)
-			return output;
-		std::error_code path_error;
-		const std::filesystem::path requested{executable_path};
-		// argv[0] is caller-controlled.  Linux exposes the opened executable identity
-		// independently, so consult it first even when argv[0] contains parent components.
-		std::filesystem::path executable =
-			std::filesystem::read_symlink("/proc/self/exe", path_error);
-		if (path_error || executable.empty())
-		{
-			path_error.clear();
-			if (requested.has_parent_path())
-				executable = std::filesystem::absolute(requested, path_error);
-			else
-			{
-				const auto* raw_path = std::getenv("PATH");
-				if (raw_path == nullptr)
-					return output;
-				const std::string_view search_path{raw_path};
-				std::size_t begin{};
-				while (begin <= search_path.size())
-				{
-					const auto separator = search_path.find(':', begin);
-					const auto end =
-						separator == std::string_view::npos ? search_path.size() : separator;
-					const auto directory = search_path.substr(begin, end - begin);
-					const auto candidate =
-						(directory.empty() ? std::filesystem::current_path(path_error)
-										   : std::filesystem::path{directory}) /
-						requested;
-					if (path_error)
-						return output;
-					std::error_code status_error;
-					if (std::filesystem::is_regular_file(candidate, status_error) && !status_error)
-					{
-						executable = candidate;
-						break;
-					}
-					if (separator == std::string_view::npos)
-						break;
-					begin = separator + 1U;
-				}
-			}
-		}
-		if (path_error)
-			return output;
-		executable = std::filesystem::weakly_canonical(executable, path_error);
-		if (path_error || executable.empty())
-			return output;
-		const auto directory = executable.parent_path();
-		const std::array candidates{
-			directory / ".." / "share" / "cxxlens" / "schemas" /
-				"cxxlens_ng_provider_certification_registry.yaml",
-			directory / ".." / ".." / "schemas" / "cxxlens_ng_provider_certification_registry.yaml",
-		};
-		std::filesystem::path registry_path;
-		for (const auto& candidate : candidates)
-		{
-			std::error_code status_error;
-			if (std::filesystem::is_regular_file(candidate, status_error) && !status_error)
-			{
-				registry_path = candidate;
-				break;
-			}
-		}
-		if (registry_path.empty())
-			return output;
-		std::string read_error;
-		const auto raw = read_file(registry_path.string(), read_error);
-		if (!read_error.empty() || !valid_utf8(raw))
-			return output;
-
-		certification_registry_document registry;
-		enum class section : std::uint8_t
-		{
-			none,
-			authority,
-			update_policy,
-			anchors,
-			issuers,
-			certificates,
-			revocations,
-		};
-		section active{section::none};
-		bool schema_seen{};
-		bool version_seen{};
-		bool maturity_seen{};
-		bool authority_seen{};
-		bool authority_adr_seen{};
-		bool authority_owner_seen{};
-		bool update_policy_seen{};
-		bool update_source_seen{};
-		bool update_signature_seen{};
-		bool update_rollback_seen{};
-		bool update_clock_seen{};
-		bool certificates_empty{};
-		bool revocations_empty{};
-		std::size_t anchor_fingerprint_count{};
-		std::size_t anchor_scope_count{};
-		std::size_t anchor_production_use_count{};
-		std::size_t issuer_anchor_count{};
-		std::size_t issuer_fingerprint_count{};
-		std::size_t issuer_qualification_count{};
-		std::size_t issuer_namespace_count{};
-		std::size_t issuer_scope_count{};
-		std::size_t offset{};
-		while (offset <= raw.size())
-		{
-			const auto newline = raw.find('\n', offset);
-			const auto end = newline == std::string::npos ? raw.size() : newline;
-			const auto line = std::string_view{raw}.substr(offset, end - offset);
-			if (line.size() > maximum_json_string_bytes ||
-				line.find('\t') != std::string_view::npos)
-				return output;
-			const auto content = trim_ascii(line);
-			const auto first_content = line.find_first_not_of(' ');
-			const auto indent =
-				first_content == std::string_view::npos ? line.size() : first_content;
-			if (!content.empty() && content.front() != '#')
-			{
-				if (indent == 0U)
-				{
-					active = section::none;
-					if (content == "schema: cxxlens.provider-certification-registry.v1")
-					{
-						if (schema_seen)
-							return output;
-						schema_seen = true;
-					}
-					else if (content == "document_version: 1.0.0")
-					{
-						if (version_seen)
-							return output;
-						version_seen = true;
-					}
-					else if (content == "maturity: accepted")
-					{
-						if (maturity_seen)
-							return output;
-						maturity_seen = true;
-					}
-					else if (content == "authority:")
-					{
-						if (authority_seen)
-							return output;
-						authority_seen = true;
-						active = section::authority;
-					}
-					else if (content == "update_policy:")
-					{
-						if (update_policy_seen)
-							return output;
-						update_policy_seen = true;
-						active = section::update_policy;
-					}
-					else if (content == "trust_anchors:")
-						active = section::anchors;
-					else if (content == "issuers:")
-						active = section::issuers;
-					else if (content == "certificates: []")
-						active = section::certificates, certificates_empty = true;
-					else if (content == "revocations: []")
-						active = section::revocations, revocations_empty = true;
-					else
-						return output;
-				}
-				else if (active == section::authority)
-				{
-					if (content ==
-						"decision_adr: "
-						"docs/design/adr/0011-provider-trust-certification-discovery.md")
-					{
-						if (authority_adr_seen)
-							return output;
-						authority_adr_seen = true;
-					}
-					else if (content == "owner: steward.ng-security")
-					{
-						if (authority_owner_seen)
-							return output;
-						authority_owner_seen = true;
-					}
-					else
-						return output;
-				}
-				else if (active == section::update_policy)
-				{
-					if (content == "source: explicit-installed-registry")
-					{
-						if (update_source_seen)
-							return output;
-						update_source_seen = true;
-					}
-					else if (content == "signature: required")
-					{
-						if (update_signature_seen)
-							return output;
-						update_signature_seen = true;
-					}
-					else if (content == "rollback: monotonically-increasing-sequence")
-					{
-						if (update_rollback_seen)
-							return output;
-						update_rollback_seen = true;
-					}
-					else if (content == "clock: trusted-time-port")
-					{
-						if (update_clock_seen)
-							return output;
-						update_clock_seen = true;
-					}
-					else
-						return output;
-				}
-				else if (active == section::anchors)
-				{
-					if (content.starts_with("- id: "))
-					{
-						if (registry.trust_anchors.size() >= maximum_json_collection_count)
-							return output;
-						registry.trust_anchors.push_back(
-							{std::string{trim_ascii(content.substr(6U))},
-							 {},
-							 "conformance-only",
-							 false});
-					}
-					else if (!registry.trust_anchors.empty() &&
-							 content.starts_with("public_key_fingerprint: "))
-					{
-						registry.trust_anchors.back().public_key_fingerprint =
-							std::string{trim_ascii(content.substr(24U))};
-						++anchor_fingerprint_count;
-					}
-					else if (!registry.trust_anchors.empty() &&
-							 content == "production_use: allowed")
-					{
-						registry.trust_anchors.back().production_use = true;
-						++anchor_production_use_count;
-					}
-					else if (!registry.trust_anchors.empty() &&
-							 content == "production_use: forbidden")
-						++anchor_production_use_count;
-					else if (!registry.trust_anchors.empty() &&
-							 (content == "scope: conformance-only" ||
-							  content == "scope: production"))
-					{
-						registry.trust_anchors.back().scope =
-							content == "scope: production" ? "production" : "conformance-only";
-						++anchor_scope_count;
-					}
-					else
-						return output;
-				}
-				else if (active == section::issuers)
-				{
-					if (content.starts_with("- id: "))
-					{
-						if (registry.issuers.size() >= maximum_json_collection_count)
-							return output;
-						registry.issuers.push_back(
-							{std::string{trim_ascii(content.substr(6U))}, {}, {}, false, {}, {}});
-					}
-					else if (!registry.issuers.empty() && content.starts_with("trust_anchor: "))
-					{
-						registry.issuers.back().trust_anchor_id =
-							std::string{trim_ascii(content.substr(14U))};
-						++issuer_anchor_count;
-					}
-					else if (!registry.issuers.empty() &&
-							 content.starts_with("public_key_fingerprint: "))
-					{
-						registry.issuers.back().public_key_fingerprint =
-							std::string{trim_ascii(content.substr(24U))};
-						++issuer_fingerprint_count;
-					}
-					else if (!registry.issuers.empty() && content == "scope: production")
-					{
-						registry.issuers.back().production_scope = true;
-						++issuer_scope_count;
-					}
-					else if (!registry.issuers.empty() && content == "scope: conformance-only")
-						++issuer_scope_count;
-					else if (!registry.issuers.empty() &&
-							 content.starts_with("allowed_qualifications: "))
-					{
-						auto qualifications = parse_yaml_flow_string_set(content.substr(24U));
-						if (!qualifications)
-							return output;
-						registry.issuers.back().allowed_qualifications = std::move(*qualifications);
-						++issuer_qualification_count;
-					}
-					else if (!registry.issuers.empty() &&
-							 content.starts_with("namespace_prefixes: "))
-					{
-						auto prefixes = parse_yaml_flow_string_set(content.substr(20U));
-						if (!prefixes)
-							return output;
-						registry.issuers.back().namespace_prefixes = std::move(*prefixes);
-						++issuer_namespace_count;
-					}
-					else
-						return output;
-				}
-				else
-					return output;
-			}
-			if (newline == std::string::npos)
-				break;
-			offset = newline + 1U;
-		}
-		const auto valid_anchor = [](const certification_trust_anchor& value)
-		{
-			return strict_id(value.id) && digest_value(value.public_key_fingerprint);
-		};
-		const auto valid_issuer = [](const certification_issuer& value)
-		{
-			return strict_id(value.id) && strict_id(value.trust_anchor_id) &&
-				digest_value(value.public_key_fingerprint) && !value.allowed_qualifications.empty();
-		};
-		if (!schema_seen || !version_seen || !maturity_seen || !authority_seen ||
-			!authority_adr_seen || !authority_owner_seen || !update_policy_seen ||
-			!update_source_seen || !update_signature_seen || !update_rollback_seen ||
-			!update_clock_seen || !certificates_empty || !revocations_empty ||
-			registry.trust_anchors.empty() || registry.issuers.empty() ||
-			registry.trust_anchors.size() > maximum_json_collection_count ||
-			registry.issuers.size() > maximum_json_collection_count ||
-			anchor_fingerprint_count != registry.trust_anchors.size() ||
-			anchor_scope_count != registry.trust_anchors.size() ||
-			anchor_production_use_count != registry.trust_anchors.size() ||
-			issuer_anchor_count != registry.issuers.size() ||
-			issuer_fingerprint_count != registry.issuers.size() ||
-			issuer_qualification_count != registry.issuers.size() ||
-			issuer_namespace_count != registry.issuers.size() ||
-			issuer_scope_count != registry.issuers.size() ||
-			!std::ranges::all_of(registry.trust_anchors, valid_anchor) ||
-			!std::ranges::all_of(registry.issuers, valid_issuer))
-			return output;
-		output.certification_registry = std::move(registry);
-		return output;
-	}
 } // namespace cxxlens::sdk::doctor

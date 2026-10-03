@@ -341,7 +341,7 @@ namespace
 	[[nodiscard]] cxxlens::sdk::provider::provider_candidate
 	application_provider_candidate(const cxxlens::sdk::relation_descriptor& descriptor,
 								   const std::string& binary_digest,
-								   const bool trust_valid = true)
+								   const bool executable_available = true)
 	{
 		using namespace cxxlens::sdk::provider;
 		const auto policies = builtin_sandbox_policies();
@@ -352,7 +352,7 @@ namespace
 		description.package_identity = "cxxlens.gcc-replay.package";
 		description.publisher = "cxxlens";
 		description.license = "Apache-2.0";
-		description.signature = digest('7');
+
 		description.protocol = {protocol_v2_major,
 								protocol_v2_minor,
 								protocol_v2_minor,
@@ -367,20 +367,17 @@ namespace
 		description.determinism_contract = digest('9');
 		description.resource_class = "provider.application-analysis";
 		description.sandbox_minimum = "enforced";
-		description.requested_qualifications = {"canonical-semantic-qualified"};
+
 		return {std::move(description),
 				discovery_source::explicit_path,
 				{"/opt/cxxlens/bin/cxxlens-clang-gcc-replay-worker-23"},
 				true,
-				trust_valid,
-				true,
-				{"canonical-semantic-qualified"},
 				{"linux-glibc",
 				 policies.front().mechanisms,
 				 sandbox_assurance::enforced,
 				 policies.front().policy_digest(),
 				 digest('8')},
-				{}};
+				executable_available ? std::string{} : "provider.executable-unavailable"};
 	}
 
 	class detached_transcript_sink final : public cxxlens::sdk::provider::frame_sink
@@ -1631,7 +1628,7 @@ namespace
 				std::ranges::equal(repeat->bytes(), run->bytes()));
 		auto validated_transcript =
 			provider::detail::validate_detached_provider_transcript(unit.process, sink.transcript);
-		require(validated_transcript && candidate.description.signature);
+		require(validated_transcript.has_value());
 		auto required_features = candidate.description.protocol.required_features;
 		std::ranges::sort(required_features);
 		auto offered_relations = candidate.description.offered_relations;
@@ -1690,8 +1687,6 @@ namespace
 			 candidate.description.provider_version,
 			 candidate.description.provider_binary_digest,
 			 candidate.description.provider_semantic_contract_digest,
-			 *candidate.description.signature,
-			 "not-revoked",
 			 unit.process.sandbox.policy_digest}};
 		auto direct = build_detached_provider_run_from_validated_transcript(
 			detached_authority, sink.transcript, *validated_transcript, signer);
@@ -1983,14 +1978,11 @@ namespace
 		manifest.invalidation_contract = digest('c');
 		manifest.determinism_contract = digest('d');
 		manifest.resource_class = "provider.application-analysis";
-		manifest.requested_qualifications = {"experimental"};
+
 		provider::provider_candidate candidate{manifest,
 											   provider::discovery_source::explicit_path,
 											   {worker},
 											   true,
-											   true,
-											   true,
-											   {"experimental"},
 											   {"linux-glibc",
 												policies.front().mechanisms,
 												provider::sandbox_assurance::enforced,
@@ -2003,7 +1995,6 @@ namespace
 			manifest.provider_binary_digest,
 			manifest.provider_semantic_contract_digest,
 			{provider::sandbox_assurance::enforced, policies.front().policy_digest()},
-			true,
 			std::nullopt};
 		provider::execution_budget execution_budget;
 #if defined(CXXLENS_SANITIZER_INSTRUMENTED)

@@ -88,7 +88,7 @@ class MaterializationProtocol2Tests(unittest.TestCase):
         ):
             materialization.validate_request_schema_shape(raw_bytes)
 
-    def test_materializer_semantics_uses_product_source_identity(self) -> None:
+    def test_materializer_semantics_uses_interface_identity(self) -> None:
         request = self.request()
         direct_basis = materialization.expected_direct_basis(request)
         tool = request["tool"]
@@ -100,8 +100,6 @@ class MaterializationProtocol2Tests(unittest.TestCase):
                     "executable",
                     "interface_version",
                     "distribution_version",
-                    "source_revision",
-                    "source_tree",
                 )
             ),
         )
@@ -123,7 +121,7 @@ class MaterializationProtocol2Tests(unittest.TestCase):
         )
 
         different_source = copy.deepcopy(request)
-        different_source["tool"]["source_tree"] = "f" * 40
+        different_source["tool"]["interface_version"] = "tool-interface-v3"
         self.assertNotEqual(
             materialization.expected_direct_basis(different_source)[
                 "materializer_semantics_digest"
@@ -635,8 +633,6 @@ class MaterializationProtocol2Tests(unittest.TestCase):
 
         manifest = materialization.fixture_occurrence_manifest(
             ROOT,
-            source_revision="a" * 40,
-            source_tree="b" * 40,
             configuration="static",
             tool_digest="sha256:" + "1" * 64,
             worker_digest="sha256:" + "2" * 64,
@@ -717,8 +713,6 @@ class MaterializationProtocol2Tests(unittest.TestCase):
 
         shared = materialization.fixture_occurrence_manifest(
             ROOT,
-            source_revision="a" * 40,
-            source_tree="b" * 40,
             configuration="shared",
             tool_digest="sha256:" + "1" * 64,
             worker_digest="sha256:" + "2" * 64,

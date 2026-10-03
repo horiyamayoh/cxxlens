@@ -1995,9 +1995,6 @@ def validate(root: pathlib.Path) -> None:
             "full-canonical-manifest",
             "ordered-executable-argv",
             "authoritative-path",
-            "trust-verdict",
-            "certification-verdict",
-            "canonical-certified-qualifications",
             "canonical-sandbox-report",
             "validation-error",
         ],
@@ -2125,13 +2122,6 @@ def validate(root: pathlib.Path) -> None:
     ):
         raise ContractError("frontend.clang22 relation namespace is not registered")
 
-    support = load(root / "schemas/cxxlens_ng_provider_support_matrix.yaml")
-    if not any(
-        entry["provider_id"] == "cxxlens.clang22.reference"
-        and entry["status"] == "conformance-only"
-        for entry in support["entries"]
-    ):
-        raise ContractError("Clang 22 provider conformance tuple is not published")
 
 
 def main() -> int:

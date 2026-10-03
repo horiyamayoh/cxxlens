@@ -30,8 +30,6 @@ namespace cxxlens::detail::clang23_gcc_replay
 		std::string environment_digest;
 		std::string protocol_major;
 		std::string protocol_minor;
-		std::string provider_signature_digest;
-		std::string provider_revocation_state;
 		std::string detached_run_signer_id;
 		std::string detached_run_private_key_file;
 		std::string detached_run_public_key_file;

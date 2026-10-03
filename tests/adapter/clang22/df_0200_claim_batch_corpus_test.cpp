@@ -25,8 +25,6 @@ namespace
 	constexpr std::string_view corpus_schema_path{
 		"schemas/cxxlens_ng_df_0200_claim_batch_differential_corpus.schema.yaml"};
 	constexpr std::string_view corpus_api{"cxxlens::sdk::claim_batch::commit"};
-	constexpr std::string_view expected_artifact_sha256{
-		"sha256:f05513d05b0b57788b6f94d9c1a477c88d589b64dd8232d88a5c6c6022a84836"};
 	constexpr std::string_view columns{
 		"id\tequivalence_group\tverdict_group\tadded_templates\texisting_templates\t"
 		"input_encoding_hex\toutcome\terror_code\terror_field\terror_detail\tclaim_count\t"
@@ -615,9 +613,5 @@ int main(const int argc, char** argv)
 	const auto artifact = read_file(argv[1]);
 	require(artifact == generated,
 			"frozen corpus bytes diverged from the current public claim_batch::commit result");
-	const auto raw_digest =
-		cxxlens::sdk::content_digest(std::as_bytes(std::span{artifact.data(), artifact.size()}));
-	require(raw_digest == expected_artifact_sha256,
-			"frozen corpus raw SHA-256 diverged from the source-bound digest: " + raw_digest);
 	return 0;
 }

@@ -19,6 +19,7 @@ namespace cxxlens::sdk::detail
 		std::string trusted_worker_digest;
 		import_limits limits;
 		provider::execution_budget budget;
+		bool query_results{};
 	};
 
 	struct application_analysis_run_command_result

@@ -112,5 +112,6 @@ namespace cxxlens::detail::clang22
 	observe_provider_worker_v4_ast(provider::clang22::borrowed_translation_unit& unit,
 								   const source_closure_task_v4_decoded& metadata,
 								   std::string compile_unit,
-								   provider_worker_v4_ast_observer_limits limits = {});
+								   provider_worker_v4_ast_observer_limits limits = {},
+								   std::string main_source_snapshot = {});
 } // namespace cxxlens::detail::clang22

@@ -13,7 +13,6 @@
 #include "installed_materializer_source_closure.hpp"
 #include "materialization_rooted_vfs.hpp"
 #include "materialization_v4_claim_binding.hpp"
-#include "provider_trust_issuer_internal.hpp"
 #include "sdk/materialization_task_internal.hpp"
 #include "sdk/materialization_writer_internal.hpp"
 #include "sdk/provider_runtime_internal.hpp"
@@ -51,15 +50,12 @@ namespace cxxlens::detail::clang22
 		installed_materializer_source_closure_result ingress;
 		sdk::detail::validated_materialization_task task;
 		sdk::provider::detail::provider_process_validation_outcome outcome;
-		provider_trust_issuance trust;
 
 		materializer_worker_execution(
 			installed_materializer_source_closure_result ingress,
 			sdk::detail::validated_materialization_task task,
-			sdk::provider::detail::provider_process_validation_outcome outcome,
-			provider_trust_issuance trust)
-			: ingress{std::move(ingress)}, task{std::move(task)}, outcome{std::move(outcome)},
-			  trust{std::move(trust)}
+			sdk::provider::detail::provider_process_validation_outcome outcome)
+			: ingress{std::move(ingress)}, task{std::move(task)}, outcome{std::move(outcome)}
 		{
 		}
 
@@ -91,6 +87,8 @@ namespace cxxlens::detail::clang22
 		std::optional<sdk::publication_record> observed_parent_record;
 		/** SDK canonical export identity captured before the backend lifetime is released. */
 		std::string canonical_export_digest;
+		/** Independent public relation scans from the committed immutable snapshot. */
+		std::string query_results_json;
 		/** Rooted SQLite observation captured by the production opener, when SQLite is selected. */
 		std::optional<materialization::materialization_rooted_vfs_receipt>
 			sqlite_effect_root_receipt;
@@ -105,6 +103,7 @@ namespace cxxlens::detail::clang22
 			sdk::detail::materialization_store_publication publication,
 			std::optional<sdk::publication_record> observed_parent_record,
 			std::string canonical_export_digest,
+			std::string query_results_json,
 			std::optional<materialization::materialization_rooted_vfs_receipt>
 				sqlite_effect_root_receipt)
 			: worker{std::move(worker)}, claims{std::move(claims)},
@@ -113,6 +112,7 @@ namespace cxxlens::detail::clang22
 			  result{std::move(result)}, publication{std::move(publication)},
 			  observed_parent_record{std::move(observed_parent_record)},
 			  canonical_export_digest{std::move(canonical_export_digest)},
+			  query_results_json{std::move(query_results_json)},
 			  sqlite_effect_root_receipt{std::move(sqlite_effect_root_receipt)}
 		{
 		}
@@ -130,11 +130,6 @@ namespace cxxlens::detail::clang22
 	 */
 	[[nodiscard]] sdk::result<materializer_worker_execution>
 	run_materializer_worker(installed_materializer_source_closure_result ingress);
-
-	/** Conformance and embedding entry point with an explicit trust issuer. */
-	[[nodiscard]] sdk::result<materializer_worker_execution>
-	run_materializer_worker(installed_materializer_source_closure_result ingress,
-							provider_trust_issuer_port& issuer);
 
 	/**
 	 * Convert the sealed six-batch transcript into a typed claim and publish it through the

@@ -46,7 +46,7 @@
 | [0058](0058-query-scan-occurrence-column-identity.md) | scan occurrence-qualified query column identity |
 | [0059](0059-query-row-guarantee-canonical-projection.md) | lossless row-level guarantee canonical projection |
 | [0060](0060-query-summary-guarantee-fragment-algebra.md) | result-contributing guarantee fragment algebra |
-| [0061](0061-relocatable-static-shared-install-package.md) | relocatable static/shared installed package qualification |
+| [0061](0061-relocatable-static-shared-install-package.md) | relocatable static/shared installed package verification |
 | [0062](0062-first-party-sanitizer-closure.md) | first-party sanitizer compile and runtime closure |
 | [0063](0063-project-catalog-bottom-up-identity.md) | project catalog bottom-up exact-input identity |
 | [0064](0064-portable-provider-task-session-binding.md) | portable provider task and session exact binding |

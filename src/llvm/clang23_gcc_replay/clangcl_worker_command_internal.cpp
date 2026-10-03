@@ -75,9 +75,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 								   const clangcl_sandbox_process_port& process,
 								   const sdk::import_limits limits)
 	{
-		if (configuration.provider_signature_digest.empty() ||
-			configuration.provider_revocation_state.empty() ||
-			configuration.detached_run_signer_id.empty() ||
+		if (configuration.detached_run_signer_id.empty() ||
 			configuration.detached_run_private_key_file.empty() ||
 			configuration.detached_run_public_key_file.empty())
 			return sdk::unexpected(failure("environment", "missing-or-foreign-authority"));
@@ -85,10 +83,7 @@ namespace cxxlens::detail::clang23_gcc_replay
 		auto worker = make_clangcl_worker_authority(configuration);
 		if (!worker)
 			return sdk::unexpected(std::move(worker.error()));
-		detached_provider_worker_authority authority{
-			std::move(*worker),
-			std::move(configuration.provider_signature_digest),
-			std::move(configuration.provider_revocation_state)};
+		detached_provider_worker_authority authority{std::move(*worker)};
 		const runtime::detached_run_signing_file_port signing_material{
 			std::move(configuration.detached_run_signer_id),
 			std::move(configuration.detached_run_private_key_file),

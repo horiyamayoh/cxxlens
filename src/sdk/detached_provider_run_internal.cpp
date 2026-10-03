@@ -116,8 +116,6 @@ namespace cxxlens::sdk::detail
 				version_value(value.provider_version),
 				canonical_value::from_string(value.binary_digest),
 				canonical_value::from_string(value.semantic_contract_digest),
-				canonical_value::from_string(value.signature_digest),
-				canonical_value::from_string(value.revocation_state),
 				canonical_value::from_string(value.sandbox_policy_digest),
 			});
 		}
@@ -366,10 +364,6 @@ namespace cxxlens::sdk::detail
 							   &draft.provider.binary_digest},
 					 std::pair{std::string{"provider_semantic_contract_digest"},
 							   &draft.provider.semantic_contract_digest},
-					 std::pair{std::string{"provider_signature_digest"},
-							   &draft.provider.signature_digest},
-					 std::pair{std::string{"provider_revocation_state"},
-							   &draft.provider.revocation_state},
 					 std::pair{std::string{"sandbox_policy_digest"},
 							   &draft.provider.sandbox_policy_digest},
 				 })
@@ -379,13 +373,10 @@ namespace cxxlens::sdk::detail
 				return unexpected(std::move(valid.error()));
 			if (auto valid = strong_id(draft.provider.provider_id, "provider_id"); !valid)
 				return unexpected(std::move(valid.error()));
-			if (auto valid = strong_id(draft.provider.revocation_state, "revocation_state"); !valid)
-				return unexpected(std::move(valid.error()));
 			for (const auto* value : {&draft.task_input_digest,
 									  &draft.replay_plan_digest,
 									  &draft.provider.binary_digest,
 									  &draft.provider.semantic_contract_digest,
-									  &draft.provider.signature_digest,
 									  &draft.provider.sandbox_policy_digest})
 				if (!digest_like(*value))
 					return unexpected(invalid("digest", "spelling"));
@@ -602,7 +593,7 @@ namespace cxxlens::sdk::detail
 				if (auto valid = assign(index, field, *destination); !valid)
 					return unexpected(std::move(valid.error()));
 
-			auto identity = tuple((**fields)[4], "provider_identity", 7U);
+			auto identity = tuple((**fields)[4], "provider_identity", 5U);
 			if (!identity)
 				return unexpected(std::move(identity.error()));
 			for (const auto& [index, field, destination] : {
@@ -611,11 +602,7 @@ namespace cxxlens::sdk::detail
 					 std::tuple{3U,
 								std::string{"semantic_contract_digest"},
 								&draft.provider.semantic_contract_digest},
-					 std::tuple{
-						 4U, std::string{"signature_digest"}, &draft.provider.signature_digest},
-					 std::tuple{
-						 5U, std::string{"revocation_state"}, &draft.provider.revocation_state},
-					 std::tuple{6U,
+					 std::tuple{4U,
 								std::string{"sandbox_policy_digest"},
 								&draft.provider.sandbox_policy_digest},
 				 })

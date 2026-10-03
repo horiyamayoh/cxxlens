@@ -1,183 +1,46 @@
 $schema: https://json-schema.org/draft/2020-12/schema
-$id: https://cxxlens.dev/schemas/cxxlens.security-profile.v1
+$id: https://cxxlens.dev/schemas/cxxlens_ng_security_profile.schema.yaml
+title: Provider execution and input safety requirements
 type: object
 additionalProperties: false
-required:
-  - schema
-  - kind
-  - document_version
-  - maturity
-  - authority
-  - registries
-  - signature_contract
-  - qualification
-  - discovery
-  - execution_authority
-  - sandbox
-  - product_execution
-  - validation_boundary
-  - reason_codes
-  - backend_authority
+required: [schema, document_version, maturity, provider_selection, execution, input_validation, analysis_results]
 properties:
   schema: {const: cxxlens.security-profile.v1}
-  kind: {const: security-profile}
-  document_version: {const: 1.7.0}
+  document_version: {const: 2.0.0}
   maturity: {const: accepted}
-  authority:
+  provider_selection:
     type: object
     additionalProperties: false
-    required: [design, index, decision_adr, owner]
+    required: [precedence, identity, protocol, ambiguous_candidates, invalid_explicit_candidate, fallback]
     properties:
-      design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
-      index: {const: docs/design/catalogs/README.md}
-      decision_adr: {const: docs/design/adr/0087-provider-budget-surface-parity.md}
-      owner: {const: steward.ng-security}
-  registries:
+      precedence: {type: array, items: {type: string}, uniqueItems: true}
+      identity: {type: array, items: {type: string}, uniqueItems: true}
+      protocol: {type: string}
+      ambiguous_candidates: {const: reject}
+      invalid_explicit_candidate: {const: fail-with-reason}
+      fallback: {const: explicitly-configured-identities-only}
+  execution:
     type: object
     additionalProperties: false
-    required: [namespace, certification, support_matrix]
+    required: [command, executable, sandbox_assurance, sandbox_minimum, limits, cancellation]
     properties:
-      namespace: {const: schemas/cxxlens_ng_namespace_registry.yaml}
-      certification: {const: schemas/cxxlens_ng_provider_certification_registry.yaml}
-      support_matrix: {const: schemas/cxxlens_ng_provider_support_matrix.yaml}
-  signature_contract:
+      command: {const: argv-without-shell}
+      executable: {const: measure-content-before-execution}
+      sandbox_assurance: {const: [none, best_effort, enforced]}
+      sandbox_minimum: {type: string}
+      limits: {type: array, items: {type: string}, uniqueItems: true}
+      cancellation: {type: string}
+  input_validation:
     type: object
     additionalProperties: false
-    required: [algorithm, subject_digest, domain, signed_fields, verifier_boundary, manifest_verdict_authority]
+    required: [encoding, required, malformed_input]
     properties:
-      algorithm: {const: ed25519}
-      subject_digest: {const: domain-separated-sha256-full-256}
-      domain: {const: cxxlens-provider-signature-subject-v1}
-      signed_fields:
-        const: [provider_id, provider_version, package_identity, publisher, manifest_digest, binary_digest, semantic_contract_digest]
-      verifier_boundary: {const: trusted-signature-verifier-port}
-      manifest_verdict_authority: {const: forbidden}
-  qualification:
+      encoding: {type: string}
+      required: {type: array, items: {type: string}, uniqueItems: true}
+      malformed_input: {const: typed-error-before-publication}
+  analysis_results:
     type: object
     additionalProperties: false
-    required: [levels, canonical_authority_minimum, self_assertion, schema_conformance_grants_canonical_authority]
+    required: [retained]
     properties:
-      levels:
-        type: array
-        minItems: 7
-        maxItems: 7
-        items:
-          type: object
-          additionalProperties: false
-          required: [id, requires, grant]
-          properties:
-            id: {enum: [experimental, schema-conformant, deterministic, sandbox-qualified, canonical-semantic-qualified, cross-version-qualified, production-supported]}
-            requires: {type: array, uniqueItems: true, items: {$ref: '#/$defs/id'}}
-            grant: {$ref: '#/$defs/id'}
-      canonical_authority_minimum: {const: canonical-semantic-qualified}
-      self_assertion: {const: non-authoritative}
-      schema_conformance_grants_canonical_authority: {const: false}
-  discovery:
-    type: object
-    additionalProperties: false
-    required: [precedence, path_only, duplicate_exact_identity, candidate_identity, shadowing, invalid_higher_precedence, fallback, explanation]
-    properties:
-      precedence: {const: [explicit_path, installation_manifest, project_config, system_registry]}
-      path_only: {const: forbidden}
-      duplicate_exact_identity: {const: reject-same-source-canonical-duplicate-deduplicate-lower-precedence-with-explanation}
-      candidate_identity: {const: semantic-v2-full-manifest-argv-trust-certification-sandbox-validation}
-      shadowing: {const: reject-provider-version-with-distinct-full-candidate-identity}
-      invalid_higher_precedence: {const: blocks-lower-precedence-fallback}
-      fallback:
-        const:
-          authority: explicit-policy-exact-tuple-only
-          tuple_fields: [priority, provider_id, provider_version, binary_digest, semantic_contract_digest, direction, require_certification, required_qualifications]
-          direction: [upgrade, downgrade, same_version_rebuild]
-          qualification_evidence: certification-verdict-only-manifest-self-claim-forbidden
-          selection_order: [unique-policy-priority, discovery-source-precedence, canonical-identity]
-          invalid_higher_policy_priority: blocks-lower-policy-priority
-          selection_evidence: policy-semantic-digest-required
-      explanation: {const: selected-and-rejected-candidates-with-candidate-digest-and-stable-reason-codes}
-  execution_authority:
-    const:
-      selection_token: immutable-private-construction-by-select-provider
-      retained_bindings: [original-selection-request, selected-candidate, all-decisions, fallback-policy-digest]
-      runtime_revalidation: before-process-effect
-      selected_decision: exact-one-candidate-identity-and-source-bound
-      candidate_verdicts: [authoritative-path, trust, certification, validation-error, certified-qualifications]
-      sandbox_policy_digest: exact-selection-request-binding
-      sandbox_minimum: max-of-selection-request-process-request-manifest
-      default_or_forged_token: provider.selection-invalid
-  sandbox:
-    type: object
-    additionalProperties: false
-    required: [assurance_order, membership_validation, ordinal_comparison, unknown_value, stable_errors, effective_minimum, insufficient, executable_binding, evidence_required, policy_registry, applied_evidence, execution_budget, profiles]
-    properties:
-      assurance_order: {const: [none, best_effort, enforced, certified]}
-      membership_validation: {const: [requirement, report, selection, effective-minimum, process-output, evidence-digest]}
-      ordinal_comparison: {const: validated-operands-only}
-      unknown_value: {const: reject-never-map-or-rank}
-      stable_errors:
-        const: {required: provider.sandbox-requirement-invalid, achieved: provider.sandbox-report-invalid}
-      effective_minimum: {const: max-of-manifest-request-security-profile}
-      insufficient: {const: provider-unavailable-no-degradation}
-      executable_binding:
-        const: {resolve: working-directory-aware-single-open, measure: exact-sealed-memfd-bytes, execute: verified-fd-without-path-reresolution, enforced_without_binding: forbidden}
-      evidence_required: {const: [platform, mechanism, achieved, policy_digest, evidence_digest]}
-      policy_registry:
-        type: object
-        minProperties: 6
-        additionalProperties: true
-      applied_evidence:
-        type: object
-        minProperties: 5
-        additionalProperties: true
-      execution_budget:
-        const:
-          logical: [output_bytes, rows, diagnostics]
-          process_resources: [wall_ms, cpu_ms, address_space_bytes, transport_bytes, open_files, subprocesses]
-          address_space_is_not_rss: true
-          transport_is_combined_stdout_stderr: true
-          created_file_count_claimed: false
-          direct_callback_resource_preemption: false
-      profiles:
-        type: array
-        minItems: 4
-        items:
-          type: object
-          additionalProperties: false
-          required: [id, minimum, allowed_execution, network]
-          properties:
-            id: {$ref: '#/$defs/id'}
-            minimum: {enum: [none, best_effort, enforced, certified]}
-            allowed_execution: {type: array, uniqueItems: true, items: {$ref: '#/$defs/id'}}
-            network: {enum: [denied, unsupported]}
-  product_execution:
-    type: object
-    additionalProperties: false
-    required: [default, required_opt_in, digest_binding, audit_fields]
-    properties:
-      default: {const: disabled}
-      required_opt_in: {const: explicit-per-request}
-      digest_binding: {const: exact-executable-plugin-spec-digests}
-      audit_fields: {const: [execution_id, executable_digest, plugin_digests, process_tree_digest, environment_digest, network, writable_staging_digest, output_redirection_digest]}
-  validation_boundary:
-    type: object
-    additionalProperties: false
-    required: [inputs, before, checks, invalid]
-    properties:
-      inputs: {const: [provider_manifest, provider_output, schema_pack, model_pack, snapshot, cache]}
-      before: {const: authority-or-publication-or-cache-adoption}
-      checks: {const: [size_limit, schema_digest, canonical_encoding, reference_integrity, trust_binding]}
-      invalid: {const: reject-without-prior-snapshot-mutation}
-  reason_codes:
-    type: array
-    minItems: 16
-    uniqueItems: true
-    items: {type: string, pattern: '^security\.[a-z0-9-]+$'}
-  backend_authority:
-    type: object
-    additionalProperties: false
-    required: [implementation, vectors, report_schema, equality]
-    properties:
-      implementation: {const: tools/quality/check_ng_security_contract.py}
-      vectors: {const: schemas/cxxlens_ng_security_conformance_vectors.yaml}
-      report_schema: {const: schemas/cxxlens_ng_security_conformance_report.schema.yaml}
-      equality: {const: selection-and-rejection-explanation}
-$defs:
-  id: {type: string, minLength: 1, maxLength: 512}
+      retained: {type: array, items: {type: string}, uniqueItems: true}

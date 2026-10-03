@@ -1715,6 +1715,16 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   )
 
   if(UNIX)
+    add_test(
+      NAME adapter.clang22-application-analysis
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/clang22/application_analysis_test.py"
+        "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}")
+    set_tests_properties(
+      adapter.clang22-application-analysis
+      PROPERTIES LABELS "adapter;clang22;application;integration;bounded"
+                 TIMEOUT 600)
     cxxlens_add_test_executable(cxxlens-clang22-source-closure-fd
                                 adapter/clang22/source_closure_fd_test.cpp)
     target_link_libraries(cxxlens-clang22-source-closure-fd
@@ -2174,7 +2184,6 @@ foreach(
         sqlite_store_contract
         provider_protocol
         provider_runtime
-        security_contract
         source_closure_transport
         release_contract
         clang22_materialization
@@ -2211,36 +2220,12 @@ add_test(
 set_tests_properties(quality.relation-idl-reproducibility
                      PROPERTIES LABELS "quality;ng;contract;relation;generated")
 
-set(cxxlens_sdk_doctor_authority_consumer_source
-    "${CMAKE_CURRENT_BINARY_DIR}/generated/doctor-authority-consumer.cpp")
-add_custom_command(
-  OUTPUT "${cxxlens_sdk_doctor_authority_consumer_source}"
-  COMMAND
-    "${Python3_EXECUTABLE}"
-    "${PROJECT_SOURCE_DIR}/tests/unit/sdk/check_sdk_doctor_product.py"
-    --emit-consumer-source "${cxxlens_sdk_doctor_authority_consumer_source}"
-    "$<TARGET_FILE:cxxlens-sdk-doctor>"
-  DEPENDS
-    cxxlens-sdk-doctor
-    "${PROJECT_SOURCE_DIR}/tests/unit/sdk/check_sdk_doctor_product.py"
-    "${PROJECT_SOURCE_DIR}/schemas/cxxlens_ng_sdk_doctor_catalog.yaml"
-    "${PROJECT_SOURCE_DIR}/schemas/cxxlens_ng_sdk_doctor_catalog.schema.yaml"
-  VERBATIM)
-cxxlens_add_test_executable(cxxlens-sdk-doctor-authority-consumer
-                            "${cxxlens_sdk_doctor_authority_consumer_source}")
-target_include_directories(cxxlens-sdk-doctor-authority-consumer
-                           PRIVATE "${PROJECT_SOURCE_DIR}/tools/sdk")
-target_link_libraries(cxxlens-sdk-doctor-authority-consumer
-                      PRIVATE cxxlens::sdk)
-
 add_test(
   NAME sdk.doctor-product
   COMMAND
     "${Python3_EXECUTABLE}"
     "${PROJECT_SOURCE_DIR}/tests/unit/sdk/check_sdk_doctor_product.py"
-    "$<TARGET_FILE:cxxlens-sdk-doctor>"
-    "$<TARGET_FILE:cxxlens-sdk-doctor-authority-consumer>"
-    "$<TARGET_FILE:cxxlens-provider-process-fixture>")
+    "$<TARGET_FILE:cxxlens-sdk-doctor>")
 set_tests_properties(sdk.doctor-product PROPERTIES LABELS "sdk;doctor;product"
                                                    RUN_SERIAL TRUE)
 
@@ -2271,25 +2256,6 @@ set_tests_properties(
     "sdk;cli;capture;gcc;process;filesystem;bounded;negative;determinism;resource;security"
     TIMEOUT
     90)
-
-# The production authority keeps trust-anchor storage and rotation outside the
-# repository.  When the host supplies OpenSSL 3, exercise the source-private
-# Ed25519 verifier port with generated keys and malformed-material cases.  The
-# test is intentionally gated at configure time so unsupported installations
-# remain structured-unavailable rather than silently accepting a weaker crypto
-# path.
-find_package(OpenSSL 3.0 QUIET COMPONENTS Crypto)
-if(OpenSSL_FOUND)
-  add_test(
-    NAME security.sdk-openssl-ed25519-verifier
-    COMMAND
-      "${Python3_EXECUTABLE}"
-      "${PROJECT_SOURCE_DIR}/tests/unit/sdk/check_openssl_ed25519_signature_verifier.py"
-  )
-  set_tests_properties(
-    security.sdk-openssl-ed25519-verifier
-    PROPERTIES LABELS "security;sdk;provider;trust;ed25519;openssl")
-endif()
 
 configure_file(install/run_install_test.cmake.in
                "${CMAKE_CURRENT_BINARY_DIR}/run_install_test.cmake" @ONLY)

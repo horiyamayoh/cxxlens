@@ -109,11 +109,11 @@ if("@CXXLENS_OCCURRENCE_CONFIGURATION@" STREQUAL "shared")
 endif()
 
 set(_payload
-    "{\"files\":[${_cxxlens_occurrence_files}],\"manifest_version\":\"1.0.0\",\"package_configuration\":\"@CXXLENS_OCCURRENCE_CONFIGURATION@\",\"schema\":\"cxxlens.clang22-materializer-occurrence-manifest.v1\",\"source_revision\":\"@CXXLENS_SOURCE_REVISION@\",\"source_tree\":\"@CXXLENS_SOURCE_TREE@\"}"
+    "{\"files\":[${_cxxlens_occurrence_files}],\"manifest_version\":\"1.0.0\",\"package_configuration\":\"@CXXLENS_OCCURRENCE_CONFIGURATION@\",\"schema\":\"cxxlens.clang22-materializer-occurrence-manifest.v1\"}"
 )
 string(SHA256 _payload_digest "${_payload}")
 set(_manifest
-    "{\"files\":[${_cxxlens_occurrence_files}],\"manifest_version\":\"1.0.0\",\"occurrence_payload_digest\":\"sha256:${_payload_digest}\",\"package_configuration\":\"@CXXLENS_OCCURRENCE_CONFIGURATION@\",\"schema\":\"cxxlens.clang22-materializer-occurrence-manifest.v1\",\"source_revision\":\"@CXXLENS_SOURCE_REVISION@\",\"source_tree\":\"@CXXLENS_SOURCE_TREE@\"}\n"
+    "{\"files\":[${_cxxlens_occurrence_files}],\"manifest_version\":\"1.0.0\",\"occurrence_payload_digest\":\"sha256:${_payload_digest}\",\"package_configuration\":\"@CXXLENS_OCCURRENCE_CONFIGURATION@\",\"schema\":\"cxxlens.clang22-materializer-occurrence-manifest.v1\"}\n"
 )
 set(_destination
     "${_cxxlens_occurrence_prefix}/@CMAKE_INSTALL_DATADIR@/cxxlens/materialization/clang22"
