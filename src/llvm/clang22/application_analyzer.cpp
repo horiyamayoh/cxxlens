@@ -14,7 +14,6 @@
 #include <utility>
 #include <vector>
 
-#include <clang/Basic/Version.h>
 #include <cxxlens/relations/build_compile_unit.hpp>
 #include <cxxlens/relations/build_project.hpp>
 #include <cxxlens/relations/build_toolchain_context.hpp>
@@ -27,6 +26,7 @@
 #include <cxxlens/sdk/store.hpp>
 
 #include "observation_v2.hpp"
+#include "provider_worker_v4_ast_observer.hpp"
 #include "provider_worker_v4_output_normalizer.hpp"
 #include "runtime/gcc_probe_process_port_internal.hpp"
 #include "runtime/monotonic_clock_port_internal.hpp"
@@ -321,8 +321,10 @@ namespace cxxlens::detail::clang22
 				if (const auto* value = std::getenv(name); value != nullptr && *value != '\0')
 					fail("environment",
 						 std::string{name} + ": put include paths in compile_commands.json");
+			const std::string compiler_version{compiled_clang22_version()};
+			if (compiler_version.empty())
+				fail("compiler", "Clang 22 frontend is unavailable in this build");
 			const auto version = probe(compiler, directory, {"--version"});
-			const std::string compiler_version{CLANG_VERSION_STRING};
 			const auto expected_version = "clang version " + compiler_version;
 			const auto matches_version = [&](const std::string_view prefix)
 			{

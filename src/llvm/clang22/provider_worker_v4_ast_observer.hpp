@@ -20,6 +20,9 @@
 
 namespace cxxlens::detail::clang22
 {
+	/** Clang version used by this frontend; empty for the unavailable adapter. */
+	[[nodiscard]] std::string_view compiled_clang22_version() noexcept;
+
 	inline constexpr std::size_t provider_worker_v4_ast_product_maximum_observations = 100000U;
 	inline constexpr std::size_t provider_worker_v4_ast_product_maximum_rows = 100000U;
 	inline constexpr std::size_t provider_worker_v4_ast_product_maximum_diagnostics = 10000U;

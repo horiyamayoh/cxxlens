@@ -29,6 +29,7 @@
 #include <clang/AST/PrettyPrinter.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Basic/SourceManager.h>
+#include <clang/Basic/Version.h>
 #include <clang/Index/USRGeneration.h>
 #include <clang/Lex/Lexer.h>
 #include <llvm/ADT/ArrayRef.h>
@@ -41,6 +42,15 @@
 
 namespace cxxlens::detail::clang22
 {
+	std::string_view compiled_clang22_version() noexcept
+	{
+#if defined(CXXLENS_HAS_CLANG22) && CXXLENS_HAS_CLANG22
+		return CLANG_VERSION_STRING;
+#else
+		return {};
+#endif
+	}
+
 	namespace
 	{
 		using namespace std::string_view_literals;
