@@ -25,13 +25,13 @@ interpretation、guarantee floor を独立 axis として表す。
 Phase 3 の固定 toolchain は次とする。
 
 - GCC 16.2.0
-- MSVC compiler 19.51.36256
+- MSVC compiler 19.51 系列。capture は実際の compiler の patch version を保持する
 - Windows SDK package 10.1.26100.8249 (kit 10.0.26100.0)
 - LLVM/clang-cl 23.1.0
 
 Windows CI は `windows-2025-vs2026` で実際の compiler と SDK の互換性を確認する。
 runner image の日付、Visual Studio installer の build 番号、toolset directory 名、vcpkg の Git revision は
-利用条件にしない。上記 MSVC compiler version は capture/replay が扱う入力形式の条件であり、
+利用条件にしない。上記 MSVC compiler 系列は capture/replay が扱う入力形式の条件であり、
 試験済み commit の認定ではない。
 
 `cxxlens::sdk` に CH-1 Experimental application-analysis surface を追加する。外部 bundle は

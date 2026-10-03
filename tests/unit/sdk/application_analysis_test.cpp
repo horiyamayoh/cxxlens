@@ -828,6 +828,7 @@ namespace
 		input.canonical_compiler_path =
 			"C:\\VS\\VC\\Tools\\MSVC\\14.51.36231\\bin\\Hostx64\\x64\\cl.exe";
 		input.compiler_binary_digest = digest('1');
+		input.compiler_version = "19.51.36256";
 		input.windows_sdk_root = "C:\\Program Files (x86)\\Windows Kits\\10";
 		input.abi_digest = digest('2');
 		input.builtin_headers_digest = digest('3');
@@ -859,6 +860,19 @@ namespace
 		auto imported = cxxlens::sdk::import_capture(*decoded);
 		require(imported && imported->replay_plans().size() == 1U);
 		require(imported->replay_plans().front().analysis_frontend() == "clang-cl-23.1.0");
+
+		auto patched = input;
+		patched.compiler_version = "19.51.36260";
+		auto patched_encoded = encode_msvc_capture_bundle(patched);
+		require(patched_encoded && *patched_encoded != *encoded);
+		auto patched_decoded = cxxlens::sdk::decode_capture_bundle(*patched_encoded);
+		require(patched_decoded && patched_decoded->production_compiler() == "msvc-19.51.36260");
+		require(cxxlens::sdk::import_capture(*patched_decoded));
+		for (const auto version : {"19.52.36260", "19.51.", "19.51.36260-extra"})
+		{
+			patched.compiler_version = version;
+			require(!encode_msvc_capture_bundle(patched));
+		}
 
 		auto partial = input;
 		partial.source_closure_membership =

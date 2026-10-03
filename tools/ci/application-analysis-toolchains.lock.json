@@ -57,7 +57,7 @@
     ]
   },
   "msvc": {
-    "exact_version": "19.51.36256"
+    "version_series": "19.51"
   },
   "runner": {
     "architecture": "X64",

@@ -161,7 +161,7 @@ class ApplicationAnalysisSupportTest(unittest.TestCase):
     def test_exact_toolchain_pins_are_not_latest_aliases(self) -> None:
         pins = self.contract["toolchain_pins"]
         self.assertEqual(pins["gcc"]["exact_version"], "16.2.0")
-        self.assertEqual(pins["msvc"]["exact_version"], "19.51.36256")
+        self.assertEqual(pins["msvc"]["version_series"], "19.51")
         self.assertEqual(pins["windows_sdk"]["exact_version"], "10.1.26100.8249")
         self.assertEqual(pins["windows_sdk"]["kit_version"], "10.0.26100.0")
         self.assertEqual(pins["clang_replay"]["exact_version"], "23.1.0")

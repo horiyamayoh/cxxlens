@@ -87,7 +87,14 @@ properties:
     required: [gcc, msvc, windows_sdk, clang_replay, windows_runner]
     properties:
       gcc: {$ref: '#/$defs/toolchain'}
-      msvc: {$ref: '#/$defs/toolchain'}
+      msvc:
+        type: object
+        additionalProperties: false
+        required: [family, version_series, source]
+        properties:
+          family: {const: msvc}
+          version_series: {const: '19.51'}
+          source: {type: string, format: uri, pattern: '^https://'}
       windows_sdk:
         allOf:
           - {$ref: '#/$defs/toolchain'}

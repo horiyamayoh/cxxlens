@@ -30,7 +30,7 @@ jobs:
           $toolset = (Get-Content (Join-Path $vs 'VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt') -Raw).Trim()
           $cl = Join-Path $vs "VC\Tools\MSVC\$toolset\bin\Hostx64\x64\cl.exe"
           $clVersion = (Get-Item $cl).VersionInfo.ProductVersion
-          if (-not $clVersion.StartsWith('14.51.36256')) { throw "The capture adapter requires MSVC 19.51.36256; found $clVersion" }
+          if (-not $clVersion.StartsWith('14.51.')) { throw "The capture adapter requires the MSVC 19.51 series; found $clVersion" }
           Write-Host "Visual Studio $($installation.installationVersion), MSVC $clVersion"
           $sdkRc = "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.0.26100.0\x64\rc.exe"
           if (-not (Test-Path $sdkRc)) { throw 'Windows SDK 10.0.26100.0 is unavailable' }

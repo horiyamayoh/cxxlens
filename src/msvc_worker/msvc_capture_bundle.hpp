@@ -53,6 +53,7 @@ namespace cxxlens::application_analysis_worker
 		std::string canonical_project_root;
 		std::string canonical_working_directory;
 		std::string canonical_compiler_path;
+		std::string compiler_version;
 		std::string compiler_binary_digest;
 		std::string windows_sdk_root;
 		std::string abi_digest;

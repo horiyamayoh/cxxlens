@@ -209,7 +209,7 @@ def load_lock(path: pathlib.Path = LOCK_PATH) -> dict[str, Any]:
     }:
         raise ToolchainError("Clang-cl replay lock differs")
     if value.get("msvc") != {
-        "exact_version": "19.51.36256",
+        "version_series": "19.51",
     }:
         raise ToolchainError("MSVC toolchain lock differs")
     if value.get("windows_sdk") != {

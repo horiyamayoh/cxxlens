@@ -230,7 +230,8 @@ namespace cxxlens::sdk::detail
 									const std::size_t unit_index,
 									const import_limits limits)
 	{
-		if (capture.toolchain_family != "msvc" || capture.toolchain_version != "19.51.36256")
+		if (capture.toolchain_family != "msvc" ||
+			!supported_msvc_toolchain_version(capture.toolchain_version))
 			return unexpected(invalid("production_toolchain", "not-pinned-msvc-19.51"));
 		if (!unit.original_arguments || unit.original_arguments->empty())
 			return unexpected(invalid("original_argv", "recapture-with-msbuild-cltool-proxy"));

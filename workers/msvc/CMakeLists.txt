@@ -53,6 +53,7 @@ target_include_directories(
   PUBLIC "${CXXLENS_ROOT}/include"
   PRIVATE "${CXXLENS_ROOT}/src")
 target_compile_options(cxxlens_msvc_worker_base PRIVATE /W4 /WX /permissive-)
+target_link_libraries(cxxlens_msvc_worker_base PRIVATE Version)
 
 add_executable(cxxlens-msvc-capture
                "${CXXLENS_ROOT}/src/msvc_worker/capture_main.cpp")

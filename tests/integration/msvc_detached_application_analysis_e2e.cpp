@@ -214,6 +214,7 @@ int main()
 	capture.canonical_compiler_path =
 		"C:\\VS\\VC\\Tools\\MSVC\\14.51.36231\\bin\\Hostx64\\x64\\cl.exe";
 	capture.compiler_binary_digest = digest('1');
+	capture.compiler_version = "19.51.36256";
 	capture.windows_sdk_root = "C:\\Program Files (x86)\\Windows Kits\\10";
 	capture.abi_digest = digest('2');
 	capture.builtin_headers_digest = digest('3');

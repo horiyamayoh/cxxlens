@@ -12,6 +12,7 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#include <winver.h>
 #endif
 
 namespace cxxlens::application_analysis_worker
@@ -201,6 +202,30 @@ namespace cxxlens::application_analysis_worker
 	sdk::result<std::wstring> canonical_worker_file(const std::wstring_view path)
 	{
 		return canonical_path(path, false);
+	}
+
+	sdk::result<std::string> read_msvc_compiler_version(const std::wstring_view path)
+	{
+		const std::wstring file{path};
+		DWORD unused{};
+		const auto size = GetFileVersionInfoSizeW(file.c_str(), &unused);
+		if (size == 0U || size > 64U * 1024U)
+			return sdk::unexpected(io_error("compiler_version", "missing-or-oversized"));
+		std::vector<std::byte> bytes(size);
+		if (!GetFileVersionInfoW(file.c_str(), 0U, size, bytes.data()))
+			return sdk::unexpected(io_error("compiler_version", "read"));
+		void* value{};
+		UINT value_size{};
+		if (!VerQueryValueW(bytes.data(), L"\\", &value, &value_size) ||
+			value_size < sizeof(VS_FIXEDFILEINFO) || value == nullptr)
+			return sdk::unexpected(io_error("compiler_version", "invalid-resource"));
+		const auto& info = *static_cast<const VS_FIXEDFILEINFO*>(value);
+		const auto product_major = info.dwProductVersionMS >> 16U;
+		if (info.dwSignature != 0xfeef04bdU || product_major != 14U)
+			return sdk::unexpected(io_error("compiler_version", "unsupported-product"));
+		// MSVC's 14.x executable product version corresponds to compiler version 19.x.
+		return "19." + std::to_string(info.dwProductVersionMS & 0xffffU) + "." +
+			std::to_string(info.dwProductVersionLS >> 16U);
 	}
 
 	sdk::result<std::wstring> current_worker_directory()
