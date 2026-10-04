@@ -18,6 +18,7 @@
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/FrontendAction.h>
 #include <clang/Lex/Lexer.h>
+#include <clang/Lex/Preprocessor.h>
 #include <clang/Tooling/Tooling.h>
 #endif
 
@@ -28,9 +29,11 @@ namespace cxxlens::provider::clang22
 		struct native_access
 		{
 			[[nodiscard]] static borrowed_translation_unit
-			make(clang::ASTContext& ast, clang::SourceManager& source_manager)
+			make(clang::ASTContext& ast,
+				 clang::SourceManager& source_manager,
+				 clang::Preprocessor& preprocessor)
 			{
-				return {ast, source_manager};
+				return {ast, source_manager, preprocessor};
 			}
 		};
 	} // namespace detail
@@ -61,39 +64,50 @@ namespace cxxlens::provider::clang22
 		class callback_consumer final : public clang::ASTConsumer
 		{
 		  public:
-			callback_consumer(translation_unit_callback& callback, sdk::result<void>& outcome)
-				: callback_{&callback}, outcome_{&outcome}
+			callback_consumer(translation_unit_callback& callback,
+							  sdk::result<void>& outcome,
+							  clang::Preprocessor& preprocessor)
+				: callback_{&callback}, outcome_{&outcome}, preprocessor_{&preprocessor}
 			{
 			}
 
 			void HandleTranslationUnit(clang::ASTContext& context) override
 			{
-				auto borrowed = detail::native_access::make(context, context.getSourceManager());
+				auto borrowed = detail::native_access::make(
+					context, context.getSourceManager(), *preprocessor_);
 				*outcome_ = (*callback_)(borrowed);
 			}
 
 		  private:
 			translation_unit_callback* callback_;
 			sdk::result<void>* outcome_;
+			clang::Preprocessor* preprocessor_;
 		};
 
 		class callback_action final : public clang::ASTFrontendAction
 		{
 		  public:
-			callback_action(translation_unit_callback& callback, sdk::result<void>& outcome)
-				: callback_{&callback}, outcome_{&outcome}
+			callback_action(translation_unit_callback& callback,
+							sdk::result<void>& outcome,
+							detail::preprocessor_setup setup = {})
+				: callback_{&callback}, outcome_{&outcome}, setup_{std::move(setup)}
 			{
 			}
 
-			std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(clang::CompilerInstance&,
+			std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(clang::CompilerInstance& compiler,
 																  llvm::StringRef) override
 			{
-				return std::make_unique<callback_consumer>(*callback_, *outcome_);
+				compiler.getPreprocessor().createPreprocessingRecord();
+				if (setup_)
+					setup_(compiler.getPreprocessor());
+				return std::make_unique<callback_consumer>(
+					*callback_, *outcome_, compiler.getPreprocessor());
 			}
 
 		  private:
 			translation_unit_callback* callback_;
 			sdk::result<void>* outcome_;
+			detail::preprocessor_setup setup_;
 		};
 #endif
 	} // namespace
@@ -118,8 +132,9 @@ namespace cxxlens::provider::clang22
 	}
 
 	borrowed_translation_unit::borrowed_translation_unit(clang::ASTContext& ast,
-														 clang::SourceManager& source_manager)
-		: ast_{&ast}, source_manager_{&source_manager}
+														 clang::SourceManager& source_manager,
+														 clang::Preprocessor& preprocessor)
+		: ast_{&ast}, source_manager_{&source_manager}, preprocessor_{&preprocessor}
 	{
 	}
 
@@ -131,6 +146,11 @@ namespace cxxlens::provider::clang22
 	clang::SourceManager& borrowed_translation_unit::source_manager() const noexcept
 	{
 		return *source_manager_;
+	}
+
+	clang::Preprocessor& borrowed_translation_unit::preprocessor() const noexcept
+	{
+		return *preprocessor_;
 	}
 
 	sdk::result<void> with_translation_unit(const translation_unit_input& input,
@@ -178,7 +198,8 @@ namespace cxxlens::provider::clang22
 									  const std::string& tool_name,
 									  const std::vector<std::string>& compiler_arguments,
 									  llvm::vfs::FileSystem& filesystem,
-									  translation_unit_callback callback)
+									  translation_unit_callback callback,
+									  preprocessor_setup setup)
 	{
 		if (auto valid = input.validate(); !valid)
 			return valid;
@@ -191,7 +212,7 @@ namespace cxxlens::provider::clang22
 				return sdk::unexpected(native_error("native.input-invalid", "argument"));
 
 		sdk::result<void> outcome{};
-		auto action = std::make_unique<callback_action>(callback, outcome);
+		auto action = std::make_unique<callback_action>(callback, outcome, std::move(setup));
 		llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> retained_filesystem{&filesystem};
 		const auto parsed = clang::tooling::runToolOnCodeWithArgs(std::move(action),
 																  input.source,

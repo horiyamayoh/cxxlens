@@ -21,6 +21,7 @@
 #endif
 
 #include "runtime/gcc_probe_process_port_internal.hpp"
+#include "runtime/sealed_executable_internal.hpp"
 
 namespace
 {
@@ -199,6 +200,34 @@ int main(const int argc, char** argv)
 		auto observed_again = run_gcc_probe_process(observed_request);
 		require(observed_again && observed_again->executable_digest == observed->executable_digest,
 				"measured executable identity was nondeterministic");
+		auto opened =
+			cxxlens::sdk::detail::open_sealed_executable({executable,
+														  root.string(),
+														  deadline_after(std::chrono::seconds{2}),
+														  limits().maximum_executable_image_bytes,
+														  4096U,
+														  {}});
+		require(static_cast<bool>(opened), "could not freeze reusable executable");
+		auto reusable = request_for(executable, root, "--child-observe");
+		reusable.executable_image =
+			std::make_shared<const cxxlens::sdk::detail::sealed_executable>(std::move(*opened));
+		auto reused = run_gcc_probe_process(reusable);
+		require(reused && reused->terminal == gcc_probe_process_terminal::exited &&
+					reused->standard_output == observed->standard_output &&
+					reused->executable_digest == observed->executable_digest,
+				"reused executable lost its output or measured identity");
+		auto wrong_image = reusable;
+		wrong_image.argv.front() += ".different";
+		auto mismatched = run_gcc_probe_process(wrong_image);
+		require(mismatched && mismatched->terminal == gcc_probe_process_terminal::launch_failed &&
+					mismatched->failure_stage == "executable-image",
+				"cached image accepted an unrelated executable path");
+		auto bounded_image = reusable;
+		bounded_image.limits.maximum_executable_image_bytes = 1U;
+		auto bounded = run_gcc_probe_process(bounded_image);
+		require(bounded && bounded->terminal == gcc_probe_process_terminal::launch_failed &&
+					bounded->failure_stage == "executable-image",
+				"cached image bypassed the execution resource bound");
 
 		auto exit_result = run_gcc_probe_process(request_for(executable, root, "--child-exit"));
 		require(exit_result && exit_result->terminal == gcc_probe_process_terminal::exited &&

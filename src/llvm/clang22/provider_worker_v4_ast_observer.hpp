@@ -30,7 +30,7 @@ namespace cxxlens::detail::clang22
 	inline constexpr std::size_t provider_worker_v4_ast_product_maximum_origins_per_observation =
 		256U;
 	inline constexpr std::size_t provider_worker_v4_ast_product_maximum_logical_bytes =
-		std::size_t{16U} * 1024U * 1024U;
+		std::size_t{128U} * 1024U * 1024U;
 	inline constexpr std::size_t provider_worker_v4_ast_product_maximum_traversal_entries =
 		2000000U;
 	inline constexpr std::size_t provider_worker_v4_ast_product_maximum_traversal_depth = 4096U;
@@ -99,6 +99,8 @@ namespace cxxlens::detail::clang22
 		std::vector<sdk::detached_row> rows;
 		std::uint64_t failed_count{};
 		std::vector<std::string> diagnostics;
+		/** Frozen non-main sources admitted explicitly by the project analysis caller. */
+		std::vector<source_closure_member> additional_sources{};
 
 		[[nodiscard]] sdk::result<void> validate() const;
 	};
@@ -116,5 +118,6 @@ namespace cxxlens::detail::clang22
 								   const source_closure_task_v4_decoded& metadata,
 								   std::string compile_unit,
 								   provider_worker_v4_ast_observer_limits limits = {},
-								   std::string main_source_snapshot = {});
+								   std::string main_source_snapshot = {},
+								   bool include_project_headers = false);
 } // namespace cxxlens::detail::clang22

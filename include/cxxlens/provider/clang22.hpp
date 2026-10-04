@@ -17,6 +17,7 @@ namespace clang
 	class ASTContext;
 	class SourceManager;
 	class SourceRange;
+	class Preprocessor;
 } // namespace clang
 
 namespace cxxlens::provider::clang22
@@ -50,11 +51,16 @@ namespace cxxlens::provider::clang22
 		[[nodiscard]] clang::ASTContext& ast() const noexcept;
 		/** @brief Borrow the Clang source manager only for the active callback. */
 		[[nodiscard]] clang::SourceManager& source_manager() const noexcept;
+		/** @brief Borrow compiler preprocessing observations only for the active callback. */
+		[[nodiscard]] clang::Preprocessor& preprocessor() const noexcept;
 
 	  private:
-		borrowed_translation_unit(clang::ASTContext& ast, clang::SourceManager& source_manager);
+		borrowed_translation_unit(clang::ASTContext& ast,
+								  clang::SourceManager& source_manager,
+								  clang::Preprocessor& preprocessor);
 		clang::ASTContext* ast_{};
 		clang::SourceManager* source_manager_{};
+		clang::Preprocessor* preprocessor_{};
 		friend struct detail::native_access;
 	};
 

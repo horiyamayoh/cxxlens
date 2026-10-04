@@ -492,7 +492,7 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool container_target_type_matches(const value_type& source,
 														 const value_type& target)
 		{
-			return source.scalar == scalar_kind::set && !source.optional && !target.optional &&
+			return source.scalar == scalar_kind::set && !target.optional &&
 				(target.scalar == scalar_kind::typed_id
 					 ? target.parameter == source.parameter
 					 : target.canonical_name() == source.parameter);
@@ -799,7 +799,7 @@ namespace cxxlens::sdk
 					return cxxlens::sdk::unexpected(
 						relation_error("sdk.reference-invalid", name, "container-shape"));
 				auto source = column(reference.source_columns.front());
-				if (!source || source->type.scalar != scalar_kind::set || source->type.optional)
+				if (!source || source->type.scalar != scalar_kind::set)
 					return cxxlens::sdk::unexpected(
 						relation_error("sdk.reference-invalid", name, "container-source-type"));
 			}

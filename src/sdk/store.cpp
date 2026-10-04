@@ -27,6 +27,7 @@
 
 #include <cxxlens/sdk/store.hpp>
 
+#include "canonical_order_internal.hpp"
 #include "claim_internal.hpp"
 #include "snapshot_store_v5_codec_internal.hpp"
 #include "sqlite_connection_lifecycle_internal.hpp"
@@ -9922,7 +9923,8 @@ namespace cxxlens::sdk
 			return unexpected(store_error("store.transaction-state", "stage"));
 		if (partition.condition.universe != data_->draft.series.condition_universe_id)
 			return unexpected(store_error("store.condition-universe-mismatch", "partition"));
-		std::ranges::sort(partition.claims, detail::claim_occurrence_less);
+		if (auto sorted = detail::sort_claim_occurrences(partition.claims); !sorted)
+			return unexpected(std::move(sorted.error()));
 		partition.claims.erase(std::unique(partition.claims.begin(),
 										   partition.claims.end(),
 										   detail::same_claim_occurrence),
@@ -10100,18 +10102,9 @@ namespace cxxlens::sdk
 			if (!relation)
 				return unexpected(std::move(relation.error()));
 			candidate->descriptors.emplace(descriptor, relation->descriptor());
-			std::ranges::sort(rows,
-							  [](const detached_row& left, const detached_row& right)
-							  {
-								  return left.canonical_form() < right.canonical_form();
-							  });
+			detail::sort_canonical_projection(rows, &detached_row::canonical_form);
 			auto& annotations = candidate->annotations[descriptor];
-			std::ranges::sort(
-				annotations,
-				[](const snapshot_claim_annotation& left, const snapshot_claim_annotation& right)
-				{
-					return annotation_projection(left) < annotation_projection(right);
-				});
+			detail::sort_canonical_projection(annotations, annotation_projection);
 		}
 		if (auto valid = validate_semantic_graph(*candidate, data_->store->engine); !valid)
 			return unexpected(std::move(valid.error()));

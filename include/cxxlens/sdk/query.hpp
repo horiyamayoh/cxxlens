@@ -452,12 +452,15 @@ namespace cxxlens::sdk::query
 		[[nodiscard]] const query_explanation& explain_physical() const noexcept;
 		[[nodiscard]] std::string_view logical_ir_digest() const noexcept;
 		[[nodiscard]] std::string_view snapshot_id() const noexcept;
+		/** @brief Exact publication binding retained by query exchange and persistence. */
+		[[nodiscard]] std::string_view publication_id() const noexcept;
 		[[nodiscard]] std::string canonical_form() const;
 
 	  private:
 		explicit query_result(std::shared_ptr<const data> data);
 		std::shared_ptr<const data> data_;
 		friend class reference_engine;
+		friend struct query_transfer_access;
 	};
 
 	/** @brief Cursor-scoped result row view invalidated by cursor advance. */

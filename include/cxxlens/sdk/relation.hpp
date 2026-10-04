@@ -261,6 +261,13 @@ namespace cxxlens::sdk
 		[[nodiscard]] std::string canonical_form() const;
 	};
 
+	/**
+	 * @brief All installed registry descriptors in descriptor-ID order.
+	 * @details The returned immutable metadata has process lifetime. Provider-owned dynamic
+	 * observations remain value-only descriptors; no native compiler or provider is loaded.
+	 */
+	[[nodiscard]] std::span<const relation_descriptor> standard_relation_descriptors();
+
 	/** @brief Descriptor-aware row builder and validator. */
 	class row_builder
 	{

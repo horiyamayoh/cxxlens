@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.70.0
+document_version: 1.79.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -32,6 +32,11 @@ packages:
       - include/cxxlens/sdk/relation.hpp
       - include/cxxlens/sdk/store.hpp
       - include/cxxlens/sdk/query.hpp
+      - include/cxxlens/sdk/query_transfer.hpp
+      - include/cxxlens/sdk/control_flow.hpp
+      - include/cxxlens/sdk/source_tokens.hpp
+      - include/cxxlens/sdk/semantic_graphs.hpp
+      - include/cxxlens/sdk/record_surfaces.hpp
       - include/cxxlens/sdk/provider.hpp
       - include/cxxlens/sdk/recipe.hpp
     llvm_clang_dependency: forbidden
@@ -156,7 +161,7 @@ entries:
     status: implemented
     profile: NG0
     target: cxxlens::sdk
-    headers: [include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_declaration.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_type_component.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/core_claim_conflict.hpp, include/cxxlens/relations/core_differential_disagreement.hpp, include/cxxlens/relations/core_provider_execution.hpp, include/cxxlens/relations/core_unresolved.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_origin.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
+    headers: [include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_declaration.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_type_component.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/core_claim_conflict.hpp, include/cxxlens/relations/core_differential_disagreement.hpp, include/cxxlens/relations/core_provider_execution.hpp, include/cxxlens/relations/core_unresolved.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_origin.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/relations/cc_entity_detail.hpp, include/cxxlens/relations/cc_entity_edge.hpp, include/cxxlens/relations/cc_syntax_node.hpp, include/cxxlens/relations/cc_body.hpp, include/cxxlens/relations/cc_cfg_node.hpp, include/cxxlens/relations/cc_cfg_edge.hpp, include/cxxlens/relations/cc_flow_fact.hpp, include/cxxlens/relations/cc_layout_fact.hpp, include/cxxlens/relations/cc_record_surface.hpp, include/cxxlens/relations/source_include.hpp, include/cxxlens/relations/source_preprocessor_event.hpp, include/cxxlens/relations/source_token.hpp, include/cxxlens/relations/source_token_inventory.hpp, include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
     symbols:
       - name: query.from
         kind: template
@@ -188,6 +193,9 @@ entries:
     target: cxxlens::sdk
     headers: [include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
     symbols:
+      - name: standard_relation_descriptors
+        kind: function
+        signature: 'span<const relation_descriptor> standard_relation_descriptors(); immutable descriptor-ID ordered installed registry metadata; process lifetime; dynamic observations remain value-only'
       - name: relation_registry
         kind: class
         signature: 'result<void> add(relation_descriptor); result<dynamic_relation> require(string_view name, uint32_t semantic_major) const; result<relation_engine> build(string generation)'
@@ -303,11 +311,162 @@ entries:
     versioning: [logical-query-ir-version-is-independent, ir-1.0-admits-ng0-and-ir-1.1-adds-anti-join, operator-ids-are-versioned]
     invariants: [typed-and-dynamic-paths-normalize-to-identical-ir, validated-operator-arguments-are-reencoded-from-typed-values, scan-alias-is-semantic-query-local-column-occurrence-identity, reachable-scan-aliases-are-unique-before-authoritative-canonical-identity-use-or-execution, union-reuses-an-identical-same-alias-scan-dag-node-or-rejects, column-references-bind-source-alias-plus-stable-column-id, unqualified-duplicate-columns-reject-as-ambiguous, alias-change-changes-logical-digest, set-and-bytes-literals-preserve-byte-vector-storage-across-decode, set-literal-parameter-is-exact-and-malformed-hex-rejects, json-member-order-whitespace-and-equivalent-escapes-do-not-affect-digest, argument-json-follows-rfc8259-lexical-rules, raw-json-strings-require-strict-utf8, valid-surrogate-pairs-combine-and-isolated-surrogates-reject, leading-zero-integers-reject, condition-sets-and-commutative-predicates-are-canonical-sort-deduplicated, zero-operand-boolean-factories-reject-and-one-operand-factories-canonical-fold-to-the-operand, boolean-ir-wrappers-and-decoder-require-minimum-two-operands, no-implicit-literal-coercion, every-node-is-reachable-from-the-single-root, every-relation-requirement-is-referenced-by-a-reachable-scan, exact-requirements-deduplicate-and-compatible-additive-optional-minors-retain-the-exact-highest-descriptor, requirement-reconciliation-expands-every-scan-and-is-operand-permutation-invariant, incompatible-same-id-descriptors-reject-without-first-wins, canonical-and-executor-node-sets-match-exactly, node-shape-propagates-exact-value-type, output-schema-exactly-matches-owning-descriptor-and-root-typed-shape, projected-output-type-is-derived-from-source-column, implicit-terminal-project-uses-the-same-canonical-output-aliases-as-explicit-project, equivalent-explicit-and-implicit-project-digests-match, semi-join-and-anti-join-preserve-left-total-order-and-order-keys-in-builder-validator-and-executor, anti-join-is-an-ng1-non-monotone-closure-boundary, inner-join-remains-unordered, limit-requires-total-order]
 
+  - id: public.finite-control-flow
+    status: implemented
+    profile: NG1
+    target: cxxlens::query
+    headers: [include/cxxlens/sdk/control_flow.hpp]
+    symbols:
+      - name: query.control_flow_input
+        kind: value
+        signature: 'span<const annotated_row> bodies; nodes; edges'
+      - name: query.control_flow_limits
+        kind: value
+        signature: 'maximum_rows; maximum_condition_expansions; maximum_evidence_bytes; maximum_expanded_row_bytes; maximum_bodies; maximum_body_nodes; maximum_body_edges; maximum_source_queries; maximum_source_plan_bytes; result<void> validate() const'
+      - name: query.control_flow_state
+        kind: value
+        signature: 'complete; partial; conflicting'
+      - name: query.control_flow_node
+        kind: value
+        signature: 'id; kind; ordinal; source_span; statement_count; evidence'
+      - name: query.control_flow_edge
+        kind: value
+        signature: 'id; from; to; kind; ordinal; evidence'
+      - name: query.control_flow_body
+        kind: value
+        signature: 'id; compile_unit; function; source_span; analysis_profile; universe; variant; interpretation; declared_nodes; declared_edges; entry; exit; state; evidence; nodes; edges; gaps'
+      - name: query.control_flow_projection
+        kind: value
+        signature: 'evidence_rows; bodies; unresolved; source_queries'
+      - name: query.project_control_flow
+        kind: function
+        signature: 'result<control_flow_projection> project_control_flow(control_flow_input, control_flow_limits = {}, stop_token = {}); result<control_flow_projection> project_control_flow(const application_query_results&, control_flow_limits = {}, stop_token = {})'
+    errors: [sdk.cfg-limit-invalid, sdk.cfg-input-invalid, sdk.cfg-budget, sdk.cfg-cancelled, sdk.cfg-resource-exhausted]
+    lifetime: [borrowed-input-only-during-call, projection-owns-evidence-values-and-original-query-results, no-compiler-pointer]
+    threading: [projection-has-value-semantics, independent-calls-share-no-mutable-state]
+    versioning: [finite-local-projection-v1-does-not-change-relation-or-query-identity]
+    invariants: [both-independent-consumers-use-the-shared-endpoint-and-cardinality-join, universe-variant-interpretation-and-actual-owners-must-match, edges-join-bodies-through-both-actual-endpoints, complete-proves-only-finite-local-enumeration, unknown-and-conflicting-input-never-becomes-zero-or-global-closure, every-original-query-side-channel-retained, overlapping-payload-conflicts-retain-candidates, duplicate-evidence-preserved, deterministic-row-and-body-order, bounds-before-retention-and-typed-cancellation]
+    depends_on: [public.query-runtime]
+
+  - id: public.finite-source-tokens
+    status: implemented
+    profile: NG1
+    target: cxxlens::query
+    headers: [include/cxxlens/sdk/source_tokens.hpp]
+    symbols:
+      - name: query.source_token_input
+        kind: value
+        signature: 'span<const annotated_row> files; spans; inventories; tokens'
+      - name: query.source_token_limits
+        kind: value
+        signature: 'maximum_rows; maximum_condition_expansions; maximum_evidence_bytes; maximum_expanded_row_bytes; maximum_evidence_references; maximum_streams; maximum_stream_tokens; maximum_source_queries; maximum_source_plan_bytes; result<void> validate() const'
+      - name: query.source_token_state
+        kind: value
+        signature: 'complete; partial; conflicting'
+      - name: query.source_token
+        kind: value
+        signature: 'id; source_span; kind; spelling; ordinal; begin; end; macro; active; template_context; preprocessor; directive_start; evidence'
+      - name: query.source_token_stream
+        kind: value
+        signature: 'id; compile_unit; file; source_snapshot; phase; profile; universe; variant; interpretation; source_size; declared_tokens; directive_count; state; active_state; template_state; evidence; tokens; gaps'
+      - name: query.source_token_projection
+        kind: value
+        signature: 'evidence_rows; streams; unresolved; source_queries'
+      - name: query.project_source_tokens
+        kind: function
+        signature: 'result<source_token_projection> project_source_tokens(source_token_input, source_token_limits = {}, stop_token = {}); result<source_token_projection> project_source_tokens(const application_query_results&, source_token_limits = {}, stop_token = {})'
+    errors: [sdk.token-limit-invalid, sdk.token-input-invalid, sdk.token-budget, sdk.token-cancelled, sdk.token-resource-exhausted]
+    lifetime: [borrowed-input-only-during-call, projection-owns-evidence-values-and-original-query-results, no-compiler-pointer]
+    threading: [projection-has-value-semantics, independent-calls-share-no-mutable-state]
+    versioning: [finite-local-projection-v1-does-not-change-relation-or-query-identity]
+    invariants: [both-independent-consumers-share-source-and-cardinality-validation, universe-variant-interpretation-unit-phase-and-profile-remain-distinct, raw-and-expanded-streams-never-merge, ordinal-and-range-validation-before-complete, declared-directive-count-matches-directive-start-tokens, classification-completeness-is-independent-of-enumeration, no-local-enumeration-promotion-to-global-closure, duplicate-evidence-preserved, conflicts-retain-candidates, every-original-query-side-channel-retained, bounds-before-retention-and-typed-cancellation]
+    depends_on: [public.query-runtime]
+
+  - id: public.typed-semantic-graphs
+    status: implemented
+    profile: NG1
+    target: cxxlens::query
+    headers: [include/cxxlens/sdk/semantic_graphs.hpp]
+    symbols:
+      - name: query.semantic_graph_input
+        kind: value
+        signature: 'units; files; entities; entity_edges; call_sites; call_targets; includes; observations_complete'
+      - name: query.semantic_graph_spec
+        kind: value
+        signature: 'id; node_kinds; edge_kinds; file_nodes'
+      - name: query.semantic_graph_limits
+        kind: value
+        signature: 'maximum_rows; maximum_condition_expansions; maximum_evidence_bytes; maximum_expanded_row_bytes; maximum_evidence_references; maximum_specs; maximum_graphs; maximum_graph_nodes; maximum_graph_edges; maximum_source_queries; maximum_source_plan_bytes; result<void> validate() const'
+      - name: query.semantic_graph_state
+        kind: value
+        signature: 'complete; partial; conflicting'
+      - name: query.semantic_graph_evidence
+        kind: value
+        signature: 'relation_id; row'
+      - name: query.semantic_graph_node
+        kind: value
+        signature: 'id; kind; name; evidence'
+      - name: query.semantic_graph_edge
+        kind: value
+        signature: 'id; from; to; kind; source_span; compile_unit; resolution; evidence'
+      - name: query.semantic_graph
+        kind: value
+        signature: 'spec; universe; variant; interpretation; state; closed; compile_units; closure_ids; nodes; edges; gaps'
+      - name: query.semantic_graph_projection
+        kind: value
+        signature: 'evidence; graphs; unresolved; source_queries'
+      - name: query.project_semantic_graphs
+        kind: function
+        signature: 'result<semantic_graph_projection> project_semantic_graphs(semantic_graph_input, span<const semantic_graph_spec>, semantic_graph_limits = {}, stop_token = {}); result<semantic_graph_projection> project_semantic_graphs(const application_query_results&, span<const semantic_graph_spec>, semantic_graph_limits = {}, stop_token = {})'
+    errors: [sdk.graph-limit-invalid, sdk.graph-input-invalid, sdk.graph-spec-invalid, sdk.graph-budget, sdk.graph-cancelled, sdk.graph-resource-exhausted]
+    lifetime: [borrowed-input-only-during-call, projection-owns-labelled-evidence-and-original-queries, no-compiler-pointer]
+    threading: [projection-has-value-semantics, independent-calls-share-no-mutable-state]
+    versioning: [typed-observed-graph-v1-does-not-change-relation-or-query-identity]
+    invariants: [both-independent-consumers-share-conditioned-endpoint-validation, exact-universe-variant-interpretation-and-call-owner, typed-projections-and-candidate-resolution-remain-explicit, finite-observation-enumeration-separate-from-closure, unresolved-endpoints-remain-visible, conflicting-candidates-never-first-wins, original-query-side-channels-retained, deterministic-order, bounds-before-retention-and-typed-cancellation]
+    depends_on: [public.query-runtime]
+
+  - id: public.record-surfaces
+    status: implemented
+    profile: NG1
+    target: cxxlens::query
+    headers: [include/cxxlens/sdk/record_surfaces.hpp]
+    symbols:
+      - name: query.record_surface_input
+        kind: value
+        signature: 'units; files; spans; entities; details; edges; surfaces; observations_complete'
+      - name: query.record_surface_limits
+        kind: value
+        signature: 'maximum_rows; maximum_condition_expansions; maximum_evidence_bytes; maximum_retained_bytes; maximum_evidence_references; maximum_surfaces; maximum_members; maximum_operations; maximum_source_queries; maximum_source_plan_bytes; result<void> validate() const'
+      - name: query.record_surface_state
+        kind: value
+        signature: 'complete; unknown; partial; conflicting'
+      - name: query.record_surface_evidence
+        kind: value
+        signature: 'relation_id; row'
+      - name: query.record_surface_member
+        kind: value
+        signature: 'entity; kind; access; canonical_type; flags; evidence'
+      - name: query.record_surface
+        kind: value
+        signature: 'id; entity; compile_unit; source_span; file; source_snapshot; profile; universe; variant; interpretation; is_definition; declared_methods; declared_fields; declared_base_specifiers; state; methods; fields; base_targets; declared_type_references; type_reference_state; type_reference_profile; type_reference_reason; type_reference_targets; evidence; gaps'
+      - name: query.record_surface_projection
+        kind: value
+        signature: 'evidence; surfaces; unresolved; source_queries'
+      - name: query.project_record_surfaces
+        kind: function
+        signature: 'result<record_surface_projection> project_record_surfaces(record_surface_input, record_surface_limits = {}, stop_token = {}); result<record_surface_projection> project_record_surfaces(const application_query_results&, record_surface_limits = {}, stop_token = {})'
+    errors: [sdk.record-limit-invalid, sdk.record-input-invalid, sdk.record-budget, sdk.record-cancelled, sdk.record-resource-exhausted]
+    lifetime: [borrowed-input-only-during-call, projection-owns-labelled-evidence-and-original-queries, no-compiler-pointer]
+    threading: [projection-has-value-semantics, independent-calls-share-no-mutable-state]
+    versioning: [finite-explicit-record-surface-v1-does-not-change-existing-relation-or-query-identity]
+    invariants: [both-independent-consumers-share-cardinality-and-membership-validation, universe-variant-interpretation-unit-source-and-profile-remain-distinct, complete-empty-definition-distinct-from-forward-record, direct-ownership-never-flattens-nested-types, implicit-methods-and-static-fields-excluded, local-enumeration-does-not-close-project, conflicting-candidates-retained, original-query-side-channels-retained, deterministic-order, bounds-before-retention-and-typed-cancellation]
+    depends_on: [public.query-runtime]
+
   - id: public.query-runtime
     status: implemented
     profile: NG1
     target: cxxlens::sdk
-    headers: [include/cxxlens/sdk/query.hpp, include/cxxlens/sdk/store.hpp]
+    headers: [include/cxxlens/sdk/query.hpp, include/cxxlens/sdk/store.hpp, include/cxxlens/sdk/query_transfer.hpp]
     symbols:
       - name: query.decode_arguments
         kind: function
@@ -317,7 +476,7 @@ entries:
         signature: 'static result<reference_engine> bind(snapshot_handle); result<query_result> execute(const logical_query_ir&, execution_request = {}) const'
       - name: query.query_result
         kind: class
-        signature: 'rows; execution; ordered; inputs_complete; closed; input_coverage; closure_ids; unresolved_items; conflicts; differential_disagreements; producer_contracts; summary_guarantee; explain_logical; explain_physical; logical_ir_digest; snapshot_id; canonical_form'
+        signature: 'rows; execution; ordered; inputs_complete; closed; input_coverage; closure_ids; unresolved_items; conflicts; differential_disagreements; producer_contracts; summary_guarantee; explain_logical; explain_physical; logical_ir_digest; snapshot_id; publication_id; canonical_form'
       - name: query.query_guarantee_fragment
         kind: value
         signature: 'guarantee; condition; interpretation; assumptions; claim_contributors; producer_contracts; provenance; coverage_states; closure_ids; condition_partition_complete; conflicting; unresolved; requires_closure'
@@ -336,11 +495,23 @@ entries:
       - name: query.execution_controls
         kind: value
         signature: 'execution_budget; execution_request; execution_checkpoint; cancellation_probe; stop_token_cancellation'
-    errors: [sdk.query-argument-invalid, sdk.query-scan-requirement-missing, sdk.query-join-present-equality-required, sdk.query-filter-join-predicate, sdk.query-column-not-in-input, sdk.query-output-schema-mismatch, sdk.query-limit-unordered, sdk.query-multiplicity-overflow, sdk.query-row-invalid, sdk.query-row-view-expired, sdk.query-cursor-thread-violation, sdk.query-snapshot-empty, sdk.query-snapshot-schema-mismatch, sdk.query-annotations-unavailable, sdk.query-input-unresolved, sdk.query-closure-missing, sdk.query-scan-budget, sdk.query-intermediate-budget, sdk.query-memory-budget, sdk.query-output-budget, sdk.query-cancelled]
+      - name: query.transfer_limits
+        kind: value
+        signature: 'maximum_bytes; maximum_depth; maximum_scans; maximum_rows; maximum_values; result<void> validate() const'
+      - name: query.application_relation_scan
+        kind: value
+        signature: 'relation_id; logical_ir; result'
+      - name: query.application_query_results
+        kind: value
+        signature: 'snapshot_id; scans'
+      - name: query.decode_application_queries
+        kind: function
+        signature: 'result<application_query_results> decode_application_queries(const relation_engine&, string_view, transfer_limits = {})'
+    errors: [sdk.query-transfer-invalid, sdk.query-transfer-limit-invalid, sdk.query-transfer-resource-exhausted, sdk.query-argument-invalid, sdk.query-scan-requirement-missing, sdk.query-join-present-equality-required, sdk.query-filter-join-predicate, sdk.query-column-not-in-input, sdk.query-output-schema-mismatch, sdk.query-limit-unordered, sdk.query-multiplicity-overflow, sdk.query-row-invalid, sdk.query-row-view-expired, sdk.query-cursor-thread-violation, sdk.query-snapshot-empty, sdk.query-snapshot-schema-mismatch, sdk.query-annotations-unavailable, sdk.query-input-unresolved, sdk.query-closure-missing, sdk.query-scan-budget, sdk.query-intermediate-budget, sdk.query-memory-budget, sdk.query-output-budget, sdk.query-cancelled]
     lifetime: [reference-engine-owns-snapshot-pin, query-result-owns-rows-producer-contracts-and-side-channels, result-row-view-expires-on-cursor-advance, cancellation-probe-is-synchronously-borrowed]
     threading: [reference-engine-and-query-result-are-concurrent-readable, execution-is-logically-immutable, result-row-cursor-is-thread-confined, cancellation-probe-must-be-noexcept]
     versioning: [query-runtime-result-v1-independent-from-logical-ir-v1, reference-physical-plan-is-internal, runtime-budget-and-cancellation-excluded-from-ir-digest, row-canonical-v1-includes-bound-contributor-edges-and-derived-projections, summary-guarantee-v1-includes-digest-bound-lossless-fragment-index]
-    invariants: [all-11-ng0-plus-one-ng1-anti-join-operators-use-accepted-annotated-multiset-algebra, same-content-evidence-occurrences-aggregate-to-one-non-multiset-semantic-row, claim-producer-provenance-guarantee-condition-interpretation-remain-bound-in-canonical-contributor-edges, independent-row-evidence-sets-are-derived-projections-only, contributor-guarantees-are-nonempty-canonical-sorted-unique-and-duplicate-public-state-is-invalid, cursor-owned-copy-canonical-json-and-result-schema-observe-identical-guarantee-cardinality, summary-fragments-preserve-singleton-contributor-edge-attribution, conflict-and-unresolved-classification-is-bound-contributor-local, empty-result-summary-never-reaggregates-filtered-source-annotations, zero-row-proof-preserves-selected-condition-and-interpretation, exact-empty-result-requires-complete-execution-and-applicable-closure-for-every-input, occurrence-guarantees-use-conservative-summary-meet, memory-and-sqlite-semantic-parity, physical-scan-order-unobservable, commutative-union-identity-and-runtime-use-the-same-canonical-subtree-total-order, budget-and-cancellation-follow-canonical-rooted-postorder, diagnostic-node-ids-are-canonical-postorder-ordinals, argument-decoder-follows-rfc8259-number-whitespace-and-unicode-rules, set-literal-decode-preserves-byte-vector-and-exact-parameter, set-equals-present-compares-byte-backed-values-without-string-fallback, all-referenced-columns-bind-to-exact-snapshot-type-required-role-before-scan, only-explicit-absent-if-schema-missing-may-synthesize-typed-absent-for-an-optional-column, advertised-output-columns-exactly-match-snapshot-types-before-execution, implicit-terminal-projection-runs-before-sort-budget-and-result-publication, every-runtime-row-key-is-a-canonical-output-schema-id, intermediate-row-and-logical-memory-budgets-are-reserved-before-retention, semi-join-does-not-materialize-a-witness-vector, budget-exhaustion-stops-operator-and-side-channel-materialization, sql-null-unknown-conflict-not-coerced, budget-and-cancellation-return-canonical-sealed-prefix-only, success-input-complete-and-closed-are-distinct, closed-requires-exact-certificate-for-every-reachable-scan-input-range, unrelated-condition-interpretation-and-relation-certificates-never-prove-closure, exact-partition-certificate-may-prove-an-explicit-condition-subset, anti-join-emits-no-absence-row-without-complete-right-coverage-and-applicable-closure, result-closure-ids-are-applied-only, producer-contracts-conflicts-and-differential-disagreements-survive-query, canonical-conflict-projection-losslessly-includes-overlap-assertions-and-contents, conflict-collection-normalization-is-shared-with-claim-kernel, query-and-claim-kernel-share-functional-payload-projection-and-classification, claim-content-identity-is-not-functional-payload-identity, all-json-strings-use-shared-control-byte-safe-encoder, valid-non-ascii-utf8-is-byte-preserving, invalid-utf8-is-rejected-before-retention, byte-scalars-use-hex-encoding, logical-explain-excludes-physical-authority]
+    invariants: [application-query-transfer-retains-all-side-channels-and-publication-bindings, transfer-validates-independent-scan-ir-and-exact-column-types, transfer-owns-pointer-free-decoded-values, transfer-bounds-bytes-depth-scans-rows-and-values, transfer-checks-contributor-projections-and-fragment-digests, all-11-ng0-plus-one-ng1-anti-join-operators-use-accepted-annotated-multiset-algebra, same-content-evidence-occurrences-aggregate-to-one-non-multiset-semantic-row, claim-producer-provenance-guarantee-condition-interpretation-remain-bound-in-canonical-contributor-edges, independent-row-evidence-sets-are-derived-projections-only, contributor-guarantees-are-nonempty-canonical-sorted-unique-and-duplicate-public-state-is-invalid, cursor-owned-copy-canonical-json-and-result-schema-observe-identical-guarantee-cardinality, summary-fragments-preserve-singleton-contributor-edge-attribution, conflict-and-unresolved-classification-is-bound-contributor-local, empty-result-summary-never-reaggregates-filtered-source-annotations, zero-row-proof-preserves-selected-condition-and-interpretation, exact-empty-result-requires-complete-execution-and-applicable-closure-for-every-input, occurrence-guarantees-use-conservative-summary-meet, memory-and-sqlite-semantic-parity, physical-scan-order-unobservable, commutative-union-identity-and-runtime-use-the-same-canonical-subtree-total-order, budget-and-cancellation-follow-canonical-rooted-postorder, diagnostic-node-ids-are-canonical-postorder-ordinals, argument-decoder-follows-rfc8259-number-whitespace-and-unicode-rules, set-literal-decode-preserves-byte-vector-and-exact-parameter, set-equals-present-compares-byte-backed-values-without-string-fallback, all-referenced-columns-bind-to-exact-snapshot-type-required-role-before-scan, only-explicit-absent-if-schema-missing-may-synthesize-typed-absent-for-an-optional-column, advertised-output-columns-exactly-match-snapshot-types-before-execution, implicit-terminal-projection-runs-before-sort-budget-and-result-publication, every-runtime-row-key-is-a-canonical-output-schema-id, intermediate-row-and-logical-memory-budgets-are-reserved-before-retention, semi-join-does-not-materialize-a-witness-vector, budget-exhaustion-stops-operator-and-side-channel-materialization, sql-null-unknown-conflict-not-coerced, budget-and-cancellation-return-canonical-sealed-prefix-only, success-input-complete-and-closed-are-distinct, closed-requires-exact-certificate-for-every-reachable-scan-input-range, unrelated-condition-interpretation-and-relation-certificates-never-prove-closure, exact-partition-certificate-may-prove-an-explicit-condition-subset, anti-join-emits-no-absence-row-without-complete-right-coverage-and-applicable-closure, result-closure-ids-are-applied-only, producer-contracts-conflicts-and-differential-disagreements-survive-query, canonical-conflict-projection-losslessly-includes-overlap-assertions-and-contents, conflict-collection-normalization-is-shared-with-claim-kernel, query-and-claim-kernel-share-functional-payload-projection-and-classification, claim-content-identity-is-not-functional-payload-identity, all-json-strings-use-shared-control-byte-safe-encoder, valid-non-ascii-utf8-is-byte-preserving, invalid-utf8-is-rejected-before-retention, byte-scalars-use-hex-encoding, logical-explain-excludes-physical-authority]
 
   - id: public.provider-sdk
     status: implemented
@@ -432,6 +603,9 @@ entries:
       - name: with_translation_unit
         kind: function
         signature: 'result<void> with_translation_unit(const translation_unit_input&, translation_unit_callback)'
+      - name: borrowed_translation_unit.preprocessor
+        kind: function
+        signature: 'clang::Preprocessor& borrowed_translation_unit::preprocessor() const noexcept; callback-scoped native-only borrow'
       - name: normalize_source
         kind: function
         signature: 'detached_source_origin{kind,logical_path,begin,end,read_only}; source_range_identity{snapshot,file,role}; result<detached_source_span{snapshot,file,role,logical_path,begin,end,read_only,id,origin_chain}> normalize_source(borrowed_translation_unit&, const clang::SourceRange&, const source_range_identity&)'

@@ -396,7 +396,11 @@ namespace cxxlens::detail::clang22
 				{
 					const auto confidence = observation.payload.find(field);
 					if (confidence != observation.payload.end() &&
-						confidence->second != "exact-usr")
+						confidence->second != "exact-usr" &&
+						!(confidence->second == "exact-parameter-slot" &&
+						  observation.kind == provider_worker_v4_ast_observation_kind::entity &&
+						  entity_field(observation, "symbol.kind") == "parameter" &&
+						  observation.semantic_key.starts_with("clang-parameter-slot:")))
 						add_limitation(output.limitations,
 									   "identity-confidence:" + confidence->second + ":" +
 										   observation.semantic_key);
@@ -502,7 +506,7 @@ namespace cxxlens::detail::clang22
 			for (const auto* observation : selected_entities)
 			{
 				auto canonical = entity_row(
-					*observation, options.toolchain_context_id, output.exact_equivalence);
+					*observation, options.toolchain_context_id, observation->exact_equivalence);
 				if (!canonical)
 					return sdk::unexpected(std::move(canonical.error()));
 				auto entity = row_string(*canonical, "cc.entity.v1.entity");
@@ -589,7 +593,7 @@ namespace cxxlens::detail::clang22
 					}
 					auto target_row = entity_row(*target_observation,
 												 options.toolchain_context_id,
-												 output.exact_equivalence);
+												 target_observation->exact_equivalence);
 					if (!target_row)
 						return sdk::unexpected(std::move(target_row.error()));
 					auto projected = row_string(*target_row, "cc.entity.v1.entity");

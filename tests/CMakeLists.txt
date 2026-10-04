@@ -1130,7 +1130,36 @@ set_tests_properties(
   unit.sdk-query-runtime PROPERTIES LABELS
                                     "unit;sdk;query;store;budget;cancellation")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-control-flow
+                            unit/sdk/control_flow_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-control-flow PRIVATE cxxlens::query)
+add_test(NAME unit.sdk-control-flow COMMAND cxxlens-unit-sdk-control-flow)
+set_tests_properties(unit.sdk-control-flow
+                     PROPERTIES LABELS "unit;sdk;query;cfg;budget;cancellation")
+
+cxxlens_add_test_executable(cxxlens-unit-sdk-source-tokens
+                            unit/sdk/source_tokens_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-source-tokens PRIVATE cxxlens::query)
+add_test(NAME unit.sdk-source-tokens COMMAND cxxlens-unit-sdk-source-tokens)
+set_tests_properties(
+  unit.sdk-source-tokens PROPERTIES LABELS
+                                    "unit;sdk;query;tokens;budget;cancellation")
+
 cxxlens_add_test_executable(cxxlens-g5-runtime unit/sdk/g5_runtime_test.cpp)
+cxxlens_add_test_executable(cxxlens-unit-sdk-semantic-graphs
+                            unit/sdk/semantic_graphs_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-semantic-graphs PRIVATE cxxlens::query)
+add_test(NAME unit.sdk-semantic-graphs COMMAND cxxlens-unit-sdk-semantic-graphs)
+cxxlens_add_test_executable(cxxlens-unit-sdk-record-surfaces
+                            unit/sdk/record_surfaces_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-record-surfaces PRIVATE cxxlens::query)
+add_test(NAME unit.sdk-record-surfaces COMMAND cxxlens-unit-sdk-record-surfaces)
+set_tests_properties(
+  unit.sdk-record-surfaces
+  PROPERTIES LABELS "unit;sdk;query;records;budget;cancellation")
+set_tests_properties(
+  unit.sdk-semantic-graphs
+  PROPERTIES LABELS "unit;sdk;query;graphs;budget;cancellation")
 target_link_libraries(cxxlens-g5-runtime PRIVATE cxxlens::sdk)
 add_test(NAME acceptance.g5-runtime COMMAND cxxlens-g5-runtime)
 set_tests_properties(

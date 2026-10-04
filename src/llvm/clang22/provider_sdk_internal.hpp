@@ -16,6 +16,8 @@ namespace llvm::vfs
 
 namespace cxxlens::provider::clang22::detail
 {
+	/** Configure provider-owned PP callbacks before preprocessing, within one native job. */
+	using preprocessor_setup = std::move_only_function<void(clang::Preprocessor&)>;
 #if defined(CXXLENS_HAS_CLANG22) && CXXLENS_HAS_CLANG22
 	/** Source-private execution seam for an already authenticated compiler-facing VFS. */
 	[[nodiscard]] sdk::result<void>
@@ -24,6 +26,7 @@ namespace cxxlens::provider::clang22::detail
 							  const std::string& tool_name,
 							  const std::vector<std::string>& compiler_arguments,
 							  llvm::vfs::FileSystem& filesystem,
-							  translation_unit_callback callback);
+							  translation_unit_callback callback,
+							  preprocessor_setup setup = {});
 #endif
 } // namespace cxxlens::provider::clang22::detail

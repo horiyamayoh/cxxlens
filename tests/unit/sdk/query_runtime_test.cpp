@@ -3003,12 +3003,127 @@ namespace
 	}
 } // namespace
 
+namespace
+{
+	void check_query_transfer(const fixture& data, const snapshot_handle& snapshot)
+	{
+		auto runtime = query::reference_engine::bind(snapshot);
+		require(runtime.has_value(), "transfer query engine failed");
+		auto builder = query::builder::from(data.left);
+		require(builder.has_value(), "transfer scan builder failed");
+		auto ir = std::move(*builder).finish();
+		auto executed = runtime->execute(ir);
+		require(executed.has_value(), "transfer query execution failed");
+		const auto bundle =
+			"{\"schema\":\"cxxlens.application-query-results.v1\",\"snapshot_id\":\"" +
+			std::string{snapshot.id()} + "\",\"queries\":[{\"relation_id\":\"" + data.left.id +
+			"\",\"logical_ir\":" + ir.canonical_form() +
+			",\"result\":" + executed->canonical_form() + "}]}";
+		auto decoded = query::decode_application_queries(data.engine, bundle);
+		if (!decoded)
+			std::cerr << decoded.error().code << ':' << decoded.error().field << ':'
+					  << decoded.error().detail << '\n';
+		require(decoded.has_value() && decoded->scans.size() == 1U,
+				"valid query transfer rejected");
+		require(decoded->snapshot_id == snapshot.id() &&
+					decoded->scans.front().result.canonical_form() == executed->canonical_form() &&
+					decoded->scans.front().logical_ir.canonical_form() == ir.canonical_form(),
+				"query transfer changed rows, evidence, partiality or plan");
+		auto cfg = query::project_control_flow(*decoded);
+		require(cfg && cfg->source_queries && cfg->unresolved.size() == 3U &&
+					cfg->source_queries->scans.front().result.canonical_form() ==
+						executed->canonical_form() &&
+					cfg->source_queries->scans.front().logical_ir == ir,
+				"CFG projection discarded unrelated scans, their plan or result side channels");
+		query::control_flow_limits cfg_limits;
+		cfg_limits.maximum_source_plan_bytes = 1U;
+		auto plan_limited = query::project_control_flow(*decoded, cfg_limits);
+		require(!plan_limited && plan_limited.error().code == "sdk.cfg-budget" &&
+					plan_limited.error().field == "source-plan-bytes",
+				"CFG projection copied unbounded unrelated source plans");
+		cfg_limits = {};
+		cfg_limits.maximum_source_queries = 1U;
+		auto repeated = *decoded;
+		repeated.scans.push_back(repeated.scans.front());
+		auto scan_limited = query::project_control_flow(repeated, cfg_limits);
+		require(!scan_limited && scan_limited.error().code == "sdk.cfg-budget" &&
+					scan_limited.error().field == "source-queries",
+				"CFG projection copied too many unrelated source queries");
+		auto tokens = query::project_source_tokens(*decoded);
+		require(tokens && tokens->source_queries && tokens->unresolved.size() == 4U &&
+					tokens->source_queries->scans.front().result.canonical_form() ==
+						executed->canonical_form() &&
+					tokens->source_queries->scans.front().logical_ir == ir,
+				"token projection discarded unrelated plans, results or side channels");
+		query::source_token_limits token_limits;
+		token_limits.maximum_source_plan_bytes = 1U;
+		auto token_plan_limited = query::project_source_tokens(*decoded, token_limits);
+		require(!token_plan_limited && token_plan_limited.error().code == "sdk.token-budget" &&
+					token_plan_limited.error().field == "source-plan-bytes",
+				"token projection retained unbounded source plans");
+		token_limits = {};
+		token_limits.maximum_source_queries = 1U;
+		auto token_scan_limited = query::project_source_tokens(repeated, token_limits);
+		require(!token_scan_limited && token_scan_limited.error().code == "sdk.token-budget" &&
+					token_scan_limited.error().field == "source-queries",
+				"token projection retained too many source queries");
+		// The decoded result owns its values and cursors after input storage disappears.
+		auto cursor = decoded->scans.front().result.rows();
+		auto first = cursor.next();
+		require(first && first->has_value() && (**first).copy().has_value(),
+				"detached transfer row missing");
+		auto expect_corrupt = [&](std::string before, std::string after)
+		{
+			auto corrupt = bundle;
+			const auto position = corrupt.find(before);
+			require(position != std::string::npos, "transfer corruption target missing");
+			corrupt.replace(position, before.size(), after);
+			require(!query::decode_application_queries(data.engine, corrupt),
+					"corrupted transfer accepted");
+		};
+		expect_corrupt("\"schema\":\"cxxlens.application-query-results.v1\"",
+					   "\"schema\":\"cxxlens.application-query-results.v2\"");
+		expect_corrupt("\"multiplicity\":1", "\"multiplicity\":0");
+		expect_corrupt("\"type\":\"int64\"", "\"type\":\"uint64\"");
+		expect_corrupt("\"ordered\":false", "\"ordered\":false,\"ordered\":true");
+		expect_corrupt("\"fragment_count\":", "\"fragment_count\":0,\"discarded_count\":");
+		expect_corrupt("\"closed\":false", "\"closed\":true");
+		expect_corrupt("\"logical_ir_digest\":\"", "\"logical_ir_digest\":\"changed:");
+		require(
+			!query::decode_application_queries(data.engine, bundle.substr(0, bundle.size() - 1U)),
+			"truncated query transfer accepted");
+		query::transfer_limits limits;
+		limits.maximum_rows = 1U;
+		require(!query::decode_application_queries(data.engine, bundle, limits),
+				"transfer row budget ignored");
+		limits = {};
+		limits.maximum_bytes = bundle.size() - 1U;
+		require(!query::decode_application_queries(data.engine, bundle, limits),
+				"transfer byte budget ignored");
+		limits = {};
+		limits.maximum_depth = 2U;
+		require(!query::decode_application_queries(data.engine, bundle, limits),
+				"transfer depth budget ignored");
+		limits = {};
+		limits.maximum_values = 5U;
+		require(!query::decode_application_queries(data.engine, bundle, limits),
+				"transfer value budget ignored");
+	}
+} // namespace
+
 int main()
 {
 	const auto data = make_fixture();
 	auto memory_store = make_in_memory_snapshot_store(data.engine);
 	require(memory_store.has_value(), "memory query store failed");
 	auto memory_snapshot = publish(*memory_store, data, false, false);
+	check_query_transfer(data, memory_snapshot);
+	{
+		const auto side_channels = make_side_channel_fixture();
+		auto store = make_in_memory_snapshot_store(side_channels.engine);
+		require(store.has_value(), "transfer side-channel store failed");
+		check_query_transfer(side_channels, publish(*store, side_channels, false, true));
+	}
 
 	const auto database =
 		std::filesystem::temp_directory_path() / "cxxlens-ng-query-runtime.sqlite";

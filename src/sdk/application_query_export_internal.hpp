@@ -11,6 +11,8 @@
 namespace cxxlens::sdk::detail
 {
 	inline constexpr std::size_t maximum_application_query_export_bytes =
+		std::size_t{512U} * 1024U * 1024U;
+	inline constexpr std::size_t default_application_query_export_bytes =
 		std::size_t{64U} * 1024U * 1024U;
 
 	/** Export independent scans from one immutable snapshot without reconstructing evidence. */
@@ -18,5 +20,5 @@ namespace cxxlens::sdk::detail
 	encode_application_queries(const relation_engine& engine,
 							   const snapshot_handle& snapshot,
 							   std::span<const std::string> relation_ids,
-							   std::size_t maximum_bytes = maximum_application_query_export_bytes);
+							   std::size_t maximum_bytes = default_application_query_export_bytes);
 } // namespace cxxlens::sdk::detail

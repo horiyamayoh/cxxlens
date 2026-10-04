@@ -21,6 +21,7 @@
 
 namespace cxxlens::sdk::detail
 {
+	class sealed_executable;
 	enum class gcc_probe_process_terminal : std::uint8_t
 	{
 		exited,
@@ -58,6 +59,8 @@ namespace cxxlens::sdk::detail
 		std::uint64_t absolute_wall_deadline_ns{};
 		gcc_process_standard_stream_mode standard_stream_mode{
 			gcc_process_standard_stream_mode::captured};
+		/** Optional already-frozen executable reused by a single analysis session. */
+		std::shared_ptr<const sealed_executable> executable_image{};
 	};
 
 	struct CXXLENS_RUNTIME_DETAIL_HIDDEN gcc_probe_process_output

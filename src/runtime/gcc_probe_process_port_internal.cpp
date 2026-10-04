@@ -335,24 +335,39 @@ namespace cxxlens::sdk::detail
 				output.terminal = gcc_probe_process_terminal::timed_out;
 				return output;
 			}
-			auto executable = open_sealed_executable({request.argv.front(),
+			auto executable = request.executable_image;
+			if (!executable)
+			{
+				auto opened = open_sealed_executable({request.argv.front(),
 													  request.working_directory,
 													  request.absolute_wall_deadline_ns,
 													  request.limits.maximum_executable_image_bytes,
 													  request.limits.maximum_canonical_path_bytes,
 													  cancellation});
-			if (!executable)
+				if (!opened)
+				{
+					if (opened.error().code == "runtime.sealed-executable-timeout")
+						output.terminal = gcc_probe_process_terminal::timed_out;
+					else if (opened.error().code == "runtime.sealed-executable-cancelled")
+						output.terminal = gcc_probe_process_terminal::cancelled;
+					else
+						output.terminal = opened.error().detail == "unsupported"
+							? gcc_probe_process_terminal::unavailable
+							: gcc_probe_process_terminal::launch_failed;
+					output.failure_stage = opened.error().field;
+					output.failure_detail = opened.error().detail;
+					return output;
+				}
+				executable = std::make_shared<const sealed_executable>(std::move(*opened));
+			}
+			else if (executable->native_handle() < 0 ||
+					 executable->canonical_source_path() != request.argv.front() ||
+					 executable->byte_count() > request.limits.maximum_executable_image_bytes ||
+					 executable->canonical_source_path().size() >
+						 request.limits.maximum_canonical_path_bytes)
 			{
-				if (executable.error().code == "runtime.sealed-executable-timeout")
-					output.terminal = gcc_probe_process_terminal::timed_out;
-				else if (executable.error().code == "runtime.sealed-executable-cancelled")
-					output.terminal = gcc_probe_process_terminal::cancelled;
-				else
-					output.terminal = executable.error().detail == "unsupported"
-						? gcc_probe_process_terminal::unavailable
-						: gcc_probe_process_terminal::launch_failed;
-				output.failure_stage = executable.error().field;
-				output.failure_detail = executable.error().detail;
+				output.failure_stage = "executable-image";
+				output.failure_detail = "request-binding";
 				return output;
 			}
 			output.executable_path = executable->canonical_source_path();

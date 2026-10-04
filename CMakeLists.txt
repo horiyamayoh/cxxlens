@@ -163,6 +163,7 @@ add_library(
   cxxlens_kernel
   ${CXXLENS_LIBRARY_TYPE}
   src/sdk/relation.cpp
+  src/sdk/standard_relations.cpp
   src/sdk/claim.cpp
   src/sdk/store.cpp
   src/sdk/store_candidate_projection_internal.cpp
@@ -245,8 +246,17 @@ cxxlens_set_project_warnings(cxxlens_bounded_store_v6_sqlite_internal)
 cxxlens_enable_sanitizers(cxxlens_bounded_store_v6_sqlite_internal)
 
 add_library(
-  cxxlens_query ${CXXLENS_LIBRARY_TYPE} src/sdk/query.cpp
-                src/sdk/query_execution.cpp src/sdk/query_ir_decoder.cpp)
+  cxxlens_query
+  ${CXXLENS_LIBRARY_TYPE}
+  src/sdk/query.cpp
+  src/sdk/query_execution.cpp
+  src/sdk/query_ir_decoder.cpp
+  src/sdk/query_transfer.cpp
+  src/sdk/control_flow.cpp
+  src/sdk/source_tokens.cpp
+  src/sdk/semantic_graphs.cpp
+  src/sdk/record_surfaces.cpp
+  src/sdk/query_projection_plan_limits_internal.cpp)
 add_library(cxxlens::query ALIAS cxxlens_query)
 cxxlens_configure_component(cxxlens_query query)
 target_link_libraries(cxxlens_query PUBLIC cxxlens::kernel)
@@ -744,7 +754,8 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     src/llvm/clang22/source_closure_native.cpp
     src/llvm/clang22/provider_worker_v4.cpp
     src/llvm/clang22/provider_worker_v4_ast_observer.cpp
-    src/llvm/clang22/provider_worker_v4_output_normalizer.cpp)
+    src/llvm/clang22/provider_worker_v4_output_normalizer.cpp
+    src/llvm/clang22/project_semantic_facts.cpp)
   target_link_libraries(
     cxxlens_clang22_worker_core
     PUBLIC cxxlens::clang22_provider_sdk

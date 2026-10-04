@@ -400,7 +400,8 @@ namespace cxxlens::detail::clang22
 
 		[[nodiscard]] sdk::result<void>
 		run_source_closure_translation_unit(const source_closure_native_input& input,
-											provider::clang22::translation_unit_callback callback)
+											provider::clang22::translation_unit_callback callback,
+											provider::clang22::detail::preprocessor_setup setup)
 		{
 			if (auto valid = input.closure.validate(); !valid)
 				return sdk::unexpected(std::move(valid.error()));
@@ -440,7 +441,8 @@ namespace cxxlens::detail::clang22
 																	 invocation->tool_name,
 																	 invocation->compiler_arguments,
 																	 *mount->filesystem,
-																	 std::move(callback));
+																	 std::move(callback),
+																	 std::move(setup));
 			// A member the closure actually claims but could not serve is a determinate input
 			// failure (the record's core invariant) and must fail the task even when Clang's own
 			// run reports success for the translation unit as a whole -- e.g. a `__has_include`
@@ -460,6 +462,7 @@ namespace cxxlens::detail::clang22
 #else
 			(void)main_blob;
 			(void)callback;
+			(void)setup;
 			return sdk::unexpected(failure("native.unsupported-clang-major", "clang", "22"));
 #endif
 		}
@@ -467,8 +470,9 @@ namespace cxxlens::detail::clang22
 
 	sdk::result<void>
 	with_source_closure_translation_unit(const source_closure_native_input& input,
-										 provider::clang22::translation_unit_callback callback)
+										 provider::clang22::translation_unit_callback callback,
+										 provider::clang22::detail::preprocessor_setup setup)
 	{
-		return run_source_closure_translation_unit(input, std::move(callback));
+		return run_source_closure_translation_unit(input, std::move(callback), std::move(setup));
 	}
 } // namespace cxxlens::detail::clang22

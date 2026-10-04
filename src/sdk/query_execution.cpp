@@ -21,6 +21,7 @@
 #include "claim_internal.hpp"
 #include "json_internal.hpp"
 #include "query_internal.hpp"
+#include "query_result_internal.hpp"
 
 namespace cxxlens::sdk::query
 {
@@ -1479,36 +1480,6 @@ namespace cxxlens::sdk::query
 		}
 	} // namespace
 
-	struct query_result::data
-	{
-		std::vector<annotated_row> row_values;
-		execution_status status{execution_status::failed_before_result};
-		bool ordered{};
-		bool input_complete{};
-		bool closed_world{};
-		std::vector<snapshot_query_coverage> coverage;
-		std::vector<std::string> closures;
-		std::vector<query_unresolved> unresolved;
-		std::vector<claim_conflict> conflict_values;
-		std::vector<differential_disagreement> disagreement_values;
-		std::vector<claim_producer> producers;
-		query_summary_guarantee guarantee{"unknown",
-										  "query-empty",
-										  {"query-empty", {}},
-										  {"query-empty"},
-										  {"assumptions:unknown"},
-										  {},
-										  0U,
-										  {},
-										  {},
-										  {}};
-		query_explanation logical;
-		query_explanation physical;
-		std::string ir_digest;
-		std::string snapshot;
-		std::string publication;
-	};
-
 	result<void> query_contributor_edge::validate() const
 	{
 		if (claim_contributor.empty() || producer.id.empty() ||
@@ -1718,6 +1689,11 @@ namespace cxxlens::sdk::query
 	std::string_view query_result::snapshot_id() const noexcept
 	{
 		return data_->snapshot;
+	}
+
+	std::string_view query_result::publication_id() const noexcept
+	{
+		return data_->publication;
 	}
 
 	std::string query_result::canonical_form() const

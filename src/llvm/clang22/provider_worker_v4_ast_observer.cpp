@@ -10,6 +10,7 @@
 #include <map>
 #include <new>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -19,6 +20,7 @@
 #include <cxxlens/provider/clang22.hpp>
 
 #include "sdk/source_identity_internal.hpp"
+#include "source_closure_vfs.hpp"
 
 #if defined(CXXLENS_HAS_CLANG22) && CXXLENS_HAS_CLANG22
 #include <clang/AST/Attr.h>
@@ -789,6 +791,17 @@ namespace cxxlens::detail::clang22
 		}
 
 #if defined(CXXLENS_HAS_CLANG22) && CXXLENS_HAS_CLANG22
+		[[nodiscard]] std::string project_source_path(std::string_view compiler_path)
+		{
+			const auto root = source_closure_vfs::synthetic_root();
+			if (compiler_path.starts_with("project://"))
+				return std::string{compiler_path};
+			if (compiler_path.starts_with(root) && compiler_path.size() > root.size() &&
+				compiler_path[root.size()] == '/')
+				return "project://" + std::string{compiler_path.substr(root.size() + 1U)};
+			return {};
+		}
+
 		[[nodiscard]] sdk::result<std::optional<std::string>>
 		source_anchor(provider::clang22::borrowed_translation_unit& unit,
 					  observer_budget& budget,
@@ -1682,6 +1695,7 @@ namespace cxxlens::detail::clang22
 			std::string_view source_snapshot;
 			std::string_view source_file;
 			std::string_view toolchain_digest;
+			const source_closure_snapshot* closure{};
 		};
 
 		class visitor final : public clang::RecursiveASTVisitor<visitor>
@@ -1701,18 +1715,67 @@ namespace cxxlens::detail::clang22
 					const visitor_source_context source)
 				: unit_{&unit}, output_{&output}, budget_{&budget},
 				  source_snapshot_{source.source_snapshot}, source_file_{source.source_file},
-				  toolchain_digest_{source.toolchain_digest}
+				  toolchain_digest_{source.toolchain_digest}, closure_{source.closure}
 			{
 			}
 
-			bool TraverseDecl(clang::Decl* declaration)
+			bool shouldVisitTemplateInstantiations() const
 			{
-				if (declaration == nullptr)
+				return closure_ != nullptr;
+			}
+
+			bool TraverseDecl(clang::Decl* value)
+			{
+				if (value == nullptr)
 					return true;
+				if (closure_ != nullptr && !llvm::isa<clang::TranslationUnitDecl>(value) &&
+					!written_in_project_file(value->getLocation()))
+					return true;
+				if (auto* declaration = llvm::dyn_cast<clang::FunctionDecl>(value))
+				{
+					if (declaration == nullptr ||
+						!written_in_project_file(declaration->getLocation()))
+						return true;
+					if (!declaration->isImplicit() &&
+						written_in_project_file(declaration->getLocation()) &&
+						!accept(budget_->preflight_observations(2U, output_->compile_unit.size())))
+						return false;
+					auto previous = std::move(current_function_);
+					auto identity = declaration_identity_for(
+						*unit_,
+						*budget_,
+						*declaration,
+						{toolchain_digest_, source_snapshot_, source_file_});
+					if (identity)
+					{
+						if (!accept(budget_->preflight_bytes(identity->first.size(),
+															 "current-function")))
+						{
+							current_function_ = std::move(previous);
+							return false;
+						}
+						current_function_ = identity->first;
+					}
+					else if (identity.error().code == "provider-worker-v4.ast-resource-limit")
+					{
+						set_failure(std::move(identity.error()));
+						current_function_ = std::move(previous);
+						return false;
+					}
+					else
+						current_function_.clear();
+					const auto traversed = with_depth(
+						[&]()
+						{
+							return base::TraverseDecl(declaration);
+						});
+					current_function_ = std::move(previous);
+					return traversed;
+				}
 				return with_depth(
 					[&]()
 					{
-						return base::TraverseDecl(declaration);
+						return base::TraverseDecl(value);
 					});
 			}
 
@@ -1812,47 +1875,10 @@ namespace cxxlens::detail::clang22
 				return !failure_;
 			}
 
-			bool TraverseFunctionDecl(clang::FunctionDecl* declaration)
-			{
-				if (declaration == nullptr)
-					return true;
-				if (!declaration->isImplicit() &&
-					written_in_main_file(declaration->getLocation()) &&
-					!accept(budget_->preflight_observations(2U, output_->compile_unit.size())))
-					return false;
-				auto previous = std::move(current_function_);
-				auto identity =
-					declaration_identity_for(*unit_,
-											 *budget_,
-											 *declaration,
-											 {toolchain_digest_, source_snapshot_, source_file_});
-				if (identity)
-				{
-					if (!accept(
-							budget_->preflight_bytes(identity->first.size(), "current-function")))
-					{
-						current_function_ = std::move(previous);
-						return false;
-					}
-					current_function_ = identity->first;
-				}
-				else if (identity.error().code == "provider-worker-v4.ast-resource-limit")
-				{
-					set_failure(std::move(identity.error()));
-					current_function_ = std::move(previous);
-					return false;
-				}
-				else
-					current_function_.clear();
-				const auto traversed = base::TraverseFunctionDecl(declaration);
-				current_function_ = std::move(previous);
-				return traversed;
-			}
-
 			bool VisitFunctionDecl(clang::FunctionDecl* declaration)
 			{
 				if (declaration == nullptr || declaration->isImplicit() ||
-					!written_in_main_file(declaration->getLocation()))
+					!written_in_project_file(declaration->getLocation()))
 					return true;
 				provider_worker_v4_ast_observation entity;
 				entity.kind = provider_worker_v4_ast_observation_kind::entity;
@@ -1933,9 +1959,147 @@ namespace cxxlens::detail::clang22
 				return true;
 			}
 
+			bool VisitNamedDecl(clang::NamedDecl* declaration)
+			{
+				if (closure_ == nullptr || declaration == nullptr || declaration->isImplicit() ||
+					llvm::isa<clang::FunctionDecl>(declaration) ||
+					!written_in_project_file(declaration->getLocation()))
+					return true;
+				provider_worker_v4_ast_observation entity;
+				entity.kind = provider_worker_v4_ast_observation_kind::entity;
+				if (!begin_observation(entity))
+					return false;
+				llvm::SmallString<256U> usr;
+				const auto* canonical = declaration->getCanonicalDecl();
+				bool parameter_slot{};
+				if (const auto* parameter = llvm::dyn_cast<clang::ParmVarDecl>(declaration))
+					if (const auto* function =
+							llvm::dyn_cast<clang::FunctionDecl>(parameter->getDeclContext()))
+						if (!clang::index::generateUSRForDecl(function->getCanonicalDecl(), usr) &&
+							!usr.empty())
+						{
+							usr.append("#parameter:");
+							usr.append(std::to_string(parameter->getFunctionScopeIndex()));
+							parameter_slot = true;
+						}
+				const bool exact = parameter_slot ||
+					(!clang::index::generateUSRForDecl(canonical, usr) && !usr.empty());
+				if (usr.size() > maximum_clang_text_bytes)
+				{
+					set_failure(
+						failure("provider-worker-v4.ast-resource-limit", "bytes", "named-usr"));
+					return false;
+				}
+				if (!attach_source(entity, declaration->getSourceRange(), "declaration"))
+					return false;
+				std::string key;
+				if (exact)
+					key =
+						(parameter_slot ? "clang-parameter-slot:" : "clang-usr:") + usr.str().str();
+				else
+				{
+					if (!entity.primary_span)
+						return record_diagnostic("provider.named-identity-unavailable");
+					const auto projection = entity.primary_span->span_id + ":" +
+						declaration->getDeclKindName() + ":" + current_function_;
+					auto identity =
+						sdk::semantic_digest("clang22.named-source-anchor.v1", projection);
+					if (!identity)
+					{
+						set_failure(std::move(identity.error()));
+						return false;
+					}
+					key = "clang-fallback:" + *identity;
+				}
+				std::string_view kind = "declaration";
+				if (llvm::isa<clang::NamespaceDecl>(declaration))
+					kind = "namespace";
+				else if (llvm::isa<clang::NamespaceAliasDecl>(declaration))
+					kind = "namespace_alias";
+				else if (const auto* record = llvm::dyn_cast<clang::RecordDecl>(declaration))
+					kind = record->isUnion() ? "union" : record->isStruct() ? "struct" : "class";
+				else if (llvm::isa<clang::EnumDecl>(declaration))
+					kind = "enum";
+				else if (llvm::isa<clang::EnumConstantDecl>(declaration))
+					kind = "enum_constant";
+				else if (llvm::isa<clang::TypedefNameDecl>(declaration))
+					kind = "alias";
+				else if (llvm::isa<clang::FieldDecl>(declaration))
+					kind = "field";
+				else if (llvm::isa<clang::ParmVarDecl>(declaration))
+					kind = "parameter";
+				else if (llvm::isa<clang::VarDecl>(declaration))
+					kind = "variable";
+				else if (llvm::isa<clang::ConceptDecl>(declaration))
+					kind = "concept";
+				else if (llvm::isa<clang::TemplateTypeParmDecl>(declaration))
+					kind = "template_type_parameter";
+				else if (llvm::isa<clang::NonTypeTemplateParmDecl>(declaration))
+					kind = "template_non_type_parameter";
+				else if (llvm::isa<clang::TemplateTemplateParmDecl>(declaration))
+					kind = "template_template_parameter";
+				else if (llvm::isa<clang::TemplateDecl>(declaration))
+					kind = "template";
+				auto qualified = bounded_qualified_name(*budget_, *declaration);
+				if (!qualified)
+				{
+					set_failure(std::move(qualified.error()));
+					return false;
+				}
+				std::string signature = key;
+				clang::QualType type;
+				if (const auto* value = llvm::dyn_cast<clang::ValueDecl>(declaration))
+					type = value->getType();
+				else if (const auto* alias = llvm::dyn_cast<clang::TypedefNameDecl>(declaration))
+					type = alias->getUnderlyingType();
+				else if (const auto* record = llvm::dyn_cast<clang::RecordDecl>(declaration))
+					type = unit_->ast().getCanonicalTagType(record);
+				else if (const auto* enumeration = llvm::dyn_cast<clang::EnumDecl>(declaration))
+					type = unit_->ast().getCanonicalTagType(enumeration);
+				if (!type.isNull())
+				{
+					auto value = bounded_canonical_type(*budget_, type);
+					if (!value)
+					{
+						set_failure(std::move(value.error()));
+						return false;
+					}
+					signature = std::move(*value);
+				}
+				bool definition = true;
+				if (const auto* tag = llvm::dyn_cast<clang::TagDecl>(declaration))
+					definition = tag->isThisDeclarationADefinition();
+				else if (const auto* variable = llvm::dyn_cast<clang::VarDecl>(declaration))
+					definition =
+						variable->isThisDeclarationADefinition() != clang::VarDecl::DeclarationOnly;
+				if (const auto* parameter = llvm::dyn_cast<clang::ParmVarDecl>(declaration))
+					if (const auto* function =
+							llvm::dyn_cast<clang::FunctionDecl>(parameter->getDeclContext()))
+						definition = function->isThisDeclarationADefinition();
+				entity.exact_equivalence = exact;
+				if (!exact && !set_limitation(entity, "identity-confidence:structural-fallback"))
+					return false;
+				return set_semantic_key(entity, std::move(key)) &&
+					put_payload(entity, "symbol.kind", kind) &&
+					put_payload_preflighted(
+						   entity, "symbol.qualified_name", std::move(*qualified)) &&
+					put_payload_preflighted(entity, "symbol.signature", std::move(signature)) &&
+					put_payload(entity,
+								"symbol.identity_confidence",
+								parameter_slot ? "exact-parameter-slot"sv
+									: exact	   ? "exact-usr"sv
+											   : "structural-fallback"sv) &&
+					put_payload(
+						   entity, "symbol.is_definition", definition ? "true"sv : "false"sv) &&
+					put_payload(entity,
+								"symbol.is_canonical_declaration",
+								declaration == canonical ? "true"sv : "false"sv) &&
+					insert(entity);
+			}
+
 			bool VisitCallExpr(clang::CallExpr* expression)
 			{
-				if (expression == nullptr || !written_in_main_file(expression->getExprLoc()))
+				if (expression == nullptr || !written_in_project_file(expression->getExprLoc()))
 					return true;
 				provider_worker_v4_ast_observation call;
 				call.kind = provider_worker_v4_ast_observation_kind::call;
@@ -2104,9 +2268,17 @@ namespace cxxlens::detail::clang22
 			}
 
 		  private:
-			[[nodiscard]] bool written_in_main_file(const clang::SourceLocation location) const
+			[[nodiscard]] bool written_in_project_file(const clang::SourceLocation location) const
 			{
-				return location.isValid() && unit_->source_manager().isWrittenInMainFile(location);
+				if (location.isInvalid())
+					return false;
+				auto& manager = unit_->source_manager();
+				const auto spelling = manager.getExpansionLoc(location);
+				if (manager.isWrittenInMainFile(spelling))
+					return true;
+				return closure_ != nullptr &&
+					closure_->find_member(project_source_path(manager.getFilename(spelling))) !=
+					nullptr;
 			}
 
 			template <class Function>
@@ -2246,8 +2418,26 @@ namespace cxxlens::detail::clang22
 				const auto end = source_manager.getFileOffset(end_location);
 				if (end < begin)
 					return sdk::unexpected(failure("native.source-span-invalid", "offset"));
+				std::string snapshot{source_snapshot_};
+				std::string file{source_file_};
+				if (!source_manager.isWrittenInMainFile(begin_location))
+				{
+					const auto* member = closure_ == nullptr
+						? nullptr
+						: closure_->find_member(project_source_path(filename));
+					if (member == nullptr || member->encoding != source_closure_encoding::utf8 ||
+						end > member->size_bytes)
+						return sdk::unexpected(failure(
+							"native.source-span-invalid", "file", "unadmitted-project-input"));
+					auto identity = sdk::detail::derive_source_snapshot_id(
+						member->file_id, member->content_digest, "utf8");
+					if (!identity)
+						return sdk::unexpected(std::move(identity.error()));
+					snapshot = std::move(*identity);
+					file = member->file_id;
+				}
 				std::size_t identity_projection_bytes{256U};
-				for (const auto text : {source_snapshot_, source_file_, role})
+				for (const auto text : {std::string_view{snapshot}, std::string_view{file}, role})
 					if (!checked_add(identity_projection_bytes,
 									 text.size(),
 									 budget_->limits().maximum_logical_bytes,
@@ -2259,21 +2449,22 @@ namespace cxxlens::detail::clang22
 						budget_->preflight_bytes(identity_projection_bytes, "source-span-identity");
 					!preflight)
 					return sdk::unexpected(std::move(preflight.error()));
-				auto id =
-					sdk::source_span_identity(source_snapshot_, source_file_, begin, end, role);
+				auto id = sdk::source_span_identity(snapshot, file, begin, end, role);
 				if (!id)
 					return sdk::unexpected(std::move(id.error()));
 
-				for (const auto text :
-					 {std::string_view{*id}, source_snapshot_, source_file_, role})
+				for (const auto text : {std::string_view{*id},
+										std::string_view{snapshot},
+										std::string_view{file},
+										role})
 					if (auto reserved = budget_->reserve_bytes(text.size(), "primary-span");
 						!reserved)
 						return sdk::unexpected(std::move(reserved.error()));
 
 				source_attachment output{
 					{std::move(*id),
-					 std::string{source_snapshot_},
-					 std::string{source_file_},
+					 std::string{snapshot},
+					 std::string{file},
 					 begin,
 					 end,
 					 std::string{role},
@@ -2429,12 +2620,41 @@ namespace cxxlens::detail::clang22
 			std::string_view source_snapshot_;
 			std::string_view source_file_;
 			std::string_view toolchain_digest_;
+			const source_closure_snapshot* closure_;
 			std::string current_function_;
 			std::map<std::string, provider_worker_v4_ast_observation, std::less<>> observations_;
 			std::optional<sdk::error> failure_;
 			std::uint64_t unavailable_call_index_{};
 		};
 #endif
+		[[nodiscard]] sdk::result<materialization::observation_v2_task_authority>
+		observation_authority(const provider_worker_v4_ast_observation_batch& batch,
+							  const provider_worker_v4_ast_observation& observation)
+		{
+			materialization::observation_v2_task_authority authority{batch.compile_unit,
+																	 batch.source_snapshot,
+																	 batch.source_file,
+																	 batch.source_size_bytes};
+			if (!observation.primary_span || observation.primary_span->file == batch.source_file)
+				return authority;
+			for (const auto& member : batch.additional_sources)
+				if (member.file_id == observation.primary_span->file)
+				{
+					if (auto valid = member.validate(); !valid)
+						return sdk::unexpected(std::move(valid.error()));
+					auto snapshot = sdk::detail::derive_source_snapshot_id(
+						member.file_id, member.content_digest, "utf8");
+					if (!snapshot)
+						return sdk::unexpected(std::move(snapshot.error()));
+					return materialization::observation_v2_task_authority{batch.compile_unit,
+																		  std::move(*snapshot),
+																		  member.file_id,
+																		  member.size_bytes};
+				}
+			return sdk::unexpected(failure(
+				"provider-worker-v4.ast-batch-invalid", "source", "unadmitted-project-input"));
+		}
+
 	} // namespace
 
 	sdk::result<void> provider_worker_v4_ast_observer_limits::validate() const
@@ -2539,6 +2759,16 @@ namespace cxxlens::detail::clang22
 		if (rows.size() != observations.size())
 			return sdk::unexpected(
 				failure("provider-worker-v4.ast-batch-invalid", "rows", "observation-cardinality"));
+		std::set<std::string, std::less<>> admitted_sources;
+		for (const auto& member : additional_sources)
+		{
+			if (auto valid = member.validate(); !valid)
+				return valid;
+			if (member.encoding != source_closure_encoding::utf8 || member.file_id == source_file ||
+				!admitted_sources.insert(member.file_id).second)
+				return sdk::unexpected(
+					failure("provider-worker-v4.ast-batch-invalid", "additional-sources"));
+		}
 		std::string previous;
 		for (std::size_t index{}; index < observations.size(); ++index)
 		{
@@ -2576,9 +2806,10 @@ namespace cxxlens::detail::clang22
 				return valid;
 			if (auto valid = sdk::validate_domain_identity(**descriptor, rows[index]); !valid)
 				return valid;
-			const materialization::observation_v2_task_authority authority{
-				compile_unit, source_snapshot, source_file, source_size_bytes};
-			auto decoded = materialization::decode_observation_v2_row(rows[index], authority);
+			auto authority = observation_authority(*this, observation);
+			if (!authority)
+				return sdk::unexpected(std::move(authority.error()));
+			auto decoded = materialization::decode_observation_v2_row(rows[index], *authority);
 			if (!decoded)
 				return sdk::unexpected(std::move(decoded.error()));
 			const auto expected_kind =
@@ -2614,7 +2845,8 @@ namespace cxxlens::detail::clang22
 								   const source_closure_task_v4_decoded& metadata,
 								   std::string compile_unit,
 								   provider_worker_v4_ast_observer_limits limits,
-								   std::string main_source_snapshot)
+								   std::string main_source_snapshot,
+								   const bool include_project_headers)
 	{
 		try
 		{
@@ -2656,14 +2888,29 @@ namespace cxxlens::detail::clang22
 				{},
 				0U,
 				{},
+				{},
 			};
+			if (include_project_headers)
+				for (const auto& member : metadata.input.closure.members)
+					if (member.file_id != main->file_id)
+					{
+						if (auto reserved = budget.reserve_bytes(member.file_id.size() +
+																	 member.logical_path.size() +
+																	 member.content_digest.size(),
+																 "additional-source");
+							!reserved)
+							return sdk::unexpected(std::move(reserved.error()));
+						output.additional_sources.push_back(member);
+					}
 
 #if defined(CXXLENS_HAS_CLANG22) && CXXLENS_HAS_CLANG22
-			visitor extractor{
-				unit,
-				output,
-				budget,
-				{output.source_snapshot, output.source_file, metadata.input.toolchain_digest}};
+			visitor extractor{unit,
+							  output,
+							  budget,
+							  {output.source_snapshot,
+							   output.source_file,
+							   metadata.input.toolchain_digest,
+							   include_project_headers ? &metadata.input.closure : nullptr}};
 			const bool traversed = extractor.TraverseDecl(unit.ast().getTranslationUnitDecl());
 			if (extractor.error())
 				return sdk::unexpected(*extractor.error());
@@ -2697,8 +2944,6 @@ namespace cxxlens::detail::clang22
 			if (auto reserved = budget.reserve_bytes(total_row_reservation, "row-reservations");
 				!reserved)
 				return sdk::unexpected(std::move(reserved.error()));
-			const materialization::observation_v2_task_authority authority{
-				output.compile_unit, output.source_snapshot, output.source_file, main->size_bytes};
 			output.rows.reserve(output.observations.size());
 			for (const auto& observation : output.observations)
 			{
@@ -2729,7 +2974,10 @@ namespace cxxlens::detail::clang22
 				native.origin_chain = observation.origins;
 				native.exact_equivalence = observation.exact_equivalence;
 				native.limitation = observation.limitation;
-				auto row = materialization::make_observation_v2_row(native, authority);
+				auto authority = observation_authority(output, observation);
+				if (!authority)
+					return sdk::unexpected(std::move(authority.error()));
+				auto row = materialization::make_observation_v2_row(native, *authority);
 				if (!row)
 					return sdk::unexpected(std::move(row.error()));
 				const auto canonical_row = row->canonical_form();

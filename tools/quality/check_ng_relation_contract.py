@@ -702,13 +702,13 @@ def validate_registry(
                     fail("relation.reference-container-shape", f"{name} container reference is not unary")
                 source = columns[reference["source_columns"][0]]
                 target = target_columns[reference["target_columns"][0]]
+                source_type = reference_scalar_type(source["type"])
                 if (
-                    source["type"].startswith("optional<")
-                    or not source["type"].startswith("set<")
-                    or not source["type"].endswith(">")
+                    not source_type.startswith("set<")
+                    or not source_type.endswith(">")
                 ):
                     fail("relation.reference-container-source", f"{name} container source is not a set")
-                parameter = source["type"][4:-1]
+                parameter = source_type[4:-1]
                 if target["type"].startswith("optional<") or target["type"] not in (
                     parameter,
                     f"typed_id<{parameter}>",

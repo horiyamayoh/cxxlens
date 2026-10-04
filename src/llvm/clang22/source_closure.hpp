@@ -112,6 +112,11 @@ namespace cxxlens::detail::clang22
 	[[nodiscard]] sdk::result<std::string>
 	source_closure_main_line_index_id(const source_closure_snapshot& snapshot);
 
+	/** Derive a byte line index for one explicitly selected frozen member. */
+	[[nodiscard]] sdk::result<std::string>
+	source_closure_member_line_index_id(const source_closure_snapshot& snapshot,
+										std::string_view logical_path);
+
 	/** Construct, sort, deduplicate, identify, and fully validate one source closure. */
 	[[nodiscard]] sdk::result<source_closure_snapshot>
 	make_source_closure_snapshot(std::vector<source_closure_file_input> files);

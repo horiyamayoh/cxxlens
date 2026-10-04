@@ -6,6 +6,7 @@
 
 #include <cxxlens/provider/clang22.hpp>
 
+#include "provider_sdk_internal.hpp"
 #include "source_closure.hpp"
 
 namespace cxxlens::detail::clang22
@@ -80,5 +81,6 @@ namespace cxxlens::detail::clang22
 	 */
 	[[nodiscard]] sdk::result<void>
 	with_source_closure_translation_unit(const source_closure_native_input& input,
-										 provider::clang22::translation_unit_callback callback);
+										 provider::clang22::translation_unit_callback callback,
+										 provider::clang22::detail::preprocessor_setup setup = {});
 } // namespace cxxlens::detail::clang22

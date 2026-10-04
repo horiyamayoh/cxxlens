@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <map>
 #include <ranges>
 #include <set>
 #include <sstream>
@@ -406,6 +407,32 @@ namespace cxxlens::sdk
 		bool same_claim_occurrence(const claim& left, const claim& right)
 		{
 			return *claim_occurrence_projection(left) == *claim_occurrence_projection(right);
+		}
+		result<void> sort_claim_occurrences(std::vector<claim>& values)
+		{
+			std::vector<std::pair<std::vector<std::byte>, std::size_t>> keys;
+			keys.reserve(values.size());
+			for (std::size_t index{}; index < values.size(); ++index)
+			{
+				auto encoded = claim_occurrence_projection(values[index]);
+				if (!encoded)
+					return unexpected(std::move(encoded.error()));
+				keys.emplace_back(std::move(*encoded), index);
+			}
+			std::ranges::sort(keys,
+							  [](const auto& left, const auto& right)
+							  {
+								  return left.first < right.first;
+							  });
+			std::vector<claim> ordered;
+			ordered.reserve(values.size());
+			for (const auto& [encoded, index] : keys)
+			{
+				(void)encoded;
+				ordered.push_back(std::move(values[index]));
+			}
+			values = std::move(ordered);
+			return {};
 		}
 
 		result<std::string> functional_payload_digest(const relation_descriptor& descriptor,
@@ -880,6 +907,36 @@ namespace cxxlens::sdk
 		for (const auto& value : claims_)
 			reference_space.push_back(&value);
 
+		// Resolve only exact value projections, then retain the original condition law.
+		// The scalar variant tag remains part of the key (e.g. signed 1 is not unsigned 1).
+		const auto descriptors = engine.descriptors();
+		std::map<std::string, const relation_descriptor*, std::less<>> descriptors_by_id;
+		for (const auto& descriptor : descriptors)
+			descriptors_by_id.emplace(descriptor.id, &descriptor);
+		std::map<std::string, std::vector<const claim*>, std::less<>> targets_by_relation;
+		for (const auto* target : reference_space)
+			targets_by_relation[descriptors_by_id.at(target->descriptor)->name].push_back(target);
+		using reference_key = std::tuple<std::string, std::string, std::vector<scalar_value>>;
+		using reference_index = std::map<reference_key, std::vector<const claim*>>;
+		std::map<std::pair<std::string, std::vector<std::string>>, reference_index>
+			reference_indexes;
+		const auto projected_values =
+			[](const claim& value,
+			   const std::vector<std::string>& columns) -> std::optional<std::vector<scalar_value>>
+		{
+			std::vector<scalar_value> key;
+			key.reserve(columns.size());
+			for (const auto& column : columns)
+			{
+				const auto found = value.row.cells.find(column);
+				if (found == value.row.cells.end() || found->second.state != cell_state::present ||
+					!found->second.value)
+					return std::nullopt;
+				key.push_back(*found->second.value);
+			}
+			return key;
+		};
+
 		for (const auto& value : claims_)
 		{
 			auto descriptor = descriptor_for(engine, value);
@@ -891,15 +948,36 @@ namespace cxxlens::sdk
 					continue;
 				const auto target_resolves = [&](const std::optional<std::string_view> element)
 				{
-					return std::ranges::any_of(
-						reference_space,
-						[&](const claim* target)
-						{
-							auto target_descriptor = descriptor_for(engine, *target);
-							return target_descriptor &&
-								target_descriptor->name == reference.target_relation &&
-								reference_match(value, reference, *target, element);
-						});
+					const auto projection =
+						std::pair{reference.target_relation, reference.target_columns};
+					auto found = reference_indexes.find(projection);
+					if (found == reference_indexes.end())
+					{
+						reference_index index;
+						for (const auto* target : targets_by_relation[reference.target_relation])
+							if (const auto key =
+									projected_values(*target, reference.target_columns))
+								index[{target->interpretation, target->presence.universe, *key}]
+									.push_back(target);
+						found = reference_indexes.emplace(projection, std::move(index)).first;
+					}
+					std::optional<std::vector<scalar_value>> key;
+					if (element)
+						key = std::vector<scalar_value>(reference.source_columns.size(),
+														scalar_value{std::string{*element}});
+					else
+						key = projected_values(value, reference.source_columns);
+					if (!key)
+						return false;
+					const auto candidates =
+						found->second.find({value.interpretation, value.presence.universe, *key});
+					return candidates != found->second.end() &&
+						std::ranges::any_of(candidates->second,
+											[&](const claim* target)
+											{
+												return reference_match(
+													value, reference, *target, element);
+											});
 				};
 				bool resolved{};
 				if (reference.container_elements)
@@ -929,7 +1007,8 @@ namespace cxxlens::sdk
 			}
 		}
 
-		std::ranges::sort(claims_, claim_order);
+		if (auto sorted = detail::sort_claim_occurrences(claims_); !sorted)
+			return unexpected(std::move(sorted.error()));
 		for (const auto& value : claims_)
 		{
 			auto descriptor = descriptor_for(engine, value);
@@ -985,13 +1064,19 @@ namespace cxxlens::sdk
 			return {};
 		};
 
-		for (std::size_t left = 0U; left < output.claims.size(); ++left)
-			for (std::size_t right = left + 1U; right < output.claims.size(); ++right)
-			{
-				if (auto classified = classify_pair(output.claims[left], output.claims[right]);
-					!classified)
-					return unexpected(std::move(classified.error()));
-			}
+		using functional_key = std::pair<std::string, std::string>;
+		std::map<functional_key, std::vector<const claim*>> added_by_key;
+		for (const auto& value : output.claims)
+			if (descriptors_by_id.at(value.descriptor)->merge == merge_mode::functional_assertion)
+				added_by_key[{value.descriptor, value.semantic_key}].push_back(&value);
+		for (const auto& [key, group] : added_by_key)
+		{
+			(void)key;
+			for (std::size_t left{}; left < group.size(); ++left)
+				for (std::size_t right = left + 1U; right < group.size(); ++right)
+					if (auto classified = classify_pair(*group[left], *group[right]); !classified)
+						return unexpected(std::move(classified.error()));
+		}
 
 		std::vector<const claim*> ordered_existing;
 		ordered_existing.reserve(existing.size());
@@ -1009,10 +1094,15 @@ namespace cxxlens::sdk
 											   return left->content == right->content;
 										   }),
 							   ordered_existing.end());
-		for (const auto& added : output.claims)
-			for (const auto* prior : ordered_existing)
-				if (auto classified = classify_pair(added, *prior); !classified)
-					return unexpected(std::move(classified.error()));
+		std::map<functional_key, std::vector<const claim*>> existing_by_key;
+		for (const auto* value : ordered_existing)
+			existing_by_key[{value->descriptor, value->semantic_key}].push_back(value);
+		for (const auto& [key, added] : added_by_key)
+			if (const auto prior = existing_by_key.find(key); prior != existing_by_key.end())
+				for (const auto* value : added)
+					for (const auto* previous : prior->second)
+						if (auto classified = classify_pair(*value, *previous); !classified)
+							return unexpected(std::move(classified.error()));
 
 		detail::canonicalize_claim_conflicts(output.conflicts);
 		std::ranges::sort(

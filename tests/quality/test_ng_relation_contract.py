@@ -49,8 +49,8 @@ class NgRelationContractTest(unittest.TestCase):
 
     def test_registry_and_vectors_have_valid_product_contracts(self) -> None:
         registry, results = validate_contract(ROOT)
-        self.assertEqual(registry["document_version"], "1.5.0")
-        self.assertEqual(registry["compatibility"]["current"], "1.5.0")
+        self.assertEqual(registry["document_version"], "1.11.0")
+        self.assertEqual(registry["compatibility"]["current"], "1.11.0")
         self.assertGreater(len(registry["relations"]), 0)
         self.assertEqual(len(results), len(self.vectors["vectors"]))
         self.assertEqual({row["decision"] for row in results}, {"accepted", "rejected"})
@@ -91,6 +91,19 @@ class NgRelationContractTest(unittest.TestCase):
                 "cc.type_component",
                 "cc.call_site",
                 "cc.call_direct_target",
+                "cc.entity_detail",
+                "cc.entity_edge",
+                "cc.syntax_node",
+                "cc.body",
+                "cc.cfg_node",
+                "cc.cfg_edge",
+                "cc.flow_fact",
+                "cc.layout_fact",
+                "cc.record_surface",
+                "source.include",
+                "source.preprocessor_event",
+                "source.token",
+                "source.token_inventory",
                 "core.provider_execution",
                 "core.unresolved",
                 "core.claim_conflict",
@@ -251,6 +264,19 @@ class NgRelationContractTest(unittest.TestCase):
             resolve_reference(self.registry, rejected),
             ("rejected", "relation.soft-reference-unaccounted"),
         )
+
+    def test_optional_container_reference_preserves_element_type(self) -> None:
+        candidate = copy.deepcopy(self.registry)
+        relation = next(r for r in candidate["relations"] if r["name"] == "cc.record_surface")
+        target_set = next(c for c in relation["columns"] if c["name"] == "type_reference_targets")
+        self.assertEqual(target_set["type"], "optional<set<cc_entity_id>>")
+        validate_registry(candidate, schema=self.registry_schema)
+        target_set["type"] = "optional<set<source_span_id>>"
+        with self.assertRaisesRegex(RelationContractError, "relation.reference-container-target"):
+            validate_registry(candidate, schema=self.registry_schema)
+        target_set["type"] = "optional<typed_id<cc_entity_id>>"
+        with self.assertRaisesRegex(RelationContractError, "relation.reference-container-source"):
+            validate_registry(candidate, schema=self.registry_schema)
 
     def test_unknown_open_symbol_is_preserved_and_closed_symbol_is_rejected(self) -> None:
         open_value = self.vector("open-symbol-unknown-preserved")["input"]

@@ -229,10 +229,28 @@ namespace cxxlens::detail::clang22
 		if (main == snapshot.members.end())
 			return sdk::unexpected(
 				failure("source-closure.main-invalid", "closure.main-count", "missing"));
+		return source_closure_member_line_index_id(snapshot, main->logical_path);
+	}
+
+	sdk::result<std::string>
+	source_closure_member_line_index_id(const source_closure_snapshot& snapshot,
+										const std::string_view logical_path)
+	{
+		const auto* main = snapshot.find_member(logical_path);
+		if (main == nullptr)
+			return sdk::unexpected(failure(
+				"source-closure.member-missing", "logical-path", std::string{logical_path}));
 		const auto* blob = snapshot.find_blob(main->content_digest);
 		if (blob == nullptr || !blob->content)
 			return sdk::unexpected(failure(
 				"source-closure.blob-missing", "member.content-digest", main->logical_path));
+		if (auto valid = main->validate(); !valid)
+			return sdk::unexpected(std::move(valid.error()));
+		if (auto valid = blob->validate(); !valid)
+			return sdk::unexpected(std::move(valid.error()));
+		if (main->size_bytes != blob->size_bytes)
+			return sdk::unexpected(
+				failure("source-closure.digest-mismatch", "member.size-bytes", main->logical_path));
 		if (blob->size_bytes > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
 			return sdk::unexpected(
 				failure("source-closure.limit-exceeded", "blob.size-bytes", main->logical_path));

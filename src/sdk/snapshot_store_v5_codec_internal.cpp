@@ -21,6 +21,7 @@
 
 #include <cxxlens/sdk/store.hpp>
 
+#include "canonical_order_internal.hpp"
 #include "claim_internal.hpp"
 #include "store_claim_codec_internal.hpp"
 #include "store_identity_internal.hpp"
@@ -1144,11 +1145,7 @@ namespace cxxlens::sdk::detail
 				value.partition_bindings, {}, &snapshot_partition_binding::partition_id);
 			for (auto& [descriptor, rows] : value.rows)
 			{
-				std::ranges::sort(rows,
-								  [](const detached_row& left, const detached_row& right)
-								  {
-									  return left.canonical_form() < right.canonical_form();
-								  });
+				sort_canonical_projection(rows, &detached_row::canonical_form);
 				const auto relation = value.descriptors.find(descriptor);
 				if (relation != value.descriptors.end() &&
 					relation->second.merge != merge_mode::multiset)
@@ -1164,13 +1161,7 @@ namespace cxxlens::sdk::detail
 			for (auto& [descriptor, annotations] : value.annotations)
 			{
 				(void)descriptor;
-				std::ranges::sort(annotations,
-								  [](const snapshot_claim_annotation& left,
-									 const snapshot_claim_annotation& right)
-								  {
-									  return annotation_projection_private(left) <
-										  annotation_projection_private(right);
-								  });
+				sort_canonical_projection(annotations, annotation_projection_private);
 			}
 		}
 

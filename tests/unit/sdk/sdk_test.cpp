@@ -1687,8 +1687,10 @@ namespace
 		require(!malformed.validate(), "multi-column container reference was accepted");
 		malformed = cxxlens::source::relations::origin::descriptor();
 		malformed.columns[2].type.optional = true;
+		malformed.columns[2].required = false;
 		rebind(malformed);
-		require(!malformed.validate(), "optional container source was accepted");
+		require(malformed.validate().has_value(), "optional container source was rejected");
+		const auto optional_origin = malformed;
 		malformed = cxxlens::source::relations::origin::descriptor();
 		malformed.columns[2].type.scalar = cxxlens::sdk::scalar_kind::typed_id;
 		rebind(malformed);
@@ -1745,6 +1747,33 @@ namespace
 		auto origin = make_origin({"span:a", "span:b"});
 		require(span_a && span_b && origin, "container reference claims could not be built");
 		const std::array resolved_targets{*span_a, *span_b};
+		cxxlens::sdk::relation_registry optional_registry;
+		require(optional_registry.add(span).has_value() &&
+					optional_registry.add(optional_origin).has_value(),
+				"optional reference registry rejected");
+		const auto optional_engine = optional_registry.build("optional-container-reference");
+		require(optional_engine.has_value(), "optional reference registry build failed");
+		for (const auto state : {"absent", "empty", "resolved", "missing"})
+		{
+			auto row = make_source_origin_row({});
+			auto& source = row.cells.at(optional_origin.columns[2].id);
+			source.type = optional_origin.columns[2].type;
+			if (std::string_view{state} == "absent")
+				source = cxxlens::sdk::detached_cell::absent(source.type);
+			else if (std::string_view{state} != "empty")
+				source.value = cxxlens::sdk::scalar_value{canonical_set({"span:a", "span:b"})};
+			auto value = cxxlens::sdk::make_assertion(*optional_engine, observe(std::move(row)));
+			require(value.has_value(), "optional container assertion rejected");
+			cxxlens::sdk::claim_batch batch;
+			require(batch.add(*value).has_value(), "optional container assertion adoption failed");
+			const auto result = std::string_view{state} == "resolved"
+				? std::move(batch).commit(*optional_engine, resolved_targets)
+				: std::move(batch).commit(*optional_engine);
+			require(std::string_view{state} == "missing"
+						? !result && result.error().code == "sdk.hard-reference-missing"
+						: result.has_value(),
+					"optional container reference changed absence or element resolution");
+		}
 		cxxlens::sdk::claim_batch resolved_batch;
 		require(resolved_batch.add(*origin).has_value(), "resolved container origin rejected");
 		auto resolved = std::move(resolved_batch).commit(*engine, resolved_targets);
@@ -1770,6 +1799,63 @@ namespace
 		auto mismatch_result = std::move(mismatch_batch).commit(*engine, one_target);
 		require(!mismatch_result && mismatch_result.error().code == "sdk.hard-reference-missing",
 				"condition mismatch resolved a container reference");
+		auto debug_target = make_span("span:a", {"debug"});
+		auto release_target = make_span("span:a", {"release"});
+		auto both_variants = make_origin({"span:a"}, {"debug", "release"});
+		require(debug_target && release_target && both_variants,
+				"split condition reference fixtures could not be built");
+		cxxlens::sdk::claim_batch split_condition_batch;
+		require(split_condition_batch.add(*both_variants).has_value(),
+				"split condition source rejected early");
+		const std::array split_targets{*debug_target, *release_target};
+		auto split_condition = std::move(split_condition_batch).commit(*engine, split_targets);
+		require(!split_condition && split_condition.error().code == "sdk.hard-reference-missing",
+				"separate target conditions were combined into a false complete reference");
+
+		// A project-sized target set must retain the same hard-reference law and
+		// canonical result under arrival-order changes and one missing target.
+		std::vector<cxxlens::sdk::claim> many_targets;
+		std::vector<cxxlens::sdk::claim> many_origins;
+		for (std::size_t index = 0U; index < 1024U; ++index)
+		{
+			const auto span_id = "span:project:" + std::to_string(index);
+			auto target = make_span(span_id);
+			auto row = make_source_origin_row({span_id});
+			row.cells.at("source.origin.v1.origin") = cxxlens::sdk::detached_cell::typed(
+				"origin_id", "origin:project:" + std::to_string(index));
+			auto source = cxxlens::sdk::make_assertion(*engine, observe(std::move(row)));
+			require(target && source, "project reference fixtures could not be built");
+			many_targets.push_back(std::move(*target));
+			many_origins.push_back(std::move(*source));
+		}
+		std::string project_digest;
+		for (const auto reverse : {false, true})
+		{
+			if (reverse)
+			{
+				std::ranges::reverse(many_targets);
+				std::ranges::reverse(many_origins);
+			}
+			cxxlens::sdk::claim_batch project_batch;
+			for (const auto& project_origin : many_origins)
+				require(project_batch.add(project_origin).has_value(), "project source rejected");
+			auto project_result = std::move(project_batch).commit(*engine, many_targets);
+			require(project_result && project_result->claims.size() == 1024U &&
+						project_result->unresolved.empty(),
+					"project container reference did not resolve");
+			if (project_digest.empty())
+				project_digest = project_result->content_digest;
+			require(project_result->content_digest == project_digest,
+					"project reference result depended on target order");
+		}
+		many_targets.pop_back();
+		cxxlens::sdk::claim_batch project_missing_batch;
+		for (const auto& project_origin : many_origins)
+			require(project_missing_batch.add(project_origin).has_value(),
+					"project missing source rejected early");
+		auto project_missing = std::move(project_missing_batch).commit(*engine, many_targets);
+		require(!project_missing && project_missing.error().code == "sdk.hard-reference-missing",
+				"one missing project target was silently ignored");
 	}
 
 	void check_snapshot_lifetime()

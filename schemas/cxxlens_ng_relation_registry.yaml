@@ -1,6 +1,6 @@
 schema: cxxlens.relation-registry.v1
 kind: relation-registry
-document_version: 1.5.0
+document_version: 1.11.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -9,7 +9,7 @@ authority:
   owner: steward.ng-relations
 compatibility:
   version_axis: relation-descriptor
-  current: 1.5.0
+  current: 1.11.0
   semantic_major_policy: exact-major-compatible-minor
   unknown_optional_columns: preserve
   unknown_open_symbols: preserve
@@ -1147,7 +1147,7 @@ relations:
   evolution_policy: ng0.additive.v1
 - descriptor_id: cc.type.v1
   name: cc.type
-  version: 1.0.0
+  version: 1.1.0
   semantic_major: 1
   semantics: cc.type/1
   owner_namespace: cxxlens.standard.cc
@@ -1207,6 +1207,29 @@ relations:
     type: optional<utf8_string>
     required: false
     identity_role: display
+  - id: cc.type.v1.structure_profile
+    name: structure_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Named compiler structural encoding; never interpret an opaque digest as a type grammar.
+  - id: cc.type.v1.structure_preimage
+    name: structure_preimage
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Exact input bytes of component_signature_digest under structure_profile; child types remain references to retained type rows.
+  - id: cc.type.v1.structure_state
+    name: structure_state
+    type: optional<open_symbol<cc.type-structure-state/1>>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Complete means the named grammar represents this constructor; partial preserves unsupported or dependent structure without claiming equality.
+  row_constraints:
+    all_or_none:
+    - - cc.type.v1.structure_profile
+      - cc.type.v1.structure_preimage
+      - cc.type.v1.structure_state
   references:
   - source_columns:
     - cc.type.v1.nominal_entity
@@ -1223,6 +1246,9 @@ relations:
     - cc.type.v1.component_signature_digest
     - cc.type.v1.qualifiers
     - cc.type.v1.dependent
+    - cc.type.v1.structure_profile
+    - cc.type.v1.structure_preimage
+    - cc.type.v1.structure_state
   partition:
     suggested_keys:
     - cc.type.v1.type
@@ -1241,7 +1267,7 @@ relations:
   evolution_policy: ng0.additive.v1
 - descriptor_id: cc.type_component.v1
   name: cc.type_component
-  version: 1.0.0
+  version: 1.1.0
   semantic_major: 1
   semantics: cc.type-component/1
   owner_namespace: cxxlens.standard.cc
@@ -1302,6 +1328,12 @@ relations:
     type: optional<digest>
     required: false
     identity_role: claim_key
+  - id: cc.type_component.v1.value_preimage
+    name: value_preimage
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Exact canonical value bytes hashed into value_digest, such as the decimal constant-array extent.
   references:
   - source_columns:
     - cc.type_component.v1.owner_type
@@ -2512,6 +2544,1855 @@ relations:
   - - frontend.clang22.call_observation.v2.source
   coverage:
     execution_domain: frontend.clang22.call-observation.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+
+- descriptor_id: cc.entity_detail.v1
+  name: cc.entity_detail
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.entity_detail/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: Source-bound declaration detail; physical occurrence is distinct from semantic entity.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::entity_detail
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.entity_detail.v1.detail
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.entity_detail.v1.detail
+      projection:
+      - cc.entity_detail.v1.compile_unit
+      - cc.entity_detail.v1.entity
+      - cc.entity_detail.v1.source
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.entity_detail.v1.detail
+    name: detail
+    type: typed_id<entity_detail_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.entity_detail.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.entity
+    name: entity
+    type: typed_id<cc_entity_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.source
+    name: source
+    type: typed_id<source_span_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.signature
+    name: signature
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.access
+    name: access
+    type: open_symbol<cc.access/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.linkage
+    name: linkage
+    type: open_symbol<cc.linkage/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.is_definition
+    name: is_definition
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.flags
+    name: flags
+    type: set<open_symbol<cc.entity-flag/1>>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.parameter_count
+    name: parameter_count
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.canonical_type
+    name: canonical_type
+    type: optional<typed_id<cc_type_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.language
+    name: language
+    type: optional<open_symbol<cc.language/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.calling_convention
+    name: calling_convention
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.module_domain
+    name: module_domain
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.entity_detail.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.entity_detail.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.entity_detail.v1.entity
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.entity_detail.v1.canonical_type
+    target_relation: cc.type
+    target_columns:
+    - cc.type.v1.type
+    strength: soft_semantic
+    on_missing: unresolved
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.entity_detail.v1.compile_unit
+    - cc.entity_detail.v1.entity
+    - cc.entity_detail.v1.source
+    - cc.entity_detail.v1.signature
+    - cc.entity_detail.v1.access
+    - cc.entity_detail.v1.linkage
+    - cc.entity_detail.v1.is_definition
+    - cc.entity_detail.v1.flags
+    - cc.entity_detail.v1.parameter_count
+    - cc.entity_detail.v1.canonical_type
+    - cc.entity_detail.v1.language
+    - cc.entity_detail.v1.calling_convention
+    - cc.entity_detail.v1.module_domain
+  partition:
+    suggested_keys:
+    - cc.entity_detail.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.entity_detail.v1.entity
+  - - cc.entity_detail.v1.source
+  coverage:
+    execution_domain: cc.entity_detail.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.entity_edge.v1
+  name: cc.entity_edge
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.entity_edge/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: Typed ownership, inheritance, override, type-use and state-access relation with explicit resolution.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::entity_edge
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.entity_edge.v1.edge
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.entity_edge.v1.edge
+      projection:
+      - cc.entity_edge.v1.compile_unit
+      - cc.entity_edge.v1.source_entity
+      - cc.entity_edge.v1.target_entity
+      - cc.entity_edge.v1.source
+      - cc.entity_edge.v1.kind
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.entity_edge.v1.edge
+    name: edge
+    type: typed_id<entity_edge_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.entity_edge.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.entity_edge.v1.source_entity
+    name: source_entity
+    type: typed_id<cc_entity_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.entity_edge.v1.target_entity
+    name: target_entity
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.entity_edge.v1.source
+    name: source
+    type: typed_id<source_span_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.entity_edge.v1.kind
+    name: kind
+    type: open_symbol<cc.entity-edge-kind/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.entity_edge.v1.resolution
+    name: resolution
+    type: open_symbol<cc.edge-resolution/1>
+    required: true
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.entity_edge.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.entity_edge.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.entity_edge.v1.source_entity
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.entity_edge.v1.target_entity
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.entity_edge.v1.compile_unit
+    - cc.entity_edge.v1.source_entity
+    - cc.entity_edge.v1.target_entity
+    - cc.entity_edge.v1.source
+    - cc.entity_edge.v1.kind
+    - cc.entity_edge.v1.resolution
+  partition:
+    suggested_keys:
+    - cc.entity_edge.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.entity_edge.v1.source_entity
+  - - cc.entity_edge.v1.target_entity
+  - - cc.entity_edge.v1.kind
+  coverage:
+    execution_domain: cc.entity_edge.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.syntax_node.v1
+  name: cc.syntax_node
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.syntax_node/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: Detached source-bound syntax node; ordinal follows deterministic structural traversal within
+    a body.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::syntax_node
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.syntax_node.v1.node
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.syntax_node.v1.node
+      projection:
+      - cc.syntax_node.v1.compile_unit
+      - cc.syntax_node.v1.function
+      - cc.syntax_node.v1.source
+      - cc.syntax_node.v1.kind
+      - cc.syntax_node.v1.ordinal
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.syntax_node.v1.node
+    name: node
+    type: typed_id<syntax_node_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.syntax_node.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.function
+    name: function
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.source
+    name: source
+    type: typed_id<source_span_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.parent
+    name: parent
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.kind
+    name: kind
+    type: open_symbol<cc.syntax-kind/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.opcode
+    name: opcode
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.type
+    name: type
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.value
+    name: value
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.ordinal
+    name: ordinal
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.flags
+    name: flags
+    type: set<open_symbol<cc.syntax-flag/1>>
+    required: true
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.syntax_node.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.syntax_node.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.syntax_node.v1.function
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.syntax_node.v1.compile_unit
+    - cc.syntax_node.v1.function
+    - cc.syntax_node.v1.source
+    - cc.syntax_node.v1.parent
+    - cc.syntax_node.v1.kind
+    - cc.syntax_node.v1.opcode
+    - cc.syntax_node.v1.type
+    - cc.syntax_node.v1.value
+    - cc.syntax_node.v1.ordinal
+    - cc.syntax_node.v1.flags
+  partition:
+    suggested_keys:
+    - cc.syntax_node.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.syntax_node.v1.function
+  - - cc.syntax_node.v1.source
+  - - cc.syntax_node.v1.kind
+  coverage:
+    execution_domain: cc.syntax_node.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.body.v1
+  name: cc.body
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.body/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: CFG/body eligibility and explicit frontiers, independent from interprocedural model completeness.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::body
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.body.v1.body
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.body.v1.body
+      projection:
+      - cc.body.v1.compile_unit
+      - cc.body.v1.function
+      - cc.body.v1.source
+      - cc.body.v1.content
+      - cc.body.v1.analysis_profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.body.v1.body
+    name: body
+    type: typed_id<body_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.body.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.body.v1.function
+    name: function
+    type: typed_id<cc_entity_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.body.v1.source
+    name: source
+    type: typed_id<source_span_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.body.v1.content
+    name: content
+    type: digest
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.body.v1.eligibility
+    name: eligibility
+    type: open_symbol<cc.body-eligibility/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.body.v1.reason
+    name: reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.node_count
+    name: node_count
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.body.v1.edge_count
+    name: edge_count
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.body.v1.entry
+    name: entry
+    type: optional<typed_id<cfg_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.exit
+    name: exit
+    type: optional<typed_id<cfg_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.analysis_profile
+    name: analysis_profile
+    type: open_symbol<cc.analysis-profile/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.body.v1.ast_node_count
+    name: ast_node_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.ast_state
+    name: ast_state
+    type: optional<open_symbol<cc.body-ast-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.local_variable_count
+    name: local_variable_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.member_access_count
+    name: member_access_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.member_access_state
+    name: member_access_state
+    type: optional<open_symbol<cc.member-access-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.member_access_profile
+    name: member_access_profile
+    type: optional<open_symbol<cc.member-access-profile/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.member_access_targets
+    name: member_access_targets
+    type: optional<set<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.body.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.body.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.body.v1.function
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.body.v1.compile_unit
+    - cc.body.v1.function
+    - cc.body.v1.source
+    - cc.body.v1.content
+    - cc.body.v1.eligibility
+    - cc.body.v1.reason
+    - cc.body.v1.node_count
+    - cc.body.v1.edge_count
+    - cc.body.v1.entry
+    - cc.body.v1.exit
+    - cc.body.v1.analysis_profile
+    - cc.body.v1.ast_node_count
+    - cc.body.v1.ast_state
+    - cc.body.v1.local_variable_count
+    - cc.body.v1.member_access_count
+    - cc.body.v1.member_access_state
+    - cc.body.v1.member_access_profile
+    - cc.body.v1.member_access_targets
+  partition:
+    suggested_keys:
+    - cc.body.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.body.v1.function
+  - - cc.body.v1.eligibility
+  coverage:
+    execution_domain: cc.body.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.cfg_node.v1
+  name: cc.cfg_node
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.cfg_node/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: One detached Clang CFG block including explicit entry, exit and unreachable blocks.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::cfg_node
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.cfg_node.v1.node
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.cfg_node.v1.node
+      projection:
+      - cc.cfg_node.v1.compile_unit
+      - cc.cfg_node.v1.function
+      - cc.cfg_node.v1.body
+      - cc.cfg_node.v1.ordinal
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.cfg_node.v1.node
+    name: node
+    type: typed_id<cfg_node_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.cfg_node.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.cfg_node.v1.function
+    name: function
+    type: typed_id<cc_entity_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.cfg_node.v1.body
+    name: body
+    type: typed_id<body_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.cfg_node.v1.ordinal
+    name: ordinal
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.cfg_node.v1.kind
+    name: kind
+    type: open_symbol<cc.cfg-node-kind/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.cfg_node.v1.source
+    name: source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.cfg_node.v1.statement_count
+    name: statement_count
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.cfg_node.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.cfg_node.v1.function
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.cfg_node.v1.body
+    target_relation: cc.body
+    target_columns:
+    - cc.body.v1.body
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.cfg_node.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: soft_semantic
+    on_missing: unresolved
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.cfg_node.v1.compile_unit
+    - cc.cfg_node.v1.function
+    - cc.cfg_node.v1.body
+    - cc.cfg_node.v1.ordinal
+    - cc.cfg_node.v1.kind
+    - cc.cfg_node.v1.source
+    - cc.cfg_node.v1.statement_count
+  partition:
+    suggested_keys:
+    - cc.cfg_node.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.cfg_node.v1.function
+  - - cc.cfg_node.v1.body
+  coverage:
+    execution_domain: cc.cfg_node.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.cfg_edge.v1
+  name: cc.cfg_edge
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.cfg_edge/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: CFG successor edge; absent targets are explicit frontier, never a fabricated exit.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::cfg_edge
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.cfg_edge.v1.edge
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.cfg_edge.v1.edge
+      projection:
+      - cc.cfg_edge.v1.compile_unit
+      - cc.cfg_edge.v1.function
+      - cc.cfg_edge.v1.from
+      - cc.cfg_edge.v1.to
+      - cc.cfg_edge.v1.kind
+      - cc.cfg_edge.v1.ordinal
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.cfg_edge.v1.edge
+    name: edge
+    type: typed_id<cfg_edge_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.cfg_edge.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.cfg_edge.v1.function
+    name: function
+    type: typed_id<cc_entity_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.cfg_edge.v1.from
+    name: from
+    type: typed_id<cfg_node_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.cfg_edge.v1.to
+    name: to
+    type: optional<typed_id<cfg_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.cfg_edge.v1.kind
+    name: kind
+    type: open_symbol<cc.cfg-edge-kind/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.cfg_edge.v1.ordinal
+    name: ordinal
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.cfg_edge.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.cfg_edge.v1.function
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.cfg_edge.v1.from
+    target_relation: cc.cfg_node
+    target_columns:
+    - cc.cfg_node.v1.node
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.cfg_edge.v1.to
+    target_relation: cc.cfg_node
+    target_columns:
+    - cc.cfg_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.cfg_edge.v1.compile_unit
+    - cc.cfg_edge.v1.function
+    - cc.cfg_edge.v1.from
+    - cc.cfg_edge.v1.to
+    - cc.cfg_edge.v1.kind
+    - cc.cfg_edge.v1.ordinal
+  partition:
+    suggested_keys:
+    - cc.cfg_edge.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.cfg_edge.v1.function
+  - - cc.cfg_edge.v1.from
+  - - cc.cfg_edge.v1.to
+  coverage:
+    execution_domain: cc.cfg_edge.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.flow_fact.v1
+  name: cc.flow_fact
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.flow_fact/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: Flow/model fact with analysis guarantee and witness; unresolved alias/model is explicit.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::flow_fact
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.flow_fact.v1.fact
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.flow_fact.v1.fact
+      projection:
+      - cc.flow_fact.v1.compile_unit
+      - cc.flow_fact.v1.function
+      - cc.flow_fact.v1.kind
+      - cc.flow_fact.v1.node
+      - cc.flow_fact.v1.subject
+      - cc.flow_fact.v1.target
+      - cc.flow_fact.v1.source
+      - cc.flow_fact.v1.ordinal
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.flow_fact.v1.fact
+    name: fact
+    type: typed_id<flow_fact_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.flow_fact.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.flow_fact.v1.function
+    name: function
+    type: typed_id<cc_entity_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.flow_fact.v1.kind
+    name: kind
+    type: open_symbol<cc.flow-kind/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.flow_fact.v1.node
+    name: node
+    type: typed_id<cfg_node_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.flow_fact.v1.subject
+    name: subject
+    type: typed_id<cc_entity_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.flow_fact.v1.target
+    name: target
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.flow_fact.v1.source
+    name: source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.flow_fact.v1.value
+    name: value
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.flow_fact.v1.ordinal
+    name: ordinal
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.flow_fact.v1.guarantee
+    name: guarantee
+    type: open_symbol<cc.flow-guarantee/1>
+    required: true
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.flow_fact.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.flow_fact.v1.function
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.flow_fact.v1.subject
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.flow_fact.v1.target
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.flow_fact.v1.node
+    target_relation: cc.cfg_node
+    target_columns:
+    - cc.cfg_node.v1.node
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.flow_fact.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: soft_semantic
+    on_missing: unresolved
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.flow_fact.v1.compile_unit
+    - cc.flow_fact.v1.function
+    - cc.flow_fact.v1.kind
+    - cc.flow_fact.v1.node
+    - cc.flow_fact.v1.subject
+    - cc.flow_fact.v1.target
+    - cc.flow_fact.v1.source
+    - cc.flow_fact.v1.value
+    - cc.flow_fact.v1.ordinal
+    - cc.flow_fact.v1.guarantee
+  partition:
+    suggested_keys:
+    - cc.flow_fact.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.flow_fact.v1.function
+  - - cc.flow_fact.v1.kind
+  - - cc.flow_fact.v1.subject
+  - - cc.flow_fact.v1.node
+  coverage:
+    execution_domain: cc.flow_fact.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: source.include.v1
+  name: source.include
+  version: 1.0.0
+  semantic_major: 1
+  semantics: source.include/1
+  owner_namespace: cxxlens.standard.source
+  stability: versioned
+  profile: NG0
+  summary: An actually processed compiler include with original spelling and explicit target resolution.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::source::relations::include
+  claim:
+    cardinality: functional_assertion
+    key:
+    - source.include.v1.include
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: source.include.v1.include
+      projection:
+      - source.include.v1.compile_unit
+      - source.include.v1.source
+      - source.include.v1.from_file
+      - source.include.v1.to_file
+      - source.include.v1.spelling
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: source.include.v1.include
+    name: include
+    type: typed_id<include_id>
+    required: true
+    identity_role: claim_key
+  - id: source.include.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.include.v1.source
+    name: source
+    type: typed_id<source_span_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.include.v1.from_file
+    name: from_file
+    type: typed_id<file_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.include.v1.to_file
+    name: to_file
+    type: optional<typed_id<file_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.include.v1.spelling
+    name: spelling
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: source.include.v1.kind
+    name: kind
+    type: open_symbol<source.include-kind/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.include.v1.resolution
+    name: resolution
+    type: open_symbol<source.include-resolution/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.include.v1.is_system
+    name: is_system
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - source.include.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - source.include.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: hard
+    on_missing: reject_batch
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - source.include.v1.compile_unit
+    - source.include.v1.source
+    - source.include.v1.from_file
+    - source.include.v1.to_file
+    - source.include.v1.spelling
+    - source.include.v1.kind
+    - source.include.v1.resolution
+    - source.include.v1.is_system
+  partition:
+    suggested_keys:
+    - source.include.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - source.include.v1.from_file
+  - - source.include.v1.to_file
+  coverage:
+    execution_domain: source.include.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: source.preprocessor_event.v1
+  name: source.preprocessor_event
+  version: 1.0.0
+  semantic_major: 1
+  semantics: source.preprocessor_event/1
+  owner_namespace: cxxlens.standard.source
+  stability: versioned
+  profile: NG0
+  summary: Source-bound macro, directive and condition observation; inactive and unknown state remain
+    distinct.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::source::relations::preprocessor_event
+  claim:
+    cardinality: functional_assertion
+    key:
+    - source.preprocessor_event.v1.event
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: source.preprocessor_event.v1.event
+      projection:
+      - source.preprocessor_event.v1.compile_unit
+      - source.preprocessor_event.v1.source
+      - source.preprocessor_event.v1.kind
+      - source.preprocessor_event.v1.name
+      - source.preprocessor_event.v1.ordinal
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: source.preprocessor_event.v1.event
+    name: event
+    type: typed_id<preprocessor_event_id>
+    required: true
+    identity_role: claim_key
+  - id: source.preprocessor_event.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.source
+    name: source
+    type: typed_id<source_span_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.kind
+    name: kind
+    type: open_symbol<source.pp-event-kind/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.name
+    name: name
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.value
+    name: value
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.state
+    name: state
+    type: open_symbol<source.pp-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.ordinal
+    name: ordinal
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - source.preprocessor_event.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - source.preprocessor_event.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: hard
+    on_missing: reject_batch
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - source.preprocessor_event.v1.compile_unit
+    - source.preprocessor_event.v1.source
+    - source.preprocessor_event.v1.kind
+    - source.preprocessor_event.v1.name
+    - source.preprocessor_event.v1.value
+    - source.preprocessor_event.v1.state
+    - source.preprocessor_event.v1.ordinal
+  partition:
+    suggested_keys:
+    - source.preprocessor_event.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - source.preprocessor_event.v1.kind
+  - - source.preprocessor_event.v1.name
+  coverage:
+    execution_domain: source.preprocessor_event.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.layout_fact.v1
+  name: cc.layout_fact
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.layout_fact/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: Compiler-observed size, alignment and bit-level member layout with explicit incomplete-type
+    state.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::layout_fact
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.layout_fact.v1.layout
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.layout_fact.v1.layout
+      projection:
+      - cc.layout_fact.v1.compile_unit
+      - cc.layout_fact.v1.entity
+      - cc.layout_fact.v1.kind
+      - cc.layout_fact.v1.member
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.layout_fact.v1.layout
+    name: layout
+    type: typed_id<layout_fact_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.layout_fact.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.layout_fact.v1.entity
+    name: entity
+    type: typed_id<cc_entity_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.layout_fact.v1.kind
+    name: kind
+    type: open_symbol<cc.layout-kind/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.layout_fact.v1.member
+    name: member
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.layout_fact.v1.canonical_type
+    name: canonical_type
+    type: optional<typed_id<cc_type_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.layout_fact.v1.byte_size
+    name: byte_size
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.layout_fact.v1.byte_alignment
+    name: byte_alignment
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.layout_fact.v1.bit_offset
+    name: bit_offset
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.layout_fact.v1.bit_width
+    name: bit_width
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.layout_fact.v1.abi_digest
+    name: abi_digest
+    type: digest
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.layout_fact.v1.guarantee
+    name: guarantee
+    type: open_symbol<cc.layout-guarantee/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.layout_fact.v1.reason
+    name: reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.layout_fact.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.layout_fact.v1.entity
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.layout_fact.v1.member
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.layout_fact.v1.canonical_type
+    target_relation: cc.type
+    target_columns:
+    - cc.type.v1.type
+    strength: soft_semantic
+    on_missing: unresolved
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.layout_fact.v1.compile_unit
+    - cc.layout_fact.v1.entity
+    - cc.layout_fact.v1.kind
+    - cc.layout_fact.v1.member
+    - cc.layout_fact.v1.canonical_type
+    - cc.layout_fact.v1.byte_size
+    - cc.layout_fact.v1.byte_alignment
+    - cc.layout_fact.v1.bit_offset
+    - cc.layout_fact.v1.bit_width
+    - cc.layout_fact.v1.abi_digest
+    - cc.layout_fact.v1.guarantee
+    - cc.layout_fact.v1.reason
+  partition:
+    suggested_keys:
+    - cc.layout_fact.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.layout_fact.v1.entity
+  - - cc.layout_fact.v1.member
+  - - cc.layout_fact.v1.kind
+  coverage:
+    execution_domain: cc.layout_fact.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: source.token.v1
+  name: source.token
+  version: 1.0.0
+  semantic_major: 1
+  semantics: source.token/1
+  owner_namespace: cxxlens.standard.source
+  stability: versioned
+  profile: NG0
+  summary: Compiler raw/expanded lexical token with content-bound source range and independent optional
+    activity/template classification.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::source::relations::token
+  claim:
+    cardinality: functional_assertion
+    key:
+    - source.token.v1.token
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: source.token.v1.token
+      projection:
+      - source.token.v1.compile_unit
+      - source.token.v1.source
+      - source.token.v1.phase
+      - source.token.v1.ordinal
+      - source.token.v1.profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: source.token.v1.token
+    name: token
+    type: typed_id<source_token_id>
+    required: true
+    identity_role: claim_key
+  - id: source.token.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.token.v1.source
+    name: source
+    type: typed_id<source_span_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.token.v1.phase
+    name: phase
+    type: open_symbol<source.token-phase/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.token.v1.kind
+    name: kind
+    type: open_symbol<source.token-kind/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.token.v1.spelling
+    name: spelling
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: source.token.v1.ordinal
+    name: ordinal
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: source.token.v1.macro
+    name: macro
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.token.v1.active
+    name: active
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.token.v1.template_context
+    name: template_context
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.token.v1.preprocessor
+    name: preprocessor
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.token.v1.directive_start
+    name: directive_start
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.token.v1.profile
+    name: profile
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - source.token.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - source.token.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: hard
+    on_missing: reject_batch
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - source.token.v1.compile_unit
+    - source.token.v1.source
+    - source.token.v1.phase
+    - source.token.v1.kind
+    - source.token.v1.spelling
+    - source.token.v1.ordinal
+    - source.token.v1.macro
+    - source.token.v1.active
+    - source.token.v1.template_context
+    - source.token.v1.preprocessor
+    - source.token.v1.directive_start
+    - source.token.v1.profile
+  partition:
+    suggested_keys:
+    - source.token.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - source.token.v1.phase
+  - - source.token.v1.compile_unit
+  coverage:
+    execution_domain: source.token.compile-unit-source-phase
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: source.token_inventory.v1
+  name: source.token_inventory
+  version: 1.0.0
+  semantic_major: 1
+  semantics: source.token_inventory/1
+  owner_namespace: cxxlens.standard.source
+  stability: versioned
+  profile: NG0
+  summary: Finite per-unit source token inventory; local cardinality does not establish project-wide closure.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::source::relations::token_inventory
+  claim:
+    cardinality: functional_assertion
+    key:
+    - source.token_inventory.v1.inventory
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: source.token_inventory.v1.inventory
+      projection:
+      - source.token_inventory.v1.compile_unit
+      - source.token_inventory.v1.source_snapshot
+      - source.token_inventory.v1.phase
+      - source.token_inventory.v1.profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: source.token_inventory.v1.inventory
+    name: inventory
+    type: typed_id<source_token_inventory_id>
+    required: true
+    identity_role: claim_key
+  - id: source.token_inventory.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.token_inventory.v1.file
+    name: file
+    type: typed_id<file_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.token_inventory.v1.source_snapshot
+    name: source_snapshot
+    type: typed_id<source_snapshot_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.token_inventory.v1.phase
+    name: phase
+    type: open_symbol<source.token-phase/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.token_inventory.v1.profile
+    name: profile
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: source.token_inventory.v1.token_count
+    name: token_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.token_inventory.v1.directive_count
+    name: directive_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.token_inventory.v1.enumeration_state
+    name: enumeration_state
+    type: open_symbol<source.token-enumeration/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.token_inventory.v1.active_state
+    name: active_state
+    type: open_symbol<source.token-classification/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.token_inventory.v1.template_state
+    name: template_state
+    type: open_symbol<source.token-classification/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.token_inventory.v1.reason
+    name: reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - source.token_inventory.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - source.token_inventory.v1.file
+    - source.token_inventory.v1.source_snapshot
+    target_relation: source.file
+    target_columns:
+    - source.file.v1.file
+    - source.file.v1.snapshot
+    strength: hard
+    on_missing: reject_batch
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - source.token_inventory.v1.compile_unit
+    - source.token_inventory.v1.file
+    - source.token_inventory.v1.source_snapshot
+    - source.token_inventory.v1.phase
+    - source.token_inventory.v1.profile
+    - source.token_inventory.v1.token_count
+    - source.token_inventory.v1.directive_count
+    - source.token_inventory.v1.enumeration_state
+    - source.token_inventory.v1.active_state
+    - source.token_inventory.v1.template_state
+    - source.token_inventory.v1.reason
+  partition:
+    suggested_keys:
+    - source.token_inventory.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - source.token_inventory.v1.phase
+  - - source.token_inventory.v1.compile_unit
+  coverage:
+    execution_domain: source.token_inventory.compile-unit-source-phase
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+
+- descriptor_id: cc.record_surface.v1
+  name: cc.record_surface
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.record_surface/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: Conditioned direct explicit record member enumeration; empty definitions and unknown declarations remain distinct.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::record_surface
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.record_surface.v1.surface
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.record_surface.v1.surface
+      projection:
+      - cc.record_surface.v1.compile_unit
+      - cc.record_surface.v1.entity
+      - cc.record_surface.v1.source
+      - cc.record_surface.v1.profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.record_surface.v1.surface
+    name: surface
+    type: typed_id<record_surface_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.record_surface.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.record_surface.v1.entity
+    name: entity
+    type: typed_id<cc_entity_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.record_surface.v1.source
+    name: source
+    type: typed_id<source_span_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.record_surface.v1.profile
+    name: profile
+    type: open_symbol<cc.record-surface-profile/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.record_surface.v1.is_definition
+    name: is_definition
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.record_surface.v1.enumeration_state
+    name: enumeration_state
+    type: open_symbol<cc.record-surface-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.record_surface.v1.reason
+    name: reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.record_surface.v1.method_count
+    name: method_count
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.record_surface.v1.field_count
+    name: field_count
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.record_surface.v1.base_specifier_count
+    name: base_specifier_count
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.record_surface.v1.methods
+    name: methods
+    type: set<cc_entity_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.record_surface.v1.fields
+    name: fields
+    type: set<cc_entity_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.record_surface.v1.base_targets
+    name: base_targets
+    type: set<cc_entity_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.record_surface.v1.type_reference_count
+    name: type_reference_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.record_surface.v1.type_reference_state
+    name: type_reference_state
+    type: optional<open_symbol<cc.record-type-reference-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.record_surface.v1.type_reference_profile
+    name: type_reference_profile
+    type: optional<open_symbol<cc.record-type-reference-profile/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.record_surface.v1.type_reference_targets
+    name: type_reference_targets
+    type: optional<set<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.record_surface.v1.type_reference_reason
+    name: type_reference_reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.record_surface.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.record_surface.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.record_surface.v1.entity
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.record_surface.v1.methods
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - cc.record_surface.v1.fields
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - cc.record_surface.v1.base_targets
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - cc.record_surface.v1.type_reference_targets
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.record_surface.v1.compile_unit
+    - cc.record_surface.v1.entity
+    - cc.record_surface.v1.source
+    - cc.record_surface.v1.profile
+    - cc.record_surface.v1.is_definition
+    - cc.record_surface.v1.enumeration_state
+    - cc.record_surface.v1.reason
+    - cc.record_surface.v1.method_count
+    - cc.record_surface.v1.field_count
+    - cc.record_surface.v1.base_specifier_count
+    - cc.record_surface.v1.methods
+    - cc.record_surface.v1.fields
+    - cc.record_surface.v1.base_targets
+    - cc.record_surface.v1.type_reference_count
+    - cc.record_surface.v1.type_reference_state
+    - cc.record_surface.v1.type_reference_profile
+    - cc.record_surface.v1.type_reference_targets
+    - cc.record_surface.v1.type_reference_reason
+  partition:
+    suggested_keys:
+    - cc.record_surface.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.record_surface.v1.entity
+  - - cc.record_surface.v1.source
+  coverage:
+    execution_domain: cc.record_surface.compile-unit-declaration
   closure:
     supported_kinds:
     - relation-key-enumeration

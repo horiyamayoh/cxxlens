@@ -18,18 +18,36 @@
 #include <cxxlens/relations/build_project.hpp>
 #include <cxxlens/relations/build_toolchain_context.hpp>
 #include <cxxlens/relations/build_variant.hpp>
+#include <cxxlens/relations/cc_body.hpp>
 #include <cxxlens/relations/cc_call_direct_target.hpp>
 #include <cxxlens/relations/cc_call_site.hpp>
+#include <cxxlens/relations/cc_cfg_edge.hpp>
+#include <cxxlens/relations/cc_cfg_node.hpp>
+#include <cxxlens/relations/cc_declaration.hpp>
 #include <cxxlens/relations/cc_entity.hpp>
+#include <cxxlens/relations/cc_entity_detail.hpp>
+#include <cxxlens/relations/cc_entity_edge.hpp>
+#include <cxxlens/relations/cc_flow_fact.hpp>
+#include <cxxlens/relations/cc_layout_fact.hpp>
+#include <cxxlens/relations/cc_record_surface.hpp>
+#include <cxxlens/relations/cc_syntax_node.hpp>
+#include <cxxlens/relations/cc_type.hpp>
+#include <cxxlens/relations/cc_type_component.hpp>
 #include <cxxlens/relations/source_file.hpp>
+#include <cxxlens/relations/source_include.hpp>
+#include <cxxlens/relations/source_preprocessor_event.hpp>
 #include <cxxlens/relations/source_span.hpp>
+#include <cxxlens/relations/source_token.hpp>
+#include <cxxlens/relations/source_token_inventory.hpp>
 #include <cxxlens/sdk/store.hpp>
 
 #include "observation_v2.hpp"
+#include "project_semantic_facts.hpp"
 #include "provider_worker_v4_ast_observer.hpp"
 #include "provider_worker_v4_output_normalizer.hpp"
 #include "runtime/gcc_probe_process_port_internal.hpp"
 #include "runtime/monotonic_clock_port_internal.hpp"
+#include "runtime/sealed_executable_internal.hpp"
 #include "sdk/application_query_export_internal.hpp"
 #include "sdk/bounded_json_internal.hpp"
 #include "sdk/compile_commands_capture_internal.hpp"
@@ -85,6 +103,56 @@ namespace cxxlens::detail::clang22
 				output.push_back(text(value));
 			return sdk::detail::canonical_json(json::array(std::move(output)));
 		}
+		std::string abi_profile(const std::string_view macros,
+								const std::vector<std::string>& invocation)
+		{
+			std::vector<std::string> parts;
+			for (std::size_t begin{}; begin < macros.size();)
+			{
+				const auto end = macros.find('\n', begin);
+				const auto line = macros.substr(
+					begin, end == std::string_view::npos ? macros.size() - begin : end - begin);
+				for (const auto prefix : {"#define __SIZEOF_",
+										  "#define __ALIGNOF_",
+										  "#define __BYTE_ORDER__",
+										  "#define __ORDER_",
+										  "#define __CHAR_UNSIGNED__",
+										  "#define __WCHAR_",
+										  "#define __WINT_",
+										  "#define __LONG_DOUBLE_",
+										  "#define __GXX_ABI_VERSION",
+										  "#define _GLIBCXX_USE_CXX11_ABI",
+										  "#define _GLIBCXX_DEBUG",
+										  "#define _LIBCPP_ABI_",
+										  "#define _ITERATOR_DEBUG_LEVEL"})
+					if (line.starts_with(prefix))
+					{
+						parts.emplace_back(line);
+						break;
+					}
+				if (end == std::string_view::npos)
+					break;
+				begin = end + 1U;
+			}
+			for (const auto& flag : invocation)
+				for (const auto prefix : {"-m",
+										  "-fabi",
+										  "-fpack",
+										  "-fshort",
+										  "-funsigned-char",
+										  "-fsigned-char",
+										  "-fms-",
+										  "-fno-rtti",
+										  "-frtti",
+										  "-freg-struct-return",
+										  "-fpcc-struct-return"})
+					if (flag.starts_with(prefix))
+					{
+						parts.push_back(flag);
+						break;
+					}
+			return arguments_json(parts);
+		}
 		void replace_all(std::string& value, std::string_view from, std::string_view to)
 		{
 			if (from.empty())
@@ -123,6 +191,16 @@ namespace cxxlens::detail::clang22
 					stream.peek() != std::char_traits<char>::eof())
 					fail("input", "read-or-size-changed: " + path.string());
 				return output;
+			}
+			std::shared_ptr<const std::string> freeze(const fs::path& path) const
+			{
+				const auto canonical_path = canonical(path);
+				const auto found = frozen_.find(canonical_path);
+				if (found != frozen_.end())
+					return found->second;
+				auto content = std::make_shared<const std::string>(read(canonical_path));
+				frozen_.emplace(canonical_path, content);
+				return content;
 			}
 			std::vector<fs::path> members(const fs::path& root, bool source_only) const
 			{
@@ -183,6 +261,31 @@ namespace cxxlens::detail::clang22
 				}
 				fail("compiler", "executable-not-found: " + name);
 			}
+
+			std::shared_ptr<const sdk::detail::sealed_executable> compiler_image(
+				const fs::path& compiler, const fs::path& directory, std::uint64_t deadline) const
+			{
+				const auto found = compilers_.find(compiler);
+				if (found != compilers_.end())
+					return found->second;
+				if (compilers_.size() >= 32U)
+					fail("compiler", "distinct-executable-limit");
+				auto image = take(sdk::detail::open_sealed_executable({compiler.string(),
+																	   directory.string(),
+																	   deadline,
+																	   512U * 1024U * 1024U,
+																	   4096U,
+																	   {}}));
+				auto retained =
+					std::make_shared<const sdk::detail::sealed_executable>(std::move(image));
+				compilers_.emplace(compiler, retained);
+				return retained;
+			}
+
+		  private:
+			mutable std::map<fs::path, std::shared_ptr<const std::string>> frozen_;
+			mutable std::map<fs::path, std::shared_ptr<const sdk::detail::sealed_executable>>
+				compilers_;
 		};
 
 		bool beneath(const fs::path& path, const fs::path& root)
@@ -210,8 +313,48 @@ namespace cxxlens::detail::clang22
 				value.pop_back();
 			return value;
 		}
-		sdk::detail::gcc_probe_process_output
-		probe(const fs::path& compiler, const fs::path& directory, std::vector<std::string> options)
+		std::vector<std::string> dependency_paths(std::string_view value)
+		{
+			const auto colon = value.find(':');
+			if (colon == std::string_view::npos)
+				fail("dependencies", "invalid-makefile-target");
+			value.remove_prefix(colon + 1U);
+			std::vector<std::string> paths;
+			std::string token;
+			for (std::size_t index{}; index < value.size(); ++index)
+			{
+				const auto character = value[index];
+				if (character == '\\' && index + 1U < value.size())
+				{
+					const auto next = value[++index];
+					if (next != '\n')
+						token.push_back(next);
+				}
+				else if (character == '$' && index + 1U < value.size() && value[index + 1U] == '$')
+				{
+					token.push_back('$');
+					++index;
+				}
+				else if (character == ' ' || character == '\t' || character == '\n' ||
+						 character == '\r')
+				{
+					if (!token.empty())
+					{
+						paths.push_back(std::move(token));
+						token.clear();
+					}
+				}
+				else
+					token.push_back(character);
+			}
+			if (!token.empty())
+				paths.push_back(std::move(token));
+			return paths;
+		}
+		sdk::detail::gcc_probe_process_output probe(const input_files& files,
+													const fs::path& compiler,
+													const fs::path& directory,
+													std::vector<std::string> options)
 		{
 			options.insert(options.begin(), compiler.string());
 			const auto now = std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -223,6 +366,8 @@ namespace cxxlens::detail::clang22
 				{"LC_ALL=C", "LANG=C", "PATH=/usr/bin:/bin"},
 				{4096U, 1024U * 1024U, 16U, 4096U, 4U * 1024U * 1024U, 512U * 1024U * 1024U, 4096U},
 				static_cast<std::uint64_t>(now) + 30000000000ULL};
+			request.executable_image =
+				files.compiler_image(compiler, directory, request.absolute_wall_deadline_ns);
 			auto result = take(sdk::detail::run_gcc_probe_process(request));
 			if (result.terminal != sdk::detail::gcc_probe_process_terminal::exited ||
 				result.exit_code != 0)
@@ -282,40 +427,49 @@ namespace cxxlens::detail::clang22
 				*value.cells.at(value.descriptor_id + "." + std::string{field}).value);
 		}
 
-		std::string analyze(const application_analysis_options& options)
+		struct prepared_unit
 		{
-			if (options.project_root.empty() || options.compile_commands.empty())
-				fail("options", "project-root-and-compile-commands-required");
-			input_files files;
-			const auto root = files.canonical(options.project_root);
-			const auto database =
-				take(sdk::detail::decode_compile_commands(files.read(options.compile_commands)));
-			const sdk::detail::compile_command_entry* selected{};
-			for (const auto& entry : database.entries())
-			{
-				const auto source = files.canonical(fs::path{entry.file}.is_absolute()
-														? fs::path{entry.file}
-														: fs::path{entry.directory} / entry.file);
-				if (!options.source_file.empty() &&
-					source !=
-						files.canonical(fs::path{options.source_file}.is_absolute()
-											? fs::path{options.source_file}
-											: root / options.source_file))
-					continue;
-				if (selected != nullptr)
-					fail("compile-commands",
-						 "ambiguous-variants: select --file and keep one command for that file");
-				selected = &entry;
-			}
-			if (selected == nullptr)
-				fail("compile-commands", "selected-source-not-found");
-			const auto directory = files.canonical(selected->directory);
-			const auto source = files.canonical(fs::path{selected->file}.is_absolute()
-													? fs::path{selected->file}
-													: directory / selected->file);
+			std::string main_path;
+			std::string working_path;
+			std::string compiler_version;
+			std::string target;
+			std::string language;
+			std::string standard;
+			std::string invocation;
+			std::string toolchain_digest;
+			std::string builtins;
+			std::string macros;
+			std::string search;
+			std::string environment;
+			fs::path compiler;
+			source_closure_snapshot closure;
+			std::vector<std::string> semantic;
+			std::vector<std::string> effective;
+		};
+
+		struct analyzed_unit
+		{
+			std::vector<sdk::detached_row> rows;
+			std::vector<sdk::provider::unresolved_item> unresolved;
+			std::vector<std::string> limitations;
+			std::string variant;
+			std::string compile_unit;
+			std::string project;
+			std::string basis;
+			std::string observed_snapshot;
+		};
+
+		prepared_unit prepare_unit(const sdk::detail::compile_command_entry& selected,
+								   const fs::path& root,
+								   const input_files& files)
+		{
+			const auto directory = files.canonical(selected.directory);
+			const auto source =
+				files.canonical(fs::path{selected.file}.is_absolute() ? fs::path{selected.file}
+																	  : directory / selected.file);
 			const auto main_path = logical_path(source, root);
 			const auto working_path = logical_path(directory, root);
-			const auto compiler = files.compiler(selected->arguments.front(), directory);
+			const auto compiler = files.compiler(selected.arguments.front(), directory);
 			for (const auto* name :
 				 {"CPATH", "CPLUS_INCLUDE_PATH", "C_INCLUDE_PATH", "OBJC_INCLUDE_PATH"})
 				if (const auto* value = std::getenv(name); value != nullptr && *value != '\0')
@@ -324,7 +478,7 @@ namespace cxxlens::detail::clang22
 			const std::string compiler_version{compiled_clang22_version()};
 			if (compiler_version.empty())
 				fail("compiler", "Clang 22 frontend is unavailable in this build");
-			const auto version = probe(compiler, directory, {"--version"});
+			const auto version = probe(files, compiler, directory, {"--version"});
 			const auto expected_version = "clang version " + compiler_version;
 			const auto matches_version = [&](const std::string_view prefix)
 			{
@@ -338,18 +492,18 @@ namespace cxxlens::detail::clang22
 				fail("compiler",
 					 "Clang " + compiler_version + " required to match the analyzer frontend");
 			const auto resource = files.canonical(
-				trim(probe(compiler, directory, {"-print-resource-dir"}).standard_output));
+				trim(probe(files, compiler, directory, {"-print-resource-dir"}).standard_output));
 			std::string language = source.extension() == ".c" ? "c" : "c++";
 			std::string standard = language == "c" ? "gnu17" : "gnu++17";
 			std::vector<std::string> flags;
-			for (std::size_t index = 1U; index < selected->arguments.size(); ++index)
+			for (std::size_t index = 1U; index < selected.arguments.size(); ++index)
 			{
-				const auto& token = selected->arguments[index];
+				const auto& token = selected.arguments[index];
 				if (token == "-c" || token == "-MD" || token == "-MMD" || token == "-MP")
 					continue;
 				if (token == "-o" || token == "-MF" || token == "-MT" || token == "-MQ")
 				{
-					if (++index == selected->arguments.size())
+					if (++index == selected.arguments.size())
 						fail("arguments", "missing-option-value");
 					continue;
 				}
@@ -363,7 +517,7 @@ namespace cxxlens::detail::clang22
 					fail("arguments", "unsupported-option: " + token);
 				if (!token.empty() && token.front() != '-')
 				{
-					if (token == selected->file ||
+					if (token == selected.file ||
 						(directory / token).lexically_normal() == source ||
 						fs::path{token} == source)
 						continue;
@@ -371,9 +525,9 @@ namespace cxxlens::detail::clang22
 				}
 				if (token == "-x")
 				{
-					if (++index == selected->arguments.size())
+					if (++index == selected.arguments.size())
 						fail("arguments", "missing-language");
-					language = selected->arguments[index];
+					language = selected.arguments[index];
 					if (language != "c" && language != "c++")
 						fail("arguments", "C-or-C++-required");
 					continue;
@@ -386,9 +540,9 @@ namespace cxxlens::detail::clang22
 					token == "-target" || token == "-D" || token == "-U")
 				{
 					flags.push_back(token);
-					if (++index == selected->arguments.size())
+					if (++index == selected.arguments.size())
 						fail("arguments", "missing-option-value");
-					const auto& value = selected->arguments[index];
+					const auto& value = selected.arguments[index];
 					flags.push_back(
 						token == "--target" || token == "-target" || token == "-D" || token == "-U"
 							? value
@@ -407,21 +561,22 @@ namespace cxxlens::detail::clang22
 			flags.insert(flags.end(), {"-x", language, "-resource-dir", resource.string()});
 			auto target_arguments = flags;
 			target_arguments.push_back("-dumpmachine");
-			const auto target =
-				trim(probe(compiler, directory, std::move(target_arguments)).standard_output);
+			const auto target = trim(
+				probe(files, compiler, directory, std::move(target_arguments)).standard_output);
 			if (!target.starts_with("x86_64-") || target.find("linux") == std::string::npos)
 				fail("target", "Linux x86_64 required");
 			auto macro_arguments = flags;
 			macro_arguments.insert(macro_arguments.end(), {"-dM", "-E", "/dev/null"});
 			const auto macros =
-				probe(compiler, directory, std::move(macro_arguments)).standard_output;
+				probe(files, compiler, directory, std::move(macro_arguments)).standard_output;
 			if (macros.find("#define __x86_64__ 1\n") == std::string::npos ||
 				macros.find("#define __linux__ 1\n") == std::string::npos ||
 				macros.find("#define __SIZEOF_POINTER__ 8\n") == std::string::npos)
 				fail("target", "Linux x86_64 with 64-bit pointers required");
 			auto search_arguments = flags;
 			search_arguments.insert(search_arguments.end(), {"-E", "-v", "/dev/null"});
-			auto search = probe(compiler, directory, std::move(search_arguments)).standard_error;
+			auto search =
+				probe(files, compiler, directory, std::move(search_arguments)).standard_error;
 			std::string builtins;
 			std::size_t builtin_bytes{};
 			for (const auto& path : files.members(resource / "include", false))
@@ -434,21 +589,32 @@ namespace cxxlens::detail::clang22
 					{path.lexically_relative(resource).generic_string(), content_digest(bytes)});
 			}
 			std::vector<source_closure_file_input> inputs;
-			auto source_paths = files.members(root, true);
-			if (std::ranges::find(source_paths, source) == source_paths.end())
-				source_paths.push_back(source);
+			auto dependency_arguments = flags;
+			dependency_arguments.insert(dependency_arguments.end(),
+										{"-M", "-MT", "cxxlens-input", source.string()});
+			const auto dependencies =
+				probe(files, compiler, directory, std::move(dependency_arguments)).standard_output;
+			std::set<fs::path> source_paths{source};
+			for (const auto& dependency : dependency_paths(dependencies))
+			{
+				const auto path =
+					files.canonical(fs::path{dependency}.is_absolute() ? fs::path{dependency}
+																	   : directory / dependency);
+				if (beneath(path, root))
+					source_paths.insert(path);
+			}
 			std::size_t source_bytes{};
 			for (const auto& path : source_paths)
 			{
-				auto bytes = files.read(path);
-				if (bytes.size() > 48U * 1024U * 1024U - source_bytes)
+				auto bytes = files.freeze(path);
+				if (bytes->size() > 48U * 1024U * 1024U - source_bytes)
 					fail("inputs", "source-byte-limit");
-				source_bytes += bytes.size();
+				source_bytes += bytes->size();
 				inputs.push_back(
 					{logical_path(path, root),
 					 path == source ? source_closure_role::main : source_closure_role::header,
 					 source_closure_encoding::utf8,
-					 std::make_shared<const std::string>(std::move(bytes))});
+					 std::move(bytes)});
 			}
 			auto closure = take(make_source_closure_snapshot(std::move(inputs)));
 			const auto* main = closure.find_member(main_path);
@@ -489,10 +655,45 @@ namespace cxxlens::detail::clang22
 			const auto toolchain_digest = digest(
 				"cxxlens.local-clang22.toolchain.v1",
 				arguments_json({version.executable_digest, compiler_version, target, builtins}));
-			const auto catalog = take(sdk::project_catalog::make(
-				"project://root",
-				environment,
-				{{"unit:" + invocation, invocation, main->content_digest, environment}}));
+			return {main_path,
+					working_path,
+					compiler_version,
+					target,
+					language,
+					standard,
+					invocation,
+					toolchain_digest,
+					builtins,
+					macros,
+					search,
+					environment,
+					compiler,
+					std::move(closure),
+					std::move(semantic),
+					std::move(effective)};
+		}
+
+		analyzed_unit observe_unit(const prepared_unit& prepared,
+								   const sdk::project_catalog& catalog,
+								   const std::function<void(std::string_view)>& progress)
+		{
+			const auto& [main_path,
+						 working_path,
+						 compiler_version,
+						 target,
+						 language,
+						 standard,
+						 invocation,
+						 toolchain_digest,
+						 builtins,
+						 macros,
+						 search,
+						 environment,
+						 compiler,
+						 closure,
+						 semantic,
+						 effective] = prepared;
+			const auto* main = closure.find_member(main_path);
 			std::vector<sdk::detached_row> rows;
 			auto project = row(build::relations::project::descriptor(),
 							   {{"catalog", id("catalog_id", catalog.catalog_id)},
@@ -501,20 +702,25 @@ namespace cxxlens::detail::clang22
 								{"environment_digest", digest_cell(environment)}});
 			const auto project_id = identity(project, "project");
 			rows.push_back(std::move(project));
-			auto toolchain =
-				row(build::relations::toolchain_context::descriptor(),
-					{{"family", symbol("build.toolchain-family/1", "clang")},
-					 {"exact_version", sdk::detached_cell::utf8(compiler_version)},
-					 {"target_triple", sdk::detached_cell::utf8(target)},
-					 {"builtin_headers_digest",
-					  digest_cell(digest("cxxlens.local-clang22.builtin-headers.v1", builtins))},
-					 {"abi_digest",
-					  digest_cell(digest("cxxlens.local-clang22.abi-profile.v1",
-										 arguments_json({toolchain_digest, target, macros})))},
-					 {"plugin_spec_digest",
-					  digest_cell(digest("cxxlens.local-clang22.plugins.v1", "none"))}});
+			auto toolchain = row(
+				build::relations::toolchain_context::descriptor(),
+				{{"family", symbol("build.toolchain-family/1", "clang")},
+				 {"exact_version", sdk::detached_cell::utf8(compiler_version)},
+				 {"target_triple", sdk::detached_cell::utf8(target)},
+				 {"builtin_headers_digest",
+				  digest_cell(digest("cxxlens.local-clang22.builtin-headers.v1", builtins))},
+				 {"abi_digest",
+				  digest_cell(digest(
+					  "cxxlens.local-clang22.abi-profile.v1",
+					  arguments_json({toolchain_digest, target, abi_profile(macros, semantic)})))},
+				 {"plugin_spec_digest",
+				  digest_cell(digest("cxxlens.local-clang22.plugins.v1", "none"))}});
 			const auto toolchain_id = identity(toolchain, "toolchain");
 			rows.push_back(std::move(toolchain));
+			auto variant_flags = semantic;
+			variant_flags.pop_back();
+			const auto variant_digest =
+				digest("cxxlens.local-clang22.variant-flags.v1", arguments_json(variant_flags));
 			auto variant =
 				row(build::relations::variant::descriptor(),
 					{{"project", id("project_id", project_id)},
@@ -526,22 +732,28 @@ namespace cxxlens::detail::clang22
 					  digest_cell(digest("cxxlens.local-clang22.macros.v1", macros))},
 					 {"include_search_digest",
 					  digest_cell(digest("cxxlens.local-clang22.include-search.v1", search))},
-					 {"semantic_flags_digest", digest_cell(invocation)}});
+					 {"semantic_flags_digest", digest_cell(variant_digest)}});
 			const auto variant_id = identity(variant, "variant");
 			rows.push_back(std::move(variant));
-			auto source_row =
-				row(source::relations::file::descriptor(),
-					{{"file", id("file_id", main->file_id)},
+			std::string snapshot_id;
+			for (const auto& member : closure.members)
+			{
+				auto source_row = row(
+					source::relations::file::descriptor(),
+					{{"file", id("file_id", member.file_id)},
 					 {"project", id("project_id", project_id)},
-					 {"logical_path", id("logical_path_id", main_path)},
-					 {"content", digest_cell(main->content_digest)},
-					 {"size", sdk::detached_cell::unsigned_integer(main->size_bytes)},
+					 {"logical_path", id("logical_path_id", member.logical_path)},
+					 {"content", digest_cell(member.content_digest)},
+					 {"size", sdk::detached_cell::unsigned_integer(member.size_bytes)},
 					 {"encoding", symbol("source.encoding/1", "utf8")},
 					 {"line_index",
-					  id("line_index_id", take(source_closure_main_line_index_id(closure)))},
+					  id("line_index_id",
+						 take(source_closure_member_line_index_id(closure, member.logical_path)))},
 					 {"read_only", sdk::detached_cell::boolean(true)}});
-			const auto snapshot_id = identity(source_row, "snapshot");
-			rows.push_back(std::move(source_row));
+				if (member.file_id == main->file_id)
+					snapshot_id = identity(source_row, "snapshot");
+				rows.push_back(std::move(source_row));
+			}
 			auto unit = row(build::relations::compile_unit::descriptor(),
 							{{"project", id("project_id", project_id)},
 							 {"main_source", id("source_snapshot_id", snapshot_id)},
@@ -576,23 +788,42 @@ namespace cxxlens::detail::clang22
 			std::ranges::sort(read_roots);
 			read_roots.erase(std::unique(read_roots.begin(), read_roots.end()), read_roots.end());
 			std::optional<provider_worker_v4_ast_observation_batch> observations;
+			std::optional<provider_worker_v4_normalized_output> normalized;
+			std::optional<project_semantic_facts> facts;
+			project_preprocessor_observations preprocessing;
+			provider_worker_v4_output_normalizer_options normalization;
+			normalization.toolchain_context_id = toolchain_id;
 			take(with_source_closure_translation_unit(
-				{closure, main_path, working_path, std::move(effective), std::move(read_roots), {}},
+				{closure, main_path, working_path, effective, std::move(read_roots), {}},
 				[&](provider::clang22::borrowed_translation_unit& borrowed) -> sdk::result<void>
 				{
 					auto observed = observe_provider_worker_v4_ast(
-						borrowed, metadata, unit_id, {}, snapshot_id);
+						borrowed, metadata, unit_id, {}, snapshot_id, true);
 					if (!observed)
 						return sdk::unexpected(std::move(observed.error()));
 					observations = std::move(*observed);
+					if (progress)
+						progress("normalizing " +
+								 std::to_string(observations->observations.size()) +
+								 " observations");
+					auto canonical =
+						normalize_provider_worker_v4_output(*observations, normalization);
+					if (!canonical)
+						return sdk::unexpected(std::move(canonical.error()));
+					normalized = std::move(*canonical);
+					auto detached = observe_project_semantics(
+						borrowed, closure, *observations, *normalized, preprocessing, progress);
+					if (!detached)
+						return sdk::unexpected(std::move(detached.error()));
+					facts = std::move(*detached);
 					return {};
+				},
+				[&](clang::Preprocessor& preprocessor)
+				{
+					install_project_preprocessor_observer(preprocessor, closure, preprocessing);
 				}));
-			if (!observations)
+			if (!observations || !normalized || !facts)
 				fail("AST", "observer-not-called");
-			provider_worker_v4_output_normalizer_options normalization;
-			normalization.toolchain_context_id = toolchain_id;
-			const auto normalized =
-				take(normalize_provider_worker_v4_output(*observations, normalization));
 			std::map<std::string, materialization::observation_v2_primary_span, std::less<>> spans;
 			for (const auto& observed : observations->observations)
 				if (observed.primary_span)
@@ -608,10 +839,97 @@ namespace cxxlens::detail::clang22
 									{"role", symbol("source.range-role/1", span.role)},
 									{"read_only", sdk::detached_cell::boolean(span.read_only)}}));
 			}
-			for (const auto& batch : normalized.batches)
+			for (const auto& batch : normalized->batches)
 				rows.insert(rows.end(), batch.rows.begin(), batch.rows.end());
+			rows.insert(rows.end(),
+						std::make_move_iterator(facts->rows.begin()),
+						std::make_move_iterator(facts->rows.end()));
+			normalized->unresolved.insert(normalized->unresolved.end(),
+										  std::make_move_iterator(facts->unresolved.begin()),
+										  std::make_move_iterator(facts->unresolved.end()));
+			const auto basis = content_digest(arguments_json(
+				{closure.closure_digest, invocation, toolchain_digest, environment}));
+			return {std::move(rows),
+					std::move(normalized->unresolved),
+					std::move(normalized->limitations),
+					variant_id,
+					unit_id,
+					project_id,
+					basis,
+					closure.snapshot_id};
+		}
+
+		std::string analyze(const application_analysis_options& options)
+		{
+			if (options.project_root.empty() || options.compile_commands.empty())
+				fail("options", "project-root-and-compile-commands-required");
+			input_files files;
+			const auto root = files.canonical(options.project_root);
+			const auto database =
+				take(sdk::detail::decode_compile_commands(files.read(options.compile_commands)));
+			const auto selected_source = options.source_file.empty()
+				? fs::path{}
+				: files.canonical(fs::path{options.source_file}.is_absolute()
+									  ? fs::path{options.source_file}
+									  : root / options.source_file);
+			std::vector<prepared_unit> prepared;
+			std::map<std::string, sdk::error, std::less<>> failed;
+			std::vector<sdk::catalog_compile_unit> entries;
+			const auto environment =
+				content_digest("LC_ALL=C; explicit includes; no ambient include variables");
+			std::size_t selected_count{};
+			for (const auto& entry : database.entries())
+			{
+				const auto source = files.canonical(fs::path{entry.file}.is_absolute()
+														? fs::path{entry.file}
+														: fs::path{entry.directory} / entry.file);
+				if (!selected_source.empty() && selected_source != source)
+					continue;
+				++selected_count;
+				try
+				{
+					if (options.progress)
+						options.progress("freezing " + entry.file);
+					auto value = prepare_unit(entry, root, files);
+					const auto* main = value.closure.find_member(value.main_path);
+					entries.push_back({"unit:" + value.invocation,
+									   value.invocation,
+									   main->content_digest,
+									   value.environment});
+					prepared.push_back(std::move(value));
+				}
+				catch (const analysis_failure& failure)
+				{
+					auto arguments = entry.arguments;
+					for (auto& argument : arguments)
+						replace_all(argument, root.string(), "project://root");
+					const auto invocation =
+						digest("cxxlens.local-clang22.unavailable-invocation.v1",
+							   arguments_json(arguments));
+					const auto key = logical_path(source, root) + ":" + invocation;
+					failed.emplace(key, failure.value);
+					entries.push_back({"unavailable-unit:" + invocation,
+									   invocation,
+									   content_digest(files.read(source)),
+									   environment});
+				}
+			}
+			if (selected_count == 0U)
+				fail("compile-commands", "selected-source-not-found");
+			std::ranges::sort(entries, {}, &sdk::catalog_compile_unit::compile_unit_id);
+			entries.erase(std::ranges::unique(entries).begin(), entries.end());
+			const auto catalog =
+				take(sdk::project_catalog::make("project://root", environment, std::move(entries)));
+			std::ranges::sort(prepared, {}, &prepared_unit::invocation);
+			prepared.erase(std::unique(prepared.begin(),
+									   prepared.end(),
+									   [](const auto& a, const auto& b)
+									   {
+										   return a.invocation == b.invocation;
+									   }),
+						   prepared.end());
 			sdk::relation_registry registry;
-			const std::array<const sdk::relation_descriptor*, 12U> descriptors{
+			const std::array<const sdk::relation_descriptor*, 28U> descriptors{
 				&build::relations::project::descriptor(),
 				&build::relations::toolchain_context::descriptor(),
 				&build::relations::variant::descriptor(),
@@ -621,111 +939,230 @@ namespace cxxlens::detail::clang22
 				&cc::relations::entity::descriptor(),
 				&cc::relations::call_site::descriptor(),
 				&cc::relations::call_direct_target::descriptor(),
+				&cc::relations::entity_detail::descriptor(),
+				&cc::relations::entity_edge::descriptor(),
+				&cc::relations::syntax_node::descriptor(),
+				&cc::relations::body::descriptor(),
+				&cc::relations::cfg_node::descriptor(),
+				&cc::relations::cfg_edge::descriptor(),
+				&cc::relations::flow_fact::descriptor(),
+				&cc::relations::layout_fact::descriptor(),
+				&cc::relations::record_surface::descriptor(),
+				&cc::relations::declaration::descriptor(),
+				&cc::relations::type::descriptor(),
+				&cc::relations::type_component::descriptor(),
+				&source::relations::include::descriptor(),
+				&source::relations::preprocessor_event::descriptor(),
+				&source::relations::token::descriptor(),
+				&source::relations::token_inventory::descriptor(),
 				&materialization::entity_observation_v2_descriptor(),
 				&materialization::call_observation_v2_descriptor(),
 				&materialization::type_observation_v2_descriptor()};
 			for (const auto* descriptor : descriptors)
 				take(registry.add(*descriptor));
 			auto engine = take(registry.build("cxxlens.local-clang22.v1"));
-			const auto semantics =
-				digest("cxxlens.local-clang22.producer.v1",
-					   "Clang " + compiler_version +
-						   " AST observer v4; canonical normalizer v4; single main source");
-			const auto basis = content_digest(arguments_json(
-				{closure.closure_digest, invocation, toolchain_digest, environment}));
-			const sdk::claim_condition condition{"local-clang22-variant:" + variant_id,
-												 {variant_id}};
+			const auto semantics = digest(
+				"cxxlens.local-clang22.producer.v2",
+				"Clang " + std::string{compiled_clang22_version()} +
+					" AST observer v4; canonical normalizer v4; raw/expanded token domains v1; all "
+					"selected compile units and variants");
+			const auto universe = "local-clang22-project:" + catalog.catalog_id;
 			const sdk::claim_producer producer{"cxxlens.clang22.local", semantics};
-			const sdk::claim_guarantee guarantee{
-				"under_approximation",
-				"selected-compile-unit",
-				"single variant; main-source facts; system headers are live compiler inputs",
-				{"static_analysis"}};
-			sdk::claim_batch claims;
-			for (auto& value : rows)
-			{
-				const bool native_observation = value.descriptor_id.starts_with("frontend.");
-				auto asserted = take(sdk::make_assertion(engine,
-														 {value,
-														  condition,
-														  "cc.clang22-canonical-1",
-														  producer,
-														  {basis},
-														  closure.snapshot_id,
-														  guarantee}));
-				if (!native_observation)
-					asserted = take(sdk::make_canonical_claim(
-						engine, asserted, producer, std::move(value), semantics));
-				take(claims.add(std::move(asserted)));
-			}
-			auto committed = take(std::move(claims).commit(engine));
-			const auto claim_basis =
-				take(sdk::claim_input_basis_digest(sdk::direct_claim_basis{basis}));
-			auto store = take(sdk::make_in_memory_snapshot_store(engine));
 			sdk::snapshot_series_selector selector{
 				catalog.catalog_id,
 				"application",
 				std::string{engine.generation()},
-				condition.universe,
+				universe,
 				std::string{engine.registry_digest()},
 				digest("cxxlens.local-clang22.interpretation.v1", "cc.clang22-canonical-1"),
 				digest("cxxlens.local-clang22.execution.v1",
 					   "explicit local compiler; in-process AST")};
+			auto store = take(sdk::make_in_memory_snapshot_store(engine));
 			auto writer =
 				take(store.begin({selector, {1U, 0U, 0U}, catalog.catalog_digest, std::nullopt}));
+			std::size_t successful{};
+			for (const auto& unit : prepared)
+			{
+				std::optional<analyzed_unit> observed;
+				try
+				{
+					if (options.progress)
+						options.progress("parsing " + unit.main_path);
+					observed = observe_unit(unit, catalog, options.progress);
+				}
+				catch (const analysis_failure& failure)
+				{
+					failed.emplace(unit.main_path + ":" + unit.invocation, failure.value);
+					continue;
+				}
+				auto& value = *observed;
+				const sdk::claim_condition condition{universe, {value.variant}};
+				const sdk::claim_guarantee guarantee{
+					"under_approximation",
+					"selected-compile-units",
+					"all selected variants; frozen project/header facts; "
+					"system headers are live compiler inputs",
+					{"static_analysis"}};
+				sdk::claim_batch claims;
+				for (auto& item : value.rows)
+				{
+					const bool native_observation = item.descriptor_id.starts_with("frontend.");
+					auto asserted = take(sdk::make_assertion(engine,
+															 {item,
+															  condition,
+															  "cc.clang22-canonical-1",
+															  producer,
+															  {value.basis},
+															  value.observed_snapshot,
+															  guarantee}));
+					if (!native_observation)
+						asserted = take(sdk::make_canonical_claim(
+							engine, asserted, producer, std::move(item), semantics));
+					take(claims.add(std::move(asserted)));
+				}
+				if (options.progress)
+					options.progress("committing " + std::to_string(value.rows.size()) + " rows");
+				auto committed = take(std::move(claims).commit(engine));
+				if (options.progress)
+					options.progress("claim batch committed");
+				const auto claim_basis =
+					take(sdk::claim_input_basis_digest(sdk::direct_claim_basis{value.basis}));
+				std::map<std::string, std::vector<sdk::unresolved_reference>, std::less<>>
+					unresolved_by_assertion;
+				for (const auto& unresolved : committed.unresolved)
+					unresolved_by_assertion[unresolved.source_assertion].push_back(unresolved);
+				for (const auto* descriptor : descriptors)
+				{
+					std::map<std::string, std::vector<sdk::claim>, std::less<>> groups;
+					for (const auto& claim : committed.claims)
+						if (claim.descriptor == descriptor->id)
+							groups[take(sdk::claim_input_basis_digest(claim.input_basis))]
+								.push_back(claim);
+					// TU-wide diagnostics belong to the frozen input, rather than every
+					// independently derived assertion. Preserve them once in that basis.
+					groups.try_emplace(claim_basis);
+					if (options.progress)
+						options.progress("staging " + descriptor->id + " (" +
+										 std::to_string(groups.size()) + " partitions)");
+					for (auto& [input_basis, group] : groups)
+					{
+						sdk::partition_draft partition{
+							descriptor->id,
+							value.compile_unit,
+							condition,
+							"cc.clang22-canonical-1",
+							semantics,
+							input_basis,
+							"under_approximation",
+							"selected-compile-unit",
+							std::move(group),
+							{{"compile-unit", value.compile_unit, "covered", {}}},
+							{}};
+						for (const auto& claim : partition.claims)
+							if (const auto found = unresolved_by_assertion.find(claim.assertion);
+								found != unresolved_by_assertion.end())
+								partition.unresolved.insert(partition.unresolved.end(),
+															found->second.begin(),
+															found->second.end());
+						if (input_basis == claim_basis &&
+							(descriptor->id.starts_with("cc.") ||
+							 descriptor->id == "source.preprocessor_event.v1"))
+						{
+							for (const auto& unresolved : value.unresolved)
+							{
+								if (unresolved.code.starts_with("body.") &&
+									descriptor->id != "cc.body.v1" &&
+									descriptor->id != "cc.syntax_node.v1")
+									continue;
+								if (unresolved.code.starts_with("flow.") &&
+									descriptor->id != "cc.flow_fact.v1")
+									continue;
+								if (unresolved.code.starts_with("record.") &&
+									descriptor->id != "cc.record_surface.v1")
+									continue;
+								if (unresolved.code.starts_with("declaration.") &&
+									descriptor->id != "cc.entity_detail.v1")
+									continue;
+								if (unresolved.code.starts_with("type.") &&
+									descriptor->id != "cc.type.v1" &&
+									descriptor->id != "cc.type_component.v1" &&
+									descriptor->id != "cc.entity_detail.v1")
+									continue;
+								if (unresolved.code.starts_with("preprocessor.") &&
+									descriptor->id != "source.preprocessor_event.v1")
+									continue;
+								if (descriptor->id == "source.preprocessor_event.v1" &&
+									!unresolved.code.starts_with("preprocessor."))
+									continue;
+								partition.coverage.push_back(
+									{"provider-diagnostic",
+									 unresolved.subject + ":" +
+										 digest("cxxlens.application-diagnostic.v1",
+												arguments_json({unresolved.code,
+																unresolved.subject,
+																unresolved.detail})),
+									 "unresolved",
+									 unresolved.code + ": " + unresolved.detail});
+							}
+							for (const auto& limitation : value.limitations)
+								if (descriptor->id.starts_with("cc."))
+									partition.coverage.push_back({"extraction-limitation",
+																  limitation,
+																  "unknown",
+																  limitation});
+						}
+						std::ranges::sort(
+							partition.coverage,
+							[](const auto& left, const auto& right)
+							{
+								return std::tie(left.domain, left.key, left.state, left.reason) <
+									std::tie(right.domain, right.key, right.state, right.reason);
+							});
+						partition.coverage.erase(std::ranges::unique(partition.coverage).begin(),
+												 partition.coverage.end());
+						take(writer.stage(std::move(partition)));
+					}
+				}
+				++successful;
+			}
+			if (successful == 0U)
+				throw analysis_failure{failed.begin()->second};
+			for (const auto& [key, error] : failed)
+			{
+				const auto reason = error.code + ": " + error.field + ": " + error.detail;
+				const sdk::claim_condition condition{
+					universe,
+					{"unavailable-unit:" + digest("cxxlens.local-clang22.failed-unit.v1", key)}};
+				const auto basis = take(
+					sdk::claim_input_basis_digest(sdk::direct_claim_basis{content_digest(key)}));
+				for (const auto* descriptor : descriptors)
+					take(writer.stage({descriptor->id,
+									   key,
+									   condition,
+									   "cc.clang22-canonical-1",
+									   semantics,
+									   basis,
+									   "unknown",
+									   "failed-compile-unit",
+									   {},
+									   {{"compile-unit", key, "not_covered", reason}},
+									   {}}));
+			}
+			if (options.progress)
+				options.progress("validating snapshot");
+			take(writer.validate());
+			if (options.progress)
+				options.progress("publishing snapshot");
+			auto snapshot = take(writer.publish());
+			if (options.progress)
+				options.progress("exporting public relation scans");
 			std::vector<std::string> relation_ids;
 			for (const auto* descriptor : descriptors)
-			{
-				std::map<std::string, std::vector<sdk::claim>, std::less<>> groups;
-				for (const auto& claim : committed.claims)
-					if (claim.descriptor == descriptor->id)
-						groups[take(sdk::claim_input_basis_digest(claim.input_basis))].push_back(
-							claim);
-				if (groups.empty())
-					groups.emplace(claim_basis, std::vector<sdk::claim>{});
-				for (auto& [input_basis, group] : groups)
-				{
-					sdk::partition_draft partition{descriptor->id,
-												   project_id,
-												   condition,
-												   "cc.clang22-canonical-1",
-												   semantics,
-												   input_basis,
-												   "under_approximation",
-												   "single-main-source",
-												   std::move(group),
-												   {{"compile-unit", unit_id, "covered", {}}},
-												   {}};
-					for (const auto& unresolved : committed.unresolved)
-						if ((unresolved.source_relation == descriptor->name ||
-							 unresolved.source_relation == descriptor->id) &&
-							std::ranges::any_of(partition.claims,
-												[&](const auto& claim)
-												{
-													return claim.assertion ==
-														unresolved.source_assertion;
-												}))
-							partition.unresolved.push_back(unresolved);
-					if (descriptor->id.starts_with("cc."))
-					{
-						for (const auto& unresolved : normalized.unresolved)
-							partition.coverage.push_back(
-								{"provider-diagnostic",
-								 unresolved.subject,
-								 "unresolved",
-								 unresolved.code + ": " + unresolved.detail});
-						for (const auto& limitation : normalized.limitations)
-							partition.coverage.push_back(
-								{"extraction-limitation", limitation, "unknown", limitation});
-					}
-					take(writer.stage(std::move(partition)));
-				}
 				relation_ids.push_back(descriptor->id);
-			}
-			take(writer.validate());
-			auto snapshot = take(writer.publish());
-			return take(sdk::detail::encode_application_queries(engine, snapshot, relation_ids));
+			return take(sdk::detail::encode_application_queries(
+				engine, snapshot, relation_ids, options.maximum_output_bytes));
 		}
+
 	} // namespace
 
 	sdk::result<std::string> analyze_application(const application_analysis_options& options)

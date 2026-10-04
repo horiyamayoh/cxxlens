@@ -73,6 +73,13 @@
 | [0107](0107-provider-protocol-2-cutover.md) | Provider Protocol 2.0 cutover |
 | [0108](0108-remove-unadmitted-snapshot-builder.md) | remove unadmitted snapshot builder compatibility path |
 | [0109](0109-claim-envelope-text-validation-parity.md) | claim envelope text validation parity |
+| [0113](0113-complete-application-consumers.md) | complete cxxmonster and monet-code consumer design |
+| [0114](0114-owned-finite-control-flow-projection.md) | shared owned finite control-flow projection |
+| [0115](0115-source-token-observation-domains.md) | owned source token observation domains |
+| [0116](0116-owned-typed-semantic-graphs.md) | owned typed semantic graphs |
+| [0117](0117-owned-record-surfaces.md) | owned finite record surfaces |
+| [0118](0118-finite-body-member-access.md) | finite method member-access observations |
+| [0119](0119-finite-record-type-references.md) | finite direct record type-reference observations |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。
