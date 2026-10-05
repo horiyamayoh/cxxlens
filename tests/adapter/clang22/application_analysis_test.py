@@ -38,12 +38,26 @@ def database(root, files, extra=()):
 def scans(bundle):
     assert bundle["schema"] == "cxxlens.application-query-results.v1"
     queries = bundle["queries"]
-    assert len(queries) == 36
     def relation(query):
         requirements = query["logical_ir"]["relation_requirements"]
         assert len(requirements) == 1
         return requirements[0]["descriptor_id"]
-    assert [relation(q) for q in queries] == sorted({relation(q) for q in queries})
+    expected_relations = {
+        "build.analysis_inventory.v1", "build.compile_unit.v1", "build.compile_unit_analysis.v1",
+        "build.project.v1", "build.toolchain_context.v1", "build.variant.v1",
+        "cc.abi_surface.v1", "cc.body.v1", "cc.call_direct_target.v1", "cc.call_operand.v1",
+        "cc.call_site.v1", "cc.cfg_edge.v1", "cc.cfg_node.v1", "cc.declaration.v1",
+        "cc.declaration_inventory.v1", "cc.entity.v1", "cc.entity_detail.v1", "cc.entity_edge.v1",
+        "cc.flow_fact.v1", "cc.flow_inventory.v1", "cc.layout_fact.v1", "cc.operation.v1",
+        "cc.record_inventory.v1", "cc.record_surface.v1", "cc.syntax_node.v1", "cc.type.v1",
+        "cc.type_component.v1", "frontend.clang22.call_observation.v2",
+        "frontend.clang22.entity_observation.v2", "frontend.clang22.type_observation.v2",
+        "source.comment.v1", "source.comment_inventory.v1", "source.file.v1", "source.include.v1",
+        "source.include_inventory.v1", "source.preprocessor_event.v1",
+        "source.preprocessor_inventory.v1", "source.span.v1", "source.token.v1",
+        "source.token_inventory.v1",
+    }
+    assert [relation(q) for q in queries] == sorted(expected_relations)
     publications = set()
     for query in queries:
         result = query["result"]
@@ -131,13 +145,18 @@ with tempfile.TemporaryDirectory(prefix="cxxlens-application-") as temporary:
     (root / "compile_commands.json").write_text(json.dumps(list(reversed(entries))))
     assert run(root, source="main.cpp") == variants
 
-    # One broken TU does not discard independently valid project facts.
+    # Parser recovery retains independently valid project facts and its original diagnostics.
     database(root, ["main.cpp", "other.cpp"])
     (root / "other.cpp").write_text("int broken( {\n", encoding="utf-8")
     partial = scans(run(root))
     assert partial["cc.entity.v1"]["rows"]
-    assert any(c["state"] == "not_covered" for c in partial["cc.entity.v1"]["input_coverage"])
-    assert not partial["cc.entity.v1"]["inputs_complete"]
+    outcomes = [{name.removeprefix("output."): cell.get("value")
+                 for name, cell in row["values"].items()}
+                for row in partial["build.compile_unit_analysis.v1"]["rows"]]
+    assert len(outcomes) == 2 and {row["parse_outcome"] for row in outcomes} == {"success", "recovery"}, outcomes
+    recovered = next(row for row in outcomes if row["parse_outcome"] == "recovery")
+    assert recovered["parse_error_count"] > 0 and recovered["fatal_error_count"] == 0, recovered
+    assert recovered["semantic_output"] == "produced", recovered
     (root / "other.cpp").write_text("int other() { return 0; }\n", encoding="utf-8")
 
     semantic = Path(temporary) / "semantic"
@@ -478,8 +497,14 @@ with tempfile.TemporaryDirectory(prefix="cxxlens-application-") as temporary:
     database(root, ["main.cpp"], extra=("--target=aarch64-linux-gnu",))
     assert "Linux x86_64 required" in run(root, success=False)
     database(root, ["main.cpp"])
-    (root / "main.cpp").write_text("int broken( {\n", encoding="utf-8")
-    assert run(root, success=False)
+    (root / "main.cpp").write_text('#include "missing.hpp"\n', encoding="utf-8")
+    failed = scans(run(root))
+    assert len(failed["build.compile_unit.v1"]["rows"]) == 1
+    assert not failed["cc.entity.v1"]["rows"] and not failed["cc.entity.v1"]["inputs_complete"]
+    outcome = failed["build.compile_unit_analysis.v1"]["rows"][0]["values"]
+    assert outcome["output.parse_outcome"]["value"] == "failed"
+    assert outcome["output.fatal_error_count"]["value"] > 0
+    assert outcome["output.semantic_output"]["value"] == "not_produced"
     (root / "compile_commands.json").write_text("{", encoding="utf-8")
     assert run(root, success=False)
 

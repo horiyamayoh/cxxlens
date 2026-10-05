@@ -27,13 +27,18 @@ namespace cxxlens::sdk::query::detail
 								std::size_t maximum_queries,
 								std::size_t maximum_bytes,
 								std::string_view prefix,
-								std::stop_token cancellation)
+								std::stop_token cancellation,
+								std::size_t* measured_bytes,
+								const std::function<bool()>& active_cancelled)
 		{
 			if (input.scans.size() > maximum_queries)
 				fail(prefix, "-budget", "source-queries", "limit-exceeded");
 			std::size_t bytes{};
 			const auto add = [&](std::size_t amount)
 			{
+				cancelled(cancellation, prefix);
+				if (active_cancelled && active_cancelled())
+					fail(prefix, "-cancelled", "projection", "stop-requested");
 				if (bytes > maximum_bytes || amount > maximum_bytes - bytes)
 					fail(prefix, "-budget", "source-plan-bytes", "limit-exceeded");
 				bytes += amount;
@@ -113,6 +118,8 @@ namespace cxxlens::sdk::query::detail
 					text_bytes(column.source_alias);
 				}
 			}
+			if (measured_bytes)
+				*measured_bytes = bytes;
 		}
 	} // namespace
 
@@ -120,11 +127,19 @@ namespace cxxlens::sdk::query::detail
 										  std::size_t maximum_queries,
 										  std::size_t maximum_bytes,
 										  std::stop_token cancellation,
-										  std::string_view prefix)
+										  std::string_view prefix,
+										  std::size_t* measured_bytes,
+										  const std::function<bool()>& active_cancelled)
 	{
 		try
 		{
-			bound_source_plans(input, maximum_queries, maximum_bytes, prefix, cancellation);
+			bound_source_plans(input,
+							   maximum_queries,
+							   maximum_bytes,
+							   prefix,
+							   cancellation,
+							   measured_bytes,
+							   active_cancelled);
 			return {};
 		}
 		catch (const plan_failure& failure)

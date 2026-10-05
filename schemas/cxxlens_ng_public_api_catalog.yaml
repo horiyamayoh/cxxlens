@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.84.0
+document_version: 1.85.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -40,6 +40,9 @@ packages:
       - include/cxxlens/sdk/abi_surfaces.hpp
       - include/cxxlens/sdk/finite_populations.hpp
       - include/cxxlens/sdk/call_operands.hpp
+      - include/cxxlens/sdk/function_actions.hpp
+      - include/cxxlens/sdk/preprocessor.hpp
+      - include/cxxlens/sdk/build_health.hpp
       - include/cxxlens/sdk/provider.hpp
       - include/cxxlens/sdk/recipe.hpp
     llvm_clang_dependency: forbidden
@@ -164,7 +167,7 @@ entries:
     status: implemented
     profile: NG0
     target: cxxlens::sdk
-    headers: [include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_call_operand.hpp, include/cxxlens/relations/cc_declaration.hpp, include/cxxlens/relations/cc_declaration_inventory.hpp, include/cxxlens/relations/cc_flow_inventory.hpp, include/cxxlens/relations/source_comment.hpp, include/cxxlens/relations/source_comment_inventory.hpp, include/cxxlens/relations/source_include_inventory.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_type_component.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/core_claim_conflict.hpp, include/cxxlens/relations/core_differential_disagreement.hpp, include/cxxlens/relations/core_provider_execution.hpp, include/cxxlens/relations/core_unresolved.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_origin.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/relations/cc_entity_detail.hpp, include/cxxlens/relations/cc_entity_edge.hpp, include/cxxlens/relations/cc_syntax_node.hpp, include/cxxlens/relations/cc_body.hpp, include/cxxlens/relations/cc_cfg_node.hpp, include/cxxlens/relations/cc_cfg_edge.hpp, include/cxxlens/relations/cc_flow_fact.hpp, include/cxxlens/relations/cc_layout_fact.hpp, include/cxxlens/relations/cc_abi_surface.hpp, include/cxxlens/relations/cc_record_surface.hpp, include/cxxlens/relations/cc_record_inventory.hpp, include/cxxlens/relations/source_include.hpp, include/cxxlens/relations/source_preprocessor_event.hpp, include/cxxlens/relations/source_token.hpp, include/cxxlens/relations/source_token_inventory.hpp, include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
+    headers: [include/cxxlens/relations/build_analysis_inventory.hpp, include/cxxlens/relations/cc_operation.hpp, include/cxxlens/relations/source_preprocessor_inventory.hpp, include/cxxlens/relations/build_compile_unit_analysis.hpp, include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_call_operand.hpp, include/cxxlens/relations/cc_declaration.hpp, include/cxxlens/relations/cc_declaration_inventory.hpp, include/cxxlens/relations/cc_flow_inventory.hpp, include/cxxlens/relations/source_comment.hpp, include/cxxlens/relations/source_comment_inventory.hpp, include/cxxlens/relations/source_include_inventory.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_type_component.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/core_claim_conflict.hpp, include/cxxlens/relations/core_differential_disagreement.hpp, include/cxxlens/relations/core_provider_execution.hpp, include/cxxlens/relations/core_unresolved.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_origin.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/relations/cc_entity_detail.hpp, include/cxxlens/relations/cc_entity_edge.hpp, include/cxxlens/relations/cc_syntax_node.hpp, include/cxxlens/relations/cc_body.hpp, include/cxxlens/relations/cc_cfg_node.hpp, include/cxxlens/relations/cc_cfg_edge.hpp, include/cxxlens/relations/cc_flow_fact.hpp, include/cxxlens/relations/cc_layout_fact.hpp, include/cxxlens/relations/cc_abi_surface.hpp, include/cxxlens/relations/cc_record_surface.hpp, include/cxxlens/relations/cc_record_inventory.hpp, include/cxxlens/relations/source_include.hpp, include/cxxlens/relations/source_preprocessor_event.hpp, include/cxxlens/relations/source_token.hpp, include/cxxlens/relations/source_token_inventory.hpp, include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
     symbols:
       - name: query.from
         kind: template
@@ -505,6 +508,156 @@ entries:
     versioning: [call-operands-v1-original-call-identities-and-function-scopes]
     invariants: [independent-actual-slot-and-function-site-counts, exact-unit-world-source-profile, absent-distinct-from-unknown, receiver-separate-from-argument-index, no-pointer-pointee-or-result-destination-guess, original-syntax-binding-not-source-only, external-target-signature-without-invented-declaration, original-component-digest-and-actual-type-grammar, old-direct-callexpr-profile-preserved, complete-zero-only-after-actual-declaration-traversal, conflicts-never-first-wins, bounds-before-retention-and-cancellation]
     depends_on: [public.query-runtime, public.finite-populations]
+
+  - id: public.build-health
+    status: implemented
+    profile: NG1
+    target: cxxlens::query
+    headers:
+    - include/cxxlens/sdk/build_health.hpp
+    symbols:
+    - name: query.build_health_input
+      kind: value
+      signature: projects; variants; units; source_files; unit_analysis; analysis_inventories; catalog_inputs_complete; analysis_inputs_complete; inventory_inputs_complete
+    - name: query.observed_compile_unit_analysis
+      kind: value
+      signature: compile_unit; project; source_snapshot; file; profile; universe; variant; interpretation; parse_outcome; semantic_output; reason; parse_error_count; fatal_error_count; state; evidence; gaps
+    - name: query.build_health_population
+      kind: value
+      signature: inventory_id; project; profile; universe; variant; interpretation; declared_units; selected_variant_count; compile_unit_ids; selected_variant_ids; enumeration_state; selected_variant_state; state; selection_state; units; evidence; gaps
+    - name: query.build_health_projection
+      kind: value
+      signature: evidence; populations; catalog_inputs_complete; analysis_inputs_complete; inventory_inputs_complete; unresolved; source_queries
+    - name: query.project_build_health
+      kind: function
+      signature: result<build_health_projection> project_build_health(build_health_input, finite_population_limits = {}, stop_token = {}); result<build_health_projection> project_build_health(const application_query_results&, finite_population_limits = {}, stop_token = {})
+    errors:
+    - sdk.health-input-invalid
+    - sdk.health-budget
+    - sdk.health-cancelled
+    - sdk.health-resource-exhausted
+    lifetime:
+    - borrowed-input-only-during-call
+    - projection-owns-original-evidence-and-query-side-channels
+    - no-compiler-pointer
+    threading:
+    - independent-calls-share-no-mutable-state
+    versioning:
+    - build_health-v1-original-finite-inputs
+    invariants:
+    - actual-prepared-unit-worlds-retained-on-parser-failure
+    - parser-outcome-independent-of-semantic-output
+    - original-selected-unit-and-variant-census-independent-of-returned-outcomes
+    - same-world-source-project-unit-membership-and-cross-world-selection-validated
+    - unavailable-and-known-zero-distinct
+    - no-prose-diagnostic-inference
+    - bounds-before-copy-and-active-cancellation
+    depends_on:
+    - public.query-runtime
+    - public.finite-populations
+
+  - id: public.preprocessor
+    status: implemented
+    profile: NG1
+    target: cxxlens::query
+    headers:
+    - include/cxxlens/sdk/preprocessor.hpp
+    symbols:
+    - name: query.preprocessor_input
+      kind: value
+      signature: units; files; spans; inventories; events; token_inventories; tokens; syntax_nodes; compile_units_complete; inventory_inputs_complete; event_inputs_complete; token_inputs_complete; syntax_inputs_complete
+    - name: query.preprocessor_state
+      kind: value
+      signature: complete; unknown; partial; unavailable; unsupported; conflicting
+    - name: query.preprocessor_evidence
+      kind: value
+      signature: relation_id; row
+    - name: query.preprocessor_event
+      kind: value
+      signature: id; compile_unit; source_span; file; source_snapshot; universe; variant; interpretation; kind; phase; profile; symbol; display_value; observation_state; source_begin; source_end; raw_event; parent_event; closing_event; branch_event; region_begin; region_end; depth; structure_state; activity; feature_symbols; condition_tokens; function_like; variadic; parameter_count; replacement_count; parameter_index; argument_index; parameter_symbol; raw_token_ids; stringify_token_ids; paste_token_ids; substitution_count; evaluating_substitution_count; argument_source; argument_empty; spelling_bytes; parent_expansion; definition_event; expansion_depth; effect_expression; effect_function; argument_may_have_side_effects; effect_state; macro_state; evidence; gaps
+    - name: query.preprocessor_population
+      kind: value
+      signature: id; compile_unit; file; source_snapshot; phase; profile; universe; variant; interpretation; source_size; declared_count; state; structure_state; activity_state; macro_state; candidate_state; expansion_state; argument_effect_state; reason; event_ids; events; evidence; gaps
+    - name: query.preprocessor_projection
+      kind: value
+      signature: evidence; populations; compile_units_complete; inventory_inputs_complete; event_inputs_complete; token_inputs_complete; syntax_inputs_complete; unresolved; source_queries
+    - name: query.project_preprocessor
+      kind: function
+      signature: result<preprocessor_projection> project_preprocessor(preprocessor_input, finite_population_limits = {}, stop_token = {}); result<preprocessor_projection> project_preprocessor(const application_query_results&, finite_population_limits = {}, stop_token = {})
+    errors:
+    - sdk.preprocessor-input-invalid
+    - sdk.preprocessor-budget
+    - sdk.preprocessor-cancelled
+    - sdk.preprocessor-resource-exhausted
+    lifetime:
+    - borrowed-input-only-during-call
+    - projection-owns-original-evidence-and-query-side-channels
+    - no-compiler-pointer
+    threading:
+    - independent-calls-share-no-mutable-state
+    versioning:
+    - preprocessor-v1-original-finite-inputs
+    invariants:
+    - raw-directive-start-token-admission-independent-of-event-inventory
+    - actual-raw-and-evaluated-phases-remain-distinct
+    - unopened-raw-known-versus-evaluated-unavailable
+    - typed-macro-parameter-and-replacement-operator-child-closure
+    - actual-effect-expression-source-function-and-evaluation-required
+    - no-display-name-or-value-parsing
+    - original-query-side-channels-retained
+    - bounds-before-retention-and-active-cancellation
+    depends_on:
+    - public.query-runtime
+    - public.finite-populations
+
+  - id: public.function-actions
+    status: implemented
+    profile: NG1
+    target: cxxlens::query
+    headers:
+    - include/cxxlens/sdk/function_actions.hpp
+    symbols:
+    - name: query.function_action_input
+      kind: value
+      signature: units; files; spans; entities; details; declarations; types; type_components; bodies; syntax_nodes; cfg_nodes; call_sites; operations; compile_units_complete; scope_inputs_complete; operation_inputs_complete; admission_inputs_complete; type_inputs_complete; call_inputs_complete
+    - name: query.observed_function_action
+      kind: value
+      signature: operation; site; scope_declaration; function; compile_unit; body; kind; origin; profile; evaluation; outcome; observation_state; site_state; source_span; file; source_snapshot; expression; call; parent_site; node; element_kind; program_point_profile; target_kind; type_use_kind; ordinal; begin; end; element_index; program_point; subject_index; parameter_has_default_argument; target_signature; object_declaration; object_entity; object_expression; object_source; object_type; object_binding_state; expression_context; context_declaration; context_state; site_binding_state; source_state; expression_state; call_state; cfg_state; object_state; type_state; state; evidence; gaps
+    - name: query.function_action_population
+      kind: value
+      signature: declaration; function; compile_unit; body; source_span; file; source_snapshot; universe; variant; interpretation; profile; operation_count; begin; end; operation_ids; state; actions; evidence; gaps
+    - name: query.function_action_projection
+      kind: value
+      signature: evidence; populations; compile_units_complete; scope_inputs_complete; operation_inputs_complete; admission_inputs_complete; type_inputs_complete; call_inputs_complete; unresolved; source_queries
+    - name: query.project_function_actions
+      kind: function
+      signature: result<function_action_projection> project_function_actions(function_action_input, finite_population_limits = {}, stop_token = {}); result<function_action_projection> project_function_actions(const application_query_results&, finite_population_limits = {}, stop_token = {})
+    errors:
+    - sdk.action-input-invalid
+    - sdk.action-budget
+    - sdk.action-cancelled
+    - sdk.action-resource-exhausted
+    lifetime:
+    - borrowed-input-only-during-call
+    - projection-owns-original-evidence-and-query-side-channels
+    - no-compiler-pointer
+    threading:
+    - independent-calls-share-no-mutable-state
+    versioning:
+    - function_actions-v1-original-finite-inputs
+    invariants:
+    - exact-actual-declaration-scope-and-original-world
+    - original-syntax-type-subject-and-implicit-cfg-admission-independent-of-returned-operations
+    - compiler-bound-static-site-distinct-from-cfg-occurrence-and-runtime-execution
+    - no-source-equality-ast-cfg-site-grouping
+    - target-object-source-type-evaluation-and-outcome-independent
+    - pointer-does-not-identify-pointee
+    - cfg-element-index-never-substituted-for-flow-program-point
+    - old-direct-and-emitted-call-profiles-preserved
+    - bounds-before-retention-and-active-cancellation
+    depends_on:
+    - public.query-runtime
+    - public.finite-populations
 
   - id: public.finite-populations
     status: implemented

@@ -24,8 +24,8 @@ namespace cxxlens::source::relations
 				output.semantic_major = 1U;
 				output.semantics = "source.preprocessor_event/1";
 				output.owner_namespace = "cxxlens.standard.source";
-				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["source.preprocessor_event.v1.compile_unit","source.preprocessor_event.v1.source","source.preprocessor_event.v1.kind","source.preprocessor_event.v1.name","source.preprocessor_event.v1.ordinal"],"result_column":"source.preprocessor_event.v1.event"},"interpretation_required":true,"key":["source.preprocessor_event.v1.event"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"source.preprocessor_event.v1.event","identity_role":"claim_key","name":"event","required":true,"type":"typed_id<preprocessor_event_id>"},{"id":"source.preprocessor_event.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"source.preprocessor_event.v1.source","identity_role":"authoritative_payload","name":"source","required":true,"type":"typed_id<source_span_id>"},{"id":"source.preprocessor_event.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<source.pp-event-kind/1>"},{"id":"source.preprocessor_event.v1.name","identity_role":"authoritative_payload","name":"name","required":true,"type":"utf8_string"},{"id":"source.preprocessor_event.v1.value","identity_role":"authoritative_payload","name":"value","required":false,"type":"optional<utf8_string>"},{"id":"source.preprocessor_event.v1.state","identity_role":"authoritative_payload","name":"state","required":true,"type":"open_symbol<source.pp-state/1>"},{"id":"source.preprocessor_event.v1.ordinal","identity_role":"authoritative_payload","name":"ordinal","required":true,"type":"uint64"}],"coverage":{"execution_domain":"source.preprocessor_event.compile-unit"},"descriptor_id":"source.preprocessor_event.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::source::relations::preprocessor_event","indexes":[["source.preprocessor_event.v1.kind"],["source.preprocessor_event.v1.name"]],"merge":{"conflict_columns":["source.preprocessor_event.v1.compile_unit","source.preprocessor_event.v1.kind","source.preprocessor_event.v1.name","source.preprocessor_event.v1.ordinal","source.preprocessor_event.v1.source","source.preprocessor_event.v1.state","source.preprocessor_event.v1.value"],"mode":"functional_assertion"},"name":"source.preprocessor_event","owner_namespace":"cxxlens.standard.source","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["source.preprocessor_event.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"on_missing":"reject_batch","source_columns":["source.preprocessor_event.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"reject_batch","source_columns":["source.preprocessor_event.v1.source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"}],"semantic_major":1,"semantics":"source.preprocessor_event/1","stability":"versioned","summary":"Source-bound macro, directive and condition observation; inactive and unknown state remain distinct.","version":"1.0.0"})cxxlens";
-				output.contract_digest = "sha256:2bf93f5eb3d56ed204b8e079139308ce2860575cd327549db1b43e669799d22e";
+				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["source.preprocessor_event.v1.compile_unit","source.preprocessor_event.v1.source","source.preprocessor_event.v1.kind","source.preprocessor_event.v1.name","source.preprocessor_event.v1.ordinal"],"result_column":"source.preprocessor_event.v1.event"},"interpretation_required":true,"key":["source.preprocessor_event.v1.event"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"source.preprocessor_event.v1.event","identity_role":"claim_key","name":"event","required":true,"type":"typed_id<preprocessor_event_id>"},{"id":"source.preprocessor_event.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"source.preprocessor_event.v1.source","identity_role":"authoritative_payload","name":"source","required":true,"type":"typed_id<source_span_id>"},{"id":"source.preprocessor_event.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<source.pp-event-kind/1>"},{"id":"source.preprocessor_event.v1.name","identity_role":"authoritative_payload","name":"name","required":true,"type":"utf8_string"},{"id":"source.preprocessor_event.v1.value","identity_role":"authoritative_payload","name":"value","required":false,"type":"optional<utf8_string>"},{"id":"source.preprocessor_event.v1.state","identity_role":"authoritative_payload","name":"state","required":true,"type":"open_symbol<source.pp-state/1>"},{"id":"source.preprocessor_event.v1.ordinal","identity_role":"authoritative_payload","name":"ordinal","required":true,"type":"uint64"},{"id":"source.preprocessor_event.v1.phase","identity_role":"authoritative_payload","name":"phase","required":false,"type":"optional<open_symbol<source.pp-phase/1>>"},{"id":"source.preprocessor_event.v1.profile","identity_role":"authoritative_payload","name":"profile","required":false,"type":"optional<utf8_string>"},{"id":"source.preprocessor_event.v1.raw_event","identity_role":"authoritative_payload","name":"raw_event","required":false,"type":"optional<typed_id<preprocessor_event_id>>"},{"id":"source.preprocessor_event.v1.parent_event","identity_role":"authoritative_payload","name":"parent_event","required":false,"type":"optional<typed_id<preprocessor_event_id>>"},{"id":"source.preprocessor_event.v1.closing_event","identity_role":"authoritative_payload","name":"closing_event","required":false,"type":"optional<typed_id<preprocessor_event_id>>"},{"id":"source.preprocessor_event.v1.branch_event","identity_role":"authoritative_payload","name":"branch_event","required":false,"type":"optional<typed_id<preprocessor_event_id>>"},{"id":"source.preprocessor_event.v1.region_begin","identity_role":"authoritative_payload","name":"region_begin","required":false,"type":"optional<uint64>"},{"id":"source.preprocessor_event.v1.region_end","identity_role":"authoritative_payload","name":"region_end","required":false,"type":"optional<uint64>"},{"id":"source.preprocessor_event.v1.depth","identity_role":"authoritative_payload","name":"depth","required":false,"type":"optional<uint64>"},{"id":"source.preprocessor_event.v1.structure_state","identity_role":"authoritative_payload","name":"structure_state","required":false,"type":"optional<open_symbol<source.pp-facet-state/1>>"},{"id":"source.preprocessor_event.v1.activity","identity_role":"authoritative_payload","name":"activity","required":false,"type":"optional<open_symbol<source.pp-activity/1>>"},{"id":"source.preprocessor_event.v1.feature_symbols","identity_role":"authoritative_payload","name":"feature_symbols","required":false,"type":"optional<set<pp_symbol_id>>"},{"id":"source.preprocessor_event.v1.condition_tokens","identity_role":"authoritative_payload","name":"condition_tokens","required":false,"type":"optional<set<source_token_id>>"},{"id":"source.preprocessor_event.v1.function_like","identity_role":"authoritative_payload","name":"function_like","required":false,"type":"optional<bool>"},{"id":"source.preprocessor_event.v1.variadic","identity_role":"authoritative_payload","name":"variadic","required":false,"type":"optional<bool>"},{"id":"source.preprocessor_event.v1.parameter_count","identity_role":"authoritative_payload","name":"parameter_count","required":false,"type":"optional<uint64>"},{"id":"source.preprocessor_event.v1.replacement_count","identity_role":"authoritative_payload","name":"replacement_count","required":false,"type":"optional<uint64>"},{"id":"source.preprocessor_event.v1.parameter_index","identity_role":"authoritative_payload","name":"parameter_index","required":false,"type":"optional<uint64>"},{"id":"source.preprocessor_event.v1.argument_index","identity_role":"authoritative_payload","name":"argument_index","required":false,"type":"optional<uint64>"},{"id":"source.preprocessor_event.v1.parameter_symbol","identity_role":"authoritative_payload","name":"parameter_symbol","required":false,"type":"optional<typed_id<pp_symbol_id>>"},{"id":"source.preprocessor_event.v1.raw_token_ids","identity_role":"authoritative_payload","name":"raw_token_ids","required":false,"type":"optional<set<source_token_id>>"},{"id":"source.preprocessor_event.v1.stringify_token_ids","identity_role":"authoritative_payload","name":"stringify_token_ids","required":false,"type":"optional<set<source_token_id>>"},{"id":"source.preprocessor_event.v1.paste_token_ids","identity_role":"authoritative_payload","name":"paste_token_ids","required":false,"type":"optional<set<source_token_id>>"},{"id":"source.preprocessor_event.v1.substitution_count","identity_role":"authoritative_payload","name":"substitution_count","required":false,"type":"optional<uint64>"},{"id":"source.preprocessor_event.v1.evaluating_substitution_count","identity_role":"authoritative_payload","name":"evaluating_substitution_count","required":false,"type":"optional<uint64>"},{"id":"source.preprocessor_event.v1.argument_source","identity_role":"authoritative_payload","name":"argument_source","required":false,"type":"optional<typed_id<source_span_id>>"},{"id":"source.preprocessor_event.v1.argument_empty","identity_role":"authoritative_payload","name":"argument_empty","required":false,"type":"optional<bool>"},{"id":"source.preprocessor_event.v1.spelling_bytes","identity_role":"authoritative_payload","name":"spelling_bytes","required":false,"type":"optional<bytes>"},{"id":"source.preprocessor_event.v1.parent_expansion","identity_role":"authoritative_payload","name":"parent_expansion","required":false,"type":"optional<typed_id<preprocessor_event_id>>"},{"id":"source.preprocessor_event.v1.expansion_depth","identity_role":"authoritative_payload","name":"expansion_depth","required":false,"type":"optional<uint64>"},{"id":"source.preprocessor_event.v1.definition_event","identity_role":"authoritative_payload","name":"definition_event","required":false,"type":"optional<typed_id<preprocessor_event_id>>"},{"id":"source.preprocessor_event.v1.effect_expression","identity_role":"authoritative_payload","name":"effect_expression","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"source.preprocessor_event.v1.effect_state","identity_role":"authoritative_payload","name":"effect_state","required":false,"type":"optional<open_symbol<source.pp-effect-state/1>>"},{"id":"source.preprocessor_event.v1.macro_state","identity_role":"authoritative_payload","name":"macro_state","required":false,"type":"optional<open_symbol<source.pp-facet-state/1>>"},{"id":"source.preprocessor_event.v1.argument_may_have_side_effects","identity_role":"authoritative_payload","name":"argument_may_have_side_effects","required":false,"type":"optional<bool>"},{"id":"source.preprocessor_event.v1.effect_function","identity_role":"authoritative_payload","name":"effect_function","required":false,"type":"optional<typed_id<cc_entity_id>>"}],"coverage":{"execution_domain":"source.preprocessor_event.compile-unit"},"descriptor_id":"source.preprocessor_event.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::source::relations::preprocessor_event","indexes":[["source.preprocessor_event.v1.kind"],["source.preprocessor_event.v1.name"]],"merge":{"conflict_columns":["source.preprocessor_event.v1.activity","source.preprocessor_event.v1.argument_empty","source.preprocessor_event.v1.argument_index","source.preprocessor_event.v1.argument_may_have_side_effects","source.preprocessor_event.v1.argument_source","source.preprocessor_event.v1.branch_event","source.preprocessor_event.v1.closing_event","source.preprocessor_event.v1.compile_unit","source.preprocessor_event.v1.condition_tokens","source.preprocessor_event.v1.definition_event","source.preprocessor_event.v1.depth","source.preprocessor_event.v1.effect_expression","source.preprocessor_event.v1.effect_function","source.preprocessor_event.v1.effect_state","source.preprocessor_event.v1.evaluating_substitution_count","source.preprocessor_event.v1.expansion_depth","source.preprocessor_event.v1.feature_symbols","source.preprocessor_event.v1.function_like","source.preprocessor_event.v1.kind","source.preprocessor_event.v1.macro_state","source.preprocessor_event.v1.name","source.preprocessor_event.v1.ordinal","source.preprocessor_event.v1.parameter_count","source.preprocessor_event.v1.parameter_index","source.preprocessor_event.v1.parameter_symbol","source.preprocessor_event.v1.parent_event","source.preprocessor_event.v1.parent_expansion","source.preprocessor_event.v1.paste_token_ids","source.preprocessor_event.v1.phase","source.preprocessor_event.v1.profile","source.preprocessor_event.v1.raw_event","source.preprocessor_event.v1.raw_token_ids","source.preprocessor_event.v1.region_begin","source.preprocessor_event.v1.region_end","source.preprocessor_event.v1.replacement_count","source.preprocessor_event.v1.source","source.preprocessor_event.v1.spelling_bytes","source.preprocessor_event.v1.state","source.preprocessor_event.v1.stringify_token_ids","source.preprocessor_event.v1.structure_state","source.preprocessor_event.v1.substitution_count","source.preprocessor_event.v1.value","source.preprocessor_event.v1.variadic"],"mode":"functional_assertion"},"name":"source.preprocessor_event","owner_namespace":"cxxlens.standard.source","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["source.preprocessor_event.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"on_missing":"unresolved","source_columns":["source.preprocessor_event.v1.argument_source"],"strength":"soft_semantic","target_columns":["source.span.v1.span"],"target_relation":"source.span"},{"on_missing":"unresolved","source_columns":["source.preprocessor_event.v1.branch_event"],"strength":"soft_semantic","target_columns":["source.preprocessor_event.v1.event"],"target_relation":"source.preprocessor_event"},{"on_missing":"unresolved","source_columns":["source.preprocessor_event.v1.closing_event"],"strength":"soft_semantic","target_columns":["source.preprocessor_event.v1.event"],"target_relation":"source.preprocessor_event"},{"on_missing":"reject_batch","source_columns":["source.preprocessor_event.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"container_elements":true,"on_missing":"unresolved","source_columns":["source.preprocessor_event.v1.condition_tokens"],"strength":"soft_semantic","target_columns":["source.token.v1.token"],"target_relation":"source.token"},{"on_missing":"unresolved","source_columns":["source.preprocessor_event.v1.definition_event"],"strength":"soft_semantic","target_columns":["source.preprocessor_event.v1.event"],"target_relation":"source.preprocessor_event"},{"on_missing":"unresolved","source_columns":["source.preprocessor_event.v1.effect_expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["source.preprocessor_event.v1.effect_function"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["source.preprocessor_event.v1.parent_event"],"strength":"soft_semantic","target_columns":["source.preprocessor_event.v1.event"],"target_relation":"source.preprocessor_event"},{"on_missing":"unresolved","source_columns":["source.preprocessor_event.v1.parent_expansion"],"strength":"soft_semantic","target_columns":["source.preprocessor_event.v1.event"],"target_relation":"source.preprocessor_event"},{"container_elements":true,"on_missing":"unresolved","source_columns":["source.preprocessor_event.v1.paste_token_ids"],"strength":"soft_semantic","target_columns":["source.token.v1.token"],"target_relation":"source.token"},{"on_missing":"unresolved","source_columns":["source.preprocessor_event.v1.raw_event"],"strength":"soft_semantic","target_columns":["source.preprocessor_event.v1.event"],"target_relation":"source.preprocessor_event"},{"container_elements":true,"on_missing":"unresolved","source_columns":["source.preprocessor_event.v1.raw_token_ids"],"strength":"soft_semantic","target_columns":["source.token.v1.token"],"target_relation":"source.token"},{"on_missing":"reject_batch","source_columns":["source.preprocessor_event.v1.source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"},{"container_elements":true,"on_missing":"unresolved","source_columns":["source.preprocessor_event.v1.stringify_token_ids"],"strength":"soft_semantic","target_columns":["source.token.v1.token"],"target_relation":"source.token"}],"row_constraints":{"all_or_none":[["source.preprocessor_event.v1.phase","source.preprocessor_event.v1.profile"]]},"semantic_major":1,"semantics":"source.preprocessor_event/1","stability":"versioned","summary":"Source-bound macro, directive and condition observation; inactive and unknown state remain distinct.","version":"1.0.0"})cxxlens";
+				output.contract_digest = "sha256:77c08523fd6f12e403b99bdcd992fc7ab91e40db9937f32f2dfe1adc221daa16";
 				output.columns = {
 					{"source.preprocessor_event.v1.event", "event", {sdk::scalar_kind::typed_id, "preprocessor_event_id", false}, true, sdk::column_role::claim_key},
 					{"source.preprocessor_event.v1.compile_unit", "compile_unit", {sdk::scalar_kind::typed_id, "compile_unit_id", false}, true, sdk::column_role::authoritative_payload},
@@ -35,6 +35,42 @@ namespace cxxlens::source::relations
 					{"source.preprocessor_event.v1.value", "value", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
 					{"source.preprocessor_event.v1.state", "state", {sdk::scalar_kind::open_symbol, "source.pp-state/1", false}, true, sdk::column_role::authoritative_payload},
 					{"source.preprocessor_event.v1.ordinal", "ordinal", {sdk::scalar_kind::unsigned_integer, "", false}, true, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.phase", "phase", {sdk::scalar_kind::open_symbol, "source.pp-phase/1", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.profile", "profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.raw_event", "raw_event", {sdk::scalar_kind::typed_id, "preprocessor_event_id", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.parent_event", "parent_event", {sdk::scalar_kind::typed_id, "preprocessor_event_id", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.closing_event", "closing_event", {sdk::scalar_kind::typed_id, "preprocessor_event_id", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.branch_event", "branch_event", {sdk::scalar_kind::typed_id, "preprocessor_event_id", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.region_begin", "region_begin", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.region_end", "region_end", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.depth", "depth", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.structure_state", "structure_state", {sdk::scalar_kind::open_symbol, "source.pp-facet-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.activity", "activity", {sdk::scalar_kind::open_symbol, "source.pp-activity/1", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.feature_symbols", "feature_symbols", {sdk::scalar_kind::set, "pp_symbol_id", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.condition_tokens", "condition_tokens", {sdk::scalar_kind::set, "source_token_id", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.function_like", "function_like", {sdk::scalar_kind::boolean, "", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.variadic", "variadic", {sdk::scalar_kind::boolean, "", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.parameter_count", "parameter_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.replacement_count", "replacement_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.parameter_index", "parameter_index", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.argument_index", "argument_index", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.parameter_symbol", "parameter_symbol", {sdk::scalar_kind::typed_id, "pp_symbol_id", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.raw_token_ids", "raw_token_ids", {sdk::scalar_kind::set, "source_token_id", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.stringify_token_ids", "stringify_token_ids", {sdk::scalar_kind::set, "source_token_id", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.paste_token_ids", "paste_token_ids", {sdk::scalar_kind::set, "source_token_id", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.substitution_count", "substitution_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.evaluating_substitution_count", "evaluating_substitution_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.argument_source", "argument_source", {sdk::scalar_kind::typed_id, "source_span_id", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.argument_empty", "argument_empty", {sdk::scalar_kind::boolean, "", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.spelling_bytes", "spelling_bytes", {sdk::scalar_kind::bytes, "", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.parent_expansion", "parent_expansion", {sdk::scalar_kind::typed_id, "preprocessor_event_id", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.expansion_depth", "expansion_depth", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.definition_event", "definition_event", {sdk::scalar_kind::typed_id, "preprocessor_event_id", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.effect_expression", "effect_expression", {sdk::scalar_kind::typed_id, "syntax_node_id", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.effect_state", "effect_state", {sdk::scalar_kind::open_symbol, "source.pp-effect-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.macro_state", "macro_state", {sdk::scalar_kind::open_symbol, "source.pp-facet-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.argument_may_have_side_effects", "argument_may_have_side_effects", {sdk::scalar_kind::boolean, "", true}, false, sdk::column_role::authoritative_payload},
+					{"source.preprocessor_event.v1.effect_function", "effect_function", {sdk::scalar_kind::typed_id, "cc_entity_id", true}, false, sdk::column_role::authoritative_payload},
 				};
 				output.domain_identity.result_column = "source.preprocessor_event.v1.event";
 				output.domain_identity.projection = {
@@ -49,18 +85,67 @@ namespace cxxlens::source::relations
 					"source.preprocessor_event.v1.event",
 				};
 				output.references = {
+					{{"source.preprocessor_event.v1.argument_source"}, "source.span", {"source.span.v1.span"}, sdk::reference_strength::soft_semantic},
+					{{"source.preprocessor_event.v1.branch_event"}, "source.preprocessor_event", {"source.preprocessor_event.v1.event"}, sdk::reference_strength::soft_semantic},
+					{{"source.preprocessor_event.v1.closing_event"}, "source.preprocessor_event", {"source.preprocessor_event.v1.event"}, sdk::reference_strength::soft_semantic},
 					{{"source.preprocessor_event.v1.compile_unit"}, "build.compile_unit", {"build.compile_unit.v1.compile_unit"}, sdk::reference_strength::hard},
+					{{"source.preprocessor_event.v1.condition_tokens"}, "source.token", {"source.token.v1.token"}, sdk::reference_strength::soft_semantic, true},
+					{{"source.preprocessor_event.v1.definition_event"}, "source.preprocessor_event", {"source.preprocessor_event.v1.event"}, sdk::reference_strength::soft_semantic},
+					{{"source.preprocessor_event.v1.effect_expression"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
+					{{"source.preprocessor_event.v1.effect_function"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic},
+					{{"source.preprocessor_event.v1.parent_event"}, "source.preprocessor_event", {"source.preprocessor_event.v1.event"}, sdk::reference_strength::soft_semantic},
+					{{"source.preprocessor_event.v1.parent_expansion"}, "source.preprocessor_event", {"source.preprocessor_event.v1.event"}, sdk::reference_strength::soft_semantic},
+					{{"source.preprocessor_event.v1.paste_token_ids"}, "source.token", {"source.token.v1.token"}, sdk::reference_strength::soft_semantic, true},
+					{{"source.preprocessor_event.v1.raw_event"}, "source.preprocessor_event", {"source.preprocessor_event.v1.event"}, sdk::reference_strength::soft_semantic},
+					{{"source.preprocessor_event.v1.raw_token_ids"}, "source.token", {"source.token.v1.token"}, sdk::reference_strength::soft_semantic, true},
 					{{"source.preprocessor_event.v1.source"}, "source.span", {"source.span.v1.span"}, sdk::reference_strength::hard},
+					{{"source.preprocessor_event.v1.stringify_token_ids"}, "source.token", {"source.token.v1.token"}, sdk::reference_strength::soft_semantic, true},
 				};
 				output.merge = sdk::merge_mode::functional_assertion;
 				output.conflict_columns = {
+					"source.preprocessor_event.v1.activity",
+					"source.preprocessor_event.v1.argument_empty",
+					"source.preprocessor_event.v1.argument_index",
+					"source.preprocessor_event.v1.argument_may_have_side_effects",
+					"source.preprocessor_event.v1.argument_source",
+					"source.preprocessor_event.v1.branch_event",
+					"source.preprocessor_event.v1.closing_event",
 					"source.preprocessor_event.v1.compile_unit",
+					"source.preprocessor_event.v1.condition_tokens",
+					"source.preprocessor_event.v1.definition_event",
+					"source.preprocessor_event.v1.depth",
+					"source.preprocessor_event.v1.effect_expression",
+					"source.preprocessor_event.v1.effect_function",
+					"source.preprocessor_event.v1.effect_state",
+					"source.preprocessor_event.v1.evaluating_substitution_count",
+					"source.preprocessor_event.v1.expansion_depth",
+					"source.preprocessor_event.v1.feature_symbols",
+					"source.preprocessor_event.v1.function_like",
 					"source.preprocessor_event.v1.kind",
+					"source.preprocessor_event.v1.macro_state",
 					"source.preprocessor_event.v1.name",
 					"source.preprocessor_event.v1.ordinal",
+					"source.preprocessor_event.v1.parameter_count",
+					"source.preprocessor_event.v1.parameter_index",
+					"source.preprocessor_event.v1.parameter_symbol",
+					"source.preprocessor_event.v1.parent_event",
+					"source.preprocessor_event.v1.parent_expansion",
+					"source.preprocessor_event.v1.paste_token_ids",
+					"source.preprocessor_event.v1.phase",
+					"source.preprocessor_event.v1.profile",
+					"source.preprocessor_event.v1.raw_event",
+					"source.preprocessor_event.v1.raw_token_ids",
+					"source.preprocessor_event.v1.region_begin",
+					"source.preprocessor_event.v1.region_end",
+					"source.preprocessor_event.v1.replacement_count",
 					"source.preprocessor_event.v1.source",
+					"source.preprocessor_event.v1.spelling_bytes",
 					"source.preprocessor_event.v1.state",
+					"source.preprocessor_event.v1.stringify_token_ids",
+					"source.preprocessor_event.v1.structure_state",
+					"source.preprocessor_event.v1.substitution_count",
 					"source.preprocessor_event.v1.value",
+					"source.preprocessor_event.v1.variadic",
 				};
 				output.descriptor_digest = *sdk::semantic_digest(
 					"cxxlens.relation-descriptor-binding.v2",
@@ -141,6 +226,330 @@ namespace cxxlens::source::relations
 			[[nodiscard]] static sdk::column_ref ref()
 			{
 				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.ordinal", {sdk::scalar_kind::unsigned_integer, "", false}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.phase`. */
+		struct phase
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.phase", {sdk::scalar_kind::open_symbol, "source.pp-phase/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.profile`. */
+		struct profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.raw_event`. */
+		struct raw_event
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.raw_event", {sdk::scalar_kind::typed_id, "preprocessor_event_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.parent_event`. */
+		struct parent_event
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.parent_event", {sdk::scalar_kind::typed_id, "preprocessor_event_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.closing_event`. */
+		struct closing_event
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.closing_event", {sdk::scalar_kind::typed_id, "preprocessor_event_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.branch_event`. */
+		struct branch_event
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.branch_event", {sdk::scalar_kind::typed_id, "preprocessor_event_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.region_begin`. */
+		struct region_begin
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.region_begin", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.region_end`. */
+		struct region_end
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.region_end", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.depth`. */
+		struct depth
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.depth", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.structure_state`. */
+		struct structure_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.structure_state", {sdk::scalar_kind::open_symbol, "source.pp-facet-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.activity`. */
+		struct activity
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.activity", {sdk::scalar_kind::open_symbol, "source.pp-activity/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.feature_symbols`. */
+		struct feature_symbols
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.feature_symbols", {sdk::scalar_kind::set, "pp_symbol_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.condition_tokens`. */
+		struct condition_tokens
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.condition_tokens", {sdk::scalar_kind::set, "source_token_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.function_like`. */
+		struct function_like
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.function_like", {sdk::scalar_kind::boolean, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.variadic`. */
+		struct variadic
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.variadic", {sdk::scalar_kind::boolean, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.parameter_count`. */
+		struct parameter_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.parameter_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.replacement_count`. */
+		struct replacement_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.replacement_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.parameter_index`. */
+		struct parameter_index
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.parameter_index", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.argument_index`. */
+		struct argument_index
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.argument_index", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.parameter_symbol`. */
+		struct parameter_symbol
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.parameter_symbol", {sdk::scalar_kind::typed_id, "pp_symbol_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.raw_token_ids`. */
+		struct raw_token_ids
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.raw_token_ids", {sdk::scalar_kind::set, "source_token_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.stringify_token_ids`. */
+		struct stringify_token_ids
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.stringify_token_ids", {sdk::scalar_kind::set, "source_token_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.paste_token_ids`. */
+		struct paste_token_ids
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.paste_token_ids", {sdk::scalar_kind::set, "source_token_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.substitution_count`. */
+		struct substitution_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.substitution_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.evaluating_substitution_count`. */
+		struct evaluating_substitution_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.evaluating_substitution_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.argument_source`. */
+		struct argument_source
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.argument_source", {sdk::scalar_kind::typed_id, "source_span_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.argument_empty`. */
+		struct argument_empty
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.argument_empty", {sdk::scalar_kind::boolean, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.spelling_bytes`. */
+		struct spelling_bytes
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.spelling_bytes", {sdk::scalar_kind::bytes, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.parent_expansion`. */
+		struct parent_expansion
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.parent_expansion", {sdk::scalar_kind::typed_id, "preprocessor_event_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.expansion_depth`. */
+		struct expansion_depth
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.expansion_depth", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.definition_event`. */
+		struct definition_event
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.definition_event", {sdk::scalar_kind::typed_id, "preprocessor_event_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.effect_expression`. */
+		struct effect_expression
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.effect_expression", {sdk::scalar_kind::typed_id, "syntax_node_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.effect_state`. */
+		struct effect_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.effect_state", {sdk::scalar_kind::open_symbol, "source.pp-effect-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.macro_state`. */
+		struct macro_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.macro_state", {sdk::scalar_kind::open_symbol, "source.pp-facet-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.argument_may_have_side_effects`. */
+		struct argument_may_have_side_effects
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.argument_may_have_side_effects", {sdk::scalar_kind::boolean, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `source.preprocessor_event.v1.effect_function`. */
+		struct effect_function
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {preprocessor_event::descriptor().id, "source.preprocessor_event.v1.effect_function", {sdk::scalar_kind::typed_id, "cc_entity_id", true}};
 			}
 		};
 	};

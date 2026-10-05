@@ -1159,12 +1159,35 @@ add_test(NAME unit.sdk-finite-populations
 set_tests_properties(
   unit.sdk-finite-populations
   PROPERTIES LABELS "unit;sdk;query;population;budget;cancellation")
+cxxlens_add_test_executable(cxxlens-unit-sdk-build-health
+                            unit/sdk/build_health_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-build-health PRIVATE cxxlens::query)
+add_test(NAME unit.sdk-build-health COMMAND cxxlens-unit-sdk-build-health)
+set_tests_properties(unit.sdk-build-health PROPERTIES LABELS "unit;sdk;query")
+
+cxxlens_add_test_executable(cxxlens-unit-sdk-preprocessor
+                            unit/sdk/preprocessor_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-preprocessor PRIVATE cxxlens::query)
+target_include_directories(cxxlens-unit-sdk-preprocessor
+                           PRIVATE ${PROJECT_SOURCE_DIR}/src/sdk)
+add_test(NAME unit.sdk-preprocessor COMMAND cxxlens-unit-sdk-preprocessor)
+set_tests_properties(unit.sdk-preprocessor PROPERTIES LABELS "unit;sdk;query")
+
+cxxlens_add_test_executable(cxxlens-unit-sdk-function-actions
+                            unit/sdk/function_actions_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-function-actions PRIVATE cxxlens::query)
+add_test(NAME unit.sdk-function-actions
+         COMMAND cxxlens-unit-sdk-function-actions)
+set_tests_properties(unit.sdk-function-actions PROPERTIES LABELS
+                                                          "unit;sdk;query")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-call-operands
                             unit/sdk/call_operands_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-call-operands PRIVATE cxxlens::query)
 add_test(NAME unit.sdk-call-operands COMMAND cxxlens-unit-sdk-call-operands)
-set_tests_properties(unit.sdk-call-operands
-                     PROPERTIES LABELS "unit;sdk;query;calls;population;budget;cancellation")
+set_tests_properties(
+  unit.sdk-call-operands
+  PROPERTIES LABELS "unit;sdk;query;calls;population;budget;cancellation")
 cxxlens_add_test_executable(cxxlens-unit-sdk-abi-surfaces
                             unit/sdk/abi_surfaces_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-abi-surfaces PRIVATE cxxlens::query)
@@ -1809,6 +1832,39 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
       PROPERTIES LABELS "adapter;clang22;application;calls;population;bounded"
                  TIMEOUT 600)
     add_test(
+      NAME adapter.clang22-function-actions
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/clang22/function_actions_test.py"
+        "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}")
+    set_tests_properties(
+      adapter.clang22-function-actions
+      PROPERTIES LABELS
+                 "adapter;clang22;application;operations;population;bounded"
+                 TIMEOUT 600)
+    add_test(
+      NAME adapter.clang22-build-health
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/clang22/build_health_test.py"
+        "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}")
+    set_tests_properties(
+      adapter.clang22-build-health
+      PROPERTIES LABELS
+                 "adapter;clang22;application;operations;population;bounded"
+                 TIMEOUT 600)
+    add_test(
+      NAME adapter.clang22-preprocessor-inputs
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/clang22/preprocessor_inputs_test.py"
+        "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}")
+    set_tests_properties(
+      adapter.clang22-preprocessor-inputs
+      PROPERTIES LABELS
+                 "adapter;clang22;application;operations;population;bounded"
+                 TIMEOUT 600)
+    add_test(
       NAME adapter.clang22-application-analysis
       COMMAND
         "${Python3_EXECUTABLE}"
@@ -2067,6 +2123,9 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     list(GET CXXLENS_CLANG22_LIBRARY_DIRS 0 _cxxlens_native_test_lib_dir)
     get_filename_component(_cxxlens_native_test_llvm_root
                            "${_cxxlens_native_test_lib_dir}" DIRECTORY)
+    target_include_directories(
+      cxxlens-clang22-source-closure-native SYSTEM
+      PRIVATE "${_cxxlens_native_test_llvm_root}/include")
     find_program(
       _cxxlens_native_test_clangxx
       NAMES clang++-22 clang++

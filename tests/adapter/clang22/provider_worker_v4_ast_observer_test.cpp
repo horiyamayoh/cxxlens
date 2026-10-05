@@ -168,7 +168,8 @@ namespace
 	run_once(const fixture& value,
 			 provider_worker_v4_ast_observer_limits limits = {},
 			 const bool inject_bad_alloc = false,
-			 const std::string_view compile_unit_value = "compile-unit:v4-ast-observer")
+			 const std::string_view compile_unit_value = "compile-unit:v4-ast-observer",
+			 const bool include_project = false)
 	{
 		const auto* main =
 			value.metadata.input.closure.find_member(value.metadata.input.main_logical_path);
@@ -193,7 +194,7 @@ namespace
 					allocation_fault_test::arm(compile_unit.size() + 1U);
 #endif
 				auto result = observe_provider_worker_v4_ast(
-					unit, value.metadata, std::move(compile_unit), limits);
+					unit, value.metadata, std::move(compile_unit), limits, {}, include_project);
 #if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
 				allocation_fault_test::disarm();
 #endif
@@ -792,6 +793,55 @@ int main()
 		for (const auto& origin : observation.origins)
 			require(origin.read_only && !origin.kind.empty() && !origin.logical_path.empty(),
 					"observer dropped typed macro origin provenance");
+
+	const auto initializer_macro_fixture =
+		make_fixture("#define TWICE(value) ((value)+(value))\n"
+					 "int use_macro(int value) { int doubled=TWICE(value); return doubled; }\n");
+	auto initializer_macro =
+		run_once(initializer_macro_fixture, {}, false, "compile-unit:macro-initializer", true);
+	if (!initializer_macro)
+		std::cerr << "initializer macro observer failed: " << initializer_macro.error().code
+				  << " / " << initializer_macro.error().field << " / "
+				  << initializer_macro.error().detail << '\n';
+	require(initializer_macro.has_value(),
+			"observer rejected a written initializer ending in an earlier macro definition");
+	bool original_begin{}, original_end{};
+	for (const auto& observation : initializer_macro->observations)
+		for (const auto& origin : observation.origins)
+		{
+			require(origin.begin >= 0 && origin.end >= origin.begin,
+					"observer invented a reverse contiguous macro spelling range");
+			const auto spelling = initializer_macro_fixture.source.substr(
+				static_cast<std::size_t>(origin.begin),
+				static_cast<std::size_t>(origin.end - origin.begin));
+			original_begin |= origin.kind == "macro-spelling-begin" && spelling == "int";
+			original_end |= origin.kind == "macro-spelling-end" && spelling == ")";
+		}
+	require(original_begin && original_end,
+			"observer lost actual endpoint token views of a discontiguous macro spelling");
+
+	const auto stringify_initializer_fixture =
+		make_fixture("#define STRINGIFY(value) #value\n"
+					 "int use_string() { const char* text=STRINGIFY(value); return text[0]; }\n");
+	auto stringify_initializer = run_once(
+		stringify_initializer_fixture, {}, false, "compile-unit:stringify-initializer", true);
+	if (!stringify_initializer)
+		std::cerr << "stringify initializer observer failed: " << stringify_initializer.error().code
+				  << " / " << stringify_initializer.error().field << " / "
+				  << stringify_initializer.error().detail << '\n';
+	require(stringify_initializer.has_value(),
+			"observer lost an actual named declaration with unavailable scratch spelling");
+	bool scratch_source_frontier{};
+	for (const auto& observation : stringify_initializer->observations)
+		if (observation.limitation &&
+			observation.limitation->starts_with("source-span-unavailable:"))
+		{
+			require(!observation.exact_equivalence,
+					"exact named USR erased an independently unavailable source spelling");
+			scratch_source_frontier = true;
+		}
+	require(scratch_source_frontier,
+			"stringification scratch spelling was incorrectly treated as project source");
 
 	limited = product_limits;
 	limited.maximum_origins = origin_count - 1U;

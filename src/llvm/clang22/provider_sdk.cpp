@@ -14,6 +14,7 @@
 #if CXXLENS_HAS_CLANG22
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/ASTContext.h>
+#include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/FrontendAction.h>
@@ -62,23 +63,79 @@ namespace cxxlens::provider::clang22
 		}
 
 #if CXXLENS_HAS_CLANG22
+		class parser_diagnostics final : public clang::DiagnosticConsumer
+		{
+		  public:
+			parser_diagnostics(clang::DiagnosticConsumer* target,
+							   std::unique_ptr<clang::DiagnosticConsumer> owned)
+				: target_{target}, owned_{std::move(owned)}
+			{
+			}
+			void HandleDiagnostic(clang::DiagnosticsEngine::Level level,
+								  const clang::Diagnostic& diagnostic) override
+			{
+				clang::DiagnosticConsumer::HandleDiagnostic(level, diagnostic);
+				if (level == clang::DiagnosticsEngine::Error ||
+					level == clang::DiagnosticsEngine::Fatal)
+					++errors;
+				if (level == clang::DiagnosticsEngine::Fatal)
+					++fatal_errors;
+				if (target_)
+					target_->HandleDiagnostic(level, diagnostic);
+			}
+			void BeginSourceFile(const clang::LangOptions& options,
+								 const clang::Preprocessor* preprocessor) override
+			{
+				if (target_)
+					target_->BeginSourceFile(options, preprocessor);
+			}
+			void EndSourceFile() override
+			{
+				if (target_)
+					target_->EndSourceFile();
+			}
+			void finish() override
+			{
+				if (target_)
+					target_->finish();
+			}
+			bool IncludeInDiagnosticCounts() const override
+			{
+				return !target_ || target_->IncludeInDiagnosticCounts();
+			}
+			std::uint64_t errors{}, fatal_errors{};
+
+		  private:
+			clang::DiagnosticConsumer* target_;
+			std::unique_ptr<clang::DiagnosticConsumer> owned_;
+		};
 		class callback_consumer final : public clang::ASTConsumer
 		{
 		  public:
 			callback_consumer(translation_unit_callback& callback,
 							  sdk::result<void>& outcome,
 							  clang::Preprocessor& preprocessor,
-							  const clang::CodeGenOptions& code_generation_options)
+							  const clang::CodeGenOptions& code_generation_options,
+							  detail::native_parse_observation* parse_observation,
+							  parser_diagnostics*& diagnostics)
 				: callback_{&callback}, outcome_{&outcome}, preprocessor_{&preprocessor},
-				  code_generation_options_{&code_generation_options}
+				  code_generation_options_{&code_generation_options},
+				  parse_observation_{parse_observation}, diagnostics_{&diagnostics}
 			{
 			}
 
 			void HandleTranslationUnit(clang::ASTContext& context) override
 			{
+				if (parse_observation_ && *diagnostics_)
+					*parse_observation_ = {
+						true, true, (*diagnostics_)->errors, (*diagnostics_)->fatal_errors};
 				auto borrowed = detail::native_access::make(
 					context, context.getSourceManager(), *preprocessor_, *code_generation_options_);
 				*outcome_ = (*callback_)(borrowed);
+				if (*outcome_ && parse_observation_ && *diagnostics_ &&
+					(*diagnostics_)->errors > parse_observation_->error_count)
+					*outcome_ = sdk::unexpected(
+						native_error("native.extractor-diagnostics-failed", "callback"));
 			}
 
 		  private:
@@ -86,6 +143,8 @@ namespace cxxlens::provider::clang22
 			sdk::result<void>* outcome_;
 			clang::Preprocessor* preprocessor_;
 			const clang::CodeGenOptions* code_generation_options_;
+			detail::native_parse_observation* parse_observation_;
+			parser_diagnostics** diagnostics_;
 		};
 
 		class callback_action final : public clang::ASTFrontendAction
@@ -93,8 +152,10 @@ namespace cxxlens::provider::clang22
 		  public:
 			callback_action(translation_unit_callback& callback,
 							sdk::result<void>& outcome,
-							detail::preprocessor_setup setup = {})
-				: callback_{&callback}, outcome_{&outcome}, setup_{std::move(setup)}
+							detail::preprocessor_setup setup = {},
+							detail::native_parse_observation* parse_observation = nullptr)
+				: callback_{&callback}, outcome_{&outcome}, setup_{std::move(setup)},
+				  parse_observation_{parse_observation}
 			{
 			}
 
@@ -104,14 +165,58 @@ namespace cxxlens::provider::clang22
 				compiler.getPreprocessor().createPreprocessingRecord();
 				if (setup_)
 					setup_(compiler.getPreprocessor());
-				return std::make_unique<callback_consumer>(
-					*callback_, *outcome_, compiler.getPreprocessor(), compiler.getCodeGenOpts());
+				return std::make_unique<callback_consumer>(*callback_,
+														   *outcome_,
+														   compiler.getPreprocessor(),
+														   compiler.getCodeGenOpts(),
+														   parse_observation_,
+														   diagnostics_);
+			}
+
+		  protected:
+			void ExecuteAction() override
+			{
+				if (!parse_observation_)
+				{
+					clang::ASTFrontendAction::ExecuteAction();
+					return;
+				}
+				auto& engine = getCompilerInstance().getDiagnostics();
+				if (engine.hasErrorOccurred())
+				{
+					*outcome_ =
+						sdk::unexpected(native_error("native.driver-or-setup-failed", "parser"));
+					return;
+				}
+				auto* target = engine.getClient();
+				auto owned = engine.takeClient();
+				diagnostics_ = new parser_diagnostics(target, std::move(owned));
+				engine.setClient(diagnostics_, true);
+				parse_observation_->attempted = true;
+				const auto finish = [&]
+				{
+					if (!parse_observation_->ast_completed)
+						*parse_observation_ = {
+							true, false, diagnostics_->errors, diagnostics_->fatal_errors};
+				};
+				try
+				{
+					clang::ASTFrontendAction::ExecuteAction();
+				}
+				catch (...)
+				{
+					finish();
+					throw;
+				}
+				finish();
 			}
 
 		  private:
 			translation_unit_callback* callback_;
 			sdk::result<void>* outcome_;
 			detail::preprocessor_setup setup_;
+			detail::native_parse_observation* parse_observation_;
+			parser_diagnostics* diagnostics_{};
 		};
 #endif
 	} // namespace
@@ -211,7 +316,8 @@ namespace cxxlens::provider::clang22
 									  const std::vector<std::string>& compiler_arguments,
 									  llvm::vfs::FileSystem& filesystem,
 									  translation_unit_callback callback,
-									  preprocessor_setup setup)
+									  preprocessor_setup setup,
+									  native_parse_observation* parse_observation)
 	{
 		if (auto valid = input.validate(); !valid)
 			return valid;
@@ -224,7 +330,8 @@ namespace cxxlens::provider::clang22
 				return sdk::unexpected(native_error("native.input-invalid", "argument"));
 
 		sdk::result<void> outcome{};
-		auto action = std::make_unique<callback_action>(callback, outcome, std::move(setup));
+		auto action = std::make_unique<callback_action>(
+			callback, outcome, std::move(setup), parse_observation);
 		llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> retained_filesystem{&filesystem};
 		const auto parsed = clang::tooling::runToolOnCodeWithArgs(std::move(action),
 																  input.source,
@@ -232,7 +339,11 @@ namespace cxxlens::provider::clang22
 																  compiler_arguments,
 																  compiler_filename,
 																  tool_name);
-		if (!parsed && outcome)
+		// Keep a completed nonfatal AST as observed recovery for this private
+		// execution path. The public entry retains its existing error result.
+		if (!parsed && outcome &&
+			!(parse_observation && parse_observation->ast_completed &&
+			  parse_observation->fatal_error_count == 0U && parse_observation->error_count > 0U))
 			return sdk::unexpected(native_error("native.parse-failed", input.logical_path));
 		return outcome;
 	}

@@ -79,8 +79,9 @@ namespace cxxlens::detail::clang22
 	 * everything the callback emits as provisional until this function returns success, and must
 	 * discard it otherwise; a successful callback never overrides a failed verdict here.
 	 */
-	[[nodiscard]] sdk::result<void>
-	with_source_closure_translation_unit(const source_closure_native_input& input,
-										 provider::clang22::translation_unit_callback callback,
-										 provider::clang22::detail::preprocessor_setup setup = {});
+	[[nodiscard]] sdk::result<void> with_source_closure_translation_unit(
+		const source_closure_native_input& input,
+		provider::clang22::translation_unit_callback callback,
+		provider::clang22::detail::preprocessor_setup setup = {},
+		provider::clang22::detail::native_parse_observation* parse_observation = nullptr);
 } // namespace cxxlens::detail::clang22

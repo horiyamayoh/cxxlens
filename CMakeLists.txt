@@ -256,6 +256,9 @@ add_library(
   src/sdk/source_tokens.cpp
   src/sdk/finite_populations.cpp
   src/sdk/call_operands.cpp
+  src/sdk/build_health.cpp
+  src/sdk/preprocessor.cpp
+  src/sdk/function_actions.cpp
   src/sdk/semantic_graphs.cpp
   src/sdk/record_surfaces.cpp
   src/sdk/abi_surfaces.cpp

@@ -6,12 +6,15 @@
 
 #include <cxxlens/sdk/abi_surfaces.hpp>
 #include <cxxlens/sdk/application_analysis.hpp>
+#include <cxxlens/sdk/build_health.hpp>
 #include <cxxlens/sdk/call_operands.hpp>
 #include <cxxlens/sdk/claim.hpp>
 #include <cxxlens/sdk/common.hpp>
 #include <cxxlens/sdk/control_flow.hpp>
 #include <cxxlens/sdk/finite_populations.hpp>
+#include <cxxlens/sdk/function_actions.hpp>
 #include <cxxlens/sdk/incremental.hpp>
+#include <cxxlens/sdk/preprocessor.hpp>
 #include <cxxlens/sdk/provider.hpp>
 #include <cxxlens/sdk/query.hpp>
 #include <cxxlens/sdk/query_transfer.hpp>

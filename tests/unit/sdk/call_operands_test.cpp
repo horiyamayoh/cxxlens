@@ -554,6 +554,55 @@ int main()
 				result.calls[0].signatures[0].usr == usr,
 			"original external signature/non-text USR lost");
 
+	// Missing optional target facets cannot contradict the independent,
+	// original declaration identity retained by the entity/detail route.
+	const auto complete_target = input.rows[10][0];
+	input.rows[3].push_back(
+		fact(3,
+			 {{"entity", detached_cell::utf8("external:f")},
+			  {"kind", detached_cell::utf8("function")},
+			  {"provider_local_key", detached_cell::bytes(usr)},
+			  {"structural_signature_digest", detached_cell::utf8(signature)}}));
+	input.rows[4].push_back(fact(4,
+								 {{"detail", detached_cell::utf8("detail:target")},
+								  {"entity", detached_cell::utf8("external:f")},
+								  {"compile_unit", detached_cell::utf8("unit:a")},
+								  {"source", detached_cell::utf8("span:a")},
+								  {"canonical_type", detached_cell::utf8("type:int")}}));
+	for (const auto name : {"target_signature_state",
+							"target_signature_profile",
+							"target_usr",
+							"target_canonical_type",
+							"target_structural_signature_digest",
+							"target_canonical_type_digest",
+							"target_canonical_type_profile",
+							"target_language",
+							"target_linkage",
+							"target_module_domain"})
+	{
+		const auto type = input.rows[10][0].values.at("output." + std::string{name}).type;
+		set(input.rows[10][0], name, detached_cell::absent(type));
+	}
+	result = project(input);
+	require(result.calls[0].signatures[0].state == state::unknown &&
+				result.calls[0].state == state::complete &&
+				input.rows[3].back().values.at("output.provider_local_key").value ==
+					detached_cell::bytes(usr).value,
+			"absent target signature conflicted with independent entity/detail identity");
+	input.rows[10][0] = complete_target;
+	for (const auto name : {"target_canonical_type_digest", "target_canonical_type_profile"})
+		set(input.rows[10][0],
+			name,
+			detached_cell::absent(input.rows[10][0].values.at("output." + std::string{name}).type));
+	require(project(input).calls[0].signatures[0].state == state::partial,
+			"absent target type facets became contradictory against known actual type");
+	input.rows[10][0] = complete_target;
+	set(input.rows[3].back(), "provider_local_key", detached_cell::bytes({std::byte{'x'}}));
+	require(project(input).calls[0].signatures[0].state == state::conflicting,
+			"present contradictory original target USR was accepted");
+	input.rows[3].pop_back();
+	input.rows[4].pop_back();
+
 	auto child = input.rows[5][0];
 	set(child, "type", detached_cell::utf8("type:child"));
 	auto leaf = child;

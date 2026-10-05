@@ -520,9 +520,13 @@ namespace cxxlens::sdk::query
 						if (root)
 						{
 							value.canonical_type_structure = text(type, "structure_preimage");
-							if (text(type, "component_signature_digest") !=
-									value.canonical_type_digest ||
-								text(type, "structure_profile") != value.canonical_type_profile)
+							if ((present(native, "target_canonical_type_digest") &&
+								 present(type, "component_signature_digest") &&
+								 text(type, "component_signature_digest") !=
+									 value.canonical_type_digest) ||
+								(present(native, "target_canonical_type_profile") &&
+								 present(type, "structure_profile") &&
+								 text(type, "structure_profile") != value.canonical_type_profile))
 								gap(value, value.target, "target-type-signature-conflicting", true);
 						}
 						// These are original observed type facets, not an interpreted type grammar.
@@ -552,9 +556,14 @@ namespace cxxlens::sdk::query
 					{
 						if (!equal(entities))
 							gap(value, value.target, "target-entity-conflicting", true);
-						else if (bytes(row(entities.front()), "provider_local_key") != value.usr ||
-								 text(row(entities.front()), "structural_signature_digest") !=
-									 value.structural_signature_digest)
+						else if ((present(native, "target_usr") &&
+								  present(row(entities.front()), "provider_local_key") &&
+								  bytes(row(entities.front()), "provider_local_key") !=
+									  value.usr) ||
+								 (present(native, "target_structural_signature_digest") &&
+								  present(row(entities.front()), "structural_signature_digest") &&
+								  text(row(entities.front()), "structural_signature_digest") !=
+									  value.structural_signature_digest))
 							gap(value, value.target, "target-entity-signature-conflicting", true);
 					}
 					// Missing external entity rows do not erase the compiler's original signature

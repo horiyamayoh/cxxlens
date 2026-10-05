@@ -9,6 +9,11 @@
 #include <string_view>
 #include <vector>
 
+#if defined(CXXLENS_TEST_CLANGXX22_PATH)
+#include <clang/AST/ASTContext.h>
+#include <clang/Basic/Diagnostic.h>
+#endif
+
 namespace
 {
 	using cxxlens::detail::clang22::make_source_closure_snapshot;
@@ -124,6 +129,7 @@ namespace
 		bool callback_ran{};
 		std::string code;
 		std::string detail;
+		cxxlens::provider::clang22::detail::native_parse_observation parser;
 	};
 
 	[[nodiscard]] source_closure_native_input make_input(const source_closure_snapshot& closure,
@@ -140,18 +146,26 @@ namespace
 	}
 
 	[[nodiscard]] run_outcome run(const source_closure_snapshot& closure,
-								  const std::vector<std::string>& extra = {})
+								  const std::vector<std::string>& extra = {},
+								  bool extractor_failure = false)
 	{
 		const auto input = make_input(closure, extra);
 		run_outcome outcome;
 		auto result = with_source_closure_translation_unit(
 			input,
-			[&outcome](cxxlens::provider::clang22::borrowed_translation_unit&)
+			[&outcome, extractor_failure](cxxlens::provider::clang22::borrowed_translation_unit&)
 				-> cxxlens::sdk::result<void>
 			{
 				outcome.callback_ran = true;
+				require(outcome.parser.ast_completed,
+						"parser observation was not captured before extractor");
+				if (extractor_failure)
+					return cxxlens::sdk::unexpected(
+						cxxlens::sdk::error{"fixture.extractor-failed", "callback", {}});
 				return {};
-			});
+			},
+			{},
+			&outcome.parser);
 		outcome.succeeded = result.has_value();
 		if (!result)
 		{
@@ -186,7 +200,9 @@ namespace
 			{
 				outcome.callback_ran = true;
 				return {};
-			});
+			},
+			{},
+			&outcome.parser);
 		outcome.succeeded = result.has_value();
 		if (!result)
 		{
@@ -345,6 +361,85 @@ int main()
 		expect_success(run(*closure), "unconstrained driver toolchain probing");
 	}
 
+	std::cerr << "[H] original parser phase and extractor outcome independence\n";
+	{
+		auto good = make_source_closure_snapshot({file(
+			"project://src/main.cpp", source_closure_role::main, "int good() { return 1; }\n")});
+		require(good.has_value(), "health normal source rejected");
+		auto outcome = run(*good);
+		require(outcome.succeeded && outcome.parser.outcome() == "success" &&
+					outcome.parser.error_count == 0U,
+				"normal parser outcome not observed");
+		outcome = run(*good, {}, true);
+		require(!outcome.succeeded && outcome.code == "fixture.extractor-failed" &&
+					outcome.parser.outcome() == "success",
+				"extractor failure relabeled parser success");
+		cxxlens::provider::clang22::detail::native_parse_observation thrown;
+		bool caught = false;
+		try
+		{
+			(void)with_source_closure_translation_unit(
+				make_input(*good, {}),
+				[](cxxlens::provider::clang22::borrowed_translation_unit&)
+					-> cxxlens::sdk::result<void>
+				{
+					throw 7;
+				},
+				{},
+				&thrown);
+		}
+		catch (int)
+		{
+			caught = true;
+		}
+		require(caught && thrown.outcome() == "success",
+				"extractor exception erased original parser observations");
+		for (const auto level : {clang::DiagnosticsEngine::Error, clang::DiagnosticsEngine::Fatal})
+		{
+			cxxlens::provider::clang22::detail::native_parse_observation diagnostic_parser;
+			const auto diagnostic_result = with_source_closure_translation_unit(
+				make_input(*good, {}),
+				[level](cxxlens::provider::clang22::borrowed_translation_unit& borrowed)
+					-> cxxlens::sdk::result<void>
+				{
+					auto& diagnostics = borrowed.ast().getDiagnostics();
+					diagnostics.Report(diagnostics.getCustomDiagID(level, "extractor fixture"));
+					return {};
+				},
+				{},
+				&diagnostic_parser);
+			require(!diagnostic_result &&
+						diagnostic_result.error().code == "native.extractor-diagnostics-failed" &&
+						diagnostic_parser.outcome() == "success" &&
+						diagnostic_parser.error_count == 0U &&
+						diagnostic_parser.fatal_error_count == 0U,
+					"extractor diagnostic was accepted or relabeled original parser outcome");
+		}
+		auto recoverable =
+			make_source_closure_snapshot({file("project://src/main.cpp",
+											   source_closure_role::main,
+											   "int recover() { return missing_name; }\n")});
+		require(recoverable.has_value(), "health recovery source rejected");
+		outcome = run(*recoverable);
+		require(outcome.succeeded && outcome.parser.outcome() == "recovery" &&
+					outcome.parser.error_count > 0U && outcome.parser.fatal_error_count == 0U,
+				"nonfatal completed AST did not preserve recovery");
+		auto fatal = make_source_closure_snapshot(
+			{file("project://src/main.cpp",
+				  source_closure_role::main,
+				  "#include \"missing.hpp\"\nint fatal() { return 0; }\n")});
+		require(fatal.has_value(), "health fatal source rejected");
+		outcome = run(*fatal);
+		require(!outcome.succeeded && outcome.parser.outcome() == "failed" &&
+					outcome.parser.fatal_error_count > 0U &&
+					outcome.parser.error_count >= outcome.parser.fatal_error_count,
+				"fatal partial AST became recovery or lost diagnostic counts");
+		outcome = run(*good, {"-x", "not-a-clang-language"});
+		require(!outcome.succeeded && !outcome.parser.attempted &&
+					outcome.parser.outcome() == "unavailable",
+				"driver/setup failure became attempted parser failure");
+	}
+
 	// ---------------------------------------------------------------------------------------
 	// Group B -- an incomplete closure is Clang's own error, not a member-missing verdict.
 	// ---------------------------------------------------------------------------------------
@@ -426,6 +521,8 @@ int main()
 		expect_failure(outcome,
 					   "source-closure.member-missing",
 					   "an unservable claimed member that Clang itself tolerates");
+		require(outcome.parser.outcome() == "success" && outcome.parser.error_count == 0U,
+				"postparse source audit erased independent parser success");
 		require(outcome.detail == "project://src/generated.hpp",
 				"member-missing failure did not name the claimed member");
 	}

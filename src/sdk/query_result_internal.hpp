@@ -36,6 +36,12 @@ namespace cxxlens::sdk::query
 
 	struct query_transfer_access
 	{
+		[[nodiscard]] static std::span<const annotated_row>
+		borrow_rows(const query_result& result) noexcept
+		{
+			return result.data_ ? std::span<const annotated_row>{result.data_->row_values}
+								: std::span<const annotated_row>{};
+		}
 		[[nodiscard]] static query_result make(std::shared_ptr<const query_result::data> data)
 		{
 			return query_result{std::move(data)};

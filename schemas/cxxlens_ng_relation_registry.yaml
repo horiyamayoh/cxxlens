@@ -1,6 +1,6 @@
 schema: cxxlens.relation-registry.v1
 kind: relation-registry
-document_version: 1.16.0
+document_version: 1.17.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -9,7 +9,7 @@ authority:
   owner: steward.ng-relations
 compatibility:
   version_axis: relation-descriptor
-  current: 1.16.0
+  current: 1.17.0
   semantic_major_policy: exact-major-compatible-minor
   unknown_optional_columns: preserve
   unknown_open_symbols: preserve
@@ -226,6 +226,150 @@ symbol_contracts:
   - complete
   - partial
   unknown_value: preserve
+- id: cc.operation-site-state/1
+  openness: open
+  values:
+  - complete
+  - partial
+  - unsupported
+  unknown_value: preserve
+- id: cc.operation-kind/1
+  openness: open
+  values:
+  - invocation
+  - construction
+  - allocation
+  - initialization_failure_deallocation
+  - deallocation
+  - destruction
+  - cleanup_function
+  - load
+  - store
+  - update
+  - atomic
+  - type_use
+  - throw_expression
+  - coroutine_suspend
+  - unsupported
+  unknown_value: preserve
+- id: cc.operation-origin/1
+  openness: open
+  values:
+  - ast
+  - cfg
+  - declaration
+  unknown_value: preserve
+- id: cc.operation-evaluation/1
+  openness: open
+  values:
+  - potentially_evaluated
+  - unevaluated
+  - declarative
+  - dependent
+  - unknown
+  unknown_value: preserve
+- id: cc.operation-outcome/1
+  openness: open
+  values:
+  - ordinary
+  - initialization_failure
+  - exceptional_cleanup
+  - unknown
+  unknown_value: preserve
+- id: cc.operation-state/1
+  openness: open
+  values:
+  - complete
+  - partial
+  - unsupported
+  unknown_value: preserve
+- id: cc.operation-enumeration-state/1
+  openness: open
+  values:
+  - complete
+  - partial
+  - unavailable
+  unknown_value: preserve
+- id: cc.type-use-kind/1
+  openness: open
+  values:
+  - parameter
+  - return_type
+  - local
+  - capture
+  - temporary
+  - initializer
+  unknown_value: preserve
+- id: source.pp-phase/1
+  openness: open
+  values:
+  - raw
+  - evaluated
+  unknown_value: preserve
+- id: source.pp-enumeration-state/1
+  openness: open
+  values:
+  - complete
+  - partial
+  - unavailable
+  unknown_value: preserve
+- id: source.pp-facet-state/1
+  openness: open
+  values:
+  - complete
+  - partial
+  - unavailable
+  - unsupported
+  unknown_value: preserve
+- id: source.pp-activity/1
+  openness: open
+  values:
+  - active
+  - inactive
+  - unknown
+  unknown_value: preserve
+- id: source.pp-effect-state/1
+  openness: open
+  values:
+  - complete
+  - partial
+  - unavailable
+  - unsupported
+  unknown_value: preserve
+- id: build.parse-outcome/1
+  openness: open
+  values:
+  - success
+  - recovery
+  - failed
+  - unavailable
+  unknown_value: preserve
+- id: build.semantic-output/1
+  openness: open
+  values:
+  - produced
+  - not_produced
+  unknown_value: preserve
+- id: build.analysis-inventory-state/1
+  openness: open
+  values:
+  - complete
+  - partial
+  - unavailable
+  unknown_value: preserve
+- id: cc.flow-binding-state/1
+  openness: open
+  values: [complete, partial, unavailable, unsupported]
+  unknown_value: preserve
+
+- id: cc.cfg-element-kind/1
+  openness: open
+  values: [statement, constructor, new_allocator, automatic_object_dtor, delete_dtor, member_dtor, base_dtor, temporary_dtor, cleanup_function, lifetime_end, loop_exit, terminator, other]
+  unknown_value: preserve
+- id: cc.operation-expression-context/1
+  openness: open
+  values: [written_scope, default_argument, default_initializer, unknown]
+  unknown_value: preserve
 evolution_policies:
 - id: ng0.additive.v1
   patch:
@@ -251,6 +395,7 @@ evolution_policies:
   - source-coordinate-semantics
   old_reader_unknown_optional: preserve
   new_reader_missing_optional: absent
+
 relations:
 - descriptor_id: build.project.v1
   name: build.project
@@ -2830,6 +2975,31 @@ relations:
     type: optional<utf8_string>
     required: false
     identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.operation_count
+    name: operation_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.operation_ids
+    name: operation_ids
+    type: optional<set<operation_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.operation_state
+    name: operation_state
+    type: optional<open_symbol<cc.operation-enumeration-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.operation_profile
+    name: operation_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.capture_count
+    name: capture_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
   references:
   - source_columns:
     - cc.entity_detail.v1.compile_unit
@@ -2867,6 +3037,14 @@ relations:
     strength: soft_semantic
     on_missing: unresolved
     container_elements: true
+  - source_columns:
+    - cc.entity_detail.v1.operation_ids
+    target_relation: cc.operation
+    target_columns:
+    - cc.operation.v1.operation
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
   merge:
     mode: functional_assertion
     conflict_columns:
@@ -2887,6 +3065,11 @@ relations:
     - cc.entity_detail.v1.call_site_ids
     - cc.entity_detail.v1.call_site_state
     - cc.entity_detail.v1.call_site_profile
+    - cc.entity_detail.v1.operation_count
+    - cc.entity_detail.v1.operation_ids
+    - cc.entity_detail.v1.operation_state
+    - cc.entity_detail.v1.operation_profile
+    - cc.entity_detail.v1.capture_count
   partition:
     suggested_keys:
     - cc.entity_detail.v1.compile_unit
@@ -2903,6 +3086,12 @@ relations:
   provenance:
     minimum: direct_observation
   evolution_policy: ng0.additive.v1
+  row_constraints:
+    all_or_none:
+    - - cc.entity_detail.v1.operation_count
+      - cc.entity_detail.v1.operation_ids
+      - cc.entity_detail.v1.operation_state
+      - cc.entity_detail.v1.operation_profile
 - descriptor_id: cc.entity_edge.v1
   name: cc.entity_edge
   version: 1.0.0
@@ -3322,6 +3511,26 @@ relations:
     type: optional<utf8_string>
     required: false
     identity_role: authoritative_payload
+  - id: cc.body.v1.operation_count
+    name: operation_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.operation_ids
+    name: operation_ids
+    type: optional<set<operation_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.operation_state
+    name: operation_state
+    type: optional<open_symbol<cc.operation-enumeration-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.operation_profile
+    name: operation_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
   references:
   - source_columns:
     - cc.body.v1.compile_unit
@@ -3349,6 +3558,14 @@ relations:
     target_relation: cc.call_site
     target_columns:
     - cc.call_site.v1.call
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - cc.body.v1.operation_ids
+    target_relation: cc.operation
+    target_columns:
+    - cc.operation.v1.operation
     strength: soft_semantic
     on_missing: unresolved
     container_elements: true
@@ -3382,6 +3599,10 @@ relations:
     - cc.body.v1.call_site_ids
     - cc.body.v1.call_site_state
     - cc.body.v1.call_site_profile
+    - cc.body.v1.operation_count
+    - cc.body.v1.operation_ids
+    - cc.body.v1.operation_state
+    - cc.body.v1.operation_profile
   partition:
     suggested_keys:
     - cc.body.v1.compile_unit
@@ -3398,6 +3619,12 @@ relations:
   provenance:
     minimum: direct_observation
   evolution_policy: ng0.additive.v1
+  row_constraints:
+    all_or_none:
+    - - cc.body.v1.operation_count
+      - cc.body.v1.operation_ids
+      - cc.body.v1.operation_state
+      - cc.body.v1.operation_profile
 - descriptor_id: cc.cfg_node.v1
   name: cc.cfg_node
   version: 1.0.0
@@ -3469,6 +3696,21 @@ relations:
     type: optional<uint64>
     required: false
     identity_role: authoritative_payload
+  - id: cc.cfg_node.v1.implicit_operation_count
+    name: implicit_operation_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.cfg_node.v1.implicit_operation_state
+    name: implicit_operation_state
+    type: optional<open_symbol<cc.operation-enumeration-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.cfg_node.v1.implicit_operation_profile
+    name: implicit_operation_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
   references:
   - source_columns:
     - cc.cfg_node.v1.compile_unit
@@ -3509,6 +3751,9 @@ relations:
     - cc.cfg_node.v1.source
     - cc.cfg_node.v1.statement_count
     - cc.cfg_node.v1.element_count
+    - cc.cfg_node.v1.implicit_operation_count
+    - cc.cfg_node.v1.implicit_operation_state
+    - cc.cfg_node.v1.implicit_operation_profile
   partition:
     suggested_keys:
     - cc.cfg_node.v1.compile_unit
@@ -3525,7 +3770,11 @@ relations:
   provenance:
     minimum: direct_observation
   evolution_policy: ng0.additive.v1
-
+  row_constraints:
+    all_or_none:
+    - - cc.cfg_node.v1.implicit_operation_count
+      - cc.cfg_node.v1.implicit_operation_state
+      - cc.cfg_node.v1.implicit_operation_profile
 - descriptor_id: cc.cfg_edge.v1
   name: cc.cfg_edge
   version: 1.0.0
@@ -3754,6 +4003,46 @@ relations:
     type: optional<uint64>
     required: false
     identity_role: authoritative_payload
+  - id: cc.flow_fact.v1.expression
+    name: expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.flow_fact.v1.value_expression
+    name: value_expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.flow_fact.v1.expression_profile
+    name: expression_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.flow_fact.v1.expression_state
+    name: expression_state
+    type: optional<open_symbol<cc.flow-binding-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.flow_fact.v1.element_index
+    name: element_index
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.flow_fact.v1.element_kind
+    name: element_kind
+    type: optional<open_symbol<cc.cfg-element-kind/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.flow_fact.v1.cfg_binding_profile
+    name: cfg_binding_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.flow_fact.v1.cfg_binding_state
+    name: cfg_binding_state
+    type: optional<open_symbol<cc.flow-binding-state/1>>
+    required: false
+    identity_role: authoritative_payload
   references:
   - source_columns:
     - cc.flow_fact.v1.compile_unit
@@ -3827,6 +4116,20 @@ relations:
     strength: soft_semantic
     on_missing: unresolved
     container_elements: true
+  - source_columns:
+    - cc.flow_fact.v1.expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.flow_fact.v1.value_expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
   merge:
     mode: functional_assertion
     conflict_columns:
@@ -3845,6 +4148,14 @@ relations:
     - cc.flow_fact.v1.definition_facts
     - cc.flow_fact.v1.live_subjects
     - cc.flow_fact.v1.program_point
+    - cc.flow_fact.v1.expression
+    - cc.flow_fact.v1.value_expression
+    - cc.flow_fact.v1.expression_profile
+    - cc.flow_fact.v1.expression_state
+    - cc.flow_fact.v1.element_index
+    - cc.flow_fact.v1.element_kind
+    - cc.flow_fact.v1.cfg_binding_profile
+    - cc.flow_fact.v1.cfg_binding_state
   partition:
     suggested_keys:
     - cc.flow_fact.v1.compile_unit
@@ -3863,7 +4174,14 @@ relations:
   provenance:
     minimum: direct_observation
   evolution_policy: ng0.additive.v1
-
+  row_constraints:
+    all_or_none:
+    - - cc.flow_fact.v1.expression_profile
+      - cc.flow_fact.v1.expression_state
+    - - cc.flow_fact.v1.cfg_binding_profile
+      - cc.flow_fact.v1.cfg_binding_state
+    - - cc.flow_fact.v1.element_index
+      - cc.flow_fact.v1.element_kind
 - descriptor_id: source.include.v1
   name: source.include
   version: 1.0.0
@@ -3986,8 +4304,7 @@ relations:
   owner_namespace: cxxlens.standard.source
   stability: versioned
   profile: NG0
-  summary: Source-bound macro, directive and condition observation; inactive and unknown state remain
-    distinct.
+  summary: Source-bound macro, directive and condition observation; inactive and unknown state remain distinct.
   cpp_projection: installed-static
   generated_cpp_tag: cxxlens::source::relations::preprocessor_event
   claim:
@@ -4046,6 +4363,186 @@ relations:
     type: uint64
     required: true
     identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.phase
+    name: phase
+    type: optional<open_symbol<source.pp-phase/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.profile
+    name: profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.raw_event
+    name: raw_event
+    type: optional<typed_id<preprocessor_event_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.parent_event
+    name: parent_event
+    type: optional<typed_id<preprocessor_event_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.closing_event
+    name: closing_event
+    type: optional<typed_id<preprocessor_event_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.branch_event
+    name: branch_event
+    type: optional<typed_id<preprocessor_event_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.region_begin
+    name: region_begin
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.region_end
+    name: region_end
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.depth
+    name: depth
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.structure_state
+    name: structure_state
+    type: optional<open_symbol<source.pp-facet-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.activity
+    name: activity
+    type: optional<open_symbol<source.pp-activity/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.feature_symbols
+    name: feature_symbols
+    type: optional<set<pp_symbol_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.condition_tokens
+    name: condition_tokens
+    type: optional<set<source_token_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.function_like
+    name: function_like
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.variadic
+    name: variadic
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.parameter_count
+    name: parameter_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.replacement_count
+    name: replacement_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.parameter_index
+    name: parameter_index
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.argument_index
+    name: argument_index
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.parameter_symbol
+    name: parameter_symbol
+    type: optional<typed_id<pp_symbol_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.raw_token_ids
+    name: raw_token_ids
+    type: optional<set<source_token_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.stringify_token_ids
+    name: stringify_token_ids
+    type: optional<set<source_token_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.paste_token_ids
+    name: paste_token_ids
+    type: optional<set<source_token_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.substitution_count
+    name: substitution_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.evaluating_substitution_count
+    name: evaluating_substitution_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.argument_source
+    name: argument_source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.argument_empty
+    name: argument_empty
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.spelling_bytes
+    name: spelling_bytes
+    type: optional<bytes>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.parent_expansion
+    name: parent_expansion
+    type: optional<typed_id<preprocessor_event_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.expansion_depth
+    name: expansion_depth
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.definition_event
+    name: definition_event
+    type: optional<typed_id<preprocessor_event_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.effect_expression
+    name: effect_expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.effect_state
+    name: effect_state
+    type: optional<open_symbol<source.pp-effect-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.macro_state
+    name: macro_state
+    type: optional<open_symbol<source.pp-facet-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.argument_may_have_side_effects
+    name: argument_may_have_side_effects
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: source.preprocessor_event.v1.effect_function
+    name: effect_function
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
   references:
   - source_columns:
     - source.preprocessor_event.v1.compile_unit
@@ -4061,6 +4558,101 @@ relations:
     - source.span.v1.span
     strength: hard
     on_missing: reject_batch
+  - source_columns:
+    - source.preprocessor_event.v1.raw_event
+    target_relation: source.preprocessor_event
+    target_columns:
+    - source.preprocessor_event.v1.event
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - source.preprocessor_event.v1.parent_event
+    target_relation: source.preprocessor_event
+    target_columns:
+    - source.preprocessor_event.v1.event
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - source.preprocessor_event.v1.closing_event
+    target_relation: source.preprocessor_event
+    target_columns:
+    - source.preprocessor_event.v1.event
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - source.preprocessor_event.v1.branch_event
+    target_relation: source.preprocessor_event
+    target_columns:
+    - source.preprocessor_event.v1.event
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - source.preprocessor_event.v1.parent_expansion
+    target_relation: source.preprocessor_event
+    target_columns:
+    - source.preprocessor_event.v1.event
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - source.preprocessor_event.v1.definition_event
+    target_relation: source.preprocessor_event
+    target_columns:
+    - source.preprocessor_event.v1.event
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - source.preprocessor_event.v1.condition_tokens
+    target_relation: source.token
+    target_columns:
+    - source.token.v1.token
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - source.preprocessor_event.v1.raw_token_ids
+    target_relation: source.token
+    target_columns:
+    - source.token.v1.token
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - source.preprocessor_event.v1.stringify_token_ids
+    target_relation: source.token
+    target_columns:
+    - source.token.v1.token
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - source.preprocessor_event.v1.paste_token_ids
+    target_relation: source.token
+    target_columns:
+    - source.token.v1.token
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - source.preprocessor_event.v1.argument_source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - source.preprocessor_event.v1.effect_expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - source.preprocessor_event.v1.effect_function
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
   merge:
     mode: functional_assertion
     conflict_columns:
@@ -4071,6 +4663,42 @@ relations:
     - source.preprocessor_event.v1.value
     - source.preprocessor_event.v1.state
     - source.preprocessor_event.v1.ordinal
+    - source.preprocessor_event.v1.phase
+    - source.preprocessor_event.v1.profile
+    - source.preprocessor_event.v1.raw_event
+    - source.preprocessor_event.v1.parent_event
+    - source.preprocessor_event.v1.closing_event
+    - source.preprocessor_event.v1.branch_event
+    - source.preprocessor_event.v1.region_begin
+    - source.preprocessor_event.v1.region_end
+    - source.preprocessor_event.v1.depth
+    - source.preprocessor_event.v1.structure_state
+    - source.preprocessor_event.v1.activity
+    - source.preprocessor_event.v1.feature_symbols
+    - source.preprocessor_event.v1.condition_tokens
+    - source.preprocessor_event.v1.function_like
+    - source.preprocessor_event.v1.variadic
+    - source.preprocessor_event.v1.parameter_count
+    - source.preprocessor_event.v1.replacement_count
+    - source.preprocessor_event.v1.parameter_index
+    - source.preprocessor_event.v1.argument_index
+    - source.preprocessor_event.v1.parameter_symbol
+    - source.preprocessor_event.v1.raw_token_ids
+    - source.preprocessor_event.v1.stringify_token_ids
+    - source.preprocessor_event.v1.paste_token_ids
+    - source.preprocessor_event.v1.substitution_count
+    - source.preprocessor_event.v1.evaluating_substitution_count
+    - source.preprocessor_event.v1.argument_source
+    - source.preprocessor_event.v1.argument_empty
+    - source.preprocessor_event.v1.spelling_bytes
+    - source.preprocessor_event.v1.parent_expansion
+    - source.preprocessor_event.v1.expansion_depth
+    - source.preprocessor_event.v1.definition_event
+    - source.preprocessor_event.v1.effect_expression
+    - source.preprocessor_event.v1.effect_state
+    - source.preprocessor_event.v1.macro_state
+    - source.preprocessor_event.v1.argument_may_have_side_effects
+    - source.preprocessor_event.v1.effect_function
   partition:
     suggested_keys:
     - source.preprocessor_event.v1.compile_unit
@@ -4087,6 +4715,10 @@ relations:
   provenance:
     minimum: direct_observation
   evolution_policy: ng0.additive.v1
+  row_constraints:
+    all_or_none:
+    - - source.preprocessor_event.v1.phase
+      - source.preprocessor_event.v1.profile
 - descriptor_id: cc.layout_fact.v1
   name: cc.layout_fact
   version: 1.0.0
@@ -5990,6 +6622,860 @@ relations:
   - - cc.call_operand.v1.referenced_entity
   coverage:
     execution_domain: cc.call-operands.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.operation.v1
+  name: cc.operation
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.operation/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: Finite original compiler operation occurrences with independent actual static-site grouping.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::operation
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.operation.v1.operation
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.operation.v1.operation
+      projection:
+      - cc.operation.v1.compile_unit
+      - cc.operation.v1.scope_declaration
+      - cc.operation.v1.kind
+      - cc.operation.v1.origin
+      - cc.operation.v1.expression
+      - cc.operation.v1.object_declaration
+      - cc.operation.v1.node
+      - cc.operation.v1.element_index
+      - cc.operation.v1.ordinal
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.operation.v1.operation
+    name: operation
+    type: typed_id<operation_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.operation.v1.site
+    name: site
+    type: optional<typed_id<operation_site_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.site_state
+    name: site_state
+    type: open_symbol<cc.operation-site-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.scope_declaration
+    name: scope_declaration
+    type: typed_id<cc_declaration_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.function
+    name: function
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.body
+    name: body
+    type: optional<typed_id<body_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.kind
+    name: kind
+    type: open_symbol<cc.operation-kind/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.origin
+    name: origin
+    type: open_symbol<cc.operation-origin/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.profile
+    name: profile
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.ordinal
+    name: ordinal
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.source
+    name: source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.expression
+    name: expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.call
+    name: call
+    type: optional<typed_id<cc_call_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.parent_site
+    name: parent_site
+    type: optional<typed_id<operation_site_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.node
+    name: node
+    type: optional<typed_id<cfg_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.element_index
+    name: element_index
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.element_kind
+    name: element_kind
+    type: optional<open_symbol<cc.cfg-element-kind/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.program_point
+    name: program_point
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.program_point_profile
+    name: program_point_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.evaluation
+    name: evaluation
+    type: open_symbol<cc.operation-evaluation/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.outcome
+    name: outcome
+    type: open_symbol<cc.operation-outcome/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.observation_state
+    name: observation_state
+    type: open_symbol<cc.operation-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.reason
+    name: reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.target
+    name: target
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.target_signature_state
+    name: target_signature_state
+    type: optional<open_symbol<cc.target-signature-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.target_signature_profile
+    name: target_signature_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.target_usr
+    name: target_usr
+    type: optional<bytes>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.target_canonical_type
+    name: target_canonical_type
+    type: optional<typed_id<cc_type_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.target_structural_signature_digest
+    name: target_structural_signature_digest
+    type: optional<digest>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.target_canonical_type_digest
+    name: target_canonical_type_digest
+    type: optional<digest>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.target_canonical_type_profile
+    name: target_canonical_type_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.target_language
+    name: target_language
+    type: optional<open_symbol<build.language/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.target_linkage
+    name: target_linkage
+    type: optional<open_symbol<cc.linkage/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.target_module_domain
+    name: target_module_domain
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.object_declaration
+    name: object_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.object_entity
+    name: object_entity
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.object_expression
+    name: object_expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.object_source
+    name: object_source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.object_type
+    name: object_type
+    type: optional<typed_id<cc_type_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.object_state
+    name: object_state
+    type: optional<open_symbol<cc.operation-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.type_use_kind
+    name: type_use_kind
+    type: optional<open_symbol<cc.type-use-kind/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.target_kind
+    name: target_kind
+    type: optional<open_symbol<cc.entity-kind/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.subject_index
+    name: subject_index
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.parameter_has_default_argument
+    name: parameter_has_default_argument
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.expression_context
+    name: expression_context
+    type: optional<open_symbol<cc.operation-expression-context/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.operation.v1.context_declaration
+    name: context_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.operation.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.operation.v1.scope_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.operation.v1.function
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.operation.v1.body
+    target_relation: cc.body
+    target_columns:
+    - cc.body.v1.body
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.operation.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.operation.v1.expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.operation.v1.call
+    target_relation: cc.call_site
+    target_columns:
+    - cc.call_site.v1.call
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.operation.v1.node
+    target_relation: cc.cfg_node
+    target_columns:
+    - cc.cfg_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.operation.v1.target
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.operation.v1.target_canonical_type
+    target_relation: cc.type
+    target_columns:
+    - cc.type.v1.type
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.operation.v1.object_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.operation.v1.object_entity
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.operation.v1.object_expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.operation.v1.object_source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.operation.v1.object_type
+    target_relation: cc.type
+    target_columns:
+    - cc.type.v1.type
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.operation.v1.context_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.operation.v1.site
+    - cc.operation.v1.site_state
+    - cc.operation.v1.compile_unit
+    - cc.operation.v1.scope_declaration
+    - cc.operation.v1.function
+    - cc.operation.v1.body
+    - cc.operation.v1.kind
+    - cc.operation.v1.origin
+    - cc.operation.v1.profile
+    - cc.operation.v1.ordinal
+    - cc.operation.v1.source
+    - cc.operation.v1.expression
+    - cc.operation.v1.call
+    - cc.operation.v1.parent_site
+    - cc.operation.v1.node
+    - cc.operation.v1.element_index
+    - cc.operation.v1.element_kind
+    - cc.operation.v1.program_point
+    - cc.operation.v1.program_point_profile
+    - cc.operation.v1.evaluation
+    - cc.operation.v1.outcome
+    - cc.operation.v1.observation_state
+    - cc.operation.v1.reason
+    - cc.operation.v1.target
+    - cc.operation.v1.target_signature_state
+    - cc.operation.v1.target_signature_profile
+    - cc.operation.v1.target_usr
+    - cc.operation.v1.target_canonical_type
+    - cc.operation.v1.target_structural_signature_digest
+    - cc.operation.v1.target_canonical_type_digest
+    - cc.operation.v1.target_canonical_type_profile
+    - cc.operation.v1.target_language
+    - cc.operation.v1.target_linkage
+    - cc.operation.v1.target_module_domain
+    - cc.operation.v1.object_declaration
+    - cc.operation.v1.object_entity
+    - cc.operation.v1.object_expression
+    - cc.operation.v1.object_source
+    - cc.operation.v1.object_type
+    - cc.operation.v1.object_state
+    - cc.operation.v1.type_use_kind
+    - cc.operation.v1.target_kind
+    - cc.operation.v1.subject_index
+    - cc.operation.v1.parameter_has_default_argument
+    - cc.operation.v1.expression_context
+    - cc.operation.v1.context_declaration
+  partition:
+    suggested_keys:
+    - cc.operation.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.operation.v1.compile_unit
+  coverage:
+    execution_domain: cc.operation.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: source.preprocessor_inventory.v1
+  name: source.preprocessor_inventory
+  version: 1.0.0
+  semantic_major: 1
+  semantics: source.preprocessor_inventory/1
+  owner_namespace: cxxlens.standard.source
+  stability: versioned
+  profile: NG0
+  summary: Finite original raw/evaluated preprocessing events per frozen file and actual world.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::source::relations::preprocessor_inventory
+  claim:
+    cardinality: functional_assertion
+    key:
+    - source.preprocessor_inventory.v1.inventory
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: source.preprocessor_inventory.v1.inventory
+      projection:
+      - source.preprocessor_inventory.v1.compile_unit
+      - source.preprocessor_inventory.v1.file
+      - source.preprocessor_inventory.v1.source_snapshot
+      - source.preprocessor_inventory.v1.phase
+      - source.preprocessor_inventory.v1.profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: source.preprocessor_inventory.v1.inventory
+    name: inventory
+    type: typed_id<preprocessor_inventory_id>
+    required: true
+    identity_role: claim_key
+  - id: source.preprocessor_inventory.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.preprocessor_inventory.v1.file
+    name: file
+    type: typed_id<file_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.preprocessor_inventory.v1.source_snapshot
+    name: source_snapshot
+    type: typed_id<source_snapshot_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.preprocessor_inventory.v1.phase
+    name: phase
+    type: open_symbol<source.pp-phase/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.preprocessor_inventory.v1.profile
+    name: profile
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: source.preprocessor_inventory.v1.event_count
+    name: event_count
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: source.preprocessor_inventory.v1.event_ids
+    name: event_ids
+    type: set<preprocessor_event_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.preprocessor_inventory.v1.enumeration_state
+    name: enumeration_state
+    type: open_symbol<source.pp-enumeration-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.preprocessor_inventory.v1.structure_state
+    name: structure_state
+    type: open_symbol<source.pp-facet-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.preprocessor_inventory.v1.activity_state
+    name: activity_state
+    type: open_symbol<source.pp-facet-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.preprocessor_inventory.v1.macro_state
+    name: macro_state
+    type: open_symbol<source.pp-facet-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.preprocessor_inventory.v1.candidate_state
+    name: candidate_state
+    type: open_symbol<source.pp-facet-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.preprocessor_inventory.v1.expansion_state
+    name: expansion_state
+    type: open_symbol<source.pp-facet-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.preprocessor_inventory.v1.argument_effect_state
+    name: argument_effect_state
+    type: open_symbol<source.pp-facet-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: source.preprocessor_inventory.v1.reason
+    name: reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - source.preprocessor_inventory.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - source.preprocessor_inventory.v1.file
+    target_relation: source.file
+    target_columns:
+    - source.file.v1.file
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - source.preprocessor_inventory.v1.source_snapshot
+    target_relation: source.file
+    target_columns:
+    - source.file.v1.snapshot
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - source.preprocessor_inventory.v1.event_ids
+    target_relation: source.preprocessor_event
+    target_columns:
+    - source.preprocessor_event.v1.event
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - source.preprocessor_inventory.v1.compile_unit
+    - source.preprocessor_inventory.v1.file
+    - source.preprocessor_inventory.v1.source_snapshot
+    - source.preprocessor_inventory.v1.phase
+    - source.preprocessor_inventory.v1.profile
+    - source.preprocessor_inventory.v1.event_count
+    - source.preprocessor_inventory.v1.event_ids
+    - source.preprocessor_inventory.v1.enumeration_state
+    - source.preprocessor_inventory.v1.structure_state
+    - source.preprocessor_inventory.v1.activity_state
+    - source.preprocessor_inventory.v1.macro_state
+    - source.preprocessor_inventory.v1.candidate_state
+    - source.preprocessor_inventory.v1.expansion_state
+    - source.preprocessor_inventory.v1.argument_effect_state
+    - source.preprocessor_inventory.v1.reason
+  partition:
+    suggested_keys:
+    - source.preprocessor_inventory.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - source.preprocessor_inventory.v1.compile_unit
+  coverage:
+    execution_domain: source.preprocessor_inventory.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: build.compile_unit_analysis.v1
+  name: build.compile_unit_analysis
+  version: 1.0.0
+  semantic_major: 1
+  semantics: build.compile_unit_analysis/1
+  owner_namespace: cxxlens.standard.build
+  stability: versioned
+  profile: NG0
+  summary: Original selected compile-unit parser outcome independent of semantic extraction.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::build::relations::compile_unit_analysis
+  claim:
+    cardinality: functional_assertion
+    key:
+    - build.compile_unit_analysis.v1.compile_unit
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: null
+      projection:
+      - build.compile_unit_analysis.v1.compile_unit
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: build.compile_unit_analysis.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: claim_key
+  - id: build.compile_unit_analysis.v1.project
+    name: project
+    type: typed_id<project_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: build.compile_unit_analysis.v1.main_source
+    name: main_source
+    type: typed_id<source_snapshot_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: build.compile_unit_analysis.v1.profile
+    name: profile
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: build.compile_unit_analysis.v1.parse_outcome
+    name: parse_outcome
+    type: open_symbol<build.parse-outcome/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: build.compile_unit_analysis.v1.parse_error_count
+    name: parse_error_count
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: build.compile_unit_analysis.v1.fatal_error_count
+    name: fatal_error_count
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: build.compile_unit_analysis.v1.semantic_output
+    name: semantic_output
+    type: open_symbol<build.semantic-output/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: build.compile_unit_analysis.v1.reason
+    name: reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - build.compile_unit_analysis.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - build.compile_unit_analysis.v1.project
+    target_relation: build.project
+    target_columns:
+    - build.project.v1.project
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - build.compile_unit_analysis.v1.main_source
+    target_relation: source.file
+    target_columns:
+    - source.file.v1.snapshot
+    strength: hard
+    on_missing: reject_batch
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - build.compile_unit_analysis.v1.project
+    - build.compile_unit_analysis.v1.main_source
+    - build.compile_unit_analysis.v1.profile
+    - build.compile_unit_analysis.v1.parse_outcome
+    - build.compile_unit_analysis.v1.parse_error_count
+    - build.compile_unit_analysis.v1.fatal_error_count
+    - build.compile_unit_analysis.v1.semantic_output
+    - build.compile_unit_analysis.v1.reason
+  partition:
+    suggested_keys:
+    - build.compile_unit_analysis.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - build.compile_unit_analysis.v1.compile_unit
+  coverage:
+    execution_domain: build.compile_unit_analysis.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: build.analysis_inventory.v1
+  name: build.analysis_inventory
+  version: 1.0.0
+  semantic_major: 1
+  semantics: build.analysis_inventory/1
+  owner_namespace: cxxlens.standard.build
+  stability: versioned
+  profile: NG0
+  summary: Independent finite selected unit and configuration populations.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::build::relations::analysis_inventory
+  claim:
+    cardinality: functional_assertion
+    key:
+    - build.analysis_inventory.v1.inventory
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: build.analysis_inventory.v1.inventory
+      projection:
+      - build.analysis_inventory.v1.project
+      - build.analysis_inventory.v1.profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: build.analysis_inventory.v1.inventory
+    name: inventory
+    type: typed_id<analysis_inventory_id>
+    required: true
+    identity_role: claim_key
+  - id: build.analysis_inventory.v1.project
+    name: project
+    type: typed_id<project_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: build.analysis_inventory.v1.profile
+    name: profile
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: build.analysis_inventory.v1.compile_unit_count
+    name: compile_unit_count
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: build.analysis_inventory.v1.compile_units
+    name: compile_units
+    type: set<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: build.analysis_inventory.v1.selected_variant_count
+    name: selected_variant_count
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: build.analysis_inventory.v1.selected_variant_ids
+    name: selected_variant_ids
+    type: set<build_variant_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: build.analysis_inventory.v1.selected_variant_state
+    name: selected_variant_state
+    type: open_symbol<build.analysis-inventory-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: build.analysis_inventory.v1.enumeration_state
+    name: enumeration_state
+    type: open_symbol<build.analysis-inventory-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: build.analysis_inventory.v1.reason
+    name: reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - build.analysis_inventory.v1.project
+    target_relation: build.project
+    target_columns:
+    - build.project.v1.project
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - build.analysis_inventory.v1.compile_units
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+    container_elements: true
+  - source_columns:
+    - build.analysis_inventory.v1.selected_variant_ids
+    target_relation: build.variant
+    target_columns:
+    - build.variant.v1.variant
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - build.analysis_inventory.v1.project
+    - build.analysis_inventory.v1.profile
+    - build.analysis_inventory.v1.compile_unit_count
+    - build.analysis_inventory.v1.compile_units
+    - build.analysis_inventory.v1.selected_variant_count
+    - build.analysis_inventory.v1.selected_variant_ids
+    - build.analysis_inventory.v1.selected_variant_state
+    - build.analysis_inventory.v1.enumeration_state
+    - build.analysis_inventory.v1.reason
+  partition:
+    suggested_keys:
+    - build.analysis_inventory.v1.project
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - build.analysis_inventory.v1.project
+  coverage:
+    execution_domain: build.analysis_inventory.project
   closure:
     supported_kinds:
     - relation-key-enumeration

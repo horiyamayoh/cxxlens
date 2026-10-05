@@ -4,6 +4,7 @@
 
 #include <functional>
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -23,6 +24,16 @@ namespace cxxlens::detail::clang22
 		std::string logical_path;
 		std::uint64_t begin{}, end{};
 		std::string kind, name, value, state;
+		std::uint32_t location{}, definition_location{}, parent_location{};
+		std::optional<std::size_t> parent_observation, closing_observation;
+		std::optional<bool> function_like, variadic, argument_empty;
+		std::optional<std::uint64_t> parameter_count, replacement_count, parameter_index,
+			argument_index, substitution_count, evaluating_substitution_count;
+		std::string parameter_name;
+		std::vector<std::uint32_t> argument_locations;
+		std::optional<bool> active;
+		bool macro_complete{}, expansion_context_complete{};
+		std::uint64_t context_depth{};
 	};
 	struct project_preprocessor_observations
 	{
@@ -34,6 +45,7 @@ namespace cxxlens::detail::clang22
 		};
 		std::vector<project_preprocessor_event> events;
 		std::size_t retained_bytes{};
+		std::map<std::string, std::uint64_t, std::less<>> event_admissions;
 		bool truncated{};
 		std::vector<token> expanded_tokens;
 		std::set<std::string, std::less<>> opened_files, classification_incomplete;
@@ -61,5 +73,6 @@ namespace cxxlens::detail::clang22
 							  const provider_worker_v4_normalized_output& normalized,
 							  const project_preprocessor_observations& preprocessing,
 							  const std::function<void(std::string_view)>& progress = {},
-							  const project_original_calls& original_calls = {});
+							  const project_original_calls& original_calls = {},
+							  const std::string& project_id = {});
 } // namespace cxxlens::detail::clang22

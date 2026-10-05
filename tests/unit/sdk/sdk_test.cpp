@@ -1169,7 +1169,8 @@ namespace
 
 		auto conflict_order = baseline.conflict_columns;
 		std::ranges::sort(conflict_order);
-		do
+		// Visit every column at every position without factorial schema-size growth.
+		for (std::size_t rotation{}; rotation < conflict_order.size(); ++rotation)
 		{
 			auto candidate = baseline;
 			candidate.conflict_columns = conflict_order;
@@ -1177,7 +1178,8 @@ namespace
 			require(candidate.validate() && candidate.canonical_form() == expected_form &&
 						candidate.descriptor_digest == expected_digest,
 					"conflict column permutation changed descriptor canonical identity");
-		} while (std::ranges::next_permutation(conflict_order).found);
+			std::ranges::rotate(conflict_order, conflict_order.begin() + 1);
+		}
 	}
 
 	void check_claim_batch_digest_framing()

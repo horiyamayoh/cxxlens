@@ -2111,7 +2111,7 @@ namespace cxxlens::detail::clang22
 					if (const auto* function =
 							llvm::dyn_cast<clang::FunctionDecl>(parameter->getDeclContext()))
 						definition = function->isThisDeclarationADefinition();
-				entity.exact_equivalence = exact;
+				entity.exact_equivalence = exact && !entity.limitation.has_value();
 				if (!exact && !set_limitation(entity, "identity-confidence:structural-fallback"))
 					return false;
 				return set_semantic_key(entity, std::move(key)) &&
@@ -2531,7 +2531,8 @@ namespace cxxlens::detail::clang22
 					if (origin_begin >
 							static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) ||
 						origin_end >
-							static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+							static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) ||
+						origin_end < origin_begin)
 						return sdk::unexpected(failure("native.source-origin-invalid", "offset"));
 					std::size_t bytes{};
 					if (!checked_add(kind.size(),
@@ -2564,7 +2565,9 @@ namespace cxxlens::detail::clang22
 						spelling_end_token, 0U, source_manager, unit_->ast().getLangOpts());
 					if (spelling_begin.isInvalid() || spelling_end.isInvalid())
 						return sdk::unexpected(failure("native.source-origin-invalid", "range"));
-					if (source_manager.isWrittenInSameFile(spelling_begin, spelling_end))
+					if (source_manager.isWrittenInSameFile(spelling_begin, spelling_end) &&
+						source_manager.getFileOffset(spelling_begin) <=
+							source_manager.getFileOffset(spelling_end))
 					{
 						const auto origin_filename = source_manager.getFilename(spelling_begin);
 						if (origin_filename.empty())

@@ -3,7 +3,9 @@
 #include <utility>
 #include <vector>
 
+#include <cxxlens/relations/build_analysis_inventory.hpp>
 #include <cxxlens/relations/build_compile_unit.hpp>
+#include <cxxlens/relations/build_compile_unit_analysis.hpp>
 #include <cxxlens/relations/build_project.hpp>
 #include <cxxlens/relations/build_toolchain_context.hpp>
 #include <cxxlens/relations/build_variant.hpp>
@@ -22,6 +24,7 @@
 #include <cxxlens/relations/cc_flow_fact.hpp>
 #include <cxxlens/relations/cc_flow_inventory.hpp>
 #include <cxxlens/relations/cc_layout_fact.hpp>
+#include <cxxlens/relations/cc_operation.hpp>
 #include <cxxlens/relations/cc_record_inventory.hpp>
 #include <cxxlens/relations/cc_record_surface.hpp>
 #include <cxxlens/relations/cc_syntax_node.hpp>
@@ -39,6 +42,7 @@
 #include <cxxlens/relations/source_include_inventory.hpp>
 #include <cxxlens/relations/source_origin.hpp>
 #include <cxxlens/relations/source_preprocessor_event.hpp>
+#include <cxxlens/relations/source_preprocessor_inventory.hpp>
 #include <cxxlens/relations/source_span.hpp>
 #include <cxxlens/relations/source_token.hpp>
 #include <cxxlens/relations/source_token_inventory.hpp>
@@ -290,6 +294,10 @@ namespace cxxlens::sdk
 		static const std::vector<relation_descriptor> values = []
 		{
 			std::vector<relation_descriptor> descriptors{
+				source::relations::preprocessor_inventory::descriptor(),
+				cc::relations::operation::descriptor(),
+				build::relations::analysis_inventory::descriptor(),
+				build::relations::compile_unit_analysis::descriptor(),
 				build::relations::compile_unit::descriptor(),
 				build::relations::project::descriptor(),
 				build::relations::toolchain_context::descriptor(),
