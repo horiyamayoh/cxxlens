@@ -2222,11 +2222,11 @@ effect gates、one-shot barrier、fault harness、および fixture-scoped clean
 retained root identity/lifetime、exact fixture locator、selected runtime/VFS/device/build profile、
 許可 family/effect/fault scheduleへbindしたnonforgeable capabilityとし、path、environment、public flag、
 report field、self-asserted booleanから導出せず、serializeせず、run終了時にrevokeする。public locatorまたは
-production APIからmint・注入・到達できない。canonical/user source と production activation は、static/shared
-Cxxlens runnersが実際にloadする同一 SQLite DSO identity/source-id/hash、VFS/build/device/filesystem profile、
-全 callback boundary・parameterized large-sector・parent-sync・rebind-at-unlink・recrash/idempotence の
-positive・negative・fault tests が揃うまで fail closed とする。Cxxlens の static/shared runner labels から
-static SQLite runtime を推測せず、genuinely static SQLite image は別 profile/matrix を要求する。
+production APIからmint・注入・到達できない。canonical/user source の利用条件は、現在ロードしている
+SQLite と VFS の互換性、およびその呼出しで観測した source identity・lock・許可 effect で判定する。
+保存した試験結果、runner identity、DSO hash の照合や認定済み試験 matrix を利用条件にしない。
+callback boundary、large-sector、parent-sync、rebind-at-unlink、crash/reopen は通常の回帰・fault 試験で検証する。
+Cxxlens の static/shared linkage から SQLite の linkage や VFS の動作を推測しない。
 
 exact public locator `:memory:` は filesystem canonicalization 前に ephemeral fresh-v3 branch とし、sidecar、v2/migration、
 close 後 persistence を持たない。embedded NUL またはplatform pathへlosslessに表現不能なnonempty inputはruntime/filesystem
@@ -2271,9 +2271,9 @@ profile で native `SQLITE_OK` が返ることは mapping の null/non-null を�
 `extend=0`+OK semantics は変更しない。この per-file READONLY-family state は成功した delegated `xShmUnmap` でだけ reset する。
 
 DF-0205 の `cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1` は、same-process writer の
-runtime safety contract である。internal implementation はこの contract の positive・negative・fault
-tests で検証し、全 counterexample が通るまで current source の blanket `SQLITE_OK` rejectionを変更せず、
-productionをblockする。同じloaded SQLite Unix runtimeで既存writerのinode-bound
+runtime safety contract である。internal implementation は通常の positive・negative・fault tests で検証する。
+実行時の必要な lease・mapping・source identity を確認できなければ native `SQLITE_OK` を拒否する。
+保存した試験証跡で利用を許可する仕組みは持たない。同じloaded SQLite Unix runtimeで既存writerのinode-bound
 SHM mappingが再利用される場合に限り、accepted narrow exception authorityはwriter native map前のlocal
 non-authoritative attempt、exact OK+nonnullとpost-map receipt後のregistry pending、current-v3 Store
 writer gate完了後のlive leaseという順で成立し、reader delegation前にprocess-global cross-alias

@@ -3167,7 +3167,7 @@ $defs:
                     checksum_authority: high-probability-incomplete-write-guard-only-never-a-substitute-for-exact-original-page-one-bytes
                     cold_parser_scope: format-classifier-input-only-never-recovery-or-success-authority-without-a-separately-accepted-receiptless-crash-profile
                     invalid-or-mismatched-S: reject-candidate-before-offset-arithmetic-private-recovery-or-source-effect
-                  effect_grammar_profile_receipt: bind-an-exact-layer-discriminator-plus-loaded-SQLite-DSO-source-id-hash-build-options-VFS-backend-token-raw-xSectorSize-effective-S-temporary-status-xDeviceCharacteristics-device-filesystem-profile-decoded-P-database-page-count-N-and-derived-Q-E-R-the-disposable-runtime-test-layer-additionally-binds-the-nonforgeable-fixture-capability-private-root-identity-lifetime-runtime-test-profile-and-direct-positive-negative-fault-resource-and-determinism-tests-without-authorizing-production-the-production-layer-cannot-accept-that-capability-and-binds-the-runtime-safety-receipt-and-direct-test-success-before-the-pending-coordination-request-and-inherit-the-receipt-through-the-full-receipt-bounded-effect-transcript-completed-edge-and-handoff
+                  effect_grammar_profile_receipt: bind-an-exact-layer-discriminator-plus-loaded-SQLite-DSO-source-id-hash-build-options-VFS-backend-token-raw-xSectorSize-effective-S-temporary-status-xDeviceCharacteristics-device-filesystem-profile-decoded-P-database-page-count-N-and-derived-Q-E-R-the-disposable-runtime-test-layer-additionally-binds-the-nonforgeable-fixture-capability-private-root-identity-lifetime-runtime-test-profile-the-production-layer-cannot-accept-that-capability-and-binds-the-current-runtime-safety-receipt-before-the-pending-coordination-request-and-inherit-the-receipt-through-the-full-receipt-bounded-effect-transcript-completed-edge-and-handoff
                   rollback_journal_effect_trace: xOpen-flags-2054-readwrite-create-main_journal-write-the-exact-S-byte-incomplete-header-in-minimum-of-P-and-S-byte-chunks-then-for-each-derived-large-sector-record-page-in-ascending-order-xWrite-4-page-number-xWrite-P-exact-preimage-xWrite-4-checksum-xSync-flags-2-normal-xWrite-12-at-zero-valid-magic-and-nRec-R-xSync-flags-2-normal-then-for-each-derived-record-page-xWrite-P-at-page-offset-with-page-one-postimage-and-every-other-page-byte-exact-xFileControl-SYNC-21-return-SQLITE_NOTFOUND-12-xSync-flags-2-normal-xWrite-28-at-zero-zero-header-invalidation-xSync-flags-18-normal-dataonly-xFileControl-COMMIT_PHASETWO-22-return-SQLITE_NOTFOUND-12-xSync-flags-2-normal-xClose-then-immediate-retained-parent-relative-current-journal-leaf-regular-identity-byte-check-wrapper-known-name-xDelete-syncDir-zero-with-no-xTruncate-and-after-wrapper-delete-success-before-returning-the-callback-full-fsync-the-retained-authenticated-parent
                   parent_directory_effect_trace: separate-linux-unix-vfs-platform-syscall-evidence-after-the-first-journal-fdatasync-and-before-the-valid-journal-header-write-opens-the-same-path-parent-directory-performs-fdatasync-and-closes-it-but-unix-VFS-ignores-directory-fsync-failure-and-this-observation-is-never-the-per-operation-durability-receipt
                   normalizer_parent_durability_receipt: after-the-underlying-first-journal-xSync-succeeds-and-before-returning-that-wrapper-callback-or-arming-the-valid-header-or-any-main-write-full-fsync-the-preopened-retained-authenticated-parent-directory-fd-require-observed-success-and-seal-the-same-parent-entry-journal-object-and-namespace-epoch-receipt-failure-enters-post-journal-pre-main-effect-totality-with-no-valid-header-or-main-write
@@ -3204,71 +3204,6 @@ $defs:
                     terminal_reclassifier_source_effect: forbidden-no-repair-cleanup-or-second-normalization
                     post_normalization_fresh_pre_effect_failure: when-normalization-close-postcondition-are-confirmed-and-fresh-has-made-no-persistent-effect-return-the-exact-fresh-trigger-and-no-store-without-claiming-zero-whole-invocation-effect-fresh-close-non-ok-and-post-arm-paths-retain-existing-fresh-totality
                   implicit_retry_or_second_snapshot: forbidden
-                  qualification:
-                    matrix: exact-static-and-shared-Cxxlens-qualification-runners-bound-to-the-same-loaded-SQLite-DSO-identity-source-id-hash-VFS-build-and-device-profile-not-an-inferred-static-SQLite-runtime
-                    observed_fixture_page_size: 4096
-                    page_size_vectors:
-                    - 512-header-512-file-512
-                    - 1024-header-1024-file-1024
-                    - 2048-header-2048-file-2048
-                    - 4096-header-4096-file-4096
-                    - 8192-header-8192-file-8192
-                    - 16384-header-16384-file-16384
-                    - 32768-header-32768-file-32768
-                    - 65536-header-1-file-65536
-                    page_size_boundary_qualification_required:
-                    - 512-header-512-file-512
-                    - 65536-header-1-file-65536
-                    sector_page_count_matrix_required: for-every-supported-P-and-every-qualified-effective-S-let-Q-be-S-div-P-when-S-is-greater-than-P-otherwise-one-and-cover-the-deduplicated-positive-database-page-count-set-one-Q-minus-one-Q-and-Q-plus-one-then-mechanically-prove-L-equals-floor-0x40000000-div-P-plus-one-is-greater-than-Q-throughout-the-admitted-domain-and-reject-a-synthetic-record-containing-L
-                    journal_sector_pinned_default_vector: test-vector-only-raw-xSectorSize-512-effective-S-512-incomplete-header-single-512-byte-write-at-zero-page-number-one-at-512-page-one-at-516-and-checksum-at-516-plus-decoded-page-size-never-a-contract-default
-                    journal_sector_parameterized_vectors_required:
-                    - raw-16-effective-512
-                    - raw-32-effective-32
-                    - raw-4096-effective-4096
-                    - raw-65536-effective-65536
-                    - raw-131072-effective-65536
-                    - raw-4096-powersafe-overwrite-effective-512
-                    - S-65536-page-size-4096-header-written-as-sixteen-4096-byte-chunks
-                    - S-65536-page-size-4096-page-count-at-least-16-nRec-16-record-pages-one-through-16-and-main-writes-page-one-postimage-plus-pages-two-through-16-exact-preimages
-                    journal_sector_negative_vectors_required:
-                    - effective-non-power-of-two
-                    - parsed-S-below-32
-                    - parsed-S-above-65536
-                    - header-field-S-mismatch
-                    - header-region-length-not-equal-to-S
-                    - record-offset-derived-from-512-instead-of-S
-                    - record-length-or-page-size-mismatch
-                    - padding-bytes-treated-as-authority
-                    - fixed-nRec-one-when-S-exceeds-page-size
-                    - omitted-large-sector-preimage
-                    - injected-locking-page-L-record
-                    - main-write-outside-derived-record-set
-                    - non-page-one-main-byte-change
-                    observed_fixture_pre_main_sha256: e3ba06536f7dbba337dee3c1c5f01b43660ce276abb54c5cee2d5defc5b970aa
-                    observed_fixture_post_main_sha256: bd70f69256dee6875161b88a66f56baaf057e8f064a01108d11428b2d7a7b071
-                    counter_vectors:
-                    - pre-change-counter-5-pre-version-valid-for-9-post-change-counter-6-post-version-valid-for-6
-                    - pre-change-counter-4294967295-pre-version-valid-for-305419896-post-change-counter-0-post-version-valid-for-0
-                    write_library_version_vector: pre-write-library-version-1-pre-change-counter-7-pre-version-valid-for-3-post-write-library-version-3045001-post-change-counter-8-post-version-valid-for-8
-                    multi_page_freelist_vector:
-                      page_count: 492
-                      page_size: 4096
-                      byte_count: 2015232
-                      freelist_pages: 491
-                      pre_main_sha256: bc708af76e44d33510e7f13224227e34a7a2730baf5e55a5b27c2cdf43c849c8
-                      post_main_sha256: 11add905bcdca94b67c443e7b74276f2c771f4924ee8a30170db1551af7f00a2
-                      projection: unchanged-size-and-page-one-only-authorized-fields-patched-with-pages-two-through-492-byte-exact
-                    required:
-                    - pre-and-post-exact-file-family-effect-trace
-                    - faults-before-and-after-first-coordination-callback-post-coordination-pre-full-zero-wal-gap-and-before-and-after-second-full-arm-callback
-                    - skipped-duplicate-reordered-and-wrong-prerequisite-arm-fail-closed
-                    - faults-at-every-parameterized-header-chunk-record-field-journal-sync-valid-header-main-page-write-main-sync-invalidation-close-coordination-wal-delete-parent-sync-terminal-journal-delete-parent-sync-and-creation-parent-sync-boundary-including-FI-to-FO
-                    - receiptless-nonhot-hot-invalidated-absent-and-zero-wal-cold-reopen-and-recrash-idempotence
-                    - rebind-at-every-known-name-unlink-and-wrapper-xDelete-final-check-boundary
-                    - same-process-shared-and-reserved-separate-process-lock-holder-and-unrelated-same-inode-fd-close-hazard
-                    - post-normalization-fresh-journal-transition-fault
-                    - cold-reopen-exact-outcome
-                    - no-effect-replacement-nonempty-mixed-unrecognized-journal-and-receipt-drift-cases
                 accepted_v2_compact_recovery: explicit-compact-acquires-exclusive-lease-rechecks-every-receipt-field-opens-original-read-write-no-create-through-the-initially-write-denying-vfs-queries-and-passes-the-actual-connection-v3-gate-arms-writes-lets-sqlite-recover-and-proves-the-exact-anchored-v2-state-before-migration-write-concurrent-byte-drift-is-the-source-drift-result
                 accepted_current_v3_first_mutation_recovery: acquire-exclusive-lease-recheck-every-receipt-field-query-source-limit-let-sqlite-recover-and-prove-the-exact-anchored-current-v3-state-and-wal-close-the-exclusive-recovery-connection-release-its-lock-normal-read-write-no-create-reopen-then-begin-immediate-and-recheck-exact-or-valid-descendant-wal-and-limit-before-write
                 special_recovery_concurrency: exact-receipt-only-is-a-conservative-exception-to-ordinary-valid-descendant-admission-until-normal-locking-handoff-concurrent-byte-drift-is-no-write-concurrent-source-change

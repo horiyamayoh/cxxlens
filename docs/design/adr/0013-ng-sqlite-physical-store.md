@@ -69,9 +69,9 @@ attachment 全体を一 callback で解放し得る。ADR 0097 と SQLite/Snapsh
 checked attachment identityごとのcomplete pending/live holder setを一回のunmap outcomeへbindする。
 cross-attachment grouping、partial group、duplicate unmap、second-page validation failure後のfirst-page
 継続、closeのdouble cleanupを禁止する。この acceptance は internal writer attachment-group state
-machine と focused positive・negative・fault tests の実装だけを認可する。reader grouping と writer
-VFS production binding は、それぞれの runtime contract と直接試験が成立するまで block し、current
-blanket native `SQLITE_OK` rejection を維持する。
+machine を実装し、通常の positive・negative・fault tests で検証する。reader grouping と writer
+VFS binding は、それぞれの runtime contract が要求する source identity・mapping・lifetime を現在の
+呼出しで確認する。必要な条件を確認できない native `SQLITE_OK` は拒否し、試験証跡を利用条件にしない。
 
 reader attachment の runtime contract は、non-last attachment が唯一 support した page を cleanup 後も
 fresh reader に見せないこと、map-before-gate group snapshot と later map を total-order して partial

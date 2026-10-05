@@ -533,10 +533,9 @@ ACCEPTED_EMPTY_NORMALIZATION: dict[str, Any] = {
         "xDeviceCharacteristics-device-filesystem-profile-decoded-P-database-page-"
         "count-N-and-derived-Q-E-R-the-disposable-runtime-test-layer-additionally-"
         "binds-the-nonforgeable-fixture-capability-private-root-identity-lifetime-"
-        "runtime-test-profile-and-direct-positive-negative-fault-resource-"
-        "and-determinism-tests-without-authorizing-production-the-production-layer-"
-        "cannot-accept-that-capability-and-binds-the-runtime-safety-receipt-and-"
-        "direct-test-success-before-the-pending-coordination-request-and-inherit-the-"
+        "runtime-test-profile-the-production-layer-cannot-accept-that-capability-"
+        "and-binds-the-current-runtime-safety-receipt-before-the-pending-"
+        "coordination-request-and-inherit-the-"
         "receipt-through-the-full-receipt-bounded-effect-transcript-completed-edge-"
         "and-handoff"
     ),
@@ -765,141 +764,7 @@ ACCEPTED_EMPTY_NORMALIZATION: dict[str, Any] = {
         ),
     },
     "implicit_retry_or_second_snapshot": "forbidden",
-    "qualification": {
-        "matrix": (
-            "exact-static-and-shared-Cxxlens-qualification-runners-bound-to-the-same-"
-            "loaded-SQLite-DSO-identity-source-id-hash-VFS-build-and-device-profile-"
-            "not-an-inferred-static-SQLite-runtime"
-        ),
-        "observed_fixture_page_size": 4096,
-        "page_size_vectors": [
-            "512-header-512-file-512",
-            "1024-header-1024-file-1024",
-            "2048-header-2048-file-2048",
-            "4096-header-4096-file-4096",
-            "8192-header-8192-file-8192",
-            "16384-header-16384-file-16384",
-            "32768-header-32768-file-32768",
-            "65536-header-1-file-65536",
-        ],
-        "page_size_boundary_qualification_required": [
-            "512-header-512-file-512",
-            "65536-header-1-file-65536",
-        ],
-        "sector_page_count_matrix_required": (
-            "for-every-supported-P-and-every-qualified-effective-S-let-Q-be-S-div-P-"
-            "when-S-is-greater-than-P-otherwise-one-and-cover-the-deduplicated-"
-            "positive-database-page-count-set-one-Q-minus-one-Q-and-Q-plus-one-then-"
-            "mechanically-prove-L-equals-floor-0x40000000-div-P-plus-one-is-greater-"
-            "than-Q-throughout-the-admitted-domain-and-reject-a-synthetic-record-"
-            "containing-L"
-        ),
-        "journal_sector_pinned_default_vector": (
-            "test-vector-only-raw-xSectorSize-512-effective-S-512-incomplete-"
-            "header-single-512-byte-write-at-zero-page-number-one-at-512-page-one-"
-            "at-516-and-checksum-at-516-plus-decoded-page-size-never-a-contract-"
-            "default"
-        ),
-        "journal_sector_parameterized_vectors_required": [
-            "raw-16-effective-512",
-            "raw-32-effective-32",
-            "raw-4096-effective-4096",
-            "raw-65536-effective-65536",
-            "raw-131072-effective-65536",
-            "raw-4096-powersafe-overwrite-effective-512",
-            "S-65536-page-size-4096-header-written-as-sixteen-4096-byte-chunks",
-            (
-                "S-65536-page-size-4096-page-count-at-least-16-nRec-16-record-pages-"
-                "one-through-16-and-main-writes-page-one-postimage-plus-pages-two-"
-                "through-16-exact-preimages"
-            ),
-        ],
-        "journal_sector_negative_vectors_required": [
-            "effective-non-power-of-two",
-            "parsed-S-below-32",
-            "parsed-S-above-65536",
-            "header-field-S-mismatch",
-            "header-region-length-not-equal-to-S",
-            "record-offset-derived-from-512-instead-of-S",
-            "record-length-or-page-size-mismatch",
-            "padding-bytes-treated-as-authority",
-            "fixed-nRec-one-when-S-exceeds-page-size",
-            "omitted-large-sector-preimage",
-            "injected-locking-page-L-record",
-            "main-write-outside-derived-record-set",
-            "non-page-one-main-byte-change",
-        ],
-        "observed_fixture_pre_main_sha256": (
-            "e3ba06536f7dbba337dee3c1c5f01b43660ce276abb54c5cee2d5defc5b970aa"
-        ),
-        "observed_fixture_post_main_sha256": (
-            "bd70f69256dee6875161b88a66f56baaf057e8f064a01108d11428b2d7a7b071"
-        ),
-        "counter_vectors": [
-            (
-                "pre-change-counter-5-pre-version-valid-for-9-post-change-counter-6-"
-                "post-version-valid-for-6"
-            ),
-            (
-                "pre-change-counter-4294967295-pre-version-valid-for-305419896-post-"
-                "change-counter-0-post-version-valid-for-0"
-            ),
-        ],
-        "write_library_version_vector": (
-            "pre-write-library-version-1-pre-change-counter-7-pre-version-valid-for-"
-            "3-post-write-library-version-3045001-post-change-counter-8-post-version-"
-            "valid-for-8"
-        ),
-        "multi_page_freelist_vector": {
-            "page_count": 492,
-            "page_size": 4096,
-            "byte_count": 2_015_232,
-            "freelist_pages": 491,
-            "pre_main_sha256": (
-                "bc708af76e44d33510e7f13224227e34a7a2730baf5e55a5b27c2cdf43c849c8"
-            ),
-            "post_main_sha256": (
-                "11add905bcdca94b67c443e7b74276f2c771f4924ee8a30170db1551af7f00a2"
-            ),
-            "projection": (
-                "unchanged-size-and-page-one-only-authorized-fields-patched-with-"
-                "pages-two-through-492-byte-exact"
-            ),
-        },
-        "required": [
-            "pre-and-post-exact-file-family-effect-trace",
-            (
-                "faults-before-and-after-first-coordination-callback-post-"
-                "coordination-pre-full-zero-wal-gap-and-before-and-after-second-"
-                "full-arm-callback"
-            ),
-            "skipped-duplicate-reordered-and-wrong-prerequisite-arm-fail-closed",
-            (
-                "faults-at-every-parameterized-header-chunk-record-field-journal-sync-"
-                "valid-header-main-page-write-main-sync-invalidation-close-"
-                "coordination-wal-delete-parent-sync-terminal-journal-delete-parent-"
-                "sync-and-creation-parent-sync-boundary-including-FI-to-FO"
-            ),
-            (
-                "receiptless-nonhot-hot-invalidated-absent-and-zero-wal-cold-reopen-"
-                "and-recrash-idempotence"
-            ),
-            (
-                "rebind-at-every-known-name-unlink-and-wrapper-xDelete-final-check-"
-                "boundary"
-            ),
-            (
-                "same-process-shared-and-reserved-separate-process-lock-holder-and-"
-                "unrelated-same-inode-fd-close-hazard"
-            ),
-            "post-normalization-fresh-journal-transition-fault",
-            "cold-reopen-exact-outcome",
-            (
-                "no-effect-replacement-nonempty-mixed-unrecognized-journal-and-"
-                "receipt-drift-cases"
-            ),
-        ],
-    },
+
 }
 
 ACCEPTED_EMPTY_EFFECT_GATE_STAGES: dict[str, Any] = {

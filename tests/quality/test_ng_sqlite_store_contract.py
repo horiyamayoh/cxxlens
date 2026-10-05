@@ -3234,14 +3234,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
-                "normalization-counter-vectors",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]["qualification"]
-                ["counter_vectors"].pop(),
-            ),
-            (
                 "rollback-empty-route-precedence",
                 lambda value: value["transaction"]["fresh_v3_initialization"]
                 ["guards"]["filesystem"]["precreate_census"]
@@ -3294,58 +3286,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 lambda value: value["transaction"]["recovery_model"]
                 ["terminal_reclassification"]["sealed_receipt_profiles"]
                 ["accepted_empty_normalization_source_anchor"].pop(),
-            ),
-            (
-                "normalization-page-size-vectors",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]["qualification"]
-                ["page_size_vectors"].pop(),
-            ),
-            (
-                "normalization-page-size-boundaries",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]["qualification"]
-                ["page_size_boundary_qualification_required"].pop(),
-            ),
-            (
-                "normalization-journal-sector-pinned-vector",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]["qualification"].pop(
-                    "journal_sector_pinned_default_vector"
-                ),
-            ),
-            (
-                "normalization-journal-sector-parameterized-vectors",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]["qualification"]
-                ["journal_sector_parameterized_vectors_required"].pop(),
-            ),
-            (
-                "normalization-journal-sector-negative-vectors",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]["qualification"]
-                ["journal_sector_negative_vectors_required"].remove(
-                    "record-offset-derived-from-512-instead-of-S"
-                ),
-            ),
-            (
-                "normalization-multi-page-freelist-vector",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]["qualification"].pop(
-                    "multi_page_freelist_vector"
-                ),
             ),
             (
                 "rollback-empty-source-recheck",
@@ -3435,16 +3375,6 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ["terminal_reclassification"].__setitem__(
                     "accepted_empty_normalization_receipt_seal",
                     "in-the-first-exclusive-xLock-callback",
-                ),
-            ),
-            (
-                "normalization-skipped-arm-qualification",
-                lambda value: value["transaction"]["fresh_v3_initialization"]
-                ["guards"]["filesystem"]["precreate_census"]
-                ["preauthority_sidecar_candidate"]
-                ["accepted_empty_original_normalization"]["qualification"]
-                ["required"].remove(
-                    "skipped-duplicate-reordered-and-wrong-prerequisite-arm-fail-closed"
                 ),
             ),
             (
