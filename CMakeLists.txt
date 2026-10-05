@@ -256,6 +256,7 @@ add_library(
   src/sdk/source_tokens.cpp
   src/sdk/semantic_graphs.cpp
   src/sdk/record_surfaces.cpp
+  src/sdk/abi_surfaces.cpp
   src/sdk/query_projection_plan_limits_internal.cpp)
 add_library(cxxlens::query ALIAS cxxlens_query)
 cxxlens_configure_component(cxxlens_query query)
@@ -755,7 +756,8 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     src/llvm/clang22/provider_worker_v4.cpp
     src/llvm/clang22/provider_worker_v4_ast_observer.cpp
     src/llvm/clang22/provider_worker_v4_output_normalizer.cpp
-    src/llvm/clang22/project_semantic_facts.cpp)
+    src/llvm/clang22/project_semantic_facts.cpp
+    src/llvm/clang22/project_abi_observer.cpp)
   target_link_libraries(
     cxxlens_clang22_worker_core
     PUBLIC cxxlens::clang22_provider_sdk

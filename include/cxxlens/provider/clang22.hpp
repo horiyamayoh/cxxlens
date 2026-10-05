@@ -18,6 +18,7 @@ namespace clang
 	class SourceManager;
 	class SourceRange;
 	class Preprocessor;
+	class CodeGenOptions;
 } // namespace clang
 
 namespace cxxlens::provider::clang22
@@ -53,14 +54,18 @@ namespace cxxlens::provider::clang22
 		[[nodiscard]] clang::SourceManager& source_manager() const noexcept;
 		/** @brief Borrow compiler preprocessing observations only for the active callback. */
 		[[nodiscard]] clang::Preprocessor& preprocessor() const noexcept;
+		/** @brief Borrow actual compiler ABI/code-generation options during this callback. */
+		[[nodiscard]] const clang::CodeGenOptions& code_generation_options() const noexcept;
 
 	  private:
 		borrowed_translation_unit(clang::ASTContext& ast,
 								  clang::SourceManager& source_manager,
-								  clang::Preprocessor& preprocessor);
+								  clang::Preprocessor& preprocessor,
+								  const clang::CodeGenOptions& code_generation_options);
 		clang::ASTContext* ast_{};
 		clang::SourceManager* source_manager_{};
 		clang::Preprocessor* preprocessor_{};
+		const clang::CodeGenOptions* code_generation_options_{};
 		friend struct detail::native_access;
 	};
 

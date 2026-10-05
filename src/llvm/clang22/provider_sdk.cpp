@@ -31,9 +31,10 @@ namespace cxxlens::provider::clang22
 			[[nodiscard]] static borrowed_translation_unit
 			make(clang::ASTContext& ast,
 				 clang::SourceManager& source_manager,
-				 clang::Preprocessor& preprocessor)
+				 clang::Preprocessor& preprocessor,
+				 const clang::CodeGenOptions& code_generation_options)
 			{
-				return {ast, source_manager, preprocessor};
+				return {ast, source_manager, preprocessor, code_generation_options};
 			}
 		};
 	} // namespace detail
@@ -66,15 +67,17 @@ namespace cxxlens::provider::clang22
 		  public:
 			callback_consumer(translation_unit_callback& callback,
 							  sdk::result<void>& outcome,
-							  clang::Preprocessor& preprocessor)
-				: callback_{&callback}, outcome_{&outcome}, preprocessor_{&preprocessor}
+							  clang::Preprocessor& preprocessor,
+							  const clang::CodeGenOptions& code_generation_options)
+				: callback_{&callback}, outcome_{&outcome}, preprocessor_{&preprocessor},
+				  code_generation_options_{&code_generation_options}
 			{
 			}
 
 			void HandleTranslationUnit(clang::ASTContext& context) override
 			{
 				auto borrowed = detail::native_access::make(
-					context, context.getSourceManager(), *preprocessor_);
+					context, context.getSourceManager(), *preprocessor_, *code_generation_options_);
 				*outcome_ = (*callback_)(borrowed);
 			}
 
@@ -82,6 +85,7 @@ namespace cxxlens::provider::clang22
 			translation_unit_callback* callback_;
 			sdk::result<void>* outcome_;
 			clang::Preprocessor* preprocessor_;
+			const clang::CodeGenOptions* code_generation_options_;
 		};
 
 		class callback_action final : public clang::ASTFrontendAction
@@ -101,7 +105,7 @@ namespace cxxlens::provider::clang22
 				if (setup_)
 					setup_(compiler.getPreprocessor());
 				return std::make_unique<callback_consumer>(
-					*callback_, *outcome_, compiler.getPreprocessor());
+					*callback_, *outcome_, compiler.getPreprocessor(), compiler.getCodeGenOpts());
 			}
 
 		  private:
@@ -131,10 +135,13 @@ namespace cxxlens::provider::clang22
 		return {};
 	}
 
-	borrowed_translation_unit::borrowed_translation_unit(clang::ASTContext& ast,
-														 clang::SourceManager& source_manager,
-														 clang::Preprocessor& preprocessor)
-		: ast_{&ast}, source_manager_{&source_manager}, preprocessor_{&preprocessor}
+	borrowed_translation_unit::borrowed_translation_unit(
+		clang::ASTContext& ast,
+		clang::SourceManager& source_manager,
+		clang::Preprocessor& preprocessor,
+		const clang::CodeGenOptions& code_generation_options)
+		: ast_{&ast}, source_manager_{&source_manager}, preprocessor_{&preprocessor},
+		  code_generation_options_{&code_generation_options}
 	{
 	}
 
@@ -151,6 +158,11 @@ namespace cxxlens::provider::clang22
 	clang::Preprocessor& borrowed_translation_unit::preprocessor() const noexcept
 	{
 		return *preprocessor_;
+	}
+
+	const clang::CodeGenOptions& borrowed_translation_unit::code_generation_options() const noexcept
+	{
+		return *code_generation_options_;
 	}
 
 	sdk::result<void> with_translation_unit(const translation_unit_input& input,

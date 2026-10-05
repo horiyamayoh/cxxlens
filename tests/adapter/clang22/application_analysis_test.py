@@ -38,7 +38,7 @@ def database(root, files, extra=()):
 def scans(bundle):
     assert bundle["schema"] == "cxxlens.application-query-results.v1"
     queries = bundle["queries"]
-    assert len(queries) == 29
+    assert len(queries) == 30
     def relation(query):
         requirements = query["logical_ir"]["relation_requirements"]
         assert len(requirements) == 1
@@ -182,6 +182,22 @@ with tempfile.TemporaryDirectory(prefix="cxxlens-application-") as temporary:
         'int nested() { auto inner = [captured = call_leaf()] { return call_external(3); }; '
         'return inner(); } };\n'
         'template<class T> struct ResponseDependent { int invoke(T value) { return value.run(); } };\n'
+        'int category_value(); void category_sink(int);\n'
+        'inline void category_ignored() { category_value(); (void)category_value(); '
+        'int x = category_value(); category_sink(category_value()); '
+        'int y = (category_value(), 1); category_value() + category_value(); '
+        '(void)sizeof((category_value(), 1)); '
+        'decltype((void)category_value())* unused = nullptr; }\n'
+        'struct CategoryNontrivial { ~CategoryNontrivial() {} };\n'
+        'inline void category_exceptions() { try { throw 1; } catch (...) { ; } '
+        'try { throw CategoryNontrivial{}; } '
+        'catch (CategoryNontrivial value) { category_sink(1); } '
+        'try { throw CategoryNontrivial{}; } '
+        'catch (CategoryNontrivial const& value) { category_sink(2); } }\n'
+        'inline void category_casts(void* p, unsigned long n) { '
+        'auto number = reinterpret_cast<unsigned long>(p); '
+        'auto pointer = reinterpret_cast<void*>(n); '
+        'asm volatile ("" ::: "memory"); auto lambda = [] { return 1; }; }\n'
         'inline void safe() noexcept {}\ninline void maybe() noexcept(false) {}\n'
         'inline int Plain::*member = &Plain::number;\ninline int extent[17];\n'
         '}\n', encoding="utf-8")
@@ -356,6 +372,26 @@ with tempfile.TemporaryDirectory(prefix="cxxlens-application-") as temporary:
     assert row_flags(lambda_body, "direct_call_targets") == {ids_by_name["demo::call_external"]}
     dependent_body = accesses[ids_by_name["demo::ResponseDependent::invoke"]]
     assert value(dependent_body, "direct_call_state") == "partial", dependent_body
+    def function_syntax(name):
+        return [row for row in facts["cc.syntax_node.v1"]["rows"]
+                if value(row, "function") == ids_by_name[name]]
+    ignored_nodes = function_syntax("demo::category_ignored")
+    assert ignored_nodes and all("finite_categories_v1" in row_flags(row, "flags") for row in ignored_nodes)
+    ignored_calls = [row for row in ignored_nodes if "discarded_nonvoid_result" in row_flags(row, "flags")]
+    assert len(ignored_calls) == 3, ignored_calls
+    assert all(value(row, "kind") == "CallExpr" for row in ignored_calls)
+    assert not any("discarded_result_unknown" in row_flags(row, "flags") for row in ignored_nodes)
+    exception_nodes = function_syntax("demo::category_exceptions")
+    handlers = [row for row in exception_nodes if value(row, "kind") == "CXXCatchStmt"]
+    assert len(handlers) == 3
+    assert sum("catch_all" in row_flags(row, "flags") for row in handlers) == 1
+    assert sum("catch_empty" in row_flags(row, "flags") for row in handlers) == 1
+    assert sum("catch_nontrivial_by_value" in row_flags(row, "flags") for row in handlers) == 1
+    cast_nodes = function_syntax("demo::category_casts")
+    assert sum("cast_pointer_to_integer" in row_flags(row, "flags") for row in cast_nodes) == 1
+    assert sum("cast_integer_to_pointer" in row_flags(row, "flags") for row in cast_nodes) == 1
+    assert sum(value(row, "kind") == "GCCAsmStmt" for row in cast_nodes) == 1
+    assert sum(value(row, "kind") == "LambdaExpr" for row in cast_nodes) == 1
     assert b"noexcept" in bytes.fromhex(value(details[ids_by_name["demo::safe"]], "flags"))
     assert b"noexcept" not in bytes.fromhex(value(details[ids_by_name["demo::maybe"]], "flags"))
     # Unused defaulted members have lazy exception specifications. Observation cannot

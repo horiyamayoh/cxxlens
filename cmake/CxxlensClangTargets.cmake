@@ -243,6 +243,7 @@ function(cxxlens_configure_clang22 target)
       LLVMSupport
       clangAST
       clangBasic
+      clangCodeGen
       clangDriver
       clangFrontend
       clangFrontendTool

@@ -7,6 +7,7 @@
 #include <cxxlens/relations/build_project.hpp>
 #include <cxxlens/relations/build_toolchain_context.hpp>
 #include <cxxlens/relations/build_variant.hpp>
+#include <cxxlens/relations/cc_abi_surface.hpp>
 #include <cxxlens/relations/cc_body.hpp>
 #include <cxxlens/relations/cc_call_direct_target.hpp>
 #include <cxxlens/relations/cc_call_site.hpp>
@@ -287,6 +288,7 @@ namespace cxxlens::sdk
 				build::relations::project::descriptor(),
 				build::relations::toolchain_context::descriptor(),
 				build::relations::variant::descriptor(),
+				cc::relations::abi_surface::descriptor(),
 				cc::relations::body::descriptor(),
 				cc::relations::call_direct_target::descriptor(),
 				cc::relations::call_site::descriptor(),

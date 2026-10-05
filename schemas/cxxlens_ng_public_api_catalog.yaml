@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.81.0
+document_version: 1.82.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -37,6 +37,7 @@ packages:
       - include/cxxlens/sdk/source_tokens.hpp
       - include/cxxlens/sdk/semantic_graphs.hpp
       - include/cxxlens/sdk/record_surfaces.hpp
+      - include/cxxlens/sdk/abi_surfaces.hpp
       - include/cxxlens/sdk/provider.hpp
       - include/cxxlens/sdk/recipe.hpp
     llvm_clang_dependency: forbidden
@@ -161,7 +162,7 @@ entries:
     status: implemented
     profile: NG0
     target: cxxlens::sdk
-    headers: [include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_declaration.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_type_component.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/core_claim_conflict.hpp, include/cxxlens/relations/core_differential_disagreement.hpp, include/cxxlens/relations/core_provider_execution.hpp, include/cxxlens/relations/core_unresolved.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_origin.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/relations/cc_entity_detail.hpp, include/cxxlens/relations/cc_entity_edge.hpp, include/cxxlens/relations/cc_syntax_node.hpp, include/cxxlens/relations/cc_body.hpp, include/cxxlens/relations/cc_cfg_node.hpp, include/cxxlens/relations/cc_cfg_edge.hpp, include/cxxlens/relations/cc_flow_fact.hpp, include/cxxlens/relations/cc_layout_fact.hpp, include/cxxlens/relations/cc_record_surface.hpp, include/cxxlens/relations/cc_record_inventory.hpp, include/cxxlens/relations/source_include.hpp, include/cxxlens/relations/source_preprocessor_event.hpp, include/cxxlens/relations/source_token.hpp, include/cxxlens/relations/source_token_inventory.hpp, include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
+    headers: [include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_declaration.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_type_component.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/core_claim_conflict.hpp, include/cxxlens/relations/core_differential_disagreement.hpp, include/cxxlens/relations/core_provider_execution.hpp, include/cxxlens/relations/core_unresolved.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_origin.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/relations/cc_entity_detail.hpp, include/cxxlens/relations/cc_entity_edge.hpp, include/cxxlens/relations/cc_syntax_node.hpp, include/cxxlens/relations/cc_body.hpp, include/cxxlens/relations/cc_cfg_node.hpp, include/cxxlens/relations/cc_cfg_edge.hpp, include/cxxlens/relations/cc_flow_fact.hpp, include/cxxlens/relations/cc_layout_fact.hpp, include/cxxlens/relations/cc_abi_surface.hpp, include/cxxlens/relations/cc_record_surface.hpp, include/cxxlens/relations/cc_record_inventory.hpp, include/cxxlens/relations/source_include.hpp, include/cxxlens/relations/source_preprocessor_event.hpp, include/cxxlens/relations/source_token.hpp, include/cxxlens/relations/source_token_inventory.hpp, include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
     symbols:
       - name: query.from
         kind: template
@@ -465,6 +466,43 @@ entries:
     invariants: [both-independent-consumers-share-cardinality-and-membership-validation, universe-variant-interpretation-unit-source-and-profile-remain-distinct, complete-empty-definition-distinct-from-forward-record, direct-ownership-never-flattens-nested-types, implicit-methods-and-static-fields-excluded, local-enumeration-does-not-close-project, conflicting-candidates-retained, original-query-side-channels-retained, deterministic-order, bounds-before-retention-and-typed-cancellation]
     depends_on: [public.query-runtime]
 
+  - id: public.abi-surfaces
+    status: implemented
+    profile: NG1
+    target: cxxlens::query
+    headers: [include/cxxlens/sdk/abi_surfaces.hpp]
+    symbols:
+      - name: query.abi_surface_input
+        kind: value
+        signature: 'units; files; spans; entities; details; surfaces; observations_complete; compile_units_complete; abi_inputs_complete'
+      - name: query.abi_surface_limits
+        kind: value
+        signature: 'maximum_rows; maximum_condition_expansions; maximum_evidence_bytes; maximum_retained_bytes; maximum_evidence_references; maximum_surfaces; maximum_extents; maximum_operations; maximum_source_queries; maximum_source_plan_bytes; result<void> validate() const'
+      - name: query.abi_surface_state
+        kind: value
+        signature: 'complete; unknown; partial; conflicting'
+      - name: query.abi_byte_extent
+        kind: value
+        signature: 'uint64 begin; uint64 end; operator=='
+      - name: query.abi_surface_evidence
+        kind: value
+        signature: 'relation_id; row'
+      - name: query.abi_surface
+        kind: value
+        signature: 'id; entity; compile_unit; source_span; file; source_snapshot; kind; profile; universe; variant; interpretation; abi_state; layout_state; byte_size; byte_alignment; occupied_bytes; padding_bytes; occupied_ranges; abi_context; abi_signature; abi_fingerprint; evidence; gaps'
+      - name: query.abi_surface_projection
+        kind: value
+        signature: 'evidence; surfaces; compile_units_complete; abi_inputs_complete; unresolved; source_queries'
+      - name: query.project_abi_surfaces
+        kind: function
+        signature: 'result<abi_surface_projection> project_abi_surfaces(abi_surface_input, abi_surface_limits = {}, stop_token = {}); result<abi_surface_projection> project_abi_surfaces(const application_query_results&, abi_surface_limits = {}, stop_token = {})'
+    errors: [sdk.abi-limit-invalid, sdk.abi-input-invalid, sdk.abi-budget, sdk.abi-cancelled, sdk.abi-resource-exhausted]
+    lifetime: [borrowed-input-only-during-call, projection-owns-labelled-evidence-and-original-queries, no-compiler-pointer]
+    threading: [projection-has-value-semantics, independent-calls-share-no-mutable-state]
+    versioning: [storage-and-call-interface-v1-binds-exact-profile-and-actual-compiler-context]
+    invariants: [both-independent-consumers-share-local-storage-and-interface-validation, universe-variant-interpretation-unit-source-and-profile-remain-distinct, abi-and-layout-facets-are-independent, canonical-byte-ranges-are-validated-before-union-derived-padding, no-field-size-sum-infers-padding, unknown-distinct-from-complete-empty, physical-interface-fingerprint-is-not-whole-program-abi-compatibility, fingerprint-length-framing-is-revalidated, conflicting-candidates-retained, independent-input-completion-defaults-false, local-observation-does-not-close-project, original-query-side-channels-retained, deterministic-order, bounds-before-retention-and-typed-cancellation]
+    depends_on: [public.query-runtime]
+
   - id: public.query-runtime
     status: implemented
     profile: NG1
@@ -609,6 +647,9 @@ entries:
       - name: borrowed_translation_unit.preprocessor
         kind: function
         signature: 'clang::Preprocessor& borrowed_translation_unit::preprocessor() const noexcept; callback-scoped native-only borrow'
+      - name: borrowed_translation_unit.code_generation_options
+        kind: function
+        signature: 'const clang::CodeGenOptions& borrowed_translation_unit::code_generation_options() const noexcept; callback-scoped actual compiler options native-only borrow'
       - name: normalize_source
         kind: function
         signature: 'detached_source_origin{kind,logical_path,begin,end,read_only}; source_range_identity{snapshot,file,role}; result<detached_source_span{snapshot,file,role,logical_path,begin,end,read_only,id,origin_chain}> normalize_source(borrowed_translation_unit&, const clang::SourceRange&, const source_range_identity&)'
@@ -616,7 +657,7 @@ entries:
         kind: template
         signature: 'template<detachable_scalar T> sdk::result<sdk::detached_cell> detach_scalar(T&&)'
     errors: [native.unsupported-detachment, native.address-escape, native.input-invalid, native.parse-failed, native.source-origin-invalid, native.source-span-invalid, native.unsupported-clang-major, provider.declaration-identity-unresolved]
-    lifetime: [translation-unit-and-ast-objects-are-borrowed-callback-only, outputs-must-be-detached-before-return]
+    lifetime: [translation-unit-and-ast-objects-are-borrowed-callback-only, outputs-must-be-detached-before-return, code-generation-options-are-the-actual-active-compiler-instance-options]
     threading: [borrowed-translation-unit-is-not-copyable-or-transferable, callback-is-synchronous]
     versioning: [clang-major-is-explicit-in-package-target-header-and-namespace, clang22-declaration-fallback-v2-is-versioned-toolchain-bound-conformance-authority, macro-call-occurrence-dedup-uses-canonical-origin-chain-v1, normal-usr-prefix-and-identity-remain-unchanged]
     invariants: [pointer-types-rejected-at-compile-time, translation-unit-input-logical-path-rejects-empty-root-relative-leading-separator-nul-and-exact-parent-segments, translation-unit-input-logical-path-accepts-non-parent-components-containing-two-dots, translation-unit-input-parent-segment-detection-treats-forward-and-backslash-separators-equally, source-range-normalized-to-half-open-detached-source-span, call-ordinal-is-source-local-equivalence-class-tie-break, normalizer-output-is-input-permutation-independent, unrelated-call-addition-does-not-change-existing-call-identity, macro-call-primary-span-uses-expansion-range, ordered-macro-spelling-origin-chain-is-provider-evidence, same-expansion-same-callee-distinct-spelling-occurrences-are-never-deduplicated, pre-normalization-dedup-and-final-ordinal-share-canonical-observation-authority, two-twice-expansions-preserve-four-calls, spelling-order-preserving-whitespace-comment-shifts-do-not-change-call-ids, macro-primary-and-origin-ranges-are-read-only, origin-logical-path-never-enters-standard-span-or-call-identity, native-task-carries-exact-source-snapshot-and-file, range-role-is-explicit-per-normalization, logical-path-is-not-span-identity-authority, missing-source-authority-fails-closed, clang-direct-target-identity-does-not-require-same-batch-entity-row, direct-target-and-actual-entity-use-the-same-complete-semantic-projection, declaration-definition-occurrence-anchor-never-enters-semantic-entity-identity, entity-occurrence-source-remains-in-provider-owned-observation, header-forward-definition-and-relocated-source-targets-join-the-published-entity, overload-template-member-and-operator-identities-remain-distinct, call-kind-is-derived-from-ast-directness-and-shape, virtual-member-kind-retains-static-direct-target, indirect-and-dependent-calls-never-fabricate-direct-targets, known-call-kind-and-target-inconsistency-is-unresolved-and-non-exact, redeclaration-chain-selects-definition-then-canonical-declaration-deterministically, structural-signature-uses-canonical-type-not-source-occurrence, incompatible-redeclaration-is-explicit-unresolved-and-not-exact, missing-soft-target-entity-is-accounted-by-relation-reference-policy, no-silent-clang-major-fallback, native-sdk-does-not-author-installed-materialization-json-or-publish-snapshots, no-clang22-specific-public-cxx-materialization-host-bridge]

@@ -1150,6 +1150,12 @@ cxxlens_add_test_executable(cxxlens-unit-sdk-semantic-graphs
                             unit/sdk/semantic_graphs_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-semantic-graphs PRIVATE cxxlens::query)
 add_test(NAME unit.sdk-semantic-graphs COMMAND cxxlens-unit-sdk-semantic-graphs)
+cxxlens_add_test_executable(cxxlens-unit-sdk-abi-surfaces
+                            unit/sdk/abi_surfaces_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-abi-surfaces PRIVATE cxxlens::query)
+add_test(NAME unit.sdk-abi-surfaces COMMAND cxxlens-unit-sdk-abi-surfaces)
+set_tests_properties(unit.sdk-abi-surfaces
+                     PROPERTIES LABELS "unit;sdk;query;abi;budget;cancellation")
 cxxlens_add_test_executable(cxxlens-unit-sdk-record-surfaces
                             unit/sdk/record_surfaces_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-record-surfaces PRIVATE cxxlens::query)
@@ -1744,6 +1750,28 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   )
 
   if(UNIX)
+    cxxlens_add_test_executable(cxxlens-clang22-abi-observer
+                                adapter/clang22/abi_observer_test.cpp)
+    target_link_libraries(cxxlens-clang22-abi-observer
+                          PRIVATE cxxlens_clang22_worker_core)
+    if(CXXLENS_BUILD_SHARED)
+      cxxlens_add_provider_runtime_closure(cxxlens-clang22-abi-observer)
+    endif()
+    cxxlens_configure_clang22(cxxlens-clang22-abi-observer)
+    add_test(NAME adapter.clang22-abi-observer
+             COMMAND cxxlens-clang22-abi-observer)
+    set_tests_properties(
+      adapter.clang22-abi-observer
+      PROPERTIES LABELS "adapter;clang22;abi;layout;bounded" TIMEOUT 120)
+    add_test(
+      NAME adapter.clang22-abi-surfaces
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/clang22/abi_surface_test.py"
+        "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}")
+    set_tests_properties(
+      adapter.clang22-abi-surfaces
+      PROPERTIES LABELS "adapter;clang22;abi;application;bounded" TIMEOUT 600)
     add_test(
       NAME adapter.clang22-application-analysis
       COMMAND
@@ -2505,6 +2533,8 @@ endif()
 
 add_custom_target(cxxlens-ng-test-binaries)
 set(_cxxlens_ng_test_binary_candidates
+    cxxlens-clang22-abi-observer
+    cxxlens-unit-sdk-abi-surfaces
     cxxlens_cli
     cxxlens-sdk-doctor
     cxxlens-clang-worker-22

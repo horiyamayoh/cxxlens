@@ -13,6 +13,7 @@
 #include <tuple>
 #include <utility>
 
+#include <cxxlens/relations/cc_abi_surface.hpp>
 #include <cxxlens/relations/cc_body.hpp>
 #include <cxxlens/relations/cc_cfg_edge.hpp>
 #include <cxxlens/relations/cc_cfg_node.hpp>
@@ -32,6 +33,7 @@
 #include <cxxlens/relations/source_token.hpp>
 #include <cxxlens/relations/source_token_inventory.hpp>
 
+#include "project_abi_observer.hpp"
 #include "sdk/bounded_json_internal.hpp"
 #include "sdk/source_identity_internal.hpp"
 #include "source_closure_vfs.hpp"
@@ -473,7 +475,8 @@ namespace cxxlens::detail::clang22
 					  const provider_worker_v4_ast_observation_batch& observations,
 					  const provider_worker_v4_normalized_output& normalized,
 					  const std::function<void(std::string_view)>& progress)
-				: unit_{unit}, closure_{closure}, observations_{observations}, progress_{progress}
+				: unit_{unit}, closure_{closure}, observations_{observations}, progress_{progress},
+				  abi_observer_{unit.ast(), unit.preprocessor(), unit.code_generation_options()}
 			{
 				for (const auto& batch : normalized.batches)
 					for (const auto& row : batch.rows)
@@ -624,6 +627,23 @@ namespace cxxlens::detail::clang22
 				// Captures execute in the enclosing function; the written body has its own owner.
 				return TraverseDecl(expression->getCallOperator());
 			}
+			bool TraverseDecltypeTypeLoc(clang::DecltypeTypeLoc type, bool traverse_qualifier)
+			{
+				++unevaluated_depth_;
+				const bool success = clang::RecursiveASTVisitor<collector>::TraverseDecltypeTypeLoc(
+					type, traverse_qualifier);
+				--unevaluated_depth_;
+				return success;
+			}
+			bool TraverseTypeOfExprTypeLoc(clang::TypeOfExprTypeLoc type, bool traverse_qualifier)
+			{
+				++unevaluated_depth_;
+				const bool success =
+					clang::RecursiveASTVisitor<collector>::TraverseTypeOfExprTypeLoc(
+						type, traverse_qualifier);
+				--unevaluated_depth_;
+				return success;
+			}
 			bool dataTraverseStmtPre(clang::Stmt* statement)
 			{
 				const auto* parent_statement = statements_.empty() ? nullptr : statements_.back();
@@ -657,6 +677,9 @@ namespace cxxlens::detail::clang22
 					if (!body_root && !parents_.empty() && !parents_.back().empty())
 						value.emplace("parent", id("syntax_node_id", parents_.back()));
 					std::set<std::string, std::less<>> properties;
+					// This marker makes absent category flags known false for this versioned
+					// profile.
+					properties.emplace("finite_categories_v1");
 					properties.emplace(llvm::isa<clang::Expr>(statement) ? "expression"
 																		 : "statement");
 					if (llvm::isa<clang::ImplicitCastExpr,
@@ -777,6 +800,52 @@ namespace cxxlens::detail::clang22
 							unit_.ast().getLangOpts());
 						value.emplace("value", sdk::detached_cell::utf8(text.str()));
 						properties.emplace("literal");
+					}
+					if (const auto* handler = llvm::dyn_cast<clang::CXXCatchStmt>(statement))
+					{
+						if (const auto* exception = handler->getExceptionDecl())
+						{
+							const auto type = exception->getType().getCanonicalType();
+							if (type.isNull() || type->isDependentType() ||
+								(!type->isReferenceType() && type->isIncompleteType()))
+								properties.emplace("catch_type_unknown");
+							else if (!type->isReferenceType() && !type.isTrivialType(unit_.ast()))
+								properties.emplace("catch_nontrivial_by_value");
+						}
+						else
+							properties.emplace("catch_all");
+						const auto* body =
+							llvm::dyn_cast_or_null<clang::CompoundStmt>(handler->getHandlerBlock());
+						if (body &&
+							std::ranges::all_of(body->body(),
+												[](const auto* child)
+												{
+													return llvm::isa<clang::NullStmt>(child);
+												}))
+							properties.emplace("catch_empty");
+					}
+					if (const auto* cast = llvm::dyn_cast<clang::CastExpr>(statement))
+					{
+						if (cast->getCastKind() == clang::CK_PointerToIntegral)
+							properties.emplace("cast_pointer_to_integer");
+						else if (cast->getCastKind() == clang::CK_IntegralToPointer)
+							properties.emplace("cast_integer_to_pointer");
+					}
+					if (llvm::isa<clang::CoawaitExpr, clang::CoyieldExpr>(statement))
+						properties.emplace("coroutine_suspend_site");
+					if (const auto* call = llvm::dyn_cast<clang::CallExpr>(statement))
+					{
+						if (call->getType().isNull() || call->isTypeDependent() ||
+							call->isValueDependent())
+							properties.emplace("discarded_result_unknown");
+						else if (!call->getType()->isVoidType())
+						{
+							const auto use = result_use(*call);
+							if (use == "discarded")
+								properties.emplace("discarded_nonvoid_result");
+							else if (use == "unknown")
+								properties.emplace("discarded_result_unknown");
+						}
 					}
 					value.emplace("flags", flags("cc.syntax-flag/1", std::move(properties)));
 					auto row = make_row(cc::relations::syntax_node::descriptor(), std::move(value));
@@ -1044,7 +1113,13 @@ namespace cxxlens::detail::clang22
 								base_specifier.getType()->getAs<clang::RecordType>())
 							edge(entity_id, entity(target->getDecl()), *source, "inherits");
 				if (const auto* record = llvm::dyn_cast<clang::RecordDecl>(declaration))
+				{
 					record_surface(*record, entity_id, *source);
+					abi_surface(entity_id, *source, "record", take(abi_observer_.record(*record)));
+				}
+				else if (const auto* function = llvm::dyn_cast<clang::FunctionDecl>(declaration))
+					abi_surface(
+						entity_id, *source, "function", take(abi_observer_.function(*function)));
 				return true;
 			}
 			bool VisitFunctionDecl(clang::FunctionDecl* function)
@@ -2120,6 +2195,76 @@ namespace cxxlens::detail::clang22
 				}
 				append(std::move(surface));
 			}
+			void abi_surface(const std::string& owner,
+							 const std::string& source,
+							 std::string kind,
+							 project_abi_observation observation)
+			{
+				auto value = common();
+				value.emplace("entity", id("cc_entity_id", owner));
+				value.emplace("source", id("source_span_id", source));
+				value.emplace("kind", symbol("cc.abi-surface-kind/1", std::move(kind)));
+				value.emplace(
+					"profile",
+					symbol("cc.abi-surface-profile/1", "clang22-storage-and-call-interface/1"));
+				value.emplace("abi_state", symbol("cc.abi-surface-state/1", observation.abi_state));
+				value.emplace("layout_state",
+							  symbol("cc.abi-surface-state/1", observation.layout_state));
+				if (observation.byte_size)
+					value.emplace("byte_size",
+								  sdk::detached_cell::unsigned_integer(*observation.byte_size));
+				if (observation.byte_alignment)
+					value.emplace(
+						"byte_alignment",
+						sdk::detached_cell::unsigned_integer(*observation.byte_alignment));
+				const auto number = [](std::string& out, std::uint64_t n)
+				{
+					for (unsigned shift{}; shift < 64U; shift += 8U)
+						out.push_back(static_cast<char>((n >> shift) & 255U));
+				};
+				const auto bytes = [](std::string_view text)
+				{
+					std::vector<std::byte> out;
+					out.reserve(text.size());
+					for (const auto byte : text)
+						out.push_back(static_cast<std::byte>(byte));
+					return sdk::detached_cell::bytes(std::move(out));
+				};
+				if (observation.byte_size)
+				{
+					std::string ranges;
+					ranges.reserve(observation.occupied_ranges.size() * 16U);
+					for (const auto& [begin, end] : observation.occupied_ranges)
+					{
+						number(ranges, begin);
+						number(ranges, end);
+					}
+					value.emplace("occupied_ranges", bytes(ranges));
+				}
+				if (!observation.abi_context.empty())
+					value.emplace("abi_context", digest_value(observation.abi_context));
+				if (!observation.abi_signature.empty())
+				{
+					std::string payload;
+					payload.reserve(16U + observation.abi_context.size() +
+									observation.abi_signature.size());
+					number(payload, observation.abi_context.size());
+					payload += observation.abi_context;
+					number(payload, observation.abi_signature.size());
+					payload += observation.abi_signature;
+					value.emplace("abi_signature", bytes(observation.abi_signature));
+					value.emplace("abi_fingerprint",
+								  digest_value(take(
+									  sdk::semantic_digest("cc.clang22.abi-surface.v1", payload))));
+				}
+				if (!observation.reason.empty())
+					value.emplace("reason", sdk::detached_cell::utf8(observation.reason));
+				if (observation.abi_state != "complete" ||
+					(observation.byte_size && observation.layout_state != "complete"))
+					output_.unresolved.push_back(
+						{"abi.surface-frontier", owner, observation.reason});
+				append(make_row(cc::relations::abi_surface::descriptor(), std::move(value)));
+			}
 			void layout(const clang::NamedDecl& declaration, clang::QualType type)
 			{
 				const auto owner = entity(&declaration);
@@ -2203,6 +2348,91 @@ namespace cxxlens::detail::clang22
 					"abi_digest",
 					digest_value(take(sdk::semantic_digest("cc.clang22.object-layout.v1", abi))));
 				append(make_row(cc::relations::layout_fact::descriptor(), std::move(value)));
+			}
+			std::string_view result_use(const clang::CallExpr& call)
+			{
+				// Inspect the actual traversal ancestors; declarations and unevaluated contexts
+				// never acquire expression-statement semantics through a surrounding block.
+				if (unevaluated_depth_ != 0U)
+					return "consumed";
+				for (const auto* ancestor : statements_)
+				{
+					if (++category_work_ > 32'000'000U)
+						fail("syntax.categories", "operation-limit");
+					if (llvm::isa<clang::UnaryExprOrTypeTraitExpr,
+								  clang::CXXNoexceptExpr,
+								  clang::TypeTraitExpr,
+								  clang::RequiresExpr>(ancestor))
+						return "consumed";
+					if (const auto* typeid_expression =
+							llvm::dyn_cast<clang::CXXTypeidExpr>(ancestor))
+						if (!typeid_expression->isPotentiallyEvaluated())
+							return "consumed";
+				}
+				const clang::Stmt* child = &call;
+				for (auto position = statements_.rbegin() + 1; position != statements_.rend();
+					 ++position)
+				{
+					if (++category_work_ > 32'000'000U)
+						fail("syntax.categories", "operation-limit");
+					const auto* parent = *position;
+					if (llvm::isa<clang::UnaryExprOrTypeTraitExpr,
+								  clang::CXXNoexceptExpr,
+								  clang::TypeTraitExpr,
+								  clang::RequiresExpr>(parent))
+						return "consumed";
+					if (const auto* cast = llvm::dyn_cast<clang::CastExpr>(parent))
+					{
+						if (cast->getType()->isVoidType())
+							return "discarded";
+						if (!llvm::isa<clang::ImplicitCastExpr>(cast))
+							return "consumed";
+					}
+					else if (llvm::isa<clang::ParenExpr,
+									   clang::ExprWithCleanups,
+									   clang::MaterializeTemporaryExpr,
+									   clang::CXXBindTemporaryExpr,
+									   clang::ConstantExpr>(parent))
+					{
+						// Transparent wrappers retain the parent's use of this result.
+					}
+					else if (const auto* binary = llvm::dyn_cast<clang::BinaryOperator>(parent))
+					{
+						if (binary->getOpcode() != clang::BO_Comma)
+							return "consumed";
+						if (binary->getLHS() == child)
+							return "discarded";
+					}
+					else if (const auto* conditional =
+								 llvm::dyn_cast<clang::AbstractConditionalOperator>(parent))
+					{
+						if (conditional->getCond() == child)
+							return "consumed";
+					}
+					else if (const auto* loop = llvm::dyn_cast<clang::ForStmt>(parent))
+						return loop->getInit() == child || loop->getInc() == child ||
+								loop->getBody() == child
+							? "discarded"
+							: "consumed";
+					else if (const auto* branch = llvm::dyn_cast<clang::IfStmt>(parent))
+						return branch->getThen() == child || branch->getElse() == child
+							? "discarded"
+							: "consumed";
+					else if (const auto* while_loop = llvm::dyn_cast<clang::WhileStmt>(parent))
+						return while_loop->getBody() == child ? "discarded" : "consumed";
+					else if (const auto* do_loop = llvm::dyn_cast<clang::DoStmt>(parent))
+						return do_loop->getBody() == child ? "discarded" : "consumed";
+					else if (const auto* range_loop =
+								 llvm::dyn_cast<clang::CXXForRangeStmt>(parent))
+						return range_loop->getBody() == child ? "discarded" : "consumed";
+					else if (llvm::isa<clang::CompoundStmt>(parent))
+						return "discarded";
+					else if (!llvm::isa<clang::LabelStmt, clang::SwitchCase, clang::AttributedStmt>(
+								 parent))
+						return "consumed";
+					child = parent;
+				}
+				return "unknown";
 			}
 			void append(sdk::detached_row row)
 			{
@@ -2965,6 +3195,7 @@ namespace cxxlens::detail::clang22
 			project_semantic_facts output_;
 			std::map<std::string, sdk::detached_row, std::less<>> rows_;
 			const std::function<void(std::string_view)>& progress_;
+			project_abi_observer abi_observer_;
 			std::string current_function_;
 			struct ast_enumeration
 			{
@@ -2981,6 +3212,8 @@ namespace cxxlens::detail::clang22
 			std::map<const clang::FunctionDecl*, fields> pending_bodies_;
 			std::vector<std::string> parents_;
 			std::vector<clang::Stmt*> statements_;
+			std::size_t category_work_{};
+			std::size_t unevaluated_depth_{};
 			std::size_t depth_{};
 			std::size_t retained_bytes_{};
 			std::size_t record_inventory_bytes_{};

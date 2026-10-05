@@ -18,6 +18,7 @@
 #include <cxxlens/relations/build_project.hpp>
 #include <cxxlens/relations/build_toolchain_context.hpp>
 #include <cxxlens/relations/build_variant.hpp>
+#include <cxxlens/relations/cc_abi_surface.hpp>
 #include <cxxlens/relations/cc_body.hpp>
 #include <cxxlens/relations/cc_call_direct_target.hpp>
 #include <cxxlens/relations/cc_call_site.hpp>
@@ -930,7 +931,7 @@ namespace cxxlens::detail::clang22
 									   }),
 						   prepared.end());
 			sdk::relation_registry registry;
-			const std::array<const sdk::relation_descriptor*, 29U> descriptors{
+			const std::array<const sdk::relation_descriptor*, 30U> descriptors{
 				&build::relations::project::descriptor(),
 				&build::relations::toolchain_context::descriptor(),
 				&build::relations::variant::descriptor(),
@@ -943,6 +944,7 @@ namespace cxxlens::detail::clang22
 				&cc::relations::entity_detail::descriptor(),
 				&cc::relations::entity_edge::descriptor(),
 				&cc::relations::syntax_node::descriptor(),
+				&cc::relations::abi_surface::descriptor(),
 				&cc::relations::body::descriptor(),
 				&cc::relations::cfg_node::descriptor(),
 				&cc::relations::cfg_edge::descriptor(),
@@ -1072,6 +1074,12 @@ namespace cxxlens::detail::clang22
 						{
 							for (const auto& unresolved : value.unresolved)
 							{
+								if (unresolved.code.starts_with("abi.") &&
+									descriptor->id != "cc.abi_surface.v1")
+									continue;
+								if (descriptor->id == "cc.abi_surface.v1" &&
+									!unresolved.code.starts_with("abi."))
+									continue;
 								if (descriptor->id == "cc.record_inventory.v1" &&
 									unresolved.code != "record.inventory-frontier")
 									continue;

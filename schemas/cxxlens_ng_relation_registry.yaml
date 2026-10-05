@@ -1,6 +1,6 @@
 schema: cxxlens.relation-registry.v1
 kind: relation-registry
-document_version: 1.13.0
+document_version: 1.14.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -9,7 +9,7 @@ authority:
   owner: steward.ng-relations
 compatibility:
   version_axis: relation-descriptor
-  current: 1.13.0
+  current: 1.14.0
   semantic_major_policy: exact-major-compatible-minor
   unknown_optional_columns: preserve
   unknown_open_symbols: preserve
@@ -4543,3 +4543,174 @@ relations:
   provenance:
     minimum: direct_observation
   evolution_policy: ng0.additive.v1
+- descriptor_id: cc.abi_surface.v1
+  name: cc.abi_surface
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.abi_surface/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: Independent compiler-observed storage occupancy and call-interface ABI facets bound to actual
+    declaration sources.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::abi_surface
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.abi_surface.v1.surface
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.abi_surface.v1.surface
+      projection:
+      - cc.abi_surface.v1.compile_unit
+      - cc.abi_surface.v1.entity
+      - cc.abi_surface.v1.source
+      - cc.abi_surface.v1.profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.abi_surface.v1.surface
+    name: surface
+    type: typed_id<abi_surface_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.abi_surface.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.abi_surface.v1.entity
+    name: entity
+    type: typed_id<cc_entity_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.abi_surface.v1.source
+    name: source
+    type: typed_id<source_span_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.abi_surface.v1.kind
+    name: kind
+    type: open_symbol<cc.abi-surface-kind/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.abi_surface.v1.profile
+    name: profile
+    type: open_symbol<cc.abi-surface-profile/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.abi_surface.v1.abi_state
+    name: abi_state
+    type: open_symbol<cc.abi-surface-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.abi_surface.v1.layout_state
+    name: layout_state
+    type: open_symbol<cc.abi-surface-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.abi_surface.v1.byte_size
+    name: byte_size
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.abi_surface.v1.byte_alignment
+    name: byte_alignment
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.abi_surface.v1.occupied_ranges
+    name: occupied_ranges
+    type: optional<bytes>
+    required: false
+    identity_role: authoritative_payload
+    semantic: 'Canonical concatenated little-endian uint64 begin/end byte intervals: nonempty, strictly
+      ordered, disjoint, nonadjacent and bounded by actual byte_size under clang22-storage-and-call-interface/1;
+      absent means unavailable.'
+  - id: cc.abi_surface.v1.abi_context
+    name: abi_context
+    type: optional<digest>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.abi_surface.v1.abi_signature
+    name: abi_signature
+    type: optional<bytes>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Opaque structural compiler storage/call-interface bytes under the exact profile; LLVM type
+      names, source paths, display names and arbitrary preprocessor variants are excluded.
+  - id: cc.abi_surface.v1.abi_fingerprint
+    name: abi_fingerprint
+    type: optional<digest>
+    required: false
+    identity_role: authoritative_payload
+    semantic: semantic_digest cc.clang22.abi-surface.v1 of uint64le context length, context UTF8, uint64le
+      signature length, signature bytes; not a general binary-compatibility proof.
+  - id: cc.abi_surface.v1.reason
+    name: reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.abi_surface.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.abi_surface.v1.entity
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.abi_surface.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: hard
+    on_missing: reject_batch
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.abi_surface.v1.compile_unit
+    - cc.abi_surface.v1.entity
+    - cc.abi_surface.v1.source
+    - cc.abi_surface.v1.kind
+    - cc.abi_surface.v1.profile
+    - cc.abi_surface.v1.abi_state
+    - cc.abi_surface.v1.layout_state
+    - cc.abi_surface.v1.byte_size
+    - cc.abi_surface.v1.byte_alignment
+    - cc.abi_surface.v1.occupied_ranges
+    - cc.abi_surface.v1.abi_context
+    - cc.abi_surface.v1.abi_signature
+    - cc.abi_surface.v1.abi_fingerprint
+    - cc.abi_surface.v1.reason
+  partition:
+    suggested_keys:
+    - cc.abi_surface.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.abi_surface.v1.entity
+  - - cc.abi_surface.v1.source
+  - - cc.abi_surface.v1.kind
+  coverage:
+    execution_domain: cc.abi_surface.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+  row_constraints:
+    all_or_none:
+    - - cc.abi_surface.v1.byte_size
+      - cc.abi_surface.v1.byte_alignment
+    - - cc.abi_surface.v1.abi_signature
+      - cc.abi_surface.v1.abi_fingerprint
