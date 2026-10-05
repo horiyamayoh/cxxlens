@@ -14,10 +14,12 @@
 #include <cxxlens/relations/cc_cfg_edge.hpp>
 #include <cxxlens/relations/cc_cfg_node.hpp>
 #include <cxxlens/relations/cc_declaration.hpp>
+#include <cxxlens/relations/cc_declaration_inventory.hpp>
 #include <cxxlens/relations/cc_entity.hpp>
 #include <cxxlens/relations/cc_entity_detail.hpp>
 #include <cxxlens/relations/cc_entity_edge.hpp>
 #include <cxxlens/relations/cc_flow_fact.hpp>
+#include <cxxlens/relations/cc_flow_inventory.hpp>
 #include <cxxlens/relations/cc_layout_fact.hpp>
 #include <cxxlens/relations/cc_record_inventory.hpp>
 #include <cxxlens/relations/cc_record_surface.hpp>
@@ -29,8 +31,11 @@
 #include <cxxlens/relations/core_differential_disagreement.hpp>
 #include <cxxlens/relations/core_provider_execution.hpp>
 #include <cxxlens/relations/core_unresolved.hpp>
+#include <cxxlens/relations/source_comment.hpp>
+#include <cxxlens/relations/source_comment_inventory.hpp>
 #include <cxxlens/relations/source_file.hpp>
 #include <cxxlens/relations/source_include.hpp>
+#include <cxxlens/relations/source_include_inventory.hpp>
 #include <cxxlens/relations/source_origin.hpp>
 #include <cxxlens/relations/source_preprocessor_event.hpp>
 #include <cxxlens/relations/source_span.hpp>
@@ -295,6 +300,12 @@ namespace cxxlens::sdk
 				cc::relations::cfg_edge::descriptor(),
 				cc::relations::cfg_node::descriptor(),
 				cc::relations::declaration::descriptor(),
+				cc::relations::declaration_inventory::descriptor(),
+				cc::relations::flow_inventory::descriptor(),
+				source::relations::comment::descriptor(),
+				source::relations::comment_inventory::descriptor(),
+				source::relations::include_inventory::descriptor(),
+
 				cc::relations::entity::descriptor(),
 				cc::relations::entity_detail::descriptor(),
 				cc::relations::entity_edge::descriptor(),

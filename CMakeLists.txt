@@ -254,6 +254,7 @@ add_library(
   src/sdk/query_transfer.cpp
   src/sdk/control_flow.cpp
   src/sdk/source_tokens.cpp
+  src/sdk/finite_populations.cpp
   src/sdk/semantic_graphs.cpp
   src/sdk/record_surfaces.cpp
   src/sdk/abi_surfaces.cpp

@@ -1150,6 +1150,15 @@ cxxlens_add_test_executable(cxxlens-unit-sdk-semantic-graphs
                             unit/sdk/semantic_graphs_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-semantic-graphs PRIVATE cxxlens::query)
 add_test(NAME unit.sdk-semantic-graphs COMMAND cxxlens-unit-sdk-semantic-graphs)
+cxxlens_add_test_executable(cxxlens-unit-sdk-finite-populations
+                            unit/sdk/finite_populations_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-finite-populations
+                      PRIVATE cxxlens::query)
+add_test(NAME unit.sdk-finite-populations
+         COMMAND cxxlens-unit-sdk-finite-populations)
+set_tests_properties(
+  unit.sdk-finite-populations
+  PROPERTIES LABELS "unit;sdk;query;population;budget;cancellation")
 cxxlens_add_test_executable(cxxlens-unit-sdk-abi-surfaces
                             unit/sdk/abi_surfaces_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-abi-surfaces PRIVATE cxxlens::query)
@@ -1772,6 +1781,17 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     set_tests_properties(
       adapter.clang22-abi-surfaces
       PROPERTIES LABELS "adapter;clang22;abi;application;bounded" TIMEOUT 600)
+    add_test(
+      NAME adapter.clang22-finite-populations
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/clang22/finite_populations_test.py"
+        "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}")
+    set_tests_properties(
+      adapter.clang22-finite-populations
+      PROPERTIES LABELS
+                 "adapter;clang22;application;population;flow;coroutine;bounded"
+                 TIMEOUT 600)
     add_test(
       NAME adapter.clang22-application-analysis
       COMMAND

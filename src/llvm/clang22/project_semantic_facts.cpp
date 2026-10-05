@@ -18,16 +18,21 @@
 #include <cxxlens/relations/cc_cfg_edge.hpp>
 #include <cxxlens/relations/cc_cfg_node.hpp>
 #include <cxxlens/relations/cc_declaration.hpp>
+#include <cxxlens/relations/cc_declaration_inventory.hpp>
 #include <cxxlens/relations/cc_entity_detail.hpp>
 #include <cxxlens/relations/cc_entity_edge.hpp>
 #include <cxxlens/relations/cc_flow_fact.hpp>
+#include <cxxlens/relations/cc_flow_inventory.hpp>
 #include <cxxlens/relations/cc_layout_fact.hpp>
 #include <cxxlens/relations/cc_record_inventory.hpp>
 #include <cxxlens/relations/cc_record_surface.hpp>
 #include <cxxlens/relations/cc_syntax_node.hpp>
 #include <cxxlens/relations/cc_type.hpp>
 #include <cxxlens/relations/cc_type_component.hpp>
+#include <cxxlens/relations/source_comment.hpp>
+#include <cxxlens/relations/source_comment_inventory.hpp>
 #include <cxxlens/relations/source_include.hpp>
+#include <cxxlens/relations/source_include_inventory.hpp>
 #include <cxxlens/relations/source_preprocessor_event.hpp>
 #include <cxxlens/relations/source_span.hpp>
 #include <cxxlens/relations/source_token.hpp>
@@ -169,6 +174,81 @@ namespace cxxlens::detail::clang22
 			const auto* method = llvm::dyn_cast_or_null<clang::CXXMethodDecl>(declaration);
 			return method && method->getParent()->isLambda() &&
 				method == method->getParent()->getLambdaCallOperator();
+		}
+		clang::TemplateSpecializationKind specialization_kind(const clang::NamedDecl* declaration)
+		{
+			if (const auto* function = llvm::dyn_cast<clang::FunctionDecl>(declaration))
+				return function->getTemplateSpecializationKind();
+			if (const auto* record = llvm::dyn_cast<clang::CXXRecordDecl>(declaration))
+				return record->getTemplateSpecializationKind();
+			if (const auto* variable = llvm::dyn_cast<clang::VarDecl>(declaration))
+				return variable->getTemplateSpecializationKind();
+			return clang::TSK_Undeclared;
+		}
+		bool declaration_population_admitted(const clang::NamedDecl* declaration)
+		{
+			if (specialization_kind(declaration) == clang::TSK_ImplicitInstantiation)
+				return false;
+			for (auto* context = declaration->getDeclContext();
+				 context && !context->isTranslationUnit();
+				 context = context->getParent())
+				if (const auto* owner =
+						llvm::dyn_cast<clang::NamedDecl>(clang::Decl::castFromDeclContext(context)))
+				{
+					const auto kind = specialization_kind(owner);
+					if (kind == clang::TSK_ImplicitInstantiation ||
+						kind == clang::TSK_ExplicitInstantiationDeclaration ||
+						kind == clang::TSK_ExplicitInstantiationDefinition)
+						return false;
+				}
+			return true;
+		}
+		void declaration_categories(const clang::NamedDecl& declaration,
+									std::set<std::string, std::less<>>& properties)
+		{
+			properties.emplace("finite_declarations_v1");
+			if (declaration_population_admitted(&declaration))
+				properties.emplace("declaration_population_admitted");
+			if (written_lambda(&declaration))
+				properties.emplace("written_lambda");
+			bool primary = false;
+			if (const auto* record = llvm::dyn_cast<clang::CXXRecordDecl>(&declaration))
+				primary = record->getDescribedClassTemplate() != nullptr;
+			if (const auto* function = llvm::dyn_cast<clang::FunctionDecl>(&declaration))
+				primary = function->getDescribedFunctionTemplate() != nullptr;
+			if (const auto* variable = llvm::dyn_cast<clang::VarDecl>(&declaration))
+				primary = variable->getDescribedVarTemplate() != nullptr;
+			if (const auto* alias = llvm::dyn_cast<clang::TypeAliasDecl>(&declaration))
+				primary = alias->getDescribedAliasTemplate() != nullptr;
+			if (primary)
+				properties.emplace("template_primary");
+			if (llvm::isa<clang::ConceptDecl>(&declaration))
+				properties.emplace("concept");
+			const bool partial =
+				llvm::isa<clang::ClassTemplatePartialSpecializationDecl,
+						  clang::VarTemplatePartialSpecializationDecl>(&declaration);
+			if (partial)
+				properties.emplace("template_partial_specialization");
+			switch (specialization_kind(&declaration))
+			{
+				case clang::TSK_ExplicitSpecialization:
+					if (!partial)
+						properties.emplace("template_full_specialization");
+					break;
+				case clang::TSK_ExplicitInstantiationDeclaration:
+					properties.emplace("template_explicit_instantiation_declaration");
+					break;
+				case clang::TSK_ExplicitInstantiationDefinition:
+					properties.emplace("template_explicit_instantiation_definition");
+					break;
+				case clang::TSK_ImplicitInstantiation:
+					properties.emplace("template_implicit_instantiation");
+					break;
+				case clang::TSK_Undeclared:
+					break;
+			}
+			if (!declaration_population_admitted(&declaration))
+				properties.emplace("template_implicit_instantiation");
 		}
 		std::string usr(const clang::NamedDecl* declaration)
 		{
@@ -882,6 +962,13 @@ namespace cxxlens::detail::clang22
 					ast_enumerations_.back().active &&
 					ast_enumerations_.back().function == current_function_)
 					++ast_enumerations_.back().local_variables;
+				const bool population_admitted = declaration_population_admitted(declaration);
+				if (population_admitted && observed_declarations_.insert(declaration).second)
+				{
+					retain_population_bytes(64U);
+					if (observed_declarations_.size() > 1'000'000U)
+						fail("declaration-inventory", "admission-count-limit");
+				}
 				const auto entity_id = entity(declaration);
 				const auto source = span(declaration->getSourceRange(), "declaration");
 				if (const auto* record = llvm::dyn_cast<clang::RecordDecl>(declaration); record &&
@@ -911,6 +998,7 @@ namespace cxxlens::detail::clang22
 									  ? declaration->getOwningModule()->getFullModuleName()
 									  : "<none>"));
 				std::set<std::string, std::less<>> properties;
+				declaration_categories(*declaration, properties);
 				std::string signature = usr(declaration);
 				bool definition = true;
 				std::uint64_t parameters{};
@@ -972,6 +1060,10 @@ namespace cxxlens::detail::clang22
 						// Unused defaulted members and template declarations deliberately retain
 						// lazy specifications; observing them must not instantiate user code.
 						const auto specification = proto->getExceptionSpecType();
+						if (!clang::isUnresolvedExceptionSpec(specification) &&
+							specification != clang::EST_Unparsed &&
+							specification != clang::EST_DependentNoexcept)
+							properties.emplace("noexcept_classified");
 						if (specification == clang::EST_DynamicNone ||
 							specification == clang::EST_NoThrow ||
 							specification == clang::EST_BasicNoexcept ||
@@ -1069,7 +1161,7 @@ namespace cxxlens::detail::clang22
 					 symbol("cc.linkage/1",
 							declaration->isExternallyVisible() ? "external" : "internal")},
 					{"attributes", flags("cc.attribute/1", {})},
-					{"is_implicit", sdk::detached_cell::boolean(false)},
+					{"is_implicit", sdk::detached_cell::boolean(declaration->isImplicit())},
 					{"is_deleted", sdk::detached_cell::boolean(false)},
 					{"is_defaulted", sdk::detached_cell::boolean(false)},
 					{"is_friend",
@@ -1097,8 +1189,18 @@ namespace cxxlens::detail::clang22
 					declaration_row.insert_or_assign(
 						"storage",
 						symbol("cc.storage-class/1", storage(variable->getStorageClass())));
-				append(
-					make_row(cc::relations::declaration::descriptor(), std::move(declaration_row)));
+				auto original_declaration =
+					make_row(cc::relations::declaration::descriptor(), std::move(declaration_row));
+				if (population_admitted)
+				{
+					const auto declaration_id = row_id(original_declaration, "declaration");
+					retain_population_bytes(declaration_id.size() * 2U + 128U);
+					declaration_ids_.insert(declaration_id);
+					if (unit_.source_manager().isInSystemHeader(
+							unit_.source_manager().getExpansionLoc(declaration->getLocation())))
+						system_declaration_ids_.insert(declaration_id);
+				}
+				append(std::move(original_declaration));
 				if (!type.isNull() && !llvm::isa<clang::FunctionDecl>(declaration))
 					layout(*declaration, type);
 				const auto* owner = llvm::dyn_cast<clang::NamedDecl>(
@@ -1243,6 +1345,28 @@ namespace cxxlens::detail::clang22
 				for (auto iterator = record->begin(); iterator != record->end(); ++iterator)
 				{
 					const auto* observation = *iterator;
+					include_census* inclusion_population{};
+					if (const auto* inclusion =
+							llvm::dyn_cast<clang::InclusionDirective>(observation))
+						if (const auto* member = admitted(inclusion->getSourceRange().getBegin()))
+						{
+							inclusion_population = &include_populations_[member->logical_path];
+							const auto first = unit_.source_manager().getExpansionLoc(
+								inclusion->getSourceRange().getBegin());
+							const auto last = unit_.source_manager().getExpansionLoc(
+								inclusion->getSourceRange().getEnd());
+							const auto included = inclusion->getFile();
+							const auto key =
+								std::to_string(unit_.source_manager().getFileOffset(first)) + ':' +
+								std::to_string(last.isValid()
+												   ? unit_.source_manager().getFileOffset(last)
+												   : 0U) +
+								':' + inclusion->getFileName().str() + ':' +
+								(included ? included->getName().str() : "<unresolved>");
+							retain_population_bytes(key.size() + 96U);
+							inclusion_population->admissions.insert(key);
+							inclusion_population->resolution_complete &= included.has_value();
+						}
 					const auto source = span(observation->getSourceRange(), "preprocessor");
 					if (!source)
 						continue;
@@ -1278,9 +1402,57 @@ namespace cxxlens::detail::clang22
 								file_id.isValid() &&
 								unit_.source_manager().isInSystemHeader(
 									unit_.source_manager().getLocForStartOfFile(file_id))));
-						append(
-							make_row(source::relations::include::descriptor(), std::move(value)));
+						auto include =
+							make_row(source::relations::include::descriptor(), std::move(value));
+						if (inclusion_population)
+						{
+							const auto include_id = row_id(include, "include");
+							retain_population_bytes(include_id.size() + 96U);
+							inclusion_population->ids.insert(include_id);
+						}
+						append(std::move(include));
 					}
+				}
+				for (const auto& member : closure_.members)
+				{
+					const auto found = include_populations_.find(member.logical_path);
+					const auto count =
+						found == include_populations_.end() ? 0U : found->second.admissions.size();
+					const auto ids = found == include_populations_.end()
+						? std::set<std::string, std::less<>>{}
+						: found->second.ids;
+					const bool opened = preprocessing.opened_files.contains(member.logical_path);
+					const bool complete = opened && count == ids.size();
+					auto value = common();
+					value.emplace("file", id("file_id", member.file_id));
+					value.emplace("source_snapshot",
+								  id("source_snapshot_id",
+									 take(sdk::detail::derive_source_snapshot_id(
+										 member.file_id, member.content_digest, "utf8"))));
+					value.emplace(
+						"profile",
+						sdk::detached_cell::utf8("clang22-preprocessed-inclusion-directives/1"));
+					value.emplace("enumeration_state",
+								  symbol("source.include-inventory-state/1",
+										 !opened		? "unavailable"
+											 : complete ? "complete"
+														: "partial"));
+					value.emplace("include_count", sdk::detached_cell::unsigned_integer(count));
+					value.emplace("includes", flags("include_id", ids));
+					value.emplace("resolution_state",
+								  symbol("source.include-resolution-state/1",
+										 !opened ? "unavailable"
+											 : found == include_populations_.end() ||
+												 found->second.resolution_complete
+											 ? "complete"
+											 : "partial"));
+					if (!complete)
+						value.emplace("reason",
+									  sdk::detached_cell::utf8(
+										  !opened ? "source-not-preprocessed-in-unit"
+												  : "include-source-identity-unavailable"));
+					append(make_row(source::relations::include_inventory::descriptor(),
+									std::move(value)));
 				}
 				std::uint64_t ordinal{};
 				for (const auto& event : preprocessing.events)
@@ -1318,6 +1490,14 @@ namespace cxxlens::detail::clang22
 			}
 			void tokens(const project_preprocessor_observations& preprocessing)
 			{
+				for (const auto& logical : preprocessing.opened_files)
+					if (const auto* member = closure_.find_member(logical))
+					{
+						retain_population_bytes(member->file_id.size() + 256U);
+						parsed_files_.insert(member->file_id);
+						parsed_snapshots_.insert(take(sdk::detail::derive_source_snapshot_id(
+							member->file_id, member->content_digest, "utf8")));
+					}
 				using intervals = std::vector<std::pair<std::uint64_t, std::uint64_t>>;
 				std::map<std::string, intervals, std::less<>> skipped, macros;
 				for (const auto& event : preprocessing.events)
@@ -1471,8 +1651,9 @@ namespace cxxlens::detail::clang22
 									   manager.getBufferOrFake(file_id),
 									   manager,
 									   unit_.ast().getLangOpts()};
-					lexer.SetCommentRetentionState(false);
-					std::uint64_t count{}, directives{};
+					lexer.SetCommentRetentionState(true);
+					std::uint64_t count{}, directives{}, comment_count{}, comment_bytes{};
+					std::set<std::string, std::less<>> comment_ids;
 					bool directive{};
 					while (true)
 					{
@@ -1481,7 +1662,54 @@ namespace cxxlens::detail::clang22
 						if (token.is(clang::tok::eof))
 							break;
 						if (token.is(clang::tok::comment))
+						{
+							const auto begin = manager.getFileOffset(token.getLocation());
+							const auto end = static_cast<std::uint64_t>(begin) + token.getLength();
+							if (end > member.size_bytes)
+								fail("comments", "range-outside-frozen-input");
+							auto source =
+								make_row(source::relations::span::descriptor(),
+										 {{"snapshot", id("source_snapshot_id", snapshot)},
+										  {"file", id("file_id", member.file_id)},
+										  {"begin", sdk::detached_cell::unsigned_integer(begin)},
+										  {"end", sdk::detached_cell::unsigned_integer(end)},
+										  {"role", symbol("source.range-role/1", "comment")},
+										  {"read_only", sdk::detached_cell::boolean(true)}});
+							const auto source_id = row_id(source, "span");
+							append(std::move(source));
+							auto value = common();
+							value.emplace("source", id("source_span_id", source_id));
+							const auto spelling = clang::Lexer::getSpelling(
+								token, manager, unit_.ast().getLangOpts());
+							value.emplace("kind",
+										  symbol("source.comment-kind/1",
+												 spelling.starts_with("//") ? "line" : "block"));
+							value.emplace("byte_count",
+										  sdk::detached_cell::unsigned_integer(end - begin));
+							retain_population_bytes(end - begin);
+							const auto raw =
+								std::as_bytes(std::span{blob->content->data() + begin,
+														static_cast<std::size_t>(end - begin)});
+							value.emplace("spelling_bytes",
+										  sdk::detached_cell::bytes(
+											  std::vector<std::byte>{raw.begin(), raw.end()}));
+							value.emplace("ordinal",
+										  sdk::detached_cell::unsigned_integer(comment_count++));
+							value.emplace(
+								"profile",
+								sdk::detached_cell::utf8("clang22-frozen-raw-comments/1"));
+							auto comment = make_row(source::relations::comment::descriptor(),
+													std::move(value));
+							const auto comment_id = row_id(comment, "comment");
+							retain_population_bytes(comment_id.size() + 96U);
+							comment_ids.insert(comment_id);
+							if (end - begin >
+								std::numeric_limits<std::uint64_t>::max() - comment_bytes)
+								fail("comments", "byte-count-overflow");
+							comment_bytes += end - begin;
+							append(std::move(comment));
 							continue;
+						}
 						const auto begin = manager.getFileOffset(token.getLocation());
 						const auto end = static_cast<std::uint64_t>(begin) + token.getLength();
 						if (token.isAtStartOfLine())
@@ -1516,6 +1744,45 @@ namespace cxxlens::detail::clang22
 							 directive_start);
 					}
 					inventory("raw", count, directives, "complete", {});
+					std::vector<std::byte> line_starts;
+					const auto line = [&](std::uint64_t offset)
+					{
+						retain_population_bytes(8U);
+						for (unsigned shift{}; shift < 64U; shift += 8U)
+							line_starts.push_back(static_cast<std::byte>((offset >> shift) & 255U));
+					};
+					if (!blob->content->empty())
+						line(0U);
+					for (std::size_t offset{}; offset < blob->content->size(); ++offset)
+						if ((*blob->content)[offset] == '\r' || (*blob->content)[offset] == '\n')
+						{
+							if ((*blob->content)[offset] == '\r' &&
+								offset + 1U < blob->content->size() &&
+								(*blob->content)[offset + 1U] == '\n')
+								++offset;
+							if (offset + 1U < blob->content->size())
+								line(offset + 1U);
+						}
+					auto comments = common();
+					comments.emplace("file", id("file_id", member.file_id));
+					comments.emplace("source_snapshot", id("source_snapshot_id", snapshot));
+					comments.emplace("profile",
+									 sdk::detached_cell::utf8("clang22-frozen-raw-comments/1"));
+					comments.emplace("enumeration_state",
+									 symbol("source.comment-inventory-state/1", "complete"));
+					comments.emplace("comment_count",
+									 sdk::detached_cell::unsigned_integer(comment_count));
+					comments.emplace("comments",
+									 flags("source_comment_id", std::move(comment_ids)));
+					comments.emplace("comment_bytes",
+									 sdk::detached_cell::unsigned_integer(comment_bytes));
+					comments.emplace("physical_line_starts",
+									 sdk::detached_cell::bytes(std::move(line_starts)));
+					comments.emplace(
+						"physical_line_profile",
+						sdk::detached_cell::utf8("source.physical-lines.crlf-lf-cr/1"));
+					append(make_row(source::relations::comment_inventory::descriptor(),
+									std::move(comments)));
 					template_partial = false;
 					count = 0U;
 					for (const auto* token : expanded[member.logical_path])
@@ -1575,6 +1842,40 @@ namespace cxxlens::detail::clang22
 				}
 				append(
 					make_row(cc::relations::record_inventory::descriptor(), std::move(inventory)));
+				auto declarations = common();
+				declarations.emplace(
+					"profile",
+					sdk::detached_cell::utf8("clang22-explicit-admitted-named-declarations/1"));
+				declarations.emplace(
+					"declaration_count",
+					sdk::detached_cell::unsigned_integer(observed_declarations_.size()));
+				const bool declarations_complete =
+					observed_declarations_.size() == declaration_ids_.size();
+				declarations.emplace("enumeration_state",
+									 symbol("cc.declaration-inventory-state/1",
+											declarations_complete ? "complete" : "partial"));
+				declarations.emplace("declarations",
+									 flags("cc_declaration_id", std::move(declaration_ids_)));
+				declarations.emplace(
+					"system_declarations",
+					flags("cc_declaration_id", std::move(system_declaration_ids_)));
+				declarations.emplace("parsed_files", flags("file_id", std::move(parsed_files_)));
+				declarations.emplace("parsed_source_snapshots",
+									 flags("source_snapshot_id", std::move(parsed_snapshots_)));
+				declarations.emplace("file_state",
+									 symbol("cc.declaration-file-state/1", "complete"));
+				if (!declarations_complete)
+				{
+					declarations.emplace(
+						"reason",
+						sdk::detached_cell::utf8("declaration-identity-or-source-unavailable"));
+					output_.unresolved.push_back(
+						{"declaration.inventory-frontier",
+						 observations_.compile_unit,
+						 "supply-written-declaration-identity-and-source"});
+				}
+				append(make_row(cc::relations::declaration_inventory::descriptor(),
+								std::move(declarations)));
 				if (progress_)
 					progress_("finishing " + std::to_string(rows_.size()) + " detached rows");
 				output_.rows.reserve(rows_.size());
@@ -1587,6 +1888,12 @@ namespace cxxlens::detail::clang22
 			}
 
 		  private:
+			void retain_population_bytes(std::size_t bytes)
+			{
+				if (bytes > 64U * 1024U * 1024U - population_bytes_)
+					fail("finite-populations", "retained-byte-limit");
+				population_bytes_ += bytes;
+			}
 			void retain_direct_call_bytes(std::size_t bytes)
 			{
 				if (bytes > 64U * 1024U * 1024U - direct_call_bytes_)
@@ -2522,12 +2829,16 @@ namespace cxxlens::detail::clang22
 				local_flow(collector& owner,
 						   clang::FunctionDecl& function,
 						   const clang::CFG& cfg,
-						   const std::map<unsigned, std::string>& nodes)
+						   const std::map<unsigned, std::string>& nodes,
+						   std::string body,
+						   std::string source)
 					: owner_{owner}, function_{function}, cfg_{cfg}, nodes_{nodes},
-					  function_id_{owner.entity(&function)}
+					  function_id_{owner.entity(&function)}, body_id_{std::move(body)},
+					  body_source_{std::move(source)}
 				{
 					for (const auto* block : cfg)
 					{
+						block_sizes_.emplace(block->getBlockID(), block->size());
 						unsigned position{};
 						for (const auto& element : *block)
 						{
@@ -2609,6 +2920,7 @@ namespace cxxlens::detail::clang22
 					for (const auto& value : events_)
 						events_by_block_[value.where.block].push_back(&value);
 					fixed_point();
+					inventory();
 				}
 				bool TraverseLambdaExpr(clang::LambdaExpr* expression)
 				{
@@ -2620,12 +2932,85 @@ namespace cxxlens::detail::clang22
 				}
 				bool TraverseDecl(clang::Decl* declaration)
 				{
-					if (llvm::isa_and_nonnull<clang::FunctionDecl>(declaration))
+					if (llvm::isa_and_nonnull<clang::FunctionDecl, clang::RecordDecl>(declaration))
 						return true;
 					return visitor::TraverseDecl(declaration);
 				}
+				bool TraverseDecltypeType(clang::DecltypeType*, bool)
+				{
+					return true;
+				}
+				bool TraverseDecltypeTypeLoc(clang::DecltypeTypeLoc, bool)
+				{
+					return true;
+				}
+				bool TraverseTypeOfExprType(clang::TypeOfExprType* type, bool qualifier)
+				{
+					return !type->getUnderlyingExpr()->getType()->isVariablyModifiedType() ||
+						visitor::TraverseTypeOfExprType(type, qualifier);
+				}
+				bool TraverseTypeOfExprTypeLoc(clang::TypeOfExprTypeLoc type, bool qualifier)
+				{
+					return !type.getUnderlyingExpr()->getType()->isVariablyModifiedType() ||
+						visitor::TraverseTypeOfExprTypeLoc(type, qualifier);
+				}
+				bool TraverseIfStmt(clang::IfStmt* statement)
+				{
+					if (!statement->isConstexpr())
+						return visitor::TraverseIfStmt(statement);
+					if (!TraverseStmt(statement->getInit()) ||
+						!TraverseStmt(statement->getConditionVariableDeclStmt()) ||
+						!TraverseStmt(statement->getCond()))
+						return false;
+					const auto selected = statement->getNondiscardedCase(owner_.unit_.ast());
+					if (!selected)
+					{
+						frontier("dependent-constexpr-branch", function_id_);
+						return true;
+					}
+					return TraverseStmt(*selected);
+				}
+				bool TraverseChooseExpr(clang::ChooseExpr* expression)
+				{
+					if (expression->isConditionDependent())
+					{
+						frontier("dependent-selected-expression", function_id_);
+						return true;
+					}
+					return TraverseStmt(expression->getChosenSubExpr());
+				}
+				bool TraverseGenericSelectionExpr(clang::GenericSelectionExpr* expression)
+				{
+					if (expression->isResultDependent())
+					{
+						frontier("dependent-selected-expression", function_id_);
+						return true;
+					}
+					return TraverseStmt(expression->getResultExpr());
+				}
 				bool dataTraverseStmtPre(clang::Stmt* statement)
 				{
+					// Follow compiler evaluation semantics before collecting events. An
+					// ancestor CFG location must never make an unevaluated child a use.
+					if (llvm::isa<clang::CXXNoexceptExpr,
+								  clang::TypeTraitExpr,
+								  clang::ExpressionTraitExpr,
+								  clang::RequiresExpr,
+								  clang::OffsetOfExpr,
+								  clang::CXXUuidofExpr>(statement))
+						return false;
+					if (const auto* trait =
+							llvm::dyn_cast<clang::UnaryExprOrTypeTraitExpr>(statement))
+						if (trait->getKind() != clang::UETT_SizeOf ||
+							!trait->getTypeOfArgument()->isVariableArrayType())
+							return false;
+					if (const auto* typeid_expression =
+							llvm::dyn_cast<clang::CXXTypeidExpr>(statement))
+						if (!typeid_expression->isPotentiallyEvaluated())
+							return false;
+					if (const auto* call = llvm::dyn_cast<clang::CallExpr>(statement))
+						if (call->isUnevaluatedBuiltinCall(owner_.unit_.ast()))
+							return false;
 					stack_.push_back(statement);
 					if (stack_.size() > 4096U)
 						fail("flow", "depth-limit");
@@ -2659,6 +3044,11 @@ namespace cxxlens::detail::clang22
 				{
 					if (llvm::isa<clang::VarDecl>(expression->getDecl()))
 						use(expression, expression->getDecl());
+					return true;
+				}
+				bool VisitVarDecl(clang::VarDecl* declaration)
+				{
+					observe_subject(*declaration);
 					return true;
 				}
 				bool VisitMemberExpr(clang::MemberExpr* expression)
@@ -2720,9 +3110,25 @@ namespace cxxlens::detail::clang22
 					if (const auto found = points_.find(statement); found != points_.end())
 						return found->second;
 					for (auto iterator = stack_.rbegin(); iterator != stack_.rend(); ++iterator)
+					{
+						// A VLA sizeof may evaluate a fresh type bound, but the operand of
+						// sizeof(existing_array) is not a storage read. Only actual descendant
+						// CFG expressions justify an event across this evaluation boundary.
+						if (llvm::isa<clang::UnaryExprOrTypeTraitExpr>(*iterator))
+							break;
 						if (const auto found = points_.find(*iterator); found != points_.end())
 							return found->second;
+					}
 					return std::nullopt;
+				}
+				bool within_sizeof_operand() const
+				{
+					return std::ranges::any_of(
+						stack_,
+						[](const auto* statement)
+						{
+							return llvm::isa<clang::UnaryExprOrTypeTraitExpr>(statement);
+						});
 				}
 				static std::string encoded(const string_set& values)
 				{
@@ -2737,15 +3143,31 @@ namespace cxxlens::detail::clang22
 								 const std::optional<std::string>& source,
 								 const std::string& target,
 								 std::string value,
-								 std::string guarantee)
+								 std::string guarantee,
+								 const string_set* definitions = nullptr,
+								 const string_set* live = nullptr,
+								 const std::string& use_fact = {},
+								 const std::string& event_fact = {})
 				{
+					++admitted_facts_;
+					if (!source &&
+						(kind == "definition" || kind == "use" || kind == "call" ||
+						 kind == "dereference" || kind == "constant" || kind == "null" ||
+						 kind == "points_to"))
+					{
+						++unmapped_facts_;
+						frontier("fact-source-missing", function_id_);
+					}
 					if (subject_id.empty())
 					{
+						++unmapped_facts_;
 						frontier("subject-identity-missing", function_id_);
 						return {};
 					}
 					auto row = owner_.common();
 					row.emplace("function", id("cc_entity_id", function_id_));
+					const bool reaching = kind.starts_with("reaching_"),
+							   liveness = kind.starts_with("live_");
 					row.emplace("kind", symbol("cc.flow-kind/1", std::move(kind)));
 					row.emplace("node", id("cfg_node_id", nodes_.at(where.block)));
 					row.emplace("subject", id("cc_entity_id", subject_id));
@@ -2756,9 +3178,25 @@ namespace cxxlens::detail::clang22
 					if (!value.empty())
 						row.emplace("value", sdk::detached_cell::utf8(std::move(value)));
 					row.emplace("ordinal", sdk::detached_cell::unsigned_integer(ordinal_++));
+					row.emplace("program_point",
+								sdk::detached_cell::unsigned_integer(where.position));
+					if (definitions)
+						row.emplace("definition_facts", flags("flow_fact_id", *definitions));
+					if (live)
+						row.emplace("live_subjects", flags("cc_entity_id", *live));
+					if (!use_fact.empty())
+						row.emplace("use_fact", id("flow_fact_id", use_fact));
+					if (!event_fact.empty())
+						row.emplace("event_fact", id("flow_fact_id", event_fact));
 					row.emplace("guarantee", symbol("cc.flow-guarantee/1", std::move(guarantee)));
 					auto fact = make_row(cc::relations::flow_fact::descriptor(), std::move(row));
 					const auto result = row_id(fact, "fact");
+					owner_.retain_population_bytes(result.size() * 3U + 256U);
+					fact_ids_.insert(result);
+					if (reaching)
+						reaching_points_.insert(result);
+					if (liveness)
+						liveness_points_.insert(result);
 					owner_.append(std::move(fact));
 					return result;
 				}
@@ -2784,7 +3222,14 @@ namespace cxxlens::detail::clang22
 						return;
 					const auto where = location(expression);
 					if (!where)
+					{
+						if (within_sizeof_operand())
+							return;
+						++unmapped_facts_;
+						frontier("use-position-missing", function_id_);
 						return;
+					}
+					observe_subject(*declaration);
 					const auto variable = owner_.entity(declaration);
 					const auto source = owner_.span(expression->getSourceRange(), "expression");
 					const auto fact = emit("use", *where, variable, source, {}, {}, "observed");
@@ -2796,6 +3241,7 @@ namespace cxxlens::detail::clang22
 								const clang::Expr* initializer,
 								bool initialized)
 				{
+					observe_subject(declaration);
 					const auto variable = owner_.entity(&declaration);
 					const auto source = owner_.span(initializer ? initializer->getSourceRange()
 																: declaration.getSourceRange(),
@@ -2852,7 +3298,13 @@ namespace cxxlens::detail::clang22
 				{
 					const auto where = location(statement);
 					if (!where)
+					{
+						if (within_sizeof_operand())
+							return;
+						++unmapped_facts_;
+						frontier("write-position-missing", function_id_);
 						return;
+					}
 					expression = expression->IgnoreParenImpCasts();
 					if (const auto* reference = llvm::dyn_cast<clang::DeclRefExpr>(expression))
 						definition(*reference->getDecl(), *where, initializer, true);
@@ -2927,6 +3379,7 @@ namespace cxxlens::detail::clang22
 					}
 					if (!converged)
 						frontier("fixed-point-budget", function_id_);
+					reaching_complete_ = converged;
 					const auto reaching_guarantee = converged ? "may" : "unknown";
 					for (const auto& [block, node] : nodes_)
 					{
@@ -2937,16 +3390,30 @@ namespace cxxlens::detail::clang22
 							 {},
 							 {},
 							 encoded(incoming[block]),
-							 reaching_guarantee);
+							 reaching_guarantee,
+							 &incoming[block]);
 						emit("reaching_out",
-							 {block, 0},
+							 {block, block_sizes_.at(block)},
 							 function_id_,
 							 {},
 							 {},
 							 encoded(outgoing[block]),
-							 reaching_guarantee);
+							 reaching_guarantee,
+							 &outgoing[block]);
 						auto state = incoming[block];
 						for (const auto* value : events_by_block_[block])
+						{
+							emit("reaching_before",
+								 value->where,
+								 function_id_,
+								 value->source,
+								 {},
+								 encoded(state),
+								 reaching_guarantee,
+								 &state,
+								 nullptr,
+								 {},
+								 value->fact);
 							if (value->definition)
 								transfer(state, *value);
 							else
@@ -2961,10 +3428,25 @@ namespace cxxlens::detail::clang22
 									 value->source,
 									 {},
 									 encoded(reaching),
-									 reaching_guarantee);
+									 reaching_guarantee,
+									 &reaching,
+									 nullptr,
+									 value->fact);
 								if (reaching.empty())
 									frontier("definition-frontier", value->subject);
 							}
+							emit("reaching_after",
+								 value->where,
+								 function_id_,
+								 value->source,
+								 {},
+								 encoded(state),
+								 reaching_guarantee,
+								 &state,
+								 nullptr,
+								 {},
+								 value->fact);
+						}
 					}
 					queue.clear();
 					scheduled.clear();
@@ -3003,6 +3485,7 @@ namespace cxxlens::detail::clang22
 					}
 					if (!converged)
 						frontier("liveness-budget", function_id_);
+					liveness_complete_ = converged;
 					for (const auto& [block, node] : nodes_)
 					{
 						(void)node;
@@ -3012,21 +3495,142 @@ namespace cxxlens::detail::clang22
 							 {},
 							 {},
 							 encoded(live_in[block]),
-							 converged ? "may" : "unknown");
+							 converged ? "may" : "unknown",
+							 nullptr,
+							 &live_in[block]);
 						emit("live_out",
-							 {block, 0},
+							 {block, block_sizes_.at(block)},
 							 function_id_,
 							 {},
 							 {},
 							 encoded(live_out[block]),
-							 converged ? "may" : "unknown");
+							 converged ? "may" : "unknown",
+							 nullptr,
+							 &live_out[block]);
+						auto live = live_out[block];
+						for (auto event = events_by_block_[block].rbegin();
+							 event != events_by_block_[block].rend();
+							 ++event)
+						{
+							const auto& value = **event;
+							emit("live_after",
+								 value.where,
+								 function_id_,
+								 value.source,
+								 {},
+								 encoded(live),
+								 converged ? "may" : "unknown",
+								 nullptr,
+								 &live,
+								 {},
+								 value.fact);
+							if (value.definition)
+							{
+								if (value.strong)
+									live.erase(value.subject);
+							}
+							else
+								live.insert(value.subject);
+							emit("live_before",
+								 value.where,
+								 function_id_,
+								 value.source,
+								 {},
+								 encoded(live),
+								 converged ? "may" : "unknown",
+								 nullptr,
+								 &live,
+								 {},
+								 value.fact);
+						}
 					}
+				}
+				void observe_subject(const clang::NamedDecl& declaration)
+				{
+					const auto* value = llvm::dyn_cast<clang::ValueDecl>(&declaration);
+					if (!value)
+						return;
+					const auto entity = owner_.entity(&declaration);
+					if (entity.empty() || value->getType().isNull() ||
+						value->getType()->isDependentType())
+					{
+						subjects_complete_ = false;
+						return;
+					}
+					owner_.retain_population_bytes(entity.size() * 2U + 128U);
+					if (value->getType()->isPointerType())
+						pointer_subjects_.insert(entity);
+					if (value->getType()->isIntegralOrEnumerationType())
+						integer_subjects_.insert(entity);
+				}
+				void inventory()
+				{
+					auto value = owner_.common();
+					value.emplace("function", id("cc_entity_id", function_id_));
+					value.emplace("body", id("body_id", body_id_));
+					value.emplace("source", id("source_span_id", body_source_));
+					value.emplace("profile",
+								  sdk::detached_cell::utf8("clang22-local-may-flow-facts/1"));
+					const bool complete =
+						unmapped_facts_ == 0U && admitted_facts_ == fact_ids_.size();
+					value.emplace(
+						"enumeration_state",
+						symbol("cc.flow-inventory-state/1", complete ? "complete" : "partial"));
+					value.emplace("fact_count",
+								  sdk::detached_cell::unsigned_integer(admitted_facts_));
+					value.emplace("facts", flags("flow_fact_id", fact_ids_));
+					value.emplace("program_point_profile",
+								  sdk::detached_cell::utf8(
+									  "clang22-cfg-boundaries-and-written-local-events/1"));
+					value.emplace("program_point_count",
+								  sdk::detached_cell::unsigned_integer(nodes_.size() * 2U +
+																	   events_.size() * 2U));
+					value.emplace("reaching_points", flags("flow_fact_id", reaching_points_));
+					value.emplace("liveness_points", flags("flow_fact_id", liveness_points_));
+					value.emplace("reaching_state",
+								  symbol("cc.flow-facet-state/1",
+										 reaching_complete_ ? "complete" : "partial"));
+					value.emplace("liveness_state",
+								  symbol("cc.flow-facet-state/1",
+										 liveness_complete_ ? "complete" : "partial"));
+					value.emplace("pointer_subjects", flags("cc_entity_id", pointer_subjects_));
+					value.emplace("integer_subjects", flags("cc_entity_id", integer_subjects_));
+					value.emplace("subject_state",
+								  symbol("cc.flow-facet-state/1",
+										 subjects_complete_ ? "complete" : "partial"));
+					value.emplace("points_to_state",
+								  symbol("cc.flow-facet-state/1",
+										 pointer_subjects_.empty() && subjects_complete_
+											 ? "complete"
+											 : "partial"));
+					value.emplace("null_state",
+								  symbol("cc.flow-facet-state/1",
+										 pointer_subjects_.empty() && subjects_complete_
+											 ? "complete"
+											 : "partial"));
+					value.emplace("range_state",
+								  symbol("cc.flow-facet-state/1",
+										 integer_subjects_.empty() && subjects_complete_
+											 ? "complete"
+											 : "partial"));
+					value.emplace("summary_state", symbol("cc.flow-facet-state/1", "unavailable"));
+					if (!complete)
+						value.emplace("reason",
+									  sdk::detached_cell::utf8(
+										  "flow-subject-source-or-position-unavailable"));
+					owner_.append(
+						make_row(cc::relations::flow_inventory::descriptor(), std::move(value)));
 				}
 				collector& owner_;
 				clang::FunctionDecl& function_;
 				const clang::CFG& cfg_;
 				const std::map<unsigned, std::string>& nodes_;
 				std::string function_id_;
+				std::string body_id_, body_source_;
+				string_set fact_ids_, reaching_points_, liveness_points_, pointer_subjects_,
+					integer_subjects_;
+				std::uint64_t admitted_facts_{}, unmapped_facts_{};
+				bool reaching_complete_{}, liveness_complete_{}, subjects_complete_{true};
 				std::map<const clang::Stmt*, point> points_;
 				std::vector<const clang::Stmt*> stack_;
 				std::set<const clang::Expr*> writes_only_;
@@ -3034,6 +3638,7 @@ namespace cxxlens::detail::clang22
 				std::map<unsigned, std::vector<const event*>> events_by_block_;
 				std::map<std::string, std::string, std::less<>> definition_subjects_;
 				std::map<unsigned, std::set<unsigned>> successors_, predecessors_;
+				std::map<unsigned, unsigned> block_sizes_;
 				std::set<std::pair<std::string, std::string>> frontiers_;
 				std::uint64_t ordinal_{}, order_{};
 			};
@@ -3115,6 +3720,8 @@ namespace cxxlens::detail::clang22
 										block == &cfg->getEntry()	   ? "entry"
 											: block == &cfg->getExit() ? "exit"
 																	   : "block"));
+					node.emplace("element_count",
+								 sdk::detached_cell::unsigned_integer(block->size()));
 					node.emplace(
 						"statement_count",
 						sdk::detached_cell::unsigned_integer(
@@ -3182,7 +3789,7 @@ namespace cxxlens::detail::clang22
 						append(make_row(cc::relations::cfg_edge::descriptor(), std::move(branch)));
 					}
 				}
-				local_flow{*this, function, *cfg, nodes}.run();
+				local_flow{*this, function, *cfg, nodes, body_id, *source}.run();
 				if (progress_)
 					progress_("cfg/flow finished " + function.getQualifiedNameAsString());
 			}
@@ -3217,6 +3824,16 @@ namespace cxxlens::detail::clang22
 			std::size_t depth_{};
 			std::size_t retained_bytes_{};
 			std::size_t record_inventory_bytes_{};
+			std::size_t population_bytes_{};
+			std::set<const clang::NamedDecl*> observed_declarations_;
+			std::set<std::string, std::less<>> declaration_ids_, system_declaration_ids_,
+				parsed_files_, parsed_snapshots_;
+			struct include_census
+			{
+				std::set<std::string, std::less<>> admissions, ids;
+				bool resolution_complete{true};
+			};
+			std::map<std::string, include_census, std::less<>> include_populations_;
 			std::size_t direct_call_bytes_{};
 			std::map<std::pair<std::string, std::string>,
 					 std::vector<std::pair<std::string, std::string>>>

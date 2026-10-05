@@ -38,7 +38,7 @@ def database(root, files, extra=()):
 def scans(bundle):
     assert bundle["schema"] == "cxxlens.application-query-results.v1"
     queries = bundle["queries"]
-    assert len(queries) == 30
+    assert len(queries) == 35
     def relation(query):
         requirements = query["logical_ir"]["relation_requirements"]
         assert len(requirements) == 1
@@ -392,12 +392,12 @@ with tempfile.TemporaryDirectory(prefix="cxxlens-application-") as temporary:
     assert sum("cast_integer_to_pointer" in row_flags(row, "flags") for row in cast_nodes) == 1
     assert sum(value(row, "kind") == "GCCAsmStmt" for row in cast_nodes) == 1
     assert sum(value(row, "kind") == "LambdaExpr" for row in cast_nodes) == 1
-    assert b"noexcept" in bytes.fromhex(value(details[ids_by_name["demo::safe"]], "flags"))
-    assert b"noexcept" not in bytes.fromhex(value(details[ids_by_name["demo::maybe"]], "flags"))
+    assert "noexcept" in row_flags(details[ids_by_name["demo::safe"]], "flags")
+    assert "noexcept" not in row_flags(details[ids_by_name["demo::maybe"]], "flags")
     # Unused defaulted members have lazy exception specifications. Observation cannot
     # force instantiation or call Clang's evaluated-only canThrow()/isNothrow() APIs.
     lazy = [row for entity, row in details.items() if (names[entity] or "").startswith("demo::Lazy")]
-    assert lazy and any(b"noexcept_unknown" in bytes.fromhex(value(row, "flags")) for row in lazy)
+    assert lazy and any("noexcept_unknown" in row_flags(row, "flags") for row in lazy)
     types = {value(row, "type"): row for row in facts["cc.type.v1"]["rows"]}
     assert value(types[value(details[ids_by_name["demo::member"]], "canonical_type")], "constructor") == "member_pointer"
     for row in types.values():

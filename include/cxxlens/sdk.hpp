@@ -9,6 +9,7 @@
 #include <cxxlens/sdk/claim.hpp>
 #include <cxxlens/sdk/common.hpp>
 #include <cxxlens/sdk/control_flow.hpp>
+#include <cxxlens/sdk/finite_populations.hpp>
 #include <cxxlens/sdk/incremental.hpp>
 #include <cxxlens/sdk/provider.hpp>
 #include <cxxlens/sdk/query.hpp>

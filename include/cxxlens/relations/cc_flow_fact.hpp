@@ -24,8 +24,8 @@ namespace cxxlens::cc::relations
 				output.semantic_major = 1U;
 				output.semantics = "cc.flow_fact/1";
 				output.owner_namespace = "cxxlens.standard.cc";
-				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.flow_fact.v1.compile_unit","cc.flow_fact.v1.function","cc.flow_fact.v1.kind","cc.flow_fact.v1.node","cc.flow_fact.v1.subject","cc.flow_fact.v1.target","cc.flow_fact.v1.source","cc.flow_fact.v1.ordinal"],"result_column":"cc.flow_fact.v1.fact"},"interpretation_required":true,"key":["cc.flow_fact.v1.fact"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.flow_fact.v1.fact","identity_role":"claim_key","name":"fact","required":true,"type":"typed_id<flow_fact_id>"},{"id":"cc.flow_fact.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.flow_fact.v1.function","identity_role":"authoritative_payload","name":"function","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.flow_fact.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<cc.flow-kind/1>"},{"id":"cc.flow_fact.v1.node","identity_role":"authoritative_payload","name":"node","required":true,"type":"typed_id<cfg_node_id>"},{"id":"cc.flow_fact.v1.subject","identity_role":"authoritative_payload","name":"subject","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.flow_fact.v1.target","identity_role":"authoritative_payload","name":"target","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.flow_fact.v1.source","identity_role":"authoritative_payload","name":"source","required":false,"type":"optional<typed_id<source_span_id>>"},{"id":"cc.flow_fact.v1.value","identity_role":"authoritative_payload","name":"value","required":false,"type":"optional<utf8_string>"},{"id":"cc.flow_fact.v1.ordinal","identity_role":"authoritative_payload","name":"ordinal","required":true,"type":"uint64"},{"id":"cc.flow_fact.v1.guarantee","identity_role":"authoritative_payload","name":"guarantee","required":true,"type":"open_symbol<cc.flow-guarantee/1>"}],"coverage":{"execution_domain":"cc.flow_fact.compile-unit"},"descriptor_id":"cc.flow_fact.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::flow_fact","indexes":[["cc.flow_fact.v1.function"],["cc.flow_fact.v1.kind"],["cc.flow_fact.v1.subject"],["cc.flow_fact.v1.node"]],"merge":{"conflict_columns":["cc.flow_fact.v1.compile_unit","cc.flow_fact.v1.function","cc.flow_fact.v1.guarantee","cc.flow_fact.v1.kind","cc.flow_fact.v1.node","cc.flow_fact.v1.ordinal","cc.flow_fact.v1.source","cc.flow_fact.v1.subject","cc.flow_fact.v1.target","cc.flow_fact.v1.value"],"mode":"functional_assertion"},"name":"cc.flow_fact","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.flow_fact.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"on_missing":"reject_batch","source_columns":["cc.flow_fact.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"unresolved","source_columns":["cc.flow_fact.v1.function"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"reject_batch","source_columns":["cc.flow_fact.v1.node"],"strength":"hard","target_columns":["cc.cfg_node.v1.node"],"target_relation":"cc.cfg_node"},{"on_missing":"unresolved","source_columns":["cc.flow_fact.v1.source"],"strength":"soft_semantic","target_columns":["source.span.v1.span"],"target_relation":"source.span"},{"on_missing":"unresolved","source_columns":["cc.flow_fact.v1.subject"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.flow_fact.v1.target"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"}],"semantic_major":1,"semantics":"cc.flow_fact/1","stability":"versioned","summary":"Flow/model fact with analysis guarantee and witness; unresolved alias/model is explicit.","version":"1.0.0"})cxxlens";
-				output.contract_digest = "sha256:5183121cceb2d5408bc3aa0d12f4053a27a177d146bc181c1bbefffcd76be3e6";
+				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.flow_fact.v1.compile_unit","cc.flow_fact.v1.function","cc.flow_fact.v1.kind","cc.flow_fact.v1.node","cc.flow_fact.v1.subject","cc.flow_fact.v1.target","cc.flow_fact.v1.source","cc.flow_fact.v1.ordinal"],"result_column":"cc.flow_fact.v1.fact"},"interpretation_required":true,"key":["cc.flow_fact.v1.fact"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.flow_fact.v1.fact","identity_role":"claim_key","name":"fact","required":true,"type":"typed_id<flow_fact_id>"},{"id":"cc.flow_fact.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.flow_fact.v1.function","identity_role":"authoritative_payload","name":"function","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.flow_fact.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<cc.flow-kind/1>"},{"id":"cc.flow_fact.v1.node","identity_role":"authoritative_payload","name":"node","required":true,"type":"typed_id<cfg_node_id>"},{"id":"cc.flow_fact.v1.subject","identity_role":"authoritative_payload","name":"subject","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.flow_fact.v1.target","identity_role":"authoritative_payload","name":"target","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.flow_fact.v1.source","identity_role":"authoritative_payload","name":"source","required":false,"type":"optional<typed_id<source_span_id>>"},{"id":"cc.flow_fact.v1.value","identity_role":"authoritative_payload","name":"value","required":false,"type":"optional<utf8_string>"},{"id":"cc.flow_fact.v1.ordinal","identity_role":"authoritative_payload","name":"ordinal","required":true,"type":"uint64"},{"id":"cc.flow_fact.v1.guarantee","identity_role":"authoritative_payload","name":"guarantee","required":true,"type":"open_symbol<cc.flow-guarantee/1>"},{"id":"cc.flow_fact.v1.use_fact","identity_role":"authoritative_payload","name":"use_fact","required":false,"type":"optional<typed_id<flow_fact_id>>"},{"id":"cc.flow_fact.v1.event_fact","identity_role":"authoritative_payload","name":"event_fact","required":false,"type":"optional<typed_id<flow_fact_id>>"},{"id":"cc.flow_fact.v1.definition_facts","identity_role":"authoritative_payload","name":"definition_facts","required":false,"type":"optional<set<flow_fact_id>>"},{"id":"cc.flow_fact.v1.live_subjects","identity_role":"authoritative_payload","name":"live_subjects","required":false,"type":"optional<set<cc_entity_id>>"},{"id":"cc.flow_fact.v1.program_point","identity_role":"authoritative_payload","name":"program_point","required":false,"type":"optional<uint64>"}],"coverage":{"execution_domain":"cc.flow_fact.compile-unit"},"descriptor_id":"cc.flow_fact.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::flow_fact","indexes":[["cc.flow_fact.v1.function"],["cc.flow_fact.v1.kind"],["cc.flow_fact.v1.subject"],["cc.flow_fact.v1.node"]],"merge":{"conflict_columns":["cc.flow_fact.v1.compile_unit","cc.flow_fact.v1.definition_facts","cc.flow_fact.v1.event_fact","cc.flow_fact.v1.function","cc.flow_fact.v1.guarantee","cc.flow_fact.v1.kind","cc.flow_fact.v1.live_subjects","cc.flow_fact.v1.node","cc.flow_fact.v1.ordinal","cc.flow_fact.v1.program_point","cc.flow_fact.v1.source","cc.flow_fact.v1.subject","cc.flow_fact.v1.target","cc.flow_fact.v1.use_fact","cc.flow_fact.v1.value"],"mode":"functional_assertion"},"name":"cc.flow_fact","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.flow_fact.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"on_missing":"reject_batch","source_columns":["cc.flow_fact.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.flow_fact.v1.definition_facts"],"strength":"soft_semantic","target_columns":["cc.flow_fact.v1.fact"],"target_relation":"cc.flow_fact"},{"on_missing":"unresolved","source_columns":["cc.flow_fact.v1.event_fact"],"strength":"soft_semantic","target_columns":["cc.flow_fact.v1.fact"],"target_relation":"cc.flow_fact"},{"on_missing":"unresolved","source_columns":["cc.flow_fact.v1.function"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.flow_fact.v1.live_subjects"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"reject_batch","source_columns":["cc.flow_fact.v1.node"],"strength":"hard","target_columns":["cc.cfg_node.v1.node"],"target_relation":"cc.cfg_node"},{"on_missing":"unresolved","source_columns":["cc.flow_fact.v1.source"],"strength":"soft_semantic","target_columns":["source.span.v1.span"],"target_relation":"source.span"},{"on_missing":"unresolved","source_columns":["cc.flow_fact.v1.subject"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.flow_fact.v1.target"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.flow_fact.v1.use_fact"],"strength":"soft_semantic","target_columns":["cc.flow_fact.v1.fact"],"target_relation":"cc.flow_fact"}],"semantic_major":1,"semantics":"cc.flow_fact/1","stability":"versioned","summary":"Flow/model fact with analysis guarantee and witness; unresolved alias/model is explicit.","version":"1.0.0"})cxxlens";
+				output.contract_digest = "sha256:c96a8f8756000f15ff9b19454169f48609f542b2177486e1e704f913e2c1c8f6";
 				output.columns = {
 					{"cc.flow_fact.v1.fact", "fact", {sdk::scalar_kind::typed_id, "flow_fact_id", false}, true, sdk::column_role::claim_key},
 					{"cc.flow_fact.v1.compile_unit", "compile_unit", {sdk::scalar_kind::typed_id, "compile_unit_id", false}, true, sdk::column_role::authoritative_payload},
@@ -38,6 +38,11 @@ namespace cxxlens::cc::relations
 					{"cc.flow_fact.v1.value", "value", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.flow_fact.v1.ordinal", "ordinal", {sdk::scalar_kind::unsigned_integer, "", false}, true, sdk::column_role::authoritative_payload},
 					{"cc.flow_fact.v1.guarantee", "guarantee", {sdk::scalar_kind::open_symbol, "cc.flow-guarantee/1", false}, true, sdk::column_role::authoritative_payload},
+					{"cc.flow_fact.v1.use_fact", "use_fact", {sdk::scalar_kind::typed_id, "flow_fact_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.flow_fact.v1.event_fact", "event_fact", {sdk::scalar_kind::typed_id, "flow_fact_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.flow_fact.v1.definition_facts", "definition_facts", {sdk::scalar_kind::set, "flow_fact_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.flow_fact.v1.live_subjects", "live_subjects", {sdk::scalar_kind::set, "cc_entity_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.flow_fact.v1.program_point", "program_point", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
 				};
 				output.domain_identity.result_column = "cc.flow_fact.v1.fact";
 				output.domain_identity.projection = {
@@ -56,23 +61,32 @@ namespace cxxlens::cc::relations
 				};
 				output.references = {
 					{{"cc.flow_fact.v1.compile_unit"}, "build.compile_unit", {"build.compile_unit.v1.compile_unit"}, sdk::reference_strength::hard},
+					{{"cc.flow_fact.v1.definition_facts"}, "cc.flow_fact", {"cc.flow_fact.v1.fact"}, sdk::reference_strength::soft_semantic, true},
+					{{"cc.flow_fact.v1.event_fact"}, "cc.flow_fact", {"cc.flow_fact.v1.fact"}, sdk::reference_strength::soft_semantic},
 					{{"cc.flow_fact.v1.function"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic},
+					{{"cc.flow_fact.v1.live_subjects"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic, true},
 					{{"cc.flow_fact.v1.node"}, "cc.cfg_node", {"cc.cfg_node.v1.node"}, sdk::reference_strength::hard},
 					{{"cc.flow_fact.v1.source"}, "source.span", {"source.span.v1.span"}, sdk::reference_strength::soft_semantic},
 					{{"cc.flow_fact.v1.subject"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic},
 					{{"cc.flow_fact.v1.target"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic},
+					{{"cc.flow_fact.v1.use_fact"}, "cc.flow_fact", {"cc.flow_fact.v1.fact"}, sdk::reference_strength::soft_semantic},
 				};
 				output.merge = sdk::merge_mode::functional_assertion;
 				output.conflict_columns = {
 					"cc.flow_fact.v1.compile_unit",
+					"cc.flow_fact.v1.definition_facts",
+					"cc.flow_fact.v1.event_fact",
 					"cc.flow_fact.v1.function",
 					"cc.flow_fact.v1.guarantee",
 					"cc.flow_fact.v1.kind",
+					"cc.flow_fact.v1.live_subjects",
 					"cc.flow_fact.v1.node",
 					"cc.flow_fact.v1.ordinal",
+					"cc.flow_fact.v1.program_point",
 					"cc.flow_fact.v1.source",
 					"cc.flow_fact.v1.subject",
 					"cc.flow_fact.v1.target",
+					"cc.flow_fact.v1.use_fact",
 					"cc.flow_fact.v1.value",
 				};
 				output.descriptor_digest = *sdk::semantic_digest(
@@ -181,6 +195,51 @@ namespace cxxlens::cc::relations
 			[[nodiscard]] static sdk::column_ref ref()
 			{
 				return {flow_fact::descriptor().id, "cc.flow_fact.v1.guarantee", {sdk::scalar_kind::open_symbol, "cc.flow-guarantee/1", false}};
+			}
+		};
+		/** @brief Generated column tag for `cc.flow_fact.v1.use_fact`. */
+		struct use_fact
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {flow_fact::descriptor().id, "cc.flow_fact.v1.use_fact", {sdk::scalar_kind::typed_id, "flow_fact_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.flow_fact.v1.event_fact`. */
+		struct event_fact
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {flow_fact::descriptor().id, "cc.flow_fact.v1.event_fact", {sdk::scalar_kind::typed_id, "flow_fact_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.flow_fact.v1.definition_facts`. */
+		struct definition_facts
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {flow_fact::descriptor().id, "cc.flow_fact.v1.definition_facts", {sdk::scalar_kind::set, "flow_fact_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.flow_fact.v1.live_subjects`. */
+		struct live_subjects
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {flow_fact::descriptor().id, "cc.flow_fact.v1.live_subjects", {sdk::scalar_kind::set, "cc_entity_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.flow_fact.v1.program_point`. */
+		struct program_point
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {flow_fact::descriptor().id, "cc.flow_fact.v1.program_point", {sdk::scalar_kind::unsigned_integer, "", true}};
 			}
 		};
 	};

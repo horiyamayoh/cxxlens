@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.82.0
+document_version: 1.83.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -38,6 +38,7 @@ packages:
       - include/cxxlens/sdk/semantic_graphs.hpp
       - include/cxxlens/sdk/record_surfaces.hpp
       - include/cxxlens/sdk/abi_surfaces.hpp
+      - include/cxxlens/sdk/finite_populations.hpp
       - include/cxxlens/sdk/provider.hpp
       - include/cxxlens/sdk/recipe.hpp
     llvm_clang_dependency: forbidden
@@ -162,7 +163,7 @@ entries:
     status: implemented
     profile: NG0
     target: cxxlens::sdk
-    headers: [include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_declaration.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_type_component.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/core_claim_conflict.hpp, include/cxxlens/relations/core_differential_disagreement.hpp, include/cxxlens/relations/core_provider_execution.hpp, include/cxxlens/relations/core_unresolved.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_origin.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/relations/cc_entity_detail.hpp, include/cxxlens/relations/cc_entity_edge.hpp, include/cxxlens/relations/cc_syntax_node.hpp, include/cxxlens/relations/cc_body.hpp, include/cxxlens/relations/cc_cfg_node.hpp, include/cxxlens/relations/cc_cfg_edge.hpp, include/cxxlens/relations/cc_flow_fact.hpp, include/cxxlens/relations/cc_layout_fact.hpp, include/cxxlens/relations/cc_abi_surface.hpp, include/cxxlens/relations/cc_record_surface.hpp, include/cxxlens/relations/cc_record_inventory.hpp, include/cxxlens/relations/source_include.hpp, include/cxxlens/relations/source_preprocessor_event.hpp, include/cxxlens/relations/source_token.hpp, include/cxxlens/relations/source_token_inventory.hpp, include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
+    headers: [include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_declaration.hpp, include/cxxlens/relations/cc_declaration_inventory.hpp, include/cxxlens/relations/cc_flow_inventory.hpp, include/cxxlens/relations/source_comment.hpp, include/cxxlens/relations/source_comment_inventory.hpp, include/cxxlens/relations/source_include_inventory.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_type_component.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/core_claim_conflict.hpp, include/cxxlens/relations/core_differential_disagreement.hpp, include/cxxlens/relations/core_provider_execution.hpp, include/cxxlens/relations/core_unresolved.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_origin.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/relations/cc_entity_detail.hpp, include/cxxlens/relations/cc_entity_edge.hpp, include/cxxlens/relations/cc_syntax_node.hpp, include/cxxlens/relations/cc_body.hpp, include/cxxlens/relations/cc_cfg_node.hpp, include/cxxlens/relations/cc_cfg_edge.hpp, include/cxxlens/relations/cc_flow_fact.hpp, include/cxxlens/relations/cc_layout_fact.hpp, include/cxxlens/relations/cc_abi_surface.hpp, include/cxxlens/relations/cc_record_surface.hpp, include/cxxlens/relations/cc_record_inventory.hpp, include/cxxlens/relations/source_include.hpp, include/cxxlens/relations/source_preprocessor_event.hpp, include/cxxlens/relations/source_token.hpp, include/cxxlens/relations/source_token_inventory.hpp, include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
     symbols:
       - name: query.from
         kind: template
@@ -464,6 +465,52 @@ entries:
     threading: [projection-has-value-semantics, independent-calls-share-no-mutable-state]
     versioning: [finite-explicit-record-surface-v1-does-not-change-existing-relation-or-query-identity]
     invariants: [both-independent-consumers-share-cardinality-and-membership-validation, universe-variant-interpretation-unit-source-and-profile-remain-distinct, complete-empty-definition-distinct-from-forward-record, direct-ownership-never-flattens-nested-types, implicit-methods-and-static-fields-excluded, local-enumeration-does-not-close-project, conflicting-candidates-retained, original-query-side-channels-retained, deterministic-order, bounds-before-retention-and-typed-cancellation]
+    depends_on: [public.query-runtime]
+
+  - id: public.finite-populations
+    status: implemented
+    profile: NG1
+    target: cxxlens::query
+    headers: [include/cxxlens/sdk/finite_populations.hpp]
+    symbols:
+      - name: query.finite_population_input
+        kind: value
+        signature: 'units; files; spans; entities; details; bodies; cfg_nodes; inventories; members; compile_units_complete; inventory_inputs_complete; member_inputs_complete'
+      - name: query.finite_population_limits
+        kind: value
+        signature: 'maximum_rows; maximum_condition_expansions; maximum_evidence_bytes; maximum_retained_bytes; maximum_evidence_references; maximum_populations; maximum_members; maximum_operations; maximum_source_queries; maximum_source_plan_bytes; result<void> validate() const'
+      - name: query.finite_population_state
+        kind: value
+        signature: 'complete; unknown; partial; conflicting'
+      - name: query.finite_population_member
+        kind: value
+        signature: 'id; entity; kind; declaration_kind; source_span; file; source_snapshot; begin; end; spelling_bytes; evidence'
+      - name: query.finite_population
+        kind: value
+        signature: 'id; domain; compile_unit; profile; universe; variant; interpretation; function; body; source_span; file; source_snapshot; source_size; declared_count; declared_bytes; state; resolution_state; subject_state; points_to_state; null_state; range_state; summary_state; reaching_state; liveness_state; program_point_profile; program_point_count; reaching_points; liveness_points; physical_line_starts; physical_line_profile; system_members; pointer_subjects; integer_subjects; parsed_files; parsed_source_snapshots; file_state; members; evidence; gaps'
+      - name: query.finite_population_evidence
+        kind: value
+        signature: 'relation_id; row'
+      - name: query.finite_population_projection
+        kind: value
+        signature: 'evidence; populations; compile_units_complete; inventory_inputs_complete; member_inputs_complete; unresolved; source_queries'
+      - name: query.project_declarations
+        kind: function
+        signature: 'result<finite_population_projection> project_declarations(finite_population_input, finite_population_limits = {}, stop_token = {}); result<finite_population_projection> project_declarations(const application_query_results&, finite_population_limits = {}, stop_token = {})'
+      - name: query.project_source_comments
+        kind: function
+        signature: 'result<finite_population_projection> project_source_comments(finite_population_input, finite_population_limits = {}, stop_token = {}); result<finite_population_projection> project_source_comments(const application_query_results&, finite_population_limits = {}, stop_token = {})'
+      - name: query.project_source_includes
+        kind: function
+        signature: 'result<finite_population_projection> project_source_includes(finite_population_input, finite_population_limits = {}, stop_token = {}); result<finite_population_projection> project_source_includes(const application_query_results&, finite_population_limits = {}, stop_token = {})'
+      - name: query.project_body_flow
+        kind: function
+        signature: 'result<finite_population_projection> project_body_flow(finite_population_input, finite_population_limits = {}, stop_token = {}); result<finite_population_projection> project_body_flow(const application_query_results&, finite_population_limits = {}, stop_token = {})'
+    errors: [sdk.population-limit-invalid, sdk.population-input-invalid, sdk.population-budget, sdk.population-cancelled, sdk.population-resource-exhausted]
+    lifetime: [borrowed-input-only-during-call, projection-owns-conditioned-original-evidence-and-queries, no-compiler-pointer]
+    threading: [independent-calls-share-no-mutable-state]
+    versioning: [finite-populations-v1-preserve-original-relation-identities]
+    invariants: [independent-admission-before-identity-failure, exact-world-unit-source-profile, known-empty-distinct-from-unavailable, typed-original-flow-use-and-definition-bindings, physical-lines-explicit-crlf-lf-cr-policy, source-comments-are-raw-lexical-observations, include-enumeration-independent-of-resolution, finite-enumeration-never-upgrades-analysis-guarantee, conflicts-never-first-wins, original-query-side-channels-retained, bounds-before-retention-and-cancellation]
     depends_on: [public.query-runtime]
 
   - id: public.abi-surfaces
