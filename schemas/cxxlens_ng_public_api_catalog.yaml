@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.79.0
+document_version: 1.80.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -161,7 +161,7 @@ entries:
     status: implemented
     profile: NG0
     target: cxxlens::sdk
-    headers: [include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_declaration.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_type_component.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/core_claim_conflict.hpp, include/cxxlens/relations/core_differential_disagreement.hpp, include/cxxlens/relations/core_provider_execution.hpp, include/cxxlens/relations/core_unresolved.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_origin.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/relations/cc_entity_detail.hpp, include/cxxlens/relations/cc_entity_edge.hpp, include/cxxlens/relations/cc_syntax_node.hpp, include/cxxlens/relations/cc_body.hpp, include/cxxlens/relations/cc_cfg_node.hpp, include/cxxlens/relations/cc_cfg_edge.hpp, include/cxxlens/relations/cc_flow_fact.hpp, include/cxxlens/relations/cc_layout_fact.hpp, include/cxxlens/relations/cc_record_surface.hpp, include/cxxlens/relations/source_include.hpp, include/cxxlens/relations/source_preprocessor_event.hpp, include/cxxlens/relations/source_token.hpp, include/cxxlens/relations/source_token_inventory.hpp, include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
+    headers: [include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_declaration.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_type_component.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/core_claim_conflict.hpp, include/cxxlens/relations/core_differential_disagreement.hpp, include/cxxlens/relations/core_provider_execution.hpp, include/cxxlens/relations/core_unresolved.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_origin.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/relations/cc_entity_detail.hpp, include/cxxlens/relations/cc_entity_edge.hpp, include/cxxlens/relations/cc_syntax_node.hpp, include/cxxlens/relations/cc_body.hpp, include/cxxlens/relations/cc_cfg_node.hpp, include/cxxlens/relations/cc_cfg_edge.hpp, include/cxxlens/relations/cc_flow_fact.hpp, include/cxxlens/relations/cc_layout_fact.hpp, include/cxxlens/relations/cc_record_surface.hpp, include/cxxlens/relations/cc_record_inventory.hpp, include/cxxlens/relations/source_include.hpp, include/cxxlens/relations/source_preprocessor_event.hpp, include/cxxlens/relations/source_token.hpp, include/cxxlens/relations/source_token_inventory.hpp, include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
     symbols:
       - name: query.from
         kind: template
@@ -433,10 +433,10 @@ entries:
     symbols:
       - name: query.record_surface_input
         kind: value
-        signature: 'units; files; spans; entities; details; edges; surfaces; observations_complete'
+        signature: 'units; files; spans; entities; details; edges; surfaces; observations_complete; inventories; compile_units_complete; inventory_inputs_complete'
       - name: query.record_surface_limits
         kind: value
-        signature: 'maximum_rows; maximum_condition_expansions; maximum_evidence_bytes; maximum_retained_bytes; maximum_evidence_references; maximum_surfaces; maximum_members; maximum_operations; maximum_source_queries; maximum_source_plan_bytes; result<void> validate() const'
+        signature: 'maximum_rows; maximum_condition_expansions; maximum_evidence_bytes; maximum_retained_bytes; maximum_evidence_references; maximum_surfaces; maximum_inventories; maximum_members; maximum_operations; maximum_source_queries; maximum_source_plan_bytes; result<void> validate() const'
       - name: query.record_surface_state
         kind: value
         signature: 'complete; unknown; partial; conflicting'
@@ -449,9 +449,12 @@ entries:
       - name: query.record_surface
         kind: value
         signature: 'id; entity; compile_unit; source_span; file; source_snapshot; profile; universe; variant; interpretation; is_definition; declared_methods; declared_fields; declared_base_specifiers; state; methods; fields; base_targets; declared_type_references; type_reference_state; type_reference_profile; type_reference_reason; type_reference_targets; evidence; gaps'
+      - name: query.record_inventory
+        kind: value
+        signature: 'id; compile_unit; profile; universe; variant; interpretation; declared_definitions; state; definitions; system_definitions; evidence; gaps'
       - name: query.record_surface_projection
         kind: value
-        signature: 'evidence; surfaces; unresolved; source_queries'
+        signature: 'evidence; surfaces; inventories; compile_units_complete; inventory_inputs_complete; unresolved; source_queries'
       - name: query.project_record_surfaces
         kind: function
         signature: 'result<record_surface_projection> project_record_surfaces(record_surface_input, record_surface_limits = {}, stop_token = {}); result<record_surface_projection> project_record_surfaces(const application_query_results&, record_surface_limits = {}, stop_token = {})'

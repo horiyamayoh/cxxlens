@@ -18,6 +18,7 @@
 #include <cxxlens/relations/cc_entity_edge.hpp>
 #include <cxxlens/relations/cc_flow_fact.hpp>
 #include <cxxlens/relations/cc_layout_fact.hpp>
+#include <cxxlens/relations/cc_record_inventory.hpp>
 #include <cxxlens/relations/cc_record_surface.hpp>
 #include <cxxlens/relations/cc_syntax_node.hpp>
 #include <cxxlens/relations/cc_type.hpp>
@@ -298,6 +299,7 @@ namespace cxxlens::sdk
 				cc::relations::flow_fact::descriptor(),
 				cc::relations::layout_fact::descriptor(),
 				cc::relations::record_surface::descriptor(),
+				cc::relations::record_inventory::descriptor(),
 				cc::relations::syntax_node::descriptor(),
 				cc::relations::type::descriptor(),
 				cc::relations::type_component::descriptor(),

@@ -49,8 +49,8 @@ class NgRelationContractTest(unittest.TestCase):
 
     def test_registry_and_vectors_have_valid_product_contracts(self) -> None:
         registry, results = validate_contract(ROOT)
-        self.assertEqual(registry["document_version"], "1.11.0")
-        self.assertEqual(registry["compatibility"]["current"], "1.11.0")
+        self.assertEqual(registry["document_version"], "1.12.0")
+        self.assertEqual(registry["compatibility"]["current"], "1.12.0")
         self.assertGreater(len(registry["relations"]), 0)
         self.assertEqual(len(results), len(self.vectors["vectors"]))
         self.assertEqual({row["decision"] for row in results}, {"accepted", "rejected"})
@@ -100,6 +100,7 @@ class NgRelationContractTest(unittest.TestCase):
                 "cc.flow_fact",
                 "cc.layout_fact",
                 "cc.record_surface",
+                "cc.record_inventory",
                 "source.include",
                 "source.preprocessor_event",
                 "source.token",

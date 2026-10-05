@@ -18,6 +18,9 @@ namespace cxxlens::sdk::query
 	{
 		std::span<const annotated_row> units, files, spans, entities, details, edges, surfaces;
 		bool observations_complete{};
+		std::span<const annotated_row> inventories{};
+		bool compile_units_complete{};
+		bool inventory_inputs_complete{};
 	};
 	struct record_surface_limits
 	{
@@ -27,6 +30,7 @@ namespace cxxlens::sdk::query
 		std::size_t maximum_retained_bytes{512U * 1024U * 1024U};
 		std::size_t maximum_evidence_references{16'000'000U};
 		std::size_t maximum_surfaces{500'000U};
+		std::size_t maximum_inventories{100'000U};
 		std::size_t maximum_members{1'000'000U};
 		std::size_t maximum_operations{128'000'000U};
 		std::size_t maximum_source_queries{4096U};
@@ -67,10 +71,22 @@ namespace cxxlens::sdk::query
 		std::vector<std::size_t> evidence;
 		std::vector<query_unresolved> gaps;
 	};
+	struct record_inventory
+	{
+		std::string id, compile_unit, profile, universe, variant, interpretation;
+		std::uint64_t declared_definitions{};
+		record_surface_state state{record_surface_state::unknown};
+		std::vector<std::string> definitions, system_definitions;
+		std::vector<std::size_t> evidence;
+		std::vector<query_unresolved> gaps;
+	};
 	struct record_surface_projection
 	{
 		std::vector<record_surface_evidence> evidence;
 		std::vector<record_surface> surfaces;
+		std::vector<record_inventory> inventories;
+		bool compile_units_complete{};
+		bool inventory_inputs_complete{};
 		std::vector<query_unresolved> unresolved;
 		std::optional<application_query_results> source_queries;
 	};

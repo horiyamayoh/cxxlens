@@ -80,6 +80,7 @@
 | [0117](0117-owned-record-surfaces.md) | owned finite record surfaces |
 | [0118](0118-finite-body-member-access.md) | finite method member-access observations |
 | [0119](0119-finite-record-type-references.md) | finite direct record type-reference observations |
+| [0120](0120-finite-record-definition-inventories.md) | finite observed record-definition inventories |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

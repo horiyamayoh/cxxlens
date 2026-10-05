@@ -38,7 +38,7 @@ def database(root, files, extra=()):
 def scans(bundle):
     assert bundle["schema"] == "cxxlens.application-query-results.v1"
     queries = bundle["queries"]
-    assert len(queries) == 28
+    assert len(queries) == 29
     def relation(query):
         requirements = query["logical_ir"]["relation_requirements"]
         assert len(requirements) == 1
@@ -76,6 +76,13 @@ with tempfile.TemporaryDirectory(prefix="cxxlens-application-") as temporary:
             for row in whole["cc.entity.v1"]["rows"] if row["values"]["output.kind"]["value"] in {"function", "method"}} == {"twice", "leaf", "branch", "main", "other"}
     first = run(root, source="main.cpp")
     results = scans(first)
+    record_inventories = results["cc.record_inventory.v1"]
+    assert record_inventories["inputs_complete"] and not record_inventories["closed"]
+    assert len(record_inventories["rows"]) == 1
+    inventory_values = record_inventories["rows"][0]["values"]
+    assert inventory_values["output.enumeration_state"]["value"] == "complete"
+    assert inventory_values["output.definition_count"]["value"] == 0
+    assert inventory_values["output.definitions"]["value"] == ""
     entities = results["cc.entity.v1"]["rows"]
     assert {row["values"]["output.qualified_name"]["value"] for row in entities if row["values"]["output.kind"]["value"] in {"function", "method"}} == {"twice", "leaf", "branch", "main"}
     calls = results["cc.call_site.v1"]["rows"]
@@ -261,6 +268,21 @@ with tempfile.TemporaryDirectory(prefix="cxxlens-application-") as temporary:
     explicit = surfaces[ids_by_name["demo::Surface"]]
     assert (value(explicit, "method_count"), value(explicit, "field_count")) == (5, 1)
     assert value(explicit, "enumeration_state") == "complete"
+    record_inventory = facts["cc.record_inventory.v1"]
+    assert record_inventory["inputs_complete"] and not record_inventory["closed"], record_inventory
+    assert len(record_inventory["rows"]) == len(facts["build.compile_unit.v1"]["rows"])
+    record_sources = {value(row, "span"): value(row, "file") for row in facts["source.span.v1"]["rows"]}
+    record_files = {value(row, "file"): value(row, "logical_path") for row in facts["source.file.v1"]["rows"]}
+    for inventory in record_inventory["rows"]:
+        definitions = [row for row in facts["cc.record_surface.v1"]["rows"]
+                       if value(row, "is_definition") and value(row, "compile_unit") == value(inventory, "compile_unit")]
+        assert value(inventory, "enumeration_state") == "complete", inventory
+        assert value(inventory, "definition_count") == len(definitions)
+        assert row_flags(inventory, "definitions") == {value(row, "surface") for row in definitions}
+        system = {value(row, "surface") for row in definitions
+                  if record_files[record_sources[value(row, "source")]].endswith("/system/types.hpp")}
+        assert system and row_flags(inventory, "system_definitions") == system
+        assert value(forward[0], "surface") not in row_flags(inventory, "definitions")
     for row in facts["cc.record_surface.v1"]["rows"]:
         assert value(row, "type_reference_profile") == "clang22-explicit-nonsystem-nominal-type-uses/1"
         targets = row_flags(row, "type_reference_targets")

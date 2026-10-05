@@ -14,13 +14,14 @@ namespace cxxlens::sdk::query
 {
 	namespace
 	{
-		constexpr std::array<std::string_view, 7> relations{"build.compile_unit.v1",
+		constexpr std::array<std::string_view, 8> relations{"build.compile_unit.v1",
 															"source.file.v1",
 															"source.span.v1",
 															"cc.entity.v1",
 															"cc.entity_detail.v1",
 															"cc.entity_edge.v1",
-															"cc.record_surface.v1"};
+															"cc.record_surface.v1",
+															"cc.record_inventory.v1"};
 		using world = std::array<std::string, 3>;
 		using key = std::tuple<std::size_t, std::string, world>;
 		struct failure
@@ -152,14 +153,16 @@ namespace cxxlens::sdk::query
 										input.entities,
 										input.details,
 										input.edges,
-										input.surfaces};
-				constexpr std::array<std::string_view, 7> identifiers{"compile_unit",
+										input.surfaces,
+										input.inventories};
+				constexpr std::array<std::string_view, 8> identifiers{"compile_unit",
 																	  "snapshot",
 																	  "span",
 																	  "entity",
 																	  "entity",
 																	  "source_entity",
-																	  "surface"};
+																	  "surface",
+																	  "inventory"};
 				std::vector<entry> entries;
 				std::size_t expansions{}, members{}, operations{};
 				const auto work = [&]()
@@ -215,6 +218,8 @@ namespace cxxlens::sdk::query
 									  return std::tie(e.group, e.canonical);
 								  });
 				record_surface_projection output;
+				output.compile_units_complete = input.compile_units_complete;
+				output.inventory_inputs_complete = input.inventory_inputs_complete;
 				std::map<key, std::vector<std::size_t>> index;
 				using edge_key =
 					std::tuple<world, std::string, std::string, std::string, std::string>;
@@ -792,6 +797,378 @@ namespace cxxlens::sdk::query
 						output.surfaces.push_back(std::move(surface));
 					}
 				}
+				if (!input.inventories.empty())
+				{
+					using unit_key = std::pair<world, std::string>;
+					using inventory_key = std::tuple<world, std::string, std::string>;
+					std::map<unit_key, std::set<std::string>> definitions;
+					std::map<unit_key, std::set<std::array<std::string, 2>>> definition_sources;
+					std::map<unit_key,
+							 std::map<std::array<std::string, 2>, std::vector<std::size_t>>>
+						declaration_definitions;
+					std::map<unit_key, std::vector<std::size_t>> uncertain_definitions;
+					std::map<inventory_key, std::vector<std::size_t>> inventories;
+					for (const auto& [identity, refs] : index)
+					{
+						const auto group = std::get<0>(identity);
+						if (group != 4U && group != 6U && group != 7U)
+							continue;
+						const auto& condition = std::get<2>(identity);
+						for (const auto ref : refs)
+						{
+							work();
+							const auto& row = *entries[ref].row;
+							const auto unit = text(row, "compile_unit");
+							charge(retained.bytes,
+								   sizeof(inventory_key) + 128U + unit.size() +
+									   condition[0].size() + condition[1].size() +
+									   condition[2].size() + std::get<1>(identity).size() +
+									   (group == 4U ? text(row, "source").size() +
+												text(row, "entity").size()
+													: text(row, "profile").size()),
+								   limits.maximum_retained_bytes,
+								   "inventory-index");
+							charge(retained.references,
+								   1U,
+								   limits.maximum_evidence_references,
+								   "inventory-index-references");
+							if (group == 6U && scalar<bool>(row, "is_definition"))
+							{
+								charge(retained.bytes,
+									   text(row, "entity").size() + text(row, "source").size() +
+										   sizeof(unit_key) + 192U + unit.size() +
+										   condition[0].size() + condition[1].size() +
+										   condition[2].size(),
+									   limits.maximum_retained_bytes,
+									   "inventory-definition-sources");
+								definitions[{condition, unit}].insert(text(row, "surface"));
+								definition_sources[{condition, unit}].insert(
+									{text(row, "entity"), text(row, "source")});
+							}
+							else if (group == 4U && scalar<bool>(row, "is_definition"))
+							{
+								const auto entity = text(row, "entity");
+								const auto found = index.find({3U, entity, condition});
+								bool record{}, uncertain = found == index.end();
+								if (found != index.end())
+									for (const auto entity_ref : found->second)
+									{
+										work();
+										const auto kind = text(*entries[entity_ref].row, "kind");
+										const bool is_record =
+											kind == "class" || kind == "struct" || kind == "union";
+										record |= is_record;
+										constexpr std::array<std::string_view, 19> nonrecords{
+											"function",
+											"method",
+											"constructor",
+											"destructor",
+											"conversion",
+											"namespace",
+											"namespace_alias",
+											"enum",
+											"enum_constant",
+											"alias",
+											"field",
+											"parameter",
+											"variable",
+											"concept",
+											"template_type_parameter",
+											"template_non_type_parameter",
+											"template_template_parameter",
+											"template",
+											"declaration"};
+										uncertain |= !is_record &&
+											std::ranges::find(nonrecords, kind) == nonrecords.end();
+									}
+								if (record)
+									declaration_definitions[{condition, unit}]
+														   [{entity, text(row, "source")}]
+															   .push_back(ref);
+								if (uncertain)
+								{
+									charge(retained.bytes,
+										   sizeof(unit_key) + 128U + unit.size() +
+											   condition[0].size() + condition[1].size() +
+											   condition[2].size(),
+										   limits.maximum_retained_bytes,
+										   "inventory-uncertain-definitions");
+									charge(retained.references,
+										   1U,
+										   limits.maximum_evidence_references,
+										   "inventory-uncertain-references");
+									uncertain_definitions[{condition, unit}].push_back(ref);
+								}
+							}
+							else if (group == 7U)
+								inventories[{condition, unit, text(row, "profile")}].push_back(ref);
+						}
+					}
+					for (const auto& [identity, refs] : inventories)
+					{
+						const auto& condition = std::get<0>(identity);
+						const auto& unit = std::get<1>(identity);
+						std::map<std::string, std::vector<std::size_t>> payloads;
+						for (const auto ref : refs)
+						{
+							work();
+							std::string payload;
+							for (const auto& [name, value] : entries[ref].row->values)
+							{
+								const auto part = name + ":" + value.canonical_form() + "\n";
+								charge(retained.bytes,
+									   part.size(),
+									   limits.maximum_retained_bytes,
+									   "inventory-payloads");
+								payload += part;
+							}
+							charge(retained.bytes,
+								   96U,
+								   limits.maximum_retained_bytes,
+								   "inventory-payloads");
+							payloads[std::move(payload)].push_back(ref);
+						}
+						for (const auto& [payload, candidates] : payloads)
+						{
+							work();
+							if (output.inventories.size() >= limits.maximum_inventories)
+								fail("sdk.record-budget", "inventories", "limit-exceeded");
+							const auto& row = *entries[candidates.front()].row;
+							record_inventory inventory;
+							inventory.id = text(row, "inventory");
+							inventory.compile_unit = unit;
+							inventory.profile = text(row, "profile");
+							inventory.universe = condition[0];
+							inventory.variant = condition[1];
+							inventory.interpretation = condition[2];
+							inventory.declared_definitions =
+								scalar<std::uint64_t>(row, "definition_count");
+							const auto state = text(row, "enumeration_state");
+							inventory.state = state == "complete" ? record_surface_state::complete
+								: state == "partial"			  ? record_surface_state::partial
+																  : record_surface_state::unknown;
+							const auto gap =
+								[&](std::string code, std::string subject, bool conflict = false)
+							{
+								if (conflict)
+									inventory.state = record_surface_state::conflicting;
+								else if (inventory.state == record_surface_state::complete)
+									inventory.state = record_surface_state::partial;
+								charge(retained.bytes,
+									   sizeof(query_unresolved) + code.size() + subject.size() +
+										   inventory.id.size(),
+									   limits.maximum_retained_bytes,
+									   "inventory-gaps");
+								inventory.gaps.push_back(
+									{std::move(code), inventory.id, std::move(subject)});
+							};
+							const auto retain = [&](std::size_t ref)
+							{
+								charge(retained.references,
+									   1U,
+									   limits.maximum_evidence_references,
+									   "inventory-evidence");
+								charge(retained.bytes,
+									   sizeof(ref),
+									   limits.maximum_retained_bytes,
+									   "inventory-evidence");
+								inventory.evidence.push_back(ref);
+							};
+							const auto lookup =
+								[&](std::size_t group,
+									const std::string& id) -> const std::vector<std::size_t>&
+							{
+								const auto found = index.find({group, id, condition});
+								static const std::vector<std::size_t> empty;
+								return found == index.end() ? empty : found->second;
+							};
+							const auto bind = [&](std::size_t group,
+												  const std::string& id,
+												  std::string_view kind) -> const annotated_row*
+							{
+								const auto& bound = lookup(group, id);
+								if (bound.empty())
+								{
+									gap("sdk.record-inventory-binding-missing",
+										std::string{kind} + ":" + id);
+									return nullptr;
+								}
+								for (const auto ref : bound)
+								{
+									work();
+									retain(ref);
+									if (!same_payload(*entries[bound.front()].row,
+													  *entries[ref].row))
+									{
+										gap("sdk.record-inventory-binding-conflicting",
+											std::string{kind} + ":" + id,
+											true);
+										return nullptr;
+									}
+								}
+								return entries[bound.front()].row;
+							};
+							for (const auto ref : candidates)
+								retain(ref);
+							(void)bind(0U, unit, "compile-unit");
+							inventory.definitions = strings(row,
+															"definitions",
+															retained.bytes,
+															retained.references,
+															limits,
+															stop);
+							inventory.system_definitions = strings(row,
+																   "system_definitions",
+																   retained.bytes,
+																   retained.references,
+																   limits,
+																   stop);
+							charge(members,
+								   inventory.definitions.size() +
+									   inventory.system_definitions.size(),
+								   limits.maximum_members,
+								   "inventory-definitions");
+							if (payloads.size() > 1U)
+								gap("sdk.record-inventory-candidate-conflicting", unit, true);
+							if (inventory.declared_definitions < inventory.definitions.size() ||
+								(state == "complete" &&
+								 inventory.declared_definitions != inventory.definitions.size()))
+								gap("sdk.record-inventory-cardinality-conflicting", unit, true);
+							if (!std::ranges::includes(inventory.definitions,
+													   inventory.system_definitions))
+								gap("sdk.record-inventory-system-subset-conflicting", unit, true);
+							if (const auto found = declaration_definitions.find({condition, unit});
+								found != declaration_definitions.end())
+							{
+								if (inventory.declared_definitions < found->second.size())
+									gap("sdk.record-inventory-cardinality-conflicting", unit, true);
+								const auto observed = definition_sources.find({condition, unit});
+								for (const auto& [source, evidence] : found->second)
+								{
+									work();
+									for (const auto ref : evidence)
+										retain(ref);
+									if (observed == definition_sources.end() ||
+										!observed->second.contains(source))
+										gap("sdk.record-inventory-declared-definition-missing",
+											source[0] + ":" + source[1]);
+								}
+							}
+							if (const auto found = uncertain_definitions.find({condition, unit});
+								found != uncertain_definitions.end())
+								for (const auto ref : found->second)
+								{
+									work();
+									retain(ref);
+									gap("sdk.record-inventory-definition-kind-unavailable",
+										text(*entries[ref].row, "entity"));
+								}
+							if (const auto found = definitions.find({condition, unit});
+								found != definitions.end())
+							{
+								if (inventory.declared_definitions < found->second.size())
+									gap("sdk.record-inventory-cardinality-conflicting", unit, true);
+								for (const auto& id : found->second)
+								{
+									work();
+									if (!std::ranges::binary_search(inventory.definitions, id))
+										gap("sdk.record-inventory-definition-unlisted",
+											id,
+											state == "complete");
+								}
+							}
+							for (const auto& id : inventory.definitions)
+							{
+								work();
+								const auto& surfaces = lookup(6U, id);
+								if (surfaces.empty())
+									gap("sdk.record-inventory-definition-missing", id);
+								std::optional<std::array<std::string, 3>> identity_fields;
+								for (const auto ref : surfaces)
+								{
+									work();
+									retain(ref);
+									const auto& surface = *entries[ref].row;
+									const auto entity = text(surface, "entity"),
+											   source = text(surface, "source");
+									const std::array actual_identity{
+										entity, source, text(surface, "profile")};
+									if (text(surface, "compile_unit") != unit ||
+										!scalar<bool>(surface, "is_definition") ||
+										(identity_fields && *identity_fields != actual_identity))
+										gap("sdk.record-inventory-definition-conflicting",
+											id,
+											true);
+									identity_fields = actual_identity;
+									const auto& entities = lookup(3U, entity);
+									if (entities.empty())
+										gap("sdk.record-inventory-entity-missing", entity);
+									for (const auto entity_ref : entities)
+									{
+										work();
+										retain(entity_ref);
+										const auto kind = text(*entries[entity_ref].row, "kind");
+										if (kind != "class" && kind != "struct" && kind != "union")
+											gap("sdk.record-inventory-entity-conflicting",
+												entity,
+												true);
+									}
+									if (const auto* span = bind(2U, source, "source-span"))
+										if (const auto* file = bind(
+												1U, text(*span, "snapshot"), "source-snapshot"))
+											if (text(*span, "file") != text(*file, "file") ||
+												scalar<std::uint64_t>(*span, "begin") >
+													scalar<std::uint64_t>(*span, "end") ||
+												scalar<std::uint64_t>(*span, "end") >
+													scalar<std::uint64_t>(*file, "size"))
+												gap("sdk.record-inventory-source-conflicting",
+													source,
+													true);
+									bool declared{};
+									for (const auto detail_ref : lookup(4U, entity))
+									{
+										work();
+										const auto& detail = *entries[detail_ref].row;
+										if (text(detail, "compile_unit") != unit ||
+											text(detail, "source") != source)
+											continue;
+										retain(detail_ref);
+										declared = true;
+										if (!scalar<bool>(detail, "is_definition"))
+											gap("sdk.record-inventory-declaration-conflicting",
+												entity,
+												true);
+									}
+									if (!declared)
+										gap("sdk.record-inventory-declaration-missing", entity);
+								}
+							}
+							if (inventory.profile !=
+								"clang22-explicit-admitted-record-definitions/1")
+							{
+								if (inventory.state != record_surface_state::conflicting)
+									inventory.state = record_surface_state::unknown;
+								gap("sdk.record-inventory-profile-unsupported", inventory.profile);
+							}
+							if (state != "complete" && state != "partial" && state != "unknown")
+								gap("sdk.record-inventory-state-unsupported", state);
+							if (const auto reason = text(row, "reason"); !reason.empty())
+								gap("sdk.record-inventory-producer-frontier", reason);
+							std::ranges::sort(inventory.evidence);
+							inventory.evidence.erase(
+								std::ranges::unique(inventory.evidence).begin(),
+								inventory.evidence.end());
+							normalize(inventory.gaps);
+							charge(retained.bytes,
+								   sizeof(inventory) + inventory.id.size() + unit.size() +
+									   inventory.profile.size() + condition[0].size() +
+									   condition[1].size() + condition[2].size(),
+								   limits.maximum_retained_bytes,
+								   "inventory-output");
+							output.inventories.push_back(std::move(inventory));
+						}
+					}
+				}
 				if (!input.observations_complete)
 					output.unresolved.push_back({"sdk.record-observations-partial",
 												 "projection",
@@ -817,8 +1194,8 @@ namespace cxxlens::sdk::query
 	{
 		if (!maximum_rows || !maximum_condition_expansions || !maximum_evidence_bytes ||
 			!maximum_retained_bytes || !maximum_evidence_references || !maximum_surfaces ||
-			!maximum_members || !maximum_operations || !maximum_source_queries ||
-			!maximum_source_plan_bytes)
+			!maximum_inventories || !maximum_members || !maximum_operations ||
+			!maximum_source_queries || !maximum_source_plan_bytes)
 			return error{"sdk.record-limit-invalid", "limits", "positive-required"};
 		return {};
 	}
@@ -845,8 +1222,10 @@ namespace cxxlens::sdk::query
 				!valid)
 				return valid.error();
 			budget retained;
-			std::array<std::vector<annotated_row>, 7> groups;
-			std::array<bool, 7> present{};
+			std::array<std::vector<annotated_row>, 8> groups;
+			std::array<bool, 8> present{};
+			std::array<bool, 8> scan_complete{};
+			scan_complete.fill(true);
 			std::size_t rows{};
 			bool complete = true;
 			for (const auto& scan : input.scans)
@@ -857,9 +1236,13 @@ namespace cxxlens::sdk::query
 					continue;
 				const auto group = static_cast<std::size_t>(found - relations.begin());
 				present[group] = true;
-				complete &= scan.result.execution() == execution_status::complete &&
+				const auto current_complete =
+					scan.result.execution() == execution_status::complete &&
 					scan.result.inputs_complete() && scan.result.conflicts().empty() &&
 					scan.result.differential_disagreements().empty();
+				scan_complete[group] &= current_complete;
+				if (group != 7U)
+					complete &= current_complete;
 				auto cursor = scan.result.rows();
 				while (true)
 				{
@@ -880,7 +1263,7 @@ namespace cxxlens::sdk::query
 					groups[group].push_back(std::move(*row));
 				}
 			}
-			complete &= std::ranges::all_of(present,
+			complete &= std::ranges::all_of(std::span{present}.first(7U),
 											[](bool value)
 											{
 												return value;
@@ -892,7 +1275,10 @@ namespace cxxlens::sdk::query
 										groups[4],
 										groups[5],
 										groups[6],
-										complete},
+										complete,
+										groups[7],
+										present[0] && scan_complete[0],
+										present[7] && scan_complete[7]},
 									   limits,
 									   stop,
 									   retained);

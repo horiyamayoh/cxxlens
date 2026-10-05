@@ -81,7 +81,7 @@ namespace
 	}
 	struct fixture
 	{
-		std::array<std::vector<q::annotated_row>, 7> groups;
+		std::array<std::vector<q::annotated_row>, 8> groups;
 		fixture()
 		{
 			groups[0] = {
@@ -139,6 +139,9 @@ namespace
 					groups[4],
 					groups[5],
 					groups[6],
+					complete,
+					groups[7],
+					complete,
 					complete};
 		}
 	};
@@ -282,13 +285,14 @@ namespace
 	{
 		q::application_query_results result;
 		result.snapshot_id = "snapshot:query";
-		const std::array<std::string_view, 7> relations{"build.compile_unit.v1",
+		const std::array<std::string_view, 8> relations{"build.compile_unit.v1",
 														"source.file.v1",
 														"source.span.v1",
 														"cc.entity.v1",
 														"cc.entity_detail.v1",
 														"cc.entity_edge.v1",
-														"cc.record_surface.v1"};
+														"cc.record_surface.v1",
+														"cc.record_inventory.v1"};
 		for (std::size_t group{}; group < relations.size(); ++group)
 		{
 			auto data = std::make_shared<q::query_result::data>();
@@ -310,11 +314,152 @@ namespace
 		}
 		return result;
 	}
+	fixture inventory_fixture()
+	{
+		fixture data;
+		data.groups[7] = {
+			row("cc.record_inventory.v1",
+				{{"inventory", detached_cell::utf8("inventory:test")},
+				 {"compile_unit", detached_cell::utf8("tu:test")},
+				 {"profile", detached_cell::utf8("clang22-explicit-admitted-record-definitions/1")},
+				 {"enumeration_state", detached_cell::utf8("complete")},
+				 {"definition_count", detached_cell::unsigned_integer(1U)},
+				 {"definitions", ids({"surface:record"})},
+				 {"system_definitions", ids({})}})};
+		return data;
+	}
+	void inventory_tests()
+	{
+		auto data = inventory_fixture();
+		const auto actual = project(data);
+		require(actual.inventories.size() == 1U &&
+					actual.inventories.front().state == q::record_surface_state::complete &&
+					actual.inventories.front().declared_definitions == 1U &&
+					actual.inventories.front().definitions ==
+						std::vector<std::string>{"surface:record"} &&
+					actual.inventories.front().system_definitions.empty() &&
+					!actual.inventories.front().evidence.empty(),
+				"finite record inventory lost");
+		require(actual.surfaces.front().type_reference_state == q::record_surface_state::unknown,
+				"inventory supplied missing type-reference completion");
+		auto raw = data.input();
+		raw.compile_units_complete = false;
+		raw.inventory_inputs_complete = false;
+		const auto scoped = q::project_record_surfaces(raw);
+		require(scoped && !scoped->compile_units_complete && !scoped->inventory_inputs_complete &&
+					scoped->inventories.front().state == q::record_surface_state::complete,
+				"local population granted selected-input completion");
+		for (auto& group : data.groups)
+			std::ranges::reverse(group);
+		const auto reordered = project(data);
+		require(actual.inventories.front().evidence == reordered.inventories.front().evidence,
+				"input order changed inventory evidence");
+		data.groups[7].push_back(data.groups[7].front());
+		require(project(data).inventories.size() == 1U,
+				"equal inventory observations were not merged");
+		data = inventory_fixture();
+		replace(data.groups[7].front(), "system_definitions", ids({"surface:record"}));
+		require(project(data).inventories.front().system_definitions ==
+					std::vector<std::string>{"surface:record"},
+				"compiler system classification was lost");
+		replace(data.groups[7].front(), "system_definitions", ids({"surface:other"}));
+		require(project(data).inventories.front().state == q::record_surface_state::conflicting,
+				"system classification outside inventory accepted");
+		data = inventory_fixture();
+		replace(data.groups[7].front(), "definition_count", detached_cell::unsigned_integer(2U));
+		require(project(data).inventories.front().state == q::record_surface_state::conflicting,
+				"complete wrong cardinality accepted");
+		replace(data.groups[7].front(), "enumeration_state", detached_cell::utf8("partial"));
+		replace(data.groups[7].front(), "reason", detached_cell::utf8("missing-definition-source"));
+		require(project(data).inventories.front().state == q::record_surface_state::partial,
+				"declared partial subset became a contradiction or completion");
+		data = inventory_fixture();
+		data.groups[6].clear();
+		require(project(data).inventories.front().state == q::record_surface_state::partial,
+				"missing actual definition surface acquired completion");
+		replace(data.groups[7].front(), "definition_count", detached_cell::unsigned_integer(0U));
+		replace(data.groups[7].front(), "definitions", ids({}));
+		require(project(data).inventories.front().state == q::record_surface_state::conflicting,
+				"known declaration with an omitted surface became zero definitions");
+		replace(data.groups[4].front(), "is_definition", detached_cell::boolean(false));
+		require(project(data).inventories.front().state == q::record_surface_state::complete,
+				"forward-only domain did not establish zero definitions");
+		data = inventory_fixture();
+		replace(data.groups[6].front(), "is_definition", detached_cell::boolean(false));
+		replace(data.groups[6].front(), "enumeration_state", detached_cell::utf8("unknown"));
+		replace(data.groups[4].front(), "is_definition", detached_cell::boolean(false));
+		require(project(data).inventories.front().state == q::record_surface_state::conflicting,
+				"forward declaration counted as a definition");
+		data = inventory_fixture();
+		replace(data.groups[7].front(), "definition_count", detached_cell::unsigned_integer(0U));
+		replace(data.groups[7].front(), "definitions", ids({}));
+		require(project(data).inventories.front().state == q::record_surface_state::conflicting,
+				"unlisted observed definition accepted");
+		data = inventory_fixture();
+		data.groups[6].front().presence.fragments = {"release"};
+		data.groups[6].front().contributor_edges.front().condition =
+			data.groups[6].front().presence;
+		require(project(data).inventories.front().state == q::record_surface_state::partial,
+				"definition from another variant satisfied inventory");
+		data = inventory_fixture();
+		replace(data.groups[6].front(), "compile_unit", detached_cell::utf8("tu:other"));
+		require(project(data).inventories.front().state == q::record_surface_state::conflicting,
+				"definition from another unit satisfied inventory");
+		data = inventory_fixture();
+		data.groups[0].clear();
+		require(project(data).inventories.front().state == q::record_surface_state::partial,
+				"unbound compile unit acquired completion");
+		data = inventory_fixture();
+		replace(data.groups[2].front(), "end", detached_cell::unsigned_integer(101U));
+		require(project(data).inventories.front().state == q::record_surface_state::conflicting,
+				"invalid declaration source acquired completion");
+		data = inventory_fixture();
+		replace(data.groups[7].front(), "profile", detached_cell::utf8("future-record-domain/2"));
+		require(project(data).inventories.front().state == q::record_surface_state::unknown,
+				"unknown population profile acquired completion");
+		replace(data.groups[7].front(), "definition_count", detached_cell::unsigned_integer(0U));
+		require(project(data).inventories.front().state == q::record_surface_state::conflicting,
+				"unknown profile hid a cardinality contradiction");
+		data = inventory_fixture();
+		auto alternate = data.groups[7].front();
+		replace(alternate, "system_definitions", ids({"surface:record"}));
+		data.groups[7].push_back(alternate);
+		const auto conflicting = project(data);
+		require(conflicting.inventories.size() == 2U &&
+					std::ranges::all_of(conflicting.inventories,
+										[](const auto& inventory)
+										{
+											return inventory.state ==
+												q::record_surface_state::conflicting;
+										}),
+				"conflicting system classifications chose a first candidate");
+		q::record_surface_limits limits;
+		limits.maximum_inventories = 1U;
+		const auto bounded = q::project_record_surfaces(data.input(), limits);
+		require(!bounded && bounded.error().code == "sdk.record-budget" &&
+					bounded.error().field == "inventories",
+				"inventory count bound not enforced");
+		data = inventory_fixture();
+		const auto transferred = q::project_record_surfaces(queries(data));
+		require(transferred && transferred->compile_units_complete &&
+					transferred->inventory_inputs_complete &&
+					transferred->inventories.front().state == q::record_surface_state::complete &&
+					transferred->source_queries &&
+					!transferred->source_queries->scans.front().result.closed(),
+				"independent finite scans were lost or acquired whole-project closure");
+		auto incomplete = queries(data);
+		incomplete.scans.erase(incomplete.scans.begin());
+		const auto missing_unit = q::project_record_surfaces(incomplete);
+		require(missing_unit && !missing_unit->compile_units_complete &&
+					missing_unit->inventory_inputs_complete,
+				"missing build scan acquired a complete inverse domain");
+	}
 } // namespace
 
 int main()
 {
 	type_reference_tests();
+	inventory_tests();
 	fixture data;
 	const auto actual = project(data);
 	require(actual.surfaces.size() == 1U, "wrong surface count");
@@ -463,7 +608,8 @@ int main()
 	q::application_query_results missing;
 	missing.snapshot_id = "snapshot:missing";
 	const auto no_scans = q::project_record_surfaces(missing);
-	require(no_scans && no_scans->surfaces.empty() && no_scans->unresolved.size() == 8U &&
+	require(no_scans && no_scans->surfaces.empty() && no_scans->unresolved.size() == 9U &&
+				!no_scans->compile_units_complete && !no_scans->inventory_inputs_complete &&
 				no_scans->source_queries,
 			"missing scans became empty closed project");
 	return 0;

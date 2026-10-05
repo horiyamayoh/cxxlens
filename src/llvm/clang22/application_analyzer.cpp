@@ -29,6 +29,7 @@
 #include <cxxlens/relations/cc_entity_edge.hpp>
 #include <cxxlens/relations/cc_flow_fact.hpp>
 #include <cxxlens/relations/cc_layout_fact.hpp>
+#include <cxxlens/relations/cc_record_inventory.hpp>
 #include <cxxlens/relations/cc_record_surface.hpp>
 #include <cxxlens/relations/cc_syntax_node.hpp>
 #include <cxxlens/relations/cc_type.hpp>
@@ -929,7 +930,7 @@ namespace cxxlens::detail::clang22
 									   }),
 						   prepared.end());
 			sdk::relation_registry registry;
-			const std::array<const sdk::relation_descriptor*, 28U> descriptors{
+			const std::array<const sdk::relation_descriptor*, 29U> descriptors{
 				&build::relations::project::descriptor(),
 				&build::relations::toolchain_context::descriptor(),
 				&build::relations::variant::descriptor(),
@@ -948,6 +949,7 @@ namespace cxxlens::detail::clang22
 				&cc::relations::flow_fact::descriptor(),
 				&cc::relations::layout_fact::descriptor(),
 				&cc::relations::record_surface::descriptor(),
+				&cc::relations::record_inventory::descriptor(),
 				&cc::relations::declaration::descriptor(),
 				&cc::relations::type::descriptor(),
 				&cc::relations::type_component::descriptor(),
@@ -1070,6 +1072,12 @@ namespace cxxlens::detail::clang22
 						{
 							for (const auto& unresolved : value.unresolved)
 							{
+								if (descriptor->id == "cc.record_inventory.v1" &&
+									unresolved.code != "record.inventory-frontier")
+									continue;
+								if (unresolved.code == "record.inventory-frontier" &&
+									descriptor->id != "cc.record_inventory.v1")
+									continue;
 								if (unresolved.code.starts_with("body.") &&
 									descriptor->id != "cc.body.v1" &&
 									descriptor->id != "cc.syntax_node.v1")
@@ -1078,7 +1086,8 @@ namespace cxxlens::detail::clang22
 									descriptor->id != "cc.flow_fact.v1")
 									continue;
 								if (unresolved.code.starts_with("record.") &&
-									descriptor->id != "cc.record_surface.v1")
+									descriptor->id != "cc.record_surface.v1" &&
+									descriptor->id != "cc.record_inventory.v1")
 									continue;
 								if (unresolved.code.starts_with("declaration.") &&
 									descriptor->id != "cc.entity_detail.v1")
@@ -1105,7 +1114,8 @@ namespace cxxlens::detail::clang22
 									 unresolved.code + ": " + unresolved.detail});
 							}
 							for (const auto& limitation : value.limitations)
-								if (descriptor->id.starts_with("cc."))
+								if (descriptor->id.starts_with("cc.") &&
+									descriptor->id != "cc.record_inventory.v1")
 									partition.coverage.push_back({"extraction-limitation",
 																  limitation,
 																  "unknown",

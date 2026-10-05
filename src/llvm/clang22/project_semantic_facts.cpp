@@ -21,6 +21,7 @@
 #include <cxxlens/relations/cc_entity_edge.hpp>
 #include <cxxlens/relations/cc_flow_fact.hpp>
 #include <cxxlens/relations/cc_layout_fact.hpp>
+#include <cxxlens/relations/cc_record_inventory.hpp>
 #include <cxxlens/relations/cc_record_surface.hpp>
 #include <cxxlens/relations/cc_syntax_node.hpp>
 #include <cxxlens/relations/cc_type.hpp>
@@ -755,6 +756,15 @@ namespace cxxlens::detail::clang22
 					++ast_enumerations_.back().local_variables;
 				const auto entity_id = entity(declaration);
 				const auto source = span(declaration->getSourceRange(), "declaration");
+				if (const auto* record = llvm::dyn_cast<clang::RecordDecl>(declaration); record &&
+					record->isThisDeclarationADefinition() &&
+					!observed_record_definitions_.contains(record->getCanonicalDecl()))
+				{
+					retain_inventory_bytes(64U);
+					if (observed_record_definitions_.size() >= 1'000'000U)
+						fail("record-inventory", "definition-count-limit");
+					observed_record_definitions_.insert(record->getCanonicalDecl());
+				}
 				if (entity_id.empty() || !source)
 					return true;
 				fields value = common();
@@ -1355,6 +1365,36 @@ namespace cxxlens::detail::clang22
 			}
 			project_semantic_facts finish()
 			{
+				auto inventory = common();
+				inventory.emplace("profile",
+								  symbol("cc.record-inventory-profile/1",
+										 "clang22-explicit-admitted-record-definitions/1"));
+				inventory.emplace(
+					"definition_count",
+					sdk::detached_cell::unsigned_integer(observed_record_definitions_.size()));
+				const bool complete =
+					observed_record_definitions_.size() == record_definition_surfaces_.size();
+				inventory.emplace(
+					"enumeration_state",
+					symbol("cc.record-inventory-state/1", complete ? "complete" : "partial"));
+				inventory.emplace(
+					"definitions",
+					flags("record_surface_id", std::move(record_definition_surfaces_)));
+				inventory.emplace(
+					"system_definitions",
+					flags("record_surface_id", std::move(system_record_definition_surfaces_)));
+				if (!complete)
+				{
+					inventory.emplace("reason",
+									  sdk::detached_cell::utf8(
+										  "record-definition-identity-or-source-unavailable"));
+					output_.unresolved.push_back(
+						{"record.inventory-frontier",
+						 observations_.compile_unit,
+						 "record-definition-identity-or-source-unavailable"});
+				}
+				append(
+					make_row(cc::relations::record_inventory::descriptor(), std::move(inventory)));
 				if (progress_)
 					progress_("finishing " + std::to_string(rows_.size()) + " detached rows");
 				output_.rows.reserve(rows_.size());
@@ -1367,6 +1407,12 @@ namespace cxxlens::detail::clang22
 			}
 
 		  private:
+			void retain_inventory_bytes(std::size_t bytes)
+			{
+				if (bytes > 64U * 1024U * 1024U - record_inventory_bytes_)
+					fail("record-inventory", "retained-byte-limit");
+				record_inventory_bytes_ += bytes;
+			}
 			void mark_template(clang::SourceRange range)
 			{
 				auto& manager = unit_.source_manager();
@@ -1943,7 +1989,25 @@ namespace cxxlens::detail::clang22
 					output_.unresolved.push_back(
 						{"record.surface-frontier", std::string{owner}, reason});
 				}
-				append(make_row(cc::relations::record_surface::descriptor(), std::move(value)));
+				auto surface =
+					make_row(cc::relations::record_surface::descriptor(), std::move(value));
+				if (definition)
+				{
+					const auto id = row_id(surface, "surface");
+					if (!record_definition_surfaces_.contains(id))
+					{
+						retain_inventory_bytes(id.size() + 64U);
+						record_definition_surfaces_.insert(id);
+					}
+					if (unit_.source_manager().isInSystemHeader(
+							unit_.source_manager().getExpansionLoc(record.getLocation())) &&
+						!system_record_definition_surfaces_.contains(id))
+					{
+						retain_inventory_bytes(id.size() + 64U);
+						system_record_definition_surfaces_.insert(id);
+					}
+				}
+				append(std::move(surface));
 			}
 			void layout(const clang::NamedDecl& declaration, clang::QualType type)
 			{
@@ -2806,6 +2870,10 @@ namespace cxxlens::detail::clang22
 			std::vector<clang::Stmt*> statements_;
 			std::size_t depth_{};
 			std::size_t retained_bytes_{};
+			std::size_t record_inventory_bytes_{};
+			std::set<const clang::Decl*> observed_record_definitions_;
+			std::set<std::string, std::less<>> record_definition_surfaces_,
+				system_record_definition_surfaces_;
 			std::uint64_t syntax_ordinal_{};
 			std::map<const void*, std::string> types_;
 			std::size_t type_depth_{};
