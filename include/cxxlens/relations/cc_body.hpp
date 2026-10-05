@@ -24,8 +24,8 @@ namespace cxxlens::cc::relations
 				output.semantic_major = 1U;
 				output.semantics = "cc.body/1";
 				output.owner_namespace = "cxxlens.standard.cc";
-				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.body.v1.compile_unit","cc.body.v1.function","cc.body.v1.source","cc.body.v1.content","cc.body.v1.analysis_profile"],"result_column":"cc.body.v1.body"},"interpretation_required":true,"key":["cc.body.v1.body"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.body.v1.body","identity_role":"claim_key","name":"body","required":true,"type":"typed_id<body_id>"},{"id":"cc.body.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.body.v1.function","identity_role":"authoritative_payload","name":"function","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.body.v1.source","identity_role":"authoritative_payload","name":"source","required":true,"type":"typed_id<source_span_id>"},{"id":"cc.body.v1.content","identity_role":"authoritative_payload","name":"content","required":true,"type":"digest"},{"id":"cc.body.v1.eligibility","identity_role":"authoritative_payload","name":"eligibility","required":true,"type":"open_symbol<cc.body-eligibility/1>"},{"id":"cc.body.v1.reason","identity_role":"authoritative_payload","name":"reason","required":false,"type":"optional<utf8_string>"},{"id":"cc.body.v1.node_count","identity_role":"authoritative_payload","name":"node_count","required":true,"type":"uint64"},{"id":"cc.body.v1.edge_count","identity_role":"authoritative_payload","name":"edge_count","required":true,"type":"uint64"},{"id":"cc.body.v1.entry","identity_role":"authoritative_payload","name":"entry","required":false,"type":"optional<typed_id<cfg_node_id>>"},{"id":"cc.body.v1.exit","identity_role":"authoritative_payload","name":"exit","required":false,"type":"optional<typed_id<cfg_node_id>>"},{"id":"cc.body.v1.analysis_profile","identity_role":"authoritative_payload","name":"analysis_profile","required":true,"type":"open_symbol<cc.analysis-profile/1>"},{"id":"cc.body.v1.ast_node_count","identity_role":"authoritative_payload","name":"ast_node_count","required":false,"type":"optional<uint64>"},{"id":"cc.body.v1.ast_state","identity_role":"authoritative_payload","name":"ast_state","required":false,"type":"optional<open_symbol<cc.body-ast-state/1>>"},{"id":"cc.body.v1.local_variable_count","identity_role":"authoritative_payload","name":"local_variable_count","required":false,"type":"optional<uint64>"},{"id":"cc.body.v1.member_access_count","identity_role":"authoritative_payload","name":"member_access_count","required":false,"type":"optional<uint64>"},{"id":"cc.body.v1.member_access_state","identity_role":"authoritative_payload","name":"member_access_state","required":false,"type":"optional<open_symbol<cc.member-access-state/1>>"},{"id":"cc.body.v1.member_access_profile","identity_role":"authoritative_payload","name":"member_access_profile","required":false,"type":"optional<open_symbol<cc.member-access-profile/1>>"},{"id":"cc.body.v1.member_access_targets","identity_role":"authoritative_payload","name":"member_access_targets","required":false,"type":"optional<set<cc_entity_id>>"}],"coverage":{"execution_domain":"cc.body.compile-unit"},"descriptor_id":"cc.body.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::body","indexes":[["cc.body.v1.function"],["cc.body.v1.eligibility"]],"merge":{"conflict_columns":["cc.body.v1.analysis_profile","cc.body.v1.ast_node_count","cc.body.v1.ast_state","cc.body.v1.compile_unit","cc.body.v1.content","cc.body.v1.edge_count","cc.body.v1.eligibility","cc.body.v1.entry","cc.body.v1.exit","cc.body.v1.function","cc.body.v1.local_variable_count","cc.body.v1.member_access_count","cc.body.v1.member_access_profile","cc.body.v1.member_access_state","cc.body.v1.member_access_targets","cc.body.v1.node_count","cc.body.v1.reason","cc.body.v1.source"],"mode":"functional_assertion"},"name":"cc.body","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.body.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"on_missing":"reject_batch","source_columns":["cc.body.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"unresolved","source_columns":["cc.body.v1.function"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"reject_batch","source_columns":["cc.body.v1.source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"}],"semantic_major":1,"semantics":"cc.body/1","stability":"versioned","summary":"CFG/body eligibility and explicit frontiers, independent from interprocedural model completeness.","version":"1.0.0"})cxxlens";
-				output.contract_digest = "sha256:a401ffe05a9da166c8bf90fcbe6381ff2b3ab07020e582badbc083ef09f6f5a3";
+				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.body.v1.compile_unit","cc.body.v1.function","cc.body.v1.source","cc.body.v1.content","cc.body.v1.analysis_profile"],"result_column":"cc.body.v1.body"},"interpretation_required":true,"key":["cc.body.v1.body"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.body.v1.body","identity_role":"claim_key","name":"body","required":true,"type":"typed_id<body_id>"},{"id":"cc.body.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.body.v1.function","identity_role":"authoritative_payload","name":"function","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.body.v1.source","identity_role":"authoritative_payload","name":"source","required":true,"type":"typed_id<source_span_id>"},{"id":"cc.body.v1.content","identity_role":"authoritative_payload","name":"content","required":true,"type":"digest"},{"id":"cc.body.v1.eligibility","identity_role":"authoritative_payload","name":"eligibility","required":true,"type":"open_symbol<cc.body-eligibility/1>"},{"id":"cc.body.v1.reason","identity_role":"authoritative_payload","name":"reason","required":false,"type":"optional<utf8_string>"},{"id":"cc.body.v1.node_count","identity_role":"authoritative_payload","name":"node_count","required":true,"type":"uint64"},{"id":"cc.body.v1.edge_count","identity_role":"authoritative_payload","name":"edge_count","required":true,"type":"uint64"},{"id":"cc.body.v1.entry","identity_role":"authoritative_payload","name":"entry","required":false,"type":"optional<typed_id<cfg_node_id>>"},{"id":"cc.body.v1.exit","identity_role":"authoritative_payload","name":"exit","required":false,"type":"optional<typed_id<cfg_node_id>>"},{"id":"cc.body.v1.analysis_profile","identity_role":"authoritative_payload","name":"analysis_profile","required":true,"type":"open_symbol<cc.analysis-profile/1>"},{"id":"cc.body.v1.ast_node_count","identity_role":"authoritative_payload","name":"ast_node_count","required":false,"type":"optional<uint64>"},{"id":"cc.body.v1.ast_state","identity_role":"authoritative_payload","name":"ast_state","required":false,"type":"optional<open_symbol<cc.body-ast-state/1>>"},{"id":"cc.body.v1.local_variable_count","identity_role":"authoritative_payload","name":"local_variable_count","required":false,"type":"optional<uint64>"},{"id":"cc.body.v1.member_access_count","identity_role":"authoritative_payload","name":"member_access_count","required":false,"type":"optional<uint64>"},{"id":"cc.body.v1.member_access_state","identity_role":"authoritative_payload","name":"member_access_state","required":false,"type":"optional<open_symbol<cc.member-access-state/1>>"},{"id":"cc.body.v1.member_access_profile","identity_role":"authoritative_payload","name":"member_access_profile","required":false,"type":"optional<open_symbol<cc.member-access-profile/1>>"},{"id":"cc.body.v1.member_access_targets","identity_role":"authoritative_payload","name":"member_access_targets","required":false,"type":"optional<set<cc_entity_id>>"},{"id":"cc.body.v1.direct_call_count","identity_role":"authoritative_payload","name":"direct_call_count","required":false,"type":"optional<uint64>"},{"id":"cc.body.v1.direct_call_state","identity_role":"authoritative_payload","name":"direct_call_state","required":false,"type":"optional<open_symbol<cc.direct-call-state/1>>"},{"id":"cc.body.v1.direct_call_profile","identity_role":"authoritative_payload","name":"direct_call_profile","required":false,"type":"optional<open_symbol<cc.direct-call-profile/1>>"},{"id":"cc.body.v1.direct_call_sites","identity_role":"authoritative_payload","name":"direct_call_sites","required":false,"type":"optional<set<cc_call_id>>"},{"id":"cc.body.v1.direct_call_targets","identity_role":"authoritative_payload","name":"direct_call_targets","required":false,"type":"optional<set<cc_entity_id>>"}],"coverage":{"execution_domain":"cc.body.compile-unit"},"descriptor_id":"cc.body.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::body","indexes":[["cc.body.v1.function"],["cc.body.v1.eligibility"]],"merge":{"conflict_columns":["cc.body.v1.analysis_profile","cc.body.v1.ast_node_count","cc.body.v1.ast_state","cc.body.v1.compile_unit","cc.body.v1.content","cc.body.v1.direct_call_count","cc.body.v1.direct_call_profile","cc.body.v1.direct_call_sites","cc.body.v1.direct_call_state","cc.body.v1.direct_call_targets","cc.body.v1.edge_count","cc.body.v1.eligibility","cc.body.v1.entry","cc.body.v1.exit","cc.body.v1.function","cc.body.v1.local_variable_count","cc.body.v1.member_access_count","cc.body.v1.member_access_profile","cc.body.v1.member_access_state","cc.body.v1.member_access_targets","cc.body.v1.node_count","cc.body.v1.reason","cc.body.v1.source"],"mode":"functional_assertion"},"name":"cc.body","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.body.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"on_missing":"reject_batch","source_columns":["cc.body.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"unresolved","source_columns":["cc.body.v1.function"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"reject_batch","source_columns":["cc.body.v1.source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"}],"semantic_major":1,"semantics":"cc.body/1","stability":"versioned","summary":"CFG/body eligibility and explicit frontiers, independent from interprocedural model completeness.","version":"1.0.0"})cxxlens";
+				output.contract_digest = "sha256:74f85dff8ee6b622ac16db22e76284d63942af2424e403fab7502fade787ccbc";
 				output.columns = {
 					{"cc.body.v1.body", "body", {sdk::scalar_kind::typed_id, "body_id", false}, true, sdk::column_role::claim_key},
 					{"cc.body.v1.compile_unit", "compile_unit", {sdk::scalar_kind::typed_id, "compile_unit_id", false}, true, sdk::column_role::authoritative_payload},
@@ -46,6 +46,11 @@ namespace cxxlens::cc::relations
 					{"cc.body.v1.member_access_state", "member_access_state", {sdk::scalar_kind::open_symbol, "cc.member-access-state/1", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.body.v1.member_access_profile", "member_access_profile", {sdk::scalar_kind::open_symbol, "cc.member-access-profile/1", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.body.v1.member_access_targets", "member_access_targets", {sdk::scalar_kind::set, "cc_entity_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.body.v1.direct_call_count", "direct_call_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.body.v1.direct_call_state", "direct_call_state", {sdk::scalar_kind::open_symbol, "cc.direct-call-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.body.v1.direct_call_profile", "direct_call_profile", {sdk::scalar_kind::open_symbol, "cc.direct-call-profile/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.body.v1.direct_call_sites", "direct_call_sites", {sdk::scalar_kind::set, "cc_call_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.body.v1.direct_call_targets", "direct_call_targets", {sdk::scalar_kind::set, "cc_entity_id", true}, false, sdk::column_role::authoritative_payload},
 				};
 				output.domain_identity.result_column = "cc.body.v1.body";
 				output.domain_identity.projection = {
@@ -71,6 +76,11 @@ namespace cxxlens::cc::relations
 					"cc.body.v1.ast_state",
 					"cc.body.v1.compile_unit",
 					"cc.body.v1.content",
+					"cc.body.v1.direct_call_count",
+					"cc.body.v1.direct_call_profile",
+					"cc.body.v1.direct_call_sites",
+					"cc.body.v1.direct_call_state",
+					"cc.body.v1.direct_call_targets",
 					"cc.body.v1.edge_count",
 					"cc.body.v1.eligibility",
 					"cc.body.v1.entry",
@@ -263,6 +273,51 @@ namespace cxxlens::cc::relations
 			[[nodiscard]] static sdk::column_ref ref()
 			{
 				return {body::descriptor().id, "cc.body.v1.member_access_targets", {sdk::scalar_kind::set, "cc_entity_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.body.v1.direct_call_count`. */
+		struct direct_call_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {body::descriptor().id, "cc.body.v1.direct_call_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.body.v1.direct_call_state`. */
+		struct direct_call_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {body::descriptor().id, "cc.body.v1.direct_call_state", {sdk::scalar_kind::open_symbol, "cc.direct-call-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.body.v1.direct_call_profile`. */
+		struct direct_call_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {body::descriptor().id, "cc.body.v1.direct_call_profile", {sdk::scalar_kind::open_symbol, "cc.direct-call-profile/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.body.v1.direct_call_sites`. */
+		struct direct_call_sites
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {body::descriptor().id, "cc.body.v1.direct_call_sites", {sdk::scalar_kind::set, "cc_call_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.body.v1.direct_call_targets`. */
+		struct direct_call_targets
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {body::descriptor().id, "cc.body.v1.direct_call_targets", {sdk::scalar_kind::set, "cc_entity_id", true}};
 			}
 		};
 	};

@@ -162,6 +162,12 @@ namespace cxxlens::detail::clang22
 				return "project://" + std::string{path.substr(root.size() + 1U)};
 			return {};
 		}
+		bool written_lambda(const clang::NamedDecl* declaration)
+		{
+			const auto* method = llvm::dyn_cast_or_null<clang::CXXMethodDecl>(declaration);
+			return method && method->getParent()->isLambda() &&
+				method == method->getParent()->getLambdaCallOperator();
+		}
 		std::string usr(const clang::NamedDecl* declaration)
 		{
 			if (declaration == nullptr)
@@ -482,6 +488,30 @@ namespace cxxlens::detail::clang22
 								key.push_back(static_cast<char>(b));
 							entities_.emplace(std::move(key), row_id(row, "entity"));
 						}
+				std::map<std::string, std::string, std::less<>> targets;
+				for (const auto& batch : normalized.batches)
+					for (const auto& row : batch.rows)
+						if (row.descriptor_id == "cc.call_direct_target.v1")
+						{
+							const auto call = row_id(row, "call"), target = row_id(row, "target");
+							retain_direct_call_bytes(192U + call.size() + target.size());
+							targets.emplace(call, target);
+						}
+				for (const auto& batch : normalized.batches)
+					for (const auto& row : batch.rows)
+						if (row.descriptor_id == "cc.call_site.v1" &&
+							row.cells.at("cc.call_site.v1.caller").value)
+						{
+							const auto call = row_id(row, "call");
+							const auto target = targets.find(call);
+							if (target == targets.end())
+								continue;
+							const auto caller = row_id(row, "caller"),
+									   source = row_id(row, "source");
+							retain_direct_call_bytes(384U + caller.size() + source.size() +
+													 call.size() + target->second.size());
+							direct_call_index_[{caller, source}].emplace_back(call, target->second);
+						}
 				for (const auto& value : observations.observations)
 					if (value.kind == provider_worker_v4_ast_observation_kind::entity &&
 						value.primary_span)
@@ -550,6 +580,21 @@ namespace cxxlens::detail::clang22
 							member_targets.insert(target);
 						found->second.emplace("member_access_targets",
 											  flags("cc_entity_id", std::move(member_targets)));
+						found->second.emplace("direct_call_count",
+											  sdk::detached_cell::unsigned_integer(
+												  enumeration.direct_call_sites.size()));
+						found->second.emplace(
+							"direct_call_state",
+							symbol("cc.direct-call-state/1",
+								   enumeration.unmapped_calls == 0U ? "complete" : "partial"));
+						found->second.emplace("direct_call_profile",
+											  symbol("cc.direct-call-profile/1",
+													 "clang22-written-syntactic-direct-calls/1"));
+						found->second.emplace("direct_call_sites",
+											  flags("cc_call_id", enumeration.direct_call_sites));
+						found->second.emplace(
+							"direct_call_targets",
+							flags("cc_entity_id", enumeration.direct_call_targets));
 						found->second.emplace(
 							"ast_state",
 							symbol("cc.body-ast-state/1",
@@ -565,6 +610,19 @@ namespace cxxlens::detail::clang22
 				}
 				current_function_ = previous;
 				return result;
+			}
+			bool TraverseLambdaExpr(clang::LambdaExpr* expression)
+			{
+				if (!WalkUpFromLambdaExpr(expression))
+					return false;
+				for (unsigned i{}; i < expression->capture_size(); ++i)
+					if (expression->capture_begin()[i].isExplicit() &&
+						!TraverseLambdaCapture(expression,
+											   expression->capture_begin() + i,
+											   expression->capture_init_begin()[i]))
+						return false;
+				// Captures execute in the enclosing function; the written body has its own owner.
+				return TraverseDecl(expression->getCallOperator());
 			}
 			bool dataTraverseStmtPre(clang::Stmt* statement)
 			{
@@ -739,7 +797,8 @@ namespace cxxlens::detail::clang22
 			}
 			bool VisitNamedDecl(clang::NamedDecl* declaration)
 			{
-				if (declaration == nullptr || declaration->isImplicit() ||
+				if (declaration == nullptr ||
+					(declaration->isImplicit() && !written_lambda(declaration)) ||
 					!admitted(declaration->getLocation()))
 					return true;
 				// A template wrapper and its templated declaration share a Clang USR.
@@ -990,11 +1049,49 @@ namespace cxxlens::detail::clang22
 			}
 			bool VisitFunctionDecl(clang::FunctionDecl* function)
 			{
-				if (function == nullptr || function->isImplicit() ||
+				if (function == nullptr || (function->isImplicit() && !written_lambda(function)) ||
 					!function->isThisDeclarationADefinition() || !function->hasBody() ||
 					!admitted(function->getLocation()))
 					return true;
 				build_cfg(*function);
+				return true;
+			}
+			bool VisitCallExpr(clang::CallExpr* expression)
+			{
+				if (ast_enumerations_.empty() || current_function_.empty())
+					return true;
+				auto& enumeration = ast_enumerations_.back();
+				if (enumeration.function != current_function_ ||
+					(!enumeration.active && !enumeration.written_initializer))
+					return true;
+				const auto* callee = expression->getDirectCallee();
+				if (!callee && !expression->isTypeDependent() && !expression->isValueDependent())
+					return true;
+				const auto source = span(expression->getSourceRange(), "expression");
+				const auto target = entity(callee);
+				const auto found = source ? direct_call_index_.find({current_function_, *source})
+										  : direct_call_index_.end();
+				bool bound{};
+				if (!target.empty() && found != direct_call_index_.end())
+					for (const auto& [call, actual_target] : found->second)
+						if (actual_target == target)
+						{
+							bound = true;
+							if (!enumeration.direct_call_sites.contains(call))
+							{
+								retain_direct_call_bytes(192U + call.size() + target.size());
+								enumeration.direct_call_sites.insert(call);
+								enumeration.direct_call_targets.insert(target);
+							}
+						}
+				if (!bound)
+				{
+					++enumeration.unmapped_calls;
+					output_.unresolved.push_back({"body.direct-call-frontier",
+												  current_function_,
+												  callee ? "supply-direct-call-source-and-identity"
+														 : "observe-call-specialization"});
+				}
 				return true;
 			}
 			bool VisitMemberExpr(clang::MemberExpr* expression)
@@ -1025,7 +1122,15 @@ namespace cxxlens::detail::clang22
 							 entity(initializer->getMember()),
 							 *source,
 							 "accesses_member");
-				return base::TraverseConstructorInitializer(initializer);
+				const bool tracked =
+					!ast_enumerations_.empty() && initializer && initializer->isWritten();
+				const bool previous = tracked && ast_enumerations_.back().written_initializer;
+				if (tracked)
+					ast_enumerations_.back().written_initializer = true;
+				const auto traversed = base::TraverseConstructorInitializer(initializer);
+				if (tracked)
+					ast_enumerations_.back().written_initializer = previous;
+				return traversed;
 			}
 			std::optional<std::string> observe_member_access(const clang::NamedDecl& field,
 															 clang::SourceRange range)
@@ -1407,6 +1512,12 @@ namespace cxxlens::detail::clang22
 			}
 
 		  private:
+			void retain_direct_call_bytes(std::size_t bytes)
+			{
+				if (bytes > 64U * 1024U * 1024U - direct_call_bytes_)
+					fail("body-direct-calls", "retained-byte-limit");
+				direct_call_bytes_ += bytes;
+			}
 			void retain_inventory_bytes(std::size_t bytes)
 			{
 				if (bytes > 64U * 1024U * 1024U - record_inventory_bytes_)
@@ -2862,7 +2973,9 @@ namespace cxxlens::detail::clang22
 				std::uint64_t nodes{}, unmapped{}, local_variables{};
 				std::uint64_t unmapped_members{};
 				std::set<std::pair<std::string, std::string>> member_accesses;
-				bool active{};
+				std::uint64_t unmapped_calls{};
+				std::set<std::string, std::less<>> direct_call_sites, direct_call_targets;
+				bool active{}, written_initializer{};
 			};
 			std::vector<ast_enumeration> ast_enumerations_;
 			std::map<const clang::FunctionDecl*, fields> pending_bodies_;
@@ -2871,6 +2984,10 @@ namespace cxxlens::detail::clang22
 			std::size_t depth_{};
 			std::size_t retained_bytes_{};
 			std::size_t record_inventory_bytes_{};
+			std::size_t direct_call_bytes_{};
+			std::map<std::pair<std::string, std::string>,
+					 std::vector<std::pair<std::string, std::string>>>
+				direct_call_index_;
 			std::set<const clang::Decl*> observed_record_definitions_;
 			std::set<std::string, std::less<>> record_definition_surfaces_,
 				system_record_definition_surfaces_;

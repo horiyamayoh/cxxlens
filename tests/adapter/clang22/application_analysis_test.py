@@ -171,6 +171,17 @@ with tempfile.TemporaryDirectory(prefix="cxxlens-application-") as temporary:
         'template<class T> struct Lazy { T value; Lazy() = default; '
         'Lazy(Lazy&&) = default; ~Lazy() = default; };\n'
         'inline constexpr auto lazy_size = sizeof(Lazy<int>);\n'
+        'inline int call_leaf(int value = 0) { return value; }\n'
+        'extern int call_external(int);\n'
+        'struct Response { int value; Response() : value(call_leaf()) {} '
+        'static int helper() { return call_leaf(1); } '
+        'int repeated() { return call_leaf() + call_leaf() + helper() + call_external(2); } '
+        'int recursive(int n) { return n ? recursive(n-1) : 0; } '
+        'int defaults(int n = call_leaf()) { return n; } '
+        'int indirect(int (*target)()) { return target(); } '
+        'int nested() { auto inner = [captured = call_leaf()] { return call_external(3); }; '
+        'return inner(); } };\n'
+        'template<class T> struct ResponseDependent { int invoke(T value) { return value.run(); } };\n'
         'inline void safe() noexcept {}\ninline void maybe() noexcept(false) {}\n'
         'inline int Plain::*member = &Plain::number;\ninline int extent[17];\n'
         '}\n', encoding="utf-8")
@@ -309,6 +320,42 @@ with tempfile.TemporaryDirectory(prefix="cxxlens-application-") as temporary:
         assert value(body, "member_access_state") == "complete"
         assert value(body, "member_access_profile") == "clang22-explicit-member-access/1"
         assert value(body, "member_access_targets") is not None
+    call_sites = {value(row, "call"): row for row in facts["cc.call_site.v1"]["rows"]}
+    call_targets = {value(row, "call"): value(row, "target")
+                    for row in facts["cc.call_direct_target.v1"]["rows"]}
+    for name, expected_count, expected_targets in (
+            ("demo::Response::Response", 1, {"demo::call_leaf"}),
+            ("demo::Response::helper", 1, {"demo::call_leaf"}),
+            ("demo::Response::repeated", 4, {"demo::call_leaf", "demo::Response::helper", "demo::call_external"}),
+            ("demo::Response::recursive", 1, {"demo::Response::recursive"}),
+            ("demo::Response::defaults", 0, set()),
+            ("demo::Response::indirect", 0, set()),
+            ("demo::Access::no_access", 0, set())):
+        body = accesses[ids_by_name[name]]
+        sites = row_flags(body, "direct_call_sites")
+        targets = row_flags(body, "direct_call_targets")
+        assert value(body, "direct_call_profile") == "clang22-written-syntactic-direct-calls/1"
+        assert value(body, "direct_call_state") == "complete", body
+        assert value(body, "direct_call_count") == len(sites) == expected_count, body
+        assert {names[target] for target in targets} == expected_targets, body
+        assert {call_targets[site] for site in sites} == targets
+        assert all(value(call_sites[site], "caller") == ids_by_name[name] and
+                   value(call_sites[site], "compile_unit") == value(body, "compile_unit") for site in sites)
+    nested = accesses[ids_by_name["demo::Response::nested"]]
+    nested_targets = row_flags(nested, "direct_call_targets")
+    assert value(nested, "direct_call_state") == "complete", nested
+    assert value(nested, "direct_call_count") == 2
+    assert ids_by_name["demo::call_leaf"] in nested_targets
+    assert ids_by_name["demo::call_external"] not in nested_targets
+    lambda_calls = [row for row in facts["cc.call_site.v1"]["rows"]
+                    if call_targets.get(value(row, "call")) == ids_by_name["demo::call_external"] and
+                    value(row, "caller") != ids_by_name["demo::Response::repeated"]]
+    assert len(lambda_calls) == 1 and value(lambda_calls[0], "caller") != ids_by_name["demo::Response::nested"]
+    lambda_body = accesses[value(lambda_calls[0], "caller")]
+    assert value(lambda_body, "direct_call_state") == "complete", lambda_body
+    assert row_flags(lambda_body, "direct_call_targets") == {ids_by_name["demo::call_external"]}
+    dependent_body = accesses[ids_by_name["demo::ResponseDependent::invoke"]]
+    assert value(dependent_body, "direct_call_state") == "partial", dependent_body
     assert b"noexcept" in bytes.fromhex(value(details[ids_by_name["demo::safe"]], "flags"))
     assert b"noexcept" not in bytes.fromhex(value(details[ids_by_name["demo::maybe"]], "flags"))
     # Unused defaulted members have lazy exception specifications. Observation cannot

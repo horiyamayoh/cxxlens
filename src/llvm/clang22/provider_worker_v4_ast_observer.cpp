@@ -1669,6 +1669,12 @@ namespace cxxlens::detail::clang22
 			return std::pair<std::string, std::string>{std::move(identity), "structural-fallback"};
 		}
 
+		bool written_lambda(const clang::FunctionDecl* declaration)
+		{
+			const auto* method = llvm::dyn_cast_or_null<clang::CXXMethodDecl>(declaration);
+			return method && method->getParent()->isLambda() &&
+				method == method->getParent()->getLambdaCallOperator();
+		}
 		[[nodiscard]] std::string_view call_kind(const clang::CallExpr& expression)
 		{
 			const auto* direct = expression.getDirectCallee();
@@ -1736,7 +1742,7 @@ namespace cxxlens::detail::clang22
 					if (declaration == nullptr ||
 						!written_in_project_file(declaration->getLocation()))
 						return true;
-					if (!declaration->isImplicit() &&
+					if ((!declaration->isImplicit() || written_lambda(declaration)) &&
 						written_in_project_file(declaration->getLocation()) &&
 						!accept(budget_->preflight_observations(2U, output_->compile_unit.size())))
 						return false;
@@ -1779,6 +1785,18 @@ namespace cxxlens::detail::clang22
 					});
 			}
 
+			bool TraverseLambdaExpr(clang::LambdaExpr* expression)
+			{
+				if (!WalkUpFromLambdaExpr(expression))
+					return false;
+				for (unsigned i{}; i < expression->capture_size(); ++i)
+					if (expression->capture_begin()[i].isExplicit() &&
+						!TraverseLambdaCapture(expression,
+											   expression->capture_begin() + i,
+											   expression->capture_init_begin()[i]))
+						return false;
+				return TraverseDecl(expression->getCallOperator());
+			}
 			bool TraverseType(clang::QualType type, const bool TraverseQualifier = true)
 			{
 				if (type.isNull())
@@ -1877,7 +1895,8 @@ namespace cxxlens::detail::clang22
 
 			bool VisitFunctionDecl(clang::FunctionDecl* declaration)
 			{
-				if (declaration == nullptr || declaration->isImplicit() ||
+				if (declaration == nullptr ||
+					(declaration->isImplicit() && !written_lambda(declaration)) ||
 					!written_in_project_file(declaration->getLocation()))
 					return true;
 				provider_worker_v4_ast_observation entity;
