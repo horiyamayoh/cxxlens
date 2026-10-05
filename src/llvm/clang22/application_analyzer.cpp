@@ -21,6 +21,7 @@
 #include <cxxlens/relations/cc_abi_surface.hpp>
 #include <cxxlens/relations/cc_body.hpp>
 #include <cxxlens/relations/cc_call_direct_target.hpp>
+#include <cxxlens/relations/cc_call_operand.hpp>
 #include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_cfg_edge.hpp>
 #include <cxxlens/relations/cc_cfg_node.hpp>
@@ -459,6 +460,7 @@ namespace cxxlens::detail::clang22
 			std::vector<sdk::detached_row> rows;
 			std::vector<sdk::provider::unresolved_item> unresolved;
 			std::vector<std::string> limitations;
+			std::map<std::string, std::vector<std::string>, std::less<>> limitation_relations;
 			std::string variant;
 			std::string compile_unit;
 			std::string project;
@@ -800,12 +802,36 @@ namespace cxxlens::detail::clang22
 			project_preprocessor_observations preprocessing;
 			provider_worker_v4_output_normalizer_options normalization;
 			normalization.toolchain_context_id = toolchain_id;
+			normalization.capture_original_call_ids = true;
 			take(with_source_closure_translation_unit(
 				{closure, main_path, working_path, effective, std::move(read_roots), {}},
 				[&](provider::clang22::borrowed_translation_unit& borrowed) -> sdk::result<void>
 				{
+					std::map<const clang::Expr*, std::string> original_keys;
+					std::size_t original_key_bytes{};
 					auto observed = observe_provider_worker_v4_ast(
-						borrowed, metadata, unit_id, {}, snapshot_id, true);
+						borrowed,
+						metadata,
+						unit_id,
+						{},
+						snapshot_id,
+						true,
+						[&](const clang::Expr& expression, std::string_view key)
+						{
+							const auto found = original_keys.find(&expression);
+							if (found != original_keys.end())
+							{
+								if (found->second != key)
+									fail("original-call", "conflicting-expression-observation");
+								return;
+							}
+							const auto bytes = key.size() + 128U;
+							if (original_keys.size() >= 100000U ||
+								bytes > 64U * 1024U * 1024U - original_key_bytes)
+								fail("original-call", "binding-retention-limit");
+							original_key_bytes += bytes;
+							original_keys.emplace(&expression, key);
+						});
 					if (!observed)
 						return sdk::unexpected(std::move(observed.error()));
 					observations = std::move(*observed);
@@ -818,8 +844,24 @@ namespace cxxlens::detail::clang22
 					if (!canonical)
 						return sdk::unexpected(std::move(canonical.error()));
 					normalized = std::move(*canonical);
-					auto detached = observe_project_semantics(
-						borrowed, closure, *observations, *normalized, preprocessing, progress);
+					project_original_calls original_calls;
+					for (const auto& [expression, key] : original_keys)
+						if (const auto found = normalized->original_call_ids.find(key);
+							found != normalized->original_call_ids.end())
+						{
+							const auto bytes = found->second.size() + 128U;
+							if (bytes > 64U * 1024U * 1024U - original_key_bytes)
+								fail("original-call", "binding-retention-limit");
+							original_key_bytes += bytes;
+							original_calls.emplace(expression, found->second);
+						}
+					auto detached = observe_project_semantics(borrowed,
+															  closure,
+															  *observations,
+															  *normalized,
+															  preprocessing,
+															  progress,
+															  original_calls);
 					if (!detached)
 						return sdk::unexpected(std::move(detached.error()));
 					facts = std::move(*detached);
@@ -846,8 +888,21 @@ namespace cxxlens::detail::clang22
 									{"role", symbol("source.range-role/1", span.role)},
 									{"read_only", sdk::detached_cell::boolean(span.read_only)}}));
 			}
-			for (const auto& batch : normalized->batches)
-				rows.insert(rows.end(), batch.rows.begin(), batch.rows.end());
+			for (auto& batch : normalized->batches)
+				for (auto& original : batch.rows)
+				{
+					if (original.descriptor_id == "cc.call_site.v1" ||
+						original.descriptor_id == "cc.call_direct_target.v1")
+					{
+						const auto call = std::get<std::string>(
+							*original.cells.at(original.descriptor_id + ".call").value);
+						if (const auto update =
+								facts->call_updates.find(original.descriptor_id + call);
+							update != facts->call_updates.end())
+							original = std::move(update->second);
+					}
+					rows.push_back(std::move(original));
+				}
 			rows.insert(rows.end(),
 						std::make_move_iterator(facts->rows.begin()),
 						std::make_move_iterator(facts->rows.end()));
@@ -859,6 +914,7 @@ namespace cxxlens::detail::clang22
 			return {std::move(rows),
 					std::move(normalized->unresolved),
 					std::move(normalized->limitations),
+					std::move(normalized->limitation_relations),
 					variant_id,
 					unit_id,
 					project_id,
@@ -936,7 +992,7 @@ namespace cxxlens::detail::clang22
 									   }),
 						   prepared.end());
 			sdk::relation_registry registry;
-			const std::array<const sdk::relation_descriptor*, 35U> descriptors{
+			const std::array<const sdk::relation_descriptor*, 36U> descriptors{
 				&build::relations::project::descriptor(),
 				&build::relations::toolchain_context::descriptor(),
 				&build::relations::variant::descriptor(),
@@ -946,6 +1002,7 @@ namespace cxxlens::detail::clang22
 				&cc::relations::entity::descriptor(),
 				&cc::relations::call_site::descriptor(),
 				&cc::relations::call_direct_target::descriptor(),
+				&cc::relations::call_operand::descriptor(),
 				&cc::relations::entity_detail::descriptor(),
 				&cc::relations::entity_edge::descriptor(),
 				&cc::relations::syntax_node::descriptor(),
@@ -1085,6 +1142,23 @@ namespace cxxlens::detail::clang22
 						{
 							for (const auto& unresolved : value.unresolved)
 							{
+								if (unresolved.code ==
+										"provider.entity-redeclaration-incompatible" &&
+									descriptor->id != "cc.entity.v1")
+									continue;
+								const bool target_resolution =
+									unresolved.code == "provider.indirect-target-unresolved" ||
+									unresolved.code == "provider.call-target-unresolved" ||
+									unresolved.code == "provider.direct-target-unresolved" ||
+									unresolved.code == "provider.call-kind-target-inconsistent";
+								if ((target_resolution ||
+									 unresolved.code == "call.target-signature-frontier") &&
+									descriptor->id != "cc.call_direct_target.v1")
+									continue;
+								if (unresolved.code.starts_with("function.call-site") &&
+									descriptor->id != "cc.entity_detail.v1" &&
+									descriptor->id != "cc.body.v1")
+									continue;
 								if (unresolved.code.starts_with("abi.") &&
 									descriptor->id != "cc.abi_surface.v1")
 									continue;
@@ -1137,10 +1211,18 @@ namespace cxxlens::detail::clang22
 							for (const auto& limitation : value.limitations)
 								if (descriptor->id.starts_with("cc.") &&
 									descriptor->id != "cc.record_inventory.v1")
+								{
+									const auto routing =
+										value.limitation_relations.find(limitation);
+									if (routing != value.limitation_relations.end() &&
+										std::ranges::find(routing->second, descriptor->id) ==
+											routing->second.end())
+										continue;
 									partition.coverage.push_back({"extraction-limitation",
 																  limitation,
 																  "unknown",
 																  limitation});
+								}
 						}
 						std::ranges::sort(
 							partition.coverage,

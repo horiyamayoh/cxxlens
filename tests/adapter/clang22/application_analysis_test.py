@@ -38,7 +38,7 @@ def database(root, files, extra=()):
 def scans(bundle):
     assert bundle["schema"] == "cxxlens.application-query-results.v1"
     queries = bundle["queries"]
-    assert len(queries) == 35
+    assert len(queries) == 36
     def relation(query):
         requirements = query["logical_ir"]["relation_requirements"]
         assert len(requirements) == 1

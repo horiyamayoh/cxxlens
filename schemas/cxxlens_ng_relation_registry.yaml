@@ -1,6 +1,6 @@
 schema: cxxlens.relation-registry.v1
 kind: relation-registry
-document_version: 1.15.0
+document_version: 1.16.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -9,7 +9,7 @@ authority:
   owner: steward.ng-relations
 compatibility:
   version_axis: relation-descriptor
-  current: 1.15.0
+  current: 1.16.0
   semantic_major_policy: exact-major-compatible-minor
   unknown_optional_columns: preserve
   unknown_open_symbols: preserve
@@ -165,6 +165,66 @@ symbol_contracts:
   - exclusive
   - shared
   - upgrade
+  unknown_value: preserve
+- id: cc.call-operand-kind/1
+  openness: open
+  values:
+  - argument
+  - receiver
+  - result
+  unknown_value: preserve
+- id: cc.call-operand-population-state/1
+  openness: open
+  values:
+  - complete
+  - partial
+  - unsupported
+  unknown_value: preserve
+- id: cc.call-operand-observation-state/1
+  openness: open
+  values:
+  - complete
+  - partial
+  - unsupported
+  unknown_value: preserve
+- id: cc.value-category/1
+  openness: open
+  values:
+  - lvalue
+  - xvalue
+  - prvalue
+  - dependent
+  - unknown
+  unknown_value: preserve
+- id: cc.expression-evaluation-state/1
+  openness: open
+  values:
+  - potentially_evaluated
+  - unevaluated
+  - dependent
+  - unknown
+  unknown_value: preserve
+- id: cc.call-operand-origin/1
+  openness: open
+  values:
+  - written
+  - default_argument
+  - default_initializer
+  - implicit_receiver
+  - result
+  unknown_value: preserve
+- id: cc.target-signature-state/1
+  openness: open
+  values:
+  - complete
+  - partial
+  - unsupported
+  unknown_value: preserve
+- id: cc.function-call-site-state/1
+  openness: open
+  values:
+  - complete
+  - partial
   unknown_value: preserve
 evolution_policies:
 - id: ng0.additive.v1
@@ -1437,6 +1497,31 @@ relations:
     type: uint64
     required: true
     identity_role: authoritative_payload
+  - id: cc.call_site.v1.argument_count
+    name: argument_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_site.v1.operand_count
+    name: operand_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_site.v1.operand_population_state
+    name: operand_population_state
+    type: optional<open_symbol<cc.call-operand-population-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_site.v1.operand_profile
+    name: operand_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_site.v1.expression
+    name: expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
   references:
   - source_columns:
     - cc.call_site.v1.compile_unit
@@ -1466,6 +1551,13 @@ relations:
     - cc.type.v1.type
     strength: soft_semantic
     on_missing: unresolved
+  - source_columns:
+    - cc.call_site.v1.expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
   merge:
     mode: functional_assertion
     conflict_columns:
@@ -1475,6 +1567,11 @@ relations:
     - cc.call_site.v1.source
     - cc.call_site.v1.receiver_static_type
     - cc.call_site.v1.ordinal
+    - cc.call_site.v1.argument_count
+    - cc.call_site.v1.operand_count
+    - cc.call_site.v1.operand_population_state
+    - cc.call_site.v1.operand_profile
+    - cc.call_site.v1.expression
   partition:
     suggested_keys:
     - cc.call_site.v1.compile_unit
@@ -1530,6 +1627,56 @@ relations:
     type: open_symbol<cc.direct-target-resolution/1>
     required: true
     identity_role: authoritative_payload
+  - id: cc.call_direct_target.v1.target_signature_state
+    name: target_signature_state
+    type: optional<open_symbol<cc.target-signature-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_direct_target.v1.target_signature_profile
+    name: target_signature_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_direct_target.v1.target_usr
+    name: target_usr
+    type: optional<bytes>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_direct_target.v1.target_canonical_type
+    name: target_canonical_type
+    type: optional<typed_id<cc_type_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_direct_target.v1.target_structural_signature_digest
+    name: target_structural_signature_digest
+    type: optional<digest>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_direct_target.v1.target_canonical_type_digest
+    name: target_canonical_type_digest
+    type: optional<digest>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_direct_target.v1.target_canonical_type_profile
+    name: target_canonical_type_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_direct_target.v1.target_language
+    name: target_language
+    type: optional<open_symbol<build.language/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_direct_target.v1.target_linkage
+    name: target_linkage
+    type: optional<open_symbol<cc.linkage/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_direct_target.v1.target_module_domain
+    name: target_module_domain
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
   references:
   - source_columns:
     - cc.call_direct_target.v1.call
@@ -1545,11 +1692,28 @@ relations:
     - cc.entity.v1.entity
     strength: soft_semantic
     on_missing: unresolved
+  - source_columns:
+    - cc.call_direct_target.v1.target_canonical_type
+    target_relation: cc.type
+    target_columns:
+    - cc.type.v1.type
+    strength: soft_semantic
+    on_missing: unresolved
   merge:
     mode: functional_assertion
     conflict_columns:
     - cc.call_direct_target.v1.target
     - cc.call_direct_target.v1.resolution
+    - cc.call_direct_target.v1.target_signature_state
+    - cc.call_direct_target.v1.target_signature_profile
+    - cc.call_direct_target.v1.target_usr
+    - cc.call_direct_target.v1.target_canonical_type
+    - cc.call_direct_target.v1.target_structural_signature_digest
+    - cc.call_direct_target.v1.target_canonical_type_digest
+    - cc.call_direct_target.v1.target_canonical_type_profile
+    - cc.call_direct_target.v1.target_language
+    - cc.call_direct_target.v1.target_linkage
+    - cc.call_direct_target.v1.target_module_domain
   partition:
     suggested_keys:
     - cc.call_direct_target.v1.call
@@ -2646,6 +2810,26 @@ relations:
     type: optional<utf8_string>
     required: false
     identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.call_site_count
+    name: call_site_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.call_site_ids
+    name: call_site_ids
+    type: optional<set<cc_call_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.call_site_state
+    name: call_site_state
+    type: optional<open_symbol<cc.function-call-site-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.call_site_profile
+    name: call_site_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
   references:
   - source_columns:
     - cc.entity_detail.v1.compile_unit
@@ -2675,6 +2859,14 @@ relations:
     - cc.type.v1.type
     strength: soft_semantic
     on_missing: unresolved
+  - source_columns:
+    - cc.entity_detail.v1.call_site_ids
+    target_relation: cc.call_site
+    target_columns:
+    - cc.call_site.v1.call
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
   merge:
     mode: functional_assertion
     conflict_columns:
@@ -2691,6 +2883,10 @@ relations:
     - cc.entity_detail.v1.language
     - cc.entity_detail.v1.calling_convention
     - cc.entity_detail.v1.module_domain
+    - cc.entity_detail.v1.call_site_count
+    - cc.entity_detail.v1.call_site_ids
+    - cc.entity_detail.v1.call_site_state
+    - cc.entity_detail.v1.call_site_profile
   partition:
     suggested_keys:
     - cc.entity_detail.v1.compile_unit
@@ -3106,6 +3302,26 @@ relations:
     type: optional<set<cc_entity_id>>
     required: false
     identity_role: authoritative_payload
+  - id: cc.body.v1.call_site_count
+    name: call_site_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.call_site_ids
+    name: call_site_ids
+    type: optional<set<cc_call_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.call_site_state
+    name: call_site_state
+    type: optional<open_symbol<cc.function-call-site-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.call_site_profile
+    name: call_site_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
   references:
   - source_columns:
     - cc.body.v1.compile_unit
@@ -3128,6 +3344,14 @@ relations:
     - cc.entity.v1.entity
     strength: soft_semantic
     on_missing: unresolved
+  - source_columns:
+    - cc.body.v1.call_site_ids
+    target_relation: cc.call_site
+    target_columns:
+    - cc.call_site.v1.call
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
   merge:
     mode: functional_assertion
     conflict_columns:
@@ -3154,6 +3378,10 @@ relations:
     - cc.body.v1.direct_call_profile
     - cc.body.v1.direct_call_sites
     - cc.body.v1.direct_call_targets
+    - cc.body.v1.call_site_count
+    - cc.body.v1.call_site_ids
+    - cc.body.v1.call_site_state
+    - cc.body.v1.call_site_profile
   partition:
     suggested_keys:
     - cc.body.v1.compile_unit
@@ -5560,6 +5788,208 @@ relations:
   - - cc.flow_inventory.v1.compile_unit
   coverage:
     execution_domain: cc.flow_inventory.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.call_operand.v1
+  name: cc.call_operand
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.call-operands/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: Original source/type/expression operands of a compiler-observed call; no alias or runtime object claim.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::call_operand
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.call_operand.v1.operand
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.call_operand.v1.operand
+      projection:
+      - cc.call_operand.v1.call
+      - cc.call_operand.v1.kind
+      - cc.call_operand.v1.index
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.call_operand.v1.operand
+    name: operand
+    type: typed_id<cc_call_operand_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.call_operand.v1.call
+    name: call
+    type: typed_id<cc_call_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.call_operand.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.call_operand.v1.kind
+    name: kind
+    type: open_symbol<cc.call-operand-kind/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.call_operand.v1.index
+    name: index
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.call_operand.v1.source
+    name: source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_operand.v1.expression
+    name: expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_operand.v1.type
+    name: type
+    type: optional<typed_id<cc_type_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_operand.v1.referenced_entity
+    name: referenced_entity
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_operand.v1.value_category
+    name: value_category
+    type: open_symbol<cc.value-category/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.call_operand.v1.implicit
+    name: implicit
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.call_operand.v1.default_argument
+    name: default_argument
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.call_operand.v1.evaluation_state
+    name: evaluation_state
+    type: open_symbol<cc.expression-evaluation-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.call_operand.v1.observation_state
+    name: observation_state
+    type: open_symbol<cc.call-operand-observation-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.call_operand.v1.reason
+    name: reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_operand.v1.formal_parameter_index
+    name: formal_parameter_index
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_operand.v1.actual_argument_index
+    name: actual_argument_index
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_operand.v1.written_argument_index
+    name: written_argument_index
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.call_operand.v1.origin
+    name: origin
+    type: open_symbol<cc.call-operand-origin/1>
+    required: true
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.call_operand.v1.call
+    target_relation: cc.call_site
+    target_columns:
+    - cc.call_site.v1.call
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.call_operand.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.call_operand.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.call_operand.v1.expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.call_operand.v1.type
+    target_relation: cc.type
+    target_columns:
+    - cc.type.v1.type
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.call_operand.v1.referenced_entity
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.call_operand.v1.call
+    - cc.call_operand.v1.compile_unit
+    - cc.call_operand.v1.kind
+    - cc.call_operand.v1.index
+    - cc.call_operand.v1.source
+    - cc.call_operand.v1.expression
+    - cc.call_operand.v1.type
+    - cc.call_operand.v1.referenced_entity
+    - cc.call_operand.v1.value_category
+    - cc.call_operand.v1.implicit
+    - cc.call_operand.v1.default_argument
+    - cc.call_operand.v1.evaluation_state
+    - cc.call_operand.v1.observation_state
+    - cc.call_operand.v1.reason
+    - cc.call_operand.v1.formal_parameter_index
+    - cc.call_operand.v1.actual_argument_index
+    - cc.call_operand.v1.written_argument_index
+    - cc.call_operand.v1.origin
+  partition:
+    suggested_keys:
+    - cc.call_operand.v1.compile_unit
+    - cc.call_operand.v1.call
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.call_operand.v1.call
+  - - cc.call_operand.v1.source
+  - - cc.call_operand.v1.referenced_entity
+  coverage:
+    execution_domain: cc.call-operands.compile-unit
   closure:
     supported_kinds:
     - relation-key-enumeration

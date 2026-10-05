@@ -1159,6 +1159,12 @@ add_test(NAME unit.sdk-finite-populations
 set_tests_properties(
   unit.sdk-finite-populations
   PROPERTIES LABELS "unit;sdk;query;population;budget;cancellation")
+cxxlens_add_test_executable(cxxlens-unit-sdk-call-operands
+                            unit/sdk/call_operands_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-call-operands PRIVATE cxxlens::query)
+add_test(NAME unit.sdk-call-operands COMMAND cxxlens-unit-sdk-call-operands)
+set_tests_properties(unit.sdk-call-operands
+                     PROPERTIES LABELS "unit;sdk;query;calls;population;budget;cancellation")
 cxxlens_add_test_executable(cxxlens-unit-sdk-abi-surfaces
                             unit/sdk/abi_surfaces_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-abi-surfaces PRIVATE cxxlens::query)
@@ -1791,6 +1797,16 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
       adapter.clang22-finite-populations
       PROPERTIES LABELS
                  "adapter;clang22;application;population;flow;coroutine;bounded"
+                 TIMEOUT 600)
+    add_test(
+      NAME adapter.clang22-call-operands
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/clang22/call_operands_test.py"
+        "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}")
+    set_tests_properties(
+      adapter.clang22-call-operands
+      PROPERTIES LABELS "adapter;clang22;application;calls;population;bounded"
                  TIMEOUT 600)
     add_test(
       NAME adapter.clang22-application-analysis

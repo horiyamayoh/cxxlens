@@ -1718,10 +1718,12 @@ namespace cxxlens::detail::clang22
 			visitor(provider::clang22::borrowed_translation_unit& unit,
 					provider_worker_v4_ast_observation_batch& output,
 					observer_budget& budget,
-					const visitor_source_context source)
+					const visitor_source_context source,
+					const provider_worker_v4_call_observer& calls)
 				: unit_{&unit}, output_{&output}, budget_{&budget},
 				  source_snapshot_{source.source_snapshot}, source_file_{source.source_file},
-				  toolchain_digest_{source.toolchain_digest}, closure_{source.closure}
+				  toolchain_digest_{source.toolchain_digest}, closure_{source.closure},
+				  calls_{calls}
 			{
 			}
 
@@ -1778,11 +1780,19 @@ namespace cxxlens::detail::clang22
 					current_function_ = std::move(previous);
 					return traversed;
 				}
-				return with_depth(
+				const auto* previous_default = inherited_default_;
+				if (const auto* parameter = llvm::dyn_cast<clang::ParmVarDecl>(value); parameter &&
+					parameter->hasInheritedDefaultArg() && !parameter->hasUnparsedDefaultArg())
+					inherited_default_ = parameter->hasUninstantiatedDefaultArg()
+						? parameter->getUninstantiatedDefaultArg()
+						: parameter->getDefaultArg();
+				const bool traversed = with_depth(
 					[&]()
 					{
 						return base::TraverseDecl(value);
 					});
+				inherited_default_ = previous_default;
+				return traversed;
 			}
 
 			bool TraverseLambdaExpr(clang::LambdaExpr* expression)
@@ -1877,6 +1887,8 @@ namespace cxxlens::detail::clang22
 			{
 				if (statement == nullptr || failure_)
 					return statement == nullptr;
+				if (statement == inherited_default_)
+					return false;
 				auto entered = budget_->enter_depth();
 				if (!entered)
 				{
@@ -1981,7 +1993,11 @@ namespace cxxlens::detail::clang22
 			bool VisitNamedDecl(clang::NamedDecl* declaration)
 			{
 				if (closure_ == nullptr || declaration == nullptr || declaration->isImplicit() ||
-					llvm::isa<clang::FunctionDecl>(declaration) ||
+					llvm::isa<clang::FunctionDecl,
+							  clang::ClassTemplateDecl,
+							  clang::FunctionTemplateDecl,
+							  clang::VarTemplateDecl,
+							  clang::TypeAliasTemplateDecl>(declaration) ||
 					!written_in_project_file(declaration->getLocation()))
 					return true;
 				provider_worker_v4_ast_observation entity;
@@ -2120,15 +2136,31 @@ namespace cxxlens::detail::clang22
 			{
 				if (expression == nullptr || !written_in_project_file(expression->getExprLoc()))
 					return true;
+				return observe_call(
+					*expression, expression->getDirectCallee(), call_kind(*expression));
+			}
+			bool VisitCXXConstructExpr(clang::CXXConstructExpr* expression)
+			{
+				// Only actual written construction syntax; implicit default/copy construction
+				// remains outside this explicitly declared profile.
+				if (!expression || !expression->getParenOrBraceRange().isValid() ||
+					!written_in_project_file(expression->getExprLoc()))
+					return true;
+				return observe_call(*expression, expression->getConstructor(), "constructor");
+			}
+			bool observe_call(const clang::Expr& actual,
+							  const clang::FunctionDecl* callee,
+							  std::string_view kind)
+			{
+				const auto* expression = &actual;
 				provider_worker_v4_ast_observation call;
 				call.kind = provider_worker_v4_ast_observation_kind::call;
-				if (!begin_observation(call) ||
-					!put_payload(call, "call.kind", call_kind(*expression)))
+				if (!begin_observation(call) || !put_payload(call, "call.kind", kind))
 					return false;
 				if (!current_function_.empty() &&
 					!put_payload(call, "call.caller", std::string_view{current_function_}))
 					return false;
-				if (const auto* callee = expression->getDirectCallee(); callee != nullptr)
+				if (callee != nullptr)
 				{
 					const auto* declaration = callee->getDefinition();
 					if (declaration == nullptr)
@@ -2265,7 +2297,7 @@ namespace cxxlens::detail::clang22
 					set_failure(std::move(semantic_key.error()));
 					return false;
 				}
-				return set_semantic_key(call, std::move(*semantic_key)) && insert(call);
+				return set_semantic_key(call, std::move(*semantic_key)) && insert(call, expression);
 			}
 
 			[[nodiscard]] const std::optional<sdk::error>& error() const noexcept
@@ -2608,7 +2640,8 @@ namespace cxxlens::detail::clang22
 				return true;
 			}
 
-			[[nodiscard]] bool insert(const provider_worker_v4_ast_observation& observation)
+			[[nodiscard]] bool insert(const provider_worker_v4_ast_observation& observation,
+									  const clang::Expr* expression = nullptr)
 			{
 				const auto expected_size =
 					canonical_size(observation, budget_->limits().maximum_logical_bytes);
@@ -2629,7 +2662,11 @@ namespace cxxlens::detail::clang22
 										"size-estimator-mismatch"));
 					return false;
 				}
-				observations_.try_emplace(std::move(key), observation);
+				const auto [retained, inserted] =
+					observations_.try_emplace(std::move(key), observation);
+				(void)inserted;
+				if (expression && calls_)
+					calls_(*expression, retained->first);
 				return true;
 			}
 
@@ -2640,7 +2677,9 @@ namespace cxxlens::detail::clang22
 			std::string_view source_file_;
 			std::string_view toolchain_digest_;
 			const source_closure_snapshot* closure_;
+			const provider_worker_v4_call_observer& calls_;
 			std::string current_function_;
+			const clang::Stmt* inherited_default_{};
 			std::map<std::string, provider_worker_v4_ast_observation, std::less<>> observations_;
 			std::optional<sdk::error> failure_;
 			std::uint64_t unavailable_call_index_{};
@@ -2865,7 +2904,8 @@ namespace cxxlens::detail::clang22
 								   std::string compile_unit,
 								   provider_worker_v4_ast_observer_limits limits,
 								   std::string main_source_snapshot,
-								   const bool include_project_headers)
+								   const bool include_project_headers,
+								   const provider_worker_v4_call_observer& calls)
 	{
 		try
 		{
@@ -2929,7 +2969,8 @@ namespace cxxlens::detail::clang22
 							  {output.source_snapshot,
 							   output.source_file,
 							   metadata.input.toolchain_digest,
-							   include_project_headers ? &metadata.input.closure : nullptr}};
+							   include_project_headers ? &metadata.input.closure : nullptr},
+							  calls};
 			const bool traversed = extractor.TraverseDecl(unit.ast().getTranslationUnitDecl());
 			if (extractor.error())
 				return sdk::unexpected(*extractor.error());
@@ -2940,6 +2981,7 @@ namespace cxxlens::detail::clang22
 				return sdk::unexpected(std::move(released.error()));
 #else
 			(void)unit;
+			(void)calls;
 			return sdk::unexpected(
 				failure("native.unsupported-clang-major", "translation-unit", "clang-major-22"));
 #endif

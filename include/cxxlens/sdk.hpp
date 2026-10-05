@@ -6,6 +6,7 @@
 
 #include <cxxlens/sdk/abi_surfaces.hpp>
 #include <cxxlens/sdk/application_analysis.hpp>
+#include <cxxlens/sdk/call_operands.hpp>
 #include <cxxlens/sdk/claim.hpp>
 #include <cxxlens/sdk/common.hpp>
 #include <cxxlens/sdk/control_flow.hpp>

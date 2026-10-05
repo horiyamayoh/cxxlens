@@ -255,6 +255,7 @@ add_library(
   src/sdk/control_flow.cpp
   src/sdk/source_tokens.cpp
   src/sdk/finite_populations.cpp
+  src/sdk/call_operands.cpp
   src/sdk/semantic_graphs.cpp
   src/sdk/record_surfaces.cpp
   src/sdk/abi_surfaces.cpp

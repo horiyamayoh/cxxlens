@@ -28,9 +28,9 @@ namespace cxxlens::sdk::query
 		{
 			throw failure{{std::move(code), std::move(field), std::move(reason)}};
 		}
-		void check(std::stop_token stop)
+		void check(std::stop_token stop, const finite_population_limits& limits)
 		{
-			if (stop.stop_requested())
+			if (stop.stop_requested() || (limits.cancelled && limits.cancelled()))
 				fail("projection", "stop-requested", "sdk.population-cancelled");
 		}
 		void
@@ -152,7 +152,7 @@ namespace cxxlens::sdk::query
 			std::map<key, indices> body_nodes;
 			void work()
 			{
-				check(stop);
+				check(stop, limits);
 				charge(used.operations, 1U, limits.maximum_operations, "operations");
 			}
 			const annotated_row& row(std::size_t ref) const
@@ -697,7 +697,7 @@ namespace cxxlens::sdk::query
 				return valid.error();
 			try
 			{
-				check(stop);
+				check(stop, limits);
 				projection_work work{limits, stop, {}, {}, {}, {}};
 				work.output.compile_units_complete = input.compile_units_complete;
 				work.output.inventory_inputs_complete = input.inventory_inputs_complete;
@@ -1183,7 +1183,7 @@ namespace cxxlens::sdk::query
 				return valid.error();
 			try
 			{
-				check(stop);
+				check(stop, limits);
 				if (auto bounded =
 						detail::check_source_plan_limits(input,
 														 limits.maximum_source_queries,
@@ -1199,7 +1199,7 @@ namespace cxxlens::sdk::query
 				std::size_t rows{}, bytes{};
 				for (const auto& scan : input.scans)
 				{
-					check(stop);
+					check(stop, limits);
 					const auto found = std::ranges::find(names, scan.relation_id);
 					if (found == names.end())
 						continue;
@@ -1211,7 +1211,7 @@ namespace cxxlens::sdk::query
 					auto cursor = scan.result.rows();
 					while (true)
 					{
-						check(stop);
+						check(stop, limits);
 						auto next = cursor.next();
 						if (!next)
 							return next.error();

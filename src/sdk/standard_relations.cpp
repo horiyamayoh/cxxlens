@@ -10,6 +10,7 @@
 #include <cxxlens/relations/cc_abi_surface.hpp>
 #include <cxxlens/relations/cc_body.hpp>
 #include <cxxlens/relations/cc_call_direct_target.hpp>
+#include <cxxlens/relations/cc_call_operand.hpp>
 #include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_cfg_edge.hpp>
 #include <cxxlens/relations/cc_cfg_node.hpp>
@@ -296,6 +297,7 @@ namespace cxxlens::sdk
 				cc::relations::abi_surface::descriptor(),
 				cc::relations::body::descriptor(),
 				cc::relations::call_direct_target::descriptor(),
+				cc::relations::call_operand::descriptor(),
 				cc::relations::call_site::descriptor(),
 				cc::relations::cfg_edge::descriptor(),
 				cc::relations::cfg_node::descriptor(),

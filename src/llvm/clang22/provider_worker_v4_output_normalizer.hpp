@@ -7,6 +7,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -43,6 +44,9 @@ namespace cxxlens::detail::clang22
 		std::vector<std::string> invocation_limitations;
 		provider_worker_v4_output_normalizer_limits limits{};
 		std::stop_token cancellation;
+		// Source-private original observation bindings requested by the local
+		// application collector; never serialized on the worker protocol.
+		bool capture_original_call_ids{};
 
 		[[nodiscard]] sdk::result<void> validate() const;
 	};
@@ -72,6 +76,10 @@ namespace cxxlens::detail::clang22
 		std::vector<sdk::provider::unresolved_item> unresolved;
 		std::vector<std::string> limitations;
 		bool exact_equivalence{true};
+		std::map<std::string, std::string, std::less<>> original_call_ids;
+		// Exact observation-kind routing for local relation coverage; unscoped
+		// invocation/frontend limitations remain conservative. Not a wire field.
+		std::map<std::string, std::vector<std::string>, std::less<>> limitation_relations;
 
 		[[nodiscard]] sdk::result<void> validate() const;
 	};

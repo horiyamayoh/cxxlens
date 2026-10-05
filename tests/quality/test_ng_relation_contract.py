@@ -16,6 +16,7 @@ from check_ng_relation_contract import (  # noqa: E402
     CLANG22_INSTALLED_OUTPUT_DESCRIPTORS,
     CLANG22_OBSERVATION_RELATIONS,
     CLANG22_PRIMARY_SPAN_SUFFIXES,
+    CALL_TARGET_SIGNATURE_COLUMNS,
     REGISTRY,
     REGISTRY_SCHEMA,
     VECTORS,
@@ -49,8 +50,8 @@ class NgRelationContractTest(unittest.TestCase):
 
     def test_registry_and_vectors_have_valid_product_contracts(self) -> None:
         registry, results = validate_contract(ROOT)
-        self.assertEqual(registry["document_version"], "1.15.0")
-        self.assertEqual(registry["compatibility"]["current"], "1.15.0")
+        self.assertEqual(registry["document_version"], "1.16.0")
+        self.assertEqual(registry["compatibility"]["current"], "1.16.0")
         self.assertGreater(len(registry["relations"]), 0)
         self.assertEqual(len(results), len(self.vectors["vectors"]))
         self.assertEqual({row["decision"] for row in results}, {"accepted", "rejected"})
@@ -97,6 +98,7 @@ class NgRelationContractTest(unittest.TestCase):
                 "cc.type_component",
                 "cc.call_site",
                 "cc.call_direct_target",
+                "cc.call_operand",
                 "cc.entity_detail",
                 "cc.entity_edge",
                 "cc.syntax_node",
@@ -240,7 +242,7 @@ class NgRelationContractTest(unittest.TestCase):
         self.assertNotIn("direct_target", {row["name"] for row in calls["columns"]})
         self.assertEqual(
             {row["name"] for row in targets["columns"]},
-            {"call", "target", "resolution"},
+            {"call", "target", "resolution"} | CALL_TARGET_SIGNATURE_COLUMNS,
         )
         self.assertEqual(
             validate_query_columns(self.registry, self.vector("exact-call-model")["input"]),

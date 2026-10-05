@@ -24,12 +24,22 @@ namespace cxxlens::cc::relations
 				output.semantic_major = 1U;
 				output.semantics = "cc.call-direct-target/1";
 				output.owner_namespace = "cxxlens.standard.cc";
-				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.call_direct_target.v1.call"],"result_column":null},"interpretation_required":true,"key":["cc.call_direct_target.v1.call"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.call_direct_target.v1.call","identity_role":"claim_key","name":"call","required":true,"type":"typed_id<cc_call_id>"},{"id":"cc.call_direct_target.v1.target","identity_role":"authoritative_payload","name":"target","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.call_direct_target.v1.resolution","identity_role":"authoritative_payload","name":"resolution","required":true,"type":"open_symbol<cc.direct-target-resolution/1>"}],"coverage":{"execution_domain":"cc.call-extraction.compile-unit"},"descriptor_id":"cc.call_direct_target.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::call_direct_target","indexes":[["cc.call_direct_target.v1.target"]],"merge":{"conflict_columns":["cc.call_direct_target.v1.resolution","cc.call_direct_target.v1.target"],"mode":"functional_assertion"},"name":"cc.call_direct_target","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.call_direct_target.v1.call"]},"profile":"NG0","provenance":{"minimum":"canonicalization"},"references":[{"on_missing":"reject_batch","source_columns":["cc.call_direct_target.v1.call"],"strength":"hard","target_columns":["cc.call_site.v1.call"],"target_relation":"cc.call_site"},{"on_missing":"unresolved","source_columns":["cc.call_direct_target.v1.target"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"}],"semantic_major":1,"semantics":"cc.call-direct-target/1","stability":"versioned","summary":"Functional syntactic direct target separated from the call occurrence.","version":"1.0.0"})cxxlens";
-				output.contract_digest = "sha256:e2960ef9dff7a1190aa6b687281e0b1aeaddfcc684f35a9870323d5716697b2b";
+				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.call_direct_target.v1.call"],"result_column":null},"interpretation_required":true,"key":["cc.call_direct_target.v1.call"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.call_direct_target.v1.call","identity_role":"claim_key","name":"call","required":true,"type":"typed_id<cc_call_id>"},{"id":"cc.call_direct_target.v1.target","identity_role":"authoritative_payload","name":"target","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.call_direct_target.v1.resolution","identity_role":"authoritative_payload","name":"resolution","required":true,"type":"open_symbol<cc.direct-target-resolution/1>"},{"id":"cc.call_direct_target.v1.target_signature_state","identity_role":"authoritative_payload","name":"target_signature_state","required":false,"type":"optional<open_symbol<cc.target-signature-state/1>>"},{"id":"cc.call_direct_target.v1.target_signature_profile","identity_role":"authoritative_payload","name":"target_signature_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.call_direct_target.v1.target_usr","identity_role":"authoritative_payload","name":"target_usr","required":false,"type":"optional<bytes>"},{"id":"cc.call_direct_target.v1.target_canonical_type","identity_role":"authoritative_payload","name":"target_canonical_type","required":false,"type":"optional<typed_id<cc_type_id>>"},{"id":"cc.call_direct_target.v1.target_structural_signature_digest","identity_role":"authoritative_payload","name":"target_structural_signature_digest","required":false,"type":"optional<digest>"},{"id":"cc.call_direct_target.v1.target_canonical_type_digest","identity_role":"authoritative_payload","name":"target_canonical_type_digest","required":false,"type":"optional<digest>"},{"id":"cc.call_direct_target.v1.target_canonical_type_profile","identity_role":"authoritative_payload","name":"target_canonical_type_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.call_direct_target.v1.target_language","identity_role":"authoritative_payload","name":"target_language","required":false,"type":"optional<open_symbol<build.language/1>>"},{"id":"cc.call_direct_target.v1.target_linkage","identity_role":"authoritative_payload","name":"target_linkage","required":false,"type":"optional<open_symbol<cc.linkage/1>>"},{"id":"cc.call_direct_target.v1.target_module_domain","identity_role":"authoritative_payload","name":"target_module_domain","required":false,"type":"optional<utf8_string>"}],"coverage":{"execution_domain":"cc.call-extraction.compile-unit"},"descriptor_id":"cc.call_direct_target.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::call_direct_target","indexes":[["cc.call_direct_target.v1.target"]],"merge":{"conflict_columns":["cc.call_direct_target.v1.resolution","cc.call_direct_target.v1.target","cc.call_direct_target.v1.target_canonical_type","cc.call_direct_target.v1.target_canonical_type_digest","cc.call_direct_target.v1.target_canonical_type_profile","cc.call_direct_target.v1.target_language","cc.call_direct_target.v1.target_linkage","cc.call_direct_target.v1.target_module_domain","cc.call_direct_target.v1.target_signature_profile","cc.call_direct_target.v1.target_signature_state","cc.call_direct_target.v1.target_structural_signature_digest","cc.call_direct_target.v1.target_usr"],"mode":"functional_assertion"},"name":"cc.call_direct_target","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.call_direct_target.v1.call"]},"profile":"NG0","provenance":{"minimum":"canonicalization"},"references":[{"on_missing":"reject_batch","source_columns":["cc.call_direct_target.v1.call"],"strength":"hard","target_columns":["cc.call_site.v1.call"],"target_relation":"cc.call_site"},{"on_missing":"unresolved","source_columns":["cc.call_direct_target.v1.target"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.call_direct_target.v1.target_canonical_type"],"strength":"soft_semantic","target_columns":["cc.type.v1.type"],"target_relation":"cc.type"}],"semantic_major":1,"semantics":"cc.call-direct-target/1","stability":"versioned","summary":"Functional syntactic direct target separated from the call occurrence.","version":"1.0.0"})cxxlens";
+				output.contract_digest = "sha256:b7336b574b14b3aebd07571f07a942132068bd89e45f4d11679d7dd48f672a27";
 				output.columns = {
 					{"cc.call_direct_target.v1.call", "call", {sdk::scalar_kind::typed_id, "cc_call_id", false}, true, sdk::column_role::claim_key},
 					{"cc.call_direct_target.v1.target", "target", {sdk::scalar_kind::typed_id, "cc_entity_id", false}, true, sdk::column_role::authoritative_payload},
 					{"cc.call_direct_target.v1.resolution", "resolution", {sdk::scalar_kind::open_symbol, "cc.direct-target-resolution/1", false}, true, sdk::column_role::authoritative_payload},
+					{"cc.call_direct_target.v1.target_signature_state", "target_signature_state", {sdk::scalar_kind::open_symbol, "cc.target-signature-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.call_direct_target.v1.target_signature_profile", "target_signature_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.call_direct_target.v1.target_usr", "target_usr", {sdk::scalar_kind::bytes, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.call_direct_target.v1.target_canonical_type", "target_canonical_type", {sdk::scalar_kind::typed_id, "cc_type_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.call_direct_target.v1.target_structural_signature_digest", "target_structural_signature_digest", {sdk::scalar_kind::digest, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.call_direct_target.v1.target_canonical_type_digest", "target_canonical_type_digest", {sdk::scalar_kind::digest, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.call_direct_target.v1.target_canonical_type_profile", "target_canonical_type_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.call_direct_target.v1.target_language", "target_language", {sdk::scalar_kind::open_symbol, "build.language/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.call_direct_target.v1.target_linkage", "target_linkage", {sdk::scalar_kind::open_symbol, "cc.linkage/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.call_direct_target.v1.target_module_domain", "target_module_domain", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
 				};
 				output.domain_identity.projection = {
 					"cc.call_direct_target.v1.call",
@@ -41,11 +51,22 @@ namespace cxxlens::cc::relations
 				output.references = {
 					{{"cc.call_direct_target.v1.call"}, "cc.call_site", {"cc.call_site.v1.call"}, sdk::reference_strength::hard},
 					{{"cc.call_direct_target.v1.target"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic},
+					{{"cc.call_direct_target.v1.target_canonical_type"}, "cc.type", {"cc.type.v1.type"}, sdk::reference_strength::soft_semantic},
 				};
 				output.merge = sdk::merge_mode::functional_assertion;
 				output.conflict_columns = {
 					"cc.call_direct_target.v1.resolution",
 					"cc.call_direct_target.v1.target",
+					"cc.call_direct_target.v1.target_canonical_type",
+					"cc.call_direct_target.v1.target_canonical_type_digest",
+					"cc.call_direct_target.v1.target_canonical_type_profile",
+					"cc.call_direct_target.v1.target_language",
+					"cc.call_direct_target.v1.target_linkage",
+					"cc.call_direct_target.v1.target_module_domain",
+					"cc.call_direct_target.v1.target_signature_profile",
+					"cc.call_direct_target.v1.target_signature_state",
+					"cc.call_direct_target.v1.target_structural_signature_digest",
+					"cc.call_direct_target.v1.target_usr",
 				};
 				output.descriptor_digest = *sdk::semantic_digest(
 					"cxxlens.relation-descriptor-binding.v2",
@@ -81,6 +102,96 @@ namespace cxxlens::cc::relations
 			[[nodiscard]] static sdk::column_ref ref()
 			{
 				return {call_direct_target::descriptor().id, "cc.call_direct_target.v1.resolution", {sdk::scalar_kind::open_symbol, "cc.direct-target-resolution/1", false}};
+			}
+		};
+		/** @brief Generated column tag for `cc.call_direct_target.v1.target_signature_state`. */
+		struct target_signature_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {call_direct_target::descriptor().id, "cc.call_direct_target.v1.target_signature_state", {sdk::scalar_kind::open_symbol, "cc.target-signature-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.call_direct_target.v1.target_signature_profile`. */
+		struct target_signature_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {call_direct_target::descriptor().id, "cc.call_direct_target.v1.target_signature_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.call_direct_target.v1.target_usr`. */
+		struct target_usr
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {call_direct_target::descriptor().id, "cc.call_direct_target.v1.target_usr", {sdk::scalar_kind::bytes, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.call_direct_target.v1.target_canonical_type`. */
+		struct target_canonical_type
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {call_direct_target::descriptor().id, "cc.call_direct_target.v1.target_canonical_type", {sdk::scalar_kind::typed_id, "cc_type_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.call_direct_target.v1.target_structural_signature_digest`. */
+		struct target_structural_signature_digest
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {call_direct_target::descriptor().id, "cc.call_direct_target.v1.target_structural_signature_digest", {sdk::scalar_kind::digest, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.call_direct_target.v1.target_canonical_type_digest`. */
+		struct target_canonical_type_digest
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {call_direct_target::descriptor().id, "cc.call_direct_target.v1.target_canonical_type_digest", {sdk::scalar_kind::digest, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.call_direct_target.v1.target_canonical_type_profile`. */
+		struct target_canonical_type_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {call_direct_target::descriptor().id, "cc.call_direct_target.v1.target_canonical_type_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.call_direct_target.v1.target_language`. */
+		struct target_language
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {call_direct_target::descriptor().id, "cc.call_direct_target.v1.target_language", {sdk::scalar_kind::open_symbol, "build.language/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.call_direct_target.v1.target_linkage`. */
+		struct target_linkage
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {call_direct_target::descriptor().id, "cc.call_direct_target.v1.target_linkage", {sdk::scalar_kind::open_symbol, "cc.linkage/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.call_direct_target.v1.target_module_domain`. */
+		struct target_module_domain
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {call_direct_target::descriptor().id, "cc.call_direct_target.v1.target_module_domain", {sdk::scalar_kind::utf8_string, "", true}};
 			}
 		};
 	};

@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <span>
 #include <stop_token>
@@ -34,6 +35,8 @@ namespace cxxlens::sdk::query
 		std::size_t maximum_operations{128'000'000U};
 		std::size_t maximum_source_queries{4096U};
 		std::size_t maximum_source_plan_bytes{64U * 1024U * 1024U};
+		/** @brief Optional caller cancellation, polled with the stop token during work. */
+		std::function<bool()> cancelled;
 		[[nodiscard]] result<void> validate() const;
 	};
 	enum class finite_population_state : std::uint8_t

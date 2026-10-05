@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <optional>
 #include <string>
@@ -18,8 +19,17 @@
 #include "observation_v2.hpp"
 #include "source_closure_task_v4.hpp"
 
+namespace clang
+{
+	class Expr;
+} // namespace clang
+
 namespace cxxlens::detail::clang22
 {
+	// Runs only while the borrowed translation unit is alive. The canonical
+	// observation key binds the actual expression to its original detached call.
+	using provider_worker_v4_call_observer =
+		std::function<void(const clang::Expr&, std::string_view)>;
 	/** Clang version used by this frontend; empty for the unavailable adapter. */
 	[[nodiscard]] std::string_view compiled_clang22_version() noexcept;
 
@@ -119,5 +129,6 @@ namespace cxxlens::detail::clang22
 								   std::string compile_unit,
 								   provider_worker_v4_ast_observer_limits limits = {},
 								   std::string main_source_snapshot = {},
-								   bool include_project_headers = false);
+								   bool include_project_headers = false,
+								   const provider_worker_v4_call_observer& calls = {});
 } // namespace cxxlens::detail::clang22

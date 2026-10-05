@@ -325,6 +325,16 @@ int main()
 	stopped.request_stop();
 	require(!q::project_source_comments(c.input(), {}, stopped.get_token()),
 			"cancellation not enforced");
+	limits = {};
+	std::size_t checkpoints{};
+	limits.cancelled = [&]
+	{
+		return ++checkpoints == 4U;
+	};
+	auto callback_cancelled = q::project_source_comments(c.input(), limits);
+	require(!callback_cancelled && callback_cancelled.error().code == "sdk.population-cancelled" &&
+				checkpoints == 4U,
+			"caller cancellation was not polled during projection");
 	d.declaration();
 	auto first = q::project_declarations(d.input());
 	std::ranges::reverse(d.groups[3]);

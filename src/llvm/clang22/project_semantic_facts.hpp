@@ -48,7 +48,10 @@ namespace cxxlens::detail::clang22
 	{
 		std::vector<sdk::detached_row> rows;
 		std::vector<sdk::provider::unresolved_item> unresolved;
+		// Additive fields of existing original call rows, replaced by original row identity.
+		std::map<std::string, sdk::detached_row, std::less<>> call_updates;
 	};
+	using project_original_calls = std::map<const clang::Expr*, std::string>;
 
 	/** Detach declarations, semantic edges, syntax, PP, CFG and local flow before AST release. */
 	[[nodiscard]] sdk::result<project_semantic_facts>
@@ -57,5 +60,6 @@ namespace cxxlens::detail::clang22
 							  const provider_worker_v4_ast_observation_batch& observations,
 							  const provider_worker_v4_normalized_output& normalized,
 							  const project_preprocessor_observations& preprocessing,
-							  const std::function<void(std::string_view)>& progress = {});
+							  const std::function<void(std::string_view)>& progress = {},
+							  const project_original_calls& original_calls = {});
 } // namespace cxxlens::detail::clang22

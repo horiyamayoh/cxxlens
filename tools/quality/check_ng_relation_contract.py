@@ -65,6 +65,13 @@ CLANG22_INSTALLED_OUTPUT_DESCRIPTORS = {
     "cc.call_direct_target.v1",
 }
 
+CALL_TARGET_SIGNATURE_COLUMNS = {
+    "target_signature_state", "target_signature_profile", "target_usr",
+    "target_canonical_type", "target_structural_signature_digest",
+    "target_canonical_type_digest", "target_canonical_type_profile",
+    "target_language", "target_linkage", "target_module_domain",
+}
+
 CLANG22_PRIMARY_SPAN_SUFFIXES = (
     "source",
     "source_snapshot",
@@ -737,8 +744,10 @@ def validate_registry(
         fail("relation.call-model-duplicated", "direct target is embedded in cc.call_site")
     direct = relations["cc.call_direct_target"]
     _, direct_names = _column_maps(direct)
-    if set(direct_names) != {"call", "target", "resolution"}:
+    if set(direct_names) != {"call", "target", "resolution"} | CALL_TARGET_SIGNATURE_COLUMNS:
         fail("relation.call-model-invalid", "cc.call_direct_target columns differ")
+    if any(direct_names[name]["required"] for name in CALL_TARGET_SIGNATURE_COLUMNS):
+        fail("relation.call-model-invalid", "observed target signature is not optional")
     entity = relations["cc.entity"]
     entity_projection = entity["claim"]["domain_identity"]["projection"]
     if "cc.entity.v1.anchor" in entity_projection:

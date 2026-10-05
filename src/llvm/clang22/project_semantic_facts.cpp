@@ -15,6 +15,9 @@
 
 #include <cxxlens/relations/cc_abi_surface.hpp>
 #include <cxxlens/relations/cc_body.hpp>
+#include <cxxlens/relations/cc_call_direct_target.hpp>
+#include <cxxlens/relations/cc_call_operand.hpp>
+#include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_cfg_edge.hpp>
 #include <cxxlens/relations/cc_cfg_node.hpp>
 #include <cxxlens/relations/cc_declaration.hpp>
@@ -548,16 +551,43 @@ namespace cxxlens::detail::clang22
 		class collector final : public clang::RecursiveASTVisitor<collector>
 		{
 			using base = clang::RecursiveASTVisitor<collector>;
+			struct ast_enumeration
+			{
+				const clang::Stmt* body{};
+				std::string function;
+				std::uint64_t nodes{}, unmapped{}, local_variables{};
+				std::uint64_t unmapped_members{};
+				std::set<std::pair<std::string, std::string>> member_accesses;
+				std::uint64_t unmapped_calls{};
+				std::set<std::string, std::less<>> direct_call_sites, direct_call_targets;
+				std::set<const clang::Expr*> call_admissions;
+				std::set<std::string, std::less<>> call_sites;
+				bool call_frontier{};
+				bool active{}, written_initializer{};
+			};
 
 		  public:
 			collector(provider::clang22::borrowed_translation_unit& unit,
 					  const source_closure_snapshot& closure,
 					  const provider_worker_v4_ast_observation_batch& observations,
 					  const provider_worker_v4_normalized_output& normalized,
-					  const std::function<void(std::string_view)>& progress)
+					  const std::function<void(std::string_view)>& progress,
+					  const project_original_calls& original_calls)
 				: unit_{unit}, closure_{closure}, observations_{observations}, progress_{progress},
-				  abi_observer_{unit.ast(), unit.preprocessor(), unit.code_generation_options()}
+				  abi_observer_{unit.ast(), unit.preprocessor(), unit.code_generation_options()},
+				  original_calls_{original_calls}
 			{
+				for (const auto& batch : normalized.batches)
+					for (const auto& row : batch.rows)
+						if (row.descriptor_id == "cc.call_site.v1" ||
+							row.descriptor_id == "cc.call_direct_target.v1")
+						{
+							retain_call_bytes(row.canonical_form().size() + 128U);
+							auto& index = row.descriptor_id == "cc.call_site.v1"
+								? original_sites_
+								: original_targets_;
+							index.emplace(row_id(row, "call"), row);
+						}
 				for (const auto& batch : normalized.batches)
 					for (const auto& row : batch.rows)
 						if (row.descriptor_id == "cc.entity.v1")
@@ -570,30 +600,6 @@ namespace cxxlens::detail::clang22
 							for (const auto b : bytes)
 								key.push_back(static_cast<char>(b));
 							entities_.emplace(std::move(key), row_id(row, "entity"));
-						}
-				std::map<std::string, std::string, std::less<>> targets;
-				for (const auto& batch : normalized.batches)
-					for (const auto& row : batch.rows)
-						if (row.descriptor_id == "cc.call_direct_target.v1")
-						{
-							const auto call = row_id(row, "call"), target = row_id(row, "target");
-							retain_direct_call_bytes(192U + call.size() + target.size());
-							targets.emplace(call, target);
-						}
-				for (const auto& batch : normalized.batches)
-					for (const auto& row : batch.rows)
-						if (row.descriptor_id == "cc.call_site.v1" &&
-							row.cells.at("cc.call_site.v1.caller").value)
-						{
-							const auto call = row_id(row, "call");
-							const auto target = targets.find(call);
-							if (target == targets.end())
-								continue;
-							const auto caller = row_id(row, "caller"),
-									   source = row_id(row, "source");
-							retain_direct_call_bytes(384U + caller.size() + source.size() +
-													 call.size() + target->second.size());
-							direct_call_index_[{caller, source}].emplace_back(call, target->second);
 						}
 				for (const auto& value : observations.observations)
 					if (value.kind == provider_worker_v4_ast_observation_kind::entity &&
@@ -623,6 +629,13 @@ namespace cxxlens::detail::clang22
 				if (function != nullptr && !admitted(function->getLocation()))
 					return true;
 				const auto previous = current_function_;
+				const auto* previous_default = inherited_default_;
+				if (const auto* parameter = llvm::dyn_cast<clang::ParmVarDecl>(declaration);
+					parameter && parameter->hasInheritedDefaultArg() &&
+					!parameter->hasUnparsedDefaultArg())
+					inherited_default_ = parameter->hasUninstantiatedDefaultArg()
+						? parameter->getUninstantiatedDefaultArg()
+						: parameter->getDefaultArg();
 				if (function != nullptr)
 				{
 					current_function_ = entity(function);
@@ -639,9 +652,20 @@ namespace cxxlens::detail::clang22
 				{
 					const auto enumeration = std::move(ast_enumerations_.back());
 					ast_enumerations_.pop_back();
+					if (const auto detail = pending_function_details_.find(function);
+						detail != pending_function_details_.end())
+					{
+						call_scope_fields(detail->second, enumeration);
+						append(make_row(cc::relations::entity_detail::descriptor(),
+										std::move(detail->second)));
+						pending_function_details_.erase(detail);
+					}
 					if (const auto found = pending_bodies_.find(function);
 						found != pending_bodies_.end())
 					{
+						if (declaration_population_admitted(function) &&
+							(!function->isImplicit() || written_lambda(function)))
+							call_scope_fields(found->second, enumeration);
 						found->second.emplace(
 							"ast_node_count",
 							sdk::detached_cell::unsigned_integer(enumeration.nodes));
@@ -692,6 +716,7 @@ namespace cxxlens::detail::clang22
 					}
 				}
 				current_function_ = previous;
+				inherited_default_ = previous_default;
 				return result;
 			}
 			bool TraverseLambdaExpr(clang::LambdaExpr* expression)
@@ -717,15 +742,39 @@ namespace cxxlens::detail::clang22
 			}
 			bool TraverseTypeOfExprTypeLoc(clang::TypeOfExprTypeLoc type, bool traverse_qualifier)
 			{
+				const bool unevaluated =
+					!type.getUnderlyingExpr()->getType()->isVariablyModifiedType();
+				if (unevaluated)
+					++unevaluated_depth_;
+				const bool success = base::TraverseTypeOfExprTypeLoc(type, traverse_qualifier);
+				if (unevaluated)
+					--unevaluated_depth_;
+				return success;
+			}
+			bool TraverseDecltypeType(clang::DecltypeType* type, bool qualifier)
+			{
 				++unevaluated_depth_;
-				const bool success =
-					clang::RecursiveASTVisitor<collector>::TraverseTypeOfExprTypeLoc(
-						type, traverse_qualifier);
+				const bool success = base::TraverseDecltypeType(type, qualifier);
 				--unevaluated_depth_;
+				return success;
+			}
+			bool TraverseTypeOfExprType(clang::TypeOfExprType* type, bool qualifier)
+			{
+				const bool unevaluated =
+					!type->getUnderlyingExpr()->getType()->isVariablyModifiedType();
+				if (unevaluated)
+					++unevaluated_depth_;
+				const bool success = base::TraverseTypeOfExprType(type, qualifier);
+				if (unevaluated)
+					--unevaluated_depth_;
 				return success;
 			}
 			bool dataTraverseStmtPre(clang::Stmt* statement)
 			{
+				// An inherited default is the same written expression from another actual
+				// declaration. Its redeclaration does not acquire a second syntax/call scope.
+				if (statement == inherited_default_)
+					return false;
 				const auto* parent_statement = statements_.empty() ? nullptr : statements_.back();
 				const bool body_root =
 					!ast_enumerations_.empty() && ast_enumerations_.back().body == statement;
@@ -734,6 +783,20 @@ namespace cxxlens::detail::clang22
 				statements_.push_back(statement);
 				if (++depth_ > 4096U)
 					fail("traversal", "depth-limit");
+				if (const auto* expression = llvm::dyn_cast<clang::Expr>(statement); expression &&
+					(llvm::isa<clang::CallExpr>(expression) ||
+					 llvm::isa<clang::CXXConstructExpr>(expression)))
+				{
+					const auto state = evaluation_context(*expression);
+					const auto previous = call_evaluation_.find(expression);
+					if (previous == call_evaluation_.end())
+					{
+						retain_call_bytes(128U + state.size());
+						call_evaluation_.emplace(expression, state);
+					}
+					else if (previous->second != state)
+						previous->second = "unknown";
+				}
 				const auto source = span(statement->getSourceRange(), "expression");
 				if (!ast_enumerations_.empty() && ast_enumerations_.back().active &&
 					ast_enumerations_.back().function == current_function_)
@@ -760,6 +823,17 @@ namespace cxxlens::detail::clang22
 					// This marker makes absent category flags known false for this versioned
 					// profile.
 					properties.emplace("finite_categories_v1");
+					// Independent membership of the original emitted call profile. It does
+					// not depend on whether normalization returned a call row.
+					properties.emplace("finite_call_admission_v1");
+					if (const auto* expression = llvm::dyn_cast<clang::Expr>(statement);
+						expression && admitted(expression->getExprLoc()) &&
+						(llvm::isa<clang::CallExpr>(expression) ||
+						 (llvm::isa<clang::CXXConstructExpr>(expression) &&
+						  llvm::cast<clang::CXXConstructExpr>(expression)
+							  ->getParenOrBraceRange()
+							  .isValid())))
+						properties.emplace("admitted_call_site");
 					properties.emplace(llvm::isa<clang::Expr>(statement) ? "expression"
 																		 : "statement");
 					if (llvm::isa<clang::ImplicitCastExpr,
@@ -930,6 +1004,8 @@ namespace cxxlens::detail::clang22
 					value.emplace("flags", flags("cc.syntax-flag/1", std::move(properties)));
 					auto row = make_row(cc::relations::syntax_node::descriptor(), std::move(value));
 					parent = row_id(row, "node");
+					retain_call_bytes(parent.size() + 192U);
+					syntax_nodes_[statement].insert(parent);
 					append(std::move(row));
 				}
 				parents_.push_back(std::move(parent));
@@ -1037,6 +1113,19 @@ namespace cxxlens::detail::clang22
 																   ->castAs<clang::FunctionType>()
 																   ->getCallConv()))));
 					definition = function->isThisDeclarationADefinition();
+					if (population_admitted)
+					{
+						properties.emplace("finite_function_body_v1");
+						const bool written_body = function->doesThisDeclarationHaveABody() &&
+							function->getBody() && !function->isDeleted() &&
+							!function->isDefaulted();
+						if (written_body)
+							properties.emplace("body_written");
+						else if (!function->hasSkippedBody() &&
+								 (!function->doesThisDeclarationHaveABody() ||
+								  function->isDeleted() || function->isDefaulted()))
+							properties.emplace("body_absent");
+					}
 					parameters = function->getNumParams();
 					if (function->isConstexpr())
 						properties.emplace("constexpr");
@@ -1151,7 +1240,14 @@ namespace cxxlens::detail::clang22
 				value.emplace("is_definition", sdk::detached_cell::boolean(definition));
 				value.emplace("flags", flags("cc.entity-flag/1", std::move(properties)));
 				value.emplace("parameter_count", sdk::detached_cell::unsigned_integer(parameters));
-				append(make_row(cc::relations::entity_detail::descriptor(), std::move(value)));
+				if (const auto* function = llvm::dyn_cast<clang::FunctionDecl>(declaration);
+					function && population_admitted)
+				{
+					retain_call_bytes(512U);
+					pending_function_details_.insert_or_assign(function, std::move(value));
+				}
+				else
+					append(make_row(cc::relations::entity_detail::descriptor(), std::move(value)));
 				auto declaration_row = fields{
 					{"entity", id("cc_entity_id", entity_id)},
 					{"source", id("source_span_id", *source)},
@@ -1233,8 +1329,15 @@ namespace cxxlens::detail::clang22
 				build_cfg(*function);
 				return true;
 			}
+			bool VisitCXXConstructExpr(clang::CXXConstructExpr* expression)
+			{
+				if (expression && expression->getParenOrBraceRange().isValid())
+					admit_call(expression);
+				return true;
+			}
 			bool VisitCallExpr(clang::CallExpr* expression)
 			{
+				admit_call(expression);
 				if (ast_enumerations_.empty() || current_function_.empty())
 					return true;
 				auto& enumeration = ast_enumerations_.back();
@@ -1244,23 +1347,23 @@ namespace cxxlens::detail::clang22
 				const auto* callee = expression->getDirectCallee();
 				if (!callee && !expression->isTypeDependent() && !expression->isValueDependent())
 					return true;
-				const auto source = span(expression->getSourceRange(), "expression");
 				const auto target = entity(callee);
-				const auto found = source ? direct_call_index_.find({current_function_, *source})
-										  : direct_call_index_.end();
+				const auto original = original_calls_.find(expression);
 				bool bound{};
-				if (!target.empty() && found != direct_call_index_.end())
-					for (const auto& [call, actual_target] : found->second)
-						if (actual_target == target)
+				if (!target.empty() && original != original_calls_.end())
+					if (const auto actual_target = original_targets_.find(original->second);
+						actual_target != original_targets_.end() &&
+						row_id(actual_target->second, "target") == target)
+					{
+						bound = true;
+						if (!enumeration.direct_call_sites.contains(original->second))
 						{
-							bound = true;
-							if (!enumeration.direct_call_sites.contains(call))
-							{
-								retain_direct_call_bytes(192U + call.size() + target.size());
-								enumeration.direct_call_sites.insert(call);
-								enumeration.direct_call_targets.insert(target);
-							}
+							retain_direct_call_bytes(192U + original->second.size() +
+													 target.size());
+							enumeration.direct_call_sites.insert(original->second);
+							enumeration.direct_call_targets.insert(target);
 						}
+					}
 				if (!bound)
 				{
 					++enumeration.unmapped_calls;
@@ -1812,6 +1915,7 @@ namespace cxxlens::detail::clang22
 			}
 			project_semantic_facts finish()
 			{
+				finish_calls();
 				auto inventory = common();
 				inventory.emplace("profile",
 								  symbol("cc.record-inventory-profile/1",
@@ -1888,6 +1992,415 @@ namespace cxxlens::detail::clang22
 			}
 
 		  private:
+			void retain_call_bytes(std::size_t bytes)
+			{
+				if (bytes > 64U * 1024U * 1024U - call_bytes_)
+					fail("call-operands", "retained-byte-limit");
+				call_bytes_ += bytes;
+			}
+			void call_scope_fields(fields& value, const ast_enumeration& enumeration)
+			{
+				value.emplace(
+					"call_site_count",
+					sdk::detached_cell::unsigned_integer(enumeration.call_admissions.size()));
+				value.emplace("call_site_ids", flags("cc_call_id", enumeration.call_sites));
+				value.emplace(
+					"call_site_state",
+					symbol("cc.function-call-site-state/1",
+						   enumeration.call_admissions.size() == enumeration.call_sites.size() &&
+								   !enumeration.call_frontier
+							   ? "complete"
+							   : "partial"));
+				value.emplace("call_site_profile",
+							  sdk::detached_cell::utf8("clang22-function-emitted-call-sites/1"));
+			}
+			void admit_call(const clang::Expr* expression)
+			{
+				if (!expression || !admitted(expression->getExprLoc()) || ast_enumerations_.empty())
+					return;
+				auto& enumeration = ast_enumerations_.back();
+				if (!enumeration.call_admissions.contains(expression))
+				{
+					if (enumeration.call_admissions.size() >= 100000U)
+						fail("function-call-sites", "admission-count-limit");
+					retain_call_bytes(64U);
+					enumeration.call_admissions.insert(expression);
+				}
+				const auto found = original_calls_.find(expression);
+				const auto original = found == original_calls_.end()
+					? original_sites_.end()
+					: original_sites_.find(found->second);
+				if (original == original_sites_.end() || current_function_.empty() ||
+					!original->second.cells.at("cc.call_site.v1.caller").value ||
+					row_id(original->second, "caller") != current_function_)
+				{
+					enumeration.call_frontier = true;
+					output_.unresolved.push_back(
+						{"function.call-site-frontier",
+						 observations_.compile_unit,
+						 "supply-original-call-source-and-owner-identity"});
+					return;
+				}
+				if (!enumeration.call_sites.contains(found->second))
+				{
+					retain_call_bytes(found->second.size() + 128U);
+					enumeration.call_sites.insert(found->second);
+				}
+			}
+			std::string evaluation_context(const clang::Expr& expression)
+			{
+				if (unevaluated_depth_ != 0U)
+					return "unevaluated";
+				if (expression.isTypeDependent() || expression.isValueDependent())
+					return "dependent";
+				for (const auto* ancestor : statements_)
+				{
+					if (++category_work_ > 32'000'000U)
+						fail("call-operands", "context-operation-limit");
+					if (llvm::isa<clang::CXXNoexceptExpr,
+								  clang::TypeTraitExpr,
+								  clang::ExpressionTraitExpr,
+								  clang::RequiresExpr,
+								  clang::OffsetOfExpr,
+								  clang::CXXUuidofExpr>(ancestor))
+						return "unevaluated";
+					if (const auto* trait =
+							llvm::dyn_cast<clang::UnaryExprOrTypeTraitExpr>(ancestor))
+						if (trait->getKind() != clang::UETT_SizeOf ||
+							!trait->getTypeOfArgument()->isVariableArrayType())
+							return "unevaluated";
+					if (const auto* typeid_expression =
+							llvm::dyn_cast<clang::CXXTypeidExpr>(ancestor))
+						if (!typeid_expression->isPotentiallyEvaluated())
+							return "unevaluated";
+					if (const auto* call = llvm::dyn_cast<clang::CallExpr>(ancestor))
+						if (call->isUnevaluatedBuiltinCall(unit_.ast()))
+							return "unevaluated";
+				}
+				return "potentially_evaluated";
+			}
+			void update_original(const sdk::relation_descriptor& descriptor,
+								 const sdk::detached_row& original,
+								 fields additions)
+			{
+				auto updated = original;
+				for (auto& [name, cell] : additions)
+				{
+					const auto column = take(descriptor.column(descriptor.id + "." + name));
+					cell.type = column.type;
+					updated.cells.insert_or_assign(column.id, std::move(cell));
+				}
+				check(sdk::validate_row(descriptor, updated));
+				if (descriptor.domain_identity.result_column)
+					check(sdk::validate_domain_identity(descriptor, updated));
+				retain_call_bytes(updated.canonical_form().size() + 128U);
+				const auto key = descriptor.id + row_id(original, "call");
+				const auto found = output_.call_updates.find(key);
+				if (found != output_.call_updates.end() &&
+					found->second.canonical_form() != updated.canonical_form())
+					fail("call-operands", "conflicting-original-call-update");
+				output_.call_updates.insert_or_assign(key, std::move(updated));
+			}
+			void call_target_signature(const clang::Expr& expression,
+									   const std::string& call,
+									   const clang::FunctionDecl* target)
+			{
+				const auto original = original_targets_.find(call);
+				if (!target || original == original_targets_.end())
+					return;
+				target = target->getCanonicalDecl();
+				const auto actual_type = canonical_type(target->getType());
+				const auto& structure = type_structure_.at(actual_type);
+				const auto actual_usr = usr(target);
+				const auto expected_entity = entity(target);
+				const bool complete = !actual_usr.empty() && structure.state == "complete" &&
+					(expected_entity.empty() ||
+					 expected_entity == row_id(original->second, "target"));
+				fields additions{
+					{"target_signature_state",
+					 symbol("cc.target-signature-state/1", complete ? "complete" : "partial")},
+					{"target_signature_profile",
+					 sdk::detached_cell::utf8("clang22-original-target-signature/1")},
+					{"target_canonical_type", id("cc_type_id", actual_type)},
+					{"target_canonical_type_digest", digest_value(structure.digest)},
+					{"target_canonical_type_profile",
+					 sdk::detached_cell::utf8("clang22-structural-type/1")},
+					{"target_structural_signature_digest",
+					 digest_value(take(sdk::semantic_digest(
+						 "cc.entity.structural-signature.v1",
+						 target->getType().getCanonicalType().getAsString())))},
+					{"target_language",
+					 symbol("build.language/1", unit_.ast().getLangOpts().CPlusPlus ? "c++" : "c")},
+					{"target_linkage",
+					 symbol("cc.linkage/1",
+							target->isExternallyVisible() ? "external" : "internal")},
+					{"target_module_domain",
+					 sdk::detached_cell::utf8(target->getOwningModule()
+												  ? target->getOwningModule()->getFullModuleName()
+												  : "<none>")}};
+				if (!actual_usr.empty())
+				{
+					std::vector<std::byte> bytes;
+					retain_call_bytes(actual_usr.size());
+					bytes.reserve(actual_usr.size());
+					for (const auto ch : actual_usr)
+						bytes.push_back(static_cast<std::byte>(ch));
+					additions.emplace("target_usr", sdk::detached_cell::bytes(std::move(bytes)));
+				}
+				else
+					additions.emplace(
+						"target_usr",
+						sdk::detached_cell::unknown({sdk::scalar_kind::bytes, {}, true},
+													"compiler-target-usr-unavailable"));
+				if (!complete)
+					output_.unresolved.push_back(
+						{"call.target-signature-frontier",
+						 call,
+						 "supply-complete-original-target-identity-and-type"});
+				(void)expression;
+				update_original(cc::relations::call_direct_target::descriptor(),
+								original->second,
+								std::move(additions));
+			}
+			void call_operand(const clang::Expr& invocation,
+							  const std::string& call,
+							  const clang::Expr* input,
+							  std::string kind,
+							  std::uint64_t index,
+							  std::optional<std::uint64_t> actual,
+							  std::optional<std::uint64_t> formal,
+							  std::optional<std::uint64_t> written,
+							  std::string origin)
+			{
+				const bool default_argument = input && llvm::isa<clang::CXXDefaultArgExpr>(input);
+				const bool default_initializer =
+					input && llvm::isa<clang::CXXDefaultInitExpr>(input);
+				const bool implicit =
+					default_argument || default_initializer || origin == "implicit_receiver";
+				if (default_argument)
+				{
+					origin = "default_argument";
+					input = llvm::cast<clang::CXXDefaultArgExpr>(input)->getExpr();
+				}
+				else if (default_initializer)
+				{
+					origin = "default_initializer";
+					input = llvm::cast<clang::CXXDefaultInitExpr>(input)->getExpr();
+				}
+				fields value = common();
+				value.emplace("call", id("cc_call_id", call));
+				value.emplace("kind", symbol("cc.call-operand-kind/1", std::move(kind)));
+				value.emplace("index", sdk::detached_cell::unsigned_integer(index));
+				value.emplace("origin", symbol("cc.call-operand-origin/1", std::move(origin)));
+				value.emplace("implicit", sdk::detached_cell::boolean(implicit));
+				value.emplace("default_argument", sdk::detached_cell::boolean(default_argument));
+				if (actual)
+					value.emplace("actual_argument_index",
+								  sdk::detached_cell::unsigned_integer(*actual));
+				if (formal)
+					value.emplace("formal_parameter_index",
+								  sdk::detached_cell::unsigned_integer(*formal));
+				if (written)
+					value.emplace("written_argument_index",
+								  sdk::detached_cell::unsigned_integer(*written));
+				bool complete = input != nullptr;
+				std::string category = "unknown";
+				if (input)
+				{
+					category = input->isTypeDependent() || input->isValueDependent() ? "dependent"
+						: input->isLValue()											 ? "lvalue"
+						: input->isXValue()											 ? "xvalue"
+																					 : "prvalue";
+					const auto source = span(input->getSourceRange(), "expression");
+					if (source)
+						value.emplace("source", id("source_span_id", *source));
+					else
+					{
+						complete = false;
+						value.emplace("source",
+									  sdk::detached_cell::unknown(
+										  {sdk::scalar_kind::typed_id, "source_span_id", true},
+										  "operand-source-unavailable"));
+					}
+					const auto node = syntax_nodes_.find(input);
+					if (node != syntax_nodes_.end() && node->second.size() == 1U)
+						value.emplace("expression", id("syntax_node_id", *node->second.begin()));
+					else
+					{
+						complete = false;
+						value.emplace("expression",
+									  sdk::detached_cell::unknown(
+										  {sdk::scalar_kind::typed_id, "syntax_node_id", true},
+										  "operand-original-expression-unavailable"));
+					}
+					if (!input->getType().isNull())
+						value.emplace("type", id("cc_type_id", canonical_type(input->getType())));
+					else
+					{
+						complete = false;
+						value.emplace("type",
+									  sdk::detached_cell::unknown(
+										  {sdk::scalar_kind::typed_id, "cc_type_id", true},
+										  "operand-type-unavailable"));
+					}
+					const auto* named = input->IgnoreParenImpCasts();
+					const clang::NamedDecl* referenced = nullptr;
+					if (const auto* reference = llvm::dyn_cast<clang::DeclRefExpr>(named))
+						referenced = reference->getDecl();
+					else if (const auto* member = llvm::dyn_cast<clang::MemberExpr>(named))
+						referenced = member->getMemberDecl();
+					if (referenced)
+					{
+						const auto target = entity(referenced);
+						if (!target.empty())
+							value.emplace("referenced_entity", id("cc_entity_id", target));
+						else
+						{
+							complete = false;
+							value.emplace("referenced_entity",
+										  sdk::detached_cell::unknown(
+											  {sdk::scalar_kind::typed_id, "cc_entity_id", true},
+											  "operand-referenced-entity-unavailable"));
+						}
+					}
+					else if (named->isTypeDependent() || named->isValueDependent())
+					{
+						complete = false;
+						value.emplace("referenced_entity",
+									  sdk::detached_cell::unknown(
+										  {sdk::scalar_kind::typed_id, "cc_entity_id", true},
+										  "dependent-operand-reference"));
+					}
+				}
+				value.emplace("value_category", symbol("cc.value-category/1", std::move(category)));
+				const auto context = call_evaluation_.find(&invocation);
+				const auto evaluation =
+					context == call_evaluation_.end() ? "unknown" : context->second;
+				value.emplace("evaluation_state",
+							  symbol("cc.expression-evaluation-state/1", evaluation));
+				if (evaluation == "unknown")
+					complete = false;
+				value.emplace("observation_state",
+							  symbol("cc.call-operand-observation-state/1",
+									 complete ? "complete" : "partial"));
+				if (!complete)
+					value.emplace("reason",
+								  sdk::detached_cell::utf8(
+									  "operand-source-expression-type-or-reference-frontier"));
+				append(make_row(cc::relations::call_operand::descriptor(), std::move(value)));
+			}
+			void finish_calls()
+			{
+				// Pointer order affects work order only. Every detached identity/row order uses
+				// original canonical IDs and relation serialization, never an AST address.
+				for (const auto& [expression, call] : original_calls_)
+				{
+					const auto original = original_sites_.find(call);
+					if (original == original_sites_.end())
+						continue;
+					const auto* function_call = llvm::dyn_cast<clang::CallExpr>(expression);
+					const auto* construction = llvm::dyn_cast<clang::CXXConstructExpr>(expression);
+					if (!function_call && !construction)
+						continue;
+					const auto* target = function_call ? function_call->getDirectCallee()
+													   : construction->getConstructor();
+					const auto actual_count =
+						function_call ? function_call->getNumArgs() : construction->getNumArgs();
+					if (actual_count > 4096U)
+						fail("call-operands", "per-call-slot-limit");
+					const auto* method = llvm::dyn_cast_or_null<clang::CXXMethodDecl>(target);
+					const bool operator_object =
+						method && llvm::isa<clang::CXXOperatorCallExpr>(expression);
+					const bool first_receiver = method && !method->isStatic() &&
+						(method->isExplicitObjectMemberFunction() || operator_object);
+					const bool skipped_object = first_receiver || operator_object;
+					const auto* member_call = llvm::dyn_cast<clang::CXXMemberCallExpr>(expression);
+					const clang::Expr* receiver = first_receiver && actual_count
+						? function_call->getArg(0)
+						: member_call && (!method || !method->isStatic())
+						? member_call->getImplicitObjectArgument()
+						: nullptr;
+					const bool receiver_expected =
+						first_receiver || (member_call && (!method || !method->isStatic()));
+					const auto arguments =
+						actual_count - (skipped_object && actual_count ? 1U : 0U);
+					const bool result = construction ||
+						(!expression->getType().isNull() && !expression->getType()->isVoidType());
+					fields population{
+						{"argument_count", sdk::detached_cell::unsigned_integer(arguments)},
+						{"operand_count",
+						 sdk::detached_cell::unsigned_integer(
+							 arguments + (receiver_expected ? 1U : 0U) + (result ? 1U : 0U))},
+						{"operand_population_state",
+						 symbol("cc.call-operand-population-state/1",
+								skipped_object && actual_count == 0U ? "partial" : "complete")},
+						{"operand_profile",
+						 sdk::detached_cell::utf8("clang22-actual-call-operands/1")}};
+					const auto node = syntax_nodes_.find(expression);
+					if (node != syntax_nodes_.end() && node->second.size() == 1U)
+						population.emplace("expression",
+										   id("syntax_node_id", *node->second.begin()));
+					else
+						population.emplace("expression",
+										   sdk::detached_cell::unknown(
+											   {sdk::scalar_kind::typed_id, "syntax_node_id", true},
+											   "call-original-expression-unavailable"));
+					update_original(cc::relations::call_site::descriptor(),
+									original->second,
+									std::move(population));
+					if (receiver_expected)
+						call_operand(
+							*expression,
+							call,
+							receiver,
+							"receiver",
+							0U,
+							first_receiver ? std::optional<std::uint64_t>{0U} : std::nullopt,
+							method && method->isExplicitObjectMemberFunction()
+								? std::optional<std::uint64_t>{0U}
+								: std::nullopt,
+							first_receiver ? std::optional<std::uint64_t>{0U} : std::nullopt,
+							first_receiver ? "written" : "implicit_receiver");
+					std::uint64_t slot{}, written{};
+					for (unsigned actual = skipped_object && actual_count ? 1U : 0U;
+						 actual < actual_count;
+						 ++actual)
+					{
+						const auto* argument = function_call ? function_call->getArg(actual)
+															 : construction->getArg(actual);
+						const bool injected =
+							llvm::isa<clang::CXXDefaultArgExpr, clang::CXXDefaultInitExpr>(
+								argument);
+						const auto formal = actual -
+							(skipped_object && method && !method->isExplicitObjectMemberFunction()
+								 ? 1U
+								 : 0U);
+						call_operand(*expression,
+									 call,
+									 argument,
+									 "argument",
+									 slot++,
+									 actual,
+									 target && formal < target->getNumParams()
+										 ? std::optional<std::uint64_t>{formal}
+										 : std::nullopt,
+									 injected ? std::nullopt
+											  : std::optional<std::uint64_t>{written++},
+									 "written");
+					}
+					if (result)
+						call_operand(*expression,
+									 call,
+									 expression,
+									 "result",
+									 0U,
+									 std::nullopt,
+									 std::nullopt,
+									 std::nullopt,
+									 "result");
+					call_target_signature(*expression, call, target);
+				}
+			}
 			void retain_population_bytes(std::size_t bytes)
 			{
 				if (bytes > 64U * 1024U * 1024U - population_bytes_)
@@ -2181,6 +2694,10 @@ namespace cxxlens::detail::clang22
 				auto row = make_row(cc::relations::type::descriptor(), std::move(value));
 				const auto result = row_id(row, "type");
 				types_.emplace(type.getAsOpaquePtr(), result);
+				const auto digest = row_id(row, "component_signature_digest");
+				retain_call_bytes(result.size() + digest.size() + 256U);
+				type_structure_.emplace(
+					result, type_structure{digest, structural_complete ? "complete" : "partial"});
 				append(std::move(row));
 				std::uint64_t ordinal{};
 				for (const auto& [role, child, parameter, preimage] : components)
@@ -3803,18 +4320,20 @@ namespace cxxlens::detail::clang22
 			std::map<std::string, sdk::detached_row, std::less<>> rows_;
 			const std::function<void(std::string_view)>& progress_;
 			project_abi_observer abi_observer_;
-			std::string current_function_;
-			struct ast_enumeration
+			const project_original_calls& original_calls_;
+			std::map<std::string, sdk::detached_row, std::less<>> original_sites_,
+				original_targets_;
+			std::map<const clang::FunctionDecl*, fields> pending_function_details_;
+			std::map<const clang::Stmt*, std::set<std::string, std::less<>>> syntax_nodes_;
+			std::map<const clang::Expr*, std::string> call_evaluation_;
+			struct type_structure
 			{
-				const clang::Stmt* body{};
-				std::string function;
-				std::uint64_t nodes{}, unmapped{}, local_variables{};
-				std::uint64_t unmapped_members{};
-				std::set<std::pair<std::string, std::string>> member_accesses;
-				std::uint64_t unmapped_calls{};
-				std::set<std::string, std::less<>> direct_call_sites, direct_call_targets;
-				bool active{}, written_initializer{};
+				std::string digest, state;
 			};
+			std::map<std::string, type_structure, std::less<>> type_structure_;
+			std::size_t call_bytes_{};
+			std::string current_function_;
+			const clang::Stmt* inherited_default_{};
 			std::vector<ast_enumeration> ast_enumerations_;
 			std::map<const clang::FunctionDecl*, fields> pending_bodies_;
 			std::vector<std::string> parents_;
@@ -3835,9 +4354,6 @@ namespace cxxlens::detail::clang22
 			};
 			std::map<std::string, include_census, std::less<>> include_populations_;
 			std::size_t direct_call_bytes_{};
-			std::map<std::pair<std::string, std::string>,
-					 std::vector<std::pair<std::string, std::string>>>
-				direct_call_index_;
 			std::set<const clang::Decl*> observed_record_definitions_;
 			std::set<std::string, std::less<>> record_definition_surfaces_,
 				system_record_definition_surfaces_;
@@ -3929,7 +4445,8 @@ namespace cxxlens::detail::clang22
 							  const provider_worker_v4_ast_observation_batch& observations,
 							  const provider_worker_v4_normalized_output& normalized,
 							  const project_preprocessor_observations& preprocessing,
-							  const std::function<void(std::string_view)>& progress)
+							  const std::function<void(std::string_view)>& progress,
+							  const project_original_calls& original_calls)
 	{
 #if defined(CXXLENS_HAS_CLANG22) && CXXLENS_HAS_CLANG22
 		try
@@ -3945,7 +4462,7 @@ namespace cxxlens::detail::clang22
 			check(closure.validate());
 			check(observations.validate());
 			check(normalized.validate());
-			collector visitor{unit, closure, observations, normalized, progress};
+			collector visitor{unit, closure, observations, normalized, progress, original_calls};
 			if (progress)
 				progress("detaching preprocessor facts");
 			visitor.preprocess(preprocessing);
@@ -3974,6 +4491,7 @@ namespace cxxlens::detail::clang22
 		(void)normalized;
 		(void)preprocessing;
 		(void)progress;
+		(void)original_calls;
 		return sdk::unexpected(
 			sdk::error{"native.unsupported-clang-major", "cpp-facts", "clang-major-22"});
 #endif

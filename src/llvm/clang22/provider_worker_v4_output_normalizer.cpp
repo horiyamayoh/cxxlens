@@ -101,7 +101,7 @@ namespace cxxlens::detail::clang22
 		[[nodiscard]] bool call_kind_requires_direct_target(const std::string_view kind)
 		{
 			return kind == "direct_function" || kind == "direct_member" ||
-				kind == "virtual_member" || kind == "operator";
+				kind == "virtual_member" || kind == "operator" || kind == "constructor";
 		}
 
 		[[nodiscard]] bool call_kind_forbids_direct_target(const std::string_view kind)
@@ -366,6 +366,27 @@ namespace cxxlens::detail::clang22
 				return {};
 			};
 
+			auto scoped_limitation = [&](std::string limitation,
+										 std::string relation) -> sdk::result<void>
+			{
+				add_limitation(output.limitations, limitation);
+				if (!options.capture_original_call_ids)
+					return {};
+				const auto found = output.limitation_relations.find(limitation);
+				if (found != output.limitation_relations.end() &&
+					std::ranges::find(found->second, relation) != found->second.end())
+					return {};
+				const auto bytes = limitation.size() + relation.size() + 256U;
+				if (bytes > options.limits.maximum_output_bytes -
+						std::min(output_bytes, options.limits.maximum_output_bytes))
+					return sdk::unexpected(failure("provider-worker-v4.output-limit",
+												   "limitation-routing",
+												   "maximum-output-bytes"));
+				output_bytes += bytes;
+				output.limitation_relations[std::move(limitation)].push_back(std::move(relation));
+				return {};
+			};
+
 			std::vector<std::size_t> ordered;
 			ordered.reserve(input.observations.size());
 			for (std::size_t index{}; index < input.observations.size(); ++index)
@@ -386,10 +407,19 @@ namespace cxxlens::detail::clang22
 							   "frontend-failed-count:" + std::to_string(input.failed_count));
 			for (const auto& observation : input.observations)
 			{
+				const std::string affected =
+					observation.kind == provider_worker_v4_ast_observation_kind::entity
+					? "cc.entity.v1"
+					: observation.kind == provider_worker_v4_ast_observation_kind::call
+					? "cc.call_direct_target.v1"
+					: "cc.type.v1";
 				if (!observation.exact_equivalence && observation.limitation)
-					add_limitation(output.limitations,
-								   "observation-limitation:" + observation.semantic_key + ":" +
-									   *observation.limitation);
+					if (auto valid =
+							scoped_limitation("observation-limitation:" + observation.semantic_key +
+												  ":" + *observation.limitation,
+											  affected);
+						!valid)
+						return valid;
 				for (const auto field :
 					 {std::string_view{"symbol.identity_confidence"},
 					  std::string_view{"call.direct_callee_identity_confidence"}})
@@ -401,9 +431,12 @@ namespace cxxlens::detail::clang22
 						  observation.kind == provider_worker_v4_ast_observation_kind::entity &&
 						  entity_field(observation, "symbol.kind") == "parameter" &&
 						  observation.semantic_key.starts_with("clang-parameter-slot:")))
-						add_limitation(output.limitations,
-									   "identity-confidence:" + confidence->second + ":" +
-										   observation.semantic_key);
+						if (auto valid =
+								scoped_limitation("identity-confidence:" + confidence->second +
+													  ":" + observation.semantic_key,
+												  affected);
+							!valid)
+							return valid;
 				}
 			}
 
@@ -433,8 +466,10 @@ namespace cxxlens::detail::clang22
 											return !compatible_redeclaration(*selected, *candidate);
 										}))
 				{
-					add_limitation(output.limitations,
-								   "incompatible-redeclaration:" + semantic_key);
+					if (auto valid = scoped_limitation("incompatible-redeclaration:" + semantic_key,
+													   "cc.entity.v1");
+						!valid)
+						return valid;
 					add_unresolved(output.unresolved,
 								   "provider.entity-redeclaration-incompatible",
 								   semantic_key,
@@ -457,9 +492,13 @@ namespace cxxlens::detail::clang22
 						observation.kind == provider_worker_v4_ast_observation_kind::entity
 						? "entity"
 						: "call";
-					add_limitation(output.limitations,
-								   "source-authority-unavailable:" + std::string{kind} + ":" +
-									   observation.semantic_key);
+					if (auto valid = scoped_limitation(
+							"source-authority-unavailable:" + std::string{kind} + ":" +
+								observation.semantic_key,
+							kind == std::string_view{"entity"} ? "cc.entity.v1"
+															   : "cc.call_site.v1");
+						!valid)
+						return valid;
 					add_unresolved(output.unresolved,
 								   "provider.source-unavailable",
 								   observation.semantic_key,
@@ -551,6 +590,22 @@ namespace cxxlens::detail::clang22
 				auto call = row_string(*site, "cc.call_site.v1.call");
 				if (!call)
 					return sdk::unexpected(std::move(call.error()));
+				if (options.capture_original_call_ids)
+				{
+					const auto key = observation.canonical_form();
+					const auto bytes = key.size() + call->size() + 192U;
+					if (bytes > options.limits.maximum_output_bytes -
+							std::min(output_bytes, options.limits.maximum_output_bytes))
+						return sdk::unexpected(failure("provider-worker-v4.output-limit",
+													   "call-bindings",
+													   "maximum-output-bytes"));
+					output_bytes += bytes;
+					const auto [bound, inserted] = output.original_call_ids.emplace(key, *call);
+					if (!inserted && bound->second != *call)
+						return sdk::unexpected(failure("provider-worker-v4.output-invalid",
+													   "call-bindings",
+													   "conflicting-original-call"));
+				}
 				if (auto valid = append_row(1U, std::move(*site)); !valid)
 					return valid;
 
@@ -707,6 +762,11 @@ namespace cxxlens::detail::clang22
 			if (auto valid = batch.validate(); !valid)
 				return valid;
 		}
+		for (const auto& [key, call] : original_call_ids)
+			if (!valid_text(key) || !sdk::validate_strong_id(call))
+				return sdk::unexpected(failure("provider-worker-v4.output-invalid",
+											   "call-bindings",
+											   "original-call-identity"));
 		for (const auto& item : unresolved)
 			if (!item.code.starts_with("provider.") || !valid_text(item.subject) ||
 				(item.detail.find('\0') != std::string::npos) ||
@@ -723,6 +783,17 @@ namespace cxxlens::detail::clang22
 		for (const auto& limitation : limitations)
 			if (!valid_text(limitation))
 				return sdk::unexpected(failure("provider-worker-v4.output-invalid", "limitations"));
+		for (const auto& [limitation, relations] : limitation_relations)
+		{
+			if (!std::ranges::binary_search(limitations, limitation) || relations.empty())
+				return sdk::unexpected(
+					failure("provider-worker-v4.output-invalid", "limitation-routing"));
+			for (const auto& relation : relations)
+				if (relation != "cc.entity.v1" && relation != "cc.call_site.v1" &&
+					relation != "cc.call_direct_target.v1" && relation != "cc.type.v1")
+					return sdk::unexpected(
+						failure("provider-worker-v4.output-invalid", "limitation-relation"));
+		}
 		for (std::size_t index{1U}; index < limitations.size(); ++index)
 			if (limitations[index - 1U] >= limitations[index])
 				return sdk::unexpected(failure(
