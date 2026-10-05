@@ -172,11 +172,14 @@ namespace cxxlens::sdk::query
 				retain(from.size() * sizeof(std::size_t));
 				into.insert(into.end(), from.begin(), from.end());
 			}
-			std::size_t estimate(const annotated_row& row)
+			std::size_t estimate(const annotated_row& row, bool encoding = true)
 			{
 				std::size_t total = 2048;
 				const auto add = [&](std::size_t n, std::size_t factor = 8U)
 				{
+					if (!encoding)
+						factor = 2U;
+					work(n);
 					work();
 					if (total > limits.maximum_retained_bytes ||
 						n > (limits.maximum_retained_bytes - total) / factor)
@@ -250,7 +253,8 @@ namespace cxxlens::sdk::query
 		{
 			std::size_t group;
 			const annotated_row* row;
-			std::string canonical, payload;
+			std::string canonical;
+			std::size_t payload_bytes{};
 		};
 		struct projection
 		{
@@ -260,7 +264,7 @@ namespace cxxlens::sdk::query
 			std::array<std::map<identity, refs>, 13> maps;
 			std::map<identity, refs> declaration_sources, detail_sources, scope_operations,
 				function_bodies, function_syntax, function_details, body_nodes, type_members, sites;
-			std::vector<std::string> payloads;
+			std::vector<std::size_t> payloads;
 			std::map<identity, std::pair<finite_population_state, refs>> site_states;
 			projection(budget& bounds, function_action_input raw) : b(bounds), input(raw) {}
 			const annotated_row& row(std::size_t i) const
@@ -286,8 +290,37 @@ namespace cxxlens::sdk::query
 				for (auto i : r)
 				{
 					b.work();
-					if (payloads[i] != payloads[r.front()])
+					const auto& left = row(i).values;
+					const auto& right = row(r.front()).values;
+					if (left.size() != right.size())
 						return false;
+					auto x = left.begin(), y = right.begin();
+					for (; x != left.end(); ++x, ++y)
+					{
+						for (const auto* value : {&*x, &*y})
+						{
+							b.work(value->first.size() + value->second.type.parameter.size() + 1U);
+							if (value->second.unknown_reason)
+								b.work(value->second.unknown_reason->size());
+							if (value->second.value)
+							{
+								if (const auto* text =
+										std::get_if<std::string>(&*value->second.value))
+									b.work(text->size());
+								if (const auto* bytes =
+										std::get_if<std::vector<std::byte>>(&*value->second.value))
+									b.work(bytes->size());
+							}
+						}
+						if (x->first != y->first ||
+							x->second.type.scalar != y->second.type.scalar ||
+							x->second.type.parameter != y->second.type.parameter ||
+							x->second.type.optional != y->second.type.optional ||
+							x->second.state != y->second.state ||
+							x->second.value != y->second.value ||
+							x->second.unknown_reason != y->second.unknown_reason)
+							return false;
+					}
 				}
 				return true;
 			}
@@ -666,7 +699,7 @@ namespace cxxlens::sdk::query
 			{
 				const auto& native = row(original.front());
 				observed_function_action value;
-				b.retain(sizeof(value) + payloads[original.front()].size());
+				b.retain(sizeof(value) + payloads[original.front()]);
 				value.operation = text(native, "operation");
 				value.site = text(native, "site");
 				value.scope_declaration = text(native, "scope_declaration");
@@ -1351,7 +1384,7 @@ namespace cxxlens::sdk::query
 							(!callable ||
 							 !std::ranges::binary_search(flags, "declaration_population_admitted")))
 							continue;
-						b.retain(sizeof(scope_key) + payloads[i].size() + 128);
+						b.retain(sizeof(scope_key) + payloads[i] + 128);
 						scopes_by_source[{function,
 										  text(detail, "compile_unit"),
 										  text(detail, "source"),
@@ -1369,7 +1402,7 @@ namespace cxxlens::sdk::query
 						fail("populations", "limit-exceeded", "sdk.action-budget");
 					const auto& detail = row(r.front());
 					function_action_population value;
-					b.retain(sizeof(value) + payloads[r.front()].size());
+					b.retain(sizeof(value) + payloads[r.front()]);
 					value.function = owner[0];
 					value.compile_unit = owner[1];
 					value.source_span = owner[2];
@@ -1516,7 +1549,7 @@ namespace cxxlens::sdk::query
 					if (output.populations.size() >= b.limits.maximum_populations)
 						fail("populations", "limit-exceeded", "sdk.action-budget");
 					function_action_population value;
-					b.retain(sizeof(value) + payloads[r.front()].size());
+					b.retain(sizeof(value) + payloads[r.front()]);
 					value.declaration = id[0];
 					value.function = text(declaration, "entity");
 					value.source_span = text(declaration, "source");
@@ -1991,16 +2024,35 @@ namespace cxxlens::sdk::query
 														 }))
 									return;
 							}
-							b.retain(b.estimate(row));
-							std::string payload;
+							// Retain the detached original row once. Equality below compares
+							// original typed cells, so no serialized payload copy is needed.
+							b.retain(b.estimate(row, false));
+							const auto temporary = b.estimate(row);
+							if (temporary > (limits.maximum_retained_bytes - b.retained) / 2U)
+								fail("canonical-temporary", "limit-exceeded", "sdk.action-budget");
+							std::size_t payload_bytes = 128U;
 							for (const auto& [name, value] : row.values)
-								payload += name + '=' + value.canonical_form() + '\n';
-							const auto canonical = row.canonical_form();
+							{
+								b.work();
+								payload_bytes += name.size() + value.type.parameter.size() + 128U;
+								if (value.unknown_reason)
+									payload_bytes += value.unknown_reason->size() * 2U;
+								if (value.value)
+								{
+									if (const auto* text = std::get_if<std::string>(&*value.value))
+										payload_bytes += text->size() * 2U;
+									if (const auto* bytes =
+											std::get_if<std::vector<std::byte>>(&*value.value))
+										payload_bytes += bytes->size() * 2U;
+								}
+							}
+							auto canonical = row.canonical_form();
+							b.retain(canonical.size() * 2U + sizeof(entry));
 							b.charge(b.evidence,
 									 canonical.size(),
 									 limits.maximum_evidence_bytes,
 									 "evidence-bytes");
-							entries.push_back({group, &row, canonical, std::move(payload)});
+							entries.push_back({group, &row, std::move(canonical), payload_bytes});
 						});
 				}
 				std::ranges::sort(entries,
@@ -2014,7 +2066,7 @@ namespace cxxlens::sdk::query
 					b.work();
 					const auto i = work.output.evidence.size();
 					work.output.evidence.push_back({std::string{relations[e.group]}, *e.row});
-					work.payloads.push_back(std::move(e.payload));
+					work.payloads.push_back(e.payload_bytes);
 					const auto id = text(*e.row, identifiers[e.group]);
 					if (id.empty())
 						fail(relations[e.group], "identity-missing");

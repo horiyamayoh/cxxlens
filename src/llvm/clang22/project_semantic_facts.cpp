@@ -71,6 +71,8 @@
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/PrettyStackTrace.h>
 #include <llvm/Support/Signals.h>
+
+#include "original_builtin_kind.hpp"
 #endif
 
 namespace cxxlens::detail::clang22
@@ -5579,6 +5581,33 @@ namespace cxxlens::detail::clang22
 					 symbol("cc.type-structure-state/1",
 							structural_complete ? "complete" : "partial")},
 					{"spelling", sdk::detached_cell::utf8(type.getAsString())}};
+				if (const auto builtin = observe_original_builtin_kind(type); !builtin.kind.empty())
+				{
+					value.emplace("builtin_kind",
+								  symbol("cc.builtin-kind/1", std::string{builtin.kind}));
+					value.emplace("builtin_profile",
+								  sdk::detached_cell::utf8("clang22-original-builtin-type/1"));
+					value.emplace(
+						"builtin_state",
+						symbol("cc.builtin-observation-state/1", std::string{builtin.state}));
+				}
+				const auto integer = observe_original_integer_representation(unit_.ast(), type);
+				value.emplace(
+					"integer_profile",
+					sdk::detached_cell::utf8("clang22-original-integer-representation/1"));
+				value.emplace(
+					"integer_state",
+					symbol("cc.integer-representation-state/1", std::string{integer.state}));
+				if (integer.bit_width && integer.signed_value)
+				{
+					value.emplace("integer_bit_width",
+								  sdk::detached_cell::unsigned_integer(*integer.bit_width));
+					value.emplace("integer_signed",
+								  sdk::detached_cell::boolean(*integer.signed_value));
+				}
+				if (!integer.underlying_type.isNull())
+					value.emplace("integer_underlying_type",
+								  id("cc_type_id", canonical_type(integer.underlying_type)));
 				if (!nominal_id.empty())
 					value.emplace("nominal_entity", id("cc_entity_id", nominal_id));
 				auto row = make_row(cc::relations::type::descriptor(), std::move(value));

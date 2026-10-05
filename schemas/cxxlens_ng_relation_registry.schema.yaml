@@ -259,7 +259,7 @@ properties:
           uniqueItems: true
           items:
             type: string
-            pattern: ^[a-z][a-z0-9_.-]+$
+            pattern: ^[A-Za-z][A-Za-z0-9_.-]+$
         unknown_value:
           enum:
           - preserve

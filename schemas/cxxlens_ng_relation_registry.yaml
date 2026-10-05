@@ -1,6 +1,6 @@
 schema: cxxlens.relation-registry.v1
 kind: relation-registry
-document_version: 1.19.0
+document_version: 1.20.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -9,7 +9,7 @@ authority:
   owner: steward.ng-relations
 compatibility:
   version_axis: relation-descriptor
-  current: 1.19.0
+  current: 1.20.0
   semantic_major_policy: exact-major-compatible-minor
   unknown_optional_columns: preserve
   unknown_open_symbols: preserve
@@ -130,6 +130,50 @@ api_projection:
     column_operand: column_id
   parity: exact-id-equality
 symbol_contracts:
+- id: cc.builtin-kind/1
+  openness: open
+  values:
+  - Bool
+  - Void
+  - Char_U
+  - Char_S
+  - UChar
+  - SChar
+  - UShort
+  - Short
+  - UInt
+  - Int
+  - ULong
+  - Long
+  - ULongLong
+  - LongLong
+  - UInt128
+  - Int128
+  - Float
+  - Double
+  - LongDouble
+  - Dependent
+  - Overload
+  unknown_value: preserve
+- id: cc.builtin-observation-state/1
+  openness: open
+  values:
+  - complete
+  - partial
+  - unknown
+  - unavailable
+  - unsupported
+  unknown_value: preserve
+- id: cc.integer-representation-state/1
+  openness: open
+  values:
+  - complete
+  - partial
+  - unknown
+  - unavailable
+  - unsupported
+  - not_applicable
+  unknown_value: preserve
 - id: cc.definition-role/1
   openness: open
   values:
@@ -1613,13 +1657,13 @@ relations:
       - cc.declaration.v1.identifier_profile
 - descriptor_id: cc.type.v1
   name: cc.type
-  version: 1.1.0
+  version: 1.2.0
   semantic_major: 1
   semantics: cc.type/1
   owner_namespace: cxxlens.standard.cc
   stability: versioned
   profile: NG0
-  summary: Structural type identity with nominal entities breaking recursive cycles.
+  summary: Structural type identity with nominal entities breaking recursive cycles and independent original builtin and integer representation facets.
   cpp_projection: installed-static
   generated_cpp_tag: cxxlens::cc::relations::type
   claim:
@@ -1691,17 +1735,79 @@ relations:
     required: false
     identity_role: authoritative_payload
     semantic: Complete means the named grammar represents this constructor; partial preserves unsupported or dependent structure without claiming equality.
+  - id: cc.type.v1.builtin_kind
+    name: builtin_kind
+    type: optional<open_symbol<cc.builtin-kind/1>>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Exact Clang22 BuiltinType enum discriminator from the actual canonical compiler type. Bool is distinct from integer widths, aliases, pointer constructors and IntegralToBoolean conversions.
+  - id: cc.type.v1.builtin_profile
+    name: builtin_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+    semantic: clang22-original-builtin-type/1. Applies only to actual compiler BuiltinType, independently of the opaque structural grammar.
+  - id: cc.type.v1.builtin_state
+    name: builtin_state
+    type: optional<open_symbol<cc.builtin-observation-state/1>>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Complete means actual nondependent nonplaceholder builtin classification. Dependent is unknown, compiler placeholder is partial, unknown compiler discriminator unsupported. Absent legacy facet is unknown and never inferred from spelling, width or structural bytes.
+  - id: cc.type.v1.integer_bit_width
+    name: integer_bit_width
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Actual ASTContext::getIntWidth of canonical integer type or compiler-bound enum underlying type, excluding padding bits. Not object sizeof and not a Bool value-domain bound.
+  - id: cc.type.v1.integer_signed
+    name: integer_signed
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Actual canonical integer representation signedness, including original _BitInt and enum underlying representation. Enum enumerator-domain completeness remains independent.
+  - id: cc.type.v1.integer_profile
+    name: integer_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+    semantic: clang22-original-integer-representation/1. Reused through original syntax.canonical_type and cast operand_type references; no duplicated expression grammar.
+  - id: cc.type.v1.integer_state
+    name: integer_state
+    type: optional<open_symbol<cc.integer-representation-state/1>>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Complete requires original nondependent integer value width and signedness; noninteger compiler types are not_applicable; dependent/missing enum underlying type is unknown; placeholder partial; unsupported classifier unsupported. Missing legacy facet remains unknown.
+  - id: cc.type.v1.integer_underlying_type
+    name: integer_underlying_type
+    type: optional<typed_id<cc_type_id>>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Actual EnumDecl::getIntegerType canonical association when this original type is enum. No enum value-domain or implicit conversion identity is inferred.
   row_constraints:
     all_or_none:
     - - cc.type.v1.structure_profile
       - cc.type.v1.structure_preimage
       - cc.type.v1.structure_state
+    - - cc.type.v1.builtin_kind
+      - cc.type.v1.builtin_profile
+      - cc.type.v1.builtin_state
+    - - cc.type.v1.integer_bit_width
+      - cc.type.v1.integer_signed
+    - - cc.type.v1.integer_profile
+      - cc.type.v1.integer_state
   references:
   - source_columns:
     - cc.type.v1.nominal_entity
     target_relation: cc.entity
     target_columns:
     - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.type.v1.integer_underlying_type
+    target_relation: cc.type
+    target_columns:
+    - cc.type.v1.type
     strength: soft_semantic
     on_missing: unresolved
   merge:
@@ -1715,6 +1821,14 @@ relations:
     - cc.type.v1.structure_profile
     - cc.type.v1.structure_preimage
     - cc.type.v1.structure_state
+    - cc.type.v1.builtin_kind
+    - cc.type.v1.builtin_profile
+    - cc.type.v1.builtin_state
+    - cc.type.v1.integer_bit_width
+    - cc.type.v1.integer_signed
+    - cc.type.v1.integer_profile
+    - cc.type.v1.integer_state
+    - cc.type.v1.integer_underlying_type
   partition:
     suggested_keys:
     - cc.type.v1.type

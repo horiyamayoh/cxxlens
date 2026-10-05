@@ -1225,6 +1225,13 @@ target_link_libraries(cxxlens-unit-sdk-abi-surfaces PRIVATE cxxlens::query)
 add_test(NAME unit.sdk-abi-surfaces COMMAND cxxlens-unit-sdk-abi-surfaces)
 set_tests_properties(unit.sdk-abi-surfaces
                      PROPERTIES LABELS "unit;sdk;query;abi;budget;cancellation")
+cxxlens_add_test_executable(cxxlens-unit-sdk-scalar-types
+                            unit/sdk/scalar_types_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-scalar-types PRIVATE cxxlens::query)
+add_test(NAME unit.sdk-scalar-types COMMAND cxxlens-unit-sdk-scalar-types)
+set_tests_properties(unit.sdk-scalar-types
+                     PROPERTIES LABELS "unit;sdk;type;scalar;contract;negative")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-record-surfaces
                             unit/sdk/record_surfaces_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-record-surfaces PRIVATE cxxlens::query)
@@ -1899,6 +1906,16 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
       adapter.clang22-definition-roles
       PROPERTIES LABELS "adapter;clang22;application;flow;bounded" TIMEOUT 600)
     add_test(
+      NAME adapter.clang22-scalar-types
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/clang22/scalar_types_test.py"
+        "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}")
+    set_tests_properties(
+      adapter.clang22-scalar-types
+      PROPERTIES LABELS "adapter;clang22;application;type;scalar;bounded"
+                 TIMEOUT 240)
+    add_test(
       NAME adapter.clang22-build-health
       COMMAND
         "${Python3_EXECUTABLE}"
@@ -2178,6 +2195,19 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
              COMMAND cxxlens-clang22-template-domains-native)
     set_tests_properties(adapter.clang22-template-domains-native
                          PROPERTIES LABELS "adapter;clang22;native;compiler")
+  endif()
+
+  if(CXXLENS_CLANG22_AVAILABLE)
+    cxxlens_add_test_executable(cxxlens-clang22-scalar-types-native
+                                adapter/clang22/scalar_types_native_test.cpp)
+    target_link_libraries(cxxlens-clang22-scalar-types-native
+                          PRIVATE cxxlens_clang22_worker_core)
+    cxxlens_configure_clang22(cxxlens-clang22-scalar-types-native)
+    add_test(NAME adapter.clang22-scalar-types-native
+             COMMAND cxxlens-clang22-scalar-types-native)
+    set_tests_properties(
+      adapter.clang22-scalar-types-native
+      PROPERTIES LABELS "adapter;clang22;native;type;scalar;negative")
   endif()
 
   cxxlens_add_test_executable(cxxlens-clang22-source-closure-native

@@ -20,12 +20,12 @@ namespace cxxlens::cc::relations
 				sdk::relation_descriptor output;
 				output.id = "cc.type.v1";
 				output.name = "cc.type";
-				output.version = {1U, 1U, 0U};
+				output.version = {1U, 2U, 0U};
 				output.semantic_major = 1U;
 				output.semantics = "cc.type/1";
 				output.owner_namespace = "cxxlens.standard.cc";
-				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.type.v1.constructor","cc.type.v1.nominal_entity","cc.type.v1.component_signature_digest","cc.type.v1.qualifiers","cc.type.v1.dependent"],"result_column":"cc.type.v1.type"},"interpretation_required":true,"key":["cc.type.v1.type"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.type.v1.type","identity_role":"claim_key","name":"type","required":true,"type":"typed_id<cc_type_id>"},{"id":"cc.type.v1.constructor","identity_role":"authoritative_payload","name":"constructor","required":true,"type":"open_symbol<cc.type-constructor/1>"},{"id":"cc.type.v1.nominal_entity","identity_role":"authoritative_payload","name":"nominal_entity","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.type.v1.component_signature_digest","identity_role":"authoritative_payload","name":"component_signature_digest","required":true,"type":"digest"},{"id":"cc.type.v1.qualifiers","identity_role":"authoritative_payload","name":"qualifiers","required":true,"type":"set<open_symbol<cc.type-qualifier/1>>"},{"id":"cc.type.v1.dependent","identity_role":"authoritative_payload","name":"dependent","required":true,"type":"bool"},{"id":"cc.type.v1.spelling","identity_role":"display","name":"spelling","required":false,"type":"optional<utf8_string>"},{"id":"cc.type.v1.structure_profile","identity_role":"authoritative_payload","name":"structure_profile","required":false,"semantic":"Named compiler structural encoding; never interpret an opaque digest as a type grammar.","type":"optional<utf8_string>"},{"id":"cc.type.v1.structure_preimage","identity_role":"authoritative_payload","name":"structure_preimage","required":false,"semantic":"Exact input bytes of component_signature_digest under structure_profile; child types remain references to retained type rows.","type":"optional<utf8_string>"},{"id":"cc.type.v1.structure_state","identity_role":"authoritative_payload","name":"structure_state","required":false,"semantic":"Complete means the named grammar represents this constructor; partial preserves unsupported or dependent structure without claiming equality.","type":"optional<open_symbol<cc.type-structure-state/1>>"}],"coverage":{"execution_domain":"cc.type.compile-unit"},"descriptor_id":"cc.type.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::type","indexes":[["cc.type.v1.constructor"],["cc.type.v1.nominal_entity"]],"merge":{"conflict_columns":["cc.type.v1.component_signature_digest","cc.type.v1.constructor","cc.type.v1.dependent","cc.type.v1.nominal_entity","cc.type.v1.qualifiers","cc.type.v1.structure_preimage","cc.type.v1.structure_profile","cc.type.v1.structure_state"],"mode":"functional_assertion"},"name":"cc.type","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.type.v1.type"]},"profile":"NG0","provenance":{"minimum":"canonicalization"},"references":[{"on_missing":"unresolved","source_columns":["cc.type.v1.nominal_entity"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"}],"row_constraints":{"all_or_none":[["cc.type.v1.structure_preimage","cc.type.v1.structure_profile","cc.type.v1.structure_state"]]},"semantic_major":1,"semantics":"cc.type/1","stability":"versioned","summary":"Structural type identity with nominal entities breaking recursive cycles.","version":"1.1.0"})cxxlens";
-				output.contract_digest = "sha256:25af522b82a5498393964fc93fef6d9dd14b967c8329916707efb6a9b199eeb5";
+				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.type.v1.constructor","cc.type.v1.nominal_entity","cc.type.v1.component_signature_digest","cc.type.v1.qualifiers","cc.type.v1.dependent"],"result_column":"cc.type.v1.type"},"interpretation_required":true,"key":["cc.type.v1.type"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.type.v1.type","identity_role":"claim_key","name":"type","required":true,"type":"typed_id<cc_type_id>"},{"id":"cc.type.v1.constructor","identity_role":"authoritative_payload","name":"constructor","required":true,"type":"open_symbol<cc.type-constructor/1>"},{"id":"cc.type.v1.nominal_entity","identity_role":"authoritative_payload","name":"nominal_entity","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.type.v1.component_signature_digest","identity_role":"authoritative_payload","name":"component_signature_digest","required":true,"type":"digest"},{"id":"cc.type.v1.qualifiers","identity_role":"authoritative_payload","name":"qualifiers","required":true,"type":"set<open_symbol<cc.type-qualifier/1>>"},{"id":"cc.type.v1.dependent","identity_role":"authoritative_payload","name":"dependent","required":true,"type":"bool"},{"id":"cc.type.v1.spelling","identity_role":"display","name":"spelling","required":false,"type":"optional<utf8_string>"},{"id":"cc.type.v1.structure_profile","identity_role":"authoritative_payload","name":"structure_profile","required":false,"semantic":"Named compiler structural encoding; never interpret an opaque digest as a type grammar.","type":"optional<utf8_string>"},{"id":"cc.type.v1.structure_preimage","identity_role":"authoritative_payload","name":"structure_preimage","required":false,"semantic":"Exact input bytes of component_signature_digest under structure_profile; child types remain references to retained type rows.","type":"optional<utf8_string>"},{"id":"cc.type.v1.structure_state","identity_role":"authoritative_payload","name":"structure_state","required":false,"semantic":"Complete means the named grammar represents this constructor; partial preserves unsupported or dependent structure without claiming equality.","type":"optional<open_symbol<cc.type-structure-state/1>>"},{"id":"cc.type.v1.builtin_kind","identity_role":"authoritative_payload","name":"builtin_kind","required":false,"semantic":"Exact Clang22 BuiltinType enum discriminator from the actual canonical compiler type. Bool is distinct from integer widths, aliases, pointer constructors and IntegralToBoolean conversions.","type":"optional<open_symbol<cc.builtin-kind/1>>"},{"id":"cc.type.v1.builtin_profile","identity_role":"authoritative_payload","name":"builtin_profile","required":false,"semantic":"clang22-original-builtin-type/1. Applies only to actual compiler BuiltinType, independently of the opaque structural grammar.","type":"optional<utf8_string>"},{"id":"cc.type.v1.builtin_state","identity_role":"authoritative_payload","name":"builtin_state","required":false,"semantic":"Complete means actual nondependent nonplaceholder builtin classification. Dependent is unknown, compiler placeholder is partial, unknown compiler discriminator unsupported. Absent legacy facet is unknown and never inferred from spelling, width or structural bytes.","type":"optional<open_symbol<cc.builtin-observation-state/1>>"},{"id":"cc.type.v1.integer_bit_width","identity_role":"authoritative_payload","name":"integer_bit_width","required":false,"semantic":"Actual ASTContext::getIntWidth of canonical integer type or compiler-bound enum underlying type, excluding padding bits. Not object sizeof and not a Bool value-domain bound.","type":"optional<uint64>"},{"id":"cc.type.v1.integer_signed","identity_role":"authoritative_payload","name":"integer_signed","required":false,"semantic":"Actual canonical integer representation signedness, including original _BitInt and enum underlying representation. Enum enumerator-domain completeness remains independent.","type":"optional<bool>"},{"id":"cc.type.v1.integer_profile","identity_role":"authoritative_payload","name":"integer_profile","required":false,"semantic":"clang22-original-integer-representation/1. Reused through original syntax.canonical_type and cast operand_type references; no duplicated expression grammar.","type":"optional<utf8_string>"},{"id":"cc.type.v1.integer_state","identity_role":"authoritative_payload","name":"integer_state","required":false,"semantic":"Complete requires original nondependent integer value width and signedness; noninteger compiler types are not_applicable; dependent/missing enum underlying type is unknown; placeholder partial; unsupported classifier unsupported. Missing legacy facet remains unknown.","type":"optional<open_symbol<cc.integer-representation-state/1>>"},{"id":"cc.type.v1.integer_underlying_type","identity_role":"authoritative_payload","name":"integer_underlying_type","required":false,"semantic":"Actual EnumDecl::getIntegerType canonical association when this original type is enum. No enum value-domain or implicit conversion identity is inferred.","type":"optional<typed_id<cc_type_id>>"}],"coverage":{"execution_domain":"cc.type.compile-unit"},"descriptor_id":"cc.type.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::type","indexes":[["cc.type.v1.constructor"],["cc.type.v1.nominal_entity"]],"merge":{"conflict_columns":["cc.type.v1.builtin_kind","cc.type.v1.builtin_profile","cc.type.v1.builtin_state","cc.type.v1.component_signature_digest","cc.type.v1.constructor","cc.type.v1.dependent","cc.type.v1.integer_bit_width","cc.type.v1.integer_profile","cc.type.v1.integer_signed","cc.type.v1.integer_state","cc.type.v1.integer_underlying_type","cc.type.v1.nominal_entity","cc.type.v1.qualifiers","cc.type.v1.structure_preimage","cc.type.v1.structure_profile","cc.type.v1.structure_state"],"mode":"functional_assertion"},"name":"cc.type","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.type.v1.type"]},"profile":"NG0","provenance":{"minimum":"canonicalization"},"references":[{"on_missing":"unresolved","source_columns":["cc.type.v1.integer_underlying_type"],"strength":"soft_semantic","target_columns":["cc.type.v1.type"],"target_relation":"cc.type"},{"on_missing":"unresolved","source_columns":["cc.type.v1.nominal_entity"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"}],"row_constraints":{"all_or_none":[["cc.type.v1.builtin_kind","cc.type.v1.builtin_profile","cc.type.v1.builtin_state"],["cc.type.v1.integer_bit_width","cc.type.v1.integer_signed"],["cc.type.v1.integer_profile","cc.type.v1.integer_state"],["cc.type.v1.structure_preimage","cc.type.v1.structure_profile","cc.type.v1.structure_state"]]},"semantic_major":1,"semantics":"cc.type/1","stability":"versioned","summary":"Structural type identity with nominal entities breaking recursive cycles and independent original builtin and integer representation facets.","version":"1.2.0"})cxxlens";
+				output.contract_digest = "sha256:4646415f01d81bc090b15837b27f92037ed3c6ed7c60c75b632df73658184b52";
 				output.columns = {
 					{"cc.type.v1.type", "type", {sdk::scalar_kind::typed_id, "cc_type_id", false}, true, sdk::column_role::claim_key},
 					{"cc.type.v1.constructor", "constructor", {sdk::scalar_kind::open_symbol, "cc.type-constructor/1", false}, true, sdk::column_role::authoritative_payload},
@@ -37,6 +37,14 @@ namespace cxxlens::cc::relations
 					{"cc.type.v1.structure_profile", "structure_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.type.v1.structure_preimage", "structure_preimage", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.type.v1.structure_state", "structure_state", {sdk::scalar_kind::open_symbol, "cc.type-structure-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.type.v1.builtin_kind", "builtin_kind", {sdk::scalar_kind::open_symbol, "cc.builtin-kind/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.type.v1.builtin_profile", "builtin_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.type.v1.builtin_state", "builtin_state", {sdk::scalar_kind::open_symbol, "cc.builtin-observation-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.type.v1.integer_bit_width", "integer_bit_width", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.type.v1.integer_signed", "integer_signed", {sdk::scalar_kind::boolean, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.type.v1.integer_profile", "integer_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.type.v1.integer_state", "integer_state", {sdk::scalar_kind::open_symbol, "cc.integer-representation-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.type.v1.integer_underlying_type", "integer_underlying_type", {sdk::scalar_kind::typed_id, "cc_type_id", true}, false, sdk::column_role::authoritative_payload},
 				};
 				output.domain_identity.result_column = "cc.type.v1.type";
 				output.domain_identity.projection = {
@@ -51,13 +59,22 @@ namespace cxxlens::cc::relations
 					"cc.type.v1.type",
 				};
 				output.references = {
+					{{"cc.type.v1.integer_underlying_type"}, "cc.type", {"cc.type.v1.type"}, sdk::reference_strength::soft_semantic},
 					{{"cc.type.v1.nominal_entity"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic},
 				};
 				output.merge = sdk::merge_mode::functional_assertion;
 				output.conflict_columns = {
+					"cc.type.v1.builtin_kind",
+					"cc.type.v1.builtin_profile",
+					"cc.type.v1.builtin_state",
 					"cc.type.v1.component_signature_digest",
 					"cc.type.v1.constructor",
 					"cc.type.v1.dependent",
+					"cc.type.v1.integer_bit_width",
+					"cc.type.v1.integer_profile",
+					"cc.type.v1.integer_signed",
+					"cc.type.v1.integer_state",
+					"cc.type.v1.integer_underlying_type",
 					"cc.type.v1.nominal_entity",
 					"cc.type.v1.qualifiers",
 					"cc.type.v1.structure_preimage",
@@ -161,6 +178,78 @@ namespace cxxlens::cc::relations
 			[[nodiscard]] static sdk::column_ref ref()
 			{
 				return {type::descriptor().id, "cc.type.v1.structure_state", {sdk::scalar_kind::open_symbol, "cc.type-structure-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.type.v1.builtin_kind`. */
+		struct builtin_kind
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {type::descriptor().id, "cc.type.v1.builtin_kind", {sdk::scalar_kind::open_symbol, "cc.builtin-kind/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.type.v1.builtin_profile`. */
+		struct builtin_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {type::descriptor().id, "cc.type.v1.builtin_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.type.v1.builtin_state`. */
+		struct builtin_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {type::descriptor().id, "cc.type.v1.builtin_state", {sdk::scalar_kind::open_symbol, "cc.builtin-observation-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.type.v1.integer_bit_width`. */
+		struct integer_bit_width
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {type::descriptor().id, "cc.type.v1.integer_bit_width", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.type.v1.integer_signed`. */
+		struct integer_signed
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {type::descriptor().id, "cc.type.v1.integer_signed", {sdk::scalar_kind::boolean, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.type.v1.integer_profile`. */
+		struct integer_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {type::descriptor().id, "cc.type.v1.integer_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.type.v1.integer_state`. */
+		struct integer_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {type::descriptor().id, "cc.type.v1.integer_state", {sdk::scalar_kind::open_symbol, "cc.integer-representation-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.type.v1.integer_underlying_type`. */
+		struct integer_underlying_type
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {type::descriptor().id, "cc.type.v1.integer_underlying_type", {sdk::scalar_kind::typed_id, "cc_type_id", true}};
 			}
 		};
 	};

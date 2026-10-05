@@ -366,6 +366,25 @@ int main()
 	input.written();
 	input.rows[12].push_back(input.rows[12][2]);
 	check(input, state::complete, "agreeing duplicate evidence");
+	{
+		fixture many;
+		for (unsigned copy = 0; copy < 32U; ++copy)
+			many.rows[12].push_back(many.rows[12].front());
+		q::finite_population_limits compact;
+		compact.maximum_retained_bytes = 2U * 1024U * 1024U;
+		const auto retained = take(q::project_function_actions(many.input(), compact));
+		require(retained.populations.size() == 1U &&
+					retained.populations[0].state == state::complete &&
+					retained.populations[0].actions.size() == 1U,
+				"original agreeing row evidence should not require a second equality payload copy");
+		require(std::ranges::count(retained.evidence,
+								   "cc.operation.v1",
+								   [](const auto& e)
+								   {
+									   return e.relation_id;
+								   }) == 33,
+				"bounded storage must preserve every agreeing original operation row");
+	}
 	set(input.rows[12].back(), "element_kind", detached_cell::utf8("constructor"));
 	check(input, state::conflicting, "contradictory occurrence evidence");
 	input = fixture{};
