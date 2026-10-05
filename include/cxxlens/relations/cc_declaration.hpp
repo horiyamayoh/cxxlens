@@ -24,8 +24,8 @@ namespace cxxlens::cc::relations
 				output.semantic_major = 1U;
 				output.semantics = "cc.declaration/1";
 				output.owner_namespace = "cxxlens.standard.cc";
-				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.declaration.v1.entity","cc.declaration.v1.source","cc.declaration.v1.kind"],"result_column":"cc.declaration.v1.declaration"},"interpretation_required":true,"key":["cc.declaration.v1.declaration"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.declaration.v1.declaration","identity_role":"claim_key","name":"declaration","required":true,"type":"typed_id<cc_declaration_id>"},{"id":"cc.declaration.v1.entity","identity_role":"authoritative_payload","name":"entity","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.declaration.v1.source","identity_role":"authoritative_payload","name":"source","required":true,"type":"typed_id<source_span_id>"},{"id":"cc.declaration.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<cc.declaration-kind/1>"},{"id":"cc.declaration.v1.storage","identity_role":"authoritative_payload","name":"storage","required":true,"type":"open_symbol<cc.storage-class/1>"},{"id":"cc.declaration.v1.linkage","identity_role":"authoritative_payload","name":"linkage","required":true,"type":"open_symbol<cc.linkage/1>"},{"id":"cc.declaration.v1.attributes","identity_role":"authoritative_payload","name":"attributes","required":true,"type":"set<open_symbol<cc.attribute/1>>"},{"id":"cc.declaration.v1.is_implicit","identity_role":"authoritative_payload","name":"is_implicit","required":true,"type":"bool"},{"id":"cc.declaration.v1.is_deleted","identity_role":"authoritative_payload","name":"is_deleted","required":true,"type":"bool"},{"id":"cc.declaration.v1.is_defaulted","identity_role":"authoritative_payload","name":"is_defaulted","required":true,"type":"bool"},{"id":"cc.declaration.v1.is_friend","identity_role":"authoritative_payload","name":"is_friend","required":true,"type":"bool"},{"id":"cc.declaration.v1.is_exported","identity_role":"authoritative_payload","name":"is_exported","required":true,"type":"bool"}],"coverage":{"execution_domain":"cc.declaration.compile-unit"},"descriptor_id":"cc.declaration.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::declaration","indexes":[["cc.declaration.v1.entity"],["cc.declaration.v1.source"]],"merge":{"conflict_columns":["cc.declaration.v1.attributes","cc.declaration.v1.entity","cc.declaration.v1.is_defaulted","cc.declaration.v1.is_deleted","cc.declaration.v1.is_exported","cc.declaration.v1.is_friend","cc.declaration.v1.is_implicit","cc.declaration.v1.kind","cc.declaration.v1.linkage","cc.declaration.v1.source","cc.declaration.v1.storage"],"mode":"functional_assertion"},"name":"cc.declaration","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.declaration.v1.entity"]},"profile":"NG0","provenance":{"minimum":"canonicalization"},"references":[{"on_missing":"reject_batch","source_columns":["cc.declaration.v1.entity"],"strength":"hard","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"reject_batch","source_columns":["cc.declaration.v1.source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"}],"semantic_major":1,"semantics":"cc.declaration/1","stability":"versioned","summary":"Conditioned declaration surface for a semantic entity.","version":"1.0.0"})cxxlens";
-				output.contract_digest = "sha256:09b0b43b3883525baa94afcefb0ea7c125d50af4ae2bf133fbf4f7b80863152c";
+				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.declaration.v1.entity","cc.declaration.v1.source","cc.declaration.v1.kind"],"result_column":"cc.declaration.v1.declaration"},"interpretation_required":true,"key":["cc.declaration.v1.declaration"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.declaration.v1.declaration","identity_role":"claim_key","name":"declaration","required":true,"type":"typed_id<cc_declaration_id>"},{"id":"cc.declaration.v1.entity","identity_role":"authoritative_payload","name":"entity","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.declaration.v1.source","identity_role":"authoritative_payload","name":"source","required":true,"type":"typed_id<source_span_id>"},{"id":"cc.declaration.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<cc.declaration-kind/1>"},{"id":"cc.declaration.v1.storage","identity_role":"authoritative_payload","name":"storage","required":true,"type":"open_symbol<cc.storage-class/1>"},{"id":"cc.declaration.v1.linkage","identity_role":"authoritative_payload","name":"linkage","required":true,"type":"open_symbol<cc.linkage/1>"},{"id":"cc.declaration.v1.attributes","identity_role":"authoritative_payload","name":"attributes","required":true,"type":"set<open_symbol<cc.attribute/1>>"},{"id":"cc.declaration.v1.is_implicit","identity_role":"authoritative_payload","name":"is_implicit","required":true,"type":"bool"},{"id":"cc.declaration.v1.is_deleted","identity_role":"authoritative_payload","name":"is_deleted","required":true,"type":"bool"},{"id":"cc.declaration.v1.is_defaulted","identity_role":"authoritative_payload","name":"is_defaulted","required":true,"type":"bool"},{"id":"cc.declaration.v1.is_friend","identity_role":"authoritative_payload","name":"is_friend","required":true,"type":"bool"},{"id":"cc.declaration.v1.is_exported","identity_role":"authoritative_payload","name":"is_exported","required":true,"type":"bool"},{"id":"cc.declaration.v1.identifier_scope","identity_role":"authoritative_payload","name":"identifier_scope","required":false,"type":"optional<open_symbol<cc.identifier-scope/1>>"},{"id":"cc.declaration.v1.identifier_kind","identity_role":"authoritative_payload","name":"identifier_kind","required":false,"type":"optional<open_symbol<cc.identifier-kind/1>>"},{"id":"cc.declaration.v1.identifier_state","identity_role":"authoritative_payload","name":"identifier_state","required":false,"type":"optional<open_symbol<cc.identifier-state/1>>"},{"id":"cc.declaration.v1.identifier_profile","identity_role":"authoritative_payload","name":"identifier_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.declaration.v1.identifier_name","identity_role":"authoritative_payload","name":"identifier_name","required":false,"type":"optional<utf8_string>"},{"id":"cc.declaration.v1.identifier_source","identity_role":"authoritative_payload","name":"identifier_source","required":false,"type":"optional<typed_id<source_span_id>>"},{"id":"cc.declaration.v1.identifier_function","identity_role":"authoritative_payload","name":"identifier_function","required":false,"type":"optional<typed_id<cc_entity_id>>"}],"coverage":{"execution_domain":"cc.declaration.compile-unit"},"descriptor_id":"cc.declaration.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::declaration","indexes":[["cc.declaration.v1.entity"],["cc.declaration.v1.source"]],"merge":{"conflict_columns":["cc.declaration.v1.attributes","cc.declaration.v1.entity","cc.declaration.v1.identifier_function","cc.declaration.v1.identifier_kind","cc.declaration.v1.identifier_name","cc.declaration.v1.identifier_profile","cc.declaration.v1.identifier_scope","cc.declaration.v1.identifier_source","cc.declaration.v1.identifier_state","cc.declaration.v1.is_defaulted","cc.declaration.v1.is_deleted","cc.declaration.v1.is_exported","cc.declaration.v1.is_friend","cc.declaration.v1.is_implicit","cc.declaration.v1.kind","cc.declaration.v1.linkage","cc.declaration.v1.source","cc.declaration.v1.storage"],"mode":"functional_assertion"},"name":"cc.declaration","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.declaration.v1.entity"]},"profile":"NG0","provenance":{"minimum":"canonicalization"},"references":[{"on_missing":"reject_batch","source_columns":["cc.declaration.v1.entity"],"strength":"hard","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.declaration.v1.identifier_function"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"reject_batch","source_columns":["cc.declaration.v1.identifier_source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"},{"on_missing":"reject_batch","source_columns":["cc.declaration.v1.source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"}],"row_constraints":{"all_or_none":[["cc.declaration.v1.identifier_kind","cc.declaration.v1.identifier_profile","cc.declaration.v1.identifier_scope","cc.declaration.v1.identifier_state"]]},"semantic_major":1,"semantics":"cc.declaration/1","stability":"versioned","summary":"Conditioned declaration surface for a semantic entity.","version":"1.0.0"})cxxlens";
+				output.contract_digest = "sha256:b0d27d269f4ddf57c7fbd0f45aebc2f4ac06d3c4fd579273ffeb3b993e2db861";
 				output.columns = {
 					{"cc.declaration.v1.declaration", "declaration", {sdk::scalar_kind::typed_id, "cc_declaration_id", false}, true, sdk::column_role::claim_key},
 					{"cc.declaration.v1.entity", "entity", {sdk::scalar_kind::typed_id, "cc_entity_id", false}, true, sdk::column_role::authoritative_payload},
@@ -39,6 +39,13 @@ namespace cxxlens::cc::relations
 					{"cc.declaration.v1.is_defaulted", "is_defaulted", {sdk::scalar_kind::boolean, "", false}, true, sdk::column_role::authoritative_payload},
 					{"cc.declaration.v1.is_friend", "is_friend", {sdk::scalar_kind::boolean, "", false}, true, sdk::column_role::authoritative_payload},
 					{"cc.declaration.v1.is_exported", "is_exported", {sdk::scalar_kind::boolean, "", false}, true, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.identifier_scope", "identifier_scope", {sdk::scalar_kind::open_symbol, "cc.identifier-scope/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.identifier_kind", "identifier_kind", {sdk::scalar_kind::open_symbol, "cc.identifier-kind/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.identifier_state", "identifier_state", {sdk::scalar_kind::open_symbol, "cc.identifier-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.identifier_profile", "identifier_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.identifier_name", "identifier_name", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.identifier_source", "identifier_source", {sdk::scalar_kind::typed_id, "source_span_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.identifier_function", "identifier_function", {sdk::scalar_kind::typed_id, "cc_entity_id", true}, false, sdk::column_role::authoritative_payload},
 				};
 				output.domain_identity.result_column = "cc.declaration.v1.declaration";
 				output.domain_identity.projection = {
@@ -52,12 +59,21 @@ namespace cxxlens::cc::relations
 				};
 				output.references = {
 					{{"cc.declaration.v1.entity"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::hard},
+					{{"cc.declaration.v1.identifier_function"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic},
+					{{"cc.declaration.v1.identifier_source"}, "source.span", {"source.span.v1.span"}, sdk::reference_strength::hard},
 					{{"cc.declaration.v1.source"}, "source.span", {"source.span.v1.span"}, sdk::reference_strength::hard},
 				};
 				output.merge = sdk::merge_mode::functional_assertion;
 				output.conflict_columns = {
 					"cc.declaration.v1.attributes",
 					"cc.declaration.v1.entity",
+					"cc.declaration.v1.identifier_function",
+					"cc.declaration.v1.identifier_kind",
+					"cc.declaration.v1.identifier_name",
+					"cc.declaration.v1.identifier_profile",
+					"cc.declaration.v1.identifier_scope",
+					"cc.declaration.v1.identifier_source",
+					"cc.declaration.v1.identifier_state",
 					"cc.declaration.v1.is_defaulted",
 					"cc.declaration.v1.is_deleted",
 					"cc.declaration.v1.is_exported",
@@ -183,6 +199,69 @@ namespace cxxlens::cc::relations
 			[[nodiscard]] static sdk::column_ref ref()
 			{
 				return {declaration::descriptor().id, "cc.declaration.v1.is_exported", {sdk::scalar_kind::boolean, "", false}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.identifier_scope`. */
+		struct identifier_scope
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.identifier_scope", {sdk::scalar_kind::open_symbol, "cc.identifier-scope/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.identifier_kind`. */
+		struct identifier_kind
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.identifier_kind", {sdk::scalar_kind::open_symbol, "cc.identifier-kind/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.identifier_state`. */
+		struct identifier_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.identifier_state", {sdk::scalar_kind::open_symbol, "cc.identifier-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.identifier_profile`. */
+		struct identifier_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.identifier_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.identifier_name`. */
+		struct identifier_name
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.identifier_name", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.identifier_source`. */
+		struct identifier_source
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.identifier_source", {sdk::scalar_kind::typed_id, "source_span_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.identifier_function`. */
+		struct identifier_function
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.identifier_function", {sdk::scalar_kind::typed_id, "cc_entity_id", true}};
 			}
 		};
 	};

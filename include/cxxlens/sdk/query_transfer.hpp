@@ -39,7 +39,9 @@ namespace cxxlens::sdk::query
 
 	/**
 	 * @brief Decode cxxlens.application-query-results.v1 without dropping evidence or partiality.
-	 * @details Each plan must be the independent scan of its supplied registry descriptor.
+	 * @details Each plan must be an independent scan of its supplied registry descriptor.
+	 * An older ordered projection may omit current optional additive columns; omitted
+	 * fields remain unobserved. Required columns, types and the saved plan digest must agree.
 	 * This checks transfer consistency; it does not execute a plan, certify a provider, or adopt
 	 * claims into a Store. JSON member order and whitespace do not affect the decoded values.
 	 */

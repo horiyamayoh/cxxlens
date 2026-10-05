@@ -24,8 +24,8 @@ namespace cxxlens::cc::relations
 				output.semantic_major = 1U;
 				output.semantics = "cc.abi_surface/1";
 				output.owner_namespace = "cxxlens.standard.cc";
-				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.abi_surface.v1.compile_unit","cc.abi_surface.v1.entity","cc.abi_surface.v1.source","cc.abi_surface.v1.profile"],"result_column":"cc.abi_surface.v1.surface"},"interpretation_required":true,"key":["cc.abi_surface.v1.surface"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.abi_surface.v1.surface","identity_role":"claim_key","name":"surface","required":true,"type":"typed_id<abi_surface_id>"},{"id":"cc.abi_surface.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.abi_surface.v1.entity","identity_role":"authoritative_payload","name":"entity","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.abi_surface.v1.source","identity_role":"authoritative_payload","name":"source","required":true,"type":"typed_id<source_span_id>"},{"id":"cc.abi_surface.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<cc.abi-surface-kind/1>"},{"id":"cc.abi_surface.v1.profile","identity_role":"authoritative_payload","name":"profile","required":true,"type":"open_symbol<cc.abi-surface-profile/1>"},{"id":"cc.abi_surface.v1.abi_state","identity_role":"authoritative_payload","name":"abi_state","required":true,"type":"open_symbol<cc.abi-surface-state/1>"},{"id":"cc.abi_surface.v1.layout_state","identity_role":"authoritative_payload","name":"layout_state","required":true,"type":"open_symbol<cc.abi-surface-state/1>"},{"id":"cc.abi_surface.v1.byte_size","identity_role":"authoritative_payload","name":"byte_size","required":false,"type":"optional<uint64>"},{"id":"cc.abi_surface.v1.byte_alignment","identity_role":"authoritative_payload","name":"byte_alignment","required":false,"type":"optional<uint64>"},{"id":"cc.abi_surface.v1.occupied_ranges","identity_role":"authoritative_payload","name":"occupied_ranges","required":false,"semantic":"Canonical concatenated little-endian uint64 begin/end byte intervals: nonempty, strictly ordered, disjoint, nonadjacent and bounded by actual byte_size under clang22-storage-and-call-interface/1; absent means unavailable.","type":"optional<bytes>"},{"id":"cc.abi_surface.v1.abi_context","identity_role":"authoritative_payload","name":"abi_context","required":false,"type":"optional<digest>"},{"id":"cc.abi_surface.v1.abi_signature","identity_role":"authoritative_payload","name":"abi_signature","required":false,"semantic":"Opaque structural compiler storage/call-interface bytes under the exact profile; LLVM type names, source paths, display names and arbitrary preprocessor variants are excluded.","type":"optional<bytes>"},{"id":"cc.abi_surface.v1.abi_fingerprint","identity_role":"authoritative_payload","name":"abi_fingerprint","required":false,"semantic":"semantic_digest cc.clang22.abi-surface.v1 of uint64le context length, context UTF8, uint64le signature length, signature bytes; not a general binary-compatibility proof.","type":"optional<digest>"},{"id":"cc.abi_surface.v1.reason","identity_role":"authoritative_payload","name":"reason","required":false,"type":"optional<utf8_string>"}],"coverage":{"execution_domain":"cc.abi_surface.compile-unit"},"descriptor_id":"cc.abi_surface.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::abi_surface","indexes":[["cc.abi_surface.v1.entity"],["cc.abi_surface.v1.source"],["cc.abi_surface.v1.kind"]],"merge":{"conflict_columns":["cc.abi_surface.v1.abi_context","cc.abi_surface.v1.abi_fingerprint","cc.abi_surface.v1.abi_signature","cc.abi_surface.v1.abi_state","cc.abi_surface.v1.byte_alignment","cc.abi_surface.v1.byte_size","cc.abi_surface.v1.compile_unit","cc.abi_surface.v1.entity","cc.abi_surface.v1.kind","cc.abi_surface.v1.layout_state","cc.abi_surface.v1.occupied_ranges","cc.abi_surface.v1.profile","cc.abi_surface.v1.reason","cc.abi_surface.v1.source"],"mode":"functional_assertion"},"name":"cc.abi_surface","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.abi_surface.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"on_missing":"reject_batch","source_columns":["cc.abi_surface.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"reject_batch","source_columns":["cc.abi_surface.v1.entity"],"strength":"hard","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"reject_batch","source_columns":["cc.abi_surface.v1.source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"}],"row_constraints":{"all_or_none":[["cc.abi_surface.v1.abi_fingerprint","cc.abi_surface.v1.abi_signature"],["cc.abi_surface.v1.byte_alignment","cc.abi_surface.v1.byte_size"]]},"semantic_major":1,"semantics":"cc.abi_surface/1","stability":"versioned","summary":"Independent compiler-observed storage occupancy and call-interface ABI facets bound to actual declaration sources.","version":"1.0.0"})cxxlens";
-				output.contract_digest = "sha256:47023e8187f541bf541628cbf54b1459152c9ee9d8a5bec4bb967c3d55823ce3";
+				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.abi_surface.v1.compile_unit","cc.abi_surface.v1.entity","cc.abi_surface.v1.source","cc.abi_surface.v1.profile"],"result_column":"cc.abi_surface.v1.surface"},"interpretation_required":true,"key":["cc.abi_surface.v1.surface"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.abi_surface.v1.surface","identity_role":"claim_key","name":"surface","required":true,"type":"typed_id<abi_surface_id>"},{"id":"cc.abi_surface.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.abi_surface.v1.entity","identity_role":"authoritative_payload","name":"entity","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.abi_surface.v1.source","identity_role":"authoritative_payload","name":"source","required":true,"type":"typed_id<source_span_id>"},{"id":"cc.abi_surface.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<cc.abi-surface-kind/1>"},{"id":"cc.abi_surface.v1.profile","identity_role":"authoritative_payload","name":"profile","required":true,"type":"open_symbol<cc.abi-surface-profile/1>"},{"id":"cc.abi_surface.v1.abi_state","identity_role":"authoritative_payload","name":"abi_state","required":true,"type":"open_symbol<cc.abi-surface-state/1>"},{"id":"cc.abi_surface.v1.layout_state","identity_role":"authoritative_payload","name":"layout_state","required":true,"type":"open_symbol<cc.abi-surface-state/1>"},{"id":"cc.abi_surface.v1.byte_size","identity_role":"authoritative_payload","name":"byte_size","required":false,"type":"optional<uint64>"},{"id":"cc.abi_surface.v1.byte_alignment","identity_role":"authoritative_payload","name":"byte_alignment","required":false,"type":"optional<uint64>"},{"id":"cc.abi_surface.v1.occupied_ranges","identity_role":"authoritative_payload","name":"occupied_ranges","required":false,"semantic":"Canonical concatenated little-endian uint64 begin/end byte intervals: nonempty, strictly ordered, disjoint, nonadjacent and bounded by actual byte_size under clang22-storage-and-call-interface/1; absent means unavailable.","type":"optional<bytes>"},{"id":"cc.abi_surface.v1.abi_context","identity_role":"authoritative_payload","name":"abi_context","required":false,"type":"optional<digest>"},{"id":"cc.abi_surface.v1.abi_signature","identity_role":"authoritative_payload","name":"abi_signature","required":false,"semantic":"Opaque structural compiler storage/call-interface bytes under the exact profile; LLVM type names, source paths, display names and arbitrary preprocessor variants are excluded.","type":"optional<bytes>"},{"id":"cc.abi_surface.v1.abi_fingerprint","identity_role":"authoritative_payload","name":"abi_fingerprint","required":false,"semantic":"semantic_digest cc.clang22.abi-surface.v1 of uint64le context length, context UTF8, uint64le signature length, signature bytes; not a general binary-compatibility proof.","type":"optional<digest>"},{"id":"cc.abi_surface.v1.reason","identity_role":"authoritative_payload","name":"reason","required":false,"type":"optional<utf8_string>"},{"id":"cc.abi_surface.v1.target_data_model_state","identity_role":"authoritative_payload","name":"target_data_model_state","required":false,"type":"optional<open_symbol<cc.abi-observation-state/1>>"},{"id":"cc.abi_surface.v1.target_data_model_profile","identity_role":"authoritative_payload","name":"target_data_model_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.abi_surface.v1.long_width_bits","identity_role":"authoritative_payload","name":"long_width_bits","required":false,"type":"optional<uint64>"},{"id":"cc.abi_surface.v1.pointer_width_bits","identity_role":"authoritative_payload","name":"pointer_width_bits","required":false,"type":"optional<uint64>"},{"id":"cc.abi_surface.v1.wchar_width_bits","identity_role":"authoritative_payload","name":"wchar_width_bits","required":false,"type":"optional<uint64>"},{"id":"cc.abi_surface.v1.plain_char_signed","identity_role":"authoritative_payload","name":"plain_char_signed","required":false,"type":"optional<bool>"},{"id":"cc.abi_surface.v1.byte_order","identity_role":"authoritative_payload","name":"byte_order","required":false,"type":"optional<open_symbol<cc.target-byte-order/1>>"},{"id":"cc.abi_surface.v1.packing_state","identity_role":"authoritative_payload","name":"packing_state","required":false,"type":"optional<open_symbol<cc.abi-observation-state/1>>"},{"id":"cc.abi_surface.v1.packing_profile","identity_role":"authoritative_payload","name":"packing_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.abi_surface.v1.packed_attribute","identity_role":"authoritative_payload","name":"packed_attribute","required":false,"type":"optional<bool>"},{"id":"cc.abi_surface.v1.maximum_field_alignment_bits","identity_role":"authoritative_payload","name":"maximum_field_alignment_bits","required":false,"type":"optional<uint64>"},{"id":"cc.abi_surface.v1.packing_applied","identity_role":"authoritative_payload","name":"packing_applied","required":false,"type":"optional<bool>"}],"coverage":{"execution_domain":"cc.abi_surface.compile-unit"},"descriptor_id":"cc.abi_surface.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::abi_surface","indexes":[["cc.abi_surface.v1.entity"],["cc.abi_surface.v1.source"],["cc.abi_surface.v1.kind"]],"merge":{"conflict_columns":["cc.abi_surface.v1.abi_context","cc.abi_surface.v1.abi_fingerprint","cc.abi_surface.v1.abi_signature","cc.abi_surface.v1.abi_state","cc.abi_surface.v1.byte_alignment","cc.abi_surface.v1.byte_order","cc.abi_surface.v1.byte_size","cc.abi_surface.v1.compile_unit","cc.abi_surface.v1.entity","cc.abi_surface.v1.kind","cc.abi_surface.v1.layout_state","cc.abi_surface.v1.long_width_bits","cc.abi_surface.v1.maximum_field_alignment_bits","cc.abi_surface.v1.occupied_ranges","cc.abi_surface.v1.packed_attribute","cc.abi_surface.v1.packing_applied","cc.abi_surface.v1.packing_profile","cc.abi_surface.v1.packing_state","cc.abi_surface.v1.plain_char_signed","cc.abi_surface.v1.pointer_width_bits","cc.abi_surface.v1.profile","cc.abi_surface.v1.reason","cc.abi_surface.v1.source","cc.abi_surface.v1.target_data_model_profile","cc.abi_surface.v1.target_data_model_state","cc.abi_surface.v1.wchar_width_bits"],"mode":"functional_assertion"},"name":"cc.abi_surface","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.abi_surface.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"on_missing":"reject_batch","source_columns":["cc.abi_surface.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"reject_batch","source_columns":["cc.abi_surface.v1.entity"],"strength":"hard","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"reject_batch","source_columns":["cc.abi_surface.v1.source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"}],"row_constraints":{"all_or_none":[["cc.abi_surface.v1.abi_fingerprint","cc.abi_surface.v1.abi_signature"],["cc.abi_surface.v1.byte_alignment","cc.abi_surface.v1.byte_size"]]},"semantic_major":1,"semantics":"cc.abi_surface/1","stability":"versioned","summary":"Independent compiler-observed storage occupancy and call-interface ABI facets bound to actual declaration sources.","version":"1.0.0"})cxxlens";
+				output.contract_digest = "sha256:2fbc9f9e74d5885ff269372fc453b13bbc08e8df4e70d22fecf87ccdfccb2b87";
 				output.columns = {
 					{"cc.abi_surface.v1.surface", "surface", {sdk::scalar_kind::typed_id, "abi_surface_id", false}, true, sdk::column_role::claim_key},
 					{"cc.abi_surface.v1.compile_unit", "compile_unit", {sdk::scalar_kind::typed_id, "compile_unit_id", false}, true, sdk::column_role::authoritative_payload},
@@ -42,6 +42,18 @@ namespace cxxlens::cc::relations
 					{"cc.abi_surface.v1.abi_signature", "abi_signature", {sdk::scalar_kind::bytes, "", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.abi_surface.v1.abi_fingerprint", "abi_fingerprint", {sdk::scalar_kind::digest, "", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.abi_surface.v1.reason", "reason", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.abi_surface.v1.target_data_model_state", "target_data_model_state", {sdk::scalar_kind::open_symbol, "cc.abi-observation-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.abi_surface.v1.target_data_model_profile", "target_data_model_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.abi_surface.v1.long_width_bits", "long_width_bits", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.abi_surface.v1.pointer_width_bits", "pointer_width_bits", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.abi_surface.v1.wchar_width_bits", "wchar_width_bits", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.abi_surface.v1.plain_char_signed", "plain_char_signed", {sdk::scalar_kind::boolean, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.abi_surface.v1.byte_order", "byte_order", {sdk::scalar_kind::open_symbol, "cc.target-byte-order/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.abi_surface.v1.packing_state", "packing_state", {sdk::scalar_kind::open_symbol, "cc.abi-observation-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.abi_surface.v1.packing_profile", "packing_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.abi_surface.v1.packed_attribute", "packed_attribute", {sdk::scalar_kind::boolean, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.abi_surface.v1.maximum_field_alignment_bits", "maximum_field_alignment_bits", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.abi_surface.v1.packing_applied", "packing_applied", {sdk::scalar_kind::boolean, "", true}, false, sdk::column_role::authoritative_payload},
 				};
 				output.domain_identity.result_column = "cc.abi_surface.v1.surface";
 				output.domain_identity.projection = {
@@ -66,15 +78,27 @@ namespace cxxlens::cc::relations
 					"cc.abi_surface.v1.abi_signature",
 					"cc.abi_surface.v1.abi_state",
 					"cc.abi_surface.v1.byte_alignment",
+					"cc.abi_surface.v1.byte_order",
 					"cc.abi_surface.v1.byte_size",
 					"cc.abi_surface.v1.compile_unit",
 					"cc.abi_surface.v1.entity",
 					"cc.abi_surface.v1.kind",
 					"cc.abi_surface.v1.layout_state",
+					"cc.abi_surface.v1.long_width_bits",
+					"cc.abi_surface.v1.maximum_field_alignment_bits",
 					"cc.abi_surface.v1.occupied_ranges",
+					"cc.abi_surface.v1.packed_attribute",
+					"cc.abi_surface.v1.packing_applied",
+					"cc.abi_surface.v1.packing_profile",
+					"cc.abi_surface.v1.packing_state",
+					"cc.abi_surface.v1.plain_char_signed",
+					"cc.abi_surface.v1.pointer_width_bits",
 					"cc.abi_surface.v1.profile",
 					"cc.abi_surface.v1.reason",
 					"cc.abi_surface.v1.source",
+					"cc.abi_surface.v1.target_data_model_profile",
+					"cc.abi_surface.v1.target_data_model_state",
+					"cc.abi_surface.v1.wchar_width_bits",
 				};
 				output.descriptor_digest = *sdk::semantic_digest(
 					"cxxlens.relation-descriptor-binding.v2",
@@ -218,6 +242,114 @@ namespace cxxlens::cc::relations
 			[[nodiscard]] static sdk::column_ref ref()
 			{
 				return {abi_surface::descriptor().id, "cc.abi_surface.v1.reason", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.abi_surface.v1.target_data_model_state`. */
+		struct target_data_model_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {abi_surface::descriptor().id, "cc.abi_surface.v1.target_data_model_state", {sdk::scalar_kind::open_symbol, "cc.abi-observation-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.abi_surface.v1.target_data_model_profile`. */
+		struct target_data_model_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {abi_surface::descriptor().id, "cc.abi_surface.v1.target_data_model_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.abi_surface.v1.long_width_bits`. */
+		struct long_width_bits
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {abi_surface::descriptor().id, "cc.abi_surface.v1.long_width_bits", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.abi_surface.v1.pointer_width_bits`. */
+		struct pointer_width_bits
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {abi_surface::descriptor().id, "cc.abi_surface.v1.pointer_width_bits", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.abi_surface.v1.wchar_width_bits`. */
+		struct wchar_width_bits
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {abi_surface::descriptor().id, "cc.abi_surface.v1.wchar_width_bits", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.abi_surface.v1.plain_char_signed`. */
+		struct plain_char_signed
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {abi_surface::descriptor().id, "cc.abi_surface.v1.plain_char_signed", {sdk::scalar_kind::boolean, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.abi_surface.v1.byte_order`. */
+		struct byte_order
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {abi_surface::descriptor().id, "cc.abi_surface.v1.byte_order", {sdk::scalar_kind::open_symbol, "cc.target-byte-order/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.abi_surface.v1.packing_state`. */
+		struct packing_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {abi_surface::descriptor().id, "cc.abi_surface.v1.packing_state", {sdk::scalar_kind::open_symbol, "cc.abi-observation-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.abi_surface.v1.packing_profile`. */
+		struct packing_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {abi_surface::descriptor().id, "cc.abi_surface.v1.packing_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.abi_surface.v1.packed_attribute`. */
+		struct packed_attribute
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {abi_surface::descriptor().id, "cc.abi_surface.v1.packed_attribute", {sdk::scalar_kind::boolean, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.abi_surface.v1.maximum_field_alignment_bits`. */
+		struct maximum_field_alignment_bits
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {abi_surface::descriptor().id, "cc.abi_surface.v1.maximum_field_alignment_bits", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.abi_surface.v1.packing_applied`. */
+		struct packing_applied
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {abi_surface::descriptor().id, "cc.abi_surface.v1.packing_applied", {sdk::scalar_kind::boolean, "", true}};
 			}
 		};
 	};

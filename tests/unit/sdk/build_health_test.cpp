@@ -256,10 +256,48 @@ int main()
 	f = fixture{};
 	f.second_world();
 	p = project(f);
+	const auto descriptors = standard_relation_descriptors();
+	const auto inventory_descriptor =
+		std::ranges::find(descriptors, names[5], &relation_descriptor::id);
+	require(inventory_descriptor != descriptors.end() &&
+				std::ranges::none_of(
+					inventory_descriptor->references,
+					[](const auto& reference)
+					{
+						return std::ranges::find(
+								   reference.source_columns,
+								   "build.analysis_inventory.v1.selected_variant_ids") !=
+							reference.source_columns.end();
+					}),
+			"global selected variants gained a same-world generic reference");
 	require(p.populations.size() == 2U && p.populations[0].selection_state == state::complete &&
 				p.populations[1].selection_state == state::complete &&
 				p.populations[1].units[0].parse_outcome == "failed",
 			"mixed actual selected worlds did not retain failure");
+	auto missing_selected_world = f;
+	missing_selected_world.rows[1].pop_back();
+	const auto missing_world = project(missing_selected_world);
+	require(missing_world.populations.size() == 2U &&
+				missing_world.populations[0].selection_state == state::partial &&
+				missing_world.populations[1].selection_state == state::partial,
+			"missing actual selected variant was promoted by removal of generic reference");
+	auto conflicting_selected_world = f;
+	set(conflicting_selected_world.rows[1].back(),
+		"project",
+		detached_cell::utf8("foreign-project"));
+	const auto conflicting_world = project(conflicting_selected_world);
+	require(conflicting_world.populations[0].selection_state == state::conflicting &&
+				conflicting_world.populations[1].selection_state == state::conflicting,
+			"foreign project selected variant did not conflict all global selections");
+	auto duplicated_selected_world = f;
+	duplicated_selected_world.rows[1].push_back(duplicated_selected_world.rows[1].back());
+	set(duplicated_selected_world.rows[1].back(),
+		"project",
+		detached_cell::utf8("foreign-project"));
+	const auto duplicate_world = project(duplicated_selected_world);
+	require(duplicate_world.populations[0].selection_state == state::conflicting &&
+				duplicate_world.populations[1].selection_state == state::conflicting,
+			"contradictory selected variant carrier gained first wins across worlds");
 	set(f.rows[5][1], "selected_variant_count", detached_cell::unsigned_integer(1U));
 	set(f.rows[5][1], "selected_variant_ids", ids({"release"}));
 	p = project(f);

@@ -525,6 +525,52 @@ namespace cxxlens::sdk::query
 				fail("summary", "inconsistent-exact-guarantee");
 			return query_transfer_access::make(std::move(result));
 		}
+		logical_query_ir independent_scan(const relation_descriptor& descriptor,
+										  const json& saved,
+										  const sdk::detail::json_limits& limits)
+		{
+			auto builder = take(query::builder::from(descriptor));
+			auto current = std::move(builder).finish();
+			const auto expected =
+				take(sdk::detail::parse_json_value(current.canonical_form(), limits));
+			if (saved == expected)
+				return current;
+
+			// Optional additive columns do not change an older independent scan.
+			// Rebuild precisely its ordered projection; all required columns and
+			// observed types/aliases still have to agree with the current registry.
+			const auto& columns = array(member(saved, "output_schema"));
+			const auto& available = array(member(expected, "output_schema"));
+			if (columns.empty() || columns.size() > available.size())
+				fail("logical_ir", "independent-scan-required");
+			std::vector<column_ref> projection;
+			projection.reserve(columns.size());
+			std::size_t at{};
+			for (const auto& column : columns)
+			{
+				while (at < available.size() && available[at] != column)
+				{
+					if (!current.output_schema[at].type.optional)
+						fail("logical_ir", "independent-scan-required");
+					++at;
+				}
+				if (at == available.size())
+					fail("logical_ir", "independent-scan-required");
+				projection.push_back(current.output_schema[at++]);
+			}
+			for (; at < available.size(); ++at)
+				if (!current.output_schema[at].type.optional)
+					fail("logical_ir", "independent-scan-required");
+			auto compatible = take(query::builder::from(descriptor));
+			compatible = take(std::move(compatible).project(projection));
+			auto original = std::move(compatible).finish();
+			check(original.validate());
+			const auto rebuilt =
+				take(sdk::detail::parse_json_value(original.canonical_form(), limits));
+			if (saved != rebuilt)
+				fail("logical_ir", "independent-scan-required");
+			return original;
+		}
 	} // namespace
 
 	result<void> transfer_limits::validate() const
@@ -573,12 +619,8 @@ namespace cxxlens::sdk::query
 					fail("queries", "sorted-unique-scans-required");
 				previous = relation;
 				const auto descriptor = take(engine.require_id(relation));
-				auto builder = take(query::builder::from(descriptor.descriptor()));
-				auto ir = std::move(builder).finish();
-				const auto expected_plan =
-					take(sdk::detail::parse_json_value(ir.canonical_form(), json_limits));
-				if (member(scan, "logical_ir") != expected_plan)
-					fail("logical_ir", "independent-scan-required");
+				auto ir = independent_scan(
+					descriptor.descriptor(), member(scan, "logical_ir"), json_limits);
 				auto decoded = decode_result(member(scan, "result"),
 											 ir,
 											 relation,

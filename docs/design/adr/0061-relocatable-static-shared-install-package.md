@@ -17,7 +17,12 @@ environment で直接実行し、prefix 移設後に再実行する。core、por
 tree と installed executable の双方を同じ環境で実行する。release package は別 configure で再生成せず、全試験を通過した relocated
 prefix そのものから作る。
 
-shared library は project version と distribution-major SONAME を持つ。Linux の installed library は `$ORIGIN`、tool は
+shared library は package version と独立した public C++ ABI revision を SONAME に持つ。
+公開 DTO の layout が変わる場合は `CXXLENS_SHARED_ABI_REVISION` を更新する。現在の revision は 2、
+shared library の実ファイル version は `2.0.0` であり、package/provider の `1.0.0` とは独立する。
+SONAME と実ファイル名の双方を更新し、旧 revision の実ファイルを新 layout で上書きしない。
+CMake package は `cxxlens_SHARED_ABI_REVISION` を公開する。利用側は同じ install の header と library
+で再ビルドし、異なる revision の public C++ object を混在させない。Linux の installed library は `$ORIGIN`、tool は
 `$ORIGIN/../<install-libdir>`、macOS は対応する `@loader_path` を使用し、link directory 由来の build-tree path を install RPATH へ
 取り込まない。Linux の直接インストール試験は dynamic section の RUNPATH/SONAME と build-tree path 不在を検査する。required SONAME link を
 一時的に除去する negative test は、外部 library-path override なしで起動が失敗し、loader diagnostic が欠落 SONAME を含むことを

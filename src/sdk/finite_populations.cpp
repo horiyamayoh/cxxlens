@@ -11,6 +11,7 @@
 #include <cxxlens/sdk/finite_populations.hpp>
 
 #include "query_projection_plan_limits_internal.hpp"
+#include "query_projection_rows_internal.hpp"
 
 namespace cxxlens::sdk::query
 {
@@ -725,14 +726,16 @@ namespace cxxlens::sdk::query
 						work.work();
 						if (entries.size() >= limits.maximum_rows)
 							fail("rows", "limit-exceeded", "sdk.population-budget");
-						if (auto valid = row.validate(); !valid)
+						if (auto valid = detail::validate_projected_relation_row(
+								row,
+								*descriptor,
+								"sdk.population-input-invalid",
+								[&]
+								{
+									work.work();
+								});
+							!valid)
 							return valid.error();
-						for (const auto& column : descriptor->columns)
-						{
-							const auto* actual = cell(row, column.name);
-							if (!actual || actual->type != column.type || !actual->validate())
-								fail(column.id, "column-type-or-value-invalid");
-						}
 						charge(work.used.conditions,
 							   row.presence.fragments.size(),
 							   limits.maximum_condition_expansions,
@@ -1205,8 +1208,16 @@ namespace cxxlens::sdk::query
 						continue;
 					const auto group = static_cast<std::size_t>(found - names.begin());
 					present[group] = true;
+					// The declaration inventory carries independently finite
+					// declaration and parsed-file facets. An unrelated optional
+					// target-slot frontier does not erase their atomic census.
+					// Their actual profile/state/count/member/source joins are
+					// still validated by project_rows for every selected unit.
+					const bool named_declaration_inventory =
+						current.domain == "declarations" && group == 7U;
 					complete[group] &= scan.result.execution() == execution_status::complete &&
-						scan.result.inputs_complete() && scan.result.conflicts().empty() &&
+						(named_declaration_inventory || scan.result.inputs_complete()) &&
+						scan.result.conflicts().empty() &&
 						scan.result.differential_disagreements().empty();
 					auto cursor = scan.result.rows();
 					while (true)

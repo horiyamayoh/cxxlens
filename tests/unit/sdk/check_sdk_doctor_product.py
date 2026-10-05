@@ -21,6 +21,10 @@ class DoctorTest(unittest.TestCase):
         self.assertEqual(found.returncode, 0, found.stderr)
         document = json.loads(found.stdout)
         self.assertEqual(document['state'], 'proved')
+        additional = self.call('relation-presence', 'cc.flow_fact.v1',
+                               'cc.template_subject.v1', 'cc.template_inventory.v1')
+        self.assertEqual(additional.returncode, 0, additional.stderr)
+        self.assertEqual(json.loads(additional.stdout)['state'], 'proved')
         missing = self.call('relation-presence', 'cc.missing.v1')
         self.assertEqual(missing.returncode, 1, missing.stderr)
         self.assertEqual(json.loads(missing.stdout)['state'], 'unknown')

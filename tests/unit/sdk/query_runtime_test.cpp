@@ -3029,6 +3029,60 @@ namespace
 					decoded->scans.front().result.canonical_form() == executed->canonical_form() &&
 					decoded->scans.front().logical_ir.canonical_form() == ir.canonical_form(),
 				"query transfer changed rows, evidence, partiality or plan");
+		// An actual older executed scan remains readable after optional additive
+		// columns are inserted and appended under the same semantic major.
+		auto evolved = data.left;
+		evolved.columns.insert(evolved.columns.begin() + 1,
+							   {evolved.id + ".new_optional",
+								"new_optional",
+								{scalar_kind::utf8_string, {}, true},
+								false,
+								column_role::auxiliary});
+		evolved.columns.push_back({evolved.id + ".another_optional",
+								   "another_optional",
+								   {scalar_kind::boolean, {}, true},
+								   false,
+								   column_role::auxiliary});
+		auto evolved_engine = [](relation_descriptor descriptor)
+		{
+			descriptor.descriptor_digest =
+				*semantic_digest("cxxlens.relation-descriptor-binding.v2",
+								 descriptor.contract_digest + "\n" + descriptor.canonical_form());
+			relation_registry registry;
+			require(registry.add(std::move(descriptor)).has_value(),
+					"evolved transfer descriptor rejected");
+			auto engine = registry.build("transfer-additive-schema");
+			require(engine.has_value(), "evolved transfer registry failed");
+			return std::move(*engine);
+		};
+		auto compatible_engine = evolved_engine(evolved);
+		auto compatible = query::decode_application_queries(compatible_engine, bundle);
+		if (!compatible)
+			std::cerr << compatible.error().code << ':' << compatible.error().field << ':'
+					  << compatible.error().detail << '\n';
+		require(compatible &&
+					compatible->scans.front().logical_ir.canonical_form() == ir.canonical_form() &&
+					compatible->scans.front().logical_ir.digest() == ir.digest() &&
+					compatible->scans.front().result.canonical_form() == executed->canonical_form(),
+				"optional evolution changed the saved plan, digest, rows or evidence");
+		auto required_evolution = evolved;
+		required_evolution.columns.back().required = true;
+		required_evolution.columns.back().type.optional = false;
+		require(!query::decode_application_queries(evolved_engine(required_evolution), bundle),
+				"saved scan omitted a newly required column");
+		auto changed_type = evolved;
+		changed_type.columns[2].type = {scalar_kind::unsigned_integer, {}, false};
+		require(!query::decode_application_queries(evolved_engine(changed_type), bundle),
+				"saved scan accepted an incompatible required type");
+		auto renamed_optional = evolved;
+		renamed_optional.columns[3].id += "_foreign";
+		renamed_optional.columns[3].name += "_foreign";
+		require(!query::decode_application_queries(evolved_engine(renamed_optional), bundle),
+				"saved scan accepted a foreign old optional column");
+		auto reordered = evolved;
+		std::swap(reordered.columns[0], reordered.columns[2]);
+		require(!query::decode_application_queries(evolved_engine(reordered), bundle),
+				"saved scan accepted incompatible required column order");
 		auto cfg = query::project_control_flow(*decoded);
 		require(cfg && cfg->source_queries && cfg->unresolved.size() == 3U &&
 					cfg->source_queries->scans.front().result.canonical_form() ==

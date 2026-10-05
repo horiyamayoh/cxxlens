@@ -6,6 +6,11 @@ project(
   DESCRIPTION "C and C++ Semantic Relation Platform"
   LANGUAGES CXX)
 
+# Public C++ layouts changed with the new semantic input DTOs. Keep the shared
+# ABI file version separate from the package and provider protocol versions.
+set(CXXLENS_SHARED_ABI_REVISION 2)
+set(CXXLENS_SHARED_LIBRARY_VERSION "${CXXLENS_SHARED_ABI_REVISION}.0.0")
+
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
   message(
     FATAL_ERROR
@@ -109,8 +114,8 @@ function(cxxlens_configure_component target export_name)
     ${target}
     PROPERTIES CXX_EXTENSIONS OFF
                EXPORT_NAME "${export_name}"
-               VERSION "${PROJECT_VERSION}"
-               SOVERSION "${PROJECT_VERSION_MAJOR}")
+               VERSION "${CXXLENS_SHARED_LIBRARY_VERSION}"
+               SOVERSION "${CXXLENS_SHARED_ABI_REVISION}")
   if(CXXLENS_BUILD_SHARED)
     if(APPLE)
       set_target_properties(${target} PROPERTIES INSTALL_RPATH "@loader_path")
@@ -259,6 +264,9 @@ add_library(
   src/sdk/build_health.cpp
   src/sdk/preprocessor.cpp
   src/sdk/function_actions.cpp
+  src/sdk/function_compiler_facets.cpp
+  src/sdk/target_resolution.cpp
+  src/sdk/template_domains.cpp
   src/sdk/semantic_graphs.cpp
   src/sdk/record_surfaces.cpp
   src/sdk/abi_surfaces.cpp
@@ -762,6 +770,7 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     src/llvm/clang22/provider_worker_v4_ast_observer.cpp
     src/llvm/clang22/provider_worker_v4_output_normalizer.cpp
     src/llvm/clang22/project_semantic_facts.cpp
+    src/llvm/clang22/project_template_observer.cpp
     src/llvm/clang22/project_abi_observer.cpp)
   target_link_libraries(
     cxxlens_clang22_worker_core
@@ -842,13 +851,6 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   target_link_libraries(
     cxxlens-clang-worker-22 PRIVATE cxxlens_clang22_worker_core
                                     cxxlens_clang22_materialization_codecs)
-  if(CXXLENS_BUILD_SHARED)
-    # The worker SDK is a static private closure when the public SDK is shared.
-    # Its provider implementation references the hidden runtime boundary, so
-    # consume the same private closure instead of rebuilding its object list.
-    target_link_libraries(cxxlens-clang-worker-22
-                          PRIVATE cxxlens_provider_runtime_private_closure)
-  endif()
   target_include_directories(cxxlens-clang-worker-22
                              PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_features(cxxlens-clang-worker-22 PRIVATE cxx_std_23)

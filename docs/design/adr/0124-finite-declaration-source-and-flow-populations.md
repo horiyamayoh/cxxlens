@@ -69,6 +69,11 @@ complete merely because enumeration succeeded. Actual local variable/parameter
 and referenced member subjects form separate typed pointer/integer candidate
 sets; their finite candidate census never certifies a points-to/null/range result.
 Bodyless and dependent functions remain unavailable with actionable reasons.
+For a `definition` fact in this profile, the exact `value` tags `initialized` and
+`uninitialized` describe the original producer event: parameters enter initialized,
+variable declarations use the compiler's `hasInit`, and assignments/increments
+define an initialized value. A missing initializer-expression binding remains
+independent and never becomes `uninitialized`; absent or future tags stay unknown.
 Events follow the compiler's potentially evaluated expression contexts.
 Unevaluated sizeof/alignof, noexcept, type traits, requirements, decltype and
 non-variably-modified typeof operands do not become uses, writes or calls through

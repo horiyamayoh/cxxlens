@@ -9,6 +9,8 @@
 #include <cxxlens/sdk/call_operands.hpp>
 
 #include "query_projection_plan_limits_internal.hpp"
+#include "query_projection_rows_internal.hpp"
+#include "query_result_internal.hpp"
 
 namespace cxxlens::sdk::query
 {
@@ -59,6 +61,51 @@ namespace cxxlens::sdk::query
 		{
 			const auto* c = cell(row, name);
 			return c && c->state == cell_state::present && c->value;
+		}
+		std::string_view borrowed_text(const annotated_row& row, std::string_view name)
+		{
+			const auto* c = cell(row, name);
+			const auto* v = c && c->state == cell_state::present && c->value
+				? std::get_if<std::string>(&*c->value)
+				: nullptr;
+			return v ? std::string_view{*v} : std::string_view{};
+		}
+		template <class Work>
+		std::optional<bool> borrowed_symbol(const annotated_row& row,
+											std::string_view name,
+											std::string_view wanted,
+											Work&& work)
+		{
+			const auto* c = cell(row, name);
+			const auto* values = c && c->state == cell_state::present && c->value
+				? std::get_if<std::vector<std::byte>>(&*c->value)
+				: nullptr;
+			if (!values)
+				return std::nullopt;
+			for (std::size_t i{}; i < values->size();)
+			{
+				work();
+				if (values->size() - i < 4U)
+					return std::nullopt;
+				std::uint32_t size{};
+				for (unsigned shift{}; shift < 32U; shift += 8U)
+					size |= std::to_integer<std::uint32_t>((*values)[i++]) << shift;
+				if (size > values->size() - i)
+					return std::nullopt;
+				bool equal = size == wanted.size();
+				if (equal)
+					for (std::size_t offset{}; offset < size; ++offset)
+						if (std::to_integer<unsigned char>((*values)[i + offset]) !=
+							static_cast<unsigned char>(wanted[offset]))
+						{
+							equal = false;
+							break;
+						}
+				if (equal)
+					return true;
+				i += size;
+			}
+			return false;
 		}
 		std::string text(const annotated_row& row, std::string_view name)
 		{
@@ -316,7 +363,7 @@ namespace cxxlens::sdk::query
 				const auto& file = row(files.front());
 				const auto size = number(file, "size");
 				if (text(file, "file") != value.file || !size || !value.begin || !value.end ||
-					*value.end < *value.begin || *value.end > *size)
+					(*value.end) < (*value.begin) || (*value.end) > (*size))
 					gap(value, subject, "source-bounds-conflicting", true);
 			}
 			template <class T>
@@ -962,11 +1009,13 @@ namespace cxxlens::sdk::query
 				refs_unique(scope.evidence);
 			canonical(output.unresolved);
 		}
-		result<call_operand_projection> project_rows(call_operand_input input,
-													 finite_population_limits limits,
-													 std::stop_token stop,
-													 budget& b,
-													 bool scope_only)
+		result<call_operand_projection>
+		project_rows(call_operand_input input,
+					 finite_population_limits limits,
+					 std::stop_token stop,
+					 budget& b,
+					 bool scope_only,
+					 const std::array<std::vector<const annotated_row*>, 12>* borrowed = nullptr)
 		{
 			if (auto valid = limits.validate(); !valid)
 				return valid.error();
@@ -992,6 +1041,217 @@ namespace cxxlens::sdk::query
 										input.call_sites,
 										input.direct_targets,
 										input.operands};
+				const auto visit_group = [&](std::size_t group, auto&& visit)
+				{
+					if (borrowed)
+					{
+						for (const auto* row : (*borrowed)[group])
+							visit(*row);
+					}
+					else
+					{
+						for (const auto& row : groups[group])
+							visit(row);
+					}
+				};
+				// Retain the actual selected semantic carriers once. Independent
+				// admission markers exclude known non-call syntax; absent/missing
+				// markers and all same-ID alternatives remain retained frontiers.
+				// Every original row is still validated and charged below.
+				using view_key = std::array<std::string_view, 4>;
+				std::array<std::set<view_key>, 12> selected;
+				const auto add =
+					[&](std::size_t group, std::string_view id, const annotated_row& row)
+				{
+					if (id.empty())
+						return;
+					for (const auto& variant : row.presence.fragments)
+					{
+						b.work();
+						const view_key k{id, row.presence.universe, variant, row.interpretation};
+						if (!selected[group].contains(k))
+						{
+							b.retain(sizeof(view_key) + 96U);
+							selected[group].insert(k);
+						}
+					}
+				};
+				const auto contains =
+					[&](std::size_t group, std::string_view id, const annotated_row& row)
+				{
+					return std::ranges::any_of(
+						row.presence.fragments,
+						[&](const auto& variant)
+						{
+							b.work();
+							return selected[group].contains(
+								view_key{id, row.presence.universe, variant, row.interpretation});
+						});
+				};
+				visit_group(3U,
+							[&](const annotated_row& row)
+							{
+								b.work();
+								const auto kind = borrowed_text(row, "kind");
+								if (kind.empty() || kind == "function" || kind == "method" ||
+									kind == "constructor" || kind == "destructor" ||
+									kind == "conversion")
+									add(4U, borrowed_text(row, "entity"), row);
+							});
+				visit_group(4U,
+							[&](const annotated_row& row)
+							{
+								b.work();
+								if (present(row, "call_site_count") ||
+									present(row, "call_site_ids") ||
+									present(row, "call_site_profile") ||
+									contains(4U, borrowed_text(row, "entity"), row))
+								{
+									add(4U, borrowed_text(row, "entity"), row);
+									add(3U, borrowed_text(row, "entity"), row);
+								}
+							});
+				visit_group(8U,
+							[&](const annotated_row& row)
+							{
+								b.work();
+								const auto finite = borrowed_symbol(row,
+																	"flags",
+																	"finite_call_admission_v1",
+																	[&]
+																	{
+																		b.work();
+																	}),
+										   admitted = borrowed_symbol(row,
+																	  "flags",
+																	  "admitted_call_site",
+																	  [&]
+																	  {
+																		  b.work();
+																	  });
+								if (!finite || !*finite || !admitted || *admitted)
+									add(8U, borrowed_text(row, "node"), row);
+							});
+				for (const auto group : {9U, 10U, 11U})
+				{
+					if (scope_only && (group == 10U || group == 11U))
+						continue;
+					visit_group(
+						group,
+						[&](const annotated_row& row)
+						{
+							b.work();
+							add(3U,
+								borrowed_text(row,
+											  group == 9U		 ? "caller"
+												  : group == 10U ? "target"
+																 : "referenced_entity"),
+								row);
+							if (group == 9U)
+								add(4U, borrowed_text(row, "caller"), row);
+							add(8U, borrowed_text(row, "expression"), row);
+							if (!scope_only)
+								add(5U,
+									borrowed_text(row,
+												  group == 10U ? "target_canonical_type" : "type"),
+									row);
+						});
+				}
+				visit_group(7U,
+							[&](const annotated_row& row)
+							{
+								b.work();
+								if (contains(4U, borrowed_text(row, "function"), row))
+									add(7U, borrowed_text(row, "body"), row);
+							});
+				// All component alternatives of a selected type remain visible;
+				// child closure is reached through original explicit component IDs.
+				if (!scope_only)
+				{
+					std::map<view_key, std::vector<const annotated_row*>> components;
+					visit_group(6U,
+								[&](const annotated_row& row)
+								{
+									b.work();
+									const auto owner = borrowed_text(row, "owner_type");
+									for (const auto& variant : row.presence.fragments)
+									{
+										b.work();
+										b.retain(sizeof(view_key) + sizeof(const annotated_row*) +
+												 96U);
+										components[view_key{owner,
+															row.presence.universe,
+															variant,
+															row.interpretation}]
+											.push_back(&row);
+									}
+								});
+					std::vector<view_key> pending;
+					std::set<view_key> visited;
+					for (const auto& id : selected[5])
+					{
+						b.retain(sizeof(view_key));
+						pending.push_back(id);
+					}
+					while (!pending.empty())
+					{
+						b.work();
+						const auto id = pending.back();
+						pending.pop_back();
+						if (visited.contains(id))
+							continue;
+						b.retain(sizeof(view_key) + 96U);
+						visited.insert(id);
+						const auto at = components.find(id);
+						if (at == components.end())
+							continue;
+						for (const auto* row : at->second)
+						{
+							b.work();
+							add(6U, borrowed_text(*row, "owner_type"), *row);
+							const auto child = borrowed_text(*row, "component_type");
+							if (child.empty())
+								continue;
+							for (const auto& variant : row->presence.fragments)
+							{
+								b.work();
+								const view_key child_id{
+									child, row->presence.universe, variant, row->interpretation};
+								if (!selected[5].contains(child_id))
+								{
+									b.retain(sizeof(view_key) * 2U + 96U);
+									selected[5].insert(child_id);
+									pending.push_back(child_id);
+								}
+							}
+						}
+					}
+				}
+				const auto relevant = [&](std::size_t group, const annotated_row& row)
+				{
+					if (group == 0U || group == 9U || group == 10U || group == 11U)
+						return true;
+					return contains(group, borrowed_text(row, identifiers[group]), row);
+				};
+				for (const auto group : {4U, 7U, 8U, 9U, 11U})
+				{
+					if (scope_only && group == 11U)
+						continue;
+					visit_group(group,
+								[&](const annotated_row& row)
+								{
+									b.work();
+									if (relevant(group, row))
+										add(2U, borrowed_text(row, "source"), row);
+								});
+				}
+				visit_group(2U,
+							[&](const annotated_row& row)
+							{
+								b.work();
+								if (relevant(2U, row))
+									add(1U, borrowed_text(row, "snapshot"), row);
+							});
 				const auto descriptors = standard_relation_descriptors();
 				std::vector<entry> entries;
 				for (std::size_t group = 0; group < groups.size(); ++group)
@@ -1002,34 +1262,41 @@ namespace cxxlens::sdk::query
 						std::ranges::find(descriptors, relations[group], &relation_descriptor::id);
 					if (descriptor == descriptors.end())
 						fail(relations[group], "descriptor-missing");
-					for (const auto& row : groups[group])
-					{
-						b.work();
-						b.charge(b.rows, 1, limits.maximum_rows, "rows");
-						b.retain(b.estimate(row));
-						if (auto valid = row.validate(); !valid)
-							return valid.error();
-						for (const auto& column : descriptor->columns)
-						{
-							b.work();
-							const auto* actual = cell(row, column.name);
-							if (!actual || actual->type != column.type || !actual->validate())
-								fail(column.id, "column-type-or-value-invalid");
-						}
-						b.charge(b.conditions,
-								 row.presence.fragments.size(),
-								 limits.maximum_condition_expansions,
-								 "conditions");
-						std::string payload;
-						for (const auto& [name, value] : row.values)
-							payload += name + '=' + value.canonical_form() + '\n';
-						const auto canonical = row.canonical_form();
-						b.charge(b.evidence,
-								 canonical.size(),
-								 limits.maximum_evidence_bytes,
-								 "evidence-bytes");
-						entries.push_back({group, &row, canonical, std::move(payload)});
-					}
+					visit_group(group,
+								[&](const annotated_row& row)
+								{
+									b.work();
+									b.charge(b.rows, 1, limits.maximum_rows, "rows");
+									const auto retained = b.estimate(row);
+									if (auto valid = detail::validate_projected_relation_row(
+											row,
+											*descriptor,
+											"sdk.call-input-invalid",
+											[&]
+											{
+												b.work();
+											});
+										!valid)
+										throw failure{valid.error()};
+									b.charge(b.conditions,
+											 row.presence.fragments.size(),
+											 limits.maximum_condition_expansions,
+											 "conditions");
+									if (borrowed_text(row, identifiers[group]).empty())
+										fail(relations[group], "identity-missing");
+									if (!relevant(group, row))
+										return;
+									b.retain(retained);
+									std::string payload;
+									for (const auto& [name, value] : row.values)
+										payload += name + '=' + value.canonical_form() + '\n';
+									const auto canonical = row.canonical_form();
+									b.charge(b.evidence,
+											 canonical.size(),
+											 limits.maximum_evidence_bytes,
+											 "evidence-bytes");
+									entries.push_back({group, &row, canonical, std::move(payload)});
+								});
 				}
 				std::ranges::sort(entries,
 								  {},
@@ -1116,7 +1383,7 @@ namespace cxxlens::sdk::query
 																  "sdk.call");
 					!valid)
 					return valid.error();
-				std::array<std::vector<annotated_row>, 12> groups;
+				std::array<std::vector<const annotated_row*>, 12> groups;
 				std::array<bool, 12> present{}, complete{};
 				complete.fill(true);
 				for (const auto& scan : input.scans)
@@ -1132,44 +1399,31 @@ namespace cxxlens::sdk::query
 					complete[group] &= scan.result.execution() == execution_status::complete &&
 						scan.result.inputs_complete() && scan.result.conflicts().empty() &&
 						scan.result.differential_disagreements().empty();
-					auto cursor = scan.result.rows();
-					while (true)
+					const auto rows = query_transfer_access::borrow_rows(scan.result);
+					b.charge(b.rows, rows.size(), limits.maximum_rows, "scan-rows");
+					if (rows.size() > limits.maximum_rows ||
+						groups[group].size() > limits.maximum_rows - rows.size())
+						fail("rows", "limit-exceeded", "sdk.call-budget");
+					b.retain(rows.size() * sizeof(const annotated_row*));
+					groups[group].reserve(groups[group].size() + rows.size());
+					for (const auto& row : rows)
 					{
 						b.work();
-						auto next = cursor.next();
-						if (!next)
-							return next.error();
-						if (!*next)
-							break;
-						auto value = (*next)->copy();
-						if (!value)
-							return value.error();
-						b.retain(b.estimate(*value));
-						groups[group].push_back(std::move(*value));
+						groups[group].push_back(&row);
 					}
 				}
 				const auto available = [&](std::size_t group)
 				{
 					return present[group] && complete[group];
 				};
-				call_operand_input raw{groups[0],
-									   groups[1],
-									   groups[2],
-									   groups[3],
-									   groups[4],
-									   groups[5],
-									   groups[6],
-									   groups[7],
-									   groups[8],
-									   groups[9],
-									   groups[10],
-									   groups[11],
-									   available(0),
-									   available(9) && available(8),
-									   available(11),
-									   available(4),
-									   available(5) && available(6)};
-				auto output = project_rows(raw, limits, stop, b, scope_only);
+				b.rows = 0;
+				call_operand_input raw{};
+				raw.compile_units_complete = available(0);
+				raw.call_inputs_complete = available(9) && available(8);
+				raw.operand_inputs_complete = available(11);
+				raw.scope_inputs_complete = available(4);
+				raw.type_inputs_complete = available(5) && available(6);
+				auto output = project_rows(raw, limits, stop, b, scope_only, &groups);
 				if (!output)
 					return output.error();
 				for (std::size_t i = 0; i < groups.size(); ++i)

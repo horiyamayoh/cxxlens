@@ -18,6 +18,7 @@
 #include <cxxlens/sdk/preprocessor.hpp>
 
 #include "query_projection_plan_limits_internal.hpp"
+#include "query_projection_rows_internal.hpp"
 
 namespace cxxlens::sdk::query
 {
@@ -226,8 +227,8 @@ namespace cxxlens::sdk::query
 		struct indexed
 		{
 			indices refs;
-			std::string payload;
-			bool conflict{};
+			std::string payload, pragma_payload;
+			bool conflict{}, pragma_conflict{};
 		};
 		using index = std::map<key, indexed>;
 		struct work
@@ -371,11 +372,59 @@ namespace cxxlens::sdk::query
 				e.argument_may_have_side_effects = boolean(r, "argument_may_have_side_effects");
 				e.effect_state = state(text(r, "effect_state"));
 				e.macro_state = state(text(r, "macro_state"));
+				e.pragma_kind = optional_text(r, "pragma_kind");
+				e.pragma_profile = optional_text(r, "pragma_profile");
+				e.pragma_state = state(text(r, "pragma_state"));
+				if (e.pragma_kind)
+					b.retain(e.pragma_kind->size());
+				if (e.pragma_profile)
+					b.retain(e.pragma_profile->size());
 				b.evidence(e.evidence, input.refs);
+				if (e.pragma_state == preprocessor_state::complete)
+				{
+					constexpr std::array<std::string_view, 10> kinds{"pack",
+																	 "once",
+																	 "push_macro",
+																	 "pop_macro",
+																	 "diagnostic",
+																	 "visibility",
+																	 "weak",
+																	 "message",
+																	 "omp",
+																	 "other"};
+					if (e.kind != "raw_pragma" || e.phase != "raw")
+					{
+						weaken(e.pragma_state, true);
+						gap(e, "sdk.preprocessor-pragma-applicability-conflicting");
+					}
+					else if (!e.pragma_profile ||
+							 *e.pragma_profile != "clang22-original-raw-pragma-kind/1")
+					{
+						e.pragma_state = preprocessor_state::unsupported;
+						gap(e, "sdk.preprocessor-pragma-profile-unsupported");
+					}
+					else if (!e.pragma_kind ||
+							 std::ranges::find(kinds, *e.pragma_kind) == kinds.end())
+					{
+						weaken(e.pragma_state, false);
+						gap(e, "sdk.preprocessor-pragma-kind-unavailable");
+					}
+				}
+				if (input.pragma_conflict)
+				{
+					weaken(e.pragma_state, true);
+					gap(e, "sdk.preprocessor-pragma-conflicting");
+				}
 				if (input.conflict)
+				{
+					weaken(e.pragma_state, true);
 					gap(e, "sdk.preprocessor-event-conflicting");
+				}
 				if (!source(e, e.source_span))
+				{
+					weaken(e.pragma_state, false);
 					gap(e, "sdk.preprocessor-source-unbound", e.source_span);
+				}
 				if (e.argument_source && !source(e, *e.argument_source))
 				{
 					gap(e, "sdk.preprocessor-argument-source-unbound", *e.argument_source);
@@ -544,8 +593,6 @@ namespace cxxlens::sdk::query
 					if (count >= limits.maximum_rows)
 						fail("rows", "limit-exceeded", "sdk.preprocessor-budget");
 					++count;
-					if (auto valid = row.validate(); !valid)
-						return valid.error();
 					const std::array<const relation_descriptor*, 8U> descriptors{
 						&build::relations::compile_unit::descriptor(),
 						&source::relations::file::descriptor(),
@@ -555,14 +602,16 @@ namespace cxxlens::sdk::query
 						&source::relations::token_inventory::descriptor(),
 						&source::relations::token::descriptor(),
 						&cc::relations::syntax_node::descriptor()};
-					for (const auto& column : descriptors[group]->columns)
-					{
-						w.b.tick();
-						const auto found = row.values.find("output." + column.name);
-						const auto* actual = found == row.values.end() ? nullptr : &found->second;
-						if (!actual || actual->type != column.type || !actual->validate())
-							fail(column.id, "column-type-or-value-invalid");
-					}
+					if (auto valid = detail::validate_projected_relation_row(
+							row,
+							*descriptors[group],
+							"sdk.preprocessor-input-invalid",
+							[&]
+							{
+								w.b.tick();
+							});
+						!valid)
+						return valid.error();
 					if (!row.presence.validate() || row.interpretation.empty())
 						fail("condition", "validated-world-required");
 					if (expanded > limits.maximum_condition_expansions ||
@@ -590,11 +639,17 @@ namespace cxxlens::sdk::query
 				w.b.tick();
 				const auto ref = w.output.evidence.size();
 				w.output.evidence.push_back({std::string{relations[item.group]}, *item.row});
-				std::string payload;
+				std::string payload, pragma_payload;
 				for (const auto& [name, c] : item.row->values)
 				{
 					w.b.tick();
-					payload += name + '=' + c.canonical_form() + '\n';
+					const auto part = name + '=' + c.canonical_form() + '\n';
+					if (item.group == 4U &&
+						(name == "output.pragma_kind" || name == "output.pragma_state" ||
+						 name == "output.pragma_profile"))
+						pragma_payload += part;
+					else
+						payload += part;
 				}
 				const auto id = text(*item.row, id_fields[item.group]);
 				if (id.empty())
@@ -603,14 +658,20 @@ namespace cxxlens::sdk::query
 				{
 					w.b.tick();
 					const auto k = world(id, *item.row, variant);
-					w.b.retain(payload.size() + 256U);
+					w.b.retain(payload.size() + pragma_payload.size() + 256U);
 					for (const auto& part : k)
 						w.b.retain(part.size());
 					auto& indexed = w.maps[item.group][k];
 					if (indexed.refs.empty())
+					{
 						indexed.payload = payload;
+						indexed.pragma_payload = pragma_payload;
+					}
 					else
+					{
 						indexed.conflict |= indexed.payload != payload;
+						indexed.pragma_conflict |= indexed.pragma_payload != pragma_payload;
+					}
 					w.b.evidence(indexed.refs, {ref});
 				}
 			}

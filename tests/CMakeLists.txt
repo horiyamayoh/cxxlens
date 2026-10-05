@@ -1181,6 +1181,37 @@ add_test(NAME unit.sdk-function-actions
 set_tests_properties(unit.sdk-function-actions PROPERTIES LABELS
                                                           "unit;sdk;query")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-function-compiler-facets
+                            unit/sdk/function_compiler_facets_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-function-compiler-facets
+                      PRIVATE cxxlens::query)
+target_include_directories(cxxlens-unit-sdk-function-compiler-facets
+                           PRIVATE ${PROJECT_SOURCE_DIR}/src/sdk)
+add_test(NAME unit.sdk-function-compiler-facets
+         COMMAND cxxlens-unit-sdk-function-compiler-facets)
+set_tests_properties(unit.sdk-function-compiler-facets
+                     PROPERTIES LABELS "unit;sdk;query;budget;cancellation")
+
+cxxlens_add_test_executable(cxxlens-unit-sdk-target-resolution
+                            unit/sdk/target_resolution_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-target-resolution PRIVATE cxxlens::query)
+target_include_directories(cxxlens-unit-sdk-target-resolution
+                           PRIVATE ${PROJECT_SOURCE_DIR}/src/sdk)
+add_test(NAME unit.sdk-target-resolution
+         COMMAND cxxlens-unit-sdk-target-resolution)
+set_tests_properties(unit.sdk-target-resolution
+                     PROPERTIES LABELS "unit;sdk;query;budget;cancellation")
+
+cxxlens_add_test_executable(cxxlens-unit-sdk-template-domains
+                            unit/sdk/template_domains_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-template-domains PRIVATE cxxlens::query)
+target_include_directories(cxxlens-unit-sdk-template-domains
+                           PRIVATE ${PROJECT_SOURCE_DIR}/src/sdk)
+add_test(NAME unit.sdk-template-domains
+         COMMAND cxxlens-unit-sdk-template-domains)
+set_tests_properties(unit.sdk-template-domains
+                     PROPERTIES LABELS "unit;sdk;query;budget;cancellation")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-call-operands
                             unit/sdk/call_operands_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-call-operands PRIVATE cxxlens::query)
@@ -1842,6 +1873,31 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
       PROPERTIES LABELS
                  "adapter;clang22;application;operations;population;bounded"
                  TIMEOUT 600)
+    cxxlens_add_test_executable(
+      cxxlens-clang22-original-input-projection
+      adapter/clang22/original_input_projection_test.cpp)
+    target_link_libraries(cxxlens-clang22-original-input-projection
+                          PRIVATE cxxlens::query)
+    add_test(
+      NAME adapter.clang22-original-input-bindings
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/clang22/original_input_bindings_test.py"
+        "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}"
+        "$<TARGET_FILE:cxxlens-clang22-original-input-projection>")
+    set_tests_properties(
+      adapter.clang22-original-input-bindings
+      PROPERTIES LABELS "adapter;clang22;application;targets;flow;bounded"
+                 TIMEOUT 600)
+    add_test(
+      NAME adapter.clang22-definition-roles
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/clang22/definition_roles_test.py"
+        "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}")
+    set_tests_properties(
+      adapter.clang22-definition-roles
+      PROPERTIES LABELS "adapter;clang22;application;flow;bounded" TIMEOUT 600)
     add_test(
       NAME adapter.clang22-build-health
       COMMAND
@@ -2112,6 +2168,18 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   # assumed host path such as /usr/bin/clang++-22. This is the same "admitted
   # toolchain root" the native bridge itself pins through qualified_read_roots
   # -- one source of truth, not a second ad hoc guess for the test.
+  cxxlens_add_test_executable(cxxlens-clang22-template-domains-native
+                              adapter/clang22/template_domains_native_test.cpp)
+  target_link_libraries(cxxlens-clang22-template-domains-native
+                        PRIVATE cxxlens_clang22_worker_core)
+  cxxlens_configure_clang22(cxxlens-clang22-template-domains-native)
+  if(CXXLENS_CLANG22_AVAILABLE)
+    add_test(NAME adapter.clang22-template-domains-native
+             COMMAND cxxlens-clang22-template-domains-native)
+    set_tests_properties(adapter.clang22-template-domains-native
+                         PROPERTIES LABELS "adapter;clang22;native;compiler")
+  endif()
+
   cxxlens_add_test_executable(cxxlens-clang22-source-closure-native
                               adapter/clang22/source_closure_native_test.cpp)
   target_link_libraries(cxxlens-clang22-source-closure-native

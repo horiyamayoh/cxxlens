@@ -28,6 +28,7 @@
 #include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_cfg_edge.hpp>
 #include <cxxlens/relations/cc_cfg_node.hpp>
+#include <cxxlens/relations/cc_constraint_node.hpp>
 #include <cxxlens/relations/cc_declaration.hpp>
 #include <cxxlens/relations/cc_declaration_inventory.hpp>
 #include <cxxlens/relations/cc_entity.hpp>
@@ -35,11 +36,16 @@
 #include <cxxlens/relations/cc_entity_edge.hpp>
 #include <cxxlens/relations/cc_flow_fact.hpp>
 #include <cxxlens/relations/cc_flow_inventory.hpp>
+#include <cxxlens/relations/cc_lambda_capture.hpp>
 #include <cxxlens/relations/cc_layout_fact.hpp>
 #include <cxxlens/relations/cc_operation.hpp>
 #include <cxxlens/relations/cc_record_inventory.hpp>
 #include <cxxlens/relations/cc_record_surface.hpp>
 #include <cxxlens/relations/cc_syntax_node.hpp>
+#include <cxxlens/relations/cc_target_resolution_slot.hpp>
+#include <cxxlens/relations/cc_template_instantiation_frame.hpp>
+#include <cxxlens/relations/cc_template_inventory.hpp>
+#include <cxxlens/relations/cc_template_subject.hpp>
 #include <cxxlens/relations/cc_type.hpp>
 #include <cxxlens/relations/cc_type_component.hpp>
 #include <cxxlens/relations/source_comment.hpp>
@@ -56,6 +62,7 @@
 
 #include "observation_v2.hpp"
 #include "project_semantic_facts.hpp"
+#include "project_template_observer.hpp"
 #include "provider_worker_v4_ast_observer.hpp"
 #include "provider_worker_v4_output_normalizer.hpp"
 #include "runtime/gcc_probe_process_port_internal.hpp"
@@ -881,6 +888,8 @@ namespace cxxlens::detail::clang22
 			std::optional<provider_worker_v4_normalized_output> normalized;
 			std::optional<project_semantic_facts> facts;
 			project_preprocessor_observations preprocessing;
+			project_template_observations templates;
+			project_template_limits template_limits;
 			provider_worker_v4_output_normalizer_options normalization;
 			normalization.toolchain_context_id = toolchain_id;
 			normalization.capture_original_call_ids = true;
@@ -943,7 +952,8 @@ namespace cxxlens::detail::clang22
 															  preprocessing,
 															  progress,
 															  original_calls,
-															  project_id);
+															  project_id,
+															  &templates);
 					if (!detached)
 						return sdk::unexpected(std::move(detached.error()));
 					facts = std::move(*detached);
@@ -953,7 +963,15 @@ namespace cxxlens::detail::clang22
 				{
 					install_project_preprocessor_observer(preprocessor, closure, preprocessing);
 				},
-				&value.parser));
+				&value.parser,
+				[&](clang::Sema& sema)
+				{
+					install_project_template_observer(sema, templates, template_limits);
+				},
+				[&](clang::Sema& sema) -> sdk::result<void>
+				{
+					return observe_project_templates(sema, templates, template_limits);
+				}));
 			if (!observations || !normalized || !facts)
 				fail("AST", "observer-not-called");
 			std::map<std::string, materialization::observation_v2_primary_span, std::less<>> spans;
@@ -1072,7 +1090,7 @@ namespace cxxlens::detail::clang22
 									   }),
 						   prepared.end());
 			sdk::relation_registry registry;
-			const std::array<const sdk::relation_descriptor*, 40U> descriptors{
+			const std::array<const sdk::relation_descriptor*, 46U> descriptors{
 				&build::relations::project::descriptor(),
 				&build::relations::toolchain_context::descriptor(),
 				&build::relations::variant::descriptor(),
@@ -1099,6 +1117,13 @@ namespace cxxlens::detail::clang22
 				&cc::relations::record_inventory::descriptor(),
 				&cc::relations::declaration::descriptor(),
 				&cc::relations::declaration_inventory::descriptor(),
+				&cc::relations::target_resolution_slot::descriptor(),
+				&cc::relations::template_subject::descriptor(),
+				&cc::relations::constraint_node::descriptor(),
+				&cc::relations::lambda_capture::descriptor(),
+				&cc::relations::template_instantiation_frame::descriptor(),
+				&cc::relations::template_inventory::descriptor(),
+
 				&cc::relations::flow_inventory::descriptor(),
 				&source::relations::comment::descriptor(),
 				&source::relations::comment_inventory::descriptor(),
@@ -1346,6 +1371,14 @@ namespace cxxlens::detail::clang22
 										"provider.entity-redeclaration-incompatible" &&
 									descriptor->id != "cc.entity.v1")
 									continue;
+								const bool template_relation =
+									descriptor->id == "cc.template_subject.v1" ||
+									descriptor->id == "cc.constraint_node.v1" ||
+									descriptor->id == "cc.lambda_capture.v1" ||
+									descriptor->id == "cc.template_instantiation_frame.v1" ||
+									descriptor->id == "cc.template_inventory.v1";
+								if (template_relation && !unresolved.code.starts_with("template."))
+									continue;
 								const bool target_resolution =
 									unresolved.code == "provider.indirect-target-unresolved" ||
 									unresolved.code == "provider.call-target-unresolved" ||
@@ -1392,6 +1425,10 @@ namespace cxxlens::detail::clang22
 									descriptor->id != "cc.entity_detail.v1" &&
 									descriptor->id != "cc.declaration_inventory.v1")
 									continue;
+								if (unresolved.code.starts_with("target-slot.") &&
+									descriptor->id != "cc.target_resolution_slot.v1" &&
+									descriptor->id != "cc.declaration_inventory.v1")
+									continue;
 								if (unresolved.code.starts_with("type.") &&
 									descriptor->id != "cc.type.v1" &&
 									descriptor->id != "cc.type_component.v1" &&
@@ -1417,7 +1454,10 @@ namespace cxxlens::detail::clang22
 							}
 							for (const auto& limitation : value.limitations)
 								if (descriptor->id.starts_with("cc.") &&
-									descriptor->id != "cc.record_inventory.v1")
+									descriptor->id != "cc.record_inventory.v1" &&
+									!descriptor->id.starts_with("cc.template_") &&
+									descriptor->id != "cc.constraint_node.v1" &&
+									descriptor->id != "cc.lambda_capture.v1")
 								{
 									const auto routing =
 										value.limitation_relations.find(limitation);

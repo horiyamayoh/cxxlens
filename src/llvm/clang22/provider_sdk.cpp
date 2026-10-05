@@ -20,6 +20,7 @@
 #include <clang/Frontend/FrontendAction.h>
 #include <clang/Lex/Lexer.h>
 #include <clang/Lex/Preprocessor.h>
+#include <clang/Sema/SemaConsumer.h>
 #include <clang/Tooling/Tooling.h>
 #endif
 
@@ -109,7 +110,7 @@ namespace cxxlens::provider::clang22
 			clang::DiagnosticConsumer* target_;
 			std::unique_ptr<clang::DiagnosticConsumer> owned_;
 		};
-		class callback_consumer final : public clang::ASTConsumer
+		class callback_consumer final : public clang::SemaConsumer
 		{
 		  public:
 			callback_consumer(translation_unit_callback& callback,
@@ -117,11 +118,25 @@ namespace cxxlens::provider::clang22
 							  clang::Preprocessor& preprocessor,
 							  const clang::CodeGenOptions& code_generation_options,
 							  detail::native_parse_observation* parse_observation,
-							  parser_diagnostics*& diagnostics)
+							  parser_diagnostics*& diagnostics,
+							  detail::sema_setup& semantic_setup,
+							  detail::sema_ast_ready& semantic_ready)
 				: callback_{&callback}, outcome_{&outcome}, preprocessor_{&preprocessor},
 				  code_generation_options_{&code_generation_options},
-				  parse_observation_{parse_observation}, diagnostics_{&diagnostics}
+				  parse_observation_{parse_observation}, diagnostics_{&diagnostics},
+				  semantic_setup_{&semantic_setup}, semantic_ready_{&semantic_ready}
 			{
+			}
+
+			void InitializeSema(clang::Sema& sema) override
+			{
+				sema_ = &sema;
+				if (*semantic_setup_)
+					(*semantic_setup_)(sema);
+			}
+			void ForgetSema() override
+			{
+				sema_ = nullptr;
 			}
 
 			void HandleTranslationUnit(clang::ASTContext& context) override
@@ -129,6 +144,18 @@ namespace cxxlens::provider::clang22
 				if (parse_observation_ && *diagnostics_)
 					*parse_observation_ = {
 						true, true, (*diagnostics_)->errors, (*diagnostics_)->fatal_errors};
+				if (*semantic_ready_)
+				{
+					if (!sema_)
+					{
+						*outcome_ =
+							sdk::unexpected(native_error("native.sema-unavailable", "callback"));
+						return;
+					}
+					*outcome_ = (*semantic_ready_)(*sema_);
+					if (!*outcome_)
+						return;
+				}
 				auto borrowed = detail::native_access::make(
 					context, context.getSourceManager(), *preprocessor_, *code_generation_options_);
 				*outcome_ = (*callback_)(borrowed);
@@ -145,6 +172,9 @@ namespace cxxlens::provider::clang22
 			const clang::CodeGenOptions* code_generation_options_;
 			detail::native_parse_observation* parse_observation_;
 			parser_diagnostics** diagnostics_;
+			clang::Sema* sema_{};
+			detail::sema_setup* semantic_setup_;
+			detail::sema_ast_ready* semantic_ready_;
 		};
 
 		class callback_action final : public clang::ASTFrontendAction
@@ -153,9 +183,12 @@ namespace cxxlens::provider::clang22
 			callback_action(translation_unit_callback& callback,
 							sdk::result<void>& outcome,
 							detail::preprocessor_setup setup = {},
-							detail::native_parse_observation* parse_observation = nullptr)
+							detail::native_parse_observation* parse_observation = nullptr,
+							detail::sema_setup semantic_setup = {},
+							detail::sema_ast_ready semantic_ready = {})
 				: callback_{&callback}, outcome_{&outcome}, setup_{std::move(setup)},
-				  parse_observation_{parse_observation}
+				  parse_observation_{parse_observation}, semantic_setup_{std::move(semantic_setup)},
+				  semantic_ready_{std::move(semantic_ready)}
 			{
 			}
 
@@ -170,7 +203,9 @@ namespace cxxlens::provider::clang22
 														   compiler.getPreprocessor(),
 														   compiler.getCodeGenOpts(),
 														   parse_observation_,
-														   diagnostics_);
+														   diagnostics_,
+														   semantic_setup_,
+														   semantic_ready_);
 			}
 
 		  protected:
@@ -216,6 +251,8 @@ namespace cxxlens::provider::clang22
 			sdk::result<void>* outcome_;
 			detail::preprocessor_setup setup_;
 			detail::native_parse_observation* parse_observation_;
+			detail::sema_setup semantic_setup_;
+			detail::sema_ast_ready semantic_ready_;
 			parser_diagnostics* diagnostics_{};
 		};
 #endif
@@ -317,7 +354,9 @@ namespace cxxlens::provider::clang22
 									  llvm::vfs::FileSystem& filesystem,
 									  translation_unit_callback callback,
 									  preprocessor_setup setup,
-									  native_parse_observation* parse_observation)
+									  native_parse_observation* parse_observation,
+									  sema_setup semantic_setup,
+									  sema_ast_ready semantic_ready)
 	{
 		if (auto valid = input.validate(); !valid)
 			return valid;
@@ -330,8 +369,12 @@ namespace cxxlens::provider::clang22
 				return sdk::unexpected(native_error("native.input-invalid", "argument"));
 
 		sdk::result<void> outcome{};
-		auto action = std::make_unique<callback_action>(
-			callback, outcome, std::move(setup), parse_observation);
+		auto action = std::make_unique<callback_action>(callback,
+														outcome,
+														std::move(setup),
+														parse_observation,
+														std::move(semantic_setup),
+														std::move(semantic_ready));
 		llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> retained_filesystem{&filesystem};
 		const auto parsed = clang::tooling::runToolOnCodeWithArgs(std::move(action),
 																  input.source,

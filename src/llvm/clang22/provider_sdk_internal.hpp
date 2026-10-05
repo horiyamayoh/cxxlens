@@ -16,6 +16,11 @@ namespace llvm::vfs
 } // namespace llvm::vfs
 #endif
 
+namespace clang
+{
+	class Sema;
+} // namespace clang
+
 namespace cxxlens::provider::clang22::detail
 {
 	/** Scalar parser observations captured before invoking the semantic extractor. */
@@ -36,6 +41,12 @@ namespace cxxlens::provider::clang22::detail
 	};
 	/** Configure provider-owned PP callbacks before preprocessing, within one native job. */
 	using preprocessor_setup = std::move_only_function<void(clang::Preprocessor&)>;
+	/** Install original compiler callbacks before parsing; the Sema is borrowed only during this
+	 * job. */
+	using sema_setup = std::move_only_function<void(clang::Sema&)>;
+	/** Observe the original parsed AST before the ordinary extractor, preserving parser diagnostic
+	 * axes. */
+	using sema_ast_ready = std::move_only_function<sdk::result<void>(clang::Sema&)>;
 #if defined(CXXLENS_HAS_CLANG22) && CXXLENS_HAS_CLANG22
 	/** Source-private execution seam for an already authenticated compiler-facing VFS. */
 	[[nodiscard]] sdk::result<void>
@@ -46,6 +57,8 @@ namespace cxxlens::provider::clang22::detail
 							  llvm::vfs::FileSystem& filesystem,
 							  translation_unit_callback callback,
 							  preprocessor_setup setup = {},
-							  native_parse_observation* parse_observation = nullptr);
+							  native_parse_observation* parse_observation = nullptr,
+							  sema_setup semantic_setup = {},
+							  sema_ast_ready semantic_ready = {});
 #endif
 } // namespace cxxlens::provider::clang22::detail

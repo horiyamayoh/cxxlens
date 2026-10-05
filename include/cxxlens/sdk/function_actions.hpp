@@ -61,6 +61,8 @@ namespace cxxlens::sdk::query
 		std::string universe, variant, interpretation, profile;
 		std::optional<std::uint64_t> operation_count, begin, end;
 		std::vector<std::string> operation_ids;
+		/** Independent count/member/admission closure, before dependent member facets. */
+		finite_population_state enumeration_state{finite_population_state::unknown};
 		finite_population_state state{finite_population_state::unknown};
 		std::vector<observed_function_action> actions;
 		std::vector<std::size_t> evidence;

@@ -16,6 +16,7 @@
 #include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_cfg_edge.hpp>
 #include <cxxlens/relations/cc_cfg_node.hpp>
+#include <cxxlens/relations/cc_constraint_node.hpp>
 #include <cxxlens/relations/cc_declaration.hpp>
 #include <cxxlens/relations/cc_declaration_inventory.hpp>
 #include <cxxlens/relations/cc_entity.hpp>
@@ -23,11 +24,16 @@
 #include <cxxlens/relations/cc_entity_edge.hpp>
 #include <cxxlens/relations/cc_flow_fact.hpp>
 #include <cxxlens/relations/cc_flow_inventory.hpp>
+#include <cxxlens/relations/cc_lambda_capture.hpp>
 #include <cxxlens/relations/cc_layout_fact.hpp>
 #include <cxxlens/relations/cc_operation.hpp>
 #include <cxxlens/relations/cc_record_inventory.hpp>
 #include <cxxlens/relations/cc_record_surface.hpp>
 #include <cxxlens/relations/cc_syntax_node.hpp>
+#include <cxxlens/relations/cc_target_resolution_slot.hpp>
+#include <cxxlens/relations/cc_template_instantiation_frame.hpp>
+#include <cxxlens/relations/cc_template_inventory.hpp>
+#include <cxxlens/relations/cc_template_subject.hpp>
 #include <cxxlens/relations/cc_type.hpp>
 #include <cxxlens/relations/cc_type_component.hpp>
 #include <cxxlens/relations/company_lock_acquire.hpp>
@@ -311,6 +317,12 @@ namespace cxxlens::sdk
 				cc::relations::cfg_node::descriptor(),
 				cc::relations::declaration::descriptor(),
 				cc::relations::declaration_inventory::descriptor(),
+				cc::relations::target_resolution_slot::descriptor(),
+				cc::relations::constraint_node::descriptor(),
+				cc::relations::lambda_capture::descriptor(),
+				cc::relations::template_instantiation_frame::descriptor(),
+				cc::relations::template_inventory::descriptor(),
+				cc::relations::template_subject::descriptor(),
 				cc::relations::flow_inventory::descriptor(),
 				source::relations::comment::descriptor(),
 				source::relations::comment_inventory::descriptor(),

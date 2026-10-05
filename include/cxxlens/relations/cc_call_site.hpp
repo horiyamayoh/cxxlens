@@ -24,8 +24,8 @@ namespace cxxlens::cc::relations
 				output.semantic_major = 1U;
 				output.semantics = "cc.call-site/1";
 				output.owner_namespace = "cxxlens.standard.cc";
-				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.call_site.v1.compile_unit","cc.call_site.v1.source","cc.call_site.v1.kind","cc.call_site.v1.ordinal","cc.call_site.v1.caller"],"result_column":"cc.call_site.v1.call"},"interpretation_required":true,"key":["cc.call_site.v1.call"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.call_site.v1.call","identity_role":"claim_key","name":"call","required":true,"type":"typed_id<cc_call_id>"},{"id":"cc.call_site.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.call_site.v1.caller","identity_role":"authoritative_payload","name":"caller","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.call_site.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<cc.call-kind/1>"},{"id":"cc.call_site.v1.source","identity_role":"authoritative_payload","name":"source","required":true,"type":"typed_id<source_span_id>"},{"id":"cc.call_site.v1.receiver_static_type","identity_role":"authoritative_payload","name":"receiver_static_type","required":false,"type":"optional<typed_id<cc_type_id>>"},{"id":"cc.call_site.v1.ordinal","identity_role":"authoritative_payload","name":"ordinal","required":true,"type":"uint64"},{"id":"cc.call_site.v1.argument_count","identity_role":"authoritative_payload","name":"argument_count","required":false,"type":"optional<uint64>"},{"id":"cc.call_site.v1.operand_count","identity_role":"authoritative_payload","name":"operand_count","required":false,"type":"optional<uint64>"},{"id":"cc.call_site.v1.operand_population_state","identity_role":"authoritative_payload","name":"operand_population_state","required":false,"type":"optional<open_symbol<cc.call-operand-population-state/1>>"},{"id":"cc.call_site.v1.operand_profile","identity_role":"authoritative_payload","name":"operand_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.call_site.v1.expression","identity_role":"authoritative_payload","name":"expression","required":false,"type":"optional<typed_id<syntax_node_id>>"}],"coverage":{"execution_domain":"cc.call-extraction.compile-unit"},"descriptor_id":"cc.call_site.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::call_site","indexes":[["cc.call_site.v1.caller"],["cc.call_site.v1.source"],["cc.call_site.v1.receiver_static_type"]],"merge":{"conflict_columns":["cc.call_site.v1.argument_count","cc.call_site.v1.caller","cc.call_site.v1.compile_unit","cc.call_site.v1.expression","cc.call_site.v1.kind","cc.call_site.v1.operand_count","cc.call_site.v1.operand_population_state","cc.call_site.v1.operand_profile","cc.call_site.v1.ordinal","cc.call_site.v1.receiver_static_type","cc.call_site.v1.source"],"mode":"functional_assertion"},"name":"cc.call_site","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.call_site.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"canonicalization"},"references":[{"on_missing":"unresolved","source_columns":["cc.call_site.v1.caller"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"reject_batch","source_columns":["cc.call_site.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"unresolved","source_columns":["cc.call_site.v1.expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.call_site.v1.receiver_static_type"],"strength":"soft_semantic","target_columns":["cc.type.v1.type"],"target_relation":"cc.type"},{"on_missing":"reject_batch","source_columns":["cc.call_site.v1.source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"}],"semantic_major":1,"semantics":"cc.call-site/1","stability":"versioned","summary":"A call occurrence; direct targets are represented only by cc.call_direct_target.","version":"1.0.0"})cxxlens";
-				output.contract_digest = "sha256:f67a51c9b2aa26bccf2b1f54605d533c55a39884f4e45dd7d2318df9345606bc";
+				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.call_site.v1.compile_unit","cc.call_site.v1.source","cc.call_site.v1.kind","cc.call_site.v1.ordinal","cc.call_site.v1.caller"],"result_column":"cc.call_site.v1.call"},"interpretation_required":true,"key":["cc.call_site.v1.call"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.call_site.v1.call","identity_role":"claim_key","name":"call","required":true,"type":"typed_id<cc_call_id>"},{"id":"cc.call_site.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.call_site.v1.caller","identity_role":"authoritative_payload","name":"caller","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.call_site.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<cc.call-kind/1>"},{"id":"cc.call_site.v1.source","identity_role":"authoritative_payload","name":"source","required":true,"type":"typed_id<source_span_id>"},{"id":"cc.call_site.v1.receiver_static_type","identity_role":"authoritative_payload","name":"receiver_static_type","required":false,"type":"optional<typed_id<cc_type_id>>"},{"id":"cc.call_site.v1.ordinal","identity_role":"authoritative_payload","name":"ordinal","required":true,"type":"uint64"},{"id":"cc.call_site.v1.argument_count","identity_role":"authoritative_payload","name":"argument_count","required":false,"type":"optional<uint64>"},{"id":"cc.call_site.v1.operand_count","identity_role":"authoritative_payload","name":"operand_count","required":false,"type":"optional<uint64>"},{"id":"cc.call_site.v1.operand_population_state","identity_role":"authoritative_payload","name":"operand_population_state","required":false,"type":"optional<open_symbol<cc.call-operand-population-state/1>>"},{"id":"cc.call_site.v1.operand_profile","identity_role":"authoritative_payload","name":"operand_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.call_site.v1.expression","identity_role":"authoritative_payload","name":"expression","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.call_site.v1.dispatch_kind","identity_role":"authoritative_payload","name":"dispatch_kind","required":false,"type":"optional<open_symbol<cc.dispatch-kind/1>>"},{"id":"cc.call_site.v1.dispatch_state","identity_role":"authoritative_payload","name":"dispatch_state","required":false,"type":"optional<open_symbol<cc.target-slot-observation-state/1>>"},{"id":"cc.call_site.v1.dispatch_profile","identity_role":"authoritative_payload","name":"dispatch_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.call_site.v1.candidate_count","identity_role":"authoritative_payload","name":"candidate_count","required":false,"type":"optional<uint64>"},{"id":"cc.call_site.v1.candidate_targets","identity_role":"authoritative_payload","name":"candidate_targets","required":false,"type":"optional<set<cc_entity_id>>"},{"id":"cc.call_site.v1.candidate_state","identity_role":"authoritative_payload","name":"candidate_state","required":false,"type":"optional<open_symbol<cc.target-slot-enumeration-state/1>>"},{"id":"cc.call_site.v1.candidate_profile","identity_role":"authoritative_payload","name":"candidate_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.call_site.v1.candidate_presence","identity_role":"authoritative_payload","name":"candidate_presence","required":false,"type":"optional<open_symbol<cc.candidate-presence/1>>"}],"coverage":{"execution_domain":"cc.call-extraction.compile-unit"},"descriptor_id":"cc.call_site.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::call_site","indexes":[["cc.call_site.v1.caller"],["cc.call_site.v1.source"],["cc.call_site.v1.receiver_static_type"]],"merge":{"conflict_columns":["cc.call_site.v1.argument_count","cc.call_site.v1.caller","cc.call_site.v1.candidate_count","cc.call_site.v1.candidate_presence","cc.call_site.v1.candidate_profile","cc.call_site.v1.candidate_state","cc.call_site.v1.candidate_targets","cc.call_site.v1.compile_unit","cc.call_site.v1.dispatch_kind","cc.call_site.v1.dispatch_profile","cc.call_site.v1.dispatch_state","cc.call_site.v1.expression","cc.call_site.v1.kind","cc.call_site.v1.operand_count","cc.call_site.v1.operand_population_state","cc.call_site.v1.operand_profile","cc.call_site.v1.ordinal","cc.call_site.v1.receiver_static_type","cc.call_site.v1.source"],"mode":"functional_assertion"},"name":"cc.call_site","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.call_site.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"canonicalization"},"references":[{"on_missing":"unresolved","source_columns":["cc.call_site.v1.caller"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.call_site.v1.candidate_targets"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"reject_batch","source_columns":["cc.call_site.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"unresolved","source_columns":["cc.call_site.v1.expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.call_site.v1.receiver_static_type"],"strength":"soft_semantic","target_columns":["cc.type.v1.type"],"target_relation":"cc.type"},{"on_missing":"reject_batch","source_columns":["cc.call_site.v1.source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"}],"row_constraints":{"all_or_none":[["cc.call_site.v1.candidate_count","cc.call_site.v1.candidate_profile","cc.call_site.v1.candidate_state","cc.call_site.v1.candidate_targets"],["cc.call_site.v1.dispatch_kind","cc.call_site.v1.dispatch_profile","cc.call_site.v1.dispatch_state"]]},"semantic_major":1,"semantics":"cc.call-site/1","stability":"versioned","summary":"A call occurrence; direct targets are represented only by cc.call_direct_target.","version":"1.0.0"})cxxlens";
+				output.contract_digest = "sha256:0d335a03c8a081dcdca58eabb54d26d9200e2fcbc6b8f2770ef4b3ca973456d6";
 				output.columns = {
 					{"cc.call_site.v1.call", "call", {sdk::scalar_kind::typed_id, "cc_call_id", false}, true, sdk::column_role::claim_key},
 					{"cc.call_site.v1.compile_unit", "compile_unit", {sdk::scalar_kind::typed_id, "compile_unit_id", false}, true, sdk::column_role::authoritative_payload},
@@ -39,6 +39,14 @@ namespace cxxlens::cc::relations
 					{"cc.call_site.v1.operand_population_state", "operand_population_state", {sdk::scalar_kind::open_symbol, "cc.call-operand-population-state/1", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.call_site.v1.operand_profile", "operand_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.call_site.v1.expression", "expression", {sdk::scalar_kind::typed_id, "syntax_node_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.call_site.v1.dispatch_kind", "dispatch_kind", {sdk::scalar_kind::open_symbol, "cc.dispatch-kind/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.call_site.v1.dispatch_state", "dispatch_state", {sdk::scalar_kind::open_symbol, "cc.target-slot-observation-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.call_site.v1.dispatch_profile", "dispatch_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.call_site.v1.candidate_count", "candidate_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.call_site.v1.candidate_targets", "candidate_targets", {sdk::scalar_kind::set, "cc_entity_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.call_site.v1.candidate_state", "candidate_state", {sdk::scalar_kind::open_symbol, "cc.target-slot-enumeration-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.call_site.v1.candidate_profile", "candidate_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.call_site.v1.candidate_presence", "candidate_presence", {sdk::scalar_kind::open_symbol, "cc.candidate-presence/1", true}, false, sdk::column_role::authoritative_payload},
 				};
 				output.domain_identity.result_column = "cc.call_site.v1.call";
 				output.domain_identity.projection = {
@@ -54,6 +62,7 @@ namespace cxxlens::cc::relations
 				};
 				output.references = {
 					{{"cc.call_site.v1.caller"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic},
+					{{"cc.call_site.v1.candidate_targets"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic, true},
 					{{"cc.call_site.v1.compile_unit"}, "build.compile_unit", {"build.compile_unit.v1.compile_unit"}, sdk::reference_strength::hard},
 					{{"cc.call_site.v1.expression"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
 					{{"cc.call_site.v1.receiver_static_type"}, "cc.type", {"cc.type.v1.type"}, sdk::reference_strength::soft_semantic},
@@ -63,7 +72,15 @@ namespace cxxlens::cc::relations
 				output.conflict_columns = {
 					"cc.call_site.v1.argument_count",
 					"cc.call_site.v1.caller",
+					"cc.call_site.v1.candidate_count",
+					"cc.call_site.v1.candidate_presence",
+					"cc.call_site.v1.candidate_profile",
+					"cc.call_site.v1.candidate_state",
+					"cc.call_site.v1.candidate_targets",
 					"cc.call_site.v1.compile_unit",
+					"cc.call_site.v1.dispatch_kind",
+					"cc.call_site.v1.dispatch_profile",
+					"cc.call_site.v1.dispatch_state",
 					"cc.call_site.v1.expression",
 					"cc.call_site.v1.kind",
 					"cc.call_site.v1.operand_count",
@@ -188,6 +205,78 @@ namespace cxxlens::cc::relations
 			[[nodiscard]] static sdk::column_ref ref()
 			{
 				return {call_site::descriptor().id, "cc.call_site.v1.expression", {sdk::scalar_kind::typed_id, "syntax_node_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.call_site.v1.dispatch_kind`. */
+		struct dispatch_kind
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {call_site::descriptor().id, "cc.call_site.v1.dispatch_kind", {sdk::scalar_kind::open_symbol, "cc.dispatch-kind/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.call_site.v1.dispatch_state`. */
+		struct dispatch_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {call_site::descriptor().id, "cc.call_site.v1.dispatch_state", {sdk::scalar_kind::open_symbol, "cc.target-slot-observation-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.call_site.v1.dispatch_profile`. */
+		struct dispatch_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {call_site::descriptor().id, "cc.call_site.v1.dispatch_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.call_site.v1.candidate_count`. */
+		struct candidate_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {call_site::descriptor().id, "cc.call_site.v1.candidate_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.call_site.v1.candidate_targets`. */
+		struct candidate_targets
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {call_site::descriptor().id, "cc.call_site.v1.candidate_targets", {sdk::scalar_kind::set, "cc_entity_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.call_site.v1.candidate_state`. */
+		struct candidate_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {call_site::descriptor().id, "cc.call_site.v1.candidate_state", {sdk::scalar_kind::open_symbol, "cc.target-slot-enumeration-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.call_site.v1.candidate_profile`. */
+		struct candidate_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {call_site::descriptor().id, "cc.call_site.v1.candidate_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.call_site.v1.candidate_presence`. */
+		struct candidate_presence
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {call_site::descriptor().id, "cc.call_site.v1.candidate_presence", {sdk::scalar_kind::open_symbol, "cc.candidate-presence/1", true}};
 			}
 		};
 	};

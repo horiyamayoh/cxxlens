@@ -24,8 +24,8 @@ namespace cxxlens::cc::relations
 				output.semantic_major = 1U;
 				output.semantics = "cc.operation/1";
 				output.owner_namespace = "cxxlens.standard.cc";
-				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.operation.v1.compile_unit","cc.operation.v1.scope_declaration","cc.operation.v1.kind","cc.operation.v1.origin","cc.operation.v1.expression","cc.operation.v1.object_declaration","cc.operation.v1.node","cc.operation.v1.element_index","cc.operation.v1.ordinal"],"result_column":"cc.operation.v1.operation"},"interpretation_required":true,"key":["cc.operation.v1.operation"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.operation.v1.operation","identity_role":"claim_key","name":"operation","required":true,"type":"typed_id<operation_id>"},{"id":"cc.operation.v1.site","identity_role":"authoritative_payload","name":"site","required":false,"type":"optional<typed_id<operation_site_id>>"},{"id":"cc.operation.v1.site_state","identity_role":"authoritative_payload","name":"site_state","required":true,"type":"open_symbol<cc.operation-site-state/1>"},{"id":"cc.operation.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.operation.v1.scope_declaration","identity_role":"authoritative_payload","name":"scope_declaration","required":true,"type":"typed_id<cc_declaration_id>"},{"id":"cc.operation.v1.function","identity_role":"authoritative_payload","name":"function","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.operation.v1.body","identity_role":"authoritative_payload","name":"body","required":false,"type":"optional<typed_id<body_id>>"},{"id":"cc.operation.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<cc.operation-kind/1>"},{"id":"cc.operation.v1.origin","identity_role":"authoritative_payload","name":"origin","required":true,"type":"open_symbol<cc.operation-origin/1>"},{"id":"cc.operation.v1.profile","identity_role":"authoritative_payload","name":"profile","required":true,"type":"utf8_string"},{"id":"cc.operation.v1.ordinal","identity_role":"authoritative_payload","name":"ordinal","required":true,"type":"uint64"},{"id":"cc.operation.v1.source","identity_role":"authoritative_payload","name":"source","required":false,"type":"optional<typed_id<source_span_id>>"},{"id":"cc.operation.v1.expression","identity_role":"authoritative_payload","name":"expression","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.operation.v1.call","identity_role":"authoritative_payload","name":"call","required":false,"type":"optional<typed_id<cc_call_id>>"},{"id":"cc.operation.v1.parent_site","identity_role":"authoritative_payload","name":"parent_site","required":false,"type":"optional<typed_id<operation_site_id>>"},{"id":"cc.operation.v1.node","identity_role":"authoritative_payload","name":"node","required":false,"type":"optional<typed_id<cfg_node_id>>"},{"id":"cc.operation.v1.element_index","identity_role":"authoritative_payload","name":"element_index","required":false,"type":"optional<uint64>"},{"id":"cc.operation.v1.element_kind","identity_role":"authoritative_payload","name":"element_kind","required":false,"type":"optional<open_symbol<cc.cfg-element-kind/1>>"},{"id":"cc.operation.v1.program_point","identity_role":"authoritative_payload","name":"program_point","required":false,"type":"optional<uint64>"},{"id":"cc.operation.v1.program_point_profile","identity_role":"authoritative_payload","name":"program_point_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.operation.v1.evaluation","identity_role":"authoritative_payload","name":"evaluation","required":true,"type":"open_symbol<cc.operation-evaluation/1>"},{"id":"cc.operation.v1.outcome","identity_role":"authoritative_payload","name":"outcome","required":true,"type":"open_symbol<cc.operation-outcome/1>"},{"id":"cc.operation.v1.observation_state","identity_role":"authoritative_payload","name":"observation_state","required":true,"type":"open_symbol<cc.operation-state/1>"},{"id":"cc.operation.v1.reason","identity_role":"authoritative_payload","name":"reason","required":false,"type":"optional<utf8_string>"},{"id":"cc.operation.v1.target","identity_role":"authoritative_payload","name":"target","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.operation.v1.target_signature_state","identity_role":"authoritative_payload","name":"target_signature_state","required":false,"type":"optional<open_symbol<cc.target-signature-state/1>>"},{"id":"cc.operation.v1.target_signature_profile","identity_role":"authoritative_payload","name":"target_signature_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.operation.v1.target_usr","identity_role":"authoritative_payload","name":"target_usr","required":false,"type":"optional<bytes>"},{"id":"cc.operation.v1.target_canonical_type","identity_role":"authoritative_payload","name":"target_canonical_type","required":false,"type":"optional<typed_id<cc_type_id>>"},{"id":"cc.operation.v1.target_structural_signature_digest","identity_role":"authoritative_payload","name":"target_structural_signature_digest","required":false,"type":"optional<digest>"},{"id":"cc.operation.v1.target_canonical_type_digest","identity_role":"authoritative_payload","name":"target_canonical_type_digest","required":false,"type":"optional<digest>"},{"id":"cc.operation.v1.target_canonical_type_profile","identity_role":"authoritative_payload","name":"target_canonical_type_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.operation.v1.target_language","identity_role":"authoritative_payload","name":"target_language","required":false,"type":"optional<open_symbol<build.language/1>>"},{"id":"cc.operation.v1.target_linkage","identity_role":"authoritative_payload","name":"target_linkage","required":false,"type":"optional<open_symbol<cc.linkage/1>>"},{"id":"cc.operation.v1.target_module_domain","identity_role":"authoritative_payload","name":"target_module_domain","required":false,"type":"optional<utf8_string>"},{"id":"cc.operation.v1.object_declaration","identity_role":"authoritative_payload","name":"object_declaration","required":false,"type":"optional<typed_id<cc_declaration_id>>"},{"id":"cc.operation.v1.object_entity","identity_role":"authoritative_payload","name":"object_entity","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.operation.v1.object_expression","identity_role":"authoritative_payload","name":"object_expression","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.operation.v1.object_source","identity_role":"authoritative_payload","name":"object_source","required":false,"type":"optional<typed_id<source_span_id>>"},{"id":"cc.operation.v1.object_type","identity_role":"authoritative_payload","name":"object_type","required":false,"type":"optional<typed_id<cc_type_id>>"},{"id":"cc.operation.v1.object_state","identity_role":"authoritative_payload","name":"object_state","required":false,"type":"optional<open_symbol<cc.operation-state/1>>"},{"id":"cc.operation.v1.type_use_kind","identity_role":"authoritative_payload","name":"type_use_kind","required":false,"type":"optional<open_symbol<cc.type-use-kind/1>>"},{"id":"cc.operation.v1.target_kind","identity_role":"authoritative_payload","name":"target_kind","required":false,"type":"optional<open_symbol<cc.entity-kind/1>>"},{"id":"cc.operation.v1.subject_index","identity_role":"authoritative_payload","name":"subject_index","required":false,"type":"optional<uint64>"},{"id":"cc.operation.v1.parameter_has_default_argument","identity_role":"authoritative_payload","name":"parameter_has_default_argument","required":false,"type":"optional<bool>"},{"id":"cc.operation.v1.expression_context","identity_role":"authoritative_payload","name":"expression_context","required":false,"type":"optional<open_symbol<cc.operation-expression-context/1>>"},{"id":"cc.operation.v1.context_declaration","identity_role":"authoritative_payload","name":"context_declaration","required":false,"type":"optional<typed_id<cc_declaration_id>>"}],"coverage":{"execution_domain":"cc.operation.compile-unit"},"descriptor_id":"cc.operation.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::operation","indexes":[["cc.operation.v1.compile_unit"]],"merge":{"conflict_columns":["cc.operation.v1.body","cc.operation.v1.call","cc.operation.v1.compile_unit","cc.operation.v1.context_declaration","cc.operation.v1.element_index","cc.operation.v1.element_kind","cc.operation.v1.evaluation","cc.operation.v1.expression","cc.operation.v1.expression_context","cc.operation.v1.function","cc.operation.v1.kind","cc.operation.v1.node","cc.operation.v1.object_declaration","cc.operation.v1.object_entity","cc.operation.v1.object_expression","cc.operation.v1.object_source","cc.operation.v1.object_state","cc.operation.v1.object_type","cc.operation.v1.observation_state","cc.operation.v1.ordinal","cc.operation.v1.origin","cc.operation.v1.outcome","cc.operation.v1.parameter_has_default_argument","cc.operation.v1.parent_site","cc.operation.v1.profile","cc.operation.v1.program_point","cc.operation.v1.program_point_profile","cc.operation.v1.reason","cc.operation.v1.scope_declaration","cc.operation.v1.site","cc.operation.v1.site_state","cc.operation.v1.source","cc.operation.v1.subject_index","cc.operation.v1.target","cc.operation.v1.target_canonical_type","cc.operation.v1.target_canonical_type_digest","cc.operation.v1.target_canonical_type_profile","cc.operation.v1.target_kind","cc.operation.v1.target_language","cc.operation.v1.target_linkage","cc.operation.v1.target_module_domain","cc.operation.v1.target_signature_profile","cc.operation.v1.target_signature_state","cc.operation.v1.target_structural_signature_digest","cc.operation.v1.target_usr","cc.operation.v1.type_use_kind"],"mode":"functional_assertion"},"name":"cc.operation","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.operation.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"on_missing":"unresolved","source_columns":["cc.operation.v1.body"],"strength":"soft_semantic","target_columns":["cc.body.v1.body"],"target_relation":"cc.body"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.call"],"strength":"soft_semantic","target_columns":["cc.call_site.v1.call"],"target_relation":"cc.call_site"},{"on_missing":"reject_batch","source_columns":["cc.operation.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.context_declaration"],"strength":"soft_semantic","target_columns":["cc.declaration.v1.declaration"],"target_relation":"cc.declaration"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.function"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.node"],"strength":"soft_semantic","target_columns":["cc.cfg_node.v1.node"],"target_relation":"cc.cfg_node"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.object_declaration"],"strength":"soft_semantic","target_columns":["cc.declaration.v1.declaration"],"target_relation":"cc.declaration"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.object_entity"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.object_expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.object_source"],"strength":"soft_semantic","target_columns":["source.span.v1.span"],"target_relation":"source.span"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.object_type"],"strength":"soft_semantic","target_columns":["cc.type.v1.type"],"target_relation":"cc.type"},{"on_missing":"reject_batch","source_columns":["cc.operation.v1.scope_declaration"],"strength":"hard","target_columns":["cc.declaration.v1.declaration"],"target_relation":"cc.declaration"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.source"],"strength":"soft_semantic","target_columns":["source.span.v1.span"],"target_relation":"source.span"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.target"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.target_canonical_type"],"strength":"soft_semantic","target_columns":["cc.type.v1.type"],"target_relation":"cc.type"}],"semantic_major":1,"semantics":"cc.operation/1","stability":"versioned","summary":"Finite original compiler operation occurrences with independent actual static-site grouping.","version":"1.0.0"})cxxlens";
-				output.contract_digest = "sha256:9e795ff21b166d9fb91d09ad6d9b8afab03100ec4b895856a1e70a3cc708c778";
+				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.operation.v1.compile_unit","cc.operation.v1.scope_declaration","cc.operation.v1.kind","cc.operation.v1.origin","cc.operation.v1.expression","cc.operation.v1.object_declaration","cc.operation.v1.node","cc.operation.v1.element_index","cc.operation.v1.ordinal"],"result_column":"cc.operation.v1.operation"},"interpretation_required":true,"key":["cc.operation.v1.operation"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.operation.v1.operation","identity_role":"claim_key","name":"operation","required":true,"type":"typed_id<operation_id>"},{"id":"cc.operation.v1.site","identity_role":"authoritative_payload","name":"site","required":false,"type":"optional<typed_id<operation_site_id>>"},{"id":"cc.operation.v1.site_state","identity_role":"authoritative_payload","name":"site_state","required":true,"type":"open_symbol<cc.operation-site-state/1>"},{"id":"cc.operation.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.operation.v1.scope_declaration","identity_role":"authoritative_payload","name":"scope_declaration","required":true,"type":"typed_id<cc_declaration_id>"},{"id":"cc.operation.v1.function","identity_role":"authoritative_payload","name":"function","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.operation.v1.body","identity_role":"authoritative_payload","name":"body","required":false,"type":"optional<typed_id<body_id>>"},{"id":"cc.operation.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<cc.operation-kind/1>"},{"id":"cc.operation.v1.origin","identity_role":"authoritative_payload","name":"origin","required":true,"type":"open_symbol<cc.operation-origin/1>"},{"id":"cc.operation.v1.profile","identity_role":"authoritative_payload","name":"profile","required":true,"type":"utf8_string"},{"id":"cc.operation.v1.ordinal","identity_role":"authoritative_payload","name":"ordinal","required":true,"type":"uint64"},{"id":"cc.operation.v1.source","identity_role":"authoritative_payload","name":"source","required":false,"type":"optional<typed_id<source_span_id>>"},{"id":"cc.operation.v1.expression","identity_role":"authoritative_payload","name":"expression","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.operation.v1.call","identity_role":"authoritative_payload","name":"call","required":false,"type":"optional<typed_id<cc_call_id>>"},{"id":"cc.operation.v1.parent_site","identity_role":"authoritative_payload","name":"parent_site","required":false,"type":"optional<typed_id<operation_site_id>>"},{"id":"cc.operation.v1.node","identity_role":"authoritative_payload","name":"node","required":false,"type":"optional<typed_id<cfg_node_id>>"},{"id":"cc.operation.v1.element_index","identity_role":"authoritative_payload","name":"element_index","required":false,"type":"optional<uint64>"},{"id":"cc.operation.v1.element_kind","identity_role":"authoritative_payload","name":"element_kind","required":false,"type":"optional<open_symbol<cc.cfg-element-kind/1>>"},{"id":"cc.operation.v1.program_point","identity_role":"authoritative_payload","name":"program_point","required":false,"type":"optional<uint64>"},{"id":"cc.operation.v1.program_point_profile","identity_role":"authoritative_payload","name":"program_point_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.operation.v1.evaluation","identity_role":"authoritative_payload","name":"evaluation","required":true,"type":"open_symbol<cc.operation-evaluation/1>"},{"id":"cc.operation.v1.outcome","identity_role":"authoritative_payload","name":"outcome","required":true,"type":"open_symbol<cc.operation-outcome/1>"},{"id":"cc.operation.v1.observation_state","identity_role":"authoritative_payload","name":"observation_state","required":true,"type":"open_symbol<cc.operation-state/1>"},{"id":"cc.operation.v1.reason","identity_role":"authoritative_payload","name":"reason","required":false,"type":"optional<utf8_string>"},{"id":"cc.operation.v1.target","identity_role":"authoritative_payload","name":"target","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.operation.v1.target_signature_state","identity_role":"authoritative_payload","name":"target_signature_state","required":false,"type":"optional<open_symbol<cc.target-signature-state/1>>"},{"id":"cc.operation.v1.target_signature_profile","identity_role":"authoritative_payload","name":"target_signature_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.operation.v1.target_usr","identity_role":"authoritative_payload","name":"target_usr","required":false,"type":"optional<bytes>"},{"id":"cc.operation.v1.target_canonical_type","identity_role":"authoritative_payload","name":"target_canonical_type","required":false,"type":"optional<typed_id<cc_type_id>>"},{"id":"cc.operation.v1.target_structural_signature_digest","identity_role":"authoritative_payload","name":"target_structural_signature_digest","required":false,"type":"optional<digest>"},{"id":"cc.operation.v1.target_canonical_type_digest","identity_role":"authoritative_payload","name":"target_canonical_type_digest","required":false,"type":"optional<digest>"},{"id":"cc.operation.v1.target_canonical_type_profile","identity_role":"authoritative_payload","name":"target_canonical_type_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.operation.v1.target_language","identity_role":"authoritative_payload","name":"target_language","required":false,"type":"optional<open_symbol<build.language/1>>"},{"id":"cc.operation.v1.target_linkage","identity_role":"authoritative_payload","name":"target_linkage","required":false,"type":"optional<open_symbol<cc.linkage/1>>"},{"id":"cc.operation.v1.target_module_domain","identity_role":"authoritative_payload","name":"target_module_domain","required":false,"type":"optional<utf8_string>"},{"id":"cc.operation.v1.object_declaration","identity_role":"authoritative_payload","name":"object_declaration","required":false,"type":"optional<typed_id<cc_declaration_id>>"},{"id":"cc.operation.v1.object_entity","identity_role":"authoritative_payload","name":"object_entity","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.operation.v1.object_expression","identity_role":"authoritative_payload","name":"object_expression","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.operation.v1.object_source","identity_role":"authoritative_payload","name":"object_source","required":false,"type":"optional<typed_id<source_span_id>>"},{"id":"cc.operation.v1.object_type","identity_role":"authoritative_payload","name":"object_type","required":false,"type":"optional<typed_id<cc_type_id>>"},{"id":"cc.operation.v1.object_state","identity_role":"authoritative_payload","name":"object_state","required":false,"type":"optional<open_symbol<cc.operation-state/1>>"},{"id":"cc.operation.v1.type_use_kind","identity_role":"authoritative_payload","name":"type_use_kind","required":false,"type":"optional<open_symbol<cc.type-use-kind/1>>"},{"id":"cc.operation.v1.target_kind","identity_role":"authoritative_payload","name":"target_kind","required":false,"type":"optional<open_symbol<cc.entity-kind/1>>"},{"id":"cc.operation.v1.subject_index","identity_role":"authoritative_payload","name":"subject_index","required":false,"type":"optional<uint64>"},{"id":"cc.operation.v1.parameter_has_default_argument","identity_role":"authoritative_payload","name":"parameter_has_default_argument","required":false,"type":"optional<bool>"},{"id":"cc.operation.v1.expression_context","identity_role":"authoritative_payload","name":"expression_context","required":false,"type":"optional<open_symbol<cc.operation-expression-context/1>>"},{"id":"cc.operation.v1.context_declaration","identity_role":"authoritative_payload","name":"context_declaration","required":false,"type":"optional<typed_id<cc_declaration_id>>"},{"id":"cc.operation.v1.dispatch_kind","identity_role":"authoritative_payload","name":"dispatch_kind","required":false,"type":"optional<open_symbol<cc.dispatch-kind/1>>"},{"id":"cc.operation.v1.dispatch_state","identity_role":"authoritative_payload","name":"dispatch_state","required":false,"type":"optional<open_symbol<cc.target-slot-observation-state/1>>"},{"id":"cc.operation.v1.dispatch_profile","identity_role":"authoritative_payload","name":"dispatch_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.operation.v1.candidate_count","identity_role":"authoritative_payload","name":"candidate_count","required":false,"type":"optional<uint64>"},{"id":"cc.operation.v1.candidate_targets","identity_role":"authoritative_payload","name":"candidate_targets","required":false,"type":"optional<set<cc_entity_id>>"},{"id":"cc.operation.v1.candidate_state","identity_role":"authoritative_payload","name":"candidate_state","required":false,"type":"optional<open_symbol<cc.target-slot-enumeration-state/1>>"},{"id":"cc.operation.v1.candidate_profile","identity_role":"authoritative_payload","name":"candidate_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.operation.v1.storage_duration","identity_role":"authoritative_payload","name":"storage_duration","required":false,"type":"optional<open_symbol<cc.storage-duration/1>>"},{"id":"cc.operation.v1.storage_state","identity_role":"authoritative_payload","name":"storage_state","required":false,"type":"optional<open_symbol<cc.identifier-state/1>>"},{"id":"cc.operation.v1.storage_profile","identity_role":"authoritative_payload","name":"storage_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.operation.v1.storage_size_bytes","identity_role":"authoritative_payload","name":"storage_size_bytes","required":false,"type":"optional<uint64>"},{"id":"cc.operation.v1.storage_alignment_bytes","identity_role":"authoritative_payload","name":"storage_alignment_bytes","required":false,"type":"optional<uint64>"},{"id":"cc.operation.v1.candidate_presence","identity_role":"authoritative_payload","name":"candidate_presence","required":false,"type":"optional<open_symbol<cc.candidate-presence/1>>"},{"id":"cc.operation.v1.storage_abi_context","identity_role":"authoritative_payload","name":"storage_abi_context","required":false,"type":"optional<digest>"},{"id":"cc.operation.v1.storage_target_triple","identity_role":"authoritative_payload","name":"storage_target_triple","required":false,"type":"optional<utf8_string>"}],"coverage":{"execution_domain":"cc.operation.compile-unit"},"descriptor_id":"cc.operation.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::operation","indexes":[["cc.operation.v1.compile_unit"]],"merge":{"conflict_columns":["cc.operation.v1.body","cc.operation.v1.call","cc.operation.v1.candidate_count","cc.operation.v1.candidate_presence","cc.operation.v1.candidate_profile","cc.operation.v1.candidate_state","cc.operation.v1.candidate_targets","cc.operation.v1.compile_unit","cc.operation.v1.context_declaration","cc.operation.v1.dispatch_kind","cc.operation.v1.dispatch_profile","cc.operation.v1.dispatch_state","cc.operation.v1.element_index","cc.operation.v1.element_kind","cc.operation.v1.evaluation","cc.operation.v1.expression","cc.operation.v1.expression_context","cc.operation.v1.function","cc.operation.v1.kind","cc.operation.v1.node","cc.operation.v1.object_declaration","cc.operation.v1.object_entity","cc.operation.v1.object_expression","cc.operation.v1.object_source","cc.operation.v1.object_state","cc.operation.v1.object_type","cc.operation.v1.observation_state","cc.operation.v1.ordinal","cc.operation.v1.origin","cc.operation.v1.outcome","cc.operation.v1.parameter_has_default_argument","cc.operation.v1.parent_site","cc.operation.v1.profile","cc.operation.v1.program_point","cc.operation.v1.program_point_profile","cc.operation.v1.reason","cc.operation.v1.scope_declaration","cc.operation.v1.site","cc.operation.v1.site_state","cc.operation.v1.source","cc.operation.v1.storage_abi_context","cc.operation.v1.storage_alignment_bytes","cc.operation.v1.storage_duration","cc.operation.v1.storage_profile","cc.operation.v1.storage_size_bytes","cc.operation.v1.storage_state","cc.operation.v1.storage_target_triple","cc.operation.v1.subject_index","cc.operation.v1.target","cc.operation.v1.target_canonical_type","cc.operation.v1.target_canonical_type_digest","cc.operation.v1.target_canonical_type_profile","cc.operation.v1.target_kind","cc.operation.v1.target_language","cc.operation.v1.target_linkage","cc.operation.v1.target_module_domain","cc.operation.v1.target_signature_profile","cc.operation.v1.target_signature_state","cc.operation.v1.target_structural_signature_digest","cc.operation.v1.target_usr","cc.operation.v1.type_use_kind"],"mode":"functional_assertion"},"name":"cc.operation","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.operation.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"on_missing":"unresolved","source_columns":["cc.operation.v1.body"],"strength":"soft_semantic","target_columns":["cc.body.v1.body"],"target_relation":"cc.body"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.call"],"strength":"soft_semantic","target_columns":["cc.call_site.v1.call"],"target_relation":"cc.call_site"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.operation.v1.candidate_targets"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"reject_batch","source_columns":["cc.operation.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.context_declaration"],"strength":"soft_semantic","target_columns":["cc.declaration.v1.declaration"],"target_relation":"cc.declaration"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.function"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.node"],"strength":"soft_semantic","target_columns":["cc.cfg_node.v1.node"],"target_relation":"cc.cfg_node"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.object_declaration"],"strength":"soft_semantic","target_columns":["cc.declaration.v1.declaration"],"target_relation":"cc.declaration"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.object_entity"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.object_expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.object_source"],"strength":"soft_semantic","target_columns":["source.span.v1.span"],"target_relation":"source.span"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.object_type"],"strength":"soft_semantic","target_columns":["cc.type.v1.type"],"target_relation":"cc.type"},{"on_missing":"reject_batch","source_columns":["cc.operation.v1.scope_declaration"],"strength":"hard","target_columns":["cc.declaration.v1.declaration"],"target_relation":"cc.declaration"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.source"],"strength":"soft_semantic","target_columns":["source.span.v1.span"],"target_relation":"source.span"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.target"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.operation.v1.target_canonical_type"],"strength":"soft_semantic","target_columns":["cc.type.v1.type"],"target_relation":"cc.type"}],"row_constraints":{"all_or_none":[["cc.operation.v1.candidate_count","cc.operation.v1.candidate_profile","cc.operation.v1.candidate_state","cc.operation.v1.candidate_targets"],["cc.operation.v1.dispatch_kind","cc.operation.v1.dispatch_profile","cc.operation.v1.dispatch_state"],["cc.operation.v1.storage_duration","cc.operation.v1.storage_profile","cc.operation.v1.storage_state"]]},"semantic_major":1,"semantics":"cc.operation/1","stability":"versioned","summary":"Finite original compiler operation occurrences with independent actual static-site grouping.","version":"1.0.0"})cxxlens";
+				output.contract_digest = "sha256:1450005ca7fac86b67d8b66c746a4d2ecef6061f57ad5cb0e5af8f02071a66ef";
 				output.columns = {
 					{"cc.operation.v1.operation", "operation", {sdk::scalar_kind::typed_id, "operation_id", false}, true, sdk::column_role::claim_key},
 					{"cc.operation.v1.site", "site", {sdk::scalar_kind::typed_id, "operation_site_id", true}, false, sdk::column_role::authoritative_payload},
@@ -74,6 +74,21 @@ namespace cxxlens::cc::relations
 					{"cc.operation.v1.parameter_has_default_argument", "parameter_has_default_argument", {sdk::scalar_kind::boolean, "", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.operation.v1.expression_context", "expression_context", {sdk::scalar_kind::open_symbol, "cc.operation-expression-context/1", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.operation.v1.context_declaration", "context_declaration", {sdk::scalar_kind::typed_id, "cc_declaration_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.operation.v1.dispatch_kind", "dispatch_kind", {sdk::scalar_kind::open_symbol, "cc.dispatch-kind/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.operation.v1.dispatch_state", "dispatch_state", {sdk::scalar_kind::open_symbol, "cc.target-slot-observation-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.operation.v1.dispatch_profile", "dispatch_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.operation.v1.candidate_count", "candidate_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.operation.v1.candidate_targets", "candidate_targets", {sdk::scalar_kind::set, "cc_entity_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.operation.v1.candidate_state", "candidate_state", {sdk::scalar_kind::open_symbol, "cc.target-slot-enumeration-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.operation.v1.candidate_profile", "candidate_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.operation.v1.storage_duration", "storage_duration", {sdk::scalar_kind::open_symbol, "cc.storage-duration/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.operation.v1.storage_state", "storage_state", {sdk::scalar_kind::open_symbol, "cc.identifier-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.operation.v1.storage_profile", "storage_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.operation.v1.storage_size_bytes", "storage_size_bytes", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.operation.v1.storage_alignment_bytes", "storage_alignment_bytes", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.operation.v1.candidate_presence", "candidate_presence", {sdk::scalar_kind::open_symbol, "cc.candidate-presence/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.operation.v1.storage_abi_context", "storage_abi_context", {sdk::scalar_kind::digest, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.operation.v1.storage_target_triple", "storage_target_triple", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
 				};
 				output.domain_identity.result_column = "cc.operation.v1.operation";
 				output.domain_identity.projection = {
@@ -94,6 +109,7 @@ namespace cxxlens::cc::relations
 				output.references = {
 					{{"cc.operation.v1.body"}, "cc.body", {"cc.body.v1.body"}, sdk::reference_strength::soft_semantic},
 					{{"cc.operation.v1.call"}, "cc.call_site", {"cc.call_site.v1.call"}, sdk::reference_strength::soft_semantic},
+					{{"cc.operation.v1.candidate_targets"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic, true},
 					{{"cc.operation.v1.compile_unit"}, "build.compile_unit", {"build.compile_unit.v1.compile_unit"}, sdk::reference_strength::hard},
 					{{"cc.operation.v1.context_declaration"}, "cc.declaration", {"cc.declaration.v1.declaration"}, sdk::reference_strength::soft_semantic},
 					{{"cc.operation.v1.expression"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
@@ -113,8 +129,16 @@ namespace cxxlens::cc::relations
 				output.conflict_columns = {
 					"cc.operation.v1.body",
 					"cc.operation.v1.call",
+					"cc.operation.v1.candidate_count",
+					"cc.operation.v1.candidate_presence",
+					"cc.operation.v1.candidate_profile",
+					"cc.operation.v1.candidate_state",
+					"cc.operation.v1.candidate_targets",
 					"cc.operation.v1.compile_unit",
 					"cc.operation.v1.context_declaration",
+					"cc.operation.v1.dispatch_kind",
+					"cc.operation.v1.dispatch_profile",
+					"cc.operation.v1.dispatch_state",
 					"cc.operation.v1.element_index",
 					"cc.operation.v1.element_kind",
 					"cc.operation.v1.evaluation",
@@ -143,6 +167,13 @@ namespace cxxlens::cc::relations
 					"cc.operation.v1.site",
 					"cc.operation.v1.site_state",
 					"cc.operation.v1.source",
+					"cc.operation.v1.storage_abi_context",
+					"cc.operation.v1.storage_alignment_bytes",
+					"cc.operation.v1.storage_duration",
+					"cc.operation.v1.storage_profile",
+					"cc.operation.v1.storage_size_bytes",
+					"cc.operation.v1.storage_state",
+					"cc.operation.v1.storage_target_triple",
 					"cc.operation.v1.subject_index",
 					"cc.operation.v1.target",
 					"cc.operation.v1.target_canonical_type",
@@ -588,6 +619,141 @@ namespace cxxlens::cc::relations
 			[[nodiscard]] static sdk::column_ref ref()
 			{
 				return {operation::descriptor().id, "cc.operation.v1.context_declaration", {sdk::scalar_kind::typed_id, "cc_declaration_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.operation.v1.dispatch_kind`. */
+		struct dispatch_kind
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {operation::descriptor().id, "cc.operation.v1.dispatch_kind", {sdk::scalar_kind::open_symbol, "cc.dispatch-kind/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.operation.v1.dispatch_state`. */
+		struct dispatch_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {operation::descriptor().id, "cc.operation.v1.dispatch_state", {sdk::scalar_kind::open_symbol, "cc.target-slot-observation-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.operation.v1.dispatch_profile`. */
+		struct dispatch_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {operation::descriptor().id, "cc.operation.v1.dispatch_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.operation.v1.candidate_count`. */
+		struct candidate_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {operation::descriptor().id, "cc.operation.v1.candidate_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.operation.v1.candidate_targets`. */
+		struct candidate_targets
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {operation::descriptor().id, "cc.operation.v1.candidate_targets", {sdk::scalar_kind::set, "cc_entity_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.operation.v1.candidate_state`. */
+		struct candidate_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {operation::descriptor().id, "cc.operation.v1.candidate_state", {sdk::scalar_kind::open_symbol, "cc.target-slot-enumeration-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.operation.v1.candidate_profile`. */
+		struct candidate_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {operation::descriptor().id, "cc.operation.v1.candidate_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.operation.v1.storage_duration`. */
+		struct storage_duration
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {operation::descriptor().id, "cc.operation.v1.storage_duration", {sdk::scalar_kind::open_symbol, "cc.storage-duration/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.operation.v1.storage_state`. */
+		struct storage_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {operation::descriptor().id, "cc.operation.v1.storage_state", {sdk::scalar_kind::open_symbol, "cc.identifier-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.operation.v1.storage_profile`. */
+		struct storage_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {operation::descriptor().id, "cc.operation.v1.storage_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.operation.v1.storage_size_bytes`. */
+		struct storage_size_bytes
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {operation::descriptor().id, "cc.operation.v1.storage_size_bytes", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.operation.v1.storage_alignment_bytes`. */
+		struct storage_alignment_bytes
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {operation::descriptor().id, "cc.operation.v1.storage_alignment_bytes", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.operation.v1.candidate_presence`. */
+		struct candidate_presence
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {operation::descriptor().id, "cc.operation.v1.candidate_presence", {sdk::scalar_kind::open_symbol, "cc.candidate-presence/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.operation.v1.storage_abi_context`. */
+		struct storage_abi_context
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {operation::descriptor().id, "cc.operation.v1.storage_abi_context", {sdk::scalar_kind::digest, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.operation.v1.storage_target_triple`. */
+		struct storage_target_triple
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {operation::descriptor().id, "cc.operation.v1.storage_target_triple", {sdk::scalar_kind::utf8_string, "", true}};
 			}
 		};
 	};

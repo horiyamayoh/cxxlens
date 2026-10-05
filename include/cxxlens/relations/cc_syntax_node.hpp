@@ -24,8 +24,8 @@ namespace cxxlens::cc::relations
 				output.semantic_major = 1U;
 				output.semantics = "cc.syntax_node/1";
 				output.owner_namespace = "cxxlens.standard.cc";
-				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.syntax_node.v1.compile_unit","cc.syntax_node.v1.function","cc.syntax_node.v1.source","cc.syntax_node.v1.kind","cc.syntax_node.v1.ordinal"],"result_column":"cc.syntax_node.v1.node"},"interpretation_required":true,"key":["cc.syntax_node.v1.node"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.syntax_node.v1.node","identity_role":"claim_key","name":"node","required":true,"type":"typed_id<syntax_node_id>"},{"id":"cc.syntax_node.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.syntax_node.v1.function","identity_role":"authoritative_payload","name":"function","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.syntax_node.v1.source","identity_role":"authoritative_payload","name":"source","required":true,"type":"typed_id<source_span_id>"},{"id":"cc.syntax_node.v1.parent","identity_role":"authoritative_payload","name":"parent","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<cc.syntax-kind/1>"},{"id":"cc.syntax_node.v1.opcode","identity_role":"authoritative_payload","name":"opcode","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.type","identity_role":"authoritative_payload","name":"type","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.value","identity_role":"authoritative_payload","name":"value","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.ordinal","identity_role":"authoritative_payload","name":"ordinal","required":true,"type":"uint64"},{"id":"cc.syntax_node.v1.flags","identity_role":"authoritative_payload","name":"flags","required":true,"type":"set<open_symbol<cc.syntax-flag/1>>"}],"coverage":{"execution_domain":"cc.syntax_node.compile-unit"},"descriptor_id":"cc.syntax_node.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::syntax_node","indexes":[["cc.syntax_node.v1.function"],["cc.syntax_node.v1.source"],["cc.syntax_node.v1.kind"]],"merge":{"conflict_columns":["cc.syntax_node.v1.compile_unit","cc.syntax_node.v1.flags","cc.syntax_node.v1.function","cc.syntax_node.v1.kind","cc.syntax_node.v1.opcode","cc.syntax_node.v1.ordinal","cc.syntax_node.v1.parent","cc.syntax_node.v1.source","cc.syntax_node.v1.type","cc.syntax_node.v1.value"],"mode":"functional_assertion"},"name":"cc.syntax_node","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.syntax_node.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"on_missing":"reject_batch","source_columns":["cc.syntax_node.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.function"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"reject_batch","source_columns":["cc.syntax_node.v1.source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"}],"semantic_major":1,"semantics":"cc.syntax_node/1","stability":"versioned","summary":"Detached source-bound syntax node; ordinal follows deterministic structural traversal within a body.","version":"1.0.0"})cxxlens";
-				output.contract_digest = "sha256:17a0dcd8b21356462b50aea23abb2984d6479f97783280284cfad659c1581faf";
+				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.syntax_node.v1.compile_unit","cc.syntax_node.v1.function","cc.syntax_node.v1.source","cc.syntax_node.v1.kind","cc.syntax_node.v1.ordinal"],"result_column":"cc.syntax_node.v1.node"},"interpretation_required":true,"key":["cc.syntax_node.v1.node"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.syntax_node.v1.node","identity_role":"claim_key","name":"node","required":true,"type":"typed_id<syntax_node_id>"},{"id":"cc.syntax_node.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.syntax_node.v1.function","identity_role":"authoritative_payload","name":"function","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.syntax_node.v1.source","identity_role":"authoritative_payload","name":"source","required":true,"type":"typed_id<source_span_id>"},{"id":"cc.syntax_node.v1.parent","identity_role":"authoritative_payload","name":"parent","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<cc.syntax-kind/1>"},{"id":"cc.syntax_node.v1.opcode","identity_role":"authoritative_payload","name":"opcode","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.type","identity_role":"authoritative_payload","name":"type","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.value","identity_role":"authoritative_payload","name":"value","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.ordinal","identity_role":"authoritative_payload","name":"ordinal","required":true,"type":"uint64"},{"id":"cc.syntax_node.v1.flags","identity_role":"authoritative_payload","name":"flags","required":true,"type":"set<open_symbol<cc.syntax-flag/1>>"},{"id":"cc.syntax_node.v1.operand","identity_role":"authoritative_payload","name":"operand","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.cast_kind","identity_role":"authoritative_payload","name":"cast_kind","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.integer_value","identity_role":"authoritative_payload","name":"integer_value","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.integer_bit_width","identity_role":"authoritative_payload","name":"integer_bit_width","required":false,"type":"optional<uint64>"},{"id":"cc.syntax_node.v1.integer_signed","identity_role":"authoritative_payload","name":"integer_signed","required":false,"type":"optional<bool>"},{"id":"cc.syntax_node.v1.constant_null","identity_role":"authoritative_payload","name":"constant_null","required":false,"type":"optional<bool>"},{"id":"cc.syntax_node.v1.literal_context","identity_role":"authoritative_payload","name":"literal_context","required":false,"type":"optional<open_symbol<cc.literal-context/1>>"},{"id":"cc.syntax_node.v1.literal_context_state","identity_role":"authoritative_payload","name":"literal_context_state","required":false,"type":"optional<open_symbol<cc.identifier-state/1>>"},{"id":"cc.syntax_node.v1.literal_context_profile","identity_role":"authoritative_payload","name":"literal_context_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.literal_declaration","identity_role":"authoritative_payload","name":"literal_declaration","required":false,"type":"optional<typed_id<cc_declaration_id>>"},{"id":"cc.syntax_node.v1.canonical_type","identity_role":"authoritative_payload","name":"canonical_type","required":false,"type":"optional<typed_id<cc_type_id>>"},{"id":"cc.syntax_node.v1.operand_type","identity_role":"authoritative_payload","name":"operand_type","required":false,"type":"optional<typed_id<cc_type_id>>"},{"id":"cc.syntax_node.v1.conversion_state","identity_role":"authoritative_payload","name":"conversion_state","required":false,"type":"optional<open_symbol<cc.flow-binding-state/1>>"},{"id":"cc.syntax_node.v1.conversion_profile","identity_role":"authoritative_payload","name":"conversion_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.value_preservation","identity_role":"authoritative_payload","name":"value_preservation","required":false,"type":"optional<open_symbol<cc.conversion-value-preservation/1>>"},{"id":"cc.syntax_node.v1.left_operand","identity_role":"authoritative_payload","name":"left_operand","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.right_operand","identity_role":"authoritative_payload","name":"right_operand","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.base_expression","identity_role":"authoritative_payload","name":"base_expression","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.index_expression","identity_role":"authoritative_payload","name":"index_expression","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.child_count","identity_role":"authoritative_payload","name":"child_count","required":false,"type":"optional<uint64>"},{"id":"cc.syntax_node.v1.child_ids","identity_role":"authoritative_payload","name":"child_ids","required":false,"type":"optional<set<syntax_node_id>>"},{"id":"cc.syntax_node.v1.child_state","identity_role":"authoritative_payload","name":"child_state","required":false,"type":"optional<open_symbol<cc.literal-enumeration-state/1>>"},{"id":"cc.syntax_node.v1.child_profile","identity_role":"authoritative_payload","name":"child_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.literal_value_bytes","identity_role":"authoritative_payload","name":"literal_value_bytes","required":false,"type":"optional<bytes>"},{"id":"cc.syntax_node.v1.literal_value_profile","identity_role":"authoritative_payload","name":"literal_value_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.literal_value_state","identity_role":"authoritative_payload","name":"literal_value_state","required":false,"type":"optional<open_symbol<cc.syntax-observation-state/1>>"},{"id":"cc.syntax_node.v1.literal_encoding","identity_role":"authoritative_payload","name":"literal_encoding","required":false,"type":"optional<open_symbol<cc.string-literal-encoding/1>>"},{"id":"cc.syntax_node.v1.literal_element_width_bits","identity_role":"authoritative_payload","name":"literal_element_width_bits","required":false,"type":"optional<uint64>"}],"coverage":{"execution_domain":"cc.syntax_node.compile-unit"},"descriptor_id":"cc.syntax_node.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::syntax_node","indexes":[["cc.syntax_node.v1.function"],["cc.syntax_node.v1.source"],["cc.syntax_node.v1.kind"]],"merge":{"conflict_columns":["cc.syntax_node.v1.base_expression","cc.syntax_node.v1.canonical_type","cc.syntax_node.v1.cast_kind","cc.syntax_node.v1.child_count","cc.syntax_node.v1.child_ids","cc.syntax_node.v1.child_profile","cc.syntax_node.v1.child_state","cc.syntax_node.v1.compile_unit","cc.syntax_node.v1.constant_null","cc.syntax_node.v1.conversion_profile","cc.syntax_node.v1.conversion_state","cc.syntax_node.v1.flags","cc.syntax_node.v1.function","cc.syntax_node.v1.index_expression","cc.syntax_node.v1.integer_bit_width","cc.syntax_node.v1.integer_signed","cc.syntax_node.v1.integer_value","cc.syntax_node.v1.kind","cc.syntax_node.v1.left_operand","cc.syntax_node.v1.literal_context","cc.syntax_node.v1.literal_context_profile","cc.syntax_node.v1.literal_context_state","cc.syntax_node.v1.literal_declaration","cc.syntax_node.v1.literal_element_width_bits","cc.syntax_node.v1.literal_encoding","cc.syntax_node.v1.literal_value_bytes","cc.syntax_node.v1.literal_value_profile","cc.syntax_node.v1.literal_value_state","cc.syntax_node.v1.opcode","cc.syntax_node.v1.operand","cc.syntax_node.v1.operand_type","cc.syntax_node.v1.ordinal","cc.syntax_node.v1.parent","cc.syntax_node.v1.right_operand","cc.syntax_node.v1.source","cc.syntax_node.v1.type","cc.syntax_node.v1.value","cc.syntax_node.v1.value_preservation"],"mode":"functional_assertion"},"name":"cc.syntax_node","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.syntax_node.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.base_expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.canonical_type"],"strength":"soft_semantic","target_columns":["cc.type.v1.type"],"target_relation":"cc.type"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.child_ids"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"reject_batch","source_columns":["cc.syntax_node.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.function"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.index_expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.left_operand"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.literal_declaration"],"strength":"soft_semantic","target_columns":["cc.declaration.v1.declaration"],"target_relation":"cc.declaration"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.operand"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.operand_type"],"strength":"soft_semantic","target_columns":["cc.type.v1.type"],"target_relation":"cc.type"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.right_operand"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"reject_batch","source_columns":["cc.syntax_node.v1.source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"}],"row_constraints":{"all_or_none":[["cc.syntax_node.v1.child_count","cc.syntax_node.v1.child_ids","cc.syntax_node.v1.child_profile","cc.syntax_node.v1.child_state"],["cc.syntax_node.v1.conversion_profile","cc.syntax_node.v1.conversion_state","cc.syntax_node.v1.value_preservation"],["cc.syntax_node.v1.literal_context","cc.syntax_node.v1.literal_context_profile","cc.syntax_node.v1.literal_context_state"]]},"semantic_major":1,"semantics":"cc.syntax_node/1","stability":"versioned","summary":"Detached source-bound syntax node; ordinal follows deterministic structural traversal within a body.","version":"1.0.0"})cxxlens";
+				output.contract_digest = "sha256:0690d2edf6dcb3bec08203b816adfd842f54d9fb7128f80a68f1285e9443e4ff";
 				output.columns = {
 					{"cc.syntax_node.v1.node", "node", {sdk::scalar_kind::typed_id, "syntax_node_id", false}, true, sdk::column_role::claim_key},
 					{"cc.syntax_node.v1.compile_unit", "compile_unit", {sdk::scalar_kind::typed_id, "compile_unit_id", false}, true, sdk::column_role::authoritative_payload},
@@ -38,6 +38,34 @@ namespace cxxlens::cc::relations
 					{"cc.syntax_node.v1.value", "value", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.syntax_node.v1.ordinal", "ordinal", {sdk::scalar_kind::unsigned_integer, "", false}, true, sdk::column_role::authoritative_payload},
 					{"cc.syntax_node.v1.flags", "flags", {sdk::scalar_kind::set, "open_symbol<cc.syntax-flag/1>", false}, true, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.operand", "operand", {sdk::scalar_kind::typed_id, "syntax_node_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.cast_kind", "cast_kind", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.integer_value", "integer_value", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.integer_bit_width", "integer_bit_width", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.integer_signed", "integer_signed", {sdk::scalar_kind::boolean, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.constant_null", "constant_null", {sdk::scalar_kind::boolean, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.literal_context", "literal_context", {sdk::scalar_kind::open_symbol, "cc.literal-context/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.literal_context_state", "literal_context_state", {sdk::scalar_kind::open_symbol, "cc.identifier-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.literal_context_profile", "literal_context_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.literal_declaration", "literal_declaration", {sdk::scalar_kind::typed_id, "cc_declaration_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.canonical_type", "canonical_type", {sdk::scalar_kind::typed_id, "cc_type_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.operand_type", "operand_type", {sdk::scalar_kind::typed_id, "cc_type_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.conversion_state", "conversion_state", {sdk::scalar_kind::open_symbol, "cc.flow-binding-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.conversion_profile", "conversion_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.value_preservation", "value_preservation", {sdk::scalar_kind::open_symbol, "cc.conversion-value-preservation/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.left_operand", "left_operand", {sdk::scalar_kind::typed_id, "syntax_node_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.right_operand", "right_operand", {sdk::scalar_kind::typed_id, "syntax_node_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.base_expression", "base_expression", {sdk::scalar_kind::typed_id, "syntax_node_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.index_expression", "index_expression", {sdk::scalar_kind::typed_id, "syntax_node_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.child_count", "child_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.child_ids", "child_ids", {sdk::scalar_kind::set, "syntax_node_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.child_state", "child_state", {sdk::scalar_kind::open_symbol, "cc.literal-enumeration-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.child_profile", "child_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.literal_value_bytes", "literal_value_bytes", {sdk::scalar_kind::bytes, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.literal_value_profile", "literal_value_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.literal_value_state", "literal_value_state", {sdk::scalar_kind::open_symbol, "cc.syntax-observation-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.literal_encoding", "literal_encoding", {sdk::scalar_kind::open_symbol, "cc.string-literal-encoding/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.literal_element_width_bits", "literal_element_width_bits", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
 				};
 				output.domain_identity.result_column = "cc.syntax_node.v1.node";
 				output.domain_identity.projection = {
@@ -52,22 +80,59 @@ namespace cxxlens::cc::relations
 					"cc.syntax_node.v1.node",
 				};
 				output.references = {
+					{{"cc.syntax_node.v1.base_expression"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
+					{{"cc.syntax_node.v1.canonical_type"}, "cc.type", {"cc.type.v1.type"}, sdk::reference_strength::soft_semantic},
+					{{"cc.syntax_node.v1.child_ids"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic, true},
 					{{"cc.syntax_node.v1.compile_unit"}, "build.compile_unit", {"build.compile_unit.v1.compile_unit"}, sdk::reference_strength::hard},
 					{{"cc.syntax_node.v1.function"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic},
+					{{"cc.syntax_node.v1.index_expression"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
+					{{"cc.syntax_node.v1.left_operand"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
+					{{"cc.syntax_node.v1.literal_declaration"}, "cc.declaration", {"cc.declaration.v1.declaration"}, sdk::reference_strength::soft_semantic},
+					{{"cc.syntax_node.v1.operand"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
+					{{"cc.syntax_node.v1.operand_type"}, "cc.type", {"cc.type.v1.type"}, sdk::reference_strength::soft_semantic},
+					{{"cc.syntax_node.v1.right_operand"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
 					{{"cc.syntax_node.v1.source"}, "source.span", {"source.span.v1.span"}, sdk::reference_strength::hard},
 				};
 				output.merge = sdk::merge_mode::functional_assertion;
 				output.conflict_columns = {
+					"cc.syntax_node.v1.base_expression",
+					"cc.syntax_node.v1.canonical_type",
+					"cc.syntax_node.v1.cast_kind",
+					"cc.syntax_node.v1.child_count",
+					"cc.syntax_node.v1.child_ids",
+					"cc.syntax_node.v1.child_profile",
+					"cc.syntax_node.v1.child_state",
 					"cc.syntax_node.v1.compile_unit",
+					"cc.syntax_node.v1.constant_null",
+					"cc.syntax_node.v1.conversion_profile",
+					"cc.syntax_node.v1.conversion_state",
 					"cc.syntax_node.v1.flags",
 					"cc.syntax_node.v1.function",
+					"cc.syntax_node.v1.index_expression",
+					"cc.syntax_node.v1.integer_bit_width",
+					"cc.syntax_node.v1.integer_signed",
+					"cc.syntax_node.v1.integer_value",
 					"cc.syntax_node.v1.kind",
+					"cc.syntax_node.v1.left_operand",
+					"cc.syntax_node.v1.literal_context",
+					"cc.syntax_node.v1.literal_context_profile",
+					"cc.syntax_node.v1.literal_context_state",
+					"cc.syntax_node.v1.literal_declaration",
+					"cc.syntax_node.v1.literal_element_width_bits",
+					"cc.syntax_node.v1.literal_encoding",
+					"cc.syntax_node.v1.literal_value_bytes",
+					"cc.syntax_node.v1.literal_value_profile",
+					"cc.syntax_node.v1.literal_value_state",
 					"cc.syntax_node.v1.opcode",
+					"cc.syntax_node.v1.operand",
+					"cc.syntax_node.v1.operand_type",
 					"cc.syntax_node.v1.ordinal",
 					"cc.syntax_node.v1.parent",
+					"cc.syntax_node.v1.right_operand",
 					"cc.syntax_node.v1.source",
 					"cc.syntax_node.v1.type",
 					"cc.syntax_node.v1.value",
+					"cc.syntax_node.v1.value_preservation",
 				};
 				output.descriptor_digest = *sdk::semantic_digest(
 					"cxxlens.relation-descriptor-binding.v2",
@@ -175,6 +240,258 @@ namespace cxxlens::cc::relations
 			[[nodiscard]] static sdk::column_ref ref()
 			{
 				return {syntax_node::descriptor().id, "cc.syntax_node.v1.flags", {sdk::scalar_kind::set, "open_symbol<cc.syntax-flag/1>", false}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.operand`. */
+		struct operand
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.operand", {sdk::scalar_kind::typed_id, "syntax_node_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.cast_kind`. */
+		struct cast_kind
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.cast_kind", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.integer_value`. */
+		struct integer_value
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.integer_value", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.integer_bit_width`. */
+		struct integer_bit_width
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.integer_bit_width", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.integer_signed`. */
+		struct integer_signed
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.integer_signed", {sdk::scalar_kind::boolean, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.constant_null`. */
+		struct constant_null
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.constant_null", {sdk::scalar_kind::boolean, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.literal_context`. */
+		struct literal_context
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.literal_context", {sdk::scalar_kind::open_symbol, "cc.literal-context/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.literal_context_state`. */
+		struct literal_context_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.literal_context_state", {sdk::scalar_kind::open_symbol, "cc.identifier-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.literal_context_profile`. */
+		struct literal_context_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.literal_context_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.literal_declaration`. */
+		struct literal_declaration
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.literal_declaration", {sdk::scalar_kind::typed_id, "cc_declaration_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.canonical_type`. */
+		struct canonical_type
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.canonical_type", {sdk::scalar_kind::typed_id, "cc_type_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.operand_type`. */
+		struct operand_type
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.operand_type", {sdk::scalar_kind::typed_id, "cc_type_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.conversion_state`. */
+		struct conversion_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.conversion_state", {sdk::scalar_kind::open_symbol, "cc.flow-binding-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.conversion_profile`. */
+		struct conversion_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.conversion_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.value_preservation`. */
+		struct value_preservation
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.value_preservation", {sdk::scalar_kind::open_symbol, "cc.conversion-value-preservation/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.left_operand`. */
+		struct left_operand
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.left_operand", {sdk::scalar_kind::typed_id, "syntax_node_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.right_operand`. */
+		struct right_operand
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.right_operand", {sdk::scalar_kind::typed_id, "syntax_node_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.base_expression`. */
+		struct base_expression
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.base_expression", {sdk::scalar_kind::typed_id, "syntax_node_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.index_expression`. */
+		struct index_expression
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.index_expression", {sdk::scalar_kind::typed_id, "syntax_node_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.child_count`. */
+		struct child_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.child_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.child_ids`. */
+		struct child_ids
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.child_ids", {sdk::scalar_kind::set, "syntax_node_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.child_state`. */
+		struct child_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.child_state", {sdk::scalar_kind::open_symbol, "cc.literal-enumeration-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.child_profile`. */
+		struct child_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.child_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.literal_value_bytes`. */
+		struct literal_value_bytes
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.literal_value_bytes", {sdk::scalar_kind::bytes, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.literal_value_profile`. */
+		struct literal_value_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.literal_value_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.literal_value_state`. */
+		struct literal_value_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.literal_value_state", {sdk::scalar_kind::open_symbol, "cc.syntax-observation-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.literal_encoding`. */
+		struct literal_encoding
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.literal_encoding", {sdk::scalar_kind::open_symbol, "cc.string-literal-encoding/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.literal_element_width_bits`. */
+		struct literal_element_width_bits
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.literal_element_width_bits", {sdk::scalar_kind::unsigned_integer, "", true}};
 			}
 		};
 	};

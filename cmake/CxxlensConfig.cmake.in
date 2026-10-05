@@ -1,5 +1,7 @@
 @PACKAGE_INIT@
 
+set(cxxlens_SHARED_ABI_REVISION "@CXXLENS_SHARED_ABI_REVISION@")
+
 include("${CMAKE_CURRENT_LIST_DIR}/cxxlensTargets.cmake")
 
 check_required_components(cxxlens)

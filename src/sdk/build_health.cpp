@@ -9,6 +9,7 @@
 #include <cxxlens/sdk/build_health.hpp>
 
 #include "query_projection_plan_limits_internal.hpp"
+#include "query_projection_rows_internal.hpp"
 #include "query_result_internal.hpp"
 
 namespace cxxlens::sdk::query
@@ -420,12 +421,12 @@ namespace cxxlens::sdk::query
 					const auto& observed = actual == project_units.end() ? empty : actual->second;
 					if (observed != *units)
 					{
-						const bool extra =
-							std::ranges::any_of(observed,
-												[&](const auto& id)
-												{
-													return !std::ranges::binary_search(*units, id);
-												});
+						const bool extra = std::ranges::any_of(
+							observed,
+							[&](const auto& observed_unit)
+							{
+								return !std::ranges::binary_search(*units, observed_unit);
+							});
 						gap(value, "selected-unit-membership-unavailable", extra);
 					}
 				}
@@ -519,6 +520,7 @@ namespace cxxlens::sdk::query
 								p.selected_variant_ids == first->selected_variant_ids &&
 								p.selected_variant_state == first->selected_variant_state;
 					}
+					bool carrier_missing = false, carrier_conflicting = false;
 					for (auto i : values)
 					{
 						auto& p = output.populations[i];
@@ -528,8 +530,26 @@ namespace cxxlens::sdk::query
 						{
 							b.work();
 							if (!returned.contains(expected))
-								selection_gap(p, "selected-variant-world-missing");
+								carrier_missing = true;
+							// The selected set crosses variant worlds. Each original
+							// carrier must therefore be joined in its own actual world.
+							const auto& actual =
+								find(1U, {expected, p.universe, expected, p.interpretation});
+							b.bind(p.evidence, actual);
+							if (actual.empty())
+								carrier_missing = true;
+							else if (!equal(actual) ||
+									 text(row(actual.front()), "project") != p.project)
+								carrier_conflicting = true;
 						}
+					}
+					for (auto i : values)
+					{
+						auto& p = output.populations[i];
+						if (carrier_conflicting)
+							selection_gap(p, "selected-variant-carrier-conflicting", true);
+						if (carrier_missing)
+							selection_gap(p, "selected-variant-world-missing");
 					}
 				}
 				for (auto& p : output.populations)
@@ -606,17 +626,16 @@ namespace cxxlens::sdk::query
 						b.work();
 						b.charge(b.rows, 1U, limits.maximum_rows, "rows");
 						b.retain(b.estimate(row));
-						if (auto valid = row.validate(); !valid)
+						if (auto valid =
+								detail::validate_projected_relation_row(row,
+																		*descriptor,
+																		"sdk.health-input-invalid",
+																		[&]
+																		{
+																			b.work();
+																		});
+							!valid)
 							return valid.error();
-						if (row.values.size() != descriptor->columns.size())
-							fail(relations[group], "columns-invalid");
-						for (const auto& column : descriptor->columns)
-						{
-							b.work();
-							const auto* c = cell(row, column.name);
-							if (!c || c->type != column.type || !c->validate())
-								fail(column.id, "column-type-or-value-invalid");
-						}
 						b.charge(b.conditions,
 								 row.presence.fragments.size(),
 								 limits.maximum_condition_expansions,

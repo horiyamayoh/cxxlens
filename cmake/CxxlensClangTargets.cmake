@@ -7,8 +7,8 @@ set_property(CACHE CXXLENS_CLANG_ADAPTER PROPERTY STRINGS AUTO ON OFF)
 function(cxxlens_configure_clang22_worker_static_component target)
   target_compile_features(${target} PUBLIC cxx_std_23)
   target_include_directories(
-    ${target} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    ${target} PUBLIC "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../include"
+    PRIVATE "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src")
   set_target_properties(
     ${target}
     PROPERTIES CXX_EXTENSIONS OFF
@@ -26,6 +26,11 @@ function(cxxlens_create_clang22_worker_static_closure)
     return()
   endif()
 
+  # This function can run in a deferred test-directory callback. Resolve the
+  # private closure against this module, rather than the caller directory.
+  get_filename_component(_cxxlens_worker_source_dir
+                         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/.." ABSOLUTE)
+
   # A verified provider executable is copied to a sealed memfd and launched
   # with execveat(AT_EMPTY_PATH). Consequently $ORIGIN is the memfd execution
   # image, not the relocated installation prefix. Keep the public shared SDK
@@ -33,41 +38,42 @@ function(cxxlens_create_clang22_worker_static_closure)
   # static closure so the sealed image never needs lib/cxxlens DSOs.
   add_library(
     cxxlens_clang22_worker_base_internal STATIC EXCLUDE_FROM_ALL
-    src/sdk/common.cpp
-    src/sdk/bounded_json_internal.cpp
-    src/sdk/source_identity_internal.cpp)
+    "${_cxxlens_worker_source_dir}/src/sdk/common.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/bounded_json_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/source_identity_internal.cpp")
   cxxlens_configure_clang22_worker_static_component(
     cxxlens_clang22_worker_base_internal)
 
   add_library(
     cxxlens_clang22_worker_kernel_internal STATIC EXCLUDE_FROM_ALL
-    src/sdk/relation.cpp
-    src/sdk/claim.cpp
-    src/sdk/store.cpp
-    src/sdk/store_candidate_projection_internal.cpp
-    src/sdk/snapshot_store_v5_codec_internal.cpp
-    src/sdk/store_operation_port_internal.cpp
-    src/runtime/monotonic_clock_port.cpp
-    src/sdk/sqlite_connection_lifecycle_internal.cpp
-    src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp
-    src/sdk/sqlite_same_process_shm_process_port_internal.cpp
-    src/sdk/sqlite_same_process_shm_vfs_alias_registration_internal.cpp
-    src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp
-    src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp
-    src/sdk/sqlite_writer_gate_outcome_internal.cpp
-    src/sdk/sqlite_writer_shm_mapping_epoch_internal.cpp
-    src/sdk/sqlite_writer_shm_mapping_semantics_internal.cpp
-    src/sdk/sqlite_limit_length_control_internal.cpp
-    src/sdk/sqlite_payload_streaming_internal.cpp
-    src/sdk/sqlite_wal_receipt_internal.cpp
-    src/sdk/sqlite_wal_source_capture_internal.cpp
-    src/sdk/sqlite_wal_recovery_workspace_internal.cpp
-    src/sdk/sqlite_private_snapshot_internal.cpp
-    src/sdk/sqlite_default_observation.cpp
-    src/sdk/sqlite_source_shm_readonly_preflight_internal.cpp
-    src/sdk/sqlite_default_forwarding_vfs.cpp
-    src/sdk/sqlite_store_terminal_internal.cpp
-    src/sdk/sqlite_terminal_reclassifier_internal.cpp)
+    "${_cxxlens_worker_source_dir}/src/sdk/relation.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/standard_relations.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/claim.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/store.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/store_candidate_projection_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/snapshot_store_v5_codec_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/store_operation_port_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/runtime/monotonic_clock_port.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/sqlite_connection_lifecycle_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/sqlite_same_process_shm_identity_issuer_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/sqlite_same_process_shm_process_port_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/sqlite_same_process_shm_vfs_alias_registration_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/sqlite_same_process_shm_mapping_registry_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/sqlite_writer_gate_outcome_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/sqlite_writer_shm_mapping_epoch_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/sqlite_writer_shm_mapping_semantics_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/sqlite_limit_length_control_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/sqlite_payload_streaming_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/sqlite_wal_receipt_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/sqlite_wal_source_capture_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/sqlite_wal_recovery_workspace_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/sqlite_private_snapshot_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/sqlite_default_observation.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/sqlite_source_shm_readonly_preflight_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/sqlite_default_forwarding_vfs.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/sqlite_store_terminal_internal.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/sqlite_terminal_reclassifier_internal.cpp")
   cxxlens_configure_clang22_worker_static_component(
     cxxlens_clang22_worker_kernel_internal)
   target_link_libraries(
@@ -77,39 +83,43 @@ function(cxxlens_create_clang22_worker_static_closure)
 
   add_library(
     cxxlens_clang22_worker_query_internal STATIC EXCLUDE_FROM_ALL
-    src/sdk/query.cpp src/sdk/query_execution.cpp src/sdk/query_ir_decoder.cpp)
+    "${_cxxlens_worker_source_dir}/src/sdk/query.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/query_execution.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/query_ir_decoder.cpp")
   cxxlens_configure_clang22_worker_static_component(
     cxxlens_clang22_worker_query_internal)
   target_link_libraries(cxxlens_clang22_worker_query_internal
                         PUBLIC cxxlens_clang22_worker_kernel_internal)
 
   add_library(cxxlens_clang22_worker_recipes_internal STATIC EXCLUDE_FROM_ALL
-              src/sdk/recipe.cpp)
+              "${_cxxlens_worker_source_dir}/src/sdk/recipe.cpp")
   cxxlens_configure_clang22_worker_static_component(
     cxxlens_clang22_worker_recipes_internal)
   target_link_libraries(cxxlens_clang22_worker_recipes_internal
                         PUBLIC cxxlens_clang22_worker_query_internal)
 
-  # provider_runtime.cpp and provider_process_adapter.cpp are already embedded
-  # as the cxxlens_provider_runtime_internal object closure by #224.
-  # Rebuild only the remaining provider SDK objects against the worker-private
-  # static semantic stack; do not duplicate the runtime object definitions.
+  # The SDK uses hidden runtime entry points. Embed the existing private runtime
+  # closure in this archive so all consumers, including a static analyzer
+  # archive linked before it, can resolve them at the same archive boundary.
   add_library(
     cxxlens_clang22_worker_provider_sdk_internal STATIC EXCLUDE_FROM_ALL
-    src/sdk/provider.cpp src/sdk/incremental.cpp
-    src/sdk/provider_protocol_v2_adapter.cpp
-    src/protocol_v2/cbor.cpp src/protocol_v2/codec.cpp
-    src/protocol_v2/closure.cpp)
+    "${_cxxlens_worker_source_dir}/src/sdk/provider.cpp"
+    "${_cxxlens_worker_source_dir}/src/sdk/incremental.cpp"
+    "${_cxxlens_worker_source_dir}/src/protocol_v2/cbor.cpp"
+    "${_cxxlens_worker_source_dir}/src/protocol_v2/codec.cpp"
+    "${_cxxlens_worker_source_dir}/src/protocol_v2/closure.cpp")
   cxxlens_configure_clang22_worker_static_component(
     cxxlens_clang22_worker_provider_sdk_internal)
   target_link_libraries(
     cxxlens_clang22_worker_provider_sdk_internal
     PUBLIC cxxlens_clang22_worker_query_internal
            cxxlens_clang22_worker_recipes_internal)
+  target_sources(cxxlens_clang22_worker_provider_sdk_internal
+                 PRIVATE ${CXXLENS_PROVIDER_RUNTIME_PRIVATE_OBJECTS})
 
   add_library(
     cxxlens_clang22_worker_native_sdk_internal STATIC EXCLUDE_FROM_ALL
-    src/llvm/clang22/provider_sdk.cpp)
+    "${_cxxlens_worker_source_dir}/src/llvm/clang22/provider_sdk.cpp")
   cxxlens_configure_clang22_worker_static_component(
     cxxlens_clang22_worker_native_sdk_internal)
   target_link_libraries(cxxlens_clang22_worker_native_sdk_internal
@@ -118,18 +128,18 @@ function(cxxlens_create_clang22_worker_static_closure)
 
   add_library(
     cxxlens_clang22_worker_codecs_internal STATIC EXCLUDE_FROM_ALL
-    src/llvm/clang22/provider_task_v4.cpp
-    src/llvm/clang22/observation_v2.cpp
-    src/llvm/clang22/source_closure.cpp
-    src/llvm/clang22/source_closure_fd.cpp
-    src/llvm/clang22/source_closure_receiver.cpp
-    src/llvm/clang22/source_closure_spool.cpp
-    src/llvm/clang22/source_closure_task_v4.cpp
-    src/llvm/clang22/source_closure_transport.cpp
-    src/llvm/clang22/source_closure_invocation.cpp
-    src/llvm/clang22/source_closure_vfs.cpp
-    src/llvm/clang22/unicode_nfc.cpp
-    src/llvm/clang22/provider_worker_ingress.cpp)
+    "${_cxxlens_worker_source_dir}/src/llvm/clang22/provider_task_v4.cpp"
+    "${_cxxlens_worker_source_dir}/src/llvm/clang22/observation_v2.cpp"
+    "${_cxxlens_worker_source_dir}/src/llvm/clang22/source_closure.cpp"
+    "${_cxxlens_worker_source_dir}/src/llvm/clang22/source_closure_fd.cpp"
+    "${_cxxlens_worker_source_dir}/src/llvm/clang22/source_closure_receiver.cpp"
+    "${_cxxlens_worker_source_dir}/src/llvm/clang22/source_closure_spool.cpp"
+    "${_cxxlens_worker_source_dir}/src/llvm/clang22/source_closure_task_v4.cpp"
+    "${_cxxlens_worker_source_dir}/src/llvm/clang22/source_closure_transport.cpp"
+    "${_cxxlens_worker_source_dir}/src/llvm/clang22/source_closure_invocation.cpp"
+    "${_cxxlens_worker_source_dir}/src/llvm/clang22/source_closure_vfs.cpp"
+    "${_cxxlens_worker_source_dir}/src/llvm/clang22/unicode_nfc.cpp"
+    "${_cxxlens_worker_source_dir}/src/llvm/clang22/provider_worker_ingress.cpp")
   cxxlens_configure_clang22_worker_static_component(
     cxxlens_clang22_worker_codecs_internal)
   target_link_libraries(
@@ -162,6 +172,16 @@ function(cxxlens_create_clang22_worker_static_closure)
       TARGET cxxlens_clang22_worker_core PROPERTY INTERFACE_LINK_LIBRARIES
                                                    "${_cxxlens_worker_interface_links}")
   endif()
+
+  # The executable itself had a direct public-codec edge before the private
+  # closure was assembled. Replace that edge too, so sealed memfd execution
+  # cannot acquire cxxlens DSOs through the public SDK dependency chain.
+  get_target_property(_cxxlens_worker_executable_links cxxlens-clang-worker-22
+                      LINK_LIBRARIES)
+  list(REMOVE_ITEM _cxxlens_worker_executable_links
+       "cxxlens_clang22_materialization_codecs")
+  set_property(TARGET cxxlens-clang-worker-22 PROPERTY LINK_LIBRARIES
+                                                     "${_cxxlens_worker_executable_links}")
 
   target_link_libraries(
     cxxlens_clang22_worker_core

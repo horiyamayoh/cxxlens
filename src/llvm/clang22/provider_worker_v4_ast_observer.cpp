@@ -975,9 +975,9 @@ namespace cxxlens::detail::clang22
 				policy_.SuppressTemplateArgsInCXXConstructors = true;
 			}
 
-			[[nodiscard]] bool profile(const clang::FunctionDecl& declaration)
+			[[nodiscard]] bool profile(const clang::NamedDecl& declaration)
 			{
-				return profile_function(declaration) && !output_->overflowed();
+				return profile_named(declaration) && !output_->overflowed();
 			}
 
 			[[nodiscard]] std::optional<sdk::error> take_failure()
@@ -1432,8 +1432,7 @@ namespace cxxlens::detail::clang22
 		};
 
 		[[nodiscard]] sdk::result<std::size_t>
-		bounded_usr_structural_profile(observer_budget& budget,
-									   const clang::FunctionDecl& declaration)
+		bounded_usr_structural_profile(observer_budget& budget, const clang::NamedDecl& declaration)
 		{
 			fixed_text_buffer output;
 			usr_structural_profiler profiler{output, budget, declaration.getASTContext()};
@@ -1457,7 +1456,7 @@ namespace cxxlens::detail::clang22
 		};
 
 		[[nodiscard]] sdk::result<bounded_usr_inputs>
-		preflight_usr_generation(observer_budget& budget, const clang::FunctionDecl& declaration)
+		preflight_usr_generation(observer_budget& budget, const clang::NamedDecl& declaration)
 		{
 			bounded_usr_inputs output;
 			auto structural_profile = bounded_usr_structural_profile(budget, declaration);
@@ -1797,6 +1796,11 @@ namespace cxxlens::detail::clang22
 
 			bool TraverseLambdaExpr(clang::LambdaExpr* expression)
 			{
+				// The closure record is a real compiler entity and the call operator's
+				// semantic owner. Observe that identity without traversing synthesized
+				// fields, constructors or conversions as written declarations.
+				if (!VisitNamedDecl(expression->getLambdaClass()))
+					return false;
 				if (!WalkUpFromLambdaExpr(expression))
 					return false;
 				for (unsigned i{}; i < expression->capture_size(); ++i)
@@ -1965,7 +1969,8 @@ namespace cxxlens::detail::clang22
 				if (!entity.exact_equivalence &&
 					!set_limitation(entity, "identity-confidence:structural-fallback"))
 					return false;
-				if (!attach_source(entity, declaration->getSourceRange(), "declaration") ||
+				if (!attach_semantic_owner(entity, *declaration) ||
+					!attach_source(entity, declaration->getSourceRange(), "declaration") ||
 					!insert(entity))
 					return false;
 
@@ -1992,7 +1997,11 @@ namespace cxxlens::detail::clang22
 
 			bool VisitNamedDecl(clang::NamedDecl* declaration)
 			{
-				if (closure_ == nullptr || declaration == nullptr || declaration->isImplicit() ||
+				const auto* closure_record =
+					llvm::dyn_cast_or_null<clang::CXXRecordDecl>(declaration);
+				if (closure_ == nullptr || declaration == nullptr ||
+					(declaration->isImplicit() &&
+					 !(closure_record && closure_record->isLambda())) ||
 					llvm::isa<clang::FunctionDecl,
 							  clang::ClassTemplateDecl,
 							  clang::FunctionTemplateDecl,
@@ -2129,7 +2138,7 @@ namespace cxxlens::detail::clang22
 					put_payload(entity,
 								"symbol.is_canonical_declaration",
 								declaration == canonical ? "true"sv : "false"sv) &&
-					insert(entity);
+					attach_semantic_owner(entity, *declaration) && insert(entity);
 			}
 
 			bool VisitCallExpr(clang::CallExpr* expression)
@@ -2319,6 +2328,89 @@ namespace cxxlens::detail::clang22
 			}
 
 		  private:
+			// This is the actual semantic DeclContext, including out-of-line member definitions.
+			// Transparent contexts introduce no named owner. Missing owner observations are
+			// resolved later; no source range or display name is used for this identity.
+			[[nodiscard]] bool attach_semantic_owner(provider_worker_v4_ast_observation& entity,
+													 const clang::NamedDecl& declaration)
+			{
+				const auto* context = declaration.getDeclContext();
+				std::size_t context_depth{};
+				while (context != nullptr && !context->isTranslationUnit())
+				{
+					if (++context_depth > budget_->limits().maximum_traversal_depth)
+					{
+						set_failure(failure(
+							"provider-worker-v4.ast-resource-limit", "depth", "semantic-owner"));
+						return false;
+					}
+					if (!accept(budget_->enter_depth()))
+						return false;
+					budget_->leave_depth();
+					const auto* owner =
+						llvm::dyn_cast<clang::NamedDecl>(clang::Decl::castFromDeclContext(context));
+					if (owner == nullptr)
+					{
+						if (!context->isTransparentContext())
+							return put_payload(entity, "symbol.semantic_owner_state", "unknown");
+						context = context->getParent();
+						continue;
+					}
+					std::string key;
+					if (const auto* function = llvm::dyn_cast<clang::FunctionDecl>(owner))
+					{
+						auto identity = declaration_identity_for(
+							*unit_,
+							*budget_,
+							*function,
+							{toolchain_digest_, source_snapshot_, source_file_});
+						if (!identity)
+						{
+							if (identity.error().code == "provider-worker-v4.ast-resource-limit")
+							{
+								set_failure(std::move(identity.error()));
+								return false;
+							}
+							return put_payload(entity, "symbol.semantic_owner_state", "unknown");
+						}
+						if (identity->second != "exact-usr")
+							return put_payload(entity, "symbol.semantic_owner_state", "unknown");
+						key = std::move(identity->first);
+					}
+					else
+					{
+						auto envelope = preflight_usr_generation(
+							*budget_, *llvm::cast<clang::NamedDecl>(owner->getCanonicalDecl()));
+						if (!envelope)
+						{
+							set_failure(std::move(envelope.error()));
+							return false;
+						}
+						llvm::SmallString<maximum_clang_text_bytes> usr;
+						if (clang::index::generateUSRForDecl(owner->getCanonicalDecl(), usr) ||
+							usr.empty())
+							return put_payload(entity, "symbol.semantic_owner_state", "unknown");
+						if (usr.size() > envelope->maximum_encoded_bytes ||
+							usr.size() > maximum_clang_text_bytes)
+						{
+							set_failure(failure("provider-worker-v4.ast-bound-invalid",
+												"bytes",
+												"owner-usr-envelope"));
+							return false;
+						}
+						if (!accept(budget_->preflight_bytes(usr.size() + 10U, "owner-usr")))
+							return false;
+						key = "clang-usr:";
+						key.append(usr.data(), usr.size());
+					}
+					return put_payload(entity, "symbol.semantic_owner_state", "named") &&
+						put_payload_preflighted(entity, "symbol.semantic_owner", std::move(key));
+				}
+				return put_payload(entity,
+								   "symbol.semantic_owner_state",
+								   context == nullptr ? "unknown"sv : "translation_unit"sv);
+			}
+
 			[[nodiscard]] bool written_in_project_file(const clang::SourceLocation location) const
 			{
 				if (location.isInvalid())

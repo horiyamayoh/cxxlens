@@ -62,6 +62,15 @@ namespace cxxlens::sdk::query
 		std::vector<abi_byte_extent> occupied_ranges;
 		std::optional<std::string> abi_context, abi_fingerprint;
 		std::optional<std::vector<std::byte>> abi_signature;
+		/// Actual target model and record packing are independent from ABI/layout availability.
+		abi_surface_state target_data_model_state{abi_surface_state::unknown};
+		std::optional<std::string> target_data_model_profile, byte_order;
+		std::optional<std::uint64_t> long_width_bits, pointer_width_bits, wchar_width_bits;
+		std::optional<bool> plain_char_signed;
+		abi_surface_state packing_state{abi_surface_state::unknown};
+		std::optional<std::string> packing_profile;
+		std::optional<bool> packed_attribute, packing_applied;
+		std::optional<std::uint64_t> maximum_field_alignment_bits;
 		std::vector<std::size_t> evidence;
 		std::vector<query_unresolved> gaps;
 	};

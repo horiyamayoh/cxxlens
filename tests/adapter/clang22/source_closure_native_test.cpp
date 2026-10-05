@@ -11,7 +11,9 @@
 
 #if defined(CXXLENS_TEST_CLANGXX22_PATH)
 #include <clang/AST/ASTContext.h>
+#include <clang/AST/Decl.h>
 #include <clang/Basic/Diagnostic.h>
+#include <clang/Sema/Sema.h>
 #endif
 
 namespace
@@ -370,6 +372,63 @@ int main()
 		require(outcome.succeeded && outcome.parser.outcome() == "success" &&
 					outcome.parser.error_count == 0U,
 				"normal parser outcome not observed");
+
+		{
+			bool installed{}, ready{}, extracted{};
+			cxxlens::provider::clang22::detail::native_parse_observation sema_parser;
+			auto observed = with_source_closure_translation_unit(
+				make_input(*good, {}),
+				[&](cxxlens::provider::clang22::borrowed_translation_unit&)
+					-> cxxlens::sdk::result<void>
+				{
+					require(installed && ready, "semantic observation ran after extraction");
+					extracted = true;
+					return {};
+				},
+				{},
+				&sema_parser,
+				[&](clang::Sema&)
+				{
+					require(!installed && !ready && !extracted, "semantic setup duplicated");
+					installed = true;
+				},
+				[&](clang::Sema& sema) -> cxxlens::sdk::result<void>
+				{
+					require(installed && !extracted && sema_parser.ast_completed &&
+								sema_parser.outcome() == "success",
+							"semantic AST callback lost original parser phase");
+					bool found{};
+					for (const auto* d : sema.getASTContext().getTranslationUnitDecl()->decls())
+						if (const auto* named = llvm::dyn_cast<clang::NamedDecl>(d);
+							named && named->getName() == "good")
+							found = true;
+					require(found, "semantic ready callback did not observe parsed declaration");
+					ready = true;
+					return {};
+				});
+			require(observed.has_value() && installed && ready && extracted,
+					"preparse semantic callbacks did not complete");
+			extracted = false;
+			observed = with_source_closure_translation_unit(
+				make_input(*good, {}),
+				[&](cxxlens::provider::clang22::borrowed_translation_unit&)
+					-> cxxlens::sdk::result<void>
+				{
+					extracted = true;
+					return {};
+				},
+				{},
+				&sema_parser,
+				{},
+				[](clang::Sema&) -> cxxlens::sdk::result<void>
+				{
+					return cxxlens::sdk::error{"fixture.semantic-observer-failed", "callback", {}};
+				});
+			require(!observed && observed.error().code == "fixture.semantic-observer-failed" &&
+						!extracted && sema_parser.outcome() == "success" &&
+						sema_parser.error_count == 0U,
+					"semantic observer failure erased parser outcome or ran dependent extractor");
+		}
 		outcome = run(*good, {}, true);
 		require(!outcome.succeeded && outcome.code == "fixture.extractor-failed" &&
 					outcome.parser.outcome() == "success",

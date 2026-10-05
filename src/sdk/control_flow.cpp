@@ -259,7 +259,10 @@ namespace cxxlens::sdk::query
 										  number(row, "ordinal"),
 										  text(row, "source"),
 										  number(row, "statement_count"),
-										  {ref}});
+										  {ref},
+										  text(row, "terminator"),
+										  text(row, "terminator_state"),
+										  text(row, "terminator_profile")});
 				}
 			}
 			for (const auto& [node, owners] : node_owners)
@@ -346,7 +349,14 @@ namespace cxxlens::sdk::query
 										  target_id,
 										  text(row, "kind").value_or(""),
 										  number(row, "ordinal"),
-										  {ref}});
+										  {ref},
+										  text(row, "condition"),
+										  text(row, "condition_state"),
+										  text(row, "condition_profile"),
+										  text(row, "outcome"),
+										  text(row, "outcome_state"),
+										  text(row, "outcome_profile"),
+										  text(row, "outcome_expression")});
 				}
 			}
 			for (const auto& [function, count] : orphan_edges)

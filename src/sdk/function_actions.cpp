@@ -9,6 +9,8 @@
 #include <cxxlens/sdk/function_actions.hpp>
 
 #include "query_projection_plan_limits_internal.hpp"
+#include "query_projection_rows_internal.hpp"
+#include "query_result_internal.hpp"
 
 namespace cxxlens::sdk::query
 {
@@ -57,6 +59,14 @@ namespace cxxlens::sdk::query
 		{
 			const auto found = row.values.find("output." + std::string{name});
 			return found == row.values.end() ? nullptr : &found->second;
+		}
+		std::string_view borrowed_text(const annotated_row& row, std::string_view name)
+		{
+			const auto* c = cell(row, name);
+			const auto* v = c && c->state == cell_state::present && c->value
+				? std::get_if<std::string>(&*c->value)
+				: nullptr;
+			return v ? std::string_view{*v} : std::string_view{};
 		}
 		bool present(const annotated_row& row, std::string_view name)
 		{
@@ -165,23 +175,34 @@ namespace cxxlens::sdk::query
 			std::size_t estimate(const annotated_row& row)
 			{
 				std::size_t total = 2048;
-				const auto add = [&](std::size_t n)
+				const auto add = [&](std::size_t n, std::size_t factor = 8U)
 				{
 					work();
 					if (total > limits.maximum_retained_bytes ||
-						n > (limits.maximum_retained_bytes - total) / 8)
+						n > (limits.maximum_retained_bytes - total) / factor)
 						fail("row", "limit-exceeded", "sdk.action-budget");
-					total += n * 8;
+					total += n * factor;
+				};
+				const auto fixed = [&](std::size_t n)
+				{
+					work();
+					if (total > limits.maximum_retained_bytes ||
+						n > limits.maximum_retained_bytes - total)
+						fail("row", "limit-exceeded", "sdk.action-budget");
+					total += n;
 				};
 				for (const auto& [name, c] : row.values)
 				{
-					add(name.size() + c.type.parameter.size() + 128);
+					// One owned detached cell plus map-node/framing overhead. The
+					// dynamic payload allowance below still covers encoded copies.
+					fixed(sizeof(decltype(row.values)::value_type) + 256U);
+					add(name.size() + c.type.parameter.size());
 					if (c.unknown_reason)
-						add(c.unknown_reason->size());
+						add(c.unknown_reason->size(), 16U);
 					if (c.value)
 					{
 						if (const auto* v = std::get_if<std::string>(&*c.value))
-							add(v->size());
+							add(v->size(), 16U);
 						if (const auto* v = std::get_if<std::vector<std::byte>>(&*c.value))
 							add(v->size());
 					}
@@ -189,15 +210,20 @@ namespace cxxlens::sdk::query
 				const auto strings = [&](const auto& values)
 				{
 					for (const auto& v : values)
-						add(v.size() + 128);
+					{
+						fixed(sizeof(v) + 128U);
+						add(v.size());
+					}
 				};
 				const auto producer = [&](const auto& p)
 				{
-					add(p.id.size() + p.semantic_contract.size() + 128);
+					fixed(sizeof(p) + 128U);
+					add(p.id.size() + p.semantic_contract.size());
 				};
 				const auto guarantee = [&](const auto& g)
 				{
-					add(g.approximation.size() + g.scope.size() + g.assumptions.size() + 128);
+					fixed(sizeof(g) + 128U);
+					add(g.approximation.size() + g.scope.size() + g.assumptions.size());
 					strings(g.verification_modalities);
 				};
 				strings(row.claim_contributors);
@@ -210,8 +236,9 @@ namespace cxxlens::sdk::query
 					guarantee(g);
 				for (const auto& e : row.contributor_edges)
 				{
+					fixed(sizeof(e) + 128U);
 					add(e.claim_contributor.size() + e.provenance.size() + e.interpretation.size() +
-						e.condition.universe.size() + 128);
+						e.condition.universe.size());
 					producer(e.producer);
 					guarantee(e.guarantee);
 					strings(e.condition.fragments);
@@ -825,7 +852,8 @@ namespace cxxlens::sdk::query
 				if (value.origin != "cfg" &&
 					(!value.node.empty() || value.element_index || !value.element_kind.empty()))
 					gap(value, value.operation, "non-cfg-placement-conflicting", true);
-				// A future point profile remains unknown; element_index is never a flow point.
+				// A future point profile remains unknown; element_index is never a flow
+				// point.
 				if (value.program_point || !value.program_point_profile.empty())
 					gap(value, value.operation, "program-point-profile-unavailable");
 				value.target_signature = signature(native, scope, original);
@@ -1176,7 +1204,64 @@ namespace cxxlens::sdk::query
 											{
 												return occurrence->object_entity.empty();
 											}))
-						continue; // Original unnamed parameter cardinality/slots are independent.
+						continue; // Original unnamed parameter cardinality/slots are
+								  // independent.
+					if (admitted[0] == "declaration" &&
+						(admitted[2] == "parameter" || admitted[2] == "local") &&
+						!expected.contains(admitted))
+					{
+						bool owner_frontier = true;
+						for (const auto* occurrence : occurrences)
+						{
+							b.work();
+							const auto& entities = find(3, key(occurrence->object_entity, scope));
+							const auto& declarations = find(5, key(admitted[1], scope));
+							b.bind(scope.evidence, entities);
+							b.bind(scope.evidence, declarations);
+							if (!equal(entities) || !equal(declarations) ||
+								text(row(declarations.front()), "entity") !=
+									occurrence->object_entity)
+							{
+								owner_frontier = false;
+								break;
+							}
+							const auto& details =
+								indexed(detail_sources,
+										key(occurrence->object_entity + '\n' +
+												text(row(declarations.front()), "source"),
+											scope));
+							b.bind(scope.evidence, details);
+							if (!equal(details) ||
+								text(row(details.front()), "compile_unit") != scope.compile_unit)
+							{
+								owner_frontier = false;
+								break;
+							}
+							const auto detail_flags = strings(row(details.front()), "flags");
+							if (!std::ranges::binary_search(detail_flags,
+															"finite_type_use_admission_v1") ||
+								!std::ranges::binary_search(detail_flags,
+															"type_use_" + admitted[2]))
+							{
+								owner_frontier = false;
+								break;
+							}
+							const auto semantic_owner =
+								text(row(entities.front()), "semantic_owner");
+							if (semantic_owner == scope.function)
+							{
+								owner_frontier = false;
+								break;
+							}
+							gap(scope,
+								occurrence->operation,
+								semantic_owner.empty() ? "type-admission-owner-unavailable"
+													   : "type-admission-owner-conflicting",
+								!semantic_owner.empty());
+						}
+						if (owner_frontier)
+							continue;
+					}
 					if (!expected.contains(admitted) &&
 						!(admitted[0] == "ast" && uncertain_syntax) &&
 						!(admitted[0] == "declaration" && uncertain_roles.contains(admitted[2])))
@@ -1391,6 +1476,7 @@ namespace cxxlens::sdk::query
 							gap(value, id, "occurrence-outside-inventory", true);
 					}
 					admission(value, detail);
+					value.enumeration_state = value.state;
 					for (const auto& observed : value.actions)
 						if (observed.state != finite_population_state::complete)
 							gap(value,
@@ -1400,8 +1486,9 @@ namespace cxxlens::sdk::query
 					canonical(value.gaps);
 					output.populations.push_back(std::move(value));
 				}
-				// A surviving written function declaration without its original detail keeps
-				// an unknown scope. Do not infer a compile unit from physical source proximity.
+				// A surviving written function declaration without its original detail
+				// keeps an unknown scope. Do not infer a compile unit from physical source
+				// proximity.
 				for (const auto& [id, r] : maps[5])
 				{
 					b.work();
@@ -1417,7 +1504,8 @@ namespace cxxlens::sdk::query
 						kind != "destructor" && kind != "conversion")
 						continue;
 					// Observed intentionally unadmitted compiler declarations are not new
-					// function-action scopes. Missing details cannot establish that exclusion.
+					// function-action scopes. Missing details cannot establish that
+					// exclusion.
 					if (!indexed(detail_sources,
 								 {text(declaration, "entity") + '\n' + text(declaration, "source"),
 								  id[1],
@@ -1441,8 +1529,9 @@ namespace cxxlens::sdk::query
 					gap(value, value.declaration, "owning-detail-unavailable");
 					output.populations.push_back(std::move(value));
 				}
-				// Keep original actions whose owning detail/declaration was not observed. Their
-				// absence cannot turn a selected unit into a known empty action population.
+				// Keep original actions whose owning detail/declaration was not observed.
+				// Their absence cannot turn a selected unit into a known empty action
+				// population.
 				for (const auto& [id, r] : maps[12])
 				{
 					b.work();
@@ -1505,10 +1594,12 @@ namespace cxxlens::sdk::query
 			}
 			canonical(output.unresolved);
 		}
-		result<function_action_projection> project_rows(function_action_input input,
-														finite_population_limits limits,
-														std::stop_token stop,
-														budget& b)
+		result<function_action_projection>
+		project_rows(function_action_input input,
+					 finite_population_limits limits,
+					 std::stop_token stop,
+					 budget& b,
+					 const std::array<std::vector<const annotated_row*>, 13>* borrowed = nullptr)
 		{
 			if (auto valid = limits.validate(); !valid)
 				return valid.error();
@@ -1536,6 +1627,323 @@ namespace cxxlens::sdk::query
 										input.cfg_nodes,
 										input.call_sites,
 										input.operations};
+				const auto visit_group = [&](std::size_t group, auto&& visit)
+				{
+					if (borrowed)
+					{
+						for (const auto* row : (*borrowed)[group])
+							visit(*row);
+					}
+					else
+					{
+						for (const auto& row : groups[group])
+							visit(row);
+					}
+				};
+				// The original source scan can contain every lexical token span.
+				// Retain referenced carriers only, after validating all source rows.
+				using source_key = std::array<std::string_view, 4>;
+				std::set<source_key> referenced_syntax;
+				struct syntax_selection
+				{
+					const annotated_row* original{};
+					bool conflicting{};
+				};
+				std::map<source_key, syntax_selection> syntax_rows;
+				const auto same_payload = [&](const annotated_row& left, const annotated_row& right)
+				{
+					if (left.values.size() != right.values.size())
+						return false;
+					return std::ranges::equal(
+						left.values,
+						right.values,
+						[&](const auto& x, const auto& y)
+						{
+							const auto charge_cell = [&](const auto& value)
+							{
+								b.work(value.first.size() + value.second.type.parameter.size() +
+									   1U);
+								if (value.second.unknown_reason)
+									b.work(value.second.unknown_reason->size());
+								if (value.second.value)
+								{
+									if (const auto* text =
+											std::get_if<std::string>(&*value.second.value))
+										b.work(text->size());
+									if (const auto* bytes = std::get_if<std::vector<std::byte>>(
+											&*value.second.value))
+										b.work(bytes->size());
+								}
+							};
+							charge_cell(x);
+							charge_cell(y);
+							return x.first == y.first &&
+								x.second.type.scalar == y.second.type.scalar &&
+								x.second.type.parameter == y.second.type.parameter &&
+								x.second.type.optional == y.second.type.optional &&
+								x.second.state == y.second.state &&
+								x.second.unknown_reason == y.second.unknown_reason &&
+								x.second.value == y.second.value;
+						});
+				};
+				const auto each_key =
+					[&](const annotated_row& row, std::string_view name, auto&& use)
+				{
+					const auto id = borrowed_text(row, name);
+					if (id.empty())
+						return;
+					for (const auto& variant : row.presence.fragments)
+					{
+						b.work();
+						use(source_key{id, row.presence.universe, variant, row.interpretation});
+					}
+				};
+				for (const auto group : {11U, 12U})
+					visit_group(group,
+								[&](const annotated_row& row)
+								{
+									for (const auto field : {"expression", "object_expression"})
+										each_key(row,
+												 field,
+												 [&](const source_key& id)
+												 {
+													 if (!referenced_syntax.contains(id))
+													 {
+														 b.retain(sizeof(source_key) + 96U);
+														 referenced_syntax.insert(id);
+													 }
+												 });
+								});
+				visit_group(9U,
+							[&](const annotated_row& row)
+							{
+								each_key(row,
+										 "node",
+										 [&](const source_key& id)
+										 {
+											 const auto found = syntax_rows.find(id);
+											 if (found == syntax_rows.end())
+											 {
+												 b.retain(sizeof(source_key) +
+														  sizeof(syntax_selection) + 96U);
+												 syntax_rows.emplace(id,
+																	 syntax_selection{&row, false});
+											 }
+											 else if (!found->second.conflicting &&
+													  !same_payload(row, *found->second.original))
+												 found->second.conflicting = true;
+										 });
+							});
+				const auto explicit_nonaction = [&](const annotated_row& row)
+				{
+					const auto* c = cell(row, "flags");
+					const auto* encoded = c && c->state == cell_state::present && c->value
+						? std::get_if<std::vector<std::byte>>(&*c->value)
+						: nullptr;
+					if (!encoded)
+						return false;
+					b.work(encoded->size() + 1U);
+					bool marker = false;
+					for (std::size_t offset = 0; offset < encoded->size();)
+					{
+						if (encoded->size() - offset < 4U)
+							return false;
+						std::uint32_t n = 0;
+						for (unsigned i = 0; i < 4U; ++i)
+							n |= std::to_integer<std::uint32_t>((*encoded)[offset + i]) << (i * 8U);
+						offset += 4U;
+						if (n > encoded->size() - offset)
+							return false;
+						const std::string_view flag{
+							reinterpret_cast<const char*>(encoded->data() + offset), n};
+						offset += n;
+						marker |= flag == "finite_operation_admission_v1";
+						if (flag.starts_with("operation_"))
+							return false;
+					}
+					return marker;
+				};
+				const auto retain_syntax = [&](const annotated_row& row)
+				{
+					if (!explicit_nonaction(row))
+						return true;
+					bool retain = false;
+					each_key(row,
+							 "node",
+							 [&](const source_key& id)
+							 {
+								 if (referenced_syntax.contains(id))
+								 {
+									 retain = true;
+									 return;
+								 }
+								 const auto at = syntax_rows.find(id);
+								 if (at == syntax_rows.end())
+								 {
+									 retain = true;
+									 return;
+								 }
+								 retain |= at->second.conflicting;
+							 });
+					return retain;
+				};
+				std::set<source_key> needed_details, needed_declarations, needed_types;
+				const auto add_needed =
+					[&](auto& into, const annotated_row& row, std::string_view field)
+				{
+					each_key(row,
+							 field,
+							 [&](const source_key& id)
+							 {
+								 if (!into.contains(id))
+								 {
+									 b.retain(sizeof(source_key) + 96U);
+									 into.insert(id);
+								 }
+							 });
+				};
+				const auto needed =
+					[&](const auto& into, const annotated_row& row, std::string_view field)
+				{
+					bool found{};
+					each_key(row,
+							 field,
+							 [&](const source_key& id)
+							 {
+								 found |= into.contains(id);
+							 });
+					return found;
+				};
+				const auto callable_kind = [](std::string_view kind)
+				{
+					return kind.empty() || kind == "function" || kind == "method" ||
+						kind == "constructor" || kind == "destructor" || kind == "conversion";
+				};
+				visit_group(3U,
+							[&](const annotated_row& row)
+							{
+								b.work();
+								if (callable_kind(borrowed_text(row, "kind")))
+									add_needed(needed_details, row, "entity");
+							});
+				// A declared type-use admission without an independently known empty
+				// role set remains selected. Actual action object/context joins also
+				// retain their original declaration/detail carriers.
+				const auto explicit_no_type_use = [&](const annotated_row& row)
+				{
+					const auto* c = cell(row, "flags");
+					const auto* encoded = c && c->state == cell_state::present && c->value
+						? std::get_if<std::vector<std::byte>>(&*c->value)
+						: nullptr;
+					if (!encoded)
+						return false;
+					b.work(encoded->size() + 1U);
+					bool marker{};
+					for (std::size_t offset{}; offset < encoded->size();)
+					{
+						if (encoded->size() - offset < 4U)
+							return false;
+						std::uint32_t n{};
+						for (unsigned i{}; i < 4U; ++i)
+							n |= std::to_integer<std::uint32_t>((*encoded)[offset + i]) << (8U * i);
+						offset += 4U;
+						if (n > encoded->size() - offset)
+							return false;
+						const std::string_view flag{
+							reinterpret_cast<const char*>(encoded->data() + offset), n};
+						offset += n;
+						marker |= flag == "finite_type_use_admission_v1";
+						if (flag.starts_with("type_use_"))
+							return false;
+					}
+					return marker;
+				};
+				visit_group(4U,
+							[&](const annotated_row& row)
+							{
+								if (!explicit_no_type_use(row) || present(row, "operation_count") ||
+									present(row, "operation_ids"))
+									add_needed(needed_details, row, "entity");
+							});
+				for (const auto group : {11U, 12U})
+					visit_group(
+						group,
+						[&](const annotated_row& row)
+						{
+							for (const auto field : {"function", "caller", "object_entity"})
+								add_needed(needed_details, row, field);
+							for (const auto field :
+								 {"scope_declaration", "object_declaration", "context_declaration"})
+								add_needed(needed_declarations, row, field);
+							for (const auto field :
+								 {"type", "object_type", "target_canonical_type"})
+								add_needed(needed_types, row, field);
+						});
+				visit_group(5U,
+							[&](const annotated_row& row)
+							{
+								if (needed(needed_declarations, row, "declaration"))
+									add_needed(needed_details, row, "entity");
+							});
+				visit_group(4U,
+							[&](const annotated_row& row)
+							{
+								if (needed(needed_details, row, "entity"))
+									add_needed(needed_types, row, "type");
+							});
+				bool changed = true;
+				while (changed)
+				{
+					const auto before = needed_types.size();
+					visit_group(7U,
+								[&](const annotated_row& row)
+								{
+									b.work();
+									if (needed(needed_types, row, "owner_type"))
+										add_needed(needed_types, row, "component_type");
+								});
+					changed = before != needed_types.size();
+				}
+				const auto retain_carrier = [&](std::size_t group, const annotated_row& row)
+				{
+					if (group == 4U)
+						return needed(needed_details, row, "entity");
+					if (group == 5U)
+						return needed(needed_details, row, "entity") ||
+							needed(needed_declarations, row, "declaration");
+					if (group == 6U)
+						return needed(needed_types, row, "type");
+					if (group == 7U)
+						return needed(needed_types, row, "owner_type");
+					return true;
+				};
+				std::set<source_key> source_members;
+				for (const auto group : {4U, 5U, 8U, 9U, 10U, 11U, 12U})
+					visit_group(
+						group,
+						[&](const annotated_row& row)
+						{
+							if ((group == 9U && !retain_syntax(row)) || !retain_carrier(group, row))
+								return;
+							for (const auto field : {"source", "object_source"})
+							{
+								b.work();
+								const auto id = borrowed_text(row, field);
+								if (id.empty())
+									continue;
+								for (const auto& variant : row.presence.fragments)
+								{
+									b.work();
+									const source_key member{
+										id, row.presence.universe, variant, row.interpretation};
+									if (!source_members.contains(member))
+									{
+										b.retain(sizeof(source_key) + 96U);
+										source_members.insert(member);
+									}
+								}
+							}
+						});
 				const auto descriptors = standard_relation_descriptors();
 				std::vector<entry> entries;
 				for (std::size_t group = 0; group < groups.size(); ++group)
@@ -1544,34 +1952,56 @@ namespace cxxlens::sdk::query
 						std::ranges::find(descriptors, relations[group], &relation_descriptor::id);
 					if (descriptor == descriptors.end())
 						fail(relations[group], "descriptor-missing");
-					for (const auto& row : groups[group])
-					{
-						b.work();
-						b.charge(b.rows, 1, limits.maximum_rows, "rows");
-						b.retain(b.estimate(row));
-						if (auto valid = row.validate(); !valid)
-							return valid.error();
-						for (const auto& column : descriptor->columns)
+					visit_group(
+						group,
+						[&](const annotated_row& row)
 						{
 							b.work();
-							const auto* actual = cell(row, column.name);
-							if (!actual || actual->type != column.type || !actual->validate())
-								fail(column.id, "column-type-or-value-invalid");
-						}
-						b.charge(b.conditions,
-								 row.presence.fragments.size(),
-								 limits.maximum_condition_expansions,
-								 "conditions");
-						std::string payload;
-						for (const auto& [name, value] : row.values)
-							payload += name + '=' + value.canonical_form() + '\n';
-						const auto canonical = row.canonical_form();
-						b.charge(b.evidence,
-								 canonical.size(),
-								 limits.maximum_evidence_bytes,
-								 "evidence-bytes");
-						entries.push_back({group, &row, canonical, std::move(payload)});
-					}
+							b.charge(b.rows, 1, limits.maximum_rows, "rows");
+							if (auto valid = detail::validate_projected_relation_row(
+									row,
+									*descriptor,
+									"sdk.action-input-invalid",
+									[&]
+									{
+										b.work();
+									});
+								!valid)
+								throw failure{valid.error()};
+							b.charge(b.conditions,
+									 row.presence.fragments.size(),
+									 limits.maximum_condition_expansions,
+									 "conditions");
+							if (borrowed_text(row, identifiers[group]).empty())
+								fail(relations[group], "identity-missing");
+							if ((group == 9U && !retain_syntax(row)) || !retain_carrier(group, row))
+								return;
+							if (group == 2U)
+							{
+								const auto id = borrowed_text(row, "span");
+								if (!std::ranges::any_of(row.presence.fragments,
+														 [&](const auto& variant)
+														 {
+															 b.work();
+															 return source_members.contains(
+																 source_key{id,
+																			row.presence.universe,
+																			variant,
+																			row.interpretation});
+														 }))
+									return;
+							}
+							b.retain(b.estimate(row));
+							std::string payload;
+							for (const auto& [name, value] : row.values)
+								payload += name + '=' + value.canonical_form() + '\n';
+							const auto canonical = row.canonical_form();
+							b.charge(b.evidence,
+									 canonical.size(),
+									 limits.maximum_evidence_bytes,
+									 "evidence-bytes");
+							entries.push_back({group, &row, canonical, std::move(payload)});
+						});
 				}
 				std::ranges::sort(entries,
 								  {},
@@ -1703,7 +2133,7 @@ namespace cxxlens::sdk::query
 					!valid)
 					return valid.error();
 				b.retain(plan_bytes);
-				std::array<std::vector<annotated_row>, 13> groups;
+				std::array<std::vector<const annotated_row*>, 13> groups;
 				std::array<bool, 13> present{}, complete{};
 				complete.fill(true);
 				for (const auto& scan : input.scans)
@@ -1714,50 +2144,43 @@ namespace cxxlens::sdk::query
 						continue;
 					const auto group = static_cast<std::size_t>(name - relations.begin());
 					present[group] = true;
+					// Successful original scans establish availability. The independently
+					// checked typed scope/action admission closes this domain; unrelated
+					// semantic inputs_complete frontiers remain in the original
+					// source_queries.
 					complete[group] &= scan.result.execution() == execution_status::complete &&
-						scan.result.inputs_complete() && scan.result.conflicts().empty() &&
+						scan.result.conflicts().empty() &&
 						scan.result.differential_disagreements().empty();
-					auto cursor = scan.result.rows();
-					while (true)
+
+					const auto rows = query_transfer_access::borrow_rows(scan.result);
+					b.charge(b.rows, rows.size(), limits.maximum_rows, "scan-rows");
+					if (rows.size() > limits.maximum_rows ||
+						groups[group].size() > limits.maximum_rows - rows.size())
+						fail("rows", "limit-exceeded", "sdk.action-budget");
+					// Account for the temporary pointer array before allocating it;
+					// original rows remain owned by the immutable query handle.
+					b.retain((groups[group].size() + rows.size()) * sizeof(const annotated_row*));
+					groups[group].reserve(groups[group].size() + rows.size());
+					for (const auto& row : rows)
 					{
 						b.work();
-						auto next = cursor.next();
-						if (!next)
-							return next.error();
-						if (!*next)
-							break;
-						auto value = (*next)->copy();
-						if (!value)
-							return value.error();
-						b.retain(b.estimate(*value));
-						groups[group].push_back(std::move(*value));
+						groups[group].push_back(&row);
 					}
 				}
 				const auto available = [&](std::size_t group)
 				{
 					return present[group] && complete[group];
 				};
-				function_action_input raw{groups[0],
-										  groups[1],
-										  groups[2],
-										  groups[3],
-										  groups[4],
-										  groups[5],
-										  groups[6],
-										  groups[7],
-										  groups[8],
-										  groups[9],
-										  groups[10],
-										  groups[11],
-										  groups[12],
-										  available(0),
-										  available(1) && available(2) && available(3) &&
-											  available(4) && available(5),
-										  available(12),
-										  available(8) && available(9) && available(10),
-										  available(6) && available(7),
-										  available(11)};
-				auto output = project_rows(raw, limits, stop, b);
+				b.rows = 0;
+				function_action_input raw{};
+				raw.compile_units_complete = available(0);
+				raw.scope_inputs_complete =
+					available(1) && available(2) && available(3) && available(4) && available(5);
+				raw.operation_inputs_complete = available(12);
+				raw.admission_inputs_complete = available(8) && available(9) && available(10);
+				raw.type_inputs_complete = available(6) && available(7);
+				raw.call_inputs_complete = available(11);
+				auto output = project_rows(raw, limits, stop, b, &groups);
 				if (!output)
 					return output.error();
 				for (std::size_t group = 0; group < groups.size(); ++group)

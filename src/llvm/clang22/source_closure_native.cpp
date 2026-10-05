@@ -402,7 +402,9 @@ namespace cxxlens::detail::clang22
 			const source_closure_native_input& input,
 			provider::clang22::translation_unit_callback callback,
 			provider::clang22::detail::preprocessor_setup setup,
-			provider::clang22::detail::native_parse_observation* parse_observation)
+			provider::clang22::detail::native_parse_observation* parse_observation,
+			provider::clang22::detail::sema_setup semantic_setup,
+			provider::clang22::detail::sema_ast_ready semantic_ready)
 		{
 			if (auto valid = input.closure.validate(); !valid)
 				return sdk::unexpected(std::move(valid.error()));
@@ -444,7 +446,9 @@ namespace cxxlens::detail::clang22
 																	 *mount->filesystem,
 																	 std::move(callback),
 																	 std::move(setup),
-																	 parse_observation);
+																	 parse_observation,
+																	 std::move(semantic_setup),
+																	 std::move(semantic_ready));
 			// A member the closure actually claims but could not serve is a determinate input
 			// failure (the record's core invariant) and must fail the task even when Clang's own
 			// run reports success for the translation unit as a whole -- e.g. a `__has_include`
@@ -466,6 +470,8 @@ namespace cxxlens::detail::clang22
 			(void)callback;
 			(void)setup;
 			(void)parse_observation;
+			(void)semantic_setup;
+			(void)semantic_ready;
 			return sdk::unexpected(failure("native.unsupported-clang-major", "clang", "22"));
 #endif
 		}
@@ -475,9 +481,15 @@ namespace cxxlens::detail::clang22
 		const source_closure_native_input& input,
 		provider::clang22::translation_unit_callback callback,
 		provider::clang22::detail::preprocessor_setup setup,
-		provider::clang22::detail::native_parse_observation* parse_observation)
+		provider::clang22::detail::native_parse_observation* parse_observation,
+		provider::clang22::detail::sema_setup semantic_setup,
+		provider::clang22::detail::sema_ast_ready semantic_ready)
 	{
-		return run_source_closure_translation_unit(
-			input, std::move(callback), std::move(setup), parse_observation);
+		return run_source_closure_translation_unit(input,
+												   std::move(callback),
+												   std::move(setup),
+												   parse_observation,
+												   std::move(semantic_setup),
+												   std::move(semantic_ready));
 	}
 } // namespace cxxlens::detail::clang22

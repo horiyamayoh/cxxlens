@@ -14,27 +14,7 @@ namespace cxxlens::sdk::doctor
 	[[nodiscard]] inline result<relation_registry> known_relation_registry()
 	{
 		relation_registry registry;
-		const std::array descriptors{
-			build::relations::compile_unit::descriptor(),
-			build::relations::project::descriptor(),
-			build::relations::toolchain_context::descriptor(),
-			build::relations::variant::descriptor(),
-			cc::relations::call_direct_target::descriptor(),
-			cc::relations::call_site::descriptor(),
-			cc::relations::declaration::descriptor(),
-			cc::relations::entity::descriptor(),
-			cc::relations::type::descriptor(),
-			cc::relations::type_component::descriptor(),
-			company::relations::lock_acquire::descriptor(),
-			core::relations::claim_conflict::descriptor(),
-			core::relations::differential_disagreement::descriptor(),
-			core::relations::provider_execution::descriptor(),
-			core::relations::unresolved::descriptor(),
-			source::relations::file::descriptor(),
-			source::relations::origin::descriptor(),
-			source::relations::span::descriptor(),
-		};
-		for (const auto& descriptor : descriptors)
+		for (const auto& descriptor : standard_relation_descriptors())
 		{
 			if (auto added = registry.add(descriptor); !added)
 				return added.error();

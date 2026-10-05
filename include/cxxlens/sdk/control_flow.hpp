@@ -54,6 +54,9 @@ namespace cxxlens::sdk::query
 		std::optional<std::string> source_span;
 		std::optional<std::uint64_t> statement_count;
 		std::vector<std::size_t> evidence;
+		/** @brief Original compiler terminator facet; absent legacy fields remain unknown. */
+		std::optional<std::string> terminator{};
+		std::optional<std::string> terminator_state{}, terminator_profile{};
 	};
 
 	/** @brief A distinct edge; absent target remains a frontier. */
@@ -65,6 +68,11 @@ namespace cxxlens::sdk::query
 		std::string kind;
 		std::optional<std::uint64_t> ordinal;
 		std::vector<std::size_t> evidence;
+		/** @brief Original condition and outcome observations, independent of CFG enumeration. */
+		std::optional<std::string> condition{};
+		std::optional<std::string> condition_state{}, condition_profile{};
+		std::optional<std::string> outcome{}, outcome_state{}, outcome_profile{};
+		std::optional<std::string> outcome_expression{};
 	};
 
 	/** @brief One body in exactly one condition fragment and interpretation. */

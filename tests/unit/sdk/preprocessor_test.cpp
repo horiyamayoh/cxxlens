@@ -270,6 +270,52 @@ namespace
 int main()
 {
 	using state = q::preprocessor_state;
+
+	{
+		fixture pragma;
+		pragma.g[4].resize(1U);
+		set(pragma.g[4][0], "kind", detached_cell::utf8("raw_pragma"));
+		set(pragma.g[3][0], "event_ids", ids({"raw:event"}));
+		set(pragma.g[3][0], "event_count", detached_cell::unsigned_integer(1U));
+		set(pragma.g[4][0], "pragma_kind", detached_cell::utf8("pack"));
+		set(pragma.g[4][0],
+			"pragma_profile",
+			detached_cell::utf8("clang22-original-raw-pragma-kind/1"));
+		set(pragma.g[4][0], "pragma_state", detached_cell::utf8("complete"));
+		auto observed = pragma.run();
+		require(bool(observed), "pragma original input");
+		const auto& raw = population(*observed, "raw");
+		require(raw.state == state::complete && raw.events[0].pragma_state == state::complete &&
+					raw.events[0].pragma_kind == "pack",
+				"actual independent pragma facet");
+		set(pragma.g[4][0],
+			"pragma_kind",
+			detached_cell::absent(pragma.g[4][0].values.at("output.pragma_kind").type));
+		observed = pragma.run();
+		require(bool(observed), "missing pragma input");
+		require(population(*observed, "raw").state == state::complete &&
+					population(*observed, "raw").events[0].pragma_state == state::partial,
+				"missing pragma facet poisoned independent enumeration");
+		set(pragma.g[4][0], "pragma_kind", detached_cell::utf8("pack"));
+		set(pragma.g[4][0], "pragma_profile", detached_cell::utf8("future/1"));
+		observed = pragma.run();
+		require(bool(observed), "future pragma input");
+		require(population(*observed, "raw").state == state::complete &&
+					population(*observed, "raw").events[0].pragma_state == state::unsupported,
+				"future pragma profile forged complete");
+		set(pragma.g[4][0],
+			"pragma_profile",
+			detached_cell::utf8("clang22-original-raw-pragma-kind/1"));
+		auto conflicting = pragma.g[4][0];
+		set(conflicting, "pragma_kind", detached_cell::utf8("once"));
+		pragma.g[4].push_back(conflicting);
+		observed = pragma.run();
+		require(bool(observed), "conflicting pragma input");
+		require(population(*observed, "raw").state == state::complete &&
+					population(*observed, "raw").events[0].pragma_state == state::conflicting &&
+					population(*observed, "raw").events[0].evidence.size() > 1U,
+				"pragma conflict lost or poisoned independent enumeration");
+	}
 	fixture actual;
 	auto projected = actual.run();
 	if (!projected)

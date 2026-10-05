@@ -24,8 +24,8 @@ namespace cxxlens::cc::relations
 				output.semantic_major = 1U;
 				output.semantics = "cc.entity_detail/1";
 				output.owner_namespace = "cxxlens.standard.cc";
-				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.entity_detail.v1.compile_unit","cc.entity_detail.v1.entity","cc.entity_detail.v1.source"],"result_column":"cc.entity_detail.v1.detail"},"interpretation_required":true,"key":["cc.entity_detail.v1.detail"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.entity_detail.v1.detail","identity_role":"claim_key","name":"detail","required":true,"type":"typed_id<entity_detail_id>"},{"id":"cc.entity_detail.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.entity_detail.v1.entity","identity_role":"authoritative_payload","name":"entity","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.entity_detail.v1.source","identity_role":"authoritative_payload","name":"source","required":true,"type":"typed_id<source_span_id>"},{"id":"cc.entity_detail.v1.signature","identity_role":"authoritative_payload","name":"signature","required":true,"type":"utf8_string"},{"id":"cc.entity_detail.v1.access","identity_role":"authoritative_payload","name":"access","required":true,"type":"open_symbol<cc.access/1>"},{"id":"cc.entity_detail.v1.linkage","identity_role":"authoritative_payload","name":"linkage","required":true,"type":"open_symbol<cc.linkage/1>"},{"id":"cc.entity_detail.v1.is_definition","identity_role":"authoritative_payload","name":"is_definition","required":true,"type":"bool"},{"id":"cc.entity_detail.v1.flags","identity_role":"authoritative_payload","name":"flags","required":true,"type":"set<open_symbol<cc.entity-flag/1>>"},{"id":"cc.entity_detail.v1.parameter_count","identity_role":"authoritative_payload","name":"parameter_count","required":true,"type":"uint64"},{"id":"cc.entity_detail.v1.canonical_type","identity_role":"authoritative_payload","name":"canonical_type","required":false,"type":"optional<typed_id<cc_type_id>>"},{"id":"cc.entity_detail.v1.language","identity_role":"authoritative_payload","name":"language","required":false,"type":"optional<open_symbol<cc.language/1>>"},{"id":"cc.entity_detail.v1.calling_convention","identity_role":"authoritative_payload","name":"calling_convention","required":false,"type":"optional<utf8_string>"},{"id":"cc.entity_detail.v1.module_domain","identity_role":"authoritative_payload","name":"module_domain","required":false,"type":"optional<utf8_string>"},{"id":"cc.entity_detail.v1.call_site_count","identity_role":"authoritative_payload","name":"call_site_count","required":false,"type":"optional<uint64>"},{"id":"cc.entity_detail.v1.call_site_ids","identity_role":"authoritative_payload","name":"call_site_ids","required":false,"type":"optional<set<cc_call_id>>"},{"id":"cc.entity_detail.v1.call_site_state","identity_role":"authoritative_payload","name":"call_site_state","required":false,"type":"optional<open_symbol<cc.function-call-site-state/1>>"},{"id":"cc.entity_detail.v1.call_site_profile","identity_role":"authoritative_payload","name":"call_site_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.entity_detail.v1.operation_count","identity_role":"authoritative_payload","name":"operation_count","required":false,"type":"optional<uint64>"},{"id":"cc.entity_detail.v1.operation_ids","identity_role":"authoritative_payload","name":"operation_ids","required":false,"type":"optional<set<operation_id>>"},{"id":"cc.entity_detail.v1.operation_state","identity_role":"authoritative_payload","name":"operation_state","required":false,"type":"optional<open_symbol<cc.operation-enumeration-state/1>>"},{"id":"cc.entity_detail.v1.operation_profile","identity_role":"authoritative_payload","name":"operation_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.entity_detail.v1.capture_count","identity_role":"authoritative_payload","name":"capture_count","required":false,"type":"optional<uint64>"}],"coverage":{"execution_domain":"cc.entity_detail.compile-unit"},"descriptor_id":"cc.entity_detail.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::entity_detail","indexes":[["cc.entity_detail.v1.entity"],["cc.entity_detail.v1.source"]],"merge":{"conflict_columns":["cc.entity_detail.v1.access","cc.entity_detail.v1.call_site_count","cc.entity_detail.v1.call_site_ids","cc.entity_detail.v1.call_site_profile","cc.entity_detail.v1.call_site_state","cc.entity_detail.v1.calling_convention","cc.entity_detail.v1.canonical_type","cc.entity_detail.v1.capture_count","cc.entity_detail.v1.compile_unit","cc.entity_detail.v1.entity","cc.entity_detail.v1.flags","cc.entity_detail.v1.is_definition","cc.entity_detail.v1.language","cc.entity_detail.v1.linkage","cc.entity_detail.v1.module_domain","cc.entity_detail.v1.operation_count","cc.entity_detail.v1.operation_ids","cc.entity_detail.v1.operation_profile","cc.entity_detail.v1.operation_state","cc.entity_detail.v1.parameter_count","cc.entity_detail.v1.signature","cc.entity_detail.v1.source"],"mode":"functional_assertion"},"name":"cc.entity_detail","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.entity_detail.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.entity_detail.v1.call_site_ids"],"strength":"soft_semantic","target_columns":["cc.call_site.v1.call"],"target_relation":"cc.call_site"},{"on_missing":"unresolved","source_columns":["cc.entity_detail.v1.canonical_type"],"strength":"soft_semantic","target_columns":["cc.type.v1.type"],"target_relation":"cc.type"},{"on_missing":"reject_batch","source_columns":["cc.entity_detail.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"unresolved","source_columns":["cc.entity_detail.v1.entity"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.entity_detail.v1.operation_ids"],"strength":"soft_semantic","target_columns":["cc.operation.v1.operation"],"target_relation":"cc.operation"},{"on_missing":"reject_batch","source_columns":["cc.entity_detail.v1.source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"}],"row_constraints":{"all_or_none":[["cc.entity_detail.v1.operation_count","cc.entity_detail.v1.operation_ids","cc.entity_detail.v1.operation_profile","cc.entity_detail.v1.operation_state"]]},"semantic_major":1,"semantics":"cc.entity_detail/1","stability":"versioned","summary":"Source-bound declaration detail; physical occurrence is distinct from semantic entity.","version":"1.0.0"})cxxlens";
-				output.contract_digest = "sha256:2fe8f7ea94731a1ae79006771bb025f6a3e7d62da79b647478339e609099523d";
+				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.entity_detail.v1.compile_unit","cc.entity_detail.v1.entity","cc.entity_detail.v1.source"],"result_column":"cc.entity_detail.v1.detail"},"interpretation_required":true,"key":["cc.entity_detail.v1.detail"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.entity_detail.v1.detail","identity_role":"claim_key","name":"detail","required":true,"type":"typed_id<entity_detail_id>"},{"id":"cc.entity_detail.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.entity_detail.v1.entity","identity_role":"authoritative_payload","name":"entity","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.entity_detail.v1.source","identity_role":"authoritative_payload","name":"source","required":true,"type":"typed_id<source_span_id>"},{"id":"cc.entity_detail.v1.signature","identity_role":"authoritative_payload","name":"signature","required":true,"type":"utf8_string"},{"id":"cc.entity_detail.v1.access","identity_role":"authoritative_payload","name":"access","required":true,"type":"open_symbol<cc.access/1>"},{"id":"cc.entity_detail.v1.linkage","identity_role":"authoritative_payload","name":"linkage","required":true,"type":"open_symbol<cc.linkage/1>"},{"id":"cc.entity_detail.v1.is_definition","identity_role":"authoritative_payload","name":"is_definition","required":true,"type":"bool"},{"id":"cc.entity_detail.v1.flags","identity_role":"authoritative_payload","name":"flags","required":true,"type":"set<open_symbol<cc.entity-flag/1>>"},{"id":"cc.entity_detail.v1.parameter_count","identity_role":"authoritative_payload","name":"parameter_count","required":true,"type":"uint64"},{"id":"cc.entity_detail.v1.canonical_type","identity_role":"authoritative_payload","name":"canonical_type","required":false,"type":"optional<typed_id<cc_type_id>>"},{"id":"cc.entity_detail.v1.language","identity_role":"authoritative_payload","name":"language","required":false,"type":"optional<open_symbol<cc.language/1>>"},{"id":"cc.entity_detail.v1.calling_convention","identity_role":"authoritative_payload","name":"calling_convention","required":false,"type":"optional<utf8_string>"},{"id":"cc.entity_detail.v1.module_domain","identity_role":"authoritative_payload","name":"module_domain","required":false,"type":"optional<utf8_string>"},{"id":"cc.entity_detail.v1.call_site_count","identity_role":"authoritative_payload","name":"call_site_count","required":false,"type":"optional<uint64>"},{"id":"cc.entity_detail.v1.call_site_ids","identity_role":"authoritative_payload","name":"call_site_ids","required":false,"type":"optional<set<cc_call_id>>"},{"id":"cc.entity_detail.v1.call_site_state","identity_role":"authoritative_payload","name":"call_site_state","required":false,"type":"optional<open_symbol<cc.function-call-site-state/1>>"},{"id":"cc.entity_detail.v1.call_site_profile","identity_role":"authoritative_payload","name":"call_site_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.entity_detail.v1.operation_count","identity_role":"authoritative_payload","name":"operation_count","required":false,"type":"optional<uint64>"},{"id":"cc.entity_detail.v1.operation_ids","identity_role":"authoritative_payload","name":"operation_ids","required":false,"type":"optional<set<operation_id>>"},{"id":"cc.entity_detail.v1.operation_state","identity_role":"authoritative_payload","name":"operation_state","required":false,"type":"optional<open_symbol<cc.operation-enumeration-state/1>>"},{"id":"cc.entity_detail.v1.operation_profile","identity_role":"authoritative_payload","name":"operation_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.entity_detail.v1.capture_count","identity_role":"authoritative_payload","name":"capture_count","required":false,"type":"optional<uint64>"},{"id":"cc.entity_detail.v1.literal_count","identity_role":"authoritative_payload","name":"literal_count","required":false,"type":"optional<uint64>"},{"id":"cc.entity_detail.v1.literal_ids","identity_role":"authoritative_payload","name":"literal_ids","required":false,"type":"optional<set<syntax_node_id>>"},{"id":"cc.entity_detail.v1.literal_state","identity_role":"authoritative_payload","name":"literal_state","required":false,"type":"optional<open_symbol<cc.literal-enumeration-state/1>>"},{"id":"cc.entity_detail.v1.literal_profile","identity_role":"authoritative_payload","name":"literal_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.entity_detail.v1.automatic_storage_count","identity_role":"authoritative_payload","name":"automatic_storage_count","required":false,"type":"optional<uint64>"},{"id":"cc.entity_detail.v1.automatic_storage_ids","identity_role":"authoritative_payload","name":"automatic_storage_ids","required":false,"type":"optional<set<operation_id>>"},{"id":"cc.entity_detail.v1.automatic_storage_state","identity_role":"authoritative_payload","name":"automatic_storage_state","required":false,"type":"optional<open_symbol<cc.operation-enumeration-state/1>>"},{"id":"cc.entity_detail.v1.automatic_storage_profile","identity_role":"authoritative_payload","name":"automatic_storage_profile","required":false,"type":"optional<utf8_string>"}],"coverage":{"execution_domain":"cc.entity_detail.compile-unit"},"descriptor_id":"cc.entity_detail.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::entity_detail","indexes":[["cc.entity_detail.v1.entity"],["cc.entity_detail.v1.source"]],"merge":{"conflict_columns":["cc.entity_detail.v1.access","cc.entity_detail.v1.automatic_storage_count","cc.entity_detail.v1.automatic_storage_ids","cc.entity_detail.v1.automatic_storage_profile","cc.entity_detail.v1.automatic_storage_state","cc.entity_detail.v1.call_site_count","cc.entity_detail.v1.call_site_ids","cc.entity_detail.v1.call_site_profile","cc.entity_detail.v1.call_site_state","cc.entity_detail.v1.calling_convention","cc.entity_detail.v1.canonical_type","cc.entity_detail.v1.capture_count","cc.entity_detail.v1.compile_unit","cc.entity_detail.v1.entity","cc.entity_detail.v1.flags","cc.entity_detail.v1.is_definition","cc.entity_detail.v1.language","cc.entity_detail.v1.linkage","cc.entity_detail.v1.literal_count","cc.entity_detail.v1.literal_ids","cc.entity_detail.v1.literal_profile","cc.entity_detail.v1.literal_state","cc.entity_detail.v1.module_domain","cc.entity_detail.v1.operation_count","cc.entity_detail.v1.operation_ids","cc.entity_detail.v1.operation_profile","cc.entity_detail.v1.operation_state","cc.entity_detail.v1.parameter_count","cc.entity_detail.v1.signature","cc.entity_detail.v1.source"],"mode":"functional_assertion"},"name":"cc.entity_detail","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.entity_detail.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"container_elements":true,"on_missing":"reject_batch","source_columns":["cc.entity_detail.v1.automatic_storage_ids"],"strength":"hard","target_columns":["cc.operation.v1.operation"],"target_relation":"cc.operation"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.entity_detail.v1.call_site_ids"],"strength":"soft_semantic","target_columns":["cc.call_site.v1.call"],"target_relation":"cc.call_site"},{"on_missing":"unresolved","source_columns":["cc.entity_detail.v1.canonical_type"],"strength":"soft_semantic","target_columns":["cc.type.v1.type"],"target_relation":"cc.type"},{"on_missing":"reject_batch","source_columns":["cc.entity_detail.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"unresolved","source_columns":["cc.entity_detail.v1.entity"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"container_elements":true,"on_missing":"reject_batch","source_columns":["cc.entity_detail.v1.literal_ids"],"strength":"hard","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.entity_detail.v1.operation_ids"],"strength":"soft_semantic","target_columns":["cc.operation.v1.operation"],"target_relation":"cc.operation"},{"on_missing":"reject_batch","source_columns":["cc.entity_detail.v1.source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"}],"row_constraints":{"all_or_none":[["cc.entity_detail.v1.automatic_storage_count","cc.entity_detail.v1.automatic_storage_ids","cc.entity_detail.v1.automatic_storage_profile","cc.entity_detail.v1.automatic_storage_state"],["cc.entity_detail.v1.literal_count","cc.entity_detail.v1.literal_ids","cc.entity_detail.v1.literal_profile","cc.entity_detail.v1.literal_state"],["cc.entity_detail.v1.operation_count","cc.entity_detail.v1.operation_ids","cc.entity_detail.v1.operation_profile","cc.entity_detail.v1.operation_state"]]},"semantic_major":1,"semantics":"cc.entity_detail/1","stability":"versioned","summary":"Source-bound declaration detail; physical occurrence is distinct from semantic entity.","version":"1.0.0"})cxxlens";
+				output.contract_digest = "sha256:f13eebd7bb1571bb8a23d4932278ad932d954d2de3eb2fd5e89dcaaf59adf40d";
 				output.columns = {
 					{"cc.entity_detail.v1.detail", "detail", {sdk::scalar_kind::typed_id, "entity_detail_id", false}, true, sdk::column_role::claim_key},
 					{"cc.entity_detail.v1.compile_unit", "compile_unit", {sdk::scalar_kind::typed_id, "compile_unit_id", false}, true, sdk::column_role::authoritative_payload},
@@ -50,6 +50,14 @@ namespace cxxlens::cc::relations
 					{"cc.entity_detail.v1.operation_state", "operation_state", {sdk::scalar_kind::open_symbol, "cc.operation-enumeration-state/1", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.entity_detail.v1.operation_profile", "operation_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.entity_detail.v1.capture_count", "capture_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.entity_detail.v1.literal_count", "literal_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.entity_detail.v1.literal_ids", "literal_ids", {sdk::scalar_kind::set, "syntax_node_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.entity_detail.v1.literal_state", "literal_state", {sdk::scalar_kind::open_symbol, "cc.literal-enumeration-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.entity_detail.v1.literal_profile", "literal_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.entity_detail.v1.automatic_storage_count", "automatic_storage_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.entity_detail.v1.automatic_storage_ids", "automatic_storage_ids", {sdk::scalar_kind::set, "operation_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.entity_detail.v1.automatic_storage_state", "automatic_storage_state", {sdk::scalar_kind::open_symbol, "cc.operation-enumeration-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.entity_detail.v1.automatic_storage_profile", "automatic_storage_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
 				};
 				output.domain_identity.result_column = "cc.entity_detail.v1.detail";
 				output.domain_identity.projection = {
@@ -62,16 +70,22 @@ namespace cxxlens::cc::relations
 					"cc.entity_detail.v1.detail",
 				};
 				output.references = {
+					{{"cc.entity_detail.v1.automatic_storage_ids"}, "cc.operation", {"cc.operation.v1.operation"}, sdk::reference_strength::hard, true},
 					{{"cc.entity_detail.v1.call_site_ids"}, "cc.call_site", {"cc.call_site.v1.call"}, sdk::reference_strength::soft_semantic, true},
 					{{"cc.entity_detail.v1.canonical_type"}, "cc.type", {"cc.type.v1.type"}, sdk::reference_strength::soft_semantic},
 					{{"cc.entity_detail.v1.compile_unit"}, "build.compile_unit", {"build.compile_unit.v1.compile_unit"}, sdk::reference_strength::hard},
 					{{"cc.entity_detail.v1.entity"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic},
+					{{"cc.entity_detail.v1.literal_ids"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::hard, true},
 					{{"cc.entity_detail.v1.operation_ids"}, "cc.operation", {"cc.operation.v1.operation"}, sdk::reference_strength::soft_semantic, true},
 					{{"cc.entity_detail.v1.source"}, "source.span", {"source.span.v1.span"}, sdk::reference_strength::hard},
 				};
 				output.merge = sdk::merge_mode::functional_assertion;
 				output.conflict_columns = {
 					"cc.entity_detail.v1.access",
+					"cc.entity_detail.v1.automatic_storage_count",
+					"cc.entity_detail.v1.automatic_storage_ids",
+					"cc.entity_detail.v1.automatic_storage_profile",
+					"cc.entity_detail.v1.automatic_storage_state",
 					"cc.entity_detail.v1.call_site_count",
 					"cc.entity_detail.v1.call_site_ids",
 					"cc.entity_detail.v1.call_site_profile",
@@ -85,6 +99,10 @@ namespace cxxlens::cc::relations
 					"cc.entity_detail.v1.is_definition",
 					"cc.entity_detail.v1.language",
 					"cc.entity_detail.v1.linkage",
+					"cc.entity_detail.v1.literal_count",
+					"cc.entity_detail.v1.literal_ids",
+					"cc.entity_detail.v1.literal_profile",
+					"cc.entity_detail.v1.literal_state",
 					"cc.entity_detail.v1.module_domain",
 					"cc.entity_detail.v1.operation_count",
 					"cc.entity_detail.v1.operation_ids",
@@ -308,6 +326,78 @@ namespace cxxlens::cc::relations
 			[[nodiscard]] static sdk::column_ref ref()
 			{
 				return {entity_detail::descriptor().id, "cc.entity_detail.v1.capture_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.entity_detail.v1.literal_count`. */
+		struct literal_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {entity_detail::descriptor().id, "cc.entity_detail.v1.literal_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.entity_detail.v1.literal_ids`. */
+		struct literal_ids
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {entity_detail::descriptor().id, "cc.entity_detail.v1.literal_ids", {sdk::scalar_kind::set, "syntax_node_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.entity_detail.v1.literal_state`. */
+		struct literal_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {entity_detail::descriptor().id, "cc.entity_detail.v1.literal_state", {sdk::scalar_kind::open_symbol, "cc.literal-enumeration-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.entity_detail.v1.literal_profile`. */
+		struct literal_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {entity_detail::descriptor().id, "cc.entity_detail.v1.literal_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.entity_detail.v1.automatic_storage_count`. */
+		struct automatic_storage_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {entity_detail::descriptor().id, "cc.entity_detail.v1.automatic_storage_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.entity_detail.v1.automatic_storage_ids`. */
+		struct automatic_storage_ids
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {entity_detail::descriptor().id, "cc.entity_detail.v1.automatic_storage_ids", {sdk::scalar_kind::set, "operation_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.entity_detail.v1.automatic_storage_state`. */
+		struct automatic_storage_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {entity_detail::descriptor().id, "cc.entity_detail.v1.automatic_storage_state", {sdk::scalar_kind::open_symbol, "cc.operation-enumeration-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.entity_detail.v1.automatic_storage_profile`. */
+		struct automatic_storage_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {entity_detail::descriptor().id, "cc.entity_detail.v1.automatic_storage_profile", {sdk::scalar_kind::utf8_string, "", true}};
 			}
 		};
 	};

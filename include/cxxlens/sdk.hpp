@@ -13,6 +13,7 @@
 #include <cxxlens/sdk/control_flow.hpp>
 #include <cxxlens/sdk/finite_populations.hpp>
 #include <cxxlens/sdk/function_actions.hpp>
+#include <cxxlens/sdk/function_compiler_facets.hpp>
 #include <cxxlens/sdk/incremental.hpp>
 #include <cxxlens/sdk/preprocessor.hpp>
 #include <cxxlens/sdk/provider.hpp>
@@ -24,3 +25,5 @@
 #include <cxxlens/sdk/semantic_graphs.hpp>
 #include <cxxlens/sdk/source_tokens.hpp>
 #include <cxxlens/sdk/store.hpp>
+#include <cxxlens/sdk/target_resolution.hpp>
+#include <cxxlens/sdk/template_domains.hpp>

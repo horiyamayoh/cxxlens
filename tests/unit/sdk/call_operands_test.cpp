@@ -234,6 +234,117 @@ namespace
 } // namespace
 int main()
 {
+	{
+		fixture f;
+		for (std::size_t i{}; i < 512U; ++i)
+		{
+			const auto id = "excluded:" + std::to_string(i);
+			f.rows[8].push_back(fact(8,
+									 {{"node", detached_cell::utf8(id)},
+									  {"compile_unit", detached_cell::utf8("unit:a")},
+									  {"function", detached_cell::utf8("function:a")},
+									  {"source", detached_cell::utf8(id)},
+									  {"kind", detached_cell::utf8("IntegerLiteral")},
+									  {"flags", symbols({"finite_call_admission_v1"})}}));
+			f.rows[2].push_back(fact(2,
+									 {{"span", detached_cell::utf8(id)},
+									  {"snapshot", detached_cell::utf8("source:a")},
+									  {"file", detached_cell::utf8("file:a")},
+									  {"begin", detached_cell::unsigned_integer(2U)},
+									  {"end", detached_cell::unsigned_integer(3U)}}));
+			f.rows[3].push_back(fact(
+				3,
+				{{"entity", detached_cell::utf8(id)}, {"kind", detached_cell::utf8("variable")}}));
+			f.rows[4].push_back(fact(4,
+									 {{"entity", detached_cell::utf8(id)},
+									  {"compile_unit", detached_cell::utf8("unit:a")},
+									  {"source", detached_cell::utf8(id)}}));
+			f.rows[5].push_back(fact(5,
+									 {{"type", detached_cell::utf8(id)},
+									  {"constructor", detached_cell::utf8("builtin")}}));
+		}
+		q::finite_population_limits limits;
+		limits.maximum_retained_bytes = 512U * 1024U;
+		const auto raw = take(q::project_call_operands(f.input(), limits));
+		require(
+			raw.calls.size() == 1U && raw.function_scopes.size() == 1U &&
+				raw.function_scopes.front().state == state::complete,
+			"raw independently excluded syntax/variables/types must not own unrelated evidence");
+		const auto query = take(q::project_call_operands(f.queries(), limits));
+		require(query.calls.size() == 1U && query.function_scopes.size() == 1U &&
+					query.function_scopes.front().state == state::complete &&
+					query.source_queries && query.source_queries->scans.size() == 12U,
+				"query selective semantic retention preserves all original handles");
+		require(raw.evidence.size() == query.evidence.size() && raw.evidence.size() < 30U,
+				"only original referenced/admitted semantic carriers retained");
+		set(f.rows[8].back(), "ordinal", detached_cell::utf8("malformed"));
+		require(!q::project_call_operands(f.input(), limits) &&
+					!q::project_call_operands(f.queries(), limits),
+				"excluded syntax still gets exact descriptor validation");
+	}
+	{
+		fixture f;
+		auto excluded = f.rows[8].front();
+		set(excluded, "flags", symbols({"finite_call_admission_v1"}));
+		f.rows[8].push_back(excluded);
+		const auto p = project(f);
+		require(p.function_scopes.front().state == state::conflicting,
+				"same original admitted ID conflicting exclusion remains retained");
+	}
+	{
+		fixture f;
+		auto syntax = f.rows[8].front();
+		set(syntax, "node", detached_cell::utf8("unknown:syntax"));
+		set(syntax, "flags", symbols({}));
+		f.rows[8].push_back(syntax);
+		require(project(f).function_scopes.front().state != state::complete,
+				"missing independent admission marker cannot be dropped as noncall");
+		set(f.rows[8].back(), "flags", symbols({"admitted_call_site", "finite_call_admission_v1"}));
+		require(project(f).function_scopes.front().state != state::complete,
+				"actual admitted original syntax without original call remains unknown");
+		set(f.rows[8].back(), "flags", symbols({"finite_call_admission_v1"}));
+		set(f.rows[8].back(), "source", detached_cell::utf8("missing:irrelevant"));
+		require(project(f).function_scopes.front().state == state::complete,
+				"actual known excluded syntax missing source does not poison call census");
+	}
+	{
+		fixture f;
+		auto query = f.queries();
+		q::finite_population_limits limits;
+		limits.maximum_rows = 1U;
+		require(!q::project_call_operands(f.input(), limits) &&
+					!q::project_call_operands(query, limits),
+				"all original rows still consume row quota");
+		limits = {};
+		limits.maximum_condition_expansions = 1U;
+		require(!q::project_call_operands(f.input(), limits) &&
+					!q::project_call_operands(query, limits),
+				"all original rows still consume world quota");
+	}
+
+	{
+		fixture f;
+		f.rows[3].clear();
+		f.rows[7] = {fact(7,
+						  {{"body", detached_cell::utf8("body:known")},
+						   {"compile_unit", detached_cell::utf8("unit:a")},
+						   {"function", detached_cell::utf8("function:a")},
+						   {"source", detached_cell::utf8("span:a")}})};
+		const auto raw = project(f);
+		const auto query = take(q::project_call_operands(f.queries()));
+		require(raw.calls.front().body == "body:known" && query.calls.front().body == "body:known",
+				"actual source-bound call body survives missing independent caller entity");
+	}
+	{
+		fixture f;
+		auto syntax = f.rows[8].front();
+		set(syntax, "node", detached_cell::utf8(""));
+		set(syntax, "flags", symbols({"finite_call_admission_v1"}));
+		f.rows[8].push_back(syntax);
+		require(!q::project_call_operands(f.input()) && !q::project_call_operands(f.queries()),
+				"excluded original semantic carrier must still have its actual identity");
+	}
+
 	fixture input;
 	auto result = project(input);
 	require(result.calls.size() == 1 && result.calls[0].state == state::complete,
@@ -255,6 +366,107 @@ int main()
 				public_result.source_queries->scans.size() == owned.scans.size() &&
 				public_result.calls[0].state == state::complete,
 			"owned queries lost original scans");
+
+	// An independent source scan also carries lexical token spans. Its retained
+	// query handle keeps every original row, while the projection owns only
+	// actual referenced source carriers and still validates all input cells.
+	fixture lexical;
+	for (std::size_t i = 0; i < 512; ++i)
+	{
+		auto span = lexical.rows[2][0];
+		set(span, "span", detached_cell::utf8("token:unrelated:" + std::to_string(i)));
+		lexical.rows[2].push_back(std::move(span));
+	}
+	q::finite_population_limits source_limits;
+	source_limits.maximum_retained_bytes = 512U * 1024U;
+	const auto lexical_queries = lexical.queries();
+	auto lexical_result = take(q::project_call_operands(lexical_queries, source_limits));
+	require(lexical_result.calls[0].state == state::complete &&
+				lexical_result.function_scopes[0].state == state::complete,
+			"unrelated token sources exhausted the relevant call projection");
+	require(std::ranges::count(lexical_result.evidence,
+							   "source.span.v1",
+							   &q::finite_population_evidence::relation_id) == 1,
+			"unreferenced token sources were copied into call evidence");
+	const auto saved_span = std::ranges::find(lexical_result.source_queries->scans,
+											  "source.span.v1",
+											  &q::application_relation_scan::relation_id);
+	require(saved_span != lexical_result.source_queries->scans.end() &&
+				q::query_transfer_access::borrow_rows(saved_span->result).size() == 513 &&
+				saved_span->result.inputs_complete(),
+			"original complete source query handle/rows were lost");
+	auto source_scope = take(q::project_function_call_scopes(lexical_queries, source_limits));
+	require(source_scope.function_scopes[0].state == state::complete &&
+				source_scope.source_queries->scans.size() == lexical_queries.scans.size(),
+			"scope-only source borrowing lost original handles");
+	auto malformed_lexical = lexical;
+	malformed_lexical.rows[2].back().values.at("output.begin").type = {
+		scalar_kind::utf8_string, "", false};
+	require(!q::project_call_operands(malformed_lexical.queries(), source_limits),
+			"unreferenced malformed source row escaped validation");
+	auto too_many_sources = source_limits;
+	too_many_sources.maximum_rows = 100;
+	require(!q::project_call_operands(lexical_queries, too_many_sources),
+			"source borrowing bypassed original row quota");
+	too_many_sources = source_limits;
+	too_many_sources.maximum_condition_expansions = 100;
+	require(!q::project_call_operands(lexical_queries, too_many_sources),
+			"unreferenced sources bypassed condition quota");
+	auto related_duplicate = lexical;
+	auto duplicate_source = related_duplicate.rows[2][0];
+	set(duplicate_source, "end", detached_cell::unsigned_integer(9));
+	related_duplicate.rows[2].push_back(std::move(duplicate_source));
+	auto conflicted_source =
+		take(q::project_call_operands(related_duplicate.queries(), source_limits));
+	require(conflicted_source.calls[0].state == state::conflicting,
+			"borrowed matching source contradiction gained a convenient winner");
+	auto duplicate_scan = lexical_queries;
+	const auto span_scan = std::ranges::find(
+		duplicate_scan.scans, "source.span.v1", &q::application_relation_scan::relation_id);
+	duplicate_scan.scans.push_back(*span_scan);
+	auto duplicates = take(q::project_call_operands(duplicate_scan, source_limits));
+	require(duplicates.calls[0].state == state::complete &&
+				std::ranges::count(duplicates.evidence,
+								   "source.span.v1",
+								   &q::finite_population_evidence::relation_id) == 2,
+			"multiple original scans lost identical matching evidence");
+
+	// The raw borrowing entry path has the same finite source-carrier domain.
+	// Model binders already own all TU spans; unrelated lexical spans must not
+	// become another owned copy inside their nested projection budget.
+	auto raw_lexical = take(q::project_call_operands(lexical.input(), source_limits));
+	require(raw_lexical.calls[0].state == state::complete &&
+				raw_lexical.function_scopes[0].state == state::complete &&
+				std::ranges::count(raw_lexical.evidence,
+								   "source.span.v1",
+								   &q::finite_population_evidence::relation_id) == 1,
+			"raw input copied unrelated source carriers");
+	auto raw_scope = take(q::project_function_call_scopes(lexical.input(), source_limits));
+	require(raw_scope.function_scopes[0].state == state::complete && !raw_scope.source_queries,
+			"raw scope source selection invented original query handles");
+	require(!q::project_call_operands(malformed_lexical.input(), source_limits),
+			"raw unreferenced malformed source row escaped validation");
+	auto unannotated_source = lexical;
+	unannotated_source.rows[2].back().contributor_edges.clear();
+	require(!q::project_call_operands(unannotated_source.input(), source_limits),
+			"raw unreferenced source annotation escaped validation");
+	auto raw_rows = source_limits;
+	raw_rows.maximum_rows = 100;
+	auto exhausted_raw_rows = q::project_call_operands(lexical.input(), raw_rows);
+	require(!exhausted_raw_rows && exhausted_raw_rows.error().code == "sdk.call-budget",
+			"raw source selection bypassed the original row quota");
+	auto raw_conditions = source_limits;
+	raw_conditions.maximum_condition_expansions = 100;
+	auto exhausted_raw_conditions = q::project_call_operands(lexical.input(), raw_conditions);
+	require(!exhausted_raw_conditions && exhausted_raw_conditions.error().code == "sdk.call-budget",
+			"raw source selection bypassed the original condition quota");
+	auto raw_source_conflict =
+		take(q::project_call_operands(related_duplicate.input(), source_limits));
+	require(raw_source_conflict.calls[0].state == state::conflicting &&
+				std::ranges::count(raw_source_conflict.evidence,
+								   "source.span.v1",
+								   &q::finite_population_evidence::relation_id) == 2,
+			"raw referenced source conflict or original evidence was discarded");
 
 	auto missing_syntax = owned;
 	missing_syntax.scans.erase(std::ranges::find(

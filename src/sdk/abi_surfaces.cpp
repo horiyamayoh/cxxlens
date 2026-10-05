@@ -248,11 +248,12 @@ namespace cxxlens::sdk::query
 					work();
 					const auto& condition = std::get<0>(identity);
 					std::map<std::string, std::vector<std::size_t>> payloads;
-					std::set<std::string> abi_payloads, layout_payloads;
+					std::set<std::string> abi_payloads, layout_payloads, target_payloads,
+						packing_payloads;
 					for (const auto ref : candidates)
 					{
 						work();
-						std::array<std::string, 3> keys;
+						std::array<std::string, 5> keys;
 						for (const auto& [name, value] : entries[ref].row->values)
 						{
 							work();
@@ -263,8 +264,21 @@ namespace cxxlens::sdk::query
 							const bool layout = name == "output.layout_state" ||
 								name == "output.byte_size" || name == "output.byte_alignment" ||
 								name == "output.occupied_ranges";
+							const bool target = name == "output.target_data_model_state" ||
+								name == "output.target_data_model_profile" ||
+								name == "output.long_width_bits" ||
+								name == "output.pointer_width_bits" ||
+								name == "output.wchar_width_bits" ||
+								name == "output.plain_char_signed" || name == "output.byte_order" ||
+								name == "output.abi_context";
+							const bool packing = name == "output.packing_state" ||
+								name == "output.packing_profile" ||
+								name == "output.packed_attribute" ||
+								name == "output.packing_applied" ||
+								name == "output.maximum_field_alignment_bits";
 							for (std::size_t key{}; key < keys.size(); ++key)
-								if (!key || (key == 1U && abi) || (key == 2U && layout))
+								if (!key || (key == 1U && abi) || (key == 2U && layout) ||
+									(key == 3U && target) || (key == 4U && packing))
 								{
 									bytes(name.size() + canonical.size() + 2U,
 										  "candidate-payloads");
@@ -275,6 +289,8 @@ namespace cxxlens::sdk::query
 						payloads[std::move(keys[0])].push_back(ref);
 						abi_payloads.insert(std::move(keys[1]));
 						layout_payloads.insert(std::move(keys[2]));
+						target_payloads.insert(std::move(keys[3]));
+						packing_payloads.insert(std::move(keys[4]));
 					}
 					for (const auto& [payload, refs] : payloads)
 					{
@@ -297,6 +313,14 @@ namespace cxxlens::sdk::query
 								   layout_state = text(row, "layout_state");
 						value.abi_state = state(abi_state);
 						value.layout_state = state(layout_state);
+						const auto portability_state = [](std::string_view name)
+						{
+							return name == "conflicting" ? abi_surface_state::conflicting
+														 : state(name);
+						};
+						value.target_data_model_state =
+							portability_state(text(row, "target_data_model_state"));
+						value.packing_state = portability_state(text(row, "packing_state"));
 						const auto gap = [&](std::string code,
 											 std::string detail,
 											 bool conflict = false,
@@ -342,6 +366,9 @@ namespace cxxlens::sdk::query
 							if (bound.empty())
 							{
 								gap("sdk.abi-binding-missing", std::string{name} + ":" + id);
+								if (group == 0U)
+									downgrade(value.target_data_model_state, false);
+								downgrade(value.packing_state, false);
 								return nullptr;
 							}
 							bool consistent = true;
@@ -357,6 +384,9 @@ namespace cxxlens::sdk::query
 								gap("sdk.abi-binding-conflicting",
 									std::string{name} + ":" + id,
 									true);
+								if (group == 0U)
+									downgrade(value.target_data_model_state, true);
+								downgrade(value.packing_state, true);
 								return nullptr;
 							}
 							return entries[bound.front()].row;
@@ -376,11 +406,19 @@ namespace cxxlens::sdk::query
 								false,
 								true);
 						if (surface_ids.at({condition, value.id}).size() > 1U)
+						{
+							downgrade(value.target_data_model_state, true);
+							downgrade(value.packing_state, true);
 							gap("sdk.abi-identity-conflicting", value.id, true);
+						}
 						for (const auto ref : candidates)
 							if (text(*entries[ref].row, "kind") != value.kind ||
 								text(*entries[ref].row, "surface") != value.id)
+							{
+								downgrade(value.target_data_model_state, true);
+								downgrade(value.packing_state, true);
 								gap("sdk.abi-identity-conflicting", value.id, true);
+							}
 						(void)bind(0U, value.compile_unit, "compile-unit");
 						if (const auto* entity = bind(3U, value.entity, "entity"))
 						{
@@ -419,7 +457,10 @@ namespace cxxlens::sdk::query
 							retain(ref);
 							declaration = true;
 							if (first_detail && !same_payload(*first_detail, detail))
+							{
+								downgrade(value.packing_state, true);
 								gap("sdk.abi-declaration-conflicting", value.entity, true);
+							}
 							else if (!first_detail)
 								first_detail = &detail;
 							if (scalar<bool>(detail, "is_definition"))
@@ -430,7 +471,10 @@ namespace cxxlens::sdk::query
 						if (!declaration)
 							gap("sdk.abi-declaration-missing", value.entity);
 						if (definition && nondefinition)
+						{
+							downgrade(value.packing_state, true);
 							gap("sdk.abi-declaration-conflicting", value.entity, true);
+						}
 						if (value.kind == "record" &&
 							(abi_state == "complete" || layout_state == "complete") &&
 							declaration && !definition)
@@ -530,6 +574,119 @@ namespace cxxlens::sdk::query
 						{
 							bytes(signature->size(), "abi-signature");
 							value.abi_signature = *signature;
+						}
+						const auto portability_text =
+							[&](std::string_view field, std::optional<std::string>& destination)
+						{
+							if (const auto* actual = optional<std::string>(row, field))
+								destination = copy_text(*actual);
+						};
+						const auto portability_number =
+							[&](std::string_view field, std::optional<std::uint64_t>& destination)
+						{
+							if (const auto* actual = optional<std::uint64_t>(row, field))
+								destination = *actual;
+						};
+						const auto portability_boolean =
+							[&](std::string_view field, std::optional<bool>& destination)
+						{
+							if (const auto* actual = optional<bool>(row, field))
+								destination = *actual;
+						};
+						portability_text("target_data_model_profile",
+										 value.target_data_model_profile);
+						portability_text("byte_order", value.byte_order);
+						portability_number("long_width_bits", value.long_width_bits);
+						portability_number("pointer_width_bits", value.pointer_width_bits);
+						portability_number("wchar_width_bits", value.wchar_width_bits);
+						portability_boolean("plain_char_signed", value.plain_char_signed);
+						portability_text("packing_profile", value.packing_profile);
+						portability_boolean("packed_attribute", value.packed_attribute);
+						portability_boolean("packing_applied", value.packing_applied);
+						portability_number("maximum_field_alignment_bits",
+										   value.maximum_field_alignment_bits);
+						const auto facet_gap = [&](abi_surface_state& facet,
+												   std::string code,
+												   std::string detail,
+												   bool conflict = false)
+						{
+							downgrade(facet, conflict);
+							gap(std::move(code), std::move(detail), conflict, false, false);
+						};
+						if (target_payloads.size() > 1U)
+							facet_gap(value.target_data_model_state,
+									  "sdk.abi-target-data-model-conflicting",
+									  "retain-every-conditioned-candidate",
+									  true);
+						if (packing_payloads.size() > 1U)
+							facet_gap(value.packing_state,
+									  "sdk.abi-packing-conflicting",
+									  "retain-every-conditioned-candidate",
+									  true);
+						if (value.target_data_model_state == abi_surface_state::complete)
+						{
+							if (!value.target_data_model_profile ||
+								*value.target_data_model_profile !=
+									"clang22-original-target-data-model/1")
+							{
+								value.target_data_model_state = abi_surface_state::unknown;
+								facet_gap(value.target_data_model_state,
+										  "sdk.abi-target-data-model-profile-unsupported",
+										  "profile");
+							}
+							else if (!value.abi_context || !value.long_width_bits ||
+									 !value.pointer_width_bits || !value.wchar_width_bits ||
+									 !value.plain_char_signed || !value.byte_order)
+							{
+								facet_gap(value.target_data_model_state,
+										  "sdk.abi-target-data-model-missing",
+										  "complete-facet-requires-original-target-payload");
+							}
+							else if (!*value.long_width_bits || !*value.pointer_width_bits ||
+									 !*value.wchar_width_bits)
+							{
+								facet_gap(value.target_data_model_state,
+										  "sdk.abi-target-data-model-conflicting",
+										  "zero-width",
+										  true);
+							}
+							else if (*value.byte_order != "little" && *value.byte_order != "big")
+								facet_gap(value.target_data_model_state,
+										  "sdk.abi-target-byte-order-unsupported",
+										  *value.byte_order);
+						}
+						if (value.packing_state == abi_surface_state::complete)
+						{
+							if (!value.packing_profile ||
+								*value.packing_profile !=
+									"clang22-original-record-packing-attributes/1")
+							{
+								value.packing_state = abi_surface_state::unknown;
+								facet_gap(value.packing_state,
+										  "sdk.abi-packing-profile-unsupported",
+										  "profile");
+							}
+							else if (!declaration)
+								facet_gap(value.packing_state,
+										  "sdk.abi-packing-declaration-unavailable",
+										  value.entity);
+							else if (value.kind != "record" || !definition)
+								facet_gap(value.packing_state,
+										  "sdk.abi-packing-applicability-conflicting",
+										  "original-complete-record-definition-required",
+										  true);
+							else if (!value.packed_attribute || !value.packing_applied ||
+									 !value.maximum_field_alignment_bits)
+								facet_gap(value.packing_state,
+										  "sdk.abi-packing-missing",
+										  "complete-facet-requires-original-attributes");
+							else if (*value.packing_applied !=
+									 (*value.packed_attribute ||
+									  *value.maximum_field_alignment_bits != 0U))
+								facet_gap(value.packing_state,
+										  "sdk.abi-packing-conflicting",
+										  "attribute-membership-disagrees",
+										  true);
 						}
 						if ((cell(row, "abi_signature").state == cell_state::absent) !=
 							(cell(row, "abi_fingerprint").state == cell_state::absent))

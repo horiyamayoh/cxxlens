@@ -230,7 +230,8 @@ namespace
 					true,
 					true};
 		}
-		q::application_query_results queries() const
+		q::application_query_results
+		queries(bool broad_complete = true, bool conflict = false, bool disagreement = false) const
 		{
 			q::application_query_results value;
 			value.snapshot_id = "query:actions";
@@ -239,7 +240,22 @@ namespace
 				auto data = std::make_shared<q::query_result::data>();
 				data->row_values = rows[i];
 				data->status = q::execution_status::complete;
-				data->input_complete = true;
+				data->input_complete = broad_complete;
+				if (i == 4U && conflict)
+					data->conflict_values.push_back({std::string{names[i]},
+													 "unrelated-original-key",
+													 "clang22",
+													 {"debug"},
+													 {"claim:left", "claim:right"},
+													 {"content:left", "content:right"}});
+				if (i == 4U && disagreement)
+					data->disagreement_values.push_back({std::string{names[i]},
+														 "unrelated-original-key",
+														 "clang22",
+														 "other",
+														 "content:left",
+														 "content:right",
+														 {"debug"}});
 				data->ordered = true;
 				data->snapshot = value.snapshot_id;
 				value.scans.push_back(
@@ -417,6 +433,186 @@ int main()
 	require(output.source_queries && output.source_queries->scans.size() == 13 &&
 				output.populations[0].state == state::complete,
 			"original public query preservation");
+	// Source scans can also contain lexical token spans unrelated to any
+	// action. Validate them all, retain only exact original referenced sources.
+	fixture lexical;
+	for (std::size_t i = 0; i < 512; ++i)
+	{
+		auto span = lexical.rows[2][0];
+		set(span, "span", detached_cell::utf8("token:unrelated:" + std::to_string(i)));
+		lexical.rows[2].push_back(std::move(span));
+	}
+	q::finite_population_limits source_limits;
+	source_limits.maximum_retained_bytes = 512U * 1024U;
+	const auto raw_lexical_result =
+		take(q::project_function_actions(lexical.input(), source_limits));
+	require(raw_lexical_result.populations[0].enumeration_state == state::complete &&
+				raw_lexical_result.populations[0].state == state::complete &&
+				std::ranges::count(raw_lexical_result.evidence,
+								   "source.span.v1",
+								   &q::finite_population_evidence::relation_id) == 1,
+			"raw independent input copied unrelated source spans");
+	const auto lexical_queries = lexical.queries(false);
+	const auto lexical_result = take(q::project_function_actions(lexical_queries, source_limits));
+	require(lexical_result.populations[0].enumeration_state == state::complete &&
+				lexical_result.populations[0].state == state::complete,
+			"unrelated token spans exhausted original action projection");
+	require(std::ranges::count(lexical_result.evidence,
+							   "source.span.v1",
+							   &q::finite_population_evidence::relation_id) == 1,
+			"unreferenced token spans copied into action evidence");
+	const auto saved_span = std::ranges::find(lexical_result.source_queries->scans,
+											  "source.span.v1",
+											  &q::application_relation_scan::relation_id);
+	require(saved_span != lexical_result.source_queries->scans.end() &&
+				q::query_transfer_access::borrow_rows(saved_span->result).size() == 514 &&
+				!saved_span->result.inputs_complete(),
+			"original source query handle or broad flags lost");
+	auto malformed_lexical = lexical;
+	malformed_lexical.rows[2].back().values.at("output.begin").type = {
+		scalar_kind::utf8_string, "", false};
+	require(!q::project_function_actions(malformed_lexical.queries(), source_limits),
+			"unreferenced malformed source row escaped validation");
+	require(!q::project_function_actions(malformed_lexical.input(), source_limits),
+			"raw unreferenced malformed source row escaped validation");
+	auto too_many_sources = source_limits;
+	too_many_sources.maximum_rows = 100;
+	require(!q::project_function_actions(lexical_queries, too_many_sources),
+			"source borrowing bypassed original row quota");
+	too_many_sources = source_limits;
+	too_many_sources.maximum_condition_expansions = 100;
+	require(!q::project_function_actions(lexical_queries, too_many_sources),
+			"unreferenced source spans bypassed condition quota");
+	require(!q::project_function_actions(lexical.input(), too_many_sources),
+			"raw unreferenced source rows bypassed condition quota");
+	auto related_duplicate = lexical;
+	auto duplicate_source = related_duplicate.rows[2][0];
+	set(duplicate_source, "end", detached_cell::unsigned_integer(89));
+	related_duplicate.rows[2].push_back(std::move(duplicate_source));
+	const auto raw_conflicted_source =
+		take(q::project_function_actions(related_duplicate.input(), source_limits));
+	require(raw_conflicted_source.populations[0].state == state::conflicting,
+			"raw matching source contradiction gained a convenient winner");
+	const auto conflicted_source =
+		take(q::project_function_actions(related_duplicate.queries(), source_limits));
+	require(conflicted_source.populations[0].state == state::conflicting,
+			"matching source contradiction gained a convenient winner");
+	auto duplicate_scan = lexical_queries;
+	const auto span_scan = std::ranges::find(
+		duplicate_scan.scans, "source.span.v1", &q::application_relation_scan::relation_id);
+	duplicate_scan.scans.push_back(*span_scan);
+	const auto duplicates = take(q::project_function_actions(duplicate_scan, source_limits));
+	require(duplicates.populations[0].enumeration_state == state::complete &&
+				std::ranges::count(duplicates.evidence,
+								   "source.span.v1",
+								   &q::finite_population_evidence::relation_id) == 2,
+			"multiple original scans lost agreeing source evidence");
+	// Known non-action syntax is independently excluded by the actual compiler
+	// admission marker. Unknown admission and every original row remain checked.
+	auto syntax_limits = source_limits;
+	syntax_limits.maximum_retained_bytes = 1024U * 1024U;
+	fixture nonactions;
+	nonactions.written();
+	for (std::size_t i = 0; i < 512; ++i)
+	{
+		const auto suffix = std::to_string(i);
+		auto syntax = nonactions.rows[9][0];
+		set(syntax, "node", detached_cell::utf8("syntax:nonaction:" + suffix));
+		set(syntax, "source", detached_cell::utf8("span:nonaction:" + suffix));
+		set(syntax, "flags", symbols({"finite_operation_admission_v1"}));
+		nonactions.rows[9].push_back(std::move(syntax));
+		auto span = nonactions.rows[2][1];
+		set(span, "span", detached_cell::utf8("span:nonaction:" + suffix));
+		nonactions.rows[2].push_back(std::move(span));
+	}
+	const auto bounded_nonactions =
+		take(q::project_function_actions(nonactions.input(), syntax_limits));
+	require(bounded_nonactions.populations[0].enumeration_state == state::complete &&
+				bounded_nonactions.populations[0].state == state::complete &&
+				std::ranges::count(bounded_nonactions.evidence,
+								   "cc.syntax_node.v1",
+								   &q::finite_population_evidence::relation_id) == 1 &&
+				std::ranges::count(bounded_nonactions.evidence,
+								   "source.span.v1",
+								   &q::finite_population_evidence::relation_id) == 2,
+			"raw known excluded syntax/source exhausted original action storage");
+	const auto public_nonactions =
+		take(q::project_function_actions(nonactions.queries(false), syntax_limits));
+	require(public_nonactions.populations[0].enumeration_state == state::complete &&
+				public_nonactions.source_queries &&
+				public_nonactions.source_queries->scans.size() == 13,
+			"public excluded syntax lost original scan handles or independent closure");
+	auto malformed_syntax = nonactions;
+	malformed_syntax.rows[9].back().values.at("output.compile_unit").type = {
+		scalar_kind::boolean, "", false};
+	require(!q::project_function_actions(malformed_syntax.input(), syntax_limits),
+			"excluded malformed syntax escaped raw validation");
+	require(!q::project_function_actions(malformed_syntax.queries(), syntax_limits),
+			"excluded malformed syntax escaped public validation");
+	auto empty_identity = nonactions;
+	set(empty_identity.rows[9].back(), "node", detached_cell::utf8(""));
+	require(!q::project_function_actions(empty_identity.input(), syntax_limits),
+			"excluded empty syntax identity escaped validation");
+	auto excluded_limits = syntax_limits;
+	excluded_limits.maximum_rows = 100;
+	require(!q::project_function_actions(nonactions.input(), excluded_limits),
+			"excluded syntax bypassed raw row quota");
+	excluded_limits = syntax_limits;
+	excluded_limits.maximum_condition_expansions = 100;
+	require(!q::project_function_actions(nonactions.queries(), excluded_limits),
+			"excluded syntax bypassed public condition quota");
+	auto unknown_admission = fixture{};
+	unknown_admission.written();
+	auto unknown_node = nonactions.rows[9].back();
+	set(unknown_node, "source", detached_cell::utf8("span:action"));
+	set(unknown_node, "flags", symbols({}));
+	unknown_admission.rows[9].push_back(unknown_node);
+	require(project(unknown_admission).populations[0].enumeration_state != state::complete,
+			"missing syntax admission was treated as independently excluded");
+	set(unknown_admission.rows[9].back(),
+		"flags",
+		symbols({"finite_operation_admission_v1", "operation_invocation"}));
+	require(project(unknown_admission).populations[0].enumeration_state != state::complete,
+			"admitted missing action was discarded as a nonaction");
+	auto repeated_nonaction = nonactions;
+	repeated_nonaction.rows[9].push_back(repeated_nonaction.rows[9].back());
+	require(take(q::project_function_actions(repeated_nonaction.input(), syntax_limits))
+					.populations[0]
+					.enumeration_state == state::complete,
+			"agreeing original excluded duplicates lost known admission");
+	set(repeated_nonaction.rows[9].back(),
+		"flags",
+		symbols({"finite_operation_admission_v1", "operation_invocation"}));
+	require(take(q::project_function_actions(repeated_nonaction.input(), syntax_limits))
+					.populations[0]
+					.enumeration_state != state::complete,
+			"conflicting excluded/admitted duplicate gained a convenient winner");
+	auto referenced_nonaction = fixture{};
+	referenced_nonaction.written();
+	set(referenced_nonaction.rows[9][0], "flags", symbols({"finite_operation_admission_v1"}));
+	const auto retained_reference = project(referenced_nonaction);
+	require(std::ranges::count(retained_reference.evidence,
+							   "cc.syntax_node.v1",
+							   &q::finite_population_evidence::relation_id) == 1,
+			"actual action expression lost its independently referenced original syntax");
+	std::ranges::reverse(nonactions.rows[9]);
+	std::ranges::reverse(nonactions.rows[2]);
+	const auto reordered_nonactions =
+		take(q::project_function_actions(nonactions.input(), syntax_limits));
+	require(reordered_nonactions.populations.size() == bounded_nonactions.populations.size() &&
+				reordered_nonactions.populations[0].state ==
+					bounded_nonactions.populations[0].state &&
+				reordered_nonactions.populations[0].operation_ids ==
+					bounded_nonactions.populations[0].operation_ids &&
+				std::ranges::equal(reordered_nonactions.evidence,
+								   bounded_nonactions.evidence,
+								   [](const auto& a, const auto& b)
+								   {
+									   return a.relation_id == b.relation_id &&
+										   a.row.canonical_form() == b.row.canonical_form();
+								   }),
+			"excluded syntax retention depended on row order");
+
 	auto missing = owned;
 	missing.scans.erase(std::ranges::find(
 		missing.scans, "cc.syntax_node.v1", &q::application_relation_scan::relation_id));
@@ -424,6 +620,50 @@ int main()
 	require(!output.admission_inputs_complete && output.populations[0].state == state::unknown &&
 				output.source_queries->scans.size() == 12,
 			"missing independent query stays unknown");
+
+	input = fixture{};
+	input.written();
+	const auto unrelated = input.queries(false);
+	output = take(q::project_function_actions(unrelated));
+	require(output.populations[0].enumeration_state == state::complete &&
+				output.populations[0].state == state::complete,
+			"original typed action and admission census is independent of "
+			"unrelated broad input "
+			"frontier");
+	require(output.source_queries &&
+				std::ranges::all_of(output.source_queries->scans,
+									[](const auto& scan)
+									{
+										return !scan.result.inputs_complete();
+									}),
+			"original broad input flags remain unmodified");
+	auto absent_scope = unrelated;
+	absent_scope.scans.erase(std::ranges::find(
+		absent_scope.scans, "cc.declaration.v1", &q::application_relation_scan::relation_id));
+	output = take(q::project_function_actions(absent_scope));
+	require(!output.scope_inputs_complete &&
+				output.populations[0].enumeration_state != state::complete,
+			"absent original declaration scan cannot close a function action "
+			"population");
+	output = take(q::project_function_actions(input.queries(false, true)));
+	require(output.populations[0].enumeration_state != state::complete &&
+				output.source_queries->scans[4].result.conflicts().size() == 1U,
+			"original query conflict still blocks independent scope scan "
+			"availability and is retained");
+	output = take(q::project_function_actions(input.queries(false, false, true)));
+	require(output.populations[0].enumeration_state != state::complete &&
+				output.source_queries->scans[4].result.differential_disagreements().size() == 1U,
+			"original differential disagreement still blocks availability and is "
+			"retained");
+
+	limits = {};
+	limits.maximum_rows = 1U;
+	require(!q::project_function_actions(unrelated, limits),
+			"original borrowed row count is bounded before wrapper copies");
+	limits = {};
+	limits.maximum_retained_bytes = 1U;
+	require(!q::project_function_actions(unrelated, limits),
+			"original borrowed payload is charged before wrapper copies");
 	limits = {};
 	limits.maximum_source_queries = 1;
 	require(!q::project_function_actions(owned, limits), "source query bounds");
@@ -479,6 +719,26 @@ int main()
 	require(!output.populations[0].actions[0].parameter_has_default_argument,
 			"missing default classification remains unknown");
 	check(input, state::complete, "actual parameter declaration and slot admission");
+	set(input.rows[3].back(),
+		"semantic_owner",
+		detached_cell::absent(input.rows[3].back().values.at("output.semantic_owner").type));
+	check(input,
+		  state::partial,
+		  "independently admitted named parameter with unobserved owner is "
+		  "unavailable");
+	output = project(input);
+	require(std::ranges::any_of(output.populations[0].gaps,
+								[](const auto& value)
+								{
+									return value.code ==
+										"sdk.action-type-admission-owner-unavailable";
+								}),
+			"missing original owner retains an explicit admission frontier");
+	set(input.rows[3].back(), "semantic_owner", detached_cell::utf8("function:foreign"));
+	check(
+		input, state::conflicting, "actual present foreign parameter owner remains contradictory");
+	set(input.rows[3].back(), "semantic_owner", detached_cell::utf8("function:a"));
+	check(input, state::complete, "actual matching owner closes original declaration admission");
 	input.rows[5].pop_back();
 	check(input, state::partial, "missing original parameter declaration");
 	input = fixture{};
@@ -584,18 +844,20 @@ int main()
 	output = project(input);
 	require(output.populations[0].state == state::complete &&
 				output.populations[0].actions[1].target_signature.state == state::unknown,
-			"absent original optional target facets remain unknown with actual entity present");
+			"absent original optional target facets remain unknown with actual "
+			"entity present");
 	set(optional_target, "target_canonical_type", detached_cell::utf8("type:void"));
 	set(input.rows[6][0], "component_signature_digest", detached_cell::utf8(digest));
 	output = project(input);
-	require(
-		output.populations[0].actions[1].target_signature.state == state::unknown,
-		"absent original type signature facets remain unknown with actual structural type present");
+	require(output.populations[0].actions[1].target_signature.state == state::unknown,
+			"absent original type signature facets remain unknown with actual "
+			"structural type present");
 	set(optional_target, "target_usr", detached_cell::bytes({std::byte{2}}));
 	output = project(input);
 	require(output.populations[0].state == state::complete &&
 				output.populations[0].actions[1].target_signature.state == state::conflicting,
-			"present wrong original target USR stays conflicting independently of occurrence "
+			"present wrong original target USR stays conflicting independently "
+			"of occurrence "
 			"membership");
 	input = fixture{};
 	input.written();
@@ -614,7 +876,8 @@ int main()
 	set(input.rows[12][1], "element_kind", detached_cell::utf8("constructor"));
 	check(input,
 		  state::complete,
-		  "CFG-owned default initializer syntax does not need body containment or guessed syntax "
+		  "CFG-owned default initializer syntax does not need body containment "
+		  "or guessed syntax "
 		  "owner");
 	set(input.rows[12][1], "program_point", detached_cell::unsigned_integer(0));
 	set(input.rows[12][1], "program_point_profile", detached_cell::utf8("future:point"));
@@ -642,14 +905,16 @@ int main()
 	output = project(input);
 	require(output.populations[0].state == state::complete &&
 				output.populations[0].actions[2].site_binding_state == state::conflicting,
-			"contradictory shared static-site subjects stay separate from occurrence completeness");
+			"contradictory shared static-site subjects stay separate from "
+			"occurrence completeness");
 	input = fixture{};
 	input.rows[4].clear();
 	input.rows[12].clear();
 	output = project(input);
 	require(output.populations.size() == 1 && output.populations[0].state == state::unknown &&
 				output.populations[0].compile_unit.empty(),
-			"surviving function declaration without original detail is unknown and has no "
+			"surviving function declaration without original detail is unknown "
+			"and has no "
 			"fabricated unit");
 	const auto default_cfg = [](bool field)
 	{
@@ -726,7 +991,8 @@ int main()
 	input = default_cfg(false);
 	check(input,
 		  state::complete,
-		  "actual default-argument CFG activation retains its lexical expression and original call "
+		  "actual default-argument CFG activation retains its lexical expression "
+		  "and original call "
 		  "owner");
 	output = project(input);
 	require(output.populations[0].actions[0].context_state == state::complete &&
@@ -762,7 +1028,8 @@ int main()
 	input = default_cfg(true);
 	check(input,
 		  state::complete,
-		  "actual field-default CFG context is bound to the executing constructor record");
+		  "actual field-default CFG context is bound to the executing "
+		  "constructor record");
 	set(input.rows[3][0], "semantic_owner", detached_cell::utf8("record:foreign"));
 	check(input, state::conflicting, "foreign field-default executing record");
 	input = default_cfg(true);

@@ -195,6 +195,80 @@ namespace
 	{
 		require(value.abi_state == abi && value.layout_state == layout, message);
 	}
+
+	void portability_facet_tests()
+	{
+		fixture data;
+		auto& original = data.groups[5].front();
+		replace(original, "target_data_model_state", detached_cell::utf8("complete"));
+		replace(original,
+				"target_data_model_profile",
+				detached_cell::utf8("clang22-original-target-data-model/1"));
+		replace(original, "long_width_bits", detached_cell::unsigned_integer(64U));
+		replace(original, "pointer_width_bits", detached_cell::unsigned_integer(64U));
+		replace(original, "wchar_width_bits", detached_cell::unsigned_integer(32U));
+		replace(original, "plain_char_signed", detached_cell::boolean(false));
+		replace(original, "byte_order", detached_cell::utf8("little"));
+		replace(original, "packing_state", detached_cell::utf8("complete"));
+		replace(original,
+				"packing_profile",
+				detached_cell::utf8("clang22-original-record-packing-attributes/1"));
+		replace(original, "packed_attribute", detached_cell::boolean(false));
+		replace(original, "maximum_field_alignment_bits", detached_cell::unsigned_integer(8U));
+		replace(original, "packing_applied", detached_cell::boolean(true));
+		auto actual = project(data);
+		const auto& value = actual.surfaces.front();
+		require(value.target_data_model_state == q::abi_surface_state::complete &&
+					value.long_width_bits == 64U && value.pointer_width_bits == 64U &&
+					value.wchar_width_bits == 32U && value.plain_char_signed == false &&
+					value.byte_order == "little",
+				"actual target model facet not retained");
+		require(value.packing_state == q::abi_surface_state::complete &&
+					value.packed_attribute == false && value.maximum_field_alignment_bits == 8U &&
+					value.packing_applied == true,
+				"actual packing facet not retained");
+		state_is(value,
+				 q::abi_surface_state::complete,
+				 q::abi_surface_state::complete,
+				 "portability facets changed old axes");
+		auto missing = data;
+		replace(
+			missing.groups[5][0],
+			"long_width_bits",
+			detached_cell::absent(missing.groups[5][0].values.at("output.long_width_bits").type));
+		actual = project(missing);
+		require(actual.surfaces[0].target_data_model_state == q::abi_surface_state::partial &&
+					actual.surfaces[0].abi_state == q::abi_surface_state::complete &&
+					actual.surfaces[0].packing_state == q::abi_surface_state::complete,
+				"missing target width poisoned independent ABI/packing");
+		missing = data;
+		replace(missing.groups[5][0], "target_data_model_profile", detached_cell::utf8("future/1"));
+		actual = project(missing);
+		require(actual.surfaces[0].target_data_model_state == q::abi_surface_state::unknown &&
+					actual.surfaces[0].abi_state == q::abi_surface_state::complete,
+				"unsupported target profile forged complete");
+		missing = data;
+		replace(missing.groups[5][0], "packing_applied", detached_cell::boolean(false));
+		actual = project(missing);
+		require(actual.surfaces[0].packing_state == q::abi_surface_state::conflicting &&
+					actual.surfaces[0].layout_state == q::abi_surface_state::complete,
+				"packing contradiction lost or poisoned old layout");
+		missing = data;
+		auto conflicting = missing.groups[5][0];
+		replace(conflicting, "long_width_bits", detached_cell::unsigned_integer(32U));
+		missing.groups[5].push_back(conflicting);
+		actual = project(missing);
+		require(actual.surfaces.size() == 2U, "target conflict candidate lost");
+		for (const auto& candidate : actual.surfaces)
+			require(candidate.target_data_model_state == q::abi_surface_state::conflicting &&
+						candidate.abi_state == q::abi_surface_state::complete &&
+						candidate.layout_state == q::abi_surface_state::complete,
+					"target conflict poisoned independent ABI/layout");
+		auto absent = project(fixture{});
+		require(absent.surfaces[0].target_data_model_state == q::abi_surface_state::unknown &&
+					absent.surfaces[0].packing_state == q::abi_surface_state::unknown,
+				"legacy facets inferred known");
+	}
 	void positive_tests()
 	{
 		fixture data;
@@ -648,6 +722,7 @@ namespace
 
 int main()
 {
+	portability_facet_tests();
 	positive_tests();
 	negative_tests();
 	candidate_and_condition_tests();

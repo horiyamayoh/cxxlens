@@ -568,6 +568,23 @@ int main()
 					 "int main() { return make_lambda()(); }\n");
 	require(run_once(lambda_return_fixture).has_value(),
 			"USR preflight rejected a non-template return type that Clang does not encode");
+	auto project_lambda =
+		run_once(lambda_return_fixture, {}, false, "compile-unit:lambda-owner", true);
+	require(project_lambda.has_value(), "project observer rejected the actual lambda owner");
+	bool lambda_owner{};
+	for (const auto& observation : project_lambda->observations)
+		if (observation.kind == provider_worker_v4_ast_observation_kind::entity &&
+			observation.payload.contains("symbol.kind") &&
+			observation.payload.at("symbol.kind") == "method" &&
+			observation.payload.contains("symbol.semantic_owner"))
+			for (const auto& candidate : project_lambda->observations)
+				lambda_owner |= candidate.kind == provider_worker_v4_ast_observation_kind::entity &&
+					candidate.semantic_key == observation.payload.at("symbol.semantic_owner") &&
+					candidate.payload.contains("symbol.kind") &&
+					candidate.payload.at("symbol.kind") == "class" &&
+					candidate.payload.contains("symbol.semantic_owner_state") &&
+					candidate.payload.at("symbol.semantic_owner_state") == "named";
+	require(lambda_owner, "written lambda operator lost its original closure-record owner");
 	const std::string long_return_name(2048U, 'r');
 	const auto long_return_fixture =
 		make_fixture("struct " + long_return_name + " {};\n" + long_return_name +
@@ -917,13 +934,18 @@ int main()
 	const auto canonical_overflow_fixture =
 		make_fixture(std::move(canonical_overflow_source), "project://a.cpp");
 	limited = product_limits;
-	limited.maximum_logical_bytes = 2900U;
+	// Retain the original canonical-key boundary after the new actual TU owner payload.
+	limited.maximum_logical_bytes = 2900U + std::string_view{"symbol.semantic_owner_state"}.size() +
+		std::string_view{"translation_unit"}.size();
 	auto canonical_overflow = run_once(canonical_overflow_fixture, limited, false, "cu");
 	require_error(
 		canonical_overflow,
 		"provider-worker-v4.ast-resource-limit",
 		"bytes",
 		"observer lost a reachable canonical-size overflow behind a generic traversal error");
+	if (canonical_overflow.error().detail != "observation-canonical-key-overflow")
+		std::cerr << "canonical overflow actual detail: " << canonical_overflow.error().detail
+				  << "\n";
 	require(canonical_overflow.error().detail == "observation-canonical-key-overflow",
 			"observer did not type the reachable canonical-size overflow before key allocation");
 

@@ -1,7 +1,9 @@
 #include "llvm/clang22/provider_worker_v4_output_normalizer.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <optional>
 #include <span>
@@ -63,8 +65,12 @@ namespace
 	[[nodiscard]] fixture make_fixture()
 	{
 		fixture output;
-		output.source = "int leaf(int value) { return value + 1; }\n"
-						"int main() { return leaf(41); }\n";
+		output.source =
+			"namespace sample { struct Owner { int field; int method(int parameter); };\n"
+			"int Owner::method(int parameter) { return field + parameter; } }\n"
+			"int leaf(int value) { struct Local { int member; }; int local = value; return local + "
+			"1; }\n"
+			"int main() { return leaf(41); }\n";
 		auto closure = make_source_closure_snapshot({
 			{"project://src/main.cpp",
 			 source_closure_role::main,
@@ -116,7 +122,7 @@ namespace
 			[&](provider::clang22::borrowed_translation_unit& unit) -> sdk::result<void>
 			{
 				auto result = observe_provider_worker_v4_ast(
-					unit, value.metadata, "compile-unit:v4-output-normalizer");
+					unit, value.metadata, "compile-unit:v4-output-normalizer", {}, {}, true);
 				if (!result)
 					return sdk::unexpected(std::move(result.error()));
 				observed.emplace(std::move(*result));
@@ -136,6 +142,50 @@ namespace
 		output.toolchain_context_id =
 			*sdk::semantic_digest("toolchain-context", value.metadata.input.toolchain_digest);
 		return output;
+	}
+
+	[[nodiscard]] provider_worker_v4_ast_observation_batch
+	rebuild_batch(provider_worker_v4_ast_observation_batch output)
+	{
+		std::ranges::sort(
+			output.observations, {}, &provider_worker_v4_ast_observation::canonical_form);
+		output.rows.clear();
+		for (const auto& observation : output.observations)
+		{
+			materialization::native_observation_v2 native;
+			native.kind = observation.kind == provider_worker_v4_ast_observation_kind::entity
+				? materialization::observation_v2_kind::entity
+				: observation.kind == provider_worker_v4_ast_observation_kind::call
+				? materialization::observation_v2_kind::call
+				: materialization::observation_v2_kind::type;
+			native.final_relation_compile_unit_id = observation.compile_unit;
+			native.semantic_key = observation.semantic_key;
+			native.primary_span = observation.primary_span;
+			native.origin_chain = observation.origins;
+			native.exact_equivalence = observation.exact_equivalence;
+			native.limitation = observation.limitation;
+			for (const auto& [key, value] : observation.payload)
+				native.payload.push_back({key, value});
+			const materialization::observation_v2_task_authority authority{
+				output.compile_unit,
+				output.source_snapshot,
+				output.source_file,
+				output.source_size_bytes};
+			auto row = materialization::make_observation_v2_row(native, authority);
+			require(row.has_value(), "owner fixture row reconstruction failed");
+			output.rows.push_back(std::move(*row));
+		}
+		require(output.validate().has_value(), "owner fixture batch reconstruction failed");
+		return output;
+	}
+
+	[[nodiscard]] std::string text(const sdk::detached_row& row, const std::string_view column)
+	{
+		const auto i = row.cells.find(column);
+		if (i == row.cells.end() || !i->second.value)
+			return {};
+		const auto* value = std::get_if<std::string>(&*i->second.value);
+		return value == nullptr ? std::string{} : *value;
 	}
 
 	[[nodiscard]] sdk::result<provider_worker_v4_ast_observation_batch>
@@ -209,6 +259,85 @@ int main()
 	require(!first->batches[3U].rows.empty(), "normalizer emitted no call observations");
 	require(!first->batches[4U].rows.empty(), "normalizer emitted no entity observations");
 	require(!first->batches[5U].rows.empty(), "normalizer emitted no type observations");
+
+	std::map<std::string, const sdk::detached_row*, std::less<>> entities;
+	for (const auto& row : first->batches[2U].rows)
+		entities.emplace(text(row, "cc.entity.v1.qualified_name"), &row);
+	const auto owner_of = [&](std::string_view child, std::string_view parent)
+	{
+		if (!entities.contains(child) || !entities.contains(parent))
+		{
+			std::cerr << "missing owner tuple " << child << " -> " << parent << "\n";
+			for (const auto& [name, row] : entities)
+			{
+				(void)row;
+				std::cerr << "actual entity " << name << "\n";
+			}
+		}
+		require(entities.contains(child) && entities.contains(parent),
+				"original owner entity missing");
+		require(text(*entities.find(child)->second, "cc.entity.v1.semantic_owner") ==
+					text(*entities.find(parent)->second, "cc.entity.v1.entity"),
+				"original owner identity mismatch");
+	};
+	owner_of("sample::Owner", "sample");
+	owner_of("sample::Owner::field", "sample::Owner");
+	owner_of("sample::Owner::method", "sample::Owner");
+	owner_of("Local", "leaf");
+	owner_of("leaf(int)::Local::member", "Local");
+	require(entities.at("leaf")->cells.at("cc.entity.v1.semantic_owner").state ==
+				sdk::cell_state::absent,
+			"translation-unit owner absence became a fabricated entity");
+	std::string leaf_key;
+	for (const auto& observation : observed->observations)
+		if (observation.payload.contains("symbol.qualified_name") &&
+			observation.payload.at("symbol.qualified_name") == "leaf")
+			leaf_key = observation.semantic_key;
+	require(!leaf_key.empty(), "owner test lost leaf compiler identity");
+	const auto check_unknown_owner = [&](provider_worker_v4_ast_observation_batch candidate)
+	{
+		auto result = normalize_provider_worker_v4_output(rebuild_batch(std::move(candidate)),
+														  normalizer_options);
+		if (!result)
+			std::cerr << "owner negative error: " << result.error().code << " / "
+					  << result.error().field << " / " << result.error().detail << "\n";
+		require(result.has_value() && !result->exact_equivalence && !result->unresolved.empty(),
+				"missing/conflicting/cyclic owner erased its frontier");
+		for (const auto& row : result->batches[2U].rows)
+			if (text(row, "cc.entity.v1.qualified_name") == "leaf")
+			{
+				require(!row.cells.contains("cc.entity.v1.semantic_owner"),
+						"missing/conflicting/cyclic owner became known absence");
+				require(text(row, "cc.entity.v1.canonicalization") == "provider_local",
+						"unknown semantic owner retained a canonical identity");
+				return;
+			}
+		require(false, "unknown-owner entity was dropped");
+	};
+	auto missing_owner = *observed;
+	for (auto& observation : missing_owner.observations)
+		if (observation.semantic_key == leaf_key)
+		{
+			observation.payload["symbol.semantic_owner_state"] = "named";
+			observation.payload["symbol.semantic_owner"] = "clang-usr:missing-owner";
+		}
+	check_unknown_owner(missing_owner);
+	auto cyclic_owner = missing_owner;
+	for (auto& observation : cyclic_owner.observations)
+		if (observation.semantic_key == leaf_key)
+			observation.payload["symbol.semantic_owner"] = leaf_key;
+	check_unknown_owner(std::move(cyclic_owner));
+	auto conflicting_owner = *observed;
+	for (const auto& observation : missing_owner.observations)
+		if (observation.semantic_key == leaf_key)
+			conflicting_owner.observations.push_back(observation);
+	check_unknown_owner(std::move(conflicting_owner));
+	auto tiny_owner_budget = normalizer_options;
+	tiny_owner_budget.limits.maximum_output_bytes = 1U;
+	auto tiny_owner_result = normalize_provider_worker_v4_output(*observed, tiny_owner_budget);
+	require(!tiny_owner_result &&
+				tiny_owner_result.error().code == "provider-worker-v4.output-limit",
+			"owner resolution ignored retained byte cap");
 
 	auto second = normalize_provider_worker_v4_output(*observed, normalizer_options);
 	require(second.has_value(), "normalizer repeat execution failed");

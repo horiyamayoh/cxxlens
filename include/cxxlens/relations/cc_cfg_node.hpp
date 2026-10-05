@@ -24,8 +24,8 @@ namespace cxxlens::cc::relations
 				output.semantic_major = 1U;
 				output.semantics = "cc.cfg_node/1";
 				output.owner_namespace = "cxxlens.standard.cc";
-				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.cfg_node.v1.compile_unit","cc.cfg_node.v1.function","cc.cfg_node.v1.body","cc.cfg_node.v1.ordinal"],"result_column":"cc.cfg_node.v1.node"},"interpretation_required":true,"key":["cc.cfg_node.v1.node"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.cfg_node.v1.node","identity_role":"claim_key","name":"node","required":true,"type":"typed_id<cfg_node_id>"},{"id":"cc.cfg_node.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.cfg_node.v1.function","identity_role":"authoritative_payload","name":"function","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.cfg_node.v1.body","identity_role":"authoritative_payload","name":"body","required":true,"type":"typed_id<body_id>"},{"id":"cc.cfg_node.v1.ordinal","identity_role":"authoritative_payload","name":"ordinal","required":true,"type":"uint64"},{"id":"cc.cfg_node.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<cc.cfg-node-kind/1>"},{"id":"cc.cfg_node.v1.source","identity_role":"authoritative_payload","name":"source","required":false,"type":"optional<typed_id<source_span_id>>"},{"id":"cc.cfg_node.v1.statement_count","identity_role":"authoritative_payload","name":"statement_count","required":true,"type":"uint64"},{"id":"cc.cfg_node.v1.element_count","identity_role":"authoritative_payload","name":"element_count","required":false,"type":"optional<uint64>"},{"id":"cc.cfg_node.v1.implicit_operation_count","identity_role":"authoritative_payload","name":"implicit_operation_count","required":false,"type":"optional<uint64>"},{"id":"cc.cfg_node.v1.implicit_operation_state","identity_role":"authoritative_payload","name":"implicit_operation_state","required":false,"type":"optional<open_symbol<cc.operation-enumeration-state/1>>"},{"id":"cc.cfg_node.v1.implicit_operation_profile","identity_role":"authoritative_payload","name":"implicit_operation_profile","required":false,"type":"optional<utf8_string>"}],"coverage":{"execution_domain":"cc.cfg_node.compile-unit"},"descriptor_id":"cc.cfg_node.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::cfg_node","indexes":[["cc.cfg_node.v1.function"],["cc.cfg_node.v1.body"]],"merge":{"conflict_columns":["cc.cfg_node.v1.body","cc.cfg_node.v1.compile_unit","cc.cfg_node.v1.element_count","cc.cfg_node.v1.function","cc.cfg_node.v1.implicit_operation_count","cc.cfg_node.v1.implicit_operation_profile","cc.cfg_node.v1.implicit_operation_state","cc.cfg_node.v1.kind","cc.cfg_node.v1.ordinal","cc.cfg_node.v1.source","cc.cfg_node.v1.statement_count"],"mode":"functional_assertion"},"name":"cc.cfg_node","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.cfg_node.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"on_missing":"reject_batch","source_columns":["cc.cfg_node.v1.body"],"strength":"hard","target_columns":["cc.body.v1.body"],"target_relation":"cc.body"},{"on_missing":"reject_batch","source_columns":["cc.cfg_node.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"unresolved","source_columns":["cc.cfg_node.v1.function"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.cfg_node.v1.source"],"strength":"soft_semantic","target_columns":["source.span.v1.span"],"target_relation":"source.span"}],"row_constraints":{"all_or_none":[["cc.cfg_node.v1.implicit_operation_count","cc.cfg_node.v1.implicit_operation_profile","cc.cfg_node.v1.implicit_operation_state"]]},"semantic_major":1,"semantics":"cc.cfg_node/1","stability":"versioned","summary":"One detached Clang CFG block including explicit entry, exit and unreachable blocks.","version":"1.0.0"})cxxlens";
-				output.contract_digest = "sha256:5c9fb74dc01434f6a308368978fcd10d67cb5ff5861f5bbd74578fd68be4e828";
+				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.cfg_node.v1.compile_unit","cc.cfg_node.v1.function","cc.cfg_node.v1.body","cc.cfg_node.v1.ordinal"],"result_column":"cc.cfg_node.v1.node"},"interpretation_required":true,"key":["cc.cfg_node.v1.node"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.cfg_node.v1.node","identity_role":"claim_key","name":"node","required":true,"type":"typed_id<cfg_node_id>"},{"id":"cc.cfg_node.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.cfg_node.v1.function","identity_role":"authoritative_payload","name":"function","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.cfg_node.v1.body","identity_role":"authoritative_payload","name":"body","required":true,"type":"typed_id<body_id>"},{"id":"cc.cfg_node.v1.ordinal","identity_role":"authoritative_payload","name":"ordinal","required":true,"type":"uint64"},{"id":"cc.cfg_node.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<cc.cfg-node-kind/1>"},{"id":"cc.cfg_node.v1.source","identity_role":"authoritative_payload","name":"source","required":false,"type":"optional<typed_id<source_span_id>>"},{"id":"cc.cfg_node.v1.statement_count","identity_role":"authoritative_payload","name":"statement_count","required":true,"type":"uint64"},{"id":"cc.cfg_node.v1.element_count","identity_role":"authoritative_payload","name":"element_count","required":false,"type":"optional<uint64>"},{"id":"cc.cfg_node.v1.implicit_operation_count","identity_role":"authoritative_payload","name":"implicit_operation_count","required":false,"type":"optional<uint64>"},{"id":"cc.cfg_node.v1.implicit_operation_state","identity_role":"authoritative_payload","name":"implicit_operation_state","required":false,"type":"optional<open_symbol<cc.operation-enumeration-state/1>>"},{"id":"cc.cfg_node.v1.implicit_operation_profile","identity_role":"authoritative_payload","name":"implicit_operation_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.cfg_node.v1.terminator","identity_role":"authoritative_payload","name":"terminator","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.cfg_node.v1.terminator_state","identity_role":"authoritative_payload","name":"terminator_state","required":false,"type":"optional<open_symbol<cc.flow-binding-state/1>>"},{"id":"cc.cfg_node.v1.terminator_profile","identity_role":"authoritative_payload","name":"terminator_profile","required":false,"type":"optional<utf8_string>"}],"coverage":{"execution_domain":"cc.cfg_node.compile-unit"},"descriptor_id":"cc.cfg_node.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::cfg_node","indexes":[["cc.cfg_node.v1.function"],["cc.cfg_node.v1.body"]],"merge":{"conflict_columns":["cc.cfg_node.v1.body","cc.cfg_node.v1.compile_unit","cc.cfg_node.v1.element_count","cc.cfg_node.v1.function","cc.cfg_node.v1.implicit_operation_count","cc.cfg_node.v1.implicit_operation_profile","cc.cfg_node.v1.implicit_operation_state","cc.cfg_node.v1.kind","cc.cfg_node.v1.ordinal","cc.cfg_node.v1.source","cc.cfg_node.v1.statement_count","cc.cfg_node.v1.terminator","cc.cfg_node.v1.terminator_profile","cc.cfg_node.v1.terminator_state"],"mode":"functional_assertion"},"name":"cc.cfg_node","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.cfg_node.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"on_missing":"reject_batch","source_columns":["cc.cfg_node.v1.body"],"strength":"hard","target_columns":["cc.body.v1.body"],"target_relation":"cc.body"},{"on_missing":"reject_batch","source_columns":["cc.cfg_node.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"unresolved","source_columns":["cc.cfg_node.v1.function"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.cfg_node.v1.source"],"strength":"soft_semantic","target_columns":["source.span.v1.span"],"target_relation":"source.span"},{"on_missing":"unresolved","source_columns":["cc.cfg_node.v1.terminator"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"}],"row_constraints":{"all_or_none":[["cc.cfg_node.v1.implicit_operation_count","cc.cfg_node.v1.implicit_operation_profile","cc.cfg_node.v1.implicit_operation_state"],["cc.cfg_node.v1.terminator_profile","cc.cfg_node.v1.terminator_state"]]},"semantic_major":1,"semantics":"cc.cfg_node/1","stability":"versioned","summary":"One detached Clang CFG block including explicit entry, exit and unreachable blocks.","version":"1.0.0"})cxxlens";
+				output.contract_digest = "sha256:9ef9dae4c2d5439a2e2e7ddd8fbcf4a7832dbcb7c80584d5cdf65a6378e3c0f8";
 				output.columns = {
 					{"cc.cfg_node.v1.node", "node", {sdk::scalar_kind::typed_id, "cfg_node_id", false}, true, sdk::column_role::claim_key},
 					{"cc.cfg_node.v1.compile_unit", "compile_unit", {sdk::scalar_kind::typed_id, "compile_unit_id", false}, true, sdk::column_role::authoritative_payload},
@@ -39,6 +39,9 @@ namespace cxxlens::cc::relations
 					{"cc.cfg_node.v1.implicit_operation_count", "implicit_operation_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.cfg_node.v1.implicit_operation_state", "implicit_operation_state", {sdk::scalar_kind::open_symbol, "cc.operation-enumeration-state/1", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.cfg_node.v1.implicit_operation_profile", "implicit_operation_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.cfg_node.v1.terminator", "terminator", {sdk::scalar_kind::typed_id, "syntax_node_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.cfg_node.v1.terminator_state", "terminator_state", {sdk::scalar_kind::open_symbol, "cc.flow-binding-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.cfg_node.v1.terminator_profile", "terminator_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
 				};
 				output.domain_identity.result_column = "cc.cfg_node.v1.node";
 				output.domain_identity.projection = {
@@ -56,6 +59,7 @@ namespace cxxlens::cc::relations
 					{{"cc.cfg_node.v1.compile_unit"}, "build.compile_unit", {"build.compile_unit.v1.compile_unit"}, sdk::reference_strength::hard},
 					{{"cc.cfg_node.v1.function"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic},
 					{{"cc.cfg_node.v1.source"}, "source.span", {"source.span.v1.span"}, sdk::reference_strength::soft_semantic},
+					{{"cc.cfg_node.v1.terminator"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
 				};
 				output.merge = sdk::merge_mode::functional_assertion;
 				output.conflict_columns = {
@@ -70,6 +74,9 @@ namespace cxxlens::cc::relations
 					"cc.cfg_node.v1.ordinal",
 					"cc.cfg_node.v1.source",
 					"cc.cfg_node.v1.statement_count",
+					"cc.cfg_node.v1.terminator",
+					"cc.cfg_node.v1.terminator_profile",
+					"cc.cfg_node.v1.terminator_state",
 				};
 				output.descriptor_digest = *sdk::semantic_digest(
 					"cxxlens.relation-descriptor-binding.v2",
@@ -186,6 +193,33 @@ namespace cxxlens::cc::relations
 			[[nodiscard]] static sdk::column_ref ref()
 			{
 				return {cfg_node::descriptor().id, "cc.cfg_node.v1.implicit_operation_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.cfg_node.v1.terminator`. */
+		struct terminator
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {cfg_node::descriptor().id, "cc.cfg_node.v1.terminator", {sdk::scalar_kind::typed_id, "syntax_node_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.cfg_node.v1.terminator_state`. */
+		struct terminator_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {cfg_node::descriptor().id, "cc.cfg_node.v1.terminator_state", {sdk::scalar_kind::open_symbol, "cc.flow-binding-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.cfg_node.v1.terminator_profile`. */
+		struct terminator_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {cfg_node::descriptor().id, "cc.cfg_node.v1.terminator_profile", {sdk::scalar_kind::utf8_string, "", true}};
 			}
 		};
 	};

@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <new>
 #include <optional>
@@ -149,7 +150,8 @@ namespace cxxlens::detail::clang22
 		[[nodiscard]] sdk::result<sdk::detached_row>
 		entity_row(const provider_worker_v4_ast_observation& observation,
 				   const std::string_view toolchain,
-				   const bool exact)
+				   const bool exact,
+				   const std::optional<sdk::detached_cell>& owner = std::nullopt)
 		{
 			using relation = cc::relations::entity;
 			relation::builder builder;
@@ -179,6 +181,9 @@ namespace cxxlens::detail::clang22
 						 optional_bytes(bytes(observation.semantic_key))),
 				 })
 				if (!result)
+					return sdk::unexpected(std::move(result.error()));
+			if (owner)
+				if (auto result = builder.set<relation::semantic_owner>(*owner); !result)
 					return sdk::unexpected(std::move(result.error()));
 			const auto qualified_name = observation.payload.find("symbol.qualified_name");
 			if (qualified_name != observation.payload.end() && !qualified_name->second.empty())
@@ -541,20 +546,149 @@ namespace cxxlens::detail::clang22
 				}
 			}
 
-			std::map<std::string, std::string, std::less<>> entity_ids;
-			for (const auto* observation : selected_entities)
+			// Resolve the original semantic owner before deriving the child identity: the
+			// cc.entity contract includes semantic_owner in its domain identity. Iterative
+			// dependency traversal avoids recursive stack growth on deeply nested declarations.
+			const auto reserve_owner_bytes = [&](const std::size_t size) -> sdk::result<void>
 			{
-				auto canonical = entity_row(
-					*observation, options.toolchain_context_id, observation->exact_equivalence);
-				if (!canonical)
-					return sdk::unexpected(std::move(canonical.error()));
-				auto entity = row_string(*canonical, "cc.entity.v1.entity");
-				if (!entity)
-					return sdk::unexpected(std::move(entity.error()));
-				entity_ids.emplace(observation->semantic_key, *entity);
-				if (auto valid = append_row(2U, std::move(*canonical)); !valid)
+				if (auto valid = cancellation_check(options.cancellation); !valid)
 					return valid;
+				if (size > options.limits.maximum_output_bytes -
+						std::min(output_bytes, options.limits.maximum_output_bytes))
+					return sdk::unexpected(failure("provider-worker-v4.output-limit",
+												   "semantic-owner",
+												   "maximum-output-bytes"));
+				output_bytes += size;
+				return {};
+			};
+			constexpr auto owner_bookkeeping_bytes = sizeof(std::size_t) * 4U + 192U;
+			if (selected_entities.size() >
+				options.limits.maximum_output_bytes / owner_bookkeeping_bytes)
+				return sdk::unexpected(failure(
+					"provider-worker-v4.output-limit", "semantic-owner", "maximum-output-bytes"));
+			if (auto valid =
+					reserve_owner_bytes(selected_entities.size() * owner_bookkeeping_bytes);
+				!valid)
+				return valid;
+			std::map<std::string_view, std::size_t, std::less<>> owner_indices;
+			for (std::size_t i{}; i < selected_entities.size(); ++i)
+				owner_indices.emplace(selected_entities[i]->semantic_key, i);
+			std::vector<unsigned char> owner_status(selected_entities.size());
+			std::vector<unsigned char> owner_unknown(selected_entities.size());
+			std::vector<unsigned char> owner_exact(selected_entities.size());
+			std::vector<std::size_t> owner_stack;
+			owner_stack.reserve(selected_entities.size());
+			std::map<std::string, std::string, std::less<>> entity_ids;
+			for (std::size_t root{}; root < selected_entities.size(); ++root)
+			{
+				if (owner_status[root] == 2U)
+					continue;
+				std::size_t current = root;
+				while (owner_status[current] == 0U)
+				{
+					if (auto valid = cancellation_check(options.cancellation); !valid)
+						return valid;
+					owner_status[current] = 1U;
+					owner_stack.push_back(current);
+					const auto* observation = selected_entities[current];
+					const auto state = entity_field(*observation, "symbol.semantic_owner_state");
+					const auto owner = entity_field(*observation, "symbol.semantic_owner");
+					const auto& group = entity_groups.at(observation->semantic_key);
+					const bool conflicting = std::ranges::any_of(
+						group,
+						[&](const auto* candidate)
+						{
+							return entity_field(*candidate, "symbol.semantic_owner_state") !=
+								state ||
+								entity_field(*candidate, "symbol.semantic_owner") != owner;
+						});
+					if (conflicting ||
+						(state != "named" && state != "translation_unit" && !state.empty()) ||
+						(state != "named" && !owner.empty()) || (state == "named" && owner.empty()))
+					{
+						owner_unknown[current] = 1U;
+						break;
+					}
+					if (state != "named")
+						break; // Actual TU absence, or a legacy observation with no owner facet.
+					const auto found = owner_indices.find(owner);
+					if (found == owner_indices.end())
+					{
+						owner_unknown[current] = 1U;
+						break;
+					}
+					current = found->second;
+					if (owner_status[current] == 1U)
+					{
+						const auto cycle = std::ranges::find(owner_stack, current);
+						for (auto i = cycle; i != owner_stack.end(); ++i)
+							owner_unknown[*i] = 1U;
+						break;
+					}
+				}
+				while (!owner_stack.empty())
+				{
+					if (auto valid = cancellation_check(options.cancellation); !valid)
+						return valid;
+					const auto index = owner_stack.back();
+					owner_stack.pop_back();
+					const auto* observation = selected_entities[index];
+					std::optional<sdk::detached_cell> owner;
+					bool exact = observation->exact_equivalence;
+					if (owner_unknown[index])
+					{
+						exact = false;
+						// An unresolved identity component cannot derive a canonical entity ID.
+						// Keep the owner unobserved on the provider-local row; its exact original
+						// payload and explicit frontier remain in the observation/unresolved rows.
+						if (auto valid =
+								reserve_owner_bytes(observation->semantic_key.size() * 2U + 256U);
+							!valid)
+							return valid;
+						if (auto valid = scoped_limitation("semantic-owner-unavailable:" +
+															   observation->semantic_key,
+														   "cc.entity.v1");
+							!valid)
+							return valid;
+						add_unresolved(output.unresolved,
+									   "provider.semantic-owner-unavailable",
+									   observation->semantic_key,
+									   "cc.entity");
+					}
+					else if (entity_field(*observation, "symbol.semantic_owner_state") ==
+							 "translation_unit")
+						owner = sdk::detached_cell::absent(
+							{sdk::scalar_kind::typed_id, "cc_entity_id", true});
+					else if (entity_field(*observation, "symbol.semantic_owner_state") == "named")
+					{
+						const auto key = entity_field(*observation, "symbol.semantic_owner");
+						const auto parent = owner_indices.at(key);
+						exact = exact && owner_exact[parent] != 0U;
+						owner = optional_typed("cc_entity_id", entity_ids.find(key)->second);
+					}
+					if (auto valid = reserve_owner_bytes(observation->semantic_key.size() + 256U);
+						!valid)
+						return valid;
+					auto canonical =
+						entity_row(*observation, options.toolchain_context_id, exact, owner);
+					if (!canonical)
+						return sdk::unexpected(std::move(canonical.error()));
+					auto entity = row_string(*canonical, "cc.entity.v1.entity");
+					if (!entity)
+						return sdk::unexpected(std::move(entity.error()));
+					entity_ids.emplace(observation->semantic_key, *entity);
+					owner_exact[index] = exact ? 1U : 0U;
+					owner_status[index] = 2U;
+					if (auto valid = append_row(2U, std::move(*canonical)); !valid)
+						return valid;
+				}
 			}
+			if (std::ranges::any_of(owner_unknown,
+									[](const auto value)
+									{
+										return value != 0U;
+									}))
+				output.exact_equivalence = false;
 
 			std::vector<std::size_t> calls;
 			for (const auto index : ordered)

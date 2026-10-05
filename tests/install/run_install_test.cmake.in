@@ -1,6 +1,7 @@
 set(test_root "@CMAKE_CURRENT_BINARY_DIR@/install-consumer")
 set(install_prefix "${test_root}/relocated-prefix")
 set(install_libdir "@CMAKE_INSTALL_LIBDIR@")
+set(shared_abi_revision "@CXXLENS_SHARED_ABI_REVISION@")
 
 if(NOT DEFINED PHASE)
   message(FATAL_ERROR "install test requires an explicit PHASE")
@@ -341,8 +342,11 @@ if(PHASE STREQUAL "shared-runtime-layout"
   execute_process(
     COMMAND "${CXXLENS_READELF}" -d "${base_library}"
     OUTPUT_VARIABLE library_dynamic_section COMMAND_ERROR_IS_FATAL ANY)
-  if(NOT library_dynamic_section MATCHES "SONAME.*libcxxlens_base.so.1")
-    message(FATAL_ERROR "shared library SONAME does not bind project major")
+  if(NOT library_dynamic_section MATCHES
+     "SONAME.*\\[libcxxlens_base\\.so\\.${shared_abi_revision}\\]")
+    message(
+      FATAL_ERROR
+        "shared library SONAME does not bind the public C++ ABI revision")
   endif()
   if(NOT library_dynamic_section MATCHES "RUNPATH.*\\$ORIGIN")
     message(
@@ -352,7 +356,9 @@ if(PHASE STREQUAL "shared-runtime-layout"
     message(FATAL_ERROR "installed library retains build-tree path")
   endif()
 
-  set(base_soname "${install_prefix}/${install_libdir}/libcxxlens_base.so.1")
+  set(base_soname
+      "${install_prefix}/${install_libdir}/libcxxlens_base.so.${shared_abi_revision}"
+  )
   set(base_soname_unavailable "${base_soname}.unavailable")
   if(NOT EXISTS "${base_soname}")
     message(FATAL_ERROR "shared package lacks the cxxlens base SONAME link")
@@ -370,7 +376,8 @@ if(PHASE STREQUAL "shared-runtime-layout"
   if(missing_dependency_result EQUAL 0)
     message(FATAL_ERROR "installed tool ignored a missing shared dependency")
   endif()
-  if(NOT missing_dependency_error MATCHES "libcxxlens_base\\.so\\.1")
+  if(NOT missing_dependency_error MATCHES
+     "libcxxlens_base\\.so\\.${shared_abi_revision}")
     message(
       FATAL_ERROR
         "missing shared dependency diagnostic lacks the SONAME: ${missing_dependency_error}"

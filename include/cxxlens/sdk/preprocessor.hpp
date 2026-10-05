@@ -60,6 +60,9 @@ namespace cxxlens::sdk::query
 		std::optional<bool> argument_may_have_side_effects;
 		preprocessor_state effect_state{preprocessor_state::unknown};
 		preprocessor_state macro_state{preprocessor_state::unknown};
+		/// Independent original raw pragma classification; absent legacy facets stay unknown.
+		std::optional<std::string> pragma_kind, pragma_profile;
+		preprocessor_state pragma_state{preprocessor_state::unknown};
 		std::vector<std::size_t> evidence;
 		std::vector<query_unresolved> gaps;
 	};

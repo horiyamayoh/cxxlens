@@ -250,10 +250,73 @@ namespace
 } // namespace
 int main()
 {
+	{
+		fixture f;
+		f.declaration();
+		constexpr std::array<std::string_view, 9> names{"build.compile_unit.v1",
+														"source.file.v1",
+														"source.span.v1",
+														"cc.entity.v1",
+														"cc.entity_detail.v1",
+														"cc.body.v1",
+														"cc.cfg_node.v1",
+														"cc.declaration_inventory.v1",
+														"cc.declaration.v1"};
+		const auto public_queries = [&](bool execution_complete = true)
+		{
+			q::application_query_results input;
+			input.snapshot_id = "snapshot:original-public";
+			for (std::size_t group{}; group < names.size(); ++group)
+			{
+				auto data = std::make_shared<q::query_result::data>();
+				data->row_values = f.groups[group];
+				data->status = execution_complete || group != 7U ? q::execution_status::complete
+																 : q::execution_status::truncated;
+				data->input_complete = group != 7U;
+				data->snapshot = input.snapshot_id;
+				input.scans.push_back(
+					{std::string{names[group]}, {}, q::query_transfer_access::make(data)});
+			}
+			return input;
+		};
+		auto complete = q::project_declarations(public_queries());
+		require(complete && complete->inventory_inputs_complete &&
+					complete->populations[0].state == q::finite_population_state::complete,
+				"independent original declaration facet survives generic optional frontier");
+		auto missing_execution = q::project_declarations(public_queries(false));
+		require(missing_execution && !missing_execution->inventory_inputs_complete,
+				"incomplete original inventory execution remains unavailable");
+		auto inventory = public_queries();
+		inventory.scans.erase(inventory.scans.begin() + 7);
+		require(!q::project_declarations(inventory)->inventory_inputs_complete,
+				"missing original inventory scan cannot close");
+		f.groups[8].clear();
+		auto missing = q::project_declarations(public_queries());
+		require(missing && missing->populations[0].state != q::finite_population_state::complete,
+				"missing listed original declaration is not known zero");
+		f.declaration();
+		auto& count = f.groups[7][0].values.at("output.declaration_count");
+		count.value = std::uint64_t{2U};
+		auto conflict = q::project_declarations(public_queries());
+		require(conflict &&
+					conflict->populations[0].state == q::finite_population_state::conflicting,
+				"original independent declaration count contradiction survives");
+	}
+
 	relation_registry registry;
 	for (const auto& descriptor : standard_relation_descriptors())
-		require(registry.add(descriptor).has_value(), "standard descriptor rejected");
-	require(registry.build("finite-population-test").has_value(),
+	{
+		auto added = registry.add(descriptor);
+		if (!added)
+			std::cerr << descriptor.id << " / " << added.error().code << " / "
+					  << added.error().field << " / " << added.error().detail << "\n";
+		require(added.has_value(), "standard descriptor rejected");
+	}
+	auto built = registry.build("finite-population-test");
+	if (!built)
+		std::cerr << built.error().code << " / " << built.error().field << " / "
+				  << built.error().detail << "\n";
+	require(built.has_value(),
 			"finite population references do not match their actual target ID types");
 	using s = q::finite_population_state;
 	fixture d;
@@ -263,6 +326,36 @@ int main()
 	require(result->populations[0].members[0].kind == "function" &&
 				result->populations[0].members[0].declaration_kind == "Function",
 			"canonical kind lost");
+	// A saved older declaration scan lacks newly added optional identifier and
+	// target-census cells. It retains the original declaration population, and
+	// the missing fields remain unobserved in owned evidence rather than padded.
+	auto older = d;
+	for (auto iterator = older.groups[8][0].values.begin();
+		 iterator != older.groups[8][0].values.end();)
+		if (iterator->first.starts_with("output.identifier_"))
+			iterator = older.groups[8][0].values.erase(iterator);
+		else
+			++iterator;
+	for (auto iterator = older.groups[7][0].values.begin();
+		 iterator != older.groups[7][0].values.end();)
+		if (iterator->first.starts_with("output.target_slot_"))
+			iterator = older.groups[7][0].values.erase(iterator);
+		else
+			++iterator;
+	auto compatible = q::project_declarations(older.input());
+	require(state(compatible, s::complete), "optional saved columns made declarations unavailable");
+	require(std::ranges::any_of(compatible->evidence,
+								[](const auto& evidence)
+								{
+									return evidence.relation_id == "cc.declaration.v1" &&
+										!evidence.row.values.contains("output.identifier_profile");
+								}),
+			"optional saved fields were fabricated in original evidence");
+	older.groups[8][0].values.erase("output.entity");
+	require(!q::project_declarations(older.input()), "missing required saved field accepted");
+	older = d;
+	older.groups[8][0].values.emplace("output.foreign", detached_cell::utf8("foreign"));
+	require(!q::project_declarations(older.input()), "foreign projected field accepted");
 	set(d.groups[7][0], "declaration_count", detached_cell::unsigned_integer(2U));
 	require(state(q::project_declarations(d.input()), s::conflicting), "wrong count accepted");
 	d.declaration();

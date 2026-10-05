@@ -18,6 +18,7 @@
 
 namespace cxxlens::detail::clang22
 {
+	struct project_template_observations;
 	/** Value-only preprocessing observations; emitted while the compiler evaluates directives. */
 	struct project_preprocessor_event
 	{
@@ -74,5 +75,6 @@ namespace cxxlens::detail::clang22
 							  const project_preprocessor_observations& preprocessing,
 							  const std::function<void(std::string_view)>& progress = {},
 							  const project_original_calls& original_calls = {},
-							  const std::string& project_id = {});
+							  const std::string& project_id = {},
+							  const project_template_observations* templates = nullptr);
 } // namespace cxxlens::detail::clang22

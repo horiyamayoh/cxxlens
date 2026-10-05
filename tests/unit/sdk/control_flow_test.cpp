@@ -87,6 +87,28 @@ int main()
 	fixture data;
 	auto value = project(data);
 	require(complete(data), "finite diamond must be complete");
+	data.nodes[0U].values["output.terminator"] =
+		detached_cell::typed("syntax_node_id", "syntax:branch");
+	data.nodes[0U].values["output.terminator_state"] = detached_cell::utf8("complete");
+	data.nodes[0U].values["output.terminator_profile"] =
+		detached_cell::utf8("clang22-original-cfg-terminator/1");
+	data.edges[0U].values["output.condition"] =
+		detached_cell::typed("syntax_node_id", "syntax:predicate");
+	data.edges[0U].values["output.condition_state"] = detached_cell::utf8("complete");
+	data.edges[0U].values["output.condition_profile"] =
+		detached_cell::utf8("clang22-original-cfg-branch-condition/1");
+	data.edges[0U].values["output.outcome"] = detached_cell::utf8("unknown");
+	data.edges[0U].values["output.outcome_state"] = detached_cell::utf8("unknown");
+	data.edges[0U].values["output.outcome_profile"] =
+		detached_cell::utf8("clang22-original-cfg-outcome/1");
+	value = project(data);
+	require(
+		complete(data) && value.bodies[0U].nodes[0U].terminator == "syntax:branch" &&
+			value.bodies[0U].edges[0U].condition == "syntax:predicate" &&
+			value.bodies[0U].edges[0U].outcome_state == "unknown",
+		"original condition/outcome facets were dropped or poisoned independent CFG enumeration");
+	data = fixture{};
+	value = project(data);
 	require(value.evidence_rows.size() == 9U && value.bodies[0U].edges.size() == 4U,
 			"distinct nodes, edges and evidence must survive");
 	const auto original = value;

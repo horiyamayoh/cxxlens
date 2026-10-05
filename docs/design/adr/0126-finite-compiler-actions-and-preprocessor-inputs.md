@@ -75,6 +75,13 @@ errors remain failed even with a partial AST; completed nonfatal recovery is dis
 Unobserved parsing is unavailable. Actual selected unit and variant counts/member
 IDs are admitted before parser callbacks; preparation gaps preserve selection
 unknown. Diagnostics are ordinary product input, not development certification.
+The typed `selected_variant_ids` set describes all selected configurations and
+is repeated in each actual selected world. It has no ordinary per-condition FK:
+that would incorrectly demand every configuration's fact in every other world.
+`project_build_health` validates the whole set against original configuration
+facts in their actual worlds, and retains missing or conflicting selection as
+unknown/partial/conflicting. Unit/project references remain ordinary world-bound
+references. No duplicated cross-world variant facts are introduced.
 
 Owned SDK projections preserve original annotated rows, world/condition identity,
 finite counts, known-empty versus missing, conflict, coverage, query ownership and

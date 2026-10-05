@@ -83,5 +83,7 @@ namespace cxxlens::detail::clang22
 		const source_closure_native_input& input,
 		provider::clang22::translation_unit_callback callback,
 		provider::clang22::detail::preprocessor_setup setup = {},
-		provider::clang22::detail::native_parse_observation* parse_observation = nullptr);
+		provider::clang22::detail::native_parse_observation* parse_observation = nullptr,
+		provider::clang22::detail::sema_setup semantic_setup = {},
+		provider::clang22::detail::sema_ast_ready semantic_ready = {});
 } // namespace cxxlens::detail::clang22
