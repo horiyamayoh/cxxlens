@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -20,7 +21,7 @@ namespace
 int main(int argc, char** argv)
 {
 	using namespace cxxlens::sdk;
-	if (argc != 2)
+	if (argc != 2 && argc != 3)
 		return 2;
 	relation_registry registry;
 	for (const auto& descriptor : standard_relation_descriptors())
@@ -36,6 +37,28 @@ int main(int argc, char** argv)
 		std::cerr << queries.error().code << ':' << queries.error().field << ':'
 				  << queries.error().detail << '\n';
 		return 3;
+	}
+	const bool stock_events = argc == 3 && std::string_view{argv[2]} == "--stock-template-events";
+	if (argc == 3 && !stock_events)
+	{
+		require(std::string_view{argv[2]} == "--complete-template-events",
+				"unsupported original projection fixture");
+		auto events = query::project_template_events(*queries);
+		if (!events)
+		{
+			std::cerr << events.error().code << ':' << events.error().field << ':'
+					  << events.error().detail << '\n';
+			return 5;
+		}
+		const auto complete = query::finite_population_state::complete;
+		require(events->source_queries.has_value() && events->populations.size() == 1,
+				"complete event fixture lost original queries or unit scope");
+		const auto& population = events->populations.front();
+		require(population.candidate_state == complete &&
+					population.evaluation_root_state == complete &&
+					population.invocation_state == complete && population.calls.size() == 1,
+				"actual original template event population did not close through SDK");
+		return 0;
 	}
 	auto templates = query::project_template_domains(*queries);
 	if (!templates)
@@ -98,4 +121,60 @@ int main(int argc, char** argv)
 	}
 	require(root_synthesis && root_instantiation && nested_frame,
 			"mixed original root and nested frame policy was not exercised");
+	auto events = query::project_template_events(*queries);
+	if (!events)
+	{
+		std::cerr << events.error().code << ':' << events.error().field << ':'
+				  << events.error().detail << '\n';
+		return 5;
+	}
+	require(events->source_queries.has_value() && events->populations.size() == 1,
+			"original template event query ownership or unit scope is missing");
+	const auto& event_population = events->populations.front();
+	if (stock_events)
+	{
+		require(event_population.candidate_state != complete &&
+					event_population.evaluation_root_state != complete &&
+					event_population.invocation_state != complete &&
+					event_population.candidates.empty() && event_population.calls.empty(),
+				"stock compiler falsely closed uninstrumented template events");
+		return 0;
+	}
+	require(event_population.candidate_state == complete,
+			"actual original candidate census did not close through SDK");
+	const auto partial = query::finite_population_state::partial;
+	require(event_population.evaluation_root_state == partial &&
+				event_population.invocation_state == partial &&
+				std::ranges::any_of(event_population.roots,
+									[](const auto& root)
+									{
+										return root.requested_constant_context == true &&
+											root.fold_failure == true &&
+											root.completion == "complete" &&
+											root.invocation_state ==
+											query::finite_population_state::partial;
+									}),
+			"actual failed constant evaluation lost its independent invocation frontier");
+	require(std::ranges::any_of(event_population.candidates,
+								[](const auto& candidate)
+								{
+									return candidate.deduction_result == "substitution_failure" &&
+										candidate.exclusion_disposition ==
+										"substitution_exclusion" &&
+										candidate.completed == true;
+								}),
+			"original final substitution-failure exclusion is missing");
+	require(event_population.calls.size() == 2 &&
+				std::ranges::any_of(event_population.roots,
+									[complete](const auto& root)
+									{
+										return root.requested_constant_context == true &&
+											root.fold_failure == false && root.call_count == 2 &&
+											root.invocation_state == complete;
+									}),
+			"actual selected constant branch/root calls are missing or runtime calls leaked");
+	for (const auto& call : event_population.calls)
+		require(call.root_state == complete && !call.root_ids.empty() &&
+					!call.callee_usr_hexes.empty(),
+				"actual reached call lost its original root or target association");
 }

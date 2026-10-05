@@ -12,6 +12,7 @@
 
 #include "query_projection_plan_limits_internal.hpp"
 #include "query_projection_rows_internal.hpp"
+#include "query_result_internal.hpp"
 
 namespace cxxlens::sdk::query
 {
@@ -689,10 +690,15 @@ namespace cxxlens::sdk::query
 						  population.program_point_profile);
 			}
 		}
-		result<finite_population_projection> project_rows(finite_population_input input,
-														  spec current,
-														  finite_population_limits limits,
-														  std::stop_token stop)
+		result<finite_population_projection>
+		project_rows(finite_population_input input,
+					 spec current,
+					 finite_population_limits limits,
+					 std::stop_token stop,
+					 projection_resource_usage* usage = nullptr,
+					 const std::array<std::vector<const annotated_row*>, 9U>* borrowed = nullptr,
+					 std::size_t query_operations = 0U,
+					 std::size_t query_bytes = 0U)
 		{
 			if (auto valid = limits.validate(); !valid)
 				return valid.error();
@@ -700,6 +706,14 @@ namespace cxxlens::sdk::query
 			{
 				check(stop, limits);
 				projection_work work{limits, stop, {}, {}, {}, {}};
+				charge(work.used.operations,
+					   query_operations,
+					   limits.maximum_operations,
+					   "operations");
+				charge(work.used.bytes,
+					   query_bytes,
+					   limits.maximum_retained_bytes,
+					   "retained-query-index");
 				work.output.compile_units_complete = input.compile_units_complete;
 				work.output.inventory_inputs_complete = input.inventory_inputs_complete;
 				work.output.member_inputs_complete = input.member_inputs_complete;
@@ -721,8 +735,12 @@ namespace cxxlens::sdk::query
 						std::ranges::find(descriptors, names[group], &relation_descriptor::id);
 					if (descriptor == descriptors.end())
 						fail(std::string{names[group]}, "descriptor-missing");
-					for (const auto& row : groups[group])
+					for (std::size_t row_index = 0U;
+						 row_index < (borrowed ? (*borrowed)[group].size() : groups[group].size());
+						 ++row_index)
 					{
+						const auto& row =
+							borrowed ? *(*borrowed)[group][row_index] : groups[group][row_index];
 						work.work();
 						if (entries.size() >= limits.maximum_rows)
 							fail("rows", "limit-exceeded", "sdk.population-budget");
@@ -740,6 +758,19 @@ namespace cxxlens::sdk::query
 							   row.presence.fragments.size(),
 							   limits.maximum_condition_expansions,
 							   "condition-expansions");
+						// Canonical text bounds dynamic payload; detached cells and
+						// tree nodes also have fixed owned storage even when absent.
+						const auto cell_bytes = sizeof(decltype(row.values)::value_type) + 256U;
+						if (row.values.size() > limits.maximum_retained_bytes / cell_bytes)
+							fail("retained-evidence", "limit-exceeded", "sdk.population-budget");
+						charge(work.used.bytes,
+							   sizeof(annotated_row),
+							   limits.maximum_retained_bytes,
+							   "retained-evidence");
+						charge(work.used.bytes,
+							   row.values.size() * cell_bytes,
+							   limits.maximum_retained_bytes,
+							   "retained-evidence");
 						auto encoded = row.canonical_form();
 						charge(work.used.bytes,
 							   encoded.size() * 2U + sizeof(entry),
@@ -1162,6 +1193,8 @@ namespace cxxlens::sdk::query
 					}
 				}
 				canonical(work.output.unresolved);
+				if (usage)
+					*usage = {work.used.operations, work.used.bytes};
 				return std::move(work.output);
 			}
 			catch (const failure& exception)
@@ -1177,32 +1210,38 @@ namespace cxxlens::sdk::query
 				return error{"sdk.population-resource-exhausted", "projection", "length"};
 			}
 		}
-		result<finite_population_projection> project_queries(const application_query_results& input,
-															 spec current,
-															 finite_population_limits limits,
-															 std::stop_token stop)
+		result<finite_population_projection>
+		project_queries(const application_query_results& input,
+						spec current,
+						finite_population_limits limits,
+						std::stop_token stop,
+						projection_resource_usage* usage = nullptr)
 		{
 			if (auto valid = limits.validate(); !valid)
 				return valid.error();
 			try
 			{
 				check(stop, limits);
+				std::size_t plan_bytes{};
 				if (auto bounded =
 						detail::check_source_plan_limits(input,
 														 limits.maximum_source_queries,
 														 limits.maximum_source_plan_bytes,
 														 stop,
-														 "sdk.population");
+														 "sdk.population",
+														 &plan_bytes);
 					!bounded)
 					return bounded.error();
 				const auto names = relations(current);
-				std::array<std::vector<annotated_row>, 9U> groups;
+				std::array<std::vector<const annotated_row*>, 9U> groups;
 				std::array<bool, 9U> present{}, complete{};
 				complete.fill(true);
-				std::size_t rows{}, bytes{};
+				std::size_t rows{}, bytes{}, operations{};
+				charge(bytes, plan_bytes, limits.maximum_retained_bytes, "retained-query-plan");
 				for (const auto& scan : input.scans)
 				{
 					check(stop, limits);
+					charge(operations, 1U, limits.maximum_operations, "operations");
 					const auto found = std::ranges::find(names, scan.relation_id);
 					if (found == names.end())
 						continue;
@@ -1219,41 +1258,43 @@ namespace cxxlens::sdk::query
 						(named_declaration_inventory || scan.result.inputs_complete()) &&
 						scan.result.conflicts().empty() &&
 						scan.result.differential_disagreements().empty();
-					auto cursor = scan.result.rows();
-					while (true)
+					const auto source = query_transfer_access::borrow_rows(scan.result);
+					charge(rows, source.size(), limits.maximum_rows, "scan-rows");
+					if (source.size() >
+						limits.maximum_retained_bytes / (2U * sizeof(const annotated_row*)))
+						fail("retained-query-index", "limit-exceeded", "sdk.population-budget");
+					charge(bytes,
+						   source.size() * 2U * sizeof(const annotated_row*),
+						   limits.maximum_retained_bytes,
+						   "retained-query-index");
+					groups[group].reserve(groups[group].size() + source.size());
+					for (const auto& row : source)
 					{
 						check(stop, limits);
-						auto next = cursor.next();
-						if (!next)
-							return next.error();
-						if (!*next)
-							break;
-						charge(rows, 1U, limits.maximum_rows, "scan-rows");
-						auto row = (*next)->copy();
-						if (!row)
-							return row.error();
-						charge(bytes,
-							   row->canonical_form().size(),
-							   limits.maximum_evidence_bytes,
-							   "scan-evidence");
-						groups[group].push_back(std::move(*row));
+						charge(operations, 1U, limits.maximum_operations, "operations");
+						groups[group].push_back(&row);
 					}
 				}
-				auto output = project_rows({groups[0],
-											groups[1],
-											groups[2],
-											groups[3],
-											groups[4],
-											groups[5],
-											groups[6],
-											groups[7],
-											groups[8],
+				projection_resource_usage measured;
+				auto output = project_rows({{},
+											{},
+											{},
+											{},
+											{},
+											{},
+											{},
+											{},
+											{},
 											present[0] && complete[0],
 											present[7] && complete[7],
 											present[8] && complete[8]},
 										   current,
 										   limits,
-										   stop);
+										   stop,
+										   usage ? &measured : nullptr,
+										   &groups,
+										   operations,
+										   bytes);
 				if (!output)
 					return output;
 				for (std::size_t group{}; group < names.size(); ++group)
@@ -1266,6 +1307,8 @@ namespace cxxlens::sdk::query
 													  "supply-independent-public-scan"});
 				canonical(output->unresolved);
 				output->source_queries = input;
+				if (usage)
+					*usage = measured;
 				return output;
 			}
 			catch (const failure& exception)
@@ -1342,5 +1385,39 @@ namespace cxxlens::sdk::query
 														   std::stop_token stop)
 	{
 		return project_queries(input, flow, limits, stop);
+	}
+
+	result<finite_population_projection> project_declarations(finite_population_input input,
+															  finite_population_limits limits,
+															  std::stop_token stop,
+															  projection_resource_usage& usage)
+	{
+		usage = {};
+		return project_rows(input, declarations, limits, stop, &usage);
+	}
+	result<finite_population_projection>
+	project_declarations(const application_query_results& input,
+						 finite_population_limits limits,
+						 std::stop_token stop,
+						 projection_resource_usage& usage)
+	{
+		usage = {};
+		return project_queries(input, declarations, limits, stop, &usage);
+	}
+	result<finite_population_projection> project_body_flow(finite_population_input input,
+														   finite_population_limits limits,
+														   std::stop_token stop,
+														   projection_resource_usage& usage)
+	{
+		usage = {};
+		return project_rows(input, flow, limits, stop, &usage);
+	}
+	result<finite_population_projection> project_body_flow(const application_query_results& input,
+														   finite_population_limits limits,
+														   std::stop_token stop,
+														   projection_resource_usage& usage)
+	{
+		usage = {};
+		return project_queries(input, flow, limits, stop, &usage);
 	}
 } // namespace cxxlens::sdk::query

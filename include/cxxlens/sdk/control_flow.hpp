@@ -1,4 +1,5 @@
 #pragma once
+#include <cxxlens/sdk/projection_resource_usage.hpp>
 
 /** @file control_flow.hpp @brief Conditioned, evidence-preserving finite CFG projection. */
 
@@ -114,4 +115,29 @@ namespace cxxlens::sdk::query
 	project_control_flow(const application_query_results& input,
 						 control_flow_limits limits = {},
 						 std::stop_token cancellation = {});
+
+	[[nodiscard]] result<control_flow_projection> project_control_flow(control_flow_input,
+																	   control_flow_limits,
+																	   std::stop_token,
+																	   projection_resource_usage&);
+	[[nodiscard]] result<control_flow_projection>
+	project_control_flow(const application_query_results&,
+						 control_flow_limits,
+						 std::stop_token,
+						 projection_resource_usage&);
+	/** Bound total owned and temporary CFG storage before allocation without changing independent
+	 * CFG limits. */
+	[[nodiscard]] result<control_flow_projection>
+	project_control_flow(control_flow_input,
+						 control_flow_limits,
+						 std::stop_token,
+						 projection_resource_usage&,
+						 std::size_t maximum_retained_bytes);
+	[[nodiscard]] result<control_flow_projection>
+	project_control_flow(const application_query_results&,
+						 control_flow_limits,
+						 std::stop_token,
+						 projection_resource_usage&,
+						 std::size_t maximum_retained_bytes);
+
 } // namespace cxxlens::sdk::query

@@ -76,6 +76,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CxxlensWarnings)
 include(CxxlensSanitizers)
 include(CxxlensClangTargets)
+include(CxxlensClangTemplateEvents)
 cxxlens_validate_sanitizer_configuration()
 
 if(NOT CXXLENS_BUILD_CLANG22_COMPONENTS)
@@ -267,6 +268,7 @@ add_library(
   src/sdk/function_compiler_facets.cpp
   src/sdk/target_resolution.cpp
   src/sdk/template_domains.cpp
+  src/sdk/template_events.cpp
   src/sdk/semantic_graphs.cpp
   src/sdk/record_surfaces.cpp
   src/sdk/abi_surfaces.cpp
@@ -771,6 +773,8 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     src/llvm/clang22/provider_worker_v4_output_normalizer.cpp
     src/llvm/clang22/project_semantic_facts.cpp
     src/llvm/clang22/project_template_observer.cpp
+    src/llvm/clang22/project_template_events.cpp
+    src/llvm/clang22/project_template_event_rows.cpp
     src/llvm/clang22/project_abi_observer.cpp)
   target_link_libraries(
     cxxlens_clang22_worker_core
@@ -892,6 +896,7 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   cxxlens_set_project_warnings(cxxlens-clang22-analyze)
   cxxlens_enable_sanitizers(cxxlens-clang22-analyze)
   cxxlens_configure_installed_clang22_tool(cxxlens-clang22-analyze)
+  cxxlens_configure_original_template_events()
 endif()
 
 # Keep the product dependency direction executable at configure time.  Alias

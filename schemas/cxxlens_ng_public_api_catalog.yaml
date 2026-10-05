@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.87.0
+document_version: 1.89.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -169,7 +169,7 @@ entries:
     status: implemented
     profile: NG0
     target: cxxlens::sdk
-    headers: [include/cxxlens/relations/build_analysis_inventory.hpp, include/cxxlens/relations/cc_operation.hpp, include/cxxlens/relations/source_preprocessor_inventory.hpp, include/cxxlens/relations/build_compile_unit_analysis.hpp, include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_call_operand.hpp, include/cxxlens/relations/cc_declaration.hpp, include/cxxlens/relations/cc_declaration_inventory.hpp, include/cxxlens/relations/cc_target_resolution_slot.hpp, include/cxxlens/relations/cc_template_subject.hpp, include/cxxlens/relations/cc_constraint_node.hpp, include/cxxlens/relations/cc_lambda_capture.hpp, include/cxxlens/relations/cc_template_instantiation_frame.hpp, include/cxxlens/relations/cc_template_inventory.hpp, include/cxxlens/relations/cc_flow_inventory.hpp, include/cxxlens/relations/source_comment.hpp, include/cxxlens/relations/source_comment_inventory.hpp, include/cxxlens/relations/source_include_inventory.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_type_component.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/core_claim_conflict.hpp, include/cxxlens/relations/core_differential_disagreement.hpp, include/cxxlens/relations/core_provider_execution.hpp, include/cxxlens/relations/core_unresolved.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_origin.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/relations/cc_entity_detail.hpp, include/cxxlens/relations/cc_entity_edge.hpp, include/cxxlens/relations/cc_syntax_node.hpp, include/cxxlens/relations/cc_body.hpp, include/cxxlens/relations/cc_cfg_node.hpp, include/cxxlens/relations/cc_cfg_edge.hpp, include/cxxlens/relations/cc_flow_fact.hpp, include/cxxlens/relations/cc_layout_fact.hpp, include/cxxlens/relations/cc_abi_surface.hpp, include/cxxlens/relations/cc_record_surface.hpp, include/cxxlens/relations/cc_record_inventory.hpp, include/cxxlens/relations/source_include.hpp, include/cxxlens/relations/source_preprocessor_event.hpp, include/cxxlens/relations/source_token.hpp, include/cxxlens/relations/source_token_inventory.hpp, include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
+    headers: [include/cxxlens/relations/build_analysis_inventory.hpp, include/cxxlens/relations/cc_operation.hpp, include/cxxlens/relations/source_preprocessor_inventory.hpp, include/cxxlens/relations/build_compile_unit_analysis.hpp, include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_call_operand.hpp, include/cxxlens/relations/cc_declaration.hpp, include/cxxlens/relations/cc_declaration_inventory.hpp, include/cxxlens/relations/cc_target_resolution_slot.hpp, include/cxxlens/relations/cc_template_subject.hpp, include/cxxlens/relations/cc_constraint_node.hpp, include/cxxlens/relations/cc_template_candidate.hpp, include/cxxlens/relations/cc_constant_evaluation_root.hpp, include/cxxlens/relations/cc_constant_evaluated_call.hpp, include/cxxlens/relations/cc_lambda_capture.hpp, include/cxxlens/relations/cc_template_instantiation_frame.hpp, include/cxxlens/relations/cc_template_inventory.hpp, include/cxxlens/relations/cc_flow_inventory.hpp, include/cxxlens/relations/source_comment.hpp, include/cxxlens/relations/source_comment_inventory.hpp, include/cxxlens/relations/source_include_inventory.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_type_component.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/core_claim_conflict.hpp, include/cxxlens/relations/core_differential_disagreement.hpp, include/cxxlens/relations/core_provider_execution.hpp, include/cxxlens/relations/core_unresolved.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_origin.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/relations/cc_entity_detail.hpp, include/cxxlens/relations/cc_entity_edge.hpp, include/cxxlens/relations/cc_syntax_node.hpp, include/cxxlens/relations/cc_body.hpp, include/cxxlens/relations/cc_cfg_node.hpp, include/cxxlens/relations/cc_cfg_edge.hpp, include/cxxlens/relations/cc_flow_fact.hpp, include/cxxlens/relations/cc_layout_fact.hpp, include/cxxlens/relations/cc_abi_surface.hpp, include/cxxlens/relations/cc_record_surface.hpp, include/cxxlens/relations/cc_record_inventory.hpp, include/cxxlens/relations/source_include.hpp, include/cxxlens/relations/source_preprocessor_event.hpp, include/cxxlens/relations/source_token.hpp, include/cxxlens/relations/source_token_inventory.hpp, include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
     symbols:
       - name: query.from
         kind: template
@@ -348,7 +348,7 @@ entries:
         signature: 'evidence_rows; bodies; unresolved; source_queries'
       - name: query.project_control_flow
         kind: function
-        signature: 'result<control_flow_projection> project_control_flow(control_flow_input, control_flow_limits = {}, stop_token = {}); result<control_flow_projection> project_control_flow(const application_query_results&, control_flow_limits = {}, stop_token = {})'
+        signature: 'result<control_flow_projection> project_control_flow(control_flow_input, control_flow_limits = {}, stop_token = {}); result<control_flow_projection> project_control_flow(const application_query_results&, control_flow_limits = {}, stop_token = {}); result<control_flow_projection> project_control_flow(control_flow_input, control_flow_limits, stop_token, projection_resource_usage&); result<control_flow_projection> project_control_flow(const application_query_results&, control_flow_limits, stop_token, projection_resource_usage&); result<control_flow_projection> project_control_flow(control_flow_input, control_flow_limits, stop_token, projection_resource_usage&, size_t maximum_retained_bytes); result<control_flow_projection> project_control_flow(const application_query_results&, control_flow_limits, stop_token, projection_resource_usage&, size_t maximum_retained_bytes)'
     errors: [sdk.cfg-limit-invalid, sdk.cfg-input-invalid, sdk.cfg-budget, sdk.cfg-cancelled, sdk.cfg-resource-exhausted]
     lifetime: [borrowed-input-only-during-call, projection-owns-evidence-values-and-original-query-results, no-compiler-pointer]
     threading: [projection-has-value-semantics, independent-calls-share-no-mutable-state]
@@ -500,7 +500,7 @@ entries:
         signature: 'evidence; calls; function_scopes; compile_units_complete; call_inputs_complete; operand_inputs_complete; scope_inputs_complete; type_inputs_complete; unresolved; source_queries'
       - name: query.project_call_operands
         kind: function
-        signature: 'result<call_operand_projection> project_call_operands(call_operand_input, finite_population_limits = {}, stop_token = {}); result<call_operand_projection> project_call_operands(const application_query_results&, finite_population_limits = {}, stop_token = {})'
+        signature: 'result<call_operand_projection> project_call_operands(call_operand_input, finite_population_limits = {}, stop_token = {}); result<call_operand_projection> project_call_operands(const application_query_results&, finite_population_limits = {}, stop_token = {}); result<call_operand_projection> project_call_operands(call_operand_input, finite_population_limits, stop_token, projection_resource_usage&); result<call_operand_projection> project_call_operands(const application_query_results&, finite_population_limits, stop_token, projection_resource_usage&)'
       - name: query.project_function_call_scopes
         kind: function
         signature: 'result<call_operand_projection> project_function_call_scopes(call_operand_input, finite_population_limits = {}, stop_token = {}); result<call_operand_projection> project_function_call_scopes(const application_query_results&, finite_population_limits = {}, stop_token = {})'
@@ -633,7 +633,7 @@ entries:
       signature: evidence; populations; compile_units_complete; scope_inputs_complete; operation_inputs_complete; admission_inputs_complete; type_inputs_complete; call_inputs_complete; unresolved; source_queries
     - name: query.project_function_actions
       kind: function
-      signature: result<function_action_projection> project_function_actions(function_action_input, finite_population_limits = {}, stop_token = {}); result<function_action_projection> project_function_actions(const application_query_results&, finite_population_limits = {}, stop_token = {})
+      signature: result<function_action_projection> project_function_actions(function_action_input, finite_population_limits = {}, stop_token = {}); result<function_action_projection> project_function_actions(const application_query_results&, finite_population_limits = {}, stop_token = {}); result<function_action_projection> project_function_actions(function_action_input, finite_population_limits, stop_token, projection_resource_usage&); result<function_action_projection> project_function_actions(const application_query_results&, finite_population_limits, stop_token, projection_resource_usage&)
     errors:
     - sdk.action-input-invalid
     - sdk.action-budget
@@ -741,6 +741,51 @@ entries:
       - bounds-before-retention-and-active-cancellation
     depends_on: [public.function-actions, public.finite-populations]
 
+  - id: public.template-events
+    status: implemented
+    profile: NG1
+    target: cxxlens::query
+    headers: [include/cxxlens/sdk/template_events.hpp]
+    symbols:
+      - name: query.template_event_input
+        kind: value
+        signature: 'units; files; spans; entities; syntax; candidates; roots; calls; inventories; compile_units_complete; candidate_inputs_complete; root_inputs_complete; call_inputs_complete; inventory_inputs_complete'
+      - name: query.observed_template_candidate
+        kind: value
+        signature: 'candidate; compile_unit; source_span; candidate_entity; route; profile; deduction_result; exclusion_disposition; binding_state; reason; candidate_usr; ordinal; overload_failure; is_system; completed; state; source_state; subject_state; evidence; gaps'
+      - name: query.observed_constant_evaluation_root
+        kind: value
+        signature: 'root; compile_unit; mode; interpreter; profile; completion; call_state; reason; ordinal; call_count; requested_constant_context; potential_check; fold_failure; call_ids; state; terminal_state; invocation_state; evidence; gaps'
+      - name: query.observed_constant_evaluated_call
+        kind: value
+        signature: 'call; compile_unit; source_span; expression; owner_entity; invocation_kind; expression_kind; lifetime_source; profile; membership_state; binding_state; reason; owner_usr; lifetime_usr; lifetime_path; callee_usr_hexes; root_ids; ordinal; depth; root_count; is_system; state; source_state; root_state; expression_state; owner_state; target_state; lifetime_state; evidence; gaps'
+      - name: query.template_event_population
+        kind: value
+        signature: 'inventory; compile_unit; universe; variant; interpretation; candidate_profile; evaluation_root_profile; candidate_count; evaluation_root_count; candidate_ids; evaluation_root_ids; candidate_state; evaluation_root_state; invocation_state; candidates; roots; calls; evidence; gaps'
+      - name: query.template_event_projection
+        kind: value
+        signature: 'evidence; populations; compile_units_complete; candidate_inputs_complete; root_inputs_complete; call_inputs_complete; inventory_inputs_complete; unresolved; source_queries'
+      - name: query.project_template_events
+        kind: function
+        signature: 'result<template_event_projection> project_template_events(template_event_input, finite_population_limits = {}, stop_token = {}); result<template_event_projection> project_template_events(const application_query_results&, finite_population_limits = {}, stop_token = {})'
+    errors: [sdk.template-event-input-invalid, sdk.template-event-budget, sdk.template-event-cancelled, sdk.template-event-resource-exhausted]
+    lifetime: [borrowed-input-only-during-call, projection-owns-original-evidence-and-query-side-channels, no-compiler-pointer]
+    threading: [independent-calls-share-no-mutable-state]
+    versioning: [sdk.project-template-events/1]
+    invariants:
+      - candidate-root-and-invocation-membership-independent
+      - final-deduction-result-never-final-callable-viability
+      - candidate-exclusion-requires-original-caller-disposition
+      - actually-reached-constant-occurrences-never-written-or-speculative-call-proxy
+      - loop-and-root-revisits-preserve-original-distinct-occurrence-and-all-associations
+      - implicit-cleanup-preserves-original-lifetime-origin-and-designator
+      - raw-compiler-usr-bytes-and-lossless-callee-hex-without-name-identity
+      - root-terminal-completion-independent-from-invocation-and-binding-closure
+      - legacy-interpreter-static-hooks-required-and-stock-or-bytecode-stays-unsupported
+      - missing-saved-optional-facets-remain-unknown
+      - bounds-before-retention-and-active-cancellation
+    depends_on: [public.finite-populations]
+
   - id: public.template-domains
     status: implemented
     profile: NG1
@@ -815,7 +860,7 @@ entries:
         signature: 'evidence; populations; compile_units_complete; inventory_inputs_complete; member_inputs_complete; unresolved; source_queries'
       - name: query.project_declarations
         kind: function
-        signature: 'result<finite_population_projection> project_declarations(finite_population_input, finite_population_limits = {}, stop_token = {}); result<finite_population_projection> project_declarations(const application_query_results&, finite_population_limits = {}, stop_token = {})'
+        signature: 'result<finite_population_projection> project_declarations(finite_population_input, finite_population_limits = {}, stop_token = {}); result<finite_population_projection> project_declarations(const application_query_results&, finite_population_limits = {}, stop_token = {}); result<finite_population_projection> project_declarations(finite_population_input, finite_population_limits, stop_token, projection_resource_usage&); result<finite_population_projection> project_declarations(const application_query_results&, finite_population_limits, stop_token, projection_resource_usage&)'
       - name: query.project_source_comments
         kind: function
         signature: 'result<finite_population_projection> project_source_comments(finite_population_input, finite_population_limits = {}, stop_token = {}); result<finite_population_projection> project_source_comments(const application_query_results&, finite_population_limits = {}, stop_token = {})'
@@ -824,7 +869,7 @@ entries:
         signature: 'result<finite_population_projection> project_source_includes(finite_population_input, finite_population_limits = {}, stop_token = {}); result<finite_population_projection> project_source_includes(const application_query_results&, finite_population_limits = {}, stop_token = {})'
       - name: query.project_body_flow
         kind: function
-        signature: 'result<finite_population_projection> project_body_flow(finite_population_input, finite_population_limits = {}, stop_token = {}); result<finite_population_projection> project_body_flow(const application_query_results&, finite_population_limits = {}, stop_token = {})'
+        signature: 'result<finite_population_projection> project_body_flow(finite_population_input, finite_population_limits = {}, stop_token = {}); result<finite_population_projection> project_body_flow(const application_query_results&, finite_population_limits = {}, stop_token = {}); result<finite_population_projection> project_body_flow(finite_population_input, finite_population_limits, stop_token, projection_resource_usage&); result<finite_population_projection> project_body_flow(const application_query_results&, finite_population_limits, stop_token, projection_resource_usage&)'
     errors: [sdk.population-limit-invalid, sdk.population-input-invalid, sdk.population-budget, sdk.population-cancelled, sdk.population-resource-exhausted]
     lifetime: [borrowed-input-only-during-call, projection-owns-conditioned-original-evidence-and-queries, no-compiler-pointer]
     threading: [independent-calls-share-no-mutable-state]
@@ -1063,3 +1108,19 @@ entries:
     threading: [recipe-and-report-are-concurrent-readable, match-cursor-remains-thread-confined]
     versioning: [recipe-semantics-axis-independent-at-cxxlens.recipes.calls_to_function-1.2.0]
     invariants: [exact-qualified-name-only, lower-uses-cc-entity-call-direct-target-and-call-site, definitive-states-require-complete-query-execution, truncated-and-cancelled-with-partial-map-to-partial, failed-before-result-maps-to-failed, empty-complete-requires-complete-execution-complete-inputs-closed-world-nonempty-applicable-closures-and-exact-summary, empty-without-applicable-closure-is-empty-incomplete, matched-and-ambiguous-are-existential-witness-states-independent-of-closure, partial-rows-never-prove-match-ambiguity-absence, evidence-coverage-closure-unresolved-conflict-differential-producer-guarantee-and-explanations-are-preserved]
+
+  - id: public.projection-resource-usage
+    status: implemented
+    profile: NG1
+    target: cxxlens::query
+    headers: [include/cxxlens/sdk/projection_resource_usage.hpp]
+    symbols:
+      - name: query.projection_resource_usage
+        kind: value
+        signature: 'size_t operations; size_t retained_bytes_bound'
+    errors: []
+    lifetime: [caller-owned-transient-counter-value, zero-on-entry-and-failure, successful-charged-storage-includes-bounded-temporary-indexes]
+    threading: [independent-calls-share-no-mutable-state]
+    versioning: [additive-overloads-preserve-existing-projection-dto-limit-layout-and-defaults]
+    invariants: [source-validation-work-independent-of-downstream-numeric-work, counters-are-actual-charges-not-configured-maxima, counters-are-not-elapsed-time-or-closure-or-quality-evidence, every-original-input-row-still-validated, original-query-side-channels-retained]
+    depends_on: [public.query-runtime]

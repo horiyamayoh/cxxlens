@@ -16,6 +16,7 @@
 #include <cxxlens/sdk/function_compiler_facets.hpp>
 #include <cxxlens/sdk/incremental.hpp>
 #include <cxxlens/sdk/preprocessor.hpp>
+#include <cxxlens/sdk/projection_resource_usage.hpp>
 #include <cxxlens/sdk/provider.hpp>
 #include <cxxlens/sdk/query.hpp>
 #include <cxxlens/sdk/query_transfer.hpp>
@@ -27,3 +28,4 @@
 #include <cxxlens/sdk/store.hpp>
 #include <cxxlens/sdk/target_resolution.hpp>
 #include <cxxlens/sdk/template_domains.hpp>
+#include <cxxlens/sdk/template_events.hpp>

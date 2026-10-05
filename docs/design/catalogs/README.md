@@ -20,4 +20,7 @@
 各 contract は schema、positive/negative/fault test、必要な product runtime receipt を同じ authority path で管理します。
 Relation Registry は exact scalar-value と cross-TU entity identity の contract を含みます。
 `cc.type` の原始 builtin kind と整数値表現は [ADR 0130](../adr/0130-original-scalar-type-facets.md) に従い、型 ID と対象集合の完全性から独立に保持します。
+元の候補除外と実際に到達した定数評価呼び出しは [ADR 0131](../adr/0131-original-template-deduction-and-evaluation-events.md) に従い、候補・評価 root・呼び出しの対象集合と binding を独立に保持します。
 開発完了は変更固有試験と deterministic CTest の成功で判定します。
+
+Original projection resource reservations use the additive charged-usage contract in [ADR 0132](../adr/0132-projection-resource-reservation-settlement.md).

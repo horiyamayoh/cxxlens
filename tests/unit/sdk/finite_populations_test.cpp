@@ -251,6 +251,81 @@ namespace
 int main()
 {
 	{
+		q::projection_resource_usage charged{777U, 888U};
+		fixture original;
+		original.declaration();
+		auto with_usage = q::project_declarations(original.input(), {}, {}, charged);
+		auto without_usage = q::project_declarations(original.input());
+		require(with_usage && without_usage && charged.operations > 0U &&
+					charged.retained_bytes_bound > 0U,
+				"successful raw usage missing");
+		require(charged.operations < q::finite_population_limits{}.maximum_operations &&
+					charged.retained_bytes_bound <
+						q::finite_population_limits{}.maximum_retained_bytes,
+				"configured maxima were reported as actual usage");
+		require(with_usage->evidence.size() == without_usage->evidence.size() &&
+					with_usage->populations[0].members[0].id ==
+						without_usage->populations[0].members[0].id,
+				"usage changed original declaration payload");
+		original.groups[8].clear();
+		original.flow();
+		charged = {777U, 888U};
+		auto flow_usage = q::project_body_flow(original.input(), {}, {}, charged);
+		require(flow_usage && charged.operations > 0U && charged.retained_bytes_bound > 0U,
+				"successful original flow usage missing");
+		q::application_query_results flow_queries;
+		flow_queries.snapshot_id = "query:original-flow";
+		constexpr std::array<std::string_view, 9> flow_names{"build.compile_unit.v1",
+															 "source.file.v1",
+															 "source.span.v1",
+															 "cc.entity.v1",
+															 "cc.entity_detail.v1",
+															 "cc.body.v1",
+															 "cc.cfg_node.v1",
+															 "cc.flow_inventory.v1",
+															 "cc.flow_fact.v1"};
+		for (std::size_t group = 0; group < flow_names.size(); ++group)
+		{
+			auto data = std::make_shared<q::query_result::data>();
+			data->row_values = original.groups[group];
+			data->status = q::execution_status::complete;
+			data->input_complete = true;
+			data->snapshot = flow_queries.snapshot_id;
+			flow_queries.scans.push_back(
+				{std::string{flow_names[group]}, {}, q::query_transfer_access::make(data)});
+		}
+		charged = {777U, 888U};
+		auto flow_query_usage = q::project_body_flow(flow_queries, {}, {}, charged);
+		require(flow_query_usage && charged.operations > 0U && charged.retained_bytes_bound > 0U,
+				"successful original flow query usage missing");
+		require(flow_query_usage->evidence.size() == flow_usage->evidence.size() &&
+					flow_query_usage->populations[0].state == flow_usage->populations[0].state,
+				"query usage changed original flow evidence or membership state");
+		std::size_t visited{};
+		q::finite_population_limits late;
+		late.cancelled = [&]
+		{
+			return ++visited == 50U;
+		};
+		charged = {777U, 888U};
+		auto stopped_flow = q::project_body_flow(flow_queries, late, {}, charged);
+		require(!stopped_flow && charged.operations == 0U && charged.retained_bytes_bound == 0U,
+				"late public-query cancellation leaked usage");
+		q::finite_population_limits tiny;
+		tiny.maximum_rows = 1U;
+		charged = {777U, 888U};
+		require(!q::project_declarations(original.input(), tiny, {}, charged) &&
+					charged.operations == 0U && charged.retained_bytes_bound == 0U,
+				"failed projection leaked usage");
+		std::stop_source usage_stop;
+		usage_stop.request_stop();
+		charged = {777U, 888U};
+		require(!q::project_declarations(original.input(), {}, usage_stop.get_token(), charged) &&
+					charged.operations == 0U && charged.retained_bytes_bound == 0U,
+				"cancelled projection leaked usage");
+	}
+
+	{
 		fixture f;
 		f.declaration();
 		constexpr std::array<std::string_view, 9> names{"build.compile_unit.v1",
@@ -279,10 +354,25 @@ int main()
 			}
 			return input;
 		};
+		q::projection_resource_usage public_usage{9U, 9U};
+		auto with_public_usage = q::project_declarations(public_queries(), {}, {}, public_usage);
+		require(with_public_usage && public_usage.operations > 0U &&
+					public_usage.retained_bytes_bound > 0U,
+				"successful declaration query usage missing");
+		q::finite_population_limits exact;
+		exact.maximum_retained_bytes = public_usage.retained_bytes_bound;
+		require(q::project_declarations(public_queries(), exact, {}, public_usage).has_value(),
+				"caller could not settle and reuse actual source bound");
+		exact.maximum_retained_bytes = 1U;
+		public_usage = {9U, 9U};
+		require(!q::project_declarations(public_queries(), exact, {}, public_usage) &&
+					public_usage.operations == 0U && public_usage.retained_bytes_bound == 0U,
+				"public declaration failure leaked usage");
 		auto complete = q::project_declarations(public_queries());
 		require(complete && complete->inventory_inputs_complete &&
 					complete->populations[0].state == q::finite_population_state::complete,
-				"independent original declaration facet survives generic optional frontier");
+				"independent original declaration facet survives generic optional "
+				"frontier");
 		auto missing_execution = q::project_declarations(public_queries(false));
 		require(missing_execution && !missing_execution->inventory_inputs_complete,
 				"incomplete original inventory execution remains unavailable");

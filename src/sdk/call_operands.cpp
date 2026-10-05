@@ -576,8 +576,9 @@ namespace cxxlens::sdk::query
 								 text(type, "structure_profile") != value.canonical_type_profile))
 								gap(value, value.target, "target-type-signature-conflicting", true);
 						}
-						// These are original observed type facets, not an interpreted type grammar.
-						// Every referenced node keeps its own availability and original evidence.
+						// These are original observed type facets, not an interpreted type
+						// grammar. Every referenced node keeps its own availability and
+						// original evidence.
 						if (text(type, "structure_state") != "complete" ||
 							boolean(type, "dependent") ||
 							text(type, "structure_profile") != "clang22-structural-type/1" ||
@@ -613,8 +614,8 @@ namespace cxxlens::sdk::query
 									  value.structural_signature_digest))
 							gap(value, value.target, "target-entity-signature-conflicting", true);
 					}
-					// Missing external entity rows do not erase the compiler's original signature
-					// facet.
+					// Missing external entity rows do not erase the compiler's original
+					// signature facet.
 					canonical(value.gaps);
 					call.signatures.push_back(std::move(value));
 				}
@@ -1368,7 +1369,8 @@ namespace cxxlens::sdk::query
 		result<call_operand_projection> project_queries(const application_query_results& input,
 														finite_population_limits limits,
 														std::stop_token stop,
-														bool scope_only)
+														bool scope_only,
+														projection_resource_usage* usage = nullptr)
 		{
 			if (auto valid = limits.validate(); !valid)
 				return valid.error();
@@ -1376,13 +1378,16 @@ namespace cxxlens::sdk::query
 			{
 				budget b{limits, stop};
 				b.work();
+				std::size_t plan_bytes{};
 				if (auto valid = detail::check_source_plan_limits(input,
 																  limits.maximum_source_queries,
 																  limits.maximum_source_plan_bytes,
 																  stop,
-																  "sdk.call");
+																  "sdk.call",
+																  &plan_bytes);
 					!valid)
 					return valid.error();
+				b.retain(plan_bytes);
 				std::array<std::vector<const annotated_row*>, 12> groups;
 				std::array<bool, 12> present{}, complete{};
 				complete.fill(true);
@@ -1435,6 +1440,8 @@ namespace cxxlens::sdk::query
 													  "independent-scan-unavailable"});
 				canonical(output->unresolved);
 				output->source_queries = input;
+				if (usage)
+					*usage = {b.operations, b.retained};
 				return output;
 			}
 			catch (const failure& exception)
@@ -1477,5 +1484,26 @@ namespace cxxlens::sdk::query
 								 std::stop_token stop)
 	{
 		return project_queries(input, limits, stop, true);
+	}
+
+	result<call_operand_projection> project_call_operands(call_operand_input input,
+														  finite_population_limits limits,
+														  std::stop_token stop,
+														  projection_resource_usage& usage)
+	{
+		usage = {};
+		budget b{limits, stop};
+		auto output = project_rows(input, limits, stop, b, false);
+		if (output)
+			usage = {b.operations, b.retained};
+		return output;
+	}
+	result<call_operand_projection> project_call_operands(const application_query_results& input,
+														  finite_population_limits limits,
+														  std::stop_token stop,
+														  projection_resource_usage& usage)
+	{
+		usage = {};
+		return project_queries(input, limits, stop, false, &usage);
 	}
 } // namespace cxxlens::sdk::query

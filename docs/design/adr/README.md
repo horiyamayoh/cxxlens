@@ -81,6 +81,9 @@
 | [0118](0118-finite-body-member-access.md) | finite method member-access observations |
 | [0119](0119-finite-record-type-references.md) | finite direct record type-reference observations |
 | [0120](0120-finite-record-definition-inventories.md) | finite observed record-definition inventories |
+| [0131](0131-original-template-deduction-and-evaluation-events.md) | original final candidate disposition and reached constant-evaluation occurrences |
+
+| [0132](0132-projection-resource-reservation-settlement.md) | bounded successful projection usage for caller reservation settlement |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

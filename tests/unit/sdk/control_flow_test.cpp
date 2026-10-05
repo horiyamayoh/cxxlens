@@ -54,7 +54,7 @@ namespace
 															: "block")},
 						 {"ordinal", detached_cell::unsigned_integer(i)}}));
 			std::size_t ordinal{};
-			for (const auto [from, to] : {std::pair{0U, 1U}, {0U, 2U}, {1U, 3U}, {2U, 3U}})
+			for (const auto& [from, to] : {std::pair{0U, 1U}, {0U, 2U}, {1U, 3U}, {2U, 3U}})
 				edges.push_back(row(
 					{{"edge",
 					  detached_cell::typed("cfg_edge_id", "edge:" + std::to_string(ordinal))},
@@ -239,5 +239,45 @@ int main()
 	auto missing = q::project_control_flow(q::application_query_results{"snapshot:test", {}});
 	require(missing && missing->source_queries && missing->unresolved.size() == 3U,
 			"missing scans became complete empty input");
+	data = fixture{};
+	q::projection_resource_usage usage{999U, 999U};
+	auto measured = q::project_control_flow(data.input(), {}, {}, usage);
+	require(measured && usage.operations > data.nodes.size() && usage.retained_bytes_bound > 0U,
+			"successful CFG usage missing");
+	const auto saved_usage = usage;
+	auto repeated = q::project_control_flow(data.input(), {}, {}, usage);
+	require(repeated && usage.operations == saved_usage.operations &&
+				usage.retained_bytes_bound == saved_usage.retained_bytes_bound,
+			"CFG usage is not deterministic or is cumulative");
+	q::control_flow_limits narrow;
+	narrow.maximum_rows = 1U;
+	auto failed_usage = q::project_control_flow(data.input(), narrow, {}, usage);
+	require(!failed_usage && usage.operations == 0U && usage.retained_bytes_bound == 0U,
+			"failed CFG usage was published");
+	usage = {999U, 999U};
+	auto cancelled_usage = q::project_control_flow(data.input(), {}, stop.get_token(), usage);
+	require(!cancelled_usage && usage.operations == 0U && usage.retained_bytes_bound == 0U,
+			"cancelled CFG usage was published");
+	usage = {999U, 999U};
+	auto missing_usage =
+		q::project_control_flow(q::application_query_results{"snapshot:test", {}}, {}, {}, usage);
+	require(missing_usage && missing_usage->unresolved.size() == 3U && usage.operations > 0U,
+			"missing independent scans lost usage or frontiers");
+	auto bounded_usage =
+		q::project_control_flow(data.input(), {}, {}, usage, saved_usage.retained_bytes_bound);
+	require(bounded_usage && usage.retained_bytes_bound == saved_usage.retained_bytes_bound,
+			"exact caller CFG reservation rejected or changed usage");
+	auto below_usage =
+		q::project_control_flow(data.input(), {}, {}, usage, saved_usage.retained_bytes_bound - 1U);
+	require(!below_usage && below_usage.error().code == "sdk.cfg-budget" &&
+				usage.operations == 0U && usage.retained_bytes_bound == 0U,
+			"caller CFG reservation exceeded or failed usage published");
+	auto zero_usage = q::project_control_flow(data.input(), {}, {}, usage, 0U);
+	require(!zero_usage && usage.operations == 0U && usage.retained_bytes_bound == 0U,
+			"zero caller CFG reservation accepted");
+	auto missing_bounded_usage = q::project_control_flow(
+		q::application_query_results{"snapshot:test", {}}, {}, {}, usage, 1U);
+	require(!missing_bounded_usage && usage.operations == 0U && usage.retained_bytes_bound == 0U,
+			"missing-scan CFG gaps allocated beyond caller reservation");
 	return 0;
 }

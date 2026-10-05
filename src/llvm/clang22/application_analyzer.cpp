@@ -28,6 +28,8 @@
 #include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_cfg_edge.hpp>
 #include <cxxlens/relations/cc_cfg_node.hpp>
+#include <cxxlens/relations/cc_constant_evaluated_call.hpp>
+#include <cxxlens/relations/cc_constant_evaluation_root.hpp>
 #include <cxxlens/relations/cc_constraint_node.hpp>
 #include <cxxlens/relations/cc_declaration.hpp>
 #include <cxxlens/relations/cc_declaration_inventory.hpp>
@@ -43,6 +45,7 @@
 #include <cxxlens/relations/cc_record_surface.hpp>
 #include <cxxlens/relations/cc_syntax_node.hpp>
 #include <cxxlens/relations/cc_target_resolution_slot.hpp>
+#include <cxxlens/relations/cc_template_candidate.hpp>
 #include <cxxlens/relations/cc_template_instantiation_frame.hpp>
 #include <cxxlens/relations/cc_template_inventory.hpp>
 #include <cxxlens/relations/cc_template_subject.hpp>
@@ -62,6 +65,7 @@
 
 #include "observation_v2.hpp"
 #include "project_semantic_facts.hpp"
+#include "project_template_events.hpp"
 #include "project_template_observer.hpp"
 #include "provider_worker_v4_ast_observer.hpp"
 #include "provider_worker_v4_output_normalizer.hpp"
@@ -890,6 +894,9 @@ namespace cxxlens::detail::clang22
 			project_preprocessor_observations preprocessing;
 			project_template_observations templates;
 			project_template_limits template_limits;
+			project_template_event_observations template_events;
+			template_event_limits event_limits;
+			std::unique_ptr<project_template_event_scope> event_scope;
 			provider_worker_v4_output_normalizer_options normalization;
 			normalization.toolchain_context_id = toolchain_id;
 			normalization.capture_original_call_ids = true;
@@ -953,7 +960,8 @@ namespace cxxlens::detail::clang22
 															  progress,
 															  original_calls,
 															  project_id,
-															  &templates);
+															  &templates,
+															  &template_events);
 					if (!detached)
 						return sdk::unexpected(std::move(detached.error()));
 					facts = std::move(*detached);
@@ -966,10 +974,19 @@ namespace cxxlens::detail::clang22
 				&value.parser,
 				[&](clang::Sema& sema)
 				{
+					event_scope = std::make_unique<project_template_event_scope>(
+						sema, template_events, event_limits);
 					install_project_template_observer(sema, templates, template_limits);
 				},
 				[&](clang::Sema& sema) -> sdk::result<void>
 				{
+					if (!event_scope)
+						return sdk::unexpected(sdk::error{
+							"native.template-event-invalid", "phase", "scope-not-installed"});
+					auto frozen = event_scope->freeze(value.parser.ast_completed,
+													  value.parser.fatal_error_count != 0U);
+					if (!frozen)
+						return sdk::unexpected(std::move(frozen.error()));
 					return observe_project_templates(sema, templates, template_limits);
 				}));
 			if (!observations || !normalized || !facts)
@@ -1090,7 +1107,7 @@ namespace cxxlens::detail::clang22
 									   }),
 						   prepared.end());
 			sdk::relation_registry registry;
-			const std::array<const sdk::relation_descriptor*, 46U> descriptors{
+			const std::array<const sdk::relation_descriptor*, 49U> descriptors{
 				&build::relations::project::descriptor(),
 				&build::relations::toolchain_context::descriptor(),
 				&build::relations::variant::descriptor(),
@@ -1123,6 +1140,9 @@ namespace cxxlens::detail::clang22
 				&cc::relations::lambda_capture::descriptor(),
 				&cc::relations::template_instantiation_frame::descriptor(),
 				&cc::relations::template_inventory::descriptor(),
+				&cc::relations::template_candidate::descriptor(),
+				&cc::relations::constant_evaluation_root::descriptor(),
+				&cc::relations::constant_evaluated_call::descriptor(),
 
 				&cc::relations::flow_inventory::descriptor(),
 				&source::relations::comment::descriptor(),
@@ -1376,6 +1396,9 @@ namespace cxxlens::detail::clang22
 									descriptor->id == "cc.constraint_node.v1" ||
 									descriptor->id == "cc.lambda_capture.v1" ||
 									descriptor->id == "cc.template_instantiation_frame.v1" ||
+									descriptor->id == "cc.template_candidate.v1" ||
+									descriptor->id == "cc.constant_evaluation_root.v1" ||
+									descriptor->id == "cc.constant_evaluated_call.v1" ||
 									descriptor->id == "cc.template_inventory.v1";
 								if (template_relation && !unresolved.code.starts_with("template."))
 									continue;
@@ -1456,6 +1479,7 @@ namespace cxxlens::detail::clang22
 								if (descriptor->id.starts_with("cc.") &&
 									descriptor->id != "cc.record_inventory.v1" &&
 									!descriptor->id.starts_with("cc.template_") &&
+									!descriptor->id.starts_with("cc.constant_") &&
 									descriptor->id != "cc.constraint_node.v1" &&
 									descriptor->id != "cc.lambda_capture.v1")
 								{

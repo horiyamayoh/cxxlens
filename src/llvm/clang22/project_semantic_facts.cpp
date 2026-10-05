@@ -32,6 +32,7 @@
 #include <cxxlens/relations/cc_record_surface.hpp>
 #include <cxxlens/relations/cc_syntax_node.hpp>
 #include <cxxlens/relations/cc_target_resolution_slot.hpp>
+#include <cxxlens/relations/cc_template_inventory.hpp>
 #include <cxxlens/relations/cc_type.hpp>
 #include <cxxlens/relations/cc_type_component.hpp>
 #include <cxxlens/relations/source_comment.hpp>
@@ -45,6 +46,7 @@
 #include <cxxlens/relations/source_token_inventory.hpp>
 
 #include "project_abi_observer.hpp"
+#include "project_template_event_rows.hpp"
 #include "project_template_observer.hpp"
 #include "sdk/bounded_json_internal.hpp"
 #include "sdk/source_identity_internal.hpp"
@@ -890,10 +892,12 @@ namespace cxxlens::detail::clang22
 					  const std::function<void(std::string_view)>& progress,
 					  const project_original_calls& original_calls,
 					  const std::string& project_id,
-					  const project_template_observations* templates)
+					  const project_template_observations* templates,
+					  const project_template_event_observations* template_events)
 				: unit_{unit}, closure_{closure}, observations_{observations}, progress_{progress},
 				  abi_observer_{unit.ast(), unit.preprocessor(), unit.code_generation_options()},
-				  original_calls_{original_calls}, project_id_{project_id}, templates_{templates}
+				  original_calls_{original_calls}, project_id_{project_id}, templates_{templates},
+				  template_events_{template_events}
 			{
 				for (const auto& batch : normalized.batches)
 					for (const auto& row : batch.rows)
@@ -2542,7 +2546,45 @@ namespace cxxlens::detail::clang22
 										: "expression")
 							.value_or("");
 					};
-					for (auto& row : take(detach_project_templates(*templates_, bindings)))
+					auto template_rows = take(detach_project_templates(*templates_, bindings));
+					if (template_events_ != nullptr)
+					{
+						template_event_bindings event_bindings;
+						event_bindings.compile_unit = bindings.compile_unit;
+						event_bindings.entity = bindings.entity;
+						event_bindings.source = [&](template_event_source input)
+						{
+							return bindings.source(
+								{input.begin,
+								 input.end,
+								 input.role == template_event_source_role::declaration
+									 ? template_native_source_role::declaration
+									 : template_native_source_role::expression});
+						};
+						auto events =
+							take(detach_project_template_events(*template_events_, event_bindings));
+						const auto inventory =
+							std::ranges::find(template_rows,
+											  cc::relations::template_inventory::descriptor().id,
+											  &sdk::detached_row::descriptor_id);
+						if (inventory == template_rows.end())
+							fail("template-events", "original-template-inventory-unavailable");
+						for (auto& [column, value] : events.inventory_facets)
+						{
+							const auto existing = inventory->cells.find(column);
+							if (existing != inventory->cells.end() &&
+								existing->second.state != sdk::cell_state::absent)
+								fail("template-events", "duplicate-original-event-facet");
+							inventory->cells.insert_or_assign(column, std::move(value));
+						}
+						check(sdk::validate_row(cc::relations::template_inventory::descriptor(),
+												*inventory));
+						check(sdk::validate_domain_identity(
+							cc::relations::template_inventory::descriptor(), *inventory));
+						for (auto& row : events.rows)
+							append(std::move(row));
+					}
+					for (auto& row : template_rows)
 						append(std::move(row));
 				}
 				auto inventory = common();
@@ -8244,6 +8286,7 @@ namespace cxxlens::detail::clang22
 			std::map<std::string, type_structure, std::less<>> type_structure_;
 			std::size_t call_bytes_{};
 			const project_template_observations* templates_{};
+			const project_template_event_observations* template_events_{};
 			std::string current_function_;
 			const clang::Stmt* inherited_default_{};
 			std::vector<ast_enumeration> ast_enumerations_;
@@ -8370,7 +8413,8 @@ namespace cxxlens::detail::clang22
 							  const std::function<void(std::string_view)>& progress,
 							  const project_original_calls& original_calls,
 							  const std::string& project_id,
-							  const project_template_observations* templates)
+							  const project_template_observations* templates,
+							  const project_template_event_observations* template_events)
 	{
 #if defined(CXXLENS_HAS_CLANG22) && CXXLENS_HAS_CLANG22
 		try
@@ -8393,7 +8437,8 @@ namespace cxxlens::detail::clang22
 							  progress,
 							  original_calls,
 							  project_id,
-							  templates};
+							  templates,
+							  template_events};
 			if (progress)
 				progress("detaching preprocessor facts");
 			visitor.preprocess(preprocessing);
@@ -8426,6 +8471,7 @@ namespace cxxlens::detail::clang22
 		(void)original_calls;
 		(void)project_id;
 		(void)templates;
+		(void)template_events;
 		return sdk::unexpected(
 			sdk::error{"native.unsupported-clang-major", "cpp-facts", "clang-major-22"});
 #endif

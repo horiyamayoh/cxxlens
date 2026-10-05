@@ -1,6 +1,6 @@
 schema: cxxlens.relation-registry.v1
 kind: relation-registry
-document_version: 1.20.0
+document_version: 1.21.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -9,7 +9,7 @@ authority:
   owner: steward.ng-relations
 compatibility:
   version_axis: relation-descriptor
-  current: 1.20.0
+  current: 1.21.0
   semantic_major_policy: exact-major-compatible-minor
   unknown_optional_columns: preserve
   unknown_open_symbols: preserve
@@ -9687,7 +9687,7 @@ relations:
   evolution_policy: ng0.additive.v1
 - descriptor_id: cc.template_inventory.v1
   name: cc.template_inventory
-  version: 1.0.0
+  version: 1.1.0
   semantic_major: 1
   semantics: cc.template-inventory/1
   owner_namespace: cxxlens.standard.cc
@@ -9789,6 +9789,46 @@ relations:
     type: optional<utf8_string>
     required: false
     identity_role: authoritative_payload
+  - id: cc.template_inventory.v1.candidate_count
+    name: candidate_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.template_inventory.v1.candidate_ids
+    name: candidate_ids
+    type: optional<set<template_candidate_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.template_inventory.v1.candidate_state
+    name: candidate_state
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.template_inventory.v1.candidate_profile
+    name: candidate_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.template_inventory.v1.evaluation_root_count
+    name: evaluation_root_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.template_inventory.v1.evaluation_root_ids
+    name: evaluation_root_ids
+    type: optional<set<constant_evaluation_root_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.template_inventory.v1.evaluation_root_state
+    name: evaluation_root_state
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.template_inventory.v1.evaluation_root_profile
+    name: evaluation_root_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
   references:
   - source_columns:
     - cc.template_inventory.v1.compile_unit
@@ -9829,6 +9869,22 @@ relations:
     strength: soft_semantic
     on_missing: unresolved
     container_elements: true
+  - source_columns:
+    - cc.template_inventory.v1.candidate_ids
+    target_relation: cc.template_candidate
+    target_columns:
+    - cc.template_candidate.v1.candidate
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - cc.template_inventory.v1.evaluation_root_ids
+    target_relation: cc.constant_evaluation_root
+    target_columns:
+    - cc.constant_evaluation_root.v1.root
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
   merge:
     mode: functional_assertion
     conflict_columns:
@@ -9847,6 +9903,14 @@ relations:
     - cc.template_inventory.v1.frame_ids
     - cc.template_inventory.v1.frame_state
     - cc.template_inventory.v1.reason
+    - cc.template_inventory.v1.candidate_count
+    - cc.template_inventory.v1.candidate_ids
+    - cc.template_inventory.v1.candidate_state
+    - cc.template_inventory.v1.candidate_profile
+    - cc.template_inventory.v1.evaluation_root_count
+    - cc.template_inventory.v1.evaluation_root_ids
+    - cc.template_inventory.v1.evaluation_root_state
+    - cc.template_inventory.v1.evaluation_root_profile
   partition:
     suggested_keys:
     - cc.template_inventory.v1.compile_unit
@@ -9856,6 +9920,527 @@ relations:
   - - cc.template_inventory.v1.compile_unit
   coverage:
     execution_domain: cc.template_inventory.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+  row_constraints:
+    all_or_none:
+    - - cc.template_inventory.v1.candidate_count
+      - cc.template_inventory.v1.candidate_ids
+      - cc.template_inventory.v1.candidate_state
+      - cc.template_inventory.v1.candidate_profile
+    - - cc.template_inventory.v1.evaluation_root_count
+      - cc.template_inventory.v1.evaluation_root_ids
+      - cc.template_inventory.v1.evaluation_root_state
+      - cc.template_inventory.v1.evaluation_root_profile
+- descriptor_id: cc.template_candidate.v1
+  name: cc.template_candidate
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.template-candidate/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: Original final compiler deduction or reached constant-evaluation event with independent membership and binding.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::template_candidate
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.template_candidate.v1.candidate
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.template_candidate.v1.candidate
+      projection:
+      - cc.template_candidate.v1.compile_unit
+      - cc.template_candidate.v1.route
+      - cc.template_candidate.v1.ordinal
+      - cc.template_candidate.v1.profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.template_candidate.v1.candidate
+    name: candidate
+    type: typed_id<template_candidate_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.template_candidate.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.template_candidate.v1.source
+    name: source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.template_candidate.v1.candidate_usr
+    name: candidate_usr
+    type: bytes
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.template_candidate.v1.candidate_entity
+    name: candidate_entity
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.template_candidate.v1.route
+    name: route
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.template_candidate.v1.ordinal
+    name: ordinal
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.template_candidate.v1.profile
+    name: profile
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.template_candidate.v1.deduction_result
+    name: deduction_result
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.template_candidate.v1.exclusion_disposition
+    name: exclusion_disposition
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.template_candidate.v1.overload_failure
+    name: overload_failure
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.template_candidate.v1.is_system
+    name: is_system
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.template_candidate.v1.completed
+    name: completed
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.template_candidate.v1.binding_state
+    name: binding_state
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.template_candidate.v1.reason
+    name: reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.template_candidate.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.template_candidate.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.template_candidate.v1.candidate_entity
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.template_candidate.v1.compile_unit
+    - cc.template_candidate.v1.source
+    - cc.template_candidate.v1.candidate_usr
+    - cc.template_candidate.v1.candidate_entity
+    - cc.template_candidate.v1.route
+    - cc.template_candidate.v1.ordinal
+    - cc.template_candidate.v1.profile
+    - cc.template_candidate.v1.deduction_result
+    - cc.template_candidate.v1.exclusion_disposition
+    - cc.template_candidate.v1.overload_failure
+    - cc.template_candidate.v1.is_system
+    - cc.template_candidate.v1.completed
+    - cc.template_candidate.v1.binding_state
+    - cc.template_candidate.v1.reason
+  partition:
+    suggested_keys:
+    - cc.template_candidate.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.template_candidate.v1.compile_unit
+  coverage:
+    execution_domain: cc.template_candidate.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.constant_evaluation_root.v1
+  name: cc.constant_evaluation_root
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.constant-evaluation-root/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: Original final compiler deduction or reached constant-evaluation event with independent membership and binding.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::constant_evaluation_root
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.constant_evaluation_root.v1.root
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.constant_evaluation_root.v1.root
+      projection:
+      - cc.constant_evaluation_root.v1.compile_unit
+      - cc.constant_evaluation_root.v1.ordinal
+      - cc.constant_evaluation_root.v1.profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.constant_evaluation_root.v1.root
+    name: root
+    type: typed_id<constant_evaluation_root_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.constant_evaluation_root.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluation_root.v1.mode
+    name: mode
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluation_root.v1.interpreter
+    name: interpreter
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluation_root.v1.requested_constant_context
+    name: requested_constant_context
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluation_root.v1.potential_check
+    name: potential_check
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluation_root.v1.fold_failure
+    name: fold_failure
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluation_root.v1.ordinal
+    name: ordinal
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluation_root.v1.profile
+    name: profile
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluation_root.v1.completion
+    name: completion
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluation_root.v1.call_count
+    name: call_count
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluation_root.v1.call_ids
+    name: call_ids
+    type: set<constant_evaluated_call_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluation_root.v1.call_state
+    name: call_state
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluation_root.v1.reason
+    name: reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.constant_evaluation_root.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.constant_evaluation_root.v1.call_ids
+    target_relation: cc.constant_evaluated_call
+    target_columns:
+    - cc.constant_evaluated_call.v1.call
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.constant_evaluation_root.v1.compile_unit
+    - cc.constant_evaluation_root.v1.mode
+    - cc.constant_evaluation_root.v1.interpreter
+    - cc.constant_evaluation_root.v1.requested_constant_context
+    - cc.constant_evaluation_root.v1.potential_check
+    - cc.constant_evaluation_root.v1.fold_failure
+    - cc.constant_evaluation_root.v1.ordinal
+    - cc.constant_evaluation_root.v1.profile
+    - cc.constant_evaluation_root.v1.completion
+    - cc.constant_evaluation_root.v1.call_count
+    - cc.constant_evaluation_root.v1.call_ids
+    - cc.constant_evaluation_root.v1.call_state
+    - cc.constant_evaluation_root.v1.reason
+  partition:
+    suggested_keys:
+    - cc.constant_evaluation_root.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.constant_evaluation_root.v1.compile_unit
+  coverage:
+    execution_domain: cc.constant_evaluation_root.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.constant_evaluated_call.v1
+  name: cc.constant_evaluated_call
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.constant-evaluated-call/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: Original final compiler deduction or reached constant-evaluation event with independent membership and binding.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::constant_evaluated_call
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.constant_evaluated_call.v1.call
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.constant_evaluated_call.v1.call
+      projection:
+      - cc.constant_evaluated_call.v1.compile_unit
+      - cc.constant_evaluated_call.v1.ordinal
+      - cc.constant_evaluated_call.v1.profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.constant_evaluated_call.v1.call
+    name: call
+    type: typed_id<constant_evaluated_call_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.constant_evaluated_call.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluated_call.v1.root_count
+    name: root_count
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluated_call.v1.root_ids
+    name: root_ids
+    type: set<constant_evaluation_root_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluated_call.v1.source
+    name: source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluated_call.v1.is_system
+    name: is_system
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Original compiler classification of this invocation occurrence source, independent from the callee declaration.
+  - id: cc.constant_evaluated_call.v1.expression
+    name: expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluated_call.v1.owner_usr
+    name: owner_usr
+    type: optional<bytes>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluated_call.v1.owner_entity
+    name: owner_entity
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluated_call.v1.callee_usr_hexes
+    name: callee_usr_hexes
+    type: set<open_symbol<cc.constant-evaluated-callee-usr/1>>
+    required: true
+    identity_role: authoritative_payload
+    semantic: Lossless lowercase even-length hexadecimal bytes of each original compiler callee USR. Empty set means no retained target binding; no spelling identity is inferred.
+  - id: cc.constant_evaluated_call.v1.invocation_kind
+    name: invocation_kind
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluated_call.v1.expression_kind
+    name: expression_kind
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluated_call.v1.ordinal
+    name: ordinal
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluated_call.v1.depth
+    name: depth
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluated_call.v1.lifetime_source
+    name: lifetime_source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluated_call.v1.lifetime_usr
+    name: lifetime_usr
+    type: optional<bytes>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluated_call.v1.lifetime_path
+    name: lifetime_path
+    type: bytes
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluated_call.v1.profile
+    name: profile
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluated_call.v1.membership_state
+    name: membership_state
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluated_call.v1.binding_state
+    name: binding_state
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.constant_evaluated_call.v1.reason
+    name: reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.constant_evaluated_call.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.constant_evaluated_call.v1.root_ids
+    target_relation: cc.constant_evaluation_root
+    target_columns:
+    - cc.constant_evaluation_root.v1.root
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - cc.constant_evaluated_call.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.constant_evaluated_call.v1.expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.constant_evaluated_call.v1.owner_entity
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.constant_evaluated_call.v1.lifetime_source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: hard
+    on_missing: reject_batch
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.constant_evaluated_call.v1.compile_unit
+    - cc.constant_evaluated_call.v1.root_count
+    - cc.constant_evaluated_call.v1.root_ids
+    - cc.constant_evaluated_call.v1.source
+    - cc.constant_evaluated_call.v1.is_system
+    - cc.constant_evaluated_call.v1.expression
+    - cc.constant_evaluated_call.v1.owner_usr
+    - cc.constant_evaluated_call.v1.owner_entity
+    - cc.constant_evaluated_call.v1.callee_usr_hexes
+    - cc.constant_evaluated_call.v1.invocation_kind
+    - cc.constant_evaluated_call.v1.expression_kind
+    - cc.constant_evaluated_call.v1.ordinal
+    - cc.constant_evaluated_call.v1.depth
+    - cc.constant_evaluated_call.v1.lifetime_source
+    - cc.constant_evaluated_call.v1.lifetime_usr
+    - cc.constant_evaluated_call.v1.lifetime_path
+    - cc.constant_evaluated_call.v1.profile
+    - cc.constant_evaluated_call.v1.membership_state
+    - cc.constant_evaluated_call.v1.binding_state
+    - cc.constant_evaluated_call.v1.reason
+  partition:
+    suggested_keys:
+    - cc.constant_evaluated_call.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.constant_evaluated_call.v1.compile_unit
+  coverage:
+    execution_domain: cc.constant_evaluated_call.compile-unit
   closure:
     supported_kinds:
     - relation-key-enumeration

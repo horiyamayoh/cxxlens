@@ -1212,6 +1212,13 @@ add_test(NAME unit.sdk-template-domains
 set_tests_properties(unit.sdk-template-domains
                      PROPERTIES LABELS "unit;sdk;query;budget;cancellation")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-template-events
+                            unit/sdk/template_events_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-template-events PRIVATE cxxlens::query)
+add_test(NAME unit.sdk-template-events COMMAND cxxlens-unit-sdk-template-events)
+set_tests_properties(unit.sdk-template-events
+                     PROPERTIES LABELS "unit;sdk;query;budget;cancellation")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-call-operands
                             unit/sdk/call_operands_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-call-operands PRIVATE cxxlens::query)
@@ -1885,17 +1892,35 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
       adapter/clang22/original_input_projection_test.cpp)
     target_link_libraries(cxxlens-clang22-original-input-projection
                           PRIVATE cxxlens::query)
+    set(_cxxlens_template_event_fixture_mode)
+    if(NOT CXXLENS_CLANG_TEMPLATE_EVENTS)
+      set(_cxxlens_template_event_fixture_mode --stock-template-events)
+    endif()
     add_test(
       NAME adapter.clang22-original-input-bindings
       COMMAND
         "${Python3_EXECUTABLE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/adapter/clang22/original_input_bindings_test.py"
         "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}"
-        "$<TARGET_FILE:cxxlens-clang22-original-input-projection>")
+        "$<TARGET_FILE:cxxlens-clang22-original-input-projection>"
+        ${_cxxlens_template_event_fixture_mode})
     set_tests_properties(
       adapter.clang22-original-input-bindings
       PROPERTIES LABELS "adapter;clang22;application;targets;flow;bounded"
                  TIMEOUT 600)
+    if(CXXLENS_CLANG_TEMPLATE_EVENTS)
+      add_test(
+        NAME adapter.clang22-template-events
+        COMMAND
+          "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/adapter/clang22/template_events_test.py"
+          "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}"
+          "$<TARGET_FILE:cxxlens-clang22-original-input-projection>")
+      set_tests_properties(
+        adapter.clang22-template-events
+        PROPERTIES LABELS "adapter;clang22;application;templates;bounded"
+                   TIMEOUT 600)
+    endif()
     add_test(
       NAME adapter.clang22-definition-roles
       COMMAND

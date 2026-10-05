@@ -1,4 +1,5 @@
 #pragma once
+#include <cxxlens/sdk/projection_resource_usage.hpp>
 
 /** @file call_operands.hpp @brief Owned original compiler call operand
  * populations. */
@@ -15,9 +16,10 @@
 
 namespace cxxlens::sdk::query
 {
-	/** call_inputs_complete asserts independently complete call-site and syntax scans.
-	 * Original syntax finite_call_admission_v1/admitted_call_site flags are a
-	 * separate finite membership witness, including bodyless declaration scopes. */
+	/** call_inputs_complete asserts independently complete call-site and syntax
+	 * scans. Original syntax finite_call_admission_v1/admitted_call_site flags are
+	 * a separate finite membership witness, including bodyless declaration scopes.
+	 */
 	struct call_operand_input
 	{
 		std::span<const annotated_row> units, files, spans, entities, details, types,
@@ -72,7 +74,8 @@ namespace cxxlens::sdk::query
 		std::vector<std::size_t> evidence;
 		std::vector<query_unresolved> gaps;
 	};
-	/** @brief Independent original function call enumeration, including bodyless scopes. */
+	/** @brief Independent original function call enumeration, including bodyless
+	 * scopes. */
 	struct function_call_scope
 	{
 		std::string function, compile_unit, source_span, file, source_snapshot, body;
@@ -93,16 +96,27 @@ namespace cxxlens::sdk::query
 		std::vector<query_unresolved> unresolved;
 		std::optional<application_query_results> source_queries;
 	};
-	/** Original target signature canonical_type_digest is cc.type.component_signature_digest;
-	 * raw inputs retain closure flags as false unless independently established. */
+	/** Original target signature canonical_type_digest is
+	 * cc.type.component_signature_digest; raw inputs retain closure flags as false
+	 * unless independently established. */
 	[[nodiscard]] result<call_operand_projection> project_call_operands(
 		call_operand_input, finite_population_limits = {}, std::stop_token = {});
 	[[nodiscard]] result<call_operand_projection> project_call_operands(
 		const application_query_results&, finite_population_limits = {}, std::stop_token = {});
-	/** @brief Function scope projection requires original site + syntax scans, without operand/type
-	 * scans. */
+	/** @brief Function scope projection requires original site + syntax scans,
+	 * without operand/type scans. */
 	[[nodiscard]] result<call_operand_projection> project_function_call_scopes(
 		call_operand_input, finite_population_limits = {}, std::stop_token = {});
 	[[nodiscard]] result<call_operand_projection> project_function_call_scopes(
 		const application_query_results&, finite_population_limits = {}, std::stop_token = {});
+
+	[[nodiscard]] result<call_operand_projection> project_call_operands(call_operand_input,
+																		finite_population_limits,
+																		std::stop_token,
+																		projection_resource_usage&);
+	[[nodiscard]] result<call_operand_projection>
+	project_call_operands(const application_query_results&,
+						  finite_population_limits,
+						  std::stop_token,
+						  projection_resource_usage&);
 } // namespace cxxlens::sdk::query

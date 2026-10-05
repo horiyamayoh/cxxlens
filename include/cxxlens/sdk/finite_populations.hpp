@@ -1,6 +1,8 @@
 #pragma once
+#include <cxxlens/sdk/projection_resource_usage.hpp>
 
-/** @file finite_populations.hpp @brief Owned finite declaration, comment, include and flow domains.
+/** @file finite_populations.hpp @brief Owned finite declaration, comment,
+ * include and flow domains.
  */
 
 #include <cstddef>
@@ -16,7 +18,8 @@
 
 namespace cxxlens::sdk::query
 {
-	/** @brief Validated independent scans; absence of scan assertions is unknown. */
+	/** @brief Validated independent scans; absence of scan assertions is unknown.
+	 */
 	struct finite_population_input
 	{
 		std::span<const annotated_row> units, files, spans, entities, details, bodies, cfg_nodes,
@@ -35,7 +38,8 @@ namespace cxxlens::sdk::query
 		std::size_t maximum_operations{128'000'000U};
 		std::size_t maximum_source_queries{4096U};
 		std::size_t maximum_source_plan_bytes{64U * 1024U * 1024U};
-		/** @brief Optional caller cancellation, polled with the stop token during work. */
+		/** @brief Optional caller cancellation, polled with the stop token during
+		 * work. */
 		std::function<bool()> cancelled;
 		[[nodiscard]] result<void> validate() const;
 	};
@@ -46,8 +50,8 @@ namespace cxxlens::sdk::query
 		partial,
 		conflicting
 	};
-	/** @brief Original member plus actual source/entity/detail joins, without reconstructed
-	 * identity. */
+	/** @brief Original member plus actual source/entity/detail joins, without
+	 * reconstructed identity. */
 	struct finite_population_member
 	{
 		std::string id, entity, kind, declaration_kind, source_span, file, source_snapshot;
@@ -55,7 +59,8 @@ namespace cxxlens::sdk::query
 		std::vector<std::byte> spelling_bytes;
 		std::vector<std::size_t> evidence;
 	};
-	/** @brief Exactly one finite inventory in an actual semantic world and compile unit. */
+	/** @brief Exactly one finite inventory in an actual semantic world and compile
+	 * unit. */
 	struct finite_population
 	{
 		std::string id, domain, compile_unit, profile, universe, variant, interpretation;
@@ -89,7 +94,8 @@ namespace cxxlens::sdk::query
 		std::vector<query_unresolved> unresolved;
 		std::optional<application_query_results> source_queries;
 	};
-	/** @brief Project finite actual named-declaration occurrences and their independent inputs. */
+	/** @brief Project finite actual named-declaration occurrences and their
+	 * independent inputs. */
 	[[nodiscard]] result<finite_population_projection> project_declarations(
 		finite_population_input, finite_population_limits = {}, std::stop_token = {});
 	[[nodiscard]] result<finite_population_projection> project_declarations(
@@ -99,14 +105,37 @@ namespace cxxlens::sdk::query
 		finite_population_input, finite_population_limits = {}, std::stop_token = {});
 	[[nodiscard]] result<finite_population_projection> project_source_comments(
 		const application_query_results&, finite_population_limits = {}, std::stop_token = {});
-	/** @brief Project actual preprocessed inclusion directives; resolution remains independent. */
+	/** @brief Project actual preprocessed inclusion directives; resolution remains
+	 * independent. */
 	[[nodiscard]] result<finite_population_projection> project_source_includes(
 		finite_population_input, finite_population_limits = {}, std::stop_token = {});
 	[[nodiscard]] result<finite_population_projection> project_source_includes(
 		const application_query_results&, finite_population_limits = {}, std::stop_token = {});
-	/** @brief Project finite local flow observations without upgrading analysis guarantees. */
+	/** @brief Project finite local flow observations without upgrading analysis
+	 * guarantees. */
 	[[nodiscard]] result<finite_population_projection> project_body_flow(
 		finite_population_input, finite_population_limits = {}, std::stop_token = {});
 	[[nodiscard]] result<finite_population_projection> project_body_flow(
 		const application_query_results&, finite_population_limits = {}, std::stop_token = {});
+
+	[[nodiscard]] result<finite_population_projection>
+	project_declarations(finite_population_input,
+						 finite_population_limits,
+						 std::stop_token,
+						 projection_resource_usage&);
+	[[nodiscard]] result<finite_population_projection>
+	project_declarations(const application_query_results&,
+						 finite_population_limits,
+						 std::stop_token,
+						 projection_resource_usage&);
+	[[nodiscard]] result<finite_population_projection>
+	project_body_flow(finite_population_input,
+					  finite_population_limits,
+					  std::stop_token,
+					  projection_resource_usage&);
+	[[nodiscard]] result<finite_population_projection>
+	project_body_flow(const application_query_results&,
+					  finite_population_limits,
+					  std::stop_token,
+					  projection_resource_usage&);
 } // namespace cxxlens::sdk::query

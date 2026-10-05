@@ -70,6 +70,24 @@ int template_values() {
  auto captured = [value](int input) { return plus(input) + value; };
  return captured(3);
 }
+template<class T> auto choose_candidate(T value) -> decltype(value.member()) {
+ return value.member();
+}
+int choose_candidate(...) { return 0; }
+int failed_candidate() { return choose_candidate(1); }
+constexpr int event_leaf(int value) { return value + 1; }
+constexpr int event_branch(bool selected) {
+ return selected ? event_leaf(7) : event_leaf(99);
+}
+constexpr int evaluated_constant = event_branch(true);
+int runtime_constant() { return event_leaf(1); }
+struct Receiver {
+ void acquire() noexcept {}
+ void release() noexcept {}
+};
+void owned_receiver(Receiver receiver) {
+ receiver.acquire(); receiver.release(); receiver.release();
+}
 int main() { return 0; }
 '''
 
@@ -137,7 +155,8 @@ with tempfile.TemporaryDirectory(prefix="cxxlens-original-bindings-") as directo
     assert any(row["eligibility"] == "excluded" and row["resolution"] == "not_applicable" for row in slots if row["domain"] == "nominal_type")
     include, = [row for row in slots if row["domain"] == "include"]
     assert include["resolution"] == "resolved" and include["include"] and include["target_file"]
-    calls = [row for row in rows["cc.call_site.v1"] if entities[row["caller"]]["qualified_name"] == "calls"]
+    calls = [row for row in rows["cc.call_site.v1"]
+             if entities.get(row["caller"], {}).get("qualified_name") == "calls"]
     assert calls and all(row["dispatch_profile"] == "clang22-original-call-dispatch/1" for row in calls), calls
     assert sum(row["dispatch_kind"] == "virtual" for row in calls) == 1, calls
     assert sum(row["dispatch_kind"] == "direct" for row in calls) == 3, calls
@@ -172,6 +191,36 @@ with tempfile.TemporaryDirectory(prefix="cxxlens-original-bindings-") as directo
     conditional = [row for row in rows["cc.cfg_edge.v1"] if entities[row["function"]]["qualified_name"] == "storage" and row["kind"] in {"true", "false"}]
     assert conditional and all(row["condition_state"] == "complete" and row["condition"] in syntax for row in conditional), conditional
     assert {row["kind"] for row in conditional} == {"true", "false"}
+    receiver_function = by_name["owned_receiver"]["entity"]
+    receiver_parameter, = [row for row in entities.values()
+                           if row["kind"] == "parameter" and row["semantic_owner"] == receiver_function]
+    receiver_detail, = [row for row in rows["cc.entity_detail.v1"]
+                        if row["entity"] == receiver_parameter["entity"]]
+    receiver_flags = set(members(receiver_detail["flags"]))
+    assert {"finite_variable_storage_v1", "storage_parameter", "automatic_storage"} <= receiver_flags
+    assert "storage_non_object" not in receiver_flags
+    receiver_type, = [row for row in rows["cc.type.v1"]
+                      if row["type"] == receiver_detail["canonical_type"]]
+    assert receiver_type["constructor"] == "record" and receiver_type["nominal_entity"] == by_name["Receiver"]["entity"]
+    receiver_calls = {row["call"] for row in rows["cc.call_site.v1"]
+                      if row["caller"] == receiver_function}
+    receiver_operands = [row for row in rows["cc.call_operand.v1"]
+                         if row["call"] in receiver_calls and row["kind"] == "receiver"]
+    assert len(receiver_calls) == len(receiver_operands) == 3
+    assert all(row["referenced_entity"] == receiver_parameter["entity"] and
+               row["observation_state"] == "complete" and row["expression"] in syntax
+               for row in receiver_operands), receiver_operands
+    receiver_cfg = [row for row in rows["cc.operation.v1"]
+                    if row["function"] == receiver_function and row["origin"] == "cfg" and
+                    row["kind"] == "invocation"]
+    assert len(receiver_cfg) == 3 and all(row["node"] and row["element_index"] is not None and
+                                         row["element_kind"] == "statement" and row["site_state"] == "complete"
+                                         for row in receiver_cfg), receiver_cfg
+    receiver_targets = {row["target"] for row in rows["cc.call_direct_target.v1"]
+                        if row["call"] in receiver_calls}
+    assert receiver_targets == {by_name["Receiver::acquire"]["entity"], by_name["Receiver::release"]["entity"]}
+    assert all({"noexcept_classified", "noexcept"} <= set(members(row["flags"]))
+               for row in rows["cc.entity_detail.v1"] if row["entity"] in receiver_targets)
     simple_returns = [row for row in rows["cc.cfg_edge.v1"] if entities[row["function"]]["qualified_name"] == "main" and row["outcome"] == "normal_return"]
     assert simple_returns and all(row["outcome_expression"] in syntax and syntax[row["outcome_expression"]]["kind"] == "ReturnStmt" for row in simple_returns), simple_returns
 
@@ -227,6 +276,6 @@ with tempfile.TemporaryDirectory(prefix="cxxlens-original-bindings-") as directo
     for kind, members_rows in (("subject", subjects), ("capture", captures), ("constraint", constraints), ("frame", frames)):
         assert template_inventory[kind + "_count"] == len(members_rows), (kind, template_inventory)
         assert set(members(template_inventory[kind + "_ids"])) == {row[{"subject":"subject", "capture":"capture", "constraint":"node", "frame":"frame"}[kind]] for row in members_rows}
-    projected = subprocess.run([str(projection), str(debug / "analyzer.stdout.json")],
+    projected = subprocess.run([str(projection), str(debug / "analyzer.stdout.json"), *sys.argv[4:]],
                                env=environment, text=True, capture_output=True, timeout=60)
     assert projected.returncode == 0, (projected.stdout, projected.stderr)

@@ -2159,9 +2159,11 @@ namespace cxxlens::sdk::query
 				return error{"sdk.action-resource-exhausted", "projection", "length"};
 			}
 		}
-		result<function_action_projection> project_queries(const application_query_results& input,
-														   finite_population_limits limits,
-														   std::stop_token stop)
+		result<function_action_projection>
+		project_queries(const application_query_results& input,
+						finite_population_limits limits,
+						std::stop_token stop,
+						projection_resource_usage* usage = nullptr)
 		{
 			if (auto valid = limits.validate(); !valid)
 				return valid.error();
@@ -2242,6 +2244,8 @@ namespace cxxlens::sdk::query
 													  "independent-scan-unavailable"});
 				canonical(output->unresolved);
 				output->source_queries = input;
+				if (usage)
+					*usage = {b.operations, b.retained};
 				return output;
 			}
 			catch (const failure& exception)
@@ -2271,5 +2275,27 @@ namespace cxxlens::sdk::query
 							 std::stop_token stop)
 	{
 		return project_queries(input, limits, stop);
+	}
+
+	result<function_action_projection> project_function_actions(function_action_input input,
+																finite_population_limits limits,
+																std::stop_token stop,
+																projection_resource_usage& usage)
+	{
+		usage = {};
+		budget b{limits, stop};
+		auto output = project_rows(input, limits, stop, b);
+		if (output)
+			usage = {b.operations, b.retained};
+		return output;
+	}
+	result<function_action_projection>
+	project_function_actions(const application_query_results& input,
+							 finite_population_limits limits,
+							 std::stop_token stop,
+							 projection_resource_usage& usage)
+	{
+		usage = {};
+		return project_queries(input, limits, stop, &usage);
 	}
 } // namespace cxxlens::sdk::query

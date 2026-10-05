@@ -20,12 +20,12 @@ namespace cxxlens::cc::relations
 				sdk::relation_descriptor output;
 				output.id = "cc.template_inventory.v1";
 				output.name = "cc.template_inventory";
-				output.version = {1U, 0U, 0U};
+				output.version = {1U, 1U, 0U};
 				output.semantic_major = 1U;
 				output.semantics = "cc.template-inventory/1";
 				output.owner_namespace = "cxxlens.standard.cc";
-				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.template_inventory.v1.compile_unit","cc.template_inventory.v1.profile"],"result_column":"cc.template_inventory.v1.inventory"},"interpretation_required":true,"key":["cc.template_inventory.v1.inventory"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.template_inventory.v1.inventory","identity_role":"claim_key","name":"inventory","required":true,"type":"typed_id<template_inventory_id>"},{"id":"cc.template_inventory.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.template_inventory.v1.profile","identity_role":"authoritative_payload","name":"profile","required":true,"type":"utf8_string"},{"id":"cc.template_inventory.v1.subject_count","identity_role":"authoritative_payload","name":"subject_count","required":true,"type":"uint64"},{"id":"cc.template_inventory.v1.subject_ids","identity_role":"authoritative_payload","name":"subject_ids","required":true,"type":"set<template_subject_id>"},{"id":"cc.template_inventory.v1.subject_state","identity_role":"authoritative_payload","name":"subject_state","required":true,"type":"open_symbol<cc.template-enumeration-state/1>"},{"id":"cc.template_inventory.v1.constraint_count","identity_role":"authoritative_payload","name":"constraint_count","required":true,"type":"uint64"},{"id":"cc.template_inventory.v1.constraint_ids","identity_role":"authoritative_payload","name":"constraint_ids","required":true,"type":"set<constraint_node_id>"},{"id":"cc.template_inventory.v1.constraint_state","identity_role":"authoritative_payload","name":"constraint_state","required":true,"type":"open_symbol<cc.template-enumeration-state/1>"},{"id":"cc.template_inventory.v1.capture_count","identity_role":"authoritative_payload","name":"capture_count","required":true,"type":"uint64"},{"id":"cc.template_inventory.v1.capture_ids","identity_role":"authoritative_payload","name":"capture_ids","required":true,"type":"set<lambda_capture_id>"},{"id":"cc.template_inventory.v1.capture_state","identity_role":"authoritative_payload","name":"capture_state","required":true,"type":"open_symbol<cc.template-enumeration-state/1>"},{"id":"cc.template_inventory.v1.frame_count","identity_role":"authoritative_payload","name":"frame_count","required":true,"type":"uint64"},{"id":"cc.template_inventory.v1.frame_ids","identity_role":"authoritative_payload","name":"frame_ids","required":true,"type":"set<template_frame_id>"},{"id":"cc.template_inventory.v1.frame_state","identity_role":"authoritative_payload","name":"frame_state","required":true,"type":"open_symbol<cc.template-enumeration-state/1>"},{"id":"cc.template_inventory.v1.reason","identity_role":"authoritative_payload","name":"reason","required":false,"type":"optional<utf8_string>"}],"coverage":{"execution_domain":"cc.template_inventory.compile-unit"},"descriptor_id":"cc.template_inventory.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::template_inventory","indexes":[["cc.template_inventory.v1.compile_unit"]],"merge":{"conflict_columns":["cc.template_inventory.v1.capture_count","cc.template_inventory.v1.capture_ids","cc.template_inventory.v1.capture_state","cc.template_inventory.v1.compile_unit","cc.template_inventory.v1.constraint_count","cc.template_inventory.v1.constraint_ids","cc.template_inventory.v1.constraint_state","cc.template_inventory.v1.frame_count","cc.template_inventory.v1.frame_ids","cc.template_inventory.v1.frame_state","cc.template_inventory.v1.profile","cc.template_inventory.v1.reason","cc.template_inventory.v1.subject_count","cc.template_inventory.v1.subject_ids","cc.template_inventory.v1.subject_state"],"mode":"functional_assertion"},"name":"cc.template_inventory","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.template_inventory.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.template_inventory.v1.capture_ids"],"strength":"soft_semantic","target_columns":["cc.lambda_capture.v1.capture"],"target_relation":"cc.lambda_capture"},{"on_missing":"reject_batch","source_columns":["cc.template_inventory.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.template_inventory.v1.constraint_ids"],"strength":"soft_semantic","target_columns":["cc.constraint_node.v1.node"],"target_relation":"cc.constraint_node"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.template_inventory.v1.frame_ids"],"strength":"soft_semantic","target_columns":["cc.template_instantiation_frame.v1.frame"],"target_relation":"cc.template_instantiation_frame"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.template_inventory.v1.subject_ids"],"strength":"soft_semantic","target_columns":["cc.template_subject.v1.subject"],"target_relation":"cc.template_subject"}],"semantic_major":1,"semantics":"cc.template-inventory/1","stability":"versioned","summary":"Original compiler template-domain observation with independent membership and semantic facets.","version":"1.0.0"})cxxlens";
-				output.contract_digest = "sha256:8ccf34709de861bf3bc932942a4bbabc4a92a4e1e052097e785c51f73aa3a1f5";
+				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.template_inventory.v1.compile_unit","cc.template_inventory.v1.profile"],"result_column":"cc.template_inventory.v1.inventory"},"interpretation_required":true,"key":["cc.template_inventory.v1.inventory"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.template_inventory.v1.inventory","identity_role":"claim_key","name":"inventory","required":true,"type":"typed_id<template_inventory_id>"},{"id":"cc.template_inventory.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.template_inventory.v1.profile","identity_role":"authoritative_payload","name":"profile","required":true,"type":"utf8_string"},{"id":"cc.template_inventory.v1.subject_count","identity_role":"authoritative_payload","name":"subject_count","required":true,"type":"uint64"},{"id":"cc.template_inventory.v1.subject_ids","identity_role":"authoritative_payload","name":"subject_ids","required":true,"type":"set<template_subject_id>"},{"id":"cc.template_inventory.v1.subject_state","identity_role":"authoritative_payload","name":"subject_state","required":true,"type":"open_symbol<cc.template-enumeration-state/1>"},{"id":"cc.template_inventory.v1.constraint_count","identity_role":"authoritative_payload","name":"constraint_count","required":true,"type":"uint64"},{"id":"cc.template_inventory.v1.constraint_ids","identity_role":"authoritative_payload","name":"constraint_ids","required":true,"type":"set<constraint_node_id>"},{"id":"cc.template_inventory.v1.constraint_state","identity_role":"authoritative_payload","name":"constraint_state","required":true,"type":"open_symbol<cc.template-enumeration-state/1>"},{"id":"cc.template_inventory.v1.capture_count","identity_role":"authoritative_payload","name":"capture_count","required":true,"type":"uint64"},{"id":"cc.template_inventory.v1.capture_ids","identity_role":"authoritative_payload","name":"capture_ids","required":true,"type":"set<lambda_capture_id>"},{"id":"cc.template_inventory.v1.capture_state","identity_role":"authoritative_payload","name":"capture_state","required":true,"type":"open_symbol<cc.template-enumeration-state/1>"},{"id":"cc.template_inventory.v1.frame_count","identity_role":"authoritative_payload","name":"frame_count","required":true,"type":"uint64"},{"id":"cc.template_inventory.v1.frame_ids","identity_role":"authoritative_payload","name":"frame_ids","required":true,"type":"set<template_frame_id>"},{"id":"cc.template_inventory.v1.frame_state","identity_role":"authoritative_payload","name":"frame_state","required":true,"type":"open_symbol<cc.template-enumeration-state/1>"},{"id":"cc.template_inventory.v1.reason","identity_role":"authoritative_payload","name":"reason","required":false,"type":"optional<utf8_string>"},{"id":"cc.template_inventory.v1.candidate_count","identity_role":"authoritative_payload","name":"candidate_count","required":false,"type":"optional<uint64>"},{"id":"cc.template_inventory.v1.candidate_ids","identity_role":"authoritative_payload","name":"candidate_ids","required":false,"type":"optional<set<template_candidate_id>>"},{"id":"cc.template_inventory.v1.candidate_state","identity_role":"authoritative_payload","name":"candidate_state","required":false,"type":"optional<utf8_string>"},{"id":"cc.template_inventory.v1.candidate_profile","identity_role":"authoritative_payload","name":"candidate_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.template_inventory.v1.evaluation_root_count","identity_role":"authoritative_payload","name":"evaluation_root_count","required":false,"type":"optional<uint64>"},{"id":"cc.template_inventory.v1.evaluation_root_ids","identity_role":"authoritative_payload","name":"evaluation_root_ids","required":false,"type":"optional<set<constant_evaluation_root_id>>"},{"id":"cc.template_inventory.v1.evaluation_root_state","identity_role":"authoritative_payload","name":"evaluation_root_state","required":false,"type":"optional<utf8_string>"},{"id":"cc.template_inventory.v1.evaluation_root_profile","identity_role":"authoritative_payload","name":"evaluation_root_profile","required":false,"type":"optional<utf8_string>"}],"coverage":{"execution_domain":"cc.template_inventory.compile-unit"},"descriptor_id":"cc.template_inventory.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::template_inventory","indexes":[["cc.template_inventory.v1.compile_unit"]],"merge":{"conflict_columns":["cc.template_inventory.v1.candidate_count","cc.template_inventory.v1.candidate_ids","cc.template_inventory.v1.candidate_profile","cc.template_inventory.v1.candidate_state","cc.template_inventory.v1.capture_count","cc.template_inventory.v1.capture_ids","cc.template_inventory.v1.capture_state","cc.template_inventory.v1.compile_unit","cc.template_inventory.v1.constraint_count","cc.template_inventory.v1.constraint_ids","cc.template_inventory.v1.constraint_state","cc.template_inventory.v1.evaluation_root_count","cc.template_inventory.v1.evaluation_root_ids","cc.template_inventory.v1.evaluation_root_profile","cc.template_inventory.v1.evaluation_root_state","cc.template_inventory.v1.frame_count","cc.template_inventory.v1.frame_ids","cc.template_inventory.v1.frame_state","cc.template_inventory.v1.profile","cc.template_inventory.v1.reason","cc.template_inventory.v1.subject_count","cc.template_inventory.v1.subject_ids","cc.template_inventory.v1.subject_state"],"mode":"functional_assertion"},"name":"cc.template_inventory","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.template_inventory.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.template_inventory.v1.candidate_ids"],"strength":"soft_semantic","target_columns":["cc.template_candidate.v1.candidate"],"target_relation":"cc.template_candidate"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.template_inventory.v1.capture_ids"],"strength":"soft_semantic","target_columns":["cc.lambda_capture.v1.capture"],"target_relation":"cc.lambda_capture"},{"on_missing":"reject_batch","source_columns":["cc.template_inventory.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.template_inventory.v1.constraint_ids"],"strength":"soft_semantic","target_columns":["cc.constraint_node.v1.node"],"target_relation":"cc.constraint_node"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.template_inventory.v1.evaluation_root_ids"],"strength":"soft_semantic","target_columns":["cc.constant_evaluation_root.v1.root"],"target_relation":"cc.constant_evaluation_root"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.template_inventory.v1.frame_ids"],"strength":"soft_semantic","target_columns":["cc.template_instantiation_frame.v1.frame"],"target_relation":"cc.template_instantiation_frame"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.template_inventory.v1.subject_ids"],"strength":"soft_semantic","target_columns":["cc.template_subject.v1.subject"],"target_relation":"cc.template_subject"}],"row_constraints":{"all_or_none":[["cc.template_inventory.v1.candidate_count","cc.template_inventory.v1.candidate_ids","cc.template_inventory.v1.candidate_profile","cc.template_inventory.v1.candidate_state"],["cc.template_inventory.v1.evaluation_root_count","cc.template_inventory.v1.evaluation_root_ids","cc.template_inventory.v1.evaluation_root_profile","cc.template_inventory.v1.evaluation_root_state"]]},"semantic_major":1,"semantics":"cc.template-inventory/1","stability":"versioned","summary":"Original compiler template-domain observation with independent membership and semantic facets.","version":"1.1.0"})cxxlens";
+				output.contract_digest = "sha256:d45ea0125363651b1c4400d0bed93b380ecf3a57bd3d36ff23a762cf4ebb0f9e";
 				output.columns = {
 					{"cc.template_inventory.v1.inventory", "inventory", {sdk::scalar_kind::typed_id, "template_inventory_id", false}, true, sdk::column_role::claim_key},
 					{"cc.template_inventory.v1.compile_unit", "compile_unit", {sdk::scalar_kind::typed_id, "compile_unit_id", false}, true, sdk::column_role::authoritative_payload},
@@ -43,6 +43,14 @@ namespace cxxlens::cc::relations
 					{"cc.template_inventory.v1.frame_ids", "frame_ids", {sdk::scalar_kind::set, "template_frame_id", false}, true, sdk::column_role::authoritative_payload},
 					{"cc.template_inventory.v1.frame_state", "frame_state", {sdk::scalar_kind::open_symbol, "cc.template-enumeration-state/1", false}, true, sdk::column_role::authoritative_payload},
 					{"cc.template_inventory.v1.reason", "reason", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.template_inventory.v1.candidate_count", "candidate_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.template_inventory.v1.candidate_ids", "candidate_ids", {sdk::scalar_kind::set, "template_candidate_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.template_inventory.v1.candidate_state", "candidate_state", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.template_inventory.v1.candidate_profile", "candidate_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.template_inventory.v1.evaluation_root_count", "evaluation_root_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.template_inventory.v1.evaluation_root_ids", "evaluation_root_ids", {sdk::scalar_kind::set, "constant_evaluation_root_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.template_inventory.v1.evaluation_root_state", "evaluation_root_state", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.template_inventory.v1.evaluation_root_profile", "evaluation_root_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
 				};
 				output.domain_identity.result_column = "cc.template_inventory.v1.inventory";
 				output.domain_identity.projection = {
@@ -54,14 +62,20 @@ namespace cxxlens::cc::relations
 					"cc.template_inventory.v1.inventory",
 				};
 				output.references = {
+					{{"cc.template_inventory.v1.candidate_ids"}, "cc.template_candidate", {"cc.template_candidate.v1.candidate"}, sdk::reference_strength::soft_semantic, true},
 					{{"cc.template_inventory.v1.capture_ids"}, "cc.lambda_capture", {"cc.lambda_capture.v1.capture"}, sdk::reference_strength::soft_semantic, true},
 					{{"cc.template_inventory.v1.compile_unit"}, "build.compile_unit", {"build.compile_unit.v1.compile_unit"}, sdk::reference_strength::hard},
 					{{"cc.template_inventory.v1.constraint_ids"}, "cc.constraint_node", {"cc.constraint_node.v1.node"}, sdk::reference_strength::soft_semantic, true},
+					{{"cc.template_inventory.v1.evaluation_root_ids"}, "cc.constant_evaluation_root", {"cc.constant_evaluation_root.v1.root"}, sdk::reference_strength::soft_semantic, true},
 					{{"cc.template_inventory.v1.frame_ids"}, "cc.template_instantiation_frame", {"cc.template_instantiation_frame.v1.frame"}, sdk::reference_strength::soft_semantic, true},
 					{{"cc.template_inventory.v1.subject_ids"}, "cc.template_subject", {"cc.template_subject.v1.subject"}, sdk::reference_strength::soft_semantic, true},
 				};
 				output.merge = sdk::merge_mode::functional_assertion;
 				output.conflict_columns = {
+					"cc.template_inventory.v1.candidate_count",
+					"cc.template_inventory.v1.candidate_ids",
+					"cc.template_inventory.v1.candidate_profile",
+					"cc.template_inventory.v1.candidate_state",
 					"cc.template_inventory.v1.capture_count",
 					"cc.template_inventory.v1.capture_ids",
 					"cc.template_inventory.v1.capture_state",
@@ -69,6 +83,10 @@ namespace cxxlens::cc::relations
 					"cc.template_inventory.v1.constraint_count",
 					"cc.template_inventory.v1.constraint_ids",
 					"cc.template_inventory.v1.constraint_state",
+					"cc.template_inventory.v1.evaluation_root_count",
+					"cc.template_inventory.v1.evaluation_root_ids",
+					"cc.template_inventory.v1.evaluation_root_profile",
+					"cc.template_inventory.v1.evaluation_root_state",
 					"cc.template_inventory.v1.frame_count",
 					"cc.template_inventory.v1.frame_ids",
 					"cc.template_inventory.v1.frame_state",
@@ -229,6 +247,78 @@ namespace cxxlens::cc::relations
 			[[nodiscard]] static sdk::column_ref ref()
 			{
 				return {template_inventory::descriptor().id, "cc.template_inventory.v1.reason", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.template_inventory.v1.candidate_count`. */
+		struct candidate_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {template_inventory::descriptor().id, "cc.template_inventory.v1.candidate_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.template_inventory.v1.candidate_ids`. */
+		struct candidate_ids
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {template_inventory::descriptor().id, "cc.template_inventory.v1.candidate_ids", {sdk::scalar_kind::set, "template_candidate_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.template_inventory.v1.candidate_state`. */
+		struct candidate_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {template_inventory::descriptor().id, "cc.template_inventory.v1.candidate_state", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.template_inventory.v1.candidate_profile`. */
+		struct candidate_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {template_inventory::descriptor().id, "cc.template_inventory.v1.candidate_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.template_inventory.v1.evaluation_root_count`. */
+		struct evaluation_root_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {template_inventory::descriptor().id, "cc.template_inventory.v1.evaluation_root_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.template_inventory.v1.evaluation_root_ids`. */
+		struct evaluation_root_ids
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {template_inventory::descriptor().id, "cc.template_inventory.v1.evaluation_root_ids", {sdk::scalar_kind::set, "constant_evaluation_root_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.template_inventory.v1.evaluation_root_state`. */
+		struct evaluation_root_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {template_inventory::descriptor().id, "cc.template_inventory.v1.evaluation_root_state", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.template_inventory.v1.evaluation_root_profile`. */
+		struct evaluation_root_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {template_inventory::descriptor().id, "cc.template_inventory.v1.evaluation_root_profile", {sdk::scalar_kind::utf8_string, "", true}};
 			}
 		};
 	};

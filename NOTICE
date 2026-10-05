@@ -7,6 +7,10 @@ GCC replay worker component redistributes libclang-cpp 23.1.0 under the Apache
 License 2.0 with LLVM Exceptions; see LLVM-LICENSE.TXT in the installed
 documentation. Their names are trademarks of their respective owners.
 
+The original template-event analyzer statically includes modified LLVM/Clang
+22.1.0 source components. Their license and modification description are in
+llvm22-template-events/LICENSE.TXT and README.md in the installed documentation.
+
 The installed Clang 22 materialization tools statically include ICU.
 
 ICU License - ICU 1.8.1 and later

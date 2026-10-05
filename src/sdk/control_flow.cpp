@@ -11,6 +11,7 @@
 #include <cxxlens/sdk/control_flow.hpp>
 
 #include "query_projection_plan_limits_internal.hpp"
+#include "query_result_internal.hpp"
 
 namespace cxxlens::sdk::query
 {
@@ -40,6 +41,95 @@ namespace cxxlens::sdk::query
 				fail("sdk.cfg-budget", std::string{field}, "limit-exceeded");
 			target += amount;
 		}
+		void usage_add(std::size_t& target, std::size_t amount)
+		{
+			bounded_add(target, amount, std::numeric_limits<std::size_t>::max(), "usage-overflow");
+		}
+		void usage_product(std::size_t& target, std::size_t count, std::size_t width)
+		{
+			if (count > std::numeric_limits<std::size_t>::max() / width)
+				fail("sdk.cfg-budget", "usage-overflow", "limit-exceeded");
+			usage_add(target, count * width);
+		}
+		void checkpoint(std::stop_token token, std::size_t& operations)
+		{
+			cancelled(token);
+			usage_add(operations, 1U);
+		}
+
+		std::size_t
+		row_geometry(const annotated_row& row, std::stop_token stop, std::size_t& operations)
+		{
+			std::size_t total = sizeof(annotated_row) + 2176U;
+			const auto dynamic = [&](std::size_t bytes)
+			{
+				usage_product(total, bytes, 16U);
+			};
+			const auto strings = [&](const auto& values)
+			{
+				for (const auto& value : values)
+				{
+					checkpoint(stop, operations);
+					usage_add(total, sizeof(value) + 128U);
+					dynamic(value.size());
+				}
+			};
+			const auto producer = [&](const auto& value)
+			{
+				checkpoint(stop, operations);
+				usage_add(total, sizeof(value) + 128U);
+				dynamic(value.id.size());
+				dynamic(value.semantic_contract.size());
+			};
+			const auto guarantee = [&](const auto& value)
+			{
+				checkpoint(stop, operations);
+				usage_add(total, sizeof(value) + 128U);
+				dynamic(value.approximation.size());
+				dynamic(value.scope.size());
+				dynamic(value.assumptions.size());
+				strings(value.verification_modalities);
+			};
+			for (const auto& [name, value] : row.values)
+			{
+				checkpoint(stop, operations);
+				usage_add(total, sizeof(decltype(row.values)::value_type) + 512U);
+				dynamic(name.size());
+				dynamic(value.type.parameter.size());
+				if (value.unknown_reason)
+					dynamic(value.unknown_reason->size());
+				if (value.value)
+				{
+					if (const auto* text = std::get_if<std::string>(&*value.value))
+						dynamic(text->size());
+					if (const auto* bytes = std::get_if<std::vector<std::byte>>(&*value.value))
+						dynamic(bytes->size());
+				}
+			}
+			strings(row.claim_contributors);
+			strings(row.provenance);
+			strings(row.presence.fragments);
+			dynamic(row.interpretation.size());
+			dynamic(row.presence.universe.size());
+			for (const auto& value : row.producer_contracts)
+				producer(value);
+			for (const auto& value : row.contributor_guarantees)
+				guarantee(value);
+			for (const auto& value : row.contributor_edges)
+			{
+				checkpoint(stop, operations);
+				usage_add(total, sizeof(value) + 128U);
+				dynamic(value.claim_contributor.size());
+				dynamic(value.provenance.size());
+				dynamic(value.interpretation.size());
+				dynamic(value.condition.universe.size());
+				producer(value.producer);
+				guarantee(value.guarantee);
+				strings(value.condition.fragments);
+			}
+			return total;
+		}
+
 		const detached_cell* cell(const annotated_row& row, std::string_view name)
 		{
 			const auto found = row.values.find("output." + std::string{name});
@@ -117,30 +207,49 @@ namespace cxxlens::sdk::query
 		return {};
 	}
 
-	result<control_flow_projection> project_control_flow(control_flow_input input,
-														 control_flow_limits limits,
-														 std::stop_token cancellation)
+	static result<control_flow_projection> project_control_flow_rows(
+		control_flow_input input,
+		control_flow_limits limits,
+		std::stop_token cancellation,
+		projection_resource_usage& usage,
+		const std::array<std::vector<const annotated_row*>, 3U>* borrowed = nullptr,
+		std::size_t query_operations = 0U,
+		std::size_t query_bytes = 0U,
+		std::size_t maximum_storage = std::numeric_limits<std::size_t>::max())
 	{
 		if (auto valid = limits.validate(); !valid)
 			return valid.error();
 		try
 		{
-			cancelled(cancellation);
+			std::size_t operations = query_operations, storage{};
+			bounded_add(storage, query_bytes, maximum_storage, "retained-bytes");
+			checkpoint(cancellation, operations);
 			std::size_t row_count{}, bytes{}, expansions{}, expanded_bytes{};
 			std::vector<entry> entries;
 			const std::array groups{input.bodies, input.nodes, input.edges};
 			for (unsigned int kind{}; kind < groups.size(); ++kind)
 			{
-				bounded_add(row_count, groups[kind].size(), limits.maximum_rows, "rows");
-				for (const auto& row : groups[kind])
+				const auto count = borrowed ? (*borrowed)[kind].size() : groups[kind].size();
+				bounded_add(row_count, count, limits.maximum_rows, "rows");
+				for (std::size_t index{}; index < count; ++index)
 				{
-					cancelled(cancellation);
+					const auto& row = borrowed ? *(*borrowed)[kind][index] : groups[kind][index];
+					checkpoint(cancellation, operations);
 					if (!row.presence.validate() || row.interpretation.empty())
 						fail("sdk.cfg-input-invalid", "condition", "validated-world-required");
 					bounded_add(expansions,
 								row.presence.fragments.size(),
 								limits.maximum_condition_expansions,
 								"condition-expansions");
+					// Borrowed-row geometry covers row ownership, canonical payloads and
+					// conditioned body/node/edge keys before any of those allocations.
+					const auto geometry = row_geometry(row, cancellation, operations);
+					bounded_add(storage, geometry, maximum_storage, "retained-bytes");
+					std::size_t conditioned = geometry;
+					usage_add(conditioned, 4096U);
+					std::size_t indexed{};
+					usage_product(indexed, row.presence.fragments.size(), conditioned);
+					bounded_add(storage, indexed, maximum_storage, "retained-bytes");
 					auto canonical = row.canonical_form();
 					bounded_add(
 						bytes, canonical.size(), limits.maximum_evidence_bytes, "evidence-bytes");
@@ -165,7 +274,7 @@ namespace cxxlens::sdk::query
 			std::map<key, std::set<key>> node_owners;
 			for (const auto& item : entries)
 			{
-				cancelled(cancellation);
+				checkpoint(cancellation, operations);
 				const auto ref = output.evidence_rows.size();
 				output.evidence_rows.push_back(*item.row);
 				const auto& row = *item.row;
@@ -177,7 +286,7 @@ namespace cxxlens::sdk::query
 					fail("sdk.cfg-input-invalid", "body", "subject-owner-required");
 				for (const auto& variant : row.presence.fragments)
 				{
-					cancelled(cancellation);
+					checkpoint(cancellation, operations);
 					const auto subject = world_key(*id, row, variant);
 					if (!bodies.contains(subject) && bodies.size() >= limits.maximum_bodies)
 						fail("sdk.cfg-budget", "bodies", "limit-exceeded");
@@ -218,7 +327,7 @@ namespace cxxlens::sdk::query
 			}
 			for (std::size_t ref{}; ref < entries.size(); ++ref)
 			{
-				cancelled(cancellation);
+				checkpoint(cancellation, operations);
 				const auto& item = entries[ref];
 				const auto& row = *item.row;
 				if (item.kind != 1U)
@@ -228,7 +337,7 @@ namespace cxxlens::sdk::query
 					fail("sdk.cfg-input-invalid", "node", "subject-body-required");
 				for (const auto& variant : row.presence.fragments)
 				{
-					cancelled(cancellation);
+					checkpoint(cancellation, operations);
 					const auto subject = world_key(*owner, row, variant);
 					const auto found = bodies.find(subject);
 					if (found == bodies.end())
@@ -267,11 +376,11 @@ namespace cxxlens::sdk::query
 			}
 			for (const auto& [node, owners] : node_owners)
 			{
-				cancelled(cancellation);
+				checkpoint(cancellation, operations);
 				if (owners.size() > 1U)
 					for (const auto& owner : owners)
 					{
-						cancelled(cancellation);
+						checkpoint(cancellation, operations);
 						gap(bodies.at(owner).value,
 							"sdk.cfg-node-owner-conflicting",
 							node[0U],
@@ -289,7 +398,7 @@ namespace cxxlens::sdk::query
 			std::map<function_key, std::size_t> orphan_edges;
 			for (std::size_t ref{}; ref < entries.size(); ++ref)
 			{
-				cancelled(cancellation);
+				checkpoint(cancellation, operations);
 				const auto& item = entries[ref];
 				const auto& row = *item.row;
 				if (item.kind != 2U)
@@ -299,7 +408,7 @@ namespace cxxlens::sdk::query
 					fail("sdk.cfg-input-invalid", "edge", "subject-source-required");
 				for (const auto& variant : row.presence.fragments)
 				{
-					cancelled(cancellation);
+					checkpoint(cancellation, operations);
 					const auto source = node_owners.find(world_key(*from, row, variant));
 					if (source == node_owners.end() || source->second.size() != 1U)
 					{
@@ -361,12 +470,12 @@ namespace cxxlens::sdk::query
 			}
 			for (const auto& [function, count] : orphan_edges)
 			{
-				cancelled(cancellation);
+				checkpoint(cancellation, operations);
 				const auto candidates = function_bodies.find(function);
 				if (candidates != function_bodies.end())
 					for (const auto& subject : candidates->second)
 					{
-						cancelled(cancellation);
+						checkpoint(cancellation, operations);
 						gap(bodies.at(subject).value,
 							"sdk.cfg-edge-source-missing-or-ambiguous",
 							"unmatched-edge-count=" + std::to_string(count));
@@ -374,7 +483,7 @@ namespace cxxlens::sdk::query
 			}
 			for (auto& [subject, work] : bodies)
 			{
-				cancelled(cancellation);
+				checkpoint(cancellation, operations);
 				(void)subject;
 				auto& body = work.value;
 				if (!body.declared_nodes || *body.declared_nodes != body.nodes.size())
@@ -396,7 +505,8 @@ namespace cxxlens::sdk::query
 				output.bodies.push_back(std::move(body));
 			}
 			canonical_gaps(output.unresolved);
-			cancelled(cancellation);
+			checkpoint(cancellation, operations);
+			usage = {operations, storage};
 			return output;
 		}
 		catch (const projection_failure& failure)
@@ -413,69 +523,94 @@ namespace cxxlens::sdk::query
 		}
 	}
 
-	result<control_flow_projection> project_control_flow(const application_query_results& input,
-														 control_flow_limits limits,
-														 std::stop_token cancellation)
+	static result<control_flow_projection> project_control_flow_queries(
+		const application_query_results& input,
+		control_flow_limits limits,
+		std::stop_token cancellation,
+		projection_resource_usage& usage,
+		std::size_t maximum_storage = std::numeric_limits<std::size_t>::max())
 	{
 		if (auto valid = limits.validate(); !valid)
 			return valid.error();
 		try
 		{
-			cancelled(cancellation);
-			if (auto bounded = detail::check_source_plan_limits(input,
-																limits.maximum_source_queries,
-																limits.maximum_source_plan_bytes,
-																cancellation,
-																"sdk.cfg");
+			std::size_t operations{}, plan_bytes{}, staging_bytes{};
+			checkpoint(cancellation, operations);
+			if (auto bounded = detail::check_source_plan_limits(
+					input,
+					limits.maximum_source_queries,
+					std::min(limits.maximum_source_plan_bytes, maximum_storage),
+					cancellation,
+					"sdk.cfg",
+					&plan_bytes,
+					[&]()
+					{
+						checkpoint(cancellation, operations);
+						return false;
+					});
 				!bounded)
 				return bounded.error();
-			std::array<std::vector<annotated_row>, 3U> groups;
+			bounded_add(staging_bytes, plan_bytes, maximum_storage, "retained-bytes");
+			std::size_t handle_bytes{};
+			usage_product(handle_bytes, input.scans.size(), 1024U);
+			bounded_add(staging_bytes, handle_bytes, maximum_storage, "retained-bytes");
+			std::array<std::vector<const annotated_row*>, 3U> groups;
 			const std::array<std::string_view, 3U> ids{
 				"cc.body.v1", "cc.cfg_node.v1", "cc.cfg_edge.v1"};
 			std::array<bool, 3U> present{};
-			std::size_t rows{}, bytes{};
+			std::size_t rows{};
 			for (const auto& scan : input.scans)
 			{
-				cancelled(cancellation);
+				checkpoint(cancellation, operations);
 				const auto found = std::ranges::find(ids, scan.relation_id);
 				if (found == ids.end())
 					continue;
 				const auto index = static_cast<std::size_t>(found - ids.begin());
 				present[index] = true;
-				auto cursor = scan.result.rows();
-				while (true)
+				const auto borrowed = query_transfer_access::borrow_rows(scan.result);
+				bounded_add(rows, borrowed.size(), limits.maximum_rows, "rows");
+				std::size_t pointers{};
+				usage_product(pointers, borrowed.size(), sizeof(const annotated_row*));
+				bounded_add(staging_bytes, pointers, maximum_storage, "retained-bytes");
+				groups[index].reserve(groups[index].size() + borrowed.size());
+				for (const auto& row : borrowed)
 				{
-					cancelled(cancellation);
-					auto next = cursor.next();
-					if (!next)
-						return next.error();
-					if (!*next)
-						break;
-					bounded_add(rows, 1U, limits.maximum_rows, "rows");
-					auto row = (*next)->copy();
-					if (!row)
-						return row.error();
-					bounded_add(bytes,
-								row->canonical_form().size(),
-								limits.maximum_evidence_bytes,
-								"evidence-bytes");
-					groups[index].push_back(std::move(*row));
+					checkpoint(cancellation, operations);
+					groups[index].push_back(&row);
 				}
 			}
-			auto projected = project_control_flow(
-				control_flow_input{groups[0U], groups[1U], groups[2U]}, limits, cancellation);
+			projection_resource_usage completed;
+
+			auto projected = project_control_flow_rows(control_flow_input{},
+													   limits,
+													   cancellation,
+													   completed,
+													   &groups,
+													   operations,
+													   staging_bytes,
+													   maximum_storage);
 			if (!projected)
 				return projected;
 			for (std::size_t index{}; index < ids.size(); ++index)
 				if (!present[index])
 				{
+					std::size_t gap_bytes{};
+					usage_product(gap_bytes, projected->bodies.size() + 1U, 1024U);
+					bounded_add(completed.retained_bytes_bound,
+								gap_bytes,
+								maximum_storage,
+								"retained-bytes");
 					projected->unresolved.push_back({"sdk.cfg-scan-missing",
 													 std::string{ids[index]},
 													 "independent-scan-required"});
 					for (auto& body : projected->bodies)
 						gap(body, "sdk.cfg-scan-missing", std::string{ids[index]});
 				}
+			// Query-result data remains shared; account for the owned scan handles,
+			// relation metadata and final missing-scan gaps without copying rows.
+			checkpoint(cancellation, completed.operations);
 			projected->source_queries = input;
+			usage = completed;
 			return projected;
 		}
 		catch (const projection_failure& failure)
@@ -491,4 +626,55 @@ namespace cxxlens::sdk::query
 			return error{"sdk.cfg-resource-exhausted", "projection", "length"};
 		}
 	}
+	result<control_flow_projection> project_control_flow(control_flow_input input,
+														 control_flow_limits limits,
+														 std::stop_token cancellation)
+	{
+		projection_resource_usage ignored;
+		return project_control_flow_rows(input, limits, cancellation, ignored);
+	}
+	result<control_flow_projection> project_control_flow(const application_query_results& input,
+														 control_flow_limits limits,
+														 std::stop_token cancellation)
+	{
+		projection_resource_usage ignored;
+		return project_control_flow_queries(input, limits, cancellation, ignored);
+	}
+	result<control_flow_projection> project_control_flow(control_flow_input input,
+														 control_flow_limits limits,
+														 std::stop_token cancellation,
+														 projection_resource_usage& usage)
+	{
+		usage = {};
+		return project_control_flow_rows(input, limits, cancellation, usage);
+	}
+	result<control_flow_projection> project_control_flow(const application_query_results& input,
+														 control_flow_limits limits,
+														 std::stop_token cancellation,
+														 projection_resource_usage& usage)
+	{
+		usage = {};
+		return project_control_flow_queries(input, limits, cancellation, usage);
+	}
+
+	result<control_flow_projection> project_control_flow(control_flow_input input,
+														 control_flow_limits limits,
+														 std::stop_token stop,
+														 projection_resource_usage& usage,
+														 std::size_t maximum_storage)
+	{
+		usage = {};
+		return project_control_flow_rows(
+			input, limits, stop, usage, nullptr, 0U, 0U, maximum_storage);
+	}
+	result<control_flow_projection> project_control_flow(const application_query_results& input,
+														 control_flow_limits limits,
+														 std::stop_token stop,
+														 projection_resource_usage& usage,
+														 std::size_t maximum_storage)
+	{
+		usage = {};
+		return project_control_flow_queries(input, limits, stop, usage, maximum_storage);
+	}
+
 } // namespace cxxlens::sdk::query

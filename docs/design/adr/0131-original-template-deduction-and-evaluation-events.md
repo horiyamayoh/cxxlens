@@ -1,0 +1,15 @@
+# ADR 0131: Original template deduction and evaluation events
+
+Status: accepted
+
+The remaining SFINAE and evaluated-constexpr call metrics need the compiler's original final candidate disposition and actually reached constant-interpreter occurrences. Written AST calls, instantiation frames and speculative evaluation cannot close these domains.
+
+Three additive relations retain original candidate attempts, evaluation roots and reached call occurrences. Independent optional candidate and root inventory facets extend the existing template inventory. A candidate admission precedes the original final deduction; its result and exclusion disposition stay separate. Deduction success does not assert later overload viability. Substitution failure qualifies only when the original caller excludes that candidate. All nine supported final candidate routes, including class and variable partial specialization, belong to the declared profile.
+
+The legacy interpreter preserves the original requested constant context, potential-check classification, terminal root completion and independently closed invocation membership. A reached call occurrence uses the actual instantiated AST expression, owning instantiation and invocation stage. Loop, retry and root revisits retain one occurrence and every original root/target association. Implicit destruction instead retains its actual lifetime origin and field/base/array designator. Explicit destruction keeps the original call expression. Source positions, names and arbitrary trace order do not coalesce distinct expressions or cleanup objects.
+
+The parser-start recorder freezes before provider extraction. Original completed evaluation failure remains terminally completed while incomplete failed-stage invocation admission stays partial. Stock compiler and bytecode domains remain explicitly unsupported; missing event facets in saved earlier inputs remain unknown. These frontiers do not weaken independent template subject, frame or capture domains.
+
+The conventional analyzer option uses exact LLVM 22.1.0 statically instrumented source objects before the original compiler archives. Compiler assertion, RTTI and EH settings must match the shipped ABI. The stock public provider DSO does not acquire an instrumentation capability through interposition. Callbacks latch errors without throwing across compiler cleanup; cancellation, malformed input and resource exhaustion abort detachment rather than publishing a complete empty inventory.
+
+Pure SDK projections preserve original worlds, rows, evidence, query plans and side channels. They independently validate count/member populations, original subject/source/target/root associations and conflicts, and do not replay deduction, interpret a second type grammar or calculate either metric. Actual source callbacks and compiler USRs supply bindings; unavailable associations remain unknown. Original typed values and finite closure are product inputs, with no certification or development test ledger.

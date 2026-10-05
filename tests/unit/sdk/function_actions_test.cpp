@@ -325,6 +325,40 @@ namespace
 } // namespace
 int main()
 {
+	{
+		q::projection_resource_usage charged{777U, 888U};
+		fixture original;
+		auto with_usage = q::project_function_actions(original.input(), {}, {}, charged);
+		auto without_usage = q::project_function_actions(original.input());
+		require(with_usage && without_usage && charged.operations > 0U &&
+					charged.retained_bytes_bound > 0U,
+				"successful raw usage missing");
+		require(charged.operations < q::finite_population_limits{}.maximum_operations &&
+					charged.retained_bytes_bound <
+						q::finite_population_limits{}.maximum_retained_bytes,
+				"configured maxima were reported as actual usage");
+		require(with_usage->evidence.size() == without_usage->evidence.size() &&
+					with_usage->populations.size() == without_usage->populations.size(),
+				"usage changed original payload");
+		charged = {777U, 888U};
+		auto query_usage = q::project_function_actions(original.queries(), {}, {}, charged);
+		require(query_usage && charged.operations > 0U && charged.retained_bytes_bound > 0U,
+				"successful public-query usage missing");
+		q::finite_population_limits tiny;
+		tiny.maximum_rows = 1U;
+		charged = {777U, 888U};
+		require(!q::project_function_actions(original.input(), tiny, {}, charged) &&
+					charged.operations == 0U && charged.retained_bytes_bound == 0U,
+				"failed projection leaked usage");
+		std::stop_source usage_stop;
+		usage_stop.request_stop();
+		charged = {777U, 888U};
+		require(
+			!q::project_function_actions(original.input(), {}, usage_stop.get_token(), charged) &&
+				charged.operations == 0U && charged.retained_bytes_bound == 0U,
+			"cancelled projection leaked usage");
+	}
+
 	fixture input;
 	check(input, state::complete, "bodyless return type population");
 	auto output = project(input);
@@ -376,7 +410,8 @@ int main()
 		require(retained.populations.size() == 1U &&
 					retained.populations[0].state == state::complete &&
 					retained.populations[0].actions.size() == 1U,
-				"original agreeing row evidence should not require a second equality payload copy");
+				"original agreeing row evidence should not require a second "
+				"equality payload copy");
 		require(std::ranges::count(retained.evidence,
 								   "cc.operation.v1",
 								   [](const auto& e)
@@ -560,7 +595,8 @@ int main()
 	require(public_nonactions.populations[0].enumeration_state == state::complete &&
 				public_nonactions.source_queries &&
 				public_nonactions.source_queries->scans.size() == 13,
-			"public excluded syntax lost original scan handles or independent closure");
+			"public excluded syntax lost original scan handles or independent "
+			"closure");
 	auto malformed_syntax = nonactions;
 	malformed_syntax.rows[9].back().values.at("output.compile_unit").type = {
 		scalar_kind::boolean, "", false};
@@ -613,7 +649,8 @@ int main()
 	require(std::ranges::count(retained_reference.evidence,
 							   "cc.syntax_node.v1",
 							   &q::finite_population_evidence::relation_id) == 1,
-			"actual action expression lost its independently referenced original syntax");
+			"actual action expression lost its independently referenced original "
+			"syntax");
 	std::ranges::reverse(nonactions.rows[9]);
 	std::ranges::reverse(nonactions.rows[2]);
 	const auto reordered_nonactions =

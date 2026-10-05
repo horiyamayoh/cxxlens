@@ -16,6 +16,8 @@
 #include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_cfg_edge.hpp>
 #include <cxxlens/relations/cc_cfg_node.hpp>
+#include <cxxlens/relations/cc_constant_evaluated_call.hpp>
+#include <cxxlens/relations/cc_constant_evaluation_root.hpp>
 #include <cxxlens/relations/cc_constraint_node.hpp>
 #include <cxxlens/relations/cc_declaration.hpp>
 #include <cxxlens/relations/cc_declaration_inventory.hpp>
@@ -31,6 +33,7 @@
 #include <cxxlens/relations/cc_record_surface.hpp>
 #include <cxxlens/relations/cc_syntax_node.hpp>
 #include <cxxlens/relations/cc_target_resolution_slot.hpp>
+#include <cxxlens/relations/cc_template_candidate.hpp>
 #include <cxxlens/relations/cc_template_instantiation_frame.hpp>
 #include <cxxlens/relations/cc_template_inventory.hpp>
 #include <cxxlens/relations/cc_template_subject.hpp>
@@ -319,7 +322,10 @@ namespace cxxlens::sdk
 				cc::relations::declaration_inventory::descriptor(),
 				cc::relations::target_resolution_slot::descriptor(),
 				cc::relations::constraint_node::descriptor(),
+				cc::relations::constant_evaluation_root::descriptor(),
+				cc::relations::constant_evaluated_call::descriptor(),
 				cc::relations::lambda_capture::descriptor(),
+				cc::relations::template_candidate::descriptor(),
 				cc::relations::template_instantiation_frame::descriptor(),
 				cc::relations::template_inventory::descriptor(),
 				cc::relations::template_subject::descriptor(),

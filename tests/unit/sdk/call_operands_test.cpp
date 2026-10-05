@@ -235,6 +235,39 @@ namespace
 int main()
 {
 	{
+		q::projection_resource_usage charged{777U, 888U};
+		fixture original;
+		auto with_usage = q::project_call_operands(original.input(), {}, {}, charged);
+		auto without_usage = q::project_call_operands(original.input());
+		require(with_usage && without_usage && charged.operations > 0U &&
+					charged.retained_bytes_bound > 0U,
+				"successful raw usage missing");
+		require(charged.operations < q::finite_population_limits{}.maximum_operations &&
+					charged.retained_bytes_bound <
+						q::finite_population_limits{}.maximum_retained_bytes,
+				"configured maxima were reported as actual usage");
+		require(with_usage->evidence.size() == without_usage->evidence.size() &&
+					with_usage->calls.size() == without_usage->calls.size(),
+				"usage changed original payload");
+		charged = {777U, 888U};
+		auto query_usage = q::project_call_operands(original.queries(), {}, {}, charged);
+		require(query_usage && charged.operations > 0U && charged.retained_bytes_bound > 0U,
+				"successful public-query usage missing");
+		q::finite_population_limits tiny;
+		tiny.maximum_rows = 1U;
+		charged = {777U, 888U};
+		require(!q::project_call_operands(original.input(), tiny, {}, charged) &&
+					charged.operations == 0U && charged.retained_bytes_bound == 0U,
+				"failed projection leaked usage");
+		std::stop_source usage_stop;
+		usage_stop.request_stop();
+		charged = {777U, 888U};
+		require(!q::project_call_operands(original.input(), {}, usage_stop.get_token(), charged) &&
+					charged.operations == 0U && charged.retained_bytes_bound == 0U,
+				"cancelled projection leaked usage");
+	}
+
+	{
 		fixture f;
 		for (std::size_t i{}; i < 512U; ++i)
 		{
@@ -266,10 +299,10 @@ int main()
 		q::finite_population_limits limits;
 		limits.maximum_retained_bytes = 512U * 1024U;
 		const auto raw = take(q::project_call_operands(f.input(), limits));
-		require(
-			raw.calls.size() == 1U && raw.function_scopes.size() == 1U &&
-				raw.function_scopes.front().state == state::complete,
-			"raw independently excluded syntax/variables/types must not own unrelated evidence");
+		require(raw.calls.size() == 1U && raw.function_scopes.size() == 1U &&
+					raw.function_scopes.front().state == state::complete,
+				"raw independently excluded syntax/variables/types must not own "
+				"unrelated evidence");
 		const auto query = take(q::project_call_operands(f.queries(), limits));
 		require(query.calls.size() == 1U && query.function_scopes.size() == 1U &&
 					query.function_scopes.front().state == state::complete &&
@@ -301,11 +334,13 @@ int main()
 				"missing independent admission marker cannot be dropped as noncall");
 		set(f.rows[8].back(), "flags", symbols({"admitted_call_site", "finite_call_admission_v1"}));
 		require(project(f).function_scopes.front().state != state::complete,
-				"actual admitted original syntax without original call remains unknown");
+				"actual admitted original syntax without original call remains "
+				"unknown");
 		set(f.rows[8].back(), "flags", symbols({"finite_call_admission_v1"}));
 		set(f.rows[8].back(), "source", detached_cell::utf8("missing:irrelevant"));
 		require(project(f).function_scopes.front().state == state::complete,
-				"actual known excluded syntax missing source does not poison call census");
+				"actual known excluded syntax missing source does not poison call "
+				"census");
 	}
 	{
 		fixture f;
@@ -333,7 +368,8 @@ int main()
 		const auto raw = project(f);
 		const auto query = take(q::project_call_operands(f.queries()));
 		require(raw.calls.front().body == "body:known" && query.calls.front().body == "body:known",
-				"actual source-bound call body survives missing independent caller entity");
+				"actual source-bound call body survives missing independent caller "
+				"entity");
 	}
 	{
 		fixture f;
@@ -342,7 +378,8 @@ int main()
 		set(syntax, "flags", symbols({"finite_call_admission_v1"}));
 		f.rows[8].push_back(syntax);
 		require(!q::project_call_operands(f.input()) && !q::project_call_operands(f.queries()),
-				"excluded original semantic carrier must still have its actual identity");
+				"excluded original semantic carrier must still have its actual "
+				"identity");
 	}
 
 	fixture input;
@@ -472,12 +509,12 @@ int main()
 	missing_syntax.scans.erase(std::ranges::find(
 		missing_syntax.scans, "cc.syntax_node.v1", &q::application_relation_scan::relation_id));
 	auto incomplete_scope = take(q::project_function_call_scopes(missing_syntax));
-	require(
-		!incomplete_scope.call_inputs_complete &&
-			incomplete_scope.function_scopes[0].state == state::unknown &&
-			incomplete_scope.source_queries &&
-			incomplete_scope.source_queries->scans.size() == missing_syntax.scans.size(),
-		"missing independent syntax query became a complete call scope or lost original inputs");
+	require(!incomplete_scope.call_inputs_complete &&
+				incomplete_scope.function_scopes[0].state == state::unknown &&
+				incomplete_scope.source_queries &&
+				incomplete_scope.source_queries->scans.size() == missing_syntax.scans.size(),
+			"missing independent syntax query became a complete call scope or "
+			"lost original inputs");
 	auto scope_result = take(q::project_function_call_scopes(input.input()));
 	require(scope_result.calls.empty() && scope_result.function_scopes[0].state == state::complete,
 			"scope-only API coupled to operands");
@@ -591,7 +628,8 @@ int main()
 	require(result.calls[0].state == state::complete &&
 				result.calls[0].operands[0].reference_state == state::unknown &&
 				result.calls[0].operands[0].referenced_entity.empty(),
-			"unknown named binding erased independent finite slots or became known absence");
+			"unknown named binding erased independent finite slots or became "
+			"known absence");
 	input = fixture{};
 	set(input.rows[4][0], "call_site_ids", symbols({}));
 	set(input.rows[4][0], "call_site_count", detached_cell::unsigned_integer(0));
@@ -800,14 +838,16 @@ int main()
 				result.calls[0].state == state::complete &&
 				input.rows[3].back().values.at("output.provider_local_key").value ==
 					detached_cell::bytes(usr).value,
-			"absent target signature conflicted with independent entity/detail identity");
+			"absent target signature conflicted with independent entity/detail "
+			"identity");
 	input.rows[10][0] = complete_target;
 	for (const auto name : {"target_canonical_type_digest", "target_canonical_type_profile"})
 		set(input.rows[10][0],
 			name,
 			detached_cell::absent(input.rows[10][0].values.at("output." + std::string{name}).type));
 	require(project(input).calls[0].signatures[0].state == state::partial,
-			"absent target type facets became contradictory against known actual type");
+			"absent target type facets became contradictory against known actual "
+			"type");
 	input.rows[10][0] = complete_target;
 	set(input.rows[3].back(), "provider_local_key", detached_cell::bytes({std::byte{'x'}}));
 	require(project(input).calls[0].signatures[0].state == state::conflicting,
@@ -841,7 +881,8 @@ int main()
 			"available original type-node facets were not retained");
 	set(input.rows[5].back(), "structure_state", detached_cell::utf8("unsupported"));
 	require(project(input).calls[0].signatures[0].state == state::partial,
-			"unsupported nested original type node became a complete target signature");
+			"unsupported nested original type node became a complete target "
+			"signature");
 	set(input.rows[10][0], "target_canonical_type_digest", detached_cell::utf8(content_digest({})));
 	require(project(input).calls[0].signatures[0].state == state::conflicting,
 			"target type signature disagreement accepted");
