@@ -3032,6 +3032,7 @@ namespace
 		// An actual older executed scan remains readable after optional additive
 		// columns are inserted and appended under the same semantic major.
 		auto evolved = data.left;
+		++evolved.version.minor;
 		evolved.columns.insert(evolved.columns.begin() + 1,
 							   {evolved.id + ".new_optional",
 								"new_optional",
@@ -3065,6 +3066,15 @@ namespace
 					compatible->scans.front().logical_ir.digest() == ir.digest() &&
 					compatible->scans.front().result.canonical_form() == executed->canonical_form(),
 				"optional evolution changed the saved plan, digest, rows or evidence");
+		auto future_minor = bundle;
+		const auto minimum = "\"minimum_minor\":" + std::to_string(data.left.version.minor);
+		const auto minimum_at = future_minor.find(minimum);
+		require(minimum_at != std::string::npos, "saved minimum minor missing");
+		future_minor.replace(minimum_at,
+							 minimum.size(),
+							 "\"minimum_minor\":" + std::to_string(evolved.version.minor + 1U));
+		require(!query::decode_application_queries(compatible_engine, future_minor),
+				"saved scan accepted a future minimum minor");
 		auto required_evolution = evolved;
 		required_evolution.columns.back().required = true;
 		required_evolution.columns.back().type.optional = false;

@@ -84,8 +84,9 @@ namespace
 		std::array<std::vector<q::annotated_row>, 9U> groups;
 		fixture()
 		{
-			groups[0] = {
-				row("build.compile_unit.v1", {{"compile_unit", detached_cell::utf8("tu:test")}})};
+			groups[0] = {row("build.compile_unit.v1",
+							 {{"compile_unit", detached_cell::utf8("tu:test")},
+							  {"main_source", detached_cell::utf8("snapshot:test")}})};
 			groups[1] = {row("source.file.v1",
 							 {{"snapshot", detached_cell::utf8("snapshot:test")},
 							  {"file", detached_cell::utf8("file:test")},
@@ -469,6 +470,75 @@ int main()
 	set(c.groups[7][0], "physical_line_starts", detached_cell::bytes({std::byte{1}}));
 	require(state(q::project_source_comments(c.input()), s::conflicting),
 			"bad line encoding accepted");
+	// Two actual main-source occurrences in one world never establish a
+	// Cartesian unit/file comment domain.
+	fixture independent;
+	independent.comment();
+	set(independent.groups[0][0], "main_source", detached_cell::utf8("snapshot:test"));
+	auto other_unit = independent.groups[0][0];
+	set(other_unit, "compile_unit", detached_cell::utf8("tu:other"));
+	set(other_unit, "main_source", detached_cell::utf8("snapshot:other"));
+	independent.groups[0].push_back(other_unit);
+	auto other_file = independent.groups[1][0];
+	set(other_file, "snapshot", detached_cell::utf8("snapshot:other"));
+	set(other_file, "file", detached_cell::utf8("file:other"));
+	independent.groups[1].push_back(other_file);
+	auto other_inventory = independent.groups[7][0];
+	set(other_inventory, "inventory", detached_cell::utf8("inventory:other"));
+	set(other_inventory, "compile_unit", detached_cell::utf8("tu:other"));
+	set(other_inventory, "source_snapshot", detached_cell::utf8("snapshot:other"));
+	set(other_inventory, "file", detached_cell::utf8("file:other"));
+	set(other_inventory, "comment_count", detached_cell::unsigned_integer(0U));
+	set(other_inventory, "comment_bytes", detached_cell::unsigned_integer(0U));
+	set(other_inventory, "comments", ids({}));
+	independent.groups[7].push_back(other_inventory);
+	auto original_comments = q::project_source_comments(independent.input());
+	require(original_comments && original_comments->populations.size() == 2U &&
+				std::ranges::all_of(original_comments->populations,
+									[](const auto& population)
+									{
+										return population.state == s::complete &&
+											!population.id.empty();
+									}),
+			"unrelated unit/file Cartesian comment populations invented");
+	independent.groups[7].pop_back();
+	auto missing_main_comments = q::project_source_comments(independent.input());
+	require(missing_main_comments && missing_main_comments->populations.size() == 2U &&
+				std::ranges::any_of(missing_main_comments->populations,
+									[](const auto& population)
+									{
+										return population.compile_unit == "tu:other" &&
+											population.file == "file:other" &&
+											population.source_snapshot == "snapshot:other" &&
+											population.id.empty() && population.state == s::unknown;
+									}),
+			"genuine main-source missing comment census omitted or became zero");
+	fixture member_only;
+	member_only.comment();
+	set(member_only.groups[0][0],
+		"main_source",
+		detached_cell::unknown(member_only.groups[0][0].values.at("output.main_source").type,
+							   "fixture-original-boundary-unavailable"));
+	member_only.groups[7].clear();
+	auto member_comments = q::project_source_comments(member_only.input());
+	require(member_comments && member_comments->populations.size() == 1U &&
+				member_comments->populations[0].file == "file:test" &&
+				member_comments->populations[0].state == s::unknown,
+			"actual member/source association lost when inventory is missing");
+	member_only.groups[8].clear();
+	auto unassociated_comments = q::project_source_comments(member_only.input());
+	require(unassociated_comments && unassociated_comments->populations.size() == 1U &&
+				unassociated_comments->populations[0].file.empty() &&
+				unassociated_comments->populations[0].source_snapshot.empty() &&
+				unassociated_comments->populations[0].state == s::unknown &&
+				std::ranges::any_of(unassociated_comments->unresolved,
+									[](const auto& item)
+									{
+										return item.code ==
+											"sdk.population-unit-source-membership-missing";
+									}),
+			"missing original association became fabricated file membership");
+
 	fixture i;
 	i.include();
 	require(state(q::project_source_includes(i.input()), s::complete),

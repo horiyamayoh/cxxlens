@@ -10,6 +10,7 @@
 #include <cxxlens/sdk/abi_surfaces.hpp>
 
 #include "query_projection_plan_limits_internal.hpp"
+#include "query_result_internal.hpp"
 
 namespace cxxlens::sdk::query
 {
@@ -101,6 +102,83 @@ namespace cxxlens::sdk::query
 		struct budget
 		{
 			std::size_t bytes{}, evidence{}, references{}, operations{}, extents{};
+			std::size_t
+			estimate(const annotated_row& row, abi_surface_limits limits, std::stop_token stop)
+			{
+				std::size_t total = 2048;
+				const auto add = [&](std::size_t n, std::size_t factor = 8U)
+				{
+					check(stop);
+					charge(operations, n, limits.maximum_operations, "operations");
+					charge(operations, 1U, limits.maximum_operations, "operations");
+					if (total > limits.maximum_retained_bytes ||
+						n > (limits.maximum_retained_bytes - total) / factor)
+						fail("sdk.abi-budget", "row", "limit-exceeded");
+					total += n * factor;
+				};
+				const auto fixed = [&](std::size_t n)
+				{
+					check(stop);
+					charge(operations, 1U, limits.maximum_operations, "operations");
+					if (total > limits.maximum_retained_bytes ||
+						n > limits.maximum_retained_bytes - total)
+						fail("sdk.abi-budget", "row", "limit-exceeded");
+					total += n;
+				};
+				for (const auto& [name, c] : row.values)
+				{
+					// One owned detached cell plus map-node/framing overhead. The
+					// dynamic payload allowance below still covers encoded copies.
+					fixed(sizeof(decltype(row.values)::value_type) + 256U);
+					add(name.size() + c.type.parameter.size());
+					if (c.unknown_reason)
+						add(c.unknown_reason->size(), 16U);
+					if (c.value)
+					{
+						if (const auto* v = std::get_if<std::string>(&*c.value))
+							add(v->size(), 16U);
+						if (const auto* v = std::get_if<std::vector<std::byte>>(&*c.value))
+							add(v->size());
+					}
+				}
+				const auto strings = [&](const auto& values)
+				{
+					for (const auto& v : values)
+					{
+						fixed(sizeof(v) + 128U);
+						add(v.size());
+					}
+				};
+				const auto producer = [&](const auto& p)
+				{
+					fixed(sizeof(p) + 128U);
+					add(p.id.size() + p.semantic_contract.size());
+				};
+				const auto guarantee = [&](const auto& g)
+				{
+					fixed(sizeof(g) + 128U);
+					add(g.approximation.size() + g.scope.size() + g.assumptions.size());
+					strings(g.verification_modalities);
+				};
+				strings(row.claim_contributors);
+				strings(row.provenance);
+				strings(row.presence.fragments);
+				add(row.interpretation.size() + row.presence.universe.size());
+				for (const auto& p : row.producer_contracts)
+					producer(p);
+				for (const auto& g : row.contributor_guarantees)
+					guarantee(g);
+				for (const auto& e : row.contributor_edges)
+				{
+					fixed(sizeof(e) + 128U);
+					add(e.claim_contributor.size() + e.provenance.size() + e.interpretation.size() +
+						e.condition.universe.size());
+					producer(e.producer);
+					guarantee(e.guarantee);
+					strings(e.condition.fragments);
+				}
+				return total;
+			}
 		};
 		struct entry
 		{
@@ -126,10 +204,12 @@ namespace cxxlens::sdk::query
 			for (unsigned shift{}; shift < 64U; shift += 8U)
 				value.push_back(static_cast<char>((count >> shift) & 255U));
 		}
-		result<abi_surface_projection> project_rows(abi_surface_input input,
-													abi_surface_limits limits,
-													std::stop_token stop,
-													budget& retained)
+		result<abi_surface_projection>
+		project_rows(abi_surface_input input,
+					 abi_surface_limits limits,
+					 std::stop_token stop,
+					 budget& retained,
+					 const std::array<std::vector<const annotated_row*>, 6>* borrowed = nullptr)
 		{
 			if (auto valid = limits.validate(); !valid)
 				return valid.error();
@@ -150,6 +230,7 @@ namespace cxxlens::sdk::query
 					bytes(value.size() + sizeof(std::string), "owned-text");
 					return std::string{value};
 				};
+				bytes(sizeof(abi_surface_projection), "projection-framing");
 				const std::array groups{input.units,
 										input.files,
 										input.spans,
@@ -169,11 +250,15 @@ namespace cxxlens::sdk::query
 						fail("sdk.abi-input-invalid",
 							 std::string{relations[group]},
 							 "descriptor-missing");
-					for (const auto& row : groups[group])
+					const auto count = borrowed ? (*borrowed)[group].size() : groups[group].size();
+					for (std::size_t row_index{}; row_index < count; ++row_index)
 					{
+						const auto& row =
+							borrowed ? *(*borrowed)[group][row_index] : groups[group][row_index];
 						work();
 						if (entries.size() >= limits.maximum_rows)
 							fail("sdk.abi-budget", "rows", "limit-exceeded");
+						bytes(retained.estimate(row, limits, stop), "owned-row-and-temporaries");
 						if (auto valid = row.validate(); !valid)
 							return valid.error();
 						for (const auto& column : descriptor->columns)
@@ -194,8 +279,7 @@ namespace cxxlens::sdk::query
 							   canonical.size(),
 							   limits.maximum_evidence_bytes,
 							   "evidence-bytes");
-						bytes(canonical.size(), "canonical-row");
-						bytes(canonical.size(), "owned-evidence");
+						// Encoding and detached-row storage were precharged before allocation.
 						bytes(sizeof(entry) + sizeof(abi_surface_evidence), "evidence-rows");
 						entries.push_back({group, &row, std::move(canonical)});
 					}
@@ -795,9 +879,13 @@ namespace cxxlens::sdk::query
 					}
 				}
 				if (!input.observations_complete)
+				{
+					work();
+					bytes(sizeof(query_unresolved) + 256U, "observation-gap");
 					output.unresolved.push_back({"sdk.abi-observations-partial",
 												 "projection",
 												 "local-interface-does-not-close-project"});
+				}
 				return output;
 			}
 			catch (const failure& value)
@@ -826,27 +914,58 @@ namespace cxxlens::sdk::query
 	result<abi_surface_projection>
 	project_abi_surfaces(abi_surface_input input, abi_surface_limits limits, std::stop_token stop)
 	{
+		projection_resource_usage usage;
+		return project_abi_surfaces(input, limits, stop, usage);
+	}
+	result<abi_surface_projection> project_abi_surfaces(abi_surface_input input,
+														abi_surface_limits limits,
+														std::stop_token stop,
+														projection_resource_usage& usage)
+	{
+		usage = {};
 		budget retained;
-		return project_rows(input, limits, stop, retained);
+		auto output = project_rows(input, limits, stop, retained);
+		if (output)
+			usage = {retained.operations, retained.bytes};
+		return output;
 	}
 	result<abi_surface_projection> project_abi_surfaces(const application_query_results& input,
 														abi_surface_limits limits,
 														std::stop_token stop)
 	{
+		projection_resource_usage usage;
+		return project_abi_surfaces(input, limits, stop, usage);
+	}
+	result<abi_surface_projection> project_abi_surfaces(const application_query_results& input,
+														abi_surface_limits limits,
+														std::stop_token stop,
+														projection_resource_usage& usage)
+	{
+		usage = {};
 		if (auto valid = limits.validate(); !valid)
 			return valid.error();
 		try
 		{
 			check(stop);
+			budget retained;
+			std::size_t plan_bytes{};
+			const std::function<bool()> cancelled = [&]
+			{
+				check(stop);
+				charge(retained.operations, 1U, limits.maximum_operations, "operations");
+				return false;
+			};
 			if (auto valid = detail::check_source_plan_limits(input,
 															  limits.maximum_source_queries,
 															  limits.maximum_source_plan_bytes,
 															  stop,
-															  "sdk.abi");
+															  "sdk.abi",
+															  &plan_bytes,
+															  cancelled);
 				!valid)
 				return valid.error();
-			budget retained;
-			std::array<std::vector<annotated_row>, 6> groups;
+			charge(retained.bytes, plan_bytes, limits.maximum_retained_bytes, "source-plans");
+			std::array<std::vector<const annotated_row*>, 6> groups;
 			std::array<bool, 6> present{}, scan_complete{};
 			scan_complete.fill(true);
 			std::size_t rows{};
@@ -861,55 +980,62 @@ namespace cxxlens::sdk::query
 				scan_complete[group] &= scan.result.execution() == execution_status::complete &&
 					scan.result.inputs_complete() && scan.result.conflicts().empty() &&
 					scan.result.differential_disagreements().empty();
-				auto cursor = scan.result.rows();
-				while (true)
+				const auto original_rows = query_transfer_access::borrow_rows(scan.result);
+				charge(rows, original_rows.size(), limits.maximum_rows, "rows");
+				if (original_rows.size() > limits.maximum_rows ||
+					groups[group].size() > limits.maximum_rows - original_rows.size())
+					fail("sdk.abi-budget", "rows", "limit-exceeded");
+				const auto pointer_count = groups[group].size() + original_rows.size();
+				if (pointer_count > limits.maximum_retained_bytes / sizeof(const annotated_row*))
+					fail("sdk.abi-budget", "detached-scan-index", "limit-exceeded");
+				charge(retained.bytes,
+					   pointer_count * sizeof(const annotated_row*),
+					   limits.maximum_retained_bytes,
+					   "detached-scan-index");
+				groups[group].reserve(pointer_count);
+				for (const auto& row : original_rows)
 				{
 					check(stop);
-					auto next = cursor.next();
-					if (!next)
-						return next.error();
-					if (!*next)
-						break;
-					charge(rows, 1U, limits.maximum_rows, "rows");
-					auto row = (*next)->copy();
-					if (!row)
-						return row.error();
-					const auto canonical = row->canonical_form();
-					charge(retained.evidence,
-						   canonical.size(),
-						   limits.maximum_evidence_bytes,
-						   "detached-scan-evidence");
-					charge(retained.bytes,
-						   canonical.size() + sizeof(annotated_row),
-						   limits.maximum_retained_bytes,
-						   "detached-scan-rows");
-					groups[group].push_back(std::move(*row));
+					charge(retained.operations, 1U, limits.maximum_operations, "operations");
+					groups[group].push_back(&row);
 				}
 			}
 			bool complete = true;
 			for (std::size_t group{}; group < present.size(); ++group)
 				complete &= present[group] && scan_complete[group];
-			auto output = project_rows({groups[0],
-										groups[1],
-										groups[2],
-										groups[3],
-										groups[4],
-										groups[5],
+			auto output = project_rows({{},
+										{},
+										{},
+										{},
+										{},
+										{},
 										complete,
 										present[0] && scan_complete[0],
 										present[5] && scan_complete[5]},
 									   limits,
 									   stop,
-									   retained);
+									   retained,
+									   &groups);
 			if (!output)
 				return output.error();
 			for (std::size_t group{}; group < present.size(); ++group)
+			{
+				check(stop);
+				charge(retained.operations, 1U, limits.maximum_operations, "operations");
 				if (!present[group])
+				{
+					charge(retained.bytes,
+						   sizeof(query_unresolved) * 2U + relations[group].size() + 128U,
+						   limits.maximum_retained_bytes,
+						   "missing-scan-gap");
 					output->unresolved.push_back({"sdk.abi-scan-missing",
 												  std::string{relations[group]},
 												  "independent-scan-unavailable"});
+				}
+			}
 			normalize(output->unresolved);
 			output->source_queries = input;
+			usage = {retained.operations, retained.bytes};
 			return output;
 		}
 		catch (const failure& value)

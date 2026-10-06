@@ -77,6 +77,7 @@ include(CxxlensWarnings)
 include(CxxlensSanitizers)
 include(CxxlensClangTargets)
 include(CxxlensClangTemplateEvents)
+include(CxxlensClangExceptionalEvents)
 cxxlens_validate_sanitizer_configuration()
 
 if(NOT CXXLENS_BUILD_CLANG22_COMPONENTS)
@@ -266,6 +267,7 @@ add_library(
   src/sdk/preprocessor.cpp
   src/sdk/function_actions.cpp
   src/sdk/function_compiler_facets.cpp
+  src/sdk/exceptional_exits.cpp
   src/sdk/target_resolution.cpp
   src/sdk/template_domains.cpp
   src/sdk/template_events.cpp
@@ -775,6 +777,8 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     src/llvm/clang22/project_template_observer.cpp
     src/llvm/clang22/project_template_events.cpp
     src/llvm/clang22/project_template_event_rows.cpp
+    src/llvm/clang22/project_exceptional_exits.cpp
+    src/llvm/clang22/project_exceptional_exit_rows.cpp
     src/llvm/clang22/project_abi_observer.cpp)
   target_link_libraries(
     cxxlens_clang22_worker_core
@@ -897,6 +901,7 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   cxxlens_enable_sanitizers(cxxlens-clang22-analyze)
   cxxlens_configure_installed_clang22_tool(cxxlens-clang22-analyze)
   cxxlens_configure_original_template_events()
+  cxxlens_configure_original_exceptional_events()
 endif()
 
 # Keep the product dependency direction executable at configure time.  Alias

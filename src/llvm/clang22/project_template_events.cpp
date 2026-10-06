@@ -211,7 +211,7 @@ namespace cxxlens::detail::clang22
 					   clang::SourceLocation loc,
 					   unsigned kind,
 					   unsigned result,
-					   unsigned failure,
+					   unsigned original_failure,
 					   bool success)
 		{
 			context(s.getASTContext());
@@ -230,7 +230,7 @@ namespace cxxlens::detail::clang22
 									   : result == 15U ? "constraint_exclusion"
 													   : "other_exclusion");
 			if (kind <= 2U && !success)
-				e.overload_failure = failure;
+				e.overload_failure = original_failure;
 		}
 		void root(clang::ASTContext& c,
 				  const void* native,
@@ -239,7 +239,7 @@ namespace cxxlens::detail::clang22
 				  bool constant,
 				  bool potential,
 				  bool bytecode,
-				  bool failure)
+				  bool fold_failed)
 		{
 			context(c);
 			if (out.frozen || !native || mode > 3U)
@@ -251,7 +251,7 @@ namespace cxxlens::detail::clang22
 				const auto id = out.roots.size();
 				if (!roots.emplace(native, id).second)
 					throw invalid("duplicate-active-evaluation-root");
-				out.roots.push_back({mode, false, constant, potential, bytecode, failure, {}});
+				out.roots.push_back({mode, false, constant, potential, bytecode, fold_failed, {}});
 			}
 			else
 			{
@@ -265,7 +265,7 @@ namespace cxxlens::detail::clang22
 				r.constant_context = constant;
 				r.potential_check = potential;
 				r.bytecode = bytecode;
-				r.fold_failure = failure;
+				r.fold_failure = fold_failed;
 				roots.erase(i);
 			}
 		}

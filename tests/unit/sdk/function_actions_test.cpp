@@ -1094,5 +1094,27 @@ int main()
 	input = default_cfg(false);
 	set(input.rows[12][1], "expression_context", detached_cell::utf8("unknown"));
 	check(input, state::partial, "unknown compiler activation context");
+	input = fixture{};
+	set(input.rows[12][0], "reason", detached_cell::utf8(std::string(100'000U, 'x')));
+	q::projection_resource_usage measured{999U, 999U};
+	const auto peak_raw = take(q::project_function_actions(input.input(), {}, {}, measured));
+	auto peak_limits = q::finite_population_limits{};
+	peak_limits.maximum_retained_bytes = measured.retained_bytes_bound;
+	const auto repeated_raw = q::project_function_actions(input.input(), peak_limits, {}, measured);
+	require(repeated_raw.has_value() &&
+				repeated_raw->populations.size() == peak_raw.populations.size(),
+			"measured raw storage includes existing canonical temporary peak");
+	const auto peak_query = take(q::project_function_actions(input.queries(), {}, {}, measured));
+	peak_limits.maximum_retained_bytes = measured.retained_bytes_bound;
+	const auto repeated_query =
+		q::project_function_actions(input.queries(), peak_limits, {}, measured);
+	require(repeated_query.has_value() && repeated_query->source_queries.has_value() &&
+				repeated_query->populations.size() == peak_query.populations.size(),
+			"measured query storage includes original plan and canonical temporary peak");
+	peak_limits.maximum_retained_bytes = 1U;
+	measured = {999U, 999U};
+	require(!q::project_function_actions(input.input(), peak_limits, {}, measured) &&
+				measured.operations == 0U && measured.retained_bytes_bound == 0U,
+			"failed peak measurement remains zero");
 	std::cout << "function actions focused checks PASS\n";
 }

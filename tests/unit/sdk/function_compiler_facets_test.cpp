@@ -639,5 +639,46 @@ int main()
 	limits.maximum_operations = 1U;
 	require(!q::project_function_compiler_facets({f.input(), true, true}, limits),
 			"bounded total nested work");
-	std::cout << "function compiler facets 29 focused checks PASS\n";
+	f = fixture{};
+	automatic(f, true);
+	q::projection_resource_usage usage{999U, 999U};
+	auto raw_measured =
+		take(q::project_function_compiler_facets({f.input(), true, true}, {}, {}, usage));
+	const auto raw_usage = usage;
+	require(usage.operations > 0U && usage.retained_bytes_bound > 0U &&
+				usage.operations < q::finite_population_limits{}.maximum_operations / 2U &&
+				usage.retained_bytes_bound <
+					q::finite_population_limits{}.maximum_retained_bytes / 2U,
+			"measured raw usage contains actual charges rather than reserved maxima");
+	out = take(q::project_function_compiler_facets(f.queries(), {}, {}, usage));
+	require(usage.operations > raw_usage.operations &&
+				usage.retained_bytes_bound > raw_usage.retained_bytes_bound &&
+				out.original_actions.source_queries.has_value() &&
+				out.populations[0].storage_enumeration_state ==
+					raw_measured.populations[0].storage_enumeration_state,
+			"query measurement retains bounded source plans and independent storage state");
+	auto bounded = q::finite_population_limits{};
+	bounded.maximum_operations = 2U * usage.operations + 4U;
+	bounded.maximum_retained_bytes = 2U * usage.retained_bytes_bound + 4096U;
+	auto repeated = q::project_function_compiler_facets(f.queries(), bounded, {}, usage);
+	if (!repeated)
+		std::cerr << repeated.error().code << ":" << repeated.error().field << ":"
+				  << repeated.error().detail << "\n";
+	require(repeated.has_value(),
+			"actual charged budget can be reused without phantom maximum consumption");
+	usage = {999U, 999U};
+	require(!q::project_function_compiler_facets({f.input(), true, true}, limits, {}, usage) &&
+				usage.operations == 0U && usage.retained_bytes_bound == 0U,
+			"failed measurement is zero");
+	usage = {999U, 999U};
+	require(!q::project_function_compiler_facets(f.queries(), {}, stopped.get_token(), usage) &&
+				usage.operations == 0U && usage.retained_bytes_bound == 0U,
+			"cancelled query measurement is zero");
+	input = f.input();
+	input.admission_inputs_complete = false;
+	out = take(q::project_function_compiler_facets({input, true, true}, {}, {}, usage));
+	require(!out.storage_inputs_complete &&
+				out.populations[0].storage_enumeration_state != state::complete,
+			"successful measurement cannot invent admission closure");
+	std::cout << "function compiler facets 35 focused checks PASS\n";
 }

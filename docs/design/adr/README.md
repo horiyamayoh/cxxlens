@@ -84,6 +84,7 @@
 | [0131](0131-original-template-deduction-and-evaluation-events.md) | original final candidate disposition and reached constant-evaluation occurrences |
 
 | [0132](0132-projection-resource-reservation-settlement.md) | bounded successful projection usage for caller reservation settlement |
+| [0133](0133-original-exceptional-exit-occurrences.md) | original physical-definition exceptional occurrences and ABI lowering variants |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

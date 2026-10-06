@@ -46,6 +46,7 @@
 #include <cxxlens/relations/source_token_inventory.hpp>
 
 #include "project_abi_observer.hpp"
+#include "project_exceptional_exit_rows.hpp"
 #include "project_template_event_rows.hpp"
 #include "project_template_observer.hpp"
 #include "sdk/bounded_json_internal.hpp"
@@ -992,8 +993,11 @@ namespace cxxlens::detail::clang22
 						operation_scope_fields(detail->second, enumeration);
 						literal_scope_fields(detail->second, enumeration);
 						automatic_storage_scope_fields(detail->second, enumeration);
-						append(make_row(cc::relations::entity_detail::descriptor(),
-										std::move(detail->second)));
+						auto row = make_row(cc::relations::entity_detail::descriptor(),
+											std::move(detail->second));
+						retain_population_bytes(row.canonical_form().size() + 256U);
+						finalize_function_row(
+							finalized_function_details_, function, std::move(row));
 						pending_function_details_.erase(detail);
 					}
 					if (const auto found = pending_bodies_.find(function);
@@ -1051,8 +1055,10 @@ namespace cxxlens::detail::clang22
 							output_.unresolved.push_back({"body.ast-enumeration-frontier",
 														  current_function_,
 														  "source-spans-unavailable"});
-						append(
-							make_row(cc::relations::body::descriptor(), std::move(found->second)));
+						auto row =
+							make_row(cc::relations::body::descriptor(), std::move(found->second));
+						retain_population_bytes(row.canonical_form().size() + 256U);
+						finalize_function_row(finalized_bodies_, function, std::move(row));
 						pending_bodies_.erase(found);
 					}
 				}
@@ -2523,6 +2529,7 @@ namespace cxxlens::detail::clang22
 				finish_operation_dispatch();
 				finish_flow_expressions();
 				finish_calls();
+				finish_exceptional_exits();
 				if (templates_ != nullptr)
 				{
 					project_template_bindings bindings;
@@ -2664,6 +2671,151 @@ namespace cxxlens::detail::clang22
 			}
 
 		  private:
+			void
+			finalize_function_row(std::map<const clang::FunctionDecl*, sdk::detached_row>& rows,
+								  const clang::FunctionDecl* declaration,
+								  sdk::detached_row row)
+			{
+				const auto previous = rows.find(declaration);
+				if (previous == rows.end())
+				{
+					rows.emplace(declaration, std::move(row));
+					return;
+				}
+				if (previous->second.descriptor_id != row.descriptor_id ||
+					previous->second.cells.size() != row.cells.size())
+					fail("exceptional-exits", "contradictory-original-definition");
+				for (const auto& [name, value] : row.cells)
+				{
+					const auto cell = previous->second.cells.find(name);
+					if (cell == previous->second.cells.end() || cell->second.type != value.type ||
+						cell->second.state != value.state || cell->second.value != value.value ||
+						cell->second.unknown_reason != value.unknown_reason)
+						fail("exceptional-exits", "contradictory-original-definition");
+				}
+			}
+			void finish_exceptional_exits()
+			{
+				auto original_text = [](const sdk::detached_row& row,
+										std::string_view column) -> std::string_view
+				{
+					const auto found = row.cells.find(column);
+					if (found == row.cells.end() || !found->second.value)
+						return {};
+					const auto* value = std::get_if<std::string>(&*found->second.value);
+					return value ? std::string_view{*value} : std::string_view{};
+				};
+				exceptional_compiler_bindings compiler_bindings;
+				compiler_bindings.scope = [&](const clang::FunctionDecl* declaration)
+				{
+					const auto detail = finalized_function_details_.find(declaration);
+					if (detail == finalized_function_details_.end())
+						return exceptional_scope_binding{};
+					const auto body = finalized_bodies_.find(declaration);
+					return exceptional_scope_binding{
+						original_text(detail->second, "cc.entity_detail.v1.detail"),
+						original_text(detail->second, "cc.entity_detail.v1.entity"),
+						original_text(detail->second, "cc.entity_detail.v1.source"),
+						body == finalized_bodies_.end()
+							? std::string_view{}
+							: original_text(body->second, "cc.body.v1.body")};
+				};
+				compiler_bindings.expression =
+					[&](const clang::Stmt* expression) -> std::string_view
+				{
+					const auto found = syntax_nodes_.find(expression);
+					return found != syntax_nodes_.end() && found->second.size() == 1U
+						? std::string_view{*found->second.begin()}
+						: std::string_view{};
+				};
+				compiler_bindings.target = [&](const clang::Decl* declaration) -> std::string_view
+				{
+					const auto found = entity_lookup_.find(declaration->getCanonicalDecl());
+					return found == entity_lookup_.end() ? std::string_view{}
+														 : std::string_view{found->second};
+				};
+				if (progress_)
+					progress_("observing original exceptional lowering occurrences");
+				const auto original = take(
+					observe_project_exceptional_exits(unit_, {}, std::move(compiler_bindings)));
+				exceptional_exit_row_bindings bindings;
+				bindings.compile_unit = observations_.compile_unit;
+				bindings.source = [&](exceptional_source input)
+				{
+					return span({clang::SourceLocation::getFromRawEncoding(input.begin),
+								 clang::SourceLocation::getFromRawEncoding(input.end)},
+								input.declaration ? "declaration" : "expression")
+						.value_or("");
+				};
+				auto detached = take(detach_project_exceptional_exits(original, bindings));
+				std::map<std::string_view, sdk::detached_row*, std::less<>> details, bodies;
+				for (auto& [declaration, row] : finalized_function_details_)
+				{
+					(void)declaration;
+					retain_population_bytes(128U);
+					details.emplace(original_text(row, "cc.entity_detail.v1.detail"), &row);
+				}
+				for (auto& [declaration, row] : finalized_bodies_)
+				{
+					(void)declaration;
+					retain_population_bytes(128U);
+					bodies.emplace(original_text(row, "cc.body.v1.body"), &row);
+				}
+				for (auto& scope : detached.scopes)
+				{
+					auto attach =
+						[&](sdk::detached_row& row, const sdk::relation_descriptor& descriptor)
+					{
+						for (const auto& [name, value] : scope.fields)
+						{
+							const auto column = descriptor.id + "." + name;
+							const auto existing = row.cells.find(column);
+							if (existing != row.cells.end() &&
+								existing->second.state != sdk::cell_state::absent)
+								fail("exceptional-exits", "duplicate-original-scope-facet");
+							retain_population_bytes(value.canonical_form().size() + 256U);
+							auto typed = value;
+							typed.type = take(descriptor.column(column)).type;
+							row.cells.insert_or_assign(column, std::move(typed));
+						}
+						check(sdk::validate_row(descriptor, row));
+						check(sdk::validate_domain_identity(descriptor, row));
+					};
+					const auto detail = details.find(scope.detail);
+					if (detail == details.end())
+						fail("exceptional-exits", "original-detail-unavailable");
+					attach(*detail->second, cc::relations::entity_detail::descriptor());
+					if (!scope.body.empty())
+					{
+						const auto body = bodies.find(scope.body);
+						if (body == bodies.end())
+							fail("exceptional-exits", "original-body-unavailable");
+						attach(*body->second, cc::relations::body::descriptor());
+					}
+				}
+				for (const auto& scope : detached.unbound_scopes)
+				{
+					retain_population_bytes(scope.size() + 256U);
+					output_.unresolved.push_back({"exceptional-exits.scope-binding-frontier",
+												  observations_.compile_unit,
+												  "original-definition-binding-unavailable"});
+				}
+				for (auto& row : detached.rows)
+					append(std::move(row));
+				for (auto& [declaration, row] : finalized_function_details_)
+				{
+					(void)declaration;
+					append(std::move(row));
+				}
+				for (auto& [declaration, row] : finalized_bodies_)
+				{
+					(void)declaration;
+					append(std::move(row));
+				}
+				finalized_function_details_.clear();
+				finalized_bodies_.clear();
+			}
+
 			std::string
 			pp_source(const source_closure_member& member, std::uint64_t begin, std::uint64_t end)
 			{
@@ -8216,6 +8368,8 @@ namespace cxxlens::detail::clang22
 			std::map<std::string, sdk::detached_row, std::less<>> original_sites_,
 				original_targets_;
 			std::map<const clang::FunctionDecl*, fields> pending_function_details_;
+			std::map<const clang::FunctionDecl*, sdk::detached_row> finalized_function_details_,
+				finalized_bodies_;
 			std::map<std::string, std::string, std::less<>> original_abi_contexts_;
 			std::set<const clang::CXXMethodDecl*> virtual_methods_;
 			std::map<const clang::CXXMethodDecl*, std::pair<fields, std::size_t>>

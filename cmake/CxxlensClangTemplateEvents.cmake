@@ -1,3 +1,4 @@
+set_property(GLOBAL APPEND PROPERTY JOB_POOLS cxxlens_original_compiler_pool=1)
 # Original LLVM source components are a private native compiler dependency. The
 # public provider SDK, including its shared compiler boundary, stays stock.
 set(CXXLENS_CLANG_TEMPLATE_EVENT_SOURCE_DIR
@@ -100,10 +101,8 @@ function(cxxlens_configure_original_template_events)
     endif()
   endif()
   # These large original compiler translation units compile serially with Ninja.
-  set_property(GLOBAL APPEND PROPERTY JOB_POOLS
-                                      cxxlens_template_compiler_pool=1)
   set_property(TARGET cxxlens_clang22_template_compiler_objects
-               PROPERTY JOB_POOL_COMPILE cxxlens_template_compiler_pool)
+               PROPERTY JOB_POOL_COMPILE cxxlens_original_compiler_pool)
 
   # TARGET_OBJECTS puts each object before all libraries on every consuming
   # executable's link line. An analyzer-only edge would leave worker/core tests

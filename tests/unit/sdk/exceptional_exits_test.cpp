@@ -1,0 +1,581 @@
+#include <algorithm>
+#include <array>
+#include <cstdlib>
+#include <iostream>
+#include <memory>
+
+#include <cxxlens/sdk/exceptional_exits.hpp>
+
+#include "../../../src/sdk/query_result_internal.hpp"
+
+namespace
+{
+	using namespace cxxlens::sdk;
+	namespace q = cxxlens::sdk::query;
+	using state = q::finite_population_state;
+	constexpr std::array<std::string_view, 8> names{"build.compile_unit.v1",
+													"source.file.v1",
+													"source.span.v1",
+													"cc.entity.v1",
+													"cc.entity_detail.v1",
+													"cc.body.v1",
+													"cc.syntax_node.v1",
+													"cc.exceptional_exit.v1"};
+	void require(bool condition, std::string_view label)
+	{
+		if (!condition)
+		{
+			std::cerr << label << '\n';
+			std::exit(1);
+		}
+	}
+	template <class T>
+	T take(result<T> value)
+	{
+		if (!value)
+		{
+			std::cerr << value.error().code << ':' << value.error().field << ':'
+					  << value.error().detail << '\n';
+			std::exit(1);
+		}
+		return std::move(*value);
+	}
+	detached_cell symbols(std::initializer_list<std::string_view> values)
+	{
+		std::vector<std::byte> encoded;
+		for (auto value : values)
+		{
+			for (unsigned shift = 0; shift < 32; shift += 8)
+				encoded.push_back(static_cast<std::byte>((value.size() >> shift) & 255));
+			for (char c : value)
+				encoded.push_back(static_cast<std::byte>(c));
+		}
+		return detached_cell::bytes(std::move(encoded));
+	}
+	q::annotated_row fact(std::size_t group,
+						  std::initializer_list<std::pair<std::string, detached_cell>> values)
+	{
+		q::annotated_row row;
+		row.presence = {"calls:test", {"debug"}};
+		row.interpretation = "clang22";
+		row.claim_contributors = {"claim:test"};
+		row.producer_contracts = {{"calls.test", "semantic:fixture"}};
+		row.provenance = {"calls:evidence"};
+		row.contributor_guarantees = {{"exact", "finite-call", "fixture", {"schema_validated"}}};
+		row.contributor_edges = {{row.claim_contributors.front(),
+								  row.producer_contracts.front(),
+								  row.provenance.front(),
+								  row.contributor_guarantees.front(),
+								  row.presence,
+								  row.interpretation}};
+		const auto descriptors = standard_relation_descriptors();
+		auto descriptor = std::ranges::find(descriptors, names[group], &relation_descriptor::id);
+		require(descriptor != descriptors.end(), "fixture descriptor missing");
+		for (const auto& column : descriptor->columns)
+		{
+			auto cell = detached_cell::utf8("fixture");
+			if (column.type.optional)
+				cell = detached_cell::absent(column.type);
+			else if (column.type.scalar == scalar_kind::boolean)
+				cell = detached_cell::boolean(false);
+			else if (column.type.scalar == scalar_kind::unsigned_integer)
+				cell = detached_cell::unsigned_integer(0);
+			else if (column.type.scalar == scalar_kind::digest)
+				cell = detached_cell::utf8(content_digest({}));
+			else if (column.type.scalar == scalar_kind::set ||
+					 column.type.scalar == scalar_kind::bytes)
+				cell = detached_cell::bytes({});
+			else if (column.type.scalar == scalar_kind::closed_symbol)
+				cell = detached_cell::utf8("canonicalized");
+			cell.type = column.type;
+			row.values.emplace("output." + column.name, std::move(cell));
+		}
+		for (const auto& [name, cell] : values)
+		{
+			auto copy = cell;
+			copy.type = row.values.at("output." + name).type;
+			row.values["output." + name] = std::move(copy);
+		}
+		return row;
+	}
+	void set(q::annotated_row& row, std::string_view name, detached_cell value)
+	{
+		const std::string key = "output." + std::string{name};
+		value.type = row.values.at(key).type;
+		row.values[key] = std::move(value);
+	}
+	detached_cell binary(std::string_view value)
+	{
+		std::vector<std::byte> out;
+		for (char c : value)
+			out.push_back(static_cast<std::byte>(c));
+		return detached_cell::bytes(std::move(out));
+	}
+	constexpr std::string_view profile = "clang22-original-exceptional-occurrences/1",
+							   lowering = "clang22-written-definition-analysis-lowering/1";
+	struct fixture
+	{
+		std::array<std::vector<q::annotated_row>, 8> rows;
+		fixture()
+		{
+			rows[0] = {fact(0, {{"compile_unit", detached_cell::utf8("unit:a")}})};
+			rows[1] = {fact(1,
+							{{"snapshot", detached_cell::utf8("source:a")},
+							 {"file", detached_cell::utf8("file:a")},
+							 {"size", detached_cell::unsigned_integer(100)}})};
+			rows[2] = {fact(2,
+							{{"span", detached_cell::utf8("span:scope")},
+							 {"snapshot", detached_cell::utf8("source:a")},
+							 {"file", detached_cell::utf8("file:a")},
+							 {"begin", detached_cell::unsigned_integer(0)},
+							 {"end", detached_cell::unsigned_integer(90)}}),
+					   fact(2,
+							{{"span", detached_cell::utf8("span:throw")},
+							 {"snapshot", detached_cell::utf8("source:a")},
+							 {"file", detached_cell::utf8("file:a")},
+							 {"begin", detached_cell::unsigned_integer(10)},
+							 {"end", detached_cell::unsigned_integer(20)}})};
+			rows[2].push_back(fact(2,
+								   {{"span", detached_cell::utf8("span:body")},
+									{"snapshot", detached_cell::utf8("source:a")},
+									{"file", detached_cell::utf8("file:a")},
+									{"begin", detached_cell::unsigned_integer(5)},
+									{"end", detached_cell::unsigned_integer(80)}}));
+
+			rows[3] = {fact(3,
+							{{"entity", detached_cell::utf8("function:a")},
+							 {"kind", detached_cell::utf8("function")}})};
+			rows[4] = {fact(4,
+							{{"detail", detached_cell::utf8("detail:a")},
+							 {"entity", detached_cell::utf8("function:a")},
+							 {"compile_unit", detached_cell::utf8("unit:a")},
+							 {"source", detached_cell::utf8("span:scope")},
+							 {"flags", symbols({"body_written", "finite_function_body_v1"})}})};
+			rows[5] = {fact(5,
+							{{"body", detached_cell::utf8("body:a")},
+							 {"function", detached_cell::utf8("function:a")},
+							 {"compile_unit", detached_cell::utf8("unit:a")},
+							 {"source", detached_cell::utf8("span:scope")}})};
+			set(rows[5][0], "source", detached_cell::utf8("span:body"));
+
+			rows[6] = {fact(6,
+							{{"node", detached_cell::utf8("syntax:throw")},
+							 {"function", detached_cell::utf8("function:a")},
+							 {"compile_unit", detached_cell::utf8("unit:a")},
+							 {"source", detached_cell::utf8("span:throw")}})};
+			rows[7] = {exit("variant:a", "lowering_variant", 0),
+					   exit("exit:throw", "written_throw", 1),
+					   exit("exit:helper", "lowering_helper", 2)};
+			set(rows[7][1], "variant", detached_cell::utf8("variant:a"));
+			set(rows[7][1], "source", detached_cell::utf8("span:throw"));
+			set(rows[7][1], "expression", detached_cell::utf8("syntax:throw"));
+			set(rows[7][2], "variant", detached_cell::utf8("variant:a"));
+			set(rows[7][2], "emitter_methods", detached_cell::unsigned_integer(8));
+			set(rows[7][2], "block_ordinal", detached_cell::unsigned_integer(2));
+			set(rows[7][2], "instruction_ordinal", detached_cell::unsigned_integer(1));
+			set(rows[7][2], "does_not_return", detached_cell::boolean(true));
+			census();
+		}
+		q::annotated_row
+		exit(std::string_view id, std::string_view role, std::uint64_t ordinal) const
+		{
+			return fact(
+				7,
+				{{"exit", detached_cell::utf8(std::string{id})},
+				 {"compile_unit", detached_cell::utf8("unit:a")},
+				 {"scope_detail", detached_cell::utf8("detail:a")},
+				 {"function", detached_cell::utf8("function:a")},
+				 {"definition_source", detached_cell::utf8("span:scope")},
+				 {"body", detached_cell::utf8("body:a")},
+				 {"variant_kind", detached_cell::utf8("function")},
+				 {"variant_index", detached_cell::unsigned_integer(0)},
+				 {"variant_symbol", binary(std::string_view{"f\0\xff", 3})},
+				 {"ordinal", detached_cell::unsigned_integer(ordinal)},
+				 {"profile", detached_cell::utf8(std::string{profile})},
+				 {"lowering_profile", detached_cell::utf8(std::string{lowering})},
+				 {"role", detached_cell::utf8(std::string{role})},
+				 {"eligibility",
+				  detached_cell::utf8(role == "lowering_variant" || role == "lowering_helper" ||
+											  role == "ordinary_instruction"
+										  ? "excluded"
+										  : "eligible")},
+				 {"observation_state", detached_cell::utf8("complete")}});
+		}
+		void census()
+		{
+			std::vector<std::string> ids;
+			for (const auto& r : rows[7])
+				ids.push_back(std::get<std::string>(*r.values.at("output.exit").value));
+			std::ranges::sort(ids);
+			ids.erase(std::ranges::unique(ids).begin(), ids.end());
+			std::vector<std::byte> out;
+			for (const auto& id : ids)
+			{
+				for (unsigned shift = 0; shift < 32; shift += 8)
+					out.push_back(static_cast<std::byte>((id.size() >> shift) & 255U));
+				for (char c : id)
+					out.push_back(static_cast<std::byte>(c));
+			}
+			for (auto group : {4U, 5U})
+				for (auto& r : rows[group])
+				{
+					set(r, "exceptional_exit_count", detached_cell::unsigned_integer(ids.size()));
+					set(r, "exceptional_exit_ids", detached_cell::bytes(out));
+					set(r, "exceptional_exit_state", detached_cell::utf8("complete"));
+					set(r, "exceptional_exit_profile", detached_cell::utf8(std::string{profile}));
+					set(r,
+						"exceptional_lowering_profile",
+						detached_cell::utf8(std::string{lowering}));
+				}
+		}
+		q::exceptional_exit_input input() const
+		{
+			return {rows[0],
+					rows[1],
+					rows[2],
+					rows[3],
+					rows[4],
+					rows[5],
+					rows[6],
+					rows[7],
+					true,
+					true,
+					true};
+		}
+		q::application_query_results queries(bool broad = true) const
+		{
+			q::application_query_results output;
+			output.snapshot_id = "query:exceptional";
+			for (std::size_t group = 0; group < rows.size(); ++group)
+			{
+				auto data = std::make_shared<q::query_result::data>();
+				data->row_values = rows[group];
+				data->status = q::execution_status::complete;
+				data->input_complete = broad;
+				data->ordered = true;
+				data->snapshot = output.snapshot_id;
+				output.scans.push_back({std::string{names[group]},
+										{},
+										q::query_transfer_access::make(std::move(data))});
+			}
+			return output;
+		}
+	};
+	const q::exceptional_exit_population& population(const q::exceptional_exit_projection& result)
+	{
+		require(result.populations.size() == 1, "one physical population");
+		return result.populations.front();
+	}
+} // namespace
+int main()
+{
+	fixture original;
+	auto raw = take(q::project_exceptional_exits(original.input()));
+	const auto& p = population(raw);
+	require(p.state == state::complete && p.enumeration_state == state::complete &&
+				p.scope_state == state::complete && p.occurrence_count == 3U,
+			"complete physical scope and atomic full census");
+	require(p.variants.size() == 1 && p.variants[0].occurrences.size() == 2 &&
+				p.variants[0].symbol == std::string("f\0\xff", 3),
+			"carrier not counted as qualifying occurrence; raw symbol lossless");
+	require(p.variants[0].occurrences[0].role == "written_throw" &&
+				p.variants[0].occurrences[0].source_state == state::complete &&
+				p.variants[0].occurrences[0].expression_state == state::complete,
+			"exact written throw bindings");
+	require(p.variants[0].occurrences[1].emitter_methods == 8U &&
+				p.variants[0].occurrences[1].state == state::complete &&
+				p.variants[0].occurrences[1].source_state == state::unknown,
+			"excluded helper absence remains independent");
+	auto query = take(q::project_exceptional_exits(original.queries(false)));
+	require(population(query).state == state::complete && query.source_queries &&
+				query.source_queries->scans.size() == 8,
+			"typed domain ignores unrelated broad partiality and retains query");
+	fixture empty;
+	empty.rows[7].resize(1);
+	empty.census();
+	auto known_empty = take(q::project_exceptional_exits(empty.input()));
+	require(population(known_empty).state == state::complete &&
+				population(known_empty).variants[0].occurrences.empty() &&
+				population(known_empty).occurrence_count == 1U,
+			"known empty lowering has original carrier");
+	fixture no_carrier;
+	no_carrier.rows[7].clear();
+	no_carrier.census();
+	require(population(take(q::project_exceptional_exits(no_carrier.input()))).state !=
+				state::complete,
+			"zero rows cannot invent completed lowering");
+	fixture variants = empty;
+	auto alternative = variants.exit("variant:b", "lowering_variant", 0);
+	set(alternative, "variant_kind", detached_cell::utf8("constructor"));
+	set(alternative, "variant_index", detached_cell::unsigned_integer(1));
+	variants.rows[7].push_back(alternative);
+	variants.census();
+	require(population(take(q::project_exceptional_exits(variants.input()))).variants.size() == 2,
+			"actual variants retained separately");
+	fixture absent = original;
+	absent.rows[7].pop_back();
+	require(population(take(q::project_exceptional_exits(absent.input()))).enumeration_state ==
+				state::conflicting,
+			"missing original member rejects closure");
+	fixture extra = original;
+	extra.rows[7].push_back(extra.exit("exit:extra", "termination", 3));
+	set(extra.rows[7].back(), "variant", detached_cell::utf8("variant:a"));
+	require(population(take(q::project_exceptional_exits(extra.input()))).enumeration_state ==
+				state::conflicting,
+			"extra original member rejects closure");
+	fixture foreign = original;
+	foreign.rows[7][1].presence.fragments = {"foreign"};
+	auto foreign_out = take(q::project_exceptional_exits(foreign.input()));
+	require(std::ranges::none_of(foreign_out.populations,
+								 [](const auto& scope)
+								 {
+									 return scope.state == state::complete;
+								 }),
+			"foreign world cannot satisfy original member");
+	fixture duplicate = original;
+	duplicate.rows[7].push_back(duplicate.rows[7][1]);
+	require(population(take(q::project_exceptional_exits(duplicate.input()))).state ==
+				state::complete,
+			"equal duplicate preserves finite closure");
+	set(duplicate.rows[7].back(), "eligibility", detached_cell::utf8("excluded"));
+	auto contradictory = take(q::project_exceptional_exits(duplicate.input()));
+	require(population(contradictory).enumeration_state == state::complete &&
+				population(contradictory).state == state::conflicting,
+			"classification conflict separate from membership");
+	fixture source_conflict = original;
+	source_conflict.rows[2].push_back(source_conflict.rows[2][1]);
+	set(source_conflict.rows[2].back(), "end", detached_cell::unsigned_integer(30));
+	auto source_out = take(q::project_exceptional_exits(source_conflict.input()));
+	require(population(source_out).state == state::complete &&
+				population(source_out).variants[0].occurrences[0].source_state ==
+					state::conflicting,
+			"source conflict cannot erase observed eligibility");
+	fixture owner = original;
+	set(owner.rows[6][0], "compile_unit", detached_cell::utf8("unit:foreign"));
+	require(population(take(q::project_exceptional_exits(owner.input())))
+					.variants[0]
+					.occurrences[0]
+					.expression_state == state::conflicting,
+			"foreign original expression unit");
+	fixture future = original;
+	set(future.rows[7][1], "role", detached_cell::utf8("future_exit"));
+	require(population(take(q::project_exceptional_exits(future.input()))).state != state::complete,
+			"future role cannot close subset");
+	fixture unknown = original;
+	set(unknown.rows[7][1], "eligibility", detached_cell::utf8("unknown"));
+	set(unknown.rows[7][1], "observation_state", detached_cell::utf8("partial"));
+	require(population(take(q::project_exceptional_exits(unknown.input()))).enumeration_state ==
+					state::complete &&
+				population(take(q::project_exceptional_exits(unknown.input()))).state ==
+					state::partial,
+			"unknown eligibility independent complete census");
+	fixture ordinal = original;
+	set(ordinal.rows[7][2], "ordinal", detached_cell::unsigned_integer(1));
+	require(population(take(q::project_exceptional_exits(ordinal.input()))).enumeration_state ==
+				state::conflicting,
+			"duplicate original ordinal");
+	auto missing = original.queries();
+	missing.scans.erase(missing.scans.begin() + 7);
+	auto missing_result = take(q::project_exceptional_exits(missing));
+	require(!missing_result.occurrence_inputs_complete &&
+				population(missing_result).state != state::complete &&
+				!missing_result.unresolved.empty(),
+			"missing scan unavailable, not known zero");
+	fixture optional = original;
+	for (auto& d : optional.rows[4])
+		for (auto it = d.values.begin(); it != d.values.end();)
+			if (it->first.starts_with("output.exceptional_"))
+				it = d.values.erase(it);
+			else
+				++it;
+	for (auto& d : optional.rows[5])
+		for (auto it = d.values.begin(); it != d.values.end();)
+			if (it->first.starts_with("output.exceptional_"))
+				it = d.values.erase(it);
+			else
+				++it;
+	require(population(take(q::project_exceptional_exits(optional.input()))).enumeration_state !=
+				state::complete,
+			"old optional facets stay unobserved");
+	fixture invalid = original;
+	invalid.rows[2][0].values.erase("output.begin");
+	auto bad = q::project_exceptional_exits(invalid.input());
+	require(!bad, "missing required original cell rejected");
+	q::projection_resource_usage usage{9, 9};
+	auto success = q::project_exceptional_exits(original.queries(), {}, {}, usage);
+	require(success && usage.operations > 0 && usage.retained_bytes_bound > 0,
+			"measured usage success");
+	const auto measured = usage;
+	q::finite_population_limits exact;
+	exact.maximum_operations = measured.operations;
+	exact.maximum_retained_bytes = measured.retained_bytes_bound;
+	auto bounded = q::project_exceptional_exits(original.queries(), exact, {}, usage);
+	require(bounded && usage.operations == measured.operations &&
+				usage.retained_bytes_bound == measured.retained_bytes_bound,
+			"exact measured reservation deterministic");
+	exact.maximum_operations = measured.operations - 1U;
+	auto work_fail = q::project_exceptional_exits(original.queries(), exact, {}, usage);
+	require(!work_fail && usage.operations == 0 && usage.retained_bytes_bound == 0,
+			"work failure zeroes usage");
+	q::finite_population_limits cap;
+	cap.maximum_rows = 1;
+	auto row_fail = q::project_exceptional_exits(original.input(), cap, {}, usage);
+	require(!row_fail && usage.operations == 0, "row cap before ownership");
+	std::stop_source stop;
+	stop.request_stop();
+	auto cancelled = q::project_exceptional_exits(original.input(), {}, stop.get_token(), usage);
+	require(!cancelled && cancelled.error().code == "sdk.exceptional-exit-cancelled" &&
+				usage.operations == 0,
+			"stop cancellation zeroes usage");
+	q::finite_population_limits callback;
+	callback.cancelled = []
+	{
+		return true;
+	};
+	auto callback_fail = q::project_exceptional_exits(original.input(), callback, {}, usage);
+	require(!callback_fail && callback_fail.error().code == "sdk.exceptional-exit-cancelled",
+			"caller cancellation");
+	auto reversed = original;
+	for (auto& rows : reversed.rows)
+		std::ranges::reverse(rows);
+	auto permutation = take(q::project_exceptional_exits(reversed.input()));
+	require(population(permutation).state == p.state &&
+				permutation.evidence.size() == raw.evidence.size() &&
+				population(permutation).variants[0].occurrences[0].evidence ==
+					p.variants[0].occurrences[0].evidence,
+			"permutation canonical original evidence");
+	auto implicit_flags = original.input();
+	implicit_flags.compile_units_complete = false;
+	implicit_flags.scope_inputs_complete = false;
+	implicit_flags.occurrence_inputs_complete = false;
+	require(population(take(q::project_exceptional_exits(implicit_flags))).state != state::complete,
+			"raw flags default unavailable");
+	fixture target_bound = original;
+	target_bound.rows[3].push_back(
+		fact(3,
+			 {{"entity", detached_cell::utf8("function:target")},
+			  {"kind", detached_cell::utf8("function")},
+			  {"provider_local_key", binary("opaque-original-framing")}}));
+	set(target_bound.rows[7][1], "target", detached_cell::utf8("function:target"));
+	set(target_bound.rows[7][1], "target_usr", binary(std::string_view{"u\0\xff", 3}));
+	auto target_result = take(q::project_exceptional_exits(target_bound.input()));
+	require(population(target_result).variants[0].occurrences[0].target_state == state::complete &&
+				population(target_result).variants[0].occurrences[0].target_usr ==
+					std::string("u\0\xff", 3),
+			"opaque entity key is independent from raw target USR");
+	fixture missing_ordinal = empty;
+	auto ordinal_type = missing_ordinal.rows[7][0].values.at("output.ordinal").type;
+	set(missing_ordinal.rows[7][0],
+		"ordinal",
+		detached_cell::unknown(ordinal_type, "not-observed"));
+	require(population(take(q::project_exceptional_exits(missing_ordinal.input()))).state !=
+				state::complete,
+			"unknown required ordinal cannot become known ordinal zero");
+	fixture future_profile = original;
+	for (auto group : {4U, 5U})
+		set(future_profile.rows[group][0],
+			"exceptional_exit_profile",
+			detached_cell::utf8("future-exception-profile/2"));
+	require(
+		population(take(q::project_exceptional_exits(future_profile.input()))).enumeration_state !=
+			state::complete,
+		"future census profile not recognized subset");
+	fixture unknown_variant = empty;
+	set(unknown_variant.rows[7][0], "variant_kind", detached_cell::utf8("future_variant"));
+	require(population(take(q::project_exceptional_exits(unknown_variant.input()))).state !=
+				state::complete,
+			"future variant unavailable");
+	auto sidechannels = original.queries();
+	auto data = std::make_shared<q::query_result::data>();
+	data->row_values = original.rows[7];
+	data->status = q::execution_status::complete;
+	data->input_complete = true;
+	data->ordered = true;
+	data->snapshot = sidechannels.snapshot_id;
+	data->conflict_values.push_back({std::string{names[7]},
+									 "original-slot",
+									 "clang22",
+									 {"debug"},
+									 {"claim:left", "claim:right"},
+									 {"content:left", "content:right"}});
+	sidechannels.scans[7].result = q::query_transfer_access::make(std::move(data));
+	auto conflict_scan = take(q::project_exceptional_exits(sidechannels));
+	require(!conflict_scan.occurrence_inputs_complete &&
+				population(conflict_scan).state != state::complete &&
+				conflict_scan.source_queries->scans[7].result.conflicts().size() == 1,
+			"original query conflict sidechannel preserved");
+	q::finite_population_limits evidence_cap;
+	evidence_cap.maximum_evidence_bytes = 1;
+	auto evidence_failure = q::project_exceptional_exits(original.input(), evidence_cap, {}, usage);
+	require(!evidence_failure && usage.operations == 0, "evidence cap before output ownership");
+	q::finite_population_limits zero_pop;
+	zero_pop.maximum_populations = 1;
+	fixture two_scopes = original;
+	auto second = two_scopes.rows[4][0];
+	set(second, "detail", detached_cell::utf8("detail:b"));
+	two_scopes.rows[4].push_back(second);
+	auto population_failure = q::project_exceptional_exits(two_scopes.input(), zero_pop, {}, usage);
+	require(!population_failure && population_failure.error().field == "populations" &&
+				usage.operations == 0,
+			"population quota independently bounded");
+	q::projection_resource_usage raw_usage;
+	require(q::project_exceptional_exits(original.input(), {}, {}, raw_usage).has_value() &&
+				raw_usage.operations > 0 && raw_usage.retained_bytes_bound > 0,
+			"raw measured usage success");
+	fixture missing_body = original;
+	missing_body.rows[5].clear();
+	auto missing_body_result = take(q::project_exceptional_exits(missing_body.input()));
+	require(population(missing_body_result).body == "body:a" &&
+				population(missing_body_result).scope_state != state::complete,
+			"original body FK retained but missing body cannot close binding");
+	fixture foreign_body = original;
+	set(foreign_body.rows[5][0], "function", detached_cell::utf8("function:foreign"));
+	auto foreign_body_result = take(q::project_exceptional_exits(foreign_body.input()));
+	require(std::ranges::none_of(foreign_body_result.populations,
+								 [](const auto& scope)
+								 {
+									 return scope.scope_state == state::complete;
+								 }),
+			"actual foreign body owner cannot satisfy scope");
+	require(p.body == "body:a" && p.definition_source == "span:scope" &&
+				p.scope_state == state::complete,
+			"distinct exact declaration and lexical body sources joined by actual body FK");
+
+	fixture decoys = original;
+	std::string large(512U * 1024U, 'x');
+	auto unused_span = decoys.rows[2][0];
+	set(unused_span, "span", detached_cell::utf8("span:unrelated"));
+	set(unused_span, "role", detached_cell::utf8(large));
+	decoys.rows[2].push_back(unused_span);
+	auto unused_syntax = decoys.rows[6][0];
+	set(unused_syntax, "node", detached_cell::utf8("syntax:unrelated"));
+	set(unused_syntax, "source", detached_cell::utf8("span:unrelated"));
+	set(unused_syntax, "kind", detached_cell::utf8(large));
+	decoys.rows[6].push_back(unused_syntax);
+	q::finite_population_limits selective;
+	selective.maximum_retained_bytes = raw_usage.retained_bytes_bound * 2U;
+	selective.maximum_evidence_bytes = selective.maximum_retained_bytes;
+	q::projection_resource_usage decoy_usage;
+	auto decoy_result = q::project_exceptional_exits(decoys.input(), selective, {}, decoy_usage);
+	require(decoy_result && population(*decoy_result).state == state::complete &&
+				decoy_result->evidence.size() == raw.evidence.size(),
+			"unreferenced large syntax/source not copied under actual evidence cap");
+	decoys.rows[2].back().values.erase("output.begin");
+	require(!q::project_exceptional_exits(decoys.input(), selective, {}, decoy_usage) &&
+				decoy_usage.operations == 0,
+			"malformed unreferenced source still validates and resets usage");
+	fixture unknown_body = original;
+	set(unknown_body.rows[5][0],
+		"compile_unit",
+		detached_cell::unknown(unknown_body.rows[5][0].values.at("output.compile_unit").type,
+							   "unobserved-original-unit"));
+	auto unknown_body_result = take(q::project_exceptional_exits(unknown_body.input()));
+	require(std::ranges::none_of(unknown_body_result.populations,
+								 [](const auto& scope)
+								 {
+									 return scope.scope_state == state::complete;
+								 }),
+			"unobserved original body unit is a frontier");
+
+	std::cout << "exceptional exits original projection: PASS\n";
+}

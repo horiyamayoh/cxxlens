@@ -38,6 +38,36 @@ int main(int argc, char** argv)
 				  << queries.error().detail << '\n';
 		return 3;
 	}
+	if (argc == 3 && std::string_view{argv[2]} == "--exceptional-exits")
+	{
+		query::projection_resource_usage usage;
+		auto exits = query::project_exceptional_exits(*queries, {}, {}, usage);
+		if (!exits)
+		{
+			std::cerr << exits.error().code << ':' << exits.error().field << ':'
+					  << exits.error().detail << '\n';
+			return 6;
+		}
+		require(exits->source_queries.has_value() && usage.operations > 0 &&
+					usage.retained_bytes_bound > 0,
+				"exceptional projection lost original queries or measured bounds");
+		for (const auto& population : exits->populations)
+		{
+			std::cout << "population " << population.function << ' '
+					  << static_cast<unsigned>(population.enumeration_state) << ' '
+					  << static_cast<unsigned>(population.scope_state) << ' '
+					  << population.variants.size() << '\n';
+			for (const auto& variant : population.variants)
+			{
+				std::size_t eligible{};
+				for (const auto& occurrence : variant.occurrences)
+					eligible += occurrence.eligibility == "eligible" ? 1U : 0U;
+				std::cout << "variant " << population.function << ' '
+						  << static_cast<unsigned>(variant.state) << ' ' << eligible << '\n';
+			}
+		}
+		return 0;
+	}
 	const bool stock_events = argc == 3 && std::string_view{argv[2]} == "--stock-template-events";
 	if (argc == 3 && !stock_events)
 	{

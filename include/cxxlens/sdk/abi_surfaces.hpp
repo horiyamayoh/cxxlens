@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include <cxxlens/sdk/projection_resource_usage.hpp>
 #include <cxxlens/sdk/query_transfer.hpp>
 
 namespace cxxlens::sdk::query
@@ -91,4 +92,15 @@ namespace cxxlens::sdk::query
 	project_abi_surfaces(const application_query_results& input,
 						 abi_surface_limits limits = {},
 						 std::stop_token cancellation = {});
+	/** Report charged work and conservative owned-result/temporary storage on success.
+	 * Usage is zero on every failure. */
+	[[nodiscard]] result<abi_surface_projection> project_abi_surfaces(abi_surface_input,
+																	  abi_surface_limits,
+																	  std::stop_token,
+																	  projection_resource_usage&);
+	[[nodiscard]] result<abi_surface_projection>
+	project_abi_surfaces(const application_query_results&,
+						 abi_surface_limits,
+						 std::stop_token,
+						 projection_resource_usage&);
 } // namespace cxxlens::sdk::query

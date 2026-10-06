@@ -1130,6 +1130,140 @@ namespace cxxlens::sdk::query
 							missing(std::move(value));
 						}
 				}
+				else if (current.domain == "comments")
+				{
+					// Global same-world files do not establish a unit's frozen-source
+					// membership. Keep only independently observed raw comment/source
+					// associations or the unit's original main-source boundary.
+					std::set<key> associated_units;
+					for (const auto& population : work.output.populations)
+					{
+						work.work();
+						const auto unit = world(population.compile_unit, population);
+						if (!associated_units.contains(unit))
+						{
+							for (const auto& axis : unit)
+								charge(work.used.bytes,
+									   axis.size() + 64U,
+									   limits.maximum_retained_bytes,
+									   "comment-unit-membership");
+							associated_units.insert(unit);
+						}
+					}
+					std::map<key, finite_population> expected;
+					const auto observe = [&](finite_population value, const indices& original)
+					{
+						work.work();
+						const auto unit = world(value.compile_unit, value);
+						if (!associated_units.contains(unit))
+						{
+							for (const auto& axis : unit)
+								charge(work.used.bytes,
+									   axis.size() + 64U,
+									   limits.maximum_retained_bytes,
+									   "comment-unit-membership");
+							associated_units.insert(unit);
+						}
+						const auto owner =
+							world(value.compile_unit + '\n' + value.source_snapshot, value);
+						if (population_owners.contains(owner))
+							return;
+						if (!expected.contains(owner))
+						{
+							if (expected.size() >= limits.maximum_populations)
+								fail("populations", "limit-exceeded", "sdk.population-budget");
+							charge(work.used.bytes,
+								   sizeof(finite_population) + value.file.size() + 256U,
+								   limits.maximum_retained_bytes,
+								   "comment-source-membership");
+							for (const auto& axis : owner)
+								charge(work.used.bytes,
+									   axis.size() * 2U + 64U,
+									   limits.maximum_retained_bytes,
+									   "comment-source-membership");
+							expected.emplace(owner, value);
+						}
+						auto& target = expected.at(owner);
+						if (target.file != value.file && !value.file.empty())
+						{
+							gap(target,
+								"sdk.population-source-association-conflicting",
+								target.source_snapshot,
+								true);
+							target.file.clear();
+						}
+						for (const auto& unresolved : value.gaps)
+							gap(target,
+								unresolved.code,
+								unresolved.subject,
+								value.state == finite_population_state::conflicting);
+						work.retain(target.evidence, original);
+					};
+					for (const auto& [identity, refs] : work.maps[8U])
+						for (const auto ref : refs)
+						{
+							work.work();
+							const auto& member = work.row(ref);
+							const auto spans =
+								work.lookup(2U, world(text(member, "source"), member, identity[2]));
+							for (const auto span : spans)
+							{
+								work.work();
+								finite_population value;
+								value.compile_unit = text(member, "compile_unit");
+								value.source_snapshot = text(work.row(span), "snapshot");
+								value.file = text(work.row(span), "file");
+								value.universe = identity[1];
+								value.variant = identity[2];
+								value.interpretation = identity[3];
+								work.file(value);
+								observe(std::move(value), indices{ref, span});
+							}
+						}
+					for (const auto& [identity, refs] : work.maps[0U])
+					{
+						work.work();
+						bool source_observed = associated_units.contains(identity);
+						for (const auto ref : refs)
+						{
+							const auto& unit = work.row(ref);
+							const auto main = text(unit, "main_source");
+							if (main.empty())
+								continue;
+							finite_population value;
+							value.compile_unit = identity[0];
+							value.universe = identity[1];
+							value.variant = identity[2];
+							value.interpretation = identity[3];
+							value.source_snapshot = main;
+							const auto files = work.lookup(1U, world(main, value));
+							if (!files.empty() && work.equal(files))
+								value.file = text(work.row(files.front()), "file");
+							work.file(value);
+							observe(std::move(value), indices{ref});
+							source_observed = true;
+						}
+						if (!source_observed)
+						{
+							finite_population value;
+							value.compile_unit = identity[0];
+							value.universe = identity[1];
+							value.variant = identity[2];
+							value.interpretation = identity[3];
+							work.retain(value.evidence, refs);
+							gap(value,
+								"sdk.population-unit-source-membership-missing",
+								value.compile_unit);
+							missing(std::move(value));
+						}
+					}
+					for (auto& [identity, value] : expected)
+					{
+						(void)identity;
+						canonical(value.gaps);
+						missing(std::move(value));
+					}
+				}
 				else
 				{
 					std::map<std::array<std::string, 3U>, std::vector<std::pair<key, indices>>>

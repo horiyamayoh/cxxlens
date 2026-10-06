@@ -111,9 +111,11 @@ namespace cxxlens::sdk::query
 			}
 			finite_population_limits nested()
 			{
+				// The original action projection finishes before the facet builder runs.
+				// Lend remaining capacity, then settle its measured charges.
 				auto result = limits;
-				result.maximum_operations /= 2U;
-				result.maximum_retained_bytes /= 2U;
+				result.maximum_operations -= operations;
+				result.maximum_retained_bytes -= retained;
 				result.maximum_members /= 2U;
 				result.maximum_evidence_references /= 2U;
 				charge(members, result.maximum_members, limits.maximum_members, "members");
@@ -125,8 +127,6 @@ namespace cxxlens::sdk::query
 					std::min(result.maximum_evidence_bytes, result.maximum_retained_bytes);
 				result.maximum_source_plan_bytes =
 					std::min(result.maximum_source_plan_bytes, result.maximum_retained_bytes);
-				work(result.maximum_operations);
-				bytes(result.maximum_retained_bytes);
 				return result;
 			}
 		};
@@ -842,16 +842,23 @@ namespace cxxlens::sdk::query
 														   finite_population_limits limits,
 														   std::stop_token stop,
 														   bool dispatch_complete,
-														   bool storage_complete)
+														   bool storage_complete,
+														   projection_resource_usage* usage)
 		{
 			try
 			{
 				budget b{limits, stop};
 				b.work();
 				auto nested = b.nested();
-				auto actions = original(nested);
+				projection_resource_usage action_usage;
+				auto actions = original(nested, action_usage);
 				if (!actions)
 					return actions.error();
+				if (action_usage.operations > nested.maximum_operations ||
+					action_usage.retained_bytes_bound > nested.maximum_retained_bytes)
+					fail("nested-usage", "outside-offered-limit", "sdk.function-facet-budget");
+				b.work(action_usage.operations);
+				b.bytes(action_usage.retained_bytes_bound);
 				function_compiler_facet_projection result;
 				result.original_actions = std::move(*actions);
 				result.dispatch_inputs_complete = dispatch_complete;
@@ -863,7 +870,10 @@ namespace cxxlens::sdk::query
 					result.original_actions.scope_inputs_complete &&
 					result.original_actions.admission_inputs_complete;
 				builder value{b, std::move(result), {}};
-				return value.run();
+				auto output = value.run();
+				if (usage)
+					*usage = {b.operations, b.retained};
+				return output;
 			}
 			catch (const failure& f)
 			{
@@ -884,29 +894,51 @@ namespace cxxlens::sdk::query
 	result<function_compiler_facet_projection> project_function_compiler_facets(
 		function_compiler_facet_input input, finite_population_limits limits, std::stop_token stop)
 	{
-		return project(
-			[&](auto nested)
-			{
-				return project_function_actions(input.actions, nested, stop);
-			},
-			limits,
-			stop,
-			input.dispatch_inputs_complete,
-			input.storage_inputs_complete);
+		projection_resource_usage usage;
+		return project_function_compiler_facets(input, limits, stop, usage);
 	}
 	result<function_compiler_facet_projection>
 	project_function_compiler_facets(const application_query_results& input,
 									 finite_population_limits limits,
 									 std::stop_token stop)
 	{
+		projection_resource_usage usage;
+		return project_function_compiler_facets(input, limits, stop, usage);
+	}
+	result<function_compiler_facet_projection>
+	project_function_compiler_facets(function_compiler_facet_input input,
+									 finite_population_limits limits,
+									 std::stop_token stop,
+									 projection_resource_usage& usage)
+	{
+		usage = {};
 		return project(
-			[&](auto nested)
+			[&](auto nested, projection_resource_usage& original_usage)
 			{
-				return project_function_actions(input, nested, stop);
+				return project_function_actions(input.actions, nested, stop, original_usage);
+			},
+			limits,
+			stop,
+			input.dispatch_inputs_complete,
+			input.storage_inputs_complete,
+			&usage);
+	}
+	result<function_compiler_facet_projection>
+	project_function_compiler_facets(const application_query_results& input,
+									 finite_population_limits limits,
+									 std::stop_token stop,
+									 projection_resource_usage& usage)
+	{
+		usage = {};
+		return project(
+			[&](auto nested, projection_resource_usage& original_usage)
+			{
+				return project_function_actions(input, nested, stop, original_usage);
 			},
 			limits,
 			stop,
 			true,
-			true);
+			true,
+			&usage);
 	}
 } // namespace cxxlens::sdk::query

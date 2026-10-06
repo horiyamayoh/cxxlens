@@ -1202,6 +1202,14 @@ add_test(NAME unit.sdk-target-resolution
 set_tests_properties(unit.sdk-target-resolution
                      PROPERTIES LABELS "unit;sdk;query;budget;cancellation")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-exceptional-exits
+                            unit/sdk/exceptional_exits_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-exceptional-exits PRIVATE cxxlens::query)
+add_test(NAME unit.sdk-exceptional-exits
+         COMMAND cxxlens-unit-sdk-exceptional-exits)
+set_tests_properties(unit.sdk-exceptional-exits
+                     PROPERTIES LABELS "unit;sdk;query;budget;cancellation")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-template-domains
                             unit/sdk/template_domains_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-template-domains PRIVATE cxxlens::query)
@@ -1218,6 +1226,23 @@ target_link_libraries(cxxlens-unit-sdk-template-events PRIVATE cxxlens::query)
 add_test(NAME unit.sdk-template-events COMMAND cxxlens-unit-sdk-template-events)
 set_tests_properties(unit.sdk-template-events
                      PROPERTIES LABELS "unit;sdk;query;budget;cancellation")
+
+cxxlens_add_test_executable(
+  cxxlens-clang22-exceptional-exit-rows
+  adapter/clang22/project_exceptional_exit_rows_test.cpp)
+target_sources(
+  cxxlens-clang22-exceptional-exit-rows
+  PRIVATE
+    ${PROJECT_SOURCE_DIR}/src/llvm/clang22/project_exceptional_exit_rows.cpp)
+target_include_directories(cxxlens-clang22-exceptional-exit-rows
+                           PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(cxxlens-clang22-exceptional-exit-rows
+                      PRIVATE cxxlens::query)
+add_test(NAME adapter.clang22-exceptional-exit-rows
+         COMMAND cxxlens-clang22-exceptional-exit-rows)
+set_tests_properties(
+  adapter.clang22-exceptional-exit-rows
+  PROPERTIES LABELS "adapter;clang22;wire;negative;budget;cancellation")
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-call-operands
                             unit/sdk/call_operands_test.cpp)
@@ -1921,6 +1946,19 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
         PROPERTIES LABELS "adapter;clang22;application;templates;bounded"
                    TIMEOUT 600)
     endif()
+    if(CXXLENS_CLANG_EXCEPTIONAL_EVENTS)
+      add_test(
+        NAME adapter.clang22-exceptional-exits
+        COMMAND
+          "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/adapter/clang22/exceptional_exits_test.py"
+          "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}"
+          "$<TARGET_FILE:cxxlens-clang22-original-input-projection>")
+      set_tests_properties(
+        adapter.clang22-exceptional-exits
+        PROPERTIES LABELS "adapter;clang22;application;exceptions;bounded"
+                   TIMEOUT 600)
+    endif()
     add_test(
       NAME adapter.clang22-definition-roles
       COMMAND
@@ -2233,6 +2271,25 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     set_tests_properties(
       adapter.clang22-scalar-types-native
       PROPERTIES LABELS "adapter;clang22;native;type;scalar;negative")
+  endif()
+
+  if(CXXLENS_CLANG22_AVAILABLE AND CXXLENS_CLANG_EXCEPTIONAL_EVENTS)
+    cxxlens_add_test_executable(
+      cxxlens-clang22-exceptional-exits-native
+      adapter/clang22/project_exceptional_exits_test.cpp)
+    target_link_libraries(cxxlens-clang22-exceptional-exits-native
+                          PRIVATE cxxlens_clang22_worker_core)
+    cxxlens_configure_clang22(cxxlens-clang22-exceptional-exits-native)
+    if(CXXLENS_BUILD_SHARED)
+      cxxlens_add_provider_runtime_closure(
+        cxxlens-clang22-exceptional-exits-native)
+    endif()
+    add_test(NAME adapter.clang22-exceptional-exits-native
+             COMMAND cxxlens-clang22-exceptional-exits-native)
+    set_tests_properties(
+      adapter.clang22-exceptional-exits-native
+      PROPERTIES LABELS
+                 "adapter;clang22;native;eh;negative;budget;cancellation")
   endif()
 
   cxxlens_add_test_executable(cxxlens-clang22-source-closure-native

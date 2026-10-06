@@ -564,6 +564,24 @@ namespace cxxlens::sdk::query
 			auto compatible = take(query::builder::from(descriptor));
 			compatible = take(std::move(compatible).project(projection));
 			auto original = std::move(compatible).finish();
+			// A saved requirement names its minimum compatible minor, rather
+			// than the installed descriptor's newest optional-column revision.
+			// Preserve that minimum so the original plan and digest stay intact.
+			const auto& requirements = array(member(saved, "relation_requirements"));
+			if (requirements.size() != 1U)
+				fail("logical_ir", "independent-scan-required");
+			const auto& requirement = requirements.front();
+			shape(requirement, {"descriptor_id", "maximum_minor", "minimum_minor"});
+			const auto minimum_minor = number(member(requirement, "minimum_minor"));
+			if (string(requirement, "descriptor_id") != descriptor.id ||
+				string(requirement, "maximum_minor") != "any-compatible" ||
+				minimum_minor > descriptor.version.minor)
+				fail("logical_ir", "independent-scan-required");
+			auto& bound = original.relation_requirements.front();
+			bound.version.minor = static_cast<std::uint32_t>(minimum_minor);
+			bound.descriptor_digest =
+				take(semantic_digest("cxxlens.relation-descriptor-binding.v2",
+									 bound.contract_digest + "\n" + bound.canonical_form()));
 			check(original.validate());
 			const auto rebuilt =
 				take(sdk::detail::parse_json_value(original.canonical_form(), limits));

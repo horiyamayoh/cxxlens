@@ -36,6 +36,7 @@
 #include <cxxlens/relations/cc_entity.hpp>
 #include <cxxlens/relations/cc_entity_detail.hpp>
 #include <cxxlens/relations/cc_entity_edge.hpp>
+#include <cxxlens/relations/cc_exceptional_exit.hpp>
 #include <cxxlens/relations/cc_flow_fact.hpp>
 #include <cxxlens/relations/cc_flow_inventory.hpp>
 #include <cxxlens/relations/cc_lambda_capture.hpp>
@@ -1107,58 +1108,58 @@ namespace cxxlens::detail::clang22
 									   }),
 						   prepared.end());
 			sdk::relation_registry registry;
-			const std::array<const sdk::relation_descriptor*, 49U> descriptors{
-				&build::relations::project::descriptor(),
-				&build::relations::toolchain_context::descriptor(),
-				&build::relations::variant::descriptor(),
-				&build::relations::compile_unit::descriptor(),
-				&build::relations::compile_unit_analysis::descriptor(),
-				&build::relations::analysis_inventory::descriptor(),
-				&source::relations::file::descriptor(),
-				&source::relations::span::descriptor(),
-				&cc::relations::entity::descriptor(),
-				&cc::relations::call_site::descriptor(),
-				&cc::relations::call_direct_target::descriptor(),
-				&cc::relations::call_operand::descriptor(),
-				&cc::relations::entity_detail::descriptor(),
-				&cc::relations::entity_edge::descriptor(),
-				&cc::relations::syntax_node::descriptor(),
-				&cc::relations::abi_surface::descriptor(),
-				&cc::relations::body::descriptor(),
-				&cc::relations::cfg_node::descriptor(),
-				&cc::relations::cfg_edge::descriptor(),
-				&cc::relations::flow_fact::descriptor(),
-				&cc::relations::layout_fact::descriptor(),
-				&cc::relations::operation::descriptor(),
-				&cc::relations::record_surface::descriptor(),
-				&cc::relations::record_inventory::descriptor(),
-				&cc::relations::declaration::descriptor(),
-				&cc::relations::declaration_inventory::descriptor(),
-				&cc::relations::target_resolution_slot::descriptor(),
-				&cc::relations::template_subject::descriptor(),
-				&cc::relations::constraint_node::descriptor(),
-				&cc::relations::lambda_capture::descriptor(),
-				&cc::relations::template_instantiation_frame::descriptor(),
-				&cc::relations::template_inventory::descriptor(),
-				&cc::relations::template_candidate::descriptor(),
-				&cc::relations::constant_evaluation_root::descriptor(),
-				&cc::relations::constant_evaluated_call::descriptor(),
+			const std::array descriptors{&build::relations::project::descriptor(),
+										 &build::relations::toolchain_context::descriptor(),
+										 &build::relations::variant::descriptor(),
+										 &build::relations::compile_unit::descriptor(),
+										 &build::relations::compile_unit_analysis::descriptor(),
+										 &build::relations::analysis_inventory::descriptor(),
+										 &source::relations::file::descriptor(),
+										 &source::relations::span::descriptor(),
+										 &cc::relations::entity::descriptor(),
+										 &cc::relations::call_site::descriptor(),
+										 &cc::relations::call_direct_target::descriptor(),
+										 &cc::relations::call_operand::descriptor(),
+										 &cc::relations::entity_detail::descriptor(),
+										 &cc::relations::entity_edge::descriptor(),
+										 &cc::relations::exceptional_exit::descriptor(),
+										 &cc::relations::syntax_node::descriptor(),
+										 &cc::relations::abi_surface::descriptor(),
+										 &cc::relations::body::descriptor(),
+										 &cc::relations::cfg_node::descriptor(),
+										 &cc::relations::cfg_edge::descriptor(),
+										 &cc::relations::flow_fact::descriptor(),
+										 &cc::relations::layout_fact::descriptor(),
+										 &cc::relations::operation::descriptor(),
+										 &cc::relations::record_surface::descriptor(),
+										 &cc::relations::record_inventory::descriptor(),
+										 &cc::relations::declaration::descriptor(),
+										 &cc::relations::declaration_inventory::descriptor(),
+										 &cc::relations::target_resolution_slot::descriptor(),
+										 &cc::relations::template_subject::descriptor(),
+										 &cc::relations::constraint_node::descriptor(),
+										 &cc::relations::lambda_capture::descriptor(),
+										 &cc::relations::template_instantiation_frame::descriptor(),
+										 &cc::relations::template_inventory::descriptor(),
+										 &cc::relations::template_candidate::descriptor(),
+										 &cc::relations::constant_evaluation_root::descriptor(),
+										 &cc::relations::constant_evaluated_call::descriptor(),
 
-				&cc::relations::flow_inventory::descriptor(),
-				&source::relations::comment::descriptor(),
-				&source::relations::comment_inventory::descriptor(),
-				&source::relations::include_inventory::descriptor(),
+										 &cc::relations::flow_inventory::descriptor(),
+										 &source::relations::comment::descriptor(),
+										 &source::relations::comment_inventory::descriptor(),
+										 &source::relations::include_inventory::descriptor(),
 
-				&cc::relations::type::descriptor(),
-				&cc::relations::type_component::descriptor(),
-				&source::relations::include::descriptor(),
-				&source::relations::preprocessor_event::descriptor(),
-				&source::relations::preprocessor_inventory::descriptor(),
-				&source::relations::token::descriptor(),
-				&source::relations::token_inventory::descriptor(),
-				&materialization::entity_observation_v2_descriptor(),
-				&materialization::call_observation_v2_descriptor(),
-				&materialization::type_observation_v2_descriptor()};
+										 &cc::relations::type::descriptor(),
+										 &cc::relations::type_component::descriptor(),
+										 &source::relations::include::descriptor(),
+										 &source::relations::preprocessor_event::descriptor(),
+										 &source::relations::preprocessor_inventory::descriptor(),
+										 &source::relations::token::descriptor(),
+										 &source::relations::token_inventory::descriptor(),
+										 &materialization::entity_observation_v2_descriptor(),
+										 &materialization::call_observation_v2_descriptor(),
+										 &materialization::type_observation_v2_descriptor()};
 			for (const auto* descriptor : descriptors)
 				take(registry.add(*descriptor));
 			auto engine = take(registry.build("cxxlens.local-clang22.v1"));
@@ -1401,6 +1402,14 @@ namespace cxxlens::detail::clang22
 									descriptor->id == "cc.constant_evaluated_call.v1" ||
 									descriptor->id == "cc.template_inventory.v1";
 								if (template_relation && !unresolved.code.starts_with("template."))
+									continue;
+								if (descriptor->id == "cc.exceptional_exit.v1" &&
+									!unresolved.code.starts_with("exceptional-exits."))
+									continue;
+								if (unresolved.code.starts_with("exceptional-exits.") &&
+									descriptor->id != "cc.exceptional_exit.v1" &&
+									descriptor->id != "cc.entity_detail.v1" &&
+									descriptor->id != "cc.body.v1")
 									continue;
 								const bool target_resolution =
 									unresolved.code == "provider.indirect-target-unresolved" ||

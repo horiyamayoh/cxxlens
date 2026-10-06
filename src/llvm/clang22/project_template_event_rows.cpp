@@ -47,8 +47,8 @@ namespace cxxlens::detail::clang22
 				retain(value.size());
 				std::vector<std::byte> out;
 				out.reserve(value.size());
-				for (unsigned char byte : value)
-					out.push_back(static_cast<std::byte>(byte));
+				for (char byte : value)
+					out.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
 				return out;
 			}
 			sdk::detached_cell binary(std::string_view value)
@@ -63,10 +63,11 @@ namespace cxxlens::detail::clang22
 				std::string out;
 				out.reserve(value.size() * 2U);
 				constexpr auto digits = "0123456789abcdef";
-				for (unsigned char byte : value)
+				for (char byte : value)
 				{
-					out.push_back(digits[byte >> 4U]);
-					out.push_back(digits[byte & 15U]);
+					const auto encoded = static_cast<unsigned char>(byte);
+					out.push_back(digits[encoded >> 4U]);
+					out.push_back(digits[encoded & 15U]);
 				}
 				return out;
 			}
@@ -84,8 +85,8 @@ namespace cxxlens::detail::clang22
 					const auto n = static_cast<std::uint32_t>(value.size());
 					for (unsigned shift = 0; shift < 32; shift += 8U)
 						out.push_back(static_cast<std::byte>((n >> shift) & 255U));
-					for (unsigned char byte : value)
-						out.push_back(static_cast<std::byte>(byte));
+					for (char byte : value)
+						out.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
 				}
 				return {{sdk::scalar_kind::set, {}, false},
 						sdk::cell_state::present,

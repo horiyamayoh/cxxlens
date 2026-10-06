@@ -141,8 +141,8 @@ namespace cxxlens::sdk::query
 		{
 			finite_population_limits limits;
 			std::stop_token stop;
-			std::size_t retained{}, evidence{}, references{}, operations{}, conditions{}, members{},
-				rows{};
+			std::size_t retained{}, temporary_peak{}, evidence{}, references{}, operations{},
+				conditions{}, members{}, rows{};
 			void charge(std::size_t& used,
 						std::size_t amount,
 						std::size_t maximum,
@@ -2030,6 +2030,8 @@ namespace cxxlens::sdk::query
 							const auto temporary = b.estimate(row);
 							if (temporary > (limits.maximum_retained_bytes - b.retained) / 2U)
 								fail("canonical-temporary", "limit-exceeded", "sdk.action-budget");
+							b.temporary_peak =
+								std::max(b.temporary_peak, b.retained + 2U * temporary);
 							std::size_t payload_bytes = 128U;
 							for (const auto& [name, value] : row.values)
 							{
@@ -2245,7 +2247,7 @@ namespace cxxlens::sdk::query
 				canonical(output->unresolved);
 				output->source_queries = input;
 				if (usage)
-					*usage = {b.operations, b.retained};
+					*usage = {b.operations, std::max(b.retained, b.temporary_peak)};
 				return output;
 			}
 			catch (const failure& exception)
@@ -2286,7 +2288,7 @@ namespace cxxlens::sdk::query
 		budget b{limits, stop};
 		auto output = project_rows(input, limits, stop, b);
 		if (output)
-			usage = {b.operations, b.retained};
+			usage = {b.operations, std::max(b.retained, b.temporary_peak)};
 		return output;
 	}
 	result<function_action_projection>

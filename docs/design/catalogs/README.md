@@ -24,3 +24,4 @@ Relation Registry は exact scalar-value と cross-TU entity identity の contra
 開発完了は変更固有試験と deterministic CTest の成功で判定します。
 
 Original projection resource reservations use the additive charged-usage contract in [ADR 0132](../adr/0132-projection-resource-reservation-settlement.md).
+Original exceptional occurrence populations retain independent physical definitions and compiler lowering variants as specified in [ADR 0133](../adr/0133-original-exceptional-exit-occurrences.md).

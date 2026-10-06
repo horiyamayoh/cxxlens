@@ -63,4 +63,16 @@ namespace cxxlens::sdk::query
 		function_compiler_facet_input, finite_population_limits = {}, std::stop_token = {});
 	[[nodiscard]] result<function_compiler_facet_projection> project_function_compiler_facets(
 		const application_query_results&, finite_population_limits = {}, std::stop_token = {});
+	/** Report charged work and a conservative bound including owned results and temporaries.
+	 * Usage is zero on failure; unchanged default limits still apply. */
+	[[nodiscard]] result<function_compiler_facet_projection>
+	project_function_compiler_facets(function_compiler_facet_input,
+									 finite_population_limits,
+									 std::stop_token,
+									 projection_resource_usage&);
+	[[nodiscard]] result<function_compiler_facet_projection>
+	project_function_compiler_facets(const application_query_results&,
+									 finite_population_limits,
+									 std::stop_token,
+									 projection_resource_usage&);
 } // namespace cxxlens::sdk::query

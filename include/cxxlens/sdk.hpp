@@ -11,6 +11,7 @@
 #include <cxxlens/sdk/claim.hpp>
 #include <cxxlens/sdk/common.hpp>
 #include <cxxlens/sdk/control_flow.hpp>
+#include <cxxlens/sdk/exceptional_exits.hpp>
 #include <cxxlens/sdk/finite_populations.hpp>
 #include <cxxlens/sdk/function_actions.hpp>
 #include <cxxlens/sdk/function_compiler_facets.hpp>

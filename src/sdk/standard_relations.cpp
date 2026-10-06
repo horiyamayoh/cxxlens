@@ -24,6 +24,7 @@
 #include <cxxlens/relations/cc_entity.hpp>
 #include <cxxlens/relations/cc_entity_detail.hpp>
 #include <cxxlens/relations/cc_entity_edge.hpp>
+#include <cxxlens/relations/cc_exceptional_exit.hpp>
 #include <cxxlens/relations/cc_flow_fact.hpp>
 #include <cxxlens/relations/cc_flow_inventory.hpp>
 #include <cxxlens/relations/cc_lambda_capture.hpp>
@@ -337,6 +338,7 @@ namespace cxxlens::sdk
 				cc::relations::entity::descriptor(),
 				cc::relations::entity_detail::descriptor(),
 				cc::relations::entity_edge::descriptor(),
+				cc::relations::exceptional_exit::descriptor(),
 				cc::relations::flow_fact::descriptor(),
 				cc::relations::layout_fact::descriptor(),
 				cc::relations::record_surface::descriptor(),

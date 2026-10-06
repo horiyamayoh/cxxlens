@@ -718,6 +718,60 @@ namespace
 		require(!surfaces && surfaces.error().field == "surfaces",
 				"candidate population budget escaped");
 	}
+	void measured_usage_tests()
+	{
+		fixture data;
+		q::projection_resource_usage usage{999U, 999U};
+		const auto raw = take(q::project_abi_surfaces(data.input(), {}, {}, usage));
+		const auto raw_usage = usage;
+		require(usage.operations > 0U && usage.retained_bytes_bound > 0U &&
+					usage.operations < q::abi_surface_limits{}.maximum_operations &&
+					usage.retained_bytes_bound < q::abi_surface_limits{}.maximum_retained_bytes,
+				"successful ABI usage reports charged resources");
+		const auto bundle = queries(data);
+		const auto owned = take(q::project_abi_surfaces(bundle, {}, {}, usage));
+		require(usage.operations > raw_usage.operations &&
+					usage.retained_bytes_bound > raw_usage.retained_bytes_bound &&
+					owned.source_queries.has_value() &&
+					owned.surfaces.front().padding_bytes == raw.surfaces.front().padding_bytes,
+				"measured query includes source plans and temporary pointer indexes");
+		auto limits = q::abi_surface_limits{};
+		limits.maximum_operations = usage.operations;
+		limits.maximum_retained_bytes = usage.retained_bytes_bound;
+		require(q::project_abi_surfaces(bundle, limits, {}, usage).has_value(),
+				"exact successful charge can be reused");
+		--limits.maximum_retained_bytes;
+		usage = {999U, 999U};
+		require(!q::project_abi_surfaces(bundle, limits, {}, usage) && usage.operations == 0U &&
+					usage.retained_bytes_bound == 0U,
+				"retained failure leaves measured usage zero");
+		std::stop_source cancelled;
+		cancelled.request_stop();
+		usage = {999U, 999U};
+		require(!q::project_abi_surfaces(data.input(), {}, cancelled.get_token(), usage) &&
+					usage.operations == 0U && usage.retained_bytes_bound == 0U,
+				"cancelled raw ABI usage remains zero");
+		limits = {};
+		limits.maximum_source_plan_bytes = 1U;
+		usage = {999U, 999U};
+		require(!q::project_abi_surfaces(bundle, limits, {}, usage) && usage.operations == 0U &&
+					usage.retained_bytes_bound == 0U,
+				"failed source-plan bound leaves measured usage zero");
+		q::application_query_results empty;
+		empty.snapshot_id = "empty-original";
+		const auto missing = take(q::project_abi_surfaces(empty, {}, {}, usage));
+		require(usage.operations > 0U &&
+					usage.retained_bytes_bound >=
+						missing.unresolved.size() * sizeof(q::query_unresolved) &&
+					missing.unresolved.size() == 7U && missing.source_queries.has_value(),
+				"empty query charges its original handle and independent missing-scan gaps");
+		limits = {};
+		limits.maximum_retained_bytes = usage.retained_bytes_bound;
+		require(q::project_abi_surfaces(empty, limits, {}, usage).has_value(),
+				"empty query may reuse exact charged storage bound");
+		std::cout << "ABI measured usage 8 focused checks PASS\n";
+	}
+
 } // namespace
 
 int main()
@@ -728,5 +782,6 @@ int main()
 	candidate_and_condition_tests();
 	public_query_tests();
 	fault_tests();
+	measured_usage_tests();
 	return 0;
 }

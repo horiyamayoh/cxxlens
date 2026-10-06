@@ -3,6 +3,7 @@
 
 #include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_declaration.hpp>
+#include <cxxlens/relations/cc_exceptional_exit.hpp>
 #include <cxxlens/relations/cc_type_component.hpp>
 #include <cxxlens/relations/core_claim_conflict.hpp>
 #include <cxxlens/relations/core_differential_disagreement.hpp>
@@ -114,6 +115,18 @@ int main()
 {
 	if (!cxxlens::sdk::import_limits{}.validate())
 		return 1;
+	// The installed headers and libraries must expose the additive measured APIs.
+	cxxlens::sdk::query::projection_resource_usage usage;
+	auto exits = cxxlens::sdk::query::project_exceptional_exits(
+		cxxlens::sdk::query::exceptional_exit_input{}, {}, {}, usage);
+	auto facets = cxxlens::sdk::query::project_function_compiler_facets(
+		cxxlens::sdk::query::function_compiler_facet_input{}, {}, {}, usage);
+	auto abi = cxxlens::sdk::query::project_abi_surfaces(
+		cxxlens::sdk::query::abi_surface_input{}, {}, {}, usage);
+	auto exceptional = cxxlens::sdk::query::from<cxxlens::cc::relations::exceptional_exit>();
+	if (!exits || exits->compile_units_complete || !facets || facets->dispatch_inputs_complete ||
+		!abi || abi->compile_units_complete || !exceptional)
+		return 7;
 	auto query = cxxlens::sdk::query::from<cxxlens::cc::relations::call_site>();
 	auto declaration = cxxlens::sdk::query::from<cxxlens::cc::relations::declaration>();
 	auto component = cxxlens::sdk::query::from<cxxlens::cc::relations::type_component>();
