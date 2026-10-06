@@ -2290,6 +2290,22 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
       adapter.clang22-exceptional-exits-native
       PROPERTIES LABELS
                  "adapter;clang22;native;eh;negative;budget;cancellation")
+
+    cxxlens_add_test_executable(
+      cxxlens-clang22-exceptional-cleanup-bindings-native
+      adapter/clang22/project_exceptional_cleanup_bindings_test.cpp)
+    target_link_libraries(cxxlens-clang22-exceptional-cleanup-bindings-native
+                          PRIVATE cxxlens_clang22_worker_core)
+    cxxlens_configure_clang22(cxxlens-clang22-exceptional-cleanup-bindings-native)
+    if(CXXLENS_BUILD_SHARED)
+      cxxlens_add_provider_runtime_closure(
+        cxxlens-clang22-exceptional-cleanup-bindings-native)
+    endif()
+    add_test(NAME adapter.clang22-exceptional-cleanup-bindings-native
+             COMMAND cxxlens-clang22-exceptional-cleanup-bindings-native)
+    set_tests_properties(
+      adapter.clang22-exceptional-cleanup-bindings-native
+      PROPERTIES LABELS "adapter;clang22;native;eh;cleanup;exception-spec;negative")
   endif()
 
   cxxlens_add_test_executable(cxxlens-clang22-source-closure-native

@@ -46,6 +46,7 @@
 #include <cxxlens/relations/source_token_inventory.hpp>
 
 #include "project_abi_observer.hpp"
+#include "project_exception_specification.hpp"
 #include "project_exceptional_exit_rows.hpp"
 #include "project_template_event_rows.hpp"
 #include "project_template_observer.hpp"
@@ -1690,6 +1691,22 @@ namespace cxxlens::detail::clang22
 				value.emplace("is_definition", sdk::detached_cell::boolean(definition));
 				value.emplace("flags", flags("cc.entity-flag/1", std::move(properties)));
 				value.emplace("parameter_count", sdk::detached_cell::unsigned_integer(parameters));
+				if (const auto* function = llvm::dyn_cast<clang::FunctionDecl>(declaration))
+				{
+					const auto observed = observe_function_exception_specification(*function);
+					value.emplace(
+						"exception_spec_kind",
+						symbol("cc.function-exception-spec-kind/1", std::string{observed.kind}));
+					value.emplace(
+						"exception_spec_state",
+						symbol("cc.function-exception-spec-state/1", std::string{observed.state}));
+					value.emplace("exception_spec_profile",
+								  sdk::detached_cell::utf8(std::string{observed.profile}));
+					if (observed.nonthrowing)
+						value.emplace("exception_spec_nonthrowing",
+									  sdk::detached_cell::boolean(*observed.nonthrowing));
+				}
+
 				if (const auto* function = llvm::dyn_cast<clang::FunctionDecl>(declaration);
 					function && population_admitted)
 				{
@@ -2733,6 +2750,14 @@ namespace cxxlens::detail::clang22
 					const auto found = entity_lookup_.find(declaration->getCanonicalDecl());
 					return found == entity_lookup_.end() ? std::string_view{}
 														 : std::string_view{found->second};
+				};
+
+				compiler_bindings.declaration =
+					[&](const clang::Decl* declaration) -> std::string_view
+				{
+					const auto found = original_declarations_.find(declaration);
+					return found == original_declarations_.end() ? std::string_view{}
+																 : std::string_view{found->second};
 				};
 				if (progress_)
 					progress_("observing original exceptional lowering occurrences");

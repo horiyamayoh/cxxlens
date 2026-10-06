@@ -7,7 +7,7 @@ set(CXXLENS_CLANG_EXCEPTIONAL_EVENT_SOURCE_DIR
 )
 set(_cxxlens_exceptional_events_available TRUE)
 foreach(_source IN ITEMS CodeGenFunction.cpp CGExpr.cpp CGExprCXX.cpp
-                         CGCall.cpp CGException.cpp CGBuiltin.cpp)
+                         CGCall.cpp CGException.cpp CGBuiltin.cpp CGDecl.cpp CGClass.cpp)
   if(NOT EXISTS "${CXXLENS_CLANG_EXCEPTIONAL_EVENT_SOURCE_DIR}/${_source}")
     set(_cxxlens_exceptional_events_available FALSE)
   endif()
@@ -52,6 +52,8 @@ function(cxxlens_configure_original_exceptional_events)
           CGCall.cpp
           CGException.cpp
           CGBuiltin.cpp
+          CGDecl.cpp
+          CGClass.cpp
           CodeGenFunction.h
           CodeGenModule.h
           CGCall.h
@@ -71,7 +73,9 @@ function(cxxlens_configure_original_exceptional_events)
     "${CXXLENS_CLANG_EXCEPTIONAL_EVENT_SOURCE_DIR}/CGExprCXX.cpp"
     "${CXXLENS_CLANG_EXCEPTIONAL_EVENT_SOURCE_DIR}/CGCall.cpp"
     "${CXXLENS_CLANG_EXCEPTIONAL_EVENT_SOURCE_DIR}/CGException.cpp"
-    "${CXXLENS_CLANG_EXCEPTIONAL_EVENT_SOURCE_DIR}/CGBuiltin.cpp")
+    "${CXXLENS_CLANG_EXCEPTIONAL_EVENT_SOURCE_DIR}/CGBuiltin.cpp"
+    "${CXXLENS_CLANG_EXCEPTIONAL_EVENT_SOURCE_DIR}/CGDecl.cpp"
+    "${CXXLENS_CLANG_EXCEPTIONAL_EVENT_SOURCE_DIR}/CGClass.cpp")
   target_compile_features(cxxlens_clang22_exceptional_compiler_objects
                           PRIVATE cxx_std_23)
   target_include_directories(cxxlens_clang22_exceptional_compiler_objects SYSTEM

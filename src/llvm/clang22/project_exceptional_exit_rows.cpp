@@ -213,6 +213,27 @@ namespace cxxlens::detail::clang22
 						number("intrinsic_id", occurrence.intrinsic_id);
 						number("compiler_route", occurrence.compiler_route);
 						number("emitter_methods", occurrence.emitter_methods);
+						number("cleanup_registration_ordinal",
+							   occurrence.cleanup_registration_ordinal);
+						number("cleanup_emission_ordinal", occurrence.cleanup_emission_ordinal);
+						if (!occurrence.cleanup_declaration.empty())
+							item.emplace("cleanup_declaration",
+										 bounds.text(occurrence.cleanup_declaration));
+						if (!occurrence.cleanup_route.empty())
+							item.emplace("cleanup_route", bounds.text(occurrence.cleanup_route));
+						if (!occurrence.cleanup_profile.empty())
+							item.emplace("cleanup_profile",
+										 bounds.text(occurrence.cleanup_profile));
+						if (!occurrence.cleanup_target.empty())
+							item.emplace("cleanup_target", bounds.text(occurrence.cleanup_target));
+						if (!occurrence.cleanup_target_usr.empty())
+							item.emplace("cleanup_target_usr",
+										 bounds.binary(occurrence.cleanup_target_usr));
+						number("cleanup_target_dtor_type", occurrence.cleanup_target_dtor_type);
+						if (!occurrence.cleanup_target_profile.empty())
+							item.emplace("cleanup_target_profile",
+										 bounds.text(occurrence.cleanup_target_profile));
+
 						boolean("is_invoke", occurrence.is_invoke);
 						boolean("does_not_throw", occurrence.does_not_throw);
 						boolean("does_not_return", occurrence.does_not_return);

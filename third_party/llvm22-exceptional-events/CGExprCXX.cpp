@@ -122,6 +122,7 @@ RValue CodeGenFunction::EmitCXXDestructorCall(
   CallArgList Args;
   commonEmitCXXMemberOrOperatorCall(*this, Dtor, This, ImplicitParam,
                                     ImplicitParamTy, CE, Args, nullptr);
+  cxxlens_eh_destructor_target_scope originalTarget(this, CurCodeDecl, DtorDecl, static_cast<unsigned>(Dtor.getDtorType()));
   return EmitCall(CGM.getTypes().arrangeCXXStructorDeclaration(Dtor), Callee,
                   ReturnValueSlot(), Args, CallOrInvoke,
                   CE && CE == MustTailCall,

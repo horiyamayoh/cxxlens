@@ -72,6 +72,15 @@ int main()
 	occurrence.target_usr = std::string{"usr\0bytes", 9U};
 	occurrence.block_ordinal = 2U;
 	occurrence.instruction_ordinal = 4U;
+	occurrence.cleanup_declaration = "declaration:actual-local";
+	occurrence.cleanup_registration_ordinal = 1U;
+	occurrence.cleanup_emission_ordinal = 2U;
+	occurrence.cleanup_route = "exceptional";
+	occurrence.cleanup_profile = "clang22-destroy-object-cleanup-emission/1";
+	occurrence.cleanup_target = "entity:cleanup-dtor";
+	occurrence.cleanup_target_usr = std::string{"dtor\0\xff", 6U};
+	occurrence.cleanup_target_dtor_type = 0U;
+	occurrence.cleanup_target_profile = "clang22-destructor-emission-target/1";
 	input.scopes.front().variants.front().occurrences.push_back(occurrence);
 	auto detached = native::detach_project_exceptional_exits(input, bindings);
 	require(detached && detached->rows.size() == 3U,
@@ -93,6 +102,24 @@ int main()
 				*detached->rows[2U].cells.at("cc.exceptional_exit.v1.target_usr").value)
 					.size() == 9U,
 			"target USR retains exact original byte framing");
+	require(text(detached->rows[2U], "cleanup_declaration") == "declaration:actual-local" &&
+				text(detached->rows[2U], "cleanup_route") == "exceptional" &&
+				text(detached->rows[2U], "cleanup_target") == "entity:cleanup-dtor",
+			"actual cleanup origin, route, and independent emitter target detach");
+	const auto& cleanup_usr = std::get<std::vector<std::byte>>(
+		*detached->rows[2U].cells.at("cc.exceptional_exit.v1.cleanup_target_usr").value);
+	require(cleanup_usr.size() == 6U && cleanup_usr[4U] == std::byte{0} &&
+				cleanup_usr[5U] == std::byte{0xff} &&
+				std::get<std::uint64_t>(
+					*detached->rows[2U]
+						 .cells.at("cc.exceptional_exit.v1.cleanup_target_dtor_type")
+						 .value) == 0U,
+			"cleanup target raw bytes and original zero enum value remain lossless");
+	require(detached->rows[1U].cells.at("cc.exceptional_exit.v1.cleanup_declaration").state ==
+					sdk::cell_state::absent &&
+				detached->rows[1U].cells.at("cc.exceptional_exit.v1.cleanup_target").state ==
+					sdk::cell_state::absent,
+			"missing original cleanup fields remain absent on independent occurrences");
 	input.scopes.front().detail.clear();
 	auto unbound = native::detach_project_exceptional_exits(input, bindings);
 	require(

@@ -1,6 +1,6 @@
 schema: cxxlens.relation-registry.v1
 kind: relation-registry
-document_version: 1.22.0
+document_version: 1.23.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -9,7 +9,7 @@ authority:
   owner: steward.ng-relations
 compatibility:
   version_axis: relation-descriptor
-  current: 1.22.0
+  current: 1.23.0
   semantic_major_policy: exact-major-compatible-minor
   unknown_optional_columns: preserve
   unknown_open_symbols: preserve
@@ -612,6 +612,18 @@ symbol_contracts:
 - id: cc.string-literal-encoding/1
   openness: open
   values: [ordinary, utf8, utf16, utf32, wide, unknown]
+  unknown_value: preserve
+- id: cc.function-exception-spec-kind/1
+  openness: open
+  values: [none, dynamic_none, dynamic, ms_any, no_throw, basic_noexcept, dependent_noexcept, noexcept_false, noexcept_true, unevaluated, uninstantiated, unparsed, no_prototype, unknown]
+  unknown_value: preserve
+- id: cc.function-exception-spec-state/1
+  openness: open
+  values: [complete, partial, unavailable, conflicting]
+  unknown_value: preserve
+- id: cc.cleanup-emission-route/1
+  openness: open
+  values: [normal, exceptional]
   unknown_value: preserve
 - id: cc.exceptional-exit-role/1
   openness: open
@@ -3339,7 +3351,7 @@ relations:
 
 - descriptor_id: cc.entity_detail.v1
   name: cc.entity_detail
-  version: 1.1.0
+  version: 1.2.0
   semantic_major: 1
   semantics: cc.entity_detail/1
   owner_namespace: cxxlens.standard.cc
@@ -3517,6 +3529,30 @@ relations:
     type: optional<utf8_string>
     required: false
     identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.exception_spec_kind
+    name: exception_spec_kind
+    type: optional<open_symbol<cc.function-exception-spec-kind/1>>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Original already parsed FunctionProtoType exception-specification enum. Observation never resolves, instantiates, or evaluates a lazy specification.
+  - id: cc.entity_detail.v1.exception_spec_nonthrowing
+    name: exception_spec_nonthrowing
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Known nonthrowing truth from a completed stored exception specification. Missing for dependent, unresolved, unparsed, absent-prototype, or unsupported specifications; independent from body and lowering admission.
+  - id: cc.entity_detail.v1.exception_spec_state
+    name: exception_spec_state
+    type: optional<open_symbol<cc.function-exception-spec-state/1>>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Independent exception-specification classification state. A complete specification does not prove a complete function body, cleanup, operation, or exceptional-exit population.
+  - id: cc.entity_detail.v1.exception_spec_profile
+    name: exception_spec_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+    semantic: clang22-function-exception-specification/1 observes only the compiler's stored enum and preserves unresolved specifications as partial.
   - id: cc.entity_detail.v1.exceptional_exit_count
     name: exceptional_exit_count
     type: optional<uint64>
@@ -3644,6 +3680,10 @@ relations:
     - cc.entity_detail.v1.automatic_storage_ids
     - cc.entity_detail.v1.automatic_storage_state
     - cc.entity_detail.v1.automatic_storage_profile
+    - cc.entity_detail.v1.exception_spec_kind
+    - cc.entity_detail.v1.exception_spec_nonthrowing
+    - cc.entity_detail.v1.exception_spec_state
+    - cc.entity_detail.v1.exception_spec_profile
     - cc.entity_detail.v1.exceptional_exit_count
     - cc.entity_detail.v1.exceptional_exit_ids
     - cc.entity_detail.v1.exceptional_exit_state
@@ -10562,7 +10602,7 @@ relations:
   evolution_policy: ng0.additive.v1
 - descriptor_id: cc.exceptional_exit.v1
   name: cc.exceptional_exit
-  version: 1.0.0
+  version: 1.1.0
   semantic_major: 1
   semantics: cc.exceptional-exit/1
   owner_namespace: cxxlens.standard.cc
@@ -10741,6 +10781,60 @@ relations:
     required: false
     identity_role: authoritative_payload
     semantic: Original CodeGen callback method mask under clang22-written-definition-analysis-lowering/1. Bit 0 is generic EmitCall, bits 1-6 retain the actual runtime emit method IDs. This is independent from the EH block compiler_route and never a callee-name classifier.
+  - id: cc.exceptional_exit.v1.cleanup_declaration
+    name: cleanup_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Exact original automatic VarDecl attached to the compiler cleanup registration; this is a static declaration correspondence, not a runtime object or value-version claim.
+  - id: cc.exceptional_exit.v1.cleanup_registration_ordinal
+    name: cleanup_registration_ordinal
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Original compiler cleanup registration sequence within this physical scope and lowering variant; no AST CFG or storage-version correspondence follows from the ordinal.
+  - id: cc.exceptional_exit.v1.cleanup_emission_ordinal
+    name: cleanup_emission_ordinal
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Original DestroyObject emission sequence within this lowering variant, including distinct normal and EH code generation; no runtime execution count is asserted.
+  - id: cc.exceptional_exit.v1.cleanup_route
+    name: cleanup_route
+    type: optional<open_symbol<cc.cleanup-emission-route/1>>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Actual EHScopeStack Cleanup Flags emission route, independent of ordinary operation completion and AST CFG edges.
+  - id: cc.exceptional_exit.v1.cleanup_profile
+    name: cleanup_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Exact original cleanup emission contract; missing metadata never closes the full cleanup/resource population.
+  - id: cc.exceptional_exit.v1.cleanup_target
+    name: cleanup_target
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Original destructor declaration passed to the destructor emitter for this actual cleanup CallBase; independent from the generic EmitCall abstract target.
+  - id: cc.exceptional_exit.v1.cleanup_target_usr
+    name: cleanup_target_usr
+    type: optional<bytes>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Exact raw compiler USR of the independently observed cleanup destructor emitter target, preserving all original bytes.
+  - id: cc.exceptional_exit.v1.cleanup_target_dtor_type
+    name: cleanup_target_dtor_type
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Original Clang22 CXXDtorType value from the actual destructor emitter, under the target profile; this is not a runtime dispatch-target set.
+  - id: cc.exceptional_exit.v1.cleanup_target_profile
+    name: cleanup_target_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+    semantic: clang22-destructor-emission-target/1 binds only the compiler's actual destructor EmitCall occurrence; absence leaves its target axis unknown.
   - id: cc.exceptional_exit.v1.reason
     name: reason
     type: optional<utf8_string>
@@ -10810,6 +10904,20 @@ relations:
     - cc.entity.v1.entity
     strength: soft_semantic
     on_missing: unresolved
+  - source_columns:
+    - cc.exceptional_exit.v1.cleanup_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.exceptional_exit.v1.cleanup_target
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
   merge:
     mode: functional_assertion
     conflict_columns:
@@ -10842,6 +10950,15 @@ relations:
     - cc.exceptional_exit.v1.intrinsic_id
     - cc.exceptional_exit.v1.compiler_route
     - cc.exceptional_exit.v1.emitter_methods
+    - cc.exceptional_exit.v1.cleanup_declaration
+    - cc.exceptional_exit.v1.cleanup_registration_ordinal
+    - cc.exceptional_exit.v1.cleanup_emission_ordinal
+    - cc.exceptional_exit.v1.cleanup_route
+    - cc.exceptional_exit.v1.cleanup_profile
+    - cc.exceptional_exit.v1.cleanup_target
+    - cc.exceptional_exit.v1.cleanup_target_usr
+    - cc.exceptional_exit.v1.cleanup_target_dtor_type
+    - cc.exceptional_exit.v1.cleanup_target_profile
     - cc.exceptional_exit.v1.reason
   partition:
     suggested_keys:

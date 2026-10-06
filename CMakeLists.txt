@@ -779,6 +779,7 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     src/llvm/clang22/project_template_event_rows.cpp
     src/llvm/clang22/project_exceptional_exits.cpp
     src/llvm/clang22/project_exceptional_exit_rows.cpp
+    src/llvm/clang22/project_exception_specification.cpp
     src/llvm/clang22/project_abi_observer.cpp)
   target_link_libraries(
     cxxlens_clang22_worker_core

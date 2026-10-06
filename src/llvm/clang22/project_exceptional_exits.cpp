@@ -32,6 +32,27 @@ namespace cxxlens::detail::clang22
 #if defined(CXXLENS_HAS_CLANG22) && CXXLENS_HAS_CLANG22
 	namespace
 	{
+		struct cleanup_emission
+		{
+			std::size_t registration{}, ordinal{};
+			bool exceptional{};
+		};
+		struct cleanup_registration
+		{
+			const clang::Decl* declaration{};
+			unsigned allowed_routes{};
+		};
+		struct destructor_target
+		{
+			const clang::Decl* declaration{};
+			unsigned kind{};
+		};
+		struct destructor_target_view
+		{
+			destructor_target target;
+			const llvm::CallBase* invocation{};
+			bool ambiguous{};
+		};
 		struct bound_call
 		{
 			const llvm::CallBase* instruction{};
@@ -39,6 +60,8 @@ namespace cxxlens::detail::clang22
 			const clang::Stmt* expression{};
 			unsigned methods{};
 			bool generic{};
+			std::optional<cleanup_emission> cleanup;
+			std::optional<destructor_target> cleanup_target;
 		};
 		struct original_carrier
 		{
@@ -62,6 +85,10 @@ namespace cxxlens::detail::clang22
 			std::vector<bound_call> calls;
 			std::vector<original_carrier> carriers;
 			std::vector<original_builtin> builtins;
+			std::vector<cleanup_registration> cleanup_registrations;
+			std::vector<cleanup_emission> active_cleanups;
+			std::vector<destructor_target_view> active_destructor_targets;
+			std::size_t cleanup_emissions{};
 			std::size_t admissions{}, emissions{};
 		};
 		struct scope_binding
@@ -180,7 +207,10 @@ namespace cxxlens::detail::clang22
 					 nullptr,
 					 current.expressions.empty() ? nullptr : current.expressions.back().first,
 					 0U,
-					 false});
+					 false,
+					 current.active_cleanups.empty() ? std::optional<cleanup_emission>{}
+													 : current.active_cleanups.back(),
+					 {}});
 				return &current.calls.back();
 			}
 			void begin(void* context, const clang::Decl* declaration, llvm::Function* function)
@@ -237,7 +267,8 @@ namespace cxxlens::detail::clang22
 					return;
 				}
 				if (current.owner != declaration || current.function != function ||
-					!current.expressions.empty() || !current.builtins.empty())
+					!current.expressions.empty() || !current.builtins.empty() ||
+					!current.active_cleanups.empty() || !current.active_destructor_targets.empty())
 				{
 					fail("native.exceptional-exit-invalid",
 						 "lowering",
@@ -323,6 +354,53 @@ namespace cxxlens::detail::clang22
 							else
 							{
 								value.emitter_methods = bound->methods | (bound->generic ? 1U : 0U);
+								if (bound->cleanup)
+								{
+									if (!retain(128U))
+										return;
+									value.cleanup_emission_ordinal = bound->cleanup->ordinal;
+									value.cleanup_route =
+										bound->cleanup->exceptional ? "exceptional" : "normal";
+									value.cleanup_profile =
+										"clang22-destroy-object-cleanup-emission/1";
+									if (bound->cleanup->registration)
+									{
+										value.cleanup_registration_ordinal =
+											bound->cleanup->registration;
+										const auto* original_declaration =
+											current.cleanup_registrations
+												.at(bound->cleanup->registration - 1U)
+												.declaration;
+										if (compiler_bindings.declaration)
+										{
+											const auto declaration_id =
+												compiler_bindings.declaration(original_declaration);
+											if (retain(declaration_id.size()))
+												value.cleanup_declaration = declaration_id;
+										}
+									}
+									if (bound->cleanup_target)
+									{
+										const auto* cleanup_function =
+											bound->cleanup_target->declaration;
+										value.cleanup_target_usr = usr(cleanup_function);
+										if (!retain(value.cleanup_target_usr.size() + 128U))
+											return;
+										value.cleanup_target_dtor_type =
+											bound->cleanup_target->kind;
+										value.cleanup_target_profile =
+											"clang22-destructor-emission-target/1";
+										if (compiler_bindings.target)
+										{
+											const auto original_target =
+												compiler_bindings.target(cleanup_function);
+											if (!retain(original_target.size()))
+												return;
+											value.cleanup_target = original_target;
+										}
+									}
+								}
+
 								value.target_usr = usr(bound->target);
 								bind_target(value, bound->target);
 								bind_expression(value, bound->expression);
@@ -774,6 +852,29 @@ extern "C" void cxxlens_eh_call_emit(void* context,
 			{
 				call->generic = true;
 				call->target = target;
+				if (!current->active_cleanups.empty() &&
+					!current->active_destructor_targets.empty())
+				{
+					auto& view = current->active_destructor_targets.back();
+					if (!view.ambiguous && (!view.invocation || view.invocation == instruction))
+					{
+						view.invocation = instruction;
+						call->cleanup_target = view.target;
+					}
+					else if (!view.ambiguous)
+					{
+						// A future nested ABI route cannot inherit the surrounding target.
+						// Retain both original calls, leaving their cleanup target unknown.
+						if (!value.work(current->calls.size()))
+							return;
+						const auto prior = std::ranges::find(
+							current->calls, view.invocation, &bound_call::instruction);
+						if (prior != current->calls.end())
+							prior->cleanup_target.reset();
+						call->cleanup_target.reset();
+						view.ambiguous = true;
+					}
+				}
 				++current->emissions;
 			}
 		});
@@ -903,4 +1004,143 @@ extern "C" void cxxlens_eh_builtin(void* context,
 			}
 		});
 }
+#endif
+
+#if defined(CXXLENS_HAS_CLANG22) && CXXLENS_HAS_CLANG22
+extern "C" unsigned long long cxxlens_eh_cleanup_register(void* context,
+														  const clang::Decl* owner,
+														  const clang::Decl* declaration,
+														  unsigned allowed_routes) noexcept
+{
+	unsigned long long result{};
+	callback(
+		[&](recorder& value)
+		{
+			auto* current = value.frame(context);
+			if (!current)
+				return;
+			if (current->owner != owner || !llvm::isa_and_nonnull<clang::VarDecl>(declaration) ||
+				allowed_routes == 0U || allowed_routes > 3U)
+			{
+				value.fail(
+					"native.exceptional-exit-invalid", "cleanup", "original-registration-unbound");
+				return;
+			}
+			if (current->cleanup_registrations.size() >= value.limits.maximum_occurrences)
+			{
+				value.fail(
+					"native.exceptional-exit-budget", "cleanup-registrations", "limit-exceeded");
+				return;
+			}
+			if (!value.retain(sizeof(cleanup_registration) * 2U + 64U))
+				return;
+			current->cleanup_registrations.push_back({declaration, allowed_routes});
+			result = static_cast<unsigned long long>(current->cleanup_registrations.size());
+		});
+	return result;
+}
+extern "C" void cxxlens_eh_cleanup_emit(void* context,
+										const clang::Decl* owner,
+										unsigned long long registration,
+										bool exceptional,
+										bool begin) noexcept
+{
+	callback(
+		[&](recorder& value)
+		{
+			auto* current = value.frame(context);
+			if (!current)
+				return;
+			if (current->owner != owner || registration > current->cleanup_registrations.size())
+			{
+				value.fail("native.exceptional-exit-invalid", "cleanup", "foreign-registration");
+				return;
+			}
+			if (begin)
+			{
+				if (current->active_cleanups.size() >= 256U ||
+					current->cleanup_emissions >= value.limits.maximum_occurrences)
+				{
+					value.fail(
+						"native.exceptional-exit-budget", "cleanup-emissions", "limit-exceeded");
+					return;
+				}
+				if (registration &&
+					!(current->cleanup_registrations[static_cast<std::size_t>(registration) - 1U]
+						  .allowed_routes &
+					  (exceptional ? 1U : 2U)))
+				{
+					value.fail("native.exceptional-exit-invalid",
+							   "cleanup",
+							   "unregistered-emission-route");
+					return;
+				}
+				if (!value.retain(sizeof(cleanup_emission) * 2U + 64U))
+					return;
+				current->active_cleanups.push_back({static_cast<std::size_t>(registration),
+													++current->cleanup_emissions,
+													exceptional});
+			}
+			else
+			{
+				if (current->active_cleanups.empty() ||
+					current->active_cleanups.back().registration != registration ||
+					current->active_cleanups.back().exceptional != exceptional)
+				{
+					value.fail("native.exceptional-exit-invalid",
+							   "cleanup",
+							   "unbalanced-original-emission");
+					return;
+				}
+				current->active_cleanups.pop_back();
+			}
+		});
+}
+
+extern "C" void cxxlens_eh_destructor_target(void* context,
+											 const clang::Decl* owner,
+											 const clang::Decl* target,
+											 unsigned kind,
+											 bool begin) noexcept
+{
+	callback(
+		[&](recorder& value)
+		{
+			auto* current = value.frame(context);
+			if (!current)
+				return;
+			if (current->owner != owner || !llvm::isa_and_nonnull<clang::CXXDestructorDecl>(target))
+			{
+				value.fail(
+					"native.exceptional-exit-invalid", "cleanup-target", "original-target-unbound");
+				return;
+			}
+			if (begin)
+			{
+				if (current->active_destructor_targets.size() >= 256U)
+				{
+					value.fail(
+						"native.exceptional-exit-budget", "cleanup-target", "limit-exceeded");
+					return;
+				}
+				if (!value.retain(sizeof(destructor_target_view) * 2U + 64U))
+					return;
+				current->active_destructor_targets.push_back({{target, kind}, nullptr, false});
+			}
+			else
+			{
+				if (current->active_destructor_targets.empty() ||
+					current->active_destructor_targets.back().target.declaration != target ||
+					current->active_destructor_targets.back().target.kind != kind)
+				{
+					value.fail("native.exceptional-exit-invalid",
+							   "cleanup-target",
+							   "unbalanced-original-target");
+					return;
+				}
+				current->active_destructor_targets.pop_back();
+			}
+		});
+}
+
 #endif

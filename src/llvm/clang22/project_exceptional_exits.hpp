@@ -42,10 +42,15 @@ namespace cxxlens::detail::clang22
 		std::function<exceptional_scope_binding(const clang::FunctionDecl*)> scope;
 		std::function<std::string_view(const clang::Stmt*)> expression;
 		std::function<std::string_view(const clang::Decl*)> target;
+		std::function<std::string_view(const clang::Decl*)> declaration;
 	};
 	struct exceptional_occurrence
 	{
 		std::string role, eligibility, target_usr, expression_kind, expression, target;
+		std::string cleanup_declaration, cleanup_route, cleanup_profile;
+		std::optional<std::uint64_t> cleanup_registration_ordinal, cleanup_emission_ordinal;
+		std::string cleanup_target, cleanup_target_usr, cleanup_target_profile;
+		std::optional<std::uint64_t> cleanup_target_dtor_type;
 		exceptional_source source;
 		std::optional<std::size_t> original_expression_ordinal;
 		std::optional<std::uint64_t> block_ordinal, instruction_ordinal, successor_ordinal;
