@@ -1025,6 +1025,17 @@ namespace cxxlens::detail::clang22
 						retain_population_bytes(256U);
 						memory_scopes_.emplace(function, memory_scope{});
 					}
+					// RAV omits unwritten constructor initializers. Count the actual
+					// default-member activation before that traversal filter can hide it.
+					if (const auto* constructor =
+							llvm::dyn_cast<clang::CXXConstructorDecl>(function))
+						for (const auto* initializer : constructor->inits())
+						{
+							memory_charge();
+							if (!initializer->isWritten() &&
+								llvm::isa<clang::CXXDefaultInitExpr>(initializer->getInit()))
+								observe_memory_access(initializer->getInit());
+						}
 				}
 				if (++depth_ > 4096U)
 					fail("traversal", "depth-limit");
@@ -7624,26 +7635,13 @@ namespace cxxlens::detail::clang22
 				value.emplace(
 					"integer_storage_profile",
 					sdk::detached_cell::utf8("clang22-original-integer-object-storage/1"));
-				auto storage_state = std::string{integer.state};
-				if (storage_state == "complete")
-				{
-					if (type->isDependentType() || type->isIncompleteType() ||
-						type->isSizelessType())
-						storage_state = "unknown";
-					else
-					{
-						const auto bytes = unit_.ast().getTypeSizeInChars(type).getQuantity();
-						if (bytes > 0)
-							value.emplace("integer_object_bytes",
-										  sdk::detached_cell::unsigned_integer(
-											  static_cast<std::uint64_t>(bytes)));
-						else
-							storage_state = "unsupported";
-					}
-				}
+				const auto storage = observe_original_integer_object_storage(unit_.ast(), type);
+				if (storage.bytes)
+					value.emplace("integer_object_bytes",
+								  sdk::detached_cell::unsigned_integer(*storage.bytes));
 				value.emplace(
 					"integer_storage_state",
-					symbol("cc.integer-representation-state/1", std::move(storage_state)));
+					symbol("cc.integer-representation-state/1", std::string{storage.state}));
 				if (!nominal_id.empty())
 					value.emplace("nominal_entity", id("cc_entity_id", nominal_id));
 				auto row = make_row(cc::relations::type::descriptor(), std::move(value));

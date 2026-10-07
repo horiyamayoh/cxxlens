@@ -1,6 +1,6 @@
 # ADR 0135: Original memory access occurrences
 
-Status: isolated implementation draft.
+Status: accepted.
 
 Contract ID: `clang22-original-memory-access-occurrences/1`, with per-member
 observation profile `clang22-original-memory-access/1`. Authority is the accepted

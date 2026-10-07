@@ -54,7 +54,8 @@ def verify(bundle):
         declaration = declarations[scope]
         detail, = [row for row in rows["cc.entity_detail.v1"]
                    if row["entity"] == declaration["entity"] and
-                   row["source"] == declaration["source"]]
+                   row["source"] == declaration["source"] and
+                   row["compile_unit"] == body["compile_unit"]]
         for axis in ("profile", "state", "count", "ids", "reason"):
             assert detail.get("memory_access_" + axis) == body.get("memory_access_" + axis)
         selected = [nodes[node] for node in retained]
@@ -128,12 +129,22 @@ def verify(bundle):
     activated = bodies["default_activation"]
     assert activated["memory_access_count"] == 1 and not members(activated["memory_access_ids"])
     assert activated["memory_access_reason"] == "original-default-activation-unbound"
+    field, selected = observed("default_field::default_field")
+    assert field["memory_access_count"] == 2 and not selected
+    assert field["memory_access_reason"] == "original-default-activation-unbound"
     nested, selected = observed("nested_default_activations")
     assert nested["memory_access_state"] == "partial" and nested["memory_access_count"] == 2
     assert not selected
     absent, = [row for row in rows["cc.entity_detail.v1"]
                if entities[row["entity"]]["qualified_name"] == "absent_body"]
     assert absent["memory_access_state"] == "complete" and absent["memory_access_count"] == 0
+
+    nonintegers = [row for row in types.values() if row.get("integer_state") == "not_applicable"]
+    assert nonintegers and all(row["integer_storage_state"] == "not_applicable" and
+                              row.get("integer_object_bytes") is None for row in nonintegers)
+    unresolved = [row for row in types.values() if row.get("integer_state") in ("unknown", "partial")]
+    assert unresolved and all(row["integer_storage_state"] == row["integer_state"] and
+                             row.get("integer_object_bytes") is None for row in unresolved)
 
     storage_function = bodies["storage_units"]["function"]
     traits = [row for row in nodes.values() if row.get("function") == storage_function and
@@ -173,4 +184,4 @@ else:
         bounded = subprocess.run(arguments + ["--maximum-output-bytes", "1"],
                                  env=environment, text=True, capture_output=True, timeout=180)
         assert bounded.returncode == 1 and bounded.stdout == ""
-        assert bounded.stderr.startswith("application-analysis.query-export-invalid: output: byte-limit")
+        assert bounded.stderr.splitlines()[-1] == "application-analysis.query-export-invalid: output: byte-limit", bounded.stderr

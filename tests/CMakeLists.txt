@@ -1904,9 +1904,9 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   cxxlens_configure_clang22(cxxlens-clang22-source-features)
   add_test(NAME adapter.clang22-source-features
            COMMAND cxxlens-clang22-source-features)
-  set_tests_properties(adapter.clang22-source-features
-                       PROPERTIES LABELS "adapter;clang22;source;bounded"
-                                  TIMEOUT 120)
+  set_tests_properties(
+    adapter.clang22-source-features
+    PROPERTIES LABELS "adapter;clang22;source;bounded" TIMEOUT 120)
 
   if(UNIX)
     cxxlens_add_test_executable(cxxlens-clang22-abi-observer
@@ -2087,10 +2087,9 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
         "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}")
     set_tests_properties(
       adapter.clang22-original-memory-access-inputs
-      PROPERTIES
-        LABELS "adapter;clang22;application;original-inputs;memory;bounded"
-        RUN_SERIAL TRUE
-        TIMEOUT 240)
+      PROPERTIES LABELS
+                 "adapter;clang22;application;original-inputs;memory;bounded"
+                 RUN_SERIAL TRUE TIMEOUT 240)
     cxxlens_add_test_executable(cxxlens-clang22-source-closure-fd
                                 adapter/clang22/source_closure_fd_test.cpp)
     target_link_libraries(cxxlens-clang22-source-closure-fd

@@ -13,8 +13,8 @@
 #include <cxxlens/sdk/source_features.hpp>
 
 #include "../../../src/sdk/query_result_internal.hpp"
-#include "project_language_environment.hpp"
-#include "project_source_feature_rows.hpp"
+#include "llvm/clang22/project_language_environment.hpp"
+#include "llvm/clang22/project_source_feature_rows.hpp"
 
 namespace native = cxxlens::detail::clang22;
 namespace sdk = cxxlens::sdk;

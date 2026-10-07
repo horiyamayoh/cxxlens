@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <string_view>
 
@@ -118,4 +119,28 @@ namespace cxxlens::detail::clang22
 			return {{}, {}, "unsupported", underlying};
 		return {width, representation->isSignedIntegerType(), "complete", underlying};
 	}
+	struct original_integer_object_storage
+	{
+		std::optional<std::uint64_t> bytes;
+		std::string_view state;
+	};
+
+	inline original_integer_object_storage
+	observe_original_integer_object_storage(const clang::ASTContext& context, clang::QualType input)
+	{
+		const auto representation = observe_original_integer_representation(context, input);
+		if (representation.state != "complete")
+			return {{}, representation.state};
+		const auto canonical = input.getCanonicalType();
+		if (canonical->isDependentType() || canonical->isIncompleteType() ||
+			canonical->isSizelessType())
+			return {{}, "unknown"};
+		// Original target character storage units; integer precision cannot
+		// substitute for object storage, including padded _BitInt objects.
+		const auto bytes = context.getTypeSizeInChars(canonical).getQuantity();
+		if (bytes <= 0)
+			return {{}, "unsupported"};
+		return {static_cast<std::uint64_t>(bytes), "complete"};
+	}
+
 } // namespace cxxlens::detail::clang22

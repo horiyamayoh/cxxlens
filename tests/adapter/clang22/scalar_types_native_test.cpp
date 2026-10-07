@@ -2,15 +2,18 @@
 #include <iostream>
 #include <map>
 #include <string>
+#include <vector>
 
 #include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/RecursiveASTVisitor.h>
+#include <clang/Basic/TargetInfo.h>
 #include <clang/Tooling/Tooling.h>
 
 #include "llvm/clang22/original_builtin_kind.hpp"
 
 using cxxlens::detail::clang22::observe_original_builtin_kind;
+using cxxlens::detail::clang22::observe_original_integer_object_storage;
 using cxxlens::detail::clang22::observe_original_integer_representation;
 
 static void require(bool value, const char* reason)
@@ -28,6 +31,7 @@ struct actual_builtin_observer : clang::RecursiveASTVisitor<actual_builtin_obser
 	std::map<std::string, cxxlens::detail::clang22::original_builtin_kind_observation> variables;
 	std::map<std::string, cxxlens::detail::clang22::original_integer_representation>
 		representations;
+	std::map<std::string, cxxlens::detail::clang22::original_integer_object_storage> storage;
 	unsigned actual_boolean_call{}, integral_boolean_conversions{}, actual_arithmetic{},
 		actual_narrowing{};
 	explicit actual_builtin_observer(const clang::ASTContext& value) : context(value) {}
@@ -38,6 +42,8 @@ struct actual_builtin_observer : clang::RecursiveASTVisitor<actual_builtin_obser
 		representations.emplace(
 			declaration->getNameAsString(),
 			observe_original_integer_representation(context, declaration->getType()));
+		storage.emplace(declaration->getNameAsString(),
+						observe_original_integer_object_storage(context, declaration->getType()));
 		return true;
 	}
 	bool VisitBinaryOperator(clang::BinaryOperator* expression)
@@ -159,5 +165,61 @@ int main()
 		"dependent/placeholder integer representation frontier lost");
 	require(observer.actual_arithmetic == 1U && observer.actual_narrowing == 1U,
 			"actual expression/cast representation oracle incomplete");
-	std::cout << "original builtin kind and integer representation actual compiler oracle PASS\n";
+	for (const auto name : {"plain_boolean",
+							"aliased_boolean",
+							"bit_integer",
+							"unsigned_bit_integer",
+							"fixed_enum",
+							"complete_enum"})
+		require(observer.storage.at(name).state == "complete" && observer.storage.at(name).bytes,
+				"original eligible integer object storage missing");
+	require(observer.storage.at("plain_boolean").bytes == 1U &&
+				observer.storage.at("bit_integer").bytes == 2U &&
+				observer.storage.at("unsigned_bit_integer").bytes == 2U,
+			"Bool or padded BitInt object storage conflated with integer value width");
+	for (const auto name : {"floating_value", "pointer_to_boolean", "record_value"})
+		require(observer.storage.at(name).state == "not_applicable" &&
+					!observer.storage.at(name).bytes,
+				"noninteger type acquired object storage under integer profile");
+	require(observe_original_integer_object_storage(context, context.DependentTy).state ==
+					"unknown" &&
+				observe_original_integer_object_storage(context, context.OverloadTy).state ==
+					"partial" &&
+				observe_original_integer_object_storage(context, {}).state == "unavailable",
+			"missing/dependent/placeholder object storage frontier lost");
+	auto incomplete = clang::tooling::buildASTFromCodeWithArgs(
+		"enum Incomplete; extern enum Incomplete opaque_enum;",
+		{"-x", "c", "-std=c11", "-nostdinc"},
+		"/project/incomplete-storage.c");
+	require(incomplete && !incomplete->getDiagnostics().hasErrorOccurred(),
+			"original incomplete enum AST unavailable");
+	actual_builtin_observer incomplete_observer{incomplete->getASTContext()};
+	incomplete_observer.TraverseDecl(incomplete->getASTContext().getTranslationUnitDecl());
+	require(incomplete_observer.storage.at("opaque_enum").state == "unknown" &&
+				!incomplete_observer.storage.at("opaque_enum").bytes,
+			"original incomplete enum acquired fabricated storage");
+	struct selected_target
+	{
+		const char* triple;
+		std::uint64_t long_bytes;
+	};
+	for (const auto& target : {selected_target{"x86_64-unknown-linux-gnu", 8U},
+							   selected_target{"x86_64-pc-windows-msvc", 4U},
+							   selected_target{"aarch64-unknown-linux-gnu", 8U}})
+	{
+		std::vector<std::string> arguments{
+			"-std=c++23", "-nostdinc", "-nostdinc++", std::string{"--target="} + target.triple};
+		auto selected = clang::tooling::buildASTFromCodeWithArgs(
+			"long original_long;", arguments, "/project/target-storage.cpp");
+		require(selected && !selected->getDiagnostics().hasErrorOccurred(),
+				"selected original target AST unavailable");
+		const auto& original = selected->getASTContext();
+		const auto storage = observe_original_integer_object_storage(original, original.LongTy);
+		require(storage.state == "complete" && storage.bytes == target.long_bytes &&
+					original.getTargetInfo().getCharWidth() == 8U &&
+					original.getTargetInfo().getPointerWidth(clang::LangAS::Default) == 64U,
+				"selected original target storage used process host geometry");
+	}
+	std::cout << "original builtin kind, integer representation and storage actual compiler oracle "
+				 "PASS\n";
 }

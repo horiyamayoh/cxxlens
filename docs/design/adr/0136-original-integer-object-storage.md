@@ -1,6 +1,6 @@
 # ADR 0136: Original integer object storage
 
-Status: isolated implementation draft.
+Status: accepted.
 
 Contract ID: `clang22-original-integer-object-storage/1`. Authority is the relation
 registry and original Clang ASTContext, under the integrated design. Write scope
