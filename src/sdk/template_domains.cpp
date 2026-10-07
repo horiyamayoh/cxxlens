@@ -113,12 +113,6 @@ namespace cxxlens::sdk::query
 			else if (state == finite_population_state::complete)
 				state = finite_population_state::partial;
 		}
-		template <class T>
-		void gap(T& value, std::string_view subject, std::string_view reason, bool conflict = false)
-		{
-			value.gaps.push_back({"sdk.template-" + std::string{reason}, std::string{subject}, {}});
-			downgrade(value.state, conflict);
-		}
 		struct budget
 		{
 			finite_population_limits limits;

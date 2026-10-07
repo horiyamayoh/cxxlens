@@ -467,10 +467,6 @@ namespace cxxlens::sdk::query
 					: value.empty()		   ? state::unknown
 										   : state::partial;
 			}
-			view_identity world_of(const auto& value, std::string_view id) const
-			{
-				return {id, value.universe, value.semantic_variant, value.interpretation};
-			}
 			void world_fields(auto& value, const view_identity& world)
 			{
 				value.universe = copy(world[1]);
