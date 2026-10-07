@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 analyzer, compiler = map(Path, sys.argv[1:3])
 fixture = Path(__file__).with_name("fixtures") / "route_resource_inputs.cpp"
@@ -25,6 +26,44 @@ def members(encoded):
         data = data[4 + size:]
     assert result == sorted(set(result))
     return set(result)
+
+
+def verify_lowered_topology(rows):
+    topology = rows["cc.exceptional_block.v1"]
+    successors = rows["cc.exceptional_successor.v1"]
+    exits = rows["cc.exceptional_exit.v1"]
+    exit_index = {row["exit"]: row for row in exits}
+    blocks = {row["block"]: row for row in topology}
+    edge_index = {row["successor"]: row for row in successors}
+    assert blocks and successors
+    for carrier in [row for row in exits if row["role"] == "lowering_variant"]:
+        assert carrier["ordinal"] == 0
+        if carrier["lowered_topology_state"] != "complete":
+            continue
+        assert carrier["lowered_topology_profile"] == "clang22-original-lowering-topology/1"
+        selected_blocks = [row for row in topology if row["variant"] == carrier["exit"]]
+        selected_edges = [row for row in successors if row["variant"] == carrier["exit"]]
+        assert len(selected_blocks) == carrier["lowered_block_count"]
+        assert {row["block"] for row in selected_blocks} == members(carrier["lowered_block_ids"])
+        assert len(selected_edges) == carrier["lowered_successor_count"]
+        assert {row["successor"] for row in selected_edges} == members(carrier["lowered_successor_ids"])
+        entry, = [row for row in selected_blocks if row["is_entry"]]
+        assert carrier["lowered_entry"] == entry["block"]
+        assert len({row["ordinal"] for row in selected_blocks}) == len(selected_blocks)
+        assert len({(row["from_block"], row["terminator_instruction_ordinal"], row["ordinal"])
+                    for row in selected_edges}) == len(selected_edges)
+        for edge in selected_edges:
+            source = blocks[edge["from_block"]]
+            assert edge["to_block"] in blocks
+            assert source["instruction_count"] == edge["terminator_instruction_ordinal"] + 1
+            assert blocks[edge["to_block"]]["variant"] == carrier["exit"]
+            if edge.get("invoke"):
+                original = exit_index[edge["invoke"]]
+                assert original["is_invoke"] and original["lowered_block"] == edge["from_block"]
+                assert original["instruction_ordinal"] == edge["terminator_instruction_ordinal"]
+                assert (edge["ordinal"], edge["kind"]) in ((0, "normal"), (1, "unwind"))
+                assert original["normal_successor" if edge["ordinal"] == 0 else "unwind_successor"] == edge["successor"]
+    return blocks, successors, edge_index
 
 
 def verify(bundle):
@@ -92,40 +131,7 @@ def verify(bundle):
     assert type_access["object_declaration"] in declarations
     assert type_access["object_address"] in nodes
 
-    topology = rows["cc.exceptional_block.v1"]
-    successors = rows["cc.exceptional_successor.v1"]
-    exits = rows["cc.exceptional_exit.v1"]
-    exit_index = {row["exit"]: row for row in exits}
-    blocks = {row["block"]: row for row in topology}
-    edge_index = {row["successor"]: row for row in successors}
-    assert blocks and successors
-    for carrier in [row for row in exits if row["role"] == "lowering_variant"]:
-        assert carrier["ordinal"] == 0
-        if carrier["lowered_topology_state"] != "complete":
-            continue
-        assert carrier["lowered_topology_profile"] == "clang22-original-lowering-topology/1"
-        selected_blocks = [row for row in topology if row["variant"] == carrier["exit"]]
-        selected_edges = [row for row in successors if row["variant"] == carrier["exit"]]
-        assert len(selected_blocks) == carrier["lowered_block_count"]
-        assert {row["block"] for row in selected_blocks} == members(carrier["lowered_block_ids"])
-        assert len(selected_edges) == carrier["lowered_successor_count"]
-        assert {row["successor"] for row in selected_edges} == members(carrier["lowered_successor_ids"])
-        entry, = [row for row in selected_blocks if row["is_entry"]]
-        assert carrier["lowered_entry"] == entry["block"]
-        assert len({row["ordinal"] for row in selected_blocks}) == len(selected_blocks)
-        assert len({(row["from_block"], row["terminator_instruction_ordinal"], row["ordinal"])
-                    for row in selected_edges}) == len(selected_edges)
-        for edge in selected_edges:
-            source = blocks[edge["from_block"]]
-            assert edge["to_block"] in blocks
-            assert source["instruction_count"] == edge["terminator_instruction_ordinal"] + 1
-            assert blocks[edge["to_block"]]["variant"] == carrier["exit"]
-            if edge.get("invoke"):
-                original = exit_index[edge["invoke"]]
-                assert original["is_invoke"] and original["lowered_block"] == edge["from_block"]
-                assert original["instruction_ordinal"] == edge["terminator_instruction_ordinal"]
-                assert (edge["ordinal"], edge["kind"]) in ((0, "normal"), (1, "unwind"))
-                assert original["normal_successor" if edge["ordinal"] == 0 else "unwind_successor"] == edge["successor"]
+    blocks, successors, edge_index = verify_lowered_topology(rows)
     direct = [row for row in function_rows("cc.exceptional_exit.v1", "direct_boundary")
               if row.get("eh_disposition") == "direct_function_spec_termination"]
     assert direct
@@ -201,15 +207,6 @@ def verify(bundle):
     assert inventory["physical_definition_profile"] == "clang22-original-physical-definitions/1"
     physical = members(inventory["physical_definition_ids"])
     assert inventory["physical_definition_count"] >= len(physical)
-    coroutine_bodies = [row for row in bodies.values() if row.get("is_coroutine")]
-    assert len(coroutine_bodies) == 2
-    assert any(names[row["function"]] == "named_coroutine" for row in coroutine_bodies)
-    assert any(declarations[row["coroutine_definition"]]["kind"] == "CXXMethod" for row in coroutine_bodies)
-    for body in coroutine_bodies:
-        assert body["coroutine_binding_state"] == "complete"
-        assert body["coroutine_definition"] in physical
-        assert declarations[body["coroutine_definition"]]["entity"] == body["function"]
-        assert nodes[body["coroutine_body"]]["kind"] == "CoroutineBodyStmt"
     elements = rows["cc.cfg_element.v1"]
     cfg_nodes = {row["node"]: row for row in rows["cc.cfg_node.v1"]}
     for element in elements:
@@ -284,29 +281,88 @@ def verify(bundle):
     print(f"Original124: {len(blocks)} blocks, {len(successors)} successors, {len(moves)} selected members, {len(attrs)} attributes, {len(addresses)} address endpoints")
 
 
-def run_original_fixture():
+def verify_coroutines(bundle):
+    assert bundle["schema"] == "cxxlens.application-query-results.v1"
+    scans = {query["logical_ir"]["relation_requirements"][0]["descriptor_id"]:
+             query["result"] for query in bundle["queries"]}
+    assert all(scan["status"] == "complete" for scan in scans.values())
+    rows = {relation: [{key.removeprefix("output."): cell.get("value")
+                       for key, cell in row["values"].items()} for row in scan["rows"]]
+            for relation, scan in scans.items()}
+    names = {row["entity"]: row["qualified_name"] for row in rows["cc.entity.v1"]}
+    declarations = {row["declaration"]: row for row in rows["cc.declaration.v1"]}
+    nodes = {row["node"]: row for row in rows["cc.syntax_node.v1"]}
+    bodies = {row["body"]: row for row in rows["cc.body.v1"]}
+    assert all(row["semantic_output"] == "produced" and row["parse_error_count"] == 0 and
+               row["fatal_error_count"] == 0 for row in rows["build.compile_unit_analysis.v1"])
+    inventory, = rows["cc.declaration_inventory.v1"]
+    assert inventory["physical_definition_profile"] == "clang22-original-physical-definitions/1"
+    physical = members(inventory["physical_definition_ids"])
+    assert inventory["physical_definition_count"] >= len(physical)
+    coroutine_bodies = [row for row in bodies.values() if row.get("is_coroutine")]
+    assert len(coroutine_bodies) == 2
+    assert any(names[row["function"]] == "named_coroutine" for row in coroutine_bodies)
+    assert any(declarations[row["coroutine_definition"]]["kind"] == "CXXMethod" for row in coroutine_bodies)
+    for body in coroutine_bodies:
+        assert body["coroutine_binding_state"] == "complete"
+        assert body["coroutine_definition"] in physical
+        assert declarations[body["coroutine_definition"]]["entity"] == body["function"]
+        assert nodes[body["coroutine_body"]]["kind"] == "CoroutineBodyStmt"
+    elements = rows["cc.cfg_element.v1"]
+    cfg_nodes = {row["node"]: row for row in rows["cc.cfg_node.v1"]}
+    for element in elements:
+        assert element["body"] in bodies and element["node"] in cfg_nodes
+        assert element["function"] == bodies[element["body"]]["function"]
+        assert element["index"] < cfg_nodes[element["node"]]["element_count"]
+    verify_lowered_topology(rows)
+    unit, = rows["build.compile_unit.v1"]
+    assert all(row["compile_unit"] == unit["compile_unit"]
+               for row in rows["cc.address_transfer.v1"])
+    assert all(row["syntax"] in nodes and row["compile_unit"] == unit["compile_unit"]
+               for row in rows["cc.move_event.v1"])
+    assert all(row.get("declaration") in declarations for row in rows["cc.flow_fact.v1"]
+               if row["kind"] == "lifetime_end")
+    attrs = rows["cc.declaration_attribute.v1"]
+    for carrier in [row for row in attrs if row["record_kind"] == "carrier"]:
+        assert carrier["argument_slot"] == 0 and carrier["declaration"] in declarations
+        if carrier["argument_state"] == "complete":
+            arguments = [row for row in attrs if row.get("carrier_attribute") == carrier["attribute"]]
+            assert len(arguments) == carrier["argument_count"]
+            assert members(carrier["argument_ids"]) == {row["attribute"] for row in arguments}
+    print(f"Original coroutine definitions: {len(coroutine_bodies)} actual bodies")
+
+
+def run_original_fixture(selected_fixture, oracle):
     with tempfile.TemporaryDirectory(prefix="cxxlens-route-resource-") as directory:
         root = Path(directory)
-        shutil.copyfile(fixture, root / "main.cpp")
+        shutil.copyfile(selected_fixture, root / "main.cpp")
         commands = [{"directory": str(root), "file": "main.cpp", "arguments":
                      [str(compiler), "-std=c++23", "-nostdinc", "-nostdinc++", "-fexceptions",
                       "-fcxx-exceptions", "-O0", "-c", "main.cpp", "-o", "main.o"]}]
         (root / "compile_commands.json").write_text(json.dumps(commands))
+        started = time.monotonic()
         run = subprocess.run([str(analyzer), "--project-root", str(root), "--compile-commands",
                               str(root / "compile_commands.json")], env=environment,
                              text=True, capture_output=True, timeout=180)
         if debug_root := os.environ.get("CXXLENS_INPUT_DEBUG_DIR"):
-            debug = Path(debug_root) / "route-resource"
+            debug = Path(debug_root) / selected_fixture.stem
             debug.mkdir(parents=True, exist_ok=True)
             (debug / "queries.json").write_text(run.stdout)
             (debug / "analyzer.stderr.log").write_text(run.stderr)
             shutil.copyfile(root / "main.cpp", debug / "main.cpp")
             shutil.copyfile(root / "compile_commands.json", debug / "compile_commands.json")
         assert run.returncode == 0, run.stderr
-        verify(json.loads(run.stdout))
+        elapsed = time.monotonic() - started
+        oracle(json.loads(run.stdout))
+        print(f"Original TU {selected_fixture.stem}: analyzer {elapsed:.2f} seconds")
 
 
 if len(sys.argv) == 4:
-    verify(json.loads(Path(sys.argv[3]).read_text()))
+    saved = json.loads(Path(sys.argv[3]).read_text())
+    verify(saved)
+    verify_coroutines(saved)
 else:
-    run_original_fixture()
+    # Each independent original TU traverses the full qualified public query path.
+    # Separating coroutine lowering keeps each analysis within its existing deadline.
+    run_original_fixture(fixture, verify)
+    run_original_fixture(fixture.with_name("coroutine_definition_inputs.cpp"), verify_coroutines)
