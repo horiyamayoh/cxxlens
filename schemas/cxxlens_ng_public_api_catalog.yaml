@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.93.0
+document_version: 1.93.1
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -1086,7 +1086,7 @@ entries:
     lifetime: [borrowed-input-only-during-call, projection-owns-conditioned-original-evidence-and-queries, no-compiler-pointer]
     threading: [independent-calls-share-no-mutable-state]
     versioning: [finite-populations-v1-preserve-original-relation-identities]
-    invariants: [independent-admission-before-identity-failure, exact-world-unit-source-profile, source-populations-require-original-unit-source-association, known-empty-distinct-from-unavailable, typed-original-flow-use-and-definition-bindings, physical-lines-explicit-crlf-lf-cr-policy, source-comments-are-raw-lexical-observations, include-enumeration-independent-of-resolution, finite-enumeration-never-upgrades-analysis-guarantee, conflicts-never-first-wins, original-query-side-channels-retained, bounds-before-retention-and-cancellation]
+    invariants: [independent-admission-before-identity-failure, exact-world-unit-source-profile, source-populations-require-original-unit-source-association, named-membership-requires-original-census-and-successful-member-scan-independent-of-optional-facet-health, known-empty-distinct-from-unavailable, typed-original-flow-use-and-definition-bindings, physical-lines-explicit-crlf-lf-cr-policy, source-comments-are-raw-lexical-observations, include-enumeration-independent-of-resolution, finite-enumeration-never-upgrades-analysis-guarantee, conflicts-never-first-wins, original-query-side-channels-retained, bounds-before-retention-and-cancellation]
     depends_on: [public.query-runtime]
 
   - id: public.abi-surfaces

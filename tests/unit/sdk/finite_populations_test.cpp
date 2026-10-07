@@ -338,7 +338,10 @@ int main()
 														"cc.cfg_node.v1",
 														"cc.declaration_inventory.v1",
 														"cc.declaration.v1"};
-		const auto public_queries = [&](bool execution_complete = true)
+		const auto public_queries = [&](bool execution_complete = true,
+										bool member_execution_complete = true,
+										bool member_conflict = false,
+										bool member_disagreement = false)
 		{
 			q::application_query_results input;
 			input.snapshot_id = "snapshot:original-public";
@@ -346,9 +349,15 @@ int main()
 			{
 				auto data = std::make_shared<q::query_result::data>();
 				data->row_values = f.groups[group];
-				data->status = execution_complete || group != 7U ? q::execution_status::complete
-																 : q::execution_status::truncated;
-				data->input_complete = group != 7U;
+				data->status = (group == 7U && !execution_complete) ||
+						(group == 8U && !member_execution_complete)
+					? q::execution_status::truncated
+					: q::execution_status::complete;
+				data->input_complete = group != 7U && group != 8U;
+				if (group == 8U && member_conflict)
+					data->conflict_values.emplace_back();
+				if (group == 8U && member_disagreement)
+					data->disagreement_values.emplace_back();
 				data->snapshot = input.snapshot_id;
 				input.scans.push_back(
 					{std::string{names[group]}, {}, q::query_transfer_access::make(data)});
@@ -371,9 +380,31 @@ int main()
 				"public declaration failure leaked usage");
 		auto complete = q::project_declarations(public_queries());
 		require(complete && complete->inventory_inputs_complete &&
+					complete->member_inputs_complete &&
 					complete->populations[0].state == q::finite_population_state::complete,
 				"independent original declaration facet survives generic optional "
 				"frontier");
+		require(complete->source_queries &&
+					!complete->source_queries->scans[8U].result.inputs_complete(),
+				"independent named membership erased the original generic frontier");
+		auto partial_members = q::project_declarations(public_queries(true, false));
+		require(partial_members && !partial_members->member_inputs_complete &&
+					partial_members->populations[0].state != q::finite_population_state::complete,
+				"truncated member execution closed original named membership");
+		for (const bool disagreement : {false, true})
+		{
+			auto contradicted =
+				q::project_declarations(public_queries(true, true, !disagreement, disagreement));
+			require(contradicted && !contradicted->member_inputs_complete &&
+						contradicted->populations[0].state != q::finite_population_state::complete,
+					"contradicted member scan closed original named membership");
+		}
+		auto no_member_scan = public_queries();
+		no_member_scan.scans.erase(no_member_scan.scans.begin() + 8);
+		auto absent_members = q::project_declarations(no_member_scan);
+		require(absent_members && !absent_members->member_inputs_complete &&
+					absent_members->populations[0].state != q::finite_population_state::complete,
+				"missing member scan closed original named membership");
 		auto missing_execution = q::project_declarations(public_queries(false));
 		require(missing_execution && !missing_execution->inventory_inputs_complete,
 				"incomplete original inventory execution remains unavailable");
@@ -381,6 +412,17 @@ int main()
 		inventory.scans.erase(inventory.scans.begin() + 7);
 		require(!q::project_declarations(inventory)->inventory_inputs_complete,
 				"missing original inventory scan cannot close");
+		for (const std::string_view field : {"output.source", "output.entity"})
+		{
+			auto& binding = f.groups[8U][0U].values.at(std::string{field});
+			const auto original = binding;
+			binding.value = std::string{"foreign:original-member"};
+			auto unbound = q::project_declarations(public_queries());
+			require(unbound &&
+						unbound->populations[0U].state != q::finite_population_state::complete,
+					"independent member scan fabricated an original source/entity binding");
+			binding = original;
+		}
 		f.groups[8].clear();
 		auto missing = q::project_declarations(public_queries());
 		require(missing && missing->populations[0].state != q::finite_population_state::complete,

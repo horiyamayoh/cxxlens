@@ -80,6 +80,12 @@ AST only. Implicit/default activation endpoints retain an explicit frontier. An
 original direct address fact describes storage and destination operands; it does
 not establish pointee alias closure, current object version or lifetime validity.
 
+Named declaration populations use their original inventory profile, state, count
+and IDs plus successful independent member scan execution. Optional resource or
+object facet frontiers do not erase this census. Every listed declaration still
+requires its exact source, entity and unit bindings; absent or contradictory rows
+remain unavailable or conflicting. Original query coverage is preserved.
+
 ## Bounds and completion
 
 Every original input is validated and charged before retained allocation. Work,

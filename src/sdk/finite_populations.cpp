@@ -1363,15 +1363,14 @@ namespace cxxlens::sdk::query
 						continue;
 					const auto group = static_cast<std::size_t>(found - names.begin());
 					present[group] = true;
-					// The declaration inventory carries independently finite
-					// declaration and parsed-file facets. An unrelated optional
-					// target-slot frontier does not erase their atomic census.
-					// Their actual profile/state/count/member/source joins are
-					// still validated by project_rows for every selected unit.
-					const bool named_declaration_inventory =
-						current.domain == "declarations" && group == 7U;
+					// The named inventory and declaration members are independent
+					// from optional target-slot, resource and object facets. Their
+					// original profile/state/count/IDs and every member's exact
+					// source/entity/unit joins still determine closure in project_rows.
+					const bool named_declaration_axis =
+						current.domain == "declarations" && (group == 7U || group == 8U);
 					complete[group] &= scan.result.execution() == execution_status::complete &&
-						(named_declaration_inventory || scan.result.inputs_complete()) &&
+						(named_declaration_axis || scan.result.inputs_complete()) &&
 						scan.result.conflicts().empty() &&
 						scan.result.differential_disagreements().empty();
 					const auto source = query_transfer_access::borrow_rows(scan.result);
