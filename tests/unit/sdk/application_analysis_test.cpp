@@ -26,6 +26,7 @@
 #include <cxxlens/relations/source_span.hpp>
 #include <cxxlens/sdk/application_analysis.hpp>
 
+#include "llvm/clang22/project_diagnostic_routing.hpp"
 #include "msvc_worker/msvc_capture_bundle.hpp"
 #include "msvc_worker/msvc_response_arguments.hpp"
 #include "msvc_worker/msvc_source_dependencies.hpp"
@@ -2090,8 +2091,47 @@ namespace
 #endif
 } // namespace
 
+namespace
+{
+	void original_diagnostic_scope_preserves_independent_relations()
+	{
+		using namespace cxxlens::detail::clang22;
+		project_diagnostic_relations routes;
+		add_project_diagnostic_relation(
+			routes, "resource.activation-domain-frontier", "body:a", "cc.body.v1");
+		require(project_diagnostic_applies(
+			routes, "resource.activation-domain-frontier", "body:a", "cc.body.v1"));
+		require(!project_diagnostic_applies(
+			routes, "resource.activation-domain-frontier", "body:a", "cc.call_site.v1"));
+		require(!project_diagnostic_applies(
+			routes, "resource.activation-domain-frontier", "body:a", "cc.call_operand.v1"));
+		// An independently missing scope and generic source failure remain frontiers.
+		require(project_diagnostic_applies(
+			routes, "resource.activation-domain-frontier", "body:b", "cc.call_site.v1"));
+		require(project_diagnostic_applies(
+			routes, "source.world-incomplete", "body:a", "cc.call_site.v1"));
+		add_project_diagnostic_relation(
+			routes, "object.facet-binding-frontier", "node:a", "cc.syntax_node.v1");
+		add_project_diagnostic_relation(
+			routes, "object.facet-binding-frontier", "node:a", "cc.type.v1");
+		add_project_diagnostic_relation(
+			routes, "object.facet-binding-frontier", "node:a", "cc.type.v1");
+		require(routes.at({"object.facet-binding-frontier", "node:a"}).size() == 2U);
+		require(project_diagnostic_applies(
+			routes, "object.facet-binding-frontier", "node:a", "cc.syntax_node.v1"));
+		require(project_diagnostic_applies(
+			routes, "object.facet-binding-frontier", "node:a", "cc.type.v1"));
+		require(!project_diagnostic_applies(
+			routes, "object.facet-binding-frontier", "node:a", "cc.call_direct_target.v1"));
+		routes[{"object.facet-binding-frontier", "unbound"}] = {};
+		require(project_diagnostic_applies(
+			routes, "object.facet-binding-frontier", "unbound", "cc.call_direct_target.v1"));
+	}
+} // namespace
+
 int main(const int argc, const char* const* argv)
 {
+	original_diagnostic_scope_preserves_independent_relations();
 	if (argc == 2 && std::string_view{argv[1]} == "--detached-adoption-only")
 	{
 		authenticated_detached_run_is_revalidated_before_publication();

@@ -13,6 +13,7 @@
 #include <cxxlens/provider/clang22.hpp>
 #include <cxxlens/sdk/relation.hpp>
 
+#include "project_diagnostic_routing.hpp"
 #include "provider_worker_v4_ast_observer.hpp"
 #include "provider_worker_v4_output_normalizer.hpp"
 
@@ -68,6 +69,7 @@ namespace cxxlens::detail::clang22
 		std::vector<sdk::provider::unresolved_item> unresolved;
 		// Additive fields of existing original call rows, replaced by original row identity.
 		std::map<std::string, sdk::detached_row, std::less<>> call_updates;
+		project_diagnostic_relations diagnostic_relations{};
 	};
 	using project_original_calls = std::map<const clang::Expr*, std::string>;
 

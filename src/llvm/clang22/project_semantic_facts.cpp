@@ -2759,6 +2759,17 @@ namespace cxxlens::detail::clang22
 			}
 
 		  private:
+			void route_diagnostic(const std::string_view code,
+								  const std::string_view subject,
+								  const std::string_view relation)
+			{
+				// Map node, vector growth, strings and temporary lookup ownership are
+				// bounded before allocation by the existing detached population budget.
+				retain_population_bytes(256U +
+										3U * (code.size() + subject.size() + relation.size()));
+				add_project_diagnostic_relation(
+					output_.diagnostic_relations, code, subject, relation);
+			}
 			void
 			finalize_function_row(std::map<const clang::FunctionDecl*, sdk::detached_row>& rows,
 								  const clang::FunctionDecl* declaration,
@@ -3170,6 +3181,34 @@ namespace cxxlens::detail::clang22
 						output_.unresolved.push_back({"resource.original-carrier-frontier",
 													  observations_.compile_unit,
 													  "admit-exact-original-carrier-identity"});
+						if (pending.body)
+						{
+							resource_charge(1U);
+							route_diagnostic("resource.original-carrier-frontier",
+											 observations_.compile_unit,
+											 "cc.body.v1");
+						}
+						if (pending.initializer || input.admitted_declaration)
+						{
+							resource_charge(1U);
+							route_diagnostic("resource.original-carrier-frontier",
+											 observations_.compile_unit,
+											 "cc.declaration.v1");
+						}
+						for (const auto relation : {"cc.move_event.v1", "cc.address_transfer.v1"})
+						{
+							resource_charge(1U);
+							route_diagnostic("resource.original-carrier-frontier",
+											 observations_.compile_unit,
+											 relation);
+						}
+						if (input.admitted_declaration)
+						{
+							resource_charge(1U);
+							route_diagnostic("resource.original-carrier-frontier",
+											 observations_.compile_unit,
+											 "cc.declaration_attribute.v1");
+						}
 						continue;
 					}
 					resource_storage callback_storage{*this};
@@ -3444,6 +3483,9 @@ namespace cxxlens::detail::clang22
 						 row_id(row, "body"),
 						 "bind-original-implicit-and-default-action-resource-endpoints-before-"
 						 "executable-resource-closure"});
+					resource_charge(1U);
+					route_diagnostic(
+						"resource.activation-domain-frontier", row_id(row, "body"), "cc.body.v1");
 				}
 				resource_declaration_admissions_.clear();
 				resource_body_scopes_.clear();
@@ -3624,6 +3666,9 @@ namespace cxxlens::detail::clang22
 						output_.unresolved.push_back({"object.facet-binding-frontier",
 													  update.target,
 													  "original-physical-row-binding-required"});
+						object_work();
+						route_diagnostic(
+							"object.facet-binding-frontier", update.target, update.relation);
 					}
 				}
 			}

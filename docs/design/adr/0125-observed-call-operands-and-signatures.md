@@ -90,6 +90,16 @@ Target resolution is independent from syntactic call/operand enumeration. Indire
 and dependent target diagnostics remain on the target relation; they do not turn a
 known syntactic call population into missing input.
 
+Optional resource activation and object-facet binding frontiers retain the
+original diagnostic code and subject. The native collector records the affected
+typed relation at the original emission: executable resource activation belongs
+to its body carrier, and an unbound object facet belongs to the relation that
+would receive that exact update. Those frontiers do not change independent call
+or operand scan health. Unregistered diagnostics and missing routing metadata
+retain their conservative translation-unit frontier; source/world failures and
+original target/type failures remain unchanged. Relation routing does not inspect
+diagnostic prose or manufacture semantic closure.
+
 ## Independent actual function declaration scope
 
 One optional atomic facet extends `cc.entity_detail` and the actual definition's

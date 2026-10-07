@@ -134,6 +134,22 @@ with tempfile.TemporaryDirectory(prefix="cxxlens-call-operands-") as directory:
     assert all(row["call_site_state"] == "complete" for row in target_details)
     assert scans["cc.call_site.v1"]["status"] == "complete", scans["cc.call_site.v1"]["status"]
     assert scans["cc.call_site.v1"]["inputs_complete"], scans["cc.call_site.v1"]["unresolved"]
+    # Original executable resource coverage stays partial independently of the
+    # closed syntactic call/operand population. It is retained on its body carrier.
+    assert not scans["cc.body.v1"]["inputs_complete"]
+    assert any(item["state"] == "unresolved" and
+               item["reason"].split(":", 1)[0] == "resource.activation-domain-frontier"
+               for item in scans["cc.body.v1"]["input_coverage"])
+    assert scans["cc.call_operand.v1"]["status"] == "complete"
+    if not scans["cc.call_operand.v1"]["inputs_complete"]:
+        print("original operand input frontiers:", sorted({
+            (item["domain"], item["state"], item["reason"])
+            for item in scans["cc.call_operand.v1"]["input_coverage"]
+            if item["state"] != "covered"}))
+    assert not any(item["reason"].split(":", 1)[0] in {
+        "resource.activation-domain-frontier", "object.facet-binding-frontier"}
+        for name in ("cc.call_site.v1", "cc.call_operand.v1")
+        for item in scans[name]["input_coverage"])
     assert not scans["cc.call_direct_target.v1"]["inputs_complete"]
     assert any(row["state"] == "unresolved" and row["reason"].startswith("provider.indirect-target-unresolved:")
                for row in scans["cc.call_direct_target.v1"]["input_coverage"])

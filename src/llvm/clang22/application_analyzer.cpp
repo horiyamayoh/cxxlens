@@ -528,6 +528,7 @@ namespace cxxlens::detail::clang22
 			provider::clang22::detail::native_parse_observation parser;
 			bool semantic_produced{};
 			std::optional<sdk::error> failure;
+			project_diagnostic_relations diagnostic_relations{};
 		};
 
 		prepared_unit prepare_unit(const sdk::detail::compile_command_entry& selected,
@@ -1048,6 +1049,7 @@ namespace cxxlens::detail::clang22
 										  std::make_move_iterator(facts->unresolved.end()));
 			value.rows = std::move(rows);
 			value.unresolved = std::move(normalized->unresolved);
+			value.diagnostic_relations = std::move(facts->diagnostic_relations);
 			value.limitations = std::move(normalized->limitations);
 			value.limitation_relations = std::move(normalized->limitation_relations);
 			value.semantic_produced = true;
@@ -1416,6 +1418,11 @@ namespace cxxlens::detail::clang22
 						{
 							for (const auto& unresolved : value.unresolved)
 							{
+								if (!project_diagnostic_applies(value.diagnostic_relations,
+																unresolved.code,
+																unresolved.subject,
+																descriptor->id))
+									continue;
 								if (unresolved.code ==
 										"provider.entity-redeclaration-incompatible" &&
 									descriptor->id != "cc.entity.v1")
