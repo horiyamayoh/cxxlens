@@ -131,8 +131,16 @@ with tempfile.TemporaryDirectory(prefix="cxxlens-original-bindings-") as directo
     # action domain. Its full target census must remain partial even though all
     # retained original target slots are independently source/identity complete.
     assert inventory["target_slot_state"] == "partial", (inventory["target_slot_state"], run.stderr)
-    assert bodies["plus"]["eligibility"] == "dependent" and bodies["plus"]["reason"] == "instantiate-required"
-    assert bodies["plus"]["operation_state"] == "partial"
+    # The pattern and its actual int instantiation share a display name. Bind the
+    # original primary subject and physical definition rather than choosing a row
+    # through hash-dependent serialization order.
+    subjects = rows["cc.template_subject.v1"]
+    primary_plus, = [row for row in subjects if row["kind"] == "primary" and
+                     row["entity"] in entities and entities[row["entity"]]["qualified_name"] == "plus"]
+    plus_pattern, = [row for row in rows["cc.body.v1"] if row["function"] == primary_plus["entity"]]
+    assert declarations[plus_pattern["function_exit_declaration"]]["entity"] == primary_plus["entity"]
+    assert plus_pattern["eligibility"] == "dependent" and plus_pattern["reason"] == "instantiate-required"
+    assert plus_pattern["operation_state"] == "partial"
     assert all(row["observation_state"] == "complete" for row in slots), [
         {key: row[key] for key in ("subject_kind", "domain", "slot_index", "reason")}
         for row in slots if row["observation_state"] != "complete"]
@@ -282,10 +290,13 @@ with tempfile.TemporaryDirectory(prefix="cxxlens-original-bindings-") as directo
     for observed in subjects:
         if observed["entity"] is not None:
             assert bytes.fromhex(entities[observed["entity"]]["provider_local_key"]) == b"clang-usr:" + bytes.fromhex(observed["semantic_usr"])
-    primary_plus, = [row for row in subjects if row["kind"] == "primary" and
-                     row["entity"] in entities and entities[row["entity"]]["qualified_name"] == "plus"]
     actual_instance, = [row for row in subjects if row["kind"] == "implicit_instance"]
     assert actual_instance["entity"] in entities and entities[actual_instance["entity"]]["qualified_name"] == "plus"
+    assert actual_instance["entity"] != primary_plus["entity"]
+    plus_instance, = [row for row in rows["cc.body.v1"] if row["function"] == actual_instance["entity"]]
+    assert declarations[plus_instance["function_exit_declaration"]]["entity"] == actual_instance["entity"]
+    assert plus_instance["function_exit_declaration"] != plus_pattern["function_exit_declaration"]
+    assert plus_instance["eligibility"] == "closed"
     assert any(row["kind"] == "primary" and row["entity"] == by_name["Integral"]["entity"] for row in subjects)
     actual_lambda, = [row for row in subjects if row["kind"] == "lambda"]
     assert actual_lambda["entity"] == lambda_owner["entity"]
