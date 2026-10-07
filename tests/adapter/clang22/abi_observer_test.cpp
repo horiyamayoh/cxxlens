@@ -1,8 +1,9 @@
 #include <algorithm>
-#include <cassert>
 #include <cstddef>
+#include <cstdlib>
 #include <iostream>
 #include <map>
+#include <source_location>
 #include <string>
 #include <vector>
 
@@ -17,6 +18,16 @@
 
 namespace
 {
+	template <class T>
+	void require(const T& condition,
+				 std::source_location location = std::source_location::current())
+	{
+		if (!condition)
+		{
+			std::cerr << location.file_name() << ':' << location.line() << ": ABI check failed\n";
+			std::exit(EXIT_FAILURE);
+		}
+	}
 	using observation = cxxlens::detail::clang22::project_abi_observation;
 	using limits = cxxlens::detail::clang22::project_abi_limits;
 	using ranges = std::vector<std::pair<std::uint64_t, std::uint64_t>>;
@@ -97,7 +108,7 @@ int __attribute__((ms_abi)) alternate(int);
 				-> cxxlens::sdk::result<void>
 			{
 				if (std::ranges::find(extra, "-O2") != extra.end())
-					assert(unit.code_generation_options().OptimizationLevel == 2U);
+					require(unit.code_generation_options().OptimizationLevel == 2U);
 				cxxlens::detail::clang22::project_abi_observer observer{
 					unit.ast(), unit.preprocessor(), unit.code_generation_options(), bound};
 				for (auto* declaration : unit.ast().getTranslationUnitDecl()->decls())
@@ -132,14 +143,14 @@ int __attribute__((ms_abi)) alternate(int);
 		if (!parsed)
 			std::cerr << parsed.error().code << ":" << parsed.error().field << ":"
 					  << parsed.error().detail << '\n';
-		assert(parsed);
+		require(parsed);
 		return output;
 	}
 	void complete(const observation& value, std::uint64_t size, ranges expected)
 	{
-		assert(value.abi_state == "complete" && value.layout_state == "complete");
-		assert(value.byte_size == size && value.byte_alignment && !value.abi_signature.empty());
-		assert(value.occupied_ranges == expected);
+		require(value.abi_state == "complete" && value.layout_state == "complete");
+		require(value.byte_size == size && value.byte_alignment && !value.abi_signature.empty());
+		require(value.occupied_ranges == expected);
 	}
 } // namespace
 #endif
@@ -169,7 +180,7 @@ int main()
 	complete(actual.at("VirtualBase"), 16U, {{0U, 12U}});
 	complete(actual.at("VirtualDerived"), 32U, {{0U, 9U}, {16U, 28U}});
 	complete(actual.at("Zero"), 0U, {});
-	assert(actual.at("Forward").abi_state == "unknown");
+	require(actual.at("Forward").abi_state == "unknown");
 	for (const auto* name : {"call",
 							 "scalar",
 							 "alternate",
@@ -179,21 +190,21 @@ int main()
 							 "Abstract::~Abstract"})
 	{
 		const auto& value = actual.at(name);
-		assert(value.abi_state == "complete" && value.layout_state == "unknown" &&
-			   !value.abi_signature.empty());
+		require(value.abi_state == "complete" && value.layout_state == "unknown" &&
+				!value.abi_signature.empty());
 	}
-	assert(actual.at("scalar").abi_signature != actual.at("alternate").abi_signature);
+	require(actual.at("scalar").abi_signature != actual.at("alternate").abi_signature);
 	const auto unrelated = collect({"-DUNRELATED=1", "-O2"});
 	for (const auto& [name, value] : actual)
 	{
 		const auto& other = unrelated.at(name);
-		assert(value.abi_context == other.abi_context &&
-			   value.abi_signature == other.abi_signature &&
-			   value.occupied_ranges == other.occupied_ranges);
+		require(value.abi_context == other.abi_context &&
+				value.abi_signature == other.abi_signature &&
+				value.occupied_ranges == other.occupied_ranges);
 	}
 	const auto packed = collect({"-fpack-struct=1"});
-	assert(actual.at("Plain").abi_signature != packed.at("Plain").abi_signature);
-	assert(actual.at("call").abi_signature != packed.at("call").abi_signature);
+	require(actual.at("Plain").abi_signature != packed.at("Plain").abi_signature);
+	require(actual.at("call").abi_signature != packed.at("call").abi_signature);
 	for (const auto field : {0U, 1U, 2U, 3U})
 	{
 		cxxlens::provider::clang22::translation_unit_input input{
@@ -222,11 +233,11 @@ int main()
 					if (auto* record = llvm::dyn_cast<clang::RecordDecl>(declaration))
 					{
 						auto value = observer.record(*record);
-						assert(!value && value.error().code == "application-analysis.abi-budget");
+						require(!value && value.error().code == "application-analysis.abi-budget");
 					}
 				return {};
 			});
-		assert(result);
+		require(result);
 	}
 #endif
 }
