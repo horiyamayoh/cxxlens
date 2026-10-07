@@ -164,32 +164,47 @@ namespace cxxlens::sdk::detail
 
 			void transform(const std::span<const std::byte> block) noexcept
 			{
+				// Every compression block has exactly 64 bytes and 64 fixed rounds.
+				// Direct word access avoids per-round library calls in Debug builds.
 				std::array<std::uint32_t, 64U> schedule{};
+				auto* words = schedule.data();
+				const auto* bytes = block.data();
+				const auto* constants = round_constants.data();
 				for (std::size_t index{}; index < 16U; ++index)
 				{
 					const auto offset = index * 4U;
-					schedule.at(index) = (std::to_integer<std::uint32_t>(block[offset]) << 24U) |
-						(std::to_integer<std::uint32_t>(block[offset + 1U]) << 16U) |
-						(std::to_integer<std::uint32_t>(block[offset + 2U]) << 8U) |
-						std::to_integer<std::uint32_t>(block[offset + 3U]);
+					words[index] = (static_cast<std::uint32_t>(bytes[offset]) << 24U) |
+						(static_cast<std::uint32_t>(bytes[offset + 1U]) << 16U) |
+						(static_cast<std::uint32_t>(bytes[offset + 2U]) << 8U) |
+						static_cast<std::uint32_t>(bytes[offset + 3U]);
 				}
-				for (std::size_t index = 16U; index < schedule.size(); ++index)
+				for (std::size_t index = 16U; index < 64U; ++index)
 				{
-					const auto small_zero = std::rotr(schedule.at(index - 15U), 7) ^
-						std::rotr(schedule.at(index - 15U), 18) ^ (schedule.at(index - 15U) >> 3U);
-					const auto small_one = std::rotr(schedule.at(index - 2U), 17) ^
-						std::rotr(schedule.at(index - 2U), 19) ^ (schedule.at(index - 2U) >> 10U);
-					schedule.at(index) =
-						schedule.at(index - 16U) + small_zero + schedule.at(index - 7U) + small_one;
+					const auto fifteen = words[index - 15U];
+					const auto two = words[index - 2U];
+					const auto small_zero = ((fifteen >> 7U) | (fifteen << 25U)) ^
+						((fifteen >> 18U) | (fifteen << 14U)) ^ (fifteen >> 3U);
+					const auto small_one = ((two >> 17U) | (two << 15U)) ^
+						((two >> 19U) | (two << 13U)) ^ (two >> 10U);
+					words[index] = words[index - 16U] + small_zero + words[index - 7U] + small_one;
 				}
-				auto [a, b, c, d, e, f, g, h] = state_;
-				for (std::size_t index{}; index < schedule.size(); ++index)
+				auto* state = state_.data();
+				auto a = state[0U];
+				auto b = state[1U];
+				auto c = state[2U];
+				auto d = state[3U];
+				auto e = state[4U];
+				auto f = state[5U];
+				auto g = state[6U];
+				auto h = state[7U];
+				for (std::size_t index{}; index < 64U; ++index)
 				{
-					const auto big_one = std::rotr(e, 6) ^ std::rotr(e, 11) ^ std::rotr(e, 25);
+					const auto big_one = ((e >> 6U) | (e << 26U)) ^ ((e >> 11U) | (e << 21U)) ^
+						((e >> 25U) | (e << 7U));
 					const auto choose = (e & f) ^ (~e & g);
-					const auto first =
-						h + big_one + choose + round_constants.at(index) + schedule.at(index);
-					const auto big_zero = std::rotr(a, 2) ^ std::rotr(a, 13) ^ std::rotr(a, 22);
+					const auto first = h + big_one + choose + constants[index] + words[index];
+					const auto big_zero = ((a >> 2U) | (a << 30U)) ^ ((a >> 13U) | (a << 19U)) ^
+						((a >> 22U) | (a << 10U));
 					const auto majority = (a & b) ^ (a & c) ^ (b & c);
 					const auto second = big_zero + majority;
 					h = g;
@@ -201,14 +216,14 @@ namespace cxxlens::sdk::detail
 					b = a;
 					a = first + second;
 				}
-				state_[0U] += a;
-				state_[1U] += b;
-				state_[2U] += c;
-				state_[3U] += d;
-				state_[4U] += e;
-				state_[5U] += f;
-				state_[6U] += g;
-				state_[7U] += h;
+				state[0U] += a;
+				state[1U] += b;
+				state[2U] += c;
+				state[3U] += d;
+				state[4U] += e;
+				state[5U] += f;
+				state[6U] += g;
+				state[7U] += h;
 			}
 
 			std::array<std::uint32_t, 8U> state_{0x6a09e667U,

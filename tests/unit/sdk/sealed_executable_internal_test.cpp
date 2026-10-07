@@ -1,9 +1,13 @@
+#include <array>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <stop_token>
 #include <string>
+#include <string_view>
+#include <utility>
 
 #if defined(__linux__) && defined(__GLIBC__)
 #include <fcntl.h>
@@ -71,6 +75,50 @@ int main()
 		require(fragmented && fragmented->digest() == first->digest() &&
 					fragmented->byte_count() == first->byte_count(),
 				"fragmented executable reads changed measured identity");
+		// Independent SHA256 reference values cover both padding boundaries,
+		// multiple compression blocks and fragmented binary image reads.
+		const std::array<std::pair<std::string, std::string_view>, 7U> vectors{
+			{{std::string{},
+			  "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+			 {std::string{"abc"},
+			  "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"},
+			 {std::string(55U, 'a'),
+			  "sha256:9f4390f8d30c2dd92ec9f095b65e2b9ae9b0a925a5258e241c9f1e910f734318"},
+			 {std::string(56U, 'a'),
+			  "sha256:b35439a4ac6f0948b6d6f9e3c6af0f5f590ce20f1bde7090ef7970686ec6738a"},
+			 {std::string(64U, 'a'),
+			  "sha256:ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb"},
+			 {std::string(65U, 'a'),
+			  "sha256:635361c48bb9eab14198e76ea8ab7f1a41685d6ad62aa9146d301d4f17eb0ae0"},
+			 {std::string(1000000U, 'a'),
+			  "sha256:cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"}}};
+		const auto vector_path = root / "bin" / "hash-vector";
+		const auto vector_name = vector_path.string();
+		for (const auto& [contents, expected] : vectors)
+		{
+			{
+				std::ofstream stream{vector_path, std::ios::binary | std::ios::trunc};
+				stream.write(contents.data(), static_cast<std::streamsize>(contents.size()));
+				require(static_cast<bool>(stream), "could not write SHA256 reference image");
+			}
+			fs::permissions(vector_path,
+							fs::perms::owner_read | fs::perms::owner_write | fs::perms::owner_exec,
+							fs::perm_options::replace);
+			for (const std::size_t chunk : {1U, 55U, 64U, 65U, 65536U})
+			{
+				if (contents.size() > 65536U && chunk < 64U)
+					continue;
+				sealed_executable_request vector_request;
+				vector_request.executable_path = vector_name;
+				vector_request.maximum_image_bytes = 1000000U;
+				vector_request.read_chunk_bytes = chunk;
+				auto measured = open_sealed_executable(vector_request);
+				require(measured && measured->digest() == expected &&
+							measured->byte_count() == contents.size(),
+						"sealed executable SHA256 did not match the independent reference");
+			}
+		}
+
 		const auto seals = ::fcntl(first->native_handle(), F_GET_SEALS);
 		const auto required_seals = F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL;
 		require(seals >= 0 && (seals & required_seals) == required_seals,
