@@ -41,6 +41,8 @@
 #include <cxxlens/relations/cc_record_surface.hpp>
 #include <cxxlens/relations/cc_sequence_context.hpp>
 #include <cxxlens/relations/cc_sequence_pair.hpp>
+#include <cxxlens/relations/cc_source_feature.hpp>
+#include <cxxlens/relations/cc_source_feature_inventory.hpp>
 #include <cxxlens/relations/cc_syntax_node.hpp>
 #include <cxxlens/relations/cc_target_resolution_slot.hpp>
 #include <cxxlens/relations/cc_template_candidate.hpp>
@@ -350,6 +352,8 @@ namespace cxxlens::sdk
 				cc::relations::exceptional_exit::descriptor(),
 				cc::relations::sequence_context::descriptor(),
 				cc::relations::sequence_pair::descriptor(),
+				cc::relations::source_feature::descriptor(),
+				cc::relations::source_feature_inventory::descriptor(),
 				cc::relations::object_state_observation::descriptor(),
 				cc::relations::exceptional_block::descriptor(),
 				cc::relations::exceptional_successor::descriptor(),

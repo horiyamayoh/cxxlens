@@ -88,5 +88,7 @@
 | [0135](0135-original-memory-access-occurrences.md) | original builtin memory access membership, activation and operands |
 | [0136](0136-original-integer-object-storage.md) | original integer object storage in target character units |
 
+| [0134](0134-original-entered-file-source-features.md) | original static feature occurrences and actual entered-file closure |
+
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

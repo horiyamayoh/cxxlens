@@ -36,6 +36,8 @@
 #include <cxxlens/relations/cc_operation.hpp>
 #include <cxxlens/relations/cc_record_inventory.hpp>
 #include <cxxlens/relations/cc_record_surface.hpp>
+#include <cxxlens/relations/cc_source_feature.hpp>
+#include <cxxlens/relations/cc_source_feature_inventory.hpp>
 #include <cxxlens/relations/cc_syntax_node.hpp>
 #include <cxxlens/relations/cc_target_resolution_slot.hpp>
 #include <cxxlens/relations/cc_template_inventory.hpp>
@@ -55,6 +57,7 @@
 #include "project_exception_specification.hpp"
 #include "project_exceptional_exit_rows.hpp"
 #include "project_object_event_rows.hpp"
+#include "project_source_feature_rows.hpp"
 #include "project_template_event_rows.hpp"
 #include "project_template_observer.hpp"
 #include "sdk/bounded_json_internal.hpp"
@@ -349,9 +352,27 @@ namespace cxxlens::detail::clang22
 			{
 				if (reason != EnterFile)
 					return;
-				const auto logical = project_path(pp_.getSourceManager().getFilename(location));
-				if (closure_.find_member(logical))
-					output_.opened_files.insert(logical);
+				auto& manager = pp_.getSourceManager();
+				const auto file = manager.getFileID(manager.getExpansionLoc(location));
+				const auto logical = project_path(manager.getFilename(location));
+				if (!closure_.find_member(logical))
+				{
+					// Builtin/scratch buffers without a physical FileEntry are not
+					// files. An actual external physical file is an unbound entry.
+					if (manager.getFileEntryRefForID(file))
+						output_.entered_files_unbound = true;
+					return;
+				}
+				if (output_.opened_files.contains(logical))
+					return;
+				const auto bytes = logical.size() * 2U + 128U;
+				if (bytes > 4U * 1024U * 1024U - output_.entered_file_bytes)
+				{
+					output_.entered_files_truncated = true;
+					return;
+				}
+				output_.entered_file_bytes += bytes;
+				output_.opened_files.insert(logical);
 			}
 			void MacroDefined(const clang::Token& token,
 							  const clang::MacroDirective* directive) override
@@ -2596,7 +2617,7 @@ namespace cxxlens::detail::clang22
 																   : "");
 				}
 			}
-			project_semantic_facts finish()
+			project_semantic_facts finish(const project_preprocessor_observations& preprocessing)
 			{
 				finish_memory_scopes();
 				finish_syntax_bindings();
@@ -2735,9 +2756,13 @@ namespace cxxlens::detail::clang22
 				declarations.emplace(
 					"system_declarations",
 					flags("cc_declaration_id", std::move(system_declaration_ids_)));
-				declarations.emplace("parsed_files", flags("file_id", std::move(parsed_files_)));
+				// The source-feature domain borrows this original PP membership after
+				// the declaration inventory has been frozen. Bound its extra set copy
+				// before encoding, and keep the native keys alive until both detach.
+				retain_inventory_bytes((parsed_files_.size() + parsed_snapshots_.size()) * 256U);
+				declarations.emplace("parsed_files", flags("file_id", parsed_files_));
 				declarations.emplace("parsed_source_snapshots",
-									 flags("source_snapshot_id", std::move(parsed_snapshots_)));
+									 flags("source_snapshot_id", parsed_snapshots_));
 				finish_target_slots(declarations);
 				declarations.emplace(
 					"physical_definition_count",
@@ -2769,6 +2794,7 @@ namespace cxxlens::detail::clang22
 				}
 				append(make_row(cc::relations::declaration_inventory::descriptor(),
 								std::move(declarations)));
+				finish_source_features(preprocessing);
 				if (progress_)
 					progress_("finishing " + std::to_string(rows_.size()) + " detached rows");
 				output_.rows.reserve(rows_.size());
@@ -2781,6 +2807,125 @@ namespace cxxlens::detail::clang22
 			}
 
 		  private:
+			void finish_source_features(const project_preprocessor_observations& preprocessing)
+			{
+				std::vector<source_feature_entered_file> entered;
+				retain_inventory_bytes(preprocessing.opened_files.size() * 512U);
+				entered.reserve(preprocessing.opened_files.size());
+				for (const auto& logical : preprocessing.opened_files)
+					if (const auto* member = closure_.find_member(logical))
+					{
+						const auto snapshot = take(sdk::detail::derive_source_snapshot_id(
+							member->file_id, member->content_digest, "utf8"));
+						const auto original = parsed_snapshots_.find(snapshot);
+						if (original != parsed_snapshots_.end())
+							entered.push_back({member->file_id, *original});
+					}
+				source_feature_bindings bindings;
+				bindings.compile_unit = observations_.compile_unit;
+				bindings.declaration = [&](const clang::Decl& declaration)
+				{
+					return original_declaration(declaration);
+				};
+				bindings.entity = [&](const clang::NamedDecl& declaration) -> std::string_view
+				{
+					const auto found = entity_lookup_.find(declaration.getCanonicalDecl());
+					return found == entity_lookup_.end() ? std::string_view{} : found->second;
+				};
+				bindings.canonical_type = [&](clang::QualType type) -> std::string_view
+				{
+					const auto found = types_.find(type.getCanonicalType().getAsOpaquePtr());
+					return found == types_.end() ? std::string_view{} : found->second;
+				};
+				bindings.syntax = [&](const clang::Stmt& statement) -> std::string_view
+				{
+					const auto found = syntax_nodes_.find(&statement);
+					return found == syntax_nodes_.end() || found->second.size() != 1U
+						? std::string_view{}
+						: *found->second.begin();
+				};
+				bindings.source = [&](const original_source_feature_view& feature)
+				{
+					const auto range = feature.source;
+					source_feature_source_binding binding;
+					const auto* member = admitted(range.getBegin());
+					if (!member)
+						return binding;
+					const auto source =
+						span(range,
+							 feature.feature_class == source_feature_class::declaration ||
+									 feature.feature_class == source_feature_class::attribute
+								 ? "declaration"
+								 : "expression");
+					if (!source)
+						return binding;
+					binding.file = member->file_id;
+					const auto snapshot = take(sdk::detail::derive_source_snapshot_id(
+						member->file_id, member->content_digest, "utf8"));
+					const auto original = parsed_snapshots_.find(snapshot);
+					if (original == parsed_snapshots_.end())
+						return source_feature_source_binding{};
+					binding.snapshot = *original;
+					binding.source = object_text(*source);
+					binding.is_system = unit_.source_manager().isInSystemHeader(range.getBegin());
+					return binding;
+				};
+				source_feature_row_limits limits;
+				limits.maximum_retained_bytes = std::min(64U * 1024U * 1024U - population_bytes_,
+														 128U * 1024U * 1024U - retained_bytes_);
+				const auto before = population_bytes_;
+				const bool entry_complete = !preprocessing.entered_files_unbound &&
+					!preprocessing.entered_files_truncated &&
+					entered.size() == preprocessing.opened_files.size();
+				auto observed = detach_original_source_features(
+					unit_.ast(), bindings, entered, entry_complete, limits);
+				if (!observed)
+				{
+					if (observed.error().code != "native.source-feature-budget")
+						throw extraction_failure{std::move(observed.error())};
+					// A new optional domain's own storage frontier does not erase the
+					// already detached declaration/call/type populations.
+					auto unavailable = common();
+					unavailable.emplace("scope",
+										symbol("cc.source-feature-scope/1", "translation_unit"));
+					unavailable.emplace(
+						"profile",
+						sdk::detached_cell::utf8("clang22-original-static-source-features/1"));
+					unavailable.emplace("feature_count", sdk::detached_cell::unsigned_integer(0U));
+					unavailable.emplace("feature_ids", flags("cc_source_feature_id", {}));
+					unavailable.emplace("unbound_feature_count",
+										sdk::detached_cell::unsigned_integer(0U));
+					unavailable.emplace("unbound_feature_ids", flags("cc_source_feature_id", {}));
+					for (const auto name :
+						 {"enumeration_state", "traversal_state", "source_binding_state"})
+						unavailable.emplace(name,
+											symbol("cc.source-feature-state/1", "unavailable"));
+					unavailable.emplace("entry_state",
+										symbol("cc.source-feature-state/1",
+											   entry_complete ? "complete" : "partial"));
+					unavailable.emplace("entered_file_count",
+										sdk::detached_cell::unsigned_integer(parsed_files_.size()));
+					unavailable.emplace("entered_file_ids", flags("file_id", parsed_files_));
+					unavailable.emplace("entered_source_snapshots",
+										flags("source_snapshot_id", parsed_snapshots_));
+					unavailable.emplace("entered_file_state",
+										symbol("cc.source-feature-state/1",
+											   entry_complete ? "complete" : "partial"));
+					unavailable.emplace(
+						"reason",
+						sdk::detached_cell::utf8("original-source-feature-resource-frontier"));
+					retain_inventory_bytes(32U * 1024U + parsed_files_.size() * 1024U);
+					append(make_row(cc::relations::source_feature_inventory::descriptor(),
+									std::move(unavailable)));
+					return;
+				}
+				const auto callback_bytes = population_bytes_ - before;
+				if (callback_bytes > observed->retained_bytes_bound)
+					fail("source-features", "callback-accounting-underflow");
+				retain_population_bytes(observed->retained_bytes_bound - callback_bytes);
+				for (auto& row : observed->rows)
+					append(std::move(row));
+			}
 			void route_diagnostic(const std::string_view code,
 								  const std::string_view subject,
 								  const std::string_view relation)
@@ -10534,7 +10679,7 @@ namespace cxxlens::detail::clang22
 				progress("detaching raw and expanded source tokens");
 			visitor.tokens(preprocessing);
 			visitor.finish_preprocessor(preprocessing);
-			return visitor.finish();
+			return visitor.finish(preprocessing);
 		}
 		catch (const extraction_failure& error)
 		{

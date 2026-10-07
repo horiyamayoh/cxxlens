@@ -28,6 +28,7 @@
 #include <cxxlens/sdk/record_surfaces.hpp>
 #include <cxxlens/sdk/relation.hpp>
 #include <cxxlens/sdk/semantic_graphs.hpp>
+#include <cxxlens/sdk/source_features.hpp>
 #include <cxxlens/sdk/source_tokens.hpp>
 #include <cxxlens/sdk/store.hpp>
 #include <cxxlens/sdk/target_resolution.hpp>

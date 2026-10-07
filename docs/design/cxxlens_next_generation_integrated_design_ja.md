@@ -5924,3 +5924,7 @@ core-independent extension
 原始 memory access の候補母集団、評価 context、builtin address-only と `&*` の対応は [ADR 0135](adr/0135-original-memory-access-occurrences.md) に従い保持する。欠落した operand、scope、activation、current value は unknown のままとし、source/CFG から再構成しない。
 
 整数の値幅と object storage を独立して保持する追加 facet は [ADR 0136](adr/0136-original-integer-object-storage.md) に従う。original target character unit での ASTContext 観測を保存し、値幅から object size を導かない。
+
+### Original entered-file static feature domain
+
+The optional original LangOptions environment and full admitted Decl/Stmt/Attr/TypeLoc source-feature population follow [ADR 0134](adr/0134-original-entered-file-source-features.md) and [the source-feature contract](clang22-original-source-features.md). Actual preprocessor entry, frozen file/snapshot binding, traversal and unresolved source attribution are independent closure axes. Compiler kinds alone do not classify extensions or hosted facilities. Resource activation, alias/object versions and runtime access domains remain separate.

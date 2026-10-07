@@ -56,6 +56,10 @@ namespace cxxlens::detail::clang22
 		bool truncated{};
 		std::vector<token> expanded_tokens;
 		std::set<std::string, std::less<>> opened_files, classification_incomplete;
+		// Independent actual EnterFile observations. External physical entries and
+		// this membership's own retention frontier never imply empty source files.
+		std::size_t entered_file_bytes{};
+		bool entered_files_unbound{}, entered_files_truncated{};
 		std::size_t token_bytes{};
 		bool tokens_truncated{}, tokens_unmapped{};
 	};
