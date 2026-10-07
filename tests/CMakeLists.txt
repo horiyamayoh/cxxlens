@@ -2051,6 +2051,10 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
       PROPERTIES
         LABELS
         "adapter;clang22;application;original-inputs;integration;bounded"
+        # This whole original fixture takes about 160 seconds in a serial Debug
+        # run. Concurrent compiler sealing/materialization on CI's four-test
+        # schedule can exhaust its unchanged 180-second subprocess deadline.
+        RUN_SERIAL TRUE
         TIMEOUT 240)
     cxxlens_add_test_executable(cxxlens-clang22-source-closure-fd
                                 adapter/clang22/source_closure_fd_test.cpp)
