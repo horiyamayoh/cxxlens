@@ -20,12 +20,12 @@ namespace cxxlens::cc::relations
 				sdk::relation_descriptor output;
 				output.id = "cc.declaration.v1";
 				output.name = "cc.declaration";
-				output.version = {1U, 0U, 0U};
+				output.version = {1U, 1U, 0U};
 				output.semantic_major = 1U;
 				output.semantics = "cc.declaration/1";
 				output.owner_namespace = "cxxlens.standard.cc";
-				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.declaration.v1.entity","cc.declaration.v1.source","cc.declaration.v1.kind"],"result_column":"cc.declaration.v1.declaration"},"interpretation_required":true,"key":["cc.declaration.v1.declaration"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.declaration.v1.declaration","identity_role":"claim_key","name":"declaration","required":true,"type":"typed_id<cc_declaration_id>"},{"id":"cc.declaration.v1.entity","identity_role":"authoritative_payload","name":"entity","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.declaration.v1.source","identity_role":"authoritative_payload","name":"source","required":true,"type":"typed_id<source_span_id>"},{"id":"cc.declaration.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<cc.declaration-kind/1>"},{"id":"cc.declaration.v1.storage","identity_role":"authoritative_payload","name":"storage","required":true,"type":"open_symbol<cc.storage-class/1>"},{"id":"cc.declaration.v1.linkage","identity_role":"authoritative_payload","name":"linkage","required":true,"type":"open_symbol<cc.linkage/1>"},{"id":"cc.declaration.v1.attributes","identity_role":"authoritative_payload","name":"attributes","required":true,"type":"set<open_symbol<cc.attribute/1>>"},{"id":"cc.declaration.v1.is_implicit","identity_role":"authoritative_payload","name":"is_implicit","required":true,"type":"bool"},{"id":"cc.declaration.v1.is_deleted","identity_role":"authoritative_payload","name":"is_deleted","required":true,"type":"bool"},{"id":"cc.declaration.v1.is_defaulted","identity_role":"authoritative_payload","name":"is_defaulted","required":true,"type":"bool"},{"id":"cc.declaration.v1.is_friend","identity_role":"authoritative_payload","name":"is_friend","required":true,"type":"bool"},{"id":"cc.declaration.v1.is_exported","identity_role":"authoritative_payload","name":"is_exported","required":true,"type":"bool"},{"id":"cc.declaration.v1.identifier_scope","identity_role":"authoritative_payload","name":"identifier_scope","required":false,"type":"optional<open_symbol<cc.identifier-scope/1>>"},{"id":"cc.declaration.v1.identifier_kind","identity_role":"authoritative_payload","name":"identifier_kind","required":false,"type":"optional<open_symbol<cc.identifier-kind/1>>"},{"id":"cc.declaration.v1.identifier_state","identity_role":"authoritative_payload","name":"identifier_state","required":false,"type":"optional<open_symbol<cc.identifier-state/1>>"},{"id":"cc.declaration.v1.identifier_profile","identity_role":"authoritative_payload","name":"identifier_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.declaration.v1.identifier_name","identity_role":"authoritative_payload","name":"identifier_name","required":false,"type":"optional<utf8_string>"},{"id":"cc.declaration.v1.identifier_source","identity_role":"authoritative_payload","name":"identifier_source","required":false,"type":"optional<typed_id<source_span_id>>"},{"id":"cc.declaration.v1.identifier_function","identity_role":"authoritative_payload","name":"identifier_function","required":false,"type":"optional<typed_id<cc_entity_id>>"}],"coverage":{"execution_domain":"cc.declaration.compile-unit"},"descriptor_id":"cc.declaration.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::declaration","indexes":[["cc.declaration.v1.entity"],["cc.declaration.v1.source"]],"merge":{"conflict_columns":["cc.declaration.v1.attributes","cc.declaration.v1.entity","cc.declaration.v1.identifier_function","cc.declaration.v1.identifier_kind","cc.declaration.v1.identifier_name","cc.declaration.v1.identifier_profile","cc.declaration.v1.identifier_scope","cc.declaration.v1.identifier_source","cc.declaration.v1.identifier_state","cc.declaration.v1.is_defaulted","cc.declaration.v1.is_deleted","cc.declaration.v1.is_exported","cc.declaration.v1.is_friend","cc.declaration.v1.is_implicit","cc.declaration.v1.kind","cc.declaration.v1.linkage","cc.declaration.v1.source","cc.declaration.v1.storage"],"mode":"functional_assertion"},"name":"cc.declaration","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.declaration.v1.entity"]},"profile":"NG0","provenance":{"minimum":"canonicalization"},"references":[{"on_missing":"reject_batch","source_columns":["cc.declaration.v1.entity"],"strength":"hard","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.declaration.v1.identifier_function"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"reject_batch","source_columns":["cc.declaration.v1.identifier_source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"},{"on_missing":"reject_batch","source_columns":["cc.declaration.v1.source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"}],"row_constraints":{"all_or_none":[["cc.declaration.v1.identifier_kind","cc.declaration.v1.identifier_profile","cc.declaration.v1.identifier_scope","cc.declaration.v1.identifier_state"]]},"semantic_major":1,"semantics":"cc.declaration/1","stability":"versioned","summary":"Conditioned declaration surface for a semantic entity.","version":"1.0.0"})cxxlens";
-				output.contract_digest = "sha256:b0d27d269f4ddf57c7fbd0f45aebc2f4ac06d3c4fd579273ffeb3b993e2db861";
+				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.declaration.v1.entity","cc.declaration.v1.source","cc.declaration.v1.kind"],"result_column":"cc.declaration.v1.declaration"},"interpretation_required":true,"key":["cc.declaration.v1.declaration"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.declaration.v1.declaration","identity_role":"claim_key","name":"declaration","required":true,"type":"typed_id<cc_declaration_id>"},{"id":"cc.declaration.v1.entity","identity_role":"authoritative_payload","name":"entity","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.declaration.v1.source","identity_role":"authoritative_payload","name":"source","required":true,"type":"typed_id<source_span_id>"},{"id":"cc.declaration.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<cc.declaration-kind/1>"},{"id":"cc.declaration.v1.storage","identity_role":"authoritative_payload","name":"storage","required":true,"type":"open_symbol<cc.storage-class/1>"},{"id":"cc.declaration.v1.linkage","identity_role":"authoritative_payload","name":"linkage","required":true,"type":"open_symbol<cc.linkage/1>"},{"id":"cc.declaration.v1.attributes","identity_role":"authoritative_payload","name":"attributes","required":true,"type":"set<open_symbol<cc.attribute/1>>"},{"id":"cc.declaration.v1.is_implicit","identity_role":"authoritative_payload","name":"is_implicit","required":true,"type":"bool"},{"id":"cc.declaration.v1.is_deleted","identity_role":"authoritative_payload","name":"is_deleted","required":true,"type":"bool"},{"id":"cc.declaration.v1.is_defaulted","identity_role":"authoritative_payload","name":"is_defaulted","required":true,"type":"bool"},{"id":"cc.declaration.v1.is_friend","identity_role":"authoritative_payload","name":"is_friend","required":true,"type":"bool"},{"id":"cc.declaration.v1.is_exported","identity_role":"authoritative_payload","name":"is_exported","required":true,"type":"bool"},{"id":"cc.declaration.v1.identifier_scope","identity_role":"authoritative_payload","name":"identifier_scope","required":false,"type":"optional<open_symbol<cc.identifier-scope/1>>"},{"id":"cc.declaration.v1.identifier_kind","identity_role":"authoritative_payload","name":"identifier_kind","required":false,"type":"optional<open_symbol<cc.identifier-kind/1>>"},{"id":"cc.declaration.v1.identifier_state","identity_role":"authoritative_payload","name":"identifier_state","required":false,"type":"optional<open_symbol<cc.identifier-state/1>>"},{"id":"cc.declaration.v1.identifier_profile","identity_role":"authoritative_payload","name":"identifier_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.declaration.v1.identifier_name","identity_role":"authoritative_payload","name":"identifier_name","required":false,"type":"optional<utf8_string>"},{"id":"cc.declaration.v1.identifier_source","identity_role":"authoritative_payload","name":"identifier_source","required":false,"type":"optional<typed_id<source_span_id>>"},{"id":"cc.declaration.v1.identifier_function","identity_role":"authoritative_payload","name":"identifier_function","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.declaration.v1.attribute_inventory_profile","identity_role":"authoritative_payload","name":"attribute_inventory_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.declaration.v1.attribute_inventory_state","identity_role":"authoritative_payload","name":"attribute_inventory_state","required":false,"type":"optional<open_symbol<cc.original-input-state/1>>"},{"id":"cc.declaration.v1.attribute_count","identity_role":"authoritative_payload","name":"attribute_count","required":false,"type":"optional<uint64>"},{"id":"cc.declaration.v1.attribute_argument_count","identity_role":"authoritative_payload","name":"attribute_argument_count","required":false,"type":"optional<uint64>"},{"id":"cc.declaration.v1.attribute_ids","identity_role":"authoritative_payload","name":"attribute_ids","required":false,"type":"optional<set<cc_declaration_attribute_id>>"},{"id":"cc.declaration.v1.attribute_argument_state","identity_role":"authoritative_payload","name":"attribute_argument_state","required":false,"type":"optional<open_symbol<cc.original-input-state/1>>"},{"id":"cc.declaration.v1.move_input_profile","identity_role":"authoritative_payload","name":"move_input_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.declaration.v1.move_input_state","identity_role":"authoritative_payload","name":"move_input_state","required":false,"type":"optional<open_symbol<cc.original-input-state/1>>"},{"id":"cc.declaration.v1.move_input_count","identity_role":"authoritative_payload","name":"move_input_count","required":false,"type":"optional<uint64>"},{"id":"cc.declaration.v1.move_input_ids","identity_role":"authoritative_payload","name":"move_input_ids","required":false,"type":"optional<set<cc_move_event_id>>"},{"id":"cc.declaration.v1.address_input_profile","identity_role":"authoritative_payload","name":"address_input_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.declaration.v1.address_input_state","identity_role":"authoritative_payload","name":"address_input_state","required":false,"type":"optional<open_symbol<cc.original-input-state/1>>"},{"id":"cc.declaration.v1.address_input_count","identity_role":"authoritative_payload","name":"address_input_count","required":false,"type":"optional<uint64>"},{"id":"cc.declaration.v1.address_input_ids","identity_role":"authoritative_payload","name":"address_input_ids","required":false,"type":"optional<set<cc_address_transfer_id>>"}],"coverage":{"execution_domain":"cc.declaration.compile-unit"},"descriptor_id":"cc.declaration.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::declaration","indexes":[["cc.declaration.v1.entity"],["cc.declaration.v1.source"]],"merge":{"conflict_columns":["cc.declaration.v1.address_input_count","cc.declaration.v1.address_input_ids","cc.declaration.v1.address_input_profile","cc.declaration.v1.address_input_state","cc.declaration.v1.attribute_argument_count","cc.declaration.v1.attribute_argument_state","cc.declaration.v1.attribute_count","cc.declaration.v1.attribute_ids","cc.declaration.v1.attribute_inventory_profile","cc.declaration.v1.attribute_inventory_state","cc.declaration.v1.attributes","cc.declaration.v1.entity","cc.declaration.v1.identifier_function","cc.declaration.v1.identifier_kind","cc.declaration.v1.identifier_name","cc.declaration.v1.identifier_profile","cc.declaration.v1.identifier_scope","cc.declaration.v1.identifier_source","cc.declaration.v1.identifier_state","cc.declaration.v1.is_defaulted","cc.declaration.v1.is_deleted","cc.declaration.v1.is_exported","cc.declaration.v1.is_friend","cc.declaration.v1.is_implicit","cc.declaration.v1.kind","cc.declaration.v1.linkage","cc.declaration.v1.move_input_count","cc.declaration.v1.move_input_ids","cc.declaration.v1.move_input_profile","cc.declaration.v1.move_input_state","cc.declaration.v1.source","cc.declaration.v1.storage"],"mode":"functional_assertion"},"name":"cc.declaration","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.declaration.v1.entity"]},"profile":"NG0","provenance":{"minimum":"canonicalization"},"references":[{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.declaration.v1.address_input_ids"],"strength":"soft_semantic","target_columns":["cc.address_transfer.v1.transfer"],"target_relation":"cc.address_transfer"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.declaration.v1.attribute_ids"],"strength":"soft_semantic","target_columns":["cc.declaration_attribute.v1.attribute"],"target_relation":"cc.declaration_attribute"},{"on_missing":"reject_batch","source_columns":["cc.declaration.v1.entity"],"strength":"hard","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.declaration.v1.identifier_function"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"reject_batch","source_columns":["cc.declaration.v1.identifier_source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.declaration.v1.move_input_ids"],"strength":"soft_semantic","target_columns":["cc.move_event.v1.event"],"target_relation":"cc.move_event"},{"on_missing":"reject_batch","source_columns":["cc.declaration.v1.source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"}],"row_constraints":{"all_or_none":[["cc.declaration.v1.identifier_kind","cc.declaration.v1.identifier_profile","cc.declaration.v1.identifier_scope","cc.declaration.v1.identifier_state"]]},"semantic_major":1,"semantics":"cc.declaration/1","stability":"versioned","summary":"Conditioned declaration surface for a semantic entity.","version":"1.1.0"})cxxlens";
+				output.contract_digest = "sha256:5c37e7a4cd3863e037bb5f7c81e5bbad33e29eb2b60dbafb74562af0594d5e6c";
 				output.columns = {
 					{"cc.declaration.v1.declaration", "declaration", {sdk::scalar_kind::typed_id, "cc_declaration_id", false}, true, sdk::column_role::claim_key},
 					{"cc.declaration.v1.entity", "entity", {sdk::scalar_kind::typed_id, "cc_entity_id", false}, true, sdk::column_role::authoritative_payload},
@@ -46,6 +46,20 @@ namespace cxxlens::cc::relations
 					{"cc.declaration.v1.identifier_name", "identifier_name", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.declaration.v1.identifier_source", "identifier_source", {sdk::scalar_kind::typed_id, "source_span_id", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.declaration.v1.identifier_function", "identifier_function", {sdk::scalar_kind::typed_id, "cc_entity_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.attribute_inventory_profile", "attribute_inventory_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.attribute_inventory_state", "attribute_inventory_state", {sdk::scalar_kind::open_symbol, "cc.original-input-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.attribute_count", "attribute_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.attribute_argument_count", "attribute_argument_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.attribute_ids", "attribute_ids", {sdk::scalar_kind::set, "cc_declaration_attribute_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.attribute_argument_state", "attribute_argument_state", {sdk::scalar_kind::open_symbol, "cc.original-input-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.move_input_profile", "move_input_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.move_input_state", "move_input_state", {sdk::scalar_kind::open_symbol, "cc.original-input-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.move_input_count", "move_input_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.move_input_ids", "move_input_ids", {sdk::scalar_kind::set, "cc_move_event_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.address_input_profile", "address_input_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.address_input_state", "address_input_state", {sdk::scalar_kind::open_symbol, "cc.original-input-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.address_input_count", "address_input_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration.v1.address_input_ids", "address_input_ids", {sdk::scalar_kind::set, "cc_address_transfer_id", true}, false, sdk::column_role::authoritative_payload},
 				};
 				output.domain_identity.result_column = "cc.declaration.v1.declaration";
 				output.domain_identity.projection = {
@@ -58,13 +72,26 @@ namespace cxxlens::cc::relations
 					"cc.declaration.v1.declaration",
 				};
 				output.references = {
+					{{"cc.declaration.v1.address_input_ids"}, "cc.address_transfer", {"cc.address_transfer.v1.transfer"}, sdk::reference_strength::soft_semantic, true},
+					{{"cc.declaration.v1.attribute_ids"}, "cc.declaration_attribute", {"cc.declaration_attribute.v1.attribute"}, sdk::reference_strength::soft_semantic, true},
 					{{"cc.declaration.v1.entity"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::hard},
 					{{"cc.declaration.v1.identifier_function"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic},
 					{{"cc.declaration.v1.identifier_source"}, "source.span", {"source.span.v1.span"}, sdk::reference_strength::hard},
+					{{"cc.declaration.v1.move_input_ids"}, "cc.move_event", {"cc.move_event.v1.event"}, sdk::reference_strength::soft_semantic, true},
 					{{"cc.declaration.v1.source"}, "source.span", {"source.span.v1.span"}, sdk::reference_strength::hard},
 				};
 				output.merge = sdk::merge_mode::functional_assertion;
 				output.conflict_columns = {
+					"cc.declaration.v1.address_input_count",
+					"cc.declaration.v1.address_input_ids",
+					"cc.declaration.v1.address_input_profile",
+					"cc.declaration.v1.address_input_state",
+					"cc.declaration.v1.attribute_argument_count",
+					"cc.declaration.v1.attribute_argument_state",
+					"cc.declaration.v1.attribute_count",
+					"cc.declaration.v1.attribute_ids",
+					"cc.declaration.v1.attribute_inventory_profile",
+					"cc.declaration.v1.attribute_inventory_state",
 					"cc.declaration.v1.attributes",
 					"cc.declaration.v1.entity",
 					"cc.declaration.v1.identifier_function",
@@ -81,6 +108,10 @@ namespace cxxlens::cc::relations
 					"cc.declaration.v1.is_implicit",
 					"cc.declaration.v1.kind",
 					"cc.declaration.v1.linkage",
+					"cc.declaration.v1.move_input_count",
+					"cc.declaration.v1.move_input_ids",
+					"cc.declaration.v1.move_input_profile",
+					"cc.declaration.v1.move_input_state",
 					"cc.declaration.v1.source",
 					"cc.declaration.v1.storage",
 				};
@@ -262,6 +293,132 @@ namespace cxxlens::cc::relations
 			[[nodiscard]] static sdk::column_ref ref()
 			{
 				return {declaration::descriptor().id, "cc.declaration.v1.identifier_function", {sdk::scalar_kind::typed_id, "cc_entity_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.attribute_inventory_profile`. */
+		struct attribute_inventory_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.attribute_inventory_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.attribute_inventory_state`. */
+		struct attribute_inventory_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.attribute_inventory_state", {sdk::scalar_kind::open_symbol, "cc.original-input-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.attribute_count`. */
+		struct attribute_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.attribute_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.attribute_argument_count`. */
+		struct attribute_argument_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.attribute_argument_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.attribute_ids`. */
+		struct attribute_ids
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.attribute_ids", {sdk::scalar_kind::set, "cc_declaration_attribute_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.attribute_argument_state`. */
+		struct attribute_argument_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.attribute_argument_state", {sdk::scalar_kind::open_symbol, "cc.original-input-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.move_input_profile`. */
+		struct move_input_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.move_input_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.move_input_state`. */
+		struct move_input_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.move_input_state", {sdk::scalar_kind::open_symbol, "cc.original-input-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.move_input_count`. */
+		struct move_input_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.move_input_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.move_input_ids`. */
+		struct move_input_ids
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.move_input_ids", {sdk::scalar_kind::set, "cc_move_event_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.address_input_profile`. */
+		struct address_input_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.address_input_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.address_input_state`. */
+		struct address_input_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.address_input_state", {sdk::scalar_kind::open_symbol, "cc.original-input-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.address_input_count`. */
+		struct address_input_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.address_input_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration.v1.address_input_ids`. */
+		struct address_input_ids
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration::descriptor().id, "cc.declaration.v1.address_input_ids", {sdk::scalar_kind::set, "cc_address_transfer_id", true}};
 			}
 		};
 	};

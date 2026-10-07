@@ -4,7 +4,9 @@
 #include <iostream>
 #include <string_view>
 
+#include <cxxlens/relations/cc_exceptional_block.hpp>
 #include <cxxlens/relations/cc_exceptional_exit.hpp>
+#include <cxxlens/relations/cc_exceptional_successor.hpp>
 
 namespace native = cxxlens::detail::clang22;
 namespace sdk = cxxlens::sdk;
@@ -120,6 +122,76 @@ int main()
 				detached->rows[1U].cells.at("cc.exceptional_exit.v1.cleanup_target").state ==
 					sdk::cell_state::absent,
 			"missing original cleanup fields remain absent on independent occurrences");
+	// Distinct Invoke successors can have the same original destination block.
+	// Their terminator successor ordinals are still separate census members.
+	auto topology = original();
+	auto& lowered = topology.scopes.front().variants.front();
+	lowered.topology_observed = lowered.topology_complete = true;
+	lowered.blocks = {{0U, 5U, true, 13U, "invoke"}, {1U, 1U, false, 1U, "ret"}};
+	lowered.successors = {{0U, 1U, 4U, 0U, "normal", true}, {0U, 1U, 4U, 1U, "unwind", true}};
+	native::exceptional_occurrence actual_invoke;
+	actual_invoke.role = "escaping_call";
+	actual_invoke.eligibility = "eligible";
+	actual_invoke.block_ordinal = 0U;
+	actual_invoke.instruction_ordinal = 4U;
+	actual_invoke.is_invoke = true;
+	actual_invoke.eh_boundary_observed = true;
+	actual_invoke.eh_boundary_declaration = "declaration:definition";
+	actual_invoke.eh_selected_scope_kind = "terminate";
+	actual_invoke.eh_disposition = "direct_function_spec_termination";
+	lowered.occurrences.push_back(actual_invoke);
+	auto graph = native::detach_project_exceptional_exits(topology, bindings);
+	require(graph && graph->rows.size() == 6U,
+			"original topology retains all block and successor members");
+	const auto& graph_carrier = graph->rows[0U];
+	const auto& graph_invoke = graph->rows[1U];
+	require(
+		text(graph_carrier, "lowered_topology_state") == "complete" &&
+			std::get<std::uint64_t>(
+				*graph_carrier.cells.at("cc.exceptional_exit.v1.lowered_block_count").value) ==
+				2U &&
+			std::get<std::uint64_t>(
+				*graph_carrier.cells.at("cc.exceptional_exit.v1.lowered_successor_count").value) ==
+				2U &&
+			text(graph_invoke, "normal_successor") != text(graph_invoke, "unwind_successor"),
+		"parallel normal/unwind membership is independent from exit census");
+	require(text(graph_invoke, "eh_disposition") == "direct_function_spec_termination" &&
+				text(graph_invoke, "eh_boundary_declaration") == "declaration:definition" &&
+				graph_invoke.cells.at("cc.exceptional_exit.v1.expression").state ==
+					sdk::cell_state::absent,
+			"actual boundary witness does not require an invented optional AST binding");
+	for (const auto& row : graph->rows)
+	{
+		const auto& schema = row.descriptor_id == "cc.exceptional_exit.v1" ? descriptor
+			: row.descriptor_id == "cc.exceptional_block.v1"
+			? cxxlens::cc::relations::exceptional_block::descriptor()
+			: cxxlens::cc::relations::exceptional_successor::descriptor();
+		require(sdk::validate_row(schema, row).has_value() &&
+					sdk::validate_domain_identity(schema, row).has_value(),
+				"all topology original wire types and scoped identities validate");
+	}
+	auto bad_graph = topology;
+	bad_graph.scopes.front().variants.front().successors[1U].to = 9U;
+	require(!native::detach_project_exceptional_exits(bad_graph, bindings),
+			"foreign original block rejected");
+	bad_graph = topology;
+	bad_graph.scopes.front().variants.front().successors[1U].ordinal = 0U;
+	require(!native::detach_project_exceptional_exits(bad_graph, bindings),
+			"duplicate successor occurrence rejected");
+	bad_graph = topology;
+	bad_graph.scopes.front().variants.front().occurrences[0U].instruction_ordinal = 5U;
+	require(!native::detach_project_exceptional_exits(bad_graph, bindings),
+			"out-of-range Invoke placement rejected");
+	bad_graph = topology;
+	bad_graph.scopes.front().variants.front().blocks[1U].is_entry = true;
+	require(!native::detach_project_exceptional_exits(bad_graph, bindings),
+			"contradictory original entry rejected");
+	bad_graph = topology;
+	bad_graph.scopes.front().variants.front().topology_complete = false;
+	auto partial_graph = native::detach_project_exceptional_exits(bad_graph, bindings);
+	require(partial_graph &&
+				text(partial_graph->rows.front(), "lowered_topology_state") == "partial",
+			"original topology frontier is independent of complete original exit census");
 	input.scopes.front().detail.clear();
 	auto unbound = native::detach_project_exceptional_exits(input, bindings);
 	require(

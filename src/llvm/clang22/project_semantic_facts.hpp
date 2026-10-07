@@ -20,6 +20,10 @@ namespace cxxlens::detail::clang22
 {
 	struct project_template_observations;
 	struct project_template_event_observations;
+	namespace object_semantics
+	{
+		struct project_object_observations;
+	} // namespace object_semantics
 	/** Value-only preprocessing observations; emitted while the compiler evaluates directives. */
 	struct project_preprocessor_event
 	{
@@ -68,15 +72,16 @@ namespace cxxlens::detail::clang22
 	using project_original_calls = std::map<const clang::Expr*, std::string>;
 
 	/** Detach declarations, semantic edges, syntax, PP, CFG and local flow before AST release. */
-	[[nodiscard]] sdk::result<project_semantic_facts>
-	observe_project_semantics(provider::clang22::borrowed_translation_unit& unit,
-							  const source_closure_snapshot& closure,
-							  const provider_worker_v4_ast_observation_batch& observations,
-							  const provider_worker_v4_normalized_output& normalized,
-							  const project_preprocessor_observations& preprocessing,
-							  const std::function<void(std::string_view)>& progress = {},
-							  const project_original_calls& original_calls = {},
-							  const std::string& project_id = {},
-							  const project_template_observations* templates = nullptr,
-							  const project_template_event_observations* template_events = nullptr);
+	[[nodiscard]] sdk::result<project_semantic_facts> observe_project_semantics(
+		provider::clang22::borrowed_translation_unit& unit,
+		const source_closure_snapshot& closure,
+		const provider_worker_v4_ast_observation_batch& observations,
+		const provider_worker_v4_normalized_output& normalized,
+		const project_preprocessor_observations& preprocessing,
+		const std::function<void(std::string_view)>& progress = {},
+		const project_original_calls& original_calls = {},
+		const std::string& project_id = {},
+		const project_template_observations* templates = nullptr,
+		const project_template_event_observations* template_events = nullptr,
+		const object_semantics::project_object_observations* object_events = nullptr);
 } // namespace cxxlens::detail::clang22

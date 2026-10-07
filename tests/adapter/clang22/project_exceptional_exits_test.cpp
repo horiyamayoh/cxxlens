@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <cstdlib>
 #include <iostream>
+#include <set>
 #include <string_view>
+#include <tuple>
 
 namespace native = cxxlens::detail::clang22;
 namespace provider = cxxlens::provider::clang22;
@@ -63,6 +65,11 @@ int main()
  int builtin_absolute(int value) { return __builtin_abs(value); }
  void pseudo_cleanup(int* value) { using I = int; value->~I(); }
  void nonthrowing_owner() noexcept { risky(); }
+ extern "C" void user_termination() noexcept __attribute__((noreturn));
+ void caught_then_user_termination() noexcept {
+   try { risky(); } catch (...) { user_termination(); }
+ }
+ void nonthrowing_guarded() noexcept { Guard guard; risky(); }
  Guard* allocation() { return new Guard; }
  void deallocation(Guard* pointer) { delete pointer; }
  void default_target(int value = (risky(), 0));
@@ -91,6 +98,46 @@ int main()
 			}
 			require(result->frozen && result->hooks_installed,
 					"actual recorder profile is installed and frozen");
+			for (const auto& physical : result->scopes)
+				for (const auto& variant : physical.variants)
+					if (variant.topology_complete)
+					{
+						require(variant.topology_observed && !variant.blocks.empty(),
+								"complete topology has an independently observed block census");
+						std::set<std::uint64_t> blocks;
+						std::size_t entries{};
+						for (const auto& block : variant.blocks)
+						{
+							require(blocks.insert(block.ordinal).second &&
+										block.instruction_count != 0U && block.terminator_opcode,
+									"actual block identity and terminator geometry are retained");
+							entries += block.is_entry ? 1U : 0U;
+						}
+						require(entries == 1U, "the original LLVM entry is unique");
+						std::set<std::tuple<std::uint64_t, std::uint64_t, std::uint64_t>> edges;
+						for (const auto& edge : variant.successors)
+						{
+							const auto from =
+								std::ranges::find(variant.blocks,
+												  edge.from,
+												  &native::exceptional_original_block::ordinal);
+							require(from != variant.blocks.end() && blocks.contains(edge.to) &&
+										edge.terminator_instruction_ordinal + 1U ==
+											from->instruction_count &&
+										edges
+											.emplace(edge.from,
+													 edge.terminator_instruction_ordinal,
+													 edge.ordinal)
+											.second,
+									"successor occurrences retain exact block/terminator/index "
+									"geometry");
+							if (edge.invoke)
+								require((edge.ordinal == 0U && edge.kind == "normal") ||
+											(edge.ordinal == 1U && edge.kind == "unwind"),
+										"Invoke successor indices are the actual normal/unwind "
+										"operands");
+						}
+					}
 			for (const auto& value : result->scopes)
 			{
 				std::cout << value.owner_usr << " complete=" << value.complete
@@ -104,7 +151,9 @@ int main()
 								  << " intrinsic=" << occurrence.intrinsic_id.value_or(0U)
 								  << " nounwind=" << occurrence.does_not_throw.value_or(false)
 								  << " noreturn=" << occurrence.does_not_return.value_or(false)
-								  << '\n';
+								  << " invoke=" << occurrence.is_invoke.value_or(false)
+								  << " boundary=" << occurrence.eh_selected_scope_kind
+								  << " disposition=" << occurrence.eh_disposition << '\n';
 			}
 			const auto& empty = scope(*result, "@F@empty#");
 			require(
@@ -150,6 +199,34 @@ int main()
 				"throwing copy retains original selected target and its independent unwind exit");
 			require(count(scope(*result, "@F@nonthrowing_owner#"), "termination") > 0U,
 					"actual noexcept termination carrier retained");
+			auto disposition = [&](std::string_view function, std::string_view expected)
+			{
+				for (const auto& variant : scope(*result, function).variants)
+					for (const auto& occurrence : variant.occurrences)
+						if (occurrence.is_invoke.value_or(false) &&
+							occurrence.eh_boundary_observed &&
+							occurrence.eh_disposition == expected)
+							return true;
+				return false;
+			};
+			require(disposition("@F@nonthrowing_owner#", "direct_function_spec_termination"),
+					"the exact Invoke selects its live original function-spec terminate scope");
+			require(disposition("@F@closed_catch#", "catch_dispatch") &&
+						!disposition("@F@closed_catch#", "direct_function_spec_termination"),
+					"catch selection does not become a function-spec escape");
+			require(
+				disposition("@F@caught_then_user_termination#", "catch_dispatch") &&
+					!disposition("@F@caught_then_user_termination#",
+								 "direct_function_spec_termination"),
+				"a caught exception followed by unrelated user termination is not a direct escape");
+			require(disposition("@F@guarded_call#", "cleanup_dispatch") &&
+						!disposition("@F@guarded_call#", "direct_function_spec_termination"),
+					"cleanup interception remains distinct from direct function-spec termination");
+			// The actual LLVM22 EHScopeStack suppresses EH cleanups under a
+			// terminate scope; a normal cleanup registration is not an unwind route.
+			require(disposition("@F@nonthrowing_guarded#", "direct_function_spec_termination") &&
+						!disposition("@F@nonthrowing_guarded#", "cleanup_dispatch"),
+					"suppressed EH cleanup does not invent an interception route");
 			require(scope(*result, "@F@builtin_stop#").complete,
 					"builtin bypasses close only with actual emitter membership");
 			require(!scope(*result, "@F@activated_default#").complete,

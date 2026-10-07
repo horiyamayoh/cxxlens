@@ -5072,12 +5072,23 @@ void CodeGenFunction::EmitNoreturnRuntimeCallOrInvoke(
   SmallVector<llvm::OperandBundleDef, 1> BundleList =
       getBundlesForFunclet(callee.getCallee());
 
-  if (getInvokeDest()) {
+  // Snapshot the selected original EH scope before destination generation.
+  // The depth is meaningful only while this function's matching scope is live.
+  const auto OriginalEHScope = EHStack.getInnermostEHScope();
+  const long long OriginalEHDepth = OriginalEHScope.isValid() &&
+      OriginalEHScope != EHScopeStack::stable_end()
+      ? OriginalEHScope.cxxlensObservationDepth() : -1;
+  const unsigned OriginalEHKind = OriginalEHDepth >= 0
+      ? static_cast<unsigned>(EHStack.find(OriginalEHScope)->getKind()) : 4U;
+  llvm::BasicBlock *OriginalInvokeDest = getInvokeDest();
+  if (OriginalInvokeDest) {
     llvm::InvokeInst *invoke = Builder.CreateInvoke(
-        callee, getUnreachableBlock(), getInvokeDest(), args, BundleList);
+        callee, getUnreachableBlock(), OriginalInvokeDest, args, BundleList);
     invoke->setDoesNotReturn();
     invoke->setCallingConv(getRuntimeCC());
     cxxlens_eh_runtime_emit(this, CurCodeDecl, invoke, 3U);
+    cxxlens_eh_invoke_boundary(this, CurCodeDecl, invoke, OriginalInvokeDest,
+                               OriginalEHDepth, OriginalEHKind);
   } else {
     llvm::CallInst *call = Builder.CreateCall(callee, args, BundleList);
     call->setDoesNotReturn();
@@ -5110,6 +5121,14 @@ CodeGenFunction::EmitRuntimeCallOrInvoke(llvm::FunctionCallee callee,
 llvm::CallBase *CodeGenFunction::EmitCallOrInvoke(llvm::FunctionCallee Callee,
                                                   ArrayRef<llvm::Value *> Args,
                                                   const Twine &Name) {
+  // Snapshot the selected original EH scope before destination generation.
+  // The depth is meaningful only while this function's matching scope is live.
+  const auto OriginalEHScope = EHStack.getInnermostEHScope();
+  const long long OriginalEHDepth = OriginalEHScope.isValid() &&
+      OriginalEHScope != EHScopeStack::stable_end()
+      ? OriginalEHScope.cxxlensObservationDepth() : -1;
+  const unsigned OriginalEHKind = OriginalEHDepth >= 0
+      ? static_cast<unsigned>(EHStack.find(OriginalEHScope)->getKind()) : 4U;
   llvm::BasicBlock *InvokeDest = getInvokeDest();
   SmallVector<llvm::OperandBundleDef, 1> BundleList =
       getBundlesForFunclet(Callee.getCallee());
@@ -5123,6 +5142,10 @@ llvm::CallBase *CodeGenFunction::EmitCallOrInvoke(llvm::FunctionCallee Callee,
                                 Name);
     EmitBlock(ContBB);
   }
+
+  if (InvokeDest)
+    cxxlens_eh_invoke_boundary(this, CurCodeDecl, Inst, InvokeDest,
+                               OriginalEHDepth, OriginalEHKind);
 
   // In ObjC ARC mode with no ObjC ARC exception safety, tell the ARC
   // optimizer it can aggressively ignore unwind edges.
@@ -5924,6 +5947,14 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
   if (NeedSRetLifetimeEnd)
     pushFullExprCleanup<CallLifetimeEnd>(NormalEHLifetimeMarker, SRetPtr);
 
+  // Snapshot the selected original EH scope before destination generation.
+  // The depth is meaningful only while this function's matching scope is live.
+  const auto OriginalEHScope = EHStack.getInnermostEHScope();
+  const long long OriginalEHDepth = OriginalEHScope.isValid() &&
+      OriginalEHScope != EHScopeStack::stable_end()
+      ? OriginalEHScope.cxxlensObservationDepth() : -1;
+  const unsigned OriginalEHKind = OriginalEHDepth >= 0
+      ? static_cast<unsigned>(EHStack.find(OriginalEHScope)->getKind()) : 4U;
   llvm::BasicBlock *InvokeDest = CannotThrow ? nullptr : getInvokeDest();
 
   SmallVector<llvm::OperandBundleDef, 1> BundleList =
@@ -5995,6 +6026,9 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
   CI->setAttributes(Attrs);
   CI->setCallingConv(static_cast<llvm::CallingConv::ID>(CallingConv));
   cxxlens_eh_call_emit(this, CurCodeDecl, TargetDecl, CI, CannotThrow);
+  if (InvokeDest)
+    cxxlens_eh_invoke_boundary(this, CurCodeDecl, CI, InvokeDest,
+                               OriginalEHDepth, OriginalEHKind);
 
   // Apply various metadata.
 

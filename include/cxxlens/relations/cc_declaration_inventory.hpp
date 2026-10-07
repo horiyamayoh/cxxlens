@@ -20,12 +20,12 @@ namespace cxxlens::cc::relations
 				sdk::relation_descriptor output;
 				output.id = "cc.declaration_inventory.v1";
 				output.name = "cc.declaration_inventory";
-				output.version = {1U, 0U, 0U};
+				output.version = {1U, 1U, 0U};
 				output.semantic_major = 1U;
 				output.semantics = "cc.declaration_inventory/1";
 				output.owner_namespace = "cxxlens.standard.cc";
-				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.declaration_inventory.v1.compile_unit","cc.declaration_inventory.v1.profile"],"result_column":"cc.declaration_inventory.v1.inventory"},"interpretation_required":true,"key":["cc.declaration_inventory.v1.inventory"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.declaration_inventory.v1.inventory","identity_role":"claim_key","name":"inventory","required":true,"type":"typed_id<declaration_inventory_id>"},{"id":"cc.declaration_inventory.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.declaration_inventory.v1.profile","identity_role":"authoritative_payload","name":"profile","required":true,"type":"utf8_string"},{"id":"cc.declaration_inventory.v1.enumeration_state","identity_role":"authoritative_payload","name":"enumeration_state","required":true,"type":"open_symbol<cc.declaration-inventory-state/1>"},{"id":"cc.declaration_inventory.v1.declaration_count","identity_role":"authoritative_payload","name":"declaration_count","required":true,"type":"uint64"},{"id":"cc.declaration_inventory.v1.declarations","identity_role":"authoritative_payload","name":"declarations","required":true,"type":"set<cc_declaration_id>"},{"id":"cc.declaration_inventory.v1.system_declarations","identity_role":"authoritative_payload","name":"system_declarations","required":true,"type":"set<cc_declaration_id>"},{"id":"cc.declaration_inventory.v1.parsed_files","identity_role":"authoritative_payload","name":"parsed_files","required":true,"type":"set<file_id>"},{"id":"cc.declaration_inventory.v1.parsed_source_snapshots","identity_role":"authoritative_payload","name":"parsed_source_snapshots","required":true,"type":"set<source_snapshot_id>"},{"id":"cc.declaration_inventory.v1.file_state","identity_role":"authoritative_payload","name":"file_state","required":true,"type":"open_symbol<cc.declaration-file-state/1>"},{"id":"cc.declaration_inventory.v1.reason","identity_role":"authoritative_payload","name":"reason","required":false,"type":"optional<utf8_string>"},{"id":"cc.declaration_inventory.v1.target_slot_count","identity_role":"authoritative_payload","name":"target_slot_count","required":false,"type":"optional<uint64>"},{"id":"cc.declaration_inventory.v1.target_slot_ids","identity_role":"authoritative_payload","name":"target_slot_ids","required":false,"type":"optional<set<target_resolution_slot_id>>"},{"id":"cc.declaration_inventory.v1.target_slot_state","identity_role":"authoritative_payload","name":"target_slot_state","required":false,"type":"optional<open_symbol<cc.target-slot-enumeration-state/1>>"},{"id":"cc.declaration_inventory.v1.target_slot_profile","identity_role":"authoritative_payload","name":"target_slot_profile","required":false,"type":"optional<utf8_string>"}],"coverage":{"execution_domain":"cc.declaration_inventory.compile-unit"},"descriptor_id":"cc.declaration_inventory.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::declaration_inventory","indexes":[["cc.declaration_inventory.v1.compile_unit"]],"merge":{"conflict_columns":["cc.declaration_inventory.v1.compile_unit","cc.declaration_inventory.v1.declaration_count","cc.declaration_inventory.v1.declarations","cc.declaration_inventory.v1.enumeration_state","cc.declaration_inventory.v1.file_state","cc.declaration_inventory.v1.parsed_files","cc.declaration_inventory.v1.parsed_source_snapshots","cc.declaration_inventory.v1.profile","cc.declaration_inventory.v1.reason","cc.declaration_inventory.v1.system_declarations","cc.declaration_inventory.v1.target_slot_count","cc.declaration_inventory.v1.target_slot_ids","cc.declaration_inventory.v1.target_slot_profile","cc.declaration_inventory.v1.target_slot_state"],"mode":"functional_assertion"},"name":"cc.declaration_inventory","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.declaration_inventory.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"on_missing":"reject_batch","source_columns":["cc.declaration_inventory.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.declaration_inventory.v1.declarations"],"strength":"soft_semantic","target_columns":["cc.declaration.v1.declaration"],"target_relation":"cc.declaration"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.declaration_inventory.v1.parsed_files"],"strength":"soft_semantic","target_columns":["source.file.v1.file"],"target_relation":"source.file"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.declaration_inventory.v1.parsed_source_snapshots"],"strength":"soft_semantic","target_columns":["source.file.v1.snapshot"],"target_relation":"source.file"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.declaration_inventory.v1.system_declarations"],"strength":"soft_semantic","target_columns":["cc.declaration.v1.declaration"],"target_relation":"cc.declaration"},{"container_elements":true,"on_missing":"reject_batch","source_columns":["cc.declaration_inventory.v1.target_slot_ids"],"strength":"hard","target_columns":["cc.target_resolution_slot.v1.slot"],"target_relation":"cc.target_resolution_slot"}],"row_constraints":{"all_or_none":[["cc.declaration_inventory.v1.target_slot_count","cc.declaration_inventory.v1.target_slot_ids","cc.declaration_inventory.v1.target_slot_profile","cc.declaration_inventory.v1.target_slot_state"]]},"semantic_major":1,"semantics":"cc.declaration_inventory/1","stability":"versioned","summary":"Finite observed written named declaration occurrences; independent admission count and compiler system subset.","version":"1.0.0"})cxxlens";
-				output.contract_digest = "sha256:950ee143518ad766aba8dfb561a491f2e32220ee89a5b15552c0200b2cd6003f";
+				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.declaration_inventory.v1.compile_unit","cc.declaration_inventory.v1.profile"],"result_column":"cc.declaration_inventory.v1.inventory"},"interpretation_required":true,"key":["cc.declaration_inventory.v1.inventory"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.declaration_inventory.v1.inventory","identity_role":"claim_key","name":"inventory","required":true,"type":"typed_id<declaration_inventory_id>"},{"id":"cc.declaration_inventory.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.declaration_inventory.v1.profile","identity_role":"authoritative_payload","name":"profile","required":true,"type":"utf8_string"},{"id":"cc.declaration_inventory.v1.enumeration_state","identity_role":"authoritative_payload","name":"enumeration_state","required":true,"type":"open_symbol<cc.declaration-inventory-state/1>"},{"id":"cc.declaration_inventory.v1.declaration_count","identity_role":"authoritative_payload","name":"declaration_count","required":true,"type":"uint64"},{"id":"cc.declaration_inventory.v1.declarations","identity_role":"authoritative_payload","name":"declarations","required":true,"type":"set<cc_declaration_id>"},{"id":"cc.declaration_inventory.v1.system_declarations","identity_role":"authoritative_payload","name":"system_declarations","required":true,"type":"set<cc_declaration_id>"},{"id":"cc.declaration_inventory.v1.parsed_files","identity_role":"authoritative_payload","name":"parsed_files","required":true,"type":"set<file_id>"},{"id":"cc.declaration_inventory.v1.parsed_source_snapshots","identity_role":"authoritative_payload","name":"parsed_source_snapshots","required":true,"type":"set<source_snapshot_id>"},{"id":"cc.declaration_inventory.v1.file_state","identity_role":"authoritative_payload","name":"file_state","required":true,"type":"open_symbol<cc.declaration-file-state/1>"},{"id":"cc.declaration_inventory.v1.reason","identity_role":"authoritative_payload","name":"reason","required":false,"type":"optional<utf8_string>"},{"id":"cc.declaration_inventory.v1.target_slot_count","identity_role":"authoritative_payload","name":"target_slot_count","required":false,"type":"optional<uint64>"},{"id":"cc.declaration_inventory.v1.target_slot_ids","identity_role":"authoritative_payload","name":"target_slot_ids","required":false,"type":"optional<set<target_resolution_slot_id>>"},{"id":"cc.declaration_inventory.v1.target_slot_state","identity_role":"authoritative_payload","name":"target_slot_state","required":false,"type":"optional<open_symbol<cc.target-slot-enumeration-state/1>>"},{"id":"cc.declaration_inventory.v1.target_slot_profile","identity_role":"authoritative_payload","name":"target_slot_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.declaration_inventory.v1.sequence_pair_count","identity_role":"authoritative_payload","name":"sequence_pair_count","required":false,"type":"optional<uint64>"},{"id":"cc.declaration_inventory.v1.sequence_pair_ids","identity_role":"authoritative_payload","name":"sequence_pair_ids","required":false,"type":"optional<set<sequence_pair_id>>"},{"id":"cc.declaration_inventory.v1.sequence_pair_state","identity_role":"authoritative_payload","name":"sequence_pair_state","required":false,"type":"optional<utf8_string>"},{"id":"cc.declaration_inventory.v1.sequence_pair_profile","identity_role":"authoritative_payload","name":"sequence_pair_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.declaration_inventory.v1.object_state_count","identity_role":"authoritative_payload","name":"object_state_count","required":false,"type":"optional<uint64>"},{"id":"cc.declaration_inventory.v1.object_state_ids","identity_role":"authoritative_payload","name":"object_state_ids","required":false,"type":"optional<set<object_state_observation_id>>"},{"id":"cc.declaration_inventory.v1.object_state_state","identity_role":"authoritative_payload","name":"object_state_state","required":false,"type":"optional<utf8_string>"},{"id":"cc.declaration_inventory.v1.object_state_profile","identity_role":"authoritative_payload","name":"object_state_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.declaration_inventory.v1.physical_definition_count","identity_role":"authoritative_payload","name":"physical_definition_count","required":false,"type":"optional<uint64>"},{"id":"cc.declaration_inventory.v1.physical_definition_ids","identity_role":"authoritative_payload","name":"physical_definition_ids","required":false,"type":"optional<set<cc_declaration_id>>"},{"id":"cc.declaration_inventory.v1.physical_definition_state","identity_role":"authoritative_payload","name":"physical_definition_state","required":false,"type":"optional<utf8_string>"},{"id":"cc.declaration_inventory.v1.physical_definition_profile","identity_role":"authoritative_payload","name":"physical_definition_profile","required":false,"type":"optional<utf8_string>"}],"coverage":{"execution_domain":"cc.declaration_inventory.compile-unit"},"descriptor_id":"cc.declaration_inventory.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::declaration_inventory","indexes":[["cc.declaration_inventory.v1.compile_unit"]],"merge":{"conflict_columns":["cc.declaration_inventory.v1.compile_unit","cc.declaration_inventory.v1.declaration_count","cc.declaration_inventory.v1.declarations","cc.declaration_inventory.v1.enumeration_state","cc.declaration_inventory.v1.file_state","cc.declaration_inventory.v1.object_state_count","cc.declaration_inventory.v1.object_state_ids","cc.declaration_inventory.v1.object_state_profile","cc.declaration_inventory.v1.object_state_state","cc.declaration_inventory.v1.parsed_files","cc.declaration_inventory.v1.parsed_source_snapshots","cc.declaration_inventory.v1.physical_definition_count","cc.declaration_inventory.v1.physical_definition_ids","cc.declaration_inventory.v1.physical_definition_profile","cc.declaration_inventory.v1.physical_definition_state","cc.declaration_inventory.v1.profile","cc.declaration_inventory.v1.reason","cc.declaration_inventory.v1.sequence_pair_count","cc.declaration_inventory.v1.sequence_pair_ids","cc.declaration_inventory.v1.sequence_pair_profile","cc.declaration_inventory.v1.sequence_pair_state","cc.declaration_inventory.v1.system_declarations","cc.declaration_inventory.v1.target_slot_count","cc.declaration_inventory.v1.target_slot_ids","cc.declaration_inventory.v1.target_slot_profile","cc.declaration_inventory.v1.target_slot_state"],"mode":"functional_assertion"},"name":"cc.declaration_inventory","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.declaration_inventory.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"on_missing":"reject_batch","source_columns":["cc.declaration_inventory.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.declaration_inventory.v1.declarations"],"strength":"soft_semantic","target_columns":["cc.declaration.v1.declaration"],"target_relation":"cc.declaration"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.declaration_inventory.v1.object_state_ids"],"strength":"soft_semantic","target_columns":["cc.object_state_observation.v1.observation"],"target_relation":"cc.object_state_observation"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.declaration_inventory.v1.parsed_files"],"strength":"soft_semantic","target_columns":["source.file.v1.file"],"target_relation":"source.file"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.declaration_inventory.v1.parsed_source_snapshots"],"strength":"soft_semantic","target_columns":["source.file.v1.snapshot"],"target_relation":"source.file"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.declaration_inventory.v1.physical_definition_ids"],"strength":"soft_semantic","target_columns":["cc.declaration.v1.declaration"],"target_relation":"cc.declaration"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.declaration_inventory.v1.sequence_pair_ids"],"strength":"soft_semantic","target_columns":["cc.sequence_pair.v1.pair"],"target_relation":"cc.sequence_pair"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.declaration_inventory.v1.system_declarations"],"strength":"soft_semantic","target_columns":["cc.declaration.v1.declaration"],"target_relation":"cc.declaration"},{"container_elements":true,"on_missing":"reject_batch","source_columns":["cc.declaration_inventory.v1.target_slot_ids"],"strength":"hard","target_columns":["cc.target_resolution_slot.v1.slot"],"target_relation":"cc.target_resolution_slot"}],"row_constraints":{"all_or_none":[["cc.declaration_inventory.v1.target_slot_count","cc.declaration_inventory.v1.target_slot_ids","cc.declaration_inventory.v1.target_slot_profile","cc.declaration_inventory.v1.target_slot_state"]]},"semantic_major":1,"semantics":"cc.declaration_inventory/1","stability":"versioned","summary":"Finite observed written named declaration occurrences; independent admission count and compiler system subset.","version":"1.1.0"})cxxlens";
+				output.contract_digest = "sha256:fac01e9fa0ac15e1f29a25400088c8a5a6920cc0419f12d87359909ff2e43309";
 				output.columns = {
 					{"cc.declaration_inventory.v1.inventory", "inventory", {sdk::scalar_kind::typed_id, "declaration_inventory_id", false}, true, sdk::column_role::claim_key},
 					{"cc.declaration_inventory.v1.compile_unit", "compile_unit", {sdk::scalar_kind::typed_id, "compile_unit_id", false}, true, sdk::column_role::authoritative_payload},
@@ -42,6 +42,18 @@ namespace cxxlens::cc::relations
 					{"cc.declaration_inventory.v1.target_slot_ids", "target_slot_ids", {sdk::scalar_kind::set, "target_resolution_slot_id", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.declaration_inventory.v1.target_slot_state", "target_slot_state", {sdk::scalar_kind::open_symbol, "cc.target-slot-enumeration-state/1", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.declaration_inventory.v1.target_slot_profile", "target_slot_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration_inventory.v1.sequence_pair_count", "sequence_pair_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration_inventory.v1.sequence_pair_ids", "sequence_pair_ids", {sdk::scalar_kind::set, "sequence_pair_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration_inventory.v1.sequence_pair_state", "sequence_pair_state", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration_inventory.v1.sequence_pair_profile", "sequence_pair_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration_inventory.v1.object_state_count", "object_state_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration_inventory.v1.object_state_ids", "object_state_ids", {sdk::scalar_kind::set, "object_state_observation_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration_inventory.v1.object_state_state", "object_state_state", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration_inventory.v1.object_state_profile", "object_state_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration_inventory.v1.physical_definition_count", "physical_definition_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration_inventory.v1.physical_definition_ids", "physical_definition_ids", {sdk::scalar_kind::set, "cc_declaration_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration_inventory.v1.physical_definition_state", "physical_definition_state", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.declaration_inventory.v1.physical_definition_profile", "physical_definition_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
 				};
 				output.domain_identity.result_column = "cc.declaration_inventory.v1.inventory";
 				output.domain_identity.projection = {
@@ -55,8 +67,11 @@ namespace cxxlens::cc::relations
 				output.references = {
 					{{"cc.declaration_inventory.v1.compile_unit"}, "build.compile_unit", {"build.compile_unit.v1.compile_unit"}, sdk::reference_strength::hard},
 					{{"cc.declaration_inventory.v1.declarations"}, "cc.declaration", {"cc.declaration.v1.declaration"}, sdk::reference_strength::soft_semantic, true},
+					{{"cc.declaration_inventory.v1.object_state_ids"}, "cc.object_state_observation", {"cc.object_state_observation.v1.observation"}, sdk::reference_strength::soft_semantic, true},
 					{{"cc.declaration_inventory.v1.parsed_files"}, "source.file", {"source.file.v1.file"}, sdk::reference_strength::soft_semantic, true},
 					{{"cc.declaration_inventory.v1.parsed_source_snapshots"}, "source.file", {"source.file.v1.snapshot"}, sdk::reference_strength::soft_semantic, true},
+					{{"cc.declaration_inventory.v1.physical_definition_ids"}, "cc.declaration", {"cc.declaration.v1.declaration"}, sdk::reference_strength::soft_semantic, true},
+					{{"cc.declaration_inventory.v1.sequence_pair_ids"}, "cc.sequence_pair", {"cc.sequence_pair.v1.pair"}, sdk::reference_strength::soft_semantic, true},
 					{{"cc.declaration_inventory.v1.system_declarations"}, "cc.declaration", {"cc.declaration.v1.declaration"}, sdk::reference_strength::soft_semantic, true},
 					{{"cc.declaration_inventory.v1.target_slot_ids"}, "cc.target_resolution_slot", {"cc.target_resolution_slot.v1.slot"}, sdk::reference_strength::hard, true},
 				};
@@ -67,10 +82,22 @@ namespace cxxlens::cc::relations
 					"cc.declaration_inventory.v1.declarations",
 					"cc.declaration_inventory.v1.enumeration_state",
 					"cc.declaration_inventory.v1.file_state",
+					"cc.declaration_inventory.v1.object_state_count",
+					"cc.declaration_inventory.v1.object_state_ids",
+					"cc.declaration_inventory.v1.object_state_profile",
+					"cc.declaration_inventory.v1.object_state_state",
 					"cc.declaration_inventory.v1.parsed_files",
 					"cc.declaration_inventory.v1.parsed_source_snapshots",
+					"cc.declaration_inventory.v1.physical_definition_count",
+					"cc.declaration_inventory.v1.physical_definition_ids",
+					"cc.declaration_inventory.v1.physical_definition_profile",
+					"cc.declaration_inventory.v1.physical_definition_state",
 					"cc.declaration_inventory.v1.profile",
 					"cc.declaration_inventory.v1.reason",
+					"cc.declaration_inventory.v1.sequence_pair_count",
+					"cc.declaration_inventory.v1.sequence_pair_ids",
+					"cc.declaration_inventory.v1.sequence_pair_profile",
+					"cc.declaration_inventory.v1.sequence_pair_state",
 					"cc.declaration_inventory.v1.system_declarations",
 					"cc.declaration_inventory.v1.target_slot_count",
 					"cc.declaration_inventory.v1.target_slot_ids",
@@ -219,6 +246,114 @@ namespace cxxlens::cc::relations
 			[[nodiscard]] static sdk::column_ref ref()
 			{
 				return {declaration_inventory::descriptor().id, "cc.declaration_inventory.v1.target_slot_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration_inventory.v1.sequence_pair_count`. */
+		struct sequence_pair_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration_inventory::descriptor().id, "cc.declaration_inventory.v1.sequence_pair_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration_inventory.v1.sequence_pair_ids`. */
+		struct sequence_pair_ids
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration_inventory::descriptor().id, "cc.declaration_inventory.v1.sequence_pair_ids", {sdk::scalar_kind::set, "sequence_pair_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration_inventory.v1.sequence_pair_state`. */
+		struct sequence_pair_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration_inventory::descriptor().id, "cc.declaration_inventory.v1.sequence_pair_state", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration_inventory.v1.sequence_pair_profile`. */
+		struct sequence_pair_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration_inventory::descriptor().id, "cc.declaration_inventory.v1.sequence_pair_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration_inventory.v1.object_state_count`. */
+		struct object_state_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration_inventory::descriptor().id, "cc.declaration_inventory.v1.object_state_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration_inventory.v1.object_state_ids`. */
+		struct object_state_ids
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration_inventory::descriptor().id, "cc.declaration_inventory.v1.object_state_ids", {sdk::scalar_kind::set, "object_state_observation_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration_inventory.v1.object_state_state`. */
+		struct object_state_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration_inventory::descriptor().id, "cc.declaration_inventory.v1.object_state_state", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration_inventory.v1.object_state_profile`. */
+		struct object_state_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration_inventory::descriptor().id, "cc.declaration_inventory.v1.object_state_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration_inventory.v1.physical_definition_count`. */
+		struct physical_definition_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration_inventory::descriptor().id, "cc.declaration_inventory.v1.physical_definition_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration_inventory.v1.physical_definition_ids`. */
+		struct physical_definition_ids
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration_inventory::descriptor().id, "cc.declaration_inventory.v1.physical_definition_ids", {sdk::scalar_kind::set, "cc_declaration_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration_inventory.v1.physical_definition_state`. */
+		struct physical_definition_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration_inventory::descriptor().id, "cc.declaration_inventory.v1.physical_definition_state", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.declaration_inventory.v1.physical_definition_profile`. */
+		struct physical_definition_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {declaration_inventory::descriptor().id, "cc.declaration_inventory.v1.physical_definition_profile", {sdk::scalar_kind::utf8_string, "", true}};
 			}
 		};
 	};

@@ -1,6 +1,6 @@
 schema: cxxlens.relation-registry.v1
 kind: relation-registry
-document_version: 1.23.0
+document_version: 1.24.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -9,7 +9,7 @@ authority:
   owner: steward.ng-relations
 compatibility:
   version_axis: relation-descriptor
-  current: 1.23.0
+  current: 1.24.0
   semantic_major_policy: exact-major-compatible-minor
   unknown_optional_columns: preserve
   unknown_open_symbols: preserve
@@ -130,6 +130,22 @@ api_projection:
     column_operand: column_id
   parity: exact-id-equality
 symbol_contracts:
+- id: cc.type-trait-kind/1
+  openness: open
+  values:
+  - sizeof
+  - alignof
+  - preferred_alignof
+  - vec_step
+  - unknown
+  unknown_value: preserve
+- id: cc.type-trait-argument-form/1
+  openness: open
+  values:
+  - type
+  - expression
+  - unknown
+  unknown_value: preserve
 - id: cc.builtin-kind/1
   openness: open
   values:
@@ -660,6 +676,88 @@ symbol_contracts:
   - destructor
   - kernel
   - block
+  - unknown
+  unknown_value: preserve
+- id: cc.original-input-state/1
+  openness: open
+  values:
+  - complete
+  - partial
+  - unknown
+  - unavailable
+  - unsupported
+  - conflicting
+  - not_applicable
+  - observed
+  - unresolved
+  - bound
+  - unbound
+  - bound_return_slot
+  - not_classified
+  - implicit_this
+  unknown_value: preserve
+- id: cc.move-event-kind/1
+  openness: open
+  values:
+  - move_constructor
+  - copy_constructor
+  - other_constructor
+  - unresolved_constructor
+  - move_assignment
+  - copy_assignment
+  - other_assignment
+  - unresolved_assignment
+  unknown_value: preserve
+- id: cc.attribute-record-kind/1
+  openness: open
+  values:
+  - carrier
+  - argument
+  unknown_value: preserve
+- id: cc.ownership-attribute-kind/1
+  openness: open
+  values:
+  - returns
+  - takes
+  - holds
+  unknown_value: preserve
+- id: cc.attribute-argument-kind/1
+  openness: open
+  values:
+  - parameter_index
+  - annotation_expression
+  - annotation_delayed_expression
+  unknown_value: preserve
+- id: cc.address-carrier-kind/1
+  openness: open
+  values:
+  - declaration
+  - syntax
+  unknown_value: preserve
+- id: cc.address-transfer-kind/1
+  openness: open
+  values:
+  - address_of
+  - array_decay
+  - function_decay
+  - this_address
+  - reference_bind
+  - initializer
+  - assignment
+  - return
+  - member_initializer
+  - capture
+  unknown_value: preserve
+- id: cc.address-context/1
+  openness: open
+  values:
+  - automatic
+  - static
+  - thread
+  - global
+  - field
+  - return
+  - capture
   - unknown
   unknown_value: preserve
 evolution_policies:
@@ -1514,7 +1612,7 @@ relations:
   evolution_policy: ng0.additive.v1
 - descriptor_id: cc.declaration.v1
   name: cc.declaration
-  version: 1.0.0
+  version: 1.1.0
   semantic_major: 1
   semantics: cc.declaration/1
   owner_namespace: cxxlens.standard.cc
@@ -1632,6 +1730,76 @@ relations:
     type: optional<typed_id<cc_entity_id>>
     required: false
     identity_role: authoritative_payload
+  - id: cc.declaration.v1.attribute_inventory_profile
+    name: attribute_inventory_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration.v1.attribute_inventory_state
+    name: attribute_inventory_state
+    type: optional<open_symbol<cc.original-input-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration.v1.attribute_count
+    name: attribute_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration.v1.attribute_argument_count
+    name: attribute_argument_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration.v1.attribute_ids
+    name: attribute_ids
+    type: optional<set<cc_declaration_attribute_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration.v1.attribute_argument_state
+    name: attribute_argument_state
+    type: optional<open_symbol<cc.original-input-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration.v1.move_input_profile
+    name: move_input_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration.v1.move_input_state
+    name: move_input_state
+    type: optional<open_symbol<cc.original-input-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration.v1.move_input_count
+    name: move_input_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration.v1.move_input_ids
+    name: move_input_ids
+    type: optional<set<cc_move_event_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration.v1.address_input_profile
+    name: address_input_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration.v1.address_input_state
+    name: address_input_state
+    type: optional<open_symbol<cc.original-input-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration.v1.address_input_count
+    name: address_input_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration.v1.address_input_ids
+    name: address_input_ids
+    type: optional<set<cc_address_transfer_id>>
+    required: false
+    identity_role: authoritative_payload
   references:
   - source_columns:
     - cc.declaration.v1.entity
@@ -1661,6 +1829,30 @@ relations:
     - cc.entity.v1.entity
     strength: soft_semantic
     on_missing: unresolved
+  - source_columns:
+    - cc.declaration.v1.attribute_ids
+    target_relation: cc.declaration_attribute
+    target_columns:
+    - cc.declaration_attribute.v1.attribute
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - cc.declaration.v1.move_input_ids
+    target_relation: cc.move_event
+    target_columns:
+    - cc.move_event.v1.event
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - cc.declaration.v1.address_input_ids
+    target_relation: cc.address_transfer
+    target_columns:
+    - cc.address_transfer.v1.transfer
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
   merge:
     mode: functional_assertion
     conflict_columns:
@@ -1682,6 +1874,20 @@ relations:
     - cc.declaration.v1.identifier_name
     - cc.declaration.v1.identifier_source
     - cc.declaration.v1.identifier_function
+    - cc.declaration.v1.attribute_inventory_profile
+    - cc.declaration.v1.attribute_inventory_state
+    - cc.declaration.v1.attribute_count
+    - cc.declaration.v1.attribute_argument_count
+    - cc.declaration.v1.attribute_ids
+    - cc.declaration.v1.attribute_argument_state
+    - cc.declaration.v1.move_input_profile
+    - cc.declaration.v1.move_input_state
+    - cc.declaration.v1.move_input_count
+    - cc.declaration.v1.move_input_ids
+    - cc.declaration.v1.address_input_profile
+    - cc.declaration.v1.address_input_state
+    - cc.declaration.v1.address_input_count
+    - cc.declaration.v1.address_input_ids
   partition:
     suggested_keys:
     - cc.declaration.v1.entity
@@ -1706,7 +1912,7 @@ relations:
       - cc.declaration.v1.identifier_profile
 - descriptor_id: cc.type.v1
   name: cc.type
-  version: 1.2.0
+  version: 1.3.0
   semantic_major: 1
   semantics: cc.type/1
   owner_namespace: cxxlens.standard.cc
@@ -1832,6 +2038,31 @@ relations:
     required: false
     identity_role: authoritative_payload
     semantic: Actual EnumDecl::getIntegerType canonical association when this original type is enum. No enum value-domain or implicit conversion identity is inferred.
+  - name: enum_fixed_underlying
+    type: optional<bool>
+    required: false
+    id: cc.type.v1.enum_fixed_underlying
+    identity_role: authoritative_payload
+  - name: enum_value_lower
+    type: optional<utf8_string>
+    required: false
+    id: cc.type.v1.enum_value_lower
+    identity_role: authoritative_payload
+  - name: enum_value_upper
+    type: optional<utf8_string>
+    required: false
+    id: cc.type.v1.enum_value_upper
+    identity_role: authoritative_payload
+  - name: enum_value_profile
+    type: optional<utf8_string>
+    required: false
+    id: cc.type.v1.enum_value_profile
+    identity_role: authoritative_payload
+  - name: enum_value_state
+    type: optional<utf8_string>
+    required: false
+    id: cc.type.v1.enum_value_state
+    identity_role: authoritative_payload
   row_constraints:
     all_or_none:
     - - cc.type.v1.structure_profile
@@ -1878,6 +2109,11 @@ relations:
     - cc.type.v1.integer_profile
     - cc.type.v1.integer_state
     - cc.type.v1.integer_underlying_type
+    - cc.type.v1.enum_fixed_underlying
+    - cc.type.v1.enum_value_lower
+    - cc.type.v1.enum_value_upper
+    - cc.type.v1.enum_value_profile
+    - cc.type.v1.enum_value_state
   partition:
     suggested_keys:
     - cc.type.v1.type
@@ -3351,7 +3587,7 @@ relations:
 
 - descriptor_id: cc.entity_detail.v1
   name: cc.entity_detail
-  version: 1.2.0
+  version: 1.3.0
   semantic_major: 1
   semantics: cc.entity_detail/1
   owner_namespace: cxxlens.standard.cc
@@ -3578,6 +3814,36 @@ relations:
     type: optional<utf8_string>
     required: false
     identity_role: authoritative_payload
+  - name: return_kind
+    type: optional<utf8_string>
+    required: false
+    id: cc.entity_detail.v1.return_kind
+    identity_role: authoritative_payload
+  - name: is_main
+    type: optional<bool>
+    required: false
+    id: cc.entity_detail.v1.is_main
+    identity_role: authoritative_payload
+  - name: is_coroutine
+    type: optional<bool>
+    required: false
+    id: cc.entity_detail.v1.is_coroutine
+    identity_role: authoritative_payload
+  - name: coroutine_has_return_void
+    type: optional<bool>
+    required: false
+    id: cc.entity_detail.v1.coroutine_has_return_void
+    identity_role: authoritative_payload
+  - name: function_exit_profile
+    type: optional<utf8_string>
+    required: false
+    id: cc.entity_detail.v1.function_exit_profile
+    identity_role: authoritative_payload
+  - name: function_exit_state
+    type: optional<utf8_string>
+    required: false
+    id: cc.entity_detail.v1.function_exit_state
+    identity_role: authoritative_payload
   references:
   - source_columns:
     - cc.entity_detail.v1.compile_unit
@@ -3689,6 +3955,12 @@ relations:
     - cc.entity_detail.v1.exceptional_exit_state
     - cc.entity_detail.v1.exceptional_exit_profile
     - cc.entity_detail.v1.exceptional_lowering_profile
+    - cc.entity_detail.v1.return_kind
+    - cc.entity_detail.v1.is_main
+    - cc.entity_detail.v1.is_coroutine
+    - cc.entity_detail.v1.coroutine_has_return_void
+    - cc.entity_detail.v1.function_exit_profile
+    - cc.entity_detail.v1.function_exit_state
   partition:
     suggested_keys:
     - cc.entity_detail.v1.compile_unit
@@ -3838,7 +4110,7 @@ relations:
   evolution_policy: ng0.additive.v1
 - descriptor_id: cc.syntax_node.v1
   name: cc.syntax_node
-  version: 1.0.0
+  version: 1.2.0
   semantic_major: 1
   semantics: cc.syntax_node/1
   owner_namespace: cxxlens.standard.cc
@@ -4060,6 +4332,211 @@ relations:
     required: false
     identity_role: authoritative_payload
 
+  - name: object_fact_kind
+    type: optional<utf8_string>
+    required: false
+    id: cc.syntax_node.v1.object_fact_kind
+    identity_role: authoritative_payload
+  - name: object_fact_profile
+    type: optional<utf8_string>
+    required: false
+    id: cc.syntax_node.v1.object_fact_profile
+    identity_role: authoritative_payload
+  - name: original_value_lower
+    type: optional<utf8_string>
+    required: false
+    id: cc.syntax_node.v1.original_value_lower
+    identity_role: authoritative_payload
+  - name: original_value_upper
+    type: optional<utf8_string>
+    required: false
+    id: cc.syntax_node.v1.original_value_upper
+    identity_role: authoritative_payload
+  - name: representation_state
+    type: optional<utf8_string>
+    required: false
+    id: cc.syntax_node.v1.representation_state
+    identity_role: authoritative_payload
+  - name: type_access_permission
+    type: optional<bool>
+    required: false
+    id: cc.syntax_node.v1.type_access_permission
+    identity_role: authoritative_payload
+  - name: current_object_profile
+    type: optional<utf8_string>
+    required: false
+    id: cc.syntax_node.v1.current_object_profile
+    identity_role: authoritative_payload
+  - name: current_object_state
+    type: optional<utf8_string>
+    required: false
+    id: cc.syntax_node.v1.current_object_state
+    identity_role: authoritative_payload
+  - name: object_fact_state
+    type: optional<utf8_string>
+    required: false
+    id: cc.syntax_node.v1.object_fact_state
+    identity_role: authoritative_payload
+  - name: object_scope_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    id: cc.syntax_node.v1.object_scope_declaration
+    identity_role: authoritative_payload
+  - name: object_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    id: cc.syntax_node.v1.object_declaration
+    identity_role: authoritative_payload
+  - name: object_entity
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    id: cc.syntax_node.v1.object_entity
+    identity_role: authoritative_payload
+  - name: declared_object_type
+    type: optional<typed_id<cc_type_id>>
+    required: false
+    id: cc.syntax_node.v1.declared_object_type
+    identity_role: authoritative_payload
+  - name: object_address
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    id: cc.syntax_node.v1.object_address
+    identity_role: authoritative_payload
+  - name: object_target_type
+    type: optional<typed_id<cc_type_id>>
+    required: false
+    id: cc.syntax_node.v1.object_target_type
+    identity_role: authoritative_payload
+  - name: canonical_bool
+    type: optional<bool>
+    required: false
+    id: cc.syntax_node.v1.canonical_bool
+    identity_role: authoritative_payload
+  - name: downcast_compatible_with_declared_type
+    type: optional<bool>
+    required: false
+    id: cc.syntax_node.v1.downcast_compatible_with_declared_type
+    identity_role: authoritative_payload
+  - name: object_receiver
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    id: cc.syntax_node.v1.object_receiver
+    identity_role: authoritative_payload
+  - name: object_body
+    type: optional<typed_id<body_id>>
+    required: false
+    id: cc.syntax_node.v1.object_body
+    identity_role: authoritative_payload
+  - name: object_cfg_node
+    type: optional<typed_id<cfg_node_id>>
+    required: false
+    id: cc.syntax_node.v1.object_cfg_node
+    identity_role: authoritative_payload
+  - name: object_cfg_element_index
+    type: optional<uint64>
+    required: false
+    id: cc.syntax_node.v1.object_cfg_element_index
+    identity_role: authoritative_payload
+  - name: object_phase
+    type: optional<utf8_string>
+    required: false
+    id: cc.syntax_node.v1.object_phase
+    identity_role: authoritative_payload
+  - name: actual_polymorphic_use
+    type: optional<bool>
+    required: false
+    id: cc.syntax_node.v1.actual_polymorphic_use
+    identity_role: authoritative_payload
+  - name: type_trait_kind
+    type: optional<open_symbol<cc.type-trait-kind/1>>
+    required: false
+    id: cc.syntax_node.v1.type_trait_kind
+    identity_role: authoritative_payload
+  - name: type_trait_argument_form
+    type: optional<open_symbol<cc.type-trait-argument-form/1>>
+    required: false
+    id: cc.syntax_node.v1.type_trait_argument_form
+    identity_role: authoritative_payload
+  - name: type_trait_argument_type
+    type: optional<typed_id<cc_type_id>>
+    required: false
+    id: cc.syntax_node.v1.type_trait_argument_type
+    identity_role: authoritative_payload
+  - name: type_trait_argument_expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    id: cc.syntax_node.v1.type_trait_argument_expression
+    identity_role: authoritative_payload
+  - name: type_trait_result_decimal
+    type: optional<utf8_string>
+    required: false
+    id: cc.syntax_node.v1.type_trait_result_decimal
+    identity_role: authoritative_payload
+  - name: type_trait_state
+    type: optional<open_symbol<cc.syntax-observation-state/1>>
+    required: false
+    id: cc.syntax_node.v1.type_trait_state
+    identity_role: authoritative_payload
+  - name: type_trait_profile
+    type: optional<utf8_string>
+    required: false
+    id: cc.syntax_node.v1.type_trait_profile
+    identity_role: authoritative_payload
+  - name: atomic_operation
+    type: optional<uint64>
+    required: false
+    id: cc.syntax_node.v1.atomic_operation
+    identity_role: authoritative_payload
+  - name: atomic_operation_name
+    type: optional<utf8_string>
+    required: false
+    id: cc.syntax_node.v1.atomic_operation_name
+    identity_role: authoritative_payload
+  - name: atomic_pointer_expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    id: cc.syntax_node.v1.atomic_pointer_expression
+    identity_role: authoritative_payload
+  - name: atomic_success_order_expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    id: cc.syntax_node.v1.atomic_success_order_expression
+    identity_role: authoritative_payload
+  - name: atomic_failure_order_expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    id: cc.syntax_node.v1.atomic_failure_order_expression
+    identity_role: authoritative_payload
+  - name: atomic_success_order_value
+    type: optional<int64>
+    required: false
+    id: cc.syntax_node.v1.atomic_success_order_value
+    identity_role: authoritative_payload
+  - name: atomic_failure_order_value
+    type: optional<int64>
+    required: false
+    id: cc.syntax_node.v1.atomic_failure_order_value
+    identity_role: authoritative_payload
+  - name: atomic_success_order_state
+    type: optional<utf8_string>
+    required: false
+    id: cc.syntax_node.v1.atomic_success_order_state
+    identity_role: authoritative_payload
+  - name: atomic_failure_order_state
+    type: optional<utf8_string>
+    required: false
+    id: cc.syntax_node.v1.atomic_failure_order_state
+    identity_role: authoritative_payload
+  - name: atomic_binding_state
+    type: optional<utf8_string>
+    required: false
+    id: cc.syntax_node.v1.atomic_binding_state
+    identity_role: authoritative_payload
+  - name: atomic_profile
+    type: optional<utf8_string>
+    required: false
+    id: cc.syntax_node.v1.atomic_profile
+    identity_role: authoritative_payload
   references:
   - source_columns:
     - cc.syntax_node.v1.compile_unit
@@ -4146,6 +4623,104 @@ relations:
     strength: soft_semantic
     on_missing: unresolved
     container_elements: true
+  - source_columns:
+    - cc.syntax_node.v1.object_scope_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.syntax_node.v1.object_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.syntax_node.v1.object_entity
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.syntax_node.v1.declared_object_type
+    target_relation: cc.type
+    target_columns:
+    - cc.type.v1.type
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.syntax_node.v1.object_address
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.syntax_node.v1.object_target_type
+    target_relation: cc.type
+    target_columns:
+    - cc.type.v1.type
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.syntax_node.v1.object_receiver
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.syntax_node.v1.object_body
+    target_relation: cc.body
+    target_columns:
+    - cc.body.v1.body
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.syntax_node.v1.object_cfg_node
+    target_relation: cc.cfg_node
+    target_columns:
+    - cc.cfg_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.syntax_node.v1.type_trait_argument_type
+    target_relation: cc.type
+    target_columns:
+    - cc.type.v1.type
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.syntax_node.v1.type_trait_argument_expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.syntax_node.v1.atomic_pointer_expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.syntax_node.v1.atomic_success_order_expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.syntax_node.v1.atomic_failure_order_expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
   merge:
     mode: functional_assertion
     conflict_columns:
@@ -4187,6 +4762,47 @@ relations:
     - cc.syntax_node.v1.literal_value_state
     - cc.syntax_node.v1.literal_encoding
     - cc.syntax_node.v1.literal_element_width_bits
+    - cc.syntax_node.v1.object_fact_kind
+    - cc.syntax_node.v1.object_fact_profile
+    - cc.syntax_node.v1.original_value_lower
+    - cc.syntax_node.v1.original_value_upper
+    - cc.syntax_node.v1.representation_state
+    - cc.syntax_node.v1.type_access_permission
+    - cc.syntax_node.v1.current_object_profile
+    - cc.syntax_node.v1.current_object_state
+    - cc.syntax_node.v1.object_fact_state
+    - cc.syntax_node.v1.object_scope_declaration
+    - cc.syntax_node.v1.object_declaration
+    - cc.syntax_node.v1.object_entity
+    - cc.syntax_node.v1.declared_object_type
+    - cc.syntax_node.v1.object_address
+    - cc.syntax_node.v1.object_target_type
+    - cc.syntax_node.v1.canonical_bool
+    - cc.syntax_node.v1.downcast_compatible_with_declared_type
+    - cc.syntax_node.v1.object_receiver
+    - cc.syntax_node.v1.object_body
+    - cc.syntax_node.v1.object_cfg_node
+    - cc.syntax_node.v1.object_cfg_element_index
+    - cc.syntax_node.v1.object_phase
+    - cc.syntax_node.v1.actual_polymorphic_use
+    - cc.syntax_node.v1.type_trait_kind
+    - cc.syntax_node.v1.type_trait_argument_form
+    - cc.syntax_node.v1.type_trait_argument_type
+    - cc.syntax_node.v1.type_trait_argument_expression
+    - cc.syntax_node.v1.type_trait_result_decimal
+    - cc.syntax_node.v1.type_trait_state
+    - cc.syntax_node.v1.type_trait_profile
+    - cc.syntax_node.v1.atomic_operation
+    - cc.syntax_node.v1.atomic_operation_name
+    - cc.syntax_node.v1.atomic_pointer_expression
+    - cc.syntax_node.v1.atomic_success_order_expression
+    - cc.syntax_node.v1.atomic_failure_order_expression
+    - cc.syntax_node.v1.atomic_success_order_value
+    - cc.syntax_node.v1.atomic_failure_order_value
+    - cc.syntax_node.v1.atomic_success_order_state
+    - cc.syntax_node.v1.atomic_failure_order_state
+    - cc.syntax_node.v1.atomic_binding_state
+    - cc.syntax_node.v1.atomic_profile
   partition:
     suggested_keys:
     - cc.syntax_node.v1.compile_unit
@@ -4218,7 +4834,7 @@ relations:
       - cc.syntax_node.v1.child_profile
 - descriptor_id: cc.body.v1
   name: cc.body
-  version: 1.1.0
+  version: 1.3.0
   semantic_major: 1
   semantics: cc.body/1
   owner_namespace: cxxlens.standard.cc
@@ -4468,6 +5084,96 @@ relations:
     type: optional<utf8_string>
     required: false
     identity_role: authoritative_payload
+  - name: function_exit_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    id: cc.body.v1.function_exit_declaration
+    identity_role: authoritative_payload
+  - name: coroutine_body
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    id: cc.body.v1.coroutine_body
+    identity_role: authoritative_payload
+  - name: coroutine_definition
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    id: cc.body.v1.coroutine_definition
+    identity_role: authoritative_payload
+  - name: coroutine_binding_state
+    type: optional<utf8_string>
+    required: false
+    id: cc.body.v1.coroutine_binding_state
+    identity_role: authoritative_payload
+  - name: coroutine_profile
+    type: optional<utf8_string>
+    required: false
+    id: cc.body.v1.coroutine_profile
+    identity_role: authoritative_payload
+  - name: cfg_element_count
+    type: optional<uint64>
+    required: false
+    id: cc.body.v1.cfg_element_count
+    identity_role: authoritative_payload
+  - name: cfg_element_ids
+    type: optional<set<cfg_element_id>>
+    required: false
+    id: cc.body.v1.cfg_element_ids
+    identity_role: authoritative_payload
+  - name: cfg_element_state
+    type: optional<utf8_string>
+    required: false
+    id: cc.body.v1.cfg_element_state
+    identity_role: authoritative_payload
+  - name: cfg_element_profile
+    type: optional<utf8_string>
+    required: false
+    id: cc.body.v1.cfg_element_profile
+    identity_role: authoritative_payload
+  - id: cc.body.v1.is_coroutine
+    name: is_coroutine
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.move_input_profile
+    name: move_input_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.move_input_state
+    name: move_input_state
+    type: optional<open_symbol<cc.original-input-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.move_input_count
+    name: move_input_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.move_input_ids
+    name: move_input_ids
+    type: optional<set<cc_move_event_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.address_input_profile
+    name: address_input_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.address_input_state
+    name: address_input_state
+    type: optional<open_symbol<cc.original-input-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.address_input_count
+    name: address_input_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.address_input_ids
+    name: address_input_ids
+    type: optional<set<cc_address_transfer_id>>
+    required: false
+    identity_role: authoritative_payload
   references:
   - source_columns:
     - cc.body.v1.compile_unit
@@ -4530,6 +5236,51 @@ relations:
     strength: soft_semantic
     on_missing: unresolved
     container_elements: true
+  - source_columns:
+    - cc.body.v1.function_exit_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.body.v1.coroutine_body
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.body.v1.coroutine_definition
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.body.v1.cfg_element_ids
+    target_relation: cc.cfg_element
+    target_columns:
+    - cc.cfg_element.v1.element
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - cc.body.v1.move_input_ids
+    target_relation: cc.move_event
+    target_columns:
+    - cc.move_event.v1.event
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - cc.body.v1.address_input_ids
+    target_relation: cc.address_transfer
+    target_columns:
+    - cc.address_transfer.v1.transfer
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
   merge:
     mode: functional_assertion
     conflict_columns:
@@ -4577,6 +5328,24 @@ relations:
     - cc.body.v1.exceptional_exit_state
     - cc.body.v1.exceptional_exit_profile
     - cc.body.v1.exceptional_lowering_profile
+    - cc.body.v1.function_exit_declaration
+    - cc.body.v1.coroutine_body
+    - cc.body.v1.coroutine_definition
+    - cc.body.v1.coroutine_binding_state
+    - cc.body.v1.coroutine_profile
+    - cc.body.v1.cfg_element_count
+    - cc.body.v1.cfg_element_ids
+    - cc.body.v1.cfg_element_state
+    - cc.body.v1.cfg_element_profile
+    - cc.body.v1.is_coroutine
+    - cc.body.v1.move_input_profile
+    - cc.body.v1.move_input_state
+    - cc.body.v1.move_input_count
+    - cc.body.v1.move_input_ids
+    - cc.body.v1.address_input_profile
+    - cc.body.v1.address_input_state
+    - cc.body.v1.address_input_count
+    - cc.body.v1.address_input_ids
   partition:
     suggested_keys:
     - cc.body.v1.compile_unit
@@ -4786,7 +5555,7 @@ relations:
       - cc.cfg_node.v1.terminator_profile
 - descriptor_id: cc.cfg_edge.v1
   name: cc.cfg_edge
-  version: 1.0.0
+  version: 1.1.0
   semantic_major: 1
   semantics: cc.cfg_edge/1
   owner_namespace: cxxlens.standard.cc
@@ -4882,6 +5651,26 @@ relations:
     type: optional<typed_id<syntax_node_id>>
     required: false
     identity_role: authoritative_payload
+  - name: function_exit_kind
+    type: optional<utf8_string>
+    required: false
+    id: cc.cfg_edge.v1.function_exit_kind
+    identity_role: authoritative_payload
+  - name: function_exit_state
+    type: optional<utf8_string>
+    required: false
+    id: cc.cfg_edge.v1.function_exit_state
+    identity_role: authoritative_payload
+  - name: function_exit_profile
+    type: optional<utf8_string>
+    required: false
+    id: cc.cfg_edge.v1.function_exit_profile
+    identity_role: authoritative_payload
+  - name: function_exit_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    id: cc.cfg_edge.v1.function_exit_declaration
+    identity_role: authoritative_payload
   references:
   - source_columns:
     - cc.cfg_edge.v1.compile_unit
@@ -4925,6 +5714,13 @@ relations:
     - cc.syntax_node.v1.node
     strength: soft_semantic
     on_missing: unresolved
+  - source_columns:
+    - cc.cfg_edge.v1.function_exit_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
   merge:
     mode: functional_assertion
     conflict_columns:
@@ -4941,6 +5737,10 @@ relations:
     - cc.cfg_edge.v1.outcome_state
     - cc.cfg_edge.v1.outcome_profile
     - cc.cfg_edge.v1.outcome_expression
+    - cc.cfg_edge.v1.function_exit_kind
+    - cc.cfg_edge.v1.function_exit_state
+    - cc.cfg_edge.v1.function_exit_profile
+    - cc.cfg_edge.v1.function_exit_declaration
   partition:
     suggested_keys:
     - cc.cfg_edge.v1.compile_unit
@@ -4967,7 +5767,7 @@ relations:
       - cc.cfg_edge.v1.outcome_profile
 - descriptor_id: cc.flow_fact.v1
   name: cc.flow_fact
-  version: 1.0.0
+  version: 1.1.0
   semantic_major: 1
   semantics: cc.flow_fact/1
   owner_namespace: cxxlens.standard.cc
@@ -5125,6 +5925,11 @@ relations:
     type: optional<utf8_string>
     required: false
     identity_role: authoritative_payload
+  - name: declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    id: cc.flow_fact.v1.declaration
+    identity_role: authoritative_payload
   references:
   - source_columns:
     - cc.flow_fact.v1.compile_unit
@@ -5212,6 +6017,13 @@ relations:
     - cc.syntax_node.v1.node
     strength: soft_semantic
     on_missing: unresolved
+  - source_columns:
+    - cc.flow_fact.v1.declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
   merge:
     mode: functional_assertion
     conflict_columns:
@@ -5240,6 +6052,7 @@ relations:
     - cc.flow_fact.v1.cfg_binding_state
     - cc.flow_fact.v1.definition_role
     - cc.flow_fact.v1.definition_profile
+    - cc.flow_fact.v1.declaration
   partition:
     suggested_keys:
     - cc.flow_fact.v1.compile_unit
@@ -6823,7 +7636,7 @@ relations:
 
 - descriptor_id: cc.declaration_inventory.v1
   name: cc.declaration_inventory
-  version: 1.0.0
+  version: 1.1.0
   semantic_major: 1
   semantics: cc.declaration_inventory/1
   owner_namespace: cxxlens.standard.cc
@@ -6921,6 +7734,66 @@ relations:
     type: optional<utf8_string>
     required: false
     identity_role: authoritative_payload
+  - name: sequence_pair_count
+    type: optional<uint64>
+    required: false
+    id: cc.declaration_inventory.v1.sequence_pair_count
+    identity_role: authoritative_payload
+  - name: sequence_pair_ids
+    type: optional<set<sequence_pair_id>>
+    required: false
+    id: cc.declaration_inventory.v1.sequence_pair_ids
+    identity_role: authoritative_payload
+  - name: sequence_pair_state
+    type: optional<utf8_string>
+    required: false
+    id: cc.declaration_inventory.v1.sequence_pair_state
+    identity_role: authoritative_payload
+  - name: sequence_pair_profile
+    type: optional<utf8_string>
+    required: false
+    id: cc.declaration_inventory.v1.sequence_pair_profile
+    identity_role: authoritative_payload
+  - name: object_state_count
+    type: optional<uint64>
+    required: false
+    id: cc.declaration_inventory.v1.object_state_count
+    identity_role: authoritative_payload
+  - name: object_state_ids
+    type: optional<set<object_state_observation_id>>
+    required: false
+    id: cc.declaration_inventory.v1.object_state_ids
+    identity_role: authoritative_payload
+  - name: object_state_state
+    type: optional<utf8_string>
+    required: false
+    id: cc.declaration_inventory.v1.object_state_state
+    identity_role: authoritative_payload
+  - name: object_state_profile
+    type: optional<utf8_string>
+    required: false
+    id: cc.declaration_inventory.v1.object_state_profile
+    identity_role: authoritative_payload
+  - id: cc.declaration_inventory.v1.physical_definition_count
+    name: physical_definition_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration_inventory.v1.physical_definition_ids
+    name: physical_definition_ids
+    type: optional<set<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration_inventory.v1.physical_definition_state
+    name: physical_definition_state
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration_inventory.v1.physical_definition_profile
+    name: physical_definition_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
   references:
   - source_columns:
     - cc.declaration_inventory.v1.compile_unit
@@ -6969,6 +7842,30 @@ relations:
     strength: hard
     on_missing: reject_batch
     container_elements: true
+  - source_columns:
+    - cc.declaration_inventory.v1.sequence_pair_ids
+    target_relation: cc.sequence_pair
+    target_columns:
+    - cc.sequence_pair.v1.pair
+    container_elements: true
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.declaration_inventory.v1.object_state_ids
+    target_relation: cc.object_state_observation
+    target_columns:
+    - cc.object_state_observation.v1.observation
+    container_elements: true
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.declaration_inventory.v1.physical_definition_ids
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    container_elements: true
+    strength: soft_semantic
+    on_missing: unresolved
   merge:
     mode: functional_assertion
     conflict_columns:
@@ -6986,6 +7883,18 @@ relations:
     - cc.declaration_inventory.v1.target_slot_ids
     - cc.declaration_inventory.v1.target_slot_state
     - cc.declaration_inventory.v1.target_slot_profile
+    - cc.declaration_inventory.v1.sequence_pair_count
+    - cc.declaration_inventory.v1.sequence_pair_ids
+    - cc.declaration_inventory.v1.sequence_pair_state
+    - cc.declaration_inventory.v1.sequence_pair_profile
+    - cc.declaration_inventory.v1.object_state_count
+    - cc.declaration_inventory.v1.object_state_ids
+    - cc.declaration_inventory.v1.object_state_state
+    - cc.declaration_inventory.v1.object_state_profile
+    - cc.declaration_inventory.v1.physical_definition_count
+    - cc.declaration_inventory.v1.physical_definition_ids
+    - cc.declaration_inventory.v1.physical_definition_state
+    - cc.declaration_inventory.v1.physical_definition_profile
   partition:
     suggested_keys:
     - cc.declaration_inventory.v1.compile_unit
@@ -7394,7 +8303,7 @@ relations:
   evolution_policy: ng0.additive.v1
 - descriptor_id: cc.flow_inventory.v1
   name: cc.flow_inventory
-  version: 1.0.0
+  version: 1.1.0
   semantic_major: 1
   semantics: cc.flow_inventory/1
   owner_namespace: cxxlens.standard.cc
@@ -7533,6 +8442,26 @@ relations:
     type: optional<utf8_string>
     required: false
     identity_role: authoritative_payload
+  - name: lifetime_end_count
+    type: optional<uint64>
+    required: false
+    id: cc.flow_inventory.v1.lifetime_end_count
+    identity_role: authoritative_payload
+  - name: lifetime_end_ids
+    type: optional<set<flow_fact_id>>
+    required: false
+    id: cc.flow_inventory.v1.lifetime_end_ids
+    identity_role: authoritative_payload
+  - name: lifetime_end_state
+    type: optional<utf8_string>
+    required: false
+    id: cc.flow_inventory.v1.lifetime_end_state
+    identity_role: authoritative_payload
+  - name: lifetime_end_profile
+    type: optional<utf8_string>
+    required: false
+    id: cc.flow_inventory.v1.lifetime_end_profile
+    identity_role: authoritative_payload
   references:
   - source_columns:
     - cc.flow_inventory.v1.compile_unit
@@ -7602,6 +8531,14 @@ relations:
     strength: soft_semantic
     on_missing: unresolved
     container_elements: true
+  - source_columns:
+    - cc.flow_inventory.v1.lifetime_end_ids
+    target_relation: cc.flow_fact
+    target_columns:
+    - cc.flow_fact.v1.fact
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
   merge:
     mode: functional_assertion
     conflict_columns:
@@ -7627,6 +8564,10 @@ relations:
     - cc.flow_inventory.v1.range_state
     - cc.flow_inventory.v1.summary_state
     - cc.flow_inventory.v1.reason
+    - cc.flow_inventory.v1.lifetime_end_count
+    - cc.flow_inventory.v1.lifetime_end_ids
+    - cc.flow_inventory.v1.lifetime_end_state
+    - cc.flow_inventory.v1.lifetime_end_profile
   partition:
     suggested_keys:
     - cc.flow_inventory.v1.compile_unit
@@ -10602,7 +11543,7 @@ relations:
   evolution_policy: ng0.additive.v1
 - descriptor_id: cc.exceptional_exit.v1
   name: cc.exceptional_exit
-  version: 1.1.0
+  version: 1.2.0
   semantic_major: 1
   semantics: cc.exceptional-exit/1
   owner_namespace: cxxlens.standard.cc
@@ -10840,6 +11781,81 @@ relations:
     type: optional<utf8_string>
     required: false
     identity_role: authoritative_payload
+  - name: lowered_entry
+    type: optional<typed_id<exceptional_block_id>>
+    required: false
+    id: cc.exceptional_exit.v1.lowered_entry
+    identity_role: authoritative_payload
+  - name: lowered_block_count
+    type: optional<uint64>
+    required: false
+    id: cc.exceptional_exit.v1.lowered_block_count
+    identity_role: authoritative_payload
+  - name: lowered_block_ids
+    type: optional<set<exceptional_block_id>>
+    required: false
+    id: cc.exceptional_exit.v1.lowered_block_ids
+    identity_role: authoritative_payload
+  - name: lowered_successor_count
+    type: optional<uint64>
+    required: false
+    id: cc.exceptional_exit.v1.lowered_successor_count
+    identity_role: authoritative_payload
+  - name: lowered_successor_ids
+    type: optional<set<exceptional_successor_id>>
+    required: false
+    id: cc.exceptional_exit.v1.lowered_successor_ids
+    identity_role: authoritative_payload
+  - name: lowered_topology_state
+    type: optional<utf8_string>
+    required: false
+    id: cc.exceptional_exit.v1.lowered_topology_state
+    identity_role: authoritative_payload
+  - name: lowered_topology_profile
+    type: optional<utf8_string>
+    required: false
+    id: cc.exceptional_exit.v1.lowered_topology_profile
+    identity_role: authoritative_payload
+  - name: lowered_block
+    type: optional<typed_id<exceptional_block_id>>
+    required: false
+    id: cc.exceptional_exit.v1.lowered_block
+    identity_role: authoritative_payload
+  - name: normal_successor
+    type: optional<typed_id<exceptional_successor_id>>
+    required: false
+    id: cc.exceptional_exit.v1.normal_successor
+    identity_role: authoritative_payload
+  - name: unwind_successor
+    type: optional<typed_id<exceptional_successor_id>>
+    required: false
+    id: cc.exceptional_exit.v1.unwind_successor
+    identity_role: authoritative_payload
+  - name: eh_boundary_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    id: cc.exceptional_exit.v1.eh_boundary_declaration
+    identity_role: authoritative_payload
+  - name: eh_selected_scope_kind
+    type: optional<utf8_string>
+    required: false
+    id: cc.exceptional_exit.v1.eh_selected_scope_kind
+    identity_role: authoritative_payload
+  - name: eh_disposition
+    type: optional<utf8_string>
+    required: false
+    id: cc.exceptional_exit.v1.eh_disposition
+    identity_role: authoritative_payload
+  - name: eh_boundary_state
+    type: optional<utf8_string>
+    required: false
+    id: cc.exceptional_exit.v1.eh_boundary_state
+    identity_role: authoritative_payload
+  - name: eh_boundary_profile
+    type: optional<utf8_string>
+    required: false
+    id: cc.exceptional_exit.v1.eh_boundary_profile
+    identity_role: authoritative_payload
   references:
   - source_columns:
     - cc.exceptional_exit.v1.compile_unit
@@ -10918,6 +11934,57 @@ relations:
     - cc.entity.v1.entity
     strength: soft_semantic
     on_missing: unresolved
+  - source_columns:
+    - cc.exceptional_exit.v1.lowered_entry
+    target_relation: cc.exceptional_block
+    target_columns:
+    - cc.exceptional_block.v1.block
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.exceptional_exit.v1.lowered_block
+    target_relation: cc.exceptional_block
+    target_columns:
+    - cc.exceptional_block.v1.block
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.exceptional_exit.v1.lowered_block_ids
+    target_relation: cc.exceptional_block
+    target_columns:
+    - cc.exceptional_block.v1.block
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - cc.exceptional_exit.v1.lowered_successor_ids
+    target_relation: cc.exceptional_successor
+    target_columns:
+    - cc.exceptional_successor.v1.successor
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - cc.exceptional_exit.v1.normal_successor
+    target_relation: cc.exceptional_successor
+    target_columns:
+    - cc.exceptional_successor.v1.successor
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.exceptional_exit.v1.unwind_successor
+    target_relation: cc.exceptional_successor
+    target_columns:
+    - cc.exceptional_successor.v1.successor
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.exceptional_exit.v1.eh_boundary_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
   merge:
     mode: functional_assertion
     conflict_columns:
@@ -10960,6 +12027,21 @@ relations:
     - cc.exceptional_exit.v1.cleanup_target_dtor_type
     - cc.exceptional_exit.v1.cleanup_target_profile
     - cc.exceptional_exit.v1.reason
+    - cc.exceptional_exit.v1.lowered_entry
+    - cc.exceptional_exit.v1.lowered_block_count
+    - cc.exceptional_exit.v1.lowered_block_ids
+    - cc.exceptional_exit.v1.lowered_successor_count
+    - cc.exceptional_exit.v1.lowered_successor_ids
+    - cc.exceptional_exit.v1.lowered_topology_state
+    - cc.exceptional_exit.v1.lowered_topology_profile
+    - cc.exceptional_exit.v1.lowered_block
+    - cc.exceptional_exit.v1.normal_successor
+    - cc.exceptional_exit.v1.unwind_successor
+    - cc.exceptional_exit.v1.eh_boundary_declaration
+    - cc.exceptional_exit.v1.eh_selected_scope_kind
+    - cc.exceptional_exit.v1.eh_disposition
+    - cc.exceptional_exit.v1.eh_boundary_state
+    - cc.exceptional_exit.v1.eh_boundary_profile
   partition:
     suggested_keys:
     - cc.exceptional_exit.v1.compile_unit
@@ -10976,4 +12058,2137 @@ relations:
     - relation-key-enumeration
   provenance:
     minimum: canonicalization
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.sequence_context.v1
+  name: cc.sequence_context
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.sequence-context/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: Actual original argument traversal context for one compiler access occurrence; never inferred from
+    source containment.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::sequence_context
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.sequence_context.v1.context
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.sequence_context.v1.context
+      projection:
+      - cc.sequence_context.v1.compile_unit
+      - cc.sequence_context.v1.checker_root
+      - cc.sequence_context.v1.access_ordinal
+      - cc.sequence_context.v1.depth
+      - cc.sequence_context.v1.profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.sequence_context.v1.context
+    name: context
+    type: typed_id<sequence_context_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.sequence_context.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_context.v1.source
+    name: source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_context.v1.is_system
+    name: is_system
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_context.v1.owner_usr
+    name: owner_usr
+    type: optional<bytes>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_context.v1.owner_entity
+    name: owner_entity
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_context.v1.declaration
+    name: declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_context.v1.body
+    name: body
+    type: optional<typed_id<body_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_context.v1.expression
+    name: expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_context.v1.profile
+    name: profile
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_context.v1.membership_state
+    name: membership_state
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_context.v1.binding_state
+    name: binding_state
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_context.v1.reason
+    name: reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_context.v1.checker_root
+    name: checker_root
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_context.v1.access_ordinal
+    name: access_ordinal
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_context.v1.depth
+    name: depth
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_context.v1.parent_context
+    name: parent_context
+    type: optional<typed_id<sequence_context_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_context.v1.invocation
+    name: invocation
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_context.v1.argument
+    name: argument
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_context.v1.argument_index
+    name: argument_index
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_context.v1.indeterminately_sequenced
+    name: indeterminately_sequenced
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_context.v1.language
+    name: language
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.sequence_context.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.sequence_context.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.sequence_context.v1.owner_entity
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.sequence_context.v1.declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.sequence_context.v1.body
+    target_relation: cc.body
+    target_columns:
+    - cc.body.v1.body
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.sequence_context.v1.expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.sequence_context.v1.parent_context
+    target_relation: cc.sequence_context
+    target_columns:
+    - cc.sequence_context.v1.context
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.sequence_context.v1.invocation
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.sequence_context.v1.argument
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.sequence_context.v1.compile_unit
+    - cc.sequence_context.v1.source
+    - cc.sequence_context.v1.is_system
+    - cc.sequence_context.v1.owner_usr
+    - cc.sequence_context.v1.owner_entity
+    - cc.sequence_context.v1.declaration
+    - cc.sequence_context.v1.body
+    - cc.sequence_context.v1.expression
+    - cc.sequence_context.v1.profile
+    - cc.sequence_context.v1.membership_state
+    - cc.sequence_context.v1.binding_state
+    - cc.sequence_context.v1.reason
+    - cc.sequence_context.v1.checker_root
+    - cc.sequence_context.v1.access_ordinal
+    - cc.sequence_context.v1.depth
+    - cc.sequence_context.v1.parent_context
+    - cc.sequence_context.v1.invocation
+    - cc.sequence_context.v1.argument
+    - cc.sequence_context.v1.argument_index
+    - cc.sequence_context.v1.indeterminately_sequenced
+    - cc.sequence_context.v1.language
+  partition:
+    suggested_keys:
+    - cc.sequence_context.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.sequence_context.v1.compile_unit
+  coverage:
+    execution_domain: cc.sequence_context.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.sequence_pair.v1
+  name: cc.sequence_pair
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.sequence-pair/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: Original checker access pair with independent storage, evaluation and language argument sequencing
+    axes; a warning candidate is not itself an unsequenced language proof. Finite inventory covers original
+    checker candidates only, not all C++ side effects or absence of undefined behavior.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::sequence_pair
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.sequence_pair.v1.pair
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.sequence_pair.v1.pair
+      projection:
+      - cc.sequence_pair.v1.compile_unit
+      - cc.sequence_pair.v1.checker_root
+      - cc.sequence_pair.v1.ordinal
+      - cc.sequence_pair.v1.profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.sequence_pair.v1.pair
+    name: pair
+    type: typed_id<sequence_pair_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.sequence_pair.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.source
+    name: source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.is_system
+    name: is_system
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.owner_usr
+    name: owner_usr
+    type: optional<bytes>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.owner_entity
+    name: owner_entity
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.declaration
+    name: declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.body
+    name: body
+    type: optional<typed_id<body_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.expression
+    name: expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.profile
+    name: profile
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.membership_state
+    name: membership_state
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.binding_state
+    name: binding_state
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.reason
+    name: reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.checker_root
+    name: checker_root
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.ordinal
+    name: ordinal
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.left_expression
+    name: left_expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.right_expression
+    name: right_expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.left_source
+    name: left_source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.right_source
+    name: right_source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.left_context
+    name: left_context
+    type: optional<typed_id<sequence_context_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.right_context
+    name: right_context
+    type: optional<typed_id<sequence_context_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.left_context_state
+    name: left_context_state
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.right_context_state
+    name: right_context_state
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.storage_usr
+    name: storage_usr
+    type: optional<bytes>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.storage_declaration
+    name: storage_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.storage_entity
+    name: storage_entity
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.left_modifies
+    name: left_modifies
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.right_modifies
+    name: right_modifies
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.scalar_nonreference_storage
+    name: scalar_nonreference_storage
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.jointly_potentially_evaluated
+    name: jointly_potentially_evaluated
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.checker_relation
+    name: checker_relation
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.sequence_pair.v1.language
+    name: language
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.sequence_pair.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.sequence_pair.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.sequence_pair.v1.owner_entity
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.sequence_pair.v1.declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.sequence_pair.v1.body
+    target_relation: cc.body
+    target_columns:
+    - cc.body.v1.body
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.sequence_pair.v1.expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.sequence_pair.v1.left_expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.sequence_pair.v1.right_expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.sequence_pair.v1.left_source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.sequence_pair.v1.right_source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.sequence_pair.v1.left_context
+    target_relation: cc.sequence_context
+    target_columns:
+    - cc.sequence_context.v1.context
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.sequence_pair.v1.right_context
+    target_relation: cc.sequence_context
+    target_columns:
+    - cc.sequence_context.v1.context
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.sequence_pair.v1.storage_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.sequence_pair.v1.storage_entity
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.sequence_pair.v1.compile_unit
+    - cc.sequence_pair.v1.source
+    - cc.sequence_pair.v1.is_system
+    - cc.sequence_pair.v1.owner_usr
+    - cc.sequence_pair.v1.owner_entity
+    - cc.sequence_pair.v1.declaration
+    - cc.sequence_pair.v1.body
+    - cc.sequence_pair.v1.expression
+    - cc.sequence_pair.v1.profile
+    - cc.sequence_pair.v1.membership_state
+    - cc.sequence_pair.v1.binding_state
+    - cc.sequence_pair.v1.reason
+    - cc.sequence_pair.v1.checker_root
+    - cc.sequence_pair.v1.ordinal
+    - cc.sequence_pair.v1.left_expression
+    - cc.sequence_pair.v1.right_expression
+    - cc.sequence_pair.v1.left_source
+    - cc.sequence_pair.v1.right_source
+    - cc.sequence_pair.v1.left_context
+    - cc.sequence_pair.v1.right_context
+    - cc.sequence_pair.v1.left_context_state
+    - cc.sequence_pair.v1.right_context_state
+    - cc.sequence_pair.v1.storage_usr
+    - cc.sequence_pair.v1.storage_declaration
+    - cc.sequence_pair.v1.storage_entity
+    - cc.sequence_pair.v1.left_modifies
+    - cc.sequence_pair.v1.right_modifies
+    - cc.sequence_pair.v1.scalar_nonreference_storage
+    - cc.sequence_pair.v1.jointly_potentially_evaluated
+    - cc.sequence_pair.v1.checker_relation
+    - cc.sequence_pair.v1.language
+  partition:
+    suggested_keys:
+    - cc.sequence_pair.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.sequence_pair.v1.compile_unit
+  coverage:
+    execution_domain: cc.sequence_pair.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.object_state_observation.v1
+  name: cc.object_state_observation
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.object-state-observation/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: Original constant-interpreter or closed narrow owned-object point state. Lifetime generation and
+    ordered subobject path are independent from declaration type; runtime paths are not closed by this event
+    stream. Storage path is an independently bound ordered compiler designator; no source interval aliases
+    storage.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::object_state_observation
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.object_state_observation.v1.observation
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.object_state_observation.v1.observation
+      projection:
+      - cc.object_state_observation.v1.compile_unit
+      - cc.object_state_observation.v1.ordinal
+      - cc.object_state_observation.v1.profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.object_state_observation.v1.observation
+    name: observation
+    type: typed_id<object_state_observation_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.object_state_observation.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.source
+    name: source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.is_system
+    name: is_system
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.owner_usr
+    name: owner_usr
+    type: optional<bytes>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.owner_entity
+    name: owner_entity
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.declaration
+    name: declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.body
+    name: body
+    type: optional<typed_id<body_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.expression
+    name: expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.profile
+    name: profile
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.membership_state
+    name: membership_state
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.binding_state
+    name: binding_state
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.reason
+    name: reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.ordinal
+    name: ordinal
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.evaluation_root
+    name: evaluation_root
+    type: optional<typed_id<constant_evaluation_root_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.state_kind
+    name: state_kind
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.access_kind
+    name: access_kind
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.storage_kind
+    name: storage_kind
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.storage_usr
+    name: storage_usr
+    type: optional<bytes>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.storage_source
+    name: storage_source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.storage_declaration
+    name: storage_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.storage_entity
+    name: storage_entity
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.call_index
+    name: call_index
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.generation
+    name: generation
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.allocation_ordinal
+    name: allocation_ordinal
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.storage_path
+    name: storage_path
+    type: optional<bytes>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.complete_type
+    name: complete_type
+    type: optional<typed_id<cc_type_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.subobject_type
+    name: subobject_type
+    type: optional<typed_id<cc_type_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.target_type
+    name: target_type
+    type: optional<typed_id<cc_type_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.active_member_state
+    name: active_member_state
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.active_field_usr
+    name: active_field_usr
+    type: optional<bytes>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.selected_field_usr
+    name: selected_field_usr
+    type: optional<bytes>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.actual_polymorphic_use
+    name: actual_polymorphic_use
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.storage_state
+    name: storage_state
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.semantic_state
+    name: semantic_state
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.object_state_observation.v1.common_initial_sequence_permitted
+    name: common_initial_sequence_permitted
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.object_state_observation.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.object_state_observation.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.object_state_observation.v1.owner_entity
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.object_state_observation.v1.declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.object_state_observation.v1.body
+    target_relation: cc.body
+    target_columns:
+    - cc.body.v1.body
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.object_state_observation.v1.expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.object_state_observation.v1.evaluation_root
+    target_relation: cc.constant_evaluation_root
+    target_columns:
+    - cc.constant_evaluation_root.v1.root
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.object_state_observation.v1.storage_source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.object_state_observation.v1.storage_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.object_state_observation.v1.storage_entity
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.object_state_observation.v1.complete_type
+    target_relation: cc.type
+    target_columns:
+    - cc.type.v1.type
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.object_state_observation.v1.subobject_type
+    target_relation: cc.type
+    target_columns:
+    - cc.type.v1.type
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.object_state_observation.v1.target_type
+    target_relation: cc.type
+    target_columns:
+    - cc.type.v1.type
+    strength: soft_semantic
+    on_missing: unresolved
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.object_state_observation.v1.compile_unit
+    - cc.object_state_observation.v1.source
+    - cc.object_state_observation.v1.is_system
+    - cc.object_state_observation.v1.owner_usr
+    - cc.object_state_observation.v1.owner_entity
+    - cc.object_state_observation.v1.declaration
+    - cc.object_state_observation.v1.body
+    - cc.object_state_observation.v1.expression
+    - cc.object_state_observation.v1.profile
+    - cc.object_state_observation.v1.membership_state
+    - cc.object_state_observation.v1.binding_state
+    - cc.object_state_observation.v1.reason
+    - cc.object_state_observation.v1.ordinal
+    - cc.object_state_observation.v1.evaluation_root
+    - cc.object_state_observation.v1.state_kind
+    - cc.object_state_observation.v1.access_kind
+    - cc.object_state_observation.v1.storage_kind
+    - cc.object_state_observation.v1.storage_usr
+    - cc.object_state_observation.v1.storage_source
+    - cc.object_state_observation.v1.storage_declaration
+    - cc.object_state_observation.v1.storage_entity
+    - cc.object_state_observation.v1.call_index
+    - cc.object_state_observation.v1.generation
+    - cc.object_state_observation.v1.allocation_ordinal
+    - cc.object_state_observation.v1.storage_path
+    - cc.object_state_observation.v1.complete_type
+    - cc.object_state_observation.v1.subobject_type
+    - cc.object_state_observation.v1.target_type
+    - cc.object_state_observation.v1.active_member_state
+    - cc.object_state_observation.v1.active_field_usr
+    - cc.object_state_observation.v1.selected_field_usr
+    - cc.object_state_observation.v1.actual_polymorphic_use
+    - cc.object_state_observation.v1.storage_state
+    - cc.object_state_observation.v1.semantic_state
+    - cc.object_state_observation.v1.common_initial_sequence_permitted
+  partition:
+    suggested_keys:
+    - cc.object_state_observation.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.object_state_observation.v1.compile_unit
+  coverage:
+    execution_domain: cc.object_state_observation.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.exceptional_block.v1
+  name: cc.exceptional_block
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.exceptional-block/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: One actual final LLVM block in one original ABI lowering alternative; never an AST CFG block.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::exceptional_block
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.exceptional_block.v1.block
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.exceptional_block.v1.block
+      projection:
+      - cc.exceptional_block.v1.compile_unit
+      - cc.exceptional_block.v1.variant
+      - cc.exceptional_block.v1.ordinal
+      - cc.exceptional_block.v1.profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.exceptional_block.v1.block
+    name: block
+    type: typed_id<exceptional_block_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.exceptional_block.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.exceptional_block.v1.variant
+    name: variant
+    type: typed_id<exceptional_exit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.exceptional_block.v1.profile
+    name: profile
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.exceptional_block.v1.ordinal
+    name: ordinal
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.exceptional_block.v1.instruction_count
+    name: instruction_count
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.exceptional_block.v1.is_entry
+    name: is_entry
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.exceptional_block.v1.terminator_opcode
+    name: terminator_opcode
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.exceptional_block.v1.terminator_kind
+    name: terminator_kind
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.exceptional_block.v1.membership_state
+    name: membership_state
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.exceptional_block.v1.variant
+    target_relation: cc.exceptional_exit
+    target_columns:
+    - cc.exceptional_exit.v1.exit
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.exceptional_block.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.exceptional_block.v1.compile_unit
+    - cc.exceptional_block.v1.variant
+    - cc.exceptional_block.v1.profile
+    - cc.exceptional_block.v1.ordinal
+    - cc.exceptional_block.v1.instruction_count
+    - cc.exceptional_block.v1.is_entry
+    - cc.exceptional_block.v1.terminator_opcode
+    - cc.exceptional_block.v1.terminator_kind
+    - cc.exceptional_block.v1.membership_state
+  partition:
+    suggested_keys:
+    - cc.exceptional_block.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.exceptional_block.v1.compile_unit
+  coverage:
+    execution_domain: cc.exceptional_block.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.exceptional_successor.v1
+  name: cc.exceptional_successor
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.exceptional-successor/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: One original terminator successor occurrence; parallel normal and unwind edges remain separate.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::exceptional_successor
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.exceptional_successor.v1.successor
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.exceptional_successor.v1.successor
+      projection:
+      - cc.exceptional_successor.v1.compile_unit
+      - cc.exceptional_successor.v1.variant
+      - cc.exceptional_successor.v1.from_block
+      - cc.exceptional_successor.v1.terminator_instruction_ordinal
+      - cc.exceptional_successor.v1.ordinal
+      - cc.exceptional_successor.v1.profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.exceptional_successor.v1.successor
+    name: successor
+    type: typed_id<exceptional_successor_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.exceptional_successor.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.exceptional_successor.v1.variant
+    name: variant
+    type: typed_id<exceptional_exit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.exceptional_successor.v1.profile
+    name: profile
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.exceptional_successor.v1.from_block
+    name: from_block
+    type: typed_id<exceptional_block_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.exceptional_successor.v1.to_block
+    name: to_block
+    type: typed_id<exceptional_block_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.exceptional_successor.v1.terminator_instruction_ordinal
+    name: terminator_instruction_ordinal
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.exceptional_successor.v1.ordinal
+    name: ordinal
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.exceptional_successor.v1.kind
+    name: kind
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.exceptional_successor.v1.invoke
+    name: invoke
+    type: optional<typed_id<exceptional_exit_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.exceptional_successor.v1.membership_state
+    name: membership_state
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.exceptional_successor.v1.variant
+    target_relation: cc.exceptional_exit
+    target_columns:
+    - cc.exceptional_exit.v1.exit
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.exceptional_successor.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.exceptional_successor.v1.from_block
+    target_relation: cc.exceptional_block
+    target_columns:
+    - cc.exceptional_block.v1.block
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.exceptional_successor.v1.to_block
+    target_relation: cc.exceptional_block
+    target_columns:
+    - cc.exceptional_block.v1.block
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.exceptional_successor.v1.invoke
+    target_relation: cc.exceptional_exit
+    target_columns:
+    - cc.exceptional_exit.v1.exit
+    strength: soft_semantic
+    on_missing: unresolved
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.exceptional_successor.v1.compile_unit
+    - cc.exceptional_successor.v1.variant
+    - cc.exceptional_successor.v1.profile
+    - cc.exceptional_successor.v1.from_block
+    - cc.exceptional_successor.v1.to_block
+    - cc.exceptional_successor.v1.terminator_instruction_ordinal
+    - cc.exceptional_successor.v1.ordinal
+    - cc.exceptional_successor.v1.kind
+    - cc.exceptional_successor.v1.invoke
+    - cc.exceptional_successor.v1.membership_state
+  partition:
+    suggested_keys:
+    - cc.exceptional_successor.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.exceptional_successor.v1.compile_unit
+  coverage:
+    execution_domain: cc.exceptional_successor.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.cfg_element.v1
+  name: cc.cfg_element
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.cfg-element/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: Every element of the one original Clang CFG, with exact original statement and declaration bindings
+    when available.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::cfg_element
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.cfg_element.v1.element
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.cfg_element.v1.element
+      projection:
+      - cc.cfg_element.v1.compile_unit
+      - cc.cfg_element.v1.body
+      - cc.cfg_element.v1.node
+      - cc.cfg_element.v1.index
+      - cc.cfg_element.v1.profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.cfg_element.v1.element
+    name: element
+    type: typed_id<cfg_element_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.cfg_element.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.cfg_element.v1.body
+    name: body
+    type: typed_id<body_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.cfg_element.v1.function
+    name: function
+    type: typed_id<cc_entity_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.cfg_element.v1.node
+    name: node
+    type: typed_id<cfg_node_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.cfg_element.v1.index
+    name: index
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.cfg_element.v1.kind
+    name: kind
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.cfg_element.v1.profile
+    name: profile
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.cfg_element.v1.binding_state
+    name: binding_state
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.cfg_element.v1.expression
+    name: expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.cfg_element.v1.declaration
+    name: declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.cfg_element.v1.source
+    name: source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.cfg_element.v1.body
+    target_relation: cc.body
+    target_columns:
+    - cc.body.v1.body
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.cfg_element.v1.function
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.cfg_element.v1.node
+    target_relation: cc.cfg_node
+    target_columns:
+    - cc.cfg_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.cfg_element.v1.expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.cfg_element.v1.declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.cfg_element.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.cfg_element.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.cfg_element.v1.compile_unit
+    - cc.cfg_element.v1.body
+    - cc.cfg_element.v1.function
+    - cc.cfg_element.v1.node
+    - cc.cfg_element.v1.index
+    - cc.cfg_element.v1.kind
+    - cc.cfg_element.v1.profile
+    - cc.cfg_element.v1.binding_state
+    - cc.cfg_element.v1.expression
+    - cc.cfg_element.v1.declaration
+    - cc.cfg_element.v1.source
+  partition:
+    suggested_keys:
+    - cc.cfg_element.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.cfg_element.v1.compile_unit
+  coverage:
+    execution_domain: cc.cfg_element.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.move_event.v1
+  name: cc.move_event
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.move-event/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: One original constructor or assignment-call observation with actual selected special member and independently bound endpoints; never move invalidation.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::move_event
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.move_event.v1.event
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.move_event.v1.event
+      projection:
+      - cc.move_event.v1.compile_unit
+      - cc.move_event.v1.syntax
+      - cc.move_event.v1.profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.move_event.v1.event
+    name: event
+    type: typed_id<cc_move_event_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.move_event.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.move_event.v1.syntax
+    name: syntax
+    type: typed_id<syntax_node_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.move_event.v1.profile
+    name: profile
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.move_event.v1.kind
+    name: kind
+    type: open_symbol<cc.move-event-kind/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.move_event.v1.classification_state
+    name: classification_state
+    type: open_symbol<cc.original-input-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.move_event.v1.destination_state
+    name: destination_state
+    type: open_symbol<cc.original-input-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.move_event.v1.owner_declaration
+    name: owner_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.move_event.v1.source
+    name: source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.move_event.v1.selected_declaration
+    name: selected_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.move_event.v1.selected_entity
+    name: selected_entity
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.move_event.v1.source_actual
+    name: source_actual
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.move_event.v1.source_formal
+    name: source_formal
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.move_event.v1.destination_expression
+    name: destination_expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.move_event.v1.destination_declaration
+    name: destination_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.move_event.v1.is_elidable
+    name: is_elidable
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.move_event.v1.is_type_dependent
+    name: is_type_dependent
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.move_event.v1.is_value_dependent
+    name: is_value_dependent
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.move_event.v1.potentially_evaluated
+    name: potentially_evaluated
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.move_event.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.move_event.v1.syntax
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.move_event.v1.owner_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.move_event.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.move_event.v1.selected_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.move_event.v1.selected_entity
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.move_event.v1.source_actual
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.move_event.v1.source_formal
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.move_event.v1.destination_expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.move_event.v1.destination_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.move_event.v1.compile_unit
+    - cc.move_event.v1.syntax
+    - cc.move_event.v1.profile
+    - cc.move_event.v1.kind
+    - cc.move_event.v1.classification_state
+    - cc.move_event.v1.destination_state
+    - cc.move_event.v1.owner_declaration
+    - cc.move_event.v1.source
+    - cc.move_event.v1.selected_declaration
+    - cc.move_event.v1.selected_entity
+    - cc.move_event.v1.source_actual
+    - cc.move_event.v1.source_formal
+    - cc.move_event.v1.destination_expression
+    - cc.move_event.v1.destination_declaration
+    - cc.move_event.v1.is_elidable
+    - cc.move_event.v1.is_type_dependent
+    - cc.move_event.v1.is_value_dependent
+    - cc.move_event.v1.potentially_evaluated
+  partition:
+    suggested_keys:
+    - cc.move_event.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.move_event.v1.compile_unit
+  coverage:
+    execution_domain: cc.move_event.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.declaration_attribute.v1
+  name: cc.declaration_attribute
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.declaration-attribute/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: Actual declaration attribute carrier and ordered original argument occurrences; annotations remain lossless uninterpreted bytes.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::declaration_attribute
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.declaration_attribute.v1.attribute
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.declaration_attribute.v1.attribute
+      projection:
+      - cc.declaration_attribute.v1.compile_unit
+      - cc.declaration_attribute.v1.declaration
+      - cc.declaration_attribute.v1.attribute_ordinal
+      - cc.declaration_attribute.v1.argument_slot
+      - cc.declaration_attribute.v1.profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.declaration_attribute.v1.attribute
+    name: attribute
+    type: typed_id<cc_declaration_attribute_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.declaration_attribute.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.declaration
+    name: declaration
+    type: typed_id<cc_declaration_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.attribute_ordinal
+    name: attribute_ordinal
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.argument_slot
+    name: argument_slot
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.profile
+    name: profile
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.record_kind
+    name: record_kind
+    type: open_symbol<cc.attribute-record-kind/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.attribute_kind
+    name: attribute_kind
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.is_implicit
+    name: is_implicit
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.is_inherited
+    name: is_inherited
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.argument_count
+    name: argument_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.carrier_attribute
+    name: carrier_attribute
+    type: optional<typed_id<cc_declaration_attribute_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.source
+    name: source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.attribute_spelling
+    name: attribute_spelling
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.ownership_kind
+    name: ownership_kind
+    type: optional<open_symbol<cc.ownership-attribute-kind/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.ownership_module
+    name: ownership_module
+    type: optional<bytes>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.annotation_payload
+    name: annotation_payload
+    type: optional<bytes>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.argument_ordinal
+    name: argument_ordinal
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.argument_kind
+    name: argument_kind
+    type: optional<open_symbol<cc.attribute-argument-kind/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.source_parameter_index
+    name: source_parameter_index
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.ast_parameter_index
+    name: ast_parameter_index
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.is_implicit_this
+    name: is_implicit_this
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.formal_declaration
+    name: formal_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.argument_expression
+    name: argument_expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.argument_binding_state
+    name: argument_binding_state
+    type: optional<open_symbol<cc.original-input-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.argument_ids
+    name: argument_ids
+    type: optional<set<cc_declaration_attribute_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.declaration_attribute.v1.argument_state
+    name: argument_state
+    type: open_symbol<cc.original-input-state/1>
+    required: true
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.declaration_attribute.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.declaration_attribute.v1.declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.declaration_attribute.v1.carrier_attribute
+    target_relation: cc.declaration_attribute
+    target_columns:
+    - cc.declaration_attribute.v1.attribute
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.declaration_attribute.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.declaration_attribute.v1.formal_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.declaration_attribute.v1.argument_expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.declaration_attribute.v1.argument_ids
+    target_relation: cc.declaration_attribute
+    target_columns:
+    - cc.declaration_attribute.v1.attribute
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.declaration_attribute.v1.compile_unit
+    - cc.declaration_attribute.v1.declaration
+    - cc.declaration_attribute.v1.attribute_ordinal
+    - cc.declaration_attribute.v1.argument_slot
+    - cc.declaration_attribute.v1.profile
+    - cc.declaration_attribute.v1.record_kind
+    - cc.declaration_attribute.v1.attribute_kind
+    - cc.declaration_attribute.v1.is_implicit
+    - cc.declaration_attribute.v1.is_inherited
+    - cc.declaration_attribute.v1.argument_count
+    - cc.declaration_attribute.v1.carrier_attribute
+    - cc.declaration_attribute.v1.source
+    - cc.declaration_attribute.v1.attribute_spelling
+    - cc.declaration_attribute.v1.ownership_kind
+    - cc.declaration_attribute.v1.ownership_module
+    - cc.declaration_attribute.v1.annotation_payload
+    - cc.declaration_attribute.v1.argument_ordinal
+    - cc.declaration_attribute.v1.argument_kind
+    - cc.declaration_attribute.v1.source_parameter_index
+    - cc.declaration_attribute.v1.ast_parameter_index
+    - cc.declaration_attribute.v1.is_implicit_this
+    - cc.declaration_attribute.v1.formal_declaration
+    - cc.declaration_attribute.v1.argument_expression
+    - cc.declaration_attribute.v1.argument_binding_state
+    - cc.declaration_attribute.v1.argument_ids
+    - cc.declaration_attribute.v1.argument_state
+  partition:
+    suggested_keys:
+    - cc.declaration_attribute.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.declaration_attribute.v1.compile_unit
+  coverage:
+    execution_domain: cc.declaration_attribute.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.address_transfer.v1
+  name: cc.address_transfer
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.address-transfer/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: One original address/reference transfer endpoint with exact AST declaration or syntax carrier; no pointee, alias, escape or runtime-version inference.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::address_transfer
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.address_transfer.v1.transfer
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.address_transfer.v1.transfer
+      projection:
+      - cc.address_transfer.v1.compile_unit
+      - cc.address_transfer.v1.carrier_kind
+      - cc.address_transfer.v1.carrier_declaration
+      - cc.address_transfer.v1.carrier_syntax
+      - cc.address_transfer.v1.endpoint_ordinal
+      - cc.address_transfer.v1.profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.address_transfer.v1.transfer
+    name: transfer
+    type: typed_id<cc_address_transfer_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.address_transfer.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.carrier_kind
+    name: carrier_kind
+    type: open_symbol<cc.address-carrier-kind/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.endpoint_ordinal
+    name: endpoint_ordinal
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.profile
+    name: profile
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.kind
+    name: kind
+    type: open_symbol<cc.address-transfer-kind/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.context
+    name: context
+    type: open_symbol<cc.address-context/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.origin_state
+    name: origin_state
+    type: open_symbol<cc.original-input-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.destination_state
+    name: destination_state
+    type: open_symbol<cc.original-input-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.carrier_declaration
+    name: carrier_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.carrier_syntax
+    name: carrier_syntax
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.owner_declaration
+    name: owner_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.source
+    name: source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.source_expression
+    name: source_expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.origin_expression
+    name: origin_expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.origin_declaration
+    name: origin_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.destination_expression
+    name: destination_expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.destination_declaration
+    name: destination_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.referenced_declaration
+    name: referenced_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.source_type
+    name: source_type
+    type: optional<typed_id<cc_type_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.destination_type
+    name: destination_type
+    type: optional<typed_id<cc_type_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.storage_duration
+    name: storage_duration
+    type: optional<open_symbol<cc.storage-duration/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.linkage
+    name: linkage
+    type: optional<open_symbol<cc.linkage/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.capture_kind
+    name: capture_kind
+    type: optional<open_symbol<cc.lambda-capture-kind/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.address_transfer.v1.capture_implicit
+    name: capture_implicit
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.address_transfer.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.address_transfer.v1.carrier_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.address_transfer.v1.carrier_syntax
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.address_transfer.v1.owner_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.address_transfer.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.address_transfer.v1.source_expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.address_transfer.v1.origin_expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.address_transfer.v1.origin_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.address_transfer.v1.destination_expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.address_transfer.v1.destination_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.address_transfer.v1.referenced_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.address_transfer.v1.source_type
+    target_relation: cc.type
+    target_columns:
+    - cc.type.v1.type
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.address_transfer.v1.destination_type
+    target_relation: cc.type
+    target_columns:
+    - cc.type.v1.type
+    strength: soft_semantic
+    on_missing: unresolved
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.address_transfer.v1.compile_unit
+    - cc.address_transfer.v1.carrier_kind
+    - cc.address_transfer.v1.endpoint_ordinal
+    - cc.address_transfer.v1.profile
+    - cc.address_transfer.v1.kind
+    - cc.address_transfer.v1.context
+    - cc.address_transfer.v1.origin_state
+    - cc.address_transfer.v1.destination_state
+    - cc.address_transfer.v1.carrier_declaration
+    - cc.address_transfer.v1.carrier_syntax
+    - cc.address_transfer.v1.owner_declaration
+    - cc.address_transfer.v1.source
+    - cc.address_transfer.v1.source_expression
+    - cc.address_transfer.v1.origin_expression
+    - cc.address_transfer.v1.origin_declaration
+    - cc.address_transfer.v1.destination_expression
+    - cc.address_transfer.v1.destination_declaration
+    - cc.address_transfer.v1.referenced_declaration
+    - cc.address_transfer.v1.source_type
+    - cc.address_transfer.v1.destination_type
+    - cc.address_transfer.v1.storage_duration
+    - cc.address_transfer.v1.linkage
+    - cc.address_transfer.v1.capture_kind
+    - cc.address_transfer.v1.capture_implicit
+  partition:
+    suggested_keys:
+    - cc.address_transfer.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.address_transfer.v1.compile_unit
+  coverage:
+    execution_domain: cc.address_transfer.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
   evolution_policy: ng0.additive.v1

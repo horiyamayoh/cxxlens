@@ -323,6 +323,10 @@ def validate_generation_and_negatives(root: pathlib.Path, compiler: str) -> None
         temporary = pathlib.Path(directory)
         catalog = load_yaml(root / CATALOG)
         registry = load_yaml(root / "schemas/cxxlens_ng_relation_registry.yaml")
+        # Permuted registries use the same authority schema as their source.
+        (temporary / "cxxlens_ng_relation_registry.schema.yaml").write_bytes(
+            (root / "schemas/cxxlens_ng_relation_registry.schema.yaml").read_bytes()
+        )
         generated_relations = admitted_generated_relations(catalog, registry)
         generated_filenames: list[str] = []
         for relation, relative_header in generated_relations:

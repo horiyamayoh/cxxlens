@@ -22,28 +22,37 @@
 #include <cxxlens/relations/build_toolchain_context.hpp>
 #include <cxxlens/relations/build_variant.hpp>
 #include <cxxlens/relations/cc_abi_surface.hpp>
+#include <cxxlens/relations/cc_address_transfer.hpp>
 #include <cxxlens/relations/cc_body.hpp>
 #include <cxxlens/relations/cc_call_direct_target.hpp>
 #include <cxxlens/relations/cc_call_operand.hpp>
 #include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_cfg_edge.hpp>
+#include <cxxlens/relations/cc_cfg_element.hpp>
 #include <cxxlens/relations/cc_cfg_node.hpp>
 #include <cxxlens/relations/cc_constant_evaluated_call.hpp>
 #include <cxxlens/relations/cc_constant_evaluation_root.hpp>
 #include <cxxlens/relations/cc_constraint_node.hpp>
 #include <cxxlens/relations/cc_declaration.hpp>
+#include <cxxlens/relations/cc_declaration_attribute.hpp>
 #include <cxxlens/relations/cc_declaration_inventory.hpp>
 #include <cxxlens/relations/cc_entity.hpp>
 #include <cxxlens/relations/cc_entity_detail.hpp>
 #include <cxxlens/relations/cc_entity_edge.hpp>
+#include <cxxlens/relations/cc_exceptional_block.hpp>
 #include <cxxlens/relations/cc_exceptional_exit.hpp>
+#include <cxxlens/relations/cc_exceptional_successor.hpp>
 #include <cxxlens/relations/cc_flow_fact.hpp>
 #include <cxxlens/relations/cc_flow_inventory.hpp>
 #include <cxxlens/relations/cc_lambda_capture.hpp>
 #include <cxxlens/relations/cc_layout_fact.hpp>
+#include <cxxlens/relations/cc_move_event.hpp>
+#include <cxxlens/relations/cc_object_state_observation.hpp>
 #include <cxxlens/relations/cc_operation.hpp>
 #include <cxxlens/relations/cc_record_inventory.hpp>
 #include <cxxlens/relations/cc_record_surface.hpp>
+#include <cxxlens/relations/cc_sequence_context.hpp>
+#include <cxxlens/relations/cc_sequence_pair.hpp>
 #include <cxxlens/relations/cc_syntax_node.hpp>
 #include <cxxlens/relations/cc_target_resolution_slot.hpp>
 #include <cxxlens/relations/cc_template_candidate.hpp>
@@ -65,6 +74,7 @@
 #include <cxxlens/sdk/store.hpp>
 
 #include "observation_v2.hpp"
+#include "project_object_observer.hpp"
 #include "project_semantic_facts.hpp"
 #include "project_template_events.hpp"
 #include "project_template_observer.hpp"
@@ -898,6 +908,7 @@ namespace cxxlens::detail::clang22
 			project_template_event_observations template_events;
 			template_event_limits event_limits;
 			std::unique_ptr<project_template_event_scope> event_scope;
+			std::unique_ptr<object_semantics::project_object_observer> object_scope;
 			provider_worker_v4_output_normalizer_options normalization;
 			normalization.toolchain_context_id = toolchain_id;
 			normalization.capture_original_call_ids = true;
@@ -962,7 +973,8 @@ namespace cxxlens::detail::clang22
 															  original_calls,
 															  project_id,
 															  &templates,
-															  &template_events);
+															  &template_events,
+															  &object_scope->observations());
 					if (!detached)
 						return sdk::unexpected(std::move(detached.error()));
 					facts = std::move(*detached);
@@ -977,6 +989,7 @@ namespace cxxlens::detail::clang22
 				{
 					event_scope = std::make_unique<project_template_event_scope>(
 						sema, template_events, event_limits);
+					object_scope = std::make_unique<object_semantics::project_object_observer>();
 					install_project_template_observer(sema, templates, template_limits);
 				},
 				[&](clang::Sema& sema) -> sdk::result<void>
@@ -988,6 +1001,11 @@ namespace cxxlens::detail::clang22
 													  value.parser.fatal_error_count != 0U);
 					if (!frozen)
 						return sdk::unexpected(std::move(frozen.error()));
+					if (!object_scope)
+						return sdk::unexpected(
+							sdk::error{"native.object-input", "phase", "scope-not-installed"});
+					object_scope->freeze(value.parser.ast_completed,
+										 value.parser.fatal_error_count != 0U);
 					return observe_project_templates(sema, templates, template_limits);
 				}));
 			if (!observations || !normalized || !facts)
@@ -1123,6 +1141,16 @@ namespace cxxlens::detail::clang22
 										 &cc::relations::entity_detail::descriptor(),
 										 &cc::relations::entity_edge::descriptor(),
 										 &cc::relations::exceptional_exit::descriptor(),
+										 &cc::relations::sequence_context::descriptor(),
+										 &cc::relations::sequence_pair::descriptor(),
+										 &cc::relations::object_state_observation::descriptor(),
+										 &cc::relations::exceptional_block::descriptor(),
+										 &cc::relations::exceptional_successor::descriptor(),
+										 &cc::relations::cfg_element::descriptor(),
+										 &cc::relations::move_event::descriptor(),
+										 &cc::relations::declaration_attribute::descriptor(),
+										 &cc::relations::address_transfer::descriptor(),
+
 										 &cc::relations::syntax_node::descriptor(),
 										 &cc::relations::abi_surface::descriptor(),
 										 &cc::relations::body::descriptor(),

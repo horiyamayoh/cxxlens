@@ -544,8 +544,11 @@ void CodeGenFunction::EmitStartEHSpec(const Decl *D) {
     }
   } else if (Proto->canThrow() == CT_Cannot) {
     // noexcept functions are simple terminate scopes.
-    if (!getLangOpts().EHAsynch) // -EHa: HW exception still can occur
+    if (!getLangOpts().EHAsynch) { // -EHa: HW exception still can occur
       EHStack.pushTerminate();
+      cxxlens_eh_spec_scope(this, CurCodeDecl,
+          EHStack.getInnermostEHScope().cxxlensObservationDepth(), true);
+    }
   }
 }
 
@@ -625,6 +628,9 @@ void CodeGenFunction::EmitEndEHSpec(const Decl *D) {
   } else if (Proto->canThrow() == CT_Cannot &&
               /* possible empty when under async exceptions */
              !EHStack.empty()) {
+    if (!getLangOpts().EHAsynch)
+      cxxlens_eh_spec_scope(this, CurCodeDecl,
+          EHStack.getInnermostEHScope().cxxlensObservationDepth(), false);
     EHStack.popTerminate();
   }
 }

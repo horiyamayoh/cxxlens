@@ -62,6 +62,9 @@ namespace cxxlens::detail::clang22
 			bool generic{};
 			std::optional<cleanup_emission> cleanup;
 			std::optional<destructor_target> cleanup_target;
+			const clang::Decl* eh_boundary{};
+			std::optional<unsigned> eh_selected_kind;
+			bool direct_function_spec{};
 		};
 		struct original_carrier
 		{
@@ -90,6 +93,7 @@ namespace cxxlens::detail::clang22
 			std::vector<destructor_target_view> active_destructor_targets;
 			std::size_t cleanup_emissions{};
 			std::size_t admissions{}, emissions{};
+			std::optional<long long> function_spec_depth;
 		};
 		struct scope_binding
 		{
@@ -210,7 +214,10 @@ namespace cxxlens::detail::clang22
 					 false,
 					 current.active_cleanups.empty() ? std::optional<cleanup_emission>{}
 													 : current.active_cleanups.back(),
-					 {}});
+					 {},
+					 nullptr,
+					 {},
+					 false});
 				return &current.calls.back();
 			}
 			void begin(void* context, const clang::Decl* declaration, llvm::Function* function)
@@ -245,8 +252,16 @@ namespace cxxlens::detail::clang22
 								function->getName().size() + 128U))
 						return;
 					current.variant = scope.variants.size();
-					scope.variants.push_back(
-						{"function", std::string(function->getName()), 0U, {}, false, {}});
+					scope.variants.push_back({"function",
+											  std::string(function->getName()),
+											  0U,
+											  {},
+											  false,
+											  {},
+											  {},
+											  {},
+											  false,
+											  false});
 				}
 				if (retain(sizeof(original_frame) + 256U))
 					frames.emplace(context, std::move(current));
@@ -271,7 +286,9 @@ namespace cxxlens::detail::clang22
 				}
 				if (current.owner != declaration || current.function != function ||
 					!current.expressions.empty() || !current.builtins.empty() ||
-					!current.active_cleanups.empty() || !current.active_destructor_targets.empty())
+					!current.active_cleanups.empty() ||
+					!current.active_destructor_targets.empty() ||
+					current.function_spec_depth.has_value())
 				{
 					fail("native.exceptional-exit-invalid",
 						 "lowering",
@@ -281,6 +298,71 @@ namespace cxxlens::detail::clang22
 				auto& scope = output.scopes[current.scope];
 				auto& variant = scope.variants[current.variant];
 				bool complete = current.admissions == current.emissions;
+				// Final original LLVM membership is independent of optional AST bindings.
+				std::map<const llvm::BasicBlock*, std::uint64_t> original_blocks;
+				std::uint64_t original_ordinal{};
+				for (const auto& block : *function)
+				{
+					if (!retain(sizeof(decltype(original_blocks)::value_type) + 128U))
+						return;
+					original_blocks.emplace(&block, original_ordinal++);
+				}
+				variant.topology_observed = true;
+				variant.topology_complete = !function->empty();
+				for (const auto& block : *function)
+				{
+					if (members >= limits.maximum_occurrences)
+					{
+						fail(
+							"native.exceptional-exit-budget", "topology-members", "limit-exceeded");
+						return;
+					}
+					if (!retain(sizeof(exceptional_original_block) * 2U + 256U))
+						return;
+					++members;
+					exceptional_original_block observed;
+					observed.ordinal = original_blocks.at(&block);
+					observed.instruction_count = block.size();
+					observed.is_entry = &block == &function->getEntryBlock();
+					const auto* terminator = block.getTerminator();
+					if (!terminator)
+						variant.topology_complete = false;
+					else
+					{
+						observed.terminator_opcode = terminator->getOpcode();
+						observed.terminator_kind = terminator->getOpcodeName();
+						for (unsigned successor{}; successor < terminator->getNumSuccessors();
+							 ++successor)
+						{
+							const auto target =
+								original_blocks.find(terminator->getSuccessor(successor));
+							if (!work() || target == original_blocks.end())
+							{
+								variant.topology_complete = false;
+								continue;
+							}
+							if (members >= limits.maximum_occurrences)
+							{
+								fail("native.exceptional-exit-budget",
+									 "topology-members",
+									 "limit-exceeded");
+								return;
+							}
+							if (!retain(sizeof(exceptional_original_successor) * 2U + 128U))
+								return;
+							++members;
+							const bool invoke = llvm::isa<llvm::InvokeInst>(terminator);
+							variant.successors.push_back(
+								{observed.ordinal,
+								 target->second,
+								 observed.instruction_count - 1U,
+								 successor,
+								 invoke ? (successor == 0U ? "normal" : "unwind") : "ordinary",
+								 invoke});
+						}
+					}
+					variant.blocks.push_back(std::move(observed));
+				}
 				for (std::size_t i{}; i < bindings[current.scope].throws.size(); ++i)
 				{
 					const auto* expression = bindings[current.scope].throws[i];
@@ -356,6 +438,29 @@ namespace cxxlens::detail::clang22
 							}
 							else
 							{
+								if (bound->eh_selected_kind)
+								{
+									value.eh_boundary_observed = true;
+									static constexpr std::string_view kinds[] = {
+										"cleanup", "catch", "terminate", "filter", "none"};
+									value.eh_selected_scope_kind =
+										kinds[std::min(*bound->eh_selected_kind, 4U)];
+									value.eh_disposition = bound->direct_function_spec
+										? "direct_function_spec_termination"
+										: *bound->eh_selected_kind == 1U ? "catch_dispatch"
+										: *bound->eh_selected_kind == 0U ? "cleanup_dispatch"
+										: *bound->eh_selected_kind == 2U ? "other_termination"
+										: *bound->eh_selected_kind == 3U ? "filter_dispatch"
+																		 : "unknown";
+									if (bound->eh_boundary && compiler_bindings.declaration)
+									{
+										const auto key =
+											compiler_bindings.declaration(bound->eh_boundary);
+										if (!retain(key.size() + 512U))
+											return;
+										value.eh_boundary_declaration = key;
+									}
+								}
 								value.emitter_methods = bound->methods | (bound->generic ? 1U : 0U);
 								if (bound->cleanup)
 								{
@@ -727,6 +832,72 @@ namespace cxxlens::detail::clang22
 
 #if defined(CXXLENS_HAS_CLANG22) && CXXLENS_HAS_CLANG22
 using namespace cxxlens::detail::clang22;
+extern "C" void cxxlens_eh_spec_scope(void* context,
+									  const clang::Decl* declaration,
+									  long long depth,
+									  bool begin) noexcept
+{
+	callback(
+		[&](recorder& value)
+		{
+			auto* current = value.frame(context);
+			if (!current)
+				return;
+			if (current->owner != declaration || depth < 0 ||
+				(begin ? current->function_spec_depth.has_value()
+					   : current->function_spec_depth != depth))
+			{
+				value.fail("native.exceptional-exit-invalid",
+						   "EH-boundary",
+						   "unmatched-function-specification");
+				return;
+			}
+			if (begin)
+				current->function_spec_depth = depth;
+			else
+				current->function_spec_depth.reset();
+		});
+}
+extern "C" void cxxlens_eh_invoke_boundary(void* context,
+										   const clang::Decl* declaration,
+										   llvm::CallBase* instruction,
+										   llvm::BasicBlock* unwind,
+										   long long depth,
+										   unsigned selected_kind) noexcept
+{
+	callback(
+		[&](recorder& value)
+		{
+			auto* current = value.frame(context);
+			if (!current)
+				return;
+			const auto* invoke = llvm::dyn_cast_or_null<llvm::InvokeInst>(instruction);
+			if (current->owner != declaration || !invoke ||
+				invoke->getFunction() != current->function || invoke->getUnwindDest() != unwind ||
+				selected_kind > 4U)
+			{
+				value.fail("native.exceptional-exit-invalid",
+						   "EH-boundary",
+						   "original-invoke-correspondence");
+				return;
+			}
+			if (auto* call = value.call(*current, instruction))
+			{
+				if (call->eh_selected_kind)
+				{
+					value.fail("native.exceptional-exit-invalid",
+							   "EH-boundary",
+							   "duplicate-invoke-selection");
+					return;
+				}
+				call->eh_selected_kind = selected_kind;
+				call->direct_function_spec = selected_kind == 2U && current->function_spec_depth &&
+					*current->function_spec_depth == depth;
+				if (call->direct_function_spec)
+					call->eh_boundary = declaration;
+			}
+		});
+}
 extern "C" void cxxlens_eh_function(void* context,
 									const clang::Decl* declaration,
 									llvm::Function* function,

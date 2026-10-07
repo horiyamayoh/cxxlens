@@ -72,6 +72,8 @@
 #include <limits>
 #include <optional>
 
+#include "object_interpreter_hooks.hpp"
+
 #define DEBUG_TYPE "exprconstant"
 
 using namespace clang;
@@ -1785,6 +1787,17 @@ static void ObserveOriginalIntrinsicInvocation(EvalInfo &Info,
     unsigned Kind, const LValue *Object) {
   ObserveOriginalInvocation(Info, Callee, Expression, Range, Kind, Object,
       Info.CurrentCall ? Info.CurrentCall->Callee : nullptr);
+}
+
+// Preserve only real legacy constant-interpreter states from original
+// compilation. Speculative/potential and bytecode evaluations are separate
+// domains. The recorder additionally freezes before extractor callbacks.
+static void ObserveOriginalObjectState(EvalInfo &Info,
+    const cxxlens_object_semantics_hook::interpreter_access_view &View) {
+  if (!Info.InConstantContext || Info.checkingPotentialConstantExpression() ||
+      Info.SpeculativeEvaluationDepth || Info.EnableNewConstInterp)
+    return;
+  cxxlens_object_semantics_hook::interpreter_access(Info.Ctx, &Info, View);
 }
 
   struct MemberPtr {
@@ -4292,7 +4305,8 @@ static QualType getSubobjectType(QualType ObjType, QualType SubobjType,
 template <typename SubobjectHandler>
 static typename SubobjectHandler::result_type
 findSubobject(EvalInfo &Info, const Expr *E, const CompleteObject &Obj,
-              const SubobjectDesignator &Sub, SubobjectHandler &handler) {
+              const SubobjectDesignator &Sub, SubobjectHandler &handler,
+              bool OriginalDynamicUse = false) {
   if (Sub.Invalid)
     // A diagnostic will have already been produced.
     return handler.failed();
@@ -4318,6 +4332,22 @@ findSubobject(EvalInfo &Info, const Expr *E, const CompleteObject &Obj,
     if ((O->isAbsent() && !(handler.AccessKind == AK_Construct && I == N)) ||
         (O->isIndeterminate() &&
          !isValidIndeterminateAccess(handler.AccessKind))) {
+      // Preserve the compiler's absent-subobject branch. APValue absence can
+      // also denote storage before or after failed initialization, so this
+      // observation alone does not assert an ended lifetime or invalid vptr.
+      if (O->isAbsent() && !ObjType->isNullPtrType() &&
+          Info.isEvaluatingCtorDtor(Obj.Base,
+              llvm::ArrayRef(Sub.Entries).take_front(I)) == ConstructionPhase::None &&
+          (isFormalAccess(handler.AccessKind) || handler.AccessKind == AK_MemberCall ||
+           (OriginalDynamicUse && (handler.AccessKind == AK_TypeId ||
+                                      handler.AccessKind == AK_DynamicCast)))) {
+        ObserveOriginalObjectState(Info, {
+          cxxlens_object_semantics_hook::interpreter_kind::absent_subobject,
+          E, Info.CurrentCall ? Info.CurrentCall->Callee : nullptr, Obj.Base,
+          Obj.Type, ObjType, {}, llvm::ArrayRef(Sub.Entries).take_front(I),
+          static_cast<unsigned>(handler.AccessKind), nullptr, nullptr,
+          OriginalDynamicUse});
+      }
       // Object has ended lifetime.
       // If I is non-zero, some subobject (member or array element) of a
       // complete object has ended its lifetime, so this is valid for
@@ -4500,6 +4530,15 @@ findSubobject(EvalInfo &Info, const Expr *E, const CompleteObject &Obj,
             // active union member rather than reporting the prior active union
             // member. We'll need to fix nullptr_t to not use APValue() as its
             // representation first.
+            if (handler.AccessKind == AK_Read ||
+                handler.AccessKind == AK_ReadObjectRepresentation) {
+              ObserveOriginalObjectState(Info, {
+                cxxlens_object_semantics_hook::interpreter_kind::inactive_union_member,
+                E, Info.CurrentCall ? Info.CurrentCall->Callee : nullptr, Obj.Base,
+                Obj.Type, ObjType, {}, llvm::ArrayRef(Sub.Entries).take_front(I + 1),
+                static_cast<unsigned>(handler.AccessKind), UnionField, Field,
+                OriginalDynamicUse});
+            }
             Info.FFDiag(E, diag::note_constexpr_access_inactive_union_member)
                 << handler.AccessKind << Field << !UnionField << UnionField;
             return handler.failed();
@@ -4678,7 +4717,8 @@ static bool AreElementsOfSameArray(QualType ObjType,
 /// Find the complete object to which an LValue refers.
 static CompleteObject findCompleteObject(EvalInfo &Info, const Expr *E,
                                          AccessKinds AK, const LValue &LVal,
-                                         QualType LValType) {
+                                         QualType LValType,
+                                         bool OriginalDynamicUse = false) {
   if (LVal.InvalidBase) {
     Info.FFDiag(E);
     return CompleteObject();
@@ -4698,6 +4738,13 @@ static CompleteObject findCompleteObject(EvalInfo &Info, const Expr *E,
     std::tie(Frame, Depth) =
         Info.getCallFrameAndDepth(LVal.getLValueCallIndex());
     if (!Frame) {
+      if (isFormalAccess(AK) || AK == AK_MemberCall ||
+          (OriginalDynamicUse && (AK == AK_TypeId || AK == AK_DynamicCast)))
+        ObserveOriginalObjectState(Info, {
+          cxxlens_object_semantics_hook::interpreter_kind::ended_call_frame,
+          E, Info.CurrentCall ? Info.CurrentCall->Callee : nullptr, LVal.Base,
+          getType(LVal.Base), LValType, {}, LVal.Designator.Entries,
+          static_cast<unsigned>(AK), nullptr, nullptr, OriginalDynamicUse});
       Info.FFDiag(E, diag::note_constexpr_lifetime_ended, 1)
         << AK << LVal.Base.is<const ValueDecl*>();
       NoteLValueLocation(Info, LVal.Base);
@@ -4877,6 +4924,13 @@ static CompleteObject findCompleteObject(EvalInfo &Info, const Expr *E,
   } else if (DynamicAllocLValue DA = LVal.Base.dyn_cast<DynamicAllocLValue>()) {
     std::optional<DynAlloc *> Alloc = Info.lookupDynamicAlloc(DA);
     if (!Alloc) {
+      if (isFormalAccess(AK) || AK == AK_MemberCall ||
+          (OriginalDynamicUse && (AK == AK_TypeId || AK == AK_DynamicCast)))
+        ObserveOriginalObjectState(Info, {
+          cxxlens_object_semantics_hook::interpreter_kind::deleted_allocation,
+          E, Info.CurrentCall ? Info.CurrentCall->Callee : nullptr, LVal.Base,
+          LVal.Base.getDynamicAllocType(), LValType, {}, LVal.Designator.Entries,
+          static_cast<unsigned>(AK), nullptr, nullptr, OriginalDynamicUse});
       Info.FFDiag(E, diag::note_constexpr_access_deleted_object) << AK;
       return CompleteObject();
     }
@@ -5547,6 +5601,13 @@ static bool HandleBaseToDerivedCast(EvalInfo &Info, const CastExpr *E,
     TargetQT = PT->getPointeeType();
 
   auto InvalidCast = [&]() {
+    if (!Info.checkingPotentialConstantExpression() &&
+        !Result.AllowConstexprUnknown)
+      ObserveOriginalObjectState(Info, {
+        cxxlens_object_semantics_hook::interpreter_kind::incompatible_static_downcast,
+        E, Info.CurrentCall ? Info.CurrentCall->Callee : nullptr, Result.Base,
+        getType(Result.Base), D.MostDerivedType, TargetQT, D.Entries,
+        static_cast<unsigned>(AK_Dereference), nullptr, nullptr, false});
     if (!Info.checkingPotentialConstantExpression() ||
         !Result.AllowConstexprUnknown) {
       Info.CCEDiag(E, diag::note_constexpr_invalid_downcast)
@@ -6550,11 +6611,12 @@ struct CheckDynamicTypeHandler {
 /// Check that we can access the notional vptr of an object / determine its
 /// dynamic type.
 static bool checkDynamicType(EvalInfo &Info, const Expr *E, const LValue &This,
-                             AccessKinds AK, bool Polymorphic) {
+                             AccessKinds AK, bool Polymorphic,
+                             bool OriginalDynamicUse = false) {
   if (This.Designator.Invalid)
     return false;
 
-  CompleteObject Obj = findCompleteObject(Info, E, AK, This, QualType());
+  CompleteObject Obj = findCompleteObject(Info, E, AK, This, QualType(), OriginalDynamicUse);
 
   if (!Obj)
     return false;
@@ -6588,7 +6650,7 @@ static bool checkDynamicType(EvalInfo &Info, const Expr *E, const LValue &This,
   }
 
   CheckDynamicTypeHandler Handler{AK};
-  return Obj && findSubobject(Info, E, Obj, This.Designator, Handler);
+  return Obj && findSubobject(Info, E, Obj, This.Designator, Handler, OriginalDynamicUse);
 }
 
 /// Check that the pointee of the 'this' pointer in a member function call is
@@ -6627,7 +6689,7 @@ static std::optional<DynamicType> ComputeDynamicType(EvalInfo &Info,
   // meaningful dynamic type. (We consider objects of non-class type to have no
   // dynamic type.)
   if (!checkDynamicType(Info, E, This, AK,
-                        AK != AK_TypeId || This.AllowConstexprUnknown))
+                        AK != AK_TypeId || This.AllowConstexprUnknown, true))
     return std::nullopt;
 
   if (This.Designator.Invalid)
@@ -6672,6 +6734,11 @@ static std::optional<DynamicType> ComputeDynamicType(EvalInfo &Info,
     }
   }
 
+  ObserveOriginalObjectState(Info, {
+    cxxlens_object_semantics_hook::interpreter_kind::before_dynamic_construction,
+    E, Info.CurrentCall ? Info.CurrentCall->Callee : nullptr, This.Base,
+    getType(This.Base), This.Designator.MostDerivedType, {}, Path,
+    static_cast<unsigned>(AK), nullptr, nullptr, true});
   // CWG issue 1517: we're constructing a base class of the object described by
   // 'This', so that object has not yet begun its period of construction and
   // any polymorphic operation on it results in undefined behavior.
@@ -22025,3 +22092,8 @@ std::optional<bool> EvaluateBuiltinIsWithinLifetime(IntExprEvaluator &IEE,
 } // namespace
 
 namespace cxxlens_constexpr_hook { unsigned legacy_routes() { return 0x7fU; } }
+
+// Modified by cxxlens: Actual original evaluator access-state routes; runtime closure remains separate.
+namespace cxxlens_object_semantics_hook {
+std::uint32_t interpreter_routes() noexcept { return 0x3fU; }
+} // namespace cxxlens_object_semantics_hook

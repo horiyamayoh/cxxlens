@@ -20,12 +20,12 @@ namespace cxxlens::cc::relations
 				sdk::relation_descriptor output;
 				output.id = "cc.cfg_edge.v1";
 				output.name = "cc.cfg_edge";
-				output.version = {1U, 0U, 0U};
+				output.version = {1U, 1U, 0U};
 				output.semantic_major = 1U;
 				output.semantics = "cc.cfg_edge/1";
 				output.owner_namespace = "cxxlens.standard.cc";
-				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.cfg_edge.v1.compile_unit","cc.cfg_edge.v1.function","cc.cfg_edge.v1.from","cc.cfg_edge.v1.to","cc.cfg_edge.v1.kind","cc.cfg_edge.v1.ordinal"],"result_column":"cc.cfg_edge.v1.edge"},"interpretation_required":true,"key":["cc.cfg_edge.v1.edge"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.cfg_edge.v1.edge","identity_role":"claim_key","name":"edge","required":true,"type":"typed_id<cfg_edge_id>"},{"id":"cc.cfg_edge.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.cfg_edge.v1.function","identity_role":"authoritative_payload","name":"function","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.cfg_edge.v1.from","identity_role":"authoritative_payload","name":"from","required":true,"type":"typed_id<cfg_node_id>"},{"id":"cc.cfg_edge.v1.to","identity_role":"authoritative_payload","name":"to","required":false,"type":"optional<typed_id<cfg_node_id>>"},{"id":"cc.cfg_edge.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<cc.cfg-edge-kind/1>"},{"id":"cc.cfg_edge.v1.ordinal","identity_role":"authoritative_payload","name":"ordinal","required":true,"type":"uint64"},{"id":"cc.cfg_edge.v1.condition","identity_role":"authoritative_payload","name":"condition","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.cfg_edge.v1.condition_state","identity_role":"authoritative_payload","name":"condition_state","required":false,"type":"optional<open_symbol<cc.flow-binding-state/1>>"},{"id":"cc.cfg_edge.v1.condition_profile","identity_role":"authoritative_payload","name":"condition_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.cfg_edge.v1.outcome","identity_role":"authoritative_payload","name":"outcome","required":false,"type":"optional<open_symbol<cc.cfg-edge-outcome/1>>"},{"id":"cc.cfg_edge.v1.outcome_state","identity_role":"authoritative_payload","name":"outcome_state","required":false,"type":"optional<open_symbol<cc.flow-binding-state/1>>"},{"id":"cc.cfg_edge.v1.outcome_profile","identity_role":"authoritative_payload","name":"outcome_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.cfg_edge.v1.outcome_expression","identity_role":"authoritative_payload","name":"outcome_expression","required":false,"type":"optional<typed_id<syntax_node_id>>"}],"coverage":{"execution_domain":"cc.cfg_edge.compile-unit"},"descriptor_id":"cc.cfg_edge.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::cfg_edge","indexes":[["cc.cfg_edge.v1.function"],["cc.cfg_edge.v1.from"],["cc.cfg_edge.v1.to"]],"merge":{"conflict_columns":["cc.cfg_edge.v1.compile_unit","cc.cfg_edge.v1.condition","cc.cfg_edge.v1.condition_profile","cc.cfg_edge.v1.condition_state","cc.cfg_edge.v1.from","cc.cfg_edge.v1.function","cc.cfg_edge.v1.kind","cc.cfg_edge.v1.ordinal","cc.cfg_edge.v1.outcome","cc.cfg_edge.v1.outcome_expression","cc.cfg_edge.v1.outcome_profile","cc.cfg_edge.v1.outcome_state","cc.cfg_edge.v1.to"],"mode":"functional_assertion"},"name":"cc.cfg_edge","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.cfg_edge.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"on_missing":"reject_batch","source_columns":["cc.cfg_edge.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"unresolved","source_columns":["cc.cfg_edge.v1.condition"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"reject_batch","source_columns":["cc.cfg_edge.v1.from"],"strength":"hard","target_columns":["cc.cfg_node.v1.node"],"target_relation":"cc.cfg_node"},{"on_missing":"unresolved","source_columns":["cc.cfg_edge.v1.function"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.cfg_edge.v1.outcome_expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.cfg_edge.v1.to"],"strength":"soft_semantic","target_columns":["cc.cfg_node.v1.node"],"target_relation":"cc.cfg_node"}],"row_constraints":{"all_or_none":[["cc.cfg_edge.v1.condition_profile","cc.cfg_edge.v1.condition_state"],["cc.cfg_edge.v1.outcome","cc.cfg_edge.v1.outcome_profile","cc.cfg_edge.v1.outcome_state"]]},"semantic_major":1,"semantics":"cc.cfg_edge/1","stability":"versioned","summary":"CFG successor edge; absent targets are explicit frontier, never a fabricated exit.","version":"1.0.0"})cxxlens";
-				output.contract_digest = "sha256:651a246697f73d57de93946896e4fe65f57f935b7820fc4d24653fd69970baca";
+				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.cfg_edge.v1.compile_unit","cc.cfg_edge.v1.function","cc.cfg_edge.v1.from","cc.cfg_edge.v1.to","cc.cfg_edge.v1.kind","cc.cfg_edge.v1.ordinal"],"result_column":"cc.cfg_edge.v1.edge"},"interpretation_required":true,"key":["cc.cfg_edge.v1.edge"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.cfg_edge.v1.edge","identity_role":"claim_key","name":"edge","required":true,"type":"typed_id<cfg_edge_id>"},{"id":"cc.cfg_edge.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.cfg_edge.v1.function","identity_role":"authoritative_payload","name":"function","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.cfg_edge.v1.from","identity_role":"authoritative_payload","name":"from","required":true,"type":"typed_id<cfg_node_id>"},{"id":"cc.cfg_edge.v1.to","identity_role":"authoritative_payload","name":"to","required":false,"type":"optional<typed_id<cfg_node_id>>"},{"id":"cc.cfg_edge.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<cc.cfg-edge-kind/1>"},{"id":"cc.cfg_edge.v1.ordinal","identity_role":"authoritative_payload","name":"ordinal","required":true,"type":"uint64"},{"id":"cc.cfg_edge.v1.condition","identity_role":"authoritative_payload","name":"condition","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.cfg_edge.v1.condition_state","identity_role":"authoritative_payload","name":"condition_state","required":false,"type":"optional<open_symbol<cc.flow-binding-state/1>>"},{"id":"cc.cfg_edge.v1.condition_profile","identity_role":"authoritative_payload","name":"condition_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.cfg_edge.v1.outcome","identity_role":"authoritative_payload","name":"outcome","required":false,"type":"optional<open_symbol<cc.cfg-edge-outcome/1>>"},{"id":"cc.cfg_edge.v1.outcome_state","identity_role":"authoritative_payload","name":"outcome_state","required":false,"type":"optional<open_symbol<cc.flow-binding-state/1>>"},{"id":"cc.cfg_edge.v1.outcome_profile","identity_role":"authoritative_payload","name":"outcome_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.cfg_edge.v1.outcome_expression","identity_role":"authoritative_payload","name":"outcome_expression","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.cfg_edge.v1.function_exit_kind","identity_role":"authoritative_payload","name":"function_exit_kind","required":false,"type":"optional<utf8_string>"},{"id":"cc.cfg_edge.v1.function_exit_state","identity_role":"authoritative_payload","name":"function_exit_state","required":false,"type":"optional<utf8_string>"},{"id":"cc.cfg_edge.v1.function_exit_profile","identity_role":"authoritative_payload","name":"function_exit_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.cfg_edge.v1.function_exit_declaration","identity_role":"authoritative_payload","name":"function_exit_declaration","required":false,"type":"optional<typed_id<cc_declaration_id>>"}],"coverage":{"execution_domain":"cc.cfg_edge.compile-unit"},"descriptor_id":"cc.cfg_edge.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::cfg_edge","indexes":[["cc.cfg_edge.v1.function"],["cc.cfg_edge.v1.from"],["cc.cfg_edge.v1.to"]],"merge":{"conflict_columns":["cc.cfg_edge.v1.compile_unit","cc.cfg_edge.v1.condition","cc.cfg_edge.v1.condition_profile","cc.cfg_edge.v1.condition_state","cc.cfg_edge.v1.from","cc.cfg_edge.v1.function","cc.cfg_edge.v1.function_exit_declaration","cc.cfg_edge.v1.function_exit_kind","cc.cfg_edge.v1.function_exit_profile","cc.cfg_edge.v1.function_exit_state","cc.cfg_edge.v1.kind","cc.cfg_edge.v1.ordinal","cc.cfg_edge.v1.outcome","cc.cfg_edge.v1.outcome_expression","cc.cfg_edge.v1.outcome_profile","cc.cfg_edge.v1.outcome_state","cc.cfg_edge.v1.to"],"mode":"functional_assertion"},"name":"cc.cfg_edge","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.cfg_edge.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"on_missing":"reject_batch","source_columns":["cc.cfg_edge.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"unresolved","source_columns":["cc.cfg_edge.v1.condition"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"reject_batch","source_columns":["cc.cfg_edge.v1.from"],"strength":"hard","target_columns":["cc.cfg_node.v1.node"],"target_relation":"cc.cfg_node"},{"on_missing":"unresolved","source_columns":["cc.cfg_edge.v1.function"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.cfg_edge.v1.function_exit_declaration"],"strength":"soft_semantic","target_columns":["cc.declaration.v1.declaration"],"target_relation":"cc.declaration"},{"on_missing":"unresolved","source_columns":["cc.cfg_edge.v1.outcome_expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.cfg_edge.v1.to"],"strength":"soft_semantic","target_columns":["cc.cfg_node.v1.node"],"target_relation":"cc.cfg_node"}],"row_constraints":{"all_or_none":[["cc.cfg_edge.v1.condition_profile","cc.cfg_edge.v1.condition_state"],["cc.cfg_edge.v1.outcome","cc.cfg_edge.v1.outcome_profile","cc.cfg_edge.v1.outcome_state"]]},"semantic_major":1,"semantics":"cc.cfg_edge/1","stability":"versioned","summary":"CFG successor edge; absent targets are explicit frontier, never a fabricated exit.","version":"1.1.0"})cxxlens";
+				output.contract_digest = "sha256:5fb2f84ad0441a0377cb5659a6050a77ea0276b4609c12ca66bde4c3ebe6d5aa";
 				output.columns = {
 					{"cc.cfg_edge.v1.edge", "edge", {sdk::scalar_kind::typed_id, "cfg_edge_id", false}, true, sdk::column_role::claim_key},
 					{"cc.cfg_edge.v1.compile_unit", "compile_unit", {sdk::scalar_kind::typed_id, "compile_unit_id", false}, true, sdk::column_role::authoritative_payload},
@@ -41,6 +41,10 @@ namespace cxxlens::cc::relations
 					{"cc.cfg_edge.v1.outcome_state", "outcome_state", {sdk::scalar_kind::open_symbol, "cc.flow-binding-state/1", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.cfg_edge.v1.outcome_profile", "outcome_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.cfg_edge.v1.outcome_expression", "outcome_expression", {sdk::scalar_kind::typed_id, "syntax_node_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.cfg_edge.v1.function_exit_kind", "function_exit_kind", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.cfg_edge.v1.function_exit_state", "function_exit_state", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.cfg_edge.v1.function_exit_profile", "function_exit_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.cfg_edge.v1.function_exit_declaration", "function_exit_declaration", {sdk::scalar_kind::typed_id, "cc_declaration_id", true}, false, sdk::column_role::authoritative_payload},
 				};
 				output.domain_identity.result_column = "cc.cfg_edge.v1.edge";
 				output.domain_identity.projection = {
@@ -60,6 +64,7 @@ namespace cxxlens::cc::relations
 					{{"cc.cfg_edge.v1.condition"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
 					{{"cc.cfg_edge.v1.from"}, "cc.cfg_node", {"cc.cfg_node.v1.node"}, sdk::reference_strength::hard},
 					{{"cc.cfg_edge.v1.function"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic},
+					{{"cc.cfg_edge.v1.function_exit_declaration"}, "cc.declaration", {"cc.declaration.v1.declaration"}, sdk::reference_strength::soft_semantic},
 					{{"cc.cfg_edge.v1.outcome_expression"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
 					{{"cc.cfg_edge.v1.to"}, "cc.cfg_node", {"cc.cfg_node.v1.node"}, sdk::reference_strength::soft_semantic},
 				};
@@ -71,6 +76,10 @@ namespace cxxlens::cc::relations
 					"cc.cfg_edge.v1.condition_state",
 					"cc.cfg_edge.v1.from",
 					"cc.cfg_edge.v1.function",
+					"cc.cfg_edge.v1.function_exit_declaration",
+					"cc.cfg_edge.v1.function_exit_kind",
+					"cc.cfg_edge.v1.function_exit_profile",
+					"cc.cfg_edge.v1.function_exit_state",
 					"cc.cfg_edge.v1.kind",
 					"cc.cfg_edge.v1.ordinal",
 					"cc.cfg_edge.v1.outcome",
@@ -212,6 +221,42 @@ namespace cxxlens::cc::relations
 			[[nodiscard]] static sdk::column_ref ref()
 			{
 				return {cfg_edge::descriptor().id, "cc.cfg_edge.v1.outcome_expression", {sdk::scalar_kind::typed_id, "syntax_node_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.cfg_edge.v1.function_exit_kind`. */
+		struct function_exit_kind
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {cfg_edge::descriptor().id, "cc.cfg_edge.v1.function_exit_kind", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.cfg_edge.v1.function_exit_state`. */
+		struct function_exit_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {cfg_edge::descriptor().id, "cc.cfg_edge.v1.function_exit_state", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.cfg_edge.v1.function_exit_profile`. */
+		struct function_exit_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {cfg_edge::descriptor().id, "cc.cfg_edge.v1.function_exit_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.cfg_edge.v1.function_exit_declaration`. */
+		struct function_exit_declaration
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {cfg_edge::descriptor().id, "cc.cfg_edge.v1.function_exit_declaration", {sdk::scalar_kind::typed_id, "cc_declaration_id", true}};
 			}
 		};
 	};

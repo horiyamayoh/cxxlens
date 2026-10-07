@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.91.0
+document_version: 1.93.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -44,6 +44,8 @@ packages:
       - include/cxxlens/sdk/function_compiler_facets.hpp
       - include/cxxlens/sdk/exceptional_exits.hpp
       - include/cxxlens/sdk/exception_cleanup_facets.hpp
+      - include/cxxlens/sdk/exceptional_routes.hpp
+      - include/cxxlens/sdk/object_semantics.hpp
       - include/cxxlens/sdk/target_resolution.hpp
       - include/cxxlens/sdk/preprocessor.hpp
       - include/cxxlens/sdk/build_health.hpp
@@ -171,7 +173,7 @@ entries:
     status: implemented
     profile: NG0
     target: cxxlens::sdk
-    headers: [include/cxxlens/relations/build_analysis_inventory.hpp, include/cxxlens/relations/cc_operation.hpp, include/cxxlens/relations/source_preprocessor_inventory.hpp, include/cxxlens/relations/build_compile_unit_analysis.hpp, include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_call_operand.hpp, include/cxxlens/relations/cc_declaration.hpp, include/cxxlens/relations/cc_declaration_inventory.hpp, include/cxxlens/relations/cc_target_resolution_slot.hpp, include/cxxlens/relations/cc_template_subject.hpp, include/cxxlens/relations/cc_constraint_node.hpp, include/cxxlens/relations/cc_template_candidate.hpp, include/cxxlens/relations/cc_constant_evaluation_root.hpp, include/cxxlens/relations/cc_constant_evaluated_call.hpp, include/cxxlens/relations/cc_lambda_capture.hpp, include/cxxlens/relations/cc_template_instantiation_frame.hpp, include/cxxlens/relations/cc_template_inventory.hpp, include/cxxlens/relations/cc_flow_inventory.hpp, include/cxxlens/relations/source_comment.hpp, include/cxxlens/relations/source_comment_inventory.hpp, include/cxxlens/relations/source_include_inventory.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_type_component.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/core_claim_conflict.hpp, include/cxxlens/relations/core_differential_disagreement.hpp, include/cxxlens/relations/core_provider_execution.hpp, include/cxxlens/relations/core_unresolved.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_origin.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/relations/cc_entity_detail.hpp, include/cxxlens/relations/cc_entity_edge.hpp, include/cxxlens/relations/cc_exceptional_exit.hpp, include/cxxlens/relations/cc_syntax_node.hpp, include/cxxlens/relations/cc_body.hpp, include/cxxlens/relations/cc_cfg_node.hpp, include/cxxlens/relations/cc_cfg_edge.hpp, include/cxxlens/relations/cc_flow_fact.hpp, include/cxxlens/relations/cc_layout_fact.hpp, include/cxxlens/relations/cc_abi_surface.hpp, include/cxxlens/relations/cc_record_surface.hpp, include/cxxlens/relations/cc_record_inventory.hpp, include/cxxlens/relations/source_include.hpp, include/cxxlens/relations/source_preprocessor_event.hpp, include/cxxlens/relations/source_token.hpp, include/cxxlens/relations/source_token_inventory.hpp, include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
+    headers: [include/cxxlens/relations/build_analysis_inventory.hpp, include/cxxlens/relations/cc_operation.hpp, include/cxxlens/relations/source_preprocessor_inventory.hpp, include/cxxlens/relations/build_compile_unit_analysis.hpp, include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_call_operand.hpp, include/cxxlens/relations/cc_declaration.hpp, include/cxxlens/relations/cc_declaration_inventory.hpp, include/cxxlens/relations/cc_target_resolution_slot.hpp, include/cxxlens/relations/cc_template_subject.hpp, include/cxxlens/relations/cc_constraint_node.hpp, include/cxxlens/relations/cc_template_candidate.hpp, include/cxxlens/relations/cc_constant_evaluation_root.hpp, include/cxxlens/relations/cc_constant_evaluated_call.hpp, include/cxxlens/relations/cc_lambda_capture.hpp, include/cxxlens/relations/cc_template_instantiation_frame.hpp, include/cxxlens/relations/cc_template_inventory.hpp, include/cxxlens/relations/cc_flow_inventory.hpp, include/cxxlens/relations/source_comment.hpp, include/cxxlens/relations/source_comment_inventory.hpp, include/cxxlens/relations/source_include_inventory.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_type_component.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/core_claim_conflict.hpp, include/cxxlens/relations/core_differential_disagreement.hpp, include/cxxlens/relations/core_provider_execution.hpp, include/cxxlens/relations/core_unresolved.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_origin.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/relations/cc_entity_detail.hpp, include/cxxlens/relations/cc_entity_edge.hpp, include/cxxlens/relations/cc_exceptional_exit.hpp, include/cxxlens/relations/cc_exceptional_block.hpp, include/cxxlens/relations/cc_exceptional_successor.hpp, include/cxxlens/relations/cc_cfg_element.hpp, include/cxxlens/relations/cc_move_event.hpp, include/cxxlens/relations/cc_declaration_attribute.hpp, include/cxxlens/relations/cc_address_transfer.hpp, include/cxxlens/relations/cc_sequence_context.hpp, include/cxxlens/relations/cc_sequence_pair.hpp, include/cxxlens/relations/cc_object_state_observation.hpp, include/cxxlens/relations/cc_syntax_node.hpp, include/cxxlens/relations/cc_body.hpp, include/cxxlens/relations/cc_cfg_node.hpp, include/cxxlens/relations/cc_cfg_edge.hpp, include/cxxlens/relations/cc_flow_fact.hpp, include/cxxlens/relations/cc_layout_fact.hpp, include/cxxlens/relations/cc_abi_surface.hpp, include/cxxlens/relations/cc_record_surface.hpp, include/cxxlens/relations/cc_record_inventory.hpp, include/cxxlens/relations/source_include.hpp, include/cxxlens/relations/source_preprocessor_event.hpp, include/cxxlens/relations/source_token.hpp, include/cxxlens/relations/source_token_inventory.hpp, include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
     symbols:
       - name: query.from
         kind: template
@@ -821,6 +823,136 @@ entries:
       - bounds-before-retention-active-cancellation-and-measured-successful-usage
     depends_on: [public.finite-populations, public.projection-resource-usage]
 
+  - id: public.exceptional-routes
+    status: implemented
+    profile: NG1
+    target: cxxlens::query
+    headers: [include/cxxlens/sdk/exceptional_routes.hpp]
+    symbols:
+      - name: query.exceptional_route_input
+        kind: value
+        signature: 'units; files; spans; entities; details; bodies; syntax_nodes; declarations; inventories; exits; blocks; successors; compile_units_complete; scope_inputs_complete; occurrence_inputs_complete; topology_inputs_complete; declaration_inputs_complete'
+      - name: query.observed_exceptional_block
+        kind: value
+        signature: 'block; variant; compile_unit; profile; membership_state; universe; semantic_variant; interpretation; ordinal; instruction_count; is_entry; terminator_opcode; terminator_kind; identity_state; variant_state; state; evidence; gaps'
+      - name: query.observed_exceptional_successor
+        kind: value
+        signature: 'successor; variant; compile_unit; profile; membership_state; universe; semantic_variant; interpretation; from_block; to_block; kind; invoke; terminator_instruction_ordinal; ordinal; identity_state; variant_state; from_state; to_state; invoke_state; state; evidence; gaps'
+      - name: query.observed_invoke_exceptional_boundary
+        kind: value
+        signature: 'exit; variant; compile_unit; lowered_block; normal_successor; unwind_successor; universe; semantic_variant; interpretation; block_ordinal; instruction_ordinal; is_invoke; boundary_declaration; selected_scope_kind; disposition; boundary_profile; boundary_observation_state; exception_spec_kind; exception_spec_profile; exception_spec_nonthrowing; identity_state; placement_state; successors_state; boundary_state; boundary_declaration_state; exception_spec_state; evidence; gaps'
+      - name: query.exceptional_route_variant
+        kind: value
+        signature: 'carrier; kind; symbol; index; detail; function; compile_unit; body; definition_source; universe; variant; interpretation; profile; entry; block_count; successor_count; block_ids; successor_ids; carrier_state; scope_state; source_state; enumeration_state; entry_state; topology_state; blocks; successors; invokes; evidence; gaps'
+      - name: query.exceptional_route_projection
+        kind: value
+        signature: 'evidence; blocks; successors; invokes; variants; compile_units_complete; scope_inputs_complete; occurrence_inputs_complete; topology_inputs_complete; declaration_inputs_complete; unresolved; source_queries'
+      - name: query.project_exceptional_routes
+        kind: function
+        signature: 'result<exceptional_route_projection> project_exceptional_routes(exceptional_route_input, finite_population_limits = {}, stop_token = {}); result<exceptional_route_projection> project_exceptional_routes(const application_query_results&, finite_population_limits = {}, stop_token = {}); result<exceptional_route_projection> project_exceptional_routes(exceptional_route_input, finite_population_limits, stop_token, projection_resource_usage&); result<exceptional_route_projection> project_exceptional_routes(const application_query_results&, finite_population_limits, stop_token, projection_resource_usage&)'
+    errors: [sdk.exceptional-route-input-invalid, sdk.exceptional-route-budget, sdk.exceptional-route-cancelled, sdk.exceptional-route-resource-exhausted]
+    lifetime: [borrowed-input-only-during-call, projection-owns-original-evidence-and-query-side-channels, no-compiler-pointer]
+    threading: [independent-calls-share-no-mutable-state]
+    versioning: [sdk.project-exceptional-routes/1]
+    invariants:
+      - original-entry-all-block-and-all-successor-census-is-atomic-per-lowering-variant
+      - zero-based-original-llvm-ordinals-never-map-to-ast-cfg-positions
+      - parallel-successor-occurrences-retained
+      - actual-invoke-normal-and-unwind-successor-fks-and-terminator-placement
+      - direct-function-spec-termination-independent-of-catch-cleanup-and-secondary-termination
+      - boundary-declaration-binds-exact-original-physical-or-named-unit-membership
+      - partial-physical-census-proves-positive-membership-without-closing-census
+      - topology-enumeration-source-target-placement-and-specification-axes-independent
+      - no-path-search-runtime-escape-resource-version-or-cleanup-sequence-claim
+      - missing-saved-optional-topology-remains-unknown
+      - bounds-before-retention-active-cancellation-and-measured-successful-usage
+    depends_on: [public.finite-populations, public.projection-resource-usage]
+
+  - id: public.object-semantics
+    status: implemented
+    profile: NG1
+    target: cxxlens::query
+    headers: [include/cxxlens/sdk/object_semantics.hpp]
+    symbols:
+      - name: query.original_integer_interval
+        kind: value
+        signature: 'lower; upper'
+      - name: query.original_function_exit
+        kind: value
+        signature: 'return_kind; exit_kind; edge; from; to; body; is_main; is_coroutine; coroutine_has_return_void; exit_state'
+      - name: query.original_sequence_pair
+        kind: value
+        signature: 'left_expression; right_expression; left_source; right_source; storage_declaration; storage_entity; sequencing; language; left_modifies; right_modifies; scalar_nonreference_storage; jointly_potentially_evaluated; left_contexts; right_contexts; storage_state; sequencing_state; context_state'
+      - name: query.original_sequence_pair.argument_context
+        kind: value
+        signature: 'invocation; argument_expression; argument_index; indeterminately_sequenced; operator<=>'
+      - name: query.original_union_access
+        kind: value
+        signature: 'storage; selected_field; active_member_state; active_field; actual_read; common_initial_sequence_permitted; active_state'
+      - name: query.original_downcast
+        kind: value
+        signature: 'kind; storage; dynamic_type; target_type; nonnull; target_is_compatible_dynamic_subobject; dynamic_state'
+      - name: query.original_lifetime_access
+        kind: value
+        signature: 'storage; phase; actual_access; permitted_in_phase; phase_state'
+      - name: query.original_type_access
+        kind: value
+        signature: 'storage; effective_type; access_type; actual_value_access; language_type_access_permitted; effective_type_state'
+      - name: query.original_dynamic_object_access
+        kind: value
+        signature: 'storage; actual_virtual_or_dynamic_type_access; valid_dynamic_object; dynamic_state'
+      - name: query.original_bool_representation
+        kind: value
+        signature: 'kind; operand; operand_type; result_type; canonical_bool; original_representation; representation_state'
+      - name: query.original_enum_value
+        kind: value
+        signature: 'operand; operand_type; result_type; fixed_underlying; compiler_value_domain; original_value; enumeration_state'
+      - name: query.original_object_fact
+        kind: value
+        signature: 'variant<original_function_exit, original_sequence_pair, original_union_access, original_downcast, original_lifetime_access, original_type_access, original_dynamic_object_access, original_bool_representation, original_enum_value>'
+      - name: query.original_object_observation
+        kind: value
+        signature: 'is_system; observation; kind; profile; compile_unit; function; declaration; body; source_span; expression; universe; variant; interpretation; fact; source_state; owner_state; membership_state; evidence; gaps'
+      - name: query.original_object_event_population
+        kind: value
+        signature: 'compile_unit; universe; variant; interpretation; stream; profile; member_count; member_ids; enumeration_state; evidence; gaps'
+      - name: query.object_semantics_projection
+        kind: value
+        signature: 'evidence; observations; populations; unresolved; source_queries'
+      - name: query.object_semantics_input
+        kind: value
+        signature: 'compile_units; files; spans; entities; details; declarations; bodies; cfg_nodes; cfg_edges; types; syntax_nodes; sequence_contexts; sequence_pairs; object_states; declaration_inventories; evaluation_roots; source_inputs_complete; owner_inputs_complete; body_inputs_complete; cfg_inputs_complete; type_inputs_complete; syntax_inputs_complete; sequence_inputs_complete; object_state_inputs_complete; inventory_inputs_complete; evaluation_inputs_complete'
+      - name: query.compiler_object_path_step
+        kind: value
+        signature: 'kind{array,complex,vector,field,base}; category; index; virtual_base; member_usr; operator=='
+      - name: query.decode_compiler_object_path
+        kind: function
+        signature: 'result<vector<compiler_object_path_step>> decode_compiler_object_path(span<const byte>, finite_population_limits = {}, stop_token = {})'
+      - name: query.encode_compiler_object_path
+        kind: function
+        signature: 'result<vector<byte>> encode_compiler_object_path(span<const compiler_object_path_step>, finite_population_limits = {}, stop_token = {})'
+      - name: query.project_object_semantics
+        kind: function
+        signature: 'result<object_semantics_projection> project_object_semantics(object_semantics_input, finite_population_limits = {}, stop_token = {}); result<object_semantics_projection> project_object_semantics(const application_query_results&, finite_population_limits = {}, stop_token = {}); result<object_semantics_projection> project_object_semantics(object_semantics_input, finite_population_limits, stop_token, projection_resource_usage&); result<object_semantics_projection> project_object_semantics(const application_query_results&, finite_population_limits, stop_token, projection_resource_usage&)'
+    errors: [sdk.object-input-invalid, sdk.object-budget, sdk.object-cancelled, sdk.object-resource-exhausted]
+    lifetime: [borrowed-input-only-during-call, projection-owns-original-evidence-and-query-side-channels, no-compiler-pointer]
+    threading: [independent-calls-share-no-mutable-state]
+    versioning: [sdk.project-object-semantics/1, cxxlens-object-path/1]
+    invariants:
+      - original-pointwise-facts-never-consumer-rule-verdicts
+      - exact-physical-definition-and-original-unit-world-bindings
+      - sequence-checker-candidate-stream-never-complete-runtime-effect-domain
+      - original-argument-context-preserves-language-sequencing-independent-of-checker-regions
+      - declaration-type-independent-from-current-object-state
+      - absent-apvalue-never-implies-ended-lifetime
+      - integral-to-bool-conversion-never-invalid-bool-representation
+      - constant-evaluation-restriction-never-runtime-type-access-proof
+      - original-storage-path-is-lossless-ordered-and-distinguishes-absent-from-empty
+      - enumeration-source-owner-type-and-pointwise-state-axes-independent
+      - generic-soft-reference-frontiers-never-erase-independent-atomic-census
+      - bounds-before-retention-active-cancellation-and-measured-successful-usage
+    depends_on: [public.finite-populations, public.projection-resource-usage]
+
   - id: public.template-events
     status: implemented
     profile: NG1
@@ -954,7 +1086,7 @@ entries:
     lifetime: [borrowed-input-only-during-call, projection-owns-conditioned-original-evidence-and-queries, no-compiler-pointer]
     threading: [independent-calls-share-no-mutable-state]
     versioning: [finite-populations-v1-preserve-original-relation-identities]
-    invariants: [independent-admission-before-identity-failure, exact-world-unit-source-profile, known-empty-distinct-from-unavailable, typed-original-flow-use-and-definition-bindings, physical-lines-explicit-crlf-lf-cr-policy, source-comments-are-raw-lexical-observations, include-enumeration-independent-of-resolution, finite-enumeration-never-upgrades-analysis-guarantee, conflicts-never-first-wins, original-query-side-channels-retained, bounds-before-retention-and-cancellation]
+    invariants: [independent-admission-before-identity-failure, exact-world-unit-source-profile, source-populations-require-original-unit-source-association, known-empty-distinct-from-unavailable, typed-original-flow-use-and-definition-bindings, physical-lines-explicit-crlf-lf-cr-policy, source-comments-are-raw-lexical-observations, include-enumeration-independent-of-resolution, finite-enumeration-never-upgrades-analysis-guarantee, conflicts-never-first-wins, original-query-side-channels-retained, bounds-before-retention-and-cancellation]
     depends_on: [public.query-runtime]
 
   - id: public.abi-surfaces

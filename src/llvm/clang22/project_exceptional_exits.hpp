@@ -56,7 +56,22 @@ namespace cxxlens::detail::clang22
 		std::optional<std::uint64_t> block_ordinal, instruction_ordinal, successor_ordinal;
 		std::optional<bool> is_invoke, does_not_throw, does_not_return;
 		std::optional<unsigned> intrinsic_id, compiler_route, emitter_methods;
+		std::string eh_boundary_declaration, eh_selected_scope_kind, eh_disposition;
+		bool eh_boundary_observed{};
 		bool binding_complete{true};
+	};
+	struct exceptional_original_block
+	{
+		std::uint64_t ordinal{}, instruction_count{};
+		bool is_entry{};
+		std::optional<unsigned> terminator_opcode;
+		std::string terminator_kind;
+	};
+	struct exceptional_original_successor
+	{
+		std::uint64_t from{}, to{}, terminator_instruction_ordinal{}, ordinal{};
+		std::string kind;
+		bool invoke{};
 	};
 	struct exceptional_lowering_variant
 	{
@@ -65,6 +80,9 @@ namespace cxxlens::detail::clang22
 		std::vector<exceptional_occurrence> occurrences;
 		bool complete{};
 		std::string reason;
+		std::vector<exceptional_original_block> blocks;
+		std::vector<exceptional_original_successor> successors;
+		bool topology_observed{}, topology_complete{};
 	};
 	struct exceptional_physical_scope
 	{

@@ -125,11 +125,23 @@ def type_expr(value: str) -> str:
     )
 
 
+def validate_column_identity(relation: dict[str, object]) -> None:
+    """Reject ambiguous row columns before writing any generated source."""
+    columns = relation["columns"]
+    identifiers = [str(column["id"]) for column in columns]
+    names = [str(column["name"]) for column in columns]
+    if len(identifiers) != len(set(identifiers)) or len(names) != len(set(names)):
+        raise ValueError(
+            f"relation has duplicate column IDs or names: {relation['name']}"
+        )
+
+
 def render(relation: dict[str, object]) -> str:
     if relation.get("cpp_projection") == "dynamic-only":
         raise ValueError(
             f"dynamic-only relation has no generated C++ tag: {relation['name']}"
         )
+    validate_column_identity(relation)
     relation = canonical_relation(relation)
     qualified_value = relation.get("generated_cpp_tag")
     if not isinstance(qualified_value, str):
@@ -313,6 +325,8 @@ def load_registry(registry_path: pathlib.Path) -> dict[str, object]:
     ]
     if len(names) != len(set(names)) or len(tags) != len(set(tags)):
         raise ValueError("relation registry contains duplicate names or C++ tags")
+    for relation in relations:
+        validate_column_identity(relation)
     return document
 
 

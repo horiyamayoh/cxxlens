@@ -20,12 +20,12 @@ namespace cxxlens::cc::relations
 				sdk::relation_descriptor output;
 				output.id = "cc.syntax_node.v1";
 				output.name = "cc.syntax_node";
-				output.version = {1U, 0U, 0U};
+				output.version = {1U, 2U, 0U};
 				output.semantic_major = 1U;
 				output.semantics = "cc.syntax_node/1";
 				output.owner_namespace = "cxxlens.standard.cc";
-				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.syntax_node.v1.compile_unit","cc.syntax_node.v1.function","cc.syntax_node.v1.source","cc.syntax_node.v1.kind","cc.syntax_node.v1.ordinal"],"result_column":"cc.syntax_node.v1.node"},"interpretation_required":true,"key":["cc.syntax_node.v1.node"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.syntax_node.v1.node","identity_role":"claim_key","name":"node","required":true,"type":"typed_id<syntax_node_id>"},{"id":"cc.syntax_node.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.syntax_node.v1.function","identity_role":"authoritative_payload","name":"function","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.syntax_node.v1.source","identity_role":"authoritative_payload","name":"source","required":true,"type":"typed_id<source_span_id>"},{"id":"cc.syntax_node.v1.parent","identity_role":"authoritative_payload","name":"parent","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<cc.syntax-kind/1>"},{"id":"cc.syntax_node.v1.opcode","identity_role":"authoritative_payload","name":"opcode","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.type","identity_role":"authoritative_payload","name":"type","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.value","identity_role":"authoritative_payload","name":"value","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.ordinal","identity_role":"authoritative_payload","name":"ordinal","required":true,"type":"uint64"},{"id":"cc.syntax_node.v1.flags","identity_role":"authoritative_payload","name":"flags","required":true,"type":"set<open_symbol<cc.syntax-flag/1>>"},{"id":"cc.syntax_node.v1.operand","identity_role":"authoritative_payload","name":"operand","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.cast_kind","identity_role":"authoritative_payload","name":"cast_kind","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.integer_value","identity_role":"authoritative_payload","name":"integer_value","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.integer_bit_width","identity_role":"authoritative_payload","name":"integer_bit_width","required":false,"type":"optional<uint64>"},{"id":"cc.syntax_node.v1.integer_signed","identity_role":"authoritative_payload","name":"integer_signed","required":false,"type":"optional<bool>"},{"id":"cc.syntax_node.v1.constant_null","identity_role":"authoritative_payload","name":"constant_null","required":false,"type":"optional<bool>"},{"id":"cc.syntax_node.v1.literal_context","identity_role":"authoritative_payload","name":"literal_context","required":false,"type":"optional<open_symbol<cc.literal-context/1>>"},{"id":"cc.syntax_node.v1.literal_context_state","identity_role":"authoritative_payload","name":"literal_context_state","required":false,"type":"optional<open_symbol<cc.identifier-state/1>>"},{"id":"cc.syntax_node.v1.literal_context_profile","identity_role":"authoritative_payload","name":"literal_context_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.literal_declaration","identity_role":"authoritative_payload","name":"literal_declaration","required":false,"type":"optional<typed_id<cc_declaration_id>>"},{"id":"cc.syntax_node.v1.canonical_type","identity_role":"authoritative_payload","name":"canonical_type","required":false,"type":"optional<typed_id<cc_type_id>>"},{"id":"cc.syntax_node.v1.operand_type","identity_role":"authoritative_payload","name":"operand_type","required":false,"type":"optional<typed_id<cc_type_id>>"},{"id":"cc.syntax_node.v1.conversion_state","identity_role":"authoritative_payload","name":"conversion_state","required":false,"type":"optional<open_symbol<cc.flow-binding-state/1>>"},{"id":"cc.syntax_node.v1.conversion_profile","identity_role":"authoritative_payload","name":"conversion_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.value_preservation","identity_role":"authoritative_payload","name":"value_preservation","required":false,"type":"optional<open_symbol<cc.conversion-value-preservation/1>>"},{"id":"cc.syntax_node.v1.left_operand","identity_role":"authoritative_payload","name":"left_operand","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.right_operand","identity_role":"authoritative_payload","name":"right_operand","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.base_expression","identity_role":"authoritative_payload","name":"base_expression","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.index_expression","identity_role":"authoritative_payload","name":"index_expression","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.child_count","identity_role":"authoritative_payload","name":"child_count","required":false,"type":"optional<uint64>"},{"id":"cc.syntax_node.v1.child_ids","identity_role":"authoritative_payload","name":"child_ids","required":false,"type":"optional<set<syntax_node_id>>"},{"id":"cc.syntax_node.v1.child_state","identity_role":"authoritative_payload","name":"child_state","required":false,"type":"optional<open_symbol<cc.literal-enumeration-state/1>>"},{"id":"cc.syntax_node.v1.child_profile","identity_role":"authoritative_payload","name":"child_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.literal_value_bytes","identity_role":"authoritative_payload","name":"literal_value_bytes","required":false,"type":"optional<bytes>"},{"id":"cc.syntax_node.v1.literal_value_profile","identity_role":"authoritative_payload","name":"literal_value_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.literal_value_state","identity_role":"authoritative_payload","name":"literal_value_state","required":false,"type":"optional<open_symbol<cc.syntax-observation-state/1>>"},{"id":"cc.syntax_node.v1.literal_encoding","identity_role":"authoritative_payload","name":"literal_encoding","required":false,"type":"optional<open_symbol<cc.string-literal-encoding/1>>"},{"id":"cc.syntax_node.v1.literal_element_width_bits","identity_role":"authoritative_payload","name":"literal_element_width_bits","required":false,"type":"optional<uint64>"}],"coverage":{"execution_domain":"cc.syntax_node.compile-unit"},"descriptor_id":"cc.syntax_node.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::syntax_node","indexes":[["cc.syntax_node.v1.function"],["cc.syntax_node.v1.source"],["cc.syntax_node.v1.kind"]],"merge":{"conflict_columns":["cc.syntax_node.v1.base_expression","cc.syntax_node.v1.canonical_type","cc.syntax_node.v1.cast_kind","cc.syntax_node.v1.child_count","cc.syntax_node.v1.child_ids","cc.syntax_node.v1.child_profile","cc.syntax_node.v1.child_state","cc.syntax_node.v1.compile_unit","cc.syntax_node.v1.constant_null","cc.syntax_node.v1.conversion_profile","cc.syntax_node.v1.conversion_state","cc.syntax_node.v1.flags","cc.syntax_node.v1.function","cc.syntax_node.v1.index_expression","cc.syntax_node.v1.integer_bit_width","cc.syntax_node.v1.integer_signed","cc.syntax_node.v1.integer_value","cc.syntax_node.v1.kind","cc.syntax_node.v1.left_operand","cc.syntax_node.v1.literal_context","cc.syntax_node.v1.literal_context_profile","cc.syntax_node.v1.literal_context_state","cc.syntax_node.v1.literal_declaration","cc.syntax_node.v1.literal_element_width_bits","cc.syntax_node.v1.literal_encoding","cc.syntax_node.v1.literal_value_bytes","cc.syntax_node.v1.literal_value_profile","cc.syntax_node.v1.literal_value_state","cc.syntax_node.v1.opcode","cc.syntax_node.v1.operand","cc.syntax_node.v1.operand_type","cc.syntax_node.v1.ordinal","cc.syntax_node.v1.parent","cc.syntax_node.v1.right_operand","cc.syntax_node.v1.source","cc.syntax_node.v1.type","cc.syntax_node.v1.value","cc.syntax_node.v1.value_preservation"],"mode":"functional_assertion"},"name":"cc.syntax_node","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.syntax_node.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.base_expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.canonical_type"],"strength":"soft_semantic","target_columns":["cc.type.v1.type"],"target_relation":"cc.type"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.child_ids"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"reject_batch","source_columns":["cc.syntax_node.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.function"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.index_expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.left_operand"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.literal_declaration"],"strength":"soft_semantic","target_columns":["cc.declaration.v1.declaration"],"target_relation":"cc.declaration"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.operand"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.operand_type"],"strength":"soft_semantic","target_columns":["cc.type.v1.type"],"target_relation":"cc.type"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.right_operand"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"reject_batch","source_columns":["cc.syntax_node.v1.source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"}],"row_constraints":{"all_or_none":[["cc.syntax_node.v1.child_count","cc.syntax_node.v1.child_ids","cc.syntax_node.v1.child_profile","cc.syntax_node.v1.child_state"],["cc.syntax_node.v1.conversion_profile","cc.syntax_node.v1.conversion_state","cc.syntax_node.v1.value_preservation"],["cc.syntax_node.v1.literal_context","cc.syntax_node.v1.literal_context_profile","cc.syntax_node.v1.literal_context_state"]]},"semantic_major":1,"semantics":"cc.syntax_node/1","stability":"versioned","summary":"Detached source-bound syntax node; ordinal follows deterministic structural traversal within a body.","version":"1.0.0"})cxxlens";
-				output.contract_digest = "sha256:0690d2edf6dcb3bec08203b816adfd842f54d9fb7128f80a68f1285e9443e4ff";
+				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.syntax_node.v1.compile_unit","cc.syntax_node.v1.function","cc.syntax_node.v1.source","cc.syntax_node.v1.kind","cc.syntax_node.v1.ordinal"],"result_column":"cc.syntax_node.v1.node"},"interpretation_required":true,"key":["cc.syntax_node.v1.node"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.syntax_node.v1.node","identity_role":"claim_key","name":"node","required":true,"type":"typed_id<syntax_node_id>"},{"id":"cc.syntax_node.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.syntax_node.v1.function","identity_role":"authoritative_payload","name":"function","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.syntax_node.v1.source","identity_role":"authoritative_payload","name":"source","required":true,"type":"typed_id<source_span_id>"},{"id":"cc.syntax_node.v1.parent","identity_role":"authoritative_payload","name":"parent","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.kind","identity_role":"authoritative_payload","name":"kind","required":true,"type":"open_symbol<cc.syntax-kind/1>"},{"id":"cc.syntax_node.v1.opcode","identity_role":"authoritative_payload","name":"opcode","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.type","identity_role":"authoritative_payload","name":"type","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.value","identity_role":"authoritative_payload","name":"value","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.ordinal","identity_role":"authoritative_payload","name":"ordinal","required":true,"type":"uint64"},{"id":"cc.syntax_node.v1.flags","identity_role":"authoritative_payload","name":"flags","required":true,"type":"set<open_symbol<cc.syntax-flag/1>>"},{"id":"cc.syntax_node.v1.operand","identity_role":"authoritative_payload","name":"operand","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.cast_kind","identity_role":"authoritative_payload","name":"cast_kind","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.integer_value","identity_role":"authoritative_payload","name":"integer_value","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.integer_bit_width","identity_role":"authoritative_payload","name":"integer_bit_width","required":false,"type":"optional<uint64>"},{"id":"cc.syntax_node.v1.integer_signed","identity_role":"authoritative_payload","name":"integer_signed","required":false,"type":"optional<bool>"},{"id":"cc.syntax_node.v1.constant_null","identity_role":"authoritative_payload","name":"constant_null","required":false,"type":"optional<bool>"},{"id":"cc.syntax_node.v1.literal_context","identity_role":"authoritative_payload","name":"literal_context","required":false,"type":"optional<open_symbol<cc.literal-context/1>>"},{"id":"cc.syntax_node.v1.literal_context_state","identity_role":"authoritative_payload","name":"literal_context_state","required":false,"type":"optional<open_symbol<cc.identifier-state/1>>"},{"id":"cc.syntax_node.v1.literal_context_profile","identity_role":"authoritative_payload","name":"literal_context_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.literal_declaration","identity_role":"authoritative_payload","name":"literal_declaration","required":false,"type":"optional<typed_id<cc_declaration_id>>"},{"id":"cc.syntax_node.v1.canonical_type","identity_role":"authoritative_payload","name":"canonical_type","required":false,"type":"optional<typed_id<cc_type_id>>"},{"id":"cc.syntax_node.v1.operand_type","identity_role":"authoritative_payload","name":"operand_type","required":false,"type":"optional<typed_id<cc_type_id>>"},{"id":"cc.syntax_node.v1.conversion_state","identity_role":"authoritative_payload","name":"conversion_state","required":false,"type":"optional<open_symbol<cc.flow-binding-state/1>>"},{"id":"cc.syntax_node.v1.conversion_profile","identity_role":"authoritative_payload","name":"conversion_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.value_preservation","identity_role":"authoritative_payload","name":"value_preservation","required":false,"type":"optional<open_symbol<cc.conversion-value-preservation/1>>"},{"id":"cc.syntax_node.v1.left_operand","identity_role":"authoritative_payload","name":"left_operand","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.right_operand","identity_role":"authoritative_payload","name":"right_operand","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.base_expression","identity_role":"authoritative_payload","name":"base_expression","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.index_expression","identity_role":"authoritative_payload","name":"index_expression","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.child_count","identity_role":"authoritative_payload","name":"child_count","required":false,"type":"optional<uint64>"},{"id":"cc.syntax_node.v1.child_ids","identity_role":"authoritative_payload","name":"child_ids","required":false,"type":"optional<set<syntax_node_id>>"},{"id":"cc.syntax_node.v1.child_state","identity_role":"authoritative_payload","name":"child_state","required":false,"type":"optional<open_symbol<cc.literal-enumeration-state/1>>"},{"id":"cc.syntax_node.v1.child_profile","identity_role":"authoritative_payload","name":"child_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.literal_value_bytes","identity_role":"authoritative_payload","name":"literal_value_bytes","required":false,"type":"optional<bytes>"},{"id":"cc.syntax_node.v1.literal_value_profile","identity_role":"authoritative_payload","name":"literal_value_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.literal_value_state","identity_role":"authoritative_payload","name":"literal_value_state","required":false,"type":"optional<open_symbol<cc.syntax-observation-state/1>>"},{"id":"cc.syntax_node.v1.literal_encoding","identity_role":"authoritative_payload","name":"literal_encoding","required":false,"type":"optional<open_symbol<cc.string-literal-encoding/1>>"},{"id":"cc.syntax_node.v1.literal_element_width_bits","identity_role":"authoritative_payload","name":"literal_element_width_bits","required":false,"type":"optional<uint64>"},{"id":"cc.syntax_node.v1.object_fact_kind","identity_role":"authoritative_payload","name":"object_fact_kind","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.object_fact_profile","identity_role":"authoritative_payload","name":"object_fact_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.original_value_lower","identity_role":"authoritative_payload","name":"original_value_lower","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.original_value_upper","identity_role":"authoritative_payload","name":"original_value_upper","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.representation_state","identity_role":"authoritative_payload","name":"representation_state","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.type_access_permission","identity_role":"authoritative_payload","name":"type_access_permission","required":false,"type":"optional<bool>"},{"id":"cc.syntax_node.v1.current_object_profile","identity_role":"authoritative_payload","name":"current_object_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.current_object_state","identity_role":"authoritative_payload","name":"current_object_state","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.object_fact_state","identity_role":"authoritative_payload","name":"object_fact_state","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.object_scope_declaration","identity_role":"authoritative_payload","name":"object_scope_declaration","required":false,"type":"optional<typed_id<cc_declaration_id>>"},{"id":"cc.syntax_node.v1.object_declaration","identity_role":"authoritative_payload","name":"object_declaration","required":false,"type":"optional<typed_id<cc_declaration_id>>"},{"id":"cc.syntax_node.v1.object_entity","identity_role":"authoritative_payload","name":"object_entity","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.syntax_node.v1.declared_object_type","identity_role":"authoritative_payload","name":"declared_object_type","required":false,"type":"optional<typed_id<cc_type_id>>"},{"id":"cc.syntax_node.v1.object_address","identity_role":"authoritative_payload","name":"object_address","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.object_target_type","identity_role":"authoritative_payload","name":"object_target_type","required":false,"type":"optional<typed_id<cc_type_id>>"},{"id":"cc.syntax_node.v1.canonical_bool","identity_role":"authoritative_payload","name":"canonical_bool","required":false,"type":"optional<bool>"},{"id":"cc.syntax_node.v1.downcast_compatible_with_declared_type","identity_role":"authoritative_payload","name":"downcast_compatible_with_declared_type","required":false,"type":"optional<bool>"},{"id":"cc.syntax_node.v1.object_receiver","identity_role":"authoritative_payload","name":"object_receiver","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.object_body","identity_role":"authoritative_payload","name":"object_body","required":false,"type":"optional<typed_id<body_id>>"},{"id":"cc.syntax_node.v1.object_cfg_node","identity_role":"authoritative_payload","name":"object_cfg_node","required":false,"type":"optional<typed_id<cfg_node_id>>"},{"id":"cc.syntax_node.v1.object_cfg_element_index","identity_role":"authoritative_payload","name":"object_cfg_element_index","required":false,"type":"optional<uint64>"},{"id":"cc.syntax_node.v1.object_phase","identity_role":"authoritative_payload","name":"object_phase","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.actual_polymorphic_use","identity_role":"authoritative_payload","name":"actual_polymorphic_use","required":false,"type":"optional<bool>"},{"id":"cc.syntax_node.v1.type_trait_kind","identity_role":"authoritative_payload","name":"type_trait_kind","required":false,"type":"optional<open_symbol<cc.type-trait-kind/1>>"},{"id":"cc.syntax_node.v1.type_trait_argument_form","identity_role":"authoritative_payload","name":"type_trait_argument_form","required":false,"type":"optional<open_symbol<cc.type-trait-argument-form/1>>"},{"id":"cc.syntax_node.v1.type_trait_argument_type","identity_role":"authoritative_payload","name":"type_trait_argument_type","required":false,"type":"optional<typed_id<cc_type_id>>"},{"id":"cc.syntax_node.v1.type_trait_argument_expression","identity_role":"authoritative_payload","name":"type_trait_argument_expression","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.type_trait_result_decimal","identity_role":"authoritative_payload","name":"type_trait_result_decimal","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.type_trait_state","identity_role":"authoritative_payload","name":"type_trait_state","required":false,"type":"optional<open_symbol<cc.syntax-observation-state/1>>"},{"id":"cc.syntax_node.v1.type_trait_profile","identity_role":"authoritative_payload","name":"type_trait_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.atomic_operation","identity_role":"authoritative_payload","name":"atomic_operation","required":false,"type":"optional<uint64>"},{"id":"cc.syntax_node.v1.atomic_operation_name","identity_role":"authoritative_payload","name":"atomic_operation_name","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.atomic_pointer_expression","identity_role":"authoritative_payload","name":"atomic_pointer_expression","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.atomic_success_order_expression","identity_role":"authoritative_payload","name":"atomic_success_order_expression","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.atomic_failure_order_expression","identity_role":"authoritative_payload","name":"atomic_failure_order_expression","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.syntax_node.v1.atomic_success_order_value","identity_role":"authoritative_payload","name":"atomic_success_order_value","required":false,"type":"optional<int64>"},{"id":"cc.syntax_node.v1.atomic_failure_order_value","identity_role":"authoritative_payload","name":"atomic_failure_order_value","required":false,"type":"optional<int64>"},{"id":"cc.syntax_node.v1.atomic_success_order_state","identity_role":"authoritative_payload","name":"atomic_success_order_state","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.atomic_failure_order_state","identity_role":"authoritative_payload","name":"atomic_failure_order_state","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.atomic_binding_state","identity_role":"authoritative_payload","name":"atomic_binding_state","required":false,"type":"optional<utf8_string>"},{"id":"cc.syntax_node.v1.atomic_profile","identity_role":"authoritative_payload","name":"atomic_profile","required":false,"type":"optional<utf8_string>"}],"coverage":{"execution_domain":"cc.syntax_node.compile-unit"},"descriptor_id":"cc.syntax_node.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::syntax_node","indexes":[["cc.syntax_node.v1.function"],["cc.syntax_node.v1.source"],["cc.syntax_node.v1.kind"]],"merge":{"conflict_columns":["cc.syntax_node.v1.actual_polymorphic_use","cc.syntax_node.v1.atomic_binding_state","cc.syntax_node.v1.atomic_failure_order_expression","cc.syntax_node.v1.atomic_failure_order_state","cc.syntax_node.v1.atomic_failure_order_value","cc.syntax_node.v1.atomic_operation","cc.syntax_node.v1.atomic_operation_name","cc.syntax_node.v1.atomic_pointer_expression","cc.syntax_node.v1.atomic_profile","cc.syntax_node.v1.atomic_success_order_expression","cc.syntax_node.v1.atomic_success_order_state","cc.syntax_node.v1.atomic_success_order_value","cc.syntax_node.v1.base_expression","cc.syntax_node.v1.canonical_bool","cc.syntax_node.v1.canonical_type","cc.syntax_node.v1.cast_kind","cc.syntax_node.v1.child_count","cc.syntax_node.v1.child_ids","cc.syntax_node.v1.child_profile","cc.syntax_node.v1.child_state","cc.syntax_node.v1.compile_unit","cc.syntax_node.v1.constant_null","cc.syntax_node.v1.conversion_profile","cc.syntax_node.v1.conversion_state","cc.syntax_node.v1.current_object_profile","cc.syntax_node.v1.current_object_state","cc.syntax_node.v1.declared_object_type","cc.syntax_node.v1.downcast_compatible_with_declared_type","cc.syntax_node.v1.flags","cc.syntax_node.v1.function","cc.syntax_node.v1.index_expression","cc.syntax_node.v1.integer_bit_width","cc.syntax_node.v1.integer_signed","cc.syntax_node.v1.integer_value","cc.syntax_node.v1.kind","cc.syntax_node.v1.left_operand","cc.syntax_node.v1.literal_context","cc.syntax_node.v1.literal_context_profile","cc.syntax_node.v1.literal_context_state","cc.syntax_node.v1.literal_declaration","cc.syntax_node.v1.literal_element_width_bits","cc.syntax_node.v1.literal_encoding","cc.syntax_node.v1.literal_value_bytes","cc.syntax_node.v1.literal_value_profile","cc.syntax_node.v1.literal_value_state","cc.syntax_node.v1.object_address","cc.syntax_node.v1.object_body","cc.syntax_node.v1.object_cfg_element_index","cc.syntax_node.v1.object_cfg_node","cc.syntax_node.v1.object_declaration","cc.syntax_node.v1.object_entity","cc.syntax_node.v1.object_fact_kind","cc.syntax_node.v1.object_fact_profile","cc.syntax_node.v1.object_fact_state","cc.syntax_node.v1.object_phase","cc.syntax_node.v1.object_receiver","cc.syntax_node.v1.object_scope_declaration","cc.syntax_node.v1.object_target_type","cc.syntax_node.v1.opcode","cc.syntax_node.v1.operand","cc.syntax_node.v1.operand_type","cc.syntax_node.v1.ordinal","cc.syntax_node.v1.original_value_lower","cc.syntax_node.v1.original_value_upper","cc.syntax_node.v1.parent","cc.syntax_node.v1.representation_state","cc.syntax_node.v1.right_operand","cc.syntax_node.v1.source","cc.syntax_node.v1.type","cc.syntax_node.v1.type_access_permission","cc.syntax_node.v1.type_trait_argument_expression","cc.syntax_node.v1.type_trait_argument_form","cc.syntax_node.v1.type_trait_argument_type","cc.syntax_node.v1.type_trait_kind","cc.syntax_node.v1.type_trait_profile","cc.syntax_node.v1.type_trait_result_decimal","cc.syntax_node.v1.type_trait_state","cc.syntax_node.v1.value","cc.syntax_node.v1.value_preservation"],"mode":"functional_assertion"},"name":"cc.syntax_node","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.syntax_node.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"direct_observation"},"references":[{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.atomic_failure_order_expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.atomic_pointer_expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.atomic_success_order_expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.base_expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.canonical_type"],"strength":"soft_semantic","target_columns":["cc.type.v1.type"],"target_relation":"cc.type"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.child_ids"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"reject_batch","source_columns":["cc.syntax_node.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.declared_object_type"],"strength":"soft_semantic","target_columns":["cc.type.v1.type"],"target_relation":"cc.type"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.function"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.index_expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.left_operand"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.literal_declaration"],"strength":"soft_semantic","target_columns":["cc.declaration.v1.declaration"],"target_relation":"cc.declaration"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.object_address"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.object_body"],"strength":"soft_semantic","target_columns":["cc.body.v1.body"],"target_relation":"cc.body"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.object_cfg_node"],"strength":"soft_semantic","target_columns":["cc.cfg_node.v1.node"],"target_relation":"cc.cfg_node"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.object_declaration"],"strength":"soft_semantic","target_columns":["cc.declaration.v1.declaration"],"target_relation":"cc.declaration"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.object_entity"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.object_receiver"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.object_scope_declaration"],"strength":"soft_semantic","target_columns":["cc.declaration.v1.declaration"],"target_relation":"cc.declaration"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.object_target_type"],"strength":"soft_semantic","target_columns":["cc.type.v1.type"],"target_relation":"cc.type"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.operand"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.operand_type"],"strength":"soft_semantic","target_columns":["cc.type.v1.type"],"target_relation":"cc.type"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.right_operand"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"reject_batch","source_columns":["cc.syntax_node.v1.source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.type_trait_argument_expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.syntax_node.v1.type_trait_argument_type"],"strength":"soft_semantic","target_columns":["cc.type.v1.type"],"target_relation":"cc.type"}],"row_constraints":{"all_or_none":[["cc.syntax_node.v1.child_count","cc.syntax_node.v1.child_ids","cc.syntax_node.v1.child_profile","cc.syntax_node.v1.child_state"],["cc.syntax_node.v1.conversion_profile","cc.syntax_node.v1.conversion_state","cc.syntax_node.v1.value_preservation"],["cc.syntax_node.v1.literal_context","cc.syntax_node.v1.literal_context_profile","cc.syntax_node.v1.literal_context_state"]]},"semantic_major":1,"semantics":"cc.syntax_node/1","stability":"versioned","summary":"Detached source-bound syntax node; ordinal follows deterministic structural traversal within a body.","version":"1.2.0"})cxxlens";
+				output.contract_digest = "sha256:a11e8fd05f8029cd8978ba1d2cc92462f10c009e8b711a5ed8874bd27c2ff036";
 				output.columns = {
 					{"cc.syntax_node.v1.node", "node", {sdk::scalar_kind::typed_id, "syntax_node_id", false}, true, sdk::column_role::claim_key},
 					{"cc.syntax_node.v1.compile_unit", "compile_unit", {sdk::scalar_kind::typed_id, "compile_unit_id", false}, true, sdk::column_role::authoritative_payload},
@@ -66,6 +66,47 @@ namespace cxxlens::cc::relations
 					{"cc.syntax_node.v1.literal_value_state", "literal_value_state", {sdk::scalar_kind::open_symbol, "cc.syntax-observation-state/1", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.syntax_node.v1.literal_encoding", "literal_encoding", {sdk::scalar_kind::open_symbol, "cc.string-literal-encoding/1", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.syntax_node.v1.literal_element_width_bits", "literal_element_width_bits", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.object_fact_kind", "object_fact_kind", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.object_fact_profile", "object_fact_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.original_value_lower", "original_value_lower", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.original_value_upper", "original_value_upper", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.representation_state", "representation_state", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.type_access_permission", "type_access_permission", {sdk::scalar_kind::boolean, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.current_object_profile", "current_object_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.current_object_state", "current_object_state", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.object_fact_state", "object_fact_state", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.object_scope_declaration", "object_scope_declaration", {sdk::scalar_kind::typed_id, "cc_declaration_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.object_declaration", "object_declaration", {sdk::scalar_kind::typed_id, "cc_declaration_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.object_entity", "object_entity", {sdk::scalar_kind::typed_id, "cc_entity_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.declared_object_type", "declared_object_type", {sdk::scalar_kind::typed_id, "cc_type_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.object_address", "object_address", {sdk::scalar_kind::typed_id, "syntax_node_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.object_target_type", "object_target_type", {sdk::scalar_kind::typed_id, "cc_type_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.canonical_bool", "canonical_bool", {sdk::scalar_kind::boolean, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.downcast_compatible_with_declared_type", "downcast_compatible_with_declared_type", {sdk::scalar_kind::boolean, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.object_receiver", "object_receiver", {sdk::scalar_kind::typed_id, "syntax_node_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.object_body", "object_body", {sdk::scalar_kind::typed_id, "body_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.object_cfg_node", "object_cfg_node", {sdk::scalar_kind::typed_id, "cfg_node_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.object_cfg_element_index", "object_cfg_element_index", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.object_phase", "object_phase", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.actual_polymorphic_use", "actual_polymorphic_use", {sdk::scalar_kind::boolean, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.type_trait_kind", "type_trait_kind", {sdk::scalar_kind::open_symbol, "cc.type-trait-kind/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.type_trait_argument_form", "type_trait_argument_form", {sdk::scalar_kind::open_symbol, "cc.type-trait-argument-form/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.type_trait_argument_type", "type_trait_argument_type", {sdk::scalar_kind::typed_id, "cc_type_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.type_trait_argument_expression", "type_trait_argument_expression", {sdk::scalar_kind::typed_id, "syntax_node_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.type_trait_result_decimal", "type_trait_result_decimal", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.type_trait_state", "type_trait_state", {sdk::scalar_kind::open_symbol, "cc.syntax-observation-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.type_trait_profile", "type_trait_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.atomic_operation", "atomic_operation", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.atomic_operation_name", "atomic_operation_name", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.atomic_pointer_expression", "atomic_pointer_expression", {sdk::scalar_kind::typed_id, "syntax_node_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.atomic_success_order_expression", "atomic_success_order_expression", {sdk::scalar_kind::typed_id, "syntax_node_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.atomic_failure_order_expression", "atomic_failure_order_expression", {sdk::scalar_kind::typed_id, "syntax_node_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.atomic_success_order_value", "atomic_success_order_value", {sdk::scalar_kind::signed_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.atomic_failure_order_value", "atomic_failure_order_value", {sdk::scalar_kind::signed_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.atomic_success_order_state", "atomic_success_order_state", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.atomic_failure_order_state", "atomic_failure_order_state", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.atomic_binding_state", "atomic_binding_state", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.syntax_node.v1.atomic_profile", "atomic_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
 				};
 				output.domain_identity.result_column = "cc.syntax_node.v1.node";
 				output.domain_identity.projection = {
@@ -80,22 +121,49 @@ namespace cxxlens::cc::relations
 					"cc.syntax_node.v1.node",
 				};
 				output.references = {
+					{{"cc.syntax_node.v1.atomic_failure_order_expression"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
+					{{"cc.syntax_node.v1.atomic_pointer_expression"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
+					{{"cc.syntax_node.v1.atomic_success_order_expression"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
 					{{"cc.syntax_node.v1.base_expression"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
 					{{"cc.syntax_node.v1.canonical_type"}, "cc.type", {"cc.type.v1.type"}, sdk::reference_strength::soft_semantic},
 					{{"cc.syntax_node.v1.child_ids"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic, true},
 					{{"cc.syntax_node.v1.compile_unit"}, "build.compile_unit", {"build.compile_unit.v1.compile_unit"}, sdk::reference_strength::hard},
+					{{"cc.syntax_node.v1.declared_object_type"}, "cc.type", {"cc.type.v1.type"}, sdk::reference_strength::soft_semantic},
 					{{"cc.syntax_node.v1.function"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic},
 					{{"cc.syntax_node.v1.index_expression"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
 					{{"cc.syntax_node.v1.left_operand"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
 					{{"cc.syntax_node.v1.literal_declaration"}, "cc.declaration", {"cc.declaration.v1.declaration"}, sdk::reference_strength::soft_semantic},
+					{{"cc.syntax_node.v1.object_address"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
+					{{"cc.syntax_node.v1.object_body"}, "cc.body", {"cc.body.v1.body"}, sdk::reference_strength::soft_semantic},
+					{{"cc.syntax_node.v1.object_cfg_node"}, "cc.cfg_node", {"cc.cfg_node.v1.node"}, sdk::reference_strength::soft_semantic},
+					{{"cc.syntax_node.v1.object_declaration"}, "cc.declaration", {"cc.declaration.v1.declaration"}, sdk::reference_strength::soft_semantic},
+					{{"cc.syntax_node.v1.object_entity"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic},
+					{{"cc.syntax_node.v1.object_receiver"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
+					{{"cc.syntax_node.v1.object_scope_declaration"}, "cc.declaration", {"cc.declaration.v1.declaration"}, sdk::reference_strength::soft_semantic},
+					{{"cc.syntax_node.v1.object_target_type"}, "cc.type", {"cc.type.v1.type"}, sdk::reference_strength::soft_semantic},
 					{{"cc.syntax_node.v1.operand"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
 					{{"cc.syntax_node.v1.operand_type"}, "cc.type", {"cc.type.v1.type"}, sdk::reference_strength::soft_semantic},
 					{{"cc.syntax_node.v1.right_operand"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
 					{{"cc.syntax_node.v1.source"}, "source.span", {"source.span.v1.span"}, sdk::reference_strength::hard},
+					{{"cc.syntax_node.v1.type_trait_argument_expression"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
+					{{"cc.syntax_node.v1.type_trait_argument_type"}, "cc.type", {"cc.type.v1.type"}, sdk::reference_strength::soft_semantic},
 				};
 				output.merge = sdk::merge_mode::functional_assertion;
 				output.conflict_columns = {
+					"cc.syntax_node.v1.actual_polymorphic_use",
+					"cc.syntax_node.v1.atomic_binding_state",
+					"cc.syntax_node.v1.atomic_failure_order_expression",
+					"cc.syntax_node.v1.atomic_failure_order_state",
+					"cc.syntax_node.v1.atomic_failure_order_value",
+					"cc.syntax_node.v1.atomic_operation",
+					"cc.syntax_node.v1.atomic_operation_name",
+					"cc.syntax_node.v1.atomic_pointer_expression",
+					"cc.syntax_node.v1.atomic_profile",
+					"cc.syntax_node.v1.atomic_success_order_expression",
+					"cc.syntax_node.v1.atomic_success_order_state",
+					"cc.syntax_node.v1.atomic_success_order_value",
 					"cc.syntax_node.v1.base_expression",
+					"cc.syntax_node.v1.canonical_bool",
 					"cc.syntax_node.v1.canonical_type",
 					"cc.syntax_node.v1.cast_kind",
 					"cc.syntax_node.v1.child_count",
@@ -106,6 +174,10 @@ namespace cxxlens::cc::relations
 					"cc.syntax_node.v1.constant_null",
 					"cc.syntax_node.v1.conversion_profile",
 					"cc.syntax_node.v1.conversion_state",
+					"cc.syntax_node.v1.current_object_profile",
+					"cc.syntax_node.v1.current_object_state",
+					"cc.syntax_node.v1.declared_object_type",
+					"cc.syntax_node.v1.downcast_compatible_with_declared_type",
 					"cc.syntax_node.v1.flags",
 					"cc.syntax_node.v1.function",
 					"cc.syntax_node.v1.index_expression",
@@ -123,14 +195,38 @@ namespace cxxlens::cc::relations
 					"cc.syntax_node.v1.literal_value_bytes",
 					"cc.syntax_node.v1.literal_value_profile",
 					"cc.syntax_node.v1.literal_value_state",
+					"cc.syntax_node.v1.object_address",
+					"cc.syntax_node.v1.object_body",
+					"cc.syntax_node.v1.object_cfg_element_index",
+					"cc.syntax_node.v1.object_cfg_node",
+					"cc.syntax_node.v1.object_declaration",
+					"cc.syntax_node.v1.object_entity",
+					"cc.syntax_node.v1.object_fact_kind",
+					"cc.syntax_node.v1.object_fact_profile",
+					"cc.syntax_node.v1.object_fact_state",
+					"cc.syntax_node.v1.object_phase",
+					"cc.syntax_node.v1.object_receiver",
+					"cc.syntax_node.v1.object_scope_declaration",
+					"cc.syntax_node.v1.object_target_type",
 					"cc.syntax_node.v1.opcode",
 					"cc.syntax_node.v1.operand",
 					"cc.syntax_node.v1.operand_type",
 					"cc.syntax_node.v1.ordinal",
+					"cc.syntax_node.v1.original_value_lower",
+					"cc.syntax_node.v1.original_value_upper",
 					"cc.syntax_node.v1.parent",
+					"cc.syntax_node.v1.representation_state",
 					"cc.syntax_node.v1.right_operand",
 					"cc.syntax_node.v1.source",
 					"cc.syntax_node.v1.type",
+					"cc.syntax_node.v1.type_access_permission",
+					"cc.syntax_node.v1.type_trait_argument_expression",
+					"cc.syntax_node.v1.type_trait_argument_form",
+					"cc.syntax_node.v1.type_trait_argument_type",
+					"cc.syntax_node.v1.type_trait_kind",
+					"cc.syntax_node.v1.type_trait_profile",
+					"cc.syntax_node.v1.type_trait_result_decimal",
+					"cc.syntax_node.v1.type_trait_state",
 					"cc.syntax_node.v1.value",
 					"cc.syntax_node.v1.value_preservation",
 				};
@@ -492,6 +588,375 @@ namespace cxxlens::cc::relations
 			[[nodiscard]] static sdk::column_ref ref()
 			{
 				return {syntax_node::descriptor().id, "cc.syntax_node.v1.literal_element_width_bits", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.object_fact_kind`. */
+		struct object_fact_kind
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.object_fact_kind", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.object_fact_profile`. */
+		struct object_fact_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.object_fact_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.original_value_lower`. */
+		struct original_value_lower
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.original_value_lower", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.original_value_upper`. */
+		struct original_value_upper
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.original_value_upper", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.representation_state`. */
+		struct representation_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.representation_state", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.type_access_permission`. */
+		struct type_access_permission
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.type_access_permission", {sdk::scalar_kind::boolean, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.current_object_profile`. */
+		struct current_object_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.current_object_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.current_object_state`. */
+		struct current_object_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.current_object_state", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.object_fact_state`. */
+		struct object_fact_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.object_fact_state", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.object_scope_declaration`. */
+		struct object_scope_declaration
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.object_scope_declaration", {sdk::scalar_kind::typed_id, "cc_declaration_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.object_declaration`. */
+		struct object_declaration
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.object_declaration", {sdk::scalar_kind::typed_id, "cc_declaration_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.object_entity`. */
+		struct object_entity
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.object_entity", {sdk::scalar_kind::typed_id, "cc_entity_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.declared_object_type`. */
+		struct declared_object_type
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.declared_object_type", {sdk::scalar_kind::typed_id, "cc_type_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.object_address`. */
+		struct object_address
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.object_address", {sdk::scalar_kind::typed_id, "syntax_node_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.object_target_type`. */
+		struct object_target_type
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.object_target_type", {sdk::scalar_kind::typed_id, "cc_type_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.canonical_bool`. */
+		struct canonical_bool
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.canonical_bool", {sdk::scalar_kind::boolean, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.downcast_compatible_with_declared_type`. */
+		struct downcast_compatible_with_declared_type
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.downcast_compatible_with_declared_type", {sdk::scalar_kind::boolean, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.object_receiver`. */
+		struct object_receiver
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.object_receiver", {sdk::scalar_kind::typed_id, "syntax_node_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.object_body`. */
+		struct object_body
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.object_body", {sdk::scalar_kind::typed_id, "body_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.object_cfg_node`. */
+		struct object_cfg_node
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.object_cfg_node", {sdk::scalar_kind::typed_id, "cfg_node_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.object_cfg_element_index`. */
+		struct object_cfg_element_index
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.object_cfg_element_index", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.object_phase`. */
+		struct object_phase
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.object_phase", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.actual_polymorphic_use`. */
+		struct actual_polymorphic_use
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.actual_polymorphic_use", {sdk::scalar_kind::boolean, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.type_trait_kind`. */
+		struct type_trait_kind
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.type_trait_kind", {sdk::scalar_kind::open_symbol, "cc.type-trait-kind/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.type_trait_argument_form`. */
+		struct type_trait_argument_form
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.type_trait_argument_form", {sdk::scalar_kind::open_symbol, "cc.type-trait-argument-form/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.type_trait_argument_type`. */
+		struct type_trait_argument_type
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.type_trait_argument_type", {sdk::scalar_kind::typed_id, "cc_type_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.type_trait_argument_expression`. */
+		struct type_trait_argument_expression
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.type_trait_argument_expression", {sdk::scalar_kind::typed_id, "syntax_node_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.type_trait_result_decimal`. */
+		struct type_trait_result_decimal
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.type_trait_result_decimal", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.type_trait_state`. */
+		struct type_trait_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.type_trait_state", {sdk::scalar_kind::open_symbol, "cc.syntax-observation-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.type_trait_profile`. */
+		struct type_trait_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.type_trait_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.atomic_operation`. */
+		struct atomic_operation
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.atomic_operation", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.atomic_operation_name`. */
+		struct atomic_operation_name
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.atomic_operation_name", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.atomic_pointer_expression`. */
+		struct atomic_pointer_expression
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.atomic_pointer_expression", {sdk::scalar_kind::typed_id, "syntax_node_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.atomic_success_order_expression`. */
+		struct atomic_success_order_expression
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.atomic_success_order_expression", {sdk::scalar_kind::typed_id, "syntax_node_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.atomic_failure_order_expression`. */
+		struct atomic_failure_order_expression
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.atomic_failure_order_expression", {sdk::scalar_kind::typed_id, "syntax_node_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.atomic_success_order_value`. */
+		struct atomic_success_order_value
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.atomic_success_order_value", {sdk::scalar_kind::signed_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.atomic_failure_order_value`. */
+		struct atomic_failure_order_value
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.atomic_failure_order_value", {sdk::scalar_kind::signed_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.atomic_success_order_state`. */
+		struct atomic_success_order_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.atomic_success_order_state", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.atomic_failure_order_state`. */
+		struct atomic_failure_order_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.atomic_failure_order_state", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.atomic_binding_state`. */
+		struct atomic_binding_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.atomic_binding_state", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.syntax_node.v1.atomic_profile`. */
+		struct atomic_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {syntax_node::descriptor().id, "cc.syntax_node.v1.atomic_profile", {sdk::scalar_kind::utf8_string, "", true}};
 			}
 		};
 	};

@@ -1130,10 +1130,10 @@ namespace cxxlens::sdk::query
 							missing(std::move(value));
 						}
 				}
-				else if (current.domain == "comments")
+				else if (current.domain == "comments" || current.domain == "includes")
 				{
 					// Global same-world files do not establish a unit's frozen-source
-					// membership. Keep only independently observed raw comment/source
+					// membership. Keep only independently observed inventory/member
 					// associations or the unit's original main-source boundary.
 					std::set<key> associated_units;
 					for (const auto& population : work.output.populations)
@@ -1217,6 +1217,12 @@ namespace cxxlens::sdk::query
 								value.variant = identity[2];
 								value.interpretation = identity[3];
 								work.file(value);
+								if (current.domain == "includes" &&
+									text(member, "from_file") != value.file)
+									gap(value,
+										"sdk.population-include-file-conflicting",
+										text(member, "include"),
+										true);
 								observe(std::move(value), indices{ref, span});
 							}
 						}
@@ -1266,12 +1272,6 @@ namespace cxxlens::sdk::query
 				}
 				else
 				{
-					std::map<std::array<std::string, 3U>, std::vector<std::pair<key, indices>>>
-						world_files;
-					if (current.domain != "declarations")
-						for (const auto& [identity, refs] : work.maps[1U])
-							world_files[{identity[1], identity[2], identity[3]}].push_back(
-								{identity, refs});
 					for (const auto& [identity, refs] : work.maps[0U])
 					{
 						finite_population value;
@@ -1280,26 +1280,8 @@ namespace cxxlens::sdk::query
 						value.variant = identity[2];
 						value.interpretation = identity[3];
 						work.retain(value.evidence, refs);
-						if (current.domain == "declarations")
-						{
-							if (!population_owners.contains(identity))
-								missing(std::move(value));
-						}
-						else
-							for (const auto& [file_identity, file_refs] :
-								 world_files[{identity[1], identity[2], identity[3]}])
-							{
-								work.work();
-								if (population_owners.contains(
-										world(value.compile_unit + '\n' + file_identity[0], value)))
-									continue;
-								auto source = value;
-								source.source_snapshot = file_identity[0];
-								source.file = text(work.row(file_refs.front()), "file");
-								source.source_size = number(work.row(file_refs.front()), "size");
-								work.retain(source.evidence, file_refs);
-								missing(std::move(source));
-							}
+						if (!population_owners.contains(identity))
+							missing(std::move(value));
 					}
 				}
 				std::ranges::sort(work.output.populations,

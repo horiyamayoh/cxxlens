@@ -117,6 +117,10 @@ public:
 
     bool isValid() const { return Size >= 0; }
 
+    // Modified by cxxlens: job-local observation only. This is a reusable
+    // stack depth, never a durable scope identity or detached public value.
+    ptrdiff_t cxxlensObservationDepth() const { return Size; }
+
     /// Returns true if this scope encloses I.
     /// Returns false if I is invalid.
     /// This scope must be valid.

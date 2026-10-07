@@ -13,10 +13,12 @@
 #include <cxxlens/sdk/control_flow.hpp>
 #include <cxxlens/sdk/exception_cleanup_facets.hpp>
 #include <cxxlens/sdk/exceptional_exits.hpp>
+#include <cxxlens/sdk/exceptional_routes.hpp>
 #include <cxxlens/sdk/finite_populations.hpp>
 #include <cxxlens/sdk/function_actions.hpp>
 #include <cxxlens/sdk/function_compiler_facets.hpp>
 #include <cxxlens/sdk/incremental.hpp>
+#include <cxxlens/sdk/object_semantics.hpp>
 #include <cxxlens/sdk/preprocessor.hpp>
 #include <cxxlens/sdk/projection_resource_usage.hpp>
 #include <cxxlens/sdk/provider.hpp>

@@ -3,11 +3,14 @@
 
 from __future__ import annotations
 
+import copy
 import pathlib
 import subprocess
 import sys
 import tempfile
 import unittest
+
+import yaml
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -23,6 +26,31 @@ class RelationIdlCompilerTest(unittest.TestCase):
             capture_output=True,
             text=True,
         )
+
+    def test_rejects_ambiguous_columns_before_writing_headers(self) -> None:
+        original = yaml.safe_load(
+            (ROOT / "schemas/cxxlens_ng_relation_registry.yaml").read_text()
+        )
+        for field in ("id", "name"):
+            with self.subTest(field=field), tempfile.TemporaryDirectory(
+                prefix="cxxlens-relation-idl-"
+            ) as directory:
+                scratch = pathlib.Path(directory)
+                registry = copy.deepcopy(original)
+                columns = registry["relations"][0]["columns"]
+                columns[1][field] = columns[0][field]
+                registry_path = scratch / "cxxlens_ng_relation_registry.yaml"
+                registry_path.write_text(yaml.safe_dump(registry, sort_keys=False))
+                (scratch / "cxxlens_ng_relation_registry.schema.yaml").write_bytes(
+                    (ROOT / "schemas/cxxlens_ng_relation_registry.schema.yaml").read_bytes()
+                )
+                output = scratch / "headers"
+                result = self.run_compiler(
+                    "--registry", str(registry_path), "--all", "--output-dir", str(output)
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("duplicate column IDs or names", result.stderr)
+                self.assertFalse(output.exists())
 
     def test_committed_headers_match_registry_byte_for_byte(self) -> None:
         completed = self.run_compiler("--all", "--check")

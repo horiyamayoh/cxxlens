@@ -10,28 +10,37 @@
 #include <cxxlens/relations/build_toolchain_context.hpp>
 #include <cxxlens/relations/build_variant.hpp>
 #include <cxxlens/relations/cc_abi_surface.hpp>
+#include <cxxlens/relations/cc_address_transfer.hpp>
 #include <cxxlens/relations/cc_body.hpp>
 #include <cxxlens/relations/cc_call_direct_target.hpp>
 #include <cxxlens/relations/cc_call_operand.hpp>
 #include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_cfg_edge.hpp>
+#include <cxxlens/relations/cc_cfg_element.hpp>
 #include <cxxlens/relations/cc_cfg_node.hpp>
 #include <cxxlens/relations/cc_constant_evaluated_call.hpp>
 #include <cxxlens/relations/cc_constant_evaluation_root.hpp>
 #include <cxxlens/relations/cc_constraint_node.hpp>
 #include <cxxlens/relations/cc_declaration.hpp>
+#include <cxxlens/relations/cc_declaration_attribute.hpp>
 #include <cxxlens/relations/cc_declaration_inventory.hpp>
 #include <cxxlens/relations/cc_entity.hpp>
 #include <cxxlens/relations/cc_entity_detail.hpp>
 #include <cxxlens/relations/cc_entity_edge.hpp>
+#include <cxxlens/relations/cc_exceptional_block.hpp>
 #include <cxxlens/relations/cc_exceptional_exit.hpp>
+#include <cxxlens/relations/cc_exceptional_successor.hpp>
 #include <cxxlens/relations/cc_flow_fact.hpp>
 #include <cxxlens/relations/cc_flow_inventory.hpp>
 #include <cxxlens/relations/cc_lambda_capture.hpp>
 #include <cxxlens/relations/cc_layout_fact.hpp>
+#include <cxxlens/relations/cc_move_event.hpp>
+#include <cxxlens/relations/cc_object_state_observation.hpp>
 #include <cxxlens/relations/cc_operation.hpp>
 #include <cxxlens/relations/cc_record_inventory.hpp>
 #include <cxxlens/relations/cc_record_surface.hpp>
+#include <cxxlens/relations/cc_sequence_context.hpp>
+#include <cxxlens/relations/cc_sequence_pair.hpp>
 #include <cxxlens/relations/cc_syntax_node.hpp>
 #include <cxxlens/relations/cc_target_resolution_slot.hpp>
 #include <cxxlens/relations/cc_template_candidate.hpp>
@@ -339,6 +348,16 @@ namespace cxxlens::sdk
 				cc::relations::entity_detail::descriptor(),
 				cc::relations::entity_edge::descriptor(),
 				cc::relations::exceptional_exit::descriptor(),
+				cc::relations::sequence_context::descriptor(),
+				cc::relations::sequence_pair::descriptor(),
+				cc::relations::object_state_observation::descriptor(),
+				cc::relations::exceptional_block::descriptor(),
+				cc::relations::exceptional_successor::descriptor(),
+				cc::relations::cfg_element::descriptor(),
+				cc::relations::move_event::descriptor(),
+				cc::relations::declaration_attribute::descriptor(),
+				cc::relations::address_transfer::descriptor(),
+
 				cc::relations::flow_fact::descriptor(),
 				cc::relations::layout_fact::descriptor(),
 				cc::relations::record_surface::descriptor(),

@@ -20,12 +20,12 @@ namespace cxxlens::cc::relations
 				sdk::relation_descriptor output;
 				output.id = "cc.exceptional_exit.v1";
 				output.name = "cc.exceptional_exit";
-				output.version = {1U, 1U, 0U};
+				output.version = {1U, 2U, 0U};
 				output.semantic_major = 1U;
 				output.semantics = "cc.exceptional-exit/1";
 				output.owner_namespace = "cxxlens.standard.cc";
-				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.exceptional_exit.v1.compile_unit","cc.exceptional_exit.v1.scope_detail","cc.exceptional_exit.v1.variant_kind","cc.exceptional_exit.v1.variant_index","cc.exceptional_exit.v1.variant_symbol","cc.exceptional_exit.v1.ordinal","cc.exceptional_exit.v1.profile"],"result_column":"cc.exceptional_exit.v1.exit"},"interpretation_required":true,"key":["cc.exceptional_exit.v1.exit"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.exceptional_exit.v1.exit","identity_role":"claim_key","name":"exit","required":true,"type":"typed_id<exceptional_exit_id>"},{"id":"cc.exceptional_exit.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.exceptional_exit.v1.scope_detail","identity_role":"authoritative_payload","name":"scope_detail","required":true,"type":"typed_id<entity_detail_id>"},{"id":"cc.exceptional_exit.v1.function","identity_role":"authoritative_payload","name":"function","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.exceptional_exit.v1.definition_source","identity_role":"authoritative_payload","name":"definition_source","required":true,"type":"typed_id<source_span_id>"},{"id":"cc.exceptional_exit.v1.variant_kind","identity_role":"authoritative_payload","name":"variant_kind","required":true,"type":"open_symbol<cc.lowering-variant-kind/1>"},{"id":"cc.exceptional_exit.v1.variant_index","identity_role":"authoritative_payload","name":"variant_index","required":true,"type":"uint64"},{"id":"cc.exceptional_exit.v1.variant_symbol","identity_role":"authoritative_payload","name":"variant_symbol","required":true,"type":"bytes"},{"id":"cc.exceptional_exit.v1.ordinal","identity_role":"authoritative_payload","name":"ordinal","required":true,"type":"uint64"},{"id":"cc.exceptional_exit.v1.profile","identity_role":"authoritative_payload","name":"profile","required":true,"type":"utf8_string"},{"id":"cc.exceptional_exit.v1.lowering_profile","identity_role":"authoritative_payload","name":"lowering_profile","required":true,"type":"utf8_string"},{"id":"cc.exceptional_exit.v1.role","identity_role":"authoritative_payload","name":"role","required":true,"type":"open_symbol<cc.exceptional-exit-role/1>"},{"id":"cc.exceptional_exit.v1.eligibility","identity_role":"authoritative_payload","name":"eligibility","required":true,"type":"open_symbol<cc.exceptional-exit-eligibility/1>"},{"id":"cc.exceptional_exit.v1.observation_state","identity_role":"authoritative_payload","name":"observation_state","required":true,"type":"open_symbol<cc.exceptional-exit-state/1>"},{"id":"cc.exceptional_exit.v1.variant","identity_role":"authoritative_payload","name":"variant","required":false,"type":"optional<typed_id<exceptional_exit_id>>"},{"id":"cc.exceptional_exit.v1.body","identity_role":"authoritative_payload","name":"body","required":false,"type":"optional<typed_id<body_id>>"},{"id":"cc.exceptional_exit.v1.source","identity_role":"authoritative_payload","name":"source","required":false,"type":"optional<typed_id<source_span_id>>"},{"id":"cc.exceptional_exit.v1.expression","identity_role":"authoritative_payload","name":"expression","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.exceptional_exit.v1.original_expression_ordinal","identity_role":"authoritative_payload","name":"original_expression_ordinal","required":false,"type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.target","identity_role":"authoritative_payload","name":"target","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.exceptional_exit.v1.target_usr","identity_role":"authoritative_payload","name":"target_usr","required":false,"type":"optional<bytes>"},{"id":"cc.exceptional_exit.v1.block_ordinal","identity_role":"authoritative_payload","name":"block_ordinal","required":false,"type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.instruction_ordinal","identity_role":"authoritative_payload","name":"instruction_ordinal","required":false,"type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.successor_ordinal","identity_role":"authoritative_payload","name":"successor_ordinal","required":false,"type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.is_invoke","identity_role":"authoritative_payload","name":"is_invoke","required":false,"type":"optional<bool>"},{"id":"cc.exceptional_exit.v1.does_not_throw","identity_role":"authoritative_payload","name":"does_not_throw","required":false,"type":"optional<bool>"},{"id":"cc.exceptional_exit.v1.does_not_return","identity_role":"authoritative_payload","name":"does_not_return","required":false,"type":"optional<bool>"},{"id":"cc.exceptional_exit.v1.intrinsic_id","identity_role":"authoritative_payload","name":"intrinsic_id","required":false,"type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.compiler_route","identity_role":"authoritative_payload","name":"compiler_route","required":false,"type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.emitter_methods","identity_role":"authoritative_payload","name":"emitter_methods","required":false,"semantic":"Original CodeGen callback method mask under clang22-written-definition-analysis-lowering/1. Bit 0 is generic EmitCall, bits 1-6 retain the actual runtime emit method IDs. This is independent from the EH block compiler_route and never a callee-name classifier.","type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.cleanup_declaration","identity_role":"authoritative_payload","name":"cleanup_declaration","required":false,"semantic":"Exact original automatic VarDecl attached to the compiler cleanup registration; this is a static declaration correspondence, not a runtime object or value-version claim.","type":"optional<typed_id<cc_declaration_id>>"},{"id":"cc.exceptional_exit.v1.cleanup_registration_ordinal","identity_role":"authoritative_payload","name":"cleanup_registration_ordinal","required":false,"semantic":"Original compiler cleanup registration sequence within this physical scope and lowering variant; no AST CFG or storage-version correspondence follows from the ordinal.","type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.cleanup_emission_ordinal","identity_role":"authoritative_payload","name":"cleanup_emission_ordinal","required":false,"semantic":"Original DestroyObject emission sequence within this lowering variant, including distinct normal and EH code generation; no runtime execution count is asserted.","type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.cleanup_route","identity_role":"authoritative_payload","name":"cleanup_route","required":false,"semantic":"Actual EHScopeStack Cleanup Flags emission route, independent of ordinary operation completion and AST CFG edges.","type":"optional<open_symbol<cc.cleanup-emission-route/1>>"},{"id":"cc.exceptional_exit.v1.cleanup_profile","identity_role":"authoritative_payload","name":"cleanup_profile","required":false,"semantic":"Exact original cleanup emission contract; missing metadata never closes the full cleanup/resource population.","type":"optional<utf8_string>"},{"id":"cc.exceptional_exit.v1.cleanup_target","identity_role":"authoritative_payload","name":"cleanup_target","required":false,"semantic":"Original destructor declaration passed to the destructor emitter for this actual cleanup CallBase; independent from the generic EmitCall abstract target.","type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.exceptional_exit.v1.cleanup_target_usr","identity_role":"authoritative_payload","name":"cleanup_target_usr","required":false,"semantic":"Exact raw compiler USR of the independently observed cleanup destructor emitter target, preserving all original bytes.","type":"optional<bytes>"},{"id":"cc.exceptional_exit.v1.cleanup_target_dtor_type","identity_role":"authoritative_payload","name":"cleanup_target_dtor_type","required":false,"semantic":"Original Clang22 CXXDtorType value from the actual destructor emitter, under the target profile; this is not a runtime dispatch-target set.","type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.cleanup_target_profile","identity_role":"authoritative_payload","name":"cleanup_target_profile","required":false,"semantic":"clang22-destructor-emission-target/1 binds only the compiler's actual destructor EmitCall occurrence; absence leaves its target axis unknown.","type":"optional<utf8_string>"},{"id":"cc.exceptional_exit.v1.reason","identity_role":"authoritative_payload","name":"reason","required":false,"type":"optional<utf8_string>"}],"coverage":{"execution_domain":"cc.original-exceptional-occurrences"},"descriptor_id":"cc.exceptional_exit.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::exceptional_exit","indexes":[["cc.exceptional_exit.v1.scope_detail"],["cc.exceptional_exit.v1.variant"]],"merge":{"conflict_columns":["cc.exceptional_exit.v1.block_ordinal","cc.exceptional_exit.v1.body","cc.exceptional_exit.v1.cleanup_declaration","cc.exceptional_exit.v1.cleanup_emission_ordinal","cc.exceptional_exit.v1.cleanup_profile","cc.exceptional_exit.v1.cleanup_registration_ordinal","cc.exceptional_exit.v1.cleanup_route","cc.exceptional_exit.v1.cleanup_target","cc.exceptional_exit.v1.cleanup_target_dtor_type","cc.exceptional_exit.v1.cleanup_target_profile","cc.exceptional_exit.v1.cleanup_target_usr","cc.exceptional_exit.v1.compile_unit","cc.exceptional_exit.v1.compiler_route","cc.exceptional_exit.v1.definition_source","cc.exceptional_exit.v1.does_not_return","cc.exceptional_exit.v1.does_not_throw","cc.exceptional_exit.v1.eligibility","cc.exceptional_exit.v1.emitter_methods","cc.exceptional_exit.v1.expression","cc.exceptional_exit.v1.function","cc.exceptional_exit.v1.instruction_ordinal","cc.exceptional_exit.v1.intrinsic_id","cc.exceptional_exit.v1.is_invoke","cc.exceptional_exit.v1.lowering_profile","cc.exceptional_exit.v1.observation_state","cc.exceptional_exit.v1.ordinal","cc.exceptional_exit.v1.original_expression_ordinal","cc.exceptional_exit.v1.profile","cc.exceptional_exit.v1.reason","cc.exceptional_exit.v1.role","cc.exceptional_exit.v1.scope_detail","cc.exceptional_exit.v1.source","cc.exceptional_exit.v1.successor_ordinal","cc.exceptional_exit.v1.target","cc.exceptional_exit.v1.target_usr","cc.exceptional_exit.v1.variant","cc.exceptional_exit.v1.variant_index","cc.exceptional_exit.v1.variant_kind","cc.exceptional_exit.v1.variant_symbol"],"mode":"functional_assertion"},"name":"cc.exceptional_exit","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.exceptional_exit.v1.compile_unit","cc.exceptional_exit.v1.scope_detail"]},"profile":"NG0","provenance":{"minimum":"canonicalization"},"references":[{"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.body"],"strength":"soft_semantic","target_columns":["cc.body.v1.body"],"target_relation":"cc.body"},{"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.cleanup_declaration"],"strength":"soft_semantic","target_columns":["cc.declaration.v1.declaration"],"target_relation":"cc.declaration"},{"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.cleanup_target"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"reject_batch","source_columns":["cc.exceptional_exit.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"reject_batch","source_columns":["cc.exceptional_exit.v1.definition_source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"},{"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.function"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"reject_batch","source_columns":["cc.exceptional_exit.v1.scope_detail"],"strength":"hard","target_columns":["cc.entity_detail.v1.detail"],"target_relation":"cc.entity_detail"},{"on_missing":"reject_batch","source_columns":["cc.exceptional_exit.v1.source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"},{"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.target"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.variant"],"strength":"soft_semantic","target_columns":["cc.exceptional_exit.v1.exit"],"target_relation":"cc.exceptional_exit"}],"semantic_major":1,"semantics":"cc.exceptional-exit/1","stability":"versioned","summary":"Original exceptional exit occurrences and excluded lowering views, with independent physical definition and actual ABI lowering variant membership; original LLVM ordinals never imply AST CFG joins.","version":"1.1.0"})cxxlens";
-				output.contract_digest = "sha256:c966646712e57cf2064111acfafb21f4cc2c6eeeeb9dd814eba7e29da8cdd62b";
+				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.exceptional_exit.v1.compile_unit","cc.exceptional_exit.v1.scope_detail","cc.exceptional_exit.v1.variant_kind","cc.exceptional_exit.v1.variant_index","cc.exceptional_exit.v1.variant_symbol","cc.exceptional_exit.v1.ordinal","cc.exceptional_exit.v1.profile"],"result_column":"cc.exceptional_exit.v1.exit"},"interpretation_required":true,"key":["cc.exceptional_exit.v1.exit"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.exceptional_exit.v1.exit","identity_role":"claim_key","name":"exit","required":true,"type":"typed_id<exceptional_exit_id>"},{"id":"cc.exceptional_exit.v1.compile_unit","identity_role":"authoritative_payload","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"cc.exceptional_exit.v1.scope_detail","identity_role":"authoritative_payload","name":"scope_detail","required":true,"type":"typed_id<entity_detail_id>"},{"id":"cc.exceptional_exit.v1.function","identity_role":"authoritative_payload","name":"function","required":true,"type":"typed_id<cc_entity_id>"},{"id":"cc.exceptional_exit.v1.definition_source","identity_role":"authoritative_payload","name":"definition_source","required":true,"type":"typed_id<source_span_id>"},{"id":"cc.exceptional_exit.v1.variant_kind","identity_role":"authoritative_payload","name":"variant_kind","required":true,"type":"open_symbol<cc.lowering-variant-kind/1>"},{"id":"cc.exceptional_exit.v1.variant_index","identity_role":"authoritative_payload","name":"variant_index","required":true,"type":"uint64"},{"id":"cc.exceptional_exit.v1.variant_symbol","identity_role":"authoritative_payload","name":"variant_symbol","required":true,"type":"bytes"},{"id":"cc.exceptional_exit.v1.ordinal","identity_role":"authoritative_payload","name":"ordinal","required":true,"type":"uint64"},{"id":"cc.exceptional_exit.v1.profile","identity_role":"authoritative_payload","name":"profile","required":true,"type":"utf8_string"},{"id":"cc.exceptional_exit.v1.lowering_profile","identity_role":"authoritative_payload","name":"lowering_profile","required":true,"type":"utf8_string"},{"id":"cc.exceptional_exit.v1.role","identity_role":"authoritative_payload","name":"role","required":true,"type":"open_symbol<cc.exceptional-exit-role/1>"},{"id":"cc.exceptional_exit.v1.eligibility","identity_role":"authoritative_payload","name":"eligibility","required":true,"type":"open_symbol<cc.exceptional-exit-eligibility/1>"},{"id":"cc.exceptional_exit.v1.observation_state","identity_role":"authoritative_payload","name":"observation_state","required":true,"type":"open_symbol<cc.exceptional-exit-state/1>"},{"id":"cc.exceptional_exit.v1.variant","identity_role":"authoritative_payload","name":"variant","required":false,"type":"optional<typed_id<exceptional_exit_id>>"},{"id":"cc.exceptional_exit.v1.body","identity_role":"authoritative_payload","name":"body","required":false,"type":"optional<typed_id<body_id>>"},{"id":"cc.exceptional_exit.v1.source","identity_role":"authoritative_payload","name":"source","required":false,"type":"optional<typed_id<source_span_id>>"},{"id":"cc.exceptional_exit.v1.expression","identity_role":"authoritative_payload","name":"expression","required":false,"type":"optional<typed_id<syntax_node_id>>"},{"id":"cc.exceptional_exit.v1.original_expression_ordinal","identity_role":"authoritative_payload","name":"original_expression_ordinal","required":false,"type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.target","identity_role":"authoritative_payload","name":"target","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.exceptional_exit.v1.target_usr","identity_role":"authoritative_payload","name":"target_usr","required":false,"type":"optional<bytes>"},{"id":"cc.exceptional_exit.v1.block_ordinal","identity_role":"authoritative_payload","name":"block_ordinal","required":false,"type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.instruction_ordinal","identity_role":"authoritative_payload","name":"instruction_ordinal","required":false,"type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.successor_ordinal","identity_role":"authoritative_payload","name":"successor_ordinal","required":false,"type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.is_invoke","identity_role":"authoritative_payload","name":"is_invoke","required":false,"type":"optional<bool>"},{"id":"cc.exceptional_exit.v1.does_not_throw","identity_role":"authoritative_payload","name":"does_not_throw","required":false,"type":"optional<bool>"},{"id":"cc.exceptional_exit.v1.does_not_return","identity_role":"authoritative_payload","name":"does_not_return","required":false,"type":"optional<bool>"},{"id":"cc.exceptional_exit.v1.intrinsic_id","identity_role":"authoritative_payload","name":"intrinsic_id","required":false,"type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.compiler_route","identity_role":"authoritative_payload","name":"compiler_route","required":false,"type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.emitter_methods","identity_role":"authoritative_payload","name":"emitter_methods","required":false,"semantic":"Original CodeGen callback method mask under clang22-written-definition-analysis-lowering/1. Bit 0 is generic EmitCall, bits 1-6 retain the actual runtime emit method IDs. This is independent from the EH block compiler_route and never a callee-name classifier.","type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.cleanup_declaration","identity_role":"authoritative_payload","name":"cleanup_declaration","required":false,"semantic":"Exact original automatic VarDecl attached to the compiler cleanup registration; this is a static declaration correspondence, not a runtime object or value-version claim.","type":"optional<typed_id<cc_declaration_id>>"},{"id":"cc.exceptional_exit.v1.cleanup_registration_ordinal","identity_role":"authoritative_payload","name":"cleanup_registration_ordinal","required":false,"semantic":"Original compiler cleanup registration sequence within this physical scope and lowering variant; no AST CFG or storage-version correspondence follows from the ordinal.","type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.cleanup_emission_ordinal","identity_role":"authoritative_payload","name":"cleanup_emission_ordinal","required":false,"semantic":"Original DestroyObject emission sequence within this lowering variant, including distinct normal and EH code generation; no runtime execution count is asserted.","type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.cleanup_route","identity_role":"authoritative_payload","name":"cleanup_route","required":false,"semantic":"Actual EHScopeStack Cleanup Flags emission route, independent of ordinary operation completion and AST CFG edges.","type":"optional<open_symbol<cc.cleanup-emission-route/1>>"},{"id":"cc.exceptional_exit.v1.cleanup_profile","identity_role":"authoritative_payload","name":"cleanup_profile","required":false,"semantic":"Exact original cleanup emission contract; missing metadata never closes the full cleanup/resource population.","type":"optional<utf8_string>"},{"id":"cc.exceptional_exit.v1.cleanup_target","identity_role":"authoritative_payload","name":"cleanup_target","required":false,"semantic":"Original destructor declaration passed to the destructor emitter for this actual cleanup CallBase; independent from the generic EmitCall abstract target.","type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.exceptional_exit.v1.cleanup_target_usr","identity_role":"authoritative_payload","name":"cleanup_target_usr","required":false,"semantic":"Exact raw compiler USR of the independently observed cleanup destructor emitter target, preserving all original bytes.","type":"optional<bytes>"},{"id":"cc.exceptional_exit.v1.cleanup_target_dtor_type","identity_role":"authoritative_payload","name":"cleanup_target_dtor_type","required":false,"semantic":"Original Clang22 CXXDtorType value from the actual destructor emitter, under the target profile; this is not a runtime dispatch-target set.","type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.cleanup_target_profile","identity_role":"authoritative_payload","name":"cleanup_target_profile","required":false,"semantic":"clang22-destructor-emission-target/1 binds only the compiler's actual destructor EmitCall occurrence; absence leaves its target axis unknown.","type":"optional<utf8_string>"},{"id":"cc.exceptional_exit.v1.reason","identity_role":"authoritative_payload","name":"reason","required":false,"type":"optional<utf8_string>"},{"id":"cc.exceptional_exit.v1.lowered_entry","identity_role":"authoritative_payload","name":"lowered_entry","required":false,"type":"optional<typed_id<exceptional_block_id>>"},{"id":"cc.exceptional_exit.v1.lowered_block_count","identity_role":"authoritative_payload","name":"lowered_block_count","required":false,"type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.lowered_block_ids","identity_role":"authoritative_payload","name":"lowered_block_ids","required":false,"type":"optional<set<exceptional_block_id>>"},{"id":"cc.exceptional_exit.v1.lowered_successor_count","identity_role":"authoritative_payload","name":"lowered_successor_count","required":false,"type":"optional<uint64>"},{"id":"cc.exceptional_exit.v1.lowered_successor_ids","identity_role":"authoritative_payload","name":"lowered_successor_ids","required":false,"type":"optional<set<exceptional_successor_id>>"},{"id":"cc.exceptional_exit.v1.lowered_topology_state","identity_role":"authoritative_payload","name":"lowered_topology_state","required":false,"type":"optional<utf8_string>"},{"id":"cc.exceptional_exit.v1.lowered_topology_profile","identity_role":"authoritative_payload","name":"lowered_topology_profile","required":false,"type":"optional<utf8_string>"},{"id":"cc.exceptional_exit.v1.lowered_block","identity_role":"authoritative_payload","name":"lowered_block","required":false,"type":"optional<typed_id<exceptional_block_id>>"},{"id":"cc.exceptional_exit.v1.normal_successor","identity_role":"authoritative_payload","name":"normal_successor","required":false,"type":"optional<typed_id<exceptional_successor_id>>"},{"id":"cc.exceptional_exit.v1.unwind_successor","identity_role":"authoritative_payload","name":"unwind_successor","required":false,"type":"optional<typed_id<exceptional_successor_id>>"},{"id":"cc.exceptional_exit.v1.eh_boundary_declaration","identity_role":"authoritative_payload","name":"eh_boundary_declaration","required":false,"type":"optional<typed_id<cc_declaration_id>>"},{"id":"cc.exceptional_exit.v1.eh_selected_scope_kind","identity_role":"authoritative_payload","name":"eh_selected_scope_kind","required":false,"type":"optional<utf8_string>"},{"id":"cc.exceptional_exit.v1.eh_disposition","identity_role":"authoritative_payload","name":"eh_disposition","required":false,"type":"optional<utf8_string>"},{"id":"cc.exceptional_exit.v1.eh_boundary_state","identity_role":"authoritative_payload","name":"eh_boundary_state","required":false,"type":"optional<utf8_string>"},{"id":"cc.exceptional_exit.v1.eh_boundary_profile","identity_role":"authoritative_payload","name":"eh_boundary_profile","required":false,"type":"optional<utf8_string>"}],"coverage":{"execution_domain":"cc.original-exceptional-occurrences"},"descriptor_id":"cc.exceptional_exit.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::exceptional_exit","indexes":[["cc.exceptional_exit.v1.scope_detail"],["cc.exceptional_exit.v1.variant"]],"merge":{"conflict_columns":["cc.exceptional_exit.v1.block_ordinal","cc.exceptional_exit.v1.body","cc.exceptional_exit.v1.cleanup_declaration","cc.exceptional_exit.v1.cleanup_emission_ordinal","cc.exceptional_exit.v1.cleanup_profile","cc.exceptional_exit.v1.cleanup_registration_ordinal","cc.exceptional_exit.v1.cleanup_route","cc.exceptional_exit.v1.cleanup_target","cc.exceptional_exit.v1.cleanup_target_dtor_type","cc.exceptional_exit.v1.cleanup_target_profile","cc.exceptional_exit.v1.cleanup_target_usr","cc.exceptional_exit.v1.compile_unit","cc.exceptional_exit.v1.compiler_route","cc.exceptional_exit.v1.definition_source","cc.exceptional_exit.v1.does_not_return","cc.exceptional_exit.v1.does_not_throw","cc.exceptional_exit.v1.eh_boundary_declaration","cc.exceptional_exit.v1.eh_boundary_profile","cc.exceptional_exit.v1.eh_boundary_state","cc.exceptional_exit.v1.eh_disposition","cc.exceptional_exit.v1.eh_selected_scope_kind","cc.exceptional_exit.v1.eligibility","cc.exceptional_exit.v1.emitter_methods","cc.exceptional_exit.v1.expression","cc.exceptional_exit.v1.function","cc.exceptional_exit.v1.instruction_ordinal","cc.exceptional_exit.v1.intrinsic_id","cc.exceptional_exit.v1.is_invoke","cc.exceptional_exit.v1.lowered_block","cc.exceptional_exit.v1.lowered_block_count","cc.exceptional_exit.v1.lowered_block_ids","cc.exceptional_exit.v1.lowered_entry","cc.exceptional_exit.v1.lowered_successor_count","cc.exceptional_exit.v1.lowered_successor_ids","cc.exceptional_exit.v1.lowered_topology_profile","cc.exceptional_exit.v1.lowered_topology_state","cc.exceptional_exit.v1.lowering_profile","cc.exceptional_exit.v1.normal_successor","cc.exceptional_exit.v1.observation_state","cc.exceptional_exit.v1.ordinal","cc.exceptional_exit.v1.original_expression_ordinal","cc.exceptional_exit.v1.profile","cc.exceptional_exit.v1.reason","cc.exceptional_exit.v1.role","cc.exceptional_exit.v1.scope_detail","cc.exceptional_exit.v1.source","cc.exceptional_exit.v1.successor_ordinal","cc.exceptional_exit.v1.target","cc.exceptional_exit.v1.target_usr","cc.exceptional_exit.v1.unwind_successor","cc.exceptional_exit.v1.variant","cc.exceptional_exit.v1.variant_index","cc.exceptional_exit.v1.variant_kind","cc.exceptional_exit.v1.variant_symbol"],"mode":"functional_assertion"},"name":"cc.exceptional_exit","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.exceptional_exit.v1.compile_unit","cc.exceptional_exit.v1.scope_detail"]},"profile":"NG0","provenance":{"minimum":"canonicalization"},"references":[{"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.body"],"strength":"soft_semantic","target_columns":["cc.body.v1.body"],"target_relation":"cc.body"},{"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.cleanup_declaration"],"strength":"soft_semantic","target_columns":["cc.declaration.v1.declaration"],"target_relation":"cc.declaration"},{"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.cleanup_target"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"reject_batch","source_columns":["cc.exceptional_exit.v1.compile_unit"],"strength":"hard","target_columns":["build.compile_unit.v1.compile_unit"],"target_relation":"build.compile_unit"},{"on_missing":"reject_batch","source_columns":["cc.exceptional_exit.v1.definition_source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"},{"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.eh_boundary_declaration"],"strength":"soft_semantic","target_columns":["cc.declaration.v1.declaration"],"target_relation":"cc.declaration"},{"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.expression"],"strength":"soft_semantic","target_columns":["cc.syntax_node.v1.node"],"target_relation":"cc.syntax_node"},{"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.function"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.lowered_block"],"strength":"soft_semantic","target_columns":["cc.exceptional_block.v1.block"],"target_relation":"cc.exceptional_block"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.lowered_block_ids"],"strength":"soft_semantic","target_columns":["cc.exceptional_block.v1.block"],"target_relation":"cc.exceptional_block"},{"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.lowered_entry"],"strength":"soft_semantic","target_columns":["cc.exceptional_block.v1.block"],"target_relation":"cc.exceptional_block"},{"container_elements":true,"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.lowered_successor_ids"],"strength":"soft_semantic","target_columns":["cc.exceptional_successor.v1.successor"],"target_relation":"cc.exceptional_successor"},{"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.normal_successor"],"strength":"soft_semantic","target_columns":["cc.exceptional_successor.v1.successor"],"target_relation":"cc.exceptional_successor"},{"on_missing":"reject_batch","source_columns":["cc.exceptional_exit.v1.scope_detail"],"strength":"hard","target_columns":["cc.entity_detail.v1.detail"],"target_relation":"cc.entity_detail"},{"on_missing":"reject_batch","source_columns":["cc.exceptional_exit.v1.source"],"strength":"hard","target_columns":["source.span.v1.span"],"target_relation":"source.span"},{"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.target"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"},{"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.unwind_successor"],"strength":"soft_semantic","target_columns":["cc.exceptional_successor.v1.successor"],"target_relation":"cc.exceptional_successor"},{"on_missing":"unresolved","source_columns":["cc.exceptional_exit.v1.variant"],"strength":"soft_semantic","target_columns":["cc.exceptional_exit.v1.exit"],"target_relation":"cc.exceptional_exit"}],"semantic_major":1,"semantics":"cc.exceptional-exit/1","stability":"versioned","summary":"Original exceptional exit occurrences and excluded lowering views, with independent physical definition and actual ABI lowering variant membership; original LLVM ordinals never imply AST CFG joins.","version":"1.2.0"})cxxlens";
+				output.contract_digest = "sha256:66f7c0db37f8895d007d0f3e6a10c9302d74ed940e11ad1a02ead7118f1c6d49";
 				output.columns = {
 					{"cc.exceptional_exit.v1.exit", "exit", {sdk::scalar_kind::typed_id, "exceptional_exit_id", false}, true, sdk::column_role::claim_key},
 					{"cc.exceptional_exit.v1.compile_unit", "compile_unit", {sdk::scalar_kind::typed_id, "compile_unit_id", false}, true, sdk::column_role::authoritative_payload},
@@ -67,6 +67,21 @@ namespace cxxlens::cc::relations
 					{"cc.exceptional_exit.v1.cleanup_target_dtor_type", "cleanup_target_dtor_type", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.exceptional_exit.v1.cleanup_target_profile", "cleanup_target_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.exceptional_exit.v1.reason", "reason", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.exceptional_exit.v1.lowered_entry", "lowered_entry", {sdk::scalar_kind::typed_id, "exceptional_block_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.exceptional_exit.v1.lowered_block_count", "lowered_block_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.exceptional_exit.v1.lowered_block_ids", "lowered_block_ids", {sdk::scalar_kind::set, "exceptional_block_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.exceptional_exit.v1.lowered_successor_count", "lowered_successor_count", {sdk::scalar_kind::unsigned_integer, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.exceptional_exit.v1.lowered_successor_ids", "lowered_successor_ids", {sdk::scalar_kind::set, "exceptional_successor_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.exceptional_exit.v1.lowered_topology_state", "lowered_topology_state", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.exceptional_exit.v1.lowered_topology_profile", "lowered_topology_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.exceptional_exit.v1.lowered_block", "lowered_block", {sdk::scalar_kind::typed_id, "exceptional_block_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.exceptional_exit.v1.normal_successor", "normal_successor", {sdk::scalar_kind::typed_id, "exceptional_successor_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.exceptional_exit.v1.unwind_successor", "unwind_successor", {sdk::scalar_kind::typed_id, "exceptional_successor_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.exceptional_exit.v1.eh_boundary_declaration", "eh_boundary_declaration", {sdk::scalar_kind::typed_id, "cc_declaration_id", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.exceptional_exit.v1.eh_selected_scope_kind", "eh_selected_scope_kind", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.exceptional_exit.v1.eh_disposition", "eh_disposition", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.exceptional_exit.v1.eh_boundary_state", "eh_boundary_state", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
+					{"cc.exceptional_exit.v1.eh_boundary_profile", "eh_boundary_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
 				};
 				output.domain_identity.result_column = "cc.exceptional_exit.v1.exit";
 				output.domain_identity.projection = {
@@ -88,11 +103,18 @@ namespace cxxlens::cc::relations
 					{{"cc.exceptional_exit.v1.cleanup_target"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic},
 					{{"cc.exceptional_exit.v1.compile_unit"}, "build.compile_unit", {"build.compile_unit.v1.compile_unit"}, sdk::reference_strength::hard},
 					{{"cc.exceptional_exit.v1.definition_source"}, "source.span", {"source.span.v1.span"}, sdk::reference_strength::hard},
+					{{"cc.exceptional_exit.v1.eh_boundary_declaration"}, "cc.declaration", {"cc.declaration.v1.declaration"}, sdk::reference_strength::soft_semantic},
 					{{"cc.exceptional_exit.v1.expression"}, "cc.syntax_node", {"cc.syntax_node.v1.node"}, sdk::reference_strength::soft_semantic},
 					{{"cc.exceptional_exit.v1.function"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic},
+					{{"cc.exceptional_exit.v1.lowered_block"}, "cc.exceptional_block", {"cc.exceptional_block.v1.block"}, sdk::reference_strength::soft_semantic},
+					{{"cc.exceptional_exit.v1.lowered_block_ids"}, "cc.exceptional_block", {"cc.exceptional_block.v1.block"}, sdk::reference_strength::soft_semantic, true},
+					{{"cc.exceptional_exit.v1.lowered_entry"}, "cc.exceptional_block", {"cc.exceptional_block.v1.block"}, sdk::reference_strength::soft_semantic},
+					{{"cc.exceptional_exit.v1.lowered_successor_ids"}, "cc.exceptional_successor", {"cc.exceptional_successor.v1.successor"}, sdk::reference_strength::soft_semantic, true},
+					{{"cc.exceptional_exit.v1.normal_successor"}, "cc.exceptional_successor", {"cc.exceptional_successor.v1.successor"}, sdk::reference_strength::soft_semantic},
 					{{"cc.exceptional_exit.v1.scope_detail"}, "cc.entity_detail", {"cc.entity_detail.v1.detail"}, sdk::reference_strength::hard},
 					{{"cc.exceptional_exit.v1.source"}, "source.span", {"source.span.v1.span"}, sdk::reference_strength::hard},
 					{{"cc.exceptional_exit.v1.target"}, "cc.entity", {"cc.entity.v1.entity"}, sdk::reference_strength::soft_semantic},
+					{{"cc.exceptional_exit.v1.unwind_successor"}, "cc.exceptional_successor", {"cc.exceptional_successor.v1.successor"}, sdk::reference_strength::soft_semantic},
 					{{"cc.exceptional_exit.v1.variant"}, "cc.exceptional_exit", {"cc.exceptional_exit.v1.exit"}, sdk::reference_strength::soft_semantic},
 				};
 				output.merge = sdk::merge_mode::functional_assertion;
@@ -113,6 +135,11 @@ namespace cxxlens::cc::relations
 					"cc.exceptional_exit.v1.definition_source",
 					"cc.exceptional_exit.v1.does_not_return",
 					"cc.exceptional_exit.v1.does_not_throw",
+					"cc.exceptional_exit.v1.eh_boundary_declaration",
+					"cc.exceptional_exit.v1.eh_boundary_profile",
+					"cc.exceptional_exit.v1.eh_boundary_state",
+					"cc.exceptional_exit.v1.eh_disposition",
+					"cc.exceptional_exit.v1.eh_selected_scope_kind",
 					"cc.exceptional_exit.v1.eligibility",
 					"cc.exceptional_exit.v1.emitter_methods",
 					"cc.exceptional_exit.v1.expression",
@@ -120,7 +147,16 @@ namespace cxxlens::cc::relations
 					"cc.exceptional_exit.v1.instruction_ordinal",
 					"cc.exceptional_exit.v1.intrinsic_id",
 					"cc.exceptional_exit.v1.is_invoke",
+					"cc.exceptional_exit.v1.lowered_block",
+					"cc.exceptional_exit.v1.lowered_block_count",
+					"cc.exceptional_exit.v1.lowered_block_ids",
+					"cc.exceptional_exit.v1.lowered_entry",
+					"cc.exceptional_exit.v1.lowered_successor_count",
+					"cc.exceptional_exit.v1.lowered_successor_ids",
+					"cc.exceptional_exit.v1.lowered_topology_profile",
+					"cc.exceptional_exit.v1.lowered_topology_state",
 					"cc.exceptional_exit.v1.lowering_profile",
+					"cc.exceptional_exit.v1.normal_successor",
 					"cc.exceptional_exit.v1.observation_state",
 					"cc.exceptional_exit.v1.ordinal",
 					"cc.exceptional_exit.v1.original_expression_ordinal",
@@ -132,6 +168,7 @@ namespace cxxlens::cc::relations
 					"cc.exceptional_exit.v1.successor_ordinal",
 					"cc.exceptional_exit.v1.target",
 					"cc.exceptional_exit.v1.target_usr",
+					"cc.exceptional_exit.v1.unwind_successor",
 					"cc.exceptional_exit.v1.variant",
 					"cc.exceptional_exit.v1.variant_index",
 					"cc.exceptional_exit.v1.variant_kind",
@@ -504,6 +541,141 @@ namespace cxxlens::cc::relations
 			[[nodiscard]] static sdk::column_ref ref()
 			{
 				return {exceptional_exit::descriptor().id, "cc.exceptional_exit.v1.reason", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.exceptional_exit.v1.lowered_entry`. */
+		struct lowered_entry
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {exceptional_exit::descriptor().id, "cc.exceptional_exit.v1.lowered_entry", {sdk::scalar_kind::typed_id, "exceptional_block_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.exceptional_exit.v1.lowered_block_count`. */
+		struct lowered_block_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {exceptional_exit::descriptor().id, "cc.exceptional_exit.v1.lowered_block_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.exceptional_exit.v1.lowered_block_ids`. */
+		struct lowered_block_ids
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {exceptional_exit::descriptor().id, "cc.exceptional_exit.v1.lowered_block_ids", {sdk::scalar_kind::set, "exceptional_block_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.exceptional_exit.v1.lowered_successor_count`. */
+		struct lowered_successor_count
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {exceptional_exit::descriptor().id, "cc.exceptional_exit.v1.lowered_successor_count", {sdk::scalar_kind::unsigned_integer, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.exceptional_exit.v1.lowered_successor_ids`. */
+		struct lowered_successor_ids
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {exceptional_exit::descriptor().id, "cc.exceptional_exit.v1.lowered_successor_ids", {sdk::scalar_kind::set, "exceptional_successor_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.exceptional_exit.v1.lowered_topology_state`. */
+		struct lowered_topology_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {exceptional_exit::descriptor().id, "cc.exceptional_exit.v1.lowered_topology_state", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.exceptional_exit.v1.lowered_topology_profile`. */
+		struct lowered_topology_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {exceptional_exit::descriptor().id, "cc.exceptional_exit.v1.lowered_topology_profile", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.exceptional_exit.v1.lowered_block`. */
+		struct lowered_block
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {exceptional_exit::descriptor().id, "cc.exceptional_exit.v1.lowered_block", {sdk::scalar_kind::typed_id, "exceptional_block_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.exceptional_exit.v1.normal_successor`. */
+		struct normal_successor
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {exceptional_exit::descriptor().id, "cc.exceptional_exit.v1.normal_successor", {sdk::scalar_kind::typed_id, "exceptional_successor_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.exceptional_exit.v1.unwind_successor`. */
+		struct unwind_successor
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {exceptional_exit::descriptor().id, "cc.exceptional_exit.v1.unwind_successor", {sdk::scalar_kind::typed_id, "exceptional_successor_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.exceptional_exit.v1.eh_boundary_declaration`. */
+		struct eh_boundary_declaration
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {exceptional_exit::descriptor().id, "cc.exceptional_exit.v1.eh_boundary_declaration", {sdk::scalar_kind::typed_id, "cc_declaration_id", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.exceptional_exit.v1.eh_selected_scope_kind`. */
+		struct eh_selected_scope_kind
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {exceptional_exit::descriptor().id, "cc.exceptional_exit.v1.eh_selected_scope_kind", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.exceptional_exit.v1.eh_disposition`. */
+		struct eh_disposition
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {exceptional_exit::descriptor().id, "cc.exceptional_exit.v1.eh_disposition", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.exceptional_exit.v1.eh_boundary_state`. */
+		struct eh_boundary_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {exceptional_exit::descriptor().id, "cc.exceptional_exit.v1.eh_boundary_state", {sdk::scalar_kind::utf8_string, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `cc.exceptional_exit.v1.eh_boundary_profile`. */
+		struct eh_boundary_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {exceptional_exit::descriptor().id, "cc.exceptional_exit.v1.eh_boundary_profile", {sdk::scalar_kind::utf8_string, "", true}};
 			}
 		};
 	};

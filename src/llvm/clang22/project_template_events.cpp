@@ -11,6 +11,8 @@
 #include <clang/Index/USRGeneration.h>
 #include <clang/Sema/Sema.h>
 #include <llvm/ADT/SmallString.h>
+
+#include "project_object_recorder.hpp"
 namespace cxxlens_template_hook
 {
 	unsigned routes_overload();
@@ -252,6 +254,8 @@ namespace cxxlens::detail::clang22
 				if (!roots.emplace(native, id).second)
 					throw invalid("duplicate-active-evaluation-root");
 				out.roots.push_back({mode, false, constant, potential, bytecode, fold_failed, {}});
+				object_semantics::observe_object_evaluation_root(
+					c, native, id, true, constant, potential, bytecode, false);
 			}
 			else
 			{
@@ -266,6 +270,8 @@ namespace cxxlens::detail::clang22
 				r.potential_check = potential;
 				r.bytecode = bytecode;
 				r.fold_failure = fold_failed;
+				object_semantics::observe_object_evaluation_root(
+					c, native, i->second, false, constant, potential, bytecode, !fold_failed);
 				roots.erase(i);
 			}
 		}

@@ -546,6 +546,122 @@ int main()
 	set(i.groups[7][0], "enumeration_state", detached_cell::utf8("unavailable"));
 	require(state(q::project_source_includes(i.input()), s::unknown),
 			"unopened includes became empty");
+	{
+		fixture original;
+		original.include();
+		const auto add_source = [&](std::string snapshot, std::string file)
+		{
+			auto observed = original.groups[1][0];
+			set(observed, "snapshot", detached_cell::utf8(std::move(snapshot)));
+			set(observed, "file", detached_cell::utf8(std::move(file)));
+			original.groups[1].push_back(std::move(observed));
+		};
+		add_source("snapshot:worker", "file:worker");
+		add_source("snapshot:header", "file:header");
+		add_source("snapshot:variant", "file:variant");
+		add_source("snapshot:unentered", "file:unentered");
+		const auto add_unit = [&](std::string unit, std::string main)
+		{
+			auto observed = original.groups[0][0];
+			set(observed, "compile_unit", detached_cell::utf8(std::move(unit)));
+			set(observed, "main_source", detached_cell::utf8(std::move(main)));
+			original.groups[0].push_back(std::move(observed));
+		};
+		add_unit("tu:worker", "snapshot:worker");
+		add_unit("tu:variant-a", "snapshot:variant");
+		add_unit("tu:variant-b", "snapshot:variant");
+		const auto add_inventory =
+			[&](std::string id, std::string unit, std::string snapshot, std::string file)
+		{
+			auto observed = original.groups[7][0];
+			set(observed, "inventory", detached_cell::utf8(std::move(id)));
+			set(observed, "compile_unit", detached_cell::utf8(std::move(unit)));
+			set(observed, "source_snapshot", detached_cell::utf8(std::move(snapshot)));
+			set(observed, "file", detached_cell::utf8(std::move(file)));
+			original.groups[7].push_back(std::move(observed));
+		};
+		add_inventory("inventory:main-header", "tu:test", "snapshot:header", "file:header");
+		add_inventory("inventory:worker", "tu:worker", "snapshot:worker", "file:worker");
+		add_inventory("inventory:worker-header", "tu:worker", "snapshot:header", "file:header");
+		add_inventory("inventory:variant-a", "tu:variant-a", "snapshot:variant", "file:variant");
+		add_inventory("inventory:variant-b", "tu:variant-b", "snapshot:variant", "file:variant");
+		auto projected = q::project_source_includes(original.input());
+		require(projected && projected->populations.size() == 6U &&
+					std::ranges::all_of(projected->populations,
+										[](const auto& population)
+										{
+											return population.state == s::complete &&
+												!population.id.empty();
+										}),
+				"same-world files fabricated unit/include census alternatives");
+		q::application_query_results public_input;
+		public_input.snapshot_id = "query:original-includes";
+		constexpr std::array<std::string_view, 9U> names{"build.compile_unit.v1",
+														 "source.file.v1",
+														 "source.span.v1",
+														 "cc.entity.v1",
+														 "cc.entity_detail.v1",
+														 "cc.body.v1",
+														 "cc.cfg_node.v1",
+														 "source.include_inventory.v1",
+														 "source.include.v1"};
+		for (std::size_t group{}; group < names.size(); ++group)
+		{
+			auto data = std::make_shared<q::query_result::data>();
+			data->row_values = original.groups[group];
+			data->status = q::execution_status::complete;
+			data->input_complete = true;
+			data->snapshot = public_input.snapshot_id;
+			public_input.scans.push_back(
+				{std::string{names[group]}, {}, q::query_transfer_access::make(data)});
+		}
+		auto public_projection = q::project_source_includes(public_input);
+		require(public_projection && public_projection->populations.size() == 6U &&
+					public_projection->unresolved.empty(),
+				"public include query invented missing cross-unit files");
+		original.groups[7].pop_back();
+		auto missing_main = q::project_source_includes(original.input());
+		require(missing_main && missing_main->populations.size() == 6U &&
+					std::ranges::any_of(missing_main->populations,
+										[](const auto& population)
+										{
+											return population.compile_unit == "tu:variant-b" &&
+												population.source_snapshot == "snapshot:variant" &&
+												population.id.empty() &&
+												population.state == s::unknown;
+										}),
+				"actual main-source missing include census omitted or became zero");
+	}
+	{
+		fixture member;
+		member.include();
+		member.groups[7].clear();
+		set(member.groups[0][0],
+			"main_source",
+			detached_cell::unknown(member.groups[0][0].values.at("output.main_source").type,
+								   "fixture-original-main-source-unavailable"));
+		member.groups[8] = {row("source.include.v1",
+								{{"include", detached_cell::utf8("include:test")},
+								 {"compile_unit", detached_cell::utf8("tu:test")},
+								 {"source", detached_cell::utf8("span:test")},
+								 {"from_file", detached_cell::utf8("file:test")},
+								 {"resolution", detached_cell::utf8("external")}})};
+		auto missing_member = q::project_source_includes(member.input());
+		require(missing_member && missing_member->populations.size() == 1U &&
+					missing_member->populations[0].file == "file:test" &&
+					missing_member->populations[0].state == s::unknown,
+				"original include member/source membership lost without inventory");
+		set(member.groups[8][0], "from_file", detached_cell::utf8("file:foreign"));
+		require(state(q::project_source_includes(member.input()), s::conflicting),
+				"contradictory original include source association accepted");
+		member.groups[8].clear();
+		auto missing_association = q::project_source_includes(member.input());
+		require(missing_association && missing_association->populations.size() == 1U &&
+					missing_association->populations[0].source_snapshot.empty() &&
+					missing_association->populations[0].file.empty() &&
+					missing_association->populations[0].state == s::unknown,
+				"missing include source membership fabricated a global file association");
+	}
 	fixture f;
 	f.flow();
 	result = q::project_body_flow(f.input());

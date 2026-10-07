@@ -1,6 +1,9 @@
 #pragma once
 namespace clang { class Decl; class Stmt; class GlobalDecl; }
-namespace llvm { class Function; class CallBase; }
+namespace llvm { class Function; class CallBase; class BasicBlock; }
+extern "C" void cxxlens_eh_spec_scope(void*, const clang::Decl*, long long, bool);
+extern "C" void cxxlens_eh_invoke_boundary(void*, const clang::Decl*, llvm::CallBase*,
+                                         llvm::BasicBlock*, long long, unsigned);
 extern "C" void cxxlens_eh_function(void*,const clang::Decl*,llvm::Function*,bool);
 extern "C" void cxxlens_eh_variant(void*,const clang::GlobalDecl*);
 extern "C" void cxxlens_eh_expression(void*,const clang::Decl*,const clang::Stmt*,unsigned,bool);

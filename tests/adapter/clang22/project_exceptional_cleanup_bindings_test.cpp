@@ -101,8 +101,9 @@ void no_throw_owner() noexcept { risky(); }
 			bindings.declaration = [&](const clang::Decl* declaration) -> std::string_view
 			{
 				const auto* variable = llvm::dyn_cast<clang::VarDecl>(declaration);
-				require(variable && variable->hasLocalStorage(),
-						"cleanup observer invented an automatic declaration");
+				const auto* function = llvm::dyn_cast<clang::FunctionDecl>(declaration);
+				require((variable && variable->hasLocalStorage()) || function,
+						"binding must retain an actual cleanup variable or function boundary");
 				auto [entry, inserted] = original_declarations.try_emplace(declaration);
 				if (inserted)
 					entry->second =

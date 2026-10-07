@@ -4,6 +4,7 @@
 #include <cctype>
 #include <deque>
 #include <limits>
+#include <list>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -11,22 +12,27 @@
 #include <stdexcept>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 #include <cxxlens/relations/cc_abi_surface.hpp>
+#include <cxxlens/relations/cc_address_transfer.hpp>
 #include <cxxlens/relations/cc_body.hpp>
 #include <cxxlens/relations/cc_call_direct_target.hpp>
 #include <cxxlens/relations/cc_call_operand.hpp>
 #include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_cfg_edge.hpp>
+#include <cxxlens/relations/cc_cfg_element.hpp>
 #include <cxxlens/relations/cc_cfg_node.hpp>
 #include <cxxlens/relations/cc_declaration.hpp>
+#include <cxxlens/relations/cc_declaration_attribute.hpp>
 #include <cxxlens/relations/cc_declaration_inventory.hpp>
 #include <cxxlens/relations/cc_entity_detail.hpp>
 #include <cxxlens/relations/cc_entity_edge.hpp>
 #include <cxxlens/relations/cc_flow_fact.hpp>
 #include <cxxlens/relations/cc_flow_inventory.hpp>
 #include <cxxlens/relations/cc_layout_fact.hpp>
+#include <cxxlens/relations/cc_move_event.hpp>
 #include <cxxlens/relations/cc_operation.hpp>
 #include <cxxlens/relations/cc_record_inventory.hpp>
 #include <cxxlens/relations/cc_record_surface.hpp>
@@ -48,6 +54,7 @@
 #include "project_abi_observer.hpp"
 #include "project_exception_specification.hpp"
 #include "project_exceptional_exit_rows.hpp"
+#include "project_object_event_rows.hpp"
 #include "project_template_event_rows.hpp"
 #include "project_template_observer.hpp"
 #include "sdk/bounded_json_internal.hpp"
@@ -77,6 +84,7 @@
 #include <llvm/Support/Signals.h>
 
 #include "original_builtin_kind.hpp"
+#include "original_resource_inputs.hpp"
 #endif
 
 namespace cxxlens::detail::clang22
@@ -827,6 +835,8 @@ namespace cxxlens::detail::clang22
 		class collector final : public clang::RecursiveASTVisitor<collector>
 		{
 			using base = clang::RecursiveASTVisitor<collector>;
+			struct resource_scope_population;
+			struct resource_storage;
 			struct raw_pp_token
 			{
 				std::string id, spelling;
@@ -895,11 +905,12 @@ namespace cxxlens::detail::clang22
 					  const project_original_calls& original_calls,
 					  const std::string& project_id,
 					  const project_template_observations* templates,
-					  const project_template_event_observations* template_events)
+					  const project_template_event_observations* template_events,
+					  const object_semantics::project_object_observations* object_events)
 				: unit_{unit}, closure_{closure}, observations_{observations}, progress_{progress},
 				  abi_observer_{unit.ast(), unit.preprocessor(), unit.code_generation_options()},
 				  original_calls_{original_calls}, project_id_{project_id}, templates_{templates},
-				  template_events_{template_events}
+				  template_events_{template_events}, object_events_{object_events}
 			{
 				for (const auto& batch : normalized.batches)
 					for (const auto& row : batch.rows)
@@ -978,7 +989,11 @@ namespace cxxlens::detail::clang22
 					fail("traversal", "depth-limit");
 				retain_population_bytes(32U);
 				declaration_stack_.push_back(declaration);
+				const auto* previous_resource_initializer = resource_initializing_declaration_;
+				if (llvm::isa<clang::VarDecl, clang::FieldDecl>(declaration))
+					resource_initializing_declaration_ = declaration;
 				const auto result = base::TraverseDecl(declaration);
+				resource_initializing_declaration_ = previous_resource_initializer;
 				declaration_stack_.pop_back();
 				--depth_;
 				if (function != nullptr)
@@ -1169,6 +1184,12 @@ namespace cxxlens::detail::clang22
 								nullptr,
 								statement);
 				const auto source = span(statement->getSourceRange(), "expression");
+				if (source && !ast_enumerations_.empty() && ast_enumerations_.back().active)
+				{
+					retain_population_bytes(128U);
+					original_function_syntax_[ast_enumerations_.back().declaration].insert(
+						statement);
+				}
 				if (!ast_enumerations_.empty() && ast_enumerations_.back().active &&
 					ast_enumerations_.back().function == current_function_)
 				{
@@ -1405,7 +1426,10 @@ namespace cxxlens::detail::clang22
 						observe_macro_argument_expression(*expression, parent, parent_statement);
 					retain_population_bytes(row.canonical_form().size() + 128U);
 					pending_syntax_bindings_.push_back({std::move(row), statement});
+					observe_original_resource_statement(*statement);
 				}
+				else
+					note_original_resource_statement_frontier();
 				parents_.push_back(std::move(parent));
 				return true;
 			}
@@ -1768,6 +1792,8 @@ namespace cxxlens::detail::clang22
 				original_declarations_.emplace(declaration,
 											   row_id(original_declaration, "declaration"));
 				append(std::move(original_declaration));
+				if (population_admitted)
+					observe_original_resource_declaration(*declaration);
 				if (!type.isNull() && !llvm::isa<clang::FunctionDecl>(declaration))
 					layout(*declaration, type);
 				const auto* owner = llvm::dyn_cast<clang::NamedDecl>(
@@ -1799,6 +1825,13 @@ namespace cxxlens::detail::clang22
 					!function->doesThisDeclarationHaveABody() || function->isDefaulted() ||
 					function->isDeleted() || !admitted(function->getLocation()))
 					return true;
+				++physical_definition_admissions_;
+				if (const auto original = original_declarations_.find(function);
+					original != original_declarations_.end())
+				{
+					retain_population_bytes(original->second.size() + 128U);
+					physical_definition_ids_.insert(original->second);
+				}
 				build_cfg(*function);
 				return true;
 			}
@@ -1930,7 +1963,10 @@ namespace cxxlens::detail::clang22
 				const bool previous = tracked && ast_enumerations_.back().written_initializer;
 				if (tracked)
 					ast_enumerations_.back().written_initializer = true;
+				const auto* previous_resource_member_initializer = resource_member_initializer_;
+				resource_member_initializer_ = initializer;
 				const auto traversed = base::TraverseConstructorInitializer(initializer);
+				resource_member_initializer_ = previous_resource_member_initializer;
 				if (tracked)
 					ast_enumerations_.back().written_initializer = previous;
 				return traversed;
@@ -2546,6 +2582,9 @@ namespace cxxlens::detail::clang22
 				finish_operation_dispatch();
 				finish_flow_expressions();
 				finish_calls();
+				finish_cfg_elements();
+				finish_object_facets();
+				finish_original_resource_inputs();
 				finish_exceptional_exits();
 				if (templates_ != nullptr)
 				{
@@ -2606,7 +2645,23 @@ namespace cxxlens::detail::clang22
 						check(sdk::validate_domain_identity(
 							cc::relations::template_inventory::descriptor(), *inventory));
 						for (auto& row : events.rows)
+						{
+							if (row.descriptor_id == "cc.constant_evaluation_root.v1")
+							{
+								const auto& ordinal =
+									row.cells.at("cc.constant_evaluation_root.v1.ordinal");
+								if (ordinal.value)
+								{
+									const auto root = row_id(row, "root");
+									retain_population_bytes(root.size() + 128U);
+									if (!original_evaluation_roots_
+											 .emplace(std::get<std::uint64_t>(*ordinal.value), root)
+											 .second)
+										fail("object-events", "duplicate-original-evaluation-root");
+								}
+							}
 							append(std::move(row));
+						}
 					}
 					for (auto& row : template_rows)
 						append(std::move(row));
@@ -2662,6 +2717,22 @@ namespace cxxlens::detail::clang22
 				declarations.emplace("parsed_source_snapshots",
 									 flags("source_snapshot_id", std::move(parsed_snapshots_)));
 				finish_target_slots(declarations);
+				declarations.emplace(
+					"physical_definition_count",
+					sdk::detached_cell::unsigned_integer(physical_definition_admissions_));
+				declarations.emplace("physical_definition_ids",
+									 flags("cc_declaration_id", physical_definition_ids_));
+				declarations.emplace(
+					"physical_definition_state",
+					sdk::detached_cell::utf8(
+						physical_definition_admissions_ == physical_definition_ids_.size() &&
+								!unit_.ast().getDiagnostics().hasErrorOccurred()
+							? "complete"
+							: "partial"));
+				declarations.emplace(
+					"physical_definition_profile",
+					sdk::detached_cell::utf8("clang22-original-physical-definitions/1"));
+				finish_object_events(declarations);
 				declarations.emplace("file_state",
 									 symbol("cc.declaration-file-state/1", "complete"));
 				if (!declarations_complete)
@@ -2711,6 +2782,1096 @@ namespace cxxlens::detail::clang22
 						fail("exceptional-exits", "contradictory-original-definition");
 				}
 			}
+			std::string_view object_text(std::string value)
+			{
+				if (const auto found = object_texts_.find(value); found != object_texts_.end())
+					return *found;
+				retain_population_bytes(value.size() + 128U);
+				return *object_texts_.insert(std::move(value)).first;
+			}
+			std::string_view original_declaration(const clang::Decl& declaration) const
+			{
+				const auto found = original_declarations_.find(&declaration);
+				return found == original_declarations_.end() ? std::string_view{} : found->second;
+			}
+			static constexpr std::string_view resource_move_census_profile =
+				"clang22-original-written-ast-special-member-census/1";
+			static constexpr std::string_view resource_address_census_profile =
+				"clang22-original-written-ast-address-transfer-census/1";
+			void resource_charge(std::size_t operations)
+			{
+				if (operations > 8'000'000U - resource_work_)
+					fail("resource-inputs", "operation-limit");
+				resource_work_ += operations;
+			}
+			void resource_release(std::size_t bytes)
+			{
+				if (bytes > population_bytes_)
+					fail("resource-inputs", "storage-accounting-underflow");
+				population_bytes_ -= bytes;
+			}
+			resource_inputs::limits resource_remaining_limits() const
+			{
+				resource_inputs::limits result;
+				result.maximum_operations = 8'000'000U - resource_work_;
+				result.maximum_retained_bytes = 64U * 1024U * 1024U - population_bytes_;
+				return result;
+			}
+			static std::size_t resource_cell_heap(const sdk::detached_cell& cell)
+			{
+				auto bytes = cell.type.parameter.capacity() + 1U;
+				if (cell.unknown_reason)
+					bytes += cell.unknown_reason->capacity() + 1U;
+				if (cell.value)
+				{
+					if (const auto* s = std::get_if<std::string>(&*cell.value))
+						bytes += s->capacity() + 1U;
+					if (const auto* b = std::get_if<std::vector<std::byte>>(&*cell.value))
+						bytes += b->capacity();
+				}
+				return bytes;
+			}
+			static std::size_t resource_row_heap(const sdk::detached_row& row)
+			{
+				auto bytes = row.descriptor_id.capacity() + 1U;
+				for (const auto& [key, cell] : row.cells)
+					bytes += sizeof(decltype(row.cells)::value_type) + 4U * sizeof(void*) + 64U +
+						key.capacity() + 1U + resource_cell_heap(cell);
+				return bytes;
+			}
+			static std::size_t
+			resource_detached_storage(const resource_inputs::detached_inputs& input)
+			{
+				auto bytes = input.rows.capacity() * sizeof(sdk::detached_row) +
+					input.summaries.capacity() * sizeof(resource_inputs::carrier_summary);
+				for (const auto& row : input.rows)
+					bytes += resource_row_heap(row);
+				for (const auto& summary : input.summaries)
+				{
+					bytes += summary.declaration.capacity() + summary.syntax.capacity() + 2U +
+						summary.ids.capacity() * sizeof(std::string);
+					for (const auto& id : summary.ids)
+						bytes += id.capacity() + 1U;
+				}
+				return bytes;
+			}
+			static std::size_t
+			resource_observation_storage(const resource_inputs::observations& input)
+			{
+				auto bytes =
+					input.attributes.capacity() * sizeof(resource_inputs::attribute_observation) +
+					input.moves.capacity() * sizeof(resource_inputs::move_observation) +
+					input.addresses.capacity() * sizeof(resource_inputs::address_observation);
+				for (const auto& attribute : input.attributes)
+					bytes += attribute.arguments.capacity() *
+						sizeof(resource_inputs::attribute_argument);
+				// Native pointers and StringRef views borrow compiler-owned objects.
+				return bytes;
+			}
+			resource_scope_population&
+			resource_scope(std::map<const clang::Decl*, resource_scope_population>& scopes,
+						   const clang::Decl* declaration)
+			{
+				if (const auto found = scopes.find(declaration); found != scopes.end())
+					return found->second;
+				constexpr auto bytes =
+					sizeof(std::remove_reference_t<decltype(scopes)>::value_type) +
+					4U * sizeof(void*) + 64U;
+				retain_population_bytes(bytes);
+				resource_scope_storage_ += bytes;
+				return scopes.try_emplace(declaration).first->second;
+			}
+			bool resource_initializer_active()
+			{
+				if (!resource_initializing_declaration_)
+					return false;
+				for (auto at = declaration_stack_.rbegin(); at != declaration_stack_.rend(); ++at)
+				{
+					resource_charge(1U);
+					if (*at == resource_initializing_declaration_)
+						return true;
+					if (llvm::isa<clang::FunctionDecl>(*at))
+						return false;
+				}
+				return false;
+			}
+			const clang::FunctionDecl* resource_body_owner()
+			{
+				if (ast_enumerations_.empty())
+					return nullptr;
+				const auto& scope = ast_enumerations_.back();
+				if (!scope.active && !scope.written_initializer)
+					return nullptr;
+				if (resource_initializer_active() &&
+					resource_initializing_declaration_->getDeclContext() != scope.declaration)
+					return nullptr;
+				return scope.declaration;
+			}
+			const clang::Decl* resource_initializer_owner(const clang::FunctionDecl*)
+			{
+				return resource_initializer_active() ? resource_initializing_declaration_ : nullptr;
+			}
+			void note_original_resource_statement_frontier()
+			{
+				const auto* body = resource_body_owner();
+				const auto* initializer = resource_initializer_owner(body);
+				if (body)
+					resource_scope(resource_body_scopes_, body).complete = false;
+				if (initializer)
+					resource_scope(resource_declaration_scopes_, initializer).complete = false;
+				resource_charge(1U);
+			}
+			void retain_resource_input(resource_inputs::observations input,
+									   const clang::FunctionDecl* body,
+									   const clang::Decl* initializer,
+									   resource_storage& reservation,
+									   std::optional<bool> evaluated = {})
+			{
+				const auto owned = resource_observation_storage(input);
+				if (owned > input.retained_bytes_bound)
+					fail("resource-inputs", "observation-storage-bound");
+				resource_charge(input.operations);
+				reservation.hold(owned);
+				if (pending_resource_inputs_.size() >= 1'000'000U)
+					fail("resource-inputs", "admission-limit");
+				if (body)
+					resource_scope(resource_body_scopes_, body);
+				if (initializer)
+					resource_scope(resource_declaration_scopes_, initializer);
+				pending_resource_inputs_.push_back({std::move(input),
+													body,
+													initializer,
+													evaluated,
+													owned,
+													resource_pending_node_bytes});
+				reservation.keep(owned + resource_pending_node_bytes);
+			}
+			void observe_original_resource_declaration(const clang::NamedDecl& declaration)
+			{
+				if (resource_declaration_admissions_.contains(&declaration))
+					return;
+				constexpr auto admission_bytes =
+					sizeof(const clang::Decl*) + 4U * sizeof(void*) + 64U;
+				retain_population_bytes(admission_bytes);
+				resource_scope_storage_ += admission_bytes;
+				resource_declaration_admissions_.insert(&declaration);
+				const auto* body = resource_body_owner();
+				const auto* initializer = llvm::isa<clang::VarDecl, clang::FieldDecl>(declaration)
+					? &declaration
+					: nullptr;
+				// Reserve the list node before any helper-owned allocation occurs.
+				resource_storage reservation{*this};
+				reservation.hold(resource_pending_node_bytes);
+				auto input = take(
+					resource_inputs::observe_declaration(declaration, resource_remaining_limits()));
+				retain_resource_input(std::move(input), body, initializer, reservation);
+			}
+			void observe_original_resource_statement(const clang::Stmt& statement)
+			{
+				const auto* body = resource_body_owner();
+				const auto* initializer = resource_initializer_owner(body);
+				const auto* owner = body		 ? static_cast<const clang::Decl*>(body)
+					: initializer				 ? initializer
+					: declaration_stack_.empty() ? nullptr
+												 : declaration_stack_.back();
+				resource_storage reservation{*this};
+				reservation.hold(resource_pending_node_bytes);
+				auto input = take(resource_inputs::observe_statement(
+					statement,
+					{owner, resource_initializing_declaration_, resource_member_initializer_},
+					resource_remaining_limits()));
+				std::optional<bool> evaluated;
+				if (const auto* expression = llvm::dyn_cast<clang::Expr>(&statement))
+				{
+					const auto state = evaluation_context(*expression);
+					if (state == "potentially_evaluated")
+						evaluated = true;
+					else if (state == "unevaluated")
+						evaluated = false;
+				}
+				retain_resource_input(std::move(input), body, initializer, reservation, evaluated);
+			}
+			static std::size_t resource_canonical_bound(const sdk::detached_row& row)
+			{
+				auto bytes = 64U + 6U * row.descriptor_id.size();
+				for (const auto& [key, cell] : row.cells)
+				{
+					bytes += 256U + 6U * (key.size() + cell.type.parameter.size());
+					if (cell.unknown_reason)
+						bytes += 6U * cell.unknown_reason->size();
+					if (cell.value)
+					{
+						if (const auto* s = std::get_if<std::string>(&*cell.value))
+							bytes += 6U * s->size();
+						if (const auto* b = std::get_if<std::vector<std::byte>>(&*cell.value))
+							bytes += 2U * b->size();
+					}
+				}
+				return bytes;
+			}
+			void append_original_resource_row(sdk::detached_row& row,
+											  resource_storage& detached_storage)
+			{
+				const auto payload = resource_row_heap(row);
+				const auto canonical_bound = resource_canonical_bound(row);
+				resource_storage serialization{*this};
+				// Bound stream growth, returned strings and one cell's encoding scratch.
+				serialization.hold(6U * canonical_bound + 512U);
+				auto key = row.canonical_form();
+				if (key.capacity() > 2U * canonical_bound)
+					fail("resource-inputs", "canonical-storage-bound");
+				if (rows_.contains(key))
+					return;
+				if (rows_.size() >= 1'000'000U ||
+					key.size() > 128U * 1024U * 1024U - retained_bytes_)
+					fail("resource", "fact-output-limit");
+				const auto node = sizeof(decltype(rows_)::value_type) + 4U * sizeof(void*) + 64U;
+				serialization.keep(key.capacity() + 1U + node);
+				detached_storage.keep(payload);
+				retained_bytes_ += key.size();
+				rows_.emplace(std::move(key), std::move(row));
+				// Output row/payload/key charges persist; only actual scratch is released.
+			}
+			void finish_original_resource_inputs()
+			{
+				// Guards precede owned structures: reverse destruction frees each map
+				// before the corresponding population-byte reservation is released.
+				resource_storage declaration_lookup_storage{*this};
+				std::map<std::string_view, sdk::detached_row*, std::less<>> declarations;
+				for (auto& [key, row] : rows_)
+				{
+					(void)key;
+					resource_charge(1U);
+					if (row.descriptor_id != cc::relations::declaration::descriptor().id)
+						continue;
+					const auto& id =
+						std::get<std::string>(*row.cells.at("cc.declaration.v1.declaration").value);
+					constexpr auto node =
+						sizeof(decltype(declarations)::value_type) + 4U * sizeof(void*) + 64U;
+					declaration_lookup_storage.hold(node);
+					if (!declarations.emplace(std::string_view{id}, &row).second)
+						fail("resource-inputs", "conflicting-original-declaration-carrier");
+				}
+				auto put = [&](sdk::detached_row& row,
+							   const sdk::relation_descriptor& d,
+							   std::string_view name,
+							   sdk::detached_cell cell,
+							   resource_storage* prepaid = nullptr)
+				{
+					// Value ownership persists in the original output row, not in scratch.
+					const auto storage = resource_cell_heap(cell) + 256U;
+					if (prepaid)
+					{
+						if (storage > prepaid->bytes)
+							prepaid->hold(storage - prepaid->bytes);
+					}
+					else
+						retain_population_bytes(storage);
+					resource_charge(1U);
+					const auto column = take(d.column(d.id + "." + std::string{name}));
+					cell.type = column.type;
+					const auto owned = resource_cell_heap(cell) + 256U;
+					if (owned > storage)
+					{
+						if (prepaid)
+							prepaid->hold(owned - storage);
+						else
+							retain_population_bytes(owned - storage);
+					}
+					const auto old = row.cells.find(column.id);
+					if (old != row.cells.end() && old->second.state != sdk::cell_state::absent &&
+						(old->second.state != cell.state || old->second.value != cell.value ||
+						 old->second.unknown_reason != cell.unknown_reason))
+						fail("resource-inputs", "conflicting-original-inventory-facet");
+					if (prepaid)
+						prepaid->keep(owned);
+					row.cells.insert_or_assign(column.id, std::move(cell));
+				};
+				auto put_ids = [&](sdk::detached_row& row,
+								   const sdk::relation_descriptor& d,
+								   std::string_view name,
+								   const std::set<std::string, std::less<>>& ids)
+				{
+					std::size_t bytes{};
+					for (const auto& id : ids)
+					{
+						resource_charge(id.size() + 1U);
+						if (id.size() > std::numeric_limits<std::uint32_t>::max())
+							fail("resource-inputs", "original-occurrence-id-size");
+						bytes += id.size() + 4U;
+					}
+					// Reserve encoding allocation before building the owned output value.
+					resource_storage encoding_storage{*this};
+					encoding_storage.hold(bytes * 2U + 256U);
+					std::vector<std::byte> encoded;
+					encoded.reserve(bytes);
+					for (const auto& id : ids)
+					{
+						for (unsigned shift = 0U; shift < 32U; shift += 8U)
+							encoded.push_back(static_cast<std::byte>((id.size() >> shift) & 255U));
+						for (char c : id)
+							encoded.push_back(
+								static_cast<std::byte>(static_cast<unsigned char>(c)));
+					}
+					if (encoded.capacity() > bytes * 2U)
+						fail("resource-inputs", "original-occurrence-codec-storage-bound");
+					put(row,
+						d,
+						name,
+						sdk::detached_cell::bytes(std::move(encoded)),
+						&encoding_storage);
+					// The output cell keeps its capacity-based ownership charge. The
+					// unused encoding reservation is scratch and is released here.
+				};
+				auto merge =
+					[&](resource_population& to, const resource_inputs::carrier_summary& from)
+				{
+					resource_charge(from.ids.size() + 1U);
+					if (from.count != from.ids.size())
+						fail("resource-inputs", "original-occurrence-count-mismatch");
+					if (from.count > std::numeric_limits<std::uint64_t>::max() - to.count)
+						fail("resource-inputs", "occurrence-count-overflow");
+					to.count += from.count;
+					for (const auto& id : from.ids)
+					{
+						if (to.ids.contains(id))
+						{
+							to.complete = false;
+							continue;
+						}
+						const auto bytes = sizeof(decltype(to.ids)::value_type) +
+							4U * sizeof(void*) + 64U + id.size() * 2U + 1U;
+						retain_population_bytes(bytes);
+						resource_scope_storage_ += bytes;
+						to.ids.insert(id);
+					}
+				};
+				while (!pending_resource_inputs_.empty())
+				{
+					resource_storage input_storage{*this};
+					auto pending = std::move(pending_resource_inputs_.front());
+					pending_resource_inputs_.pop_front();
+					// A list node is actually destroyed here, unlike vector::clear().
+					resource_release(pending.node_storage);
+					input_storage.bytes = pending.observation_storage;
+					auto& input = pending.input;
+					if ((input.admitted_declaration &&
+						 original_declaration(*input.admitted_declaration).empty()) ||
+						(input.admitted_syntax && !syntax_nodes_.contains(input.admitted_syntax)) ||
+						(input.admitted_syntax &&
+						 syntax_nodes_.at(input.admitted_syntax).size() != 1U))
+					{
+						if (pending.body)
+							resource_scope(resource_body_scopes_, pending.body).complete = false;
+						if (pending.initializer)
+							resource_scope(resource_declaration_scopes_, pending.initializer)
+								.complete = false;
+						retain_population_bytes(256U);
+						output_.unresolved.push_back({"resource.original-carrier-frontier",
+													  observations_.compile_unit,
+													  "admit-exact-original-carrier-identity"});
+						continue;
+					}
+					resource_storage callback_storage{*this};
+					std::map<const clang::Stmt*, std::string_view> syntax_sources;
+					std::map<const clang::Decl*, std::string_view> declaration_sources;
+					std::map<const clang::Attr*, std::string_view> attribute_sources;
+					std::map<const clang::NamedDecl*, std::string_view> entities;
+					auto prepare = [&](auto& map, const auto* native, auto resolve)
+					{
+						resource_charge(1U);
+						if (!native || map.contains(native))
+							return;
+						constexpr auto bytes =
+							sizeof(typename std::remove_reference_t<decltype(map)>::value_type) +
+							4U * sizeof(void*) + 64U;
+						callback_storage.hold(bytes);
+						map.emplace(native, resolve(*native));
+					};
+					for (const auto& a : input.attributes)
+						prepare(attribute_sources,
+								a.attribute,
+								[&](const clang::Attr& v)
+								{
+									return object_text(
+										span(v.getRange(), "declaration").value_or(""));
+								});
+					for (const auto& a : input.moves)
+					{
+						prepare(syntax_sources,
+								static_cast<const clang::Stmt*>(a.site),
+								[&](const clang::Stmt& v)
+								{
+									return object_text(
+										span(v.getSourceRange(), "expression").value_or(""));
+								});
+						prepare(entities,
+								static_cast<const clang::NamedDecl*>(a.selected),
+								[&](const clang::NamedDecl& v)
+								{
+									return object_text(entity(&v));
+								});
+					}
+					for (const auto& a : input.addresses)
+					{
+						prepare(syntax_sources,
+								a.carrier_syntax,
+								[&](const clang::Stmt& v)
+								{
+									return object_text(
+										span(v.getSourceRange(), "expression").value_or(""));
+								});
+						prepare(declaration_sources,
+								a.carrier_declaration,
+								[&](const clang::Decl& v)
+								{
+									return object_text(
+										span(v.getSourceRange(), "declaration").value_or(""));
+								});
+						resource_charge(2U);
+						if (!a.source_type.isNull())
+							canonical_type(a.source_type);
+						if (!a.destination_type.isNull())
+							canonical_type(a.destination_type);
+					}
+					// Existing resolver calls finish before helper limits are captured.
+					// During detach, callbacks are read-only native-key lookups: they
+					// cannot independently grow population storage under that limit.
+					resource_inputs::bindings bindings;
+					bindings.compile_unit = observations_.compile_unit;
+					bindings.declaration = [&](const clang::Decl& d)
+					{
+						return original_declaration(d);
+					};
+					bindings.syntax = [&](const clang::Stmt& s) -> std::string_view
+					{
+						const auto found = syntax_nodes_.find(&s);
+						return found != syntax_nodes_.end() && found->second.size() == 1U
+							? std::string_view{*found->second.begin()}
+							: std::string_view{};
+					};
+					bindings.source = [&](const clang::Stmt& s)
+					{
+						const auto at = syntax_sources.find(&s);
+						return at == syntax_sources.end() ? std::string_view{} : at->second;
+					};
+					bindings.declaration_source = [&](const clang::Decl& d)
+					{
+						const auto at = declaration_sources.find(&d);
+						return at == declaration_sources.end() ? std::string_view{} : at->second;
+					};
+					bindings.attribute_source = [&](const clang::Attr& a)
+					{
+						const auto at = attribute_sources.find(&a);
+						return at == attribute_sources.end() ? std::string_view{} : at->second;
+					};
+					bindings.entity = [&](const clang::NamedDecl& d)
+					{
+						const auto at = entities.find(&d);
+						return at == entities.end() ? std::string_view{} : at->second;
+					};
+					bindings.canonical_type = [&](clang::QualType q) -> std::string_view
+					{
+						const auto at = types_.find(q.getCanonicalType().getAsOpaquePtr());
+						return at == types_.end() ? std::string_view{}
+												  : std::string_view{at->second};
+					};
+					bindings.potentially_evaluated =
+						[&](const clang::Expr& e) -> std::optional<bool>
+					{
+						return input.admitted_syntax == &e ? pending.evaluated : std::nullopt;
+					};
+					bindings.descriptor =
+						[](std::string_view name) -> const sdk::relation_descriptor*
+					{
+						if (name == "cc.move_event")
+							return &cc::relations::move_event::descriptor();
+						if (name == "cc.declaration_attribute")
+							return &cc::relations::declaration_attribute::descriptor();
+						if (name == "cc.address_transfer")
+							return &cc::relations::address_transfer::descriptor();
+						return nullptr;
+					};
+					// This owned pending DTO's data remain intact. Only its accounting
+					// counters are zeroed: original observation work/storage are already
+					// charged independently by input_storage and resource_work_.
+					input.operations = input.retained_bytes_bound = 0U;
+					resource_storage detached_storage{*this};
+					auto detached =
+						take(resource_inputs::detach(input, bindings, resource_remaining_limits()));
+					resource_charge(detached.operations);
+					const auto owned = resource_detached_storage(detached);
+					if (owned > detached.retained_bytes_bound)
+						fail("resource-inputs", "detached-storage-bound");
+					detached_storage.hold(owned);
+					for (const auto& summary : detached.summaries)
+					{
+						if (summary.profile == resource_inputs::attribute_profile)
+						{
+							const auto found =
+								declarations.find(std::string_view{summary.declaration});
+							if (found == declarations.end())
+								fail("resource-inputs", "original-attribute-carrier-unavailable");
+							auto& row = *found->second;
+							const auto& d = cc::relations::declaration::descriptor();
+							put(row,
+								d,
+								"attribute_inventory_profile",
+								sdk::detached_cell::utf8(std::string{summary.profile}));
+							put(row,
+								d,
+								"attribute_inventory_state",
+								sdk::detached_cell::utf8("complete"));
+							put(row,
+								d,
+								"attribute_count",
+								sdk::detached_cell::unsigned_integer(summary.count));
+							resource_storage carrier_storage{*this};
+							std::set<std::string, std::less<>> carrier_ids;
+							for (const auto& id : summary.ids)
+							{
+								carrier_storage.hold(id.size() * 2U + 128U);
+								carrier_ids.insert(id);
+							}
+							put_ids(row, d, "attribute_ids", carrier_ids);
+							carrier_ids.clear(); // Free nodes and ID strings before refund.
+							put(row,
+								d,
+								"attribute_argument_state",
+								sdk::detached_cell::utf8(summary.argument_inventory_complete
+															 ? "complete"
+															 : "unsupported"));
+							if (summary.argument_inventory_complete)
+								put(row,
+									d,
+									"attribute_argument_count",
+									sdk::detached_cell::unsigned_integer(summary.argument_count));
+							check(sdk::validate_row(d, row));
+							check(sdk::validate_domain_identity(d, row));
+						}
+						else
+						{
+							const bool move = summary.profile == resource_inputs::move_profile;
+							if (!move && summary.profile != resource_inputs::address_profile)
+								fail("resource-inputs", "foreign-original-summary-profile");
+							if (pending.body)
+							{
+								auto& scope = resource_scope(resource_body_scopes_, pending.body);
+								merge(move ? scope.moves : scope.addresses, summary);
+							}
+							if (pending.initializer)
+							{
+								auto& scope = resource_scope(resource_declaration_scopes_,
+															 pending.initializer);
+								merge(move ? scope.moves : scope.addresses, summary);
+							}
+						}
+					}
+					for (auto& row : detached.rows)
+						append_original_resource_row(row, detached_storage);
+					// Reverse destruction frees detached rows/summaries, callback maps,
+					// and input observations before each temporary reservation is refunded.
+				}
+				auto attach = [&](sdk::detached_row& row,
+								  const sdk::relation_descriptor& d,
+								  const resource_scope_population& scope,
+								  bool original_complete)
+				{
+					for (const bool move : {true, false})
+					{
+						const auto& population = move ? scope.moves : scope.addresses;
+						const std::string prefix = move ? "move_input" : "address_input";
+						const bool complete = original_complete && scope.complete &&
+							population.complete && population.count == population.ids.size() &&
+							!unit_.ast().getDiagnostics().hasErrorOccurred();
+						put(row,
+							d,
+							prefix + "_profile",
+							sdk::detached_cell::utf8(
+								std::string{move ? resource_move_census_profile
+												 : resource_address_census_profile}));
+						put(row,
+							d,
+							prefix + "_state",
+							sdk::detached_cell::utf8(complete ? "complete" : "partial"));
+						put(row,
+							d,
+							prefix + "_count",
+							sdk::detached_cell::unsigned_integer(population.count));
+						put_ids(row, d, prefix + "_ids", population.ids);
+					}
+					check(sdk::validate_row(d, row));
+					check(sdk::validate_domain_identity(d, row));
+				};
+				for (const auto& [declaration, scope] : resource_declaration_scopes_)
+				{
+					const auto found = declarations.find(original_declaration(*declaration));
+					if (found != declarations.end())
+					{
+						const clang::Expr* initializer{};
+						if (const auto* variable = llvm::dyn_cast<clang::VarDecl>(declaration))
+							initializer = variable->getInit();
+						else if (const auto* field = llvm::dyn_cast<clang::FieldDecl>(declaration))
+							initializer = field->getInClassInitializer();
+						const auto syntax =
+							initializer ? syntax_nodes_.find(initializer) : syntax_nodes_.end();
+						const bool original_complete = !declaration->isInvalidDecl() &&
+							(!initializer ||
+							 (syntax != syntax_nodes_.end() && syntax->second.size() == 1U));
+						attach(*found->second,
+							   cc::relations::declaration::descriptor(),
+							   scope,
+							   original_complete);
+					}
+				}
+				for (auto& [function, row] : finalized_bodies_)
+				{
+					const auto found = resource_body_scopes_.find(function);
+					const resource_scope_population empty;
+					const auto& ast = row.cells.at("cc.body.v1.ast_state");
+					const auto* state = ast.value ? std::get_if<std::string>(&*ast.value) : nullptr;
+					const bool original_complete = state && *state == "complete" &&
+						function->doesThisDeclarationHaveABody() && !function->hasSkippedBody();
+					attach(row,
+						   cc::relations::body::descriptor(),
+						   found == resource_body_scopes_.end() ? empty : found->second,
+						   original_complete);
+					// Complete above closes written AST only. The independent operation
+					// census does not invent missing implicit/default activation operands.
+					retain_population_bytes(512U);
+					output_.unresolved.push_back(
+						{"resource.activation-domain-frontier",
+						 row_id(row, "body"),
+						 "bind-original-implicit-and-default-action-resource-endpoints-before-"
+						 "executable-resource-closure"});
+				}
+				resource_declaration_admissions_.clear();
+				resource_body_scopes_.clear();
+				resource_declaration_scopes_.clear();
+				// All owned scope/admission nodes and their ID strings are now freed.
+				resource_release(resource_scope_storage_);
+				resource_scope_storage_ = 0U;
+			}
+
+			void finish_cfg_elements()
+			{
+				const auto& descriptor = cc::relations::cfg_element::descriptor();
+				for (auto& item : pending_cfg_elements_)
+				{
+					bool complete = true;
+					if (item.statement)
+					{
+						const auto expression = original_syntax(item.statement);
+						if (expression)
+							item.row.cells.insert_or_assign(
+								descriptor.id + ".expression",
+								id("syntax_node_id", *expression, true));
+						else
+							complete = false;
+						if (const auto source = span(item.statement->getSourceRange(), "statement"))
+							item.row.cells.insert_or_assign(descriptor.id + ".source",
+															id("source_span_id", *source, true));
+					}
+					if (item.declaration)
+					{
+						const auto declaration = original_declaration(*item.declaration);
+						if (!declaration.empty())
+							item.row.cells.insert_or_assign(
+								descriptor.id + ".declaration",
+								id("cc_declaration_id", std::string(declaration), true));
+						else
+							complete = false;
+					}
+					auto state = sdk::detached_cell::utf8(complete ? "complete" : "partial");
+					state.type = take(descriptor.column(descriptor.id + ".binding_state")).type;
+					item.row.cells.insert_or_assign(descriptor.id + ".binding_state",
+													std::move(state));
+					check(sdk::validate_row(descriptor, item.row));
+					append(std::move(item.row));
+				}
+				pending_cfg_elements_.clear();
+			}
+			void object_work(std::size_t operations = 1U)
+			{
+				if (operations >
+					object_semantics::object_facet_limits{}.maximum_operations - object_work_)
+					fail("object-facets", "operation-limit");
+				object_work_ += operations;
+			}
+			object_semantics::owned_object_state
+			observed_owned_object_state(const clang::FunctionDecl& function,
+										const clang::VarDecl& object,
+										const clang::Expr& address,
+										const clang::CFG& cfg)
+			{
+				std::size_t operations{};
+				const auto remaining =
+					object_semantics::object_facet_limits{}.maximum_operations - object_work_;
+				auto result = object_semantics::observe_owned_object_state(
+					function,
+					object,
+					address,
+					cfg,
+					std::min(remaining, std::size_t{100'000U}),
+					100'000U,
+					operations);
+				object_work(operations);
+				return result;
+			}
+			object_semantics::direct_lifetime_state
+			observed_direct_lifetime_state(const clang::FunctionDecl& function,
+										   const clang::VarDecl& object,
+										   const clang::Expr& use,
+										   const clang::CFG& cfg)
+			{
+				std::size_t operations{};
+				const auto remaining =
+					object_semantics::object_facet_limits{}.maximum_operations - object_work_;
+				auto result = object_semantics::observe_direct_lifetime_state(
+					function,
+					object,
+					use,
+					cfg,
+					std::min(remaining, std::size_t{1'000'000U}),
+					100'000U,
+					operations);
+				object_work(operations);
+				return result;
+			}
+			void apply_object_facets(object_semantics::detached_object_facets original)
+			{
+				object_work(original.operations);
+				for (const auto& update : original.updates)
+				{
+					bool bound{};
+					auto matches = [&](const sdk::detached_row& row, std::string_view key)
+					{
+						object_work();
+						return row.descriptor_id == update.relation &&
+							row_id(row, key) == update.target;
+					};
+					auto apply =
+						[&](sdk::detached_row& row, const sdk::relation_descriptor& descriptor)
+					{
+						bound = true;
+						for (const auto& [column, cell] : update.fields)
+						{
+							object_work();
+							retain_population_bytes(cell.canonical_form().size() + 256U);
+							const auto old = row.cells.find(column);
+							if (old != row.cells.end() &&
+								old->second.state != sdk::cell_state::absent &&
+								old->second.canonical_form() != cell.canonical_form())
+								fail("object-facets", "contradictory-original-payload");
+							row.cells.insert_or_assign(column, cell);
+						}
+						check(sdk::validate_row(descriptor, row));
+						check(sdk::validate_domain_identity(descriptor, row));
+					};
+					if (update.relation == "cc.entity_detail.v1")
+					{
+						for (auto& [physical, row] : finalized_function_details_)
+						{
+							object_work();
+							if (original_declaration(*physical) == update.scope_declaration &&
+								matches(row, "entity") && row_id(row, "source") == update.source)
+								apply(row, cc::relations::entity_detail::descriptor());
+						}
+					}
+					else if (update.relation == "cc.body.v1")
+					{
+						for (auto& [physical, row] : finalized_bodies_)
+						{
+							object_work();
+							if (original_declaration(*physical) == update.scope_declaration &&
+								matches(row, "body"))
+								apply(row, cc::relations::body::descriptor());
+						}
+					}
+					else
+					{
+						const sdk::relation_descriptor* descriptor{};
+						std::string_view key;
+						if (update.relation == "cc.cfg_edge.v1")
+						{
+							descriptor = &cc::relations::cfg_edge::descriptor();
+							key = "edge";
+						}
+						else if (update.relation == "cc.type.v1")
+						{
+							descriptor = &cc::relations::type::descriptor();
+							key = "type";
+						}
+						else if (update.relation == "cc.syntax_node.v1")
+						{
+							descriptor = &cc::relations::syntax_node::descriptor();
+							key = "node";
+						}
+						else
+							fail("object-facets", "unsupported-original-relation");
+						for (auto& [identity, row] : rows_)
+						{
+							(void)identity;
+							// Keep every relevant original alternative; an identity conflict
+							// cannot be hidden by updating only the first matching row.
+							if (matches(row, key))
+								apply(row, *descriptor);
+						}
+					}
+					if (!bound)
+					{
+						retain_population_bytes(update.target.size() + 256U);
+						output_.unresolved.push_back({"object.facet-binding-frontier",
+													  update.target,
+													  "original-physical-row-binding-required"});
+					}
+				}
+			}
+			void finish_object_facets()
+			{
+				// Physical coroutine classification does not depend on CFG construction or
+				// lowering/activation closure. Bind every original finalized body independently.
+				for (auto& [function, body] : finalized_bodies_)
+				{
+					object_work();
+					const auto* coroutine =
+						llvm::dyn_cast<clang::CoroutineBodyStmt>(function->getBody());
+					const auto syntax =
+						coroutine ? original_syntax(coroutine) : std::optional<std::string>{};
+					const bool complete = !original_declaration(*function).empty() &&
+						(!coroutine || syntax.has_value());
+					retain_population_bytes(128U + (syntax ? syntax->size() * 2U : 0U));
+					if (syntax)
+						body.cells.insert_or_assign("cc.body.v1.coroutine_body",
+													id("syntax_node_id", *syntax, true));
+					auto state = sdk::detached_cell::utf8(complete ? "complete" : "partial");
+					state.type.optional = true;
+					body.cells.insert_or_assign("cc.body.v1.coroutine_binding_state",
+												std::move(state));
+					check(sdk::validate_row(cc::relations::body::descriptor(), body));
+				}
+				for (const auto& original : pending_object_cfg_)
+				{
+					const auto& function = *original.function;
+					object_semantics::object_facet_bindings bindings;
+					bindings.compile_unit = observations_.compile_unit;
+					bindings.body = original.body;
+					bindings.declaration = [&](const clang::Decl& d)
+					{
+						return original_declaration(d);
+					};
+					bindings.entity = [&](const clang::NamedDecl& d)
+					{
+						return object_text(entity(&d));
+					};
+					bindings.syntax = [&](const clang::Stmt& s)
+					{
+						return object_text(original_syntax(&s).value_or(""));
+					};
+					bindings.canonical_type = [&](clang::QualType q)
+					{
+						canonical_type(q);
+						return std::string_view{types_.at(q.getCanonicalType().getAsOpaquePtr())};
+					};
+					bindings.declaration_source = [&](const clang::FunctionDecl& d)
+					{
+						return object_text(span(d.getSourceRange(), "declaration").value_or(""));
+					};
+					bindings.cfg_node = [&](unsigned n) -> std::string_view
+					{
+						const auto found = original.nodes.find(n);
+						return found == original.nodes.end() ? std::string_view{} : found->second;
+					};
+					bindings.cfg_edge = [&](unsigned from, unsigned to) -> std::string_view
+					{
+						const auto from_id = original.nodes.find(from),
+								   to_id = original.nodes.find(to);
+						if (from_id == original.nodes.end() || to_id == original.nodes.end())
+							return {};
+						std::string_view result;
+						for (const auto& [identity, row] : rows_)
+						{
+							(void)identity;
+							object_work();
+							if (row.descriptor_id == "cc.cfg_edge.v1" &&
+								row_id(row, "from") == from_id->second &&
+								row_id(row, "to") == to_id->second)
+							{
+								if (!result.empty())
+									return {}; // Parallel actual edges require independent
+											   // bindings.
+								result = object_text(row_id(row, "edge"));
+							}
+						}
+						return result;
+					};
+					apply_object_facets(take(object_semantics::detach_function_exit_facets(
+						function,
+						object_semantics::observe_function_exits(function, *original.cfg),
+						bindings)));
+					const auto statements = original_function_syntax_.find(&function);
+					if (statements == original_function_syntax_.end())
+						continue;
+					for (const auto* statement : statements->second)
+					{
+						object_work();
+						if (const auto* cast = llvm::dyn_cast<clang::CastExpr>(statement))
+						{
+							if (cast->getType()->isEnumeralType())
+								apply_object_facets(take(object_semantics::detach_enum_value_facets(
+									*cast,
+									object_semantics::observe_enum_value(*cast, unit_.ast()),
+									function,
+									bindings)));
+							if (cast->getType()->isBooleanType() &&
+								(cast->getCastKind() == clang::CK_IntegralToBoolean ||
+								 llvm::isa<clang::BuiltinBitCastExpr>(cast)))
+								apply_object_facets(take(object_semantics::detach_bool_value_facets(
+									*cast,
+									object_semantics::observe_bool_representation(*cast,
+																				  unit_.ast()),
+									function,
+									bindings)));
+							auto facts =
+								object_semantics::observe_direct_downcast(*cast, unit_.ast());
+							if (facts.object && facts.actual_address)
+								apply_object_facets(
+									take(object_semantics::detach_direct_downcast_facets(
+										*cast,
+										facts,
+										observed_owned_object_state(function,
+																	*facts.object,
+																	*facts.actual_address,
+																	*original.cfg),
+										function,
+										bindings)));
+						}
+						if (const auto* expression = llvm::dyn_cast<clang::Expr>(statement))
+						{
+							auto facts = object_semantics::observe_direct_type_access(*expression,
+																					  unit_.ast());
+							if (facts.object && facts.actual_address)
+								apply_object_facets(
+									take(object_semantics::detach_direct_type_facets(
+										*expression,
+										facts,
+										observed_owned_object_state(function,
+																	*facts.object,
+																	*facts.actual_address,
+																	*original.cfg),
+										function,
+										bindings)));
+						}
+						if (const auto* call = llvm::dyn_cast<clang::CXXMemberCallExpr>(statement);
+							call && call->getMethodDecl() &&
+							!llvm::isa<clang::CXXDestructorDecl>(call->getMethodDecl()))
+						{
+							const auto* reference = llvm::dyn_cast<clang::DeclRefExpr>(
+								call->getImplicitObjectArgument()->IgnoreParenImpCasts());
+							const auto* object = reference
+								? llvm::dyn_cast<clang::VarDecl>(reference->getDecl())
+								: nullptr;
+							if (!object)
+								continue;
+							const auto facts = observed_direct_lifetime_state(
+								function, *object, *call, *original.cfg);
+							for (const auto* block : *original.cfg)
+							{
+								unsigned index{};
+								for (const auto& element : *block)
+								{
+									object_work();
+									if (const auto actual = element.getAs<clang::CFGStmt>();
+										actual && actual->getStmt() == call)
+										apply_object_facets(
+											take(object_semantics::detach_direct_lifetime_facets(
+												*call,
+												*object,
+												facts,
+												block->getBlockID(),
+												index,
+												function,
+												bindings)));
+									++index;
+								}
+							}
+						}
+					}
+				}
+			}
+			void finish_object_events(fields& inventory)
+			{
+				if (!object_events_)
+					return;
+				object_semantics::object_event_bindings bindings;
+				bindings.compile_unit = observations_.compile_unit;
+				bindings.declaration = [&](const clang::Decl& d)
+				{
+					return original_declaration(d);
+				};
+				bindings.entity = [&](const clang::NamedDecl& d)
+				{
+					return object_text(entity(&d));
+				};
+				bindings.usr = [&](const clang::NamedDecl& d) -> std::span<const std::byte>
+				{
+					if (const auto found = object_usrs_.find(&d); found != object_usrs_.end())
+						return found->second;
+					llvm::SmallString<256> usr;
+					if (clang::index::generateUSRForDecl(&d, usr))
+						return {};
+					retain_population_bytes(usr.size() + 128U);
+					const auto bytes = std::as_bytes(std::span{usr.data(), usr.size()});
+					return object_usrs_
+						.emplace(&d, std::vector<std::byte>{bytes.begin(), bytes.end()})
+						.first->second;
+				};
+				bindings.syntax = [&](const clang::Stmt& s)
+				{
+					return object_text(original_syntax(&s).value_or(""));
+				};
+				bindings.source = [&](const clang::Stmt& s)
+				{
+					return object_text(span(s.getSourceRange(), "expression").value_or(""));
+				};
+				bindings.is_system = [&](const clang::Expr& e) -> std::optional<bool>
+				{
+					if (e.getExprLoc().isInvalid())
+						return {};
+					return unit_.source_manager().isInSystemHeader(
+						unit_.source_manager().getExpansionLoc(e.getExprLoc()));
+				};
+				bindings.body = [&](const clang::FunctionDecl& d) -> std::string_view
+				{
+					for (const auto& original : pending_object_cfg_)
+						if (original.function == &d)
+							return original.body;
+					return {};
+				};
+				bindings.canonical_type = [&](clang::QualType q)
+				{
+					canonical_type(q);
+					return std::string_view{types_.at(q.getCanonicalType().getAsOpaquePtr())};
+				};
+				bindings.evaluation_root = [&](std::size_t ordinal) -> std::string_view
+				{
+					const auto found = original_evaluation_roots_.find(ordinal);
+					return found == original_evaluation_roots_.end() ? std::string_view{}
+																	 : found->second;
+				};
+				auto detached =
+					take(object_semantics::detach_project_object_events(*object_events_, bindings));
+				for (auto& [column, cell] : detached.inventory_facets)
+				{
+					const auto name = std::string_view{column}.substr(
+						std::string_view{"cc.declaration_inventory.v1."}.size());
+					inventory.emplace(std::string(name), std::move(cell));
+				}
+				for (auto& row : detached.rows)
+					append(std::move(row));
+				pending_object_cfg_.clear();
+			}
+
 			void finish_exceptional_exits()
 			{
 				auto original_text = [](const sdk::detached_row& row,
@@ -4404,6 +5565,134 @@ namespace cxxlens::detail::clang22
 					{
 						bind("base_expression", index->getBase());
 						bind("index_expression", index->getIdx());
+					}
+
+					fields original_facets;
+					const auto constant =
+						[&](const clang::Expr* expression) -> std::optional<std::int64_t>
+					{
+						if (!expression || expression->isValueDependent() ||
+							expression->isTypeDependent())
+							return {};
+						clang::Expr::EvalResult result;
+						if (!expression->EvaluateAsInt(
+								result, unit_.ast(), clang::Expr::SE_NoSideEffects) ||
+							!result.Val.isInt() || result.HasSideEffects ||
+							result.HasUndefinedBehavior)
+							return {};
+						const auto& value = result.Val.getInt();
+						if ((value.isSigned() && !value.isSignedIntN(64U)) ||
+							(value.isUnsigned() && value.getActiveBits() > 63U))
+							return {};
+						return value.isSigned() ? value.getSExtValue()
+												: static_cast<std::int64_t>(value.getZExtValue());
+					};
+					if (const auto* atomic = llvm::dyn_cast<clang::AtomicExpr>(binding.statement))
+					{
+						original_facets.emplace(
+							"atomic_operation",
+							sdk::detached_cell::unsigned_integer(atomic->getOp()));
+						original_facets.emplace(
+							"atomic_operation_name",
+							sdk::detached_cell::utf8(std::string(atomic->getOpAsString())));
+						original_facets.emplace(
+							"atomic_profile",
+							sdk::detached_cell::utf8("clang22-original-atomic-expression/1"));
+						bool mapped = bind("atomic_pointer_expression", atomic->getPtr());
+						const bool initialization =
+							atomic->getOp() == clang::AtomicExpr::AO__c11_atomic_init ||
+							atomic->getOp() == clang::AtomicExpr::AO__opencl_atomic_init;
+						auto order = [&](std::string_view axis, const clang::Expr* expression)
+						{
+							const auto prefix = "atomic_" + std::string(axis) + "_order_";
+							if (!expression)
+								original_facets.emplace(prefix + "state",
+														sdk::detached_cell::utf8("not_applicable"));
+							else
+							{
+								mapped &= bind(prefix + "expression", expression);
+								const auto value = constant(expression);
+								if (value)
+									original_facets.emplace(
+										prefix + "value",
+										sdk::detached_cell::signed_integer(*value));
+								original_facets.emplace(
+									prefix + "state",
+									sdk::detached_cell::utf8(value ? "complete" : "unknown"));
+							}
+						};
+						order("success", initialization ? nullptr : atomic->getOrder());
+						order("failure", atomic->isCmpXChg() ? atomic->getOrderFail() : nullptr);
+						original_facets.emplace(
+							"atomic_binding_state",
+							sdk::detached_cell::utf8(mapped ? "complete" : "partial"));
+					}
+					if (const auto* trait =
+							llvm::dyn_cast<clang::UnaryExprOrTypeTraitExpr>(binding.statement))
+					{
+						std::string kind = "unknown";
+						switch (trait->getKind())
+						{
+							case clang::UETT_SizeOf:
+								kind = "sizeof";
+								break;
+							case clang::UETT_AlignOf:
+								kind = "alignof";
+								break;
+							case clang::UETT_PreferredAlignOf:
+								kind = "preferred_alignof";
+								break;
+							case clang::UETT_VecStep:
+								kind = "vec_step";
+								break;
+							default:
+								break;
+						}
+						original_facets.emplace("type_trait_kind",
+												symbol("cc.type-trait-kind/1", kind));
+						original_facets.emplace(
+							"type_trait_argument_form",
+							symbol("cc.type-trait-argument-form/1",
+								   trait->isArgumentType() ? "type" : "expression"));
+						const auto argument_type = canonical_type(trait->getTypeOfArgument());
+						bool mapped = !argument_type.empty();
+						if (mapped)
+							original_facets.emplace("type_trait_argument_type",
+													id("cc_type_id", argument_type));
+						if (!trait->isArgumentType())
+							mapped &=
+								bind("type_trait_argument_expression", trait->getArgumentExpr());
+						std::string state = kind == "unknown" ? "unsupported" : "partial";
+						if (kind != "unknown" && mapped && !trait->isValueDependent() &&
+							!trait->isTypeDependent() &&
+							!trait->getTypeOfArgument()->isVariablyModifiedType())
+						{
+							clang::Expr::EvalResult result;
+							if (trait->EvaluateAsInt(
+									result, unit_.ast(), clang::Expr::SE_NoSideEffects) &&
+								result.Val.isInt() && !result.HasSideEffects &&
+								!result.HasUndefinedBehavior && !result.Val.getInt().isNegative())
+							{
+								llvm::SmallString<64> decimal;
+								result.Val.getInt().toString(decimal, 10U);
+								retain_population_bytes(decimal.size() + 256U);
+								original_facets.emplace(
+									"type_trait_result_decimal",
+									sdk::detached_cell::utf8(std::string(decimal)));
+								state = "complete";
+							}
+						}
+						original_facets.emplace("type_trait_state",
+												symbol("cc.syntax-observation-state/1", state));
+						original_facets.emplace(
+							"type_trait_profile",
+							sdk::detached_cell::utf8("clang22-original-type-trait-expression/1"));
+					}
+					for (auto& [name, cell] : original_facets)
+					{
+						cell.type = take(descriptor.column(descriptor.id + "." + name)).type;
+						binding.row.cells.insert_or_assign(descriptor.id + "." + name,
+														   std::move(cell));
 					}
 					std::set<const clang::Stmt*> children;
 					std::set<std::string, std::less<>> child_ids;
@@ -6448,6 +7737,19 @@ namespace cxxlens::detail::clang22
 			{
 				for (auto& binding : pending_flow_expressions_)
 				{
+					if (binding.declaration)
+					{
+						const auto declaration = original_declaration(*binding.declaration);
+						const auto& key = cc::relations::flow_fact::declaration::ref().column_id;
+						retain_population_bytes(256U + declaration.size() * 2U);
+						binding.row.cells.insert_or_assign(
+							key,
+							declaration.empty()
+								? sdk::detached_cell::unknown(
+									  binding.row.cells.at(key).type,
+									  "original-declaration-binding-unavailable")
+								: id("cc_declaration_id", std::string{declaration}, true));
+					}
 					bool complete = true;
 					for (const auto& [column, statement] :
 						 std::initializer_list<std::pair<std::string_view, const clang::Stmt*>>{
@@ -6467,11 +7769,14 @@ namespace cxxlens::detail::clang22
 						cell.type = binding.row.cells.at(key).type;
 						binding.row.cells.insert_or_assign(key, std::move(cell));
 					}
-					auto state =
-						symbol("cc.flow-binding-state/1", complete ? "complete" : "partial");
-					state.type = binding.row.cells.at("cc.flow_fact.v1.expression_state").type;
-					binding.row.cells.insert_or_assign("cc.flow_fact.v1.expression_state",
-													   std::move(state));
+					if (binding.expression)
+					{
+						auto state =
+							symbol("cc.flow-binding-state/1", complete ? "complete" : "partial");
+						state.type = binding.row.cells.at("cc.flow_fact.v1.expression_state").type;
+						binding.row.cells.insert_or_assign("cc.flow_fact.v1.expression_state",
+														   std::move(state));
+					}
 					check(sdk::validate_row(cc::relations::flow_fact::descriptor(), binding.row));
 					check(sdk::validate_domain_identity(cc::relations::flow_fact::descriptor(),
 														binding.row));
@@ -7199,6 +8504,9 @@ namespace cxxlens::detail::clang22
 							const point where{block->getBlockID(), position++};
 							implicit_element_active_ = true;
 							if (const auto lifetime = element.getAs<clang::CFGLifetimeEnds>())
+							{
+								++lifetime_end_admissions_;
+								binding_declaration_ = lifetime->getVarDecl();
 								emit("lifetime_end",
 									 where,
 									 owner_.entity(lifetime->getVarDecl()),
@@ -7209,6 +8517,8 @@ namespace cxxlens::detail::clang22
 									 {},
 									 {},
 									 "compiler_observed");
+								binding_declaration_ = nullptr;
+							}
 							if (const auto destructor = element.getAs<clang::CFGAutomaticObjDtor>())
 								emit(
 									"automatic_destructor",
@@ -7517,6 +8827,11 @@ namespace cxxlens::detail::clang22
 					}
 					row.emplace("node", id("cfg_node_id", nodes_.at(where.block)));
 					row.emplace("subject", id("cc_entity_id", subject_id));
+					if (binding_declaration_)
+						if (const auto original =
+								owner_.original_declarations_.find(binding_declaration_);
+							original != owner_.original_declarations_.end())
+							row.emplace("declaration", id("cc_declaration_id", original->second));
 					if (source)
 						row.emplace("source", id("source_span_id", *source));
 					if (!target.empty())
@@ -7568,15 +8883,19 @@ namespace cxxlens::detail::clang22
 					const auto result = row_id(fact, "fact");
 					owner_.retain_population_bytes(result.size() * 3U + 256U);
 					fact_ids_.insert(result);
+					if (kind == "lifetime_end")
+						lifetime_end_ids_.insert(result);
 					if (reaching)
 						reaching_points_.insert(result);
 					if (liveness)
 						liveness_points_.insert(result);
-					if (event && actual_expression)
+					if (event && (actual_expression || binding_declaration_))
 					{
 						owner_.retain_population_bytes(fact.canonical_form().size() + 128U);
-						owner_.pending_flow_expressions_.push_back(
-							{std::move(fact), actual_expression, binding_value_});
+						owner_.pending_flow_expressions_.push_back({std::move(fact),
+																	actual_expression,
+																	binding_value_,
+																	binding_declaration_});
 					}
 					else
 						owner_.append(std::move(fact));
@@ -7985,6 +9304,16 @@ namespace cxxlens::detail::clang22
 					value.emplace("fact_count",
 								  sdk::detached_cell::unsigned_integer(admitted_facts_));
 					value.emplace("facts", flags("flow_fact_id", fact_ids_));
+					value.emplace("lifetime_end_count",
+								  sdk::detached_cell::unsigned_integer(lifetime_end_admissions_));
+					value.emplace("lifetime_end_ids", flags("flow_fact_id", lifetime_end_ids_));
+					value.emplace("lifetime_end_state",
+								  sdk::detached_cell::utf8(lifetime_end_admissions_ ==
+																   lifetime_end_ids_.size()
+															   ? "complete"
+															   : "partial"));
+					value.emplace("lifetime_end_profile",
+								  sdk::detached_cell::utf8("clang22-original-cfg-lifetime-ends/1"));
 					value.emplace("program_point_profile",
 								  sdk::detached_cell::utf8(
 									  "clang22-cfg-boundaries-and-written-local-events/1"));
@@ -8035,7 +9364,9 @@ namespace cxxlens::detail::clang22
 				std::string body_id_, body_source_;
 				string_set fact_ids_, reaching_points_, liveness_points_, pointer_subjects_,
 					integer_subjects_;
-				std::uint64_t admitted_facts_{}, unmapped_facts_{};
+				std::uint64_t admitted_facts_{}, unmapped_facts_{}, lifetime_end_admissions_{};
+				string_set lifetime_end_ids_;
+				const clang::Decl* binding_declaration_{};
 				bool reaching_complete_{}, liveness_complete_{}, subjects_complete_{true};
 				std::map<const clang::Stmt*, point> points_;
 				std::vector<const clang::Stmt*> stack_;
@@ -8246,6 +9577,19 @@ namespace cxxlens::detail::clang22
 				value.emplace("edge_count", sdk::detached_cell::unsigned_integer(edges));
 				auto body = make_row(cc::relations::body::descriptor(), value);
 				const auto body_id = row_id(body, "body");
+				if (const auto physical = original_declarations_.find(&function);
+					physical != original_declarations_.end())
+				{
+					value.emplace("function_exit_declaration",
+								  id("cc_declaration_id", physical->second));
+					value.emplace("coroutine_definition",
+								  id("cc_declaration_id", physical->second));
+				}
+				value.emplace("is_coroutine",
+							  sdk::detached_cell::boolean(
+								  llvm::isa<clang::CoroutineBodyStmt>(function.getBody())));
+				value.emplace("coroutine_profile",
+							  sdk::detached_cell::utf8("clang22-original-coroutine-body/1"));
 				if (!cfg)
 				{
 					pending_bodies_.insert_or_assign(&function, std::move(value));
@@ -8294,6 +9638,97 @@ namespace cxxlens::detail::clang22
 					pending_cfg_terminators_.push_back(
 						{std::move(row), block->getTerminatorStmt(), nullptr});
 				}
+				std::set<std::string, std::less<>> element_ids;
+				for (const auto* block : *cfg)
+				{
+					std::uint64_t index{};
+					for (const auto& element : *block)
+					{
+						const clang::Stmt* statement{};
+						const clang::Decl* declaration{};
+						if (const auto original = element.getAs<clang::CFGStmt>())
+							statement = original->getStmt();
+						if (const auto original = element.getAs<clang::CFGLifetimeEnds>())
+						{
+							statement = original->getTriggerStmt();
+							declaration = original->getVarDecl();
+						}
+						if (const auto original = element.getAs<clang::CFGAutomaticObjDtor>())
+						{
+							statement = original->getTriggerStmt();
+							declaration = original->getVarDecl();
+						}
+						if (const auto original = element.getAs<clang::CFGScopeBegin>())
+						{
+							statement = original->getTriggerStmt();
+							declaration = original->getVarDecl();
+						}
+						if (const auto original = element.getAs<clang::CFGScopeEnd>())
+						{
+							statement = original->getTriggerStmt();
+							declaration = original->getVarDecl();
+						}
+						if (const auto original = element.getAs<clang::CFGCleanupFunction>())
+							declaration = original->getVarDecl();
+						if (const auto original = element.getAs<clang::CFGLoopExit>())
+							statement = original->getLoopStmt();
+						if (const auto original = element.getAs<clang::CFGNewAllocator>())
+							statement = original->getAllocatorExpr();
+						if (const auto original = element.getAs<clang::CFGDeleteDtor>())
+						{
+							statement = original->getDeleteExpr();
+							declaration = original->getCXXRecordDecl();
+						}
+						if (const auto original = element.getAs<clang::CFGMemberDtor>())
+							declaration = original->getFieldDecl();
+						if (const auto original = element.getAs<clang::CFGTemporaryDtor>())
+							statement = original->getBindTemporaryExpr();
+						if (const auto original = element.getAs<clang::CFGInitializer>())
+						{
+							statement = original->getInitializer()->getInit();
+							declaration = original->getInitializer()->getAnyMember();
+						}
+
+						static constexpr std::string_view kinds[]{"initializer",
+																  "scope_begin",
+																  "scope_end",
+																  "new_allocator",
+																  "lifetime_end",
+																  "loop_exit",
+																  "statement",
+																  "constructor",
+																  "record_typed_call",
+																  "automatic_object_dtor",
+																  "delete_dtor",
+																  "base_dtor",
+																  "member_dtor",
+																  "temporary_dtor",
+																  "cleanup_function"};
+						const auto kind = static_cast<std::size_t>(element.getKind());
+						fields item = common();
+						item.emplace("body", id("body_id", body_id));
+						item.emplace("function", id("cc_entity_id", function_id));
+						item.emplace("node", id("cfg_node_id", nodes.at(block->getBlockID())));
+						item.emplace("index", sdk::detached_cell::unsigned_integer(index++));
+						item.emplace("kind",
+									 sdk::detached_cell::utf8(std::string(
+										 kind < std::size(kinds) ? kinds[kind] : "unknown")));
+						item.emplace("profile",
+									 sdk::detached_cell::utf8("clang22-original-cfg-elements/1"));
+						item.emplace("binding_state", sdk::detached_cell::utf8("unknown"));
+						auto row =
+							make_row(cc::relations::cfg_element::descriptor(), std::move(item));
+						retain_population_bytes(row.canonical_form().size() + 256U);
+						element_ids.insert(row_id(row, "element"));
+						pending_cfg_elements_.push_back({std::move(row), statement, declaration});
+					}
+				}
+				value.emplace("cfg_element_count",
+							  sdk::detached_cell::unsigned_integer(element_ids.size()));
+				value.emplace("cfg_element_ids", flags("cfg_element_id", element_ids));
+				value.emplace("cfg_element_state", sdk::detached_cell::utf8("complete"));
+				value.emplace("cfg_element_profile",
+							  sdk::detached_cell::utf8("clang22-original-cfg-elements/1"));
 				value.emplace("entry", id("cfg_node_id", nodes.at(cfg->getEntry().getBlockID())));
 				value.emplace("exit", id("cfg_node_id", nodes.at(cfg->getExit().getBlockID())));
 				pending_bodies_.insert_or_assign(&function, std::move(value));
@@ -8375,6 +9810,10 @@ namespace cxxlens::detail::clang22
 				}
 				observe_cfg_operations(*cfg, nodes, body_id);
 				local_flow{*this, function, *cfg, nodes, body_id, *source}.run();
+				retain_population_bytes(sizeof(object_cfg_binding) + nodes.size() * 128U +
+										body_id.size());
+				pending_object_cfg_.push_back(
+					{&function, std::move(cfg), std::move(nodes), body_id});
 				if (progress_)
 					progress_("cfg/flow finished " + function.getQualifiedNameAsString());
 			}
@@ -8413,6 +9852,29 @@ namespace cxxlens::detail::clang22
 							  std::set<std::pair<std::string, const clang::ValueDecl*>>>>
 				activation_contexts_;
 			std::map<const clang::Decl*, std::string> original_declarations_;
+			std::uint64_t physical_definition_admissions_{};
+			std::set<std::string, std::less<>> physical_definition_ids_;
+			struct cfg_element_binding
+			{
+				sdk::detached_row row;
+				const clang::Stmt* statement;
+				const clang::Decl* declaration;
+			};
+			std::vector<cfg_element_binding> pending_cfg_elements_;
+			struct object_cfg_binding
+			{
+				const clang::FunctionDecl* function;
+				std::unique_ptr<clang::CFG> cfg;
+				std::map<unsigned, std::string> nodes;
+				std::string body;
+			};
+			std::vector<object_cfg_binding> pending_object_cfg_;
+			std::map<const clang::FunctionDecl*, std::set<const clang::Stmt*>>
+				original_function_syntax_;
+			std::set<std::string, std::less<>> object_texts_;
+			std::map<const clang::NamedDecl*, std::vector<std::byte>> object_usrs_;
+			std::map<std::size_t, std::string> original_evaluation_roots_;
+			std::size_t object_work_{};
 			std::size_t operation_bytes_{};
 			std::vector<pp_pending> pending_raw_pp_, pending_evaluated_pp_;
 			std::vector<raw_conditional> raw_conditionals_;
@@ -8441,6 +9903,58 @@ namespace cxxlens::detail::clang22
 				const clang::Stmt* statement;
 			};
 			std::vector<syntax_binding> pending_syntax_bindings_;
+			struct resource_population
+			{
+				std::uint64_t count{};
+				std::set<std::string, std::less<>> ids;
+				bool complete{true};
+			};
+			struct resource_scope_population
+			{
+				resource_population moves, addresses;
+				bool complete{true};
+			};
+			struct resource_storage
+			{
+				collector& owner;
+				std::size_t bytes{};
+				explicit resource_storage(collector& owner) : owner(owner) {}
+				resource_storage(const resource_storage&) = delete;
+				resource_storage& operator=(const resource_storage&) = delete;
+				void hold(std::size_t amount)
+				{
+					owner.retain_population_bytes(amount);
+					bytes += amount;
+				}
+				void keep(std::size_t amount)
+				{
+					if (amount > bytes)
+						fail("resource-inputs", "storage-transfer-underflow");
+					bytes -= amount;
+				}
+				~resource_storage()
+				{
+					owner.resource_release(bytes);
+				}
+			};
+			struct resource_pending_input
+			{
+				resource_inputs::observations input;
+				const clang::FunctionDecl* body{};
+				const clang::Decl* initializer{};
+				std::optional<bool> evaluated;
+				std::size_t observation_storage{}, node_storage{};
+			};
+			static constexpr std::size_t resource_pending_node_bytes =
+				sizeof(resource_pending_input) + 4U * sizeof(void*) + 64U;
+			std::list<resource_pending_input> pending_resource_inputs_;
+			std::set<const clang::Decl*> resource_declaration_admissions_;
+			std::map<const clang::Decl*, resource_scope_population> resource_declaration_scopes_,
+				resource_body_scopes_;
+			const clang::Decl* resource_initializing_declaration_{};
+			const clang::CXXCtorInitializer* resource_member_initializer_{};
+			std::size_t resource_work_{}, resource_scope_storage_{};
+
 			struct cfg_condition_binding
 			{
 				sdk::detached_row row;
@@ -8455,6 +9969,7 @@ namespace cxxlens::detail::clang22
 				sdk::detached_row row;
 				const clang::Stmt* expression;
 				const clang::Expr* value;
+				const clang::Decl* declaration;
 			};
 			std::vector<flow_expression_binding> pending_flow_expressions_;
 			std::map<const clang::Expr*, std::string> call_evaluation_;
@@ -8466,6 +9981,7 @@ namespace cxxlens::detail::clang22
 			std::size_t call_bytes_{};
 			const project_template_observations* templates_{};
 			const project_template_event_observations* template_events_{};
+			const object_semantics::project_object_observations* object_events_{};
 			std::string current_function_;
 			const clang::Stmt* inherited_default_{};
 			std::vector<ast_enumeration> ast_enumerations_;
@@ -8593,7 +10109,8 @@ namespace cxxlens::detail::clang22
 							  const project_original_calls& original_calls,
 							  const std::string& project_id,
 							  const project_template_observations* templates,
-							  const project_template_event_observations* template_events)
+							  const project_template_event_observations* template_events,
+							  const object_semantics::project_object_observations* object_events)
 	{
 #if defined(CXXLENS_HAS_CLANG22) && CXXLENS_HAS_CLANG22
 		try
@@ -8617,7 +10134,8 @@ namespace cxxlens::detail::clang22
 							  original_calls,
 							  project_id,
 							  templates,
-							  template_events};
+							  template_events,
+							  object_events};
 			if (progress)
 				progress("detaching preprocessor facts");
 			visitor.preprocess(preprocessing);
@@ -8651,6 +10169,7 @@ namespace cxxlens::detail::clang22
 		(void)project_id;
 		(void)templates;
 		(void)template_events;
+		(void)object_events;
 		return sdk::unexpected(
 			sdk::error{"native.unsupported-clang-major", "cpp-facts", "clang-major-22"});
 #endif
