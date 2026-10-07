@@ -51,6 +51,11 @@ int main()
 	auto missing = type_relation::view{legacy}.get<type_relation::builtin_kind>();
 	require(missing && missing->state == cell_state::absent && missing->type.optional,
 			"missing legacy builtin facet was invented");
+	const auto missing_storage =
+		type_relation::view{legacy}.get<type_relation::integer_object_bytes>();
+	require(missing_storage && missing_storage->state == cell_state::absent &&
+				missing_storage->type.optional,
+			"missing original object storage was invented");
 	const auto identity = derive_domain_identity(descriptor, legacy);
 	require(identity.has_value(), "original type identity unavailable");
 
@@ -71,6 +76,38 @@ int main()
 	const auto observed_identity = derive_domain_identity(descriptor, boolean);
 	require(observed_identity && *observed_identity == *identity,
 			"optional scalar facet changed structural type identity");
+	auto stored = boolean;
+	put(stored, "integer_object_bytes", detached_cell::unsigned_integer(1U));
+	put(stored,
+		"integer_storage_profile",
+		detached_cell::utf8("clang22-original-integer-object-storage/1"));
+	put(stored, "integer_storage_state", detached_cell::utf8("complete"));
+	require(validate_row(descriptor, stored).has_value(), "original storage payload rejected");
+	const auto observed_storage =
+		type_relation::view{stored}.get<type_relation::integer_object_bytes>();
+	require(observed_storage && observed_storage->value &&
+				std::get<std::uint64_t>(*observed_storage->value) == 1U,
+			"original storage was replaced by integer value width");
+	const auto stored_identity = derive_domain_identity(descriptor, stored);
+	require(stored_identity && *stored_identity == *identity,
+			"optional object storage changed structural type identity");
+	auto unknown_storage = legacy;
+	put(unknown_storage,
+		"integer_storage_profile",
+		detached_cell::utf8("clang22-original-integer-object-storage/1"));
+	put(unknown_storage, "integer_storage_state", detached_cell::utf8("unknown"));
+	require(validate_row(descriptor, unknown_storage).has_value(),
+			"unknown original storage without an invented size was rejected");
+	auto malformed_storage = stored;
+	malformed_storage.cells.erase("cc.type.v1.integer_storage_profile");
+	const auto missing_profile =
+		type_relation::view{malformed_storage}.get<type_relation::integer_storage_profile>();
+	require(missing_profile && missing_profile->state == cell_state::absent,
+			"sparse original storage profile was invented");
+	malformed_storage = stored;
+	malformed_storage.cells.at("cc.type.v1.integer_object_bytes") = detached_cell::utf8("1");
+	require(!validate_row(descriptor, malformed_storage),
+			"foreign object storage type was accepted");
 
 	auto malformed = boolean;
 	malformed.cells.at("cc.type.v1.integer_signed") = detached_cell::utf8("false");
@@ -97,7 +134,10 @@ int main()
 							 "integer_signed",
 							 "integer_profile",
 							 "integer_state",
-							 "integer_underlying_type"})
+							 "integer_underlying_type",
+							 "integer_object_bytes",
+							 "integer_storage_profile",
+							 "integer_storage_state"})
 	{
 		const auto column = descriptor.column("cc.type.v1." + std::string{name});
 		require(column && !column->required && column->type.optional,

@@ -85,6 +85,8 @@
 
 | [0132](0132-projection-resource-reservation-settlement.md) | bounded successful projection usage for caller reservation settlement |
 | [0133](0133-original-exceptional-exit-occurrences.md) | original physical-definition exceptional occurrences and ABI lowering variants |
+| [0135](0135-original-memory-access-occurrences.md) | original builtin memory access membership, activation and operands |
+| [0136](0136-original-integer-object-storage.md) | original integer object storage in target character units |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

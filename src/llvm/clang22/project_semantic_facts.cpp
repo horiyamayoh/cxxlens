@@ -837,6 +837,21 @@ namespace cxxlens::detail::clang22
 			using base = clang::RecursiveASTVisitor<collector>;
 			struct resource_scope_population;
 			struct resource_storage;
+			struct memory_scope
+			{
+				std::set<const clang::Stmt*> candidates, activations;
+				std::uint64_t unbound_count{};
+				bool activation_frontier{}, dependent_frontier{};
+			};
+			struct memory_observation
+			{
+				const clang::FunctionDecl* scope{};
+				const clang::Expr* pointer{};
+				const clang::Expr* region{};
+				const clang::UnaryOperator* address{};
+				std::string kind, evaluation;
+				bool ambiguous{};
+			};
 			struct raw_pp_token
 			{
 				std::string id, spelling;
@@ -984,6 +999,11 @@ namespace cxxlens::detail::clang22
 						inherited_default_ = function->getBody();
 					enumeration.function = current_function_;
 					ast_enumerations_.push_back(std::move(enumeration));
+					if (!memory_scopes_.contains(function))
+					{
+						retain_population_bytes(256U);
+						memory_scopes_.emplace(function, memory_scope{});
+					}
 				}
 				if (++depth_ > 4096U)
 					fail("traversal", "depth-limit");
@@ -1160,6 +1180,7 @@ namespace cxxlens::detail::clang22
 						previous->second = "unknown";
 				}
 				observe_ast_operations(statement);
+				observe_memory_access(statement);
 				if (magic_literal(statement) && !ast_enumerations_.empty() &&
 					(ast_enumerations_.back().active ||
 					 ast_enumerations_.back().written_initializer) &&
@@ -2577,6 +2598,7 @@ namespace cxxlens::detail::clang22
 			}
 			project_semantic_facts finish()
 			{
+				finish_memory_scopes();
 				finish_syntax_bindings();
 				finish_cfg_conditions();
 				finish_operation_dispatch();
@@ -5573,6 +5595,255 @@ namespace cxxlens::detail::clang22
 				}
 				return "unknown";
 			}
+			static bool memory_candidate(const clang::Stmt* statement)
+			{
+				if (llvm::isa_and_nonnull<clang::ArraySubscriptExpr>(statement))
+					return true;
+				if (const auto* unary = llvm::dyn_cast_or_null<clang::UnaryOperator>(statement))
+					return unary->getOpcode() == clang::UO_Deref;
+				const auto* member = llvm::dyn_cast_or_null<clang::MemberExpr>(statement);
+				return member && member->isArrow();
+			}
+			void memory_charge()
+			{
+				if (++category_work_ > 32'000'000U)
+					fail("memory-access", "context-operation-limit");
+			}
+			void observe_memory_access(const clang::Stmt* statement)
+			{
+				if (ast_enumerations_.empty())
+					return;
+				const auto& physical = ast_enumerations_.back();
+				const bool activation_wrapper =
+					llvm::isa<clang::CXXDefaultArgExpr, clang::CXXDefaultInitExpr>(statement);
+				if (!physical.active && !physical.written_initializer && !activation_wrapper)
+					return;
+				auto& scope = memory_scopes_.at(physical.declaration);
+				memory_charge();
+				const clang::Expr* activated{};
+				if (const auto* argument = llvm::dyn_cast<clang::CXXDefaultArgExpr>(statement))
+					activated = argument->getExpr();
+				else if (const auto* initializer =
+							 llvm::dyn_cast<clang::CXXDefaultInitExpr>(statement))
+					activated = initializer->getExpr();
+				if (activated)
+				{
+					// A default activation has a distinct caller occurrence. Count its
+					// original candidates, but never borrow the declaration's syntax IDs.
+					scope.activation_frontier = true;
+					if (!scope.activations.contains(statement))
+					{
+						retain_population_bytes(192U);
+						scope.activations.insert(statement);
+						std::vector<const clang::Stmt*> pending;
+						retain_population_bytes(64U);
+						pending.push_back(activated);
+						while (!pending.empty())
+						{
+							memory_charge();
+							const auto* original = pending.back();
+							pending.pop_back();
+							if (memory_candidate(original))
+								++scope.unbound_count;
+							const clang::Expr* nested_activation{};
+							if (const auto* argument =
+									llvm::dyn_cast<clang::CXXDefaultArgExpr>(original))
+								nested_activation = argument->getExpr();
+							else if (const auto* initializer =
+										 llvm::dyn_cast<clang::CXXDefaultInitExpr>(original))
+								nested_activation = initializer->getExpr();
+							if (nested_activation)
+							{
+								retain_population_bytes(64U);
+								pending.push_back(nested_activation);
+							}
+							else if (const auto* lambda =
+										 llvm::dyn_cast<clang::LambdaExpr>(original))
+							{
+								for (const auto* capture : lambda->capture_inits())
+									if (capture)
+									{
+										retain_population_bytes(64U);
+										pending.push_back(capture);
+									}
+							}
+							else
+								for (const auto* child : original->children())
+									if (child)
+									{
+										retain_population_bytes(64U);
+										pending.push_back(child);
+									}
+						}
+					}
+				}
+				if (!physical.active && !physical.written_initializer)
+					return;
+				if (const auto* expression = llvm::dyn_cast<clang::Expr>(statement);
+					expression && (expression->isTypeDependent() || expression->isValueDependent()))
+					scope.dependent_frontier = true;
+				if (!memory_candidate(statement))
+					return;
+				// Admission is independent of source, syntax ID and activation binding.
+				if (!scope.candidates.contains(statement))
+				{
+					retain_population_bytes(192U);
+					scope.candidates.insert(statement);
+				}
+				memory_observation observation;
+				observation.scope = physical.declaration;
+				const auto* expression = llvm::cast<clang::Expr>(statement);
+				observation.evaluation = evaluation_context(*expression);
+				if (observation.evaluation == "dependent")
+					observation.evaluation = "unknown";
+				if (const auto* index = llvm::dyn_cast<clang::ArraySubscriptExpr>(statement))
+				{
+					observation.kind = "array_element";
+					observation.pointer = index->getBase();
+					const auto* region = index->getBase();
+					while (region)
+					{
+						memory_charge();
+						if (const auto* paren = llvm::dyn_cast<clang::ParenExpr>(region))
+							region = paren->getSubExpr();
+						else if (const auto* decay =
+									 llvm::dyn_cast<clang::ImplicitCastExpr>(region);
+								 decay && decay->getCastKind() == clang::CK_ArrayToPointerDecay)
+							region = decay->getSubExpr();
+						else
+							break;
+					}
+					if (region && !region->getType().isNull() && region->getType()->isArrayType())
+						observation.region = region;
+				}
+				else if (const auto* unary = llvm::dyn_cast<clang::UnaryOperator>(statement))
+				{
+					observation.kind = "pointer_dereference";
+					observation.pointer = unary->getSubExpr();
+				}
+				else
+				{
+					observation.kind = "pointer_member";
+					observation.pointer = llvm::cast<clang::MemberExpr>(statement)->getBase();
+				}
+				// Only the immediate original address operand, through parentheses,
+				// receives address-only eligibility. Outer subscripts do not propagate it.
+				const clang::Stmt* child = statement;
+				for (auto ancestor = statements_.rbegin() + 1; ancestor != statements_.rend();
+					 ++ancestor)
+				{
+					memory_charge();
+					if (const auto* paren = llvm::dyn_cast<clang::ParenExpr>(*ancestor);
+						paren && paren->getSubExpr() == child)
+					{
+						child = paren;
+						continue;
+					}
+					if (const auto* address = llvm::dyn_cast<clang::UnaryOperator>(*ancestor);
+						address && address->getOpcode() == clang::UO_AddrOf &&
+						address->getSubExpr() == child && observation.kind != "pointer_member")
+					{
+						observation.address = address;
+						observation.kind = observation.kind == "array_element"
+							? "array_address"
+							: "cancelled_dereference_address";
+					}
+					break;
+				}
+				const auto previous = memory_observations_.find(statement);
+				if (previous == memory_observations_.end())
+				{
+					retain_population_bytes(512U);
+					memory_observations_.emplace(statement, std::move(observation));
+				}
+				else if (previous->second.scope != observation.scope ||
+						 previous->second.evaluation != observation.evaluation ||
+						 previous->second.kind != observation.kind ||
+						 previous->second.address != observation.address)
+					previous->second.ambiguous = true;
+			}
+			bool memory_binding_complete(const clang::Stmt* statement,
+										 const memory_observation& observation)
+			{
+				memory_charge();
+				if (observation.ambiguous || observation.evaluation == "unknown" ||
+					original_declaration(*observation.scope).empty() ||
+					!original_syntax(statement) || !original_syntax(observation.pointer) ||
+					(observation.region && !original_syntax(observation.region)) ||
+					(observation.address && !original_syntax(observation.address)))
+					return false;
+				const auto* expression = llvm::cast<clang::Expr>(statement);
+				if (expression->isTypeDependent() || expression->isValueDependent())
+					return false;
+				const auto* index = llvm::dyn_cast<clang::ArraySubscriptExpr>(statement);
+				return !index || original_syntax(index->getIdx()).has_value();
+			}
+			void finish_memory_scopes()
+			{
+				for (const auto& [function, scope] : memory_scopes_)
+				{
+					memory_charge();
+					std::set<std::string, std::less<>> ids;
+					bool complete = !scope.activation_frontier && !scope.dependent_frontier;
+					for (const auto* candidate : scope.candidates)
+					{
+						memory_charge();
+						const auto original = original_syntax(candidate);
+						const auto& observation = memory_observations_.at(candidate);
+						complete &= memory_binding_complete(candidate, observation);
+						if (original && !observation.ambiguous && observation.scope == function)
+						{
+							retain_population_bytes(original->size() * 3U + 256U);
+							ids.insert(*original);
+						}
+					}
+					const auto count = scope.candidates.size() + scope.unbound_count;
+					complete &= count == ids.size();
+					const bool unavailable = function->hasSkippedBody() || function->isDefaulted();
+					complete &= !unavailable && !function->isDependentContext() &&
+						!unit_.ast().getDiagnostics().hasErrorOccurred();
+					fields additions{
+						{"memory_access_profile",
+						 sdk::detached_cell::utf8("clang22-original-memory-access-occurrences/1")},
+						{"memory_access_state",
+						 symbol("cc.memory-access-state/1",
+								unavailable	   ? "unavailable"
+									: complete ? "complete"
+											   : "partial")},
+						{"memory_access_count", sdk::detached_cell::unsigned_integer(count)},
+						{"memory_access_ids", flags("syntax_node_id", ids)}};
+					if (!complete)
+						additions.emplace(
+							"memory_access_reason",
+							sdk::detached_cell::utf8(
+								unavailable ? "original-body-skipped-or-defaulted"
+									: scope.activation_frontier
+									? "original-default-activation-unbound"
+									: scope.dependent_frontier || function->isDependentContext()
+									? "original-dependent-access-selection"
+									: "original-memory-source-operand-or-scope-binding-frontier"));
+					const auto attach =
+						[&](sdk::detached_row& row, const sdk::relation_descriptor& descriptor)
+					{
+						for (const auto& [name, cell] : additions)
+						{
+							memory_charge();
+							retain_population_bytes(cell.canonical_form().size() + 256U);
+							auto typed = cell;
+							typed.type = take(descriptor.column(descriptor.id + "." + name)).type;
+							row.cells.insert_or_assign(descriptor.id + "." + name,
+													   std::move(typed));
+						}
+						check(sdk::validate_row(descriptor, row));
+					};
+					if (const auto detail = finalized_function_details_.find(function);
+						detail != finalized_function_details_.end())
+						attach(detail->second, cc::relations::entity_detail::descriptor());
+					if (const auto body = finalized_bodies_.find(function);
+						body != finalized_bodies_.end())
+						attach(body->second, cc::relations::body::descriptor());
+				}
+			}
 			void finish_syntax_bindings()
 			{
 				for (auto& binding : pending_syntax_bindings_)
@@ -5617,6 +5888,46 @@ namespace cxxlens::detail::clang22
 					}
 
 					fields original_facets;
+					if (const auto memory = memory_observations_.find(binding.statement);
+						memory != memory_observations_.end())
+					{
+						const auto& observation = memory->second;
+						const bool complete =
+							memory_binding_complete(binding.statement, observation);
+						original_facets.emplace(
+							"memory_access_profile",
+							sdk::detached_cell::utf8("clang22-original-memory-access/1"));
+						original_facets.emplace(
+							"memory_access_state",
+							symbol("cc.memory-access-state/1", complete ? "complete" : "partial"));
+						original_facets.emplace(
+							"memory_access_kind",
+							symbol("cc.memory-access-kind/1",
+								   observation.ambiguous ? "unknown" : observation.kind));
+						original_facets.emplace(
+							"memory_evaluation",
+							symbol("cc.memory-access-evaluation/1",
+								   observation.ambiguous ? "unknown" : observation.evaluation));
+						const auto declaration = original_declaration(*observation.scope);
+						original_facets.emplace(
+							"memory_scope_declaration",
+							!declaration.empty() && !observation.ambiguous
+								? id("cc_declaration_id", std::string{declaration})
+								: sdk::detached_cell::unknown(
+									  {sdk::scalar_kind::typed_id, "cc_declaration_id", true},
+									  "original-memory-scope-unbound"));
+						if (!observation.ambiguous)
+						{
+							bind("memory_pointer_expression", observation.pointer);
+							bind("memory_region_expression", observation.region);
+							bind("memory_address_expression", observation.address);
+						}
+						if (!complete)
+							original_facets.emplace(
+								"memory_access_reason",
+								sdk::detached_cell::utf8(
+									"original-memory-source-operand-or-scope-binding-frontier"));
+					}
 					const auto constant =
 						[&](const clang::Expr* expression) -> std::optional<std::int64_t>
 					{
@@ -7165,6 +7476,29 @@ namespace cxxlens::detail::clang22
 				if (!integer.underlying_type.isNull())
 					value.emplace("integer_underlying_type",
 								  id("cc_type_id", canonical_type(integer.underlying_type)));
+				value.emplace(
+					"integer_storage_profile",
+					sdk::detached_cell::utf8("clang22-original-integer-object-storage/1"));
+				auto storage_state = std::string{integer.state};
+				if (storage_state == "complete")
+				{
+					if (type->isDependentType() || type->isIncompleteType() ||
+						type->isSizelessType())
+						storage_state = "unknown";
+					else
+					{
+						const auto bytes = unit_.ast().getTypeSizeInChars(type).getQuantity();
+						if (bytes > 0)
+							value.emplace("integer_object_bytes",
+										  sdk::detached_cell::unsigned_integer(
+											  static_cast<std::uint64_t>(bytes)));
+						else
+							storage_state = "unsupported";
+					}
+				}
+				value.emplace(
+					"integer_storage_state",
+					symbol("cc.integer-representation-state/1", std::move(storage_state)));
 				if (!nominal_id.empty())
 					value.emplace("nominal_entity", id("cc_entity_id", nominal_id));
 				auto row = make_row(cc::relations::type::descriptor(), std::move(value));
@@ -7524,6 +7858,8 @@ namespace cxxlens::detail::clang22
 							  symbol("cc.abi-observation-state/1", "complete"));
 				value.emplace("target_data_model_profile",
 							  sdk::detached_cell::utf8("clang22-original-target-data-model/1"));
+				value.emplace("char_width_bits",
+							  sdk::detached_cell::unsigned_integer(target.getCharWidth()));
 				value.emplace("long_width_bits",
 							  sdk::detached_cell::unsigned_integer(target.getLongWidth()));
 				value.emplace("pointer_width_bits",
@@ -9952,6 +10288,8 @@ namespace cxxlens::detail::clang22
 				const clang::Stmt* statement;
 			};
 			std::vector<syntax_binding> pending_syntax_bindings_;
+			std::map<const clang::FunctionDecl*, memory_scope> memory_scopes_;
+			std::map<const clang::Stmt*, memory_observation> memory_observations_;
 			struct resource_population
 			{
 				std::uint64_t count{};

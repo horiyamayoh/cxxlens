@@ -2058,6 +2058,18 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
         TRUE
         TIMEOUT
         240)
+    add_test(
+      NAME adapter.clang22-original-memory-access-inputs
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/clang22/memory_access_inputs_test.py"
+        "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}")
+    set_tests_properties(
+      adapter.clang22-original-memory-access-inputs
+      PROPERTIES
+        LABELS "adapter;clang22;application;original-inputs;memory;bounded"
+        RUN_SERIAL TRUE
+        TIMEOUT 240)
     cxxlens_add_test_executable(cxxlens-clang22-source-closure-fd
                                 adapter/clang22/source_closure_fd_test.cpp)
     target_link_libraries(cxxlens-clang22-source-closure-fd

@@ -5920,3 +5920,7 @@ core-independent extension
 ```
 
 これらを小さな縦断 release で実証したとき、`cxxlens` は用途別 SDK の集合ではなく、多様な C/C++ 解析機を安全に構築できる長期安定な Semantic Relation Platform となる。
+
+原始 memory access の候補母集団、評価 context、builtin address-only と `&*` の対応は [ADR 0135](adr/0135-original-memory-access-occurrences.md) に従い保持する。欠落した operand、scope、activation、current value は unknown のままとし、source/CFG から再構成しない。
+
+整数の値幅と object storage を独立して保持する追加 facet は [ADR 0136](adr/0136-original-integer-object-storage.md) に従う。original target character unit での ASTContext 観測を保存し、値幅から object size を導かない。
