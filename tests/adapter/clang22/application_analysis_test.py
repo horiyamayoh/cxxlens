@@ -48,6 +48,7 @@ def scans(bundle):
         "cc.abi_surface.v1", "cc.body.v1", "cc.call_direct_target.v1", "cc.call_operand.v1",
         "cc.call_site.v1", "cc.cfg_edge.v1", "cc.cfg_node.v1", "cc.declaration.v1",
         "cc.declaration_inventory.v1", "cc.entity.v1", "cc.entity_detail.v1", "cc.entity_edge.v1",
+        "cc.source_feature.v1", "cc.source_feature_inventory.v1",
         "cc.exceptional_exit.v1", "cc.exceptional_block.v1", "cc.exceptional_successor.v1",
         "cc.cfg_element.v1", "cc.sequence_context.v1", "cc.sequence_pair.v1",
         "cc.move_event.v1", "cc.declaration_attribute.v1", "cc.address_transfer.v1",
