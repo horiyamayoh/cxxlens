@@ -1897,7 +1897,7 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   cxxlens_add_test_executable(cxxlens-clang22-source-features
                               adapter/clang22/source_features_native_test.cpp)
   target_link_libraries(cxxlens-clang22-source-features
-                        PRIVATE cxxlens_clang22_worker_core)
+                        PRIVATE cxxlens_clang22_worker_core cxxlens::query)
   if(CXXLENS_BUILD_SHARED)
     cxxlens_add_provider_runtime_closure(cxxlens-clang22-source-features)
   endif()
