@@ -160,6 +160,23 @@ with tempfile.TemporaryDirectory(prefix="cxxlens-original-bindings-") as directo
     assert calls and all(row["dispatch_profile"] == "clang22-original-call-dispatch/1" for row in calls), calls
     assert sum(row["dispatch_kind"] == "virtual" for row in calls) == 1, calls
     assert sum(row["dispatch_kind"] == "direct" for row in calls) == 3, calls
+    # A reference parameter's declared type differs from its receiver expression
+    # type. Retain both without contradicting the original syntax observation.
+    types = {row["type"]: row for row in rows["cc.type.v1"]}
+    reference_calls = [row for row in syntax.values()
+                       if row.get("object_fact_kind") == "direct_member_lifetime" and
+                       entities[row["function"]]["qualified_name"] == "calls"]
+    assert len(reference_calls) == 3, reference_calls
+    for call in reference_calls:
+        receiver = syntax[call["object_receiver"]]
+        declared = types[call["declared_object_type"]]
+        expression = types[receiver["canonical_type"]]
+        assert declared["constructor"] == "lvalue_reference", declared
+        assert expression["constructor"] == "record", expression
+        pointee, = [row for row in rows["cc.type_component.v1"]
+                    if row["owner_type"] == declared["type"] and row["role"] == "pointee"]
+        assert pointee["component_type"] == expression["type"], (declared, expression)
+        assert declarations[receiver["object_declaration"]]["entity"] == receiver["object_entity"]
     virtual, = [row for row in calls if row["dispatch_kind"] == "virtual"]
     assert virtual["candidate_presence"] == "present" and virtual["candidate_state"] == "complete", virtual
     assert virtual["candidate_count"] == 2 and len(members(virtual["candidate_targets"])) == 2

@@ -394,7 +394,9 @@ namespace cxxlens::detail::clang22::object_semantics
 			auto* ref = w.update("cc.syntax_node.v1", syntax(b, *receiver), declaration(b, owner));
 			w.put(ref, "object_declaration", declaration(b, d));
 			w.put(ref, "object_entity", entity(b, d));
-			w.put(ref, "canonical_type", type(b, d.getType()));
+			// A reference declaration retains its reference type separately;
+			// the original receiver expression has the referred object type.
+			w.put(ref, "canonical_type", type(b, receiver->getType()));
 		}
 		return w.finish();
 	}
