@@ -9,6 +9,10 @@ It rejects ambiguous variants and unsupported compiler inputs with actionable
 errors. The initial route requires Clang 22 on Linux x86_64, with the compiler's
 version matching the Clang frontend used to build the analyzer.
 
+ADR 0138 separates this host runtime requirement from the selected driver's
+semantic target. Cross-target AST/type/data-model capture retains the original
+driver target and all input/runtime checks; it adds no Windows-native support.
+
 The command uses the existing Clang AST observer and canonical row normalizer,
 then the public SDK claim, immutable Store and query APIs. Compiler-native
 objects stay inside the callback. Project inputs are captured in an immutable

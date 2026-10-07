@@ -2090,6 +2090,31 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
       PROPERTIES LABELS
                  "adapter;clang22;application;original-inputs;memory;bounded"
                  RUN_SERIAL TRUE TIMEOUT 240)
+    add_test(
+      NAME adapter.clang22-original-atomic-sema-inputs
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/clang22/atomic_sema_inputs_test.py"
+        "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}"
+        ${_cxxlens_template_event_fixture_mode})
+    set_tests_properties(
+      adapter.clang22-original-atomic-sema-inputs
+      PROPERTIES
+        LABELS
+        "adapter;clang22;application;original-inputs;atomic;sema;bounded"
+        RUN_SERIAL TRUE TIMEOUT 240)
+    add_test(
+      NAME adapter.clang22-original-semantic-target-inputs
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/clang22/semantic_target_inputs_test.py"
+        "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}")
+    set_tests_properties(
+      adapter.clang22-original-semantic-target-inputs
+      PROPERTIES
+        LABELS
+        "adapter;clang22;application;original-inputs;target;storage;bounded"
+        RUN_SERIAL TRUE TIMEOUT 240)
     cxxlens_add_test_executable(cxxlens-clang22-source-closure-fd
                                 adapter/clang22/source_closure_fd_test.cpp)
     target_link_libraries(cxxlens-clang22-source-closure-fd
@@ -2354,6 +2379,21 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   endif()
 
   if(CXXLENS_CLANG22_AVAILABLE)
+    cxxlens_add_test_executable(cxxlens-clang22-atomic-sema-native
+                                adapter/clang22/atomic_sema_native_test.cpp)
+    target_link_libraries(cxxlens-clang22-atomic-sema-native
+                          PRIVATE cxxlens_clang22_worker_core)
+    target_include_directories(cxxlens-clang22-atomic-sema-native
+                               PRIVATE ${PROJECT_SOURCE_DIR}/src/llvm/clang22)
+    cxxlens_configure_clang22(cxxlens-clang22-atomic-sema-native)
+    if(CXXLENS_BUILD_SHARED)
+      cxxlens_add_provider_runtime_closure(cxxlens-clang22-atomic-sema-native)
+    endif()
+    add_test(NAME adapter.clang22-atomic-sema-native
+             COMMAND cxxlens-clang22-atomic-sema-native)
+    set_tests_properties(
+      adapter.clang22-atomic-sema-native
+      PROPERTIES LABELS "adapter;clang22;atomic;sema;budget;cancellation")
     cxxlens_add_test_executable(
       cxxlens-clang22-original-resource-inputs
       adapter/clang22/original_resource_inputs_test.cpp)

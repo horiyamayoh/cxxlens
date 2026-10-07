@@ -505,8 +505,8 @@ with tempfile.TemporaryDirectory(prefix="cxxlens-application-") as temporary:
 
     database(root, ["main.cpp"], extra=("@extra.rsp",))
     assert "unsupported-option" in run(root, success=False)
-    database(root, ["main.cpp"], extra=("--target=aarch64-linux-gnu",))
-    assert "Linux x86_64 required" in run(root, success=False)
+    database(root, ["main.cpp"], extra=("--target=cxxlens-unsupported-architecture",))
+    assert "application-analysis.clang22-invalid: compiler-probe:" in run(root, success=False)
     database(root, ["main.cpp"])
     (root / "main.cpp").write_text('#include "missing.hpp"\n', encoding="utf-8")
     failed = scans(run(root))

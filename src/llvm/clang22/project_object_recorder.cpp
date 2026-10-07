@@ -30,7 +30,7 @@ namespace cxxlens::detail::clang22::object_semantics
 			void fail() noexcept
 			{
 				failed = true;
-				out.sequence_partial = out.object_partial = true;
+				out.sequence_partial = out.object_partial = out.atomic_partial = true;
 			}
 			bool charge(std::size_t work = 1U, std::size_t bytes = 0U)
 			{
@@ -58,6 +58,54 @@ namespace cxxlens::detail::clang22::object_semantics
 				}
 				context = &actual;
 				return charge();
+			}
+			void atomic(clang::Sema& sema,
+						const clang::AtomicExpr* expression,
+						const cxxlens_object_semantics_hook::atomic_expression_view& observation)
+			{
+				if (!out.atomic_hooks_installed || !bind(sema.getASTContext()))
+					return;
+				if (!expression || out.atomics.size() == limits.maximum_fields ||
+					!charge(1U, sizeof(original_atomic_observation) * 2U))
+				{
+					out.atomic_partial = true;
+					return;
+				}
+				original_atomic_observation value;
+				value.expression = expression;
+				value.value = observation;
+				using context = clang::Sema::ExpressionEvaluationContext;
+				switch (sema.currentEvaluationContext().Context)
+				{
+					case context::Unevaluated:
+						value.evaluation_context = "unevaluated";
+						break;
+					case context::UnevaluatedList:
+						value.evaluation_context = "unevaluated_list";
+						break;
+					case context::UnevaluatedAbstract:
+						value.evaluation_context = "unevaluated_abstract";
+						break;
+					case context::DiscardedStatement:
+						value.evaluation_context = "discarded_statement";
+						break;
+					case context::ConstantEvaluated:
+						value.evaluation_context = "constant_evaluated";
+						break;
+					case context::ImmediateFunctionContext:
+						value.evaluation_context = "immediate_function_context";
+						break;
+					case context::PotentiallyEvaluated:
+						value.evaluation_context = "potentially_evaluated";
+						break;
+					case context::PotentiallyEvaluatedIfUsed:
+						value.evaluation_context = "potentially_evaluated_if_used";
+						break;
+				}
+				value.discarded = sema.currentEvaluationContext().isDiscardedStatementContext();
+				value.constant_evaluated = sema.isAlwaysConstantEvaluatedContext();
+				value.default_context = sema.isCheckingDefaultArgumentOrInitializer();
+				out.atomics.push_back(value);
 			}
 			void sequence_root(clang::Sema& sema, const clang::Expr* expression, bool begin)
 			{
@@ -281,15 +329,18 @@ namespace cxxlens::detail::clang22::object_semantics
 		sink* previous{};
 		implementation(project_object_observations& out,
 					   object_facet_limits limits,
-					   bool instrumented)
+					   bool instrumented,
+					   bool atomic_instrumented)
 			: value{out, std::move(limits), nullptr, nullptr, 0U, {}, {}, {}}
 		{
 			out.hooks_installed = instrumented;
+			out.atomic_hooks_installed = atomic_instrumented && original_atomic_hooks_available();
 			previous = active;
 			if (previous)
 			{
 				out.sequence_partial = true;
 				out.object_partial = true;
+				out.atomic_partial = true;
 			}
 			active = &value;
 		}
@@ -317,9 +368,18 @@ namespace cxxlens::detail::clang22::object_semantics
 		return false;
 #endif
 	}
+	bool original_atomic_hooks_available() noexcept
+	{
+#if defined(CXXLENS_CLANG_TEMPLATE_EVENTS) && CXXLENS_CLANG_TEMPLATE_EVENTS
+		return cxxlens_object_semantics_hook::atomic_routes() == 0x01U;
+#else
+		return false;
+#endif
+	}
 	project_object_event_scope::project_object_event_scope(project_object_observations& out,
 														   object_facet_limits limits,
-														   bool instrumented)
+														   bool instrumented,
+														   bool atomic_instrumented)
 	{
 		try
 		{
@@ -329,17 +389,18 @@ namespace cxxlens::detail::clang22::object_semantics
 				storage > limits.maximum_retained_bytes - out.retained_bytes_bound ||
 				(limits.cancelled && limits.cancelled()))
 			{
-				out.sequence_partial = out.object_partial = out.frozen = true;
+				out.sequence_partial = out.object_partial = out.atomic_partial = out.frozen = true;
 				return;
 			}
 			++out.operations;
 			out.retained_bytes_bound += storage;
-			state_ = std::make_unique<implementation>(out, std::move(limits), instrumented);
+			state_ = std::make_unique<implementation>(
+				out, std::move(limits), instrumented, atomic_instrumented);
 		}
 		catch (...)
 		{
 			// This independent observer cannot invalidate original template events.
-			out.sequence_partial = out.object_partial = out.frozen = true;
+			out.sequence_partial = out.object_partial = out.atomic_partial = out.frozen = true;
 		}
 	}
 	project_object_event_scope::~project_object_event_scope()
@@ -372,6 +433,17 @@ namespace cxxlens::detail::clang22::object_semantics
 			[&](sink& value)
 			{
 				value.sequence_root(s, e, begin);
+			});
+	}
+	void
+	record_atomic(clang::Sema& s,
+				  const clang::AtomicExpr* expression,
+				  const cxxlens_object_semantics_hook::atomic_expression_view& observation) noexcept
+	{
+		invoke(
+			[&](sink& value)
+			{
+				value.atomic(s, expression, observation);
 			});
 	}
 	std::uint64_t record_access(clang::Sema& s, const clang::Expr* e) noexcept
@@ -425,6 +497,12 @@ namespace cxxlens::detail::clang22::object_semantics
 namespace cxxlens_object_semantics_hook
 {
 	namespace n = cxxlens::detail::clang22::object_semantics;
+	void atomic_expression(clang::Sema& sema,
+						   const clang::AtomicExpr* expression,
+						   const atomic_expression_view& observation)
+	{
+		n::record_atomic(sema, expression, observation);
+	}
 	void sequence_root(clang::Sema& s, const clang::Expr* e, bool begin)
 	{
 		n::record_sequence_root(s, e, begin);

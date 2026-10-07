@@ -119,4 +119,13 @@ namespace cxxlens::sdk::query
 						  finite_population_limits,
 						  std::stop_token,
 						  projection_resource_usage&);
+	/** @brief Report successful scope-only validation/projection charges. Usage is
+	 * zero on entry and failure; it does not change original scope admission. */
+	[[nodiscard]] result<call_operand_projection> project_function_call_scopes(
+		call_operand_input, finite_population_limits, std::stop_token, projection_resource_usage&);
+	[[nodiscard]] result<call_operand_projection>
+	project_function_call_scopes(const application_query_results&,
+								 finite_population_limits,
+								 std::stop_token,
+								 projection_resource_usage&);
 } // namespace cxxlens::sdk::query

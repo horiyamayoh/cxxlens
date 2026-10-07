@@ -308,6 +308,17 @@ def verify_coroutines(bundle):
         assert body["coroutine_definition"] in physical
         assert declarations[body["coroutine_definition"]]["entity"] == body["function"]
         assert nodes[body["coroutine_body"]]["kind"] == "CoroutineBodyStmt"
+    suspension_syntax = [row for row in nodes.values()
+                         if row["kind"] in ("CoawaitExpr", "CoyieldExpr")]
+    assert suspension_syntax
+    for node in suspension_syntax:
+        assert node["syntax_scope_profile"] == "clang22-original-syntax-body-scope/1"
+        assert node["syntax_scope_state"] == "complete"
+        body = bodies[node["syntax_scope_body"]]
+        assert node["syntax_scope_declaration"] == body["function_exit_declaration"]
+        assert node["syntax_scope_declaration"] in physical
+        assert node["function"] == body["function"]
+        assert node["compile_unit"] == body["compile_unit"]
     elements = rows["cc.cfg_element.v1"]
     cfg_nodes = {row["node"]: row for row in rows["cc.cfg_node.v1"]}
     for element in elements:

@@ -4893,25 +4893,76 @@ ExprResult Sema::BuildAtomicExpr(SourceRange CallRange, SourceRange ExprRange,
     break;
   }
 
+  // Modified by cxxlens: retain the original form and actual order-check
+  // outcomes at this phase. The extractor never repeats these observations.
+  namespace AtomicHook = cxxlens_object_semantics_hook;
+  AtomicHook::atomic_expression_view AtomicObservation;
+  using AtomicKind = AtomicHook::atomic_operation_kind;
+  using AtomicValidation = AtomicHook::atomic_validation;
+  switch (Form) {
+  case Init: AtomicObservation.operation = AtomicKind::init; break;
+  case Load:
+  case LoadCopy: AtomicObservation.operation = AtomicKind::load; break;
+  case Copy: AtomicObservation.operation = AtomicKind::store; break;
+  case Arithmetic: AtomicObservation.operation = AtomicKind::rmw; break;
+  case Xchg:
+  case GNUXchg: AtomicObservation.operation = AtomicKind::exchange; break;
+  case C11CmpXchg:
+  case GNUCmpXchg:
+    AtomicObservation.operation = AtomicKind::compare_exchange;
+    break;
+  case TestAndSetByte: AtomicObservation.operation = AtomicKind::test_and_set; break;
+  case ClearByte: AtomicObservation.operation = AtomicKind::clear; break;
+  }
+  if (Form == Init)
+    AtomicObservation.success.validation = AtomicValidation::not_applicable;
+  if (Form != C11CmpXchg && Form != GNUCmpXchg)
+    AtomicObservation.failure.validation = AtomicValidation::not_applicable;
+  const auto OriginalOrder = [](int64_t Value, bool Valid) {
+    AtomicHook::atomic_order_view Result;
+    Result.validation = Valid ? AtomicValidation::valid
+                              : AtomicValidation::invalid;
+    if (!Valid)
+      return Result;
+    // The actual predicate has validated this compiler C ABI value. These
+    // compiler enum cases preserve consume independently of LLVM lowering.
+    using Order = AtomicHook::atomic_order_class;
+    switch (static_cast<llvm::AtomicOrderingCABI>(Value)) {
+    case llvm::AtomicOrderingCABI::relaxed: Result.kind = Order::relaxed; break;
+    case llvm::AtomicOrderingCABI::consume: Result.kind = Order::consume; break;
+    case llvm::AtomicOrderingCABI::acquire: Result.kind = Order::acquire; break;
+    case llvm::AtomicOrderingCABI::release: Result.kind = Order::release; break;
+    case llvm::AtomicOrderingCABI::acq_rel: Result.kind = Order::acq_rel; break;
+    case llvm::AtomicOrderingCABI::seq_cst: Result.kind = Order::seq_cst; break;
+    }
+    return Result;
+  };
+
   // If the memory orders are constants, check they are valid.
   if (SubExprs.size() >= 2 && Form != Init) {
     std::optional<llvm::APSInt> Success =
         SubExprs[1]->getIntegerConstantExpr(Context);
-    if (Success && !isValidOrderingForOp(Success->getSExtValue(), Op)) {
-      Diag(SubExprs[1]->getBeginLoc(),
-           diag::warn_atomic_op_has_invalid_memory_order)
-          << /*success=*/(Form == C11CmpXchg || Form == GNUCmpXchg)
-          << SubExprs[1]->getSourceRange();
+    if (Success) {
+      const bool Valid = isValidOrderingForOp(Success->getSExtValue(), Op);
+      AtomicObservation.success = OriginalOrder(Success->getSExtValue(), Valid);
+      if (!Valid) {
+        Diag(SubExprs[1]->getBeginLoc(),
+             diag::warn_atomic_op_has_invalid_memory_order)
+            << /*success=*/(Form == C11CmpXchg || Form == GNUCmpXchg)
+            << SubExprs[1]->getSourceRange();
+      }
     }
     if (SubExprs.size() >= 5) {
       if (std::optional<llvm::APSInt> Failure =
               SubExprs[3]->getIntegerConstantExpr(Context)) {
-        if (!llvm::is_contained(
+        const bool Valid = llvm::is_contained(
                 {llvm::AtomicOrderingCABI::relaxed,
                  llvm::AtomicOrderingCABI::consume,
                  llvm::AtomicOrderingCABI::acquire,
                  llvm::AtomicOrderingCABI::seq_cst},
-                (llvm::AtomicOrderingCABI)Failure->getSExtValue())) {
+                (llvm::AtomicOrderingCABI)Failure->getSExtValue());
+        AtomicObservation.failure = OriginalOrder(Failure->getSExtValue(), Valid);
+        if (!Valid) {
           Diag(SubExprs[3]->getBeginLoc(),
                diag::warn_atomic_op_has_invalid_memory_order)
               << /*failure=*/2 << SubExprs[3]->getSourceRange();
@@ -4921,6 +4972,7 @@ ExprResult Sema::BuildAtomicExpr(SourceRange CallRange, SourceRange ExprRange,
   }
 
   if (auto ScopeModel = AtomicExpr::getScopeModel(Op)) {
+    AtomicObservation.scoped = true;
     auto *Scope = Args[Args.size() - 1];
     if (std::optional<llvm::APSInt> Result =
             Scope->getIntegerConstantExpr(Context)) {
@@ -4953,6 +5005,7 @@ ExprResult Sema::BuildAtomicExpr(SourceRange CallRange, SourceRange ExprRange,
     return ExprError();
   }
 
+  AtomicHook::atomic_expression(*this, AE, AtomicObservation);
   return AE;
 }
 
@@ -16844,4 +16897,5 @@ void Sema::CheckTCBEnforcement(const SourceLocation CallExprLoc,
 // Modified by cxxlens: Actual original checker routes: root, access, argument context and final pair.
 namespace cxxlens_object_semantics_hook {
 std::uint32_t sequence_routes() noexcept { return 0x0fU; }
+std::uint32_t atomic_routes() noexcept { return 0x01U; }
 } // namespace cxxlens_object_semantics_hook

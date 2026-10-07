@@ -948,6 +948,18 @@ namespace cxxlens::detail::clang22
 				  original_calls_{original_calls}, project_id_{project_id}, templates_{templates},
 				  template_events_{template_events}, object_events_{object_events}
 			{
+				if (object_events_)
+					for (const auto& original : object_events_->atomics)
+					{
+						if (++category_work_ > 32'000'000U)
+							fail("atomic-sema", "context-operation-limit");
+						if (!atomic_semantics_.contains(original.expression))
+							retain_population_bytes(128U);
+						const auto [entry, inserted] =
+							atomic_semantics_.try_emplace(original.expression, &original);
+						if (!inserted)
+							entry->second = nullptr;
+					}
 				for (const auto& batch : normalized.batches)
 					for (const auto& row : batch.rows)
 						if (row.descriptor_id == "cc.call_site.v1" ||
@@ -1478,7 +1490,12 @@ namespace cxxlens::detail::clang22
 					if (const auto* expression = llvm::dyn_cast<clang::Expr>(statement))
 						observe_macro_argument_expression(*expression, parent, parent_statement);
 					retain_population_bytes(row.canonical_form().size() + 128U);
-					pending_syntax_bindings_.push_back({std::move(row), statement});
+					const auto* scope = !ast_enumerations_.empty() &&
+							ast_enumerations_.back().active &&
+							ast_enumerations_.back().function == current_function_
+						? ast_enumerations_.back().declaration
+						: nullptr;
+					pending_syntax_bindings_.push_back({std::move(row), statement, scope});
 					observe_original_resource_statement(*statement);
 				}
 				else
@@ -5751,6 +5768,168 @@ namespace cxxlens::detail::clang22
 				}
 				return "unknown";
 			}
+			void atomic_semantic_fields(const clang::AtomicExpr& expression,
+										bool operands_bound,
+										fields& values)
+			{
+				retain_population_bytes(2048U);
+				values.emplace("atomic_sema_profile",
+							   sdk::detached_cell::utf8("clang22-original-atomic-sema/1"));
+				const auto original = atomic_semantics_.find(&expression);
+				const object_semantics::original_atomic_observation* observation =
+					original == atomic_semantics_.end() ? nullptr : original->second;
+				std::string_view state = "complete", reason;
+				if (original != atomic_semantics_.end() && !observation)
+				{
+					state = "conflicting";
+					reason = "original-atomic-sema-callback-conflict";
+				}
+				else if (object_events_ && object_events_->atomic_partial)
+				{
+					state = "partial";
+					reason = "original-atomic-sema-recorder-frontier";
+				}
+				else if (!object_events_ || !object_events_->atomic_hooks_installed)
+				{
+					state = "unavailable";
+					reason = "original-atomic-sema-hook-unavailable";
+				}
+				else if (!observation)
+				{
+					state = "unavailable";
+					reason = "original-atomic-sema-callback-unbound";
+				}
+				else if (!object_events_->frozen || !operands_bound)
+				{
+					state = "partial";
+					reason = "original-atomic-sema-phase-or-operand-binding-frontier";
+				}
+				else if (observation->value.scoped || observation->evaluation_context == "unknown")
+				{
+					state = "partial";
+					reason = "original-atomic-sema-scope-or-context-frontier";
+				}
+				values.emplace("atomic_sema_state",
+							   symbol("cc.atomic-sema-state/1", std::string{state}));
+				if (!reason.empty())
+					values.emplace("atomic_sema_reason",
+								   sdk::detached_cell::utf8(std::string{reason}));
+				if (!observation)
+					return;
+				using operation = cxxlens_object_semantics_hook::atomic_operation_kind;
+				std::string_view kind = "unknown";
+				switch (observation->value.operation)
+				{
+					case operation::unknown:
+						break;
+					case operation::init:
+						kind = "init";
+						break;
+					case operation::load:
+						kind = "load";
+						break;
+					case operation::store:
+						kind = "store";
+						break;
+					case operation::rmw:
+						kind = "rmw";
+						break;
+					case operation::exchange:
+						kind = "exchange";
+						break;
+					case operation::compare_exchange:
+						kind = "compare_exchange";
+						break;
+					case operation::test_and_set:
+						kind = "test_and_set";
+						break;
+					case operation::clear:
+						kind = "clear";
+						break;
+				}
+				values.emplace("atomic_operation_kind",
+							   symbol("cc.atomic-operation-kind/1", std::string{kind}));
+				const auto order =
+					[&](std::string_view axis,
+						const cxxlens_object_semantics_hook::atomic_order_view& value)
+				{
+					using validation = cxxlens_object_semantics_hook::atomic_validation;
+					std::string_view state = "unknown";
+					switch (value.validation)
+					{
+						case validation::unknown:
+							break;
+						case validation::valid:
+							state = "valid";
+							break;
+						case validation::invalid:
+							state = "invalid";
+							break;
+						case validation::not_applicable:
+							state = "not_applicable";
+							break;
+					}
+					const auto prefix = "atomic_" + std::string{axis} + "_order_";
+					values.emplace(prefix + "validation",
+								   symbol("cc.atomic-sema-validation/1", std::string{state}));
+					using classification = cxxlens_object_semantics_hook::atomic_order_class;
+					std::string_view kind;
+					switch (value.kind)
+					{
+						case classification::unknown:
+							break;
+						case classification::relaxed:
+							kind = "relaxed";
+							break;
+						case classification::consume:
+							kind = "consume";
+							break;
+						case classification::acquire:
+							kind = "acquire";
+							break;
+						case classification::release:
+							kind = "release";
+							break;
+						case classification::acq_rel:
+							kind = "acq_rel";
+							break;
+						case classification::seq_cst:
+							kind = "seq_cst";
+							break;
+					}
+					if (!kind.empty())
+						values.emplace(prefix + "class",
+									   symbol("cc.atomic-order-class/1", std::string{kind}));
+				};
+				order("success", observation->value.success);
+				order("failure", observation->value.failure);
+				values.emplace("atomic_pair_validation",
+							   symbol("cc.atomic-sema-validation/1",
+									  kind == "compare_exchange" ? "unknown" : "not_applicable"));
+				values.emplace("atomic_evaluation_context",
+							   symbol("cc.atomic-evaluation-context/1",
+									  std::string{observation->evaluation_context}));
+				values.emplace("atomic_sema_discarded",
+							   sdk::detached_cell::boolean(observation->discarded));
+				values.emplace("atomic_sema_constant_evaluated",
+							   sdk::detached_cell::boolean(observation->constant_evaluated));
+				values.emplace("atomic_sema_default_context",
+							   sdk::detached_cell::boolean(observation->default_context));
+				if (reason.empty())
+				{
+					using validation = cxxlens_object_semantics_hook::atomic_validation;
+					std::string gap;
+					if (observation->value.success.validation == validation::unknown ||
+						observation->value.failure.validation == validation::unknown)
+						gap = "original-atomic-order-not-constant";
+					if (kind == "compare_exchange")
+						gap += (gap.empty() ? "" : ";") +
+							std::string{"original-atomic-compare-exchange-pair-unvalidated"};
+					if (!gap.empty())
+						values.emplace("atomic_sema_reason",
+									   sdk::detached_cell::utf8(std::move(gap)));
+				}
+			}
 			static bool memory_candidate(const clang::Stmt* statement)
 			{
 				if (llvm::isa_and_nonnull<clang::ArraySubscriptExpr>(statement))
@@ -6044,6 +6223,46 @@ namespace cxxlens::detail::clang22
 					}
 
 					fields original_facets;
+					if (llvm::isa<clang::AtomicExpr, clang::CoroutineSuspendExpr>(
+							binding.statement))
+					{
+						retain_population_bytes(2048U);
+						original_facets.emplace(
+							"syntax_scope_profile",
+							sdk::detached_cell::utf8("clang22-original-syntax-body-scope/1"));
+						const auto scope_declaration = binding.scope
+							? std::string{original_declaration(*binding.scope)}
+							: std::string{};
+						const auto scope_body = binding.scope
+							? finalized_bodies_.find(binding.scope)
+							: finalized_bodies_.end();
+						const bool scope_complete = !scope_declaration.empty() &&
+							scope_body != finalized_bodies_.end() &&
+							row_id(scope_body->second, "function_exit_declaration") ==
+								scope_declaration &&
+							row_id(scope_body->second, "function") ==
+								row_id(binding.row, "function") &&
+							row_id(scope_body->second, "compile_unit") ==
+								row_id(binding.row, "compile_unit");
+						original_facets.emplace("syntax_scope_state",
+												symbol("cc.syntax-scope-state/1",
+													   scope_complete ? "complete" : "partial"));
+						if (scope_complete)
+						{
+							original_facets.emplace("syntax_scope_declaration",
+													id("cc_declaration_id", scope_declaration));
+							original_facets.emplace(
+								"syntax_scope_body",
+								id("body_id", row_id(scope_body->second, "body")));
+						}
+						else
+							original_facets.emplace(
+								"syntax_scope_reason",
+								sdk::detached_cell::utf8(
+									binding.scope
+										? "original-syntax-physical-declaration-or-body-unbound"
+										: "original-syntax-outside-admitted-body"));
+					}
 					if (const auto memory = memory_observations_.find(binding.statement);
 						memory != memory_observations_.end())
 					{
@@ -6142,6 +6361,7 @@ namespace cxxlens::detail::clang22
 						original_facets.emplace(
 							"atomic_binding_state",
 							sdk::detached_cell::utf8(mapped ? "complete" : "partial"));
+						atomic_semantic_fields(*atomic, mapped, original_facets);
 					}
 					if (const auto* trait =
 							llvm::dyn_cast<clang::UnaryExprOrTypeTraitExpr>(binding.statement))
@@ -10429,6 +10649,7 @@ namespace cxxlens::detail::clang22
 			{
 				sdk::detached_row row;
 				const clang::Stmt* statement;
+				const clang::FunctionDecl* scope{};
 			};
 			std::vector<syntax_binding> pending_syntax_bindings_;
 			std::map<const clang::FunctionDecl*, memory_scope> memory_scopes_;
@@ -10512,6 +10733,8 @@ namespace cxxlens::detail::clang22
 			const project_template_observations* templates_{};
 			const project_template_event_observations* template_events_{};
 			const object_semantics::project_object_observations* object_events_{};
+			std::map<const clang::AtomicExpr*, const object_semantics::original_atomic_observation*>
+				atomic_semantics_;
 			std::string current_function_;
 			const clang::Stmt* inherited_default_{};
 			std::vector<ast_enumeration> ast_enumerations_;

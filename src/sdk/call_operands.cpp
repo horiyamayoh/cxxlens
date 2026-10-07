@@ -219,7 +219,13 @@ namespace cxxlens::sdk::query
 				};
 				for (const auto& [name, c] : row.values)
 				{
-					add(name.size() + c.type.parameter.size() + 128);
+					// Bound two map-node geometries and the fixed canonical/payload
+					// envelope independently from variable text expansion. Applying
+					// the text multiplier to map geometry overcharges absent cells.
+					constexpr auto cell_geometry =
+						2U * (sizeof(decltype(row.values)::value_type) + 4U * sizeof(void*)) + 256U;
+					charge(total, cell_geometry, limits.maximum_retained_bytes, "row");
+					add(name.size() + c.type.parameter.size());
 					if (c.unknown_reason)
 						add(c.unknown_reason->size());
 					if (c.value)
@@ -1505,5 +1511,26 @@ namespace cxxlens::sdk::query
 	{
 		usage = {};
 		return project_queries(input, limits, stop, false, &usage);
+	}
+	result<call_operand_projection> project_function_call_scopes(call_operand_input input,
+																 finite_population_limits limits,
+																 std::stop_token stop,
+																 projection_resource_usage& usage)
+	{
+		usage = {};
+		budget b{limits, stop};
+		auto output = project_rows(input, limits, stop, b, true);
+		if (output)
+			usage = {b.operations, b.retained};
+		return output;
+	}
+	result<call_operand_projection>
+	project_function_call_scopes(const application_query_results& input,
+								 finite_population_limits limits,
+								 std::stop_token stop,
+								 projection_resource_usage& usage)
+	{
+		usage = {};
+		return project_queries(input, limits, stop, true, &usage);
 	}
 } // namespace cxxlens::sdk::query

@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <source_location>
 
 #include <cxxlens/sdk/call_operands.hpp>
 
@@ -34,12 +35,12 @@ namespace
 		}
 	}
 	template <class T>
-	T take(result<T> value)
+	T take(result<T> value, const std::source_location caller = std::source_location::current())
 	{
 		if (!value)
 		{
-			std::cerr << value.error().code << ':' << value.error().field << ':'
-					  << value.error().detail << '\n';
+			std::cerr << caller.file_name() << ':' << caller.line() << ' ' << value.error().code
+					  << ':' << value.error().field << ':' << value.error().detail << '\n';
 			std::exit(1);
 		}
 		return std::move(*value);
@@ -235,6 +236,67 @@ namespace
 int main()
 {
 	{
+		fixture original;
+		const auto check_scopes = [&](const auto& input)
+		{
+			q::projection_resource_usage usage{777U, 888U};
+			auto measured = q::project_function_call_scopes(input, {}, {}, usage);
+			auto ordinary = q::project_function_call_scopes(input);
+			require(measured && ordinary && usage.operations > 0U &&
+						usage.retained_bytes_bound > 0U && measured->calls.empty(),
+					"scope-only successful usage missing");
+			require(usage.operations < q::finite_population_limits{}.maximum_operations &&
+						usage.retained_bytes_bound <
+							q::finite_population_limits{}.maximum_retained_bytes,
+					"scope-only configured maxima reported as actual usage");
+			require(measured->evidence.size() == ordinary->evidence.size() &&
+						measured->function_scopes.size() == ordinary->function_scopes.size(),
+					"scope-only usage changed original population");
+			for (std::size_t i{}; i < measured->evidence.size(); ++i)
+				require(measured->evidence[i].row.canonical_form() ==
+							ordinary->evidence[i].row.canonical_form(),
+						"scope-only usage changed original evidence");
+			for (std::size_t i{}; i < measured->function_scopes.size(); ++i)
+			{
+				const auto& left = measured->function_scopes[i];
+				const auto& right = ordinary->function_scopes[i];
+				require(left.function == right.function &&
+							left.compile_unit == right.compile_unit && left.body == right.body &&
+							left.state == right.state && left.call_count == right.call_count &&
+							left.call_ids == right.call_ids,
+						"scope-only usage changed original scope admission");
+			}
+			q::finite_population_limits exact;
+			exact.maximum_operations = usage.operations;
+			exact.maximum_retained_bytes = usage.retained_bytes_bound;
+			q::projection_resource_usage repeated{777U, 888U};
+			require(q::project_function_call_scopes(input, exact, {}, repeated) &&
+						repeated.operations == usage.operations &&
+						repeated.retained_bytes_bound == usage.retained_bytes_bound,
+					"scope-only exact bounds or deterministic charges changed");
+			for (const bool reduce_work : {false, true})
+			{
+				auto below = exact;
+				if (reduce_work)
+					--below.maximum_operations;
+				else
+					--below.maximum_retained_bytes;
+				repeated = {777U, 888U};
+				require(!q::project_function_call_scopes(input, below, {}, repeated) &&
+							repeated.operations == 0U && repeated.retained_bytes_bound == 0U,
+						"scope-only below-bound failure leaked successful usage");
+			}
+			std::stop_source stopped;
+			stopped.request_stop();
+			repeated = {777U, 888U};
+			require(!q::project_function_call_scopes(input, {}, stopped.get_token(), repeated) &&
+						repeated.operations == 0U && repeated.retained_bytes_bound == 0U,
+					"scope-only cancellation leaked successful usage");
+		};
+		check_scopes(original.input());
+		check_scopes(original.queries());
+	}
+	{
 		q::projection_resource_usage charged{777U, 888U};
 		fixture original;
 		auto with_usage = q::project_call_operands(original.input(), {}, {}, charged);
@@ -265,6 +327,19 @@ int main()
 		require(!q::project_call_operands(original.input(), {}, usage_stop.get_token(), charged) &&
 					charged.operations == 0U && charged.retained_bytes_bound == 0U,
 				"cancelled projection leaked usage");
+		// The generated syntax row has many absent, short cells. Their owned
+		// scalar/map storage still needs a bound even with little value text.
+		q::finite_population_limits cell_storage;
+		cell_storage.maximum_retained_bytes =
+			original.rows[8].front().values.size() * sizeof(detached_cell);
+		charged = {777U, 888U};
+		require(!q::project_call_operands(original.input(), cell_storage, {}, charged) &&
+					charged.operations == 0U && charged.retained_bytes_bound == 0U,
+				"short/absent raw cells escaped owned storage limits");
+		charged = {777U, 888U};
+		require(!q::project_call_operands(original.queries(), cell_storage, {}, charged) &&
+					charged.operations == 0U && charged.retained_bytes_bound == 0U,
+				"short/absent query cells escaped owned storage limits");
 	}
 
 	{

@@ -638,16 +638,17 @@ namespace cxxlens::detail::clang22
 			target_arguments.push_back("-dumpmachine");
 			const auto target = trim(
 				probe(files, compiler, directory, std::move(target_arguments)).standard_output);
-			if (!target.starts_with("x86_64-") || target.find("linux") == std::string::npos)
-				fail("target", "Linux x86_64 required");
+			if (target.empty())
+				fail("target", "original-driver-target-unavailable");
+			// The runtime/provider host stays Linux x86_64. Bind the native AST
+			// invocation to the original selected driver's semantic target, including
+			// an implicit driver default. Original architecture-affecting flags stay
+			// present; TargetInfo supplies geometry independently from this string.
+			flags.push_back("--target=" + target);
 			auto macro_arguments = flags;
 			macro_arguments.insert(macro_arguments.end(), {"-dM", "-E", "/dev/null"});
 			const auto macros =
 				probe(files, compiler, directory, std::move(macro_arguments)).standard_output;
-			if (macros.find("#define __x86_64__ 1\n") == std::string::npos ||
-				macros.find("#define __linux__ 1\n") == std::string::npos ||
-				macros.find("#define __SIZEOF_POINTER__ 8\n") == std::string::npos)
-				fail("target", "Linux x86_64 with 64-bit pointers required");
 			auto search_arguments = flags;
 			search_arguments.insert(search_arguments.end(), {"-E", "-v", "/dev/null"});
 			auto search =

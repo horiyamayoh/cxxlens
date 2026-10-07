@@ -1,6 +1,6 @@
 schema: cxxlens.relation-registry.v1
 kind: relation-registry
-document_version: 1.27.0
+document_version: 1.28.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -9,7 +9,7 @@ authority:
   owner: steward.ng-relations
 compatibility:
   version_axis: relation-descriptor
-  current: 1.27.0
+  current: 1.28.0
   semantic_major_policy: exact-major-compatible-minor
   unknown_optional_columns: preserve
   unknown_open_symbols: preserve
@@ -130,6 +130,26 @@ api_projection:
     column_operand: column_id
   parity: exact-id-equality
 symbol_contracts:
+- id: cc.atomic-sema-state/1
+  openness: open
+  values: [complete, partial, unavailable, conflicting]
+  unknown_value: preserve
+- id: cc.atomic-operation-kind/1
+  openness: open
+  values: [init, load, store, rmw, exchange, compare_exchange, test_and_set, clear, unknown]
+  unknown_value: preserve
+- id: cc.atomic-order-class/1
+  openness: open
+  values: [relaxed, consume, acquire, release, acq_rel, seq_cst, unknown]
+  unknown_value: preserve
+- id: cc.atomic-sema-validation/1
+  openness: open
+  values: [valid, invalid, unknown, not_applicable]
+  unknown_value: preserve
+- id: cc.atomic-evaluation-context/1
+  openness: open
+  values: [unevaluated, unevaluated_list, unevaluated_abstract, discarded_statement, constant_evaluated, immediate_function_context, potentially_evaluated, potentially_evaluated_if_used, unknown]
+  unknown_value: preserve
 - id: cc.memory-access-state/1
   openness: open
   values: [complete, partial, unavailable, conflicting]
@@ -4275,7 +4295,7 @@ relations:
   evolution_policy: ng0.additive.v1
 - descriptor_id: cc.syntax_node.v1
   name: cc.syntax_node
-  version: 1.3.0
+  version: 1.4.0
   semantic_major: 1
   semantics: cc.syntax_node/1
   owner_namespace: cxxlens.standard.cc
@@ -4702,6 +4722,96 @@ relations:
     required: false
     id: cc.syntax_node.v1.atomic_profile
     identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.syntax_scope_profile
+    name: syntax_scope_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.syntax_scope_state
+    name: syntax_scope_state
+    type: optional<open_symbol<cc.syntax-scope-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.syntax_scope_declaration
+    name: syntax_scope_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.syntax_scope_body
+    name: syntax_scope_body
+    type: optional<typed_id<body_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.syntax_scope_reason
+    name: syntax_scope_reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.atomic_sema_profile
+    name: atomic_sema_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.atomic_sema_state
+    name: atomic_sema_state
+    type: optional<open_symbol<cc.atomic-sema-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.atomic_operation_kind
+    name: atomic_operation_kind
+    type: optional<open_symbol<cc.atomic-operation-kind/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.atomic_success_order_class
+    name: atomic_success_order_class
+    type: optional<open_symbol<cc.atomic-order-class/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.atomic_success_order_validation
+    name: atomic_success_order_validation
+    type: optional<open_symbol<cc.atomic-sema-validation/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.atomic_failure_order_class
+    name: atomic_failure_order_class
+    type: optional<open_symbol<cc.atomic-order-class/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.atomic_failure_order_validation
+    name: atomic_failure_order_validation
+    type: optional<open_symbol<cc.atomic-sema-validation/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.atomic_pair_validation
+    name: atomic_pair_validation
+    type: optional<open_symbol<cc.atomic-sema-validation/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.atomic_evaluation_context
+    name: atomic_evaluation_context
+    type: optional<open_symbol<cc.atomic-evaluation-context/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.atomic_sema_discarded
+    name: atomic_sema_discarded
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.atomic_sema_constant_evaluated
+    name: atomic_sema_constant_evaluated
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.atomic_sema_default_context
+    name: atomic_sema_default_context
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.atomic_sema_reason
+    name: atomic_sema_reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
   - id: cc.syntax_node.v1.memory_access_profile
     name: memory_access_profile
     type: optional<utf8_string>
@@ -4932,6 +5042,20 @@ relations:
     strength: soft_semantic
     on_missing: unresolved
   - source_columns:
+    - cc.syntax_node.v1.syntax_scope_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.syntax_node.v1.syntax_scope_body
+    target_relation: cc.body
+    target_columns:
+    - cc.body.v1.body
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
     - cc.syntax_node.v1.memory_scope_declaration
     target_relation: cc.declaration
     target_columns:
@@ -5041,6 +5165,24 @@ relations:
     - cc.syntax_node.v1.atomic_failure_order_state
     - cc.syntax_node.v1.atomic_binding_state
     - cc.syntax_node.v1.atomic_profile
+    - cc.syntax_node.v1.syntax_scope_profile
+    - cc.syntax_node.v1.syntax_scope_state
+    - cc.syntax_node.v1.syntax_scope_declaration
+    - cc.syntax_node.v1.syntax_scope_body
+    - cc.syntax_node.v1.syntax_scope_reason
+    - cc.syntax_node.v1.atomic_sema_profile
+    - cc.syntax_node.v1.atomic_sema_state
+    - cc.syntax_node.v1.atomic_operation_kind
+    - cc.syntax_node.v1.atomic_success_order_class
+    - cc.syntax_node.v1.atomic_success_order_validation
+    - cc.syntax_node.v1.atomic_failure_order_class
+    - cc.syntax_node.v1.atomic_failure_order_validation
+    - cc.syntax_node.v1.atomic_pair_validation
+    - cc.syntax_node.v1.atomic_evaluation_context
+    - cc.syntax_node.v1.atomic_sema_discarded
+    - cc.syntax_node.v1.atomic_sema_constant_evaluated
+    - cc.syntax_node.v1.atomic_sema_default_context
+    - cc.syntax_node.v1.atomic_sema_reason
     - cc.syntax_node.v1.memory_access_profile
     - cc.syntax_node.v1.memory_access_state
     - cc.syntax_node.v1.memory_access_kind
@@ -5079,6 +5221,16 @@ relations:
       - cc.syntax_node.v1.child_ids
       - cc.syntax_node.v1.child_state
       - cc.syntax_node.v1.child_profile
+    - - cc.syntax_node.v1.syntax_scope_profile
+      - cc.syntax_node.v1.syntax_scope_state
+    - - cc.syntax_node.v1.syntax_scope_declaration
+      - cc.syntax_node.v1.syntax_scope_body
+    - - cc.syntax_node.v1.atomic_sema_profile
+      - cc.syntax_node.v1.atomic_sema_state
+    - - cc.syntax_node.v1.atomic_evaluation_context
+      - cc.syntax_node.v1.atomic_sema_discarded
+      - cc.syntax_node.v1.atomic_sema_constant_evaluated
+      - cc.syntax_node.v1.atomic_sema_default_context
     - - cc.syntax_node.v1.memory_access_profile
       - cc.syntax_node.v1.memory_access_state
       - cc.syntax_node.v1.memory_access_kind
