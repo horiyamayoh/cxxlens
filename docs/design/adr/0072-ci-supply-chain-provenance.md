@@ -13,7 +13,8 @@ against different compilers or dependency graphs without changing the tree.
 
 ## Decision
 
-`tools/ci/llvm22-noble.lock.json` is the only CI bootstrap authority. The
+`tools/ci/llvm22-noble.lock.json` governs the distribution packages, Python
+environment and external Action revisions in the common CI setup. The
 repository signing key is accepted only after both its SHA-256 digest and
 primary OpenPGP fingerprint match. The key is installed before an isolated APT
 metadata refresh. Every requested LLVM package uses an exact epoch-qualified
@@ -21,6 +22,17 @@ version and is downloaded without root, checked against its locked SHA-256, and
 only then installed. Missing packages, versions, or bytes fail; no alternate
 suite, major, or first candidate is selected. CI never downloads or executes a
 remote bootstrap script.
+
+`tools/ci/application-analysis-toolchains.lock.json` governs the original
+LLVM/Clang 22.1.0 compiler archive, the Clang 23 replay archives and the GCC
+application-capture build. Its bootstrap checks the original archive byte count
+and digest before extraction, then checks the selected compiler version and
+target. The bundled original compiler source components require LLVM 22.1.0;
+the common setup selects that archive's compiler, tools and CMake packages for
+native Clang 22 jobs even when the separately locked distribution packages
+provide another patch release. A missing or mismatched original compiler
+remains an error. Jobs that use the compiler-neutral or Clang 23 setup with
+`profile: none` do not extract a second Clang 22 toolchain.
 
 The documentation profile uses the same fail-closed order for the exact Ubuntu
 24.04 Doxygen package: download without root, verify the locked SHA-256 and
@@ -34,7 +46,7 @@ dependencies are exact, binary-only, and hash-bound in
 `--only-binary=:all:`. External Actions must equal the full commit revisions in
 the supply-chain lock.
 
-The lock, `tools/ci/bootstrap_supply_chain.py`, the setup action, and the
+The locks, their bootstrap scripts, the setup action, and the
 workflows directly enforce exact Action commits, package versions and
 architectures, signing-key digests and fingerprints, and Python interpreter and
 dependency hashes at execution. Ordinary tests exercise the bootstrap and
