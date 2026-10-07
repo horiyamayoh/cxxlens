@@ -1220,22 +1220,25 @@ set_tests_properties(unit.sdk-exception-cleanup-facets
                      PROPERTIES LABELS "unit;sdk;query;budget;cancellation")
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-exceptional-routes
-                           unit/sdk/exceptional_routes_test.cpp)
-target_link_libraries(cxxlens-unit-sdk-exceptional-routes PRIVATE cxxlens::query)
+                            unit/sdk/exceptional_routes_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-exceptional-routes
+                      PRIVATE cxxlens::query)
 target_include_directories(cxxlens-unit-sdk-exceptional-routes
                            PRIVATE ${PROJECT_SOURCE_DIR}/src/sdk)
-add_test(NAME unit.sdk-exceptional-routes COMMAND cxxlens-unit-sdk-exceptional-routes)
-set_tests_properties(unit.sdk-exceptional-routes PROPERTIES LABELS
-                     "unit;sdk;query;budget;cancellation")
+add_test(NAME unit.sdk-exceptional-routes
+         COMMAND cxxlens-unit-sdk-exceptional-routes)
+set_tests_properties(unit.sdk-exceptional-routes
+                     PROPERTIES LABELS "unit;sdk;query;budget;cancellation")
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-object-semantics
-                           unit/sdk/object_semantics_test.cpp)
+                            unit/sdk/object_semantics_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-object-semantics PRIVATE cxxlens::query)
 target_include_directories(cxxlens-unit-sdk-object-semantics
                            PRIVATE ${PROJECT_SOURCE_DIR}/src/sdk)
-add_test(NAME unit.sdk-object-semantics COMMAND cxxlens-unit-sdk-object-semantics)
-set_tests_properties(unit.sdk-object-semantics PROPERTIES LABELS
-                     "unit;sdk;query;budget;cancellation")
+add_test(NAME unit.sdk-object-semantics
+         COMMAND cxxlens-unit-sdk-object-semantics)
+set_tests_properties(unit.sdk-object-semantics
+                     PROPERTIES LABELS "unit;sdk;query;budget;cancellation")
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-template-domains
                             unit/sdk/template_domains_test.cpp)
@@ -2045,9 +2048,10 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
         "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}")
     set_tests_properties(
       adapter.clang22-original-route-resource-inputs
-      PROPERTIES LABELS
-                 "adapter;clang22;application;original-inputs;integration;bounded"
-                 TIMEOUT 240)
+      PROPERTIES
+        LABELS
+        "adapter;clang22;application;original-inputs;integration;bounded"
+        TIMEOUT 240)
     cxxlens_add_test_executable(cxxlens-clang22-source-closure-fd
                                 adapter/clang22/source_closure_fd_test.cpp)
     target_link_libraries(cxxlens-clang22-source-closure-fd
@@ -2312,25 +2316,29 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
   endif()
 
   if(CXXLENS_CLANG22_AVAILABLE)
-    cxxlens_add_test_executable(cxxlens-clang22-original-resource-inputs
-                               adapter/clang22/original_resource_inputs_test.cpp)
+    cxxlens_add_test_executable(
+      cxxlens-clang22-original-resource-inputs
+      adapter/clang22/original_resource_inputs_test.cpp)
     target_link_libraries(cxxlens-clang22-original-resource-inputs
                           PRIVATE cxxlens_clang22_worker_core)
     target_include_directories(cxxlens-clang22-original-resource-inputs
                                PRIVATE ${PROJECT_SOURCE_DIR}/src/llvm/clang22)
     cxxlens_configure_clang22(cxxlens-clang22-original-resource-inputs)
     if(CXXLENS_BUILD_SHARED)
-      cxxlens_add_provider_runtime_closure(cxxlens-clang22-original-resource-inputs)
+      cxxlens_add_provider_runtime_closure(
+        cxxlens-clang22-original-resource-inputs)
     endif()
     add_test(NAME adapter.clang22-original-resource-inputs
              COMMAND cxxlens-clang22-original-resource-inputs)
-    set_tests_properties(adapter.clang22-original-resource-inputs
-                         PROPERTIES LABELS "adapter;clang22;resource;budget;cancellation")
-    foreach(_fixture IN ITEMS direct_object_fixture owned_object_fixture
-                             direct_lifetime_fixture object_facets_fixture
-                             object_event_rows_test)
+    set_tests_properties(
+      adapter.clang22-original-resource-inputs
+      PROPERTIES LABELS "adapter;clang22;resource;budget;cancellation")
+    foreach(
+      _fixture IN
+      ITEMS direct_object_fixture owned_object_fixture direct_lifetime_fixture
+            object_facets_fixture object_event_rows_test)
       cxxlens_add_test_executable(cxxlens-native-object-${_fixture}
-                                 adapter/clang22/object/${_fixture}.cpp)
+                                  adapter/clang22/object/${_fixture}.cpp)
       target_link_libraries(cxxlens-native-object-${_fixture}
                             PRIVATE cxxlens_clang22_worker_core)
       target_include_directories(cxxlens-native-object-${_fixture}
@@ -2341,8 +2349,9 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
       endif()
       add_test(NAME native.object-${_fixture}
                COMMAND cxxlens-native-object-${_fixture})
-      set_tests_properties(native.object-${_fixture} PROPERTIES LABELS
-                           "native;clang22;object;budget;cancellation")
+      set_tests_properties(
+        native.object-${_fixture}
+        PROPERTIES LABELS "native;clang22;object;budget;cancellation")
     endforeach()
   endif()
 

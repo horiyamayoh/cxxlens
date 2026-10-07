@@ -799,9 +799,10 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     cxxlens_clang22_worker_core
     PUBLIC cxxlens::clang22_provider_sdk
     PRIVATE cxxlens_clang22_materialization_codecs)
-  target_include_directories(cxxlens_clang22_worker_core
-                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src"
-                             PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/llvm22-template-events")
+  target_include_directories(
+    cxxlens_clang22_worker_core
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/llvm22-template-events")
   target_compile_features(cxxlens_clang22_worker_core PRIVATE cxx_std_23)
   cxxlens_set_project_warnings(cxxlens_clang22_worker_core)
   cxxlens_enable_sanitizers(cxxlens_clang22_worker_core)

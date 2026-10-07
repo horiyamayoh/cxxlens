@@ -77,7 +77,8 @@ function(cxxlens_configure_original_template_events)
                              PRIVATE ${LLVM_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS})
   target_include_directories(
     cxxlens_clang22_template_compiler_objects
-    PRIVATE "${CXXLENS_CLANG_TEMPLATE_EVENT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}/src/llvm/clang22")
+    PRIVATE "${CXXLENS_CLANG_TEMPLATE_EVENT_SOURCE_DIR}"
+            "${PROJECT_SOURCE_DIR}/src/llvm/clang22")
   set_target_properties(cxxlens_clang22_template_compiler_objects
                         PROPERTIES POSITION_INDEPENDENT_CODE ON)
   if(NOT LLVM_ENABLE_ASSERTIONS)
