@@ -69,6 +69,23 @@ runs:
         python3 tools/ci/bootstrap_supply_chain.py install
         --profile "${{ inputs.profile }}"
 
+    - name: Restore original LLVM 22.1.0 archive
+      if: ${{ inputs.profile != 'none' }}
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: ~/.cache/cxxlens/toolchains/LLVM-22.1.0-Linux-X64.tar.xz
+        key: cxxlens-clang22-original-archive-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/ci/application-analysis-toolchains.lock.json', 'tools/ci/bootstrap_application_analysis_toolchain.py') }}
+
+    - name: Select the original LLVM and Clang 22.1.0 compiler ABI
+      if: ${{ inputs.profile != 'none' }}
+      shell: bash
+      run: |
+        python3 tools/ci/bootstrap_application_analysis_toolchain.py \
+          install-clang22-original \
+          --prefix "${RUNNER_TEMP}/cxxlens-toolchains/LLVM-22.1.0-Linux-X64" \
+          --archive-cache "${HOME}/.cache/cxxlens/toolchains/LLVM-22.1.0-Linux-X64.tar.xz" \
+          --ci-selectors "${RUNNER_TEMP}/cxxlens-toolchains/clang22-selectors"
+
     - name: Install exact locked documentation package
       if: ${{ inputs.documentation == 'true' }}
       shell: bash

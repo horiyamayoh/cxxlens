@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import pathlib
+import shutil
 import tarfile
 import tempfile
 import unittest
@@ -54,6 +55,7 @@ class ApplicationAnalysisToolchainBootstrapTest(unittest.TestCase):
             admitted["windows_runner"]["label"], "windows-2025-vs2026"
         )
         self.assertEqual(admitted["runner"]["label"], "ubuntu-24.04")
+        self.assertEqual(admitted["clang22_original"]["exact_version"], "22.1.0")
 
     def test_malformed_source_identity_and_build_recipe_drift_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as raw_directory:
@@ -114,6 +116,90 @@ class ApplicationAnalysisToolchainBootstrapTest(unittest.TestCase):
                 self.bootstrap.ToolchainError, "MSVC toolchain lock differs"
             ):
                 self.bootstrap.load_lock(self.write_lock(directory, wrong_msvc))
+
+    def test_original_clang_patch_archive_and_checksum_drift_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_directory:
+            directory = pathlib.Path(raw_directory)
+            for field, replacement in [
+                ("exact_version", "22.1.8"),
+                ("asset_url", "https://example.invalid/LLVM-22.1.0.tar.xz"),
+                ("asset_sha256", "0" * 64),
+                ("asset_archive_bytes", 1),
+            ]:
+                with self.subTest(field=field):
+                    wrong = json.loads(json.dumps(self.lock))
+                    wrong["clang22_original"][field] = replacement
+                    with self.assertRaisesRegex(
+                        self.bootstrap.ToolchainError, "original Clang 22 toolchain lock differs"
+                    ):
+                        self.bootstrap.load_lock(self.write_lock(directory, wrong))
+
+    def test_original_clang_and_llvm_patch_mismatch_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_directory:
+            prefix = pathlib.Path(raw_directory)
+            for relative in ["bin/clang++", "lib/cmake/llvm/LLVMConfig.cmake", "lib/cmake/clang/ClangConfig.cmake"]:
+                path = prefix / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("test input", encoding="utf-8")
+            with mock.patch.object(self.bootstrap, "run", side_effect=["22.1.8", "x86_64-unknown-linux-gnu"]):
+                with self.assertRaisesRegex(self.bootstrap.ToolchainError, "original Clang 22 version differs"):
+                    self.bootstrap.verify_clang22_original(prefix, self.lock)
+            with mock.patch.object(self.bootstrap, "verify_clang_archive"), mock.patch.object(self.bootstrap, "run", return_value="22.1.8"):
+                with self.assertRaisesRegex(self.bootstrap.ToolchainError, "original LLVM 22 version differs"):
+                    self.bootstrap.verify_clang22_original(prefix, self.lock)
+
+    def make_original_tools(self, prefix: pathlib.Path) -> None:
+        (prefix / "bin").mkdir(parents=True)
+        for name in ["clang", "clang++", "clang-format", "clang-tidy", "run-clang-tidy", "llvm-config", "llvm-symbolizer"]:
+            path = prefix / "bin" / name
+            path.write_text("original compiler tool", encoding="utf-8")
+            path.chmod(0o755)
+
+    def test_ci_selectors_choose_exact_tools_and_cmake_packages(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_directory:
+            directory = pathlib.Path(raw_directory)
+            prefix = directory / "original LLVM"
+            selectors = directory / "selectors"
+            self.make_original_tools(prefix)
+            environment = directory / "github-env"
+            path_file = directory / "github-path"
+            apt = directory / "apt-bin"
+            apt.mkdir()
+            wrong_compiler = apt / "clang++-22"
+            wrong_compiler.write_text("wrong patch", encoding="utf-8")
+            wrong_compiler.chmod(0o755)
+            with mock.patch.dict(self.bootstrap.os.environ, {"GITHUB_ENV": str(environment), "GITHUB_PATH": str(path_file)}):
+                self.bootstrap.bind_clang22_ci_environment(prefix, selectors)
+                self.bootstrap.bind_clang22_ci_environment(prefix, selectors)
+            selected = shutil.which("clang++-22", path=f"{selectors}:{prefix / 'bin'}:{apt}")
+            self.assertEqual(pathlib.Path(selected).resolve(), prefix / "bin/clang++")
+            self.assertEqual((selectors / "clang-format-22").resolve(), prefix / "bin/clang-format")
+            self.assertEqual((selectors / "llvm-symbolizer-22").resolve(), prefix / "bin/llvm-symbolizer")
+            self.assertIn(f"LLVM_DIR={prefix / 'lib/cmake/llvm'}\n", environment.read_text())
+            self.assertIn(f"Clang_DIR={prefix / 'lib/cmake/clang'}\n", environment.read_text())
+            self.assertEqual(path_file.read_text().splitlines()[:2], [str(selectors), str(prefix / "bin")])
+
+    def test_ci_selectors_reject_missing_tools_and_conflicts_before_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_directory:
+            directory = pathlib.Path(raw_directory)
+            prefix = directory / "original"
+            selectors = directory / "selectors"
+            environment = directory / "github-env"
+            path_file = directory / "github-path"
+            self.make_original_tools(prefix)
+            (prefix / "bin/clang-tidy").unlink()
+            with mock.patch.dict(self.bootstrap.os.environ, {"GITHUB_ENV": str(environment), "GITHUB_PATH": str(path_file)}):
+                with self.assertRaisesRegex(self.bootstrap.ToolchainError, "tool is missing"):
+                    self.bootstrap.bind_clang22_ci_environment(prefix, selectors)
+                self.assertFalse(selectors.exists())
+                self.assertFalse(environment.exists())
+                (prefix / "bin/clang-tidy").write_text("tool", encoding="utf-8")
+                selectors.mkdir()
+                (selectors / "clang++-22").symlink_to(prefix / "bin/clang")
+                with self.assertRaisesRegex(self.bootstrap.ToolchainError, "selector conflicts"):
+                    self.bootstrap.bind_clang22_ci_environment(prefix, selectors)
+                self.assertFalse(environment.exists())
+                self.assertFalse(path_file.exists())
 
     def test_archive_checksum_mismatch_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as raw_directory:
