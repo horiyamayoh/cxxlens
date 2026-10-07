@@ -8,8 +8,11 @@ namespace cxxlens::detail::clang22::object_semantics
 	{
 	  public:
 		project_object_observations output;
-		project_object_event_scope scope{
-			output, {}, original_object_hooks_available(), original_atomic_hooks_available()};
+		project_object_event_scope scope{output,
+										 {},
+										 original_object_hooks_available(),
+										 original_atomic_hooks_available(),
+										 original_fence_hooks_available()};
 	};
 	project_object_observer::project_object_observer() : state_{std::make_unique<implementation>()}
 	{
@@ -23,6 +26,7 @@ namespace cxxlens::detail::clang22::object_semantics
 			state_->output.sequence_partial = true;
 			state_->output.object_partial = true;
 			state_->output.atomic_partial = true;
+			state_->output.fence_partial = true;
 		}
 	}
 	const project_object_observations& project_object_observer::observations() const noexcept

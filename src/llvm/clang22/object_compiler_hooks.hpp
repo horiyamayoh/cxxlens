@@ -53,6 +53,9 @@ namespace cxxlens_object_semantics_hook
 		atomic_order_view success, failure;
 		bool scoped{};
 	};
+	[[nodiscard]] std::uint32_t fence_routes() noexcept;
+	/** Successful original builtin-call processing; no fence-order predicate is implied. */
+	void fence_call(clang::Sema&, const clang::CallExpr*, const clang::FunctionDecl*, unsigned);
 	[[nodiscard]] std::uint32_t atomic_routes() noexcept;
 	void atomic_expression(clang::Sema&, const clang::AtomicExpr*, const atomic_expression_view&);
 	/** Functional routes exported by the actual linked original SemaChecking TU:

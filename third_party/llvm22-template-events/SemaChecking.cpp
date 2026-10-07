@@ -3641,6 +3641,18 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
     }
   }
 
+  switch (BuiltinID) {
+  case Builtin::BI__atomic_thread_fence:
+  case Builtin::BI__atomic_signal_fence:
+  case Builtin::BI__c11_atomic_thread_fence:
+  case Builtin::BI__c11_atomic_signal_fence:
+  case Builtin::BI__scoped_atomic_thread_fence:
+    cxxlens_object_semantics_hook::fence_call(*this, TheCall, FDecl, BuiltinID);
+    break;
+  default:
+    break;
+  }
+
   return TheCallResult;
 }
 
@@ -16898,4 +16910,5 @@ void Sema::CheckTCBEnforcement(const SourceLocation CallExprLoc,
 namespace cxxlens_object_semantics_hook {
 std::uint32_t sequence_routes() noexcept { return 0x0fU; }
 std::uint32_t atomic_routes() noexcept { return 0x01U; }
+std::uint32_t fence_routes() noexcept { return 0x01U; }
 } // namespace cxxlens_object_semantics_hook

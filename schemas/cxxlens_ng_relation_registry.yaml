@@ -1,6 +1,6 @@
 schema: cxxlens.relation-registry.v1
 kind: relation-registry
-document_version: 1.28.0
+document_version: 1.29.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -9,7 +9,7 @@ authority:
   owner: steward.ng-relations
 compatibility:
   version_axis: relation-descriptor
-  current: 1.28.0
+  current: 1.29.0
   semantic_major_policy: exact-major-compatible-minor
   unknown_optional_columns: preserve
   unknown_open_symbols: preserve
@@ -4295,7 +4295,7 @@ relations:
   evolution_policy: ng0.additive.v1
 - descriptor_id: cc.syntax_node.v1
   name: cc.syntax_node
-  version: 1.4.0
+  version: 1.5.0
   semantic_major: 1
   semantics: cc.syntax_node/1
   owner_namespace: cxxlens.standard.cc
@@ -4812,6 +4812,81 @@ relations:
     type: optional<utf8_string>
     required: false
     identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.compiler_builtin_profile
+    name: compiler_builtin_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.compiler_builtin_state
+    name: compiler_builtin_state
+    type: optional<open_symbol<cc.compiler-builtin-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.compiler_builtin_id
+    name: compiler_builtin_id
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.compiler_builtin_kind
+    name: compiler_builtin_kind
+    type: optional<open_symbol<cc.compiler-builtin-kind/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.compiler_builtin_callee_declaration
+    name: compiler_builtin_callee_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.compiler_builtin_reason
+    name: compiler_builtin_reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.fence_sema_profile
+    name: fence_sema_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.fence_sema_state
+    name: fence_sema_state
+    type: optional<open_symbol<cc.fence-sema-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.fence_order_expression
+    name: fence_order_expression
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.fence_order_validation
+    name: fence_order_validation
+    type: optional<open_symbol<cc.fence-order-validation/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.fence_evaluation_context
+    name: fence_evaluation_context
+    type: optional<open_symbol<cc.atomic-evaluation-context/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.fence_sema_discarded
+    name: fence_sema_discarded
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.fence_sema_constant_evaluated
+    name: fence_sema_constant_evaluated
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.fence_sema_default_context
+    name: fence_sema_default_context
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.syntax_node.v1.fence_sema_reason
+    name: fence_sema_reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
   - id: cc.syntax_node.v1.memory_access_profile
     name: memory_access_profile
     type: optional<utf8_string>
@@ -5083,6 +5158,20 @@ relations:
     - cc.syntax_node.v1.node
     strength: soft_semantic
     on_missing: unresolved
+  - source_columns:
+    - cc.syntax_node.v1.compiler_builtin_callee_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.syntax_node.v1.fence_order_expression
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
   merge:
     mode: functional_assertion
     conflict_columns:
@@ -5183,6 +5272,21 @@ relations:
     - cc.syntax_node.v1.atomic_sema_constant_evaluated
     - cc.syntax_node.v1.atomic_sema_default_context
     - cc.syntax_node.v1.atomic_sema_reason
+    - cc.syntax_node.v1.compiler_builtin_profile
+    - cc.syntax_node.v1.compiler_builtin_state
+    - cc.syntax_node.v1.compiler_builtin_id
+    - cc.syntax_node.v1.compiler_builtin_kind
+    - cc.syntax_node.v1.compiler_builtin_callee_declaration
+    - cc.syntax_node.v1.compiler_builtin_reason
+    - cc.syntax_node.v1.fence_sema_profile
+    - cc.syntax_node.v1.fence_sema_state
+    - cc.syntax_node.v1.fence_order_expression
+    - cc.syntax_node.v1.fence_order_validation
+    - cc.syntax_node.v1.fence_evaluation_context
+    - cc.syntax_node.v1.fence_sema_discarded
+    - cc.syntax_node.v1.fence_sema_constant_evaluated
+    - cc.syntax_node.v1.fence_sema_default_context
+    - cc.syntax_node.v1.fence_sema_reason
     - cc.syntax_node.v1.memory_access_profile
     - cc.syntax_node.v1.memory_access_state
     - cc.syntax_node.v1.memory_access_kind
@@ -5231,6 +5335,16 @@ relations:
       - cc.syntax_node.v1.atomic_sema_discarded
       - cc.syntax_node.v1.atomic_sema_constant_evaluated
       - cc.syntax_node.v1.atomic_sema_default_context
+    - - cc.syntax_node.v1.compiler_builtin_profile
+      - cc.syntax_node.v1.compiler_builtin_state
+      - cc.syntax_node.v1.compiler_builtin_id
+      - cc.syntax_node.v1.compiler_builtin_kind
+    - - cc.syntax_node.v1.fence_sema_profile
+      - cc.syntax_node.v1.fence_sema_state
+    - - cc.syntax_node.v1.fence_evaluation_context
+      - cc.syntax_node.v1.fence_sema_discarded
+      - cc.syntax_node.v1.fence_sema_constant_evaluated
+      - cc.syntax_node.v1.fence_sema_default_context
     - - cc.syntax_node.v1.memory_access_profile
       - cc.syntax_node.v1.memory_access_state
       - cc.syntax_node.v1.memory_access_kind

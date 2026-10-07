@@ -2104,6 +2104,19 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
         "adapter;clang22;application;original-inputs;atomic;sema;bounded"
         RUN_SERIAL TRUE TIMEOUT 240)
     add_test(
+      NAME adapter.clang22-original-fence-builtin-inputs
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/clang22/fence_builtin_inputs_test.py"
+        "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}"
+        ${_cxxlens_template_event_fixture_mode})
+    set_tests_properties(
+      adapter.clang22-original-fence-builtin-inputs
+      PROPERTIES
+        LABELS
+        "adapter;clang22;application;original-inputs;atomic;fence;bounded"
+        RUN_SERIAL TRUE TIMEOUT 240)
+    add_test(
       NAME adapter.clang22-original-semantic-target-inputs
       COMMAND
         "${Python3_EXECUTABLE}"

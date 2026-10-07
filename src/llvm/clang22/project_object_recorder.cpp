@@ -30,7 +30,8 @@ namespace cxxlens::detail::clang22::object_semantics
 			void fail() noexcept
 			{
 				failed = true;
-				out.sequence_partial = out.object_partial = out.atomic_partial = true;
+				out.sequence_partial = out.object_partial = out.atomic_partial = out.fence_partial =
+					true;
 			}
 			bool charge(std::size_t work = 1U, std::size_t bytes = 0U)
 			{
@@ -106,6 +107,56 @@ namespace cxxlens::detail::clang22::object_semantics
 				value.constant_evaluated = sema.isAlwaysConstantEvaluatedContext();
 				value.default_context = sema.isCheckingDefaultArgumentOrInitializer();
 				out.atomics.push_back(value);
+			}
+			void fence(clang::Sema& sema,
+					   const clang::CallExpr* expression,
+					   const clang::FunctionDecl* callee,
+					   unsigned builtin_id)
+			{
+				if (!out.fence_hooks_installed || !bind(sema.getASTContext()))
+					return;
+				if (!expression || !callee || out.fences.size() == limits.maximum_fields ||
+					!charge(1U, sizeof(original_fence_observation) * 2U))
+				{
+					out.fence_partial = true;
+					return;
+				}
+				original_fence_observation value;
+				value.expression = expression;
+				value.callee = callee;
+				value.builtin_id = builtin_id;
+				using context = clang::Sema::ExpressionEvaluationContext;
+				switch (sema.currentEvaluationContext().Context)
+				{
+					case context::Unevaluated:
+						value.evaluation_context = "unevaluated";
+						break;
+					case context::UnevaluatedList:
+						value.evaluation_context = "unevaluated_list";
+						break;
+					case context::UnevaluatedAbstract:
+						value.evaluation_context = "unevaluated_abstract";
+						break;
+					case context::DiscardedStatement:
+						value.evaluation_context = "discarded_statement";
+						break;
+					case context::ConstantEvaluated:
+						value.evaluation_context = "constant_evaluated";
+						break;
+					case context::ImmediateFunctionContext:
+						value.evaluation_context = "immediate_function_context";
+						break;
+					case context::PotentiallyEvaluated:
+						value.evaluation_context = "potentially_evaluated";
+						break;
+					case context::PotentiallyEvaluatedIfUsed:
+						value.evaluation_context = "potentially_evaluated_if_used";
+						break;
+				}
+				value.discarded = sema.currentEvaluationContext().isDiscardedStatementContext();
+				value.constant_evaluated = sema.isAlwaysConstantEvaluatedContext();
+				value.default_context = sema.isCheckingDefaultArgumentOrInitializer();
+				out.fences.push_back(value);
 			}
 			void sequence_root(clang::Sema& sema, const clang::Expr* expression, bool begin)
 			{
@@ -330,17 +381,20 @@ namespace cxxlens::detail::clang22::object_semantics
 		implementation(project_object_observations& out,
 					   object_facet_limits limits,
 					   bool instrumented,
-					   bool atomic_instrumented)
+					   bool atomic_instrumented,
+					   bool fence_instrumented)
 			: value{out, std::move(limits), nullptr, nullptr, 0U, {}, {}, {}}
 		{
 			out.hooks_installed = instrumented;
 			out.atomic_hooks_installed = atomic_instrumented && original_atomic_hooks_available();
+			out.fence_hooks_installed = fence_instrumented && original_fence_hooks_available();
 			previous = active;
 			if (previous)
 			{
 				out.sequence_partial = true;
 				out.object_partial = true;
 				out.atomic_partial = true;
+				out.fence_partial = true;
 			}
 			active = &value;
 		}
@@ -376,10 +430,19 @@ namespace cxxlens::detail::clang22::object_semantics
 		return false;
 #endif
 	}
+	bool original_fence_hooks_available() noexcept
+	{
+#if defined(CXXLENS_CLANG_TEMPLATE_EVENTS) && CXXLENS_CLANG_TEMPLATE_EVENTS
+		return cxxlens_object_semantics_hook::fence_routes() == 0x01U;
+#else
+		return false;
+#endif
+	}
 	project_object_event_scope::project_object_event_scope(project_object_observations& out,
 														   object_facet_limits limits,
 														   bool instrumented,
-														   bool atomic_instrumented)
+														   bool atomic_instrumented,
+														   bool fence_instrumented)
 	{
 		try
 		{
@@ -389,18 +452,20 @@ namespace cxxlens::detail::clang22::object_semantics
 				storage > limits.maximum_retained_bytes - out.retained_bytes_bound ||
 				(limits.cancelled && limits.cancelled()))
 			{
-				out.sequence_partial = out.object_partial = out.atomic_partial = out.frozen = true;
+				out.sequence_partial = out.object_partial = out.atomic_partial = out.fence_partial =
+					out.frozen = true;
 				return;
 			}
 			++out.operations;
 			out.retained_bytes_bound += storage;
 			state_ = std::make_unique<implementation>(
-				out, std::move(limits), instrumented, atomic_instrumented);
+				out, std::move(limits), instrumented, atomic_instrumented, fence_instrumented);
 		}
 		catch (...)
 		{
 			// This independent observer cannot invalidate original template events.
-			out.sequence_partial = out.object_partial = out.atomic_partial = out.frozen = true;
+			out.sequence_partial = out.object_partial = out.atomic_partial = out.fence_partial =
+				out.frozen = true;
 		}
 	}
 	project_object_event_scope::~project_object_event_scope()
@@ -444,6 +509,17 @@ namespace cxxlens::detail::clang22::object_semantics
 			[&](sink& value)
 			{
 				value.atomic(s, expression, observation);
+			});
+	}
+	void record_fence(clang::Sema& sema,
+					  const clang::CallExpr* call,
+					  const clang::FunctionDecl* callee,
+					  unsigned builtin_id) noexcept
+	{
+		invoke(
+			[&](sink& value)
+			{
+				value.fence(sema, call, callee, builtin_id);
 			});
 	}
 	std::uint64_t record_access(clang::Sema& s, const clang::Expr* e) noexcept
@@ -502,6 +578,13 @@ namespace cxxlens_object_semantics_hook
 						   const atomic_expression_view& observation)
 	{
 		n::record_atomic(sema, expression, observation);
+	}
+	void fence_call(clang::Sema& sema,
+					const clang::CallExpr* call,
+					const clang::FunctionDecl* callee,
+					unsigned builtin_id)
+	{
+		n::record_fence(sema, call, callee, builtin_id);
 	}
 	void sequence_root(clang::Sema& s, const clang::Expr* e, bool begin)
 	{

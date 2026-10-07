@@ -50,6 +50,14 @@ namespace cxxlens::detail::clang22::object_semantics
 		std::string_view evaluation_context{"unknown"};
 		bool discarded{}, constant_evaluated{}, default_context{};
 	};
+	struct original_fence_observation
+	{
+		const clang::CallExpr* expression{};
+		const clang::FunctionDecl* callee{};
+		unsigned builtin_id{};
+		std::string_view evaluation_context{"unknown"};
+		bool discarded{}, constant_evaluated{}, default_context{};
+	};
 	/** Borrowed compiler views belong only to this native job, including the
 	 * frozen extraction phase. Detachment must finish before AST destruction. */
 	struct project_object_observations
@@ -57,13 +65,16 @@ namespace cxxlens::detail::clang22::object_semantics
 		std::vector<original_sequence_candidate> sequence;
 		std::vector<original_interpreter_observation> objects;
 		std::vector<original_atomic_observation> atomics;
+		std::vector<original_fence_observation> fences;
 		std::size_t operations{}, retained_bytes_bound{}, checker_roots{};
 		bool hooks_installed{}, sequence_partial{}, object_partial{}, frozen{};
 		bool atomic_hooks_installed{}, atomic_partial{};
+		bool fence_hooks_installed{}, fence_partial{};
 	};
 	/** Capability of the genuinely linked original compiler closure. */
 	[[nodiscard]] bool original_object_hooks_available() noexcept;
 	[[nodiscard]] bool original_atomic_hooks_available() noexcept;
+	[[nodiscard]] bool original_fence_hooks_available() noexcept;
 	class project_object_event_scope
 	{
 		class implementation;
@@ -73,7 +84,8 @@ namespace cxxlens::detail::clang22::object_semantics
 		project_object_event_scope(project_object_observations&,
 								   object_facet_limits = {},
 								   bool instrumented = false,
-								   bool atomic_instrumented = false);
+								   bool atomic_instrumented = false,
+								   bool fence_instrumented = false);
 		~project_object_event_scope();
 		project_object_event_scope(const project_object_event_scope&) = delete;
 		project_object_event_scope& operator=(const project_object_event_scope&) = delete;

@@ -72,6 +72,7 @@
 #include <clang/AST/RecordLayout.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Analysis/CFG.h>
+#include <clang/Basic/Builtins.h>
 #include <clang/Basic/Module.h>
 #include <clang/Basic/TargetInfo.h>
 #include <clang/Index/USRGeneration.h>
@@ -960,6 +961,18 @@ namespace cxxlens::detail::clang22
 						if (!inserted)
 							entry->second = nullptr;
 					}
+				if (object_events_)
+					for (const auto& original : object_events_->fences)
+					{
+						if (++category_work_ > 32'000'000U)
+							fail("fence-sema", "context-operation-limit");
+						if (!fence_semantics_.contains(original.expression))
+							retain_population_bytes(128U);
+						const auto [entry, inserted] =
+							fence_semantics_.try_emplace(original.expression, &original);
+						if (!inserted)
+							entry->second = nullptr;
+					}
 				for (const auto& batch : normalized.batches)
 					for (const auto& row : batch.rows)
 						if (row.descriptor_id == "cc.call_site.v1" ||
@@ -1512,10 +1525,31 @@ namespace cxxlens::detail::clang22
 				--depth_;
 				return true;
 			}
+			static std::string_view compiler_fence_kind(unsigned builtin_id)
+			{
+				switch (builtin_id)
+				{
+					case clang::Builtin::BI__atomic_thread_fence:
+					case clang::Builtin::BI__c11_atomic_thread_fence:
+					case clang::Builtin::BI__scoped_atomic_thread_fence:
+						return "atomic_thread_fence";
+					case clang::Builtin::BI__atomic_signal_fence:
+					case clang::Builtin::BI__c11_atomic_signal_fence:
+						return "atomic_signal_fence";
+					default:
+						return {};
+				}
+			}
+			static bool original_fence_declaration(const clang::NamedDecl* declaration)
+			{
+				const auto* function = llvm::dyn_cast<clang::FunctionDecl>(declaration);
+				return function && !compiler_fence_kind(function->getBuiltinID()).empty();
+			}
 			bool VisitNamedDecl(clang::NamedDecl* declaration)
 			{
 				if (declaration == nullptr ||
-					(declaration->isImplicit() && !written_lambda(declaration)) ||
+					(declaration->isImplicit() && !written_lambda(declaration) &&
+					 !original_fence_declaration(declaration)) ||
 					!admitted(declaration->getLocation()))
 					return true;
 				// A template wrapper and its templated declaration share a Clang USR.
@@ -6181,6 +6215,19 @@ namespace cxxlens::detail::clang22
 			}
 			void finish_syntax_bindings()
 			{
+				// The ordinary written-declaration visitor skips implicit LinkageSpecDecls.
+				// Retain the actual source-bound fence callee object from this AST job,
+				// without traversing/instantiating a body or adopting a canonical prototype.
+				for (const auto& binding : pending_syntax_bindings_)
+					if (const auto* call = llvm::dyn_cast<clang::CallExpr>(binding.statement);
+						call && !compiler_fence_kind(call->getBuiltinCallee()).empty())
+					{
+						if (++category_work_ > 32'000'000U)
+							fail("fence-callee", "context-operation-limit");
+						if (auto* callee = call->getDirectCallee();
+							callee && !original_declarations_.contains(callee))
+							VisitNamedDecl(const_cast<clang::FunctionDecl*>(callee));
+					}
 				for (auto& binding : pending_syntax_bindings_)
 				{
 					const auto& descriptor = cc::relations::syntax_node::descriptor();
@@ -6223,8 +6270,12 @@ namespace cxxlens::detail::clang22
 					}
 
 					fields original_facets;
+					const auto* builtin_call = llvm::dyn_cast<clang::CallExpr>(binding.statement);
+					const auto builtin_id = builtin_call ? builtin_call->getBuiltinCallee() : 0U;
+					const auto fence_kind = compiler_fence_kind(builtin_id);
 					if (llvm::isa<clang::AtomicExpr, clang::CoroutineSuspendExpr>(
-							binding.statement))
+							binding.statement) ||
+						!fence_kind.empty())
 					{
 						retain_population_bytes(2048U);
 						original_facets.emplace(
@@ -6262,6 +6313,99 @@ namespace cxxlens::detail::clang22
 									binding.scope
 										? "original-syntax-physical-declaration-or-body-unbound"
 										: "original-syntax-outside-admitted-body"));
+					}
+					if (builtin_call)
+					{
+						retain_population_bytes(fence_kind.empty() ? 1024U : 4096U);
+						original_facets.emplace(
+							"compiler_builtin_profile",
+							sdk::detached_cell::utf8("clang22-original-compiler-builtin-call/1"));
+						original_facets.emplace("compiler_builtin_state",
+												symbol("cc.compiler-builtin-state/1", "complete"));
+						original_facets.emplace("compiler_builtin_id",
+												sdk::detached_cell::unsigned_integer(builtin_id));
+						original_facets.emplace(
+							"compiler_builtin_kind",
+							symbol("cc.compiler-builtin-kind/1",
+								   std::string{fence_kind.empty()
+												   ? (builtin_id ? "other_builtin" : "not_builtin")
+												   : fence_kind}));
+						if (!fence_kind.empty())
+						{
+							const auto* callee = builtin_call->getDirectCallee();
+							const auto declaration =
+								callee ? original_declaration(*callee) : std::string_view{};
+							if (!declaration.empty())
+								original_facets.emplace(
+									"compiler_builtin_callee_declaration",
+									id("cc_declaration_id", std::string{declaration}));
+							else
+								original_facets.emplace(
+									"compiler_builtin_reason",
+									sdk::detached_cell::utf8(
+										"original-builtin-physical-callee-unbound"));
+							const bool mapped = builtin_call->getNumArgs() &&
+								bind("fence_order_expression", builtin_call->getArg(0));
+							original_facets.emplace(
+								"fence_sema_profile",
+								sdk::detached_cell::utf8("clang22-original-fence-sema/1"));
+							const auto observed = fence_semantics_.find(builtin_call);
+							const auto* observation =
+								observed == fence_semantics_.end() ? nullptr : observed->second;
+							std::string state = "complete", reason;
+							if (observed != fence_semantics_.end() && !observation)
+							{
+								state = "conflicting";
+								reason = "original-fence-sema-callback-conflict";
+							}
+							else if (!object_events_ || !object_events_->fence_hooks_installed)
+							{
+								state = "unavailable";
+								reason = "original-fence-sema-hook-unavailable";
+							}
+							else if (object_events_->fence_partial || !object_events_->frozen)
+							{
+								state = "partial";
+								reason = "original-fence-sema-recorder-frontier";
+							}
+							else if (!observation)
+							{
+								state = "unavailable";
+								reason = "original-fence-sema-callback-unbound";
+							}
+							else if (!mapped || declaration.empty() ||
+									 observation->callee != callee ||
+									 observation->builtin_id != builtin_id)
+							{
+								state = "partial";
+								reason = "original-fence-sema-callee-or-operand-frontier";
+							}
+							original_facets.emplace("fence_sema_state",
+													symbol("cc.fence-sema-state/1", state));
+							if (state == "complete")
+							{
+								original_facets.emplace(
+									"fence_order_validation",
+									symbol("cc.fence-order-validation/1", "not_checked"));
+								original_facets.emplace(
+									"fence_evaluation_context",
+									symbol("cc.atomic-evaluation-context/1",
+										   std::string{observation->evaluation_context}));
+								original_facets.emplace(
+									"fence_sema_discarded",
+									sdk::detached_cell::boolean(observation->discarded));
+								original_facets.emplace(
+									"fence_sema_constant_evaluated",
+									sdk::detached_cell::boolean(observation->constant_evaluated));
+								original_facets.emplace(
+									"fence_sema_default_context",
+									sdk::detached_cell::boolean(observation->default_context));
+								reason = "original-fence-order-predicate-not-checked";
+							}
+							if (!reason.empty())
+								original_facets.emplace("fence_sema_reason",
+														sdk::detached_cell::utf8(reason));
+						}
 					}
 					if (const auto memory = memory_observations_.find(binding.statement);
 						memory != memory_observations_.end())
@@ -10733,6 +10877,8 @@ namespace cxxlens::detail::clang22
 			const project_template_observations* templates_{};
 			const project_template_event_observations* template_events_{};
 			const object_semantics::project_object_observations* object_events_{};
+			std::map<const clang::CallExpr*, const object_semantics::original_fence_observation*>
+				fence_semantics_;
 			std::map<const clang::AtomicExpr*, const object_semantics::original_atomic_observation*>
 				atomic_semantics_;
 			std::string current_function_;

@@ -30,6 +30,7 @@
 #include <clang/AST/ExprCXX.h>
 #include <clang/AST/PrettyPrinter.h>
 #include <clang/AST/RecursiveASTVisitor.h>
+#include <clang/Basic/Builtins.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Basic/Version.h>
 #include <clang/Index/USRGeneration.h>
@@ -1909,10 +1910,27 @@ namespace cxxlens::detail::clang22
 				return !failure_;
 			}
 
+			static bool original_fence_declaration(const clang::FunctionDecl* declaration)
+			{
+				if (!declaration)
+					return false;
+				switch (declaration->getBuiltinID())
+				{
+					case clang::Builtin::BI__atomic_thread_fence:
+					case clang::Builtin::BI__atomic_signal_fence:
+					case clang::Builtin::BI__c11_atomic_thread_fence:
+					case clang::Builtin::BI__c11_atomic_signal_fence:
+					case clang::Builtin::BI__scoped_atomic_thread_fence:
+						return true;
+					default:
+						return false;
+				}
+			}
 			bool VisitFunctionDecl(clang::FunctionDecl* declaration)
 			{
 				if (declaration == nullptr ||
-					(declaration->isImplicit() && !written_lambda(declaration)) ||
+					(declaration->isImplicit() && !written_lambda(declaration) &&
+					 !original_fence_declaration(declaration)) ||
 					!written_in_project_file(declaration->getLocation()))
 					return true;
 				provider_worker_v4_ast_observation entity;
@@ -2145,6 +2163,17 @@ namespace cxxlens::detail::clang22
 			{
 				if (expression == nullptr || !written_in_project_file(expression->getExprLoc()))
 					return true;
+				// The real implicit builtin declaration is skipped by written TU traversal.
+				// Admit its original normalized identity before detaching this fence call.
+				if (auto* callee = expression->getDirectCallee();
+					original_fence_declaration(callee) && !fence_callees_.contains(callee))
+				{
+					if (!accept(budget_->reserve_bytes(128U, "original-fence-callee-index")))
+						return false;
+					fence_callees_.insert(callee);
+					if (!VisitFunctionDecl(callee))
+						return false;
+				}
 				return observe_call(
 					*expression, expression->getDirectCallee(), call_kind(*expression));
 			}
@@ -2774,6 +2803,7 @@ namespace cxxlens::detail::clang22
 			const source_closure_snapshot* closure_;
 			const provider_worker_v4_call_observer& calls_;
 			std::string current_function_;
+			std::set<const clang::FunctionDecl*> fence_callees_;
 			const clang::Stmt* inherited_default_{};
 			std::map<std::string, provider_worker_v4_ast_observation, std::less<>> observations_;
 			std::optional<sdk::error> failure_;

@@ -90,5 +90,7 @@
 
 | [0134](0134-original-entered-file-source-features.md) | original static feature occurrences and actual entered-file closure |
 
+| [0140](0140-original-compiler-builtin-fence-sites.md) | original compiler builtin fence membership and unchecked order frontiers |
+
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

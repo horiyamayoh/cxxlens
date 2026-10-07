@@ -11,8 +11,9 @@ envelopes remain unchanged; every observation participates in conflict.
 
 Monet Concur14 and Source2 need a physical definition owner for an original
 AtomicExpr or CoroutineSuspendExpr source-feature occurrence. The current
-carrier is emitted for exactly those original statement classes; other syntax
-remains unobserved. A canonical function entity, nearest local variable,
+carrier is emitted for those original statement classes and, under
+[ADR 0140](0140-original-compiler-builtin-fence-sites.md), actual compiler-enum
+classified fence CallExpr occurrences. Other syntax remains unobserved. A canonical function entity, nearest local variable,
 source range or object-specific binding does not identify that definition. This
 carrier borrows the actual FunctionDecl while traversal is inside that
 declaration's admitted body, then binds its original physical declaration and
