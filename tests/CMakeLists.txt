@@ -1230,6 +1230,13 @@ add_test(NAME unit.sdk-exceptional-routes
 set_tests_properties(unit.sdk-exceptional-routes
                      PROPERTIES LABELS "unit;sdk;query;budget;cancellation")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-source-features
+                            unit/sdk/source_features_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-source-features PRIVATE cxxlens::query)
+add_test(NAME unit.sdk-source-features COMMAND cxxlens-unit-sdk-source-features)
+set_tests_properties(unit.sdk-source-features
+                     PROPERTIES LABELS "unit;sdk;query;budget;cancellation")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-object-semantics
                             unit/sdk/object_semantics_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-object-semantics PRIVATE cxxlens::query)
@@ -1886,6 +1893,20 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
       LABELS
       "adapter;provider;clang22;source-closure;receiver;protocol;security;bounded"
   )
+
+  cxxlens_add_test_executable(cxxlens-clang22-source-features
+                              adapter/clang22/source_features_native_test.cpp)
+  target_link_libraries(cxxlens-clang22-source-features
+                        PRIVATE cxxlens_clang22_worker_core)
+  if(CXXLENS_BUILD_SHARED)
+    cxxlens_add_provider_runtime_closure(cxxlens-clang22-source-features)
+  endif()
+  cxxlens_configure_clang22(cxxlens-clang22-source-features)
+  add_test(NAME adapter.clang22-source-features
+           COMMAND cxxlens-clang22-source-features)
+  set_tests_properties(adapter.clang22-source-features
+                       PROPERTIES LABELS "adapter;clang22;source;bounded"
+                                  TIMEOUT 120)
 
   if(UNIX)
     cxxlens_add_test_executable(cxxlens-clang22-abi-observer

@@ -5920,3 +5920,7 @@ core-independent extension
 ```
 
 これらを小さな縦断 release で実証したとき、`cxxlens` は用途別 SDK の集合ではなく、多様な C/C++ 解析機を安全に構築できる長期安定な Semantic Relation Platform となる。
+
+### Original entered-file static feature domain
+
+The optional original LangOptions environment and full admitted Decl/Stmt/Attr/TypeLoc source-feature population follow [ADR 0134](adr/0134-original-entered-file-source-features.md) and [the source-feature contract](clang22-original-source-features.md). Actual preprocessor entry, frozen file/snapshot binding, traversal and unresolved source attribution are independent closure axes. Compiler kinds alone do not classify extensions or hosted facilities. Resource activation, alias/object versions and runtime access domains remain separate.

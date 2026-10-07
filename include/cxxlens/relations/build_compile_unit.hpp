@@ -24,8 +24,8 @@ namespace cxxlens::build::relations
 				output.semantic_major = 1U;
 				output.semantics = "build.compile-unit/1";
 				output.owner_namespace = "cxxlens.standard.build";
-				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["build.compile_unit.v1.main_source","build.compile_unit.v1.variant","build.compile_unit.v1.toolchain","build.compile_unit.v1.effective_invocation_digest"],"result_column":"build.compile_unit.v1.compile_unit"},"interpretation_required":true,"key":["build.compile_unit.v1.compile_unit"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"build.compile_unit.v1.compile_unit","identity_role":"claim_key","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"build.compile_unit.v1.project","identity_role":"authoritative_payload","name":"project","required":true,"type":"typed_id<project_id>"},{"id":"build.compile_unit.v1.main_source","identity_role":"authoritative_payload","name":"main_source","required":true,"type":"typed_id<source_snapshot_id>"},{"id":"build.compile_unit.v1.variant","identity_role":"authoritative_payload","name":"variant","required":true,"type":"typed_id<build_variant_id>"},{"id":"build.compile_unit.v1.toolchain","identity_role":"authoritative_payload","name":"toolchain","required":true,"type":"typed_id<toolchain_context_id>"},{"id":"build.compile_unit.v1.effective_invocation_digest","identity_role":"authoritative_payload","name":"effective_invocation_digest","required":true,"type":"digest"},{"id":"build.compile_unit.v1.language","identity_role":"authoritative_payload","name":"language","required":true,"type":"open_symbol<build.language/1>"},{"id":"build.compile_unit.v1.working_directory","identity_role":"authoritative_payload","name":"working_directory","required":true,"type":"typed_id<logical_path_id>"}],"coverage":{"execution_domain":"build.compile_unit.catalog"},"descriptor_id":"build.compile_unit.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::build::relations::compile_unit","indexes":[["build.compile_unit.v1.main_source"],["build.compile_unit.v1.variant"]],"merge":{"conflict_columns":["build.compile_unit.v1.effective_invocation_digest","build.compile_unit.v1.language","build.compile_unit.v1.main_source","build.compile_unit.v1.project","build.compile_unit.v1.toolchain","build.compile_unit.v1.variant","build.compile_unit.v1.working_directory"],"mode":"functional_assertion"},"name":"build.compile_unit","owner_namespace":"cxxlens.standard.build","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["build.compile_unit.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"canonicalization"},"references":[{"on_missing":"reject_batch","source_columns":["build.compile_unit.v1.main_source"],"strength":"hard","target_columns":["source.file.v1.snapshot"],"target_relation":"source.file"},{"on_missing":"reject_batch","source_columns":["build.compile_unit.v1.project"],"strength":"hard","target_columns":["build.project.v1.project"],"target_relation":"build.project"},{"on_missing":"reject_batch","source_columns":["build.compile_unit.v1.toolchain"],"strength":"hard","target_columns":["build.toolchain_context.v1.toolchain"],"target_relation":"build.toolchain_context"},{"on_missing":"reject_batch","source_columns":["build.compile_unit.v1.variant"],"strength":"hard","target_columns":["build.variant.v1.variant"],"target_relation":"build.variant"}],"semantic_major":1,"semantics":"build.compile-unit/1","stability":"versioned","summary":"Main source and one effective invocation under an exact variant.","version":"1.0.0"})cxxlens";
-				output.contract_digest = "sha256:8b019f86c953ce3d08475a726b16dcb355e1474238b6a4300d7dd3dc9fc299b3";
+				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["build.compile_unit.v1.main_source","build.compile_unit.v1.variant","build.compile_unit.v1.toolchain","build.compile_unit.v1.effective_invocation_digest"],"result_column":"build.compile_unit.v1.compile_unit"},"interpretation_required":true,"key":["build.compile_unit.v1.compile_unit"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"build.compile_unit.v1.compile_unit","identity_role":"claim_key","name":"compile_unit","required":true,"type":"typed_id<compile_unit_id>"},{"id":"build.compile_unit.v1.project","identity_role":"authoritative_payload","name":"project","required":true,"type":"typed_id<project_id>"},{"id":"build.compile_unit.v1.main_source","identity_role":"authoritative_payload","name":"main_source","required":true,"type":"typed_id<source_snapshot_id>"},{"id":"build.compile_unit.v1.variant","identity_role":"authoritative_payload","name":"variant","required":true,"type":"typed_id<build_variant_id>"},{"id":"build.compile_unit.v1.toolchain","identity_role":"authoritative_payload","name":"toolchain","required":true,"type":"typed_id<toolchain_context_id>"},{"id":"build.compile_unit.v1.effective_invocation_digest","identity_role":"authoritative_payload","name":"effective_invocation_digest","required":true,"type":"digest"},{"id":"build.compile_unit.v1.language","identity_role":"authoritative_payload","name":"language","required":true,"type":"open_symbol<build.language/1>"},{"id":"build.compile_unit.v1.working_directory","identity_role":"authoritative_payload","name":"working_directory","required":true,"type":"typed_id<logical_path_id>"},{"id":"build.compile_unit.v1.freestanding","identity_role":"authoritative_payload","name":"freestanding","required":false,"type":"optional<bool>"},{"id":"build.compile_unit.v1.freestanding_state","identity_role":"authoritative_payload","name":"freestanding_state","required":false,"type":"optional<open_symbol<build.language-environment-state/1>>"},{"id":"build.compile_unit.v1.freestanding_profile","identity_role":"authoritative_payload","name":"freestanding_profile","required":false,"type":"optional<utf8_string>"}],"coverage":{"execution_domain":"build.compile_unit.catalog"},"descriptor_id":"build.compile_unit.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::build::relations::compile_unit","indexes":[["build.compile_unit.v1.main_source"],["build.compile_unit.v1.variant"]],"merge":{"conflict_columns":["build.compile_unit.v1.effective_invocation_digest","build.compile_unit.v1.freestanding","build.compile_unit.v1.freestanding_profile","build.compile_unit.v1.freestanding_state","build.compile_unit.v1.language","build.compile_unit.v1.main_source","build.compile_unit.v1.project","build.compile_unit.v1.toolchain","build.compile_unit.v1.variant","build.compile_unit.v1.working_directory"],"mode":"functional_assertion"},"name":"build.compile_unit","owner_namespace":"cxxlens.standard.build","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["build.compile_unit.v1.compile_unit"]},"profile":"NG0","provenance":{"minimum":"canonicalization"},"references":[{"on_missing":"reject_batch","source_columns":["build.compile_unit.v1.main_source"],"strength":"hard","target_columns":["source.file.v1.snapshot"],"target_relation":"source.file"},{"on_missing":"reject_batch","source_columns":["build.compile_unit.v1.project"],"strength":"hard","target_columns":["build.project.v1.project"],"target_relation":"build.project"},{"on_missing":"reject_batch","source_columns":["build.compile_unit.v1.toolchain"],"strength":"hard","target_columns":["build.toolchain_context.v1.toolchain"],"target_relation":"build.toolchain_context"},{"on_missing":"reject_batch","source_columns":["build.compile_unit.v1.variant"],"strength":"hard","target_columns":["build.variant.v1.variant"],"target_relation":"build.variant"}],"semantic_major":1,"semantics":"build.compile-unit/1","stability":"versioned","summary":"Main source and one effective invocation under an exact variant.","version":"1.0.0"})cxxlens";
+				output.contract_digest = "sha256:d0ac9e5fa261638a225095c4c847670c25888c2e73fb946e5a51e30b0a83ce73";
 				output.columns = {
 					{"build.compile_unit.v1.compile_unit", "compile_unit", {sdk::scalar_kind::typed_id, "compile_unit_id", false}, true, sdk::column_role::claim_key},
 					{"build.compile_unit.v1.project", "project", {sdk::scalar_kind::typed_id, "project_id", false}, true, sdk::column_role::authoritative_payload},
@@ -35,6 +35,9 @@ namespace cxxlens::build::relations
 					{"build.compile_unit.v1.effective_invocation_digest", "effective_invocation_digest", {sdk::scalar_kind::digest, "", false}, true, sdk::column_role::authoritative_payload},
 					{"build.compile_unit.v1.language", "language", {sdk::scalar_kind::open_symbol, "build.language/1", false}, true, sdk::column_role::authoritative_payload},
 					{"build.compile_unit.v1.working_directory", "working_directory", {sdk::scalar_kind::typed_id, "logical_path_id", false}, true, sdk::column_role::authoritative_payload},
+					{"build.compile_unit.v1.freestanding", "freestanding", {sdk::scalar_kind::boolean, "", true}, false, sdk::column_role::authoritative_payload},
+					{"build.compile_unit.v1.freestanding_state", "freestanding_state", {sdk::scalar_kind::open_symbol, "build.language-environment-state/1", true}, false, sdk::column_role::authoritative_payload},
+					{"build.compile_unit.v1.freestanding_profile", "freestanding_profile", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::authoritative_payload},
 				};
 				output.domain_identity.result_column = "build.compile_unit.v1.compile_unit";
 				output.domain_identity.projection = {
@@ -56,6 +59,9 @@ namespace cxxlens::build::relations
 				output.merge = sdk::merge_mode::functional_assertion;
 				output.conflict_columns = {
 					"build.compile_unit.v1.effective_invocation_digest",
+					"build.compile_unit.v1.freestanding",
+					"build.compile_unit.v1.freestanding_profile",
+					"build.compile_unit.v1.freestanding_state",
 					"build.compile_unit.v1.language",
 					"build.compile_unit.v1.main_source",
 					"build.compile_unit.v1.project",
@@ -142,6 +148,33 @@ namespace cxxlens::build::relations
 			[[nodiscard]] static sdk::column_ref ref()
 			{
 				return {compile_unit::descriptor().id, "build.compile_unit.v1.working_directory", {sdk::scalar_kind::typed_id, "logical_path_id", false}};
+			}
+		};
+		/** @brief Generated column tag for `build.compile_unit.v1.freestanding`. */
+		struct freestanding
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {compile_unit::descriptor().id, "build.compile_unit.v1.freestanding", {sdk::scalar_kind::boolean, "", true}};
+			}
+		};
+		/** @brief Generated column tag for `build.compile_unit.v1.freestanding_state`. */
+		struct freestanding_state
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {compile_unit::descriptor().id, "build.compile_unit.v1.freestanding_state", {sdk::scalar_kind::open_symbol, "build.language-environment-state/1", true}};
+			}
+		};
+		/** @brief Generated column tag for `build.compile_unit.v1.freestanding_profile`. */
+		struct freestanding_profile
+		{
+			/** @brief Materialize the stable descriptor/column/type reference. */
+			[[nodiscard]] static sdk::column_ref ref()
+			{
+				return {compile_unit::descriptor().id, "build.compile_unit.v1.freestanding_profile", {sdk::scalar_kind::utf8_string, "", true}};
 			}
 		};
 	};

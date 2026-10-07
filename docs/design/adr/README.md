@@ -86,5 +86,7 @@
 | [0132](0132-projection-resource-reservation-settlement.md) | bounded successful projection usage for caller reservation settlement |
 | [0133](0133-original-exceptional-exit-occurrences.md) | original physical-definition exceptional occurrences and ABI lowering variants |
 
+| [0134](0134-original-entered-file-source-features.md) | original static feature occurrences and actual entered-file closure |
+
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

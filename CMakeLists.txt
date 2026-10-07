@@ -261,6 +261,7 @@ add_library(
   src/sdk/query_transfer.cpp
   src/sdk/control_flow.cpp
   src/sdk/source_tokens.cpp
+  src/sdk/source_features.cpp
   src/sdk/finite_populations.cpp
   src/sdk/call_operands.cpp
   src/sdk/build_health.cpp
@@ -778,6 +779,10 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
     src/llvm/clang22/provider_worker_v4_ast_observer.cpp
     src/llvm/clang22/provider_worker_v4_output_normalizer.cpp
     src/llvm/clang22/project_semantic_facts.cpp
+    src/llvm/clang22/project_language_environment.cpp
+    src/llvm/clang22/project_source_feature_walk.cpp
+    src/llvm/clang22/original_source_feature_references.cpp
+    src/llvm/clang22/project_source_feature_rows.cpp
     src/llvm/clang22/function_exit_semantics.cpp
     src/llvm/clang22/value_domain_semantics.cpp
     src/llvm/clang22/direct_object_semantics.cpp

@@ -1,0 +1,591 @@
+schema: cxxlens.original-source-features.slice-1
+profiles:
+  environment: clang22-original-language-environment/1
+  features: clang22-original-static-source-features/1
+symbols:
+- id: cc.source-feature-state/1
+  openness: open
+  unknown_value: preserve
+  values:
+  - none
+  - complete
+  - partial
+  - unknown
+  - unavailable
+  - unsupported
+  - conflicting
+- id: cc.source-feature-class/1
+  openness: open
+  unknown_value: preserve
+  values:
+  - declaration
+  - statement
+  - attribute
+  - type_location
+- id: cc.source-feature-origin/1
+  openness: open
+  unknown_value: preserve
+  values:
+  - written
+  - implicit
+  - activated
+  - unknown
+- id: cc.source-feature-evaluation/1
+  openness: open
+  unknown_value: preserve
+  values:
+  - declarative
+  - potentially_evaluated
+  - unevaluated
+  - unknown
+- id: cc.source-feature-reference-kind/1
+  openness: open
+  unknown_value: preserve
+  values:
+  - declaration_reference
+  - member_reference
+  - selected_constructor
+  - direct_callee
+  - indirect_call
+  - unsupported
+- id: cc.source-feature-type-role/1
+  openness: open
+  unknown_value: preserve
+  values:
+  - declared
+  - expression
+  - located
+  - unsupported
+- id: cc.source-feature-scope/1
+  openness: open
+  unknown_value: preserve
+  values:
+  - translation_unit
+  - entered_file
+- id: build.language-environment-state/1
+  openness: open
+  unknown_value: preserve
+  values:
+  - none
+  - complete
+  - partial
+  - unknown
+  - unavailable
+  - unsupported
+  - conflicting
+relations:
+- descriptor_id: cc.source_feature.v1
+  name: cc.source_feature
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.source-feature/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: One actual original Decl, Stmt, Attr or TypeLoc traversal occurrence; repeated original native
+    nodes retain an independent unit-local node ordinal. Source, context, entity, call and type bindings
+    are independent.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::source_feature
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.source_feature.v1.feature
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.source_feature.v1.feature
+      projection:
+      - cc.source_feature.v1.compile_unit
+      - cc.source_feature.v1.ordinal
+      - cc.source_feature.v1.profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.source_feature.v1.feature
+    name: feature
+    type: typed_id<cc_source_feature_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.source_feature.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.ordinal
+    name: ordinal
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.profile
+    name: profile
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.original_node_ordinal
+    name: original_node_ordinal
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.feature_class
+    name: feature_class
+    type: open_symbol<cc.source-feature-class/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.compiler_kind
+    name: compiler_kind
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.kind
+    name: kind
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.origin
+    name: origin
+    type: open_symbol<cc.source-feature-origin/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.evaluation
+    name: evaluation
+    type: open_symbol<cc.source-feature-evaluation/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.state
+    name: state
+    type: open_symbol<cc.source-feature-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.source_binding_state
+    name: source_binding_state
+    type: open_symbol<cc.source-feature-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.declaration_binding_state
+    name: declaration_binding_state
+    type: open_symbol<cc.source-feature-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.context_binding_state
+    name: context_binding_state
+    type: open_symbol<cc.source-feature-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.entity_binding_state
+    name: entity_binding_state
+    type: open_symbol<cc.source-feature-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.call_binding_state
+    name: call_binding_state
+    type: open_symbol<cc.source-feature-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.type_binding_state
+    name: type_binding_state
+    type: open_symbol<cc.source-feature-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.reference_kind
+    name: reference_kind
+    type: open_symbol<cc.source-feature-reference-kind/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.type_role
+    name: type_role
+    type: open_symbol<cc.source-feature-type-role/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.source_none_reason
+    name: source_none_reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.is_implicit
+    name: is_implicit
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.is_system
+    name: is_system
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.file
+    name: file
+    type: optional<typed_id<file_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.source_snapshot
+    name: source_snapshot
+    type: optional<typed_id<source_snapshot_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.source
+    name: source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.declaration
+    name: declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.context_declaration
+    name: context_declaration
+    type: optional<typed_id<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.subject_entity
+    name: subject_entity
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.call_target
+    name: call_target
+    type: optional<typed_id<cc_entity_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.subject_type
+    name: subject_type
+    type: optional<typed_id<cc_type_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.source_feature.v1.syntax
+    name: syntax
+    type: optional<typed_id<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.source_feature.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.source_feature.v1.file
+    target_relation: source.file
+    target_columns:
+    - source.file.v1.file
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.source_feature.v1.source_snapshot
+    target_relation: source.file
+    target_columns:
+    - source.file.v1.snapshot
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.source_feature.v1.source
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.source_feature.v1.declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.source_feature.v1.context_declaration
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.source_feature.v1.subject_entity
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.source_feature.v1.call_target
+    target_relation: cc.entity
+    target_columns:
+    - cc.entity.v1.entity
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.source_feature.v1.subject_type
+    target_relation: cc.type
+    target_columns:
+    - cc.type.v1.type
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.source_feature.v1.syntax
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.source_feature.v1.compile_unit
+    - cc.source_feature.v1.ordinal
+    - cc.source_feature.v1.profile
+    - cc.source_feature.v1.original_node_ordinal
+    - cc.source_feature.v1.feature_class
+    - cc.source_feature.v1.compiler_kind
+    - cc.source_feature.v1.kind
+    - cc.source_feature.v1.origin
+    - cc.source_feature.v1.evaluation
+    - cc.source_feature.v1.state
+    - cc.source_feature.v1.source_binding_state
+    - cc.source_feature.v1.declaration_binding_state
+    - cc.source_feature.v1.context_binding_state
+    - cc.source_feature.v1.entity_binding_state
+    - cc.source_feature.v1.call_binding_state
+    - cc.source_feature.v1.type_binding_state
+    - cc.source_feature.v1.reference_kind
+    - cc.source_feature.v1.type_role
+    - cc.source_feature.v1.source_none_reason
+    - cc.source_feature.v1.is_implicit
+    - cc.source_feature.v1.is_system
+    - cc.source_feature.v1.file
+    - cc.source_feature.v1.source_snapshot
+    - cc.source_feature.v1.source
+    - cc.source_feature.v1.declaration
+    - cc.source_feature.v1.context_declaration
+    - cc.source_feature.v1.subject_entity
+    - cc.source_feature.v1.call_target
+    - cc.source_feature.v1.subject_type
+    - cc.source_feature.v1.syntax
+  partition:
+    suggested_keys:
+    - cc.source_feature.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.source_feature.v1.compile_unit
+  coverage:
+    execution_domain: cc.source_feature.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: cc.source_feature_inventory.v1
+  name: cc.source_feature_inventory
+  version: 1.0.0
+  semantic_major: 1
+  semantics: cc.source-feature-inventory/1
+  owner_namespace: cxxlens.standard.cc
+  stability: versioned
+  profile: NG0
+  summary: Independent original translation-unit traversal and actual entered-file source-feature populations;
+    unopened files are not complete empty populations, and unresolved valid source attribution prevents
+    full eligible file closure.
+  cpp_projection: installed-static
+  generated_cpp_tag: cxxlens::cc::relations::source_feature_inventory
+  claim:
+    cardinality: functional_assertion
+    key:
+    - cc.source_feature_inventory.v1.inventory
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: cc.source_feature_inventory.v1.inventory
+      projection:
+      - cc.source_feature_inventory.v1.compile_unit
+      - cc.source_feature_inventory.v1.scope
+      - cc.source_feature_inventory.v1.file
+      - cc.source_feature_inventory.v1.source_snapshot
+      - cc.source_feature_inventory.v1.profile
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: cc.source_feature_inventory.v1.inventory
+    name: inventory
+    type: typed_id<cc_source_feature_inventory_id>
+    required: true
+    identity_role: claim_key
+  - id: cc.source_feature_inventory.v1.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature_inventory.v1.scope
+    name: scope
+    type: open_symbol<cc.source-feature-scope/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature_inventory.v1.file
+    name: file
+    type: optional<typed_id<file_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.source_feature_inventory.v1.source_snapshot
+    name: source_snapshot
+    type: optional<typed_id<source_snapshot_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.source_feature_inventory.v1.profile
+    name: profile
+    type: utf8_string
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature_inventory.v1.feature_count
+    name: feature_count
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature_inventory.v1.feature_ids
+    name: feature_ids
+    type: set<cc_source_feature_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature_inventory.v1.enumeration_state
+    name: enumeration_state
+    type: open_symbol<cc.source-feature-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature_inventory.v1.traversal_state
+    name: traversal_state
+    type: open_symbol<cc.source-feature-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature_inventory.v1.entry_state
+    name: entry_state
+    type: open_symbol<cc.source-feature-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature_inventory.v1.source_binding_state
+    name: source_binding_state
+    type: open_symbol<cc.source-feature-state/1>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature_inventory.v1.unbound_feature_count
+    name: unbound_feature_count
+    type: uint64
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature_inventory.v1.unbound_feature_ids
+    name: unbound_feature_ids
+    type: set<cc_source_feature_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: cc.source_feature_inventory.v1.entered_file_count
+    name: entered_file_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.source_feature_inventory.v1.entered_file_ids
+    name: entered_file_ids
+    type: optional<set<file_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.source_feature_inventory.v1.entered_source_snapshots
+    name: entered_source_snapshots
+    type: optional<set<source_snapshot_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.source_feature_inventory.v1.entered_file_state
+    name: entered_file_state
+    type: optional<open_symbol<cc.source-feature-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.source_feature_inventory.v1.reason
+    name: reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - cc.source_feature_inventory.v1.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - cc.source_feature_inventory.v1.file
+    target_relation: source.file
+    target_columns:
+    - source.file.v1.file
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.source_feature_inventory.v1.source_snapshot
+    target_relation: source.file
+    target_columns:
+    - source.file.v1.snapshot
+    strength: soft_semantic
+    on_missing: unresolved
+  - source_columns:
+    - cc.source_feature_inventory.v1.feature_ids
+    target_relation: cc.source_feature
+    target_columns:
+    - cc.source_feature.v1.feature
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - cc.source_feature_inventory.v1.unbound_feature_ids
+    target_relation: cc.source_feature
+    target_columns:
+    - cc.source_feature.v1.feature
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - cc.source_feature_inventory.v1.entered_file_ids
+    target_relation: source.file
+    target_columns:
+    - source.file.v1.file
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - cc.source_feature_inventory.v1.entered_source_snapshots
+    target_relation: source.file
+    target_columns:
+    - source.file.v1.snapshot
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - cc.source_feature_inventory.v1.compile_unit
+    - cc.source_feature_inventory.v1.scope
+    - cc.source_feature_inventory.v1.file
+    - cc.source_feature_inventory.v1.source_snapshot
+    - cc.source_feature_inventory.v1.profile
+    - cc.source_feature_inventory.v1.feature_count
+    - cc.source_feature_inventory.v1.feature_ids
+    - cc.source_feature_inventory.v1.enumeration_state
+    - cc.source_feature_inventory.v1.traversal_state
+    - cc.source_feature_inventory.v1.entry_state
+    - cc.source_feature_inventory.v1.source_binding_state
+    - cc.source_feature_inventory.v1.unbound_feature_count
+    - cc.source_feature_inventory.v1.unbound_feature_ids
+    - cc.source_feature_inventory.v1.entered_file_count
+    - cc.source_feature_inventory.v1.entered_file_ids
+    - cc.source_feature_inventory.v1.entered_source_snapshots
+    - cc.source_feature_inventory.v1.entered_file_state
+    - cc.source_feature_inventory.v1.reason
+  partition:
+    suggested_keys:
+    - cc.source_feature_inventory.v1.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - cc.source_feature_inventory.v1.compile_unit
+  coverage:
+    execution_domain: cc.source_feature_inventory.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1

@@ -53,6 +53,8 @@
 #include <cxxlens/relations/cc_record_surface.hpp>
 #include <cxxlens/relations/cc_sequence_context.hpp>
 #include <cxxlens/relations/cc_sequence_pair.hpp>
+#include <cxxlens/relations/cc_source_feature.hpp>
+#include <cxxlens/relations/cc_source_feature_inventory.hpp>
 #include <cxxlens/relations/cc_syntax_node.hpp>
 #include <cxxlens/relations/cc_target_resolution_slot.hpp>
 #include <cxxlens/relations/cc_template_candidate.hpp>
@@ -74,6 +76,7 @@
 #include <cxxlens/sdk/store.hpp>
 
 #include "observation_v2.hpp"
+#include "project_language_environment.hpp"
 #include "project_object_observer.hpp"
 #include "project_semantic_facts.hpp"
 #include "project_template_events.hpp"
@@ -917,6 +920,29 @@ namespace cxxlens::detail::clang22
 				{closure, main_path, working_path, effective, std::move(read_roots), {}},
 				[&](provider::clang22::borrowed_translation_unit& borrowed) -> sdk::result<void>
 				{
+					const auto actual_environment =
+						observe_original_language_environment(borrowed.ast());
+					for (auto& original : rows)
+						if (original.descriptor_id == "build.compile_unit.v1" &&
+							identity(original, "compile_unit") == unit_id)
+						{
+							original.cells.insert_or_assign(
+								"build.compile_unit.v1.freestanding",
+								sdk::detached_cell::boolean(actual_environment.freestanding));
+							original.cells.at("build.compile_unit.v1.freestanding").type.optional =
+								true;
+							auto state = symbol("build.language-environment-state/1", "complete");
+							state.type.optional = true;
+							original.cells.insert_or_assign(
+								"build.compile_unit.v1.freestanding_state", std::move(state));
+							auto profile =
+								sdk::detached_cell::utf8("clang22-original-language-environment/1");
+							profile.type.optional = true;
+							original.cells.insert_or_assign(
+								"build.compile_unit.v1.freestanding_profile", std::move(profile));
+							take(sdk::validate_row(build::relations::compile_unit::descriptor(),
+												   original));
+						}
 					std::map<const clang::Expr*, std::string> original_keys;
 					std::size_t original_key_bytes{};
 					auto observed = observe_provider_worker_v4_ast(
@@ -1145,6 +1171,8 @@ namespace cxxlens::detail::clang22
 										 &cc::relations::exceptional_exit::descriptor(),
 										 &cc::relations::sequence_context::descriptor(),
 										 &cc::relations::sequence_pair::descriptor(),
+										 &cc::relations::source_feature::descriptor(),
+										 &cc::relations::source_feature_inventory::descriptor(),
 										 &cc::relations::object_state_observation::descriptor(),
 										 &cc::relations::exceptional_block::descriptor(),
 										 &cc::relations::exceptional_successor::descriptor(),

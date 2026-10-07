@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.93.1
+document_version: 1.94.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -35,6 +35,7 @@ packages:
       - include/cxxlens/sdk/query_transfer.hpp
       - include/cxxlens/sdk/control_flow.hpp
       - include/cxxlens/sdk/source_tokens.hpp
+      - include/cxxlens/sdk/source_features.hpp
       - include/cxxlens/sdk/semantic_graphs.hpp
       - include/cxxlens/sdk/record_surfaces.hpp
       - include/cxxlens/sdk/abi_surfaces.hpp
@@ -173,7 +174,7 @@ entries:
     status: implemented
     profile: NG0
     target: cxxlens::sdk
-    headers: [include/cxxlens/relations/build_analysis_inventory.hpp, include/cxxlens/relations/cc_operation.hpp, include/cxxlens/relations/source_preprocessor_inventory.hpp, include/cxxlens/relations/build_compile_unit_analysis.hpp, include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_call_operand.hpp, include/cxxlens/relations/cc_declaration.hpp, include/cxxlens/relations/cc_declaration_inventory.hpp, include/cxxlens/relations/cc_target_resolution_slot.hpp, include/cxxlens/relations/cc_template_subject.hpp, include/cxxlens/relations/cc_constraint_node.hpp, include/cxxlens/relations/cc_template_candidate.hpp, include/cxxlens/relations/cc_constant_evaluation_root.hpp, include/cxxlens/relations/cc_constant_evaluated_call.hpp, include/cxxlens/relations/cc_lambda_capture.hpp, include/cxxlens/relations/cc_template_instantiation_frame.hpp, include/cxxlens/relations/cc_template_inventory.hpp, include/cxxlens/relations/cc_flow_inventory.hpp, include/cxxlens/relations/source_comment.hpp, include/cxxlens/relations/source_comment_inventory.hpp, include/cxxlens/relations/source_include_inventory.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_type_component.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/core_claim_conflict.hpp, include/cxxlens/relations/core_differential_disagreement.hpp, include/cxxlens/relations/core_provider_execution.hpp, include/cxxlens/relations/core_unresolved.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_origin.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/relations/cc_entity_detail.hpp, include/cxxlens/relations/cc_entity_edge.hpp, include/cxxlens/relations/cc_exceptional_exit.hpp, include/cxxlens/relations/cc_exceptional_block.hpp, include/cxxlens/relations/cc_exceptional_successor.hpp, include/cxxlens/relations/cc_cfg_element.hpp, include/cxxlens/relations/cc_move_event.hpp, include/cxxlens/relations/cc_declaration_attribute.hpp, include/cxxlens/relations/cc_address_transfer.hpp, include/cxxlens/relations/cc_sequence_context.hpp, include/cxxlens/relations/cc_sequence_pair.hpp, include/cxxlens/relations/cc_object_state_observation.hpp, include/cxxlens/relations/cc_syntax_node.hpp, include/cxxlens/relations/cc_body.hpp, include/cxxlens/relations/cc_cfg_node.hpp, include/cxxlens/relations/cc_cfg_edge.hpp, include/cxxlens/relations/cc_flow_fact.hpp, include/cxxlens/relations/cc_layout_fact.hpp, include/cxxlens/relations/cc_abi_surface.hpp, include/cxxlens/relations/cc_record_surface.hpp, include/cxxlens/relations/cc_record_inventory.hpp, include/cxxlens/relations/source_include.hpp, include/cxxlens/relations/source_preprocessor_event.hpp, include/cxxlens/relations/source_token.hpp, include/cxxlens/relations/source_token_inventory.hpp, include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
+    headers: [include/cxxlens/relations/build_analysis_inventory.hpp, include/cxxlens/relations/cc_operation.hpp, include/cxxlens/relations/source_preprocessor_inventory.hpp, include/cxxlens/relations/build_compile_unit_analysis.hpp, include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_call_operand.hpp, include/cxxlens/relations/cc_declaration.hpp, include/cxxlens/relations/cc_declaration_inventory.hpp, include/cxxlens/relations/cc_target_resolution_slot.hpp, include/cxxlens/relations/cc_template_subject.hpp, include/cxxlens/relations/cc_constraint_node.hpp, include/cxxlens/relations/cc_template_candidate.hpp, include/cxxlens/relations/cc_constant_evaluation_root.hpp, include/cxxlens/relations/cc_constant_evaluated_call.hpp, include/cxxlens/relations/cc_lambda_capture.hpp, include/cxxlens/relations/cc_template_instantiation_frame.hpp, include/cxxlens/relations/cc_template_inventory.hpp, include/cxxlens/relations/cc_flow_inventory.hpp, include/cxxlens/relations/source_comment.hpp, include/cxxlens/relations/source_comment_inventory.hpp, include/cxxlens/relations/source_include_inventory.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_type_component.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/core_claim_conflict.hpp, include/cxxlens/relations/core_differential_disagreement.hpp, include/cxxlens/relations/core_provider_execution.hpp, include/cxxlens/relations/core_unresolved.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_origin.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/relations/cc_entity_detail.hpp, include/cxxlens/relations/cc_entity_edge.hpp, include/cxxlens/relations/cc_exceptional_exit.hpp, include/cxxlens/relations/cc_exceptional_block.hpp, include/cxxlens/relations/cc_exceptional_successor.hpp, include/cxxlens/relations/cc_cfg_element.hpp, include/cxxlens/relations/cc_move_event.hpp, include/cxxlens/relations/cc_declaration_attribute.hpp, include/cxxlens/relations/cc_address_transfer.hpp, include/cxxlens/relations/cc_source_feature.hpp, include/cxxlens/relations/cc_source_feature_inventory.hpp, include/cxxlens/relations/cc_sequence_context.hpp, include/cxxlens/relations/cc_sequence_pair.hpp, include/cxxlens/relations/cc_object_state_observation.hpp, include/cxxlens/relations/cc_syntax_node.hpp, include/cxxlens/relations/cc_body.hpp, include/cxxlens/relations/cc_cfg_node.hpp, include/cxxlens/relations/cc_cfg_edge.hpp, include/cxxlens/relations/cc_flow_fact.hpp, include/cxxlens/relations/cc_layout_fact.hpp, include/cxxlens/relations/cc_abi_surface.hpp, include/cxxlens/relations/cc_record_surface.hpp, include/cxxlens/relations/cc_record_inventory.hpp, include/cxxlens/relations/source_include.hpp, include/cxxlens/relations/source_preprocessor_event.hpp, include/cxxlens/relations/source_token.hpp, include/cxxlens/relations/source_token_inventory.hpp, include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
     symbols:
       - name: query.from
         kind: template
@@ -865,6 +866,47 @@ entries:
       - topology-enumeration-source-target-placement-and-specification-axes-independent
       - no-path-search-runtime-escape-resource-version-or-cleanup-sequence-claim
       - missing-saved-optional-topology-remains-unknown
+      - bounds-before-retention-active-cancellation-and-measured-successful-usage
+    depends_on: [public.finite-populations, public.projection-resource-usage]
+
+  - id: public.source-features
+    status: implemented
+    profile: NG1
+    target: cxxlens::query
+    headers: [include/cxxlens/sdk/source_features.hpp]
+    symbols:
+      - name: query.source_feature_input
+        kind: value
+        signature: 'units; files; spans; entities; declarations; declaration_inventories; types; syntax_nodes; features; inventories; compile_units_complete; feature_inputs_complete; inventory_inputs_complete'
+      - name: query.observed_language_environment
+        kind: value
+        signature: 'compile_unit; universe; variant; interpretation; profile; observation_state; freestanding; state; evidence; gaps'
+      - name: query.observed_source_feature
+        kind: value
+        signature: 'feature; compile_unit; universe; variant; interpretation; profile; ordinal; original_node_ordinal; compiler_kind; feature_class; kind; origin; evaluation; observation_state; file; source_snapshot; source_span; source_none_reason; is_implicit; is_system; declaration; context_declaration; subject_entity; call_target; subject_type; syntax; reference_kind; type_role; source_binding_state; declaration_binding_state; context_binding_state; entity_binding_state; call_binding_state; type_binding_state; identity_state; observation; source_state; declaration_state; context_state; entity_state; call_state; type_state; syntax_state; evidence; gaps'
+      - name: query.source_feature_population
+        kind: value
+        signature: 'inventory; compile_unit; scope; file; source_snapshot; profile; universe; variant; interpretation; feature_count; unbound_feature_count; feature_ids; unbound_feature_ids; entered_file_count; entered_file_ids; entered_source_snapshots; enumeration_observation; traversal_observation; entry_observation; source_binding_observation; entered_file_observation; identity_state; enumeration_state; membership_state; traversal_state; entry_state; source_state; entered_file_state; features; evidence; gaps'
+      - name: query.source_feature_projection
+        kind: value
+        signature: 'evidence; environments; features; populations; compile_units_complete; feature_inputs_complete; inventory_inputs_complete; unresolved; source_queries'
+      - name: query.project_source_features
+        kind: function
+        signature: 'result<source_feature_projection> project_source_features(source_feature_input, finite_population_limits = {}, stop_token = {}); result<source_feature_projection> project_source_features(const application_query_results&, finite_population_limits = {}, stop_token = {}); result<source_feature_projection> project_source_features(source_feature_input, finite_population_limits, stop_token, projection_resource_usage&); result<source_feature_projection> project_source_features(const application_query_results&, finite_population_limits, stop_token, projection_resource_usage&)'
+    errors: [sdk.source-feature-input-invalid, sdk.source-feature-budget, sdk.source-feature-cancelled, sdk.source-feature-resource-exhausted]
+    lifetime: [borrowed-input-only-during-call, projection-owns-original-evidence-and-query-side-channels, no-compiler-pointer]
+    threading: [independent-calls-share-no-mutable-state]
+    versioning: [sdk.project-source-features/1]
+    invariants:
+      - actual-langoptions-freestanding-independent-of-original-feature-membership
+      - whole-admitted-original-decl-stmt-attr-typeloc-traversal-including-written-globals-defaults-and-unevaluated-syntax
+      - traversal-occurrence-and-original-node-ordinals-independent
+      - source-none-requires-matching-versioned-compiler-origin-grammar
+      - actual-entered-file-membership-and-exact-file-snapshot-pair-required-even-for-zero
+      - missing-valid-source-attribution-prevents-full-file-domain-closure
+      - source-context-entity-call-type-and-syntax-bindings-independent
+      - compiler-kind-is-not-extension-or-hosted-facility-classification
+      - missing-earlier-saved-facets-remain-unknown
       - bounds-before-retention-active-cancellation-and-measured-successful-usage
     depends_on: [public.finite-populations, public.projection-resource-usage]
 
