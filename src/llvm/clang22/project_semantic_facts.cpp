@@ -3599,13 +3599,17 @@ namespace cxxlens::detail::clang22
 						for (const auto& [column, cell] : update.fields)
 						{
 							object_work();
-							retain_population_bytes(cell.canonical_form().size() + 256U);
-							const auto old = row.cells.find(column);
+							retain_population_bytes(cell.canonical_form().size() +
+													descriptor.id.size() + column.size() + 257U);
+							const auto qualified = descriptor.id + "." + column;
+							if (cell.type != take(descriptor.column(qualified)).type)
+								fail("object-facets", "original-field-type-mismatch");
+							const auto old = row.cells.find(qualified);
 							if (old != row.cells.end() &&
 								old->second.state != sdk::cell_state::absent &&
 								old->second.canonical_form() != cell.canonical_form())
 								fail("object-facets", "contradictory-original-payload");
-							row.cells.insert_or_assign(column, cell);
+							row.cells.insert_or_assign(qualified, cell);
 						}
 						check(sdk::validate_row(descriptor, row));
 						check(sdk::validate_domain_identity(descriptor, row));

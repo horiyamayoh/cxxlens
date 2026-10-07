@@ -50,6 +50,48 @@ def verify(bundle):
     def function_rows(relation, function):
         return [row for row in rows[relation] if names.get(row.get("function")) == function]
 
+    # Exercise the real collector -> qualified detached cells -> full public
+    # query path. A native helper payload under an unqualified field name must
+    # never leave the descriptor-qualified optional column absent.
+    for name, exit_kind in (("missing_return_probe", "fallthrough"),
+                            ("trait_type", "return_value")):
+        body, = function_rows("cc.body.v1", name)
+        physical = body["function_exit_declaration"]
+        detail, = [row for row in rows["cc.entity_detail.v1"]
+                   if row["entity"] == body["function"] and
+                   row["source"] == declarations[physical]["source"]]
+        assert detail["function_exit_profile"] == "clang22-original-function-exits/1"
+        assert detail["function_exit_state"] == "complete" and detail["return_kind"] == "value"
+        assert detail["is_main"] is False and detail["is_coroutine"] is False
+        original_exits = [row for row in function_rows("cc.cfg_edge.v1", name)
+                          if row.get("to") == body["exit"]]
+        assert original_exits and any(row["function_exit_kind"] == exit_kind
+                                      for row in original_exits)
+        assert all(row["function_exit_declaration"] == physical and
+                   row["function_exit_profile"] == "clang22-original-function-exits/1" and
+                   row["function_exit_state"] == "complete" for row in original_exits)
+    enum_cast, = [row for row in function_rows("cc.syntax_node.v1", "enum_conversion_probe")
+                  if row.get("object_fact_kind") == "enum_cast"]
+    assert enum_cast["object_fact_profile"] == "clang22-original-enum-cast/1"
+    assert enum_cast["object_fact_state"] == "complete"
+    assert enum_cast["original_value_lower"] == enum_cast["original_value_upper"] == "4"
+    enum_domain = types[enum_cast["canonical_type"]]
+    assert enum_domain["enum_value_profile"] == "clang22-original-enum-value-domain/1"
+    assert enum_domain["enum_value_state"] == "complete" and enum_domain["enum_fixed_underlying"] is False
+    assert int(enum_domain["enum_value_upper"]) < 4
+    bool_cast, = [row for row in function_rows("cc.syntax_node.v1", "bool_representation_probe")
+                  if row.get("object_fact_kind") == "bool_bit_cast"]
+    assert bool_cast["object_fact_profile"] == "clang22-original-bool-representation/1"
+    assert bool_cast["representation_state"] == "complete" and bool_cast["canonical_bool"] is True
+    assert bool_cast["original_value_lower"] == bool_cast["original_value_upper"] == "2"
+    type_access, = [row for row in function_rows("cc.syntax_node.v1", "direct_type_access_probe")
+                   if row.get("object_fact_kind") == "direct_type_access"]
+    assert type_access["object_fact_profile"] == "clang22-original-direct-type-access/1"
+    assert type_access["type_access_permission"] is False
+    assert type_access["current_object_state"] == "live_unreplaced"
+    assert type_access["object_declaration"] in declarations
+    assert type_access["object_address"] in nodes
+
     topology = rows["cc.exceptional_block.v1"]
     successors = rows["cc.exceptional_successor.v1"]
     exits = rows["cc.exceptional_exit.v1"]
