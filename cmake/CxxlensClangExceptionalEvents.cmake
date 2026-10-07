@@ -6,8 +6,16 @@ set(CXXLENS_CLANG_EXCEPTIONAL_EVENT_SOURCE_DIR
           "Compatible LLVM 22 original exceptional-occurrence source components"
 )
 set(_cxxlens_exceptional_events_available TRUE)
-foreach(_source IN ITEMS CodeGenFunction.cpp CGExpr.cpp CGExprCXX.cpp
-                         CGCall.cpp CGException.cpp CGBuiltin.cpp CGDecl.cpp CGClass.cpp)
+foreach(
+  _source IN
+  ITEMS CodeGenFunction.cpp
+        CGExpr.cpp
+        CGExprCXX.cpp
+        CGCall.cpp
+        CGException.cpp
+        CGBuiltin.cpp
+        CGDecl.cpp
+        CGClass.cpp)
   if(NOT EXISTS "${CXXLENS_CLANG_EXCEPTIONAL_EVENT_SOURCE_DIR}/${_source}")
     set(_cxxlens_exceptional_events_available FALSE)
   endif()

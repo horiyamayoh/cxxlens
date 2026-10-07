@@ -166,4 +166,81 @@ void no_throw_owner() noexcept { risky(); }
 				  << parsed.error().detail << '\n';
 		return 1;
 	}
+
+	provider::translation_unit_input coroutine_input{"snapshot:coroutine-wrapper",
+													 "file:coroutine-wrapper",
+													 "coroutine.cpp",
+													 R"CPP(
+namespace std {
+template<class Promise = void> struct coroutine_handle {
+ static coroutine_handle from_address(void*) noexcept { return {}; }
+ operator coroutine_handle<void>() const noexcept { return {}; }
+};
+template<class Return, class... Args> struct coroutine_traits {
+ using promise_type = typename Return::promise_type;
+};
+}
+struct Awaiter {
+ bool await_ready() noexcept { return false; }
+ void await_suspend(std::coroutine_handle<>) noexcept {}
+ void await_resume() noexcept {}
+};
+struct Task { struct promise_type {
+ Task get_return_object() { return {}; }
+ Awaiter initial_suspend() { return {}; }
+ Awaiter final_suspend() noexcept { return {}; }
+ void return_void() noexcept {}
+ void unhandled_exception() noexcept {}
+}; };
+Task coroutine_probe() { co_await Awaiter{}; co_return; }
+)CPP",
+													 {"clang++",
+													  "-std=c++23",
+													  "-nostdinc",
+													  "-nostdinc++",
+													  "-fexceptions",
+													  "-fcxx-exceptions",
+													  "-O0",
+													  "coroutine.cpp"}};
+	auto coroutine_parsed = provider::with_translation_unit(
+		coroutine_input,
+		[&](provider::borrowed_translation_unit& unit) -> sdk::result<void>
+		{
+			const clang::FunctionDecl* coroutine{};
+			for (const auto* declaration : unit.ast().getTranslationUnitDecl()->decls())
+				if (const auto* function = llvm::dyn_cast<clang::FunctionDecl>(declaration);
+					function && function->getNameAsString() == "coroutine_probe")
+					coroutine = function;
+			require(coroutine != nullptr, "actual coroutine declaration absent");
+			native::exceptional_compiler_bindings bindings;
+			bindings.scope = [&](const clang::FunctionDecl* declaration)
+			{
+				return declaration == coroutine
+					? native::exceptional_scope_binding{"detail:coroutine",
+														"function:coroutine",
+														"source:coroutine",
+														"body:coroutine"}
+					: native::exceptional_scope_binding{};
+			};
+			const auto observed = native::observe_project_exceptional_exits(unit, {}, bindings);
+			if (!observed)
+				return sdk::unexpected(observed.error());
+			std::size_t bound_scopes{};
+			for (const auto& scope : observed->scopes)
+				if (scope.detail == "detail:coroutine")
+				{
+					++bound_scopes;
+					require(!scope.variants.empty() && !scope.activation_complete &&
+								!scope.complete,
+							"coroutine helpers borrowed owner or closed unsupported activation");
+				}
+			require(bound_scopes == 1U, "unowned helper acquired the written coroutine scope");
+			return {};
+		});
+	if (!coroutine_parsed)
+	{
+		std::cerr << coroutine_parsed.error().code << ':' << coroutine_parsed.error().field << ':'
+				  << coroutine_parsed.error().detail << '\n';
+		return 1;
+	}
 }

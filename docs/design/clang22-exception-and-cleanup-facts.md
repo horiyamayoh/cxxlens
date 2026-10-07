@@ -41,6 +41,23 @@ exceptional count membership and eligibility do not depend on these new facets.
 The callbacks charge bounded work/storage and latch cancellation or failures.
 Compiler pointers expire with the existing analysis job.
 
+Original compiler functions without a `GlobalDecl`, including coroutine
+await-suspend wrappers, retain matching start/end frames without a written
+owner. They do not inherit an enclosing function's identity. Unsupported
+coroutine activation keeps that written scope partial while other independent
+source and declaration populations remain available.
+
+The LLVM-free `project_exception_cleanup_facets` SDK projection retains the
+original callable detail and exit rows. Stored specification truth, callable
+identity, source, cleanup emission, registration, declaration binding and
+destructor attribution each have an independent state. A registered automatic
+object and an unregistered temporary can both have a known emission. A missing
+normalized destructor entity does not erase the actual emitter's raw USR and
+ABI destructor enum. The raw and original-query overloads validate every
+supplied row and report bounded measured work and conservative retained
+storage. Older saved rows with absent optional columns keep those facets
+unknown.
+
 These facts establish static compiler correspondences. They do not establish a
 runtime object version, alias set, operation CFG point, or complete resource
 cleanup population. Consumer proofs must require their remaining independent
@@ -48,3 +65,10 @@ inputs. The next binding step is the compiler's actual invocation unwind route
 to registered cleanup emissions, followed by the original acquire/release
 operation and object-definition correspondence. LLVM ordinals and source
 overlap cannot substitute for those inputs.
+
+The existing lowering callback route discriminators are 1 for the original
+`EmitCXXThrowExpr` insertion block, 2 for `getTerminateLandingPad`, 3 for
+`getTerminateHandler`, 4 for `getTerminateFunclet`, and 5 for `getEHResumeBlock`.
+The emitted `compiler_route` is an original block-role witness. It does not
+establish entry reachability, an invoke's unwind successor, or a path from a
+potentially throwing invocation to termination.

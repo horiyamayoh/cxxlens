@@ -1210,6 +1210,15 @@ add_test(NAME unit.sdk-exceptional-exits
 set_tests_properties(unit.sdk-exceptional-exits
                      PROPERTIES LABELS "unit;sdk;query;budget;cancellation")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-exception-cleanup-facets
+                            unit/sdk/exception_cleanup_facets_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-exception-cleanup-facets
+                      PRIVATE cxxlens::query)
+add_test(NAME unit.sdk-exception-cleanup-facets
+         COMMAND cxxlens-unit-sdk-exception-cleanup-facets)
+set_tests_properties(unit.sdk-exception-cleanup-facets
+                     PROPERTIES LABELS "unit;sdk;query;budget;cancellation")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-template-domains
                             unit/sdk/template_domains_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-template-domains PRIVATE cxxlens::query)
@@ -2296,7 +2305,8 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
       adapter/clang22/project_exceptional_cleanup_bindings_test.cpp)
     target_link_libraries(cxxlens-clang22-exceptional-cleanup-bindings-native
                           PRIVATE cxxlens_clang22_worker_core)
-    cxxlens_configure_clang22(cxxlens-clang22-exceptional-cleanup-bindings-native)
+    cxxlens_configure_clang22(
+      cxxlens-clang22-exceptional-cleanup-bindings-native)
     if(CXXLENS_BUILD_SHARED)
       cxxlens_add_provider_runtime_closure(
         cxxlens-clang22-exceptional-cleanup-bindings-native)
@@ -2305,7 +2315,8 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
              COMMAND cxxlens-clang22-exceptional-cleanup-bindings-native)
     set_tests_properties(
       adapter.clang22-exceptional-cleanup-bindings-native
-      PROPERTIES LABELS "adapter;clang22;native;eh;cleanup;exception-spec;negative")
+      PROPERTIES LABELS
+                 "adapter;clang22;native;eh;cleanup;exception-spec;negative")
   endif()
 
   cxxlens_add_test_executable(cxxlens-clang22-source-closure-native

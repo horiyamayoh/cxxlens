@@ -268,6 +268,7 @@ add_library(
   src/sdk/function_actions.cpp
   src/sdk/function_compiler_facets.cpp
   src/sdk/exceptional_exits.cpp
+  src/sdk/exception_cleanup_facets.cpp
   src/sdk/target_resolution.cpp
   src/sdk/template_domains.cpp
   src/sdk/template_events.cpp

@@ -27,21 +27,35 @@ void nonthrowing_owner() noexcept { risky(); }
 void default_target(int = (risky(), 1));
 void activated_default() { default_target(); }
 struct Receiver {
+ void acquire() noexcept {}
  void release() noexcept {}
  void use() noexcept {}
  bool try_acquire() noexcept { return true; }
 };
 void interfere(Receiver&) noexcept;
-void owned_receiver(Receiver receiver) { receiver.release(); receiver.release(); }
-void use_after_release(Receiver receiver) { receiver.release(); receiver.use(); }
-void other_receiver(Receiver receiver, Receiver other) { receiver.release(); other.release(); receiver.release(); }
-void unknown_interference(Receiver receiver) { receiver.release(); interfere(receiver); receiver.release(); }
-void conditional_receiver(Receiver receiver) { if (receiver.try_acquire()) receiver.release(); }
+void owned_receiver(Receiver receiver) { receiver.acquire(); receiver.release(); receiver.release(); }
+void use_after_release(Receiver receiver) { receiver.acquire(); receiver.release(); receiver.use(); }
+void other_receiver(Receiver receiver, Receiver other) { receiver.acquire(); other.acquire(); receiver.release(); other.release(); receiver.release(); }
+void unknown_interference(Receiver receiver) { receiver.acquire(); receiver.release(); interfere(receiver); receiver.release(); }
+void conditional_receiver(Receiver receiver) { if (receiver.try_acquire()) { receiver.release(); receiver.release(); } }
 void consume(const char*);
 void path_probe() { consume("a/b"); }
 struct Raw { int field; };
 void raw_sink(const void*);
 void raw_probe(Raw& object) { raw_sink(&object); }
+struct Guard { Guard(); ~Guard() noexcept(false); };
+struct Safe { Safe(); ~Safe() noexcept; };
+Guard make();
+void local_cleanup() { Guard first; risky(); }
+void two_cleanups() { Guard first; Guard second; make(); risky(); }
+void normal_cleanup() { Safe value; }
+void true_spec() noexcept(sizeof(int)>0);
+void false_spec() noexcept(false);
+template<class T> void dependent_spec() noexcept(T::value);
+using Alias = void() noexcept; Alias alias_spec;
+int plain_char_probe(char value) { return value; }
+int signed_char_control(signed char value) { return value; }
+int unsigned_char_control(unsigned char value) { return value; }
 '''
 
 
@@ -85,6 +99,7 @@ try:
     entities = {row["entity"]: row for row in rows["cc.entity.v1"]}
     details = {row["detail"]: row for row in rows["cc.entity_detail.v1"]}
     bodies = {row["body"]: row for row in rows["cc.body.v1"]}
+    declarations = {row["declaration"]: row for row in rows["cc.declaration.v1"]}
     exits = {row["exit"]: row for row in rows["cc.exceptional_exit.v1"]}
     assert exits, "actual lowering population is absent"
     by_detail = {}
@@ -110,6 +125,52 @@ try:
         for body in {row["body"] for row in population if row["body"]}:
             assert bodies[body]["exceptional_exit_count"] == len(expected)
             assert set(elements(bodies[body]["exceptional_exit_ids"])) == expected
+    # Stored semantic exception specifications stay independent of lowering.
+    specifications = {}
+    for row in details.values():
+        if row["exception_spec_profile"]:
+            specifications.setdefault(entities[row["entity"]]["qualified_name"], []).append(row)
+    for name, kind, nonthrowing in (("risky", "none", False), ("safe", "basic_noexcept", True),
+                                  ("true_spec", "noexcept_true", True), ("false_spec", "noexcept_false", False),
+                                  ("alias_spec", "basic_noexcept", True)):
+        assert specifications[name]
+        assert all(row["exception_spec_profile"] == "clang22-function-exception-specification/1"
+                   and row["exception_spec_state"] == "complete"
+                   and row["exception_spec_kind"] == kind
+                   and row["exception_spec_nonthrowing"] is nonthrowing for row in specifications[name]), specifications[name]
+    assert all(row["exception_spec_state"] == "partial" and row["exception_spec_nonthrowing"] is None
+               for row in specifications["dependent_spec"]), specifications["dependent_spec"]
+    cleanup_objects = set()
+    cleanup_routes = set()
+    runtime_helpers = 0
+    for row in exits.values():
+        if row["cleanup_profile"] is None:
+            continue
+        assert row["cleanup_profile"] == "clang22-destroy-object-cleanup-emission/1"
+        assert row["cleanup_emission_ordinal"] > 0
+        if row["cleanup_declaration"] is None:
+            assert row["cleanup_registration_ordinal"] is None
+            continue
+        original = declarations[row["cleanup_declaration"]]
+        unit_declarations = set()
+        for inventory in rows["cc.declaration_inventory.v1"]:
+            if inventory["compile_unit"] == row["compile_unit"]:
+                unit_declarations.update(elements(inventory["declarations"]))
+        assert original["declaration"] in unit_declarations
+        assert row["cleanup_registration_ordinal"] > 0
+        if not row["emitter_methods"] or not row["emitter_methods"] & 1:
+            assert row["cleanup_target_usr"] is None and row["cleanup_target_dtor_type"] is None
+            runtime_helpers += 1
+            continue
+        assert row["cleanup_target_profile"] == "clang22-destructor-emission-target/1"
+        assert row["cleanup_target_usr"] is not None and row["cleanup_target_dtor_type"] is not None
+        # Optional target entity binding is not replaced by the generic target.
+        if row["cleanup_target"] is not None:
+            assert entities[row["cleanup_target"]]["kind"] == "destructor"
+        cleanup_objects.add(row["cleanup_declaration"])
+        cleanup_routes.add(row["cleanup_route"])
+    assert len(cleanup_objects) >= 4 and cleanup_routes == {"normal", "exceptional"}
+    assert runtime_helpers > 0
     by_name = {}
     for row in exits.values():
         by_name.setdefault(entities[row["function"]]["qualified_name"], []).append(row)

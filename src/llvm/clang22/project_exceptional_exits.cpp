@@ -215,8 +215,11 @@ namespace cxxlens::detail::clang22
 			}
 			void begin(void* context, const clang::Decl* declaration, llvm::Function* function)
 			{
-				if (!work() || !declaration || !function)
+				if (!work() || !function)
 					return;
+				// Compiler helpers, including coroutine await-suspend wrappers, can
+				// have a real function and no GlobalDecl. Keep their matching frame
+				// unowned; they must not inherit an enclosing written definition.
 				if (frames.contains(context))
 				{
 					fail("native.exceptional-exit-invalid", "lowering", "duplicate-function-begin");

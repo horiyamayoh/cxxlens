@@ -51,6 +51,34 @@ int main(int argc, char** argv)
 		require(exits->source_queries.has_value() && usage.operations > 0 &&
 					usage.retained_bytes_bound > 0,
 				"exceptional projection lost original queries or measured bounds");
+		auto cleanup = query::project_exception_cleanup_facets(*queries, {}, {}, usage);
+		if (!cleanup)
+		{
+			std::cerr << cleanup.error().code << ':' << cleanup.error().field << ':'
+					  << cleanup.error().detail << '\n';
+			return 7;
+		}
+		const auto complete = query::finite_population_state::complete;
+		std::size_t known_true{}, known_false{}, partial{}, normal{}, exceptional{}, unbound{};
+		for (const auto& specification : cleanup->specifications)
+		{
+			if (specification.specification_state == complete && specification.nonthrowing)
+				(*specification.nonthrowing ? known_true : known_false)++;
+			partial += specification.specification_state == query::finite_population_state::partial;
+		}
+		for (const auto& emission : cleanup->cleanups)
+			if (emission.emission_state == complete)
+			{
+				normal += emission.route == "normal";
+				exceptional += emission.route == "exceptional";
+				unbound += emission.declaration_state != complete;
+				require(emission.scope_state == complete,
+						"original cleanup lost its physical compiler scope");
+			}
+		require(cleanup->source_queries.has_value() && usage.operations > 0 &&
+					usage.retained_bytes_bound > 0 && known_true > 0 && known_false > 0 &&
+					partial > 0 && normal > 0 && exceptional > 0 && unbound > 0,
+				"original stored specifications and bound/unbound cleanup facets unavailable");
 		for (const auto& population : exits->populations)
 		{
 			std::cout << "population " << population.function << ' '

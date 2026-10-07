@@ -123,9 +123,12 @@ int main()
 		cxxlens::sdk::query::function_compiler_facet_input{}, {}, {}, usage);
 	auto abi = cxxlens::sdk::query::project_abi_surfaces(
 		cxxlens::sdk::query::abi_surface_input{}, {}, {}, usage);
+	auto cleanup = cxxlens::sdk::query::project_exception_cleanup_facets(
+		cxxlens::sdk::query::exception_cleanup_input{}, {}, {}, usage);
 	auto exceptional = cxxlens::sdk::query::from<cxxlens::cc::relations::exceptional_exit>();
 	if (!exits || exits->compile_units_complete || !facets || facets->dispatch_inputs_complete ||
-		!abi || abi->compile_units_complete || !exceptional)
+		!abi || abi->compile_units_complete || !cleanup || cleanup->compile_units_complete ||
+		!exceptional)
 		return 7;
 	auto query = cxxlens::sdk::query::from<cxxlens::cc::relations::call_site>();
 	auto declaration = cxxlens::sdk::query::from<cxxlens::cc::relations::declaration>();

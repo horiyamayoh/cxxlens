@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.90.0
+document_version: 1.91.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -43,6 +43,7 @@ packages:
       - include/cxxlens/sdk/function_actions.hpp
       - include/cxxlens/sdk/function_compiler_facets.hpp
       - include/cxxlens/sdk/exceptional_exits.hpp
+      - include/cxxlens/sdk/exception_cleanup_facets.hpp
       - include/cxxlens/sdk/target_resolution.hpp
       - include/cxxlens/sdk/preprocessor.hpp
       - include/cxxlens/sdk/build_health.hpp
@@ -781,6 +782,42 @@ entries:
       - semantic-noexcept-specification-independent-of-lowered-nonthrowing-attributes
       - stock-dso-and-unrepresented-default-or-coroutine-activations-stay-unsupported-or-partial
       - missing-saved-optional-census-remains-unknown
+      - bounds-before-retention-active-cancellation-and-measured-successful-usage
+    depends_on: [public.finite-populations, public.projection-resource-usage]
+
+  - id: public.exception-cleanup-facets
+    status: implemented
+    profile: NG1
+    target: cxxlens::query
+    headers: [include/cxxlens/sdk/exception_cleanup_facets.hpp]
+    symbols:
+      - name: query.exception_cleanup_input
+        kind: value
+        signature: 'units; files; spans; entities; details; bodies; exits; declarations; inventories; compile_units_complete; detail_inputs_complete; exit_inputs_complete; declaration_inputs_complete'
+      - name: query.observed_function_exception_specification
+        kind: value
+        signature: 'detail; function; compile_unit; source_span; universe; variant; interpretation; kind; profile; observation_state; nonthrowing; specification_state; identity_state; source_state; evidence; gaps'
+      - name: query.observed_cleanup_emission
+        kind: value
+        signature: 'exit; lowering_variant; scope_detail; function; compile_unit; body; definition_source; universe; variant; interpretation; declaration; object; declaration_source; route; profile; target; target_profile; target_usr; registration_ordinal; emission_ordinal; target_dtor_type; emitter_methods; destructor_target_excluded; emission_state; registration_state; scope_state; definition_source_state; declaration_state; declaration_source_state; target_attribution_state; target_state; evidence; gaps'
+      - name: query.exception_cleanup_projection
+        kind: value
+        signature: 'evidence; specifications; cleanups; compile_units_complete; detail_inputs_complete; exit_inputs_complete; declaration_inputs_complete; unresolved; source_queries'
+      - name: query.project_exception_cleanup_facets
+        kind: function
+        signature: 'result<exception_cleanup_projection> project_exception_cleanup_facets(exception_cleanup_input, finite_population_limits = {}, stop_token = {}); result<exception_cleanup_projection> project_exception_cleanup_facets(const application_query_results&, finite_population_limits = {}, stop_token = {}); result<exception_cleanup_projection> project_exception_cleanup_facets(exception_cleanup_input, finite_population_limits, stop_token, projection_resource_usage&); result<exception_cleanup_projection> project_exception_cleanup_facets(const application_query_results&, finite_population_limits, stop_token, projection_resource_usage&)'
+    errors: [sdk.exception-cleanup-input-invalid, sdk.exception-cleanup-budget, sdk.exception-cleanup-cancelled, sdk.exception-cleanup-resource-exhausted]
+    lifetime: [borrowed-input-only-during-call, projection-owns-original-evidence-and-query-side-channels, no-compiler-pointer]
+    threading: [independent-calls-share-no-mutable-state]
+    versioning: [sdk.project-exception-cleanup-facets/1]
+    invariants:
+      - stored-exception-specification-never-resolves-lazy-compiler-state
+      - original-emission-registration-declaration-and-destructor-target-axes-independent
+      - cleanup-object-binding-requires-original-declaration-inventory-membership
+      - runtime-helpers-never-inherit-destructor-target-attribution
+      - raw-usr-bytes-and-zero-destructor-enum-retained
+      - missing-saved-optional-facets-remain-unknown
+      - cleanup-census-runtime-object-version-and-unwind-resource-route-not-implied
       - bounds-before-retention-active-cancellation-and-measured-successful-usage
     depends_on: [public.finite-populations, public.projection-resource-usage]
 
