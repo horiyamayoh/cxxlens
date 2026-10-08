@@ -110,6 +110,35 @@ namespace cxxlens::sdk::query
 			else if (state == finite_population_state::complete)
 				state = finite_population_state::partial;
 		}
+
+		struct inventory_pointer_less
+		{
+			budget* meter;
+			bool operator()(const annotated_row* left, const annotated_row* right) const
+			{
+				meter->work();
+				return std::less<const annotated_row*>{}(left, right);
+			}
+		};
+		struct declaration_member_cache
+		{
+			using index =
+				std::map<const annotated_row*, std::vector<std::string>, inventory_pointer_less>;
+			budget& meter;
+			std::size_t retained{};
+			index values;
+			explicit declaration_member_cache(budget& owner)
+				: meter(owner), values(inventory_pointer_less{&owner})
+			{
+			}
+			~declaration_member_cache()
+			{
+				// Owned decoded strings and their index nodes expire before their
+				// scoped reservation is refunded, including every failure exit.
+				values.clear();
+				meter.retained -= retained;
+			}
+		};
 		struct projector
 		{
 			budget& b;
@@ -119,6 +148,7 @@ namespace cxxlens::sdk::query
 			std::map<std::size_t, std::size_t> evidence_map;
 			std::vector<const annotated_row*> originals;
 			std::vector<std::size_t> groups;
+			declaration_member_cache& declaration_members;
 			void gap(finite_population_state& state,
 					 std::vector<query_unresolved>& gaps,
 					 std::string_view id,
@@ -318,8 +348,7 @@ namespace cxxlens::sdk::query
 							const auto& inventory = *originals[original_index];
 							if (text(inventory, "compile_unit") != v.compile_unit)
 								continue;
-							const auto ids = members(inventory, "declarations");
-							if (std::ranges::binary_search(ids, std::string{id}))
+							if (declared_member(inventory, id))
 							{
 								bind(v.evidence, {original_index});
 								admitted = true;
@@ -1299,7 +1328,46 @@ namespace cxxlens::sdk::query
 				}
 				output.observations.push_back(std::move(v));
 			}
-			std::vector<std::string> members(const annotated_row& row, std::string_view field)
+			int compare_member(std::string_view left, std::string_view right)
+			{
+				b.work();
+				const auto size = std::min(left.size(), right.size());
+				for (std::size_t i{}; i < size; ++i)
+				{
+					b.work();
+					const auto l = static_cast<unsigned char>(left[i]);
+					const auto r = static_cast<unsigned char>(right[i]);
+					if (l != r)
+						return l < r ? -1 : 1;
+				}
+				return left.size() < right.size() ? -1 : left.size() != right.size() ? 1 : 0;
+			}
+			bool declared_member(const annotated_row& row, std::string_view id)
+			{
+				b.work();
+				auto found = declaration_members.values.find(&row);
+				if (found == declaration_members.values.end())
+				{
+					constexpr auto node =
+						sizeof(declaration_member_cache::index::value_type) + 256U;
+					b.retain(node);
+					declaration_members.retained += node;
+					found = declaration_members.values.try_emplace(&row).first;
+					found->second = members(row, "declarations", &declaration_members.retained);
+				}
+				const auto& ids = found->second;
+				const auto member =
+					std::ranges::lower_bound(ids,
+											 id,
+											 [&](std::string_view left, std::string_view right)
+											 {
+												 return compare_member(left, right) < 0;
+											 });
+				return member != ids.end() && compare_member(*member, id) == 0;
+			}
+			std::vector<std::string> members(const annotated_row& row,
+											 std::string_view field,
+											 std::size_t* scratch_retained = nullptr)
 			{
 				const auto original = bytes(row, field);
 				std::vector<std::string> ids;
@@ -1313,7 +1381,13 @@ namespace cxxlens::sdk::query
 						size |= std::to_integer<std::uint32_t>(original[i++]) << shift;
 					if (size > original.size() - i)
 						fail(field, "set-truncated");
-					b.retain(size + sizeof(std::string));
+					// A cached list owns its vector until the projection ends.
+					// Four string slots per member cover capacity growth and its
+					// overlapping old/new buffers before allocation.
+					const auto retained = size + (scratch_retained ? 4U : 1U) * sizeof(std::string);
+					b.retain(retained);
+					if (scratch_retained)
+						*scratch_retained += retained;
 					b.work(size);
 					std::string id(reinterpret_cast<const char*>(original.data() + i), size);
 					i += size;
@@ -1421,15 +1495,17 @@ namespace cxxlens::sdk::query
 			}
 		};
 		using borrowed_groups = std::array<std::vector<const annotated_row*>, 17>;
-		result<object_semantics_projection> project_rows(object_semantics_input input,
-														 budget& b,
-														 const borrowed_groups* borrowed = nullptr)
+		result<object_semantics_projection>
+		project_rows(object_semantics_input input,
+					 budget& b,
+					 declaration_member_cache& declaration_members,
+					 const borrowed_groups* borrowed = nullptr)
 		{
 			return capture<object_semantics_projection>(
 				[&]()
 				{
 					b.work();
-					projector p{b, input, {}, {}, {}, {}, {}};
+					projector p{b, input, {}, {}, {}, {}, {}, declaration_members};
 					const std::array groups{input.compile_units,
 											input.files,
 											input.spans,
@@ -1565,7 +1641,8 @@ namespace cxxlens::sdk::query
 		if (auto valid = limits.validate(); !valid)
 			return valid.error();
 		budget b{limits, stop};
-		auto result = project_rows(input, b);
+		declaration_member_cache declaration_members{b};
+		auto result = project_rows(input, b, declaration_members);
 		if (result)
 			usage = {b.operations, b.retained};
 		return result;
@@ -1587,6 +1664,7 @@ namespace cxxlens::sdk::query
 		if (auto valid = limits.validate(); !valid)
 			return valid.error();
 		budget b{limits, stop};
+		declaration_member_cache declaration_members{b};
 		auto result = capture<object_semantics_projection>(
 			[&]() -> object_semantics_projection
 			{
@@ -1643,7 +1721,7 @@ namespace cxxlens::sdk::query
 				raw.inventory_inputs_complete = seen[14] && complete[14];
 				raw.evaluation_inputs_complete = seen[15] && complete[15];
 				b.rows = 0;
-				auto projected = project_rows(raw, b, &groups);
+				auto projected = project_rows(raw, b, declaration_members, &groups);
 				if (!projected)
 					throw failure{projected.error()};
 				b.retain(plan_bytes + sizeof(application_query_results));

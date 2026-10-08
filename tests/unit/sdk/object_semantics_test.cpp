@@ -1103,5 +1103,93 @@ int main()
 				"distinct original disagreement escaped exact comparison");
 		++cases;
 	}
+
+	{
+		fixture f;
+		for (auto id : {"pair2", "pair3", "pair4", "pair5", "pair6", "pair7", "pair8"})
+		{
+			auto original = f.rows[12][0];
+			set(original, "pair", detached_cell::utf8(id));
+			f.rows[12].push_back(std::move(original));
+		}
+		set(f.rows[14][0], "sequence_pair_count", detached_cell::unsigned_integer(8U));
+		set(f.rows[14][0],
+			"sequence_pair_ids",
+			ids({"pair", "pair2", "pair3", "pair4", "pair5", "pair6", "pair7", "pair8"}));
+		auto limits = q::finite_population_limits{};
+		limits.maximum_members = 32U;
+		q::projection_resource_usage usage;
+		auto out = take(q::project_object_semantics(f.input(), limits, {}, usage));
+		require(out.observations.size() == 8U &&
+					out.populations[0].enumeration_state == state::complete &&
+					std::ranges::all_of(out.observations,
+										[](const auto& observation)
+										{
+											return std::get<q::original_sequence_pair>(
+													   observation.fact)
+													   .storage_state == state::complete;
+										}),
+				"repeated references consumed the same declaration members again");
+		limits.maximum_operations = usage.operations;
+		limits.maximum_retained_bytes = usage.retained_bytes_bound;
+		require(static_cast<bool>(q::project_object_semantics(f.input(), limits)),
+				"scoped declaration cache leaked into the final retained bound");
+		--limits.maximum_operations;
+		require(!q::project_object_semantics(f.input(), limits),
+				"cached membership lookup bypassed its exact work limit");
+		++cases;
+	}
+	{
+		fixture f;
+		set(f.rows[14][0], "declarations", ids({"fn-decl"}));
+		set(f.rows[14][0], "declaration_count", detached_cell::unsigned_integer(1U));
+		auto other = f.rows[14][0];
+		set(other, "inventory", detached_cell::utf8("inventory-other"));
+		set(other, "declarations", ids({"var-decl"}));
+		f.rows[14].push_back(std::move(other));
+		auto out = take(q::project_object_semantics(f.input()));
+		require(sequence(out).storage_state == state::complete &&
+					out.populations[0].enumeration_state == state::conflicting,
+				"different original inventory rows reused a declaration list");
+		++cases;
+	}
+	{
+		fixture f;
+		set(f.rows[14][0], "declarations", ids({"var-decl", "fn-decl"}));
+		auto out = q::project_object_semantics(f.input());
+		require(!out && out.error().code == "sdk.query-row-invalid" &&
+					out.error().field == "output.declarations",
+				"cached declaration list accepted noncanonical originals");
+		++cases;
+	}
+	{
+		fixture f;
+		auto declarations = ids({"fn-decl", "var-decl"});
+		auto& raw = std::get<std::vector<std::byte>>(*declarations.value);
+		raw.pop_back();
+		set(f.rows[14][0], "declarations", std::move(declarations));
+		auto out = q::project_object_semantics(f.input());
+		require(!out && out.error().code == "sdk.query-row-invalid" &&
+					out.error().field == "output.declarations",
+				"cached declaration list accepted truncated originals");
+		++cases;
+	}
+
+	{
+		fixture f;
+		set(f.rows[14][0], "declarations", ids({"fn-decl"}));
+		set(f.rows[14][0], "declaration_count", detached_cell::unsigned_integer(1U));
+		auto other = f.rows[14][0];
+		set(other, "inventory", detached_cell::utf8("inventory-other"));
+		set(other, "declarations", ids({"var-decl"}));
+		other.presence.fragments = {"release"};
+		other.contributor_edges.front().condition = other.presence;
+		f.rows[14].push_back(std::move(other));
+		auto out = take(q::project_object_semantics(f.input()));
+		require(sequence(out).storage_state != state::complete,
+				"cached declaration list bypassed its original world");
+		++cases;
+	}
+
 	std::cout << cases << " original object SDK cases PASS\n";
 }
