@@ -1057,5 +1057,51 @@ int main()
 				"unsupported language promoted pointwise relation");
 		++cases;
 	}
+
+	{
+		fixture f;
+		set(f.rows[14][0], "reason", detached_cell::utf8(std::string(65536U, 'x')));
+		q::projection_resource_usage usage;
+		auto out = take(q::project_object_semantics(f.input(), {}, {}, usage));
+		require(out.populations[0].enumeration_state == state::complete &&
+					sequence(out).storage_state == state::complete && usage.operations < 32768U,
+				"same immutable original payload was repeatedly compared");
+		auto limits = q::finite_population_limits{};
+		limits.maximum_operations = usage.operations;
+		limits.maximum_retained_bytes = usage.retained_bytes_bound;
+		require(static_cast<bool>(q::project_object_semantics(f.input(), limits)),
+				"identity comparison lost its exact resource bound");
+		--limits.maximum_operations;
+		auto failed = q::project_object_semantics(f.input(), limits, {}, usage);
+		require(!failed && failed.error().code == "sdk.object-budget" &&
+					failed.error().field == "operations" && usage.operations == 0U &&
+					usage.retained_bytes_bound == 0U,
+				"identity comparison bypassed the operation limit");
+		++cases;
+	}
+	{
+		fixture f;
+		set(f.rows[14][0], "reason", detached_cell::utf8(std::string(65536U, 'x')));
+		f.rows[14].push_back(f.rows[14][0]);
+		auto limits = q::finite_population_limits{};
+		limits.maximum_operations = 32768U;
+		auto out = q::project_object_semantics(f.input(), limits);
+		require(!out && out.error().code == "sdk.object-budget" &&
+					out.error().field == "operations",
+				"distinct equal originals skipped their bounded cell comparison");
+		++cases;
+	}
+	{
+		fixture f;
+		set(f.rows[14][0], "reason", detached_cell::utf8(std::string(65536U, 'x')));
+		f.rows[14].push_back(f.rows[14][0]);
+		std::string reason(65536U, 'x');
+		reason.back() = 'y';
+		set(f.rows[14][1], "reason", detached_cell::utf8(std::move(reason)));
+		auto out = take(q::project_object_semantics(f.input()));
+		require(out.populations[0].enumeration_state == state::conflicting,
+				"distinct original disagreement escaped exact comparison");
+		++cases;
+	}
 	std::cout << cases << " original object SDK cases PASS\n";
 }

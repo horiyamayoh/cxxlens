@@ -149,6 +149,11 @@ namespace cxxlens::sdk::query
 				for (auto i : entries)
 				{
 					b.work();
+					// Original rows are immutable throughout this projection. Their
+					// scalar alternatives all have reflexive equality, so the same
+					// validated row needs no repeated cell comparison.
+					if (originals[i] == originals[entries.front()])
+						continue;
 					const auto& left = originals[i]->values;
 					const auto& right = originals[entries.front()]->values;
 					if (left.size() != right.size())
