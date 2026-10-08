@@ -245,7 +245,13 @@ namespace
 				if (validated)
 				{
 					for (const auto& row : data->row_values)
-						require(bool(row.validate()), "fixture generic row validation failed");
+					{
+						const auto valid = row.validate();
+						if (!valid)
+							std::cerr << valid.error().code << ':' << valid.error().field << ':'
+									  << valid.error().detail << '\n';
+						require(bool(valid), "fixture generic row validation failed");
+					}
 					data->rows_validated = true;
 				}
 				data->status = q::execution_status::complete;
@@ -303,6 +309,88 @@ int main()
 		missing.rows[8].front().values.erase("output.feature");
 		require(!q::project_source_features(missing.queries(true)),
 				"generic admitted rows bypassed a required relation column");
+	}
+	{
+		auto alternatives = f;
+		for (auto& group : alternatives.rows)
+			for (auto& row : group)
+			{
+				row.presence.fragments.push_back("release");
+				for (auto& edge : row.contributor_edges)
+					edge.condition = row.presence;
+			}
+		auto other = alternatives.rows[8].front();
+		set(alternatives.rows[8].front(), "kind", txt("\xc3\xa9"));
+		set(other, "kind", txt("z"));
+		alternatives.rows[8].push_back(std::move(other));
+		const auto claim = "claim:" + std::string(65536U, 'x');
+		for (auto& row : alternatives.rows[8])
+		{
+			row.claim_contributors = {claim};
+			row.contributor_edges.front().claim_contributor = claim;
+		}
+		q::projection_resource_usage measured, repeated;
+		const auto original = alternatives.queries(true);
+		const auto ordered = take(q::project_source_features(original, {}, {}, measured));
+		require(ordered.features.size() == 2U, "multi-world original alternatives were dropped");
+		std::ranges::reverse(alternatives.rows[8]);
+		const auto reversed = take(q::project_source_features(alternatives.queries(true)));
+		require(ordered.evidence.size() == reversed.evidence.size(),
+				"alternative order changed original evidence cardinality");
+		for (std::size_t i{}; i < ordered.evidence.size(); ++i)
+			require(ordered.evidence[i].relation_id == reversed.evidence[i].relation_id &&
+						ordered.evidence[i].row.canonical_form() ==
+							reversed.evidence[i].row.canonical_form(),
+					"non-ASCII alternatives changed canonical evidence order");
+		q::finite_population_limits exact;
+		exact.maximum_operations = measured.operations;
+		exact.maximum_retained_bytes = measured.retained_bytes_bound;
+		require(bool(q::project_source_features(original, exact, {}, repeated)) &&
+					repeated.operations == measured.operations &&
+					repeated.retained_bytes_bound == measured.retained_bytes_bound,
+				"live ordering scratch rejected its exact measured peak");
+		--exact.maximum_retained_bytes;
+		require(!q::project_source_features(original, exact, {}, repeated) &&
+					!repeated.operations && !repeated.retained_bytes_bound,
+				"ordering scratch bypassed one-less storage or published failed usage");
+		std::size_t callbacks{};
+		q::finite_population_limits cancel;
+		cancel.cancelled = [&]
+		{
+			return ++callbacks > 65536U;
+		};
+		const auto stopped = q::project_source_features(original, cancel, {}, repeated);
+		require(!stopped && stopped.error().code == "sdk.source-feature-cancelled" &&
+					!repeated.operations && !repeated.retained_bytes_bound,
+				"long common-prefix ordering ignored cancellation");
+	}
+	{
+		auto identities = f;
+		const auto id = "feature:" + std::string(65536U, 'i');
+		set(identities.rows[8].front(), "feature", txt(id));
+		for (auto& inventory : identities.rows[9])
+			set(inventory, "feature_ids", symbols({id}));
+		for (auto& group : identities.rows)
+			for (auto& row : group)
+			{
+				row.presence.fragments.push_back("release");
+				for (auto& edge : row.contributor_edges)
+					edge.condition = row.presence;
+			}
+		const auto original = identities.queries(true);
+		const auto full = take(q::project_source_features(original));
+		require(full.features.size() == 2U, "long identities lost their distinct original worlds");
+		std::size_t callbacks{};
+		q::finite_population_limits limits;
+		limits.cancelled = [&]
+		{
+			return ++callbacks > 65536U;
+		};
+		q::projection_resource_usage failed;
+		const auto stopped = q::project_source_features(original, limits, {}, failed);
+		require(!stopped && stopped.error().code == "sdk.source-feature-cancelled" &&
+					!failed.operations && !failed.retained_bytes_bound,
+				"long identity-prefix comparison ignored cancellation");
 	}
 	q::projection_resource_usage usage;
 	const auto full = take(q::project_source_features(f.input(), {}, {}, usage));

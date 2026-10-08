@@ -109,14 +109,24 @@ namespace cxxlens::sdk::query
 		}
 		using identity = std::array<std::string, 4>;
 		using view_identity = std::array<std::string_view, 4>;
+		struct budget;
+		int compare_identity_text(budget& meter, std::string_view left, std::string_view right);
 		struct identity_less
 		{
 			using is_transparent = void;
+			budget* meter{};
 			template <class L, class R>
 			bool operator()(const L& l, const R& r) const
 			{
 				for (std::size_t i = 0; i < 4U; ++i)
 				{
+					if (meter)
+					{
+						const auto order = compare_identity_text(*meter, l[i], r[i]);
+						if (order != 0)
+							return order < 0;
+						continue;
+					}
 					if (l[i] < r[i])
 						return true;
 					if (r[i] < l[i])
@@ -157,6 +167,20 @@ namespace cxxlens::sdk::query
 				if (stop.stop_requested() || (limits.cancelled && limits.cancelled()))
 					fail("projection", "stop-requested", "sdk.exceptional-route-cancelled");
 				charge(operations, n, limits.maximum_operations, "operations");
+			}
+			bool canonical_less(std::string_view left, std::string_view right)
+			{
+				work();
+				const auto common = std::min(left.size(), right.size());
+				for (std::size_t i{}; i < common; ++i)
+				{
+					work(2U);
+					const auto a = static_cast<unsigned char>(left[i]);
+					const auto b = static_cast<unsigned char>(right[i]);
+					if (a != b)
+						return a < b;
+				}
+				return left.size() < right.size();
 			}
 			void retain(std::size_t n)
 			{
@@ -257,6 +281,21 @@ namespace cxxlens::sdk::query
 				return total;
 			}
 		};
+		int compare_identity_text(budget& meter, std::string_view left, std::string_view right)
+		{
+			meter.work();
+			const auto common = std::min(left.size(), right.size());
+			for (std::size_t i{}; i < common; ++i)
+			{
+				meter.work(2U);
+				const auto a = static_cast<unsigned char>(left[i]);
+				const auto b = static_cast<unsigned char>(right[i]);
+				if (a != b)
+					return a < b ? -1 : 1;
+			}
+			return left.size() < right.size() ? -1 : (left.size() > right.size() ? 1 : 0);
+		}
+
 		struct projector
 		{
 			budget& b;
@@ -288,7 +327,7 @@ namespace cxxlens::sdk::query
 				if (id.empty())
 					return empty;
 				view_identity key{id, world[1], world[2], world[3]};
-				lookup_work(key, index[group].size());
+				b.work();
 				const auto at = index[group].find(key);
 				return at == index[group].end() ? empty : at->second;
 			}
@@ -307,6 +346,8 @@ namespace cxxlens::sdk::query
 			}
 			void initialize()
 			{
+				for (auto& group : index)
+					group = std::map<view_identity, rows, identity_less>{identity_less{&b}};
 				const std::array<const relation_descriptor*, 12> descriptors{
 					&build::relations::compile_unit::descriptor(),
 					&source::relations::file::descriptor(),
@@ -356,7 +397,7 @@ namespace cxxlens::sdk::query
 						{
 							view_identity key{
 								id, row->presence.universe, variant, row->interpretation};
-							lookup_work(key, index[group].size());
+							b.work();
 							// Conservative capacity/node allowance before both map and vector
 							// growth.
 							b.retain(sizeof(view_identity) + 256U +
@@ -365,25 +406,49 @@ namespace cxxlens::sdk::query
 						}
 					}
 				}
-				for (auto& group : index)
-					for (auto& [key, alternatives] : group)
+				std::size_t retained_keys{};
+				{
+					// Only populations with alternatives need ordering keys. One borrowed
+					// original can belong to several worlds; encode it once across them.
+					const auto pointer_less =
+						[&](const annotated_row* left, const annotated_row* right)
 					{
-						(void)key;
-						std::ranges::sort(
-							alternatives,
-							[&](const auto* x, const auto* y)
+						b.work();
+						return std::less<const annotated_row*>{}(left, right);
+					};
+					std::map<const annotated_row*, std::string, decltype(pointer_less)> keys{
+						pointer_less};
+					for (auto& group : index)
+						for (auto& [key, alternatives] : group)
+						{
+							(void)key;
+							b.work();
+							if (alternatives.size() < 2U)
+								continue;
+							for (const auto* original : alternatives)
 							{
-								const auto estimate_x = b.estimate(*x), estimate_y = b.estimate(*y);
-								if (estimate_x > b.limits.maximum_retained_bytes - estimate_y)
-									fail("temporary",
-										 "limit-exceeded",
-										 "sdk.exceptional-route-budget");
-								peak(estimate_x + estimate_y);
-								auto a = x->canonical_form(), c = y->canonical_form();
-								b.work(a.size() + c.size() + 1U);
-								return a < c;
-							});
-					}
+								b.work();
+								if (keys.find(original) != keys.end())
+									continue;
+								constexpr auto node = sizeof(decltype(keys)::value_type) + 256U;
+								b.retain(node);
+								auto encoded = canonical(*original);
+								const auto buffer = encoded.capacity() + 1U;
+								b.retain(buffer);
+								retained_keys += node + buffer;
+								keys.emplace(original, std::move(encoded));
+							}
+							std::ranges::sort(alternatives,
+											  [&](const auto* left, const auto* right)
+											  {
+												  return b.canonical_less(keys.at(left),
+																		  keys.at(right));
+											  });
+						}
+				}
+				// The map and string buffers have expired before their reservation is
+				// refunded; the observed scratch peak remains part of returned usage.
+				b.retained -= retained_keys;
 			}
 			void
 			bind(refs& evidence, std::size_t group, std::span<const annotated_row* const> originals)

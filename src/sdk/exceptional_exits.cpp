@@ -127,6 +127,20 @@ namespace cxxlens::sdk::query
 					fail("projection", "stop-requested", "sdk.exceptional-exit-cancelled");
 				charge(operations, n, limits.maximum_operations, "operations");
 			}
+			bool canonical_less(std::string_view left, std::string_view right)
+			{
+				work();
+				const auto common = std::min(left.size(), right.size());
+				for (std::size_t i{}; i < common; ++i)
+				{
+					work(2U);
+					const auto a = static_cast<unsigned char>(left[i]);
+					const auto b = static_cast<unsigned char>(right[i]);
+					if (a != b)
+						return a < b;
+				}
+				return left.size() < right.size();
+			}
 			void retain(std::size_t n)
 			{
 				charge(retained, n, limits.maximum_retained_bytes, "retained-bytes");
@@ -1286,9 +1300,10 @@ namespace cxxlens::sdk::query
 				std::ranges::sort(entries,
 								  [&](const auto& x, const auto& y)
 								  {
-									  b.work(x.canonical.size() + y.canonical.size() + 1U);
-									  return std::tie(x.group, x.canonical) <
-										  std::tie(y.group, y.canonical);
+									  b.work();
+									  if (x.group != y.group)
+										  return x.group < y.group;
+									  return b.canonical_less(x.canonical, y.canonical);
 								  });
 				for (const auto& e : entries)
 				{
