@@ -35,6 +35,12 @@ protocol outcome or metric availability verdict is emitted by the adapter.
 The generated relation row view exposes optional typed fields without changing
 any existing SDK projection DTO layout. Coverage, source provenance, closure and
 frontiers use existing claim/query channels and resource/cancellation limits.
+ABI and record-surface projections do not consume these five facets, and accept
+their absence in older saved `cc.entity_detail.v1` rows. They preserve the
+original row without adding cells or interpreting missing classification as
+false. Present cells retain descriptor type/value validation; all other existing
+column checks remain unchanged. Consumers of bit-field classification still
+require the original complete field facts and return unknown for sparse rows.
 Tests cover actual signed/unsigned/non-bitfield/zero/dependent fields, independent
 full record census, missing and foreign memberships, sparse legacy and malformed
 typed fields, repeat determinism and ordinary bounded analyzer output failure.

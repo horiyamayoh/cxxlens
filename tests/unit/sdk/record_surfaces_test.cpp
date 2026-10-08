@@ -314,6 +314,66 @@ namespace
 		}
 		return result;
 	}
+	void optional_bitfield_compatibility_tests()
+	{
+		constexpr std::array<std::string_view, 5> columns{"field_bitfield_profile",
+														  "field_bitfield_state",
+														  "field_is_bitfield",
+														  "field_bit_width",
+														  "field_bitfield_reason"};
+		fixture data;
+		const auto current = project(data);
+		for (auto& detail : data.groups[4])
+			for (const auto column : columns)
+				detail.values.erase("output." + std::string{column});
+		const auto sparse = project(data);
+		require(sparse.surfaces.size() == 1U &&
+					sparse.surfaces.front().state == current.surfaces.front().state &&
+					sparse.surfaces.front().fields.size() == 1U &&
+					sparse.surfaces.front().methods.size() == 1U,
+				"unconsumed absent bit-field facts changed record membership");
+		for (const auto& evidence : sparse.evidence)
+		{
+			if (evidence.relation_id != "cc.entity_detail.v1")
+				continue;
+			for (const auto column : columns)
+				require(!evidence.row.values.contains("output." + std::string{column}),
+						"sparse original detail acquired invented bit-field cells");
+		}
+		for (const auto column : columns)
+		{
+			auto malformed = data;
+			malformed.groups[4].front().values.emplace(
+				"output." + std::string{column}, detached_cell::utf8("wrong descriptor type"));
+			const auto rejected = q::project_record_surfaces(malformed.input());
+			require(!rejected && rejected.error().code == "sdk.record-input-invalid",
+					"present mistyped bit-field fact escaped record input validation");
+		}
+		for (const auto column : {"detail", "canonical_type"})
+		{
+			auto missing = data;
+			missing.groups[4].front().values.erase("output." + std::string{column});
+			const auto rejected = q::project_record_surfaces(missing.input());
+			require(!rejected && rejected.error().code == "sdk.record-input-invalid" &&
+						rejected.error().detail == "column-missing",
+					"bit-field compatibility relaxed an existing column check");
+		}
+		for (const auto bound : {&q::record_surface_limits::maximum_rows,
+								 &q::record_surface_limits::maximum_operations,
+								 &q::record_surface_limits::maximum_retained_bytes})
+		{
+			q::record_surface_limits limits;
+			limits.*bound = 1U;
+			const auto rejected = q::project_record_surfaces(data.input(), limits);
+			require(!rejected && rejected.error().code == "sdk.record-budget",
+					"sparse record inputs escaped a resource bound");
+		}
+		std::stop_source stopped;
+		stopped.request_stop();
+		const auto cancelled = q::project_record_surfaces(data.input(), {}, stopped.get_token());
+		require(!cancelled && cancelled.error().code == "sdk.record-cancelled",
+				"sparse record inputs escaped cancellation");
+	}
 	fixture inventory_fixture()
 	{
 		fixture data;
@@ -459,6 +519,7 @@ namespace
 int main()
 {
 	type_reference_tests();
+	optional_bitfield_compatibility_tests();
 	inventory_tests();
 	fixture data;
 	const auto actual = project(data);

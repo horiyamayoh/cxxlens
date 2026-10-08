@@ -1304,7 +1304,12 @@ set_tests_properties(unit.sdk-scalar-types
 cxxlens_add_test_executable(cxxlens-unit-sdk-field-bitfields
                             unit/sdk/field_bitfield_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-field-bitfields PRIVATE cxxlens::query)
-add_test(NAME unit.sdk-field-bitfields COMMAND cxxlens-unit-sdk-field-bitfields)
+add_test(
+  NAME unit.sdk-field-bitfields
+  COMMAND
+    cxxlens-unit-sdk-field-bitfields
+    "${CMAKE_CURRENT_SOURCE_DIR}/unit/sdk/fixtures/entity_detail_before_bitfield.queries.json"
+)
 set_tests_properties(
   unit.sdk-field-bitfields
   PROPERTIES LABELS "unit;sdk;type;field;bitfield;contract;negative")

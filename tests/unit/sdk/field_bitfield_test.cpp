@@ -1,13 +1,20 @@
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <string>
+#include <vector>
 
 #include <cxxlens/relations/cc_entity_detail.hpp>
+#include <cxxlens/sdk.hpp>
+#include <cxxlens/sdk/abi_surfaces.hpp>
+#include <cxxlens/sdk/record_surfaces.hpp>
 
 namespace
 {
 	using namespace cxxlens::sdk;
 	using relation = cxxlens::cc::relations::entity_detail;
+	namespace q = cxxlens::sdk::query;
 	void require(bool value, const char* message)
 	{
 		if (!value)
@@ -15,6 +22,77 @@ namespace
 			std::cerr << message << '\n';
 			std::exit(1);
 		}
+	}
+	void legacy_projection_tests(const char* path)
+	{
+		// This independent scan is unchanged output from the earlier exact adapter.
+		relation_registry registry;
+		for (const auto& descriptor : standard_relation_descriptors())
+			require(registry.add(descriptor).has_value(), "legacy registry failed");
+		auto engine = registry.build("legacy-field-projection-test");
+		require(engine.has_value(), "legacy engine failed");
+		std::ifstream file{path};
+		require(file.good(), "legacy original scan fixture missing");
+		const std::string text{std::istreambuf_iterator<char>{file}, {}};
+		auto decoded = q::decode_application_queries(*engine, text);
+		require(decoded && decoded->scans.size() == 1U, "genuine legacy scan rejected");
+		std::vector<q::annotated_row> rows;
+		auto cursor = decoded->scans.front().result.rows();
+		for (;;)
+		{
+			auto next = cursor.next();
+			require(next.has_value(), "legacy original row cursor failed");
+			if (!*next)
+				break;
+			auto row = (*next)->copy();
+			require(row.has_value(), "legacy original row copy failed");
+			require(!row->values.contains("output.field_is_bitfield"),
+					"fixture contains a newer bit-field classification");
+			rows.push_back(std::move(*row));
+		}
+		require(rows.size() == 18U, "genuine legacy row population changed");
+		q::abi_surface_input abi;
+		abi.details = rows;
+		q::record_surface_input records;
+		records.details = rows;
+		const auto projected_abi = q::project_abi_surfaces(abi);
+		const auto projected_records = q::project_record_surfaces(records);
+		require(projected_abi && projected_records &&
+					projected_abi->evidence.size() == rows.size() &&
+					projected_records->evidence.size() == rows.size(),
+				"ABI/record projection rejected genuine older original detail rows");
+		for (const auto& evidence : projected_abi->evidence)
+			require(!evidence.row.values.contains("output.field_is_bitfield"),
+					"ABI projection interpreted a missing old observation as false");
+		for (const auto& evidence : projected_records->evidence)
+			require(!evidence.row.values.contains("output.field_is_bitfield"),
+					"record projection interpreted a missing old observation as false");
+		auto missing = rows;
+		missing.front().values.erase("output.detail");
+		abi.details = missing;
+		records.details = missing;
+		require(!q::project_abi_surfaces(abi) && !q::project_record_surfaces(records),
+				"legacy compatibility relaxed a required original column");
+		auto malformed = rows;
+		malformed.front().values.emplace("output.field_is_bitfield", detached_cell::utf8("false"));
+		abi.details = malformed;
+		records.details = malformed;
+		require(!q::project_abi_surfaces(abi) && !q::project_record_surfaces(records),
+				"legacy compatibility accepted a present wrong field type");
+		abi.details = rows;
+		records.details = rows;
+		std::stop_source stopped;
+		stopped.request_stop();
+		require(!q::project_abi_surfaces(abi, {}, stopped.get_token()) &&
+					!q::project_record_surfaces(records, {}, stopped.get_token()),
+				"legacy compatibility bypassed cancellation");
+		q::abi_surface_limits abi_limits;
+		abi_limits.maximum_rows = 1U;
+		q::record_surface_limits record_limits;
+		record_limits.maximum_rows = 1U;
+		require(!q::project_abi_surfaces(abi, abi_limits) &&
+					!q::project_record_surfaces(records, record_limits),
+				"legacy compatibility bypassed original row bounds");
 	}
 	void put(detached_row& row, std::string name, detached_cell value)
 	{
@@ -40,8 +118,10 @@ namespace
 		return row;
 	}
 } // namespace
-int main()
+int main(int argc, char** argv)
 {
+	require(argc == 2, "legacy fixture argument missing");
+	legacy_projection_tests(argv[1]);
 	const auto& descriptor = relation::descriptor();
 	require(descriptor.validate().has_value(), "field descriptor invalid");
 	auto legacy = original_detail();

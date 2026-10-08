@@ -269,6 +269,68 @@ namespace
 					absent.surfaces[0].packing_state == q::abi_surface_state::unknown,
 				"legacy facets inferred known");
 	}
+	void optional_bitfield_compatibility_tests()
+	{
+		constexpr std::array<std::string_view, 5> columns{"field_bitfield_profile",
+														  "field_bitfield_state",
+														  "field_is_bitfield",
+														  "field_bit_width",
+														  "field_bitfield_reason"};
+		fixture data;
+		const auto current = project(data);
+		for (auto& detail : data.groups[4])
+			for (const auto column : columns)
+				detail.values.erase("output." + std::string{column});
+		q::projection_resource_usage usage;
+		const auto sparse = take(q::project_abi_surfaces(data.input(), {}, {}, usage));
+		require(sparse.surfaces.size() == 1U &&
+					sparse.surfaces.front().abi_state == current.surfaces.front().abi_state &&
+					sparse.surfaces.front().layout_state == current.surfaces.front().layout_state &&
+					sparse.surfaces.front().byte_size == current.surfaces.front().byte_size,
+				"unconsumed absent bit-field facts changed ABI/layout projection");
+		const auto retained =
+			std::ranges::find(sparse.evidence, relations[4], &q::abi_surface_evidence::relation_id);
+		require(retained != sparse.evidence.end() &&
+					retained->row.canonical_form() == data.groups[4].front().canonical_form(),
+				"sparse original detail acquired invented bit-field cells");
+		for (const auto column : columns)
+		{
+			auto malformed = data;
+			malformed.groups[4].front().values.emplace(
+				"output." + std::string{column}, detached_cell::utf8("wrong descriptor type"));
+			const auto rejected = q::project_abi_surfaces(malformed.input());
+			require(!rejected && rejected.error().code == "sdk.abi-input-invalid",
+					"present mistyped bit-field fact escaped ABI input validation");
+		}
+		for (const auto column : {"detail", "canonical_type"})
+		{
+			auto missing = data;
+			missing.groups[4].front().values.erase("output." + std::string{column});
+			const auto rejected = q::project_abi_surfaces(missing.input());
+			require(!rejected && rejected.error().code == "sdk.abi-input-invalid" &&
+						rejected.error().detail == "column-missing",
+					"bit-field compatibility relaxed an existing column check");
+		}
+		auto limits = q::abi_surface_limits{};
+		limits.maximum_operations = usage.operations;
+		limits.maximum_retained_bytes = usage.retained_bytes_bound;
+		require(q::project_abi_surfaces(data.input(), limits).has_value(),
+				"sparse ABI inputs rejected their charged resource bound");
+		--limits.maximum_operations;
+		const auto work_failure = q::project_abi_surfaces(data.input(), limits);
+		require(!work_failure && work_failure.error().code == "sdk.abi-budget",
+				"sparse ABI inputs escaped the work bound");
+		++limits.maximum_operations;
+		--limits.maximum_retained_bytes;
+		const auto byte_failure = q::project_abi_surfaces(data.input(), limits);
+		require(!byte_failure && byte_failure.error().code == "sdk.abi-budget",
+				"sparse ABI inputs escaped the retained storage bound");
+		std::stop_source stopped;
+		stopped.request_stop();
+		const auto cancelled = q::project_abi_surfaces(data.input(), {}, stopped.get_token());
+		require(!cancelled && cancelled.error().code == "sdk.abi-cancelled",
+				"sparse ABI inputs escaped cancellation");
+	}
 	void positive_tests()
 	{
 		fixture data;
@@ -777,6 +839,7 @@ namespace
 int main()
 {
 	portability_facet_tests();
+	optional_bitfield_compatibility_tests();
 	positive_tests();
 	negative_tests();
 	candidate_and_condition_tests();

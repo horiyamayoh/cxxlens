@@ -23,6 +23,12 @@ namespace cxxlens::sdk::query
 															"cc.record_surface.v1",
 															"cc.record_inventory.v1"};
 		using world = std::array<std::string, 3>;
+		constexpr std::array<std::string_view, 5> unconsumed_bitfield_columns{
+			"field_bitfield_profile",
+			"field_bitfield_state",
+			"field_is_bitfield",
+			"field_bit_width",
+			"field_bitfield_reason"};
 		using key = std::tuple<std::size_t, std::string, world>;
 		struct failure
 		{
@@ -188,6 +194,13 @@ namespace cxxlens::sdk::query
 							return valid.error();
 						for (const auto& column : descriptor->columns)
 						{
+							// These additive original facts are not consumed by this
+							// projection. Preserve older rows without fabricating cells.
+							if (group == 4U && column.type.optional &&
+								std::ranges::find(unconsumed_bitfield_columns, column.name) !=
+									unconsumed_bitfield_columns.end() &&
+								!row.values.contains("output." + column.name))
+								continue;
 							const auto& actual = cell(row, column.name);
 							if (actual.type != column.type || !actual.validate())
 								fail("sdk.record-input-invalid",
