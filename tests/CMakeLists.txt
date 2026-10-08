@@ -2128,6 +2128,17 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
                  "adapter;clang22;application;original-inputs;lifetime;bounded"
                  RUN_SERIAL TRUE TIMEOUT 240)
     add_test(
+      NAME adapter.clang22-original-direct-return-referent-inputs
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/clang22/direct_return_referent_inputs_test.py"
+        "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}")
+    set_tests_properties(
+      adapter.clang22-original-direct-return-referent-inputs
+      PROPERTIES LABELS
+                 "adapter;clang22;application;original-inputs;lifetime;bounded"
+                 RUN_SERIAL TRUE TIMEOUT 240)
+    add_test(
       NAME adapter.clang22-original-semantic-target-inputs
       COMMAND
         "${Python3_EXECUTABLE}"

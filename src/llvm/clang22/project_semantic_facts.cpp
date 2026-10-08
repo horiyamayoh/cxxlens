@@ -180,6 +180,14 @@ namespace cxxlens::detail::clang22
 			return std::get<std::string>(
 				*row.cells.at(row.descriptor_id + "." + std::string{column}).value);
 		}
+		std::string_view row_text(const sdk::detached_row& row, std::string_view column)
+		{
+			const auto found = row.cells.find(row.descriptor_id + "." + std::string{column});
+			if (found == row.cells.end() || !found->second.value)
+				return {};
+			const auto* value = std::get_if<std::string>(&*found->second.value);
+			return value ? std::string_view{*value} : std::string_view{};
+		}
 		sdk::detached_cell digest_value(std::string value)
 		{
 			return {{sdk::scalar_kind::digest, {}, false},
@@ -868,11 +876,18 @@ namespace cxxlens::detail::clang22
 			struct lifetime_requirement_scope
 			{
 				std::set<const clang::Stmt*> syntax;
+				std::set<const clang::ReturnStmt*> returns;
 				std::set<const clang::ValueDecl*> declarations;
 				std::set<std::string, std::less<>> cfg_ids;
 				std::uint64_t cfg_count{}, capture_count{};
 				bool type_frontier{}, activation_frontier{}, unsupported_frontier{},
 					cfg_binding_frontier{};
+			};
+			struct return_lifetime_population
+			{
+				std::uint64_t count{};
+				std::set<std::string, std::less<>> ids;
+				bool complete{true};
 			};
 			struct memory_observation
 			{
@@ -3657,7 +3672,15 @@ namespace cxxlens::detail::clang22
 						}
 					}
 					for (auto& row : detached.rows)
+					{
+						if (const auto* returned =
+								llvm::dyn_cast_or_null<clang::ReturnStmt>(input.admitted_syntax);
+							returned &&
+							row.descriptor_id == cc::relations::address_transfer::descriptor().id)
+							original_return_referent_fields(
+								row, *returned, pending.body, detached_storage);
 						append_original_resource_row(row, detached_storage);
+					}
 					// Reverse destruction frees detached rows/summaries, callback maps,
 					// and input observations before each temporary reservation is refunded.
 				}
@@ -3777,12 +3800,34 @@ namespace cxxlens::detail::clang22
 					if (item.lifetime_scope)
 					{
 						lifetime_charge();
-						const bool source_bound =
-							item.row.cells.contains(descriptor.id + ".source") ||
+						const bool source_bound = !row_text(item.row, "source").empty() ||
 							(item.declaration &&
 							 span(item.declaration->getSourceRange(), "declaration"));
 						lifetime_requirement_scopes_.at(item.lifetime_scope).cfg_binding_frontier |=
 							!complete || !source_bound;
+					}
+					if (item.original_scope && row_text(item.row, "kind") == "lifetime_end")
+					{
+						lifetime_charge();
+						if (const auto* variable =
+								llvm::dyn_cast_or_null<clang::VarDecl>(item.declaration))
+						{
+							const auto key = std::pair{item.original_scope, variable};
+							if (!return_lifetime_populations_.contains(key))
+							{
+								retain_population_bytes(256U);
+								return_lifetime_populations_.emplace(key,
+																	 return_lifetime_population{});
+							}
+							auto& population = return_lifetime_populations_.at(key);
+							++population.count;
+							const bool source_bound = !row_text(item.row, "source").empty() ||
+								span(variable->getSourceRange(), "declaration").has_value();
+							population.complete &= complete && source_bound;
+							const auto observed = row_id(item.row, "element");
+							retain_population_bytes(observed.size() * 3U + 256U);
+							population.ids.insert(observed);
+						}
 					}
 					auto state = sdk::detached_cell::utf8(complete ? "complete" : "partial");
 					state.type = take(descriptor.column(descriptor.id + ".binding_state")).type;
@@ -3792,6 +3837,202 @@ namespace cxxlens::detail::clang22
 					append(std::move(item.row));
 				}
 				pending_cfg_elements_.clear();
+			}
+			void original_return_referent_fields(sdk::detached_row& row,
+												 const clang::ReturnStmt& returned,
+												 const clang::FunctionDecl* function,
+												 resource_storage& storage)
+			{
+				lifetime_charge();
+				const auto native_syntax = [&](const clang::Stmt* statement) -> std::string_view
+				{
+					const auto found = syntax_nodes_.find(statement);
+					return found != syntax_nodes_.end() && found->second.size() == 1U
+						? std::string_view{*found->second.begin()}
+						: std::string_view{};
+				};
+				const auto transparent = [&](const clang::Expr* expression)
+				{
+					for (unsigned depth{}; expression && depth < 64U; ++depth)
+					{
+						lifetime_charge();
+						if (const auto* paren = llvm::dyn_cast<clang::ParenExpr>(expression))
+							expression = paren->getSubExpr();
+						else if (const auto* cast =
+									 llvm::dyn_cast<clang::ImplicitCastExpr>(expression);
+								 cast && cast->getCastKind() == clang::CK_NoOp)
+							expression = cast->getSubExpr();
+						else
+							return expression;
+					}
+					if (expression)
+						fail("return-referent", "wrapper-depth-limit");
+					return expression;
+				};
+				std::string_view kind = "unsupported", state = "partial", reason;
+				const clang::VarDecl* variable{};
+				const clang::Expr* referent{};
+				const auto body = finalized_bodies_.find(function);
+				const bool scope_bound = function && body != finalized_bodies_.end() &&
+					row_id(body->second, "function_exit_declaration") ==
+						original_declaration(*function) &&
+					row_text(body->second, "ast_state") == "complete" &&
+					row_text(body->second, "eligibility") == "closed" &&
+					!function->isDependentContext() && !function->isDefaulted() &&
+					!function->hasSkippedBody() && !unit_.ast().getDiagnostics().hasErrorOccurred();
+				const bool source_bound = !native_syntax(&returned).empty() &&
+					span(returned.getSourceRange(), "statement").has_value();
+				if (!function || function->getReturnType().isNull() ||
+					function->getReturnType()->isDependentType())
+					reason = "original-return-result-type-unavailable";
+				else if (!function->getReturnType()->isPointerType() &&
+						 !function->getReturnType()->isReferenceType())
+				{
+					kind = "nonborrow";
+					state = scope_bound && source_bound ? "complete" : "partial";
+				}
+				else
+				{
+					const auto* expression = transparent(returned.getRetValue());
+					kind = "indirect";
+					if (function->getReturnType()->isReferenceType())
+					{
+						kind = "direct_variable_reference";
+						referent = expression;
+					}
+					else if (const auto* address =
+								 llvm::dyn_cast_or_null<clang::UnaryOperator>(expression);
+							 address && address->getOpcode() == clang::UO_AddrOf)
+					{
+						kind = "direct_variable_address";
+						referent = transparent(address->getSubExpr());
+					}
+					else if (const auto* decay =
+								 llvm::dyn_cast_or_null<clang::ImplicitCastExpr>(expression);
+							 decay && decay->getCastKind() == clang::CK_ArrayToPointerDecay)
+					{
+						kind = "direct_array_decay";
+						referent = transparent(decay->getSubExpr());
+					}
+					if (const auto* use = llvm::dyn_cast_or_null<clang::DeclRefExpr>(referent))
+					{
+						if (use->refersToEnclosingVariableOrCapture())
+							reason = "original-captured-or-enclosing-variable-referent-unavailable";
+						else
+							variable = llvm::dyn_cast<clang::VarDecl>(use->getDecl());
+					}
+					if (!variable || variable->getType().isNull() ||
+						variable->getType()->isDependentType() ||
+						variable->getType()->isReferenceType())
+					{
+						kind = "indirect";
+						if (reason.empty())
+							reason = variable && !variable->getType().isNull() &&
+									variable->getType()->isReferenceType()
+								? "original-reference-variable-referent-unavailable"
+								: "original-direct-variable-referent-unavailable";
+						variable = nullptr;
+					}
+					else if (scope_bound && source_bound && !variable->isInvalidDecl() &&
+							 !original_declaration(*variable).empty() &&
+							 !native_syntax(referent).empty() &&
+							 span(variable->getSourceRange(), "declaration") &&
+							 span(referent->getSourceRange(), "statement"))
+						state = "complete";
+				}
+				if (!scope_bound)
+				{
+					state = "unavailable";
+					reason = "original-written-return-physical-scope-unavailable";
+				}
+				if (state != "complete" && reason.empty())
+					reason = "original-return-referent-source-or-id-unavailable";
+				const return_lifetime_population empty;
+				const auto found = return_lifetime_populations_.find(std::pair{function, variable});
+				const auto& ends =
+					found == return_lifetime_populations_.end() ? empty : found->second;
+				std::string_view end_state = "unavailable", duration;
+				if (variable)
+				{
+					switch (variable->getStorageDuration())
+					{
+						case clang::SD_Automatic:
+							duration = "automatic";
+							break;
+						case clang::SD_Static:
+							duration = "static";
+							break;
+						case clang::SD_Thread:
+							duration = "thread";
+							break;
+						case clang::SD_Dynamic:
+							duration = "dynamic";
+							break;
+						case clang::SD_FullExpression:
+							duration = "full_expression";
+							break;
+					}
+					const bool own_automatic =
+						duration != "automatic" || variable->getDeclContext() == function;
+					const bool closed = state == "complete" && own_automatic && ends.complete &&
+						ends.count == ends.ids.size() &&
+						row_text(body->second, "cfg_element_state") == "complete" &&
+						(duration != "automatic" || ends.count != 0U);
+					end_state = closed ? "complete" : "partial";
+					if (!closed && reason.empty())
+						reason = "original-return-lifetime-end-membership-unavailable";
+				}
+				std::size_t end_bytes{};
+				for (const auto& observed : ends.ids)
+				{
+					lifetime_charge();
+					end_bytes += observed.size() + 4U;
+				}
+				// Reserve cells, encoding, and validation scratch before growing the row.
+				storage.hold(8192U + end_bytes * 16U);
+				const auto& descriptor = cc::relations::address_transfer::descriptor();
+				const auto put = [&](std::string_view name, sdk::detached_cell cell)
+				{
+					lifetime_charge();
+					const auto column =
+						take(descriptor.column(descriptor.id + "." + std::string{name}));
+					cell.type = column.type;
+					const auto original = row.cells.find(column.id);
+					if (original != row.cells.end() &&
+						original->second.state != sdk::cell_state::absent &&
+						(original->second.state != cell.state ||
+						 original->second.value != cell.value ||
+						 original->second.unknown_reason != cell.unknown_reason))
+						fail("return-referent", "conflicting-original-return-facet");
+					row.cells.insert_or_assign(column.id, std::move(cell));
+				};
+				put("return_referent_profile",
+					sdk::detached_cell::utf8("clang22-original-direct-return-referent/1"));
+				put("return_referent_state",
+					symbol("cc.original-input-state/1", std::string{state}));
+				put("return_referent_kind", sdk::detached_cell::utf8(std::string{kind}));
+				put("return_lifetime_end_state",
+					symbol("cc.original-input-state/1", std::string{end_state}));
+				put("return_lifetime_end_count", sdk::detached_cell::unsigned_integer(ends.count));
+				put("return_lifetime_end_ids", flags("cfg_element_id", ends.ids));
+				if (variable)
+				{
+					const auto declaration = original_declaration(*variable);
+					const auto expression = native_syntax(referent);
+					if (!declaration.empty())
+						put("return_referent_declaration",
+							id("cc_declaration_id", std::string{declaration}, true));
+					if (!expression.empty())
+						put("return_referent_expression",
+							id("syntax_node_id", std::string{expression}, true));
+					if (!duration.empty())
+						put("return_referent_storage_duration",
+							symbol("cc.storage-duration/1", std::string{duration}));
+				}
+				if (!reason.empty())
+					put("return_referent_reason", sdk::detached_cell::utf8(std::string{reason}));
+				check(sdk::validate_row(descriptor, row));
+				check(sdk::validate_domain_identity(descriptor, row));
 			}
 			void object_work(std::size_t operations = 1U)
 			{
@@ -6072,6 +6313,12 @@ namespace cxxlens::detail::clang22
 					return;
 				lifetime_charge();
 				auto& scope = lifetime_requirement_scopes_.at(physical.declaration);
+				if (const auto* returned = llvm::dyn_cast<clang::ReturnStmt>(statement);
+					returned && !scope.returns.contains(returned))
+				{
+					retain_population_bytes(192U);
+					scope.returns.insert(returned);
+				}
 				bool unknown{};
 				if (!lifetime_syntax_requirement(statement, *physical.declaration, unknown))
 					return;
@@ -6208,7 +6455,35 @@ namespace cxxlens::detail::clang22
 						text("ast_state") == "complete" && text("eligibility") == "closed" &&
 						text("cfg_element_state") == "complete" &&
 						row_id(row, "function_exit_declaration") == original_declaration(*function);
+					std::set<std::string, std::less<>> return_ids;
+					bool returns_complete = !unavailable && !function->isDependentContext() &&
+						!unit_.ast().getDiagnostics().hasErrorOccurred() &&
+						text("ast_state") == "complete" && text("eligibility") == "closed" &&
+						row_id(row, "function_exit_declaration") == original_declaration(*function);
+					for (const auto* returned : scope.returns)
+					{
+						lifetime_charge();
+						const auto original = original_syntax(returned);
+						returns_complete &= original.has_value() &&
+							span(returned->getSourceRange(), "statement").has_value();
+						if (original)
+						{
+							retain_population_bytes(original->size() * 3U + 256U);
+							return_ids.insert(*original);
+						}
+					}
+					returns_complete &= scope.returns.size() == return_ids.size();
 					fields additions{
+						{"return_statement_profile",
+						 sdk::detached_cell::utf8("clang22-original-written-return-statements/1")},
+						{"return_statement_state",
+						 symbol("cc.original-input-state/1",
+								unavailable			   ? "unavailable"
+									: returns_complete ? "complete"
+													   : "partial")},
+						{"return_statement_count",
+						 sdk::detached_cell::unsigned_integer(scope.returns.size())},
+						{"return_statement_ids", flags("syntax_node_id", return_ids)},
 						{"lifetime_requirements_profile",
 						 sdk::detached_cell::utf8(
 							 "clang22-original-observed-lifetime-requirements/1")},
@@ -6223,6 +6498,13 @@ namespace cxxlens::detail::clang22
 						 flags("cc_declaration_id", declaration_ids)},
 						{"lifetime_requirement_cfg_element_ids",
 						 flags("cfg_element_id", scope.cfg_ids)}};
+					if (!returns_complete)
+						additions.emplace(
+							"return_statement_reason",
+							sdk::detached_cell::utf8(
+								unavailable
+									? "original-written-return-physical-scope-unavailable"
+									: "original-return-source-id-or-ast-enumeration-frontier"));
 					if (!complete)
 						additions.emplace(
 							"lifetime_requirements_reason",
@@ -6952,7 +7234,8 @@ namespace cxxlens::detail::clang22
 										  static_cast<std::uint64_t>(alignment)));
 					}
 				}
-				value.emplace("storage_duration", symbol("cc.storage-duration/1", duration));
+				value.emplace("storage_duration",
+							  symbol("cc.storage-duration/1", std::string{duration}));
 				value.emplace("storage_state", symbol("cc.identifier-state/1", std::move(state)));
 				value.emplace(
 					"storage_profile",
@@ -10902,7 +11185,8 @@ namespace cxxlens::detail::clang22
 						pending_cfg_elements_.push_back({std::move(row),
 														 statement,
 														 declaration,
-														 lifetime_required ? &function : nullptr});
+														 lifetime_required ? &function : nullptr,
+														 &function});
 					}
 				}
 				value.emplace("cfg_element_count",
@@ -11042,8 +11326,12 @@ namespace cxxlens::detail::clang22
 				const clang::Stmt* statement;
 				const clang::Decl* declaration;
 				const clang::FunctionDecl* lifetime_scope;
+				const clang::FunctionDecl* original_scope;
 			};
 			std::vector<cfg_element_binding> pending_cfg_elements_;
+			std::map<std::pair<const clang::FunctionDecl*, const clang::VarDecl*>,
+					 return_lifetime_population>
+				return_lifetime_populations_;
 			struct object_cfg_binding
 			{
 				const clang::FunctionDecl* function;
