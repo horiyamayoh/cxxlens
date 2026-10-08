@@ -266,9 +266,146 @@ namespace
 		require(result.populations.size() == 1, "one physical population");
 		return result.populations.front();
 	}
+	void indexed_prefix_controls()
+	{
+		constexpr std::size_t common_bytes = 120U, decoy_count = 64U;
+		fixture long_prefix;
+		const std::array old_ids{"span:scope", "span:throw", "span:body"};
+		const std::array new_ids{std::string(common_bytes, 's') + "source:A",
+								 std::string(common_bytes, 's') + "source:B",
+								 std::string(common_bytes, 's') + "source:C"};
+		for (auto& group : long_prefix.rows)
+			for (auto& row : group)
+				for (auto& [name, cell] : row.values)
+				{
+					(void)name;
+					if (!cell.value)
+						continue;
+					if (auto* value = std::get_if<std::string>(&*cell.value))
+						for (std::size_t i{}; i < old_ids.size(); ++i)
+							if (*value == old_ids[i])
+								*value = new_ids[i];
+				}
+		for (std::size_t i{}; i < decoy_count; ++i)
+		{
+			auto row = long_prefix.rows[2].front();
+			auto suffix = std::to_string(i);
+			if (suffix.size() == 1U)
+				suffix.insert(suffix.begin(), '0');
+			set(row,
+				"span",
+				detached_cell::utf8(std::string(common_bytes, 's') + "unused" + suffix));
+			long_prefix.rows[2].push_back(std::move(row));
+		}
+		auto early_prefix = long_prefix;
+		for (std::size_t i = old_ids.size(); i < early_prefix.rows[2].size(); ++i)
+		{
+			auto id =
+				std::get<std::string>(*early_prefix.rows[2][i].values.at("output.span").value);
+			id.front() = 'z';
+			set(early_prefix.rows[2][i], "span", detached_cell::utf8(std::move(id)));
+		}
+		std::size_t visits{};
+		q::finite_population_limits limits;
+		limits.cancelled = [&]
+		{
+			++visits;
+			return false;
+		};
+		q::projection_resource_usage measured, early_usage, repeated;
+		const auto full =
+			take(q::project_exceptional_exits(long_prefix.input(), limits, {}, measured));
+		const auto early =
+			take(q::project_exceptional_exits(early_prefix.input(), {}, {}, early_usage));
+		require(population(full).state == state::complete &&
+					population(early).state == state::complete &&
+					population(full).occurrence_ids == population(early).occurrence_ids &&
+					full.evidence.size() == early.evidence.size(),
+				"prefix-only unreferenced originals changed finite exit closure");
+		for (std::size_t i{}; i < full.evidence.size(); ++i)
+			require(full.evidence[i].row.canonical_form() == early.evidence[i].row.canonical_form(),
+					"unreferenced prefix decoys changed selected original evidence");
+		require(measured.retained_bytes_bound == early_usage.retained_bytes_bound,
+				"visited-prefix work changed selected owned/index/temporary storage");
+		// Each unreferenced span must compare against a needed source key before
+		// being excluded. Equal-size decoys keep validation and output work equal;
+		// only the actual lookup can inspect their shared unsigned-byte prefix.
+		require(measured.operations > early_usage.operations &&
+					measured.operations - early_usage.operations >= 2U * common_bytes * decoy_count,
+				"needed-source lookup did not charge its actually visited identity prefix");
+		limits.cancelled = {};
+		limits.maximum_operations = measured.operations;
+		limits.maximum_retained_bytes = measured.retained_bytes_bound;
+		require(bool(q::project_exceptional_exits(long_prefix.input(), limits, {}, repeated)) &&
+					repeated.operations == measured.operations &&
+					repeated.retained_bytes_bound == measured.retained_bytes_bound,
+				"prefix lookup rejected its exact deterministic work/storage bound");
+		--limits.maximum_operations;
+		auto failed = q::project_exceptional_exits(long_prefix.input(), limits, {}, repeated);
+		require(!failed && failed.error().code == "sdk.exceptional-exit-budget" &&
+					!repeated.operations && !repeated.retained_bytes_bound,
+				"prefix lookup ignored one-under work or published failed usage");
+		limits.maximum_operations = measured.operations;
+		--limits.maximum_retained_bytes;
+		failed = q::project_exceptional_exits(long_prefix.input(), limits, {}, repeated);
+		require(!failed && failed.error().code == "sdk.exceptional-exit-budget" &&
+					!repeated.operations && !repeated.retained_bytes_bound,
+				"prefix lookup ignored one-under storage or published failed usage");
+		require(visits > 2U, "long prefix fixture did not perform cancellable work");
+		const auto midpoint = visits / 2U;
+		std::size_t prefix{};
+		std::stop_source stop;
+		q::finite_population_limits interrupted;
+		interrupted.cancelled = [&]
+		{
+			if (++prefix == midpoint)
+				stop.request_stop();
+			return false;
+		};
+		failed = q::project_exceptional_exits(
+			long_prefix.input(), interrupted, stop.get_token(), repeated);
+		require(!failed && failed.error().code == "sdk.exceptional-exit-cancelled" &&
+					prefix == midpoint && !repeated.operations && !repeated.retained_bytes_bound,
+				"long prefix work ignored an actual mid-projection stop");
+
+		fixture worlds;
+		const std::array world_ids{std::string(96U, 'v') + "a", std::string(96U, 'v') + "b"};
+		for (auto& group : worlds.rows)
+			for (auto& row : group)
+			{
+				row.presence.universe = std::string(96U, 'u');
+				row.presence.fragments = {world_ids[0], world_ids[1]};
+				row.interpretation = std::string(96U, 'i');
+				for (auto& edge : row.contributor_edges)
+				{
+					edge.condition = row.presence;
+					edge.interpretation = row.interpretation;
+				}
+			}
+		const auto ordered = take(q::project_exceptional_exits(worlds.input()));
+		for (auto& group : worlds.rows)
+			std::ranges::reverse(group);
+		const auto permuted = take(q::project_exceptional_exits(worlds.input()));
+		require(ordered.populations.size() == 2U && permuted.populations.size() == 2U &&
+					ordered.evidence.size() == permuted.evidence.size(),
+				"long exact world keys erased or mixed independent populations");
+		for (std::size_t i{}; i < world_ids.size(); ++i)
+			require(ordered.populations[i].variant == world_ids[i] &&
+						permuted.populations[i].variant == world_ids[i] &&
+						ordered.populations[i].state == state::complete &&
+						permuted.populations[i].state == state::complete &&
+						ordered.populations[i].occurrence_ids ==
+							permuted.populations[i].occurrence_ids,
+					"identity ordering changed actual world closure or output order");
+		for (std::size_t i{}; i < ordered.evidence.size(); ++i)
+			require(ordered.evidence[i].row.canonical_form() ==
+						permuted.evidence[i].row.canonical_form(),
+					"long world ordering changed canonical original evidence");
+	}
 } // namespace
 int main()
 {
+	indexed_prefix_controls();
 	fixture original;
 	auto raw = take(q::project_exceptional_exits(original.input()));
 	const auto& p = population(raw);

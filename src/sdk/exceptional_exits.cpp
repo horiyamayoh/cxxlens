@@ -78,22 +78,6 @@ namespace cxxlens::sdk::query
 		}
 		using identity = std::array<std::string, 4>;
 		using view_identity = std::array<std::string_view, 4>;
-		struct identity_less
-		{
-			using is_transparent = void;
-			template <class L, class R>
-			bool operator()(const L& l, const R& r) const
-			{
-				for (std::size_t i = 0; i < 4U; ++i)
-				{
-					if (l[i] < r[i])
-						return true;
-					if (r[i] < l[i])
-						return false;
-				}
-				return false;
-			}
-		};
 		finite_population_state combine(finite_population_state a, finite_population_state b)
 		{
 			if (a == finite_population_state::conflicting ||
@@ -232,12 +216,49 @@ namespace cxxlens::sdk::query
 				return total;
 			}
 		};
+		struct identity_less
+		{
+			using is_transparent = void;
+			budget* b;
+			template <class L, class R>
+			bool operator()(const L& l, const R& r) const
+			{
+				for (std::size_t part{}; part < 4U; ++part)
+				{
+					b->work();
+					const auto extent = std::min(l[part].size(), r[part].size());
+					for (std::size_t i{}; i < extent; ++i)
+					{
+						b->work(2U);
+						const auto left = static_cast<unsigned char>(l[part][i]);
+						const auto right = static_cast<unsigned char>(r[part][i]);
+						if (left != right)
+							return left < right;
+					}
+					if (l[part].size() != r[part].size())
+						return l[part].size() < r[part].size();
+				}
+				return false;
+			}
+		};
 		struct projection
 		{
 			budget& b;
 			exceptional_exit_input input;
 			exceptional_exit_projection output;
-			std::array<std::map<identity, refs, identity_less>, 8> maps;
+			using identity_map = std::map<identity, refs, identity_less>;
+			std::array<identity_map, 8> maps;
+			projection(budget& limits, exceptional_exit_input rows)
+				: b(limits), input(rows), maps{identity_map{identity_less{&b}},
+											   identity_map{identity_less{&b}},
+											   identity_map{identity_less{&b}},
+											   identity_map{identity_less{&b}},
+											   identity_map{identity_less{&b}},
+											   identity_map{identity_less{&b}},
+											   identity_map{identity_less{&b}},
+											   identity_map{identity_less{&b}}}
+			{
+			}
 			using scope_identity = std::array<std::string, 5>;
 			struct scope_less
 			{
@@ -300,8 +321,6 @@ namespace cxxlens::sdk::query
 			find(std::size_t group, std::string_view id, const exceptional_exit_population& p)
 			{
 				static const refs empty;
-				compare_cost({id, p.universe, p.variant, p.interpretation},
-							 static_cast<std::size_t>(std::bit_width(maps[group].size())) + 1U);
 				const auto at =
 					maps[group].find(view_identity{id, p.universe, p.variant, p.interpretation});
 				return at == maps[group].end() ? empty : at->second;
@@ -1094,7 +1113,7 @@ namespace cxxlens::sdk::query
 			{
 				(void)stop;
 				b.work();
-				projection work{b, input, {}, {}, {}};
+				projection work{b, input};
 				work.output.compile_units_complete = input.compile_units_complete;
 				work.output.scope_inputs_complete = input.scope_inputs_complete;
 				work.output.occurrence_inputs_complete = input.occurrence_inputs_complete;
@@ -1201,7 +1220,8 @@ namespace cxxlens::sdk::query
 								  fail(relations[group], "identity-missing");
 						  });
 				}
-				std::set<view_identity, identity_less> needed_syntax, needed_sources;
+				std::set<view_identity, identity_less> needed_syntax{identity_less{&b}},
+					needed_sources{identity_less{&b}};
 				const auto add_needed =
 					[&](auto& into, const annotated_row& r, std::string_view field)
 				{
@@ -1210,17 +1230,6 @@ namespace cxxlens::sdk::query
 						return;
 					for (const auto& variant : r.presence.fragments)
 					{
-						const auto factor =
-							static_cast<std::size_t>(std::bit_width(into.size())) + 1U;
-						for (auto value : {id,
-										   std::string_view{r.presence.universe},
-										   std::string_view{variant},
-										   std::string_view{r.interpretation}})
-						{
-							if (value.size() + 1U > limits.maximum_operations / factor)
-								fail("operations", "limit-exceeded", "sdk.exceptional-exit-budget");
-							b.work((value.size() + 1U) * factor);
-						}
 						const view_identity key{id, r.presence.universe, variant, r.interpretation};
 						if (!into.contains(key))
 						{
@@ -1235,8 +1244,6 @@ namespace cxxlens::sdk::query
 					const auto id = text(r, field);
 					for (const auto& variant : r.presence.fragments)
 					{
-						b.work(id.size() + r.presence.universe.size() + variant.size() +
-							   r.interpretation.size() + 1U);
 						if (from.contains(
 								view_identity{id, r.presence.universe, variant, r.interpretation}))
 							return true;
