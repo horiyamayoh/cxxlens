@@ -1305,8 +1305,9 @@ cxxlens_add_test_executable(cxxlens-unit-sdk-field-bitfields
                             unit/sdk/field_bitfield_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-field-bitfields PRIVATE cxxlens::query)
 add_test(NAME unit.sdk-field-bitfields COMMAND cxxlens-unit-sdk-field-bitfields)
-set_tests_properties(unit.sdk-field-bitfields
-                     PROPERTIES LABELS "unit;sdk;type;field;bitfield;contract;negative")
+set_tests_properties(
+  unit.sdk-field-bitfields
+  PROPERTIES LABELS "unit;sdk;type;field;bitfield;contract;negative")
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-record-surfaces
                             unit/sdk/record_surfaces_test.cpp)
@@ -2153,8 +2154,10 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
         "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}")
     set_tests_properties(
       adapter.clang22-original-field-bitfield-inputs
-      PROPERTIES LABELS "adapter;clang22;application;original-inputs;record;bitfield;bounded"
-                 RUN_SERIAL TRUE TIMEOUT 240)
+      PROPERTIES
+        LABELS
+        "adapter;clang22;application;original-inputs;record;bitfield;bounded"
+        RUN_SERIAL TRUE TIMEOUT 240)
     add_test(
       NAME adapter.clang22-original-semantic-target-inputs
       COMMAND
