@@ -9,6 +9,8 @@
 #include <cxxlens/sdk/exception_cleanup_facets.hpp>
 
 #include "../../../src/sdk/query_result_internal.hpp"
+#include "query_projection_row_copy_controls.hpp"
+
 namespace
 {
 	using namespace cxxlens::sdk;
@@ -309,6 +311,20 @@ int main(int argc, char** argv)
 				"actual typed spec/normal+EH cleanup original binding");
 		return 0;
 	}
+	fixture copied;
+	query_copy_controls::projection(
+		copied.rows,
+		names,
+		[&]
+		{
+			return copied.queries();
+		},
+		[](const auto& input, const auto& limits, auto& usage)
+		{
+			return q::project_exception_cleanup_facets(input, limits, {}, usage);
+		},
+		require);
+
 	fixture original;
 	q::projection_resource_usage usage;
 	auto out = take(q::project_exception_cleanup_facets(original.input(), {}, {}, usage));

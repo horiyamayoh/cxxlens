@@ -9,6 +9,7 @@
 #include <cxxlens/sdk/exception_cleanup_facets.hpp>
 
 #include "query_projection_plan_limits_internal.hpp"
+#include "query_projection_row_copy_internal.hpp"
 #include "query_projection_rows_internal.hpp"
 #include "query_result_internal.hpp"
 namespace cxxlens::sdk::query
@@ -435,9 +436,14 @@ namespace cxxlens::sdk::query
 								 b.limits.maximum_evidence_bytes,
 								 "evidence-bytes");
 						const auto ref = output.evidence.size();
-						// Canonical bytes conservatively bound the actual row payload copy.
-						b.work(encoded.size() + relations[group].size() + 1U);
-						output.evidence.push_back({std::string{relations[group]}, *r});
+						b.work(relations[group].size() + 1U);
+						output.evidence.push_back(
+							{std::string{relations[group]},
+							 detail::copy_projected_row(*r,
+														[&](std::size_t amount)
+														{
+															b.work(amount);
+														})});
 						b.retain(128U + sizeof(std::pair<const annotated_row* const, std::size_t>));
 						at = owned.emplace(r, ref).first;
 					}

@@ -2,11 +2,50 @@
 #include <array>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <memory>
+#include <new>
 
 #include <cxxlens/sdk/exceptional_exits.hpp>
 
+#include "../../../src/sdk/query_projection_row_copy_internal.hpp"
 #include "../../../src/sdk/query_result_internal.hpp"
+#include "query_projection_row_copy_controls.hpp"
+
+#if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
+namespace
+{
+	thread_local int copy_allocation_failure = -1;
+} // namespace
+void* operator new(std::size_t size)
+{
+	if (copy_allocation_failure >= 0 && copy_allocation_failure-- == 0)
+		throw std::bad_alloc{};
+	if (auto* value = std::malloc(size == 0U ? 1U : size))
+		return value;
+	throw std::bad_alloc{};
+}
+void* operator new[](std::size_t size)
+{
+	return ::operator new(size);
+}
+void operator delete(void* value) noexcept
+{
+	std::free(value);
+}
+void operator delete[](void* value) noexcept
+{
+	::operator delete(value);
+}
+void operator delete(void* value, std::size_t) noexcept
+{
+	std::free(value);
+}
+void operator delete[](void* value, std::size_t) noexcept
+{
+	::operator delete(value);
+}
+#endif
 
 namespace
 {
@@ -266,6 +305,119 @@ namespace
 		require(result.populations.size() == 1, "one physical population");
 		return result.populations.front();
 	}
+	void typed_copy_failure_controls()
+	{
+		auto row = fixture{}.rows[3].front();
+		row.multiplicity = 17U;
+		row.values.emplace("copy.long.boolean.field", detached_cell::boolean(true));
+		row.values.emplace("copy.long.signed.field",
+						   detached_cell::signed_integer(std::numeric_limits<std::int64_t>::min()));
+		row.values.emplace(
+			"copy.long.unsigned.field",
+			detached_cell::unsigned_integer(std::numeric_limits<std::uint64_t>::max()));
+		row.values.emplace("copy.long.string.field", detached_cell::utf8("quoted\"\\\n\t日本語"));
+		row.values.emplace("copy.long.binary.field",
+						   detached_cell::bytes(std::vector<std::byte>(32768U, std::byte{0xff})));
+		const value_type optional{scalar_kind::typed_id, "long-original-type-parameter", true};
+		row.values.emplace("copy.long.absent.field", detached_cell::absent(optional));
+		row.values.emplace(
+			"copy.long.unknown.field",
+			detached_cell::unknown(optional, "unobserved\"\\日本語-original-reason"));
+		row.claim_contributors.push_back("claim:z-long-original-contributor");
+		row.producer_contracts.push_back({"z.original-long-producer", "z.original-long-contract"});
+		row.provenance.push_back("z.original-long-provenance");
+		row.contributor_guarantees.push_back(
+			{"exact", "zz-long-scope", "zz-long-assumption", {"native", "schema_validated"}});
+		row.contributor_edges.push_back({row.claim_contributors.back(),
+										 row.producer_contracts.back(),
+										 row.provenance.back(),
+										 row.contributor_guarantees.back(),
+										 row.presence,
+										 row.interpretation});
+		const auto expected = row.canonical_form();
+		std::size_t work{};
+		const auto copied = q::detail::copy_projected_row(row,
+														  [&](std::size_t amount)
+														  {
+															  work += amount;
+														  });
+		require(copied.canonical_form() == expected,
+				"typed copy retained all scalar/optional/nested fields");
+		struct interrupted
+		{
+		};
+		for (const auto cap : {work, work - 1U})
+		{
+			std::size_t used{};
+			bool failed{};
+			try
+			{
+				const auto bounded = q::detail::copy_projected_row(row,
+																   [&](std::size_t amount)
+																   {
+																	   if (amount > cap - used)
+																		   throw interrupted{};
+																	   used += amount;
+																   });
+				require(bounded.canonical_form() == expected,
+						"typed copy exact-bound retry changed input");
+			}
+			catch (const interrupted&)
+			{
+				failed = true;
+			}
+			require(failed == (cap != work) && used > 0U && used <= cap,
+					"typed copy did not gate actual work before copying");
+		}
+		std::size_t callbacks{}, used{};
+		bool cancelled{};
+		try
+		{
+			(void)q::detail::copy_projected_row(row,
+												[&](std::size_t amount)
+												{
+													if (++callbacks == 30U)
+														throw interrupted{};
+													used += amount;
+												});
+		}
+		catch (const interrupted&)
+		{
+			cancelled = true;
+		}
+		require(cancelled && used > 0U && row.canonical_form() == expected,
+				"typed copy ignored mid-copy cancellation or mutated borrowed input");
+#if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
+		for (const int point : {0, 1, 4, 16})
+		{
+			used = 0U;
+			bool failed{};
+			copy_allocation_failure = point;
+			try
+			{
+				(void)q::detail::copy_projected_row(row,
+													[&](std::size_t amount)
+													{
+														used += amount;
+													});
+			}
+			catch (const std::bad_alloc&)
+			{
+				failed = true;
+			}
+			copy_allocation_failure = -1;
+			require(failed && used > 0U && row.canonical_form() == expected,
+					"typed copy allocation failure lost work or mutated original ownership");
+		}
+#endif
+		const auto retry = q::detail::copy_projected_row(row,
+														 [](std::size_t)
+														 {
+														 });
+		require(retry.canonical_form() == expected,
+				"typed copy retry failed after partial-owner unwind");
+	}
+
 	void indexed_prefix_controls()
 	{
 		constexpr std::size_t common_bytes = 120U, decoy_count = 64U;
@@ -405,6 +557,21 @@ namespace
 } // namespace
 int main()
 {
+	typed_copy_failure_controls();
+	fixture copied;
+	query_copy_controls::projection(
+		copied.rows,
+		names,
+		[&]
+		{
+			return copied.queries();
+		},
+		[](const auto& input, const auto& limits, auto& usage)
+		{
+			return q::project_exceptional_exits(input, limits, {}, usage);
+		},
+		require);
+
 	indexed_prefix_controls();
 	fixture original;
 	auto raw = take(q::project_exceptional_exits(original.input()));

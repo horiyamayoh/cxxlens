@@ -13,7 +13,9 @@
 #include <cxxlens/sdk.hpp>
 #include <cxxlens/sdk/exceptional_routes.hpp>
 
+#include "query_projection_row_copy_controls.hpp"
 #include "query_result_internal.hpp"
+
 namespace
 {
 	using namespace cxxlens::sdk;
@@ -324,6 +326,20 @@ namespace
 
 int main()
 {
+	fixture copied;
+	query_copy_controls::projection(
+		copied.rows,
+		names,
+		[&]
+		{
+			return copied.queries();
+		},
+		[](const auto& input, const auto& limits, auto& usage)
+		{
+			return q::project_exceptional_routes(input, limits, {}, usage);
+		},
+		require);
+
 	std::size_t cases = 0;
 	{
 		fixture f;

@@ -9,6 +9,7 @@
 #include <cxxlens/sdk/exceptional_exits.hpp>
 
 #include "query_projection_plan_limits_internal.hpp"
+#include "query_projection_row_copy_internal.hpp"
 #include "query_projection_rows_internal.hpp"
 #include "query_result_internal.hpp"
 namespace cxxlens::sdk::query
@@ -1317,9 +1318,14 @@ namespace cxxlens::sdk::query
 					b.work();
 					const auto ref = work.output.evidence.size();
 					b.retain(sizeof(finite_population_evidence) + relations[e.group].size() * 2U);
-					// Canonical bytes conservatively bound the actual row payload copy.
-					b.work(e.canonical.size() + relations[e.group].size() + 1U);
-					work.output.evidence.push_back({std::string{relations[e.group]}, *e.original});
+					b.work(relations[e.group].size() + 1U);
+					work.output.evidence.push_back(
+						{std::string{relations[e.group]},
+						 detail::copy_projected_row(*e.original,
+													[&](std::size_t amount)
+													{
+														b.work(amount);
+													})});
 					for (const auto& variant : e.original->presence.fragments)
 					{
 						b.work();
