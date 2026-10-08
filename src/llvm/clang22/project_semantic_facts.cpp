@@ -865,6 +865,15 @@ namespace cxxlens::detail::clang22
 				std::uint64_t unbound_count{};
 				bool activation_frontier{}, dependent_frontier{};
 			};
+			struct lifetime_requirement_scope
+			{
+				std::set<const clang::Stmt*> syntax;
+				std::set<const clang::ValueDecl*> declarations;
+				std::set<std::string, std::less<>> cfg_ids;
+				std::uint64_t cfg_count{}, capture_count{};
+				bool type_frontier{}, activation_frontier{}, unsupported_frontier{},
+					cfg_binding_frontier{};
+			};
 			struct memory_observation
 			{
 				const clang::FunctionDecl* scope{};
@@ -1012,6 +1021,7 @@ namespace cxxlens::detail::clang22
 			{
 				if (declaration == nullptr)
 					return true;
+				observe_lifetime_declaration(declaration);
 				if (!llvm::isa<clang::TranslationUnitDecl>(declaration) &&
 					!admitted(declaration->getLocation()))
 					return true;
@@ -1050,6 +1060,13 @@ namespace cxxlens::detail::clang22
 						retain_population_bytes(256U);
 						memory_scopes_.emplace(function, memory_scope{});
 					}
+					if (!lifetime_requirement_scopes_.contains(function))
+					{
+						retain_population_bytes(256U);
+						lifetime_requirement_scopes_.emplace(function,
+															 lifetime_requirement_scope{});
+					}
+					observe_lifetime_captures(*function);
 					// RAV omits unwritten constructor initializers. Count the actual
 					// default-member activation before that traversal filter can hide it.
 					if (const auto* constructor =
@@ -1057,6 +1074,8 @@ namespace cxxlens::detail::clang22
 						for (const auto* initializer : constructor->inits())
 						{
 							memory_charge();
+							if (!initializer->isWritten())
+								observe_lifetime_syntax(initializer->getInit(), true);
 							if (!initializer->isWritten() &&
 								llvm::isa<clang::CXXDefaultInitExpr>(initializer->getInit()))
 								observe_memory_access(initializer->getInit());
@@ -1238,6 +1257,7 @@ namespace cxxlens::detail::clang22
 				}
 				observe_ast_operations(statement);
 				observe_memory_access(statement);
+				observe_lifetime_syntax(statement);
 				if (magic_literal(statement) && !ast_enumerations_.empty() &&
 					(ast_enumerations_.back().active ||
 					 ast_enumerations_.back().written_initializer) &&
@@ -2688,6 +2708,7 @@ namespace cxxlens::detail::clang22
 				finish_flow_expressions();
 				finish_calls();
 				finish_cfg_elements();
+				finish_lifetime_requirements();
 				finish_object_facets();
 				finish_original_resource_inputs();
 				finish_exceptional_exits();
@@ -3752,6 +3773,16 @@ namespace cxxlens::detail::clang22
 								id("cc_declaration_id", std::string(declaration), true));
 						else
 							complete = false;
+					}
+					if (item.lifetime_scope)
+					{
+						lifetime_charge();
+						const bool source_bound =
+							item.row.cells.contains(descriptor.id + ".source") ||
+							(item.declaration &&
+							 span(item.declaration->getSourceRange(), "declaration"));
+						lifetime_requirement_scopes_.at(item.lifetime_scope).cfg_binding_frontier |=
+							!complete || !source_bound;
 					}
 					auto state = sdk::detached_cell::utf8(complete ? "complete" : "partial");
 					state.type = take(descriptor.column(descriptor.id + ".binding_state")).type;
@@ -5972,6 +6003,251 @@ namespace cxxlens::detail::clang22
 					return unary->getOpcode() == clang::UO_Deref;
 				const auto* member = llvm::dyn_cast_or_null<clang::MemberExpr>(statement);
 				return member && member->isArrow();
+			}
+			void lifetime_charge()
+			{
+				if (++category_work_ > 32'000'000U)
+					fail("lifetime-requirements", "context-operation-limit");
+			}
+			// This is the normative potential-requirement predicate, not model eligibility.
+			static bool lifetime_type_requirement(clang::QualType type, bool& unknown)
+			{
+				if (type.isNull() || type->isDependentType())
+				{
+					unknown = true;
+					return true;
+				}
+				type = type.getCanonicalType();
+				if (type->isAnyPointerType() || type->isMemberPointerType() ||
+					type->isBlockPointerType() || type->isReferenceType() || type->isRecordType() ||
+					type->isArrayType() || type->isNullPtrType())
+					return true;
+				if (type->isArithmeticType() || type->isEnumeralType() || type->isFunctionType() ||
+					type->isVoidType())
+					return false;
+				unknown = true;
+				return true;
+			}
+			static bool lifetime_syntax_requirement(const clang::Stmt* statement,
+													const clang::FunctionDecl& function,
+													bool& unknown)
+			{
+				bool selected = llvm::isa<clang::CallExpr,
+										  clang::CXXConstructExpr,
+										  clang::CXXNewExpr,
+										  clang::CXXDeleteExpr,
+										  clang::CXXThrowExpr,
+										  clang::CoroutineSuspendExpr,
+										  clang::AtomicExpr,
+										  clang::CXXDefaultArgExpr,
+										  clang::CXXDefaultInitExpr,
+										  clang::ExprWithCleanups,
+										  clang::CXXBindTemporaryExpr,
+										  clang::AsmStmt>(statement);
+				if (const auto* expression = llvm::dyn_cast<clang::Expr>(statement))
+				{
+					selected |= expression->isXValue();
+					selected |= lifetime_type_requirement(expression->getType(), unknown);
+				}
+				if (const auto* cast = llvm::dyn_cast<clang::ExplicitCastExpr>(statement))
+					selected |= lifetime_type_requirement(cast->getTypeAsWritten(), unknown);
+				if (const auto* use = llvm::dyn_cast<clang::DeclRefExpr>(statement))
+					selected |= lifetime_type_requirement(use->getDecl()->getType(), unknown);
+				if (const auto* unary = llvm::dyn_cast<clang::UnaryOperator>(statement))
+					selected |= unary->getOpcode() == clang::UO_AddrOf;
+				if (llvm::isa<clang::ReturnStmt>(statement))
+					selected |= lifetime_type_requirement(function.getReturnType(), unknown);
+				return selected;
+			}
+			void observe_lifetime_syntax(const clang::Stmt* statement,
+										 bool observed_initializer = false)
+			{
+				if (ast_enumerations_.empty() || !statement)
+					return;
+				const auto& physical = ast_enumerations_.back();
+				const bool activation =
+					llvm::isa<clang::CXXDefaultArgExpr, clang::CXXDefaultInitExpr>(statement);
+				if (!physical.active && !physical.written_initializer && !observed_initializer &&
+					!activation)
+					return;
+				lifetime_charge();
+				auto& scope = lifetime_requirement_scopes_.at(physical.declaration);
+				bool unknown{};
+				if (!lifetime_syntax_requirement(statement, *physical.declaration, unknown))
+					return;
+				scope.type_frontier |= unknown;
+				scope.activation_frontier |= activation || observed_initializer;
+				scope.unsupported_frontier |= llvm::isa<clang::AsmStmt>(statement);
+				// Candidate admission precedes source, original ID and binding filters.
+				if (!scope.syntax.contains(statement))
+				{
+					retain_population_bytes(192U);
+					scope.syntax.insert(statement);
+				}
+			}
+			void observe_lifetime_captures(const clang::FunctionDecl& function)
+			{
+				const auto* method = llvm::dyn_cast<clang::CXXMethodDecl>(&function);
+				if (!method || !method->getParent()->isLambda() ||
+					method->getOverloadedOperator() != clang::OO_Call)
+					return;
+				auto& scope = lifetime_requirement_scopes_.at(&function);
+				for (const auto& capture : method->getParent()->captures())
+				{
+					lifetime_charge();
+					bool unknown{};
+					bool selected =
+						capture.capturesThis() || capture.getCaptureKind() == clang::LCK_ByRef;
+					if (capture.capturesVariable())
+						selected |=
+							lifetime_type_requirement(capture.getCapturedVar()->getType(), unknown);
+					if (selected)
+					{
+						// The actual capture is observed, but no existing row identifies its
+						// distinct body activation. Never substitute the outer declaration ID.
+						++scope.capture_count;
+						scope.type_frontier |= unknown;
+					}
+				}
+			}
+			void observe_lifetime_declaration(const clang::Decl* declaration)
+			{
+				if (ast_enumerations_.empty())
+					return;
+				const auto* value = llvm::dyn_cast<clang::ValueDecl>(declaration);
+				if (!value || llvm::isa<clang::FunctionDecl>(value))
+					return;
+				const auto& physical = ast_enumerations_.back();
+				if (!physical.active && !physical.written_initializer &&
+					!llvm::isa<clang::ParmVarDecl>(value))
+					return;
+				lifetime_charge();
+				auto& scope = lifetime_requirement_scopes_.at(physical.declaration);
+				bool unknown{};
+				if (!lifetime_type_requirement(value->getType(), unknown))
+					return;
+				scope.type_frontier |= unknown;
+				if (!scope.declarations.contains(value))
+				{
+					retain_population_bytes(192U);
+					scope.declarations.insert(value);
+				}
+			}
+			bool lifetime_cfg_requirement(const clang::FunctionDecl& function,
+										  const clang::CFGElement& element,
+										  const clang::Decl* declaration,
+										  const clang::Stmt* statement)
+			{
+				lifetime_charge();
+				auto& scope = lifetime_requirement_scopes_.at(&function);
+				bool unknown{};
+				bool selected = element.getAs<clang::CFGImplicitDtor>().has_value() ||
+					element.getAs<clang::CFGCleanupFunction>().has_value() ||
+					element.getAs<clang::CFGNewAllocator>().has_value() ||
+					element.getAs<clang::CFGInitializer>().has_value();
+				if (const auto* value = llvm::dyn_cast_or_null<clang::ValueDecl>(declaration))
+					selected |= lifetime_type_requirement(value->getType(), unknown);
+				// CFG statement/constructor slots are separate original placement members.
+				if (element.getAs<clang::CFGStmt>() && statement)
+					selected |= lifetime_syntax_requirement(statement, function, unknown);
+				scope.type_frontier |= unknown;
+				return selected;
+			}
+			void finish_lifetime_requirements()
+			{
+				for (auto& [function, row] : finalized_bodies_)
+				{
+					lifetime_charge();
+					const auto& scope = lifetime_requirement_scopes_.at(function);
+					std::set<std::string, std::less<>> syntax_ids, declaration_ids;
+					bool complete = !scope.type_frontier && !scope.activation_frontier &&
+						!scope.unsupported_frontier && !scope.cfg_binding_frontier &&
+						scope.capture_count == 0U;
+					for (const auto* candidate : scope.syntax)
+					{
+						lifetime_charge();
+						const auto original = original_syntax(candidate);
+						complete &= original.has_value() &&
+							span(candidate->getSourceRange(), "statement").has_value();
+						if (original)
+						{
+							retain_population_bytes(original->size() * 3U + 256U);
+							syntax_ids.insert(*original);
+						}
+					}
+					for (const auto* candidate : scope.declarations)
+					{
+						lifetime_charge();
+						const auto original = original_declaration(*candidate);
+						complete &= !original.empty() &&
+							span(candidate->getSourceRange(), "declaration").has_value();
+						if (!original.empty())
+						{
+							retain_population_bytes(original.size() * 3U + 256U);
+							declaration_ids.emplace(original);
+						}
+					}
+					const auto count = scope.syntax.size() + scope.declarations.size() +
+						scope.cfg_count + scope.capture_count;
+					complete &=
+						count == syntax_ids.size() + declaration_ids.size() + scope.cfg_ids.size();
+					const auto text = [&](std::string_view name)
+					{
+						const auto found = row.cells.find("cc.body.v1." + std::string(name));
+						if (found == row.cells.end() || !found->second.value)
+							return std::string_view{};
+						const auto* value = std::get_if<std::string>(&*found->second.value);
+						return value ? std::string_view{*value} : std::string_view{};
+					};
+					const bool unavailable = function->hasSkippedBody() ||
+						function->isDefaulted() || !function->doesThisDeclarationHaveABody() ||
+						!declaration_population_admitted(function) ||
+						(function->isImplicit() && !written_lambda(function));
+					complete &= !unavailable && !function->isDependentContext() &&
+						!unit_.ast().getDiagnostics().hasErrorOccurred() &&
+						text("ast_state") == "complete" && text("eligibility") == "closed" &&
+						text("cfg_element_state") == "complete" &&
+						row_id(row, "function_exit_declaration") == original_declaration(*function);
+					fields additions{
+						{"lifetime_requirements_profile",
+						 sdk::detached_cell::utf8(
+							 "clang22-original-observed-lifetime-requirements/1")},
+						{"lifetime_requirements_state",
+						 symbol("cc.original-input-state/1",
+								unavailable	   ? "unavailable"
+									: complete ? "complete"
+											   : "partial")},
+						{"lifetime_requirement_count", sdk::detached_cell::unsigned_integer(count)},
+						{"lifetime_requirement_syntax_ids", flags("syntax_node_id", syntax_ids)},
+						{"lifetime_requirement_declaration_ids",
+						 flags("cc_declaration_id", declaration_ids)},
+						{"lifetime_requirement_cfg_element_ids",
+						 flags("cfg_element_id", scope.cfg_ids)}};
+					if (!complete)
+						additions.emplace(
+							"lifetime_requirements_reason",
+							sdk::detached_cell::utf8(
+								unavailable ? "original-written-physical-body-unavailable"
+									: scope.activation_frontier
+									? "original-default-or-implicit-initializer-frontier"
+									: scope.capture_count != 0U
+									? "original-lambda-capture-body-context-unbound"
+									: scope.type_frontier || function->isDependentContext()
+									? "original-type-selection-frontier"
+									: scope.unsupported_frontier
+									? "original-unsupported-assembly-requirements"
+									: "original-lifetime-source-id-scope-or-cfg-binding-frontier"));
+					const auto& descriptor = cc::relations::body::descriptor();
+					for (const auto& [name, cell] : additions)
+					{
+						lifetime_charge();
+						retain_population_bytes(cell.canonical_form().size() + 256U);
+						auto typed = cell;
+						typed.type = take(descriptor.column(descriptor.id + "." + name)).type;
+						row.cells.insert_or_assign(descriptor.id + "." + name, std::move(typed));
+					}
+					check(sdk::validate_row(descriptor, row));
+				}
 			}
 			void memory_charge()
 			{
@@ -10581,6 +10857,11 @@ namespace cxxlens::detail::clang22
 							declaration = original->getInitializer()->getAnyMember();
 						}
 
+						const bool lifetime_required =
+							lifetime_cfg_requirement(function, element, declaration, statement);
+						if (lifetime_required)
+							++lifetime_requirement_scopes_.at(&function).cfg_count;
+
 						static constexpr std::string_view kinds[]{"initializer",
 																  "scope_begin",
 																  "scope_end",
@@ -10612,7 +10893,16 @@ namespace cxxlens::detail::clang22
 							make_row(cc::relations::cfg_element::descriptor(), std::move(item));
 						retain_population_bytes(row.canonical_form().size() + 256U);
 						element_ids.insert(row_id(row, "element"));
-						pending_cfg_elements_.push_back({std::move(row), statement, declaration});
+						if (lifetime_required)
+						{
+							const auto member = row_id(row, "element");
+							retain_population_bytes(member.size() * 3U + 256U);
+							lifetime_requirement_scopes_.at(&function).cfg_ids.insert(member);
+						}
+						pending_cfg_elements_.push_back({std::move(row),
+														 statement,
+														 declaration,
+														 lifetime_required ? &function : nullptr});
 					}
 				}
 				value.emplace("cfg_element_count",
@@ -10751,6 +11041,7 @@ namespace cxxlens::detail::clang22
 				sdk::detached_row row;
 				const clang::Stmt* statement;
 				const clang::Decl* declaration;
+				const clang::FunctionDecl* lifetime_scope;
 			};
 			std::vector<cfg_element_binding> pending_cfg_elements_;
 			struct object_cfg_binding
@@ -10797,6 +11088,8 @@ namespace cxxlens::detail::clang22
 			};
 			std::vector<syntax_binding> pending_syntax_bindings_;
 			std::map<const clang::FunctionDecl*, memory_scope> memory_scopes_;
+			std::map<const clang::FunctionDecl*, lifetime_requirement_scope>
+				lifetime_requirement_scopes_;
 			std::map<const clang::Stmt*, memory_observation> memory_observations_;
 			struct resource_population
 			{

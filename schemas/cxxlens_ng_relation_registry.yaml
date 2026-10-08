@@ -1,6 +1,6 @@
 schema: cxxlens.relation-registry.v1
 kind: relation-registry
-document_version: 1.29.0
+document_version: 1.30.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -9,7 +9,7 @@ authority:
   owner: steward.ng-relations
 compatibility:
   version_axis: relation-descriptor
-  current: 1.29.0
+  current: 1.30.0
   semantic_major_policy: exact-major-compatible-minor
   unknown_optional_columns: preserve
   unknown_open_symbols: preserve
@@ -5352,7 +5352,7 @@ relations:
       - cc.syntax_node.v1.memory_evaluation
 - descriptor_id: cc.body.v1
   name: cc.body
-  version: 1.4.0
+  version: 1.5.0
   semantic_major: 1
   semantics: cc.body/1
   owner_namespace: cxxlens.standard.cc
@@ -5717,6 +5717,41 @@ relations:
     type: optional<utf8_string>
     required: false
     identity_role: authoritative_payload
+  - id: cc.body.v1.lifetime_requirements_profile
+    name: lifetime_requirements_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.lifetime_requirements_state
+    name: lifetime_requirements_state
+    type: optional<open_symbol<cc.original-input-state/1>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.lifetime_requirement_count
+    name: lifetime_requirement_count
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.lifetime_requirement_syntax_ids
+    name: lifetime_requirement_syntax_ids
+    type: optional<set<syntax_node_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.lifetime_requirement_declaration_ids
+    name: lifetime_requirement_declaration_ids
+    type: optional<set<cc_declaration_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.lifetime_requirement_cfg_element_ids
+    name: lifetime_requirement_cfg_element_ids
+    type: optional<set<cfg_element_id>>
+    required: false
+    identity_role: authoritative_payload
+  - id: cc.body.v1.lifetime_requirements_reason
+    name: lifetime_requirements_reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
   references:
   - source_columns:
     - cc.body.v1.compile_unit
@@ -5832,6 +5867,30 @@ relations:
     strength: soft_semantic
     on_missing: unresolved
     container_elements: true
+  - source_columns:
+    - cc.body.v1.lifetime_requirement_syntax_ids
+    target_relation: cc.syntax_node
+    target_columns:
+    - cc.syntax_node.v1.node
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - cc.body.v1.lifetime_requirement_declaration_ids
+    target_relation: cc.declaration
+    target_columns:
+    - cc.declaration.v1.declaration
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
+  - source_columns:
+    - cc.body.v1.lifetime_requirement_cfg_element_ids
+    target_relation: cc.cfg_element
+    target_columns:
+    - cc.cfg_element.v1.element
+    strength: soft_semantic
+    on_missing: unresolved
+    container_elements: true
   merge:
     mode: functional_assertion
     conflict_columns:
@@ -5902,6 +5961,13 @@ relations:
     - cc.body.v1.memory_access_count
     - cc.body.v1.memory_access_ids
     - cc.body.v1.memory_access_reason
+    - cc.body.v1.lifetime_requirements_profile
+    - cc.body.v1.lifetime_requirements_state
+    - cc.body.v1.lifetime_requirement_count
+    - cc.body.v1.lifetime_requirement_syntax_ids
+    - cc.body.v1.lifetime_requirement_declaration_ids
+    - cc.body.v1.lifetime_requirement_cfg_element_ids
+    - cc.body.v1.lifetime_requirements_reason
   partition:
     suggested_keys:
     - cc.body.v1.compile_unit
@@ -5936,6 +6002,12 @@ relations:
       - cc.body.v1.memory_access_state
       - cc.body.v1.memory_access_count
       - cc.body.v1.memory_access_ids
+    - - cc.body.v1.lifetime_requirements_profile
+      - cc.body.v1.lifetime_requirements_state
+      - cc.body.v1.lifetime_requirement_count
+      - cc.body.v1.lifetime_requirement_syntax_ids
+      - cc.body.v1.lifetime_requirement_declaration_ids
+      - cc.body.v1.lifetime_requirement_cfg_element_ids
 - descriptor_id: cc.cfg_node.v1
   name: cc.cfg_node
   version: 1.0.0
