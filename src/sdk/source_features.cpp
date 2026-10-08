@@ -466,6 +466,11 @@ namespace cxxlens::sdk::query
 						const auto* value = cell(*r, name);
 						if (!present(*r, name))
 							continue;
+						if (!first || first == value)
+						{
+							first = value;
+							continue;
+						}
 						b.work(name.size() + value->type.parameter.size() + 1U);
 						if (value->value)
 							std::visit(
@@ -475,9 +480,7 @@ namespace cxxlens::sdk::query
 										b.work(v.size());
 								},
 								*value->value);
-						if (!first)
-							first = value;
-						else if (first->type != value->type || first->value != value->value)
+						if (first->type != value->type || first->value != value->value)
 							return false;
 					}
 				}
@@ -533,6 +536,11 @@ namespace cxxlens::sdk::query
 						if (!present(*r, field.name))
 							continue;
 						const auto* value = cell(*r, field.name);
+						if (!previous || previous == value)
+						{
+							previous = value;
+							continue;
+						}
 						b.work(field.name.size() + value->type.parameter.size() + 1U);
 						if (value->value)
 							std::visit(
@@ -542,8 +550,7 @@ namespace cxxlens::sdk::query
 										b.work(v.size());
 								},
 								*value->value);
-						if (previous &&
-							(previous->type != value->type || previous->value != value->value))
+						if (previous->type != value->type || previous->value != value->value)
 							return false;
 						previous = value;
 					}

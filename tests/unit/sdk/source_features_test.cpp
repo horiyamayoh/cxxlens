@@ -651,10 +651,76 @@ namespace
 				prefix == midpoint && !repeated.operations && !repeated.retained_bytes_bound,
 			"long comparison failed to observe a real mid-projection stop before the next visit");
 	}
+	void first_present_comparison_controls()
+	{
+		constexpr std::size_t bytes = 65536U;
+		fixture short_rows;
+		q::projection_resource_usage short_usage;
+		(void)take(q::project_source_features(short_rows.queries(true), {}, {}, short_usage));
+		auto large = short_rows;
+		const std::string kind(bytes, 'k'), toolchain(bytes, 't');
+		set(large.rows[8].front(), "kind", txt(kind));
+		set(large.rows[0].front(), "toolchain", txt(toolchain));
+		const auto input = large.queries(true);
+		q::projection_resource_usage measured;
+		const auto full = take(q::project_source_features(input, {}, {}, measured));
+		require(full.features.size() == 1U && full.features.front().kind == kind &&
+					full.features.front().observation == state::complete &&
+					full.features.front().identity_state == state::complete,
+				"large first observations lost their original payload or identity");
+		// Evidence serialization and output copies still visit the actual bytes.
+		// Initial observations have no other cell whose bytes must be compared.
+		require(measured.operations > short_usage.operations + 4U * bytes &&
+					measured.operations < short_usage.operations + 6U * bytes,
+				"first observations charged payload equality without a second cell");
+		q::finite_population_limits exact;
+		exact.maximum_operations = measured.operations;
+		exact.maximum_retained_bytes = measured.retained_bytes_bound;
+		q::projection_resource_usage repeated;
+		require(bool(q::project_source_features(input, exact, {}, repeated)) &&
+					repeated.operations == measured.operations &&
+					repeated.retained_bytes_bound == measured.retained_bytes_bound,
+				"first-observation exact work or storage bound rejected");
+		--exact.maximum_operations;
+		require(!q::project_source_features(input, exact, {}, repeated) && !repeated.operations &&
+					!repeated.retained_bytes_bound,
+				"first-observation work frontier accepted or leaked usage");
+		exact.maximum_operations = measured.operations;
+		--exact.maximum_retained_bytes;
+		require(!q::project_source_features(input, exact, {}, repeated) && !repeated.operations &&
+					!repeated.retained_bytes_bound,
+				"first-observation storage frontier accepted or leaked usage");
+		auto duplicate = large;
+		duplicate.rows[8].push_back(duplicate.rows[8].front());
+		const auto equal = take(q::project_source_features(duplicate.queries(true)));
+		require(equal.features.size() == 1U && equal.features.front().kind == kind &&
+					equal.features.front().observation == state::complete,
+				"distinct equal original cells became contrary observations");
+		auto late_kind = kind;
+		late_kind.back() = 'z';
+		set(duplicate.rows[8].back(), "kind", txt(late_kind));
+		const auto contrary = take(q::project_source_features(duplicate.queries(true)));
+		require(contrary.features.size() == 1U &&
+					contrary.features.front().observation == state::conflicting,
+				"distinct late-byte payload disagreement borrowed first-cell equality");
+		duplicate.rows[8].back().presence.fragments = {"foreign-world"};
+		duplicate.rows[8].back().contributor_edges.front().condition =
+			duplicate.rows[8].back().presence;
+		const auto worlds = take(q::project_source_features(duplicate.queries(true)));
+		require(worlds.features.size() == 2U &&
+					std::ranges::all_of(worlds.features,
+										[](const auto& feature)
+										{
+											return feature.observation == state::complete;
+										}) &&
+					worlds.features[0].kind != worlds.features[1].kind,
+				"first-cell comparison shortcut crossed original worlds");
+	}
 } // namespace
 
 int main()
 {
+	first_present_comparison_controls();
 	indexed_membership_prefix_controls();
 	retained_membership_controls();
 	retained_unbound_and_declaration_controls();
