@@ -148,7 +148,7 @@ namespace cxxlens::sdk::query
 				{
 					if (!encoding)
 						factor = 2U;
-					work(n);
+					// Geometry reads lengths; encoding and owned copies charge their bytes.
 					work();
 					if (total > limits.maximum_retained_bytes ||
 						n > (limits.maximum_retained_bytes - total) / factor)
@@ -1071,7 +1071,8 @@ namespace cxxlens::sdk::query
 					 finite_population_limits limits,
 					 std::stop_token stop,
 					 budget& b,
-					 const std::array<std::vector<const annotated_row*>, 8>* borrowed = nullptr)
+					 const std::array<std::vector<const annotated_row*>, 8>* borrowed = nullptr,
+					 bool row_validation_reused = false)
 		{
 			if (auto valid = limits.validate(); !valid)
 				return valid.error();
@@ -1122,49 +1123,54 @@ namespace cxxlens::sdk::query
 									   r.presence.fragments.size(),
 									   limits.maximum_condition_expansions,
 									   "conditions");
-							  for (const auto& [name, c] : r.values)
+							  if (!row_validation_reused)
 							  {
-								  b.work(name.size() + c.type.parameter.size() + 1U);
-								  if (c.unknown_reason)
-									  b.work(c.unknown_reason->size());
-								  if (c.value)
-									  std::visit(
-										  [&](const auto& value)
-										  {
-											  if constexpr (requires { value.size(); })
-												  b.work(value.size());
-										  },
-										  *c.value);
-							  }
-							  const auto strings = [&](const auto& values)
-							  {
-								  for (const auto& value : values)
-									  b.work(value.size() + 1U);
-							  };
-							  strings(r.presence.fragments);
-							  strings(r.claim_contributors);
-							  strings(r.provenance);
-							  b.work(r.presence.universe.size() + r.interpretation.size() + 1U);
-							  for (const auto& producer : r.producer_contracts)
-								  b.work(producer.id.size() + producer.semantic_contract.size() +
-										 1U);
-							  for (const auto& guarantee : r.contributor_guarantees)
-							  {
-								  b.work(guarantee.approximation.size() + guarantee.scope.size() +
-										 guarantee.assumptions.size() + 1U);
-								  strings(guarantee.verification_modalities);
-							  }
-							  for (const auto& edge : r.contributor_edges)
-							  {
-								  b.work(edge.claim_contributor.size() + edge.provenance.size() +
-										 edge.interpretation.size() +
-										 edge.condition.universe.size() + edge.producer.id.size() +
-										 edge.producer.semantic_contract.size() +
-										 edge.guarantee.approximation.size() +
-										 edge.guarantee.scope.size() +
-										 edge.guarantee.assumptions.size() + 1U);
-								  strings(edge.condition.fragments);
-								  strings(edge.guarantee.verification_modalities);
+								  for (const auto& [name, c] : r.values)
+								  {
+									  b.work(name.size() + c.type.parameter.size() + 1U);
+									  if (c.unknown_reason)
+										  b.work(c.unknown_reason->size());
+									  if (c.value)
+										  std::visit(
+											  [&](const auto& value)
+											  {
+												  if constexpr (requires { value.size(); })
+													  b.work(value.size());
+											  },
+											  *c.value);
+								  }
+								  const auto strings = [&](const auto& values)
+								  {
+									  for (const auto& value : values)
+										  b.work(value.size() + 1U);
+								  };
+								  strings(r.presence.fragments);
+								  strings(r.claim_contributors);
+								  strings(r.provenance);
+								  b.work(r.presence.universe.size() + r.interpretation.size() + 1U);
+								  for (const auto& producer : r.producer_contracts)
+									  b.work(producer.id.size() +
+											 producer.semantic_contract.size() + 1U);
+								  for (const auto& guarantee : r.contributor_guarantees)
+								  {
+									  b.work(guarantee.approximation.size() +
+											 guarantee.scope.size() + guarantee.assumptions.size() +
+											 1U);
+									  strings(guarantee.verification_modalities);
+								  }
+								  for (const auto& edge : r.contributor_edges)
+								  {
+									  b.work(edge.claim_contributor.size() +
+											 edge.provenance.size() + edge.interpretation.size() +
+											 edge.condition.universe.size() +
+											 edge.producer.id.size() +
+											 edge.producer.semantic_contract.size() +
+											 edge.guarantee.approximation.size() +
+											 edge.guarantee.scope.size() +
+											 edge.guarantee.assumptions.size() + 1U);
+									  strings(edge.condition.fragments);
+									  strings(edge.guarantee.verification_modalities);
+								  }
 							  }
 							  if (auto valid = detail::validate_projected_relation_row(
 									  r,
@@ -1173,7 +1179,8 @@ namespace cxxlens::sdk::query
 									  [&]
 									  {
 										  b.work();
-									  });
+									  },
+									  row_validation_reused);
 								  !valid)
 								  throw failure{valid.error()};
 							  if (text(r, identifiers[group]).empty())
@@ -1267,6 +1274,7 @@ namespace cxxlens::sdk::query
 							  b.temporary_peak =
 								  std::max(b.temporary_peak, b.retained + 2U * temporary);
 							  auto encoded = r.canonical_form();
+							  b.work(encoded.size() + 1U);
 							  b.charge(b.evidence,
 									   encoded.size(),
 									   limits.maximum_evidence_bytes,
@@ -1287,6 +1295,8 @@ namespace cxxlens::sdk::query
 					b.work();
 					const auto ref = work.output.evidence.size();
 					b.retain(sizeof(finite_population_evidence) + relations[e.group].size() * 2U);
+					// Canonical bytes conservatively bound the actual row payload copy.
+					b.work(e.canonical.size() + relations[e.group].size() + 1U);
 					work.output.evidence.push_back({std::string{relations[e.group]}, *e.original});
 					for (const auto& variant : e.original->presence.fragments)
 					{
@@ -1349,6 +1359,7 @@ namespace cxxlens::sdk::query
 				b.retain(plan_bytes);
 				std::array<std::vector<const annotated_row*>, 8> groups;
 				std::array<bool, 8> present{}, complete{};
+				bool row_validation_reused = true;
 				complete.fill(true);
 				for (const auto& scan : input.scans)
 				{
@@ -1358,6 +1369,7 @@ namespace cxxlens::sdk::query
 						continue;
 					const auto group = static_cast<std::size_t>(name - relations.begin());
 					present[group] = true;
+					row_validation_reused &= query_transfer_access::rows_validated(scan.result);
 					complete[group] &= scan.result.execution() == execution_status::complete &&
 						scan.result.conflicts().empty() &&
 						scan.result.differential_disagreements().empty();
@@ -1381,7 +1393,7 @@ namespace cxxlens::sdk::query
 				raw.compile_units_complete = available(0U);
 				raw.scope_inputs_complete = available(4U) && available(5U);
 				raw.occurrence_inputs_complete = available(7U);
-				auto output = project_rows(raw, limits, stop, b, &groups);
+				auto output = project_rows(raw, limits, stop, b, &groups, row_validation_reused);
 				if (!output)
 					return output.error();
 				for (std::size_t group = 0; group < groups.size(); ++group)

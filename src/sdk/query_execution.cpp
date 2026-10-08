@@ -350,13 +350,14 @@ namespace cxxlens::sdk::query
 					}) == values.end();
 		}
 
-		void refresh_contributor_projections(annotated_row& row)
+		void refresh_contributor_projections(annotated_row& row,
+											 std::span<const query_contributor_edge> edges)
 		{
 			row.claim_contributors.clear();
 			row.producer_contracts.clear();
 			row.provenance.clear();
 			row.contributor_guarantees.clear();
-			for (const auto& edge : row.contributor_edges)
+			for (const auto& edge : edges)
 			{
 				row.claim_contributors.push_back(edge.claim_contributor);
 				row.producer_contracts.push_back(edge.producer);
@@ -367,6 +368,11 @@ namespace cxxlens::sdk::query
 			canonical_producers(row.producer_contracts);
 			canonical_set(row.provenance);
 			canonical_guarantees(row.contributor_guarantees);
+		}
+
+		void refresh_contributor_projections(annotated_row& row)
+		{
+			refresh_contributor_projections(row, row.contributor_edges);
 		}
 
 		void canonicalize_contributor_edges(annotated_row& row)
@@ -1534,8 +1540,8 @@ namespace cxxlens::sdk::query
 				return unexpected(query_error("sdk.query-row-invalid", "contributor_edges"));
 			else if (auto valid = edge.validate(); !valid)
 				return unexpected(std::move(valid.error()));
-		auto projected = *this;
-		refresh_contributor_projections(projected);
+		annotated_row projected;
+		refresh_contributor_projections(projected, contributor_edges);
 		if (projected.claim_contributors != claim_contributors ||
 			projected.producer_contracts != producer_contracts ||
 			projected.provenance != provenance ||

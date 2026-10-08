@@ -234,7 +234,7 @@ namespace
 					true,
 					true};
 		}
-		q::application_query_results queries() const
+		q::application_query_results queries(bool validated = false) const
 		{
 			q::application_query_results queries;
 			queries.snapshot_id = "original:test";
@@ -242,6 +242,12 @@ namespace
 			{
 				auto data = std::make_shared<q::query_result::data>();
 				data->row_values = rows[group];
+				if (validated)
+				{
+					for (const auto& row : data->row_values)
+						require(bool(row.validate()), "fixture generic row validation failed");
+					data->rows_validated = true;
+				}
 				data->status = q::execution_status::complete;
 				// Generic optional metadata health does not erase an independent scan.
 				data->input_complete = false;
@@ -256,6 +262,48 @@ namespace
 int main()
 {
 	fixture f;
+	{
+		const auto unvalidated = f.queries();
+		for (const auto& scan : unvalidated.scans)
+			require(!q::query_transfer_access::rows_validated(scan.result),
+					"default query owner silently skipped generic validation");
+		q::projection_resource_usage checked_usage, borrowed_usage;
+		const auto checked = take(q::project_source_features(unvalidated, {}, {}, checked_usage));
+		const auto borrowed =
+			take(q::project_source_features(f.queries(true), {}, {}, borrowed_usage));
+		require(checked.features.size() == borrowed.features.size() &&
+					checked.evidence.size() == borrowed.evidence.size() &&
+					borrowed_usage.operations < checked_usage.operations &&
+					borrowed_usage.retained_bytes_bound == checked_usage.retained_bytes_bound,
+				"same admitted row ownership changed output/storage or repeated validation");
+		for (std::size_t i{}; i < checked.evidence.size(); ++i)
+			require(checked.evidence[i].relation_id == borrowed.evidence[i].relation_id &&
+						checked.evidence[i].row.canonical_form() ==
+							borrowed.evidence[i].row.canonical_form(),
+					"generic validation reuse changed original evidence");
+		auto malformed = f;
+		malformed.rows[8].front().multiplicity = 0U;
+		require(!q::project_source_features(malformed.queries()),
+				"default owner bypassed malformed original annotations");
+		auto mixed = f.queries(true);
+		mixed.scans[8].result = malformed.queries().scans[8].result;
+		require(!q::project_source_features(mixed),
+				"mixed admitted owners bypassed an unvalidated malformed row");
+		malformed = f;
+		set(malformed.rows[8].front(),
+			"feature",
+			detached_cell::utf8(std::string(1U, static_cast<char>(0xffU))));
+		require(!q::project_source_features(malformed.queries()),
+				"default owner bypassed malformed UTF-8 values");
+		malformed = f;
+		malformed.rows[8].front().values.emplace("output.foreign", detached_cell::boolean(true));
+		require(!q::project_source_features(malformed.queries(true)),
+				"generic admitted rows bypassed relation-specific foreign columns");
+		auto missing = f;
+		missing.rows[8].front().values.erase("output.feature");
+		require(!q::project_source_features(missing.queries(true)),
+				"generic admitted rows bypassed a required relation column");
+	}
 	q::projection_resource_usage usage;
 	const auto full = take(q::project_source_features(f.input(), {}, {}, usage));
 	require(full.features.size() == 1 && full.populations.size() == 2 &&

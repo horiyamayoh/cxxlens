@@ -150,19 +150,27 @@ namespace cxxlens::sdk::query
 				retain(from.size() * sizeof(std::size_t));
 				into.insert(into.end(), from.begin(), from.end());
 			}
-			std::size_t estimate(const annotated_row& row, bool encoding = true)
+			std::size_t estimate(const annotated_row& row,
+								 bool encoding = true,
+								 std::size_t* validation_payload = nullptr)
 			{
 				std::size_t total = 2048;
 				const auto add = [&](std::size_t n, std::size_t factor = 8U)
 				{
 					if (!encoding)
 						factor = 2U;
-					work(n);
+					// Geometry reads lengths; encoding and owned copies charge their bytes.
 					work();
 					if (total > limits.maximum_retained_bytes ||
 						n > (limits.maximum_retained_bytes - total) / factor)
 						fail("row", "limit-exceeded", "sdk.exception-cleanup-budget");
 					total += n * factor;
+					if (validation_payload)
+					{
+						if (n > limits.maximum_operations - *validation_payload)
+							fail("operations", "limit-exceeded", "sdk.exception-cleanup-budget");
+						*validation_payload += n;
+					}
 				};
 				const auto fixed = [&](std::size_t n)
 				{
@@ -234,6 +242,7 @@ namespace cxxlens::sdk::query
 			exception_cleanup_projection output;
 			std::array<std::map<view_identity, rows, identity_less>, 9> index;
 			std::map<const annotated_row*, std::size_t> owned;
+			bool row_validation_reused{};
 			std::string copy(std::string_view value)
 			{
 				b.work(value.size() + 1U);
@@ -290,9 +299,13 @@ namespace cxxlens::sdk::query
 								 row->presence.fragments.size(),
 								 b.limits.maximum_condition_expansions,
 								 "conditions");
-						// The geometry walk charges every original byte/container even for rows
-						// whose independent optional facet is absent and will not be copied.
-						(void)b.estimate(*row, false);
+						// Inspect every original field/container, including rows whose optional
+						// facet is absent. Length inspection does not traverse payload bytes.
+						std::size_t validation_payload{};
+						(void)b.estimate(
+							*row, false, row_validation_reused ? nullptr : &validation_payload);
+						// Generic row validation traverses values and annotated text.
+						b.work(validation_payload);
 						if (auto valid = detail::validate_projected_relation_row(
 								*row,
 								*d,
@@ -300,7 +313,8 @@ namespace cxxlens::sdk::query
 								[&]
 								{
 									b.work();
-								});
+								},
+								row_validation_reused);
 							!valid)
 							throw failure{valid.error()};
 						const auto id = text(*row, identifiers[group]);
@@ -356,6 +370,8 @@ namespace cxxlens::sdk::query
 								 b.limits.maximum_evidence_bytes,
 								 "evidence-bytes");
 						const auto ref = output.evidence.size();
+						// Canonical bytes conservatively bound the actual row payload copy.
+						b.work(encoded.size() + relations[group].size() + 1U);
 						output.evidence.push_back({std::string{relations[group]}, *r});
 						b.retain(128U + sizeof(std::pair<const annotated_row* const, std::size_t>));
 						at = owned.emplace(r, ref).first;
@@ -988,6 +1004,7 @@ namespace cxxlens::sdk::query
 				budget b{limits, stop};
 				b.work();
 				groups borrowed;
+				bool row_validation_reused = queries != nullptr;
 				std::array<bool, 9> available{}, seen{};
 				available.fill(true);
 				if (queries)
@@ -1016,6 +1033,7 @@ namespace cxxlens::sdk::query
 							continue;
 						const auto group = static_cast<std::size_t>(at - relations.begin());
 						seen[group] = true;
+						row_validation_reused &= query_transfer_access::rows_validated(scan.result);
 						available[group] &= scan.result.execution() == execution_status::complete &&
 							scan.result.conflicts().empty() &&
 							scan.result.differential_disagreements().empty();
@@ -1069,7 +1087,7 @@ namespace cxxlens::sdk::query
 					}
 					b.rows = 0;
 				}
-				projector work{b, borrowed, {}, {}, {}};
+				projector work{b, borrowed, {}, {}, {}, row_validation_reused};
 				auto output = work.run();
 				output.compile_units_complete = input.compile_units_complete;
 				output.detail_inputs_complete = input.detail_inputs_complete;

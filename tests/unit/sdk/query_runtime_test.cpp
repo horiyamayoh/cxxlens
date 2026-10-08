@@ -16,6 +16,7 @@
 #include <cxxlens/sdk.hpp>
 
 #include "../../../src/sdk/claim_internal.hpp"
+#include "../../../src/sdk/query_result_internal.hpp"
 
 namespace
 {
@@ -3029,6 +3030,8 @@ namespace
 					decoded->scans.front().result.canonical_form() == executed->canonical_form() &&
 					decoded->scans.front().logical_ir.canonical_form() == ir.canonical_form(),
 				"query transfer changed rows, evidence, partiality or plan");
+		require(query::query_transfer_access::rows_validated(decoded->scans.front().result),
+				"fully validated decoded owner did not retain generic row admission");
 		// An actual older executed scan remains readable after optional additive
 		// columns are inserted and appended under the same semantic major.
 		auto evolved = data.left;
@@ -3153,6 +3156,17 @@ namespace
 		expect_corrupt("\"fragment_count\":", "\"fragment_count\":0,\"discarded_count\":");
 		expect_corrupt("\"closed\":false", "\"closed\":true");
 		expect_corrupt("\"logical_ir_digest\":\"", "\"logical_ir_digest\":\"changed:");
+		{
+			auto corrupt = bundle;
+			const auto begin = corrupt.find("\"provenance\":[");
+			require(begin != std::string::npos, "row provenance corruption target missing");
+			const auto array = begin + std::string_view{"\"provenance\":"}.size();
+			const auto end = corrupt.find(']', array);
+			require(end != std::string::npos, "row provenance array missing");
+			corrupt.replace(array, end + 1U - array, "[\"corrupted\"]");
+			require(!query::decode_application_queries(data.engine, corrupt),
+					"decoded row accepted projections inconsistent with its contributor edges");
+		}
 		require(
 			!query::decode_application_queries(data.engine, bundle.substr(0, bundle.size() - 1U)),
 			"truncated query transfer accepted");

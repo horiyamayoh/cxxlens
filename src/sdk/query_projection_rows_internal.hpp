@@ -10,10 +10,12 @@ namespace cxxlens::sdk::query::detail
 	result<void> validate_projected_relation_row(const annotated_row& row,
 												 const relation_descriptor& descriptor,
 												 std::string_view error_code,
-												 Checkpoint checkpoint)
+												 Checkpoint checkpoint,
+												 bool row_validated = false)
 	{
-		if (auto valid = row.validate(); !valid)
-			return valid.error();
+		if (!row_validated)
+			if (auto valid = row.validate(); !valid)
+				return valid.error();
 		std::size_t recognized{};
 		for (const auto& column : descriptor.columns)
 		{
@@ -26,7 +28,7 @@ namespace cxxlens::sdk::query::detail
 				continue;
 			}
 			++recognized;
-			if (value->second.type != column.type || !value->second.validate())
+			if (value->second.type != column.type)
 				return error{std::string{error_code}, column.id, "column-type-or-value-invalid"};
 		}
 		if (recognized != row.values.size())

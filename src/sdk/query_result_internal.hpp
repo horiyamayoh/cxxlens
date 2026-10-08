@@ -32,6 +32,8 @@ namespace cxxlens::sdk::query
 		std::string ir_digest;
 		std::string snapshot;
 		std::string publication;
+		// Set only after all stored rows have passed generic input validation.
+		bool rows_validated{};
 	};
 
 	struct query_transfer_access
@@ -41,6 +43,10 @@ namespace cxxlens::sdk::query
 		{
 			return result.data_ ? std::span<const annotated_row>{result.data_->row_values}
 								: std::span<const annotated_row>{};
+		}
+		[[nodiscard]] static bool rows_validated(const query_result& result) noexcept
+		{
+			return result.data_ && result.data_->rows_validated;
 		}
 		[[nodiscard]] static query_result make(std::shared_ptr<const query_result::data> data)
 		{

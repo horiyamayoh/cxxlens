@@ -523,6 +523,8 @@ namespace cxxlens::sdk::query
 				 !result->conflict_values.empty() || !result->unresolved.empty() ||
 				 (rows.empty() && !result->closed_world)))
 				fail("summary", "inconsistent-exact-guarantee");
+			// row() validated every stored row before this immutable owner escapes.
+			result->rows_validated = true;
 			return query_transfer_access::make(std::move(result));
 		}
 		logical_query_ir independent_scan(const relation_descriptor& descriptor,
