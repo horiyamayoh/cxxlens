@@ -125,6 +125,20 @@ namespace cxxlens::sdk::query
 					fail("projection", "stop-requested", "sdk.target-cancelled");
 				charge(operations, n, limits.maximum_operations, "operations");
 			}
+			int compare(std::string_view a, std::string_view c)
+			{
+				work();
+				const auto common = std::min(a.size(), c.size());
+				for (std::size_t i{}; i < common; ++i)
+				{
+					work();
+					const auto left = static_cast<unsigned char>(a[i]);
+					const auto right = static_cast<unsigned char>(c[i]);
+					if (left != right)
+						return left < right ? -1 : 1;
+				}
+				return a.size() == c.size() ? 0 : a.size() < c.size() ? -1 : 1;
+			}
 			void retain(std::size_t n)
 			{
 				charge(retained, n, limits.maximum_retained_bytes, "retained-bytes");
@@ -198,25 +212,28 @@ namespace cxxlens::sdk::query
 		};
 		void canonical(std::vector<query_unresolved>& values, budget& b)
 		{
+			const auto order = [&](const auto& a, const auto& c)
+			{
+				if (const auto code = b.compare(a.code, c.code))
+					return code;
+				if (const auto subject = b.compare(a.subject, c.subject))
+					return subject;
+				return b.compare(a.detail, c.detail);
+			};
 			std::ranges::sort(values,
 							  [&](const auto& a, const auto& c)
 							  {
-								  b.work(a.code.size() + a.subject.size() + a.detail.size() +
-										 c.code.size() + c.subject.size() + c.detail.size() + 1);
-								  return std::tie(a.code, a.subject, a.detail) <
-									  std::tie(c.code, c.subject, c.detail);
+								  return order(a, c) < 0;
 							  });
 			values.erase(std::ranges::unique(values,
 											 [&](const auto& a, const auto& c)
 											 {
-												 b.work(a.code.size() + a.subject.size() +
-														a.detail.size() + c.code.size() +
-														c.subject.size() + c.detail.size() + 1);
-												 return a == c;
+												 return order(a, c) == 0;
 											 })
 							 .begin(),
 						 values.end());
 		}
+
 		struct entry
 		{
 			std::size_t group;
@@ -976,9 +993,10 @@ namespace cxxlens::sdk::query
 				std::ranges::sort(entries,
 								  [&](const auto& a, const auto& c)
 								  {
-									  b.work(std::min(a.canonical.size(), c.canonical.size()) + 1);
-									  return std::tie(a.group, a.canonical) <
-										  std::tie(c.group, c.canonical);
+									  b.work();
+									  if (a.group != c.group)
+										  return a.group < c.group;
+									  return b.compare(a.canonical, c.canonical) < 0;
 								  });
 				for (auto& e : entries)
 				{

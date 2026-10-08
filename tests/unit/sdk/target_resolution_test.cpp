@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <tuple>
 
 #include <cxxlens/sdk/target_resolution.hpp>
 
@@ -508,7 +509,8 @@ int main()
 		require(only(result).enumeration_state == state::complete && result.source_queries &&
 					!result.source_queries->scans[11].result.inputs_complete() &&
 					!result.source_queries->scans[11].result.unresolved_items().empty(),
-				"named census independent of generic declaration partiality; raw flags and "
+				"named census independent of generic declaration partiality; raw flags "
+				"and "
 				"frontiers retained");
 		++passed;
 		result = take(q::project_target_resolution(f.queries(12)));
@@ -677,6 +679,162 @@ int main()
 		require(only(result).enumeration_state == state::complete &&
 					only_slot(result).target_state == state::conflicting,
 				"actual normalized entity contradiction remains conflicting");
+		++passed;
+	}
+	{
+		fixture f;
+		for (std::size_t i{}; i < 64; ++i)
+		{
+			auto row = f.rows[3].back();
+			const auto suffix = std::to_string(i);
+			set(row,
+				"entity",
+				detached_cell::utf8("entity:unused:" + suffix + std::string(4096, 'x')));
+			row.claim_contributors = {"claim:" + suffix};
+			row.contributor_edges.front().claim_contributor = row.claim_contributors.front();
+			f.rows[3].push_back(std::move(row));
+		}
+		std::size_t serialized_bytes{};
+		for (const auto& rows : f.rows)
+			for (const auto& row : rows)
+				serialized_bytes += row.canonical_form().size();
+		q::finite_population_limits limits;
+		limits.maximum_operations = serialized_bytes * 4 + 100'000;
+		const auto result = take(q::project_target_resolution(f.input(), limits));
+		std::size_t position{};
+		for (std::size_t group{}; group < f.rows.size(); ++group)
+		{
+			std::vector<std::string> expected;
+			for (const auto& row : f.rows[group])
+				expected.push_back(row.canonical_form());
+			std::ranges::sort(expected);
+			for (const auto& canonical : expected)
+			{
+				require(result.evidence[position].relation_id == names[group] &&
+							result.evidence[position].row.canonical_form() == canonical,
+						"full original evidence remains group then binary canonical order");
+				++position;
+			}
+		}
+		require(position == result.evidence.size() &&
+					only_slot(result).target_state == state::complete,
+				"long unrelated evidence uses bounded visited-prefix comparisons");
+		++passed;
+		for (auto& rows : f.rows)
+			std::ranges::reverse(rows);
+		require(stable(result) == stable(take(q::project_target_resolution(f.input(), limits))),
+				"large original permutation retains exact evidence bindings");
+		++passed;
+		const auto queries = f.queries();
+		const auto retained = take(q::project_target_resolution(queries, limits));
+		require(stable(result) == stable(retained) && retained.source_queries &&
+					retained.source_queries->scans.size() == queries.scans.size(),
+				"query overload retains original scans under the same work cap");
+		++passed;
+	}
+	{
+		fixture f;
+		for (std::size_t i{}; i < 8; ++i)
+		{
+			auto row = f.rows[3].back();
+			const auto suffix = std::to_string(i);
+			set(row, "entity", detached_cell::utf8("entity:prefix:" + suffix));
+			row.claim_contributors = {"claim:" + std::string(4096, 'p') + suffix};
+			row.contributor_edges.front().claim_contributor = row.claim_contributors.front();
+			f.rows[3].push_back(std::move(row));
+		}
+		q::finite_population_limits limits;
+		std::size_t low{1}, high{4'000'000};
+		limits.maximum_operations = high;
+		const auto expected = stable(take(q::project_target_resolution(f.input(), limits)));
+		while (low < high)
+		{
+			const auto middle = low + (high - low) / 2;
+			limits.maximum_operations = middle;
+			const auto result = q::project_target_resolution(f.input(), limits);
+			if (result)
+				high = middle;
+			else
+			{
+				require(result.error().code == "sdk.target-budget" &&
+							result.error().field == "operations" &&
+							result.error().detail == "limit-exceeded",
+						"long common-prefix boundary reports the exact work field");
+				low = middle + 1;
+			}
+		}
+		limits.maximum_operations = low;
+		require(stable(take(q::project_target_resolution(f.input(), limits))) == expected,
+				"exact visited-prefix work cap preserves the complete result");
+		++passed;
+		limits.maximum_operations = low - 1;
+		const auto under = q::project_target_resolution(f.input(), limits);
+		require(!under && under.error().code == "sdk.target-budget" &&
+					under.error().field == "operations" && under.error().detail == "limit-exceeded",
+				"one-under visited-prefix work cap fails before completion");
+		++passed;
+		limits.maximum_operations = low;
+		std::size_t polls{};
+		limits.cancelled = [&]
+		{
+			++polls;
+			return false;
+		};
+		(void)take(q::project_target_resolution(f.input(), limits));
+		const auto stop_after = polls / 2;
+		polls = 0;
+		limits.cancelled = [&]
+		{
+			return ++polls > stop_after;
+		};
+		const auto cancelled = q::project_target_resolution(f.input(), limits);
+		require(!cancelled && cancelled.error().code == "sdk.target-cancelled" &&
+					cancelled.error().field == "projection" &&
+					cancelled.error().detail == "stop-requested",
+				"in-flight common-prefix work still obeys caller cancellation");
+		++passed;
+		std::stop_source stop;
+		stop.request_stop();
+		limits.cancelled = {};
+		const auto stopped = q::project_target_resolution(f.input(), limits, stop.get_token());
+		require(!stopped && stopped.error().code == "sdk.target-cancelled" &&
+					stopped.error().field == "projection",
+				"current stop precedes all long-prefix work");
+		++passed;
+	}
+	{
+		fixture f;
+		const auto prototype = f.rows[0].front();
+		for (auto& rows : f.rows)
+			rows.clear();
+		const std::string prefix = "unit:" + std::string(1024, 'p');
+		for (const auto& suffix : std::array<std::string, 5>{"", "a", "aa", "\xc2\x80", "\xc3\xbf"})
+		{
+			auto row = prototype;
+			set(row, "compile_unit", detached_cell::utf8(prefix + suffix));
+			f.rows[0].push_back(std::move(row));
+		}
+		f.rows[0].push_back(f.rows[0].back());
+		std::ranges::reverse(f.rows[0]);
+		const auto result = take(q::project_target_resolution(f.input()));
+		std::vector<q::query_unresolved> expected;
+		for (const auto& population : result.populations)
+		{
+			require(population.enumeration_state != state::complete,
+					"missing genuine inventories stay unknown");
+			expected.insert(expected.end(), population.gaps.begin(), population.gaps.end());
+		}
+		std::ranges::sort(expected,
+						  [](const auto& a, const auto& b)
+						  {
+							  return std::tie(a.code, a.subject, a.detail) <
+								  std::tie(b.code, b.subject, b.detail);
+						  });
+		expected.erase(std::ranges::unique(expected).begin(), expected.end());
+		require(expected == result.unresolved && result.populations.size() == 5 &&
+					result.evidence.size() == 6,
+				"long-prefix and high-byte gap subjects preserve full tuple order "
+				"and deduplication");
 		++passed;
 	}
 	std::cout << "target resolution oracles " << passed << " PASS\n";
