@@ -265,8 +265,291 @@ namespace
 		}
 	};
 } // namespace
+
+namespace
+{
+	detached_cell symbol_values(std::vector<std::string> ids)
+	{
+		std::ranges::sort(ids);
+		std::vector<std::byte> encoded;
+		for (const auto& id : ids)
+		{
+			for (unsigned shift{}; shift < 32U; shift += 8U)
+				encoded.push_back(static_cast<std::byte>((id.size() >> shift) & 255U));
+			for (char c : id)
+				encoded.push_back(static_cast<std::byte>(c));
+		}
+		return detached_cell::bytes(std::move(encoded));
+	}
+	fixture many_members()
+	{
+		fixture value;
+		const auto original = value.rows[8].front();
+		value.rows[8].clear();
+		std::vector<std::string> ids;
+		for (std::size_t ordinal{}; ordinal < 96U; ++ordinal)
+		{
+			const auto id =
+				(ordinal % 2U ? "feature:z:" : "feature:\xc3\xa9:") + std::to_string(ordinal);
+			auto row = original;
+			set(row, "feature", txt(id));
+			set(row, "ordinal", num(ordinal));
+			set(row, "original_node_ordinal", num(ordinal));
+			value.rows[8].push_back(std::move(row));
+			ids.push_back(id);
+		}
+		std::ranges::reverse(ids);
+		for (auto& row : value.rows[9])
+		{
+			set(row, "feature_ids", symbol_values(ids));
+			set(row, "feature_count", num(ids.size()));
+		}
+		return value;
+	}
+	void retained_membership_controls()
+	{
+		const auto original = many_members();
+		q::projection_resource_usage measured;
+		const auto full =
+			take(q::project_source_features(original.queries(true), {}, {}, measured));
+		require(full.features.size() == 96U && full.populations.size() == 2U &&
+					std::ranges::all_of(full.populations,
+										[](const auto& population)
+										{
+											return population.membership_state == state::complete &&
+												population.feature_count == 96U &&
+												population.features.size() == 96U;
+										}),
+				"retained ID membership lost an original or its exact census");
+		for (const auto& population : full.populations)
+		{
+			require(population.feature_ids.size() == 96U &&
+						std::ranges::is_sorted(population.feature_ids) &&
+						population.feature_ids.front() == "feature:z:1",
+					"membership lookup reordered the original inventory array");
+		}
+		for (const std::string_view mutation :
+			 {"omitted", "duplicate", "foreign", "absent", "partial"})
+		{
+			auto changed = original;
+			std::vector<std::string> ids = full.populations.front().feature_ids;
+			if (mutation == "omitted")
+				ids.pop_back();
+			if (mutation == "duplicate")
+				ids.push_back(ids.front());
+			if (mutation == "foreign")
+				ids.push_back("feature:foreign");
+			for (auto& row : changed.rows[9])
+			{
+				set(row, "feature_ids", symbol_values(ids));
+				set(row, "feature_count", num(ids.size()));
+				if (mutation == "absent")
+					row.values.erase("output.feature_ids");
+				if (mutation == "partial")
+					set(row, "enumeration_state", txt("partial"));
+			}
+			if (mutation == "absent" || mutation == "duplicate")
+			{
+				q::projection_resource_usage failed;
+				require(!q::project_source_features(changed.queries(), {}, {}, failed) &&
+							!failed.operations && !failed.retained_bytes_bound,
+						"missing or duplicate original inventory IDs bypassed input guards");
+				continue;
+			}
+			const auto out = take(q::project_source_features(changed.queries(true)));
+			require(out.features.size() == 96U, "membership failure erased observed originals");
+			for (const auto& population : out.populations)
+			{
+				if (mutation == "partial")
+					require(population.enumeration_state == state::partial,
+							"partial native inventory became complete");
+				else
+					require(population.membership_state != state::complete,
+							"missing/duplicate/foreign original inventory became complete");
+			}
+		}
+		for (const std::string_view mutation : {"unit", "world", "profile", "source"})
+		{
+			auto changed = original;
+			auto& row = changed.rows[8].front();
+			if (mutation == "unit")
+				set(row, "compile_unit", txt("foreign-unit"));
+			if (mutation == "profile")
+				set(row, "profile", txt("foreign-profile"));
+			if (mutation == "source")
+				set(row, "source_snapshot", txt("foreign-snapshot"));
+			if (mutation == "world")
+			{
+				row.presence.fragments = {"foreign-world"};
+				row.contributor_edges.front().condition = row.presence;
+			}
+			const auto out = take(q::project_source_features(changed.queries(true)));
+			require(out.features.size() == 96U,
+					"foreign member erased original feature population");
+			require(std::ranges::any_of(out.populations,
+										[](const auto& population)
+										{
+											return population.membership_state != state::complete ||
+												population.source_state != state::complete;
+										}),
+					"foreign unit/world/profile/source lent complete original membership");
+		}
+		q::finite_population_limits exact;
+		exact.maximum_operations = measured.operations;
+		exact.maximum_retained_bytes = measured.retained_bytes_bound;
+		q::projection_resource_usage repeated;
+		require(bool(q::project_source_features(original.queries(true), exact, {}, repeated)) &&
+					repeated.operations == measured.operations &&
+					repeated.retained_bytes_bound == measured.retained_bytes_bound,
+				"retained membership rejected exact measured work/storage peak");
+		--exact.maximum_operations;
+		require(!q::project_source_features(original.queries(true), exact, {}, repeated) &&
+					!repeated.operations && !repeated.retained_bytes_bound,
+				"retained membership ignored one-under work or published failed usage");
+		exact.maximum_operations = measured.operations;
+		--exact.maximum_retained_bytes;
+		require(!q::project_source_features(original.queries(true), exact, {}, repeated),
+				"retained membership ignored one-under storage peak");
+		std::stop_source stop;
+		stop.request_stop();
+		const auto stopped =
+			q::project_source_features(original.queries(true), {}, stop.get_token(), repeated);
+		require(!stopped && stopped.error().code == "sdk.source-feature-cancelled" &&
+					!repeated.operations && !repeated.retained_bytes_bound,
+				"retained membership ignored current cancellation or published "
+				"failed usage");
+	}
+	void retained_unbound_and_declaration_controls()
+	{
+		fixture unknown_source;
+		set(unknown_source.rows[8].front(), "source_binding_state", txt("unknown"));
+		set(unknown_source.rows[9].front(), "unbound_feature_ids", symbols({"X"}));
+		set(unknown_source.rows[9].front(), "unbound_feature_count", num(1));
+		set(unknown_source.rows[9].front(), "source_binding_state", txt("unknown"));
+		const auto unbound = take(q::project_source_features(unknown_source.queries(true)));
+		const auto unit_population = std::ranges::find(
+			unbound.populations, "translation_unit", &q::source_feature_population::scope);
+		require(unit_population != unbound.populations.end(),
+				"unbound translation-unit inventory missing");
+		const auto& unit = *unit_population;
+		require(unit.membership_state == state::complete &&
+					unit.unbound_feature_ids == std::vector<std::string>{"X"} &&
+					unit.source_state != state::complete,
+				"authentic unbound subset became absent or a complete source binding");
+		for (const bool foreign : {false, true})
+		{
+			auto changed = unknown_source;
+			set(changed.rows[9].front(),
+				"unbound_feature_ids",
+				foreign ? symbols({"foreign"}) : symbols({}));
+			set(changed.rows[9].front(), "unbound_feature_count", num(foreign ? 1U : 0U));
+			const auto out = take(q::project_source_features(changed.queries(true)));
+			const auto changed_unit = std::ranges::find(
+				out.populations, "translation_unit", &q::source_feature_population::scope);
+			require(changed_unit != out.populations.end() &&
+						changed_unit->membership_state == state::conflicting,
+					"omitted or foreign unbound original bypassed exact subset closure");
+		}
+
+		auto originals = many_members();
+		auto& inventory = originals.rows[5].front();
+		set(inventory,
+			"physical_definition_profile",
+			txt("clang22-original-physical-definitions/1"));
+		set(inventory, "physical_definition_state", txt("complete"));
+		set(inventory, "physical_definition_count", num(1));
+		set(inventory, "physical_definition_ids", symbols({"D"}));
+		const auto complete_context = [](const auto& out)
+		{
+			return out.features.size() == 96U &&
+				std::ranges::all_of(out.features,
+									[](const auto& feature)
+									{
+										return feature.context_state == state::complete;
+									});
+		};
+		require(complete_context(take(q::project_source_features(originals.queries(true)))),
+				"authentic named and physical inventories lost context closure");
+		for (const bool physical_only : {false, true})
+		{
+			auto changed = originals;
+			set(changed.rows[5].front(),
+				physical_only ? "declarations" : "physical_definition_ids",
+				symbols({"unused"}));
+			require(complete_context(take(q::project_source_features(changed.queries(true)))),
+					"named and physical decode caches aliased different original fields");
+		}
+		for (const bool physical : {false, true})
+		{
+			auto changed = originals;
+			set(changed.rows[5].front(),
+				physical ? "physical_definition_count" : "declaration_count",
+				num(0));
+			const auto out = take(q::project_source_features(changed.queries(true)));
+			require(std::ranges::all_of(out.features,
+										[](const auto& feature)
+										{
+											return feature.context_state == state::conflicting;
+										}),
+					"decode reuse bypassed the current inventory count guard");
+		}
+		for (const std::string_view identity : {"same", "unit", "world", "profile"})
+		{
+			auto changed = originals;
+			auto sibling = changed.rows[5].front();
+			set(sibling, "inventory", txt("DI:sibling"));
+			set(sibling, "declaration_count", num(0));
+			if (identity == "unit")
+				set(sibling, "compile_unit", txt("foreign-unit"));
+			if (identity == "world")
+			{
+				sibling.presence.fragments = {"foreign-world"};
+				sibling.contributor_edges.front().condition = sibling.presence;
+			}
+			if (identity == "profile")
+			{
+				set(sibling, "profile", txt("future-named-profile"));
+				set(sibling, "physical_definition_profile", txt("future-physical-profile"));
+			}
+			changed.rows[5].push_back(std::move(sibling));
+			const auto out = take(q::project_source_features(changed.queries(true)));
+			if (identity == "same")
+				require(std::ranges::all_of(out.features,
+											[](const auto& feature)
+											{
+												return feature.context_state == state::conflicting;
+											}),
+						"contradictory sibling inventory inherited first-row closure");
+			else
+				require(complete_context(out),
+						"foreign inventory lent or replaced exact context closure");
+		}
+		set(inventory, "declarations", symbols({"unused"}));
+		set(inventory, "physical_definition_ids", symbols({"unused"}));
+		const auto changed_owner = take(q::project_source_features(originals.queries(true)));
+		require(std::ranges::all_of(changed_owner.features,
+									[](const auto& feature)
+									{
+										return feature.context_state != state::complete;
+									}),
+				"declaration memo persisted across projections of changed original rows");
+		q::source_feature_projection detached;
+		{
+			auto owner = many_members();
+			detached = take(q::project_source_features(owner.input()));
+		}
+		require(complete_context(detached) && !detached.evidence.empty(),
+				"output context depended on expired memo/input owners");
+		for (const auto& row : detached.evidence)
+			require(bool(row.row.validate()) && !row.row.canonical_form().empty(),
+					"detached evidence retained a borrowed inventory buffer");
+	}
+} // namespace
+
 int main()
 {
+	retained_membership_controls();
+	retained_unbound_and_declaration_controls();
 	fixture f;
 	{
 		const auto unvalidated = f.queries();
@@ -281,7 +564,8 @@ int main()
 					checked.evidence.size() == borrowed.evidence.size() &&
 					borrowed_usage.operations < checked_usage.operations &&
 					borrowed_usage.retained_bytes_bound == checked_usage.retained_bytes_bound,
-				"same admitted row ownership changed output/storage or repeated validation");
+				"same admitted row ownership changed output/storage or repeated "
+				"validation");
 		for (std::size_t i{}; i < checked.evidence.size(); ++i)
 			require(checked.evidence[i].relation_id == borrowed.evidence[i].relation_id &&
 						checked.evidence[i].row.canonical_form() ==

@@ -631,29 +631,101 @@ namespace cxxlens::sdk::query
 						(value.kind == "CXXDefaultArgExpr" || value.kind == "CXXDefaultInitExpr");
 				return false;
 			}
+			struct member_less
+			{
+				budget* meter;
+				bool operator()(std::string_view left, std::string_view right) const
+				{
+					return compare_identity_text(*meter, left, right) < 0;
+				}
+			};
+			struct member_index
+			{
+				budget& meter;
+				std::size_t retained{};
+				std::set<std::string_view, member_less> values;
+				explicit member_index(budget& owner) : meter(owner), values(member_less{&owner}) {}
+				~member_index()
+				{
+					// The ID views borrow the original immutable cell. Only set nodes are
+					// owned here, and all nodes expire before their reservation is refunded.
+					values.clear();
+					meter.retained -= retained;
+				}
+				bool insert(std::string_view id)
+				{
+					constexpr auto node = 128U + sizeof(std::string_view);
+					meter.retain(node);
+					retained += node;
+					meter.temporary_peak = std::max(meter.temporary_peak, meter.retained);
+					return values.insert(id).second;
+				}
+				bool contains(std::string_view id) const
+				{
+					meter.work();
+					return values.find(id) != values.end();
+				}
+			};
 			struct decoded_set
 			{
 				bool observed{}, duplicate{};
 				std::size_t count{};
 			};
+			struct inventory_pointer_less
+			{
+				budget* meter;
+				bool operator()(const annotated_row* left, const annotated_row* right) const
+				{
+					meter->work();
+					return std::less<const annotated_row*>{}(left, right);
+				}
+			};
+			struct cached_inventory
+			{
+				member_index members;
+				decoded_set decoded;
+				explicit cached_inventory(budget& meter) : members(meter) {}
+			};
+			struct inventory_cache
+			{
+				using index =
+					std::map<const annotated_row*, cached_inventory, inventory_pointer_less>;
+				budget& meter;
+				std::size_t retained{};
+				std::array<index, 2U> values;
+				explicit inventory_cache(budget& owner)
+					: meter(owner), values{index{inventory_pointer_less{&owner}},
+										   index{inventory_pointer_less{&owner}}}
+				{
+				}
+				~inventory_cache()
+				{
+					clear();
+				}
+				void clear()
+				{
+					// Nested borrowed-ID set nodes and map nodes expire before their
+					// separate reservations are refunded, including every failure exit.
+					for (auto& group : values)
+						group.clear();
+					meter.retained -= retained;
+					retained = 0U;
+				}
+			};
+			inventory_cache declaration_members{b};
 			template <class Callback>
-			decoded_set members(const annotated_row& r, std::string_view field, Callback emit)
+			decoded_set members(const annotated_row& r,
+								std::string_view field,
+								Callback emit,
+								member_index* retained_members = nullptr)
 			{
 				const auto* values = bytes(r, field);
 				if (!values)
 					return {};
 				decoded_set result{true, false, 0U};
-				std::size_t position{}, temporary_bytes{};
-				struct release
-				{
-					budget& b;
-					std::size_t& bytes;
-					~release()
-					{
-						b.retained -= bytes;
-					}
-				} release_temporary{b, temporary_bytes};
-				std::set<std::string_view> seen;
+				std::size_t position{};
+				member_index local_members{b};
+				auto& seen = retained_members ? *retained_members : local_members;
 				while (position < values->size())
 				{
 					b.work();
@@ -667,16 +739,33 @@ namespace cxxlens::sdk::query
 					b.charge(b.members, 1U, b.limits.maximum_members, "set-members");
 					const std::string_view id{
 						reinterpret_cast<const char*>(values->data() + position), length};
-					lookup_work({id, {}, {}, {}}, seen.size());
-					b.retain(128U + sizeof(std::string_view));
-					temporary_bytes += 128U + sizeof(std::string_view);
-					b.temporary_peak = std::max(b.temporary_peak, b.retained);
-					result.duplicate |= !seen.insert(id).second;
+					result.duplicate |= !seen.insert(id);
 					emit(id);
 					++result.count;
 					position += length;
 				}
 				return result;
+			}
+			const cached_inventory& declared_members(const annotated_row& row, bool physical)
+			{
+				b.work();
+				auto& cache_group = declaration_members.values[physical ? 1U : 0U];
+				const auto found = cache_group.find(&row);
+				if (found != cache_group.end())
+					return found->second;
+				constexpr auto node = sizeof(inventory_cache::index::value_type) + 256U;
+				b.retain(node);
+				declaration_members.retained += node;
+				b.temporary_peak = std::max(b.temporary_peak, b.retained);
+				auto& cached = cache_group.try_emplace(&row, b).first->second;
+				cached.decoded = members(
+					row,
+					physical ? "physical_definition_ids" : "declarations",
+					[](std::string_view)
+					{
+					},
+					&cached.members);
+				return cached;
 			}
 			state declaration(std::string_view id,
 							  std::string_view compile_unit,
@@ -708,15 +797,9 @@ namespace cxxlens::sdk::query
 								(physical ? "clang22-original-physical-definitions/1"
 										  : "clang22-explicit-admitted-named-declarations/1"))
 								continue;
-							bool found{};
-							const auto decoded =
-								members(*inventory,
-										physical ? "physical_definition_ids" : "declarations",
-										[&](std::string_view candidate)
-										{
-											found |= candidate == id;
-										});
-							if (!found)
+							const auto& cached = declared_members(*inventory, physical);
+							const auto& decoded = cached.decoded;
+							if (!cached.members.contains(id))
 								continue;
 							bind(evidence, 5U, rows{inventory});
 							const auto count = number(*inventory,
@@ -928,43 +1011,43 @@ namespace cxxlens::sdk::query
 					: state::complete;
 				value.identity_state = combine(value.identity_state, pair_state);
 				state membership = state::complete, source_membership = state::complete;
-				const auto members_set =
-					members(r,
-							"feature_ids",
-							[&](std::string_view id)
-							{
-								value.feature_ids.push_back(copy(id));
-								const view_identity key{id, world[1], world[2], world[3]};
-								lookup_work(key, feature_index.size());
-								const auto found = feature_index.find(key);
-								if (found == feature_index.end())
-								{
-									membership = combine(membership, state::unknown);
-									return;
-								}
-								const auto& feature = output.features[found->second];
-								if (feature.compile_unit != value.compile_unit ||
-									feature.profile != value.profile ||
-									(file &&
-									 (feature.file != value.file ||
-									  feature.source_snapshot != value.source_snapshot ||
-									  feature.source_binding_state != "complete")))
-									membership = state::conflicting;
-								membership = combine(membership, feature.observation);
-								membership = combine(membership, feature.identity_state);
-								source_membership =
-									combine(source_membership, feature.source_state);
-								b.retain(2U * sizeof(std::size_t));
-								value.features.push_back(found->second);
-							});
+				member_index feature_members{b}, unbound_members{b};
+				const auto members_set = members(
+					r,
+					"feature_ids",
+					[&](std::string_view id)
+					{
+						value.feature_ids.push_back(copy(id));
+						const view_identity key{id, world[1], world[2], world[3]};
+						lookup_work(key, feature_index.size());
+						const auto found = feature_index.find(key);
+						if (found == feature_index.end())
+						{
+							membership = combine(membership, state::unknown);
+							return;
+						}
+						const auto& feature = output.features[found->second];
+						if (feature.compile_unit != value.compile_unit ||
+							feature.profile != value.profile ||
+							(file &&
+							 (feature.file != value.file ||
+							  feature.source_snapshot != value.source_snapshot ||
+							  feature.source_binding_state != "complete")))
+							membership = state::conflicting;
+						membership = combine(membership, feature.observation);
+						membership = combine(membership, feature.identity_state);
+						source_membership = combine(source_membership, feature.source_state);
+						b.retain(2U * sizeof(std::size_t));
+						value.features.push_back(found->second);
+					},
+					&feature_members);
 				const auto unbound_set = members(
 					r,
 					"unbound_feature_ids",
 					[&](std::string_view id)
 					{
 						value.unbound_feature_ids.push_back(copy(id));
-						b.work(value.feature_ids.size());
-						if (std::ranges::find(value.feature_ids, id) == value.feature_ids.end())
+						if (!feature_members.contains(id))
 							membership = state::conflicting;
 						const view_identity key{id, world[1], world[2], world[3]};
 						lookup_work(key, feature_index.size());
@@ -973,7 +1056,8 @@ namespace cxxlens::sdk::query
 							if (output.features[found->second].source_binding_state == "none" ||
 								output.features[found->second].source_binding_state == "complete")
 								membership = state::conflicting;
-					});
+					},
+					&unbound_members);
 				const auto files_set = members(r,
 											   "entered_file_ids",
 											   [&](std::string_view id)
@@ -1000,16 +1084,12 @@ namespace cxxlens::sdk::query
 						 (feature.file != value.file ||
 						  feature.source_snapshot != value.source_snapshot)))
 						continue;
-					b.work(value.feature_ids.size() + feature.feature.size());
-					if (std::ranges::find(value.feature_ids, feature.feature) ==
-						value.feature_ids.end())
+					if (!feature_members.contains(feature.feature))
 						membership = state::conflicting;
 					if (tu && feature.source_binding_state != "none" &&
 						feature.source_binding_state != "complete")
 					{
-						b.work(value.unbound_feature_ids.size() + feature.feature.size());
-						if (std::ranges::find(value.unbound_feature_ids, feature.feature) ==
-							value.unbound_feature_ids.end())
+						if (!unbound_members.contains(feature.feature))
 							membership = state::conflicting;
 					}
 				}
@@ -1097,6 +1177,9 @@ namespace cxxlens::sdk::query
 					environment(world, originals);
 				for (const auto& [world, originals] : index[8U])
 					feature(world, originals);
+				// Declaration/context attribution is finished. Retire its per-call
+				// original-field decode cache before the later population phase.
+				declaration_members.clear();
 				using occurrence_key = std::tuple<std::string_view,
 												  std::string_view,
 												  std::string_view,
@@ -1258,7 +1341,14 @@ namespace cxxlens::sdk::query
 					}
 					b.rows = 0;
 				}
-				projector work{b, borrowed, {}, {}, {}, row_validation_reused, {}};
+				projector work{b,
+							   borrowed,
+							   {},
+							   {},
+							   {},
+							   row_validation_reused,
+							   projector::inventory_cache{b},
+							   {}};
 				auto output =
 					work.run(input.feature_inputs_complete && input.inventory_inputs_complete);
 				output.compile_units_complete = input.compile_units_complete;
