@@ -1820,9 +1820,47 @@ namespace cxxlens::detail::clang22
 						!parameter->getType()->getPointeeType().isConstQualified())
 						properties.emplace("mutable_lvalue_reference");
 				}
-				if (const auto* field = llvm::dyn_cast<clang::FieldDecl>(declaration);
-					field && field->isMutable())
-					properties.emplace("mutable");
+				if (const auto* field = llvm::dyn_cast<clang::FieldDecl>(declaration))
+				{
+					if (field->isMutable())
+						properties.emplace("mutable");
+					// Classification is the original FieldDecl fact, independent of
+					// aggregate layout, field type spelling or ABI signature bytes.
+					value.emplace("field_bitfield_profile",
+								  sdk::detached_cell::utf8("clang22-original-field-bitfield/1"));
+					value.emplace("field_is_bitfield",
+								  sdk::detached_cell::boolean(field->isBitField()));
+					std::string_view state = "complete", reason;
+					if (field->isInvalidDecl())
+					{
+						state = "partial";
+						reason = "invalid-original-field-declaration";
+					}
+					else if (field->isBitField())
+					{
+						const auto* width = field->getBitWidth();
+						if (!width)
+						{
+							state = "partial";
+							reason = "original-bitfield-width-expression-unavailable";
+						}
+						else if (width->isValueDependent() || width->isTypeDependent() ||
+								 width->containsUnexpandedParameterPack())
+						{
+							state = "partial";
+							reason = "original-bitfield-width-requires-specialization";
+						}
+						else
+							value.emplace(
+								"field_bit_width",
+								sdk::detached_cell::unsigned_integer(field->getBitWidthValue()));
+					}
+					value.emplace("field_bitfield_state",
+								  symbol("cc.field-bitfield-state/1", std::string{state}));
+					if (!reason.empty())
+						value.emplace("field_bitfield_reason",
+									  sdk::detached_cell::utf8(std::string{reason}));
+				}
 				if (!type.isNull())
 				{
 					value.emplace("canonical_type", id("cc_type_id", canonical_type(type)));

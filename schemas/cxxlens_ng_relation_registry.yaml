@@ -3730,7 +3730,7 @@ relations:
 
 - descriptor_id: cc.entity_detail.v1
   name: cc.entity_detail
-  version: 1.4.0
+  version: 1.5.0
   semantic_major: 1
   semantics: cc.entity_detail/1
   owner_namespace: cxxlens.standard.cc
@@ -4012,6 +4012,36 @@ relations:
     type: optional<utf8_string>
     required: false
     identity_role: authoritative_payload
+  - id: cc.entity_detail.v1.field_bitfield_profile
+    name: field_bitfield_profile
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Original FieldDecl bit-field observation profile; not inferred from layout or ABI bytes.
+  - id: cc.entity_detail.v1.field_bitfield_state
+    name: field_bitfield_state
+    type: optional<open_symbol<cc.field-bitfield-state/1>>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Complete original non-bitfield or evaluated width; dependent/invalid width remains partial.
+  - id: cc.entity_detail.v1.field_is_bitfield
+    name: field_is_bitfield
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Actual FieldDecl::isBitField value; missing remains unclassified.
+  - id: cc.entity_detail.v1.field_bit_width
+    name: field_bit_width
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Actual evaluated FieldDecl width in bits, including zero-width unnamed fields; absent for non-bitfields or dependent widths.
+  - id: cc.entity_detail.v1.field_bitfield_reason
+    name: field_bitfield_reason
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Actionable original invalid/dependent width reason; no candidate verdict.
   references:
   - source_columns:
     - cc.entity_detail.v1.compile_unit
@@ -4142,6 +4172,11 @@ relations:
     - cc.entity_detail.v1.memory_access_count
     - cc.entity_detail.v1.memory_access_ids
     - cc.entity_detail.v1.memory_access_reason
+    - cc.entity_detail.v1.field_bitfield_profile
+    - cc.entity_detail.v1.field_bitfield_state
+    - cc.entity_detail.v1.field_is_bitfield
+    - cc.entity_detail.v1.field_bit_width
+    - cc.entity_detail.v1.field_bitfield_reason
   partition:
     suggested_keys:
     - cc.entity_detail.v1.compile_unit
@@ -4160,6 +4195,9 @@ relations:
   evolution_policy: ng0.additive.v1
   row_constraints:
     all_or_none:
+    - - cc.entity_detail.v1.field_bitfield_profile
+      - cc.entity_detail.v1.field_bitfield_state
+      - cc.entity_detail.v1.field_is_bitfield
     - - cc.entity_detail.v1.operation_count
       - cc.entity_detail.v1.operation_ids
       - cc.entity_detail.v1.operation_state

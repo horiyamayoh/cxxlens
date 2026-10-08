@@ -93,6 +93,7 @@
 | [0140](0140-original-compiler-builtin-fence-sites.md) | original compiler builtin fence membership and unchecked order frontiers |
 | [0141](0141-original-observed-lifetime-requirements.md) | observed original lifetime requirement membership and independent empty domains |
 | [0142](0142-original-direct-return-referents.md) | original direct return referents and exact compiler lifetime-end observations |
+| [0143](0143-original-field-bitfield-facets.md) | original field bit-field classification, evaluated width and independent record member census |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

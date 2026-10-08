@@ -1301,6 +1301,13 @@ add_test(NAME unit.sdk-scalar-types COMMAND cxxlens-unit-sdk-scalar-types)
 set_tests_properties(unit.sdk-scalar-types
                      PROPERTIES LABELS "unit;sdk;type;scalar;contract;negative")
 
+cxxlens_add_test_executable(cxxlens-unit-sdk-field-bitfields
+                            unit/sdk/field_bitfield_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-field-bitfields PRIVATE cxxlens::query)
+add_test(NAME unit.sdk-field-bitfields COMMAND cxxlens-unit-sdk-field-bitfields)
+set_tests_properties(unit.sdk-field-bitfields
+                     PROPERTIES LABELS "unit;sdk;type;field;bitfield;contract;negative")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-record-surfaces
                             unit/sdk/record_surfaces_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-record-surfaces PRIVATE cxxlens::query)
@@ -2137,6 +2144,16 @@ if(CXXLENS_BUILD_CLANG22_COMPONENTS)
       adapter.clang22-original-direct-return-referent-inputs
       PROPERTIES LABELS
                  "adapter;clang22;application;original-inputs;lifetime;bounded"
+                 RUN_SERIAL TRUE TIMEOUT 240)
+    add_test(
+      NAME adapter.clang22-original-field-bitfield-inputs
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/clang22/field_bitfield_inputs_test.py"
+        "$<TARGET_FILE:cxxlens-clang22-analyze>" "${CMAKE_CXX_COMPILER}")
+    set_tests_properties(
+      adapter.clang22-original-field-bitfield-inputs
+      PROPERTIES LABELS "adapter;clang22;application;original-inputs;record;bitfield;bounded"
                  RUN_SERIAL TRUE TIMEOUT 240)
     add_test(
       NAME adapter.clang22-original-semantic-target-inputs
