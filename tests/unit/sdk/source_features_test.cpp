@@ -2,6 +2,7 @@
 #include <array>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <memory>
 
 #include <cxxlens/sdk/source_features.hpp>
@@ -651,6 +652,104 @@ namespace
 				prefix == midpoint && !repeated.operations && !repeated.retained_bytes_bound,
 			"long comparison failed to observe a real mid-projection stop before the next visit");
 	}
+	void whole_evidence_clone_controls()
+	{
+		fixture original;
+		constexpr std::size_t payload_bytes = 32768U;
+		std::vector<std::byte> payload(payload_bytes, std::byte{0xff});
+		payload.back() = std::byte{0x80};
+		set(original.rows[3].front(), "provider_local_key", detached_cell::bytes(payload));
+		set(original.rows[8].front(), "kind", txt("quoted\"\\\n\t日本語"));
+		set(original.rows[8].front(),
+			"compiler_kind",
+			num(std::numeric_limits<std::uint64_t>::max()));
+		set(original.rows[8].front(), "is_implicit", detached_cell::boolean(true));
+		auto& feature = original.rows[8].front();
+		feature.multiplicity = 17U;
+		set(feature,
+			"source_none_reason",
+			detached_cell::unknown(feature.values.at("output.source_none_reason").type,
+								   "unobserved\"\\日本語"));
+		for (auto& group : original.rows)
+			for (auto& row : group)
+			{
+				row.claim_contributors.push_back("claim:z");
+				row.producer_contracts.push_back({"source.z", "semantic:z"});
+				row.provenance.push_back("features:z");
+				row.contributor_guarantees.push_back(
+					{"exact", "z", "z", {"native", "schema_validated"}});
+				row.contributor_edges.push_back({row.claim_contributors.back(),
+												 row.producer_contracts.back(),
+												 row.provenance.back(),
+												 row.contributor_guarantees.back(),
+												 row.presence,
+												 row.interpretation});
+			}
+		const auto input = original.queries(true);
+		q::projection_resource_usage measured;
+		const auto out = take(q::project_source_features(input, {}, {}, measured));
+		require(out.features.size() == 1U &&
+					out.features.front().compiler_kind ==
+						std::numeric_limits<std::uint64_t>::max() &&
+					out.features.front().is_implicit == true,
+				"typed evidence copy altered scalar values");
+		require(out.evidence.size() == 11U, "typed evidence copy lost an original row");
+		std::size_t evidence_bytes{};
+		for (const auto& evidence : out.evidence)
+		{
+			const auto group = std::ranges::find(names, evidence.relation_id);
+			require(group != names.end(), "typed evidence copy lost relation identity");
+			const auto group_index = static_cast<std::size_t>(group - names.begin());
+			const auto canonical = evidence.row.canonical_form();
+			require(std::ranges::any_of(original.rows[group_index],
+										[&](const auto& row)
+										{
+											return row.canonical_form() == canonical;
+										}),
+					"typed evidence copy changed a cell or nested original annotation");
+			evidence_bytes += canonical.size();
+		}
+		require(out.source_queries.has_value() &&
+					out.source_queries->snapshot_id == input.snapshot_id,
+				"typed evidence copy omitted the source query owner");
+		for (std::size_t i{}; i < input.scans.size(); ++i)
+			require(out.source_queries->scans[i].result.canonical_form() ==
+						input.scans[i].result.canonical_form(),
+					"typed evidence copy changed a query sidechannel");
+		q::finite_population_limits exact;
+		exact.maximum_operations = measured.operations;
+		exact.maximum_retained_bytes = measured.retained_bytes_bound;
+		exact.maximum_evidence_bytes = evidence_bytes;
+		q::projection_resource_usage repeated;
+		require(bool(q::project_source_features(input, exact, {}, repeated)) &&
+					repeated.operations == measured.operations &&
+					repeated.retained_bytes_bound == measured.retained_bytes_bound,
+				"typed evidence copy rejected exact work/storage/evidence bounds");
+		--exact.maximum_evidence_bytes;
+		require(!q::project_source_features(input, exact, {}, repeated) && !repeated.operations &&
+					!repeated.retained_bytes_bound,
+				"typed evidence copy bypassed canonical evidence-byte cap");
+		exact.maximum_evidence_bytes = evidence_bytes;
+		--exact.maximum_operations;
+		require(!q::project_source_features(input, exact, {}, repeated) && !repeated.operations &&
+					!repeated.retained_bytes_bound,
+				"typed evidence copy bypassed work cap or exposed failed usage");
+		exact.maximum_operations = measured.operations;
+		--exact.maximum_retained_bytes;
+		require(!q::project_source_features(input, exact, {}, repeated) && !repeated.operations &&
+					!repeated.retained_bytes_bound,
+				"typed evidence copy bypassed retained cap or exposed failed usage");
+		exact.maximum_retained_bytes = measured.retained_bytes_bound;
+		std::size_t callbacks{};
+		exact.cancelled = [&]
+		{
+			return ++callbacks > 3000U;
+		};
+		const auto stopped = q::project_source_features(input, exact, {}, repeated);
+		require(!stopped && stopped.error().code == "sdk.source-feature-cancelled" &&
+					!repeated.operations && !repeated.retained_bytes_bound,
+				"typed evidence copy ignored cancellation during projection");
+	}
 	void first_present_comparison_controls()
 	{
 		constexpr std::size_t bytes = 65536U;
@@ -720,6 +819,7 @@ namespace
 
 int main()
 {
+	whole_evidence_clone_controls();
 	first_present_comparison_controls();
 	indexed_membership_prefix_controls();
 	retained_membership_controls();
