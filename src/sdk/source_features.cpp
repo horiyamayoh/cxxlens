@@ -845,7 +845,7 @@ namespace cxxlens::sdk::query
 					gap(value, value.compile_unit, "language-environment-unavailable");
 				output.environments.push_back(std::move(value));
 			}
-			std::map<view_identity, std::size_t, identity_less> feature_index;
+			std::map<view_identity, std::size_t, identity_less> feature_index{identity_less{&b}};
 			void feature(const view_identity& world, const rows& originals)
 			{
 				b.charge(b.members, 1U, b.limits.maximum_members, "features");
@@ -1019,7 +1019,6 @@ namespace cxxlens::sdk::query
 					{
 						value.feature_ids.push_back(copy(id));
 						const view_identity key{id, world[1], world[2], world[3]};
-						lookup_work(key, feature_index.size());
 						const auto found = feature_index.find(key);
 						if (found == feature_index.end())
 						{
@@ -1050,7 +1049,6 @@ namespace cxxlens::sdk::query
 						if (!feature_members.contains(id))
 							membership = state::conflicting;
 						const view_identity key{id, world[1], world[2], world[3]};
-						lookup_work(key, feature_index.size());
 						if (const auto found = feature_index.find(key);
 							found != feature_index.end())
 							if (output.features[found->second].source_binding_state == "none" ||
@@ -1341,14 +1339,15 @@ namespace cxxlens::sdk::query
 					}
 					b.rows = 0;
 				}
-				projector work{b,
-							   borrowed,
-							   {},
-							   {},
-							   {},
-							   row_validation_reused,
-							   projector::inventory_cache{b},
-							   {}};
+				projector work{
+					b,
+					borrowed,
+					{},
+					{},
+					{},
+					row_validation_reused,
+					projector::inventory_cache{b},
+					std::map<view_identity, std::size_t, identity_less>{identity_less{&b}}};
 				auto output =
 					work.run(input.feature_inputs_complete && input.inventory_inputs_complete);
 				output.compile_units_complete = input.compile_units_complete;

@@ -544,10 +544,118 @@ namespace
 			require(bool(row.row.validate()) && !row.row.canonical_form().empty(),
 					"detached evidence retained a borrowed inventory buffer");
 	}
+	void indexed_membership_prefix_controls()
+	{
+		auto originals = many_members();
+		for (auto& group : originals.rows)
+			for (auto& row : group)
+			{
+				row.presence.universe = "world:" + std::string(128U, 'u');
+				row.presence.fragments = {"variant:" + std::string(128U, 'v')};
+				row.interpretation = "interpretation:" + std::string(128U, 'i');
+				for (auto& edge : row.contributor_edges)
+				{
+					edge.condition = row.presence;
+					edge.interpretation = row.interpretation;
+				}
+			}
+		const auto input = originals.queries(true);
+		std::size_t visits{};
+		q::finite_population_limits limits;
+		limits.cancelled = [&]
+		{
+			++visits;
+			return false;
+		};
+		q::projection_resource_usage measured, repeated;
+		const auto full = take(q::project_source_features(input, limits, {}, measured));
+		require(full.features.size() == 96U &&
+					std::ranges::all_of(full.populations,
+										[](const auto& population)
+										{
+											return population.membership_state == state::complete;
+										}),
+				"long exact world keys changed the closed original feature census");
+		auto empty_listed = originals;
+		for (auto& inventory : empty_listed.rows[9])
+		{
+			set(inventory, "feature_ids", symbols({}));
+			set(inventory, "feature_count", num(0));
+		}
+		q::projection_resource_usage unlisted_usage;
+		const auto unlisted =
+			take(q::project_source_features(empty_listed.queries(true), {}, {}, unlisted_usage));
+		require(unlisted.features.size() == full.features.size() &&
+					std::ranges::all_of(unlisted.populations,
+										[](const auto& population)
+										{
+											return population.membership_state ==
+												state::conflicting;
+										}),
+				"empty listed inventory erased actual originals or fabricated closed zero");
+		const auto world_bytes = full.features.front().universe.size() +
+			full.features.front().variant.size() + full.features.front().interpretation.size();
+		// Every listed key must really inspect its equal world bytes. The empty
+		// listed census keeps the same actual originals without these lookups.
+		const auto minimum_equal_world_work =
+			2U * world_bytes * full.features.size() * full.populations.size();
+		require(measured.operations > unlisted_usage.operations &&
+					measured.operations - unlisted_usage.operations >= minimum_equal_world_work,
+				"listed membership did not charge its actual equal-world key comparisons");
+		limits.cancelled = {};
+		limits.maximum_operations = measured.operations;
+		limits.maximum_retained_bytes = measured.retained_bytes_bound;
+		require(bool(q::project_source_features(input, limits, {}, repeated)) &&
+					repeated.operations == measured.operations &&
+					repeated.retained_bytes_bound == measured.retained_bytes_bound,
+				"actual index comparisons changed exact charged work/storage");
+		--limits.maximum_operations;
+		require(!q::project_source_features(input, limits, {}, repeated) && !repeated.operations &&
+					!repeated.retained_bytes_bound,
+				"index comparison bypassed one-under work or published failed usage");
+		limits.maximum_operations = measured.operations;
+		--limits.maximum_retained_bytes;
+		require(!q::project_source_features(input, limits, {}, repeated) && !repeated.operations &&
+					!repeated.retained_bytes_bound,
+				"index comparison bypassed one-under storage or published failed usage");
+
+		auto foreign = originals;
+		std::vector<std::string> ids = full.populations.front().feature_ids;
+		ids.front() = "!foreign-first-byte";
+		for (auto& inventory : foreign.rows[9])
+			set(inventory, "feature_ids", symbol_values(ids));
+		const auto unknown = take(q::project_source_features(foreign.queries(true)));
+		require(unknown.features.size() == 96U &&
+					std::ranges::all_of(unknown.populations,
+										[](const auto& population)
+										{
+											return population.membership_state != state::complete;
+										}),
+				"first-byte mismatch borrowed long matching world keys for foreign membership");
+
+		require(visits > 65536U, "fixture did not reach long original-key comparisons");
+		const auto midpoint = visits / 2U;
+		std::size_t prefix{};
+		std::stop_source stop;
+		q::finite_population_limits interrupted;
+		interrupted.cancelled = [&]
+		{
+			if (++prefix == midpoint)
+				stop.request_stop();
+			return false;
+		};
+		const auto stopped =
+			q::project_source_features(input, interrupted, stop.get_token(), repeated);
+		require(
+			!stopped && stopped.error().code == "sdk.source-feature-cancelled" &&
+				prefix == midpoint && !repeated.operations && !repeated.retained_bytes_bound,
+			"long comparison failed to observe a real mid-projection stop before the next visit");
+	}
 } // namespace
 
 int main()
 {
+	indexed_membership_prefix_controls();
 	retained_membership_controls();
 	retained_unbound_and_declaration_controls();
 	fixture f;
