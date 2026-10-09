@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cstdint>
+#include <limits>
 #include <map>
 #include <memory>
 #include <set>
@@ -733,39 +735,149 @@ namespace cxxlens::sdk::query
 						(value.kind == "CXXDefaultArgExpr" || value.kind == "CXXDefaultInitExpr");
 				return false;
 			}
-			struct member_less
-			{
-				budget* meter;
-				bool operator()(std::string_view left, std::string_view right) const
-				{
-					return compare_identity_text(*meter, left, right) < 0;
-				}
-			};
 			struct member_index
 			{
+				struct entry
+				{
+					std::string_view id;
+					std::uint64_t hash{};
+				};
+				struct position
+				{
+					std::size_t slot;
+					bool found;
+				};
 				budget& meter;
-				std::size_t retained{};
-				std::set<std::string_view, member_less> values;
-				explicit member_index(budget& owner) : meter(owner), values(member_less{&owner}) {}
+				std::size_t retained{}, capacity{}, count{};
+				std::unique_ptr<entry[]> values;
+				explicit member_index(budget& owner) : meter(owner) {}
 				~member_index()
 				{
-					// The ID views borrow the original immutable cell. Only set nodes are
-					// owned here, and all nodes expire before their reservation is refunded.
-					values.clear();
+					// Membership is never iterated or serialized. IDs still borrow the
+					// original immutable cell; buckets expire before their refund.
+					values.reset();
 					meter.retained -= retained;
+				}
+				std::uint64_t hash(std::string_view id) const
+				{
+					meter.work();
+					std::uint64_t value = 14695981039346656037ULL;
+					for (std::size_t offset{}; offset < id.size(); ++offset)
+					{
+						// Charge the actual byte read and hash update before either occurs.
+						meter.work(2U);
+						value ^= static_cast<unsigned char>(id[offset]);
+						value *= 1099511628211ULL;
+					}
+					// Zero denotes an unused bucket. Normalization only creates a possible
+					// collision; exact byte equality remains independently required.
+					return value ? value : 1U;
+				}
+				bool equal(std::string_view left, std::string_view right) const
+				{
+					meter.work();
+					if (left.size() != right.size())
+						return false;
+					for (std::size_t offset{}; offset < left.size(); ++offset)
+					{
+						meter.work(2U);
+						if (static_cast<unsigned char>(left[offset]) !=
+							static_cast<unsigned char>(right[offset]))
+							return false;
+					}
+					return true;
+				}
+				position locate(std::string_view id, std::uint64_t value) const
+				{
+					meter.work();
+					auto slot = static_cast<std::size_t>(value) & (capacity - 1U);
+					for (std::size_t visited{}; visited < capacity; ++visited)
+					{
+						meter.work();
+						const auto& candidate = values[slot];
+						if (!candidate.hash)
+							return {slot, false};
+						if (candidate.hash == value && equal(candidate.id, id))
+							return {slot, true};
+						slot = (slot + 1U) & (capacity - 1U);
+					}
+					fail("set-members", "membership-table-full");
+				}
+				void grow()
+				{
+					meter.work();
+					if (capacity > std::numeric_limits<std::size_t>::max() / 2U)
+						fail("retained-bytes", "limit-exceeded", "sdk.source-feature-budget");
+					const auto next = capacity ? capacity * 2U : 2U;
+					constexpr auto overhead = 64U;
+					if (next > (std::numeric_limits<std::size_t>::max() - overhead) / sizeof(entry))
+						fail("retained-bytes", "limit-exceeded", "sdk.source-feature-budget");
+					const auto bytes = next * sizeof(entry) + overhead;
+					meter.retain(bytes);
+					retained += bytes;
+					meter.temporary_peak = std::max(meter.temporary_peak, meter.retained);
+					// The old and new fixed arrays coexist until every occupied entry has
+					// moved. Initialization and all collision probes are prepaid/checkable.
+					constexpr auto words = sizeof(entry) / sizeof(void*) + 1U;
+					if (next > meter.limits.maximum_operations / words)
+						fail("operations", "limit-exceeded", "sdk.source-feature-budget");
+					meter.work(next * words);
+					auto replacement = std::make_unique<entry[]>(next);
+					for (std::size_t offset{}; offset < capacity; ++offset)
+					{
+						meter.work();
+						if (!values[offset].hash)
+							continue;
+						meter.work();
+						const auto value = values[offset].hash;
+						auto slot = static_cast<std::size_t>(value) & (next - 1U);
+						bool vacant{};
+						for (std::size_t visited{}; visited < next; ++visited)
+						{
+							meter.work();
+							if (!replacement[slot].hash)
+							{
+								vacant = true;
+								break;
+							}
+							slot = (slot + 1U) & (next - 1U);
+						}
+						if (!vacant)
+							fail("set-members", "membership-table-full");
+						meter.work(2U * sizeof(entry) / sizeof(void*) + 1U);
+						replacement[slot] = values[offset];
+					}
+					values.swap(replacement);
+					const auto old_bytes = capacity ? capacity * sizeof(entry) + overhead : 0U;
+					capacity = next;
+					replacement.reset();
+					meter.retained -= old_bytes;
+					retained -= old_bytes;
 				}
 				bool insert(std::string_view id)
 				{
-					constexpr auto node = 128U + sizeof(std::string_view);
-					meter.retain(node);
-					retained += node;
-					meter.temporary_peak = std::max(meter.temporary_peak, meter.retained);
-					return values.insert(id).second;
+					const auto value = hash(id);
+					position found{0U, false};
+					if (capacity)
+					{
+						found = locate(id, value);
+						if (found.found)
+							return false;
+					}
+					if (!capacity || count >= capacity / 2U)
+					{
+						grow();
+						found = locate(id, value);
+					}
+					meter.work(2U * sizeof(entry) / sizeof(void*) + 2U);
+					values[found.slot] = {id, value};
+					++count;
+					return true;
 				}
 				bool contains(std::string_view id) const
 				{
 					meter.work();
-					return values.find(id) != values.end();
+					return capacity && locate(id, hash(id)).found;
 				}
 			};
 			struct decoded_set

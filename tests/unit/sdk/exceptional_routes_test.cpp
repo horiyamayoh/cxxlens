@@ -589,6 +589,219 @@ namespace
 					"immutable Routes preserve every original query side channel");
 		}
 	}
+	fixture routed_identity_fixture()
+	{
+		fixture joined;
+		for (auto& rows : joined.rows)
+			rows.clear();
+		std::string tail;
+		for (std::size_t scalar{}; scalar < 192U; ++scalar)
+			tail += "\xf0\x9f\x8c\x8d";
+		tail += "\xc3\xa9:z";
+		const std::array<std::string, 4> original{
+			"carrier:" + tail, "universe:" + tail, "variant:" + tail, "interpretation:" + tail};
+		for (std::size_t cohort{}; cohort < 13U; ++cohort)
+		{
+			auto identity = original;
+			if (cohort)
+			{
+				const auto axis = (cohort - 1U) / 3U;
+				const auto difference = (cohort - 1U) % 3U;
+				if (difference == 0U)
+					identity[axis].front() = 'A';
+				else if (difference == 1U)
+					identity[axis].back() = 'y';
+				else
+					identity[axis] += "\xc3\xa9";
+			}
+			fixture current;
+			for (auto& group : current.rows)
+				for (auto& row : group)
+				{
+					row.presence = {identity[1], {identity[2]}};
+					row.interpretation = identity[3];
+					for (auto& edge : row.contributor_edges)
+					{
+						edge.condition = row.presence;
+						edge.interpretation = row.interpretation;
+					}
+				}
+			const auto suffix = ":" + std::to_string(cohort);
+			const std::string entry = "block:entry" + suffix;
+			const std::string normal = "block:normal" + suffix;
+			const std::string unwind = "block:unwind" + suffix;
+			const std::string normal_edge = "edge:normal" + suffix;
+			const std::string unwind_edge = "edge:unwind" + suffix;
+			const std::string call = "exit:invoke" + suffix;
+			set(current.rows[9][0], "exit", detached_cell::utf8(identity[0]));
+			set(current.rows[9][0], "lowered_entry", detached_cell::utf8(entry));
+			set(current.rows[9][0], "lowered_block_ids", symbols({entry, normal, unwind}));
+			set(current.rows[9][0], "lowered_successor_ids", symbols({normal_edge, unwind_edge}));
+			set(current.rows[9][1], "exit", detached_cell::utf8(call));
+			set(current.rows[9][1], "variant", detached_cell::utf8(identity[0]));
+			set(current.rows[9][1], "lowered_block", detached_cell::utf8(entry));
+			set(current.rows[9][1], "normal_successor", detached_cell::utf8(normal_edge));
+			set(current.rows[9][1], "unwind_successor", detached_cell::utf8(unwind_edge));
+			for (std::size_t block{}; block < current.rows[10].size(); ++block)
+			{
+				set(current.rows[10][block],
+					"block",
+					detached_cell::utf8(block == 0U		  ? entry
+											: block == 1U ? normal
+														  : unwind));
+				set(current.rows[10][block], "variant", detached_cell::utf8(identity[0]));
+			}
+			for (std::size_t successor{}; successor < current.rows[11].size(); ++successor)
+			{
+				set(current.rows[11][successor],
+					"successor",
+					detached_cell::utf8(successor == 0U ? normal_edge : unwind_edge));
+				set(current.rows[11][successor], "variant", detached_cell::utf8(identity[0]));
+				set(current.rows[11][successor], "from_block", detached_cell::utf8(entry));
+				set(current.rows[11][successor],
+					"to_block",
+					detached_cell::utf8(successor == 0U ? normal : unwind));
+				set(current.rows[11][successor], "invoke", detached_cell::utf8(call));
+			}
+			for (std::size_t group{}; group < joined.rows.size(); ++group)
+				joined.rows[group].insert(joined.rows[group].end(),
+										  current.rows[group].begin(),
+										  current.rows[group].end());
+		}
+		return joined;
+	}
+	void routed_identity_controls()
+	{
+		const auto original = routed_identity_fixture();
+		const auto input = original.queries(true);
+		q::projection_resource_usage measured;
+		const auto expected = take(q::project_exceptional_routes(input, {}, {}, measured));
+		require(expected.variants.size() == 13U && expected.blocks.size() == 39U &&
+					expected.successors.size() == 26U && expected.invokes.size() == 13U,
+				"four-axis fixture retains every distinct carrier and every flat observation");
+		for (const auto& population : expected.variants)
+		{
+			std::vector<std::size_t> blocks, successors, invokes;
+			const auto belongs = [&](const auto& record)
+			{
+				return record.variant == population.carrier &&
+					record.universe == population.universe &&
+					record.semantic_variant == population.variant &&
+					record.interpretation == population.interpretation;
+			};
+			for (std::size_t i{}; i < expected.blocks.size(); ++i)
+				if (belongs(expected.blocks[i]))
+					blocks.push_back(i);
+			for (std::size_t i{}; i < expected.successors.size(); ++i)
+				if (belongs(expected.successors[i]))
+					successors.push_back(i);
+			for (std::size_t i{}; i < expected.invokes.size(); ++i)
+				if (belongs(expected.invokes[i]))
+					invokes.push_back(i);
+			require(population.blocks == blocks && population.successors == successors &&
+						population.invokes == invokes && blocks.size() == 3U &&
+						successors.size() == 2U && invokes.size() == 1U &&
+						population.carrier_state == state::complete &&
+						population.scope_state == state::complete &&
+						population.source_state == state::complete &&
+						population.enumeration_state == state::complete &&
+						population.entry_state == state::complete &&
+						population.topology_state == state::complete,
+					"each Unicode size/first/last-axis drift obeys the complete original equality "
+					"predicate and independent topology facets");
+		}
+		const auto raw = take(q::project_exceptional_routes(original.input()));
+		same_routes(expected, raw, false);
+		same_routes(expected, take(q::project_exceptional_routes(original.queries())));
+		q::finite_population_limits shared;
+		shared.evidence_ownership = q::projection_evidence_ownership::shared_immutable;
+		same_routes(expected, take(q::project_exceptional_routes(input, shared)));
+		for (const bool storage : {false, true})
+			for (const bool one_under : {false, true})
+			{
+				q::finite_population_limits limits;
+				const auto decrement = static_cast<std::size_t>(one_under);
+				if (storage)
+					limits.maximum_retained_bytes = measured.retained_bytes_bound - decrement;
+				else
+					limits.maximum_operations = measured.operations - decrement;
+				q::projection_resource_usage usage{1U, 1U};
+				const auto bounded = q::project_exceptional_routes(input, limits, {}, usage);
+				require(bool(bounded) == !one_under,
+						"four-axis membership honors exact and one-under work/storage");
+				if (bounded)
+				{
+					same_routes(expected, *bounded);
+					require(usage.operations == measured.operations &&
+								usage.retained_bytes_bound == measured.retained_bytes_bound,
+							"membership bounded success preserves actual work and full ownership");
+				}
+				else
+					require(
+						!usage.operations && !usage.retained_bytes_bound,
+						"failed membership exposes neither output ownership nor successful usage");
+			}
+		std::size_t checkpoints{};
+		q::finite_population_limits counted;
+		counted.cancelled = [&]
+		{
+			++checkpoints;
+			return false;
+		};
+		same_routes(expected, take(q::project_exceptional_routes(input, counted)));
+		require(checkpoints > 1000U, "long identity path performs real bounded checkpoints");
+		for (const auto stop_at : {std::size_t{1U}, checkpoints / 2U, checkpoints - 1U})
+		{
+			std::size_t visited{};
+			q::finite_population_limits interrupted;
+			interrupted.cancelled = [&]
+			{
+				return ++visited == stop_at;
+			};
+			q::projection_resource_usage usage{1U, 1U};
+			const auto stopped = q::project_exceptional_routes(input, interrupted, {}, usage);
+			require(!stopped && stopped.error().code == "sdk.exceptional-route-cancelled" &&
+						visited == stop_at && !usage.operations && !usage.retained_bytes_bound,
+					"real pre/mid/late membership cancellation revokes complete partial output");
+		}
+		std::stop_source pre_stop;
+		pre_stop.request_stop();
+		q::projection_resource_usage usage{1U, 1U};
+		require(!q::project_exceptional_routes(input, {}, pre_stop.get_token(), usage) &&
+					!usage.operations && !usage.retained_bytes_bound,
+				"long membership obeys a pre-requested stop token");
+		same_routes(expected, take(q::project_exceptional_routes(input, {}, {}, usage)));
+		require(usage.operations == measured.operations &&
+					usage.retained_bytes_bound == measured.retained_bytes_bound,
+				"fresh membership retry is independent of discarded partial state");
+		for (const bool malformed_utf8 : {false, true})
+		{
+			auto changed = original;
+			auto& late = changed.rows[11].back();
+			set(late, "variant", detached_cell::utf8("carrier:foreign"));
+			if (malformed_utf8)
+				late.values.at("output.kind").value = std::string{"\x80", 1U};
+			else
+				late.values.at("output.ordinal").value = true;
+			usage = {1U, 1U};
+			require(!q::project_exceptional_routes(changed.queries(), {}, {}, usage) &&
+						!usage.operations && !usage.retained_bytes_bound,
+					"early foreign carrier mismatch never skips late raw UTF8 or scalar admission");
+		}
+		auto foreign = original;
+		set(foreign.rows[11].back(), "compile_unit", detached_cell::utf8("unit:foreign"));
+		const auto foreign_result = take(q::project_exceptional_routes(foreign.input()));
+		require(foreign_result.successors.size() == expected.successors.size() &&
+					std::ranges::any_of(foreign_result.successors,
+										[](const auto& edge)
+										{
+											return edge.compile_unit == "unit:foreign" &&
+												edge.state != state::complete;
+										}),
+				"matching membership preserves the complete foreign unit observation and gaps");
+		same_routes(
+			foreign_result, take(q::project_exceptional_routes(foreign.queries(true))), false);
+	}
 	void immutable_evidence_controls()
 	{
 		q::finite_population_limits shared;
@@ -875,6 +1088,7 @@ int main()
 {
 	ordered_successor_evidence_controls();
 	immutable_evidence_controls();
+	routed_identity_controls();
 	{
 		fixture sized;
 		query_copy_controls::projection(

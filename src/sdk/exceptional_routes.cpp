@@ -192,6 +192,19 @@ namespace cxxlens::sdk::query
 			{
 				charge(retained, n, limits.maximum_retained_bytes, "retained-bytes");
 			}
+			bool identity_equal(std::string_view left, std::string_view right)
+			{
+				work();
+				if (left.size() != right.size())
+					return false;
+				for (std::size_t i{}; i < left.size(); ++i)
+				{
+					work(2U);
+					if (static_cast<unsigned char>(left[i]) != static_cast<unsigned char>(right[i]))
+						return false;
+				}
+				return true;
+			}
 			void bind(refs& into, const refs& from)
 			{
 				work(from.size());
@@ -1601,13 +1614,10 @@ namespace cxxlens::sdk::query
 					for (std::size_t i{}; i < output.blocks.size(); ++i)
 					{
 						const auto& block = output.blocks[i];
-						b.work(block.variant.size() + value.carrier.size() + block.universe.size() +
-							   value.universe.size() + block.semantic_variant.size() +
-							   value.variant.size() + block.interpretation.size() +
-							   value.interpretation.size() + 1U);
-						if (block.variant != value.carrier || block.universe != value.universe ||
-							block.semantic_variant != value.variant ||
-							block.interpretation != value.interpretation)
+						if (!b.identity_equal(block.variant, value.carrier) ||
+							!b.identity_equal(block.universe, value.universe) ||
+							!b.identity_equal(block.semantic_variant, value.variant) ||
+							!b.identity_equal(block.interpretation, value.interpretation))
 							continue;
 						b.retain(2U * sizeof(std::size_t));
 						value.blocks.push_back(i);
@@ -1634,13 +1644,10 @@ namespace cxxlens::sdk::query
 					for (std::size_t i{}; i < output.successors.size(); ++i)
 					{
 						const auto& edge = output.successors[i];
-						b.work(edge.variant.size() + value.carrier.size() + edge.universe.size() +
-							   value.universe.size() + edge.semantic_variant.size() +
-							   value.variant.size() + edge.interpretation.size() +
-							   value.interpretation.size() + 1U);
-						if (edge.variant != value.carrier || edge.universe != value.universe ||
-							edge.semantic_variant != value.variant ||
-							edge.interpretation != value.interpretation)
+						if (!b.identity_equal(edge.variant, value.carrier) ||
+							!b.identity_equal(edge.universe, value.universe) ||
+							!b.identity_equal(edge.semantic_variant, value.variant) ||
+							!b.identity_equal(edge.interpretation, value.interpretation))
 							continue;
 						b.retain(2U * sizeof(std::size_t));
 						value.successors.push_back(i);
@@ -1667,13 +1674,10 @@ namespace cxxlens::sdk::query
 					for (std::size_t i{}; i < output.invokes.size(); ++i)
 					{
 						const auto& invoke = output.invokes[i];
-						b.work(invoke.variant.size() + value.carrier.size() +
-							   invoke.universe.size() + value.universe.size() +
-							   invoke.semantic_variant.size() + value.variant.size() +
-							   invoke.interpretation.size() + value.interpretation.size() + 1U);
-						if (invoke.variant == value.carrier && invoke.universe == value.universe &&
-							invoke.semantic_variant == value.variant &&
-							invoke.interpretation == value.interpretation)
+						if (b.identity_equal(invoke.variant, value.carrier) &&
+							b.identity_equal(invoke.universe, value.universe) &&
+							b.identity_equal(invoke.semantic_variant, value.variant) &&
+							b.identity_equal(invoke.interpretation, value.interpretation))
 						{
 							b.retain(2U * sizeof(std::size_t));
 							value.invokes.push_back(i);

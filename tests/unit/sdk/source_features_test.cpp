@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
@@ -1713,8 +1714,378 @@ namespace
 	}
 } // namespace
 
+namespace
+{
+	template <class T>
+	void membership_append(std::string& wire, const T& value);
+	void membership_append(std::string& wire, const q::query_unresolved& value)
+	{
+		membership_append(wire, std::tie(value.code, value.subject, value.detail));
+	}
+	template <class T>
+	void membership_append(std::string& wire, const T& value)
+	{
+		if constexpr (std::is_convertible_v<T, std::string_view>)
+		{
+			const std::string_view text{value};
+			wire += std::to_string(text.size()) + ":";
+			wire.append(text);
+		}
+		else if constexpr (std::is_integral_v<T>)
+			wire += std::to_string(value) + ";";
+		else if constexpr (std::is_enum_v<T>)
+			membership_append(wire, static_cast<std::underlying_type_t<T>>(value));
+		else if constexpr (requires { value.has_value(); })
+		{
+			membership_append(wire, value.has_value());
+			if (value)
+				membership_append(wire, *value);
+		}
+		else if constexpr (requires { std::tuple_size<T>::value; })
+			std::apply(
+				[&](const auto&... parts)
+				{
+					(membership_append(wire, parts), ...);
+				},
+				value);
+		else if constexpr (requires {
+							   value.begin();
+							   value.end();
+							   value.size();
+						   })
+		{
+			membership_append(wire, value.size());
+			for (const auto& member : value)
+				membership_append(wire, member);
+		}
+		else
+			static_assert(!sizeof(T), "missing complete Source oracle field");
+	}
+	std::string membership_projection_form(const q::source_feature_projection& output,
+										   bool include_queries = true)
+	{
+		const auto observed_language_environment_fields =
+			[](const q::observed_language_environment& r)
+		{
+			return std::tie(r.compile_unit,
+							r.universe,
+							r.variant,
+							r.interpretation,
+							r.profile,
+							r.observation_state,
+							r.freestanding,
+							r.state,
+							r.evidence,
+							r.gaps);
+		};
+		const auto observed_source_feature_fields = [](const q::observed_source_feature& r)
+		{
+			return std::tie(r.feature,
+							r.compile_unit,
+							r.universe,
+							r.variant,
+							r.interpretation,
+							r.profile,
+							r.ordinal,
+							r.original_node_ordinal,
+							r.compiler_kind,
+							r.feature_class,
+							r.kind,
+							r.origin,
+							r.evaluation,
+							r.observation_state,
+							r.file,
+							r.source_snapshot,
+							r.source_span,
+							r.source_none_reason,
+							r.is_implicit,
+							r.is_system,
+							r.declaration,
+							r.context_declaration,
+							r.subject_entity,
+							r.call_target,
+							r.subject_type,
+							r.syntax,
+							r.reference_kind,
+							r.type_role,
+							r.source_binding_state,
+							r.declaration_binding_state,
+							r.context_binding_state,
+							r.entity_binding_state,
+							r.call_binding_state,
+							r.type_binding_state,
+							r.identity_state,
+							r.observation,
+							r.source_state,
+							r.declaration_state,
+							r.context_state,
+							r.entity_state,
+							r.call_state,
+							r.type_state,
+							r.syntax_state,
+							r.evidence,
+							r.gaps);
+		};
+		const auto source_feature_population_fields = [](const q::source_feature_population& r)
+		{
+			return std::tie(r.inventory,
+							r.compile_unit,
+							r.scope,
+							r.file,
+							r.source_snapshot,
+							r.profile,
+							r.universe,
+							r.variant,
+							r.interpretation,
+							r.feature_count,
+							r.unbound_feature_count,
+							r.feature_ids,
+							r.unbound_feature_ids,
+							r.entered_file_count,
+							r.entered_file_ids,
+							r.entered_source_snapshots,
+							r.enumeration_observation,
+							r.traversal_observation,
+							r.entry_observation,
+							r.source_binding_observation,
+							r.entered_file_observation,
+							r.identity_state,
+							r.enumeration_state,
+							r.membership_state,
+							r.traversal_state,
+							r.entry_state,
+							r.source_state,
+							r.entered_file_state,
+							r.features,
+							r.evidence,
+							r.gaps);
+		};
+
+		std::string wire;
+		membership_append(wire,
+						  std::tie(output.compile_units_complete,
+								   output.feature_inputs_complete,
+								   output.inventory_inputs_complete,
+								   output.unresolved));
+		membership_append(wire, output.environments.size());
+		for (const auto& value : output.environments)
+			membership_append(wire, observed_language_environment_fields(value));
+		membership_append(wire, output.features.size());
+		for (const auto& value : output.features)
+			membership_append(wire, observed_source_feature_fields(value));
+		membership_append(wire, output.populations.size());
+		for (const auto& value : output.populations)
+			membership_append(wire, source_feature_population_fields(value));
+		membership_append(wire, output.evidence.size());
+		for (const auto& value : output.evidence)
+			membership_append(wire,
+							  std::tuple{value.relation_id, value.original_row().canonical_form()});
+		if (include_queries)
+		{
+			membership_append(wire, output.source_queries.has_value());
+			if (output.source_queries)
+			{
+				membership_append(wire, output.source_queries->snapshot_id);
+				membership_append(wire, output.source_queries->scans.size());
+				for (const auto& scan : output.source_queries->scans)
+					membership_append(wire,
+									  std::tuple{scan.relation_id,
+												 scan.logical_ir.canonical_form(),
+												 scan.result.canonical_form()});
+			}
+		}
+		return wire;
+	}
+} // namespace
+
+namespace
+{
+	std::uint64_t membership_fixture_hash(std::string_view id)
+	{
+		std::uint64_t hash = 14695981039346656037ULL;
+		for (const char byte : id)
+		{
+			hash ^= static_cast<unsigned char>(byte);
+			hash *= 1099511628211ULL;
+		}
+		return hash ? hash : 1U;
+	}
+	fixture colliding_members()
+	{
+		fixture original;
+		std::vector<std::string> ids;
+		for (std::size_t candidate{}; candidate < 200000U && ids.size() < 96U; ++candidate)
+		{
+			auto id = "feature:membership:\xc3\xa9:" + std::to_string(candidate);
+			if ((membership_fixture_hash(id) & 511U) == 511U)
+				ids.push_back(std::move(id));
+		}
+		require(ids.size() == 96U, "fixture did not find real same-bucket original IDs");
+		const auto feature = original.rows[8].front();
+		original.rows[8].clear();
+		for (std::size_t index{}; index < ids.size(); ++index)
+		{
+			auto row = feature;
+			set(row, "feature", txt(ids[index]));
+			set(row, "ordinal", num(index));
+			set(row, "original_node_ordinal", num(index));
+			original.rows[8].push_back(std::move(row));
+		}
+		for (auto& inventory : original.rows[9])
+		{
+			set(inventory, "feature_ids", symbol_values(ids));
+			set(inventory, "feature_count", num(ids.size()));
+		}
+		return original;
+	}
+	void collision_membership_controls()
+	{
+		const auto original = colliding_members();
+		const auto input = original.queries(true, true);
+		q::projection_resource_usage measured;
+		const auto detached = take(q::project_source_features(input, {}, {}, measured));
+		const auto full = membership_projection_form(detached);
+		std::vector<std::string> expected;
+		for (const auto& row : original.rows[8])
+			expected.push_back(std::get<std::string>(*row.values.at("output.feature").value));
+		std::ranges::sort(expected);
+		require(std::ranges::adjacent_find(expected) == expected.end() &&
+					detached.features.size() == expected.size() &&
+					detached.populations.size() == 2U,
+				"colliding fixture lost distinct originals or introduced duplicate bytes");
+		for (const auto& population : detached.populations)
+		{
+			require(population.feature_ids == expected &&
+						population.features.size() == expected.size() &&
+						population.membership_state == state::complete,
+					"same-bucket membership changed the independent sorted-set census");
+			for (std::size_t index{}; index < expected.size(); ++index)
+				require(detached.features[population.features[index]].feature == expected[index],
+						"membership probes changed ordered feature references");
+		}
+		const auto raw = take(q::project_source_features(original.input()));
+		require(!raw.source_queries &&
+					membership_projection_form(raw, false) ==
+						membership_projection_form(detached, false),
+				"raw membership changed complete DTO/raw evidence");
+		q::finite_population_limits shared_limits;
+		shared_limits.evidence_ownership = q::projection_evidence_ownership::shared_immutable;
+		q::source_feature_projection survived;
+		{
+			const auto temporary = original.queries(true, true);
+			survived = take(q::project_source_features(temporary, shared_limits));
+		}
+		require(membership_projection_form(survived) == full,
+				"shared membership changed any DTO, complete raw row or source query");
+		survived.source_queries.reset();
+		auto copied = survived;
+		survived = {};
+		auto moved = std::move(copied);
+		require(membership_projection_form(moved, false) ==
+					membership_projection_form(detached, false),
+				"membership depended on expired bucket/original-query owners");
+		for (const auto& evidence : moved.evidence)
+			require(evidence.row.values.empty() && bool(evidence.original_row().validate()),
+					"shared evidence copied or lost the independently retained original row");
+		for (const std::string_view mutation : {"duplicate", "missing", "foreign"})
+		{
+			auto changed = original;
+			auto ids = expected;
+			if (mutation == "duplicate")
+				ids.push_back(std::string{ids.front()});
+			if (mutation == "missing")
+				ids.pop_back();
+			if (mutation == "foreign")
+			{
+				ids.back() += ":foreign";
+			}
+			for (auto& inventory : changed.rows[9])
+			{
+				set(inventory, "feature_ids", symbol_values(ids));
+				set(inventory, "feature_count", num(ids.size()));
+			}
+			q::projection_resource_usage usage{1U, 1U};
+			const auto result = q::project_source_features(changed.queries(), {}, {}, usage);
+			if (mutation == "duplicate")
+			{
+				require(
+					!result && !usage.operations && !usage.retained_bytes_bound,
+					"equal bytes from separately owned cells bypassed full duplicate admission");
+			}
+			else
+			{
+				require(
+					bool(result) && result->features.size() == expected.size() &&
+						std::ranges::all_of(result->populations,
+											[](const auto& population)
+											{
+												return population.membership_state !=
+													state::complete;
+											}),
+					"missing/foreign membership erased originals or promoted incomplete census");
+			}
+		}
+		for (const bool storage : {false, true})
+			for (const bool one_under : {false, true})
+			{
+				q::finite_population_limits limits;
+				if (storage)
+					limits.maximum_retained_bytes =
+						measured.retained_bytes_bound - static_cast<std::size_t>(one_under);
+				else
+					limits.maximum_operations =
+						measured.operations - static_cast<std::size_t>(one_under);
+				q::projection_resource_usage usage{1U, 1U};
+				const auto result = q::project_source_features(input, limits, {}, usage);
+				require(static_cast<bool>(result) == !one_under,
+						"colliding membership ignored exact/one-under work or storage");
+				if (result)
+					require(membership_projection_form(*result) == full &&
+								usage.operations == measured.operations &&
+								usage.retained_bytes_bound == measured.retained_bytes_bound,
+							"bounded membership changed complete output or actual usage");
+				else
+					require(!usage.operations && !usage.retained_bytes_bound,
+							"failed membership exposed successful usage");
+			}
+		std::size_t checkpoints{};
+		q::finite_population_limits counted;
+		counted.cancelled = [&]
+		{
+			++checkpoints;
+			return false;
+		};
+		require(bool(q::project_source_features(input, counted)), "collision callback census");
+		require(checkpoints > 100U, "colliding membership did not perform bounded actual visits");
+		for (const std::size_t stop_at : {std::size_t{1U}, checkpoints / 2U, checkpoints - 1U})
+		{
+			std::size_t visited{};
+			std::stop_source stop;
+			q::finite_population_limits limits;
+			limits.cancelled = [&]
+			{
+				if (++visited == stop_at)
+					stop.request_stop();
+				return false;
+			};
+			q::projection_resource_usage usage{1U, 1U};
+			const auto result = q::project_source_features(input, limits, stop.get_token(), usage);
+			require(!result && result.error().code == "sdk.source-feature-cancelled" &&
+						visited == stop_at && !usage.operations && !usage.retained_bytes_bound,
+					"real collision-path stop bypassed checkpoints or retained partial usage");
+		}
+		q::projection_resource_usage retried;
+		const auto retry = take(q::project_source_features(input, {}, {}, retried));
+		require(membership_projection_form(retry) == full &&
+					retried.operations == measured.operations &&
+					retried.retained_bytes_bound == measured.retained_bytes_bound,
+				"fresh retry inherited discarded membership buckets or partial output");
+	}
+} // namespace
+
 int main()
 {
+	collision_membership_controls();
 	immutable_evidence_controls();
 	{
 		fixture sized;
