@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.99.0
+document_version: 1.100.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -823,6 +823,30 @@ entries:
       - cleanup-census-runtime-object-version-and-unwind-resource-route-not-implied
       - bounds-before-retention-active-cancellation-and-measured-successful-usage
     depends_on: [public.finite-populations, public.projection-resource-usage]
+
+  - id: public.function-exception-specifications
+    status: implemented
+    profile: NG1
+    target: cxxlens::query
+    headers: [include/cxxlens/sdk/exception_cleanup_facets.hpp]
+    symbols:
+      - name: query.function_exception_specification_projection
+        kind: value
+        signature: 'evidence; specifications; compile_units_complete; detail_inputs_complete; exit_inputs_complete; declaration_inputs_complete; unresolved; source_queries'
+      - name: query.project_function_exception_specifications
+        kind: function
+        signature: 'result<function_exception_specification_projection> project_function_exception_specifications(exception_cleanup_input, finite_population_limits = {}, stop_token = {}); result<function_exception_specification_projection> project_function_exception_specifications(const application_query_results&, finite_population_limits = {}, stop_token = {}); result<function_exception_specification_projection> project_function_exception_specifications(exception_cleanup_input, finite_population_limits, stop_token, projection_resource_usage&); result<function_exception_specification_projection> project_function_exception_specifications(const application_query_results&, finite_population_limits, stop_token, projection_resource_usage&)'
+    errors: [sdk.exception-cleanup-input-invalid, sdk.exception-cleanup-budget, sdk.exception-cleanup-cancelled, sdk.exception-cleanup-resource-exhausted]
+    lifetime: [borrowed-input-only-during-call, projection-owns-original-evidence-and-query-side-channels, no-compiler-pointer]
+    threading: [independent-calls-share-no-mutable-state]
+    versioning: [sdk.project-function-exception-specifications/1]
+    invariants:
+      - every-supplied-relation-row-admitted-with-the-full-projection-input-guards
+      - stored-specification-states-and-original-evidence-identical-to-full-projection
+      - all-source-scan-coverage-and-unresolved-query-side-channels-retained
+      - no-cleanup-population-or-cleanup-absence-claim
+      - bounds-before-retention-active-cancellation-and-measured-successful-usage
+    depends_on: [public.exception-cleanup-facets, public.projection-resource-usage]
 
   - id: public.exceptional-routes
     status: implemented

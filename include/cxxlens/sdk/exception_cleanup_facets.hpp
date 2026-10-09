@@ -61,6 +61,18 @@ namespace cxxlens::sdk::query
 		std::vector<query_unresolved> unresolved;
 		std::optional<application_query_results> source_queries;
 	};
+	/** Stored function specifications without a cleanup-emission population.
+	 * Every supplied relation row is still admitted. Coverage describes those
+	 * source scans; it does not imply any cleanup census or cleanup absence. */
+	struct function_exception_specification_projection
+	{
+		std::vector<finite_population_evidence> evidence;
+		std::vector<observed_function_exception_specification> specifications;
+		bool compile_units_complete{}, detail_inputs_complete{}, exit_inputs_complete{},
+			declaration_inputs_complete{};
+		std::vector<query_unresolved> unresolved;
+		std::optional<application_query_results> source_queries;
+	};
 	[[nodiscard]] result<exception_cleanup_projection> project_exception_cleanup_facets(
 		exception_cleanup_input, finite_population_limits = {}, std::stop_token = {});
 	[[nodiscard]] result<exception_cleanup_projection> project_exception_cleanup_facets(
@@ -77,4 +89,26 @@ namespace cxxlens::sdk::query
 									 finite_population_limits,
 									 std::stop_token,
 									 projection_resource_usage&);
+	/** Admit all original input rows and project only their stored function
+	 * specifications. This does not compute or classify cleanup emissions. */
+	[[nodiscard]] result<function_exception_specification_projection>
+		project_function_exception_specifications(exception_cleanup_input,
+												  finite_population_limits = {},
+												  std::stop_token = {});
+	[[nodiscard]] result<function_exception_specification_projection>
+	project_function_exception_specifications(const application_query_results&,
+											  finite_population_limits = {},
+											  std::stop_token = {});
+	/** Exact successful work and conservative owned/index/temporary storage; zero
+	 * on failure, with the same input and resource guards as the full projection. */
+	[[nodiscard]] result<function_exception_specification_projection>
+	project_function_exception_specifications(exception_cleanup_input,
+											  finite_population_limits,
+											  std::stop_token,
+											  projection_resource_usage&);
+	[[nodiscard]] result<function_exception_specification_projection>
+	project_function_exception_specifications(const application_query_results&,
+											  finite_population_limits,
+											  std::stop_token,
+											  projection_resource_usage&);
 } // namespace cxxlens::sdk::query

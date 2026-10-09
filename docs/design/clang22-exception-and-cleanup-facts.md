@@ -58,6 +58,24 @@ supplied row and report bounded measured work and conservative retained
 storage. Older saved rows with absent optional columns keep those facets
 unknown.
 
+`sdk.project-function-exception-specifications/1`, catalog entry
+`public.function-exception-specifications`, is the supported NG1 purpose-specific
+projection for consumers that need stored specifications without cleanup
+correspondences. Monet's original noexcept declaration and static path metadata
+admission are its consumers. The full cleanup projection remains unchanged.
+The narrow projection admits the same nine supplied relation groups, retains
+specification states, original evidence and evidence indexes, all source scan
+coverage flags, missing-scan reasons, and the original query side channels. It
+also checks supplied detached declaration membership framing and bounds. Its
+result has no cleanup population; it makes no cleanup absence or closure claim.
+Known stored true and false remain complete; lazy or missing truth remains
+partial or unknown, and contradictory observations remain conflicting. It never
+resolves or evaluates a specification. Missing inputs are completed by acquiring
+the independently required original scans, rather than by inferring truth.
+Work, text, byte, member, retained-storage and cancellation limits apply before
+retention, and usage remains zero on failure. This additive API does not change
+existing full projection types, symbols or results.
+
 These facts establish static compiler correspondences. They do not establish a
 runtime object version, alias set, operation CFG point, or complete resource
 cleanup population. Consumer proofs must require their remaining independent

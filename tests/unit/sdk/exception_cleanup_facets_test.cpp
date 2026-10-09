@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <tuple>
 
 #include <cxxlens/sdk.hpp>
 #include <cxxlens/sdk/exception_cleanup_facets.hpp>
@@ -256,10 +257,196 @@ namespace
 		require(out.specifications.size() == 1U, "one callable detail");
 		return out.specifications.front();
 	}
+
+	auto specification_fields(const q::observed_function_exception_specification& value)
+	{
+		return std::tie(value.detail,
+						value.function,
+						value.compile_unit,
+						value.source_span,
+						value.universe,
+						value.variant,
+						value.interpretation,
+						value.kind,
+						value.profile,
+						value.observation_state,
+						value.nonthrowing,
+						value.specification_state,
+						value.identity_state,
+						value.source_state,
+						value.evidence,
+						value.gaps);
+	}
+	void specification_parity(const q::exception_cleanup_projection& full,
+							  const q::function_exception_specification_projection& narrow)
+	{
+		require(full.specifications.size() == narrow.specifications.size(),
+				"specification-only retains every original detail");
+		for (std::size_t i{}; i < narrow.specifications.size(); ++i)
+		{
+			require(specification_fields(full.specifications[i]) ==
+						specification_fields(narrow.specifications[i]),
+					"specification-only all fields/states/ordered references match full API");
+			for (const auto reference : narrow.specifications[i].evidence)
+			{
+				require(reference < narrow.evidence.size() && reference < full.evidence.size(),
+						"specification-only evidence index remains in its owner");
+				require(narrow.evidence[reference].relation_id ==
+								full.evidence[reference].relation_id &&
+							narrow.evidence[reference].row.canonical_form() ==
+								full.evidence[reference].row.canonical_form(),
+						"specification-only lossless original evidence matches full API");
+			}
+		}
+		require(std::tie(full.compile_units_complete,
+						 full.detail_inputs_complete,
+						 full.exit_inputs_complete,
+						 full.declaration_inputs_complete,
+						 full.unresolved) ==
+					std::tie(narrow.compile_units_complete,
+							 narrow.detail_inputs_complete,
+							 narrow.exit_inputs_complete,
+							 narrow.declaration_inputs_complete,
+							 narrow.unresolved),
+				"specification-only preserves all source coverage/missing-scan axes");
+		require(full.source_queries.has_value() == narrow.source_queries.has_value(),
+				"specification-only preserves query owner presence");
+		if (full.source_queries)
+		{
+			require(full.source_queries->snapshot_id == narrow.source_queries->snapshot_id &&
+						full.source_queries->scans.size() == narrow.source_queries->scans.size(),
+					"specification-only retains the complete source query");
+			for (std::size_t i{}; i < full.source_queries->scans.size(); ++i)
+				require(full.source_queries->scans[i].relation_id ==
+								narrow.source_queries->scans[i].relation_id &&
+							full.source_queries->scans[i].logical_ir.canonical_form() ==
+								narrow.source_queries->scans[i].logical_ir.canonical_form() &&
+							full.source_queries->scans[i].result.canonical_form() ==
+								narrow.source_queries->scans[i].result.canonical_form(),
+						"specification-only query side channels match full API");
+		}
+	}
+	void specification_only_controls()
+	{
+		fixture original;
+		q::projection_resource_usage full_usage, narrow_usage;
+		auto full = take(q::project_exception_cleanup_facets(original.input(), {}, {}, full_usage));
+		auto narrow = take(
+			q::project_function_exception_specifications(original.input(), {}, {}, narrow_usage));
+		specification_parity(full, narrow);
+		require(!full.cleanups.empty() && narrow_usage.operations < full_usage.operations,
+				"purpose-specific API avoids actual cleanup construction");
+		specification_parity(
+			take(q::project_exception_cleanup_facets(original.queries())),
+			take(q::project_function_exception_specifications(original.queries())));
+		for (unsigned disposition{}; disposition < 4U; ++disposition)
+		{
+			auto changed = original;
+			if (disposition == 0U)
+				changed.rows[4].front().values.erase("output.exception_spec_nonthrowing");
+			else if (disposition == 1U)
+			{
+				set(changed.rows[4].front(),
+					"exception_spec_kind",
+					detached_cell::utf8("dependent_noexcept"));
+				set(changed.rows[4].front(),
+					"exception_spec_state",
+					detached_cell::utf8("partial"));
+				changed.rows[4].front().values.erase("output.exception_spec_nonthrowing");
+			}
+			else if (disposition == 2U)
+				set(changed.rows[4].front(),
+					"exception_spec_nonthrowing",
+					detached_cell::boolean(false));
+			else
+			{
+				changed.rows[3].front().presence.universe = "world:foreign";
+				changed.rows[3].front().contributor_edges.front().condition.universe =
+					"world:foreign";
+			}
+			specification_parity(
+				take(q::project_exception_cleanup_facets(changed.input())),
+				take(q::project_function_exception_specifications(changed.input())));
+		}
+		auto missing = original.queries();
+		missing.scans.pop_back();
+		specification_parity(take(q::project_exception_cleanup_facets(missing)),
+							 take(q::project_function_exception_specifications(missing)));
+		for (std::size_t group = 5U; group < 9U; ++group)
+		{
+			auto malformed = original;
+			malformed.rows[group].front().values.erase("output." +
+													   std::string{group == 5U		 ? "body"
+																	   : group == 6U ? "exit"
+																	   : group == 7U
+																	   ? "declaration"
+																	   : "inventory"});
+			auto full_error = q::project_exception_cleanup_facets(malformed.input());
+			narrow_usage = {1U, 1U};
+			auto narrow_error = q::project_function_exception_specifications(
+				malformed.input(), {}, {}, narrow_usage);
+			require(!full_error && !narrow_error && full_error.error() == narrow_error.error() &&
+						!narrow_usage.operations && !narrow_usage.retained_bytes_bound,
+					"unrequested body/exit/declaration/inventory rows still admitted");
+		}
+		auto malformed_members = original;
+		set(malformed_members.rows[8].front(),
+			"declarations",
+			symbols({"decl:object", "decl:object"}));
+		require(!q::project_function_exception_specifications(malformed_members.input()),
+				"unrequested cleanup inventory retains duplicate-member rejection");
+		set(malformed_members.rows[8].front(),
+			"declarations",
+			detached_cell::bytes({std::byte{1}}));
+		require(!q::project_function_exception_specifications(malformed_members.input()),
+				"unrequested cleanup inventory retains detached-set framing rejection");
+		q::finite_population_limits member_cap;
+		member_cap.maximum_members = 1U;
+		set(malformed_members.rows[8].front(),
+			"declarations",
+			symbols({"decl:object", "decl:other"}));
+		require(
+			!q::project_function_exception_specifications(malformed_members.input(), member_cap),
+			"unrequested cleanup inventory retains member ceiling");
+		fixture rich;
+		query_copy_controls::projection(
+			rich.rows,
+			names,
+			[&]
+			{
+				return rich.queries();
+			},
+			[](const auto& query,
+			   q::finite_population_limits cap,
+			   q::projection_resource_usage& usage)
+			{
+				return q::project_function_exception_specifications(query, cap, {}, usage);
+			},
+			require);
+		std::stop_source stopped;
+		stopped.request_stop();
+		narrow_usage = {1U, 1U};
+		auto cancelled = q::project_function_exception_specifications(
+			original.input(), {}, stopped.get_token(), narrow_usage);
+		require(!cancelled && cancelled.error().code == "sdk.exception-cleanup-cancelled" &&
+					!narrow_usage.operations && !narrow_usage.retained_bytes_bound,
+				"specification-only stop returns existing error and zero failure usage");
+		q::finite_population_limits late_stop;
+		std::size_t calls{};
+		late_stop.cancelled = [&]
+		{
+			return ++calls == 50U;
+		};
+		require(!q::project_function_exception_specifications(
+					original.input(), late_stop, {}, narrow_usage) &&
+					!narrow_usage.operations && !narrow_usage.retained_bytes_bound,
+				"specification-only active cancellation retains failure usage contract");
+	}
+
 } // namespace
 int main(int argc, char** argv)
 {
-	if (argc == 2)
+	if (argc == 2 || argc == 3)
 	{
 		relation_registry registry;
 		for (const auto& descriptor : standard_relation_descriptors())
@@ -271,6 +458,19 @@ int main(int argc, char** argv)
 		auto query = take(q::decode_application_queries(engine, data));
 		q::projection_resource_usage observed;
 		auto projected = take(q::project_exception_cleanup_facets(query, {}, {}, observed));
+		q::projection_resource_usage specification_usage;
+		auto specifications =
+			take(q::project_function_exception_specifications(query, {}, {}, specification_usage));
+		specification_parity(projected, specifications);
+		std::cerr << "actual narrow-specification work " << specification_usage.operations
+				  << " bytes " << specification_usage.retained_bytes_bound << " full work "
+				  << observed.operations << "\n";
+		if (argc == 3)
+		{
+			require(std::string_view{argv[2]} == "--specification-parity",
+					"known genuine specification mode");
+			return 0;
+		}
 		std::size_t known_true{}, known_false{}, partial{}, emissions{}, normal{}, exceptional{},
 			targets{}, bound{};
 		for (const auto& s : projected.specifications)
@@ -311,6 +511,8 @@ int main(int argc, char** argv)
 				"actual typed spec/normal+EH cleanup original binding");
 		return 0;
 	}
+
+	specification_only_controls();
 
 	// Shared span IDs deliberately hash to one bucket; worlds still stay distinct.
 	{

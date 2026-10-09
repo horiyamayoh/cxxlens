@@ -1079,13 +1079,19 @@ namespace cxxlens::sdk::query
 						gap(p, p.exit, axis.second);
 				output.cleanups.push_back(std::move(p));
 			}
-			exception_cleanup_projection run()
+			exception_cleanup_projection run(bool include_cleanups)
 			{
 				initialize();
 				for (const auto& [world, original] : index[4U])
 					specification(world, original);
-				for (const auto& [world, original] : index[6U])
-					cleanup(world, original);
+				if (!include_cleanups)
+					// Keep detached inventory framing, duplicate and member bounds even
+					// when cleanup correspondence is outside the requested result.
+					for (const auto* inventory : input[8U])
+						(void)contains(*inventory, "declarations", {});
+				if (include_cleanups)
+					for (const auto& [world, original] : index[6U])
+						cleanup(world, original);
 				return std::move(output);
 			}
 		};
@@ -1093,7 +1099,8 @@ namespace cxxlens::sdk::query
 													 const application_query_results* queries,
 													 finite_population_limits limits,
 													 std::stop_token stop,
-													 projection_resource_usage* usage)
+													 projection_resource_usage* usage,
+													 bool include_cleanups = true)
 		{
 			if (usage)
 				*usage = {};
@@ -1188,7 +1195,7 @@ namespace cxxlens::sdk::query
 					b.rows = 0;
 				}
 				projector work{b, borrowed, {}, {}, {}, row_validation_reused};
-				auto output = work.run();
+				auto output = work.run(include_cleanups);
 				output.compile_units_complete = input.compile_units_complete;
 				output.detail_inputs_complete = input.detail_inputs_complete;
 				output.exit_inputs_complete = input.exit_inputs_complete;
@@ -1226,6 +1233,25 @@ namespace cxxlens::sdk::query
 				return error{"sdk.exception-cleanup-resource-exhausted", "projection", "length"};
 			}
 		}
+		result<function_exception_specification_projection>
+		specifications(exception_cleanup_input input,
+					   const application_query_results* queries,
+					   finite_population_limits limits,
+					   std::stop_token stop,
+					   projection_resource_usage* usage)
+		{
+			auto full = project(input, queries, limits, stop, usage, false);
+			if (!full)
+				return full.error();
+			return function_exception_specification_projection{std::move(full->evidence),
+															   std::move(full->specifications),
+															   full->compile_units_complete,
+															   full->detail_inputs_complete,
+															   full->exit_inputs_complete,
+															   full->declaration_inputs_complete,
+															   std::move(full->unresolved),
+															   std::move(full->source_queries)};
+		}
 	} // namespace
 	result<exception_cleanup_projection> project_exception_cleanup_facets(
 		exception_cleanup_input input, finite_population_limits limits, std::stop_token stop)
@@ -1254,5 +1280,33 @@ namespace cxxlens::sdk::query
 									 projection_resource_usage& usage)
 	{
 		return project({}, &input, limits, stop, &usage);
+	}
+	result<function_exception_specification_projection> project_function_exception_specifications(
+		exception_cleanup_input input, finite_population_limits limits, std::stop_token stop)
+	{
+		return specifications(input, nullptr, limits, stop, nullptr);
+	}
+	result<function_exception_specification_projection>
+	project_function_exception_specifications(const application_query_results& input,
+											  finite_population_limits limits,
+											  std::stop_token stop)
+	{
+		return specifications({}, &input, limits, stop, nullptr);
+	}
+	result<function_exception_specification_projection>
+	project_function_exception_specifications(exception_cleanup_input input,
+											  finite_population_limits limits,
+											  std::stop_token stop,
+											  projection_resource_usage& usage)
+	{
+		return specifications(input, nullptr, limits, stop, &usage);
+	}
+	result<function_exception_specification_projection>
+	project_function_exception_specifications(const application_query_results& input,
+											  finite_population_limits limits,
+											  std::stop_token stop,
+											  projection_resource_usage& usage)
+	{
+		return specifications({}, &input, limits, stop, &usage);
 	}
 } // namespace cxxlens::sdk::query
