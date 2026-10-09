@@ -4,13 +4,15 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <span>
 #include <stop_token>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include <cxxlens/sdk/projection_resource_usage.hpp>
+#include <cxxlens/sdk/finite_populations.hpp>
 #include <cxxlens/sdk/query_transfer.hpp>
 
 namespace cxxlens::sdk::query
@@ -34,6 +36,8 @@ namespace cxxlens::sdk::query
 		std::size_t maximum_operations{128'000'000U};
 		std::size_t maximum_source_queries{4096U};
 		std::size_t maximum_source_plan_bytes{64U * 1024U * 1024U};
+		/** Shared immutable evidence is explicit; raw-span inputs stay detached. */
+		projection_evidence_ownership evidence_ownership{projection_evidence_ownership::detached};
 		[[nodiscard]] result<void> validate() const;
 	};
 	enum class abi_surface_state
@@ -51,7 +55,32 @@ namespace cxxlens::sdk::query
 	struct abi_surface_evidence
 	{
 		std::string relation_id;
+		/** Mutable detached original in the default mode and raw-span fallback.
+		 * Shared-mode consumers use original_row(); this field then stays empty. */
 		annotated_row row;
+		abi_surface_evidence() = default;
+		abi_surface_evidence(std::string relation, annotated_row original)
+			: relation_id(std::move(relation)), row(std::move(original))
+		{
+		}
+		/** Complete immutable original, independent of source_queries lifetime. */
+		[[nodiscard]] const annotated_row& original_row() const noexcept
+		{
+			return shared_row_ ? *shared_row_ : row;
+		}
+
+	  private:
+		struct shared_original_tag
+		{
+		};
+		abi_surface_evidence(std::string relation,
+							 std::shared_ptr<const annotated_row> original,
+							 shared_original_tag)
+			: relation_id(std::move(relation)), shared_row_(std::move(original))
+		{
+		}
+		std::shared_ptr<const annotated_row> shared_row_;
+		friend struct query_transfer_access;
 	};
 	struct abi_surface
 	{
@@ -87,7 +116,9 @@ namespace cxxlens::sdk::query
 	/** Validate finite local storage without inferring closure over unseen declarations. */
 	[[nodiscard]] result<abi_surface_projection> project_abi_surfaces(
 		abi_surface_input input, abi_surface_limits limits = {}, std::stop_token cancellation = {});
-	/** Retain the original independent scans and all their epistemic side channels. */
+	/** Retain the original independent scans and all their epistemic side channels.
+	 * Explicit shared evidence retains the same immutable row independently of
+	 * source_queries; every raw original is read through original_row(). */
 	[[nodiscard]] result<abi_surface_projection>
 	project_abi_surfaces(const application_query_results& input,
 						 abi_surface_limits limits = {},

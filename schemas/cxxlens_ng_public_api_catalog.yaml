@@ -1166,7 +1166,7 @@ entries:
         signature: 'units; files; spans; entities; details; surfaces; observations_complete; compile_units_complete; abi_inputs_complete'
       - name: query.abi_surface_limits
         kind: value
-        signature: 'maximum_rows; maximum_condition_expansions; maximum_evidence_bytes; maximum_retained_bytes; maximum_evidence_references; maximum_surfaces; maximum_extents; maximum_operations; maximum_source_queries; maximum_source_plan_bytes; result<void> validate() const'
+        signature: 'maximum_rows; maximum_condition_expansions; maximum_evidence_bytes; maximum_retained_bytes; maximum_evidence_references; maximum_surfaces; maximum_extents; maximum_operations; maximum_source_queries; maximum_source_plan_bytes; evidence_ownership = detached; result<void> validate() const'
       - name: query.abi_surface_state
         kind: value
         signature: 'complete; unknown; partial; conflicting'
@@ -1176,6 +1176,9 @@ entries:
       - name: query.abi_surface_evidence
         kind: value
         signature: 'relation_id; row'
+      - name: query.abi_surface_evidence.original_row
+        kind: function
+        signature: 'const annotated_row& original_row() const noexcept'
       - name: query.abi_surface
         kind: value
         signature: 'id; entity; compile_unit; source_span; file; source_snapshot; kind; profile; universe; variant; interpretation; abi_state; layout_state; byte_size; byte_alignment; occupied_bytes; padding_bytes; occupied_ranges; abi_context; abi_signature; abi_fingerprint; target_data_model_state; target_data_model_profile; byte_order; long_width_bits; pointer_width_bits; wchar_width_bits; plain_char_signed; packing_state; packing_profile; packed_attribute; packing_applied; maximum_field_alignment_bits; evidence; gaps'
@@ -1186,9 +1189,9 @@ entries:
         kind: function
         signature: 'result<abi_surface_projection> project_abi_surfaces(abi_surface_input, abi_surface_limits = {}, stop_token = {}); result<abi_surface_projection> project_abi_surfaces(const application_query_results&, abi_surface_limits = {}, stop_token = {}); result<abi_surface_projection> project_abi_surfaces(abi_surface_input, abi_surface_limits, stop_token, projection_resource_usage&); result<abi_surface_projection> project_abi_surfaces(const application_query_results&, abi_surface_limits, stop_token, projection_resource_usage&)'
     errors: [sdk.abi-limit-invalid, sdk.abi-input-invalid, sdk.abi-budget, sdk.abi-cancelled, sdk.abi-resource-exhausted]
-    lifetime: [borrowed-input-only-during-call, projection-owns-labelled-evidence-and-original-queries, no-compiler-pointer]
+    lifetime: [borrowed-raw-input-only-during-call, projection-owns-labelled-evidence-and-original-queries, opted-in-evidence-retains-exact-immutable-query-row-independently-of-source-queries, no-compiler-pointer]
     threading: [projection-has-value-semantics, independent-calls-share-no-mutable-state]
-    versioning: [storage-and-call-interface-v1-binds-exact-profile-and-actual-compiler-context]
+    versioning: [storage-and-call-interface-v1-binds-exact-profile-and-actual-compiler-context, source-compatible-default-row-and-two-argument-brace-construction, shared-immutable-evidence-requires-sdk-consumer-rebuild]
     invariants: [both-independent-consumers-share-local-storage-and-interface-validation, universe-variant-interpretation-unit-source-and-profile-remain-distinct, abi-and-layout-facets-are-independent, canonical-byte-ranges-are-validated-before-union-derived-padding, no-field-size-sum-infers-padding, unknown-distinct-from-complete-empty, physical-interface-fingerprint-is-not-whole-program-abi-compatibility, fingerprint-length-framing-is-revalidated, conflicting-candidates-retained, independent-input-completion-defaults-false, local-observation-does-not-close-project, original-query-side-channels-retained, deterministic-order, bounds-before-retention-and-typed-cancellation]
     depends_on: [public.query-runtime]
 
@@ -1409,7 +1412,7 @@ entries:
     status: implemented
     profile: NG1
     target: cxxlens::query
-    headers: [include/cxxlens/sdk/finite_populations.hpp]
+    headers: [include/cxxlens/sdk/finite_populations.hpp, include/cxxlens/sdk/abi_surfaces.hpp]
     symbols:
       - name: query.projection_evidence_ownership
         kind: value
@@ -1417,12 +1420,15 @@ entries:
       - name: query.finite_population_limits.evidence_ownership
         kind: value
         signature: 'projection_evidence_ownership evidence_ownership = detached'
+      - name: query.abi_surface_limits.evidence_ownership
+        kind: value
+        signature: 'projection_evidence_ownership evidence_ownership = detached'
       - name: query.finite_population_evidence.original_row
         kind: function
         signature: 'const annotated_row& original_row() const noexcept'
-    errors: [sdk.population-limit-invalid]
+    errors: [sdk.population-limit-invalid, sdk.abi-limit-invalid]
     lifetime: [default-detached-row-owned-by-evidence, opted-in-original-query-owner-retained-independently-of-source-queries, raw-span-input-copied-into-detached-fallback]
     threading: [shared-originals-immutable, independent-calls-share-no-mutable-state]
     versioning: [cxxlens.sdk.projection-evidence-ownership/1, source-compatible-default-row-and-two-argument-brace-construction, sdk-consumer-rebuild-required]
-    invariants: [opt-in-supported-by-source-features-exceptional-exits-and-exceptional-routes, exact-private-query-row-owner-required, complete-input-admission-and-evidence-side-channels-preserved, input-owner-reservation-retained-for-all-handle-lifetimes, actual-copy-or-owner-allocation-charged, no-semantic-state-inference]
+    invariants: [opt-in-supported-by-source-features-exceptional-exits-exceptional-routes-and-abi-surfaces, exact-private-query-row-owner-required, complete-input-admission-and-evidence-side-channels-preserved, input-owner-reservation-retained-for-all-handle-lifetimes, actual-copy-or-owner-allocation-charged, no-semantic-state-inference]
     depends_on: [public.query-runtime, public.projection-resource-usage]

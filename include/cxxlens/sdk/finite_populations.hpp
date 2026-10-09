@@ -28,7 +28,7 @@ namespace cxxlens::sdk::query
 			inventories, members;
 		bool compile_units_complete{}, inventory_inputs_complete{}, member_inputs_complete{};
 	};
-	/** Evidence ownership for Source, Exceptional Exits and Exceptional Routes.
+	/** Evidence ownership for Source, Exceptional Exits, Exceptional Routes and ABI Surfaces.
 	 * Raw span inputs and other projectors retain detached evidence in either mode. */
 	enum class projection_evidence_ownership : std::uint8_t
 	{

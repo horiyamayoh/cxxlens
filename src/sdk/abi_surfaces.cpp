@@ -6,9 +6,11 @@
 #include <set>
 #include <stdexcept>
 #include <tuple>
+#include <type_traits>
 
 #include <cxxlens/sdk/abi_surfaces.hpp>
 
+#include "query_projected_row_encoding_internal.hpp"
 #include "query_projection_plan_limits_internal.hpp"
 #include "query_result_internal.hpp"
 
@@ -31,6 +33,13 @@ namespace cxxlens::sdk::query
 			"field_bitfield_reason"};
 		using binding_key = std::tuple<std::size_t, std::string, world>;
 		using surface_key = std::tuple<world, std::string, std::string, std::string, std::string>;
+		struct evidence_owner
+		{
+			query_transfer_access::evidence_owner_view original;
+			query_transfer_access::row_size_view sizes;
+			bool validated{};
+		};
+		using owner_groups = std::array<std::vector<evidence_owner>, 6>;
 		struct failure
 		{
 			error value;
@@ -107,15 +116,21 @@ namespace cxxlens::sdk::query
 		}
 		struct budget
 		{
-			std::size_t bytes{}, evidence{}, references{}, operations{}, extents{};
-			std::size_t
-			estimate(const annotated_row& row, abi_surface_limits limits, std::stop_token stop)
+			std::size_t bytes{}, peak{}, evidence{}, references{}, operations{}, extents{};
+			std::size_t estimate(const annotated_row& row,
+								 abi_surface_limits limits,
+								 std::stop_token stop,
+								 std::size_t* deferred_payload = nullptr)
 			{
 				std::size_t total = 2048;
 				const auto add = [&](std::size_t n, std::size_t factor = 8U)
 				{
 					check(stop);
-					charge(operations, n, limits.maximum_operations, "operations");
+					if (deferred_payload)
+						charge(
+							*deferred_payload, n, std::numeric_limits<std::size_t>::max(), "row");
+					else
+						charge(operations, n, limits.maximum_operations, "operations");
 					charge(operations, 1U, limits.maximum_operations, "operations");
 					if (total > limits.maximum_retained_bytes ||
 						n > (limits.maximum_retained_bytes - total) / factor)
@@ -191,7 +206,31 @@ namespace cxxlens::sdk::query
 			std::size_t group{};
 			const annotated_row* row{};
 			std::string canonical;
+			std::string prefix;
+			const evidence_owner* owner{};
+			std::size_t deferred_payload{};
+			bool full_encoded{};
+			bool borrowed_prefix{};
 		};
+		std::size_t prefix_size(const entry& value)
+		{
+			return value.borrowed_prefix ? value.row->claim_contributors.front().size() + 4U
+										 : value.prefix.size();
+		}
+		unsigned char prefix_byte(const entry& value, std::size_t offset)
+		{
+			if (!value.borrowed_prefix)
+				return static_cast<unsigned char>(value.prefix[offset]);
+			// The complete canonical singleton array, including both string quotes
+			// and its closing bracket. Only admitted printable ASCII without escapes
+			// uses this view; arbitrary strings retain the authoritative row writer.
+			if (offset < 2U)
+				return static_cast<unsigned char>(std::string_view{"[\""}[offset]);
+			const auto& claim = value.row->claim_contributors.front();
+			if (offset - 2U < claim.size())
+				return static_cast<unsigned char>(claim[offset - 2U]);
+			return static_cast<unsigned char>(std::string_view{"\"]"}[offset - 2U - claim.size()]);
+		}
 		abi_surface_state state(std::string_view name)
 		{
 			return name == "complete" ? abi_surface_state::complete
@@ -215,7 +254,8 @@ namespace cxxlens::sdk::query
 					 abi_surface_limits limits,
 					 std::stop_token stop,
 					 budget& retained,
-					 const std::array<std::vector<const annotated_row*>, 6>* borrowed = nullptr)
+					 const std::array<std::vector<const annotated_row*>, 6>* borrowed = nullptr,
+					 const owner_groups* owners = nullptr)
 		{
 			if (auto valid = limits.validate(); !valid)
 				return valid.error();
@@ -230,6 +270,62 @@ namespace cxxlens::sdk::query
 				const auto bytes = [&](std::size_t count, std::string_view field)
 				{
 					charge(retained.bytes, count, limits.maximum_retained_bytes, field);
+				};
+				const auto peak = [&](std::size_t count)
+				{
+					if (retained.bytes > limits.maximum_retained_bytes ||
+						count > limits.maximum_retained_bytes - retained.bytes)
+						fail("sdk.abi-budget", "temporary-growth", "limit-exceeded");
+					retained.peak = std::max(retained.peak, retained.bytes + count);
+				};
+				const auto grow = [&](auto& values)
+				{
+					if (values.size() != values.capacity())
+						return;
+					using value_type =
+						typename std::remove_reference_t<decltype(values)>::value_type;
+					const auto capacity = values.capacity();
+					if (capacity > std::numeric_limits<std::size_t>::max() / 2U)
+						fail("sdk.abi-budget", "temporary-growth", "limit-exceeded");
+					const auto next = capacity ? 2U * capacity : 1U;
+					if (next > limits.maximum_retained_bytes / sizeof(value_type))
+						fail("sdk.abi-budget", "temporary-growth", "limit-exceeded");
+					constexpr auto words =
+						(sizeof(value_type) + sizeof(void*) - 1U) / sizeof(void*);
+					if (values.size() > (limits.maximum_operations - 1U) / (2U * words))
+						fail("sdk.abi-budget", "operations", "limit-exceeded");
+					work(2U * words * values.size() + 1U);
+					peak(next * sizeof(value_type));
+					bytes((next - capacity) * sizeof(value_type), "temporary-growth");
+					values.reserve(next);
+				};
+				const auto canonical_less = [&](std::string_view left, std::string_view right)
+				{
+					work();
+					const auto common = std::min(left.size(), right.size());
+					for (std::size_t i{}; i < common; ++i)
+					{
+						work(2U);
+						const auto a = static_cast<unsigned char>(left[i]);
+						const auto b = static_cast<unsigned char>(right[i]);
+						if (a != b)
+							return a < b;
+					}
+					return left.size() < right.size();
+				};
+				const auto prefix_less = [&](const entry& left, const entry& right)
+				{
+					work();
+					const auto left_size = prefix_size(left), right_size = prefix_size(right);
+					const auto common = std::min(left_size, right_size);
+					for (std::size_t i{}; i < common; ++i)
+					{
+						work(2U);
+						const auto a = prefix_byte(left, i), b = prefix_byte(right, i);
+						if (a != b)
+							return a < b;
+					}
+					return left_size < right_size;
 				};
 				const auto copy_text = [&](std::string_view value) -> std::string
 				{
@@ -264,9 +360,50 @@ namespace cxxlens::sdk::query
 						work();
 						if (entries.size() >= limits.maximum_rows)
 							fail("sdk.abi-budget", "rows", "limit-exceeded");
-						bytes(retained.estimate(row, limits, stop), "owned-row-and-temporaries");
-						if (auto valid = row.validate(); !valid)
-							return valid.error();
+						const evidence_owner* original_owner{};
+						std::optional<std::size_t> wire_base;
+						if (owners)
+							for (const auto& candidate : (*owners)[group])
+							{
+								work();
+								const auto less = std::less<const annotated_row*>{};
+								std::size_t first{}, last = candidate.original.rows.size();
+								while (first < last)
+								{
+									work();
+									const auto middle = first + (last - first) / 2U;
+									if (less(&candidate.original.rows[middle], &row))
+										first = middle + 1U;
+									else
+										last = middle;
+								}
+								work();
+								if (first == candidate.original.rows.size() ||
+									&candidate.original.rows[first] != &row)
+									continue;
+								original_owner = &candidate;
+								wire_base = candidate.sizes.find(&row,
+																 [&]
+																 {
+																	 work();
+																 });
+								break;
+							}
+						const bool validated = original_owner && original_owner->validated;
+						// Omit the old joint payload charge only when generic validation,
+						// detached copying and full row encoding are all physically absent.
+						// A tied prefix will pay this deferred charge before its full encoder.
+						// ABI-surface rows also encode every scalar into candidate payload
+						// keys below. Their existing joint byte charge remains in full.
+						const bool deferred = group != 5U && validated && wire_base &&
+							!row.claim_contributors.empty();
+						std::size_t deferred_payload{};
+						bytes(retained.estimate(
+								  row, limits, stop, deferred ? &deferred_payload : nullptr),
+							  "owned-row-and-temporaries");
+						if (!validated)
+							if (auto valid = row.validate(); !valid)
+								return valid.error();
 						for (const auto& column : descriptor->columns)
 						{
 							work();
@@ -278,7 +415,7 @@ namespace cxxlens::sdk::query
 								!row.values.contains("output." + column.name))
 								continue;
 							const auto& actual = cell(row, column.name);
-							if (actual.type != column.type || !actual.validate())
+							if (actual.type != column.type || (!validated && !actual.validate()))
 								fail("sdk.abi-input-invalid",
 									 column.id,
 									 "column-type-or-value-invalid");
@@ -287,23 +424,145 @@ namespace cxxlens::sdk::query
 							   row.presence.fragments.size(),
 							   limits.maximum_condition_expansions,
 							   "condition-expansions");
-						auto canonical = row.canonical_form();
+						std::string canonical;
+						std::size_t canonical_size{};
+						if (deferred)
+							canonical_size = detail::admitted_projected_row_size_from_base(
+								*wire_base,
+								row.multiplicity,
+								[&]
+								{
+									work();
+								},
+								[&]
+								{
+									fail("sdk.abi-budget", "evidence-bytes", "limit-exceeded");
+								});
+						else
+						{
+							canonical = row.canonical_form();
+							canonical_size = canonical.size();
+						}
 						charge(retained.evidence,
-							   canonical.size(),
+							   canonical_size,
 							   limits.maximum_evidence_bytes,
 							   "evidence-bytes");
-						// Encoding and detached-row storage were precharged before allocation.
-						bytes(sizeof(entry) + sizeof(abi_surface_evidence), "evidence-rows");
-						entries.push_back({group, &row, std::move(canonical)});
+						std::string prefix;
+						bool borrowed_prefix{};
+						if (owners)
+						{
+							work();
+							if (row.claim_contributors.size() == 1U)
+							{
+								borrowed_prefix = true;
+								const auto& claim = row.claim_contributors.front();
+								for (const auto byte : claim)
+								{
+									work();
+									const auto value = static_cast<unsigned char>(byte);
+									if (value < 0x20U || value >= 0x7FU || value == '"' ||
+										value == '\\')
+									{
+										borrowed_prefix = false;
+										break;
+									}
+								}
+								if (claim.size() > std::numeric_limits<std::size_t>::max() - 4U)
+									fail("sdk.abi-budget", "canonical-prefix", "limit-exceeded");
+							}
+							if (!borrowed_prefix)
+							{
+								std::size_t prefix_visits{};
+								detail::projected_row_size_sink encoded_prefix_size{
+									[&]
+									{
+										work();
+										charge(prefix_visits,
+											   1U,
+											   std::numeric_limits<std::size_t>::max(),
+											   "canonical-prefix");
+									},
+									[&]
+									{
+										fail(
+											"sdk.abi-budget", "canonical-prefix", "limit-exceeded");
+									}};
+								detail::emit_row_strings(encoded_prefix_size,
+														 row.claim_contributors);
+								if (encoded_prefix_size.size() >
+										(limits.maximum_retained_bytes - retained.bytes) / 2U ||
+									encoded_prefix_size.size() >
+										(limits.maximum_operations - 1U) / 3U)
+									fail("sdk.abi-budget", "canonical-prefix", "limit-exceeded");
+								// Invalid UTF-8 encodes as empty quotes: retain the actual
+								// measured scan bound even when its wire spelling is short.
+								// Then prepay escaped temporary and final writes separately.
+								work(std::max(encoded_prefix_size.size(), prefix_visits));
+								work(3U * encoded_prefix_size.size() + 1U);
+								bytes(2U * encoded_prefix_size.size(), "canonical-prefix");
+								detail::projected_row_string_sink encoded;
+								encoded.value.reserve(encoded_prefix_size.size());
+								detail::emit_row_strings(encoded, row.claim_contributors);
+								prefix = std::move(encoded.value);
+							}
+							grow(entries);
+							work(2U * ((sizeof(entry) + sizeof(void*) - 1U) / sizeof(void*)) + 1U);
+						}
+						else
+							// Encoding and detached-row storage were precharged before allocation.
+							bytes(sizeof(entry) + sizeof(abi_surface_evidence), "evidence-rows");
+						entries.push_back({group,
+										   &row,
+										   std::move(canonical),
+										   std::move(prefix),
+										   original_owner,
+										   deferred_payload,
+										   !deferred,
+										   borrowed_prefix});
 					}
 				}
-				std::ranges::sort(entries,
-								  [&](const auto& a, const auto& b)
-								  {
-									  work();
-									  return std::tie(a.group, a.canonical) <
-										  std::tie(b.group, b.canonical);
-								  });
+				std::ranges::sort(
+					entries,
+					[&](const auto& a, const auto& b)
+					{
+						work();
+						if (!owners)
+							return std::tie(a.group, a.canonical) < std::tie(b.group, b.canonical);
+						return a.group != b.group ? a.group < b.group : prefix_less(a, b);
+					});
+				if (owners)
+					for (std::size_t first{}; first < entries.size();)
+					{
+						work();
+						std::size_t last = first + 1U;
+						while (last < entries.size())
+						{
+							work();
+							if (entries[first].group != entries[last].group ||
+								prefix_size(entries[first]) != prefix_size(entries[last]) ||
+								prefix_less(entries[first], entries[last]))
+								break;
+							++last;
+						}
+						if (last - first > 1U)
+						{
+							for (std::size_t i = first; i < last; ++i)
+							{
+								work();
+								if (entries[i].full_encoded)
+									continue;
+								work(entries[i].deferred_payload);
+								entries[i].canonical = entries[i].row->canonical_form();
+								entries[i].full_encoded = true;
+							}
+							std::ranges::sort(std::span{entries}.subspan(first, last - first),
+											  [&](const auto& a, const auto& b)
+											  {
+												  return canonical_less(a.canonical, b.canonical);
+											  });
+						}
+						first = last;
+					}
 				abi_surface_projection output;
 				output.compile_units_complete = input.compile_units_complete;
 				output.abi_inputs_complete = input.abi_inputs_complete;
@@ -314,7 +573,29 @@ namespace cxxlens::sdk::query
 				{
 					work();
 					const auto& e = entries[ref];
-					output.evidence.push_back({copy_text(relations[e.group]), *e.row});
+					if (owners)
+						grow(output.evidence);
+					std::optional<abi_surface_evidence> shared;
+					if (e.owner)
+					{
+						bytes(relations[e.group].size() + sizeof(std::string), "owned-text");
+						shared = query_transfer_access::share_evidence_row<abi_surface_evidence>(
+							e.owner->original, e.row, relations[e.group], work);
+						if (!shared)
+							fail("sdk.abi-input-invalid",
+								 "evidence-owner",
+								 "original-owner-differs");
+					}
+					if (shared)
+					{
+						work(2U *
+								 ((sizeof(abi_surface_evidence) + sizeof(void*) - 1U) /
+								  sizeof(void*)) +
+							 1U);
+						output.evidence.push_back(std::move(*shared));
+					}
+					else
+						output.evidence.push_back({copy_text(relations[e.group]), *e.row});
 					const auto id = text(*e.row, identifiers[e.group]);
 					for (const auto& fragment : e.row->presence.fragments)
 					{
@@ -917,6 +1198,9 @@ namespace cxxlens::sdk::query
 	} // namespace
 	result<void> abi_surface_limits::validate() const
 	{
+		if (evidence_ownership != projection_evidence_ownership::detached &&
+			evidence_ownership != projection_evidence_ownership::shared_immutable)
+			return error{"sdk.abi-limit-invalid", "evidence_ownership", "unsupported"};
 		if (!maximum_rows || !maximum_condition_expansions || !maximum_evidence_bytes ||
 			!maximum_retained_bytes || !maximum_evidence_references || !maximum_surfaces ||
 			!maximum_extents || !maximum_operations || !maximum_source_queries ||
@@ -939,7 +1223,7 @@ namespace cxxlens::sdk::query
 		budget retained;
 		auto output = project_rows(input, limits, stop, retained);
 		if (output)
-			usage = {retained.operations, retained.bytes};
+			usage = {retained.operations, std::max(retained.bytes, retained.peak)};
 		return output;
 	}
 	result<abi_surface_projection> project_abi_surfaces(const application_query_results& input,
@@ -979,6 +1263,15 @@ namespace cxxlens::sdk::query
 				return valid.error();
 			charge(retained.bytes, plan_bytes, limits.maximum_retained_bytes, "source-plans");
 			std::array<std::vector<const annotated_row*>, 6> groups;
+			std::optional<owner_groups> evidence_owners;
+			if (limits.evidence_ownership == projection_evidence_ownership::shared_immutable)
+			{
+				charge(retained.bytes,
+					   sizeof(owner_groups),
+					   limits.maximum_retained_bytes,
+					   "owner-views");
+				evidence_owners.emplace();
+			}
 			std::array<bool, 6> present{}, scan_complete{};
 			scan_complete.fill(true);
 			std::size_t rows{};
@@ -989,6 +1282,52 @@ namespace cxxlens::sdk::query
 				if (found == relations.end())
 					continue;
 				const auto group = static_cast<std::size_t>(found - relations.begin());
+				if (evidence_owners)
+				{
+					const auto work = [&](std::size_t count = 1U)
+					{
+						check(stop);
+						charge(retained.operations, count, limits.maximum_operations, "operations");
+					};
+					work();
+					charge(retained.bytes,
+						   query_transfer_access::row_size_metadata_bytes(
+							   scan.result,
+							   [&]
+							   {
+								   fail("sdk.abi-budget", "owner-size-facts", "limit-exceeded");
+							   }),
+						   limits.maximum_retained_bytes,
+						   "owner-size-facts");
+					auto& owners = (*evidence_owners)[group];
+					if (owners.size() == owners.capacity())
+					{
+						const auto capacity = owners.capacity();
+						if (capacity > std::numeric_limits<std::size_t>::max() / 2U)
+							fail("sdk.abi-budget", "owner-views", "limit-exceeded");
+						const auto next = capacity ? 2U * capacity : 1U;
+						constexpr auto words =
+							(sizeof(evidence_owner) + sizeof(void*) - 1U) / sizeof(void*);
+						if (next > limits.maximum_retained_bytes / sizeof(evidence_owner) ||
+							owners.size() > (limits.maximum_operations - 1U) / (2U * words))
+							fail("sdk.abi-budget", "owner-views", "limit-exceeded");
+						work(2U * words * owners.size() + 1U);
+						const auto added = next * sizeof(evidence_owner);
+						if (retained.bytes > limits.maximum_retained_bytes ||
+							added > limits.maximum_retained_bytes - retained.bytes)
+							fail("sdk.abi-budget", "owner-views", "limit-exceeded");
+						retained.peak = std::max(retained.peak, retained.bytes + added);
+						charge(retained.bytes,
+							   (next - capacity) * sizeof(evidence_owner),
+							   limits.maximum_retained_bytes,
+							   "owner-views");
+						owners.reserve(next);
+					}
+					work(2U * ((sizeof(evidence_owner) + sizeof(void*) - 1U) / sizeof(void*)) + 1U);
+					owners.push_back({query_transfer_access::borrow_evidence_owner(scan.result),
+									  query_transfer_access::borrow_row_sizes(scan.result),
+									  query_transfer_access::rows_validated(scan.result)});
+				}
 				present[group] = true;
 				scan_complete[group] &= scan.result.execution() == execution_status::complete &&
 					scan.result.inputs_complete() && scan.result.conflicts().empty() &&
@@ -1028,7 +1367,8 @@ namespace cxxlens::sdk::query
 									   limits,
 									   stop,
 									   retained,
-									   &groups);
+									   &groups,
+									   evidence_owners ? &*evidence_owners : nullptr);
 			if (!output)
 				return output.error();
 			for (std::size_t group{}; group < present.size(); ++group)
@@ -1048,7 +1388,7 @@ namespace cxxlens::sdk::query
 			}
 			normalize(output->unresolved);
 			output->source_queries = input;
-			usage = {retained.operations, retained.bytes};
+			usage = {retained.operations, std::max(retained.bytes, retained.peak)};
 			return output;
 		}
 		catch (const failure& value)

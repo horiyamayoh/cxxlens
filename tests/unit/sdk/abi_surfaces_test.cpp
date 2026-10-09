@@ -2,11 +2,17 @@
 #include <array>
 #include <cstdlib>
 #include <iostream>
+#include <locale>
+#include <memory>
 #include <set>
+#include <sstream>
+#include <tuple>
 #include <utility>
 
 #include <cxxlens/sdk.hpp>
 #include <cxxlens/sdk/abi_surfaces.hpp>
+
+#include "../../../src/sdk/query_result_internal.hpp"
 
 namespace
 {
@@ -834,6 +840,632 @@ namespace
 		std::cout << "ABI measured usage 8 focused checks PASS\n";
 	}
 
+	auto surface_fields(const q::abi_surface& value)
+	{
+		return std::tie(value.id,
+						value.entity,
+						value.compile_unit,
+						value.source_span,
+						value.file,
+						value.source_snapshot,
+						value.kind,
+						value.profile,
+						value.universe,
+						value.variant,
+						value.interpretation,
+						value.abi_state,
+						value.layout_state,
+						value.byte_size,
+						value.byte_alignment,
+						value.occupied_bytes,
+						value.padding_bytes,
+						value.occupied_ranges,
+						value.abi_context,
+						value.abi_fingerprint,
+						value.abi_signature,
+						value.target_data_model_state,
+						value.target_data_model_profile,
+						value.byte_order,
+						value.long_width_bits,
+						value.pointer_width_bits,
+						value.wchar_width_bits,
+						value.plain_char_signed,
+						value.packing_state,
+						value.packing_profile,
+						value.packed_attribute,
+						value.packing_applied,
+						value.maximum_field_alignment_bits,
+						value.evidence,
+						value.gaps);
+	}
+	bool same_raw_row(const q::annotated_row& a, const q::annotated_row& z)
+	{
+		const auto producer = [](const auto& value)
+		{
+			return std::tie(value.id, value.semantic_contract);
+		};
+		const auto guarantee = [](const auto& value)
+		{
+			return std::tie(
+				value.approximation, value.scope, value.assumptions, value.verification_modalities);
+		};
+		return a.multiplicity == z.multiplicity && a.presence.universe == z.presence.universe &&
+			a.presence.fragments == z.presence.fragments && a.interpretation == z.interpretation &&
+			a.claim_contributors == z.claim_contributors && a.provenance == z.provenance &&
+			std::ranges::equal(a.values,
+							   z.values,
+							   [](const auto& x, const auto& y)
+							   {
+								   return x.first == y.first && x.second.type == y.second.type &&
+									   x.second.state == y.second.state &&
+									   x.second.value == y.second.value &&
+									   x.second.unknown_reason == y.second.unknown_reason;
+							   }) &&
+			std::ranges::equal(a.producer_contracts,
+							   z.producer_contracts,
+							   [&](const auto& x, const auto& y)
+							   {
+								   return producer(x) == producer(y);
+							   }) &&
+			std::ranges::equal(a.contributor_guarantees,
+							   z.contributor_guarantees,
+							   [&](const auto& x, const auto& y)
+							   {
+								   return guarantee(x) == guarantee(y);
+							   }) &&
+			std::ranges::equal(a.contributor_edges,
+							   z.contributor_edges,
+							   [&](const auto& x, const auto& y)
+							   {
+								   return x.claim_contributor == y.claim_contributor &&
+									   producer(x.producer) == producer(y.producer) &&
+									   x.provenance == y.provenance &&
+									   guarantee(x.guarantee) == guarantee(y.guarantee) &&
+									   x.condition.universe == y.condition.universe &&
+									   x.condition.fragments == y.condition.fragments &&
+									   x.interpretation == y.interpretation;
+							   });
+	}
+	void same_abi(const q::abi_surface_projection& expected,
+				  const q::abi_surface_projection& actual,
+				  bool compare_queries = true)
+	{
+		require(expected.compile_units_complete == actual.compile_units_complete &&
+					expected.abi_inputs_complete == actual.abi_inputs_complete &&
+					expected.unresolved == actual.unresolved &&
+					expected.surfaces.size() == actual.surfaces.size() &&
+					expected.evidence.size() == actual.evidence.size(),
+				"shared ABI changed populations, closure or unresolved metadata");
+		for (std::size_t i{}; i < expected.surfaces.size(); ++i)
+			require(surface_fields(expected.surfaces[i]) == surface_fields(actual.surfaces[i]),
+					"shared ABI changed a complete typed surface or its evidence order");
+		for (std::size_t i{}; i < expected.evidence.size(); ++i)
+			require(expected.evidence[i].relation_id == actual.evidence[i].relation_id &&
+						same_raw_row(expected.evidence[i].original_row(),
+									 actual.evidence[i].original_row()) &&
+						expected.evidence[i].original_row().canonical_form() ==
+							actual.evidence[i].original_row().canonical_form(),
+					"shared ABI changed a complete original row or annotation");
+		if (compare_queries)
+		{
+			require(
+				expected.source_queries && actual.source_queries &&
+					expected.source_queries->snapshot_id == actual.source_queries->snapshot_id &&
+					expected.source_queries->scans.size() == actual.source_queries->scans.size(),
+				"shared ABI lost its independent source queries");
+			for (std::size_t i{}; i < expected.source_queries->scans.size(); ++i)
+			{
+				const auto& a = expected.source_queries->scans[i];
+				const auto& z = actual.source_queries->scans[i];
+				require(a.relation_id == z.relation_id &&
+							a.logical_ir.canonical_form() == z.logical_ir.canonical_form() &&
+							a.result.canonical_form() == z.result.canonical_form(),
+						"shared ABI dropped original plans or query side channels");
+			}
+		}
+	}
+	std::string bundle_wire(const q::application_query_results& input)
+	{
+		std::string wire =
+			"{\"schema\":\"cxxlens.application-query-results.v1\",\"snapshot_id\":\"" +
+			input.snapshot_id + "\",\"queries\":[";
+		for (std::size_t i{}; i < input.scans.size(); ++i)
+		{
+			if (i)
+				wire += ',';
+			const auto& scan = input.scans[i];
+			wire += "{\"relation_id\":\"" + scan.relation_id +
+				"\",\"logical_ir\":" + scan.logical_ir.canonical_form() +
+				",\"result\":" + scan.result.canonical_form() + '}';
+		}
+		return wire + "]}";
+	}
+	relation_engine abi_engine()
+	{
+		relation_registry registry;
+		for (const auto& descriptor : standard_relation_descriptors())
+			take(registry.add(descriptor));
+		return take(registry.build("abi-public-query-fixture"));
+	}
+	void canonical_evidence_oracle(const q::application_query_results& input,
+								   const q::abi_surface_projection& actual)
+	{
+		std::vector<std::pair<std::size_t, std::string>> complete_rows;
+		for (const auto& scan : input.scans)
+		{
+			const auto relation = std::ranges::find(relations, scan.relation_id);
+			require(relation != relations.end(), "canonical oracle requires a known scan");
+			const auto originals = scan.result.readonly_rows();
+			for (const auto& original : originals.rows())
+				complete_rows.emplace_back(static_cast<std::size_t>(relation - relations.begin()),
+										   original.canonical_form());
+		}
+		// The unchanged full public row writer supplies the old complete ordering key.
+		std::ranges::sort(complete_rows);
+		require(complete_rows.size() == actual.evidence.size(),
+				"prefix sorting omitted duplicates or original evidence");
+		for (std::size_t i{}; i < complete_rows.size(); ++i)
+			require(actual.evidence[i].relation_id == relations[complete_rows[i].first] &&
+						actual.evidence[i].original_row().canonical_form() ==
+							complete_rows[i].second,
+					"first-claim prefix order differs from the complete canonical row oracle");
+	}
+	q::application_query_results prefix_queries()
+	{
+		auto input = queries(fixture{});
+		const std::vector<std::vector<std::string>> claims{{"claim:a"},
+														   {"claim:aa"},
+														   {"claim:a\""},
+														   {"claim:a", "claim:z"},
+														   {"claim:\\line\n"},
+														   {"claim:日本😀"},
+														   {"claim:tie"},
+														   {"claim:tie"},
+														   {"claim:tie"}};
+		for (auto& scan : input.scans)
+		{
+			const auto old = q::query_transfer_access::borrow_evidence_owner(scan.result);
+			require(!scan.result.readonly_rows().rows_validated(),
+					"actual native query does not supply decoded validation or row-size facts");
+			auto data = std::make_shared<q::query_result::data>(*old.owner);
+			const auto original = data->row_values.front();
+			data->row_values.clear();
+			for (std::size_t i{}; i < claims.size(); ++i)
+			{
+				auto row = original;
+				row.claim_contributors = claims[i];
+				row.provenance = {i == 6U ? "evidence:z-late" : "evidence:a-late"};
+				row.multiplicity = 1234567U;
+				row.contributor_edges.clear();
+				for (const auto& claim : row.claim_contributors)
+					row.contributor_edges.push_back({claim,
+													 row.producer_contracts.front(),
+													 row.provenance.front(),
+													 row.contributor_guarantees.front(),
+													 row.presence,
+													 row.interpretation});
+				take(row.validate());
+				data->row_values.push_back(std::move(row));
+			}
+			std::ranges::reverse(data->row_values);
+			data->ordered = false;
+			data->closures.push_back(
+				take(semantic_digest("abi.fixture.closure", "original-source-sidechannel")));
+			data->unresolved.push_back(
+				{"abi-original-gap", "abi-original-subject", "abi-original-reason"});
+			data->guarantee.approximation = "unknown";
+			data->physical.text += "\nABI original physical explanation";
+			scan.result = q::query_transfer_access::make(std::move(data));
+		}
+		std::ranges::sort(input.scans, {}, &q::application_relation_scan::relation_id);
+		return input;
+	}
+	void immutable_prefix_tests()
+	{
+		const auto previous = std::locale();
+		struct restore_locale
+		{
+			std::locale previous;
+			~restore_locale()
+			{
+				std::locale::global(previous);
+			}
+		} restored{previous};
+		std::locale::global(std::locale::classic());
+		const auto engine = abi_engine();
+		auto native = prefix_queries();
+		auto input = take(q::decode_application_queries(engine, bundle_wire(native)));
+		q::abi_surface_limits shared;
+		shared.evidence_ownership = q::projection_evidence_ownership::shared_immutable;
+		for (const auto& scan : input.scans)
+			require(scan.result.readonly_rows().rows_validated() &&
+						q::query_transfer_access::borrow_row_sizes(scan.result).rows.size() == 9U,
+					"real transfer decode supplies complete immutable validation and size facts");
+		q::projection_resource_usage detached_usage, shared_usage;
+		auto detached = take(q::project_abi_surfaces(input, {}, {}, detached_usage));
+		auto alias = take(q::project_abi_surfaces(input, shared, {}, shared_usage));
+		same_abi(detached, alias);
+		canonical_evidence_oracle(input, alias);
+		std::cout << "ABI mixed-prefix fixture work detached=" << detached_usage.operations
+				  << " shared=" << shared_usage.operations << '\n';
+		std::size_t evidence_bytes{};
+		std::vector<const q::annotated_row*> addresses;
+		for (std::size_t i{}; i < alias.evidence.size(); ++i)
+		{
+			const auto& evidence = alias.evidence[i];
+			bool exact{};
+			for (const auto& scan : input.scans)
+				if (scan.relation_id == evidence.relation_id)
+				{
+					const auto originals = scan.result.readonly_rows();
+					for (const auto& row : originals.rows())
+						exact |= &evidence.original_row() == &row;
+				}
+			require(exact && evidence.row.values.empty() &&
+						&detached.evidence[i].original_row() == &detached.evidence[i].row &&
+						!detached.evidence[i].row.values.empty(),
+					"opt-in aliases exact immutable rows while default keeps public detached rows");
+			addresses.push_back(&evidence.original_row());
+			evidence_bytes += evidence.original_row().canonical_form().size();
+		}
+		for (unsigned bound{}; bound < 3U; ++bound)
+			for (const bool under : {false, true})
+			{
+				auto cap = shared;
+				const auto decrement = static_cast<std::size_t>(under);
+				if (bound == 0U)
+					cap.maximum_operations = shared_usage.operations - decrement;
+				else if (bound == 1U)
+					cap.maximum_retained_bytes = shared_usage.retained_bytes_bound - decrement;
+				else
+					cap.maximum_evidence_bytes = evidence_bytes - decrement;
+				q::projection_resource_usage usage{999U, 999U};
+				const auto bounded = q::project_abi_surfaces(input, cap, {}, usage);
+				require(bool(bounded) == !under,
+						"shared ABI honors exact and one-under work, peak storage and complete "
+						"evidence");
+				if (bounded)
+					same_abi(detached, *bounded);
+				else
+					require(bounded.error().code == "sdk.abi-budget" && !usage.operations &&
+								!usage.retained_bytes_bound,
+							"failed shared ABI revokes all output ownership and successful usage");
+			}
+		const auto native_default = take(q::project_abi_surfaces(native));
+		const auto native_shared = take(q::project_abi_surfaces(native, shared));
+		same_abi(native_default, native_shared);
+		same_abi(detached, native_shared);
+		canonical_evidence_oracle(native, native_shared);
+		auto no_sizes = input;
+		for (auto& scan : no_sizes.scans)
+		{
+			const auto owner = q::query_transfer_access::borrow_evidence_owner(scan.result);
+			auto data = std::make_shared<q::query_result::data>(*owner.owner);
+			data->row_wire_base_sizes.clear();
+			scan.result = q::query_transfer_access::make(std::move(data));
+		}
+		same_abi(detached, take(q::project_abi_surfaces(no_sizes, shared)));
+		fixture raw;
+		q::projection_resource_usage raw_default_usage, raw_shared_usage;
+		const auto raw_default =
+			take(q::project_abi_surfaces(raw.input(), {}, {}, raw_default_usage));
+		const auto raw_shared =
+			take(q::project_abi_surfaces(raw.input(), shared, {}, raw_shared_usage));
+		same_abi(raw_default, raw_shared, false);
+		require(
+			raw_default_usage.operations == raw_shared_usage.operations &&
+				raw_default_usage.retained_bytes_bound == raw_shared_usage.retained_bytes_bound,
+			"raw spans retain the complete detached fallback and its original resource charges");
+		for (const auto& evidence : raw_shared.evidence)
+			require(&evidence.original_row() == &evidence.row && !evidence.row.values.empty(),
+					"shared-mode request never aliases mutable raw-span inputs");
+		std::vector<std::weak_ptr<const q::query_result::data>> owners;
+		for (const auto& scan : input.scans)
+			owners.push_back(q::query_transfer_access::borrow_evidence_owner(scan.result).owner);
+		auto copied = alias;
+		copied.source_queries.reset();
+		alias.source_queries.reset();
+		detached.source_queries.reset();
+		input = {};
+		auto moved = std::move(alias);
+		same_abi(detached, moved, false);
+		same_abi(detached, copied, false);
+		for (std::size_t i{}; i < moved.evidence.size(); ++i)
+			require(&moved.evidence[i].original_row() == addresses[i] &&
+						&copied.evidence[i].original_row() == addresses[i],
+					"copied/moved ABI evidence outlives original input and source_queries");
+		for (const auto& owner : owners)
+			require(!owner.expired(), "shared original remains live through evidence-only owners");
+		moved = {};
+		copied = {};
+		for (const auto& owner : owners)
+			require(owner.expired(), "last ABI alias releases its exact immutable query backing");
+		std::cout << "ABI immutable evidence and canonical prefix controls PASS\n";
+	}
+
+	template <class Change>
+	q::application_query_results changed_native_query(const q::application_query_results& input,
+													  std::size_t group,
+													  Change change)
+	{
+		auto output = input;
+		const auto selected = std::ranges::find(
+			output.scans, relations[group], &q::application_relation_scan::relation_id);
+		require(selected != output.scans.end(), "native fault requires its exact relation scan");
+		auto& scan = *selected;
+		require(!scan.result.readonly_rows().rows_validated(),
+				"mutable fault fixture must retain native false validation proof");
+		const auto original = q::query_transfer_access::borrow_evidence_owner(scan.result);
+		auto data = std::make_shared<q::query_result::data>(*original.owner);
+		change(*data);
+		scan.result = q::query_transfer_access::make(std::move(data));
+		return output;
+	}
+	void immutable_guard_tests()
+	{
+		const auto engine = abi_engine();
+		auto original = queries(fixture{});
+		std::ranges::sort(original.scans, {}, &q::application_relation_scan::relation_id);
+		q::abi_surface_limits shared;
+		shared.evidence_ownership = q::projection_evidence_ownership::shared_immutable;
+		for (unsigned fault{}; fault < 13U; ++fault)
+		{
+			const std::array<std::size_t, 13> groups{
+				0U, 5U, 5U, 5U, 4U, 2U, 1U, 4U, 4U, 4U, 3U, 5U, 5U};
+			const auto changed = changed_native_query(
+				original,
+				groups[fault],
+				[&](auto& data)
+				{
+					auto& late = data.row_values.back();
+					switch (fault)
+					{
+						case 0U:
+							data.row_values.clear();
+							break;
+						case 1U:
+							replace(late, "entity", detached_cell::utf8("record:foreign"));
+							break;
+						case 2U:
+							replace(late, "source", detached_cell::utf8("span:foreign"));
+							break;
+						case 3U:
+							replace(late, "compile_unit", detached_cell::utf8("tu:foreign"));
+							break;
+						case 4U:
+							replace(late, "is_definition", detached_cell::boolean(false));
+							break;
+						case 5U:
+							replace(late, "end", detached_cell::unsigned_integer(101U));
+							break;
+						case 6U:
+							replace(late, "snapshot", detached_cell::utf8("snapshot:foreign"));
+							break;
+						case 7U:
+							late.presence.universe = "abi:foreign";
+							break;
+						case 8U:
+							late.presence.fragments = {"release"};
+							break;
+						case 9U:
+							late.interpretation = "clang:foreign";
+							break;
+						case 10U:
+							replace(late, "kind", detached_cell::utf8("variable"));
+							break;
+						case 11U:
+							replace(late, "profile", detached_cell::utf8("future-storage/1"));
+							break;
+						case 12U:
+							replace(
+								late, "abi_fingerprint", detached_cell::utf8(content_digest({})));
+							break;
+					}
+					if (fault >= 7U && fault <= 9U)
+						for (auto& edge : late.contributor_edges)
+						{
+							edge.condition = late.presence;
+							edge.interpretation = late.interpretation;
+						}
+					// Empty exact scans without original closure cannot claim an exact summary.
+					if (fault == 0U)
+						data.guarantee.approximation = "unknown";
+				});
+			const auto expected = take(q::project_abi_surfaces(changed));
+			require(expected.surfaces.front().abi_state != q::abi_surface_state::complete ||
+						expected.surfaces.front().layout_state != q::abi_surface_state::complete,
+					"original World/FK/type/profile/witness defect must remain noncomplete");
+			same_abi(expected, take(q::project_abi_surfaces(changed, shared)));
+			const auto decoded = take(q::decode_application_queries(engine, bundle_wire(changed)));
+			same_abi(expected, take(q::project_abi_surfaces(decoded, shared)));
+		}
+		for (unsigned fault{}; fault < 4U; ++fault)
+		{
+			const auto changed = changed_native_query(
+				original,
+				5U,
+				[&](auto& data)
+				{
+					data.row_values.push_back(data.row_values.front());
+					auto& late = data.row_values.back();
+					replace(late, "surface", detached_cell::utf8("abi:late-foreign"));
+					if (fault == 0U)
+						late.values.at("output.kind") = detached_cell::boolean(true);
+					else if (fault == 1U)
+						late.values.at("output.kind").value = std::string{"\xed\xa0\x80", 3U};
+					else if (fault == 2U)
+						late.values.at("output.kind").value = std::string{"record\0late", 11U};
+					else
+						replace(late, "occupied_ranges", detached_cell::bytes({std::byte{0}}));
+				});
+			for (const auto mode : {q::projection_evidence_ownership::detached,
+									q::projection_evidence_ownership::shared_immutable})
+			{
+				auto cap = shared;
+				cap.evidence_ownership = mode;
+				q::projection_resource_usage usage{999U, 999U};
+				const auto invalid = q::project_abi_surfaces(changed, cap, {}, usage);
+				require(
+					!invalid && !usage.operations && !usage.retained_bytes_bound,
+					"an early foreign surface never hides a late malformed scalar, UTF8 or extent");
+			}
+			if (fault < 2U)
+				require(!q::decode_application_queries(engine, bundle_wire(changed)),
+						"public decode cannot forge validated proof for malformed raw rows");
+		}
+		const auto invalid_claim =
+			changed_native_query(original,
+								 0U,
+								 [&](auto& data)
+								 {
+									 auto& late = data.row_values.back();
+									 late.claim_contributors = {std::string(8192U, 'x') + '\xff'};
+									 late.contributor_edges.front().claim_contributor =
+										 late.claim_contributors.front();
+									 take(late.validate());
+								 });
+		const auto old_invalid_claim = take(q::project_abi_surfaces(invalid_claim));
+		const auto shared_invalid_claim = take(q::project_abi_surfaces(invalid_claim, shared));
+		same_abi(old_invalid_claim, shared_invalid_claim);
+		canonical_evidence_oracle(invalid_claim, shared_invalid_claim);
+		require(!q::decode_application_queries(engine, bundle_wire(invalid_claim)),
+				"native false proof preserves old invalid-claim encoder semantics without decoder "
+				"admission");
+		for (const auto omitted : {relations[0], relations[5]})
+		{
+			const auto input = queries(fixture{}, omitted);
+			same_abi(take(q::project_abi_surfaces(input)),
+					 take(q::project_abi_surfaces(input, shared)));
+		}
+		const auto uncovered = queries(fixture{}, {}, relations[5]);
+		same_abi(take(q::project_abi_surfaces(uncovered)),
+				 take(q::project_abi_surfaces(uncovered, shared)));
+		auto invalid_mode = shared;
+		invalid_mode.evidence_ownership = static_cast<q::projection_evidence_ownership>(255U);
+		q::projection_resource_usage usage{999U, 999U};
+		require(!q::project_abi_surfaces(original, invalid_mode, {}, usage) && !usage.operations &&
+					!usage.retained_bytes_bound,
+				"unsupported ownership mode cannot publish output or successful usage");
+		std::cout << "ABI immutable input guards PASS\n";
+	}
+	struct grouped_multiplicity final : std::numpunct<char>
+	{
+		char do_thousands_sep() const override
+		{
+			return ',';
+		}
+		std::string do_grouping() const override
+		{
+			return "\3";
+		}
+	};
+	struct observed_multiplicity final : std::num_put<char>
+	{
+		using std::num_put<char>::do_put;
+		std::size_t& visits;
+		std::size_t stop_at;
+		std::stop_source* cancellation;
+		observed_multiplicity(std::size_t& observed, std::size_t at, std::stop_source* stop)
+			: visits(observed), stop_at(at), cancellation(stop)
+		{
+		}
+		void observe(std::uint64_t value) const
+		{
+			if (value == 1234567U && ++visits == stop_at && cancellation)
+				cancellation->request_stop();
+		}
+		iter_type do_put(iter_type output,
+						 std::ios_base& stream,
+						 char_type fill,
+						 unsigned long value) const override
+		{
+			observe(value);
+			return std::num_put<char>::do_put(output, stream, fill, value);
+		}
+		iter_type do_put(iter_type output,
+						 std::ios_base& stream,
+						 char_type fill,
+						 unsigned long long value) const override
+		{
+			observe(value);
+			return std::num_put<char>::do_put(output, stream, fill, value);
+		}
+	};
+	void immutable_locale_and_stop_tests()
+	{
+		const auto previous = std::locale();
+		struct restore_locale
+		{
+			std::locale previous;
+			~restore_locale()
+			{
+				std::locale::global(previous);
+			}
+		} restored{previous};
+		std::locale::global(std::locale::classic());
+		const auto input =
+			take(q::decode_application_queries(abi_engine(), bundle_wire(prefix_queries())));
+		q::abi_surface_limits shared;
+		shared.evidence_ownership = q::projection_evidence_ownership::shared_immutable;
+		const auto grouped = std::locale{std::locale::classic(), new grouped_multiplicity};
+		std::locale::global(grouped);
+		const auto expected = take(q::project_abi_surfaces(input));
+		const auto actual = take(q::project_abi_surfaces(input, shared));
+		same_abi(expected, actual);
+		canonical_evidence_oracle(input, actual);
+		std::size_t evidence_bytes{};
+		for (const auto& evidence : actual.evidence)
+			evidence_bytes += evidence.original_row().canonical_form().size();
+		for (const bool under : {false, true})
+		{
+			auto cap = shared;
+			cap.maximum_evidence_bytes = evidence_bytes - static_cast<std::size_t>(under);
+			q::projection_resource_usage usage{999U, 999U};
+			const auto bounded = q::project_abi_surfaces(input, cap, {}, usage);
+			require(bool(bounded) == !under,
+					"decoded ABI row-size facts retain live locale multiplicity width");
+			if (bounded)
+				same_abi(expected, *bounded);
+			else
+				require(!usage.operations && !usage.retained_bytes_bound,
+						"locale evidence failure revokes output ownership and usage");
+		}
+		std::size_t visits{};
+		std::locale::global(std::locale{grouped, new observed_multiplicity{visits, 0U, nullptr}});
+		q::projection_resource_usage measured;
+		const auto counted = take(q::project_abi_surfaces(input, shared, {}, measured));
+		std::locale::global(grouped);
+		same_abi(expected, counted);
+		require(visits > 20U, "real multiplicity callbacks must execute during ABI projection");
+		for (const auto stop_at : {std::size_t{1U}, visits / 2U, visits - 1U})
+		{
+			std::size_t visited{};
+			std::stop_source stop;
+			std::locale::global(
+				std::locale{grouped, new observed_multiplicity{visited, stop_at, &stop}});
+			q::projection_resource_usage usage{999U, 999U};
+			const auto interrupted =
+				q::project_abi_surfaces(input, shared, stop.get_token(), usage);
+			std::locale::global(grouped);
+			require(!interrupted && interrupted.error().code == "sdk.abi-cancelled" &&
+						stop.stop_requested() && visited >= stop_at && !usage.operations &&
+						!usage.retained_bytes_bound,
+					"stop requested by a real multiplicity operation revokes pre/mid/late output");
+			q::projection_resource_usage retried;
+			same_abi(expected, take(q::project_abi_surfaces(input, shared, {}, retried)));
+			require(retried.operations == measured.operations &&
+						retried.retained_bytes_bound == measured.retained_bytes_bound,
+					"fresh ABI retry does not inherit cancelled ownership or work state");
+		}
+		std::stop_source pre;
+		pre.request_stop();
+		q::projection_resource_usage usage{999U, 999U};
+		require(!q::project_abi_surfaces(input, shared, pre.get_token(), usage) &&
+					!usage.operations && !usage.retained_bytes_bound,
+				"shared ABI honors a pre-requested stop token");
+		std::cout << "ABI locale evidence and real stop/retry controls PASS\n";
+	}
+
 } // namespace
 
 int main()
@@ -846,5 +1478,8 @@ int main()
 	public_query_tests();
 	fault_tests();
 	measured_usage_tests();
+	immutable_prefix_tests();
+	immutable_guard_tests();
+	immutable_locale_and_stop_tests();
 	return 0;
 }

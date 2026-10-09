@@ -3,13 +3,15 @@
 Contract: `cxxlens.sdk.projection-evidence-ownership/1`.
 
 The independent consumer is Monet's snapshot verifier. It projects Source,
-Exceptional Exits and Exceptional Routes from the same immutable query results
+Exceptional Exits, Exceptional Routes and ABI Surfaces from the same immutable query results
 and retains all original evidence. The existing projections copy each retained
 annotated row. The added opt-in ownership mode lets these projections retain the
 exact immutable query row instead, eliminating that physical copy.
 
 The default remains detached evidence. `finite_population_evidence::row` remains
 the ordinary mutable detached row, including two-argument brace construction.
+`abi_surface_evidence` provides the same detached default and immutable accessor;
+ABI callers select the mode through `abi_surface_limits::evidence_ownership`.
 Consumers choosing `projection_evidence_ownership::shared_immutable` read every
 evidence row through `original_row() const`. Its private strong owner survives
 projection copies, moves, destruction of the input and resetting `source_queries`.
@@ -40,13 +42,32 @@ copy charges and ownership.
 
 The authority is the integrated design's complete input and bounded-resource
 invariants and the author SDK public API catalog. The implementation scope is
-the common evidence/limit contract, private query-result owner access, the three
+the common evidence/limit contract, private query-result owner access, the four
 projectors, their ordinary controls and Monet's opted-in readers. The mode is
-supported for these three projectors; other projections keep detached evidence.
+supported for these four projectors; other projections keep detached evidence.
 There is no wire or relation change. Full ordinary admission precedes retaining
 a row. Failure and cancellation do not return a partially admitted projection.
 The completion path is full row/DTO parity, independent lifetime and raw fallback
 controls, real bounded-work/storage/cancellation controls, then Monet's verifier.
+
+ABI ordering retains the complete unsigned canonical row order. In shared mode,
+the complete escaped first `claim_contributors` array decides order between
+different arrays. A singleton printable ASCII claim can expose that complete
+array through a checked byte view with both quotes and brackets, without a
+temporary string. Other arrays use the existing escaped encoder. Equal arrays
+retain the existing full canonical row comparison.
+Decoder-derived exact row sizes enforce the full evidence-byte limit, including
+the current locale's multiplicity spelling. Rows without that exact immutable
+size fact retain the full encoder. Generic validation is reused only for rows
+from their exact privately validated query owner; descriptor, type, World, FK,
+closure and stricter projection checks still run. The payload work formerly
+covering validation, full encoding and copying is omitted only when all three
+operations are physically absent. ABI-surface rows retain that payload charge
+because their scalar encodings still construct complete candidate keys. Geometry,
+prefix construction, comparisons, owner lookup, alias construction and any
+full-row fallback pay their actual work.
+Default and raw callers retain the existing full validation, encoding and copy.
+ABI evidence and limits have new binary layouts and require consumer rebuilds.
 
 ## Read-only query rows
 

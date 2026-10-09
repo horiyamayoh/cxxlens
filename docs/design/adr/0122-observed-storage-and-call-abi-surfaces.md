@@ -101,7 +101,16 @@ a digest.
 ## Binding, results and completion
 
 `query.project_abi_surfaces` owns all candidates, original relation rows and
-application-query side channels. It validates exact compile unit, universe,
+application-query side channels. Its default evidence remains detached and
+mutable. Explicit `abi_surface_limits::evidence_ownership = shared_immutable`
+retains the exact immutable query row through `abi_surface_evidence::original_row()`;
+raw-span callers keep detached evidence. Strong evidence ownership survives
+input destruction and resetting the projection's `source_queries`. The caller
+keeps its query backing reservation while any shared evidence survives. This
+opt-in follows `cxxlens.sdk.projection-evidence-ownership/1` and requires rebuilding
+SDK consumers because ABI evidence and limits gain fields. It changes neither
+canonical evidence order nor relation/wire formats or semantic availability.
+It validates exact compile unit, universe,
 variant and interpretation; actual entity kind, declaration source, source
 snapshot and range; sizes, ranges, profile and digest. ABI and layout facets
 preserve independent conflict/frontier states. Local completion never supplies
