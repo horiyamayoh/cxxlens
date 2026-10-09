@@ -33,6 +33,7 @@ namespace cxxlens::sdk::query
 		using refs = std::vector<std::size_t>;
 		using rows = std::vector<const annotated_row*>;
 		using groups = std::array<rows, 12>;
+		using size_groups = std::array<std::vector<query_transfer_access::row_size_view>, 12>;
 		constexpr std::array<std::string_view, 12> relations{"build.compile_unit.v1",
 															 "source.file.v1",
 															 "source.span.v1",
@@ -308,6 +309,7 @@ namespace cxxlens::sdk::query
 			std::array<std::map<view_identity, rows, identity_less>, 12> index;
 			std::map<const annotated_row*, std::size_t> owned;
 			bool row_validation_reused{};
+			const size_groups& wire_sizes;
 			detail::projection_span_lookup<budget> span_index{b};
 			std::string copy(std::string_view value)
 			{
@@ -484,18 +486,23 @@ namespace cxxlens::sdk::query
 						// The admitted row already has canonical annotation order. Only its
 						// exact wire size is needed here; alternative ordering keeps strings.
 						peak(2U * b.estimate(*r));
-						const auto encoded_size = detail::admitted_projected_row_size(
-							*r,
-							[&]
-							{
-								b.work();
-							},
-							[&]
-							{
-								fail("evidence-bytes",
-									 "limit-exceeded",
-									 "sdk.exceptional-route-budget");
-							});
+						const auto step = [&]
+						{
+							b.work();
+						};
+						const auto overflow = [&]
+						{
+							fail(
+								"evidence-bytes", "limit-exceeded", "sdk.exceptional-route-budget");
+						};
+						std::optional<std::size_t> base;
+						for (const auto& owner : wire_sizes[group])
+							if ((base = owner.find(r, step)))
+								break;
+						const auto encoded_size = base
+							? detail::admitted_projected_row_size_from_base(
+								  *base, r->multiplicity, step, overflow)
+							: detail::admitted_projected_row_size(*r, step, overflow);
 						b.charge(b.evidence,
 								 encoded_size,
 								 b.limits.maximum_evidence_bytes,
@@ -1715,6 +1722,8 @@ namespace cxxlens::sdk::query
 				budget b{limits, stop};
 				b.work();
 				groups borrowed;
+				size_groups wire_sizes;
+				b.retain(sizeof(size_groups));
 				bool row_validation_reused = queries != nullptr;
 				std::array<bool, 12> available{}, seen{};
 				available.fill(true);
@@ -1739,6 +1748,14 @@ namespace cxxlens::sdk::query
 					for (const auto& scan : queries->scans)
 					{
 						b.work();
+						b.retain(query_transfer_access::row_size_metadata_bytes(
+							scan.result,
+							[&]
+							{
+								fail("retained-bytes",
+									 "limit-exceeded",
+									 "sdk.exceptional-route-budget");
+							}));
 						const auto at = std::ranges::find(relations, scan.relation_id);
 						if (at == relations.end())
 							continue;
@@ -1749,6 +1766,33 @@ namespace cxxlens::sdk::query
 							scan.result.conflicts().empty() &&
 							scan.result.differential_disagreements().empty();
 						const auto originals = query_transfer_access::borrow_rows(scan.result);
+						const auto sizes = query_transfer_access::borrow_row_sizes(scan.result);
+						if (!sizes.base_sizes.empty())
+						{
+							b.work();
+							b.retain(2U * sizeof(query_transfer_access::row_size_view));
+							if (wire_sizes[group].size() == wire_sizes[group].capacity())
+							{
+								const auto capacity = wire_sizes[group].capacity();
+								if (capacity > std::numeric_limits<std::size_t>::max() / 2U ||
+									capacity > (b.limits.maximum_operations - 1U) / 4U)
+									fail("operations",
+										 "limit-exceeded",
+										 "sdk.exceptional-route-budget");
+								b.work(4U * capacity + 1U);
+								if (capacity > (b.limits.maximum_retained_bytes - b.retained) /
+										sizeof(query_transfer_access::row_size_view))
+									fail("retained-bytes",
+										 "limit-exceeded",
+										 "sdk.exceptional-route-budget");
+								b.temporary_peak = std::max(
+									b.temporary_peak,
+									b.retained +
+										capacity * sizeof(query_transfer_access::row_size_view));
+								wire_sizes[group].reserve(capacity ? capacity * 2U : 1U);
+							}
+							wire_sizes[group].push_back(sizes);
+						}
 						b.retain(1024U +
 								 2U * (borrowed[group].size() + originals.size()) *
 									 sizeof(const annotated_row*));
@@ -1802,7 +1846,7 @@ namespace cxxlens::sdk::query
 					}
 					b.rows = 0;
 				}
-				projector work{b, borrowed, input, {}, {}, {}, row_validation_reused};
+				projector work{b, borrowed, input, {}, {}, {}, row_validation_reused, wire_sizes};
 				auto output = work.run();
 				output.compile_units_complete = input.compile_units_complete;
 				output.scope_inputs_complete = input.scope_inputs_complete;

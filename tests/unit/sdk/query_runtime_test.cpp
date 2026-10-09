@@ -4,11 +4,14 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <limits>
+#include <locale>
 #include <memory>
 #include <optional>
 #include <ranges>
 #include <set>
 #include <span>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -3008,6 +3011,15 @@ namespace
 {
 	void check_query_transfer(const fixture& data, const snapshot_handle& snapshot)
 	{
+		struct restore_locale
+		{
+			std::locale previous{std::locale{}};
+			~restore_locale()
+			{
+				std::locale::global(previous);
+			}
+		} restored;
+		std::locale::global(std::locale::classic());
 		auto runtime = query::reference_engine::bind(snapshot);
 		require(runtime.has_value(), "transfer query engine failed");
 		auto builder = query::builder::from(data.left);
@@ -3032,6 +3044,153 @@ namespace
 				"query transfer changed rows, evidence, partiality or plan");
 		require(query::query_transfer_access::rows_validated(decoded->scans.front().result),
 				"fully validated decoded owner did not retain generic row admission");
+
+		const auto step = []
+		{
+		};
+		const auto& decoded_result = decoded->scans.front().result;
+		const auto decoded_rows = query::query_transfer_access::borrow_rows(decoded_result);
+		const auto row_sizes = query::query_transfer_access::borrow_row_sizes(decoded_result);
+		require(!decoded_rows.empty() && row_sizes.rows.data() == decoded_rows.data() &&
+					row_sizes.base_sizes.size() == decoded_rows.size(),
+				"decoded row sizes did not retain the exact admitted row owner");
+		for (const auto& row : decoded_rows)
+		{
+			std::size_t steps{};
+			const auto base = row_sizes.find(&row,
+											 [&]
+											 {
+												 ++steps;
+											 });
+			std::ostringstream multiplicity;
+			multiplicity << row.multiplicity;
+			require(base && *base + multiplicity.str().size() == row.canonical_form().size() &&
+						steps > 0U,
+					"decoded row size changed a complete canonical row or omitted checkpoints");
+			struct interrupted_lookup
+			{
+			};
+			bool stopped{};
+			try
+			{
+				std::size_t remaining = steps - 1U;
+				(void)row_sizes.find(&row,
+									 [&]
+									 {
+										 if (remaining == 0U)
+											 throw interrupted_lookup{};
+										 --remaining;
+									 });
+			}
+			catch (const interrupted_lookup&)
+			{
+				stopped = true;
+			}
+			require(stopped, "row size lookup ignored a spent work/cancellation prefix");
+		}
+		const auto copied_row = decoded_rows.front();
+		const auto native_rows = query::query_transfer_access::borrow_rows(*executed);
+		require(!native_rows.empty() && !row_sizes.find(&copied_row, step) &&
+					!row_sizes.find(&native_rows.front(), step) && !row_sizes.find(nullptr, step),
+				"row size fact escaped to a copied, foreign or null row address");
+		const auto shared_owner = decoded_result;
+		require(query::query_transfer_access::borrow_row_sizes(shared_owner)
+						.find(&decoded_rows.front(), step) == row_sizes.base_sizes.front(),
+				"copying an immutable query handle invalidated its actual row size owner");
+		require(query::query_transfer_access::borrow_row_sizes(*executed).rows.empty(),
+				"native query execution fabricated decoder-derived row size facts");
+		{
+			auto unvalidated = std::make_shared<query::query_result::data>();
+			unvalidated->row_values.push_back(copied_row);
+			unvalidated->row_wire_base_sizes.push_back(row_sizes.base_sizes.front());
+			unvalidated->row_wire_base_sizes.reserve(17U);
+			const auto owner = query::query_transfer_access::make(unvalidated);
+			require(query::query_transfer_access::borrow_row_sizes(owner).rows.empty(),
+					"unvalidated rows exported an input sizing fact");
+			bool overflow{};
+			require(query::query_transfer_access::row_size_metadata_bytes(owner,
+																		  [&]
+																		  {
+																			  overflow = true;
+																		  }) ==
+							sizeof(std::vector<std::size_t>) +
+								unvalidated->row_wire_base_sizes.capacity() * sizeof(std::size_t) &&
+						!overflow,
+					"row size metadata geometry ignored its actual vector capacity");
+		}
+		{
+			auto incomplete = std::make_shared<query::query_result::data>();
+			incomplete->row_values.push_back(copied_row);
+			incomplete->rows_validated = true;
+			const auto owner = query::query_transfer_access::make(incomplete);
+			require(query::query_transfer_access::borrow_row_sizes(owner).rows.empty(),
+					"incomplete row size table exported a fact for an admitted row");
+		}
+		{
+			auto unavailable = std::make_shared<query::query_result::data>();
+			unavailable->row_values.push_back(copied_row);
+			unavailable->row_wire_base_sizes.push_back(std::numeric_limits<std::size_t>::max());
+			unavailable->rows_validated = true;
+			const auto owner = query::query_transfer_access::make(unavailable);
+			require(!query::query_transfer_access::borrow_row_sizes(owner).find(
+						&unavailable->row_values.front(), step),
+					"unavailable row sizing overflow sentinel was treated as a measured size");
+		}
+		{
+			auto empty_data = std::make_shared<query::query_result::data>();
+			empty_data->rows_validated = true;
+			const auto empty = query::query_transfer_access::make(empty_data);
+			require(!query::query_transfer_access::borrow_row_sizes(empty).find(
+						&decoded_rows.front(), step) &&
+						query::query_transfer_access::row_size_metadata_bytes(
+							empty,
+							[]
+							{
+								require(false, "empty sizing geometry overflowed");
+							}) == sizeof(std::vector<std::size_t>),
+					"empty owner exported an alien row fact or invented retained capacity");
+		}
+		{
+			auto many = bundle;
+			const auto prefix = std::string_view{"\"multiplicity\":"};
+			const auto first = many.find(prefix);
+			require(first != std::string::npos, "transfer multiplicity fixture missing");
+			const auto digits = first + prefix.size();
+			const auto end = many.find_first_not_of("0123456789", digits);
+			require(end != std::string::npos && end > digits,
+					"transfer multiplicity fixture was not a canonical number");
+			many.replace(digits, end - digits, "1234567");
+			auto many_decoded = query::decode_application_queries(data.engine, many);
+			require(many_decoded.has_value(), "valid large transfer multiplicity rejected");
+			const auto many_rows =
+				query::query_transfer_access::borrow_rows(many_decoded->scans.front().result);
+			const auto many_sizes =
+				query::query_transfer_access::borrow_row_sizes(many_decoded->scans.front().result);
+			const auto before = many_sizes.find(&many_rows.front(), step);
+			require(before && *before == row_sizes.base_sizes.front() &&
+						*before + 7U == many_rows.front().canonical_form().size(),
+					"decoder fixed multiplicity spelling into its row size base");
+			class grouped_numbers final : public std::numpunct<char>
+			{
+				char do_thousands_sep() const override
+				{
+					return '_';
+				}
+				std::string do_grouping() const override
+				{
+					return "\3";
+				}
+			};
+			std::locale::global(std::locale{std::locale::classic(), new grouped_numbers});
+			std::ostringstream multiplicity;
+			multiplicity << many_rows.front().multiplicity;
+			const auto after = many_sizes.find(&many_rows.front(), step);
+			require(multiplicity.str() == "1_234_567" && after == before &&
+						*after + multiplicity.str().size() ==
+							many_rows.front().canonical_form().size(),
+					"decoded row sizing fact froze the locale of its multiplicity");
+			std::locale::global(std::locale::classic());
+		}
 		// An actual older executed scan remains readable after optional additive
 		// columns are inserted and appended under the same semantic major.
 		auto evolved = data.left;

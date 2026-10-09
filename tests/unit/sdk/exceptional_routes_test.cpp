@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <sstream>
 
 #include <cxxlens/relations/cc_declaration_inventory.hpp>
 #include <cxxlens/relations/cc_entity_detail.hpp>
@@ -295,7 +296,7 @@ namespace
 					true,
 					true};
 		}
-		q::application_query_results queries() const
+		q::application_query_results queries(bool sizes = false) const
 		{
 			q::application_query_results out;
 			out.snapshot_id = "query:routes";
@@ -303,6 +304,18 @@ namespace
 			{
 				auto data = std::make_shared<q::query_result::data>();
 				data->row_values = rows[i];
+				if (sizes)
+				{
+					for (const auto& row : data->row_values)
+					{
+						require(bool(row.validate()), "sizing fixture generic row admission");
+						std::ostringstream multiplicity;
+						multiplicity << row.multiplicity;
+						data->row_wire_base_sizes.push_back(row.canonical_form().size() -
+															multiplicity.str().size());
+					}
+					data->rows_validated = true;
+				}
 				data->status = q::execution_status::complete;
 				data->input_complete = false;
 				data->snapshot = out.snapshot_id;
@@ -326,6 +339,43 @@ namespace
 
 int main()
 {
+	{
+		fixture sized;
+		query_copy_controls::projection(
+			sized.rows,
+			names,
+			[&]
+			{
+				return sized.queries(true);
+			},
+			[](const auto& input, auto limits, auto& usage)
+			{
+				return q::project_exceptional_routes(input, limits, {}, usage);
+			},
+			require);
+		std::size_t calls{};
+		q::finite_population_limits measured;
+		measured.cancelled = [&]
+		{
+			++calls;
+			return false;
+		};
+		const auto admitted = sized.queries(true);
+		require(bool(q::project_exceptional_routes(admitted, measured)),
+				"immutable sizing current callback census");
+		q::finite_population_limits interrupted;
+		std::size_t visited{};
+		interrupted.cancelled = [&]
+		{
+			return ++visited >= calls / 2U;
+		};
+		q::projection_resource_usage spent;
+		const auto stopped = q::project_exceptional_routes(admitted, interrupted, {}, spent);
+		require(!stopped && !spent.operations && !spent.retained_bytes_bound,
+				"immutable sizing real stop revokes all usage");
+		require(bool(q::project_exceptional_routes(admitted, {}, {}, spent)),
+				"immutable sizing fresh retry");
+	}
 	// Shared span IDs deliberately hash to one bucket; worlds still stay distinct.
 	{
 		fixture indexed;

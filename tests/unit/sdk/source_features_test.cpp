@@ -4,11 +4,13 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <sstream>
 
 #include <cxxlens/sdk/source_features.hpp>
 
 #include "../../../src/sdk/query_projected_row_encoding_internal.hpp"
 #include "../../../src/sdk/query_result_internal.hpp"
+#include "query_projection_row_copy_controls.hpp"
 
 namespace
 {
@@ -236,7 +238,7 @@ namespace
 					true,
 					true};
 		}
-		q::application_query_results queries(bool validated = false) const
+		q::application_query_results queries(bool validated = false, bool sizes = false) const
 		{
 			q::application_query_results queries;
 			queries.snapshot_id = "original:test";
@@ -244,6 +246,18 @@ namespace
 			{
 				auto data = std::make_shared<q::query_result::data>();
 				data->row_values = rows[group];
+				if (sizes)
+				{
+					for (const auto& row : data->row_values)
+					{
+						require(bool(row.validate()), "sizing fixture generic row admission");
+						std::ostringstream multiplicity;
+						multiplicity << row.multiplicity;
+						data->row_wire_base_sizes.push_back(row.canonical_form().size() -
+															multiplicity.str().size());
+					}
+					data->rows_validated = true;
+				}
 				if (validated)
 				{
 					for (const auto& row : data->row_values)
@@ -1403,6 +1417,43 @@ void declaration_closure_reuse_controls()
 
 int main()
 {
+	{
+		fixture sized;
+		query_copy_controls::projection(
+			sized.rows,
+			names,
+			[&]
+			{
+				return sized.queries(true, true);
+			},
+			[](const auto& input, auto limits, auto& usage)
+			{
+				return q::project_source_features(input, limits, {}, usage);
+			},
+			require);
+		std::size_t calls{};
+		q::finite_population_limits measured;
+		measured.cancelled = [&]
+		{
+			++calls;
+			return false;
+		};
+		const auto admitted = sized.queries(true, true);
+		require(bool(q::project_source_features(admitted, measured)),
+				"immutable sizing current callback census");
+		q::finite_population_limits interrupted;
+		std::size_t visited{};
+		interrupted.cancelled = [&]
+		{
+			return ++visited >= calls / 2U;
+		};
+		q::projection_resource_usage spent;
+		const auto stopped = q::project_source_features(admitted, interrupted, {}, spent);
+		require(!stopped && !spent.operations && !spent.retained_bytes_bound,
+				"immutable sizing real stop revokes all usage");
+		require(bool(q::project_source_features(admitted, {}, {}, spent)),
+				"immutable sizing fresh retry");
+	}
 	declaration_closure_reuse_controls();
 	derived_feature_lookup_controls();
 	occurrence_index_controls();

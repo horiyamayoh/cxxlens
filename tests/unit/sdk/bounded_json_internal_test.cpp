@@ -35,10 +35,26 @@ namespace
 		};
 	}
 
+	void require_sizes(const json_value& value)
+	{
+		require(value.canonical_byte_size() == canonical_json(value).size(),
+				"retained canonical byte size disagrees with the complete writer");
+		if (const auto* children = value.as_array())
+			for (const auto& child : *children)
+				require_sizes(child);
+		if (const auto* children = value.as_object())
+			for (const auto& [key, child] : *children)
+			{
+				(void)key;
+				require_sizes(child);
+			}
+	}
+
 	[[nodiscard]] json_document parse(std::string raw, const json_limits& limits = small_limits())
 	{
 		auto parsed = parse_json_document(std::move(raw), limits);
 		require(parsed.has_value(), parsed ? "" : parsed.error().detail);
+		require_sizes(parsed->root());
 		return std::move(*parsed);
 	}
 
@@ -242,6 +258,66 @@ namespace
 		require(!malformed && malformed.error().detail == "value-missing",
 				"nested parse error was collapsed into trailing-data");
 	}
+
+	void retained_size_value_semantics()
+	{
+		std::string controls;
+		for (unsigned int byte{}; byte < 0x20U; ++byte)
+			controls.push_back(static_cast<char>(byte));
+		controls += "\"\\/\xc3\xa9\xf0\x9f\x98\x80";
+		auto text = json_value::string(controls);
+		require(text.has_value(), "decoded controls and UTF8 value rejected");
+		require_sizes(*text);
+		json_value::array_type items;
+		items.push_back(json_value::null());
+		items.push_back(json_value::boolean(false));
+		items.push_back(json_value::signed_integer(std::numeric_limits<std::int64_t>::min()));
+		items.push_back(json_value::unsigned_integer(std::numeric_limits<std::uint64_t>::max()));
+		items.push_back(*text);
+		json_value::object_type members;
+		members.emplace(controls, json_value::array(std::move(items)));
+		auto object = json_value::object(std::move(members));
+		require(object.has_value(), "escaped object member rejected");
+		require_sizes(*object);
+		const auto raw = canonical_json(*object);
+		const auto roundtrip = parse(raw);
+		require(roundtrip.root() == *object,
+				"retained byte sizes changed nested value equality or the roundtrip");
+
+		auto source = json_value::boolean(true);
+		auto moved = std::move(source);
+		require(!source.canonical_byte_size() && moved.canonical_byte_size() == 4U &&
+					source == moved,
+				"move preserves destination size and equality ignores unavailable metadata");
+		const auto copy = moved;
+		require(copy == moved && copy.canonical_byte_size() == 4U,
+				"value copy retains exact byte metadata");
+		auto assigned = json_value::null();
+		assigned = *object;
+		require(assigned == *object &&
+					assigned.canonical_byte_size() == object->canonical_byte_size(),
+				"copy assignment replaces the previous value and its metadata together");
+		json_value::array_type unavailable;
+		unavailable.push_back(source);
+		const auto array = json_value::array(std::move(unavailable));
+		require(!array.canonical_byte_size() && canonical_json(array) == "[true]",
+				"unavailable child size propagates without rejecting a valid value");
+		moved = json_value::boolean(false);
+		source = std::move(moved);
+		require(!moved.canonical_byte_size() && source.canonical_byte_size() == 5U &&
+					canonical_json(source) == "false",
+				"move assignment cannot retain stale size metadata");
+
+		const auto invalid = json_value::string(std::string(1U, '\xff'));
+		require(!invalid && invalid.error().detail == "invalid-utf8:byte=0",
+				"size observation preserves direct string UTF8 rejection");
+		json_value::object_type bad_key;
+		bad_key.emplace(std::string(1U, '\xff'), json_value::null());
+		const auto invalid_object = json_value::object(std::move(bad_key));
+		require(!invalid_object &&
+					invalid_object.error().detail == "invalid-utf8-object-key:byte=0",
+				"size observation preserves direct object-key UTF8 rejection");
+	}
 } // namespace
 
 int main()
@@ -251,5 +327,6 @@ int main()
 	exact_decimal_integer_domain();
 	configured_bounds();
 	caller_policy_and_error_projection();
+	retained_size_value_semantics();
 	return 0;
 }

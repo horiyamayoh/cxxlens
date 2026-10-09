@@ -320,4 +320,16 @@ namespace cxxlens::sdk::query::detail
 		emit_projected_row(sink, row, row.contributor_guarantees, row.contributor_edges);
 		return sink.size();
 	}
+
+	// A decoder-derived base never freezes std::ostringstream's multiplicity locale.
+	template <class Step, class Overflow>
+	[[nodiscard]] std::size_t admitted_projected_row_size_from_base(
+		const std::size_t base, const std::uint64_t multiplicity, Step step, Overflow overflow)
+	{
+		projected_row_size_sink sink{std::move(step), overflow};
+		sink.multiplicity(multiplicity);
+		if (sink.size() > std::numeric_limits<std::size_t>::max() - base)
+			overflow();
+		return base + sink.size();
+	}
 } // namespace cxxlens::sdk::query::detail

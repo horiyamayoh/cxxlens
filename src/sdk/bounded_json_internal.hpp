@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -75,6 +76,11 @@ namespace cxxlens::sdk::detail
 		using array_type = std::vector<json_value>;
 		using object_type = std::map<std::string, json_value, utf8_byte_less>;
 
+		json_value(const json_value&) = default;
+		json_value& operator=(const json_value& other);
+		json_value(json_value&& other) noexcept;
+		json_value& operator=(json_value&& other) noexcept;
+
 		[[nodiscard]] static json_value null();
 		[[nodiscard]] static json_value boolean(bool value);
 		[[nodiscard]] static json_value signed_integer(std::int64_t value);
@@ -91,6 +97,8 @@ namespace cxxlens::sdk::detail
 		[[nodiscard]] const std::string* as_string() const noexcept;
 		[[nodiscard]] const array_type* as_array() const noexcept;
 		[[nodiscard]] const object_type* as_object() const noexcept;
+		/** Exact canonical byte count, unavailable after overflow or a move from this value. */
+		[[nodiscard]] std::optional<std::size_t> canonical_byte_size() const noexcept;
 
 		/** Return an exact decoded member name, or null for a non-object/missing member. */
 		[[nodiscard]] const json_value* member(std::string_view name) const noexcept;
@@ -98,7 +106,7 @@ namespace cxxlens::sdk::detail
 		[[nodiscard]] bool
 		has_exact_members(std::span<const std::string_view> names) const noexcept;
 
-		[[nodiscard]] bool operator==(const json_value&) const = default;
+		[[nodiscard]] bool operator==(const json_value& other) const;
 
 	  private:
 		using storage_type = std::variant<std::monostate,
@@ -109,8 +117,9 @@ namespace cxxlens::sdk::detail
 										  array_type,
 										  object_type>;
 
-		explicit json_value(storage_type value);
+		explicit json_value(storage_type value, std::size_t canonical_bytes);
 		storage_type value_;
+		std::size_t canonical_bytes_;
 	};
 
 	/** Accepted transport document retaining raw occurrence bytes independently of its DOM. */

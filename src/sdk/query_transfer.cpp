@@ -510,8 +510,19 @@ namespace cxxlens::sdk::query
 				fail("rows", "row-limit");
 			retained_rows += rows.size();
 			result->row_values.reserve(rows.size());
+			result->row_wire_base_sizes.reserve(rows.size());
 			for (const auto& item : rows)
+			{
 				result->row_values.push_back(row(item, ir));
+				// Exact shapes and types have now been checked. Canonical object order
+				// cannot change byte size; row multiplicity uses the current stream locale.
+				const auto size = item.canonical_byte_size();
+				const auto multiplicity = member(item, "multiplicity").canonical_byte_size();
+				result->row_wire_base_sizes.push_back(
+					size && multiplicity && *multiplicity <= *size
+						? *size - *multiplicity
+						: std::numeric_limits<std::size_t>::max());
+			}
 			if (result->status == execution_status::failed_before_result && !rows.empty())
 				fail("status", "failed-result-has-rows");
 			if (result->closed_world &&

@@ -6,6 +6,7 @@
 #include <limits>
 #include <new>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 
 #include "json_internal.hpp"
@@ -15,6 +16,51 @@ namespace cxxlens::sdk::detail
 	namespace
 	{
 		constexpr std::size_t contract_maximum_depth = 64U;
+		constexpr std::size_t unavailable_canonical_size = std::numeric_limits<std::size_t>::max();
+
+		void add_canonical_size(std::size_t& total, const std::size_t amount) noexcept
+		{
+			if (total == unavailable_canonical_size || amount >= unavailable_canonical_size - total)
+				total = unavailable_canonical_size;
+			else
+				total += amount;
+		}
+
+		[[nodiscard]] std::size_t canonical_byte_width(const unsigned char byte) noexcept
+		{
+			return byte == '"' || byte == '\\' || byte == '\b' || byte == '\f' || byte == '\n' ||
+					byte == '\r' || byte == '\t'
+				? 2U
+				: byte < 0x20U ? 6U
+							   : 1U;
+		}
+
+		template <class Integer>
+		[[nodiscard]] std::size_t canonical_integer_size(const Integer value) noexcept
+		{
+			using unsigned_type = std::make_unsigned_t<Integer>;
+			unsigned_type remaining{};
+			std::size_t size{};
+			if constexpr (std::is_signed_v<Integer>)
+			{
+				if (value < 0)
+				{
+					remaining = static_cast<unsigned_type>(-(value + 1));
+					++remaining;
+					++size;
+				}
+				else
+					remaining = static_cast<unsigned_type>(value);
+			}
+			else
+				remaining = value;
+			do
+			{
+				++size;
+				remaining /= 10U;
+			} while (remaining != 0U);
+			return size;
+		}
 
 		[[nodiscard]] error json_error(const json_parse_contract& contract,
 									   const std::string_view reason,
@@ -549,13 +595,14 @@ namespace cxxlens::sdk::detail
 				{
 					output.push_back('[');
 					bool first = true;
-					for (const auto& child : *value.as_array())
-					{
-						if (!first)
-							output.push_back(',');
-						first = false;
-						append_canonical_json(output, child);
-					}
+					if (const auto* children = value.as_array())
+						for (const auto& child : *children)
+						{
+							if (!first)
+								output.push_back(',');
+							first = false;
+							append_canonical_json(output, child);
+						}
 					output.push_back(']');
 					break;
 				}
@@ -563,15 +610,16 @@ namespace cxxlens::sdk::detail
 				{
 					output.push_back('{');
 					bool first = true;
-					for (const auto& [key, child] : *value.as_object())
-					{
-						if (!first)
-							output.push_back(',');
-						first = false;
-						output += canonical_json_string(key);
-						output.push_back(':');
-						append_canonical_json(output, child);
-					}
+					if (const auto* children = value.as_object())
+						for (const auto& [key, child] : *children)
+						{
+							if (!first)
+								output.push_back(',');
+							first = false;
+							output += canonical_json_string(key);
+							output.push_back(':');
+							append_canonical_json(output, child);
+						}
 					output.push_back('}');
 					break;
 				}
@@ -593,49 +641,129 @@ namespace cxxlens::sdk::detail
 		return left.size() < right.size();
 	}
 
-	json_value::json_value(storage_type value) : value_{std::move(value)} {}
+	json_value::json_value(storage_type value, const std::size_t canonical_bytes)
+		: value_{std::move(value)}, canonical_bytes_{canonical_bytes}
+	{
+	}
+
+	json_value::json_value(json_value&& other) noexcept
+		: value_{std::move(other.value_)},
+		  canonical_bytes_{std::exchange(other.canonical_bytes_, unavailable_canonical_size)}
+	{
+	}
+
+	json_value& json_value::operator=(const json_value& other)
+	{
+		if (this != &other)
+		{
+			canonical_bytes_ = unavailable_canonical_size;
+			value_ = other.value_;
+			canonical_bytes_ = other.canonical_bytes_;
+		}
+		return *this;
+	}
+
+	json_value& json_value::operator=(json_value&& other) noexcept
+	{
+		if (this != &other)
+		{
+			value_ = std::move(other.value_);
+			canonical_bytes_ = std::exchange(other.canonical_bytes_, unavailable_canonical_size);
+		}
+		return *this;
+	}
 
 	json_value json_value::null()
 	{
-		return json_value{storage_type{std::in_place_type<std::monostate>}};
+		return json_value{storage_type{std::in_place_type<std::monostate>}, 4U};
 	}
 
 	json_value json_value::boolean(const bool value)
 	{
-		return json_value{storage_type{std::in_place_type<bool>, value}};
+		return json_value{storage_type{std::in_place_type<bool>, value}, value ? 4U : 5U};
 	}
 
 	json_value json_value::signed_integer(const std::int64_t value)
 	{
-		return json_value{storage_type{std::in_place_type<std::int64_t>, value}};
+		return json_value{storage_type{std::in_place_type<std::int64_t>, value},
+						  canonical_integer_size(value)};
 	}
 
 	json_value json_value::unsigned_integer(const std::uint64_t value)
 	{
-		return json_value{storage_type{std::in_place_type<std::uint64_t>, value}};
+		return json_value{storage_type{std::in_place_type<std::uint64_t>, value},
+						  canonical_integer_size(value)};
 	}
 
 	result<json_value> json_value::string(std::string value)
 	{
-		if (const auto invalid = invalid_utf8_offset(value))
+		std::size_t canonical_bytes{2U};
+		if (const auto invalid = invalid_utf8_offset(
+				value,
+				[]
+				{
+				},
+				[&](const unsigned char byte)
+				{
+					add_canonical_size(canonical_bytes, canonical_byte_width(byte));
+				}))
 			return unexpected(json_value_error("invalid-utf8", *invalid));
-		return json_value{storage_type{std::in_place_type<std::string>, std::move(value)}};
+		return json_value{storage_type{std::in_place_type<std::string>, std::move(value)},
+						  canonical_bytes};
 	}
 
 	json_value json_value::array(array_type value)
 	{
-		return json_value{storage_type{std::in_place_type<array_type>, std::move(value)}};
+		std::size_t canonical_bytes{2U};
+		bool first{true};
+		for (const auto& child : value)
+		{
+			if (!first)
+				add_canonical_size(canonical_bytes, 1U);
+			first = false;
+			add_canonical_size(canonical_bytes, child.canonical_bytes_);
+		}
+		return json_value{storage_type{std::in_place_type<array_type>, std::move(value)},
+						  canonical_bytes};
 	}
 
 	result<json_value> json_value::object(object_type value)
 	{
+		std::size_t canonical_bytes{2U};
+		bool first{true};
 		for (const auto& [key, child] : value)
 		{
-			(void)child;
-			if (const auto invalid = invalid_utf8_offset(key))
+			std::size_t key_bytes{2U};
+			if (const auto invalid = invalid_utf8_offset(
+					key,
+					[]
+					{
+					},
+					[&](const unsigned char byte)
+					{
+						add_canonical_size(key_bytes, canonical_byte_width(byte));
+					}))
 				return unexpected(json_value_error("invalid-utf8-object-key", *invalid));
+			if (!first)
+				add_canonical_size(canonical_bytes, 1U);
+			first = false;
+			add_canonical_size(canonical_bytes, key_bytes);
+			add_canonical_size(canonical_bytes, 1U);
+			add_canonical_size(canonical_bytes, child.canonical_bytes_);
 		}
-		return json_value{storage_type{std::in_place_type<object_type>, std::move(value)}};
+		return json_value{storage_type{std::in_place_type<object_type>, std::move(value)},
+						  canonical_bytes};
+	}
+
+	std::optional<std::size_t> json_value::canonical_byte_size() const noexcept
+	{
+		return canonical_bytes_ == unavailable_canonical_size ? std::nullopt
+															  : std::optional{canonical_bytes_};
+	}
+
+	bool json_value::operator==(const json_value& other) const
+	{
+		return value_ == other.value_;
 	}
 
 	json_value::kind json_value::type() const noexcept

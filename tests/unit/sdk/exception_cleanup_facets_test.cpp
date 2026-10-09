@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <tuple>
 
 #include <cxxlens/sdk.hpp>
@@ -227,7 +228,7 @@ namespace
 					true,
 					true};
 		}
-		q::application_query_results queries(bool broad = false) const
+		q::application_query_results queries(bool broad = false, bool sizes = false) const
 		{
 			q::application_query_results out;
 			out.snapshot_id = "query:facet";
@@ -235,6 +236,18 @@ namespace
 			{
 				auto data = std::make_shared<q::query_result::data>();
 				data->row_values = rows[group];
+				if (sizes)
+				{
+					for (const auto& row : data->row_values)
+					{
+						require(bool(row.validate()), "sizing fixture generic row admission");
+						std::ostringstream multiplicity;
+						multiplicity << row.multiplicity;
+						data->row_wire_base_sizes.push_back(row.canonical_form().size() -
+															multiplicity.str().size());
+					}
+					data->rows_validated = true;
+				}
 				data->status = q::execution_status::complete;
 				data->input_complete = broad;
 				data->snapshot = out.snapshot_id;
@@ -446,6 +459,43 @@ namespace
 } // namespace
 int main(int argc, char** argv)
 {
+	{
+		fixture sized;
+		query_copy_controls::projection(
+			sized.rows,
+			names,
+			[&]
+			{
+				return sized.queries(false, true);
+			},
+			[](const auto& input, auto limits, auto& usage)
+			{
+				return q::project_exception_cleanup_facets(input, limits, {}, usage);
+			},
+			require);
+		std::size_t calls{};
+		q::finite_population_limits measured;
+		measured.cancelled = [&]
+		{
+			++calls;
+			return false;
+		};
+		const auto admitted = sized.queries(false, true);
+		require(bool(q::project_exception_cleanup_facets(admitted, measured)),
+				"immutable sizing current callback census");
+		q::finite_population_limits interrupted;
+		std::size_t visited{};
+		interrupted.cancelled = [&]
+		{
+			return ++visited >= calls / 2U;
+		};
+		q::projection_resource_usage spent;
+		const auto stopped = q::project_exception_cleanup_facets(admitted, interrupted, {}, spent);
+		require(!stopped && !spent.operations && !spent.retained_bytes_bound,
+				"immutable sizing real stop revokes all usage");
+		require(bool(q::project_exception_cleanup_facets(admitted, {}, {}, spent)),
+				"immutable sizing fresh retry");
+	}
 	if (argc == 2 || argc == 3)
 	{
 		relation_registry registry;

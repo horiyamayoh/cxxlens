@@ -1,5 +1,9 @@
 #pragma once
 
+#include <functional>
+#include <limits>
+#include <optional>
+
 #include <cxxlens/sdk/query.hpp>
 
 namespace cxxlens::sdk::query
@@ -7,6 +11,9 @@ namespace cxxlens::sdk::query
 	struct query_result::data
 	{
 		std::vector<annotated_row> row_values;
+		// Immutable decoder-derived wire sizes, excluding locale-sensitive multiplicity.
+		// Native execution and other owners without this fact keep the ordinary row walk.
+		std::vector<std::size_t> row_wire_base_sizes;
 		execution_status status{execution_status::failed_before_result};
 		bool ordered{};
 		bool input_complete{};
@@ -38,6 +45,56 @@ namespace cxxlens::sdk::query
 
 	struct query_transfer_access
 	{
+		struct row_size_view
+		{
+			std::span<const annotated_row> rows;
+			std::span<const std::size_t> base_sizes;
+
+			template <class Step>
+			[[nodiscard]] std::optional<std::size_t> find(const annotated_row* wanted,
+														  Step step) const
+			{
+				step();
+				if (rows.size() != base_sizes.size())
+					return {};
+				std::size_t first{}, last = rows.size();
+				const std::less<const annotated_row*> less;
+				while (first < last)
+				{
+					step();
+					const auto middle = first + (last - first) / 2U;
+					if (less(&rows[middle], wanted))
+						first = middle + 1U;
+					else
+						last = middle;
+				}
+				step();
+				if (first == rows.size() || &rows[first] != wanted ||
+					base_sizes[first] == std::numeric_limits<std::size_t>::max())
+					return {};
+				return base_sizes[first];
+			}
+		};
+		[[nodiscard]] static row_size_view borrow_row_sizes(const query_result& result) noexcept
+		{
+			if (!result.data_ || !result.data_->rows_validated ||
+				result.data_->row_wire_base_sizes.size() != result.data_->row_values.size())
+				return {};
+			return {result.data_->row_values, result.data_->row_wire_base_sizes};
+		}
+		template <class Overflow>
+		[[nodiscard]] static std::size_t row_size_metadata_bytes(const query_result& result,
+																 Overflow overflow)
+		{
+			if (!result.data_)
+				return 0U;
+			constexpr auto geometry = sizeof(std::vector<std::size_t>);
+			const auto capacity = result.data_->row_wire_base_sizes.capacity();
+			if (capacity >
+				(std::numeric_limits<std::size_t>::max() - geometry) / sizeof(std::size_t))
+				overflow();
+			return geometry + capacity * sizeof(std::size_t);
+		}
 		[[nodiscard]] static std::span<const annotated_row>
 		borrow_rows(const query_result& result) noexcept
 		{
