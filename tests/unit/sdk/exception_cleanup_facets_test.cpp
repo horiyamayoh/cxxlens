@@ -339,6 +339,121 @@ namespace
 						"specification-only query side channels match full API");
 		}
 	}
+	void ordered_identity_evidence_controls()
+	{
+		for (unsigned disposition{}; disposition < 5U; ++disposition)
+		{
+			fixture original;
+			if (disposition == 1U || disposition == 4U)
+				original.rows[0].clear();
+			if (disposition == 2U || disposition == 4U)
+			{
+				auto& function = original.rows[3].front();
+				function.presence.universe = "world:foreign";
+				function.contributor_edges.front().condition.universe = "world:foreign";
+			}
+			if (disposition == 3U)
+			{
+				auto conflicting = original.rows[3].front();
+				set(conflicting, "kind", detached_cell::utf8("variable"));
+				original.rows[3].push_back(std::move(conflicting));
+			}
+			const auto out = take(q::project_exception_cleanup_facets(original.input()));
+			const auto expected_state = disposition == 0U ? state::complete
+				: disposition == 3U						  ? state::conflicting
+				: disposition == 4U						  ? state::unknown
+														  : state::partial;
+			require(spec(out).identity_state == expected_state &&
+						cleanup(out).scope_state == expected_state &&
+						spec(out).specification_state == state::complete &&
+						spec(out).source_state == state::complete &&
+						spec(out).nonthrowing == true &&
+						cleanup(out).emission_state == state::complete &&
+						cleanup(out).registration_state == state::complete &&
+						cleanup(out).definition_source_state == state::complete &&
+						cleanup(out).declaration_state == state::complete &&
+						cleanup(out).declaration_source_state == state::complete &&
+						cleanup(out).target_attribution_state == state::complete &&
+						cleanup(out).target_state == state::complete,
+					"ordered identity evidence preserves every independent cleanup/specification "
+					"state");
+			require(
+				out.compile_units_complete && out.detail_inputs_complete &&
+					out.exit_inputs_complete && out.declaration_inputs_complete &&
+					out.unresolved.empty() && !out.source_queries,
+				"ordered identity evidence preserves original input coverage and query ownership");
+			if (expected_state == state::complete)
+				require(spec(out).gaps.empty() && cleanup(out).gaps.empty(),
+						"complete identity ordering invented a missing facet");
+			else
+				require(spec(out).gaps.size() == 1U && cleanup(out).gaps.size() == 1U &&
+							spec(out).gaps.front().code ==
+								"sdk.exception-cleanup-function-identity-unavailable" &&
+							cleanup(out).gaps.front().code ==
+								"sdk.exception-cleanup-cleanup-scope-unavailable",
+						"unknown/conflicting identity retains its precise original gaps");
+			using original_reference = std::pair<std::size_t, std::size_t>;
+			const auto append_identity = [&](std::vector<original_reference>& references)
+			{
+				if (disposition != 1U && disposition != 4U)
+					references.emplace_back(0U, 0U);
+				if (disposition != 2U && disposition != 4U)
+					references.emplace_back(3U, 0U);
+				if (disposition == 3U)
+					references.emplace_back(3U, 3U);
+			};
+			std::vector<original_reference> specification_references{{4U, 0U}};
+			append_identity(specification_references);
+			specification_references.insert(specification_references.end(), {{2U, 0U}, {1U, 0U}});
+			std::vector<original_reference> cleanup_references{{6U, 1U}};
+			append_identity(cleanup_references);
+			cleanup_references.insert(cleanup_references.end(),
+									  {{4U, 0U},
+									   {5U, 0U},
+									   {6U, 0U},
+									   {5U, 0U},
+									   {2U, 0U},
+									   {1U, 0U},
+									   {7U, 0U},
+									   {2U, 2U},
+									   {1U, 0U},
+									   {3U, 1U},
+									   {8U, 0U},
+									   {3U, 2U}});
+			std::vector<original_reference> owner_order;
+			for (const auto& references : {specification_references, cleanup_references})
+				for (const auto& reference : references)
+					if (std::ranges::find(owner_order, reference) == owner_order.end())
+						owner_order.push_back(reference);
+			require(out.evidence.size() == owner_order.size(),
+					"ordered identity binding omitted or invented original evidence");
+			for (std::size_t i{}; i < owner_order.size(); ++i)
+			{
+				const auto [group, row] = owner_order[i];
+				require(out.evidence[i].relation_id == names[group] &&
+							out.evidence[i].row.canonical_form() ==
+								original.rows[group][row].canonical_form(),
+						"compile unit precedes entity in the lossless original evidence owner");
+			}
+			const auto check_references = [&](const std::vector<original_reference>& expected,
+											  const std::vector<std::size_t>& actual)
+			{
+				require(expected.size() == actual.size(), "ordered evidence reference cardinality");
+				for (std::size_t i{}; i < expected.size(); ++i)
+				{
+					const auto at = std::ranges::find(owner_order, expected[i]);
+					require(
+						at != owner_order.end() &&
+							actual[i] == static_cast<std::size_t>(at - owner_order.begin()),
+						"ordered evidence references preserve duplicates and exact owner indices");
+				}
+			};
+			check_references(specification_references, spec(out).evidence);
+			check_references(cleanup_references, cleanup(out).evidence);
+			specification_parity(
+				out, take(q::project_function_exception_specifications(original.input())));
+		}
+	}
 	void specification_only_controls()
 	{
 		fixture original;
@@ -562,6 +677,7 @@ int main(int argc, char** argv)
 		return 0;
 	}
 
+	ordered_identity_evidence_controls();
 	specification_only_controls();
 
 	// Shared span IDs deliberately hash to one bucket; worlds still stay distinct.

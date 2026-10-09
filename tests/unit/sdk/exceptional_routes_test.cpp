@@ -335,10 +335,100 @@ namespace
 		require(out.invokes.size() == 1, "one actual Invoke");
 		return out.invokes.front();
 	}
+	void ordered_successor_evidence_controls()
+	{
+		for (unsigned disposition{}; disposition < 10U; ++disposition)
+		{
+			fixture original;
+			if (disposition == 1U)
+				original.rows[11].erase(original.rows[11].begin());
+			if (disposition == 2U)
+				set(original.rows[11][0], "kind", detached_cell::utf8("unwind"));
+			if (disposition == 3U)
+				set(original.rows[9][1], "is_invoke", detached_cell::boolean(false));
+			if (disposition == 4U)
+				set(original.rows[9][1], "unwind_successor", detached_cell::utf8("edge:normal"));
+			if (disposition == 5U)
+				set(original.rows[11][0], "to_block", detached_cell::utf8("block:dangling"));
+			if (disposition == 6U)
+				set(original.rows[11][0], "compile_unit", detached_cell::utf8("unit:foreign"));
+			if (disposition == 7U)
+				set(original.rows[11][1], "ordinal", detached_cell::unsigned_integer(0U));
+			if (disposition == 8U)
+				set(original.rows[11][0], "membership_state", detached_cell::utf8("partial"));
+			if (disposition == 9U)
+				original.rows[11].clear();
+			const auto out = take(q::project_exceptional_routes(original.input()));
+			const auto& value = invoke(out);
+			const auto expected_state = disposition == 0U ? state::complete
+				: disposition == 9U						  ? state::unknown
+				: disposition == 1U || disposition == 3U || disposition == 5U || disposition == 8U
+				? state::partial
+				: state::conflicting;
+			require(value.successors_state == expected_state &&
+						value.identity_state == state::complete &&
+						value.placement_state == state::complete &&
+						value.boundary_state == state::complete &&
+						value.boundary_declaration_state == state::complete &&
+						value.exception_spec_state == state::complete &&
+						value.exception_spec_nonthrowing == true,
+					"ordered successors preserve unknown/conflict/partial and independent Invoke "
+					"facets");
+			require(out.compile_units_complete && out.scope_inputs_complete &&
+						out.occurrence_inputs_complete && out.topology_inputs_complete &&
+						out.declaration_inputs_complete && out.unresolved.empty() &&
+						!out.source_queries,
+					"ordered successor evaluation preserves source coverage and query ownership");
+			require(value.gaps.size() == (expected_state == state::complete ? 0U : 1U) &&
+						(expected_state == state::complete ||
+						 value.gaps.front().code ==
+							 "sdk.exceptional-route-invoke-successors-unavailable"),
+					"ordered successors retain the precise missing/conflicting facet gap");
+			using original_reference = std::pair<std::size_t, std::size_t>;
+			std::vector<original_reference> expected{{10U, 0U}};
+			if (disposition != 3U && disposition != 9U)
+			{
+				if (disposition != 1U)
+				{
+					expected.emplace_back(11U, 0U);
+					if (disposition != 2U && disposition != 6U)
+					{
+						expected.emplace_back(10U, 0U);
+						if (disposition != 5U)
+							expected.emplace_back(10U, 1U);
+						expected.emplace_back(10U, 0U);
+					}
+				}
+				expected.emplace_back(11U, disposition == 1U || disposition == 4U ? 0U : 1U);
+				if (disposition != 4U && disposition != 7U)
+					expected.insert(expected.end(), {{10U, 0U}, {10U, 2U}, {10U, 0U}});
+			}
+			std::vector<std::size_t> actual;
+			for (const auto reference : value.evidence)
+			{
+				require(reference < out.evidence.size(), "Invoke evidence index remains in owner");
+				const auto& evidence = out.evidence[reference];
+				if (evidence.relation_id == names[10] || evidence.relation_id == names[11])
+					actual.push_back(reference);
+			}
+			require(actual.size() == expected.size(),
+					"ordered successor/block FKs preserve every original reference and duplicate");
+			for (std::size_t i{}; i < expected.size(); ++i)
+			{
+				const auto [group, row] = expected[i];
+				const auto& evidence = out.evidence[actual[i]];
+				require(
+					evidence.relation_id == names[group] &&
+						evidence.row.canonical_form() == original.rows[group][row].canonical_form(),
+					"normal successor FKs precede unwind successor FKs in exact evidence order");
+			}
+		}
+	}
 } // namespace
 
 int main()
 {
+	ordered_successor_evidence_controls();
 	{
 		fixture sized;
 		query_copy_controls::projection(

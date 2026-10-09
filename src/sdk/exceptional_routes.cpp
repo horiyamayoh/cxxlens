@@ -1384,20 +1384,16 @@ namespace cxxlens::sdk::query
 						number(*blocks.front(), "ordinal") &&
 						value.block_ordinal != number(*blocks.front(), "ordinal"))
 						value.placement_state = state::conflicting;
-					value.successors_state = value.is_invoke == true
-						? combine(successor_fk(value.normal_successor,
-											   value,
-											   world,
-											   value.evidence,
-											   "normal",
-											   0U),
-								  successor_fk(value.unwind_successor,
-											   value,
-											   world,
-											   value.evidence,
-											   "unwind",
-											   1U))
-						: state::partial;
+					if (value.is_invoke == true)
+					{
+						const auto normal_state = successor_fk(
+							value.normal_successor, value, world, value.evidence, "normal", 0U);
+						const auto unwind_state = successor_fk(
+							value.unwind_successor, value, world, value.evidence, "unwind", 1U);
+						value.successors_state = combine(normal_state, unwind_state);
+					}
+					else
+						value.successors_state = state::partial;
 					if (value.normal_successor == value.unwind_successor &&
 						!value.normal_successor.empty())
 						value.successors_state = state::conflicting;

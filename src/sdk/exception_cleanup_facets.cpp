@@ -645,8 +645,9 @@ namespace cxxlens::sdk::query
 				p.variant = copy(world[2]);
 				p.interpretation = copy(world[3]);
 				bind(p.evidence, 4U, originals);
-				p.identity_state = combine(unit(p.compile_unit, world, p.evidence),
-										   entity(p.function, world, p.evidence));
+				const auto unit_state = unit(p.compile_unit, world, p.evidence);
+				const auto entity_state = entity(p.function, world, p.evidence);
+				p.identity_state = combine(unit_state, entity_state);
 				if (!agree(originals, {"detail", "entity", "compile_unit", "source"}))
 					p.identity_state = finite_population_state::conflicting;
 				p.source_state = source(p.source_span, world, p.evidence);
@@ -839,8 +840,9 @@ namespace cxxlens::sdk::query
 							"profile",
 							"lowering_profile"}))
 					return finite_population_state::conflicting;
-				auto state = combine(unit(p.compile_unit, world, p.evidence),
-									 entity(p.function, world, p.evidence));
+				const auto unit_state = unit(p.compile_unit, world, p.evidence);
+				const auto entity_state = entity(p.function, world, p.evidence);
+				auto state = combine(unit_state, entity_state);
 				const auto& details = find(4U, p.scope_detail, world);
 				if (details.empty())
 					state = combine(state, finite_population_state::unknown);
