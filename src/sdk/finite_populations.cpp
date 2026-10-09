@@ -1443,6 +1443,9 @@ namespace cxxlens::sdk::query
 
 	result<void> finite_population_limits::validate() const
 	{
+		if (evidence_ownership != projection_evidence_ownership::detached &&
+			evidence_ownership != projection_evidence_ownership::shared_immutable)
+			return error{"sdk.population-limit-invalid", "evidence_ownership", "unsupported"};
 		if (!maximum_rows || !maximum_condition_expansions || !maximum_evidence_bytes ||
 			!maximum_retained_bytes || !maximum_evidence_references || !maximum_populations ||
 			!maximum_members || !maximum_operations || !maximum_source_queries ||

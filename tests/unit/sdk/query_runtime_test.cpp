@@ -3054,6 +3054,81 @@ namespace
 		require(!decoded_rows.empty() && row_sizes.rows.data() == decoded_rows.data() &&
 					row_sizes.base_sizes.size() == decoded_rows.size(),
 				"decoded row sizes did not retain the exact admitted row owner");
+		{
+			using access = query::query_transfer_access;
+			using evidence = query::finite_population_evidence;
+			const auto owner = access::borrow_evidence_owner(decoded_result);
+			std::size_t work{}, checkpoints{};
+			const auto count = [&](std::size_t amount)
+			{
+				work += amount;
+				++checkpoints;
+			};
+			const auto shared = access::share_evidence_row<evidence>(
+				owner, &decoded_rows.front(), "data.left", count);
+			require(
+				shared && shared->row.values.empty() &&
+					&shared->original_row() == &decoded_rows.front() &&
+					shared->original_row().canonical_form() ==
+						decoded_rows.front().canonical_form() &&
+					work >= std::string_view{"data.left"}.size() + 3U && checkpoints >= 3U,
+				"shared evidence changed its exact immutable owner or omitted copy checkpoints");
+			const auto no_stop = [](std::size_t)
+			{
+			};
+			const auto copied = decoded_rows.front();
+			const auto alien_rows = access::borrow_rows(*executed);
+			require(
+				!alien_rows.empty() &&
+					!access::share_evidence_row<evidence>(owner, &copied, "data.left", no_stop) &&
+					!access::share_evidence_row<evidence>(
+						owner, &alien_rows.front(), "data.left", no_stop) &&
+					!access::share_evidence_row<evidence>(owner, nullptr, "data.left", no_stop) &&
+					!access::share_evidence_row<evidence>(
+						owner, decoded_rows.data() + decoded_rows.size(), "data.left", no_stop),
+				"shared evidence borrowed copied, alien, null or one-past rows");
+			auto mismatched = owner;
+			mismatched.rows = alien_rows;
+			require(!access::share_evidence_row<evidence>(
+						mismatched, &alien_rows.front(), "data.left", no_stop),
+					"shared evidence accepted a mismatched row span and strong owner");
+			mismatched = owner;
+			mismatched.rows = decoded_rows.first(decoded_rows.size() - 1U);
+			require(!access::share_evidence_row<evidence>(
+						mismatched, &decoded_rows.front(), "data.left", no_stop),
+					"shared evidence accepted incomplete owner cardinality");
+			const access::evidence_owner_view missing;
+			require(!access::share_evidence_row<evidence>(
+						missing, &decoded_rows.front(), "data.left", no_stop),
+					"shared evidence accepted a missing strong owner");
+			struct interrupted_share
+			{
+			};
+			const auto references = owner.owner.use_count();
+			bool interrupted{};
+			try
+			{
+				std::size_t visited{};
+				(void)access::share_evidence_row<evidence>(owner,
+														   &decoded_rows.front(),
+														   "data.left",
+														   [&](std::size_t)
+														   {
+															   if (++visited == checkpoints)
+																   throw interrupted_share{};
+														   });
+			}
+			catch (const interrupted_share&)
+			{
+				interrupted = true;
+			}
+			require(
+				interrupted && owner.owner.use_count() == references,
+				"stopped evidence creation leaked a strong alias or ignored its last checkpoint");
+			require(bool(access::share_evidence_row<evidence>(
+						owner, &decoded_rows.front(), "data.left", no_stop)),
+					"shared evidence could not retry after interrupted creation");
+		}
 		for (const auto& row : decoded_rows)
 		{
 			std::size_t steps{};

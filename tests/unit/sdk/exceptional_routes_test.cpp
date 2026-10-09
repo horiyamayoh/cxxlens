@@ -5,6 +5,7 @@
 #include <iostream>
 #include <memory>
 #include <sstream>
+#include <tuple>
 
 #include <cxxlens/relations/cc_declaration_inventory.hpp>
 #include <cxxlens/relations/cc_entity_detail.hpp>
@@ -424,11 +425,456 @@ namespace
 			}
 		}
 	}
+	auto full_route_record(const q::observed_exceptional_block& value)
+	{
+		return std::tie(value.block,
+						value.variant,
+						value.compile_unit,
+						value.profile,
+						value.membership_state,
+						value.universe,
+						value.semantic_variant,
+						value.interpretation,
+						value.ordinal,
+						value.instruction_count,
+						value.is_entry,
+						value.terminator_opcode,
+						value.terminator_kind,
+						value.identity_state,
+						value.variant_state,
+						value.state,
+						value.evidence,
+						value.gaps);
+	}
+	auto full_route_record(const q::observed_exceptional_successor& value)
+	{
+		return std::tie(value.successor,
+						value.variant,
+						value.compile_unit,
+						value.profile,
+						value.membership_state,
+						value.universe,
+						value.semantic_variant,
+						value.interpretation,
+						value.from_block,
+						value.to_block,
+						value.kind,
+						value.invoke,
+						value.terminator_instruction_ordinal,
+						value.ordinal,
+						value.identity_state,
+						value.variant_state,
+						value.from_state,
+						value.to_state,
+						value.invoke_state,
+						value.state,
+						value.evidence,
+						value.gaps);
+	}
+	auto full_route_record(const q::observed_invoke_exceptional_boundary& value)
+	{
+		return std::tie(value.exit,
+						value.variant,
+						value.compile_unit,
+						value.lowered_block,
+						value.normal_successor,
+						value.unwind_successor,
+						value.universe,
+						value.semantic_variant,
+						value.interpretation,
+						value.block_ordinal,
+						value.instruction_ordinal,
+						value.is_invoke,
+						value.boundary_declaration,
+						value.selected_scope_kind,
+						value.disposition,
+						value.boundary_profile,
+						value.boundary_observation_state,
+						value.exception_spec_kind,
+						value.exception_spec_profile,
+						value.exception_spec_nonthrowing,
+						value.identity_state,
+						value.placement_state,
+						value.successors_state,
+						value.boundary_state,
+						value.boundary_declaration_state,
+						value.exception_spec_state,
+						value.evidence,
+						value.gaps);
+	}
+	auto full_route_record(const q::exceptional_route_variant& value)
+	{
+		return std::tie(value.carrier,
+						value.kind,
+						value.symbol,
+						value.index,
+						value.detail,
+						value.function,
+						value.compile_unit,
+						value.body,
+						value.definition_source,
+						value.universe,
+						value.variant,
+						value.interpretation,
+						value.profile,
+						value.entry,
+						value.block_count,
+						value.successor_count,
+						value.block_ids,
+						value.successor_ids,
+						value.carrier_state,
+						value.scope_state,
+						value.source_state,
+						value.enumeration_state,
+						value.entry_state,
+						value.topology_state,
+						value.blocks,
+						value.successors,
+						value.invokes,
+						value.evidence,
+						value.gaps);
+	}
+
+	void same_routes(const q::exceptional_route_projection& expected,
+					 const q::exceptional_route_projection& actual,
+					 bool query_owners = true)
+	{
+		require(std::tie(expected.compile_units_complete,
+						 expected.scope_inputs_complete,
+						 expected.occurrence_inputs_complete,
+						 expected.topology_inputs_complete,
+						 expected.declaration_inputs_complete,
+						 expected.unresolved) ==
+					std::tie(actual.compile_units_complete,
+							 actual.scope_inputs_complete,
+							 actual.occurrence_inputs_complete,
+							 actual.topology_inputs_complete,
+							 actual.declaration_inputs_complete,
+							 actual.unresolved),
+				"immutable Routes preserve full independent coverage and unresolved fields");
+		const auto records = [](const auto& left, const auto& right)
+		{
+			require(left.size() == right.size(), "immutable Routes retain every flat record");
+			for (std::size_t i{}; i < left.size(); ++i)
+				require(
+					full_route_record(left[i]) == full_route_record(right[i]),
+					"immutable Routes retain every DTO field, gap and ordered evidence reference");
+		};
+		records(expected.blocks, actual.blocks);
+		records(expected.successors, actual.successors);
+		records(expected.invokes, actual.invokes);
+		records(expected.variants, actual.variants);
+		require(expected.evidence.size() == actual.evidence.size(),
+				"immutable Routes retain every raw evidence owner");
+		for (std::size_t i{}; i < expected.evidence.size(); ++i)
+			require(expected.evidence[i].relation_id == actual.evidence[i].relation_id &&
+						expected.evidence[i].original_row().canonical_form() ==
+							actual.evidence[i].original_row().canonical_form(),
+					"immutable Routes retain every cell and complete annotation in evidence order");
+		if (!query_owners)
+			return;
+		require(bool(expected.source_queries) == bool(actual.source_queries),
+				"immutable Routes preserve full query-owner presence");
+		if (!expected.source_queries)
+			return;
+		require(expected.source_queries->snapshot_id == actual.source_queries->snapshot_id &&
+					expected.source_queries->scans.size() == actual.source_queries->scans.size(),
+				"immutable Routes preserve the complete query set");
+		for (std::size_t i{}; i < expected.source_queries->scans.size(); ++i)
+		{
+			const auto& left = expected.source_queries->scans[i];
+			const auto& right = actual.source_queries->scans[i];
+			require(left.relation_id == right.relation_id && left.logical_ir == right.logical_ir &&
+						left.result.canonical_form() == right.result.canonical_form(),
+					"immutable Routes preserve every original query side channel");
+		}
+	}
+	void immutable_evidence_controls()
+	{
+		q::finite_population_limits shared;
+		shared.evidence_ownership = q::projection_evidence_ownership::shared_immutable;
+		fixture original;
+		set(original.rows[3].front(),
+			"provider_local_key",
+			detached_cell::bytes(std::vector<std::byte>(32768U, std::byte{0xff})));
+		for (auto& group : original.rows)
+			for (auto& row : group)
+			{
+				row.claim_contributors.push_back("claim:z");
+				row.producer_contracts.push_back({"z.projected", "semantic:z"});
+				row.provenance.push_back("zz:evidence");
+				row.contributor_guarantees.push_back(
+					{"exact", "zz", "zz", {"native", "schema_validated"}});
+				row.contributor_edges.push_back({row.claim_contributors.back(),
+												 row.producer_contracts.back(),
+												 row.provenance.back(),
+												 row.contributor_guarantees.back(),
+												 row.presence,
+												 row.interpretation});
+			}
+		auto input = original.queries(true);
+		for (auto& scan : input.scans)
+		{
+			const auto owner = q::query_transfer_access::borrow_evidence_owner(scan.result);
+			auto data = std::make_shared<q::query_result::data>(*owner.owner);
+			data->closures = {"original-closure"};
+			data->unresolved = {{"original-gap", "original-subject", "original-reason"}};
+			data->logical = {"original-logical", "original-logical-text"};
+			data->physical = {"original-physical", "original-physical-text"};
+			data->ir_digest = "original-query-digest";
+			data->publication = "original-publication";
+			scan.result = q::query_transfer_access::make(std::move(data));
+		}
+		q::projection_resource_usage detached_usage, shared_usage;
+		auto detached = take(q::project_exceptional_routes(input, {}, {}, detached_usage));
+		auto alias = take(q::project_exceptional_routes(input, shared, {}, shared_usage));
+		same_routes(detached, alias);
+		require(shared_usage.operations < detached_usage.operations,
+				"shared immutable rows avoid the actual full raw payload clone");
+		std::size_t evidence_bytes{};
+		for (std::size_t i{}; i < alias.evidence.size(); ++i)
+		{
+			const auto& evidence = alias.evidence[i];
+			const auto group = std::ranges::find(names, evidence.relation_id);
+			require(group != names.end() && evidence.row.values.empty(),
+					"query-result opt-in keeps the detached field empty without cloning");
+			bool exact_owner{};
+			for (const auto& scan : input.scans)
+				if (scan.relation_id == evidence.relation_id)
+					for (const auto& row : q::query_transfer_access::borrow_rows(scan.result))
+						exact_owner |= &evidence.original_row() == &row;
+			require(exact_owner, "shared evidence aliases the exact immutable original address");
+			require(!detached.evidence[i].row.values.empty() &&
+						&detached.evidence[i].original_row() == &detached.evidence[i].row,
+					"default evidence keeps a complete mutable detached copy");
+			evidence_bytes += evidence.original_row().canonical_form().size();
+		}
+		q::projection_resource_usage raw_default_usage, raw_shared_usage;
+		const auto raw_default =
+			take(q::project_exceptional_routes(original.input(), {}, {}, raw_default_usage));
+		const auto raw_shared =
+			take(q::project_exceptional_routes(original.input(), shared, {}, raw_shared_usage));
+		same_routes(raw_default, raw_shared);
+		same_routes(raw_default, alias, false);
+		require(raw_default_usage.operations == raw_shared_usage.operations &&
+					raw_default_usage.retained_bytes_bound == raw_shared_usage.retained_bytes_bound,
+				"raw-span opt-in preserves the entire detached fallback and original usage");
+		for (const auto& evidence : raw_shared.evidence)
+			require(&evidence.original_row() == &evidence.row && !evidence.row.values.empty(),
+					"raw-span inputs never acquire immutable aliases");
+		for (unsigned bound{}; bound < 3U; ++bound)
+			for (bool under : {false, true})
+			{
+				auto exact = shared;
+				if (bound == 0U)
+					exact.maximum_operations =
+						shared_usage.operations - static_cast<std::size_t>(under);
+				else if (bound == 1U)
+					exact.maximum_retained_bytes =
+						shared_usage.retained_bytes_bound - static_cast<std::size_t>(under);
+				else
+					exact.maximum_evidence_bytes = evidence_bytes - static_cast<std::size_t>(under);
+				q::projection_resource_usage usage{1U, 1U};
+				const auto bounded = q::project_exceptional_routes(input, exact, {}, usage);
+				require(bool(bounded) == !under,
+						"shared evidence exact/one-under work/storage/evidence bounds");
+				if (under)
+					require(!usage.operations && !usage.retained_bytes_bound,
+							"shared evidence failed admission revokes output and usage");
+				else
+					same_routes(detached, *bounded);
+			}
+		std::vector<std::weak_ptr<const q::query_result::data>> owners;
+		for (const auto& scan : input.scans)
+			owners.push_back(q::query_transfer_access::borrow_evidence_owner(scan.result).owner);
+		alias = {};
+		detached = {};
+		bool saw_bound_alias{};
+		auto interrupt = shared;
+		interrupt.cancelled = [&]
+		{
+			for (const auto& owner : owners)
+				if (owner.use_count() > 2)
+					return saw_bound_alias = true;
+			return false;
+		};
+		q::projection_resource_usage spent{1U, 1U};
+		const auto stopped = q::project_exceptional_routes(input, interrupt, {}, spent);
+		require(!stopped && saw_bound_alias &&
+					stopped.error().code == "sdk.exceptional-route-cancelled" &&
+					!spent.operations && !spent.retained_bytes_bound,
+				"actual partial alias ownership is revoked on mid-binding cancellation");
+		for (const auto& owner : owners)
+			require(owner.use_count() == 1,
+					"failed shared projection releases every view and partial alias");
+		std::stop_source pre;
+		pre.request_stop();
+		require(!q::project_exceptional_routes(input, shared, pre.get_token(), spent) &&
+					!spent.operations && !spent.retained_bytes_bound,
+				"shared evidence pre-stop preserves the existing failure contract");
+		alias = take(q::project_exceptional_routes(input, shared));
+		auto expected = take(q::project_exceptional_routes(input));
+		std::vector<const q::annotated_row*> exact_addresses;
+		for (const auto& evidence : alias.evidence)
+			exact_addresses.push_back(&evidence.original_row());
+		auto copied = alias;
+		copied.source_queries.reset();
+		alias.source_queries.reset();
+		input = {};
+		auto moved = std::move(alias);
+		same_routes(expected, moved, false);
+		same_routes(expected, copied, false);
+		for (std::size_t i{}; i < moved.evidence.size(); ++i)
+			require(&moved.evidence[i].original_row() == exact_addresses[i] &&
+						&copied.evidence[i].original_row() == exact_addresses[i],
+					"copied/moved shared evidence owns original rows independently of "
+					"input/source_queries");
+		// Only the independent detached oracle is needed after this point.
+		expected.source_queries.reset();
+		moved = {};
+		copied = {};
+		for (const auto& owner : owners)
+			require(owner.expired(), "last evidence owner releases the immutable query backing");
+		{
+			auto repeated = original.queries();
+			require(q::query_transfer_access::borrow_rows(repeated.scans[6].result).empty(),
+					"view growth fixture has an empty independently admitted syntax scan");
+			for (unsigned i{}; i < 7U; ++i)
+				repeated.scans.push_back(repeated.scans[6]);
+			std::weak_ptr<const q::query_result::data> owner =
+				q::query_transfer_access::borrow_evidence_owner(repeated.scans[6].result).owner;
+			const auto baseline_owners = owner.use_count();
+			auto before_growth = shared;
+			std::size_t growth_checkpoints{};
+			before_growth.cancelled = [&]
+			{
+				return owner.use_count() >= baseline_owners + 2 && ++growth_checkpoints == 3U;
+			};
+			const auto cancelled =
+				q::project_exceptional_routes(repeated, before_growth, {}, spent);
+			require(!cancelled && growth_checkpoints == 3U &&
+						cancelled.error().code == "sdk.exceptional-route-cancelled" &&
+						!spent.operations && !spent.retained_bytes_bound &&
+						owner.use_count() == baseline_owners,
+					"stop at the next owner-view growth revokes existing capacity and handles");
+			const auto repeated_default = take(q::project_exceptional_routes(repeated));
+			q::projection_resource_usage grown;
+			const auto repeated_shared =
+				take(q::project_exceptional_routes(repeated, shared, {}, grown));
+			same_routes(repeated_default, repeated_shared);
+			for (const bool under : {false, true})
+			{
+				auto bounded = shared;
+				bounded.maximum_retained_bytes =
+					grown.retained_bytes_bound - static_cast<std::size_t>(under);
+				const auto result = q::project_exceptional_routes(repeated, bounded, {}, spent);
+				require(bool(result) == !under,
+						"real repeated scan view capacity obeys exact/one-under storage admission");
+				if (under)
+					require(!spent.operations && !spent.retained_bytes_bound,
+							"failed grown-view admission revokes all output and usage");
+			}
+		}
+		// Direct exact-membership negatives cannot acquire ownership from equal detached values.
+		{
+			const auto source = original.queries();
+			const auto view =
+				q::query_transfer_access::borrow_evidence_owner(source.scans.front().result);
+			auto equal_copy = view.rows.front();
+			std::size_t work{};
+			const auto miss =
+				q::query_transfer_access::share_evidence_row<q::finite_population_evidence>(
+					view,
+					&equal_copy,
+					names.front(),
+					[&](std::size_t amount)
+					{
+						work += amount;
+					});
+			require(!miss && work > 0U,
+					"equal detached row cannot impersonate the immutable owner");
+			auto foreign_span = view;
+			foreign_span.rows = std::span<const q::annotated_row>{&equal_copy, 1U};
+			require(!q::query_transfer_access::share_evidence_row<q::finite_population_evidence>(
+						foreign_span,
+						&equal_copy,
+						names.front(),
+						[](std::size_t)
+						{
+						}),
+					"foreign span cannot borrow an unrelated immutable owner");
+		}
+		for (unsigned disposition{}; disposition < 13U; ++disposition)
+		{
+			fixture fault;
+			if (disposition == 1U)
+				fault.rows[10].push_back(fault.rows[10].front());
+			if (disposition == 2U)
+			{
+				fault.rows[10].push_back(fault.rows[10].front());
+				set(fault.rows[10].back(),
+					"instruction_count",
+					detached_cell::unsigned_integer(999U));
+			}
+			if (disposition == 3U)
+				set(fault.rows[11].front(), "compile_unit", detached_cell::utf8("unit:foreign"));
+			if (disposition == 4U)
+				set(fault.rows[11].front(), "to_block", detached_cell::utf8("block:missing"));
+			if (disposition == 5U)
+				fault.rows[11].clear();
+			if (disposition == 6U)
+				fault.rows[10].front().values.erase("output.is_entry");
+			if (disposition == 7U)
+				fault.rows[11].back().values["output.kind"].value = std::string{"\xc0\x80", 2U};
+			if (disposition == 8U)
+				set(fault.rows[11].back(), "ordinal", detached_cell::utf8("wrong-type"));
+			if (disposition == 9U)
+			{
+				fault.rows[11].back().presence.universe = "world:foreign";
+				fault.rows[11].back().contributor_edges.front().condition.universe =
+					"world:foreign";
+			}
+			if (disposition == 10U)
+				fault.rows[6] = {fact(6, {{"node", detached_cell::utf8("unused:node")}})};
+			if (disposition == 10U)
+				fault.rows[6].front().values["output.extra"] =
+					detached_cell::utf8("late-malformed");
+			if (disposition == 11U)
+			{
+				fault.rows[11].back().presence.fragments = {"variant:foreign"};
+				fault.rows[11].back().contributor_edges.front().condition.fragments =
+					fault.rows[11].back().presence.fragments;
+			}
+			if (disposition == 12U)
+			{
+				fault.rows[11].back().interpretation = "interpretation:foreign";
+				fault.rows[11].back().contributor_edges.front().interpretation =
+					fault.rows[11].back().interpretation;
+			}
+			const auto query = fault.queries();
+			const auto baseline = q::project_exceptional_routes(query);
+			const auto candidate = q::project_exceptional_routes(query, shared);
+			require(bool(baseline) == bool(candidate),
+					"shared mode keeps all late/raw admission outcomes");
+			if (baseline)
+				same_routes(*baseline, *candidate);
+			else
+				require(std::tie(baseline.error().code,
+								 baseline.error().field,
+								 baseline.error().detail) ==
+							std::tie(candidate.error().code,
+									 candidate.error().field,
+									 candidate.error().detail),
+						"shared mode retains the exact original malformed-input error");
+		}
+	}
+
 } // namespace
 
 int main()
 {
 	ordered_successor_evidence_controls();
+	immutable_evidence_controls();
 	{
 		fixture sized;
 		query_copy_controls::projection(

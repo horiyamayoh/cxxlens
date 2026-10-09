@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.100.0
+document_version: 1.101.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -1399,6 +1399,27 @@ entries:
     errors: []
     lifetime: [caller-owned-transient-counter-value, zero-on-entry-and-failure, successful-charged-storage-includes-bounded-temporary-indexes]
     threading: [independent-calls-share-no-mutable-state]
-    versioning: [additive-overloads-preserve-existing-projection-dto-limit-layout-and-defaults]
+    versioning: [existing-projection-defaults-preserved, opt-in-immutable-evidence-requires-sdk-consumer-rebuild]
     invariants: [source-validation-work-independent-of-downstream-numeric-work, counters-are-actual-charges-not-configured-maxima, counters-are-not-elapsed-time-or-closure-or-quality-evidence, every-original-input-row-still-validated, original-query-side-channels-retained]
     depends_on: [public.query-runtime]
+  - id: public.projection-evidence-ownership
+    status: implemented
+    profile: NG1
+    target: cxxlens::query
+    headers: [include/cxxlens/sdk/finite_populations.hpp]
+    symbols:
+      - name: query.projection_evidence_ownership
+        kind: value
+        signature: 'detached; shared_immutable'
+      - name: query.finite_population_limits.evidence_ownership
+        kind: value
+        signature: 'projection_evidence_ownership evidence_ownership = detached'
+      - name: query.finite_population_evidence.original_row
+        kind: function
+        signature: 'const annotated_row& original_row() const noexcept'
+    errors: [sdk.population-limit-invalid]
+    lifetime: [default-detached-row-owned-by-evidence, opted-in-original-query-owner-retained-independently-of-source-queries, raw-span-input-copied-into-detached-fallback]
+    threading: [shared-originals-immutable, independent-calls-share-no-mutable-state]
+    versioning: [cxxlens.sdk.projection-evidence-ownership/1, source-compatible-default-row-and-two-argument-brace-construction, sdk-consumer-rebuild-required]
+    invariants: [opt-in-supported-by-source-features-exceptional-exits-and-exceptional-routes, exact-private-query-row-owner-required, complete-input-admission-and-evidence-side-channels-preserved, input-owner-reservation-retained-for-all-handle-lifetimes, actual-copy-or-owner-allocation-charged, no-semantic-state-inference]
+    depends_on: [public.query-runtime, public.projection-resource-usage]

@@ -8,10 +8,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <span>
 #include <stop_token>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <cxxlens/sdk/query_transfer.hpp>
@@ -25,6 +27,13 @@ namespace cxxlens::sdk::query
 		std::span<const annotated_row> units, files, spans, entities, details, bodies, cfg_nodes,
 			inventories, members;
 		bool compile_units_complete{}, inventory_inputs_complete{}, member_inputs_complete{};
+	};
+	/** Evidence ownership for Source, Exceptional Exits and Exceptional Routes.
+	 * Raw span inputs and other projectors retain detached evidence in either mode. */
+	enum class projection_evidence_ownership : std::uint8_t
+	{
+		detached,
+		shared_immutable
 	};
 	struct finite_population_limits
 	{
@@ -41,6 +50,7 @@ namespace cxxlens::sdk::query
 		/** @brief Optional caller cancellation, polled with the stop token during
 		 * work. */
 		std::function<bool()> cancelled;
+		projection_evidence_ownership evidence_ownership{projection_evidence_ownership::detached};
 		[[nodiscard]] result<void> validate() const;
 	};
 	enum class finite_population_state : std::uint8_t
@@ -84,7 +94,32 @@ namespace cxxlens::sdk::query
 	struct finite_population_evidence
 	{
 		std::string relation_id;
+		/** Mutable detached original in the default mode and raw-span fallback.
+		 * Shared-mode consumers use original_row(); this field then stays empty. */
 		annotated_row row;
+		finite_population_evidence() = default;
+		finite_population_evidence(std::string relation, annotated_row original)
+			: relation_id(std::move(relation)), row(std::move(original))
+		{
+		}
+		/** Complete immutable original, independent of source_queries lifetime. */
+		[[nodiscard]] const annotated_row& original_row() const noexcept
+		{
+			return shared_row_ ? *shared_row_ : row;
+		}
+
+	  private:
+		struct shared_original_tag
+		{
+		};
+		finite_population_evidence(std::string relation,
+								   std::shared_ptr<const annotated_row> original,
+								   shared_original_tag)
+			: relation_id(std::move(relation)), shared_row_(std::move(original))
+		{
+		}
+		std::shared_ptr<const annotated_row> shared_row_;
+		friend struct query_transfer_access;
 	};
 	struct finite_population_projection
 	{

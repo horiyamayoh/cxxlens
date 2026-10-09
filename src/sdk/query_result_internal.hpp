@@ -45,6 +45,47 @@ namespace cxxlens::sdk::query
 
 	struct query_transfer_access
 	{
+		struct evidence_owner_view
+		{
+			std::span<const annotated_row> rows;
+			std::shared_ptr<const query_result::data> owner;
+		};
+		[[nodiscard]] static evidence_owner_view
+		borrow_evidence_owner(const query_result& result) noexcept
+		{
+			return result.data_ ? evidence_owner_view{result.data_->row_values, result.data_}
+								: evidence_owner_view{};
+		}
+		template <class Evidence, class Step>
+		[[nodiscard]] static std::optional<Evidence>
+		share_evidence_row(const evidence_owner_view& view,
+						   const annotated_row* wanted,
+						   std::string_view relation,
+						   Step step)
+		{
+			step(1U);
+			if (!view.owner || !wanted || view.rows.data() != view.owner->row_values.data() ||
+				view.rows.size() != view.owner->row_values.size())
+				return {};
+			std::size_t first{}, last = view.rows.size();
+			const std::less<const annotated_row*> less;
+			while (first < last)
+			{
+				step(1U);
+				const auto middle = first + (last - first) / 2U;
+				if (less(&view.rows[middle], wanted))
+					first = middle + 1U;
+				else
+					last = middle;
+			}
+			step(1U);
+			if (first == view.rows.size() || &view.rows[first] != wanted)
+				return {};
+			step(relation.size() + 1U);
+			return Evidence{std::string{relation},
+							std::shared_ptr<const annotated_row>{view.owner, wanted},
+							typename Evidence::shared_original_tag{}};
+		}
 		struct row_size_view
 		{
 			std::span<const annotated_row> rows;

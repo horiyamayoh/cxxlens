@@ -24,6 +24,8 @@ namespace cxxlens::sdk::query
 		using rows = std::vector<const annotated_row*>;
 		using groups = std::array<rows, 10>;
 		using size_groups = std::array<std::vector<query_transfer_access::row_size_view>, 10>;
+		using evidence_groups =
+			std::array<std::vector<query_transfer_access::evidence_owner_view>, 10>;
 		constexpr std::array<std::string_view, 10> relations{"build.compile_unit.v1",
 															 "source.file.v1",
 															 "source.span.v1",
@@ -292,6 +294,7 @@ namespace cxxlens::sdk::query
 			std::map<const annotated_row*, std::size_t> owned;
 			bool row_validation_reused{};
 			const size_groups& wire_sizes;
+			const evidence_groups& evidence_owners;
 			std::string copy(std::string_view value)
 			{
 				b.work(value.size() + 1U);
@@ -482,8 +485,25 @@ namespace cxxlens::sdk::query
 					auto at = owned.find(r);
 					if (at == owned.end())
 					{
-						b.retain(b.estimate(*r, false) + 2U * sizeof(finite_population_evidence) +
+						b.retain(2U * sizeof(finite_population_evidence) +
 								 2U * relations[group].size() + 128U);
+						std::optional<finite_population_evidence> shared;
+						for (const auto& owner : evidence_owners[group])
+						{
+							shared = query_transfer_access::share_evidence_row<
+								finite_population_evidence>(owner,
+															r,
+															relations[group],
+															[&](std::size_t amount)
+															{
+																b.work(amount);
+															});
+							if (shared)
+								break;
+						}
+						// Preserve the conservative selected-row reservation in either mode.
+						// Sharing removes a physical copy, not the caller-owned input backing.
+						b.retain(b.estimate(*r, false));
 						// Only the exact wire size is needed for the evidence-byte cap.
 						// Ordering alternatives above still retains complete canonical strings.
 						peak(2U * b.estimate(*r));
@@ -508,8 +528,14 @@ namespace cxxlens::sdk::query
 								 b.limits.maximum_evidence_bytes,
 								 "evidence-bytes");
 						const auto ref = output.evidence.size();
-						b.work(relations[group].size() + 1U);
-						output.evidence.push_back({std::string{relations[group]}, clone_row(*r)});
+						if (shared)
+							output.evidence.push_back(std::move(*shared));
+						else
+						{
+							b.work(relations[group].size() + 1U);
+							output.evidence.push_back(
+								{std::string{relations[group]}, clone_row(*r)});
+						}
 						b.retain(128U + sizeof(std::pair<const annotated_row* const, std::size_t>));
 						at = owned.emplace(r, ref).first;
 					}
@@ -1480,6 +1506,11 @@ namespace cxxlens::sdk::query
 				groups borrowed;
 				size_groups wire_sizes;
 				b.retain(sizeof(size_groups));
+				evidence_groups evidence_owners;
+				const bool shared_evidence = queries &&
+					limits.evidence_ownership == projection_evidence_ownership::shared_immutable;
+				if (shared_evidence)
+					b.retain(sizeof(evidence_groups));
 				bool row_validation_reused = queries != nullptr;
 				std::array<bool, 10> available{}, seen{};
 				available.fill(true);
@@ -1516,6 +1547,35 @@ namespace cxxlens::sdk::query
 						if (at == relations.end())
 							continue;
 						const auto group = static_cast<std::size_t>(at - relations.begin());
+						if (shared_evidence)
+						{
+							auto owner = query_transfer_access::borrow_evidence_owner(scan.result);
+							b.work();
+							b.retain(2U * sizeof(query_transfer_access::evidence_owner_view));
+							auto& owners = evidence_owners[group];
+							if (owners.size() == owners.capacity())
+							{
+								const auto capacity = owners.capacity();
+								if (capacity > std::numeric_limits<std::size_t>::max() / 2U ||
+									capacity > (b.limits.maximum_operations - 1U) / 4U)
+									fail("operations",
+										 "limit-exceeded",
+										 "sdk.source-feature-budget");
+								b.work(4U * capacity + 1U);
+								if (capacity > (b.limits.maximum_retained_bytes - b.retained) /
+										sizeof(query_transfer_access::evidence_owner_view))
+									fail("retained-bytes",
+										 "limit-exceeded",
+										 "sdk.source-feature-budget");
+								b.temporary_peak = std::max(
+									b.temporary_peak,
+									b.retained +
+										capacity *
+											sizeof(query_transfer_access::evidence_owner_view));
+								owners.reserve(capacity ? capacity * 2U : 1U);
+							}
+							owners.push_back(std::move(owner));
+						}
 						seen[group] = true;
 						row_validation_reused &= query_transfer_access::rows_validated(scan.result);
 						available[group] &= scan.result.execution() == execution_status::complete &&
@@ -1605,6 +1665,7 @@ namespace cxxlens::sdk::query
 							   {},
 							   row_validation_reused,
 							   wire_sizes,
+							   evidence_owners,
 							   projector::inventory_cache{b},
 							   projector::closure_cache{b},
 							   detail::projection_span_lookup<budget, std::size_t>{b}};

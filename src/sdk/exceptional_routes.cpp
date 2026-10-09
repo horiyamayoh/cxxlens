@@ -34,6 +34,8 @@ namespace cxxlens::sdk::query
 		using rows = std::vector<const annotated_row*>;
 		using groups = std::array<rows, 12>;
 		using size_groups = std::array<std::vector<query_transfer_access::row_size_view>, 12>;
+		using owner_groups =
+			std::array<std::vector<query_transfer_access::evidence_owner_view>, 12>;
 		constexpr std::array<std::string_view, 12> relations{"build.compile_unit.v1",
 															 "source.file.v1",
 															 "source.span.v1",
@@ -310,6 +312,7 @@ namespace cxxlens::sdk::query
 			std::map<const annotated_row*, std::size_t> owned;
 			bool row_validation_reused{};
 			const size_groups& wire_sizes;
+			const owner_groups* evidence_owners{};
 			detail::projection_span_lookup<budget> span_index{b};
 			std::string copy(std::string_view value)
 			{
@@ -508,14 +511,34 @@ namespace cxxlens::sdk::query
 								 b.limits.maximum_evidence_bytes,
 								 "evidence-bytes");
 						const auto ref = output.evidence.size();
-						b.work(relations[group].size() + 1U);
-						output.evidence.push_back(
-							{std::string{relations[group]},
-							 detail::copy_projected_row(*r,
-														[&](std::size_t amount)
-														{
-															b.work(amount);
-														})});
+						std::optional<finite_population_evidence> shared;
+						if (evidence_owners)
+							for (const auto& owner : (*evidence_owners)[group])
+							{
+								shared = query_transfer_access::share_evidence_row<
+									finite_population_evidence>(owner,
+																r,
+																relations[group],
+																[&](std::size_t amount)
+																{
+																	b.work(amount);
+																});
+								if (shared)
+									break;
+							}
+						if (shared)
+							output.evidence.push_back(std::move(*shared));
+						else
+						{
+							b.work(relations[group].size() + 1U);
+							output.evidence.push_back(
+								{std::string{relations[group]},
+								 detail::copy_projected_row(*r,
+															[&](std::size_t amount)
+															{
+																b.work(amount);
+															})});
+						}
 						b.retain(128U + sizeof(std::pair<const annotated_row* const, std::size_t>));
 						at = owned.emplace(r, ref).first;
 					}
@@ -1720,6 +1743,13 @@ namespace cxxlens::sdk::query
 				groups borrowed;
 				size_groups wire_sizes;
 				b.retain(sizeof(size_groups));
+				std::optional<owner_groups> evidence_owners;
+				if (queries &&
+					limits.evidence_ownership == projection_evidence_ownership::shared_immutable)
+				{
+					b.retain(sizeof(owner_groups));
+					evidence_owners.emplace();
+				}
 				bool row_validation_reused = queries != nullptr;
 				std::array<bool, 12> available{}, seen{};
 				available.fill(true);
@@ -1762,6 +1792,33 @@ namespace cxxlens::sdk::query
 							scan.result.conflicts().empty() &&
 							scan.result.differential_disagreements().empty();
 						const auto originals = query_transfer_access::borrow_rows(scan.result);
+						if (evidence_owners)
+						{
+							using owner_view = query_transfer_access::evidence_owner_view;
+							auto& owners = (*evidence_owners)[group];
+							b.work();
+							b.retain(2U * sizeof(owner_view));
+							if (owners.size() == owners.capacity())
+							{
+								const auto capacity = owners.capacity();
+								if (capacity > std::numeric_limits<std::size_t>::max() / 2U ||
+									capacity > (b.limits.maximum_operations - 1U) / 4U)
+									fail("operations",
+										 "limit-exceeded",
+										 "sdk.exceptional-route-budget");
+								b.work(4U * capacity + 1U);
+								if (capacity > (b.limits.maximum_retained_bytes - b.retained) /
+										sizeof(owner_view))
+									fail("retained-bytes",
+										 "limit-exceeded",
+										 "sdk.exceptional-route-budget");
+								b.temporary_peak = std::max(
+									b.temporary_peak, b.retained + capacity * sizeof(owner_view));
+								owners.reserve(capacity ? capacity * 2U : 1U);
+							}
+							owners.push_back(
+								query_transfer_access::borrow_evidence_owner(scan.result));
+						}
 						const auto sizes = query_transfer_access::borrow_row_sizes(scan.result);
 						if (!sizes.base_sizes.empty())
 						{
@@ -1842,7 +1899,15 @@ namespace cxxlens::sdk::query
 					}
 					b.rows = 0;
 				}
-				projector work{b, borrowed, input, {}, {}, {}, row_validation_reused, wire_sizes};
+				projector work{b,
+							   borrowed,
+							   input,
+							   {},
+							   {},
+							   {},
+							   row_validation_reused,
+							   wire_sizes,
+							   evidence_owners ? &*evidence_owners : nullptr};
 				auto output = work.run();
 				output.compile_units_complete = input.compile_units_complete;
 				output.scope_inputs_complete = input.scope_inputs_complete;

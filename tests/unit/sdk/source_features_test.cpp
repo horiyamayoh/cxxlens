@@ -5,6 +5,8 @@
 #include <limits>
 #include <memory>
 #include <sstream>
+#include <tuple>
+#include <type_traits>
 
 #include <cxxlens/sdk/source_features.hpp>
 
@@ -1415,8 +1417,305 @@ void declaration_closure_reuse_controls()
 	}
 }
 
+namespace
+{
+	void immutable_evidence_controls()
+	{
+		static_assert(!std::is_constructible_v<q::finite_population_evidence,
+											   std::string,
+											   std::shared_ptr<const q::annotated_row>>);
+		q::finite_population_evidence default_empty{"fixture", {}};
+		require(&default_empty.original_row() == &default_empty.row,
+				"default brace construction retained detached access");
+		const auto observed_language_environment_fields =
+			[](const q::observed_language_environment& r)
+		{
+			return std::tie(r.compile_unit,
+							r.universe,
+							r.variant,
+							r.interpretation,
+							r.profile,
+							r.observation_state,
+							r.freestanding,
+							r.state,
+							r.evidence,
+							r.gaps);
+		};
+		const auto observed_source_feature_fields = [](const q::observed_source_feature& r)
+		{
+			return std::tie(r.feature,
+							r.compile_unit,
+							r.universe,
+							r.variant,
+							r.interpretation,
+							r.profile,
+							r.ordinal,
+							r.original_node_ordinal,
+							r.compiler_kind,
+							r.feature_class,
+							r.kind,
+							r.origin,
+							r.evaluation,
+							r.observation_state,
+							r.file,
+							r.source_snapshot,
+							r.source_span,
+							r.source_none_reason,
+							r.is_implicit,
+							r.is_system,
+							r.declaration,
+							r.context_declaration,
+							r.subject_entity,
+							r.call_target,
+							r.subject_type,
+							r.syntax,
+							r.reference_kind,
+							r.type_role,
+							r.source_binding_state,
+							r.declaration_binding_state,
+							r.context_binding_state,
+							r.entity_binding_state,
+							r.call_binding_state,
+							r.type_binding_state,
+							r.identity_state,
+							r.observation,
+							r.source_state,
+							r.declaration_state,
+							r.context_state,
+							r.entity_state,
+							r.call_state,
+							r.type_state,
+							r.syntax_state,
+							r.evidence,
+							r.gaps);
+		};
+		const auto source_feature_population_fields = [](const q::source_feature_population& r)
+		{
+			return std::tie(r.inventory,
+							r.compile_unit,
+							r.scope,
+							r.file,
+							r.source_snapshot,
+							r.profile,
+							r.universe,
+							r.variant,
+							r.interpretation,
+							r.feature_count,
+							r.unbound_feature_count,
+							r.feature_ids,
+							r.unbound_feature_ids,
+							r.entered_file_count,
+							r.entered_file_ids,
+							r.entered_source_snapshots,
+							r.enumeration_observation,
+							r.traversal_observation,
+							r.entry_observation,
+							r.source_binding_observation,
+							r.entered_file_observation,
+							r.identity_state,
+							r.enumeration_state,
+							r.membership_state,
+							r.traversal_state,
+							r.entry_state,
+							r.source_state,
+							r.entered_file_state,
+							r.features,
+							r.evidence,
+							r.gaps);
+		};
+		const auto compare =
+			[&](const q::source_feature_projection& a, const q::source_feature_projection& z)
+		{
+			require(a.compile_units_complete == z.compile_units_complete &&
+						a.feature_inputs_complete == z.feature_inputs_complete &&
+						a.inventory_inputs_complete == z.inventory_inputs_complete &&
+						a.unresolved == z.unresolved,
+					"shared Source changed scan health or unresolved metadata");
+			require(std::ranges::equal(a.environments,
+									   z.environments,
+									   [&](const auto& x, const auto& y)
+									   {
+										   return observed_language_environment_fields(x) ==
+											   observed_language_environment_fields(y);
+									   }),
+					"shared Source changed complete language environments");
+			require(std::ranges::equal(a.features,
+									   z.features,
+									   [&](const auto& x, const auto& y)
+									   {
+										   return observed_source_feature_fields(x) ==
+											   observed_source_feature_fields(y);
+									   }),
+					"shared Source changed complete feature DTOs");
+			require(std::ranges::equal(a.populations,
+									   z.populations,
+									   [&](const auto& x, const auto& y)
+									   {
+										   return source_feature_population_fields(x) ==
+											   source_feature_population_fields(y);
+									   }),
+					"shared Source changed complete population DTOs");
+			require(a.evidence.size() == z.evidence.size(),
+					"shared Source changed raw evidence cardinality");
+			for (std::size_t i{}; i < a.evidence.size(); ++i)
+				require(a.evidence[i].relation_id == z.evidence[i].relation_id &&
+							a.evidence[i].original_row().canonical_form() ==
+								z.evidence[i].original_row().canonical_form(),
+						"shared Source changed a complete raw cell or side channel");
+		};
+		fixture original;
+		q::finite_population_limits shared_limits;
+		shared_limits.evidence_ownership = q::projection_evidence_ownership::shared_immutable;
+		const auto queries = original.queries(true, true);
+		q::projection_resource_usage detached_usage, shared_usage;
+		const auto detached = take(q::project_source_features(queries, {}, {}, detached_usage));
+		const auto shared =
+			take(q::project_source_features(queries, shared_limits, {}, shared_usage));
+		compare(detached, shared);
+		require(shared_usage.operations < detached_usage.operations,
+				"immutable Source did not eliminate actual copies");
+		for (const auto& e : detached.evidence)
+			require(&e.original_row() == &e.row && !e.row.values.empty(),
+					"default Source lost detached public row");
+		for (const auto& e : shared.evidence)
+		{
+			require(e.row.values.empty(), "shared Source copied raw rows before discarding them");
+			bool exact{};
+			for (const auto& scan : queries.scans)
+				if (scan.relation_id == e.relation_id)
+					for (const auto& row : q::query_transfer_access::borrow_rows(scan.result))
+						exact |= &row == &e.original_row();
+			require(exact, "shared Source did not retain the exact immutable row owner");
+		}
+		require(shared.source_queries && detached.source_queries &&
+					shared.source_queries->snapshot_id == queries.snapshot_id &&
+					shared.source_queries->scans.size() == queries.scans.size(),
+				"shared Source lost source queries");
+		for (std::size_t i{}; i < queries.scans.size(); ++i)
+			require(shared.source_queries->scans[i].logical_ir.canonical_form() ==
+							queries.scans[i].logical_ir.canonical_form() &&
+						shared.source_queries->scans[i].result.canonical_form() ==
+							queries.scans[i].result.canonical_form(),
+					"shared Source lost complete original query side channels");
+		q::projection_resource_usage raw_shared_usage, raw_detached_usage;
+		const auto raw_shared =
+			take(q::project_source_features(original.input(), shared_limits, {}, raw_shared_usage));
+		const auto raw_detached =
+			take(q::project_source_features(original.input(), {}, {}, raw_detached_usage));
+		compare(raw_shared, raw_detached);
+		require(raw_shared_usage.operations == raw_detached_usage.operations &&
+					raw_shared_usage.retained_bytes_bound ==
+						raw_detached_usage.retained_bytes_bound,
+				"raw Source changed copy charges in shared mode");
+		for (const auto& e : raw_shared.evidence)
+			require(&e.original_row() == &e.row && !e.row.values.empty(),
+					"raw spans borrowed mutable caller rows");
+		{
+			q::source_feature_projection survived;
+			std::weak_ptr<const q::query_result::data> owner;
+			{
+				const auto temporary = original.queries(true, true);
+				owner = q::query_transfer_access::borrow_evidence_owner(temporary.scans[8].result)
+							.owner;
+				survived = take(q::project_source_features(temporary, shared_limits));
+			}
+			compare(detached, survived);
+			survived.source_queries.reset();
+			require(!owner.expired(), "resetting Source queries destroyed a retained evidence row");
+			auto copied = survived;
+			survived = {};
+			auto moved = std::move(copied);
+			compare(detached, moved);
+			moved.evidence.clear();
+			require(owner.expired(),
+					"Source evidence aliases kept expired owners after destruction");
+		}
+		std::size_t evidence_bytes{};
+		for (const auto& e : shared.evidence)
+			evidence_bytes += e.original_row().canonical_form().size();
+		auto exact = shared_limits;
+		exact.maximum_operations = shared_usage.operations;
+		exact.maximum_retained_bytes = shared_usage.retained_bytes_bound;
+		exact.maximum_evidence_bytes = evidence_bytes;
+		q::projection_resource_usage repeated;
+		require(bool(q::project_source_features(queries, exact, {}, repeated)) &&
+					repeated.operations == shared_usage.operations &&
+					repeated.retained_bytes_bound == shared_usage.retained_bytes_bound,
+				"shared Source rejected exact work/storage/evidence caps");
+		for (int axis{}; axis < 3; ++axis)
+		{
+			auto under = exact;
+			if (axis == 0)
+				--under.maximum_operations;
+			else if (axis == 1)
+				--under.maximum_retained_bytes;
+			else
+				--under.maximum_evidence_bytes;
+			repeated = {1, 1};
+			require(!q::project_source_features(queries, under, {}, repeated) &&
+						!repeated.operations && !repeated.retained_bytes_bound,
+					"shared Source bypassed one-under cap or retained failed usage");
+		}
+		std::size_t calls{};
+		auto counted = shared_limits;
+		counted.cancelled = [&]
+		{
+			++calls;
+			return false;
+		};
+		require(bool(q::project_source_features(queries, counted)),
+				"shared Source callback census");
+		std::size_t visited{};
+		std::stop_source stopped;
+		auto interrupted = shared_limits;
+		interrupted.cancelled = [&]
+		{
+			if (++visited == calls / 2U)
+				stopped.request_stop();
+			return false;
+		};
+		require(!q::project_source_features(queries, interrupted, stopped.get_token(), repeated) &&
+					!repeated.operations && !repeated.retained_bytes_bound && visited == calls / 2U,
+				"shared Source real stop failed to revoke usage");
+		require(bool(q::project_source_features(queries, shared_limits, {}, repeated)) &&
+					repeated.operations == shared_usage.operations,
+				"shared Source failed fresh retry");
+		stopped.request_stop();
+		require(
+			!q::project_source_features(queries, shared_limits, stopped.get_token(), repeated) &&
+				!repeated.operations && !repeated.retained_bytes_bound,
+			"shared Source ignored pre-stop");
+		{
+			auto bad = original;
+			bad.rows[8].front().multiplicity = 0;
+			require(!q::project_source_features(bad.queries(), shared_limits),
+					"shared Source bypassed malformed original annotations");
+			bad = original;
+			bad.rows[8].front().values.erase("output.kind");
+			require(!q::project_source_features(bad.queries(), shared_limits),
+					"shared Source bypassed missing original field");
+			bad = original;
+			bad.rows[8].push_back(bad.rows[8].front());
+			const auto duplicate = bad.queries(true, true);
+			compare(take(q::project_source_features(duplicate)),
+					take(q::project_source_features(duplicate, shared_limits)));
+			bad = original;
+			bad.rows[8].front().presence.universe = "foreign-world";
+			bad.rows[8].front().contributor_edges.front().condition = bad.rows[8].front().presence;
+			const auto foreign = bad.queries(true, true);
+			compare(take(q::project_source_features(foreign)),
+					take(q::project_source_features(foreign, shared_limits)));
+		}
+		auto invalid_mode = shared_limits;
+		invalid_mode.evidence_ownership = static_cast<q::projection_evidence_ownership>(255U);
+		require(!q::project_source_features(queries, invalid_mode),
+				"unsupported evidence ownership mode accepted");
+	}
+} // namespace
+
 int main()
 {
+	immutable_evidence_controls();
 	{
 		fixture sized;
 		query_copy_controls::projection(

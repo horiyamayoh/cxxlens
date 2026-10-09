@@ -20,6 +20,7 @@ namespace cxxlens::sdk::query
 	{
 		using refs = std::vector<std::size_t>;
 		using size_groups = std::array<std::vector<query_transfer_access::row_size_view>, 8>;
+		using owner_groups = std::array<std::vector<query_transfer_access::evidence_owner_view>, 8>;
 		constexpr std::array<std::string_view, 8> relations{"build.compile_unit.v1",
 															"source.file.v1",
 															"source.span.v1",
@@ -333,7 +334,7 @@ namespace cxxlens::sdk::query
 			}
 			const annotated_row& row(std::size_t ref) const
 			{
-				return output.evidence.at(ref).row;
+				return output.evidence.at(ref).original_row();
 			}
 			const refs&
 			find(std::size_t group, std::string_view id, const exceptional_exit_population& p)
@@ -1129,7 +1130,8 @@ namespace cxxlens::sdk::query
 					 budget& b,
 					 const std::array<std::vector<const annotated_row*>, 8>* borrowed = nullptr,
 					 bool row_validation_reused = false,
-					 const size_groups* wire_sizes = nullptr)
+					 const size_groups* wire_sizes = nullptr,
+					 const owner_groups* evidence_owners = nullptr)
 		{
 			if (auto valid = limits.validate(); !valid)
 				return valid.error();
@@ -1317,6 +1319,7 @@ namespace cxxlens::sdk::query
 					std::size_t group;
 					const annotated_row* original;
 					std::string canonical;
+					std::optional<finite_population_evidence> shared;
 				};
 				std::vector<entry> entries;
 
@@ -1329,6 +1332,26 @@ namespace cxxlens::sdk::query
 							  if ((group == 6U && !selected(needed_syntax, r, "node")) ||
 								  (group == 2U && !selected(needed_sources, r, "span")))
 								  return;
+							  // Reserve the inline shared handle and relation before the factory
+							  // copies it.
+							  b.retain(sizeof(finite_population_evidence) +
+									   relations[group].size() * 2U);
+							  std::optional<finite_population_evidence> shared;
+							  if (evidence_owners)
+								  for (const auto& owner : (*evidence_owners)[group])
+								  {
+									  shared = query_transfer_access::share_evidence_row<
+										  finite_population_evidence>(owner,
+																	  &r,
+																	  relations[group],
+																	  [&](std::size_t amount)
+																	  {
+																		  b.work(amount);
+																	  });
+									  if (shared)
+										  break;
+								  }
+							  // Keep the existing conservative selected-row bound in either mode.
 							  b.retain(b.estimate(r, false));
 							  const auto temporary = b.estimate(r);
 							  if (temporary > (limits.maximum_retained_bytes - b.retained) / 2U)
@@ -1358,11 +1381,32 @@ namespace cxxlens::sdk::query
 								  }};
 							  detail::emit_row_strings(prefix_size, r.claim_contributors);
 							  b.work(prefix_size.size() + 1U);
-							  b.retain(sizeof(entry) + prefix_size.size() * 2U);
+							  b.retain(prefix_size.size() * 2U);
 							  detail::projected_row_string_sink prefix;
 							  detail::emit_row_strings(prefix, r.claim_contributors);
 							  auto encoded = std::move(prefix.value);
-							  entries.push_back({group, &r, std::move(encoded)});
+							  if (entries.size() == entries.capacity())
+							  {
+								  const auto capacity = entries.capacity();
+								  if (capacity > std::numeric_limits<std::size_t>::max() / 2U)
+									  fail("retained-bytes",
+										   "limit-exceeded",
+										   "sdk.exceptional-exit-budget");
+								  const auto next = capacity ? capacity * 2U : 1U;
+								  if (next >
+									  (limits.maximum_retained_bytes - b.retained) / sizeof(entry))
+									  fail("retained-bytes",
+										   "limit-exceeded",
+										   "sdk.exceptional-exit-budget");
+								  // Existing entries move once; old and new buffers overlap during
+								  // reserve.
+								  b.work(capacity + 1U);
+								  b.temporary_peak =
+									  std::max(b.temporary_peak, b.retained + next * sizeof(entry));
+								  b.retain((next - capacity) * sizeof(entry));
+								  entries.reserve(next);
+							  }
+							  entries.push_back({group, &r, std::move(encoded), std::move(shared)});
 						  });
 				}
 				std::ranges::sort(entries,
@@ -1413,19 +1457,23 @@ namespace cxxlens::sdk::query
 					}
 					first = last;
 				}
-				for (const auto& e : entries)
+				for (auto& e : entries)
 				{
 					b.work();
 					const auto ref = work.output.evidence.size();
-					b.retain(sizeof(finite_population_evidence) + relations[e.group].size() * 2U);
-					b.work(relations[e.group].size() + 1U);
-					work.output.evidence.push_back(
-						{std::string{relations[e.group]},
-						 detail::copy_projected_row(*e.original,
-													[&](std::size_t amount)
-													{
-														b.work(amount);
-													})});
+					if (e.shared)
+						work.output.evidence.push_back(std::move(*e.shared));
+					else
+					{
+						b.work(relations[e.group].size() + 1U);
+						work.output.evidence.push_back(
+							{std::string{relations[e.group]},
+							 detail::copy_projected_row(*e.original,
+														[&](std::size_t amount)
+														{
+															b.work(amount);
+														})});
+					}
 					for (const auto& variant : e.original->presence.fragments)
 					{
 						b.work();
@@ -1487,6 +1535,12 @@ namespace cxxlens::sdk::query
 				b.retain(plan_bytes);
 				std::array<std::vector<const annotated_row*>, 8> groups;
 				size_groups wire_sizes;
+				std::optional<owner_groups> evidence_owners;
+				if (limits.evidence_ownership == projection_evidence_ownership::shared_immutable)
+				{
+					b.retain(sizeof(owner_groups));
+					evidence_owners.emplace();
+				}
 				std::array<bool, 8> present{}, complete{};
 				bool row_validation_reused = true;
 				complete.fill(true);
@@ -1510,6 +1564,32 @@ namespace cxxlens::sdk::query
 						scan.result.differential_disagreements().empty();
 					const auto rows = query_transfer_access::borrow_rows(scan.result);
 					const auto sizes = query_transfer_access::borrow_row_sizes(scan.result);
+					if (evidence_owners)
+					{
+						using owner_view = query_transfer_access::evidence_owner_view;
+						auto& owners = (*evidence_owners)[group];
+						if (owners.size() == owners.capacity())
+						{
+							const auto capacity = owners.capacity();
+							if (capacity > std::numeric_limits<std::size_t>::max() / 2U)
+								fail("retained-bytes",
+									 "limit-exceeded",
+									 "sdk.exceptional-exit-budget");
+							const auto next = capacity ? capacity * 2U : 1U;
+							if (next >
+								(limits.maximum_retained_bytes - b.retained) / sizeof(owner_view))
+								fail("retained-bytes",
+									 "limit-exceeded",
+									 "sdk.exceptional-exit-budget");
+							b.work(capacity + 1U);
+							b.temporary_peak =
+								std::max(b.temporary_peak, b.retained + next * sizeof(owner_view));
+							b.retain((next - capacity) * sizeof(owner_view));
+							owners.reserve(next);
+						}
+						b.work();
+						owners.push_back(query_transfer_access::borrow_evidence_owner(scan.result));
+					}
 					if (!sizes.base_sizes.empty())
 					{
 						b.work();
@@ -1553,8 +1633,14 @@ namespace cxxlens::sdk::query
 				raw.compile_units_complete = available(0U);
 				raw.scope_inputs_complete = available(4U) && available(5U);
 				raw.occurrence_inputs_complete = available(7U);
-				auto output =
-					project_rows(raw, limits, stop, b, &groups, row_validation_reused, &wire_sizes);
+				auto output = project_rows(raw,
+										   limits,
+										   stop,
+										   b,
+										   &groups,
+										   row_validation_reused,
+										   &wire_sizes,
+										   evidence_owners ? &*evidence_owners : nullptr);
 				if (!output)
 					return output.error();
 				for (std::size_t group = 0; group < groups.size(); ++group)

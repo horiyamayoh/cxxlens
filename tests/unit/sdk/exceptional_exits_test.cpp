@@ -8,6 +8,7 @@
 #include <memory>
 #include <new>
 #include <sstream>
+#include <tuple>
 
 #include <cxxlens/sdk/exceptional_exits.hpp>
 #include <cxxlens/sdk/query_transfer.hpp>
@@ -943,9 +944,362 @@ namespace
 		require(!q::project_exceptional_exits(malformed.input()),
 				"self reference bypassed original cell validation");
 	}
+	void complete_projection_parity(const q::exceptional_exit_projection& left,
+									const q::exceptional_exit_projection& right)
+	{
+		require(std::tie(left.compile_units_complete,
+						 left.scope_inputs_complete,
+						 left.occurrence_inputs_complete,
+						 left.unresolved) ==
+						std::tie(right.compile_units_complete,
+								 right.scope_inputs_complete,
+								 right.occurrence_inputs_complete,
+								 right.unresolved) &&
+					left.evidence.size() == right.evidence.size() &&
+					left.populations.size() == right.populations.size(),
+				"immutable ownership changes complete projection header");
+		for (std::size_t i{}; i < left.evidence.size(); ++i)
+			require(left.evidence[i].relation_id == right.evidence[i].relation_id &&
+						left.evidence[i].original_row().canonical_form() ==
+							right.evidence[i].original_row().canonical_form(),
+					"immutable ownership changes full original annotations/cells/order");
+		const auto scope_fields = [](const auto& v)
+		{
+			return std::tie(v.detail,
+							v.function,
+							v.compile_unit,
+							v.body,
+							v.definition_source,
+							v.file,
+							v.source_snapshot,
+							v.universe,
+							v.variant,
+							v.interpretation,
+							v.profile,
+							v.lowering_profile,
+							v.occurrence_count,
+							v.occurrence_ids,
+							v.enumeration_state,
+							v.scope_state,
+							v.state,
+							v.evidence,
+							v.gaps);
+		};
+		const auto occurrence_fields = [](const auto& v)
+		{
+			return std::tie(v.exit,
+							v.variant,
+							v.role,
+							v.eligibility,
+							v.profile,
+							v.lowering_profile,
+							v.observation_state,
+							v.source_span,
+							v.expression,
+							v.target,
+							v.target_usr,
+							v.ordinal,
+							v.original_expression_ordinal,
+							v.block_ordinal,
+							v.instruction_ordinal,
+							v.successor_ordinal,
+							v.intrinsic_id,
+							v.compiler_route,
+							v.emitter_methods,
+							v.is_invoke,
+							v.does_not_throw,
+							v.does_not_return,
+							v.source_state,
+							v.expression_state,
+							v.target_state,
+							v.state,
+							v.evidence,
+							v.gaps);
+		};
+		for (std::size_t i{}; i < left.populations.size(); ++i)
+		{
+			const auto& a = left.populations[i];
+			const auto& b = right.populations[i];
+			require(scope_fields(a) == scope_fields(b) && a.variants.size() == b.variants.size(),
+					"immutable ownership changes complete physical population");
+			for (std::size_t j{}; j < a.variants.size(); ++j)
+			{
+				const auto& x = a.variants[j];
+				const auto& y = b.variants[j];
+				require(
+					std::tie(x.variant, x.kind, x.symbol, x.index, x.state, x.evidence, x.gaps) ==
+							std::tie(y.variant,
+									 y.kind,
+									 y.symbol,
+									 y.index,
+									 y.state,
+									 y.evidence,
+									 y.gaps) &&
+						x.occurrences.size() == y.occurrences.size(),
+					"immutable ownership changes complete lowering variant");
+				for (std::size_t k{}; k < x.occurrences.size(); ++k)
+					require(occurrence_fields(x.occurrences[k]) ==
+								occurrence_fields(y.occurrences[k]),
+							"immutable ownership changes complete exceptional occurrence");
+			}
+		}
+		require(bool(left.source_queries) == bool(right.source_queries),
+				"immutable ownership changes source query availability");
+		if (left.source_queries)
+		{
+			require(left.source_queries->snapshot_id == right.source_queries->snapshot_id &&
+						left.source_queries->scans.size() == right.source_queries->scans.size(),
+					"immutable ownership changes source query domain");
+			for (std::size_t i{}; i < left.source_queries->scans.size(); ++i)
+			{
+				const auto& x = left.source_queries->scans[i];
+				const auto& y = right.source_queries->scans[i];
+				require(x.relation_id == y.relation_id && x.logical_ir == y.logical_ir &&
+							x.result.canonical_form() == y.result.canonical_form(),
+						"immutable ownership changes complete source query side channels");
+			}
+		}
+	}
+
+	void immutable_evidence_controls()
+	{
+		q::finite_population_limits shared_limits;
+		shared_limits.evidence_ownership = q::projection_evidence_ownership::shared_immutable;
+		for (bool sizes : {false, true})
+		{
+			fixture original;
+			const auto input = original.queries(true, sizes);
+			q::projection_resource_usage detached_usage, shared_usage;
+			const auto detached = take(q::project_exceptional_exits(input, {}, {}, detached_usage));
+			const auto shared =
+				take(q::project_exceptional_exits(input, shared_limits, {}, shared_usage));
+			complete_projection_parity(detached, shared);
+			canonical_evidence_order(detached);
+			for (const auto& evidence : shared.evidence)
+			{
+				bool found{};
+				for (const auto& scan : input.scans)
+					if (scan.relation_id == evidence.relation_id)
+						for (const auto& row : q::query_transfer_access::borrow_rows(scan.result))
+							found |= &row == &evidence.original_row();
+				require(found && evidence.row.values.empty(),
+						"opt-in evidence must share the exact admitted row without cloning");
+			}
+			for (const auto& evidence : detached.evidence)
+				require(&evidence.original_row() == &evidence.row && !evidence.row.values.empty(),
+						"default evidence keeps full mutable detached originals");
+			require(shared_usage.operations < detached_usage.operations,
+					"immutable ownership still performs full original payload copies");
+			q::projection_resource_usage raw_shared_usage, raw_default_usage;
+			const auto raw_shared = take(q::project_exceptional_exits(
+				original.input(), shared_limits, {}, raw_shared_usage));
+			const auto raw_default =
+				take(q::project_exceptional_exits(original.input(), {}, {}, raw_default_usage));
+			complete_projection_parity(raw_default, raw_shared);
+			require(raw_shared_usage.operations == raw_default_usage.operations &&
+						raw_shared_usage.retained_bytes_bound ==
+							raw_default_usage.retained_bytes_bound,
+					"raw-span opt-in must preserve actual detached copy charges");
+			for (const auto& evidence : raw_shared.evidence)
+				require(&evidence.original_row() == &evidence.row && !evidence.row.values.empty(),
+						"raw-span opt-in must retain detached fallback");
+			const auto original_bytes = raw_shared.evidence.front().row.canonical_form();
+			original.rows[0][0].values.clear();
+			require(raw_shared.evidence.front().row.canonical_form() == original_bytes,
+					"raw-span fallback aliases caller mutations");
+
+			auto exact = shared_limits;
+			exact.maximum_operations = shared_usage.operations;
+			exact.maximum_retained_bytes = shared_usage.retained_bytes_bound;
+			exact.maximum_evidence_bytes = 0U;
+			for (const auto& evidence : shared.evidence)
+				exact.maximum_evidence_bytes += evidence.original_row().canonical_form().size();
+			q::projection_resource_usage repeated;
+			const auto bounded = take(q::project_exceptional_exits(input, exact, {}, repeated));
+			complete_projection_parity(shared, bounded);
+			require(repeated.operations == shared_usage.operations &&
+						repeated.retained_bytes_bound == shared_usage.retained_bytes_bound,
+					"immutable evidence exact measured work/storage/full-evidence boundary");
+			--exact.maximum_operations;
+			auto failed = q::project_exceptional_exits(input, exact, {}, repeated);
+			require(!failed && failed.error().code == "sdk.exceptional-exit-budget" &&
+						!repeated.operations && !repeated.retained_bytes_bound,
+					"immutable evidence one-under work returns no partial owner");
+			exact.maximum_operations = shared_usage.operations;
+			--exact.maximum_retained_bytes;
+			failed = q::project_exceptional_exits(input, exact, {}, repeated);
+			require(!failed && failed.error().code == "sdk.exceptional-exit-budget" &&
+						!repeated.operations && !repeated.retained_bytes_bound,
+					"immutable evidence one-under storage returns no partial owner");
+			exact.maximum_retained_bytes = shared_usage.retained_bytes_bound;
+			--exact.maximum_evidence_bytes;
+			failed = q::project_exceptional_exits(input, exact, {}, repeated);
+			require(!failed && failed.error().field == "evidence-bytes" && !repeated.operations &&
+						!repeated.retained_bytes_bound,
+					"immutable ownership one-under full-evidence cap returns no partial owner");
+
+			std::stop_source stopped;
+			stopped.request_stop();
+			failed =
+				q::project_exceptional_exits(input, shared_limits, stopped.get_token(), repeated);
+			require(!failed && failed.error().code == "sdk.exceptional-exit-cancelled" &&
+						!repeated.operations && !repeated.retained_bytes_bound,
+					"immutable ownership honors pre-stop");
+			std::size_t visits{};
+			auto counted = shared_limits;
+			counted.cancelled = [&]
+			{
+				++visits;
+				return false;
+			};
+			complete_projection_parity(
+				shared, take(q::project_exceptional_exits(input, counted, {}, repeated)));
+			require(visits > 2U, "immutable ownership has real checkpoints");
+			std::stop_source mid_stop;
+			std::size_t prefix{};
+			counted.cancelled = [&]
+			{
+				if (++prefix == visits / 2U)
+					mid_stop.request_stop();
+				return false;
+			};
+			failed = q::project_exceptional_exits(input, counted, mid_stop.get_token(), repeated);
+			require(!failed && failed.error().code == "sdk.exceptional-exit-cancelled" &&
+						prefix == visits / 2U && !repeated.operations &&
+						!repeated.retained_bytes_bound,
+					"immutable ownership ignores charged real-prefix stop");
+			complete_projection_parity(
+				shared, take(q::project_exceptional_exits(input, shared_limits, {}, repeated)));
+		}
+
+		fixture lifetime_fixture;
+		auto lifetime_input = lifetime_fixture.queries();
+		std::weak_ptr<const q::query_result::data> weak =
+			q::query_transfer_access::borrow_evidence_owner(lifetime_input.scans.front().result)
+				.owner;
+		auto held = take(q::project_exceptional_exits(lifetime_input, shared_limits));
+		std::vector<std::string> originals;
+		for (const auto& evidence : held.evidence)
+			originals.push_back(evidence.original_row().canonical_form());
+		lifetime_input = {};
+		lifetime_fixture = {};
+		held.source_queries.reset();
+		require(!weak.expired(), "evidence loses immutable owner when source_queries resets");
+		auto copied = held;
+		auto moved = std::move(held);
+		complete_projection_parity(copied, moved);
+		auto isolated = copied.evidence;
+		copied = {};
+		moved = {};
+		require(!weak.expired(), "standalone evidence copy loses original owner");
+		for (std::size_t i{}; i < isolated.size(); ++i)
+			require(isolated[i].original_row().canonical_form() == originals[i],
+					"copy/move/owner death changes immutable original bytes");
+		isolated.clear();
+		require(weak.expired(), "shared evidence leaks query owner after final release");
+
+		fixture duplicate;
+		duplicate.rows[7].push_back(duplicate.rows[7][1]);
+		for (bool contradictory : {false, true})
+		{
+			if (contradictory)
+				set(duplicate.rows[7].back(), "eligibility", detached_cell::utf8("excluded"));
+			const auto input = duplicate.queries();
+			const auto detached = take(q::project_exceptional_exits(input));
+			const auto shared = take(q::project_exceptional_exits(input, shared_limits));
+			complete_projection_parity(detached, shared);
+			require(contradictory ? population(shared).state != state::complete
+								  : population(shared).state == state::complete,
+					"immutable aliases change duplicate agreement/conflict");
+		}
+		for (std::size_t axis{}; axis < 3U; ++axis)
+		{
+			fixture foreign;
+			auto& row = foreign.rows[7][1];
+			if (axis == 0U)
+				row.presence.universe = "foreign:universe";
+			else if (axis == 1U)
+				row.presence.fragments = {"foreign:variant"};
+			else
+				row.interpretation = "foreign:interpretation";
+			for (auto& edge : row.contributor_edges)
+			{
+				edge.condition = row.presence;
+				edge.interpretation = row.interpretation;
+			}
+			const auto input = foreign.queries();
+			const auto shared = take(q::project_exceptional_exits(input, shared_limits));
+			complete_projection_parity(take(q::project_exceptional_exits(input)), shared);
+			require(std::ranges::any_of(shared.populations,
+										[&](const auto& scope)
+										{
+											return scope.universe == row.presence.universe &&
+												scope.variant == row.presence.fragments.front() &&
+												scope.interpretation == row.interpretation;
+										}) &&
+						std::ranges::none_of(shared.populations,
+											 [](const auto& scope)
+											 {
+												 return scope.state == state::complete;
+											 }),
+					"shared foreign World cannot borrow independent occurrence closure");
+		}
+		for (bool foreign_unit : {false, true})
+		{
+			fixture foreign_body;
+			set(foreign_body.rows[5].front(),
+				foreign_unit ? "compile_unit" : "function",
+				detached_cell::utf8("foreign:owner"));
+			const auto input = foreign_body.queries();
+			const auto shared = take(q::project_exceptional_exits(input, shared_limits));
+			complete_projection_parity(take(q::project_exceptional_exits(input)), shared);
+			require(std::ranges::any_of(shared.populations,
+										[&](const auto& scope)
+										{
+											return scope.detail.empty() && scope.body == "body:a" &&
+												(foreign_unit ? scope.compile_unit
+															  : scope.function) == "foreign:owner";
+										}) &&
+						std::ranges::none_of(shared.populations,
+											 [](const auto& scope)
+											 {
+												 return scope.scope_state == state::complete;
+											 }),
+					"shared immutable body cannot borrow a foreign owner or unit");
+		}
+		fixture sidechannels;
+		auto partial_input = sidechannels.queries();
+		auto partial_data = std::make_shared<q::query_result::data>();
+		partial_data->row_values = sidechannels.rows[7];
+		partial_data->status = q::execution_status::complete;
+		partial_data->input_complete = true;
+		partial_data->snapshot = partial_input.snapshot_id;
+		partial_data->conflict_values.push_back({std::string{names[7]},
+												 "slot:original",
+												 "clang22",
+												 {"debug"},
+												 {"claim:left", "claim:right"},
+												 {"content:left", "content:right"}});
+		partial_input.scans[7].result = q::query_transfer_access::make(std::move(partial_data));
+		const auto partial_shared =
+			take(q::project_exceptional_exits(partial_input, shared_limits));
+		complete_projection_parity(take(q::project_exceptional_exits(partial_input)),
+								   partial_shared);
+		require(!partial_shared.occurrence_inputs_complete &&
+					partial_shared.source_queries->scans[7].result.conflicts().size() == 1U,
+				"shared evidence loses original query conflict sidechannels");
+		fixture malformed;
+		malformed.rows[2].back().values.erase("output.begin");
+		q::projection_resource_usage refused{777U, 888U};
+		require(!q::project_exceptional_exits(malformed.queries(), shared_limits, {}, refused) &&
+					!refused.operations && !refused.retained_bytes_bound,
+				"shared immutable evidence bypasses malformed original validation");
+	}
+
 } // namespace
 int main(int argc, char** argv)
 {
+	immutable_evidence_controls();
 	canonical_prefix_controls();
 	canonical_prefix_locale_controls();
 	if (argc == 2)
