@@ -426,6 +426,7 @@ namespace cxxlens::sdk::query
 	};
 
 	class result_row_cursor;
+	class result_row_range;
 
 	/** @brief Immutable query result owning rows and all partiality/evidence side channels. */
 	class query_result
@@ -433,6 +434,8 @@ namespace cxxlens::sdk::query
 	  public:
 		struct data;
 		[[nodiscard]] result_row_cursor rows() const;
+		/** @brief Retain all immutable rows without copying them or allocating a cursor. */
+		[[nodiscard]] result_row_range readonly_rows() const noexcept;
 		[[nodiscard]] execution_status execution() const noexcept;
 		[[nodiscard]] bool ordered() const noexcept;
 		[[nodiscard]] bool inputs_complete() const noexcept;
@@ -461,6 +464,27 @@ namespace cxxlens::sdk::query
 		std::shared_ptr<const data> data_;
 		friend class reference_engine;
 		friend struct query_transfer_access;
+	};
+
+	/** @brief Strongly owned immutable rows independent of cursor advancement.
+	 * @details A returned span remains valid while a range owning these rows lives.
+	 * Consumers retain the original query backing reservation for that lifetime.
+	 * Generic validation reuse does not replace consumer-specific admission checks.
+	 */
+	class result_row_range
+	{
+	  public:
+		[[nodiscard]] std::span<const annotated_row> rows() const noexcept;
+		/** @brief True only after this immutable owner's complete generic row validation.
+		 * @details False requires ordinary row validation. This says nothing about
+		 * domain/FK validity, closure, availability or semantic completeness.
+		 */
+		[[nodiscard]] bool rows_validated() const noexcept;
+
+	  private:
+		explicit result_row_range(std::shared_ptr<const query_result::data> owner) noexcept;
+		std::shared_ptr<const query_result::data> owner_;
+		friend class query_result;
 	};
 
 	/** @brief Cursor-scoped result row view invalidated by cursor advance. */

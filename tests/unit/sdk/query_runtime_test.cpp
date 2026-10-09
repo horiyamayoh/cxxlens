@@ -7,12 +7,14 @@
 #include <limits>
 #include <locale>
 #include <memory>
+#include <new>
 #include <optional>
 #include <ranges>
 #include <set>
 #include <span>
 #include <sstream>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -23,8 +25,73 @@
 
 namespace
 {
+	thread_local bool track_readonly_allocations{};
+	thread_local std::size_t readonly_allocation_count{};
+} // namespace
+
+void* operator new(const std::size_t size)
+{
+	if (track_readonly_allocations)
+		++readonly_allocation_count;
+	while (true)
+	{
+		if (void* memory = std::malloc(size ? size : 1U))
+			return memory;
+		const auto handler = std::get_new_handler();
+		if (!handler)
+			throw std::bad_alloc{};
+		handler();
+	}
+}
+
+void* operator new[](const std::size_t size)
+{
+	return ::operator new(size);
+}
+
+void operator delete(void* memory) noexcept
+{
+	std::free(memory);
+}
+
+void operator delete[](void* memory) noexcept
+{
+	::operator delete(memory);
+}
+
+void operator delete(void* memory, std::size_t) noexcept
+{
+	::operator delete(memory);
+}
+
+void operator delete[](void* memory, std::size_t) noexcept
+{
+	::operator delete(memory);
+}
+
+namespace
+{
 	using namespace cxxlens::sdk;
 	namespace query = cxxlens::sdk::query;
+	static_assert(
+		std::is_same_v<decltype(std::declval<const query::query_result&>().readonly_rows()),
+					   query::result_row_range>);
+	static_assert(std::is_same_v<decltype(std::declval<const query::result_row_range&>().rows()),
+								 std::span<const query::annotated_row>>);
+	static_assert(std::is_same_v<decltype(std::declval<const query::result_row_range&>().rows()[0]),
+								 const query::annotated_row&>);
+	static_assert(!std::is_constructible_v<query::result_row_range,
+										   std::shared_ptr<const query::query_result::data>>);
+	static_assert(!std::is_constructible_v<query::result_row_range,
+										   std::span<const query::annotated_row>,
+										   bool>);
+	static_assert(std::is_nothrow_copy_constructible_v<query::result_row_range> &&
+				  std::is_nothrow_move_constructible_v<query::result_row_range> &&
+				  std::is_nothrow_copy_assignable_v<query::result_row_range> &&
+				  std::is_nothrow_move_assignable_v<query::result_row_range>);
+	static_assert(noexcept(std::declval<const query::query_result&>().readonly_rows()) &&
+				  noexcept(std::declval<const query::result_row_range&>().rows()) &&
+				  noexcept(std::declval<const query::result_row_range&>().rows_validated()));
 
 	void require(const bool condition, const std::string& message)
 	{
@@ -669,6 +736,70 @@ namespace
 			output.push_back(std::move(*row));
 		}
 		return output;
+	}
+
+	void check_readonly_range(const query::query_result& result, const bool validated)
+	{
+		const auto expected = annotated_rows(result);
+		const auto complete_query = result.canonical_form();
+		const auto original = query::query_transfer_access::borrow_rows(result);
+		const auto range = result.readonly_rows();
+		require(range.rows_validated() == validated && range.rows().size() == expected.size() &&
+					range.rows().data() == original.data(),
+				"readonly range changed row ownership, cardinality or validation status");
+		for (std::size_t index{}; index < expected.size(); ++index)
+			require(range.rows()[index].canonical_form() == expected[index].canonical_form() &&
+						&range.rows()[index] == &original[index],
+					"readonly range changed a complete original row or allocated a clone");
+
+		readonly_allocation_count = 0U;
+		track_readonly_allocations = true;
+		void* const allocation = ::operator new(37U);
+		::operator delete(allocation);
+		track_readonly_allocations = false;
+		require(readonly_allocation_count == 1U,
+				"readonly allocation counter did not observe a genuine allocation");
+		readonly_allocation_count = 0U;
+		track_readonly_allocations = true;
+		bool identity{};
+		{
+			auto borrowed = result.readonly_rows();
+			auto copied = borrowed;
+			auto moved = std::move(copied);
+			auto assigned = borrowed;
+			assigned = moved;
+			assigned = std::move(moved);
+			const auto copied_query = result;
+			const auto independent = copied_query.readonly_rows();
+			identity = assigned.rows().data() == original.data() &&
+				assigned.rows().size() == original.size() &&
+				assigned.rows_validated() == validated &&
+				independent.rows().data() == original.data() && copied.rows().empty() &&
+				!copied.rows_validated() && moved.rows().empty() && !moved.rows_validated();
+		}
+		track_readonly_allocations = false;
+		require(identity && readonly_allocation_count == 0U,
+				"readonly acquisition, copying, moving or access allocated or changed the owner");
+
+		if (!expected.empty())
+		{
+			{
+				auto cursor = result.rows();
+				auto first = cursor.next();
+				require(first && *first && (**first).copy(),
+						"readonly cursor comparison did not expose its first original");
+				require(cursor.next().has_value(), "readonly cursor comparison failed to advance");
+				auto expired = (**first).copy();
+				require(!expired && expired.error().code == "sdk.query-row-view-expired" &&
+							range.rows().front().canonical_form() ==
+								expected.front().canonical_form(),
+						"cursor advance invalidated the independently owned readonly range");
+			}
+			require(range.rows().front().canonical_form() == expected.front().canonical_form(),
+					"cursor destruction invalidated the readonly range");
+		}
+		require(result.canonical_form() == complete_query,
+				"readonly access changed query rows, coverage, closure or evidence side channels");
 	}
 
 	[[nodiscard]] std::set<std::string, std::less<>> row_keys(const query::annotated_row& row)
@@ -1895,6 +2026,21 @@ namespace
 		require(truncated && truncated->execution() == query::execution_status::truncated &&
 					rows(*truncated).size() == 1U && !truncated->unresolved_items().empty(),
 				"output budget did not return deterministic unresolved prefix");
+		check_readonly_range(*truncated, false);
+		const auto partial_bundle =
+			"{\"schema\":\"cxxlens.application-query-results.v1\",\"snapshot_id\":\"" +
+			std::string{snapshot.id()} + "\",\"queries\":[{\"relation_id\":\"" + data.left.id +
+			"\",\"logical_ir\":" + logical.canonical_form() +
+			",\"result\":" + truncated->canonical_form() + "}]}";
+		auto decoded_partial = query::decode_application_queries(data.engine, partial_bundle);
+		require(decoded_partial && decoded_partial->scans.size() == 1U &&
+					decoded_partial->scans.front().result.execution() ==
+						query::execution_status::truncated &&
+					!decoded_partial->scans.front().result.closed() &&
+					decoded_partial->scans.front().result.canonical_form() ==
+						truncated->canonical_form(),
+				"generic readonly admission promoted a truncated query or dropped its frontier");
+		check_readonly_range(decoded_partial->scans.front().result, true);
 
 		ordinal_cancel cancel_after_one{1U};
 		query::execution_request cancellation;
@@ -1904,6 +2050,7 @@ namespace
 					cancelled->execution() == query::execution_status::cancelled_with_partial &&
 					rows(*cancelled).size() == 1U && !cancelled->unresolved_items().empty(),
 				"cancellation did not return deterministic sealed partial result");
+		check_readonly_range(*cancelled, false);
 
 		immediate_cancel cancel_now;
 		cancellation.cancellation = &cancel_now;
@@ -1911,6 +2058,7 @@ namespace
 		require(failed && failed->execution() == query::execution_status::failed_before_result &&
 					rows(*failed).empty(),
 				"pre-execution cancellation published rows");
+		check_readonly_range(*failed, false);
 
 		auto cursor = truncated->rows();
 		auto first = cursor.next();
@@ -3044,6 +3192,61 @@ namespace
 				"query transfer changed rows, evidence, partiality or plan");
 		require(query::query_transfer_access::rows_validated(decoded->scans.front().result),
 				"fully validated decoded owner did not retain generic row admission");
+		check_readonly_range(*executed, false);
+		check_readonly_range(decoded->scans.front().result, true);
+		{
+			const auto expected_rows = rows(decoded->scans.front().result);
+			const auto expected_query = decoded->scans.front().result.canonical_form();
+			std::optional<query::result_row_range> retained, copied, moved;
+			std::weak_ptr<const query::query_result::data> weak_owner;
+			const query::annotated_row* original_address{};
+			{
+				auto temporary_wire = bundle;
+				auto temporary = query::decode_application_queries(data.engine, temporary_wire);
+				require(temporary && temporary->scans.size() == 1U,
+						"readonly lifetime transfer failed");
+				auto source = temporary->scans.front().result;
+				auto transferred = std::move(source);
+				const auto empty = source.readonly_rows();
+				require(empty.rows().empty() && !empty.rows_validated(),
+						"moved-from query exported rows or a validation claim");
+				retained.emplace(transferred.readonly_rows());
+				copied.emplace(*retained);
+				moved.emplace(std::move(*copied));
+				require(copied->rows().empty() && !copied->rows_validated(),
+						"moved-from readonly range retained its former admission");
+				copied.reset();
+				weak_owner = query::query_transfer_access::borrow_evidence_owner(transferred).owner;
+				original_address = retained->rows().data();
+				temporary->scans.clear();
+				temporary_wire.clear();
+				temporary_wire.shrink_to_fit();
+			}
+			require(!weak_owner.expired() && retained->rows_validated() &&
+						moved->rows_validated() && retained->rows().data() == original_address &&
+						moved->rows().data() == original_address &&
+						retained->rows().size() == expected_rows.size(),
+					"readonly ranges lost their exact strong owner after input destruction");
+			for (std::size_t index{}; index < expected_rows.size(); ++index)
+				require(
+					retained->rows()[index].canonical_form() == expected_rows[index] &&
+						moved->rows()[index].canonical_form() == expected_rows[index],
+					"readonly copy or move lost complete rows after wire and query destruction");
+			{
+				const auto retained_query = query::query_transfer_access::make(weak_owner.lock());
+				require(retained_query.canonical_form() == expected_query,
+						"readonly owner retained rows but dropped original query side channels");
+			}
+			retained.reset();
+			require(!weak_owner.expired() && moved->rows().data() == original_address,
+					"destroying one readonly copy invalidated another");
+			moved.reset();
+			require(weak_owner.expired(), "destroyed readonly ranges leaked their query owner");
+			const auto absent_owner = query::query_transfer_access::make({});
+			const auto absent = absent_owner.readonly_rows();
+			require(absent.rows().empty() && !absent.rows_validated(),
+					"absent query owner invented an admitted readonly range");
+		}
 
 		const auto step = []
 		{
@@ -3375,12 +3578,17 @@ namespace
 				"detached transfer row missing");
 		auto expect_corrupt = [&](std::string before, std::string after)
 		{
+			const auto admitted = decoded_result.readonly_rows();
 			auto corrupt = bundle;
 			const auto position = corrupt.find(before);
 			require(position != std::string::npos, "transfer corruption target missing");
 			corrupt.replace(position, before.size(), after);
 			require(!query::decode_application_queries(data.engine, corrupt),
 					"corrupted transfer accepted");
+			require(admitted.rows_validated() && admitted.rows().data() == decoded_rows.data() &&
+						admitted.rows().size() == decoded_rows.size() &&
+						decoded_result.canonical_form() == executed->canonical_form(),
+					"failed decode changed an existing immutable range or its complete query");
 		};
 		expect_corrupt("\"schema\":\"cxxlens.application-query-results.v1\"",
 					   "\"schema\":\"cxxlens.application-query-results.v2\"");

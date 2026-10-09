@@ -47,3 +47,31 @@ There is no wire or relation change. Full ordinary admission precedes retaining
 a row. Failure and cancellation do not return a partially admitted projection.
 The completion path is full row/DTO parity, independent lifetime and raw fallback
 controls, real bounded-work/storage/cancellation controls, then Monet's verifier.
+
+## Read-only query rows
+
+Contract: `cxxlens.sdk.query-readonly-rows/1`. The independent consumer is Monet's
+original declaration identity index. Its current bridge copies query rows and
+subsequently repeats generic row validation, including temporary annotation
+copies. `query_result::readonly_rows()` instead returns a `result_row_range`
+holding the exact immutable query owner. `rows()` exposes a const span whose
+lifetime follows the range, including range copies and moves, rather than a
+cursor's generation. Creating the range performs no row copy or new allocation.
+
+`rows_validated()` reports only whether that private owner has already completed
+generic `annotated_row::validate()` for every stored row. The decoder supplies
+this fact; an arbitrary row, pointer or caller-supplied flag cannot construct a
+range. A false value requires ordinary generic validation. Consumers must still
+enforce their own type, domain, World, FK, text and resource limits. Reuse applies
+only to rows from the retained owner, and any mutable row overlay follows the
+ordinary validation path. The query result retains all coverage, closure,
+unresolved, conflict, guarantee and provenance side channels; the range changes
+no semantic state and does not infer completeness. Callers retain the query
+backing reservation while any range or span user survives.
+
+This additive API preserves existing query-result and cursor layouts and their
+behavior. It changes no relation or wire format. The implementation scope is the
+new owner range, its accessor, public API catalog and lifetime/validation controls,
+followed by Monet's explicit internal borrowing path. Support follows the existing
+query runtime. Native results without the decoder fact use the ordinary validator;
+failed decoding cannot produce an admitted range.

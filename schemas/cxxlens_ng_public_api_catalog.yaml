@@ -1206,7 +1206,10 @@ entries:
         signature: 'static result<reference_engine> bind(snapshot_handle); result<query_result> execute(const logical_query_ir&, execution_request = {}) const'
       - name: query.query_result
         kind: class
-        signature: 'rows; execution; ordered; inputs_complete; closed; input_coverage; closure_ids; unresolved_items; conflicts; differential_disagreements; producer_contracts; summary_guarantee; explain_logical; explain_physical; logical_ir_digest; snapshot_id; publication_id; canonical_form'
+        signature: 'rows; result_row_range readonly_rows() const noexcept; execution; ordered; inputs_complete; closed; input_coverage; closure_ids; unresolved_items; conflicts; differential_disagreements; producer_contracts; summary_guarantee; explain_logical; explain_physical; logical_ir_digest; snapshot_id; publication_id; canonical_form'
+      - name: query.result_row_range
+        kind: class
+        signature: 'span<const annotated_row> rows() const noexcept; bool rows_validated() const noexcept'
       - name: query.query_guarantee_fragment
         kind: value
         signature: 'guarantee; condition; interpretation; assumptions; claim_contributors; producer_contracts; provenance; coverage_states; closure_ids; condition_partition_complete; conflicting; unresolved; requires_closure'

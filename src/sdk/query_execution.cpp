@@ -1540,6 +1540,27 @@ namespace cxxlens::sdk::query
 		return result_row_cursor{data_};
 	}
 
+	result_row_range query_result::readonly_rows() const noexcept
+	{
+		return result_row_range{data_};
+	}
+
+	result_row_range::result_row_range(std::shared_ptr<const query_result::data> owner) noexcept
+		: owner_{std::move(owner)}
+	{
+	}
+
+	std::span<const annotated_row> result_row_range::rows() const noexcept
+	{
+		return owner_ ? std::span<const annotated_row>{owner_->row_values}
+					  : std::span<const annotated_row>{};
+	}
+
+	bool result_row_range::rows_validated() const noexcept
+	{
+		return owner_ && owner_->rows_validated;
+	}
+
 	execution_status query_result::execution() const noexcept
 	{
 		return data_->status;
