@@ -322,9 +322,102 @@ namespace
 				std::cerr << gap.code << ':' << gap.subject << '\n';
 		require(output.populations.front().state == wanted, label);
 	}
+
+	void immutable_row_agreement_controls()
+	{
+		for (bool public_query : {false, true})
+		{
+			fixture original;
+			original.rows[12].push_back(original.rows[12].front());
+			auto run = [&](q::finite_population_limits limits,
+						   std::stop_token stop,
+						   q::projection_resource_usage& usage)
+			{
+				return public_query
+					? q::project_function_actions(original.queries(), limits, stop, usage)
+					: q::project_function_actions(original.input(), limits, stop, usage);
+			};
+			std::size_t visits{};
+			q::finite_population_limits limits;
+			limits.cancelled = [&]
+			{
+				++visits;
+				return false;
+			};
+			q::projection_resource_usage measured;
+			const auto projected = take(run(limits, {}, measured));
+			require(projected.populations.front().state == state::complete &&
+						std::ranges::count(projected.evidence,
+										   "cc.operation.v1",
+										   [](const auto& evidence)
+										   {
+											   return evidence.relation_id;
+										   }) == 2,
+					"same identity at distinct indices preserves all admitted evidence");
+			const auto exact = measured;
+			limits.cancelled = {};
+			limits.maximum_operations = exact.operations;
+			limits.maximum_retained_bytes = exact.retained_bytes_bound;
+			require(run(limits, {}, measured).has_value() &&
+						measured.operations == exact.operations &&
+						measured.retained_bytes_bound == exact.retained_bytes_bound,
+					"immutable row agreement exact work and storage boundary");
+			--limits.maximum_operations;
+			auto refused = run(limits, {}, measured);
+			require(!refused && refused.error().code == "sdk.action-budget" &&
+						measured.operations == 0U && measured.retained_bytes_bound == 0U,
+					"immutable row agreement one-under work rejects");
+			limits.maximum_operations = exact.operations;
+			--limits.maximum_retained_bytes;
+			refused = run(limits, {}, measured);
+			require(!refused && refused.error().code == "sdk.action-budget" &&
+						measured.operations == 0U && measured.retained_bytes_bound == 0U,
+					"immutable row agreement one-under storage rejects");
+			std::stop_source stopped;
+			std::size_t prefix{};
+			require(visits > 2U, "immutable row agreement has real checkpoints");
+			limits = {};
+			limits.cancelled = [&]
+			{
+				if (++prefix == visits / 2U)
+					stopped.request_stop();
+				return false;
+			};
+			refused = run(limits, stopped.get_token(), measured);
+			require(!refused && refused.error().code == "sdk.action-cancelled" &&
+						prefix == visits / 2U && measured.operations == 0U &&
+						measured.retained_bytes_bound == 0U,
+					"immutable row agreement stops after a charged real prefix");
+			require(run({}, {}, measured).has_value(),
+					"immutable row agreement retries after stop");
+
+			set(original.rows[12].front(), "reason", detached_cell::utf8("same-prefix:a"));
+			set(original.rows[12].back(), "reason", detached_cell::utf8("same-prefix:b"));
+			require(take(run({}, {}, measured)).populations.front().state == state::conflicting,
+					"distinct row indices retain late text differences");
+			original = fixture{};
+			original.rows[12].push_back(original.rows[12].front());
+			set(original.rows[12].back(),
+				"parameter_has_default_argument",
+				detached_cell::boolean(false));
+			require(take(run({}, {}, measured)).populations.front().state == state::conflicting,
+					"distinct row absent and false remain different");
+			const auto type = original.rows[12].front().values.at("output.reason").type;
+			set(original.rows[12].front(), "reason", detached_cell::unknown(type, "unknown:a"));
+			set(original.rows[12].back(), "reason", detached_cell::unknown(type, "unknown:b"));
+			require(take(run({}, {}, measured)).populations.front().state == state::conflicting,
+					"distinct row unknown reasons remain different");
+			original = fixture{};
+			set(original.rows[12].front(), "reason", detached_cell::utf8(std::string(1U, '\xff')));
+			refused = run({}, {}, measured);
+			require(!refused && measured.operations == 0U && measured.retained_bytes_bound == 0U,
+					"singleton immutable row still receives full UTF-8 admission");
+		}
+	}
 } // namespace
 int main()
 {
+	immutable_row_agreement_controls();
 	{
 		q::projection_resource_usage charged{777U, 888U};
 		fixture original;

@@ -290,6 +290,9 @@ namespace cxxlens::sdk::query
 				for (auto i : r)
 				{
 					b.work();
+					// The admitted evidence row is immutable during projection.
+					if (i == r.front())
+						continue;
 					const auto& left = row(i).values;
 					const auto& right = row(r.front()).values;
 					if (left.size() != right.size())
