@@ -1,12 +1,16 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <limits>
+#include <locale>
 #include <memory>
 #include <new>
+#include <sstream>
 
 #include <cxxlens/sdk/exceptional_exits.hpp>
+#include <cxxlens/sdk/query_transfer.hpp>
 
 #include "../../../src/sdk/query_projection_row_copy_internal.hpp"
 #include "../../../src/sdk/query_result_internal.hpp"
@@ -16,9 +20,12 @@
 namespace
 {
 	thread_local int copy_allocation_failure = -1;
+	thread_local std::stop_source* prefix_allocation_stop = nullptr;
 } // namespace
 void* operator new(std::size_t size)
 {
+	if (prefix_allocation_stop && size >= 4096U)
+		prefix_allocation_stop->request_stop();
 	if (copy_allocation_failure >= 0 && copy_allocation_failure-- == 0)
 		throw std::bad_alloc{};
 	if (auto* value = std::malloc(size == 0U ? 1U : size))
@@ -281,7 +288,7 @@ namespace
 					true,
 					true};
 		}
-		q::application_query_results queries(bool broad = true) const
+		q::application_query_results queries(bool broad = true, bool sizes = false) const
 		{
 			q::application_query_results output;
 			output.snapshot_id = "query:exceptional";
@@ -289,6 +296,18 @@ namespace
 			{
 				auto data = std::make_shared<q::query_result::data>();
 				data->row_values = rows[group];
+				if (sizes)
+				{
+					for (const auto& row : data->row_values)
+					{
+						require(bool(row.validate()), "prefix sizing fixture generic admission");
+						std::ostringstream multiplicity;
+						multiplicity << row.multiplicity;
+						data->row_wire_base_sizes.push_back(row.canonical_form().size() -
+															multiplicity.str().size());
+					}
+					data->rows_validated = true;
+				}
 				data->status = q::execution_status::complete;
 				data->input_complete = broad;
 				data->ordered = true;
@@ -304,6 +323,199 @@ namespace
 	{
 		require(result.populations.size() == 1, "one physical population");
 		return result.populations.front();
+	}
+	void claims(q::annotated_row& row, std::vector<std::string> values)
+	{
+		std::ranges::sort(values);
+		row.claim_contributors = std::move(values);
+		const auto edge = row.contributor_edges.front();
+		row.contributor_edges.clear();
+		for (const auto& claim : row.claim_contributors)
+		{
+			auto next = edge;
+			next.claim_contributor = claim;
+			row.contributor_edges.push_back(std::move(next));
+		}
+		require(bool(row.validate()), "prefix fixture annotations stay authoritative");
+	}
+	void canonical_evidence_order(const q::exceptional_exit_projection& result)
+	{
+		std::vector<std::pair<std::size_t, std::string>> expected;
+		for (const auto& evidence : result.evidence)
+		{
+			const auto group = std::ranges::find(names, evidence.relation_id);
+			require(group != names.end(), "prefix evidence relation remains known");
+			expected.emplace_back(static_cast<std::size_t>(group - names.begin()),
+								  evidence.row.canonical_form());
+		}
+		std::ranges::sort(expected);
+		for (std::size_t i{}; i < expected.size(); ++i)
+			require(result.evidence[i].relation_id == names[expected[i].first] &&
+						result.evidence[i].row.canonical_form() == expected[i].second,
+					"first-field cohorts changed complete canonical evidence order");
+	}
+	void canonical_prefix_controls()
+	{
+		fixture original;
+		const std::string long_prefix(4096U, 'x');
+		const std::array<std::vector<std::string>, 8> prefixes{
+			std::vector<std::string>{"claim:a"},
+			std::vector<std::string>{"claim:a", "claim:z"},
+			std::vector<std::string>{"claim:a\""},
+			std::vector<std::string>{"claim:a\\"},
+			std::vector<std::string>{"claim:a\n"},
+			std::vector<std::string>{"claim:日本語"},
+			std::vector<std::string>{"claim:" + long_prefix + ":a"},
+			std::vector<std::string>{"claim:" + long_prefix + ":b"}};
+		for (std::size_t i{}; i < prefixes.size(); ++i)
+		{
+			auto row = fact(3U,
+							{{"entity", detached_cell::utf8("decoy:" + std::to_string(i))},
+							 {"kind", detached_cell::utf8("function")}});
+			claims(row, prefixes[i]);
+			original.rows[3].push_back(std::move(row));
+		}
+		// Equal first fields require every remaining field, including the last cell,
+		// to retain the public canonical writer's order.
+		auto tied = original.rows[3].back();
+		set(tied, "kind", detached_cell::utf8("variable"));
+		tied.multiplicity = 1234U;
+		original.rows[3].push_back(tied);
+		original.rows[3].push_back(tied);
+		q::projection_resource_usage raw_usage, fact_usage;
+		const auto raw = take(q::project_exceptional_exits(original.input(), {}, {}, raw_usage));
+		const auto query = original.queries(true, true);
+		const auto admitted = take(q::project_exceptional_exits(query, {}, {}, fact_usage));
+		canonical_evidence_order(raw);
+		canonical_evidence_order(admitted);
+		require(raw.evidence.size() == admitted.evidence.size(),
+				"prefix facts omit no original row");
+		for (std::size_t i{}; i < raw.evidence.size(); ++i)
+			require(raw.evidence[i].row.canonical_form() ==
+						admitted.evidence[i].row.canonical_form(),
+					"prefix fact/native routes change original evidence bytes");
+		for (auto& rows : original.rows)
+			std::ranges::reverse(rows);
+		const auto reversed = take(q::project_exceptional_exits(original.input()));
+		for (std::size_t i{}; i < raw.evidence.size(); ++i)
+			require(raw.evidence[i].row.canonical_form() ==
+						reversed.evidence[i].row.canonical_form(),
+					"prefix tie ordering depends on input order");
+		q::finite_population_limits limits;
+		limits.maximum_operations = fact_usage.operations;
+		limits.maximum_retained_bytes = fact_usage.retained_bytes_bound;
+		limits.maximum_evidence_bytes = 0U;
+		for (const auto& evidence : admitted.evidence)
+			limits.maximum_evidence_bytes += evidence.row.canonical_form().size();
+		q::projection_resource_usage repeated;
+		require(bool(q::project_exceptional_exits(query, limits, {}, repeated)) &&
+					repeated.operations == fact_usage.operations &&
+					repeated.retained_bytes_bound == fact_usage.retained_bytes_bound,
+				"prefix exact work/storage/full-evidence frontier changed");
+		--limits.maximum_evidence_bytes;
+		require(!q::project_exceptional_exits(query, limits, {}, repeated) &&
+					!repeated.operations && !repeated.retained_bytes_bound,
+				"prefix-only length replaced the full evidence limit");
+		++limits.maximum_evidence_bytes;
+		--limits.maximum_operations;
+		require(!q::project_exceptional_exits(query, limits, {}, repeated) &&
+					!repeated.operations && !repeated.retained_bytes_bound,
+				"prefix one-under work published partial evidence");
+		++limits.maximum_operations;
+		--limits.maximum_retained_bytes;
+		require(!q::project_exceptional_exits(query, limits, {}, repeated) &&
+					!repeated.operations && !repeated.retained_bytes_bound,
+				"prefix one-under storage published partial evidence");
+		std::size_t visits{};
+		limits = {};
+		limits.cancelled = [&]
+		{
+			return ++visits == 400U;
+		};
+		require(!q::project_exceptional_exits(query, limits, {}, repeated) && visits == 400U &&
+					!repeated.operations && !repeated.retained_bytes_bound,
+				"prefix work ignores actual mid-operation stop");
+		require(bool(q::project_exceptional_exits(query, {}, {}, repeated)),
+				"prefix fresh retry after stop");
+#if !defined(CXXLENS_TSAN_ALLOCATION_FAULT_TESTS_DISABLED)
+		std::stop_source stopped;
+		prefix_allocation_stop = &stopped;
+		const auto interrupted =
+			q::project_exceptional_exits(query, {}, stopped.get_token(), repeated);
+		prefix_allocation_stop = nullptr;
+		require(!interrupted && stopped.stop_requested() && !repeated.operations &&
+					!repeated.retained_bytes_bound,
+				"actual large prefix allocation stop published partial evidence");
+		require(bool(q::project_exceptional_exits(query, {}, {}, repeated)),
+				"prefix fresh retry after actual allocation stop");
+#endif
+		set(original.rows[3].back(),
+			"kind",
+			detached_cell::utf8(std::string{"function\0late", 13U}));
+		require(!q::project_exceptional_exits(original.input(), {}, {}, repeated) &&
+					!repeated.operations && !repeated.retained_bytes_bound,
+				"prefix ordering bypassed full late NUL cell admission");
+		set(original.rows[3].back(), "kind", detached_cell::utf8(std::string{"late\xff", 5U}));
+		require(!q::project_exceptional_exits(original.input(), {}, {}, repeated) &&
+					!repeated.operations && !repeated.retained_bytes_bound,
+				"prefix ordering bypassed full late UTF8 cell admission");
+	}
+	void canonical_prefix_locale_controls()
+	{
+		struct grouped : std::numpunct<char>
+		{
+			char do_thousands_sep() const override
+			{
+				return ',';
+			}
+			std::string do_grouping() const override
+			{
+				return "\3";
+			}
+		};
+		fixture original;
+		original.rows[3].front().multiplicity = 1234567U;
+		const auto admitted = original.queries(true, true);
+		const auto previous = std::locale();
+		struct restore
+		{
+			std::locale previous;
+			~restore()
+			{
+				std::locale::global(previous);
+			}
+		} guard{previous};
+		std::locale::global(std::locale{previous, new grouped});
+		q::projection_resource_usage usage;
+		const auto projected = take(q::project_exceptional_exits(admitted, {}, {}, usage));
+		canonical_evidence_order(projected);
+		q::finite_population_limits cap;
+		cap.maximum_evidence_bytes = 0U;
+		for (const auto& evidence : projected.evidence)
+			cap.maximum_evidence_bytes += evidence.row.canonical_form().size();
+		require(bool(q::project_exceptional_exits(admitted, cap, {}, usage)),
+				"prefix fact froze the multiplicity encoding locale");
+		--cap.maximum_evidence_bytes;
+		require(!q::project_exceptional_exits(admitted, cap, {}, usage) && !usage.operations,
+				"locale evidence one-under cap ignored dynamic multiplicity");
+	}
+	void transfer_prefix_shape_controls(const char* path)
+	{
+		relation_registry registry;
+		for (const auto& descriptor : standard_relation_descriptors())
+			require(bool(registry.add(descriptor)), "prefix transfer registry admission");
+		auto engine = take(registry.build("exceptional-prefix-original"));
+		std::ifstream file(path, std::ios::binary);
+		require(file.good(), "prefix actual saved query present");
+		std::string data{std::istreambuf_iterator<char>{file}, {}};
+		const auto admitted = take(q::decode_application_queries(engine, data));
+		canonical_evidence_order(take(q::project_exceptional_exits(admitted)));
+		const std::string_view opening = "\"rows\":[{";
+		const auto row = data.find(opening);
+		require(row != std::string::npos, "prefix original transfer has a row");
+		data.insert(row + opening.size(), "\"aaaa_unknown_first_field\":null,");
+		require(!q::decode_application_queries(engine, data),
+				"unknown first top-level row field entered the fixed canonical grammar");
 	}
 	void typed_copy_failure_controls()
 	{
@@ -407,7 +619,8 @@ namespace
 			}
 			copy_allocation_failure = -1;
 			require(failed && used > 0U && row.canonical_form() == expected,
-					"typed copy allocation failure lost work or mutated original ownership");
+					"typed copy allocation failure lost work or mutated original "
+					"ownership");
 		}
 #endif
 		const auto retry = q::detail::copy_projected_row(row,
@@ -484,7 +697,8 @@ namespace
 		// only the actual lookup can inspect their shared unsigned-byte prefix.
 		require(measured.operations > early_usage.operations &&
 					measured.operations - early_usage.operations >= 2U * common_bytes * decoy_count,
-				"needed-source lookup did not charge its actually visited identity prefix");
+				"needed-source lookup did not charge its actually visited identity "
+				"prefix");
 		limits.cancelled = {};
 		limits.maximum_operations = measured.operations;
 		limits.maximum_retained_bytes = measured.retained_bytes_bound;
@@ -730,8 +944,12 @@ namespace
 				"self reference bypassed original cell validation");
 	}
 } // namespace
-int main()
+int main(int argc, char** argv)
 {
+	canonical_prefix_controls();
+	canonical_prefix_locale_controls();
+	if (argc == 2)
+		transfer_prefix_shape_controls(argv[1]);
 	scope_world_prefix_controls();
 	self_reference_agreement_controls();
 	typed_copy_failure_controls();
@@ -1020,7 +1238,8 @@ int main()
 			"actual foreign body owner cannot satisfy scope");
 	require(p.body == "body:a" && p.definition_source == "span:scope" &&
 				p.scope_state == state::complete,
-			"distinct exact declaration and lexical body sources joined by actual body FK");
+			"distinct exact declaration and lexical body sources joined by "
+			"actual body FK");
 
 	fixture decoys = original;
 	std::string large(512U * 1024U, 'x');

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <limits>
 #include <map>
 #include <set>
 #include <stdexcept>
@@ -8,6 +9,7 @@
 
 #include <cxxlens/sdk/exceptional_exits.hpp>
 
+#include "query_projected_row_encoding_internal.hpp"
 #include "query_projection_plan_limits_internal.hpp"
 #include "query_projection_row_copy_internal.hpp"
 #include "query_projection_rows_internal.hpp"
@@ -17,6 +19,7 @@ namespace cxxlens::sdk::query
 	namespace
 	{
 		using refs = std::vector<std::size_t>;
+		using size_groups = std::array<std::vector<query_transfer_access::row_size_view>, 8>;
 		constexpr std::array<std::string_view, 8> relations{"build.compile_unit.v1",
 															"source.file.v1",
 															"source.span.v1",
@@ -732,8 +735,8 @@ namespace cxxlens::sdk::query
 						const auto& r = row(ref);
 						scope(text(r, "scope_detail"), text(r, "compile_unit"), r, key[2]);
 					}
-				// A physical written body without its detail/census is an independent frontier,
-				// rather than a fabricated known-empty lowering.
+				// A physical written body without its detail/census is an independent
+				// frontier, rather than a fabricated known-empty lowering.
 				for (const auto& [key, original] : maps[5U])
 					for (auto ref : original)
 					{
@@ -790,7 +793,8 @@ namespace cxxlens::sdk::query
 				if (!o.source_span.empty() && text(n, "source") != o.source_span)
 					return finite_population_state::conflicting;
 				// Declaration defaults can retain a different lexical owner. It is not an
-				// execution-owner substitute; the original lowering scope remains independent.
+				// execution-owner substitute; the original lowering scope remains
+				// independent.
 				if (present(n, "function") && text(n, "function") != p.function)
 					return finite_population_state::partial;
 				return finite_population_state::complete;
@@ -1059,7 +1063,8 @@ namespace cxxlens::sdk::query
 					v.state = combine(v.state, o.state);
 					v.occurrences.push_back(std::move(o));
 				}
-				// Distinct physical variant carriers cannot claim the same original lowering.
+				// Distinct physical variant carriers cannot claim the same original
+				// lowering.
 				for (std::size_t i = 0; i < p.variants.size(); ++i)
 					for (std::size_t j = 0; j < i; ++j)
 					{
@@ -1123,7 +1128,8 @@ namespace cxxlens::sdk::query
 					 std::stop_token stop,
 					 budget& b,
 					 const std::array<std::vector<const annotated_row*>, 8>* borrowed = nullptr,
-					 bool row_validation_reused = false)
+					 bool row_validation_reused = false,
+					 const size_groups* wire_sizes = nullptr)
 		{
 			if (auto valid = limits.validate(); !valid)
 				return valid.error();
@@ -1287,6 +1293,25 @@ namespace cxxlens::sdk::query
 						  if (selected(needed_syntax, r, "node"))
 							  add_needed(needed_sources, r, "source");
 					  });
+				const auto full_size = [&](const annotated_row& r, std::size_t group)
+				{
+					const auto step = [&]
+					{
+						b.work();
+					};
+					const auto overflow = [&]
+					{
+						fail("evidence-bytes", "limit-exceeded", "sdk.exceptional-exit-budget");
+					};
+					std::optional<std::size_t> base;
+					if (wire_sizes)
+						for (const auto& owner : (*wire_sizes)[group])
+							if ((base = owner.find(&r, step)))
+								break;
+					return base ? detail::admitted_projected_row_size_from_base(
+									  *base, r.multiplicity, step, overflow)
+								: detail::admitted_projected_row_size(r, step, overflow);
+				};
 				struct entry
 				{
 					std::size_t group;
@@ -1312,13 +1337,31 @@ namespace cxxlens::sdk::query
 									   "sdk.exceptional-exit-budget");
 							  b.temporary_peak =
 								  std::max(b.temporary_peak, b.retained + 2U * temporary);
-							  auto encoded = r.canonical_form();
-							  b.work(encoded.size() + 1U);
+							  const auto encoded_size = full_size(r, group);
 							  b.charge(b.evidence,
-									   encoded.size(),
+									   encoded_size,
 									   limits.maximum_evidence_bytes,
 									   "evidence-bytes");
-							  b.retain(sizeof(entry) + encoded.size() * 2U);
+							  // This complete array is the first variable field of the fixed
+							  // annotated-row wire grammar. Distinct arrays decide full row
+							  // order; only equal arrays need the remaining canonical fields.
+							  detail::projected_row_size_sink prefix_size{
+								  [&]
+								  {
+									  b.work();
+								  },
+								  [&]
+								  {
+									  fail("canonical-prefix",
+										   "limit-exceeded",
+										   "sdk.exceptional-exit-budget");
+								  }};
+							  detail::emit_row_strings(prefix_size, r.claim_contributors);
+							  b.work(prefix_size.size() + 1U);
+							  b.retain(sizeof(entry) + prefix_size.size() * 2U);
+							  detail::projected_row_string_sink prefix;
+							  detail::emit_row_strings(prefix, r.claim_contributors);
+							  auto encoded = std::move(prefix.value);
 							  entries.push_back({group, &r, std::move(encoded)});
 						  });
 				}
@@ -1330,6 +1373,46 @@ namespace cxxlens::sdk::query
 										  return x.group < y.group;
 									  return b.canonical_less(x.canonical, y.canonical);
 								  });
+				for (std::size_t first{}; first < entries.size();)
+				{
+					b.work();
+					std::size_t last = first + 1U;
+					while (last < entries.size())
+					{
+						b.work();
+						if (entries[first].group != entries[last].group ||
+							entries[first].canonical.size() != entries[last].canonical.size() ||
+							b.canonical_less(entries[first].canonical, entries[last].canonical))
+							break;
+						++last;
+					}
+					if (last - first > 1U)
+					{
+						for (std::size_t i = first; i < last; ++i)
+						{
+							b.work();
+							const auto temporary = b.estimate(*entries[i].original);
+							if (temporary > (limits.maximum_retained_bytes - b.retained) / 2U)
+								fail("canonical-temporary",
+									 "limit-exceeded",
+									 "sdk.exceptional-exit-budget");
+							b.temporary_peak =
+								std::max(b.temporary_peak, b.retained + 2U * temporary);
+							const auto encoded_size =
+								full_size(*entries[i].original, entries[i].group);
+							b.work(encoded_size + 1U);
+							b.retain(encoded_size * 2U);
+							auto encoded = entries[i].original->canonical_form();
+							entries[i].canonical = std::move(encoded);
+						}
+						std::ranges::sort(std::span{entries}.subspan(first, last - first),
+										  [&](const auto& x, const auto& y)
+										  {
+											  return b.canonical_less(x.canonical, y.canonical);
+										  });
+					}
+					first = last;
+				}
 				for (const auto& e : entries)
 				{
 					b.work();
@@ -1403,12 +1486,19 @@ namespace cxxlens::sdk::query
 					return valid.error();
 				b.retain(plan_bytes);
 				std::array<std::vector<const annotated_row*>, 8> groups;
+				size_groups wire_sizes;
 				std::array<bool, 8> present{}, complete{};
 				bool row_validation_reused = true;
 				complete.fill(true);
 				for (const auto& scan : input.scans)
 				{
 					b.work();
+					b.retain(query_transfer_access::row_size_metadata_bytes(
+						scan.result,
+						[&]
+						{
+							fail("retained-bytes", "limit-exceeded", "sdk.exceptional-exit-budget");
+						}));
 					const auto name = std::ranges::find(relations, scan.relation_id);
 					if (name == relations.end())
 						continue;
@@ -1419,6 +1509,31 @@ namespace cxxlens::sdk::query
 						scan.result.conflicts().empty() &&
 						scan.result.differential_disagreements().empty();
 					const auto rows = query_transfer_access::borrow_rows(scan.result);
+					const auto sizes = query_transfer_access::borrow_row_sizes(scan.result);
+					if (!sizes.base_sizes.empty())
+					{
+						b.work();
+						b.retain(2U * sizeof(query_transfer_access::row_size_view));
+						if (wire_sizes[group].size() == wire_sizes[group].capacity())
+						{
+							const auto capacity = wire_sizes[group].capacity();
+							if (capacity > std::numeric_limits<std::size_t>::max() / 2U ||
+								capacity > (b.limits.maximum_operations - 1U) / 4U)
+								fail("operations", "limit-exceeded", "sdk.exceptional-exit-budget");
+							b.work(4U * capacity + 1U);
+							if (capacity > (b.limits.maximum_retained_bytes - b.retained) /
+									sizeof(query_transfer_access::row_size_view))
+								fail("retained-bytes",
+									 "limit-exceeded",
+									 "sdk.exceptional-exit-budget");
+							b.temporary_peak = std::max(
+								b.temporary_peak,
+								b.retained +
+									capacity * sizeof(query_transfer_access::row_size_view));
+							wire_sizes[group].reserve(capacity ? capacity * 2U : 1U);
+						}
+						wire_sizes[group].push_back(sizes);
+					}
 					b.charge(b.rows, rows.size(), limits.maximum_rows, "scan-rows");
 					b.retain(1024U + scan.relation_id.size() * 2U +
 							 (groups[group].size() + rows.size()) * sizeof(const annotated_row*));
@@ -1438,7 +1553,8 @@ namespace cxxlens::sdk::query
 				raw.compile_units_complete = available(0U);
 				raw.scope_inputs_complete = available(4U) && available(5U);
 				raw.occurrence_inputs_complete = available(7U);
-				auto output = project_rows(raw, limits, stop, b, &groups, row_validation_reused);
+				auto output =
+					project_rows(raw, limits, stop, b, &groups, row_validation_reused, &wire_sizes);
 				if (!output)
 					return output.error();
 				for (std::size_t group = 0; group < groups.size(); ++group)
