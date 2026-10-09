@@ -1008,7 +1008,8 @@ namespace cxxlens::sdk::query
 					 finite_population_limits limits,
 					 std::stop_token stop,
 					 budget& b,
-					 const std::array<std::vector<const annotated_row*>, 13>* borrowed = nullptr)
+					 const std::array<std::vector<const annotated_row*>, 13>* borrowed = nullptr,
+					 bool row_validation_reused = false)
 		{
 			if (auto valid = limits.validate(); !valid)
 				return valid.error();
@@ -1081,9 +1082,11 @@ namespace cxxlens::sdk::query
 						b.charge(b.rows, 1, limits.maximum_rows, "rows");
 						(void)b.estimate(r); // Keep the original per-row geometry ceiling.
 						std::size_t validation_payload{};
-						b.retain(b.owned_geometry(r, false, &validation_payload) +
-								 2U * sizeof(finite_population_evidence) +
-								 2U * relations[group].size() + 128U);
+						b.retain(
+							b.owned_geometry(
+								r, false, row_validation_reused ? nullptr : &validation_payload) +
+							2U * sizeof(finite_population_evidence) + 2U * relations[group].size() +
+							128U);
 						const auto encoding = b.owned_geometry(r, true);
 						if (encoding > limits.maximum_retained_bytes / 2U)
 							fail("retained-bytes", "limit-exceeded", "sdk.target-budget");
@@ -1105,14 +1108,15 @@ namespace cxxlens::sdk::query
 							}
 						} temporary{b, 2U * encoding};
 						b.work(validation_payload);
-						if (auto valid =
-								detail::validate_projected_relation_row(r,
-																		*descriptor,
-																		"sdk.target-input-invalid",
-																		[&]
-																		{
-																			b.work();
-																		});
+						if (auto valid = detail::validate_projected_relation_row(
+								r,
+								*descriptor,
+								"sdk.target-input-invalid",
+								[&]
+								{
+									b.work();
+								},
+								row_validation_reused);
 							!valid)
 							throw failure{valid.error()};
 						b.charge(b.conditions,
@@ -1262,6 +1266,7 @@ namespace cxxlens::sdk::query
 				std::array<std::vector<const annotated_row*>, 13> groups;
 				std::array<bool, 13> seen{}, complete{};
 				std::size_t borrowed_rows{};
+				bool row_validation_reused{true};
 				complete.fill(true);
 				for (const auto& scan : input.scans)
 				{
@@ -1270,6 +1275,7 @@ namespace cxxlens::sdk::query
 					if (name == relations.end())
 						continue;
 					const auto group = static_cast<std::size_t>(name - relations.begin());
+					row_validation_reused &= query_transfer_access::rows_validated(scan.result);
 					seen[group] = true;
 					complete[group] &= scan.result.execution() == execution_status::complete;
 					if (group == 0)
@@ -1308,7 +1314,7 @@ namespace cxxlens::sdk::query
 				raw.compile_units_complete = available(0U);
 				raw.inventory_inputs_complete = available(11U);
 				raw.slot_inputs_complete = available(12U);
-				auto output = project_rows(raw, limits, stop, b, &groups);
+				auto output = project_rows(raw, limits, stop, b, &groups, row_validation_reused);
 				if (!output)
 					return output.error();
 				for (std::size_t group = 0; group < groups.size(); ++group)

@@ -224,7 +224,8 @@ namespace
 		}
 		q::application_query_results
 		queries(std::size_t incomplete = 99,
-				q::execution_status status = q::execution_status::complete) const
+				q::execution_status status = q::execution_status::complete,
+				bool validated = false) const
 		{
 			q::application_query_results value;
 			value.snapshot_id = "query:targets";
@@ -232,6 +233,13 @@ namespace
 			{
 				auto data = std::make_shared<q::query_result::data>();
 				data->row_values = rows[i];
+				if (validated)
+				{
+					for (const auto& row : data->row_values)
+						require(static_cast<bool>(row.validate()),
+								"fixture immutable rows validated");
+					data->rows_validated = true;
+				}
 				data->status = i == incomplete ? status : q::execution_status::complete;
 				data->input_complete = i != incomplete;
 				data->ordered = true;
@@ -279,7 +287,7 @@ namespace
 		}
 		return encoded;
 	}
-	void borrowed_query_controls(std::size_t& passed)
+	void borrowed_query_controls(std::size_t& passed, bool validated = false)
 	{
 		fixture f;
 		set(f.rows[3].back(),
@@ -290,7 +298,7 @@ namespace
 			"reason",
 			detached_cell::unknown(f.rows[12][0].values.at("output.reason").type,
 								   std::string(8192U, '"') + "\\observed:\xc3\xa9"));
-		auto queries = f.queries();
+		auto queries = f.queries(99U, q::execution_status::complete, validated);
 		// A second scan grows the same borrowed pointer vector and retains both
 		// originals.
 		queries.scans.push_back(queries.scans[3]);
@@ -434,6 +442,8 @@ namespace
 					result.source_queries->scans.size() == names.size() + 1U,
 				"returned evidence and original query owners survive caller destruction");
 		++passed;
+		if (validated)
+			return;
 		for (const auto invalid : {0U, 1U, 2U, 3U})
 		{
 			fixture bad;
@@ -455,11 +465,88 @@ namespace
 		}
 	}
 
+	void validated_query_guards(std::size_t& passed)
+	{
+		for (const auto invalid : {0U, 1U, 2U})
+		{
+			fixture f;
+			if (invalid == 0U)
+				f.rows[12][0].values.at("output.slot_index") = detached_cell::utf8("0");
+			else if (invalid == 1U)
+				f.rows[3].back().values.emplace("output.foreign", detached_cell::utf8("bad"));
+			else
+				f.rows[12][0].values.erase("output.subject_ordinal");
+			const auto direct = q::project_target_resolution(f.input());
+			const auto validated =
+				q::project_target_resolution(f.queries(99U, q::execution_status::complete, true));
+			require(!direct && !validated && direct.error() == validated.error(),
+					"validated generic rows still enforce family type and projected columns");
+			++passed;
+		}
+		{
+			fixture f;
+			auto mixed = f.queries(99U, q::execution_status::complete, true);
+			set(f.rows[3].back(), "entity", detached_cell::utf8(std::string(1U, '\xff')));
+			mixed.scans[3] = f.queries().scans[3];
+			const auto direct = q::project_target_resolution(f.input());
+			const auto result = q::project_target_resolution(mixed);
+			require(!direct && !result && direct.error() == result.error(),
+					"one unvalidated selected scan retains full raw UTF8 admission");
+			++passed;
+		}
+		for (const auto foreign : {0U, 1U})
+		{
+			fixture f;
+			if (foreign == 0U)
+			{
+				f.rows[3].back().presence.fragments = {"release"};
+				f.rows[3].back().contributor_edges.front().condition = f.rows[3].back().presence;
+			}
+			else
+				f.rows[3].pop_back();
+			const auto direct = take(q::project_target_resolution(f.input()));
+			const auto result = take(
+				q::project_target_resolution(f.queries(99U, q::execution_status::complete, true)));
+			require(stable(result) == stable(direct) &&
+						only_slot(result).target_state != state::complete,
+					"validated rows retain exact-world and target reference closure");
+			++passed;
+		}
+		{
+			fixture f;
+			f.rows[12].push_back(f.rows[12][0]);
+			set(f.rows[12].back(), "target_entity", detached_cell::utf8("entity:owner"));
+			const auto result = take(
+				q::project_target_resolution(f.queries(99U, q::execution_status::complete, true)));
+			require(result.evidence.size() == 15U &&
+						only_slot(result).target_state == state::conflicting,
+					"validated admission retains every contradictory original target");
+			++passed;
+		}
+		{
+			fixture f;
+			f.rows[12][0].values.erase("output.is_system");
+			set(f.rows[12][0], "resolution", detached_cell::utf8("unknown"));
+			set(f.rows[12][0],
+				"target_entity",
+				detached_cell::absent(f.rows[12][0].values.at("output.target_entity").type));
+			const auto result = take(
+				q::project_target_resolution(f.queries(99U, q::execution_status::complete, true)));
+			require(!only_slot(result).is_system.has_value() &&
+						only_slot(result).target_state != state::complete &&
+						only(result).enumeration_state == state::complete,
+					"validated optional absence and unknown target remain observed unknowns");
+			++passed;
+		}
+	}
+
 } // namespace
 int main()
 {
 	std::size_t passed{};
 	borrowed_query_controls(passed);
+	borrowed_query_controls(passed, true);
+	validated_query_guards(passed);
 	{
 		fixture f;
 		const auto result = take(q::project_target_resolution(f.input()));
