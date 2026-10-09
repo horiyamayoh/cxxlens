@@ -279,10 +279,187 @@ namespace
 		}
 		return encoded;
 	}
+	void borrowed_query_controls(std::size_t& passed)
+	{
+		fixture f;
+		set(f.rows[3].back(),
+			"provider_local_key",
+			detached_cell::bytes(std::vector<std::byte>(8192U, std::byte{0xff})));
+		f.rows[3].back().multiplicity = 3U;
+		set(f.rows[12][0],
+			"reason",
+			detached_cell::unknown(f.rows[12][0].values.at("output.reason").type,
+								   std::string(8192U, '"') + "\\observed:\xc3\xa9"));
+		auto queries = f.queries();
+		// A second scan grows the same borrowed pointer vector and retains both
+		// originals.
+		queries.scans.push_back(queries.scans[3]);
+		const auto duplicate_entities = f.rows[3];
+		f.rows[3].insert(f.rows[3].end(), duplicate_entities.begin(), duplicate_entities.end());
+		const auto expected = take(q::project_target_resolution(f.input()));
+		const auto result = take(q::project_target_resolution(queries));
+		require(stable(result) == stable(expected) && result.source_queries &&
+					result.source_queries->scans.size() == queries.scans.size(),
+				"borrowed query staging preserves duplicate scans and owned evidence "
+				"order");
+		for (std::size_t i{}; i < result.evidence.size(); ++i)
+		{
+			const auto& actual = result.evidence[i].row;
+			const auto& original = expected.evidence[i].row;
+			require(actual.multiplicity == original.multiplicity &&
+						actual.values.size() == original.values.size(),
+					"borrowed evidence retains original multiplicity and all typed cells");
+			for (const auto& [name, cell] : original.values)
+			{
+				const auto& copy = actual.values.at(name);
+				require(copy.type == cell.type && copy.state == cell.state &&
+							copy.value == cell.value && copy.unknown_reason == cell.unknown_reason,
+						"borrowed evidence owns absent, unknown and raw byte cell facets");
+			}
+		}
+		for (std::size_t i{}; i < queries.scans.size(); ++i)
+			require(result.source_queries->scans[i].relation_id == queries.scans[i].relation_id &&
+						result.source_queries->scans[i].logical_ir == queries.scans[i].logical_ir &&
+						result.source_queries->scans[i].result.canonical_form() ==
+							queries.scans[i].result.canonical_form(),
+					"borrowed projection preserves complete original query side channels");
+		++passed;
+
+		const auto boundary = [&](bool storage)
+		{
+			std::size_t low{1U}, high{storage ? 16U * 1024U * 1024U : 4'000'000U};
+			q::finite_population_limits limits;
+			while (low < high)
+			{
+				const auto middle = low + (high - low) / 2U;
+				if (storage)
+					limits.maximum_retained_bytes = middle;
+				else
+					limits.maximum_operations = middle;
+				const auto value = q::project_target_resolution(queries, limits);
+				if (value)
+					high = middle;
+				else
+				{
+					require(value.error().code == "sdk.target-budget" &&
+								value.error().detail == "limit-exceeded" &&
+								(storage ? value.error().field == "retained-bytes" ||
+										 value.error().field == "row"
+										 : value.error().field == "operations"),
+							"borrowed query resource boundary preserves precise failures");
+					low = middle + 1U;
+				}
+			}
+			if (storage)
+				limits.maximum_retained_bytes = low;
+			else
+				limits.maximum_operations = low;
+			require(stable(take(q::project_target_resolution(queries, limits))) == stable(expected),
+					"borrowed query exact resource cap retains every original binding");
+			if (storage)
+				--limits.maximum_retained_bytes;
+			else
+				--limits.maximum_operations;
+			const auto under = q::project_target_resolution(queries, limits);
+			require(!under && under.error().code == "sdk.target-budget" &&
+						under.error().field == (storage ? "retained-bytes" : "operations"),
+					"borrowed query one-under cap fails at the real owner/work frontier");
+		};
+		boundary(false);
+		boundary(true);
+		passed += 2U;
+
+		q::finite_population_limits limits;
+		limits.maximum_operations = 0U;
+		require(!q::project_target_resolution(queries, limits),
+				"zero query work cap is rejected before collection");
+		++passed;
+		limits = {};
+		limits.maximum_rows = result.evidence.size() - 1U;
+		const auto rows = q::project_target_resolution(queries, limits);
+		require(!rows && rows.error().field == "rows", "all duplicate borrowed rows count");
+		++passed;
+		limits = {};
+		limits.maximum_condition_expansions = result.evidence.size() - 1U;
+		const auto conditions = q::project_target_resolution(queries, limits);
+		require(!conditions && conditions.error().field == "conditions",
+				"borrowed rows retain the complete condition expansion ceiling");
+		++passed;
+		limits = {};
+		limits.maximum_evidence_bytes = 1U;
+		const auto evidence = q::project_target_resolution(queries, limits);
+		require(!evidence && evidence.error().field == "evidence-bytes",
+				"borrowed rows keep full canonical evidence byte admission");
+		++passed;
+		limits = {};
+		limits.maximum_members = 1U;
+		const auto members = q::project_target_resolution(queries, limits);
+		require(!members &&
+					(members.error().field == "set-members" || members.error().field == "slots"),
+				"borrowed rows preserve original encoded-member and slot bounds");
+		++passed;
+
+		std::stop_source stop;
+		stop.request_stop();
+		require(!q::project_target_resolution(queries, {}, stop.get_token()),
+				"current stop prevents borrowed query collection");
+		++passed;
+		std::size_t polls{};
+		limits = {};
+		limits.cancelled = [&]
+		{
+			++polls;
+			return false;
+		};
+		require(static_cast<bool>(q::project_target_resolution(queries, limits)),
+				"query callback observes the full genuine projection");
+		const auto stop_after = polls / 2U;
+		polls = 0U;
+		limits.cancelled = [&]
+		{
+			return ++polls > stop_after;
+		};
+		const auto cancelled = q::project_target_resolution(queries, limits);
+		require(!cancelled && cancelled.error().code == "sdk.target-cancelled",
+				"in-flight stop interrupts actual borrowed query traversal");
+		require(stable(take(q::project_target_resolution(queries))) == stable(expected),
+				"independent retry after borrowed query cancellation retains full "
+				"evidence");
+		++passed;
+
+		for (auto& group : f.rows)
+			group.clear();
+		queries = {};
+		require(stable(result) == stable(expected) && result.source_queries &&
+					result.source_queries->scans.size() == names.size() + 1U,
+				"returned evidence and original query owners survive caller destruction");
+		++passed;
+		for (const auto invalid : {0U, 1U, 2U, 3U})
+		{
+			fixture bad;
+			if (invalid == 0U)
+				set(bad.rows[3].back(), "entity", detached_cell::utf8(std::string(1U, '\xff')));
+			else if (invalid == 1U)
+				bad.rows[3].back().values.emplace("output.foreign", detached_cell::utf8("bad"));
+			else if (invalid == 2U)
+				bad.rows[3].back().values.at("output.provider_local_key").type.scalar =
+					static_cast<scalar_kind>(255U);
+			else
+				bad.rows[3].back().values.at("output.provider_local_key").state =
+					static_cast<cell_state>(255U);
+			const auto direct = q::project_target_resolution(bad.input());
+			const auto borrowed = q::project_target_resolution(bad.queries());
+			require(!direct && !borrowed && direct.error() == borrowed.error(),
+					"borrowed query route retains late descriptor and raw UTF8 validation");
+			++passed;
+		}
+	}
+
 } // namespace
 int main()
 {
 	std::size_t passed{};
+	borrowed_query_controls(passed);
 	{
 		fixture f;
 		const auto result = take(q::project_target_resolution(f.input()));

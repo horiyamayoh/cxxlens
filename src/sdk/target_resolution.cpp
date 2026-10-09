@@ -9,6 +9,7 @@
 #include <cxxlens/sdk/target_resolution.hpp>
 
 #include "query_projection_plan_limits_internal.hpp"
+#include "query_projection_row_copy_internal.hpp"
 #include "query_projection_rows_internal.hpp"
 #include "query_result_internal.hpp"
 namespace cxxlens::sdk::query
@@ -209,6 +210,90 @@ namespace cxxlens::sdk::query
 				}
 				return total;
 			}
+			std::size_t owned_geometry(const annotated_row& row,
+									   bool encoding = false,
+									   std::size_t* validation_payload = nullptr)
+			{
+				std::size_t total = 2048;
+				const auto add = [&](std::size_t n, std::size_t factor = 8U)
+				{
+					if (!encoding)
+						factor = 2U;
+					// Geometry reads lengths; encoding and owned copies charge their bytes.
+					work();
+					if (total > limits.maximum_retained_bytes ||
+						n > (limits.maximum_retained_bytes - total) / factor)
+						fail("row", "limit-exceeded", "sdk.target-budget");
+					total += n * factor;
+					if (validation_payload)
+					{
+						if (n > limits.maximum_operations - *validation_payload)
+							fail("operations", "limit-exceeded", "sdk.target-budget");
+						*validation_payload += n;
+					}
+				};
+				const auto fixed = [&](std::size_t n)
+				{
+					work();
+					if (total > limits.maximum_retained_bytes ||
+						n > limits.maximum_retained_bytes - total)
+						fail("row", "limit-exceeded", "sdk.target-budget");
+					total += n;
+				};
+				for (const auto& [name, c] : row.values)
+				{
+					// One owned detached cell plus map-node/framing overhead. The
+					// dynamic payload allowance below still covers encoded copies.
+					fixed(sizeof(decltype(row.values)::value_type) + 256U);
+					add(name.size() + c.type.parameter.size());
+					if (c.unknown_reason)
+						add(c.unknown_reason->size(), 16U);
+					if (c.value)
+					{
+						if (const auto* v = std::get_if<std::string>(&*c.value))
+							add(v->size(), 16U);
+						if (const auto* v = std::get_if<std::vector<std::byte>>(&*c.value))
+							add(v->size());
+					}
+				}
+				const auto strings = [&](const auto& values)
+				{
+					for (const auto& v : values)
+					{
+						fixed(sizeof(v) + 128U);
+						add(v.size());
+					}
+				};
+				const auto producer = [&](const auto& p)
+				{
+					fixed(sizeof(p) + 128U);
+					add(p.id.size() + p.semantic_contract.size());
+				};
+				const auto guarantee = [&](const auto& g)
+				{
+					fixed(sizeof(g) + 128U);
+					add(g.approximation.size() + g.scope.size() + g.assumptions.size());
+					strings(g.verification_modalities);
+				};
+				strings(row.claim_contributors);
+				strings(row.provenance);
+				strings(row.presence.fragments);
+				add(row.interpretation.size() + row.presence.universe.size());
+				for (const auto& p : row.producer_contracts)
+					producer(p);
+				for (const auto& g : row.contributor_guarantees)
+					guarantee(g);
+				for (const auto& e : row.contributor_edges)
+				{
+					fixed(sizeof(e) + 128U);
+					add(e.claim_contributor.size() + e.provenance.size() + e.interpretation.size() +
+						e.condition.universe.size());
+					producer(e.producer);
+					guarantee(e.guarantee);
+					strings(e.condition.fragments);
+				}
+				return total;
+			}
 		};
 		void canonical(std::vector<query_unresolved>& values, budget& b)
 		{
@@ -238,7 +323,8 @@ namespace cxxlens::sdk::query
 		{
 			std::size_t group;
 			const annotated_row* original;
-			std::string canonical, payload;
+			std::string canonical;
+			std::size_t payload_bytes{};
 		};
 		struct projection
 		{
@@ -247,7 +333,7 @@ namespace cxxlens::sdk::query
 			target_resolution_projection output;
 			std::array<std::map<identity, refs>, 13> maps;
 			std::map<identity, refs> unit_inventories, unit_slots, file_ids;
-			std::vector<std::string> payloads;
+			std::vector<std::size_t> payload_bytes;
 			std::map<std::pair<const annotated_row*, std::string>, std::vector<std::string>>
 				decoded_sets;
 			projection(budget& bounds, target_resolution_input raw) : b(bounds), input(raw) {}
@@ -520,9 +606,9 @@ namespace cxxlens::sdk::query
 					}
 					else if (text(original, "compile_unit") != p.compile_unit)
 						gap(s.gaps, s.subject_state, id, "subject-unit-conflicting", true);
-					// Only directly recorded bindings are comparable. A base/type position source
-					// can be a strict subspan of its original declaration, and ownership is not
-					// proximity.
+					// Only directly recorded bindings are comparable. A base/type position
+					// source can be a strict subspan of its original declaration, and
+					// ownership is not proximity.
 					const auto compatible =
 						[&](std::string_view original_field, const std::string& recorded)
 					{
@@ -580,9 +666,9 @@ namespace cxxlens::sdk::query
 						gap(s.gaps, s.target_state, s.slot, "target-file-unavailable");
 					else
 					{
-						// Several actual snapshots of one target file are valid; each snapshot's
-						// payload must independently agree. Never join a file ID to the
-						// source-snapshot key.
+						// Several actual snapshots of one target file are valid; each
+						// snapshot's payload must independently agree. Never join a file ID to
+						// the source-snapshot key.
 						for (auto i : files)
 						{
 							b.work();
@@ -633,7 +719,7 @@ namespace cxxlens::sdk::query
 			{
 				const auto& native = row(original.front());
 				observed_target_resolution_slot s;
-				b.retain(sizeof(s) + payloads[original.front()].size() * 2 + 1024);
+				b.retain(sizeof(s) + payload_bytes[original.front()] * 2 + 1024);
 				s.slot = text(native, "slot");
 				s.compile_unit = text(native, "compile_unit");
 				s.domain = text(native, "domain");
@@ -696,8 +782,8 @@ namespace cxxlens::sdk::query
 								  "resolution",
 								  "observation_state"}))
 					gap(s.gaps, s.target_state, s.slot, "slot-target-conflicting", true);
-				// Unknown compiler outcomes and absent is_system remain observable independent
-				// axes; neither changes the independent finite enumeration.
+				// Unknown compiler outcomes and absent is_system remain observable
+				// independent axes; neither changes the independent finite enumeration.
 				if (s.eligibility != "eligible" && s.eligibility != "excluded" &&
 					s.eligibility != "unknown")
 					gap(s.gaps, s.subject_state, s.slot, "eligibility-unsupported");
@@ -917,10 +1003,12 @@ namespace cxxlens::sdk::query
 				canonical(output.unresolved, b);
 			}
 		};
-		result<target_resolution_projection> project_rows(target_resolution_input input,
-														  finite_population_limits limits,
-														  std::stop_token stop,
-														  budget& b)
+		result<target_resolution_projection>
+		project_rows(target_resolution_input input,
+					 finite_population_limits limits,
+					 std::stop_token stop,
+					 budget& b,
+					 const std::array<std::vector<const annotated_row*>, 13>* borrowed = nullptr)
 		{
 			if (auto valid = limits.validate(); !valid)
 				return valid.error();
@@ -946,18 +1034,77 @@ namespace cxxlens::sdk::query
 										input.inventories,
 										input.slots};
 				const auto descriptors = standard_relation_descriptors();
+				struct entry_storage
+				{
+					budget& meter;
+					std::size_t nodes{}, text{};
+					~entry_storage()
+					{
+						meter.retained -= nodes + text;
+					}
+				} staged{b};
 				std::vector<entry> entries;
+				const auto grow_entries = [&]
+				{
+					b.work();
+					if (entries.size() < entries.capacity())
+						return;
+					b.work(entries.size());
+					const auto capacity = entries.capacity();
+					const auto next = capacity > limits.maximum_rows / 2U
+						? limits.maximum_rows
+						: std::max(std::size_t{1U}, 2U * capacity);
+					if (next <= entries.size() ||
+						next > limits.maximum_retained_bytes / (2U * sizeof(entry)))
+						fail("retained-bytes", "limit-exceeded", "sdk.target-budget");
+					const auto reserved = 2U * next * sizeof(entry);
+					b.retain(reserved);
+					const auto old = staged.nodes;
+					staged.nodes += reserved;
+					entries.reserve(next);
+					const auto actual = entries.capacity() * sizeof(entry);
+					if (actual > reserved)
+						fail("retained-bytes", "limit-exceeded", "sdk.target-budget");
+					// reserve has destroyed the old array before its storage is refunded.
+					b.retained -= old + reserved - actual;
+					staged.nodes = actual;
+				};
 				for (std::size_t group = 0; group < groups.size(); ++group)
 				{
 					const auto descriptor =
 						std::ranges::find(descriptors, relations[group], &relation_descriptor::id);
 					if (descriptor == descriptors.end())
 						fail(relations[group], "descriptor-missing");
-					for (const auto& r : groups[group])
+					const auto admit = [&](const annotated_row& r)
 					{
 						b.work();
 						b.charge(b.rows, 1, limits.maximum_rows, "rows");
-						b.retain(b.estimate(r));
+						(void)b.estimate(r); // Keep the original per-row geometry ceiling.
+						std::size_t validation_payload{};
+						b.retain(b.owned_geometry(r, false, &validation_payload) +
+								 2U * sizeof(finite_population_evidence) +
+								 2U * relations[group].size() + 128U);
+						const auto encoding = b.owned_geometry(r, true);
+						if (encoding > limits.maximum_retained_bytes / 2U)
+							fail("retained-bytes", "limit-exceeded", "sdk.target-budget");
+						b.retain(2U * encoding);
+						struct encoding_storage
+						{
+							budget& meter;
+							std::size_t bytes;
+							~encoding_storage()
+							{
+								meter.retained -= bytes;
+							}
+							void keep(std::size_t amount)
+							{
+								meter.work();
+								if (amount > bytes)
+									fail("retained-bytes", "limit-exceeded", "sdk.target-budget");
+								bytes -= amount;
+							}
+						} temporary{b, 2U * encoding};
+						b.work(validation_payload);
 						if (auto valid =
 								detail::validate_projected_relation_row(r,
 																		*descriptor,
@@ -967,28 +1114,53 @@ namespace cxxlens::sdk::query
 																			b.work();
 																		});
 							!valid)
-							return valid.error();
+							throw failure{valid.error()};
 						b.charge(b.conditions,
 								 r.presence.fragments.size(),
 								 limits.maximum_condition_expansions,
 								 "conditions");
-						std::string payload;
-						for (const auto& [name, value] : r.values)
-						{
-							b.work(name.size() + 1);
-							const auto canonical = value.canonical_form();
-							b.work(canonical.size());
-							payload += name + '=' + canonical + '\n';
-						}
-						const auto canonical = r.canonical_form();
+						std::size_t payload_size{};
+						// Only Slot storage consumes this byte count; no payload text is retained.
+						if (group == 12U)
+							for (const auto& [name, value] : r.values)
+							{
+								b.work(name.size() + 1U);
+								const auto canonical = value.canonical_form();
+								b.work(canonical.size());
+								b.charge(payload_size,
+										 name.size(),
+										 limits.maximum_retained_bytes,
+										 "retained-bytes");
+								b.charge(payload_size,
+										 canonical.size(),
+										 limits.maximum_retained_bytes,
+										 "retained-bytes");
+								b.charge(payload_size,
+										 2U,
+										 limits.maximum_retained_bytes,
+										 "retained-bytes");
+							}
+						auto canonical = r.canonical_form();
 						b.work(canonical.size());
 						b.charge(b.evidence,
 								 canonical.size(),
 								 limits.maximum_evidence_bytes,
 								 "evidence-bytes");
-						b.retain(sizeof(entry));
-						entries.push_back({group, &r, canonical, std::move(payload)});
+						b.work();
+						const auto text_bytes = canonical.capacity() + 1U;
+						temporary.keep(text_bytes);
+						staged.text += text_bytes;
+						grow_entries();
+						entries.push_back({group, &r, std::move(canonical), payload_size});
+					};
+					if (borrowed)
+					{
+						for (const auto* r : (*borrowed)[group])
+							admit(*r);
 					}
+					else
+						for (const auto& r : groups[group])
+							admit(r);
 				}
 				std::ranges::sort(entries,
 								  [&](const auto& a, const auto& c)
@@ -998,12 +1170,24 @@ namespace cxxlens::sdk::query
 										  return a.group < c.group;
 									  return b.compare(a.canonical, c.canonical) < 0;
 								  });
+				b.work();
+				if (entries.size() > limits.maximum_retained_bytes / (2U * sizeof(std::size_t)))
+					fail("retained-bytes", "limit-exceeded", "sdk.target-budget");
+				b.retain(2U * entries.size() * sizeof(std::size_t));
+				work.payload_bytes.reserve(entries.size());
 				for (auto& e : entries)
 				{
 					b.work();
 					const auto i = work.output.evidence.size();
-					work.output.evidence.push_back({std::string{relations[e.group]}, *e.original});
-					work.payloads.push_back(std::move(e.payload));
+					b.work(relations[e.group].size() + 1U);
+					work.output.evidence.push_back(
+						{std::string{relations[e.group]},
+						 detail::copy_projected_row(*e.original,
+													[&](std::size_t amount)
+													{
+														b.work(amount);
+													})});
+					work.payload_bytes.push_back(e.payload_bytes);
 					const auto id = text(*e.original, identifiers[e.group]);
 					if (id.empty())
 						fail(relations[e.group], "identity-missing");
@@ -1028,6 +1212,11 @@ namespace cxxlens::sdk::query
 								.push_back(i);
 					}
 				}
+				// Canonical ordering keys have no remaining reader. Destroy them and
+				// their array before returning their reservation to the live budget.
+				std::vector<entry>{}.swap(entries);
+				b.retained -= staged.nodes + staged.text;
+				staged.nodes = staged.text = 0U;
 				work.populations();
 				return std::move(work.output);
 			}
@@ -1070,7 +1259,7 @@ namespace cxxlens::sdk::query
 					!valid)
 					return valid.error();
 				b.retain(plan_bytes);
-				std::array<std::vector<annotated_row>, 13> groups;
+				std::array<std::vector<const annotated_row*>, 13> groups;
 				std::array<bool, 13> seen{}, complete{};
 				std::size_t borrowed_rows{};
 				complete.fill(true);
@@ -1090,38 +1279,36 @@ namespace cxxlens::sdk::query
 					if (group == 12)
 						complete[group] &= scan.result.conflicts().empty() &&
 							scan.result.differential_disagreements().empty();
-					for (const auto& r : query_transfer_access::borrow_rows(scan.result))
+					const auto originals = query_transfer_access::borrow_rows(scan.result);
+					if (originals.size() > limits.maximum_rows - borrowed_rows)
+						fail("rows", "limit-exceeded", "sdk.target-budget");
+					const auto count = groups[group].size() + originals.size();
+					// Reserve borrowed pointer storage before allocation. The source query
+					// owns every row until the final evidence clone and side-channel copy.
+					b.retain(1024U);
+					if (count > limits.maximum_retained_bytes / (2U * sizeof(const annotated_row*)))
+						fail("retained-bytes", "limit-exceeded", "sdk.target-budget");
+					b.retain(2U * count * sizeof(const annotated_row*));
+					b.work();
+					if (count > groups[group].capacity())
+						b.work(groups[group].size());
+					groups[group].reserve(count);
+					for (const auto& r : originals)
 					{
 						b.work();
-						b.retain(b.estimate(r));
-						// Bound storage and row cardinality before owning even the first borrowed
-						// row.
-						if (borrowed_rows++ >= limits.maximum_rows)
-							fail("rows", "limit-exceeded", "sdk.target-budget");
-						groups[group].push_back(r);
+						++borrowed_rows;
+						groups[group].push_back(&r);
 					}
 				}
 				const auto available = [&](std::size_t group)
 				{
 					return seen[group] && complete[group];
 				};
-				target_resolution_input raw{groups[0],
-											groups[1],
-											groups[2],
-											groups[3],
-											groups[4],
-											groups[5],
-											groups[6],
-											groups[7],
-											groups[8],
-											groups[9],
-											groups[10],
-											groups[11],
-											groups[12],
-											available(0),
-											available(11),
-											available(12)};
-				auto output = project_rows(raw, limits, stop, b);
+				target_resolution_input raw{};
+				raw.compile_units_complete = available(0U);
+				raw.inventory_inputs_complete = available(11U);
+				raw.slot_inputs_complete = available(12U);
+				auto output = project_rows(raw, limits, stop, b, &groups);
 				if (!output)
 					return output.error();
 				for (std::size_t group = 0; group < groups.size(); ++group)
