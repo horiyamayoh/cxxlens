@@ -914,7 +914,7 @@ namespace cxxlens::sdk::query
 					gap(value, value.compile_unit, "language-environment-unavailable");
 				output.environments.push_back(std::move(value));
 			}
-			std::map<view_identity, std::size_t, identity_less> feature_index{identity_less{&b}};
+			detail::projection_span_lookup<budget, std::size_t> feature_index{b};
 			detail::projection_span_lookup<budget> file_index{b}, span_index{b};
 			detail::projection_span_lookup<budget> entity_index{b}, declaration_index{b},
 				type_index{b}, syntax_index{b};
@@ -1037,7 +1037,7 @@ namespace cxxlens::sdk::query
 				}
 				if (value.observation != state::complete)
 					gap(value, value.feature, "observation-unavailable");
-				feature_index.emplace(world, output.features.size());
+				feature_index.add(world, output.features.size());
 				output.features.push_back(std::move(value));
 			}
 			void population(const view_identity& world, const rows& originals, bool scans_complete)
@@ -1091,13 +1091,13 @@ namespace cxxlens::sdk::query
 					{
 						value.feature_ids.push_back(copy(id));
 						const view_identity key{id, world[1], world[2], world[3]};
-						const auto found = feature_index.find(key);
-						if (found == feature_index.end())
+						const auto& found = feature_index.find(key);
+						if (found.empty())
 						{
 							membership = combine(membership, state::unknown);
 							return;
 						}
-						const auto& feature = output.features[found->second];
+						const auto& feature = output.features[found.front()];
 						if (feature.compile_unit != value.compile_unit ||
 							feature.profile != value.profile ||
 							(file &&
@@ -1109,7 +1109,7 @@ namespace cxxlens::sdk::query
 						membership = combine(membership, feature.identity_state);
 						source_membership = combine(source_membership, feature.source_state);
 						b.retain(2U * sizeof(std::size_t));
-						value.features.push_back(found->second);
+						value.features.push_back(found.front());
 					},
 					&feature_members);
 				const auto unbound_set = members(
@@ -1121,10 +1121,9 @@ namespace cxxlens::sdk::query
 						if (!feature_members.contains(id))
 							membership = state::conflicting;
 						const view_identity key{id, world[1], world[2], world[3]};
-						if (const auto found = feature_index.find(key);
-							found != feature_index.end())
-							if (output.features[found->second].source_binding_state == "none" ||
-								output.features[found->second].source_binding_state == "complete")
+						if (const auto& found = feature_index.find(key); !found.empty())
+							if (output.features[found.front()].source_binding_state == "none" ||
+								output.features[found.front()].source_binding_state == "complete")
 								membership = state::conflicting;
 					},
 					&unbound_members);
@@ -1439,7 +1438,7 @@ namespace cxxlens::sdk::query
 					{},
 					row_validation_reused,
 					projector::inventory_cache{b},
-					std::map<view_identity, std::size_t, identity_less>{identity_less{&b}}};
+					detail::projection_span_lookup<budget, std::size_t>{b}};
 				auto output =
 					work.run(input.feature_inputs_complete && input.inventory_inputs_complete);
 				output.compile_units_complete = input.compile_units_complete;

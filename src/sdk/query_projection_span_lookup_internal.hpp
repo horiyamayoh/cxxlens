@@ -14,11 +14,11 @@
 
 namespace cxxlens::sdk::query::detail
 {
-	template <class Budget>
+	template <class Budget, class Payload = const annotated_row*>
 	struct projection_span_lookup
 	{
 		using key = std::array<std::string_view, 4U>;
-		using rows = std::vector<const annotated_row*>;
+		using rows = std::vector<Payload>;
 		struct entry
 		{
 			key identity;
@@ -88,7 +88,7 @@ namespace cxxlens::sdk::query::detail
 			meter.work(sizeof(T) / sizeof(void*) + 1U);
 			values.push_back(std::move(value));
 		}
-		void add(const key& identity, const annotated_row* row)
+		void add(const key& identity, Payload row)
 		{
 			const auto hash = fingerprint(identity[0]);
 			auto bucket = buckets.find(hash);

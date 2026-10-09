@@ -1138,8 +1138,77 @@ void occurrence_index_controls()
 			"occurrence long-prefix comparison ignored cancellation or exposed partial output");
 }
 
+void derived_feature_lookup_controls()
+{
+	const fixture original;
+	auto cohorts = original;
+	for (const unsigned axis : {0U, 1U, 2U})
+		for (const std::size_t group : {0U, 8U, 9U})
+			for (const auto& saved : original.rows[group])
+			{
+				auto sibling = saved;
+				if (axis == 0U)
+					sibling.presence.universe = "world:foreign";
+				else if (axis == 1U)
+					sibling.presence.fragments = {"variant:foreign"};
+				else
+					sibling.interpretation = "interpretation:foreign";
+				sibling.contributor_edges.front().condition = sibling.presence;
+				sibling.contributor_edges.front().interpretation = sibling.interpretation;
+				if (axis == 0U && group == 8U)
+					set(sibling, "source_binding_state", txt("unknown"));
+				if (axis == 0U && group == 9U &&
+					std::get<std::string>(*sibling.values.at("output.scope").value) ==
+						"translation_unit")
+				{
+					set(sibling, "unbound_feature_ids", symbols({"X"}));
+					set(sibling, "unbound_feature_count", num(1U));
+				}
+				cohorts.rows[group].push_back(std::move(sibling));
+			}
+	const auto check = [](const auto& output)
+	{
+		require(output.features.size() == 4U && output.populations.size() == 8U,
+				"same-ID worlds changed owning feature/population cardinality");
+		std::vector<std::size_t> positions;
+		for (const auto& population : output.populations)
+		{
+			require(population.features.size() == 1U &&
+					population.features.front() < output.features.size(),
+					"derived feature lookup lost an exact population member");
+			const auto position = population.features.front();
+			const auto& feature = output.features[position];
+			require(feature.feature == "X" && feature.universe == population.universe &&
+					feature.variant == population.variant &&
+					feature.interpretation == population.interpretation,
+					"derived numeric feature position crossed a same-ID world");
+			if (population.scope == "translation_unit" &&
+				population.universe == "world:foreign")
+				require(population.membership_state == state::complete &&
+						feature.source_binding_state == "unknown",
+						"same-ID unbound lookup borrowed a complete source from another world");
+			positions.push_back(position);
+		}
+		return positions;
+	};
+	const auto full = take(q::project_source_features(cohorts.queries(true)));
+	const auto expected = check(full);
+	for (const std::size_t group : {0U, 8U, 9U})
+		std::ranges::reverse(cohorts.rows[group]);
+	const auto reordered = take(q::project_source_features(cohorts.queries(true)));
+	require(check(reordered) == expected,
+			"private derived feature lookup reordered owning population positions");
+	require(full.evidence.size() == reordered.evidence.size(), "reordered world evidence lost");
+	for (std::size_t at{}; at < full.evidence.size(); ++at)
+		require(full.evidence[at].relation_id == reordered.evidence[at].relation_id &&
+				full.evidence[at].row.canonical_form() ==
+					reordered.evidence[at].row.canonical_form(),
+				"private derived feature lookup reordered complete original evidence");
+}
+
 int main()
 {
+	derived_feature_lookup_controls();
 	occurrence_index_controls();
 	supporting_lookup_controls();
 	canonical_size_controls();
