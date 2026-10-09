@@ -20,6 +20,7 @@
 
 #include "claim_internal.hpp"
 #include "json_internal.hpp"
+#include "query_projected_row_encoding_internal.hpp"
 #include "query_internal.hpp"
 #include "query_result_internal.hpp"
 
@@ -36,53 +37,6 @@ namespace cxxlens::sdk::query
 		[[nodiscard]] std::string json_string(const std::string_view value)
 		{
 			return cxxlens::sdk::detail::canonical_json_string(value);
-		}
-
-		[[nodiscard]] std::string scalar_json(const scalar_value& value)
-		{
-			return std::visit(
-				[](const auto& item) -> std::string
-				{
-					using item_type = std::remove_cvref_t<decltype(item)>;
-					if constexpr (std::same_as<item_type, bool>)
-						return item ? "true" : "false";
-					else if constexpr (std::integral<item_type>)
-						return std::to_string(item);
-					else if constexpr (std::same_as<item_type, std::string>)
-						return json_string(item);
-					else
-					{
-						static constexpr std::string_view digits{"0123456789abcdef"};
-						std::string output{"\""};
-						output.reserve(item.size() * 2U + 2U);
-						for (const auto byte : item)
-						{
-							const auto value = std::to_integer<unsigned char>(byte);
-							output.push_back(digits[value >> 4U]);
-							output.push_back(digits[value & 0x0fU]);
-						}
-						output.push_back('"');
-						return output;
-					}
-				},
-				value);
-		}
-
-		[[nodiscard]] std::string cell_json(const detached_cell& cell)
-		{
-			switch (cell.state)
-			{
-				case cell_state::present:
-					return R"({"state":"present","type":)" +
-						json_string(cell.type.canonical_name()) +
-						",\"value\":" + scalar_json(*cell.value) + "}";
-				case cell_state::absent:
-					return R"({"state":"absent"})";
-				case cell_state::unknown:
-					return "{\"reason\":" + json_string(*cell.unknown_reason) +
-						R"(,"state":"unknown"})";
-			}
-			return "{}";
 		}
 
 		[[nodiscard]] std::string strings_json(const std::span<const std::string> values)
@@ -1562,44 +1516,9 @@ namespace cxxlens::sdk::query
 		canonical_guarantees(guarantees);
 		auto edges = contributor_edges;
 		canonical_contributor_edges(edges);
-		std::ostringstream output;
-		output << "{\"claim_contributors\":" << strings_json(claim_contributors)
-			   << ",\"condition_fragments\":" << strings_json(presence.fragments)
-			   << ",\"condition_universe\":" << json_string(presence.universe)
-			   << ",\"contributor_guarantees\":[";
-		for (std::size_t index = 0U; index < guarantees.size(); ++index)
-		{
-			if (index != 0U)
-				output << ',';
-			output << guarantee_json(guarantees[index]);
-		}
-		output << ']' << ",\"interpretation\":" << json_string(interpretation)
-			   << ",\"contributor_edges\":[";
-		for (std::size_t edge = 0U; edge < edges.size(); ++edge)
-		{
-			if (edge != 0U)
-				output << ',';
-			output << edges[edge].canonical_form();
-		}
-		output << ']' << ",\"multiplicity\":" << multiplicity << ",\"producer_contracts\":[";
-		for (std::size_t producer = 0U; producer < producer_contracts.size(); ++producer)
-		{
-			if (producer != 0U)
-				output << ',';
-			output << "{\"id\":" << json_string(producer_contracts[producer].id)
-				   << ",\"semantic_contract\":"
-				   << json_string(producer_contracts[producer].semantic_contract) << '}';
-		}
-		output << ']' << ",\"provenance\":" << strings_json(provenance) << ",\"values\":{";
-		std::size_t index{};
-		for (const auto& [column, cell] : values)
-		{
-			if (index++ != 0U)
-				output << ',';
-			output << json_string(column) << ':' << cell_json(cell);
-		}
-		output << "}}";
-		return output.str();
+		detail::projected_row_string_sink sink;
+		detail::emit_projected_row(sink, *this, guarantees, edges);
+		return std::move(sink.value);
 	}
 
 	stop_token_cancellation::stop_token_cancellation(std::stop_token token) noexcept
@@ -1614,7 +1533,7 @@ namespace cxxlens::sdk::query
 		return token_.stop_requested();
 	}
 
-	query_result::query_result(std::shared_ptr<const data> data) : data_{std::move(data)} {}
+	query_result::query_result(std::shared_ptr<const data> value) : data_{std::move(value)} {}
 
 	result_row_cursor query_result::rows() const
 	{

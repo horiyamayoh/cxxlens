@@ -10,13 +10,16 @@
 
 namespace cxxlens::sdk::detail
 {
+	template <class Before, class Observe>
 	[[nodiscard]] inline std::optional<std::size_t>
-	invalid_utf8_offset(const std::string_view input) noexcept
+	invalid_utf8_offset(const std::string_view input, Before before, Observe observe)
 	{
 		std::size_t index{};
 		while (index < input.size())
 		{
+			before();
 			const auto first = static_cast<unsigned char>(input[index]);
+			observe(first);
 			if (first <= 0x7fU)
 			{
 				++index;
@@ -49,7 +52,9 @@ namespace cxxlens::sdk::detail
 				return index;
 			for (std::size_t offset = 1U; offset < width; ++offset)
 			{
+				before();
 				const auto continuation = static_cast<unsigned char>(input[index + offset]);
+				observe(continuation);
 				if ((continuation & 0xc0U) != 0x80U)
 					return index + offset;
 				code_point = (code_point << 6U) | (continuation & 0x3fU);
@@ -60,6 +65,19 @@ namespace cxxlens::sdk::detail
 			index += width;
 		}
 		return std::nullopt;
+	}
+
+	[[nodiscard]] inline std::optional<std::size_t>
+	invalid_utf8_offset(const std::string_view input) noexcept
+	{
+		return invalid_utf8_offset(
+			input,
+			[]
+			{
+			},
+			[](unsigned char)
+			{
+			});
 	}
 
 	[[nodiscard]] inline bool valid_utf8(const std::string_view input) noexcept

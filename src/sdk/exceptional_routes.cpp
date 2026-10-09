@@ -20,9 +20,11 @@
 #include <cxxlens/relations/source_span.hpp>
 #include <cxxlens/sdk/exceptional_routes.hpp>
 
+#include "query_projected_row_encoding_internal.hpp"
 #include "query_projection_plan_limits_internal.hpp"
 #include "query_projection_row_copy_internal.hpp"
 #include "query_projection_rows_internal.hpp"
+#include "query_projection_span_lookup_internal.hpp"
 #include "query_result_internal.hpp"
 namespace cxxlens::sdk::query
 {
@@ -306,6 +308,7 @@ namespace cxxlens::sdk::query
 			std::array<std::map<view_identity, rows, identity_less>, 12> index;
 			std::map<const annotated_row*, std::size_t> owned;
 			bool row_validation_reused{};
+			detail::projection_span_lookup<budget> span_index{b};
 			std::string copy(std::string_view value)
 			{
 				b.work(value.size() + 1U);
@@ -329,6 +332,8 @@ namespace cxxlens::sdk::query
 					return empty;
 				view_identity key{id, world[1], world[2], world[3]};
 				b.work();
+				if (group == 2U)
+					return span_index.find(key);
 				const auto at = index[group].find(key);
 				return at == index[group].end() ? empty : at->second;
 			}
@@ -401,9 +406,14 @@ namespace cxxlens::sdk::query
 							b.work();
 							// Conservative capacity/node allowance before both map and vector
 							// growth.
-							b.retain(sizeof(view_identity) + 256U +
-									 2U * sizeof(const annotated_row*));
-							index[group][key].push_back(row);
+							if (group == 2U)
+								span_index.add(key, row);
+							else
+							{
+								b.retain(sizeof(view_identity) + 256U +
+										 2U * sizeof(const annotated_row*));
+								index[group][key].push_back(row);
+							}
 						}
 					}
 				}
@@ -419,33 +429,38 @@ namespace cxxlens::sdk::query
 					};
 					std::map<const annotated_row*, std::string, decltype(pointer_less)> keys{
 						pointer_less};
+					const auto order_alternatives = [&](rows& alternatives)
+					{
+						b.work();
+						if (alternatives.size() < 2U)
+							return;
+						for (const auto* original : alternatives)
+						{
+							b.work();
+							if (keys.find(original) != keys.end())
+								continue;
+							constexpr auto node = sizeof(decltype(keys)::value_type) + 256U;
+							b.retain(node);
+							auto encoded = canonical(*original);
+							const auto buffer = encoded.capacity() + 1U;
+							b.retain(buffer);
+							retained_keys += node + buffer;
+							keys.emplace(original, std::move(encoded));
+						}
+						std::ranges::sort(alternatives,
+										  [&](const auto* left, const auto* right)
+										  {
+											  return b.canonical_less(keys.at(left),
+																	  keys.at(right));
+										  });
+					};
 					for (auto& group : index)
 						for (auto& [key, alternatives] : group)
 						{
 							(void)key;
-							b.work();
-							if (alternatives.size() < 2U)
-								continue;
-							for (const auto* original : alternatives)
-							{
-								b.work();
-								if (keys.find(original) != keys.end())
-									continue;
-								constexpr auto node = sizeof(decltype(keys)::value_type) + 256U;
-								b.retain(node);
-								auto encoded = canonical(*original);
-								const auto buffer = encoded.capacity() + 1U;
-								b.retain(buffer);
-								retained_keys += node + buffer;
-								keys.emplace(original, std::move(encoded));
-							}
-							std::ranges::sort(alternatives,
-											  [&](const auto* left, const auto* right)
-											  {
-												  return b.canonical_less(keys.at(left),
-																		  keys.at(right));
-											  });
+							order_alternatives(alternatives);
 						}
+					span_index.visit(order_alternatives);
 				}
 				// The map and string buffers have expired before their reservation is
 				// refunded; the observed scratch peak remains part of returned usage.
@@ -462,9 +477,23 @@ namespace cxxlens::sdk::query
 					{
 						b.retain(b.estimate(*r, false) + 2U * sizeof(finite_population_evidence) +
 								 2U * relations[group].size() + 128U);
-						auto encoded = canonical(*r);
+						// The admitted row already has canonical annotation order. Only its
+						// exact wire size is needed here; alternative ordering keeps strings.
+						peak(2U * b.estimate(*r));
+						const auto encoded_size = detail::admitted_projected_row_size(
+							*r,
+							[&]
+							{
+								b.work();
+							},
+							[&]
+							{
+								fail("evidence-bytes",
+									 "limit-exceeded",
+									 "sdk.exceptional-route-budget");
+							});
 						b.charge(b.evidence,
-								 encoded.size(),
+								 encoded_size,
 								 b.limits.maximum_evidence_bytes,
 								 "evidence-bytes");
 						const auto ref = output.evidence.size();

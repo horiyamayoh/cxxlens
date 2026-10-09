@@ -9,9 +9,11 @@
 
 #include <cxxlens/sdk/source_features.hpp>
 
+#include "query_projected_row_encoding_internal.hpp"
 #include "query_projection_plan_limits_internal.hpp"
 #include "query_projection_row_copy_internal.hpp"
 #include "query_projection_rows_internal.hpp"
+#include "query_projection_span_lookup_internal.hpp"
 #include "query_result_internal.hpp"
 namespace cxxlens::sdk::query
 {
@@ -310,6 +312,10 @@ namespace cxxlens::sdk::query
 					return empty;
 				view_identity key{id, world[1], world[2], world[3]};
 				b.work();
+				if (group == 1U)
+					return file_index.find(key);
+				if (group == 2U)
+					return span_index.find(key);
 				const auto at = index[group].find(key);
 				return at == index[group].end() ? empty : at->second;
 			}
@@ -373,9 +379,16 @@ namespace cxxlens::sdk::query
 							b.work();
 							// Conservative capacity/node allowance before both map and vector
 							// growth.
-							b.retain(sizeof(view_identity) + 256U +
-									 2U * sizeof(const annotated_row*));
-							index[group][key].push_back(row);
+							if (group == 1U)
+								file_index.add(key, row);
+							else if (group == 2U)
+								span_index.add(key, row);
+							else
+							{
+								b.retain(sizeof(view_identity) + 256U +
+										 2U * sizeof(const annotated_row*));
+								index[group][key].push_back(row);
+							}
 						}
 					}
 				}
@@ -391,33 +404,39 @@ namespace cxxlens::sdk::query
 					};
 					std::map<const annotated_row*, std::string, decltype(pointer_less)> keys{
 						pointer_less};
+					const auto order_alternatives = [&](rows& alternatives)
+					{
+						b.work();
+						if (alternatives.size() < 2U)
+							return;
+						for (const auto* original : alternatives)
+						{
+							b.work();
+							if (keys.find(original) != keys.end())
+								continue;
+							constexpr auto node = sizeof(decltype(keys)::value_type) + 256U;
+							b.retain(node);
+							auto encoded = canonical(*original);
+							const auto buffer = encoded.capacity() + 1U;
+							b.retain(buffer);
+							retained_keys += node + buffer;
+							keys.emplace(original, std::move(encoded));
+						}
+						std::ranges::sort(alternatives,
+										  [&](const auto* left, const auto* right)
+										  {
+											  return b.canonical_less(keys.at(left),
+																	  keys.at(right));
+										  });
+					};
 					for (auto& group : index)
 						for (auto& [key, alternatives] : group)
 						{
 							(void)key;
-							b.work();
-							if (alternatives.size() < 2U)
-								continue;
-							for (const auto* original : alternatives)
-							{
-								b.work();
-								if (keys.find(original) != keys.end())
-									continue;
-								constexpr auto node = sizeof(decltype(keys)::value_type) + 256U;
-								b.retain(node);
-								auto encoded = canonical(*original);
-								const auto buffer = encoded.capacity() + 1U;
-								b.retain(buffer);
-								retained_keys += node + buffer;
-								keys.emplace(original, std::move(encoded));
-							}
-							std::ranges::sort(alternatives,
-											  [&](const auto* left, const auto* right)
-											  {
-												  return b.canonical_less(keys.at(left),
-																		  keys.at(right));
-											  });
+							order_alternatives(alternatives);
 						}
+					file_index.visit(order_alternatives);
+					span_index.visit(order_alternatives);
 				}
 				// The map and string buffers have expired before their reservation is
 				// refunded; the observed scratch peak remains part of returned usage.
@@ -442,9 +461,23 @@ namespace cxxlens::sdk::query
 					{
 						b.retain(b.estimate(*r, false) + 2U * sizeof(finite_population_evidence) +
 								 2U * relations[group].size() + 128U);
-						auto encoded = canonical(*r);
+						// Only the exact wire size is needed for the evidence-byte cap.
+						// Ordering alternatives above still retains complete canonical strings.
+						peak(2U * b.estimate(*r));
+						const auto encoded_size = detail::admitted_projected_row_size(
+							*r,
+							[&]
+							{
+								b.work();
+							},
+							[&]
+							{
+								fail("evidence-bytes",
+									 "limit-exceeded",
+									 "sdk.source-feature-budget");
+							});
 						b.charge(b.evidence,
-								 encoded.size(),
+								 encoded_size,
 								 b.limits.maximum_evidence_bytes,
 								 "evidence-bytes");
 						const auto ref = output.evidence.size();
@@ -862,6 +895,7 @@ namespace cxxlens::sdk::query
 				output.environments.push_back(std::move(value));
 			}
 			std::map<view_identity, std::size_t, identity_less> feature_index{identity_less{&b}};
+			detail::projection_span_lookup<budget> file_index{b}, span_index{b};
 			void feature(const view_identity& world, const rows& originals)
 			{
 				b.charge(b.members, 1U, b.limits.maximum_members, "features");
@@ -1200,14 +1234,34 @@ namespace cxxlens::sdk::query
 												  std::string_view,
 												  std::string_view,
 												  std::uint64_t>;
-				std::map<occurrence_key, std::size_t> occurrences;
+				// This index only detects exact occurrence duplicates; it never orders
+				// observations. Ordinals distinguish most keys before visiting text.
+				const auto occurrence_less =
+					[&](const occurrence_key& left, const occurrence_key& right)
+				{
+					b.work();
+					if (std::get<5U>(left) != std::get<5U>(right))
+						return std::get<5U>(left) < std::get<5U>(right);
+					if (const auto order =
+							compare_identity_text(b, std::get<0U>(left), std::get<0U>(right)))
+						return order < 0;
+					if (const auto order =
+							compare_identity_text(b, std::get<1U>(left), std::get<1U>(right)))
+						return order < 0;
+					if (const auto order =
+							compare_identity_text(b, std::get<2U>(left), std::get<2U>(right)))
+						return order < 0;
+					if (const auto order =
+							compare_identity_text(b, std::get<3U>(left), std::get<3U>(right)))
+						return order < 0;
+					return compare_identity_text(b, std::get<4U>(left), std::get<4U>(right)) < 0;
+				};
+				std::map<occurrence_key, std::size_t, decltype(occurrence_less)> occurrences{
+					occurrence_less};
 				for (std::size_t at{}; at < output.features.size(); ++at)
 				{
 					auto& value = output.features[at];
-					b.work((value.compile_unit.size() + value.profile.size() +
-							value.universe.size() + value.variant.size() +
-							value.interpretation.size() + 8U) *
-						   (static_cast<std::size_t>(std::bit_width(occurrences.size())) + 1U));
+					b.work();
 					const occurrence_key key{value.compile_unit,
 											 value.profile,
 											 value.universe,

@@ -7,6 +7,7 @@
 
 #include <cxxlens/sdk/source_features.hpp>
 
+#include "../../../src/sdk/query_projected_row_encoding_internal.hpp"
 #include "../../../src/sdk/query_result_internal.hpp"
 
 namespace
@@ -652,6 +653,121 @@ namespace
 				prefix == midpoint && !repeated.operations && !repeated.retained_bytes_bound,
 			"long comparison failed to observe a real mid-projection stop before the next visit");
 	}
+	void canonical_size_controls()
+	{
+		auto row = fact(8U, {{"feature", txt("feature:size")}});
+		row.multiplicity = std::numeric_limits<std::uint64_t>::max();
+		row.values.emplace("corner.signed",
+						   detached_cell::signed_integer(std::numeric_limits<std::int64_t>::min()));
+		row.values.emplace(
+			"corner.unsigned",
+			detached_cell::unsigned_integer(std::numeric_limits<std::uint64_t>::max()));
+		row.values.emplace(
+			"corner.bytes",
+			detached_cell::bytes({std::byte{0x00}, std::byte{0x80}, std::byte{0xff}}));
+		row.values.emplace("corner.string",
+						   txt(std::string{"quote\"\\\b\f\n\r\t"} + char(0x01) + "日本語"));
+		require(bool(row.validate()), "canonical size fixture is not an admitted row");
+		const auto wire = row.canonical_form();
+		require(wire.find("-9223372036854775808") != std::string::npos &&
+					wire.find("18446744073709551615") != std::string::npos &&
+					wire.find("\"0080ff\"") != std::string::npos &&
+					wire.find("\\u0001日本語") != std::string::npos,
+				"canonical size fixture lost integer, lowercase hex or escaped UTF-8 spelling");
+		std::size_t work{};
+		const auto measured = q::detail::admitted_projected_row_size(
+			row,
+			[&]
+			{
+				++work;
+			},
+			[]
+			{
+				throw std::length_error("size");
+			});
+		require(measured == wire.size() && work > 0U && work < measured,
+				"canonical size differs from complete wire or serializes framing bytes");
+		const auto exact_work = work;
+		std::size_t visited{};
+		require(q::detail::admitted_projected_row_size(
+					row,
+					[&]
+					{
+						if (visited == exact_work)
+							throw std::runtime_error("work");
+						++visited;
+					},
+					[]
+					{
+						throw std::length_error("size");
+					}) == measured &&
+					visited == exact_work,
+				"canonical size rejected the exact visited-work frontier");
+		visited = 0U;
+		bool stopped = false;
+		try
+		{
+			(void)q::detail::admitted_projected_row_size(
+				row,
+				[&]
+				{
+					if (visited == exact_work - 1U)
+						throw std::runtime_error("work");
+					++visited;
+				},
+				[]
+				{
+					throw std::length_error("size");
+				});
+		}
+		catch (const std::runtime_error&)
+		{
+			stopped = true;
+		}
+		require(stopped && visited == exact_work - 1U,
+				"canonical size bypassed one-under work frontier");
+		visited = 0U;
+		stopped = false;
+		try
+		{
+			(void)q::detail::admitted_projected_row_size(
+				row,
+				[&]
+				{
+					if (visited == 90U)
+						throw std::runtime_error("stop");
+					++visited;
+				},
+				[]
+				{
+					throw std::length_error("size");
+				});
+		}
+		catch (const std::runtime_error&)
+		{
+			stopped = true;
+		}
+		require(stopped && visited == 90U, "canonical size ignored a stop during nested text");
+		// Invalid UTF-8 keeps the original encoder's empty quoted spelling.
+		for (const std::string& text :
+			 {std::string{"valid\"\\日本語"},
+			  std::string{"prefix"} + char(0xc2),
+			  std::string{"prefix"} + char(0xe0) + char(0x80) + char(0x80),
+			  std::string{"prefix"} + char(0xf4) + char(0x90) + char(0x80) + char(0x80),
+			  std::string{"prefix"} + char(0xc2) + 'x'})
+		{
+			q::detail::projected_row_size_sink sink{[]
+													{
+													},
+													[]
+													{
+														throw std::length_error("size");
+													}};
+			sink.string(text);
+			require(sink.size() == cxxlens::sdk::detail::canonical_json_string(text).size(),
+					"canonical size changed invalid UTF-8 or escaped text admission bytes");
+		}
+	}
 	void whole_evidence_clone_controls()
 	{
 		fixture original;
@@ -817,8 +933,199 @@ namespace
 	}
 } // namespace
 
+void file_span_lookup_controls()
+{
+	fixture indexed;
+	for (const std::size_t group : {1U, 2U})
+	{
+		auto alternative = indexed.rows[group].front();
+		alternative.provenance = {"provenance:alternative-source"};
+		alternative.contributor_edges.front().provenance = alternative.provenance.front();
+		indexed.rows[group].push_back(std::move(alternative));
+		for (const unsigned axis : {0U, 1U, 2U})
+		{
+			auto foreign = indexed.rows[group].front();
+			if (axis == 0U)
+			{
+				foreign.presence.universe = "world:foreign";
+				foreign.contributor_edges.front().condition.universe = foreign.presence.universe;
+			}
+			else if (axis == 1U)
+			{
+				foreign.presence.fragments = {"variant:foreign"};
+				foreign.contributor_edges.front().condition.fragments = foreign.presence.fragments;
+			}
+			else
+			{
+				foreign.interpretation = "interpretation:foreign";
+				foreign.contributor_edges.front().interpretation = foreign.interpretation;
+			}
+			set(foreign, group == 1U ? "size" : "begin", num(99U));
+			indexed.rows[group].push_back(std::move(foreign));
+		}
+		for (unsigned i{}; i < 24U; ++i)
+		{
+			auto unrelated = indexed.rows[group].front();
+			set(unrelated,
+				group == 1U ? "snapshot" : "span",
+				txt(std::string(4096U, 's') + std::to_string(i)));
+			indexed.rows[group].push_back(std::move(unrelated));
+		}
+	}
+	const auto out = take(q::project_source_features(indexed.queries(true)));
+	require(out.features.size() == 1U && out.features.front().source_state == state::complete,
+			"file and span ID buckets merged a foreign world");
+	std::vector<std::string> expected;
+	for (const auto& evidence : out.evidence)
+		expected.push_back(evidence.relation_id + evidence.row.canonical_form());
+	std::ranges::reverse(indexed.rows[1]);
+	std::ranges::reverse(indexed.rows[2]);
+	q::projection_resource_usage baseline;
+	const auto reordered =
+		take(q::project_source_features(indexed.queries(true), {}, {}, baseline));
+	std::vector<std::string> actual;
+	for (const auto& evidence : reordered.evidence)
+		actual.push_back(evidence.relation_id + evidence.row.canonical_form());
+	require(actual == expected && reordered.features.front().source_state == state::complete,
+			"file and span alternative order changed complete original evidence");
+	for (const bool storage : {false, true})
+		for (const bool one_under : {false, true})
+		{
+			q::finite_population_limits limits;
+			if (storage)
+				limits.maximum_retained_bytes =
+					baseline.retained_bytes_bound - static_cast<std::size_t>(one_under);
+			else
+				limits.maximum_operations =
+					baseline.operations - static_cast<std::size_t>(one_under);
+			q::projection_resource_usage usage{1U, 1U};
+			const auto bounded =
+				q::project_source_features(indexed.queries(true), limits, {}, usage);
+			require(static_cast<bool>(bounded) == !one_under,
+					"file/span lookup exact and one-under quota");
+			if (one_under)
+				require(!usage.operations && !usage.retained_bytes_bound,
+						"failed file/span lookup published success usage");
+		}
+	std::size_t checkpoints{};
+	q::finite_population_limits limits;
+	limits.cancelled = [&]
+	{
+		return ++checkpoints == 1000U;
+	};
+	q::projection_resource_usage usage{1U, 1U};
+	const auto stopped = q::project_source_features(indexed.queries(true), limits, {}, usage);
+	require(!stopped && stopped.error().code == "sdk.source-feature-cancelled" &&
+				checkpoints == 1000U && !usage.operations && !usage.retained_bytes_bound,
+			"long file/span ID hashing ignored cancellation or published failure usage");
+}
+
+void occurrence_index_controls()
+{
+	for (const unsigned axis : {0U, 1U, 2U, 3U, 4U, 5U, 6U})
+	{
+		fixture original;
+		auto sibling = original.rows[8].front();
+		set(sibling, "feature", txt("Y"));
+		auto unit = original.rows[0].front();
+		if (axis == 0U)
+		{
+			set(sibling, "compile_unit", txt("U:foreign"));
+			set(unit, "compile_unit", txt("U:foreign"));
+		}
+		if (axis == 1U)
+			set(sibling, "profile", txt("future-feature-profile"));
+		if (axis == 2U)
+			sibling.presence.universe = unit.presence.universe = "foreign-universe";
+		if (axis == 3U)
+			sibling.presence.fragments = unit.presence.fragments = {"foreign-variant"};
+		if (axis == 4U)
+			sibling.interpretation = unit.interpretation = "foreign-interpretation";
+		if (axis == 5U)
+			set(sibling, "ordinal", num(1U));
+		sibling.contributor_edges.front().condition = sibling.presence;
+		sibling.contributor_edges.front().interpretation = sibling.interpretation;
+		unit.contributor_edges.front().condition = unit.presence;
+		unit.contributor_edges.front().interpretation = unit.interpretation;
+		if (axis == 0U || axis == 2U || axis == 3U || axis == 4U)
+			original.rows[0].push_back(std::move(unit));
+		original.rows[8].push_back(std::move(sibling));
+		original.rows[9].clear();
+		const auto output = take(q::project_source_features(original.queries(true)));
+		require(output.features.size() == 2U &&
+					std::ranges::all_of(output.features,
+										[&](const auto& feature)
+										{
+											return feature.identity_state ==
+												(axis == 6U ? state::conflicting : state::complete);
+										}),
+				"occurrence duplicate identity omitted an exact axis or merged foreign keys");
+		require(output.features[0].feature == "X" && output.features[1].feature == "Y",
+				"private occurrence lookup changed public feature ordering");
+	}
+
+	fixture long_prefix;
+	long_prefix.rows[9].clear();
+	const auto unit_id = std::string(4096U, 'u');
+	for (auto& group : long_prefix.rows)
+		for (auto& row : group)
+			if (row.values.contains("output.compile_unit"))
+				set(row, "compile_unit", txt(unit_id));
+	set(long_prefix.rows[8].front(), "profile", txt(std::string(4096U, 'p') + "a"));
+	auto sibling = long_prefix.rows[8].front();
+	set(sibling, "feature", txt("Y"));
+	set(sibling, "profile", txt(std::string(4096U, 'p') + "b"));
+	long_prefix.rows[8].push_back(std::move(sibling));
+	const auto input = long_prefix.queries(true);
+	std::size_t checkpoints{};
+	q::finite_population_limits observed;
+	observed.cancelled = [&]
+	{
+		++checkpoints;
+		return false;
+	};
+	q::projection_resource_usage baseline;
+	const auto complete = take(q::project_source_features(input, observed, {}, baseline));
+	require(complete.features.size() == 2U &&
+				complete.features[0].identity_state == state::complete &&
+				complete.features[1].identity_state == state::complete && checkpoints > 512U,
+			"late profile byte changed exact occurrence attribution");
+	for (const bool storage : {false, true})
+		for (const bool one_under : {false, true})
+		{
+			q::finite_population_limits limits;
+			if (storage)
+				limits.maximum_retained_bytes =
+					baseline.retained_bytes_bound - static_cast<std::size_t>(one_under);
+			else
+				limits.maximum_operations =
+					baseline.operations - static_cast<std::size_t>(one_under);
+			q::projection_resource_usage usage{1U, 1U};
+			const auto bounded = q::project_source_features(input, limits, {}, usage);
+			require(static_cast<bool>(bounded) == !one_under &&
+						(!one_under || (!usage.operations && !usage.retained_bytes_bound)),
+					"occurrence comparator ignored exact/one-under work or storage");
+		}
+	// With no populations, the final long common-prefix comparison is the last work.
+	const auto stop_at = checkpoints - 512U;
+	std::size_t visited{};
+	q::finite_population_limits cancelled;
+	cancelled.cancelled = [&]
+	{
+		return ++visited == stop_at;
+	};
+	q::projection_resource_usage failed{1U, 1U};
+	const auto stopped = q::project_source_features(input, cancelled, {}, failed);
+	require(!stopped && stopped.error().code == "sdk.source-feature-cancelled" &&
+				visited == stop_at && !failed.operations && !failed.retained_bytes_bound,
+			"occurrence long-prefix comparison ignored cancellation or exposed partial output");
+}
+
 int main()
 {
+	occurrence_index_controls();
+	file_span_lookup_controls();
+	canonical_size_controls();
 	whole_evidence_clone_controls();
 	first_present_comparison_controls();
 	indexed_membership_prefix_controls();

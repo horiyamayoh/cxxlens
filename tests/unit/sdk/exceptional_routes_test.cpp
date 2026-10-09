@@ -326,6 +326,92 @@ namespace
 
 int main()
 {
+	// Shared span IDs deliberately hash to one bucket; worlds still stay distinct.
+	{
+		fixture indexed;
+		auto alternative = indexed.rows[2].front();
+		alternative.provenance = {"provenance:alternative-span"};
+		alternative.contributor_edges.front().provenance = alternative.provenance.front();
+		indexed.rows[2].push_back(std::move(alternative));
+		for (const unsigned axis : {0U, 1U, 2U})
+		{
+			auto foreign = indexed.rows[2].front();
+			if (axis == 0U)
+			{
+				foreign.presence.universe = "world:foreign";
+				foreign.contributor_edges.front().condition.universe = foreign.presence.universe;
+			}
+			else if (axis == 1U)
+			{
+				foreign.presence.fragments = {"variant:foreign"};
+				foreign.contributor_edges.front().condition.fragments = foreign.presence.fragments;
+			}
+			else
+			{
+				foreign.interpretation = "interpretation:foreign";
+				foreign.contributor_edges.front().interpretation = foreign.interpretation;
+			}
+			set(foreign, "begin", detached_cell::unsigned_integer(99U));
+			set(foreign, "end", detached_cell::unsigned_integer(100U));
+			indexed.rows[2].push_back(std::move(foreign));
+		}
+		for (unsigned i{}; i < 24U; ++i)
+		{
+			auto unrelated = indexed.rows[2].front();
+			set(unrelated,
+				"span",
+				detached_cell::utf8(std::string(4096U, 's') + std::to_string(i)));
+			indexed.rows[2].push_back(std::move(unrelated));
+		}
+		q::projection_resource_usage measured;
+		auto out = take(q::project_exceptional_routes(indexed.input(), {}, {}, measured));
+		require(variant(out).source_state == state::complete,
+				"span ID collision retains all exact world axes");
+		std::vector<std::string> expected_evidence;
+		for (const auto& evidence : out.evidence)
+			expected_evidence.push_back(evidence.relation_id + evidence.row.canonical_form());
+		std::ranges::reverse(indexed.rows[2]);
+		out = take(q::project_exceptional_routes(indexed.input()));
+		std::vector<std::string> reordered_evidence;
+		for (const auto& evidence : out.evidence)
+			reordered_evidence.push_back(evidence.relation_id + evidence.row.canonical_form());
+		require(variant(out).source_state == state::complete &&
+					reordered_evidence == expected_evidence,
+				"span collision and long-prefix input order preserve canonical evidence");
+		q::projection_resource_usage baseline;
+		take(q::project_exceptional_routes(indexed.input(), {}, {}, baseline));
+		for (const bool storage : {false, true})
+			for (const bool one_under : {false, true})
+			{
+				q::finite_population_limits bounded;
+				if (storage)
+					bounded.maximum_retained_bytes =
+						baseline.retained_bytes_bound - static_cast<std::size_t>(one_under);
+				else
+					bounded.maximum_operations =
+						baseline.operations - static_cast<std::size_t>(one_under);
+				q::projection_resource_usage spent{1U, 1U};
+				const auto result =
+					q::project_exceptional_routes(indexed.input(), bounded, {}, spent);
+				require(static_cast<bool>(result) == !one_under,
+						"span lookup exact and one-under quota");
+				if (one_under)
+					require(spent.operations == 0U && spent.retained_bytes_bound == 0U,
+							"failed span lookup keeps the existing failure usage contract");
+			}
+		q::finite_population_limits cancelled;
+		std::size_t checkpoints{};
+		cancelled.cancelled = [&]
+		{
+			return ++checkpoints == 1000U;
+		};
+		q::projection_resource_usage spent{1U, 1U};
+		const auto stopped = q::project_exceptional_routes(indexed.input(), cancelled, {}, spent);
+		require(!stopped && stopped.error().code == "sdk.exceptional-route-cancelled" &&
+					checkpoints == 1000U && spent.operations == 0U &&
+					spent.retained_bytes_bound == 0U,
+				"late span lookup stop preserves cancellation and failure usage");
+	}
 	fixture copied;
 	query_copy_controls::projection(
 		copied.rows,
