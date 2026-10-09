@@ -933,10 +933,21 @@ namespace
 	}
 } // namespace
 
-void file_span_lookup_controls()
+void supporting_lookup_controls()
 {
 	fixture indexed;
-	for (const std::size_t group : {1U, 2U})
+	constexpr std::array<std::string_view, 10U> ids{
+		"", "snapshot", "span", "entity", "declaration", "", "type", "node", "", ""};
+	const auto complete = [](const auto& out)
+	{
+		if (out.features.size() != 1U)
+			return false;
+		const auto& feature = out.features.front();
+		return feature.source_state == state::complete && feature.context_state == state::complete &&
+			feature.entity_state == state::complete && feature.call_state == state::complete &&
+			feature.type_state == state::complete && feature.syntax_state == state::complete;
+	};
+	for (const std::size_t group : {1U, 2U, 3U, 4U, 6U, 7U})
 	{
 		auto alternative = indexed.rows[group].front();
 		alternative.provenance = {"provenance:alternative-source"};
@@ -960,34 +971,40 @@ void file_span_lookup_controls()
 				foreign.interpretation = "interpretation:foreign";
 				foreign.contributor_edges.front().interpretation = foreign.interpretation;
 			}
-			set(foreign, group == 1U ? "size" : "begin", num(99U));
+			if (group == 1U || group == 2U)
+				set(foreign, group == 1U ? "size" : "begin", num(99U));
+			else if (group == 3U)
+				set(foreign, "kind", txt("variable"));
+			else if (group == 4U)
+				set(foreign, "source", txt("source:foreign"));
+			else if (group == 6U)
+				set(foreign, "constructor", txt("pointer"));
+			else
+				set(foreign, "kind", txt("DeclRefExpr"));
 			indexed.rows[group].push_back(std::move(foreign));
 		}
 		for (unsigned i{}; i < 24U; ++i)
 		{
 			auto unrelated = indexed.rows[group].front();
-			set(unrelated,
-				group == 1U ? "snapshot" : "span",
-				txt(std::string(4096U, 's') + std::to_string(i)));
+			set(unrelated, ids[group], txt(std::string(4096U, 's') + std::to_string(i)));
 			indexed.rows[group].push_back(std::move(unrelated));
 		}
 	}
 	const auto out = take(q::project_source_features(indexed.queries(true)));
-	require(out.features.size() == 1U && out.features.front().source_state == state::complete,
-			"file and span ID buckets merged a foreign world");
+	require(complete(out), "supporting identity buckets merged a foreign world");
 	std::vector<std::string> expected;
 	for (const auto& evidence : out.evidence)
 		expected.push_back(evidence.relation_id + evidence.row.canonical_form());
-	std::ranges::reverse(indexed.rows[1]);
-	std::ranges::reverse(indexed.rows[2]);
+	for (const std::size_t group : {1U, 2U, 3U, 4U, 6U, 7U})
+		std::ranges::reverse(indexed.rows[group]);
 	q::projection_resource_usage baseline;
 	const auto reordered =
 		take(q::project_source_features(indexed.queries(true), {}, {}, baseline));
 	std::vector<std::string> actual;
 	for (const auto& evidence : reordered.evidence)
 		actual.push_back(evidence.relation_id + evidence.row.canonical_form());
-	require(actual == expected && reordered.features.front().source_state == state::complete,
-			"file and span alternative order changed complete original evidence");
+	require(actual == expected && complete(reordered),
+			"supporting alternative order changed complete original evidence");
 	for (const bool storage : {false, true})
 		for (const bool one_under : {false, true})
 		{
@@ -1002,10 +1019,10 @@ void file_span_lookup_controls()
 			const auto bounded =
 				q::project_source_features(indexed.queries(true), limits, {}, usage);
 			require(static_cast<bool>(bounded) == !one_under,
-					"file/span lookup exact and one-under quota");
+					"supporting lookup exact and one-under quota");
 			if (one_under)
 				require(!usage.operations && !usage.retained_bytes_bound,
-						"failed file/span lookup published success usage");
+						"failed supporting lookup published success usage");
 		}
 	std::size_t checkpoints{};
 	q::finite_population_limits limits;
@@ -1017,7 +1034,7 @@ void file_span_lookup_controls()
 	const auto stopped = q::project_source_features(indexed.queries(true), limits, {}, usage);
 	require(!stopped && stopped.error().code == "sdk.source-feature-cancelled" &&
 				checkpoints == 1000U && !usage.operations && !usage.retained_bytes_bound,
-			"long file/span ID hashing ignored cancellation or published failure usage");
+			"long supporting ID hashing ignored cancellation or published failure usage");
 }
 
 void occurrence_index_controls()
@@ -1124,7 +1141,7 @@ void occurrence_index_controls()
 int main()
 {
 	occurrence_index_controls();
-	file_span_lookup_controls();
+	supporting_lookup_controls();
 	canonical_size_controls();
 	whole_evidence_clone_controls();
 	first_present_comparison_controls();

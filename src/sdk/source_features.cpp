@@ -316,6 +316,14 @@ namespace cxxlens::sdk::query
 					return file_index.find(key);
 				if (group == 2U)
 					return span_index.find(key);
+				if (group == 3U)
+					return entity_index.find(key);
+				if (group == 4U)
+					return declaration_index.find(key);
+				if (group == 6U)
+					return type_index.find(key);
+				if (group == 7U)
+					return syntax_index.find(key);
 				const auto at = index[group].find(key);
 				return at == index[group].end() ? empty : at->second;
 			}
@@ -383,6 +391,14 @@ namespace cxxlens::sdk::query
 								file_index.add(key, row);
 							else if (group == 2U)
 								span_index.add(key, row);
+							else if (group == 3U)
+								entity_index.add(key, row);
+							else if (group == 4U)
+								declaration_index.add(key, row);
+							else if (group == 6U)
+								type_index.add(key, row);
+							else if (group == 7U)
+								syntax_index.add(key, row);
 							else
 							{
 								b.retain(sizeof(view_identity) + 256U +
@@ -437,6 +453,10 @@ namespace cxxlens::sdk::query
 						}
 					file_index.visit(order_alternatives);
 					span_index.visit(order_alternatives);
+					entity_index.visit(order_alternatives);
+					declaration_index.visit(order_alternatives);
+					type_index.visit(order_alternatives);
+					syntax_index.visit(order_alternatives);
 				}
 				// The map and string buffers have expired before their reservation is
 				// refunded; the observed scratch peak remains part of returned usage.
@@ -896,6 +916,8 @@ namespace cxxlens::sdk::query
 			}
 			std::map<view_identity, std::size_t, identity_less> feature_index{identity_less{&b}};
 			detail::projection_span_lookup<budget> file_index{b}, span_index{b};
+			detail::projection_span_lookup<budget> entity_index{b}, declaration_index{b},
+				type_index{b}, syntax_index{b};
 			void feature(const view_identity& world, const rows& originals)
 			{
 				b.charge(b.members, 1U, b.limits.maximum_members, "features");
