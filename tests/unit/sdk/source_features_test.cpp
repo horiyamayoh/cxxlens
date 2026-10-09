@@ -943,9 +943,10 @@ void supporting_lookup_controls()
 		if (out.features.size() != 1U)
 			return false;
 		const auto& feature = out.features.front();
-		return feature.source_state == state::complete && feature.context_state == state::complete &&
-			feature.entity_state == state::complete && feature.call_state == state::complete &&
-			feature.type_state == state::complete && feature.syntax_state == state::complete;
+		return feature.source_state == state::complete &&
+			feature.context_state == state::complete && feature.entity_state == state::complete &&
+			feature.call_state == state::complete && feature.type_state == state::complete &&
+			feature.syntax_state == state::complete;
 	};
 	for (const std::size_t group : {1U, 2U, 3U, 4U, 6U, 7U})
 	{
@@ -1174,18 +1175,17 @@ void derived_feature_lookup_controls()
 		for (const auto& population : output.populations)
 		{
 			require(population.features.size() == 1U &&
-					population.features.front() < output.features.size(),
+						population.features.front() < output.features.size(),
 					"derived feature lookup lost an exact population member");
 			const auto position = population.features.front();
 			const auto& feature = output.features[position];
 			require(feature.feature == "X" && feature.universe == population.universe &&
-					feature.variant == population.variant &&
-					feature.interpretation == population.interpretation,
+						feature.variant == population.variant &&
+						feature.interpretation == population.interpretation,
 					"derived numeric feature position crossed a same-ID world");
-			if (population.scope == "translation_unit" &&
-				population.universe == "world:foreign")
+			if (population.scope == "translation_unit" && population.universe == "world:foreign")
 				require(population.membership_state == state::complete &&
-						feature.source_binding_state == "unknown",
+							feature.source_binding_state == "unknown",
 						"same-ID unbound lookup borrowed a complete source from another world");
 			positions.push_back(position);
 		}
@@ -1201,8 +1201,8 @@ void derived_feature_lookup_controls()
 	require(full.evidence.size() == reordered.evidence.size(), "reordered world evidence lost");
 	for (std::size_t at{}; at < full.evidence.size(); ++at)
 		require(full.evidence[at].relation_id == reordered.evidence[at].relation_id &&
-				full.evidence[at].row.canonical_form() ==
-					reordered.evidence[at].row.canonical_form(),
+					full.evidence[at].row.canonical_form() ==
+						reordered.evidence[at].row.canonical_form(),
 				"private derived feature lookup reordered complete original evidence");
 }
 

@@ -1430,15 +1430,14 @@ namespace cxxlens::sdk::query
 					}
 					b.rows = 0;
 				}
-				projector work{
-					b,
-					borrowed,
-					{},
-					{},
-					{},
-					row_validation_reused,
-					projector::inventory_cache{b},
-					detail::projection_span_lookup<budget, std::size_t>{b}};
+				projector work{b,
+							   borrowed,
+							   {},
+							   {},
+							   {},
+							   row_validation_reused,
+							   projector::inventory_cache{b},
+							   detail::projection_span_lookup<budget, std::size_t>{b}};
 				auto output =
 					work.run(input.feature_inputs_complete && input.inventory_inputs_complete);
 				output.compile_units_complete = input.compile_units_complete;
