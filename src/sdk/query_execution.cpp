@@ -20,8 +20,8 @@
 
 #include "claim_internal.hpp"
 #include "json_internal.hpp"
-#include "query_projected_row_encoding_internal.hpp"
 #include "query_internal.hpp"
+#include "query_projected_row_encoding_internal.hpp"
 #include "query_result_internal.hpp"
 
 namespace cxxlens::sdk::query
