@@ -264,20 +264,30 @@ namespace cxxlens::sdk::query
 			struct scope_less
 			{
 				using is_transparent = void;
+				budget* meter;
 				template <class L, class R>
 				bool operator()(const L& l, const R& r) const
 				{
 					for (std::size_t i = 0; i < 5U; ++i)
 					{
-						if (l[i] < r[i])
-							return true;
-						if (r[i] < l[i])
-							return false;
+						meter->work();
+						const auto common = std::min(l[i].size(), r[i].size());
+						for (std::size_t at{}; at < common; ++at)
+						{
+							meter->work();
+							const auto left = static_cast<unsigned char>(l[i][at]);
+							const auto right = static_cast<unsigned char>(r[i][at]);
+							if (left != right)
+								return left < right;
+						}
+						if (l[i].size() != r[i].size())
+							return l[i].size() < r[i].size();
 					}
 					return false;
 				}
 			};
-			std::map<scope_identity, exceptional_exit_population, scope_less> scopes;
+			std::map<scope_identity, exceptional_exit_population, scope_less> scopes{
+				scope_less{&b}};
 			void canonical(refs& values)
 			{
 				b.work(values.size() *
@@ -285,15 +295,19 @@ namespace cxxlens::sdk::query
 				std::ranges::sort(values);
 				values.erase(std::ranges::unique(values).begin(), values.end());
 			}
-			void compare_cost(std::initializer_list<std::string_view> values,
-							  std::size_t multiplier = 1U)
+			bool equal(std::string_view left, std::string_view right)
 			{
-				for (auto value : values)
+				b.work();
+				if (left.size() != right.size())
+					return false;
+				for (std::size_t at{}; at < left.size(); ++at)
 				{
-					if (value.size() + 1U > b.limits.maximum_operations / multiplier)
-						fail("operations", "limit-exceeded", "sdk.exceptional-exit-budget");
-					b.work((value.size() + 1U) * multiplier);
+					b.work();
+					if (static_cast<unsigned char>(left[at]) !=
+						static_cast<unsigned char>(right[at]))
+						return false;
 				}
+				return true;
 			}
 			std::string copy(std::string_view s)
 			{
@@ -451,8 +465,7 @@ namespace cxxlens::sdk::query
 			{
 				const std::array<std::string_view, 5> view{
 					detail, unit, r.presence.universe, variant, r.interpretation};
-				compare_cost({detail, unit, r.presence.universe, variant, r.interpretation},
-							 static_cast<std::size_t>(std::bit_width(scopes.size())) + 1U);
+				b.work();
 				auto at = scopes.find(view);
 				if (at != scopes.end())
 					return at->second;
@@ -610,8 +623,8 @@ namespace cxxlens::sdk::query
 				for (const auto& [key, original] : maps[7U])
 				{
 					b.work();
-					compare_cost({key[1], key[2], key[3], p.universe, p.variant, p.interpretation});
-					if (key[1] != p.universe || key[2] != p.variant || key[3] != p.interpretation)
+					if (!equal(key[1], p.universe) || !equal(key[2], p.variant) ||
+						!equal(key[3], p.interpretation))
 						continue;
 					for (auto ref : original)
 					{
@@ -730,10 +743,9 @@ namespace cxxlens::sdk::query
 						for (const auto& [scope_key, p] : scopes)
 						{
 							b.work();
-							compare_cost(
-								{scope_key[2], scope_key[3], scope_key[4], key[1], key[2], key[3]});
-							if (scope_key[2] == key[1] && scope_key[3] == key[2] &&
-								scope_key[4] == key[3] && p.compile_unit == text(r, "compile_unit"))
+							if (equal(scope_key[2], key[1]) && equal(scope_key[3], key[2]) &&
+								equal(scope_key[4], key[3]) &&
+								p.compile_unit == text(r, "compile_unit"))
 							{
 								const auto& details = find(4U, p.detail, p);
 								for (auto d : details)
@@ -904,8 +916,8 @@ namespace cxxlens::sdk::query
 				for (const auto& [key, original] : maps[7U])
 				{
 					b.work();
-					compare_cost({key[1], key[2], key[3], p.universe, p.variant, p.interpretation});
-					if (key[1] != p.universe || key[2] != p.variant || key[3] != p.interpretation)
+					if (!equal(key[1], p.universe) || !equal(key[2], p.variant) ||
+						!equal(key[3], p.interpretation))
 						continue;
 					if (std::ranges::any_of(original,
 											[&](auto ref)

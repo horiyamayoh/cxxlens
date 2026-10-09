@@ -554,6 +554,74 @@ namespace
 						permuted.evidence[i].row.canonical_form(),
 					"long world ordering changed canonical original evidence");
 	}
+	void scope_world_prefix_controls()
+	{
+		const std::array base_world{std::string(96U, 'u') + "日本語:a",
+									std::string(96U, 'v') + ":a",
+									std::string(96U, 'i') + ":a"};
+		for (std::size_t axis{}; axis < base_world.size(); ++axis)
+		{
+			auto other_world = base_world;
+			other_world[axis].back() = 'b';
+			const auto rebind = [](fixture& value, const auto& world)
+			{
+				for (auto& rows : value.rows)
+					for (auto& row : rows)
+					{
+						row.presence = {world[0], {world[1]}};
+						row.interpretation = world[2];
+						for (auto& edge : row.contributor_edges)
+						{
+							edge.condition = row.presence;
+							edge.interpretation = row.interpretation;
+						}
+					}
+			};
+			fixture original, foreign;
+			rebind(original, base_world);
+			rebind(foreign, other_world);
+			for (std::size_t group{}; group < original.rows.size(); ++group)
+				original.rows[group].insert(original.rows[group].end(),
+											foreign.rows[group].begin(),
+											foreign.rows[group].end());
+			const auto input = original.queries();
+			q::projection_resource_usage usage;
+			const auto projected = take(q::project_exceptional_exits(input, {}, {}, usage));
+			require(projected.populations.size() == 2U,
+					"late world axis merged same-ID physical scopes");
+			for (std::size_t i{}; i < projected.populations.size(); ++i)
+			{
+				const auto& scope = projected.populations[i];
+				const auto& expected = i ? other_world : base_world;
+				require(scope.universe == expected[0] && scope.variant == expected[1] &&
+							scope.interpretation == expected[2] && scope.detail == "detail:a" &&
+							scope.compile_unit == "unit:a" && scope.body == "body:a" &&
+							scope.definition_source == "span:scope" &&
+							scope.state == state::complete && scope.occurrence_count == 3U &&
+							scope.variants.size() == 1U &&
+							scope.variants.front().occurrences.size() == 2U,
+						"matched ID skipped full world/body/source closure");
+			}
+			require(projected.source_queries && projected.source_queries->scans.size() == 8U,
+					"world prefix comparison lost original query side channels");
+			for (std::size_t i{}; i < input.scans.size(); ++i)
+				require(projected.source_queries->scans[i].result.canonical_form() ==
+							input.scans[i].result.canonical_form(),
+						"world prefix comparison changed complete raw originals");
+			set(original.rows[5].back(), "function", detached_cell::utf8("function:foreign"));
+			const auto conflict = take(q::project_exceptional_exits(original.input()));
+			const auto found = std::ranges::find_if(conflict.populations,
+													[&](const auto& scope)
+													{
+														return scope.detail == "detail:a" &&
+															scope.universe == other_world[0] &&
+															scope.variant == other_world[1] &&
+															scope.interpretation == other_world[2];
+													});
+			require(found != conflict.populations.end() && found->scope_state != state::complete,
+					"late matched-world foreign body was treated as closed");
+		}
+	}
 	void self_reference_agreement_controls()
 	{
 		for (unsigned control{}; control < 8U; ++control)
@@ -664,6 +732,7 @@ namespace
 } // namespace
 int main()
 {
+	scope_world_prefix_controls();
 	self_reference_agreement_controls();
 	typed_copy_failure_controls();
 	fixture copied;
