@@ -554,9 +554,117 @@ namespace
 						permuted.evidence[i].row.canonical_form(),
 					"long world ordering changed canonical original evidence");
 	}
+	void self_reference_agreement_controls()
+	{
+		for (unsigned control{}; control < 8U; ++control)
+		{
+			fixture original;
+			auto& row = original.rows[7][1];
+			const auto optional = row.values.at("output.original_expression_ordinal").type;
+			if (control == 1U)
+				set(row,
+					"original_expression_ordinal",
+					detached_cell::unsigned_integer(std::numeric_limits<std::uint64_t>::max()));
+			if (control >= 2U && control <= 4U)
+				set(row,
+					"original_expression_ordinal",
+					detached_cell::unknown(optional, "not-observed-日本語"));
+			if (control == 5U)
+				set(row, "does_not_return", detached_cell::boolean(true));
+			if (control >= 6U)
+				set(row, "target_usr", binary(std::string_view{"u\0\xff", 3U}));
+			original.rows[7].push_back(row);
+			auto& distinct = original.rows[7].back();
+			if (control == 3U)
+				set(distinct,
+					"original_expression_ordinal",
+					detached_cell::unknown(optional, "different-reason"));
+			if (control == 4U)
+				set(distinct, "original_expression_ordinal", detached_cell::absent(optional));
+			if (control == 5U)
+				set(distinct, "does_not_return", detached_cell::boolean(false));
+			if (control == 7U)
+				set(distinct, "target_usr", binary(std::string_view{"u\0\xfe", 3U}));
+			const auto result = take(q::project_exceptional_exits(original.input()));
+			const auto& scope = population(result);
+			require(scope.enumeration_state == state::complete,
+					"distinct duplicate changed original membership");
+			const auto& occurrences = scope.variants[0U].occurrences;
+			const auto found =
+				std::ranges::find(occurrences, "exit:throw", &q::observed_exceptional_exit::exit);
+			require(found != occurrences.end(), "duplicate occurrence disappeared");
+			const auto expected =
+				control >= 3U && control <= 5U ? state::conflicting : state::complete;
+			require(found->state == expected,
+					"distinct state/value/unknown-reason disagreement was skipped");
+			if (control == 1U)
+				require(found->original_expression_ordinal ==
+							std::numeric_limits<std::uint64_t>::max(),
+						"equal extreme optional ordinal was changed");
+			if (control == 7U)
+				require(found->target_state == state::conflicting,
+						"distinct opaque byte disagreement was skipped");
+			for (auto& rows : original.rows)
+				std::ranges::reverse(rows);
+			const auto permuted = take(q::project_exceptional_exits(original.input()));
+			require(result.evidence.size() == permuted.evidence.size(),
+					"agreement changed reordered original evidence count");
+			for (std::size_t i{}; i < result.evidence.size(); ++i)
+				require(result.evidence[i].row.canonical_form() ==
+							permuted.evidence[i].row.canonical_form(),
+						"agreement changed reordered full original metadata");
+		}
+		fixture measured;
+		const auto optional =
+			measured.rows[7][1].values.at("output.original_expression_ordinal").type;
+		set(measured.rows[7][1],
+			"original_expression_ordinal",
+			detached_cell::unknown(optional, std::string(512U, 'r')));
+		measured.rows[7].push_back(measured.rows[7][1]);
+		std::size_t visits{};
+		q::finite_population_limits cap;
+		cap.cancelled = [&]
+		{
+			++visits;
+			return false;
+		};
+		q::projection_resource_usage used, repeated;
+		require(bool(q::project_exceptional_exits(measured.input(), cap, {}, used)),
+				"equal unknown optional duplicate was not admitted");
+		cap.cancelled = {};
+		cap.maximum_operations = used.operations;
+		cap.maximum_retained_bytes = used.retained_bytes_bound;
+		require(bool(q::project_exceptional_exits(measured.input(), cap, {}, repeated)) &&
+					repeated.operations == used.operations &&
+					repeated.retained_bytes_bound == used.retained_bytes_bound,
+				"agreement exact work/storage frontier changed");
+		--cap.maximum_operations;
+		auto failed = q::project_exceptional_exits(measured.input(), cap, {}, repeated);
+		require(!failed && failed.error().code == "sdk.exceptional-exit-budget" &&
+					!repeated.operations && !repeated.retained_bytes_bound,
+				"agreement one-under work published a partial result");
+		std::size_t prefix{};
+		std::stop_source stopped;
+		cap = {};
+		cap.cancelled = [&]
+		{
+			if (++prefix == visits / 2U)
+				stopped.request_stop();
+			return false;
+		};
+		failed = q::project_exceptional_exits(measured.input(), cap, stopped.get_token(), repeated);
+		require(!failed && failed.error().code == "sdk.exceptional-exit-cancelled" &&
+					!repeated.operations && !repeated.retained_bytes_bound,
+				"agreement actual traversal ignored cancellation");
+		fixture malformed;
+		malformed.rows[7][1].values.at("output.ordinal").state = static_cast<cell_state>(99);
+		require(!q::project_exceptional_exits(malformed.input()),
+				"self reference bypassed original cell validation");
+	}
 } // namespace
 int main()
 {
+	self_reference_agreement_controls();
 	typed_copy_failure_controls();
 	fixture copied;
 	query_copy_controls::projection(

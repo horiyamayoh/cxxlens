@@ -2,6 +2,7 @@
 #include <array>
 #include <bit>
 #include <map>
+#include <memory>
 #include <set>
 #include <stdexcept>
 #include <tuple>
@@ -782,6 +783,84 @@ namespace cxxlens::sdk::query
 				}
 			};
 			inventory_cache declaration_members{b};
+			struct cached_closure
+			{
+				state status;
+				std::unique_ptr<std::size_t[]> evidence;
+				std::size_t count;
+			};
+			struct closure_cache
+			{
+				using key = std::pair<const rows*, std::string>;
+				using index = std::vector<std::pair<key, cached_closure>>;
+				budget& meter;
+				std::size_t retained{};
+				index values;
+				explicit closure_cache(budget& owner) : meter(owner) {}
+				~closure_cache()
+				{
+					clear();
+				}
+				void keep(std::size_t amount)
+				{
+					meter.retain(amount);
+					retained += amount;
+					meter.temporary_peak = std::max(meter.temporary_peak, meter.retained);
+				}
+				const cached_closure* find(const rows* originals, std::string_view compile_unit)
+				{
+					// Cache insertion follows deterministic feature traversal. Equality uses
+					// stable original-owner identity, never pointer address ordering.
+					for (const auto& [cached_key, cached] : values)
+					{
+						meter.work();
+						if (cached_key.first == originals &&
+							compare_identity_text(meter, cached_key.second, compile_unit) == 0)
+							return &cached;
+					}
+					return nullptr;
+				}
+				void append(key cache_key, cached_closure cached)
+				{
+					if (values.size() == values.capacity())
+					{
+						const auto old = values.capacity();
+						if (old >
+							meter.limits.maximum_retained_bytes / (4U * sizeof(index::value_type)))
+							fail("closure", "limit-exceeded", "sdk.source-feature-budget");
+						const auto next = old ? old * 2U : 1U;
+						keep(2U * next * sizeof(index::value_type));
+						meter.work(
+							values.size() * (sizeof(index::value_type) / sizeof(void*) + 1U) + 1U);
+						values.reserve(next);
+						meter.retained -= 2U * old * sizeof(index::value_type);
+						retained -= 2U * old * sizeof(index::value_type);
+					}
+					meter.work(sizeof(index::value_type) / sizeof(void*) + 1U);
+					values.emplace_back(std::move(cache_key), std::move(cached));
+				}
+				void clear()
+				{
+					// Owned keys and fixed evidence arrays expire before their reservation.
+					index{}.swap(values);
+					meter.retained -= retained;
+					retained = 0U;
+				}
+			};
+			closure_cache declaration_closures{b};
+			struct closure_frame
+			{
+				budget& meter;
+				explicit closure_frame(budget& owner) : meter(owner)
+				{
+					meter.retain(256U);
+					meter.temporary_peak = std::max(meter.temporary_peak, meter.retained);
+				}
+				~closure_frame()
+				{
+					meter.retained -= 256U;
+				}
+			};
 			template <class Callback>
 			decoded_set members(const annotated_row& r,
 								std::string_view field,
@@ -844,51 +923,96 @@ namespace cxxlens::sdk::query
 				const auto& originals = find(4U, id, world);
 				if (originals.empty())
 					return state::unknown;
-				bind(evidence, 4U, originals);
-				if (!agree(originals, {"declaration", "entity", "source", "kind", "is_implicit"}))
-					return state::conflicting;
-				bool admitted{}, contradiction{};
-				for (const auto& [key, inventories] : index[5U])
+				closure_frame frame{b};
+				// The stable index vector identifies the exact four-axis original world;
+				// compile-unit attribution is a separate exact, owned cache-key axis.
+				if (const auto* found = declaration_closures.find(&originals, compile_unit))
 				{
-					b.work();
-					if (key[1] != world[1] || key[2] != world[2] || key[3] != world[3])
-						continue;
-					for (const auto* inventory : inventories)
+					for (std::size_t i{}; i < found->count; ++i)
 					{
 						b.work();
-						if (text(*inventory, "compile_unit") != compile_unit)
+						b.charge(b.references,
+								 1U,
+								 b.limits.maximum_evidence_references,
+								 "evidence-references");
+						b.retain(2U * sizeof(std::size_t));
+						evidence.push_back(found->evidence[i]);
+					}
+					return found->status;
+				}
+				const auto begin = evidence.size();
+				const auto resolve = [&]() -> state
+				{
+					bind(evidence, 4U, originals);
+					if (!agree(originals,
+							   {"declaration", "entity", "source", "kind", "is_implicit"}))
+						return state::conflicting;
+					bool admitted{}, contradiction{};
+					for (const auto& [key, inventories] : index[5U])
+					{
+						b.work();
+						if (key[1] != world[1] || key[2] != world[2] || key[3] != world[3])
 							continue;
-						for (const bool physical : {false, true})
+						for (const auto* inventory : inventories)
 						{
-							const auto profile = text(
-								*inventory, physical ? "physical_definition_profile" : "profile");
-							if (profile !=
-								(physical ? "clang22-original-physical-definitions/1"
-										  : "clang22-explicit-admitted-named-declarations/1"))
+							b.work();
+							if (text(*inventory, "compile_unit") != compile_unit)
 								continue;
-							const auto& cached = declared_members(*inventory, physical);
-							const auto& decoded = cached.decoded;
-							if (!cached.members.contains(id))
-								continue;
-							bind(evidence, 5U, rows{inventory});
-							const auto count = number(*inventory,
-													  physical ? "physical_definition_count"
-															   : "declaration_count");
-							const auto native_state =
-								text(*inventory,
-									 physical ? "physical_definition_state" : "enumeration_state");
-							if (decoded.duplicate || !count || *count < decoded.count ||
-								(native_state == "complete" && *count != decoded.count) ||
-								native_state == "conflicting")
-								contradiction = true;
-							else if (native_state == "complete" || native_state == "partial")
-								admitted = true;
+							for (const bool physical : {false, true})
+							{
+								const auto profile =
+									text(*inventory,
+										 physical ? "physical_definition_profile" : "profile");
+								if (profile !=
+									(physical ? "clang22-original-physical-definitions/1"
+											  : "clang22-explicit-admitted-named-declarations/1"))
+									continue;
+								const auto& cached = declared_members(*inventory, physical);
+								const auto& decoded = cached.decoded;
+								if (!cached.members.contains(id))
+									continue;
+								bind(evidence, 5U, rows{inventory});
+								const auto count = number(*inventory,
+														  physical ? "physical_definition_count"
+																   : "declaration_count");
+								const auto native_state = text(
+									*inventory,
+									physical ? "physical_definition_state" : "enumeration_state");
+								if (decoded.duplicate || !count || *count < decoded.count ||
+									(native_state == "complete" && *count != decoded.count) ||
+									native_state == "conflicting")
+									contradiction = true;
+								else if (native_state == "complete" || native_state == "partial")
+									admitted = true;
+							}
 						}
 					}
+					if (contradiction)
+						return state::conflicting;
+					return admitted ? state::complete : state::partial;
+				};
+				const auto status = resolve();
+				// A full memo uses the unchanged resolver above without eviction or
+				// changing any original closure or evidence-reference requirement.
+				if (declaration_closures.values.size() >= 128U)
+					return status;
+				const auto count = evidence.size() - begin;
+				if (count > b.limits.maximum_retained_bytes / sizeof(std::size_t))
+					fail("closure", "limit-exceeded", "sdk.source-feature-budget");
+				declaration_closures.keep(compile_unit.size() + 1U);
+				declaration_closures.keep(compile_unit.size() + 1U);
+				declaration_closures.keep(count * sizeof(std::size_t));
+				b.work(compile_unit.size() + 1U);
+				closure_cache::key key{&originals, std::string{compile_unit}};
+				cached_closure cached{
+					status, std::make_unique_for_overwrite<std::size_t[]>(count), count};
+				for (std::size_t i{}; i < count; ++i)
+				{
+					b.work();
+					cached.evidence[i] = evidence[begin + i];
 				}
-				if (contradiction)
-					return state::conflicting;
-				return admitted ? state::complete : state::partial;
+				declaration_closures.append(std::move(key), std::move(cached));
+				return status;
 			}
 			void environment(const view_identity& world, const rows& originals)
 			{
@@ -1249,6 +1373,7 @@ namespace cxxlens::sdk::query
 				// Declaration/context attribution is finished. Retire its per-call
 				// original-field decode cache before the later population phase.
 				declaration_members.clear();
+				declaration_closures.clear();
 				using occurrence_key = std::tuple<std::string_view,
 												  std::string_view,
 												  std::string_view,
@@ -1437,6 +1562,7 @@ namespace cxxlens::sdk::query
 							   {},
 							   row_validation_reused,
 							   projector::inventory_cache{b},
+							   projector::closure_cache{b},
 							   detail::projection_span_lookup<budget, std::size_t>{b}};
 				auto output =
 					work.run(input.feature_inputs_complete && input.inventory_inputs_complete);

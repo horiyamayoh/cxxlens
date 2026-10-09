@@ -360,6 +360,10 @@ namespace cxxlens::sdk::query
 				if (original.empty())
 					return false;
 				for (const auto ref : original)
+				{
+					b.work();
+					if (ref == original.front())
+						continue;
 					for (const auto name : fields)
 					{
 						const auto* x = cell(row(original.front()), name);
@@ -374,6 +378,7 @@ namespace cxxlens::sdk::query
 								 x->value != y->value || x->unknown_reason != y->unknown_reason)
 							return false;
 					}
+				}
 				return true;
 			}
 			std::vector<std::string> strings(const annotated_row& r, std::string_view name)

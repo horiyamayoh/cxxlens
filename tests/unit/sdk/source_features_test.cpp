@@ -998,9 +998,11 @@ void supporting_lookup_controls()
 		expected.push_back(evidence.relation_id + evidence.row.canonical_form());
 	for (const std::size_t group : {1U, 2U, 3U, 4U, 6U, 7U})
 		std::ranges::reverse(indexed.rows[group]);
+	// Exact work bounds apply to this immutable original owner, including the
+	// metered pointer-key alternative ordering comparisons.
+	const auto reordered_input = indexed.queries(true);
 	q::projection_resource_usage baseline;
-	const auto reordered =
-		take(q::project_source_features(indexed.queries(true), {}, {}, baseline));
+	const auto reordered = take(q::project_source_features(reordered_input, {}, {}, baseline));
 	std::vector<std::string> actual;
 	for (const auto& evidence : reordered.evidence)
 		actual.push_back(evidence.relation_id + evidence.row.canonical_form());
@@ -1017,8 +1019,7 @@ void supporting_lookup_controls()
 				limits.maximum_operations =
 					baseline.operations - static_cast<std::size_t>(one_under);
 			q::projection_resource_usage usage{1U, 1U};
-			const auto bounded =
-				q::project_source_features(indexed.queries(true), limits, {}, usage);
+			const auto bounded = q::project_source_features(reordered_input, limits, {}, usage);
 			require(static_cast<bool>(bounded) == !one_under,
 					"supporting lookup exact and one-under quota");
 			if (one_under)
@@ -1032,7 +1033,7 @@ void supporting_lookup_controls()
 		return ++checkpoints == 1000U;
 	};
 	q::projection_resource_usage usage{1U, 1U};
-	const auto stopped = q::project_source_features(indexed.queries(true), limits, {}, usage);
+	const auto stopped = q::project_source_features(reordered_input, limits, {}, usage);
 	require(!stopped && stopped.error().code == "sdk.source-feature-cancelled" &&
 				checkpoints == 1000U && !usage.operations && !usage.retained_bytes_bound,
 			"long supporting ID hashing ignored cancellation or published failure usage");
@@ -1206,8 +1207,203 @@ void derived_feature_lookup_controls()
 				"private derived feature lookup reordered complete original evidence");
 }
 
+void declaration_closure_reuse_controls()
+{
+	auto originals = many_members();
+	const auto input = originals.queries(true);
+	q::projection_resource_usage measured;
+	const auto full = take(q::project_source_features(input, {}, {}, measured));
+	require(full.features.size() == 96U &&
+				std::ranges::all_of(full.features,
+									[](const auto& feature)
+									{
+										return feature.context_state == state::complete;
+									}),
+			"repeated declaration contexts lost exact inventory closure");
+	std::size_t references{};
+	for (const auto& environment : full.environments)
+		references += environment.evidence.size();
+	for (const auto& feature : full.features)
+		references += feature.evidence.size();
+	for (const auto& population : full.populations)
+		references += population.evidence.size();
+	q::finite_population_limits exact;
+	exact.maximum_operations = measured.operations;
+	exact.maximum_retained_bytes = measured.retained_bytes_bound;
+	exact.maximum_evidence_references = references;
+	q::projection_resource_usage repeated;
+	require(bool(q::project_source_features(input, exact, {}, repeated)) &&
+				repeated.operations == measured.operations &&
+				repeated.retained_bytes_bound == measured.retained_bytes_bound,
+			"repeated declaration closure rejected exact work/storage/reference bounds");
+	--exact.maximum_evidence_references;
+	const auto missing_reference = q::project_source_features(input, exact, {}, repeated);
+	require(!missing_reference && missing_reference.error().code == "sdk.source-feature-budget" &&
+				missing_reference.error().field == "evidence-references" && !repeated.operations &&
+				!repeated.retained_bytes_bound,
+			"cached declaration evidence bypassed the per-output reference bound");
+	exact.maximum_evidence_references = references;
+	--exact.maximum_operations;
+	require(!q::project_source_features(input, exact, {}, repeated) && !repeated.operations &&
+				!repeated.retained_bytes_bound,
+			"declaration closure reuse bypassed one-under actual work");
+	exact.maximum_operations = measured.operations;
+	--exact.maximum_retained_bytes;
+	require(!q::project_source_features(input, exact, {}, repeated) && !repeated.operations &&
+				!repeated.retained_bytes_bound,
+			"declaration closure reuse bypassed one-under live storage");
+
+	for (const std::string_view axis : {"compile_unit", "universe", "variant", "interpretation"})
+	{
+		auto changed = originals;
+		const std::string foreign_unit = "U:foreign:" + std::string(128U, 'u');
+		if (axis == "compile_unit")
+		{
+			auto unit = changed.rows[0].front();
+			set(unit, "compile_unit", txt(foreign_unit));
+			changed.rows[0].push_back(std::move(unit));
+		}
+		auto declaration = changed.rows[4].front();
+		if (axis == "universe")
+			declaration.presence.universe = "foreign:universe";
+		if (axis == "variant")
+			declaration.presence.fragments = {"foreign:variant"};
+		if (axis == "interpretation")
+			declaration.interpretation = "foreign:interpretation";
+		declaration.contributor_edges.front().condition = declaration.presence;
+		declaration.contributor_edges.front().interpretation = declaration.interpretation;
+		if (axis != "compile_unit")
+			changed.rows[4].push_back(declaration);
+		for (std::size_t at{}; at < changed.rows[8].size(); ++at)
+		{
+			if (at % 2U == 0U)
+				continue;
+			auto& feature = changed.rows[8][at];
+			if (axis == "compile_unit")
+				set(feature, "compile_unit", txt(foreign_unit));
+			else
+			{
+				feature.presence = declaration.presence;
+				feature.interpretation = declaration.interpretation;
+				feature.contributor_edges.front().condition = feature.presence;
+				feature.contributor_edges.front().interpretation = feature.interpretation;
+			}
+		}
+		const auto out = take(q::project_source_features(changed.queries(true)));
+		require(out.features.size() == 96U, "closure reuse erased a foreign original context");
+		for (const auto& feature : out.features)
+			require(feature.context_state ==
+						(feature.ordinal % 2U ? state::partial : state::complete),
+					"declaration closure reuse crossed compile-unit or exact-world axes");
+	}
+
+	auto contradictory = originals.rows[4].front();
+	set(contradictory, "kind", txt("ContraryKind"));
+	originals.rows[4].push_back(std::move(contradictory));
+	const auto conflict = take(q::project_source_features(originals.queries(true)));
+	require(std::ranges::all_of(conflict.features,
+								[](const auto& feature)
+								{
+									return feature.context_state == state::conflicting;
+								}),
+			"completed closure persisted across projection of contradictory original rows");
+
+	// Repeated original declarations and contexts fill the small memo. The
+	// extra exact key must use the same complete cold resolver when it is full.
+	fixture overflow;
+	const auto native_declaration = overflow.rows[4].front();
+	const auto native_feature = overflow.rows[8].front();
+	overflow.rows[4].clear();
+	overflow.rows[8].clear();
+	std::vector<std::string> declaration_ids, feature_ids;
+	for (std::size_t at{}; at < 129U; ++at)
+	{
+		const auto id = "declaration:closure:" + std::to_string(at);
+		auto declaration = native_declaration;
+		set(declaration, "declaration", txt(id));
+		overflow.rows[4].push_back(std::move(declaration));
+		declaration_ids.push_back(id);
+		for (std::size_t repeat{}; repeat < 2U; ++repeat)
+		{
+			const auto ordinal = at * 2U + repeat;
+			const auto feature_id = "feature:closure:" + std::to_string(ordinal);
+			auto feature = native_feature;
+			set(feature, "feature", txt(feature_id));
+			set(feature, "ordinal", num(ordinal));
+			set(feature, "original_node_ordinal", num(ordinal));
+			set(feature, "declaration", txt(id));
+			set(feature, "declaration_binding_state", txt("complete"));
+			set(feature, "context_declaration", txt(id));
+			overflow.rows[8].push_back(std::move(feature));
+			feature_ids.push_back(feature_id);
+		}
+	}
+	set(overflow.rows[5].front(), "declarations", symbol_values(declaration_ids));
+	set(overflow.rows[5].front(), "declaration_count", num(declaration_ids.size()));
+	for (auto& inventory : overflow.rows[9])
+	{
+		set(inventory, "feature_ids", symbol_values(feature_ids));
+		set(inventory, "feature_count", num(feature_ids.size()));
+	}
+	const auto overflow_input = overflow.queries(true);
+	q::projection_resource_usage overflow_usage;
+	const auto complete_overflow =
+		take(q::project_source_features(overflow_input, {}, {}, overflow_usage));
+	require(complete_overflow.features.size() == 258U &&
+				std::ranges::all_of(complete_overflow.features,
+									[](const auto& feature)
+									{
+										return feature.declaration_state == state::complete &&
+											feature.context_state == state::complete &&
+											feature.source_state == state::complete &&
+											feature.entity_state == state::complete &&
+											feature.call_state == state::complete &&
+											feature.type_state == state::complete &&
+											feature.syntax_state == state::complete;
+									}),
+			"full closure memo changed cold declaration/context resolution or other original axes");
+	q::finite_population_limits overflow_exact;
+	overflow_exact.maximum_operations = overflow_usage.operations;
+	overflow_exact.maximum_retained_bytes = overflow_usage.retained_bytes_bound;
+	require(bool(q::project_source_features(overflow_input, overflow_exact, {}, repeated)) &&
+				repeated.operations == overflow_usage.operations &&
+				repeated.retained_bytes_bound == overflow_usage.retained_bytes_bound,
+			"full closure memo rejected exact cold-fallback work/storage");
+	--overflow_exact.maximum_operations;
+	require(!q::project_source_features(overflow_input, overflow_exact, {}, repeated) &&
+				!repeated.operations && !repeated.retained_bytes_bound,
+			"cold closure fallback ignored one-under work or exposed failed usage");
+	overflow_exact.maximum_operations = overflow_usage.operations;
+	--overflow_exact.maximum_retained_bytes;
+	require(!q::project_source_features(overflow_input, overflow_exact, {}, repeated),
+			"cold closure fallback ignored one-under storage");
+
+	std::size_t calls{};
+	q::finite_population_limits observed;
+	observed.cancelled = [&]
+	{
+		++calls;
+		return false;
+	};
+	require(bool(q::project_source_features(input, observed)), "closure callback census failed");
+	for (const auto divisor : {2U, 3U})
+	{
+		std::size_t visited{};
+		q::finite_population_limits interrupted;
+		interrupted.cancelled = [&]
+		{
+			return ++visited >= calls / divisor;
+		};
+		const auto stopped = q::project_source_features(input, interrupted, {}, repeated);
+		require(!stopped && stopped.error().code == "sdk.source-feature-cancelled" &&
+					!repeated.operations && !repeated.retained_bytes_bound,
+				"closure reuse ignored current cancellation or exposed failed usage");
+	}
+}
+
 int main()
 {
+	declaration_closure_reuse_controls();
 	derived_feature_lookup_controls();
 	occurrence_index_controls();
 	supporting_lookup_controls();

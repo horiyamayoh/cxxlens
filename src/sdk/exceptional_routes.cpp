@@ -399,6 +399,10 @@ namespace cxxlens::sdk::query
 						const auto id = text(*row, identifiers[group]);
 						if (id.empty())
 							fail(relations[group], "identity-missing");
+						// Syntax rows remain fully validated and in source_queries. Routes
+						// never read this group, so it needs no lookup or alternative owners.
+						if (group == 6U)
+							continue;
 						for (const auto& variant : row->presence.fragments)
 						{
 							view_identity key{
