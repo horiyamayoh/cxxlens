@@ -287,6 +287,14 @@ namespace cxxlens::sdk::query
 			return left.size() < right.size() ? -1 : (left.size() > right.size() ? 1 : 0);
 		}
 
+		struct source_world_token
+		{
+			std::size_t slot{};
+		};
+		struct source_world_metadata
+		{
+			source_world_token world;
+		};
 		struct projector
 		{
 			budget& b;
@@ -297,6 +305,86 @@ namespace cxxlens::sdk::query
 			bool row_validation_reused{};
 			const size_groups& wire_sizes;
 			const evidence_groups& evidence_owners;
+			struct world_context
+			{
+				const view_identity* original;
+				source_world_token token;
+				std::string_view operator[](std::size_t part) const
+				{
+					return (*original)[part];
+				}
+			};
+			template <class Payload = const annotated_row*>
+			using world_lookup =
+				detail::projection_span_lookup<budget, Payload, source_world_metadata>;
+			detail::projection_span_lookup<budget, std::size_t> world_tokens{b};
+			std::size_t next_world_slot{1U};
+			source_world_token admit_world(const view_identity& original)
+			{
+				// Buckets narrow candidates by Variant. Every token is admitted by
+				// complete byte equality of Variant, Universe, and Interpretation.
+				// Views borrow validated originals only for this projector's lifetime.
+				b.work(sizeof(view_identity) / sizeof(void*) + 1U);
+				const view_identity key{original[2], original[1], original[3], {}};
+				if (const auto& found = world_tokens.find(key); !found.empty())
+				{
+					b.work(2U);
+					return {found.front()};
+				}
+				b.work(3U);
+				if (next_world_slot == std::numeric_limits<std::size_t>::max())
+					fail("operations", "limit-exceeded", "sdk.source-feature-budget");
+				const auto slot = next_world_slot++;
+				world_tokens.add(key, slot);
+				b.work(2U);
+				return {slot};
+			}
+			world_context admit_context(const view_identity& original)
+			{
+				const auto token = admit_world(original);
+				b.work(5U);
+				return {&original, token};
+			}
+			bool exact_id(std::string_view left, std::string_view right)
+			{
+				b.work();
+				if (left.size() != right.size())
+					return false;
+				for (std::size_t at{}; at < left.size(); ++at)
+				{
+					b.work(2U);
+					if (static_cast<unsigned char>(left[at]) !=
+						static_cast<unsigned char>(right[at]))
+						return false;
+				}
+				return true;
+			}
+			template <class Payload>
+			const std::vector<Payload>& find_world(world_lookup<Payload>& lookup,
+												   const view_identity& key,
+												   const world_context& world)
+			{
+				static const std::vector<Payload> empty;
+				const auto bucket = lookup.buckets.find(lookup.fingerprint(key[0]));
+				if (bucket == lookup.buckets.end())
+					return empty;
+				for (auto& candidate : bucket->second)
+				{
+					if (!exact_id(candidate.identity[0], key[0]))
+						continue;
+					b.work();
+					if (!candidate.metadata.world.slot)
+					{
+						const auto token = admit_world(candidate.identity);
+						b.work(2U);
+						candidate.metadata.world = token;
+					}
+					b.work(2U);
+					if (candidate.metadata.world.slot == world.token.slot)
+						return candidate.originals;
+				}
+				return empty;
+			}
 			std::string copy(std::string_view value)
 			{
 				b.work(value.size() + 1U);
@@ -313,25 +401,27 @@ namespace cxxlens::sdk::query
 					b.work((value.size() + 1U) * factor);
 				}
 			}
-			const rows& find(std::size_t group, std::string_view id, const view_identity& world)
+			const rows& find(std::size_t group, std::string_view id, const world_context& world)
 			{
 				static const rows empty;
 				if (id.empty())
 					return empty;
 				view_identity key{id, world[1], world[2], world[3]};
 				b.work();
+				if (group == 0U)
+					return find_world(unit_index, key, world);
 				if (group == 1U)
-					return file_index.find(key);
+					return find_world(file_index, key, world);
 				if (group == 2U)
-					return span_index.find(key);
+					return find_world(span_index, key, world);
 				if (group == 3U)
-					return entity_index.find(key);
+					return find_world(entity_index, key, world);
 				if (group == 4U)
-					return declaration_index.find(key);
+					return find_world(declaration_index, key, world);
 				if (group == 6U)
-					return type_index.find(key);
+					return find_world(type_index, key, world);
 				if (group == 7U)
-					return syntax_index.find(key);
+					return find_world(syntax_index, key, world);
 				const auto at = index[group].find(key);
 				return at == index[group].end() ? empty : at->second;
 			}
@@ -395,7 +485,9 @@ namespace cxxlens::sdk::query
 							b.work();
 							// Conservative capacity/node allowance before both map and vector
 							// growth.
-							if (group == 1U)
+							if (group == 0U)
+								unit_index.add(key, row);
+							else if (group == 1U)
 								file_index.add(key, row);
 							else if (group == 2U)
 								span_index.add(key, row);
@@ -459,6 +551,7 @@ namespace cxxlens::sdk::query
 							(void)key;
 							order_alternatives(alternatives);
 						}
+					unit_index.visit(order_alternatives);
 					file_index.visit(order_alternatives);
 					span_index.visit(order_alternatives);
 					entity_index.visit(order_alternatives);
@@ -654,7 +747,7 @@ namespace cxxlens::sdk::query
 				}
 				return true;
 			}
-			state unit(std::string_view id, const view_identity& world, refs& evidence)
+			state unit(std::string_view id, const world_context& world, refs& evidence)
 			{
 				const auto& original = find(0U, id, world);
 				if (original.empty())
@@ -666,7 +759,7 @@ namespace cxxlens::sdk::query
 			}
 			state target(std::size_t group,
 						 std::string_view id,
-						 const view_identity& world,
+						 const world_context& world,
 						 refs& evidence,
 						 std::initializer_list<std::string_view> fields)
 			{
@@ -679,7 +772,7 @@ namespace cxxlens::sdk::query
 			state source(std::string_view id,
 						 std::string_view file,
 						 std::string_view snapshot,
-						 const view_identity& world,
+						 const world_context& world,
 						 refs& evidence)
 			{
 				const auto& spans = find(2U, id, world);
@@ -705,7 +798,7 @@ namespace cxxlens::sdk::query
 			}
 			state file_snapshot(std::string_view file,
 								std::string_view snapshot,
-								const view_identity& world,
+								const world_context& world,
 								refs& evidence)
 			{
 				const auto& originals = find(1U, snapshot, world);
@@ -1061,7 +1154,7 @@ namespace cxxlens::sdk::query
 			}
 			state declaration(std::string_view id,
 							  std::string_view compile_unit,
-							  const view_identity& world,
+							  const world_context& world,
 							  refs& evidence)
 			{
 				const auto& originals = find(4U, id, world);
@@ -1182,15 +1275,15 @@ namespace cxxlens::sdk::query
 					gap(value, value.compile_unit, "language-environment-unavailable");
 				output.environments.push_back(std::move(value));
 			}
-			detail::projection_span_lookup<budget, std::size_t> feature_index{b};
-			detail::projection_span_lookup<budget> file_index{b}, span_index{b};
-			detail::projection_span_lookup<budget> entity_index{b}, declaration_index{b},
-				type_index{b}, syntax_index{b};
-			void feature(const view_identity& world, const rows& originals)
+			world_lookup<std::size_t> feature_index{b};
+			world_lookup<> unit_index{b}, file_index{b}, span_index{b};
+			world_lookup<> entity_index{b}, declaration_index{b}, type_index{b}, syntax_index{b};
+			void feature(const view_identity& original_identity, const rows& originals)
 			{
 				b.charge(b.members, 1U, b.limits.maximum_members, "features");
 				b.retain(2U * sizeof(observed_source_feature) + 256U + sizeof(view_identity));
 				const auto& r = *originals.front();
+				const auto world = admit_context(original_identity);
 				observed_source_feature value;
 				value.feature = copy(world[0]);
 				value.compile_unit = copy(text(r, "compile_unit"));
@@ -1305,14 +1398,18 @@ namespace cxxlens::sdk::query
 				}
 				if (value.observation != state::complete)
 					gap(value, value.feature, "observation-unavailable");
-				feature_index.add(world, output.features.size());
+				b.work();
+				feature_index.add(original_identity, output.features.size(), {world.token});
 				output.features.push_back(std::move(value));
 			}
-			void population(const view_identity& world, const rows& originals, bool scans_complete)
+			void population(const view_identity& original_identity,
+							const rows& originals,
+							bool scans_complete)
 			{
 				b.charge(b.populations, 1U, b.limits.maximum_populations, "populations");
 				b.retain(2U * sizeof(source_feature_population));
 				const auto& r = *originals.front();
+				const auto world = admit_context(original_identity);
 				source_feature_population value;
 				value.inventory = copy(world[0]);
 				value.compile_unit = copy(text(r, "compile_unit"));
@@ -1359,7 +1456,7 @@ namespace cxxlens::sdk::query
 					{
 						value.feature_ids.push_back(copy(id));
 						const view_identity key{id, world[1], world[2], world[3]};
-						const auto& found = feature_index.find(key);
+						const auto& found = find_world(feature_index, key, world);
 						if (found.empty())
 						{
 							membership = combine(membership, state::unknown);
@@ -1389,7 +1486,8 @@ namespace cxxlens::sdk::query
 						if (!feature_members.contains(id))
 							membership = state::conflicting;
 						const view_identity key{id, world[1], world[2], world[3]};
-						if (const auto& found = feature_index.find(key); !found.empty())
+						if (const auto& found = find_world(feature_index, key, world);
+							!found.empty())
 							if (output.features[found.front()].source_binding_state == "none" ||
 								output.features[found.front()].source_binding_state == "complete")
 								membership = state::conflicting;
@@ -1510,8 +1608,43 @@ namespace cxxlens::sdk::query
 			source_feature_projection run(bool scans_complete)
 			{
 				initialize();
-				for (const auto& [world, originals] : index[0U])
-					environment(world, originals);
+				{
+					// Units still publish in the complete original tuple order.
+					using entry = world_lookup<>::entry;
+					std::vector<const entry*> ordered;
+					b.work();
+					for (const auto& [hash, alternatives] : unit_index.buckets)
+					{
+						(void)hash;
+						b.work();
+						for (const auto& candidate : alternatives)
+						{
+							b.work();
+							unit_index.append(ordered, &candidate);
+						}
+					}
+					const auto retained = 2U * ordered.capacity() * sizeof(const entry*);
+					struct release
+					{
+						budget& meter;
+						std::vector<const entry*>& values;
+						std::size_t retained;
+						~release()
+						{
+							std::vector<const entry*>{}.swap(values);
+							meter.retained -= retained;
+						}
+					} temporary{b, ordered, retained};
+					b.work(2U * ordered.size() *
+						   (static_cast<std::size_t>(std::bit_width(ordered.size())) + 1U));
+					std::ranges::sort(ordered,
+									  [&](const auto* left, const auto* right)
+									  {
+										  return identity_less{&b}(left->identity, right->identity);
+									  });
+					for (const auto* candidate : ordered)
+						environment(candidate->identity, candidate->originals);
+				}
 				for (const auto& [world, originals] : index[8U])
 					feature(world, originals);
 				// Declaration/context attribution is finished. Retire its per-call
@@ -1778,9 +1911,11 @@ namespace cxxlens::sdk::query
 							   row_validation_reused,
 							   wire_sizes,
 							   evidence_owners,
+							   detail::projection_span_lookup<budget, std::size_t>{b},
+							   1U,
 							   projector::inventory_cache{b},
 							   projector::closure_cache{b},
-							   detail::projection_span_lookup<budget, std::size_t>{b}};
+							   projector::world_lookup<std::size_t>{b}};
 				auto output =
 					work.run(input.feature_inputs_complete && input.inventory_inputs_complete);
 				output.compile_units_complete = input.compile_units_complete;

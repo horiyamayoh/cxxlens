@@ -613,15 +613,15 @@ namespace
 												state::conflicting;
 										}),
 				"empty listed inventory erased actual originals or fabricated closed zero");
-		const auto world_bytes = full.features.front().universe.size() +
-			full.features.front().variant.size() + full.features.front().interpretation.size();
-		// Every listed key must really inspect its equal world bytes. The empty
-		// listed census keeps the same actual originals without these lookups.
-		const auto minimum_equal_world_work =
-			2U * world_bytes * full.features.size() * full.populations.size();
+		// Every listed key must inspect its complete physical ID. Equal Worlds may
+		// reuse an admitted local identity; the empty census omits these ID reads.
+		std::size_t minimum_equal_id_work{};
+		for (const auto& population : full.populations)
+			for (const auto& id : population.feature_ids)
+				minimum_equal_id_work += 2U * id.size() + 1U;
 		require(measured.operations > unlisted_usage.operations &&
-					measured.operations - unlisted_usage.operations >= minimum_equal_world_work,
-				"listed membership did not charge its actual equal-world key comparisons");
+					measured.operations - unlisted_usage.operations >= minimum_equal_id_work,
+				"listed membership did not charge its actual full-ID comparisons");
 		limits.cancelled = {};
 		limits.maximum_operations = measured.operations;
 		limits.maximum_retained_bytes = measured.retained_bytes_bound;
@@ -2419,8 +2419,185 @@ namespace
 	}
 } // namespace
 
+namespace
+{
+	fixture pooled_world_originals()
+	{
+		const fixture original;
+		fixture pooled;
+		for (auto& group : pooled.rows)
+			group.clear();
+		for (std::size_t at{}; at < 12U; ++at)
+			for (std::size_t group{}; group < original.rows.size(); ++group)
+				for (const auto& saved : original.rows[group])
+				{
+					auto row = saved;
+					row.presence.universe =
+						"universe:" + std::string(1U, at % 6U < 3U ? 'a' : 'z') + ":same-end";
+					row.presence.fragments = {
+						"variant:" + std::string(1U, static_cast<char>('a' + at % 3U)) +
+						":same-end"};
+					row.interpretation =
+						"interpretation:" + std::string(1U, at < 6U ? 'a' : 'z') + ":same-end";
+					row.contributor_edges.front().condition = row.presence;
+					row.contributor_edges.front().interpretation = row.interpretation;
+					if (group == 3U)
+						set(row,
+							"provider_local_key",
+							detached_cell::bytes({static_cast<std::byte>(at)}));
+					pooled.rows[group].push_back(std::move(row));
+				}
+		return pooled;
+	}
+	void pooled_world_lookup_controls()
+	{
+		auto originals = pooled_world_originals();
+		const auto input = originals.queries(true, true);
+		q::projection_resource_usage measured;
+		const auto output = take(q::project_source_features(input, {}, {}, measured));
+		require(output.environments.size() == 12U && output.features.size() == 12U &&
+					output.populations.size() == 24U,
+				"same-ID sampled World collisions changed full observation cardinality");
+		for (const auto& feature : output.features)
+		{
+			require(feature.identity_state == state::complete &&
+						feature.source_state == state::complete &&
+						feature.context_state == state::complete &&
+						feature.entity_state == state::complete &&
+						feature.call_state == state::complete &&
+						feature.type_state == state::complete &&
+						feature.syntax_state == state::complete,
+					"same-ID World collisions borrowed conflicting original facts");
+			for (const auto reference : feature.evidence)
+			{
+				const auto& row = output.evidence.at(reference).original_row();
+				require(row.presence.universe == feature.universe &&
+							row.presence.fragments == std::vector<std::string>{feature.variant} &&
+							row.interpretation == feature.interpretation,
+						"a supporting or unit reference crossed a complete original World");
+			}
+		}
+		for (const auto& population : output.populations)
+		{
+			require(population.features.size() == 1U &&
+						population.membership_state == state::complete,
+					"pooled World original inventory lost an exact member");
+			const auto& feature = output.features.at(population.features.front());
+			require(feature.universe == population.universe &&
+						feature.variant == population.variant &&
+						feature.interpretation == population.interpretation,
+					"feature-index growth moved a World identity away from its original member");
+		}
+		const auto full = membership_projection_form(output);
+		require(membership_projection_form(take(q::project_source_features(originals.input())),
+										   false) == membership_projection_form(output, false),
+				"raw and admitted World originals changed complete DTO or evidence fields");
+		q::finite_population_limits shared;
+		shared.evidence_ownership = q::projection_evidence_ownership::shared_immutable;
+		q::source_feature_projection survived;
+		{
+			const auto donor = originals.queries(true, true);
+			survived = take(q::project_source_features(donor, shared));
+		}
+		require(membership_projection_form(survived) == full,
+				"private World contexts depended on expired query owners");
+		survived.source_queries.reset();
+		auto copied = survived;
+		survived = {};
+		auto moved = std::move(copied);
+		require(membership_projection_form(moved, false) ==
+					membership_projection_form(output, false),
+				"copy or move retained a temporary World context");
+		for (auto& group : originals.rows)
+			std::ranges::reverse(group);
+		require(membership_projection_form(
+					take(q::project_source_features(originals.queries(true, true))), false) ==
+					membership_projection_form(output, false),
+				"World bucket order changed canonical observation or evidence order");
+		for (const bool storage : {false, true})
+			for (const bool under : {false, true})
+			{
+				q::finite_population_limits limits;
+				if (storage)
+					limits.maximum_retained_bytes =
+						measured.retained_bytes_bound - static_cast<std::size_t>(under);
+				else
+					limits.maximum_operations =
+						measured.operations - static_cast<std::size_t>(under);
+				q::projection_resource_usage usage{1U, 1U};
+				const auto bounded = q::project_source_features(input, limits, {}, usage);
+				require(static_cast<bool>(bounded) == !under,
+						"pooled World lookup ignored exact or one-under resource bounds");
+				if (bounded)
+					require(membership_projection_form(*bounded) == full &&
+								usage.operations == measured.operations &&
+								usage.retained_bytes_bound == measured.retained_bytes_bound,
+							"bounded World admission changed complete output or usage");
+				else
+					require(!usage.operations && !usage.retained_bytes_bound,
+							"failed World admission published successful usage");
+			}
+		std::size_t checkpoints{};
+		q::finite_population_limits counted;
+		counted.cancelled = [&]
+		{
+			++checkpoints;
+			return false;
+		};
+		require(bool(q::project_source_features(input, counted)) && checkpoints > 4U,
+				"pooled World checkpoint census failed");
+		std::stop_source stop;
+		std::size_t visited{};
+		q::finite_population_limits interrupted;
+		interrupted.cancelled = [&]
+		{
+			if (++visited == checkpoints * 3U / 4U)
+				stop.request_stop();
+			return false;
+		};
+		q::projection_resource_usage failed{1U, 1U};
+		const auto stopped =
+			q::project_source_features(input, interrupted, stop.get_token(), failed);
+		require(!stopped && stopped.error().code == "sdk.source-feature-cancelled" &&
+					!failed.operations && !failed.retained_bytes_bound,
+				"real stop during pooled World admission escaped bounded checkpoints");
+		require(membership_projection_form(take(q::project_source_features(input))) == full,
+				"fresh projection inherited a partial World registry");
+		{
+			auto missing = pooled_world_originals();
+			const auto removed = missing.rows[3].at(7U);
+			missing.rows[3].erase(missing.rows[3].begin() + 7U);
+			const auto incomplete = take(q::project_source_features(missing.input()));
+			for (const auto& feature : incomplete.features)
+			{
+				const bool foreign = feature.universe == removed.presence.universe &&
+					feature.variant == removed.presence.fragments.front() &&
+					feature.interpretation == removed.interpretation;
+				require(feature.entity_state == (foreign ? state::unknown : state::complete) &&
+							feature.call_state == (foreign ? state::unknown : state::complete),
+						"absent exact World borrowed a same-ID entity from another pooled World");
+			}
+		}
+		for (const bool nul : {false, true})
+		{
+			auto malformed = pooled_world_originals();
+			auto unused = malformed.rows[2].front();
+			set(unused, "span", txt("unreferenced-span"));
+			unused.presence.universe +=
+				nul ? std::string(1U, '\0') : std::string(1U, static_cast<char>(0xc3));
+			unused.contributor_edges.front().condition = unused.presence;
+			malformed.rows[2].push_back(std::move(unused));
+			q::projection_resource_usage usage{1U, 1U};
+			require(!q::project_source_features(malformed.input(), {}, {}, usage) &&
+						!usage.operations && !usage.retained_bytes_bound,
+					"unused original World bytes bypassed full raw admission");
+		}
+	}
+} // namespace
+
 int main()
 {
+	pooled_world_lookup_controls();
 	sampled_supporting_lookup_controls();
 	collision_membership_controls();
 	immutable_evidence_controls();

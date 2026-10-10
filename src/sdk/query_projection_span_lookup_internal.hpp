@@ -7,6 +7,7 @@
 #include <map>
 #include <stdexcept>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -14,7 +15,12 @@
 
 namespace cxxlens::sdk::query::detail
 {
-	template <class Budget, class Payload = const annotated_row*>
+	struct projection_lookup_empty_metadata
+	{
+	};
+	template <class Budget,
+			  class Payload = const annotated_row*,
+			  class Metadata = projection_lookup_empty_metadata>
 	struct projection_span_lookup
 	{
 		using key = std::array<std::string_view, 4U>;
@@ -23,6 +29,7 @@ namespace cxxlens::sdk::query::detail
 		{
 			key identity;
 			rows originals;
+			[[no_unique_address]] Metadata metadata;
 		};
 		struct number_less
 		{
@@ -95,8 +102,10 @@ namespace cxxlens::sdk::query::detail
 			meter.work(sizeof(T) / sizeof(void*) + 1U);
 			values.push_back(std::move(value));
 		}
-		void add(const key& identity, Payload row)
+		void add(const key& identity, Payload row, Metadata metadata = {})
 		{
+			if constexpr (!std::is_empty_v<Metadata>)
+				meter.work(2U * (sizeof(Metadata) / sizeof(void*)) + 1U);
 			const auto hash = fingerprint(identity[0]);
 			auto bucket = buckets.find(hash);
 			if (bucket == buckets.end())
@@ -120,7 +129,7 @@ namespace cxxlens::sdk::query::detail
 					budget.retained -= 2U * sizeof(entry);
 				}
 			} temporary{meter};
-			append(bucket->second, entry{identity, {}});
+			append(bucket->second, entry{identity, {}, std::move(metadata)});
 			append(bucket->second.back().originals, row);
 		}
 		const rows& find(const key& identity)
