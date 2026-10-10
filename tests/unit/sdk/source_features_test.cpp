@@ -1917,11 +1917,19 @@ namespace
 		std::vector<std::string> ids;
 		for (std::size_t candidate{}; candidate < 200000U && ids.size() < 96U; ++candidate)
 		{
-			auto id = "feature:membership:\xc3\xa9:" + std::to_string(candidate);
+			auto id =
+				"feature:membership:\xc3\xa9:" + std::to_string(100000U + candidate) + ":01234567";
 			if ((membership_fixture_hash(id) & 511U) == 511U)
 				ids.push_back(std::move(id));
 		}
 		require(ids.size() == 96U, "fixture did not find real same-bucket original IDs");
+		require(std::ranges::all_of(ids,
+									[&](const auto& id)
+									{
+										return id.size() == ids.front().size() &&
+											id.ends_with(":01234567");
+									}),
+				"fixture did not retain equal-length full-ID suffix collisions");
 		const auto feature = original.rows[8].front();
 		original.rows[8].clear();
 		for (std::size_t index{}; index < ids.size(); ++index)
@@ -1998,7 +2006,7 @@ namespace
 				ids.pop_back();
 			if (mutation == "foreign")
 			{
-				ids.back() += ":foreign";
+				ids.back().front() = '!';
 			}
 			for (auto& inventory : changed.rows[9])
 			{
@@ -2081,6 +2089,36 @@ namespace
 					retried.operations == measured.operations &&
 					retried.retained_bytes_bound == measured.retained_bytes_bound,
 				"fresh retry inherited discarded membership buckets or partial output");
+		// A sampled bucket never authorizes unseen leading bytes. Ordinary row
+		// admission still validates every member in every encoded original set.
+		for (const auto& invalid :
+			 {std::string{"bad\0:01234567", 13U}, std::string(1U, char(0xff)) + ":01234567"})
+			for (const auto& [group, field] :
+				 std::array<std::pair<std::size_t, std::string_view>, 6U>{
+					 {{5U, "declarations"},
+					  {5U, "physical_definition_ids"},
+					  {9U, "feature_ids"},
+					  {9U, "unbound_feature_ids"},
+					  {9U, "entered_file_ids"},
+					  {9U, "entered_source_snapshots"}}})
+			{
+				auto bad = original;
+				set(bad.rows[group].front(), field, symbol_values({invalid}));
+				for (unsigned ownership{}; ownership < 3U; ++ownership)
+				{
+					q::projection_resource_usage usage{1U, 1U};
+					const auto result = ownership == 0U
+						? q::project_source_features(bad.input(), {}, {}, usage)
+						: q::project_source_features(bad.queries(),
+													 ownership == 1U ? q::finite_population_limits{}
+																	 : shared_limits,
+													 {},
+													 usage);
+					require(
+						!result && !usage.operations && !usage.retained_bytes_bound,
+						"unread NUL/UTF-8 member prefix bypassed ordinary full original admission");
+				}
+			}
 	}
 } // namespace
 
@@ -2131,6 +2169,14 @@ namespace
 		set(result.rows[5].front(), "declaration_count", num(2U));
 		set(result.rows[5].front(),
 			"declarations",
+			symbol_values({ids[0U].at("D"), ids[1U].at("D")}));
+		set(result.rows[5].front(),
+			"physical_definition_profile",
+			txt("clang22-original-physical-definitions/1"));
+		set(result.rows[5].front(), "physical_definition_state", txt("complete"));
+		set(result.rows[5].front(), "physical_definition_count", num(2U));
+		set(result.rows[5].front(),
+			"physical_definition_ids",
 			symbol_values({ids[0U].at("D"), ids[1U].at("D")}));
 		set(result.rows[9].front(), "feature_count", num(2U));
 		set(result.rows[9].front(),
@@ -2421,6 +2467,66 @@ namespace
 
 namespace
 {
+	void sampled_member_inventory_controls()
+	{
+		auto original = sampled_supporting_fixture(std::string(128U, 'p') + "日本語");
+		original.rows[9].resize(1U);
+		std::vector<std::string> ids;
+		for (auto& feature : original.rows[8])
+		{
+			ids.push_back(std::get<std::string>(*feature.values.at("output.feature").value));
+			set(feature, "source_binding_state", txt("unknown"));
+			for (const auto field : {"file", "source_snapshot", "source"})
+				set(feature, field, detached_cell::absent({}));
+		}
+		std::ranges::sort(ids);
+		set(original.rows[9].front(), "unbound_feature_ids", symbol_values(ids));
+		set(original.rows[9].front(), "unbound_feature_count", num(ids.size()));
+		set(original.rows[9].front(), "source_binding_state", txt("partial"));
+		const auto input = original.queries(true, true);
+		q::projection_resource_usage measured;
+		const auto detached = take(q::project_source_features(input, {}, {}, measured));
+		require(detached.features.size() == 2U && detached.populations.size() == 1U &&
+					detached.populations.front().membership_state == state::complete &&
+					detached.populations.front().unbound_feature_ids == ids &&
+					detached.populations.front().source_state != state::complete,
+				"same-suffix unbound membership merged full IDs or fabricated complete source "
+				"bindings");
+		const auto full = membership_projection_form(detached);
+		q::finite_population_limits shared;
+		shared.evidence_ownership = q::projection_evidence_ownership::shared_immutable;
+		require(
+			membership_projection_form(take(q::project_source_features(input, shared))) == full &&
+				membership_projection_form(take(q::project_source_features(original.input())),
+										   false) == membership_projection_form(detached, false),
+			"same-suffix unbound sets changed complete DTO, evidence or source query ownership");
+		for (const bool duplicate : {false, true})
+		{
+			auto changed = original;
+			auto values = ids;
+			if (duplicate)
+				values.push_back(std::string{values.front()});
+			else
+				values.front().front() = '!';
+			set(changed.rows[9].front(), "unbound_feature_ids", symbol_values(values));
+			q::projection_resource_usage usage{1U, 1U};
+			const auto output = q::project_source_features(changed.queries(), {}, {}, usage);
+			if (duplicate)
+				require(!output && !usage.operations && !usage.retained_bytes_bound,
+						"duplicate full unbound ID bypassed original set admission");
+			else
+				require(bool(output) && output->features.size() == 2U &&
+							output->populations.front().membership_state == state::conflicting,
+						"same-suffix foreign unbound ID borrowed original subset membership");
+		}
+		q::projection_resource_usage retried;
+		require(membership_projection_form(
+					take(q::project_source_features(input, {}, {}, retried))) == full &&
+					retried.operations == measured.operations &&
+					retried.retained_bytes_bound == measured.retained_bytes_bound,
+				"unbound membership fresh retry inherited foreign or failed sets");
+	}
+
 	fixture pooled_world_originals()
 	{
 		const fixture original;
@@ -2597,6 +2703,7 @@ namespace
 
 int main()
 {
+	sampled_member_inventory_controls();
 	pooled_world_lookup_controls();
 	sampled_supporting_lookup_controls();
 	collision_membership_controls();

@@ -1226,10 +1226,156 @@ namespace
 		}
 	}
 
+	void exact_world_token_controls()
+	{
+		fixture original;
+		const auto base = original.rows;
+		for (auto& rows : original.rows)
+			rows.clear();
+		// Equal-length, equal-suffix World axes exercise full admission. These
+		// short strings also exercise SSO while public populations are moved.
+		for (const auto universe : {"u:suffix0", "v:suffix0"})
+			for (const auto variant : {"a:suffix0", "b:suffix0", "c:suffix0"})
+				for (const auto interpretation : {"i:suffix0", "j:suffix0"})
+					for (std::size_t group{}; group < base.size(); ++group)
+						for (auto row : base[group])
+						{
+							row.presence = {universe, {variant}};
+							row.interpretation = interpretation;
+							for (auto& edge : row.contributor_edges)
+							{
+								edge.condition = row.presence;
+								edge.interpretation = row.interpretation;
+							}
+							original.rows[group].push_back(std::move(row));
+						}
+		const auto compare = [](const auto& a, const auto& b, bool owners)
+		{
+			same_routes(a, b, owners);
+		};
+
+		const auto project = [](const auto& input,
+								q::finite_population_limits limits,
+								std::stop_token stop,
+								q::projection_resource_usage& usage)
+		{
+			return q::project_exceptional_routes(input, limits, stop, usage);
+		};
+		const auto input = original.queries(true, true);
+
+		q::projection_resource_usage measured;
+		const auto expected = take(project(input, {}, {}, measured));
+		require(measured.operations && measured.retained_bytes_bound,
+				"World contexts have real work and storage usage");
+		const auto guard = [&](const auto& projection, const auto& value, std::string_view variant)
+		{
+			for (const auto ref : value.evidence)
+			{
+				const auto& row = projection.evidence.at(ref).original_row();
+				require(row.presence.universe == value.universe &&
+							std::ranges::find(row.presence.fragments, variant) !=
+								row.presence.fragments.end() &&
+							row.interpretation == value.interpretation,
+						"equal physical IDs cannot borrow an unrelated World payload");
+			}
+		};
+		require(expected.variants.size() == 12U && expected.blocks.size() == 36U &&
+					expected.successors.size() == 24U && expected.invokes.size() == 12U,
+				"every three-axis World retains its complete physical topology");
+		for (const auto& value : expected.variants)
+		{
+			require(value.topology_state == state::complete, "World topology remains closed");
+			guard(expected, value, value.variant);
+		}
+		for (const auto& value : expected.blocks)
+			guard(expected, value, value.semantic_variant);
+		for (const auto& value : expected.successors)
+			guard(expected, value, value.semantic_variant);
+		for (const auto& value : expected.invokes)
+			guard(expected, value, value.semantic_variant);
+		compare(expected, take(project(original.input(), {}, {}, measured)), false);
+		q::finite_population_limits shared;
+		shared.evidence_ownership = q::projection_evidence_ownership::shared_immutable;
+		q::exceptional_route_projection survived;
+		{
+			const auto temporary = original.queries(true, true);
+			survived = take(project(temporary, shared, {}, measured));
+		}
+		compare(expected, survived, true);
+		const auto copied = survived;
+		const auto moved = std::move(survived);
+		compare(expected, copied, true);
+		compare(expected, moved, true);
+		// All typed tokens stay projector-local. Input permutation cannot change
+		// complete DTO fields, full raw evidence order, or public references.
+		for (auto& rows : original.rows)
+			std::ranges::reverse(rows);
+		compare(expected, take(project(original.input(), {}, {}, measured)), false);
+		for (const bool shared_mode : {false, true})
+		{
+			auto limits = shared_mode ? shared : q::finite_population_limits{};
+			q::projection_resource_usage usage;
+			const auto full = take(project(input, limits, {}, usage));
+			for (const bool storage : {false, true})
+				for (const bool under : {false, true})
+				{
+					auto bounded = limits;
+					if (storage)
+						bounded.maximum_retained_bytes =
+							usage.retained_bytes_bound - std::size_t(under);
+					else
+						bounded.maximum_operations = usage.operations - std::size_t(under);
+					q::projection_resource_usage spent{1U, 1U};
+					const auto result = project(input, bounded, {}, spent);
+					require(bool(result) == !under,
+							"World contexts retain exact and one-under work/storage limits");
+					if (result)
+						compare(full, *result, true);
+					else
+						require(!spent.operations && !spent.retained_bytes_bound,
+								"failed World admission publishes no partial usage");
+				}
+			std::size_t calls{};
+			limits.cancelled = [&]
+			{
+				++calls;
+				return false;
+			};
+			take(project(input, limits, {}, usage));
+			std::size_t visited{};
+			limits.cancelled = [&]
+			{
+				return ++visited == calls - 1U;
+			};
+			require(!project(input, limits, {}, usage) && visited == calls - 1U &&
+						!usage.operations && !usage.retained_bytes_bound,
+					"real late stop revokes World contexts and every borrowed view");
+			limits.cancelled = {};
+			compare(full, take(project(input, limits, {}, usage)), true);
+		}
+		// A physical file in eleven foreign Worlds cannot satisfy the twelfth.
+		std::erase_if(original.rows[1],
+					  [](const auto& row)
+					  {
+						  return row.presence.universe == "u:suffix0" &&
+							  row.presence.fragments.front() == "c:suffix0" &&
+							  row.interpretation == "j:suffix0";
+					  });
+		const auto missing = take(project(original.input(), {}, {}, measured));
+		for (const auto& value : missing.variants)
+		{
+			const bool absent = value.universe == "u:suffix0" && value.variant == "c:suffix0" &&
+				value.interpretation == "j:suffix0";
+			require((value.source_state == state::complete) == !absent,
+					"route support keeps every full World axis after token admission");
+		}
+	}
+
 } // namespace
 
 int main()
 {
+	exact_world_token_controls();
 	sampled_span_identity_controls();
 	ordered_successor_evidence_controls();
 	immutable_evidence_controls();

@@ -25,6 +25,7 @@
 #include "query_projection_row_copy_internal.hpp"
 #include "query_projection_rows_internal.hpp"
 #include "query_projection_span_lookup_internal.hpp"
+#include "query_projection_world_tokens_internal.hpp"
 #include "query_result_internal.hpp"
 namespace cxxlens::sdk::query
 {
@@ -114,18 +115,28 @@ namespace cxxlens::sdk::query
 			return v ? std::optional{*v} : std::nullopt;
 		}
 		using identity = std::array<std::string, 4>;
-		using view_identity = std::array<std::string_view, 4>;
+		using view_identity = detail::projection_world_identity;
 		struct budget;
 		int compare_identity_text(budget& meter, std::string_view left, std::string_view right);
 		struct identity_less
 		{
 			using is_transparent = void;
 			budget* meter{};
+			detail::projection_world_tokens<budget>* worlds{};
 			template <class L, class R>
 			bool operator()(const L& l, const R& r) const
 			{
 				for (std::size_t i = 0; i < 4U; ++i)
 				{
+					// IDs still decide first. Token equality only skips a proven equal
+					// World; differing Worlds retain the original lexical order.
+					if (i == 1U && worlds && worlds->enabled)
+					{
+						const auto left = worlds->ensure(l, l.world);
+						const auto right = worlds->ensure(r, r.world);
+						if (worlds->same(left, right))
+							return false;
+					}
 					if (meter)
 					{
 						const auto order = compare_identity_text(*meter, l[i], r[i]);
@@ -326,7 +337,11 @@ namespace cxxlens::sdk::query
 			bool row_validation_reused{};
 			const size_groups& wire_sizes;
 			const owner_groups* evidence_owners{};
-			detail::projection_span_lookup<budget> span_index{b};
+			detail::projection_world_tokens<budget> worlds{b};
+			detail::projection_span_lookup<budget,
+										   const annotated_row*,
+										   detail::projection_world_metadata>
+				span_index{b};
 			std::string copy(std::string_view value)
 			{
 				b.work(value.size() + 1U);
@@ -348,10 +363,12 @@ namespace cxxlens::sdk::query
 				static const rows empty;
 				if (id.empty())
 					return empty;
+				const auto token = worlds.ensure(world, world.world);
 				view_identity key{id, world[1], world[2], world[3]};
-				b.work();
+				b.work(3U);
+				key.world = token;
 				if (group == 2U)
-					return span_index.find(key);
+					return worlds.find(span_index, key.values, token);
 				const auto at = index[group].find(key);
 				return at == index[group].end() ? empty : at->second;
 			}
@@ -371,7 +388,8 @@ namespace cxxlens::sdk::query
 			void initialize()
 			{
 				for (auto& group : index)
-					group = std::map<view_identity, rows, identity_less>{identity_less{&b}};
+					group =
+						std::map<view_identity, rows, identity_less>{identity_less{&b, &worlds}};
 				const std::array<const relation_descriptor*, 12> descriptors{
 					&build::relations::compile_unit::descriptor(),
 					&source::relations::file::descriptor(),
@@ -429,11 +447,12 @@ namespace cxxlens::sdk::query
 							// Conservative capacity/node allowance before both map and vector
 							// growth.
 							if (group == 2U)
-								span_index.add(key, row);
+								span_index.add(key.values, row);
 							else
 							{
 								b.retain(sizeof(view_identity) + 256U +
 										 2U * sizeof(const annotated_row*));
+								b.work(3U);
 								index[group][key].push_back(row);
 							}
 						}
@@ -487,6 +506,8 @@ namespace cxxlens::sdk::query
 				// The map and string buffers have expired before their reservation is
 				// refunded; the observed scratch peak remains part of returned usage.
 				b.retained -= retained_keys;
+				// No more map keys are inserted. Cached World tokens cannot change order.
+				worlds.enabled = true;
 			}
 			void
 			bind(refs& evidence, std::size_t group, std::span<const annotated_row* const> originals)

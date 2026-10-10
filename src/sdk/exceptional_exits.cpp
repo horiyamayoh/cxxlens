@@ -14,6 +14,7 @@
 #include "query_projection_row_copy_internal.hpp"
 #include "query_projection_rows_internal.hpp"
 #include "query_projection_span_lookup_internal.hpp"
+#include "query_projection_world_tokens_internal.hpp"
 #include "query_result_internal.hpp"
 namespace cxxlens::sdk::query
 {
@@ -246,12 +247,19 @@ namespace cxxlens::sdk::query
 				return false;
 			}
 		};
+		struct scope_population : exceptional_exit_population
+		{
+			detail::projection_world_token world;
+		};
 		struct projection
 		{
 			budget& b;
+			detail::projection_world_tokens<budget> worlds{b};
+			using world_token = detail::projection_world_token;
 			exceptional_exit_input input;
 			exceptional_exit_projection output;
-			using identity_map = detail::projection_span_lookup<budget, std::size_t>;
+			using identity_map = detail::
+				projection_span_lookup<budget, std::size_t, detail::projection_world_metadata>;
 			std::array<identity_map, 8> maps;
 			using ordered_entry = const identity_map::entry*;
 			std::array<std::vector<ordered_entry>, 8> ordered_maps;
@@ -321,8 +329,7 @@ namespace cxxlens::sdk::query
 					return false;
 				}
 			};
-			std::map<scope_identity, exceptional_exit_population, scope_less> scopes{
-				scope_less{&b}};
+			std::map<scope_identity, scope_population, scope_less> scopes{scope_less{&b}};
 			void canonical(refs& values)
 			{
 				b.work(values.size() *
@@ -367,10 +374,11 @@ namespace cxxlens::sdk::query
 			{
 				return output.evidence.at(ref).original_row();
 			}
-			const refs&
-			find(std::size_t group, std::string_view id, const exceptional_exit_population& p)
+			const refs& find(std::size_t group, std::string_view id, const scope_population& p)
 			{
-				return maps[group].find(view_identity{id, p.universe, p.variant, p.interpretation});
+				return worlds.find(maps[group],
+								   view_identity{id, p.universe, p.variant, p.interpretation},
+								   p.world);
 			}
 			void bind(refs& into, const refs& from)
 			{
@@ -464,8 +472,7 @@ namespace cxxlens::sdk::query
 					fail(name, "duplicate-set-member");
 				return out;
 			}
-			finite_population_state
-			source(std::string_view id, exceptional_exit_population& p, refs& evidence)
+			finite_population_state source(std::string_view id, scope_population& p, refs& evidence)
 			{
 				const auto& spans = find(2U, id, p);
 				if (id.empty() || spans.empty())
@@ -490,10 +497,11 @@ namespace cxxlens::sdk::query
 					return finite_population_state::conflicting;
 				return finite_population_state::complete;
 			}
-			exceptional_exit_population& scope(std::string_view detail,
-											   std::string_view unit,
-											   const annotated_row& r,
-											   std::string_view variant)
+			scope_population& scope(std::string_view detail,
+									std::string_view unit,
+									const annotated_row& r,
+									std::string_view variant,
+									world_token world)
 			{
 				const std::array<std::string_view, 5> view{
 					detail, unit, r.presence.universe, variant, r.interpretation};
@@ -512,8 +520,10 @@ namespace cxxlens::sdk::query
 								   std::string{variant},
 								   r.interpretation};
 				b.charge(b.populations, 1U, b.limits.maximum_populations, "populations");
-				b.retain(sizeof(exceptional_exit_population));
+				b.retain(sizeof(scope_population));
 				auto& p = scopes[key];
+				b.work(3U);
+				p.world = world;
 				p.detail = copy(detail);
 				p.compile_unit = copy(unit);
 				p.universe = copy(r.presence.universe);
@@ -521,7 +531,7 @@ namespace cxxlens::sdk::query
 				p.interpretation = copy(r.interpretation);
 				return p;
 			}
-			void census(exceptional_exit_population& p, const refs& details, const refs& bodies)
+			void census(scope_population& p, const refs& details, const refs& bodies)
 			{
 				refs facets;
 				for (const auto* group : {&details, &bodies})
@@ -592,7 +602,7 @@ namespace cxxlens::sdk::query
 				if (p.enumeration_state != finite_population_state::partial)
 					p.enumeration_state = finite_population_state::complete;
 			}
-			void scope_binding(exceptional_exit_population& p)
+			void scope_binding(scope_population& p)
 			{
 				const auto& details = find(4U, p.detail, p);
 				bind(p.evidence, details);
@@ -657,8 +667,7 @@ namespace cxxlens::sdk::query
 					const auto& key = candidate->identity;
 					const auto& original = candidate->originals;
 					b.work();
-					if (!equal(key[1], p.universe) || !equal(key[2], p.variant) ||
-						!equal(key[3], p.interpretation))
+					if (!worlds.same(p.world, worlds.ensure(key, candidate->metadata.world)))
 						continue;
 					for (auto ref : original)
 					{
@@ -723,7 +732,7 @@ namespace cxxlens::sdk::query
 				return kind == "function" || kind == "method" || kind == "constructor" ||
 					kind == "destructor" || kind == "conversion";
 			}
-			bool belongs(const annotated_row& r, const exceptional_exit_population& p) const
+			bool belongs(const annotated_row& r, const scope_population& p) const
 			{
 				return text(r, "scope_detail") == p.detail &&
 					text(r, "compile_unit") == p.compile_unit;
@@ -737,7 +746,9 @@ namespace cxxlens::sdk::query
 					{
 						b.work();
 						const auto& r = row(ref);
-						exceptional_exit_population context;
+						scope_population context;
+						b.work(3U);
+						context.world = worlds.ensure(key, candidate->metadata.world);
 						context.universe = key[1];
 						context.variant = key[2];
 						context.interpretation = key[3];
@@ -759,7 +770,7 @@ namespace cxxlens::sdk::query
 							continue;
 						if (entities.empty() && !facet && !has("body_written"))
 							continue;
-						scope(key[0], text(r, "compile_unit"), r, key[2]);
+						scope(key[0], text(r, "compile_unit"), r, key[2], context.world);
 					}
 				}
 				for (const auto* candidate : ordered_maps[7U])
@@ -769,7 +780,11 @@ namespace cxxlens::sdk::query
 					{
 						b.work();
 						const auto& r = row(ref);
-						scope(text(r, "scope_detail"), text(r, "compile_unit"), r, key[2]);
+						scope(text(r, "scope_detail"),
+							  text(r, "compile_unit"),
+							  r,
+							  key[2],
+							  worlds.ensure(key, candidate->metadata.world));
 					}
 				}
 				// A physical written body without its detail/census is an independent
@@ -785,8 +800,8 @@ namespace cxxlens::sdk::query
 						for (const auto& [scope_key, p] : scopes)
 						{
 							b.work();
-							if (equal(scope_key[2], key[1]) && equal(scope_key[3], key[2]) &&
-								equal(scope_key[4], key[3]) &&
+							if (worlds.same(p.world,
+											worlds.ensure(key, candidate->metadata.world)) &&
 								p.compile_unit == text(r, "compile_unit"))
 							{
 								const auto& details = find(4U, p.detail, p);
@@ -800,7 +815,11 @@ namespace cxxlens::sdk::query
 						}
 						if (!matched)
 						{
-							auto& p = scope({}, text(r, "compile_unit"), r, key[2]);
+							auto& p = scope({},
+											text(r, "compile_unit"),
+											r,
+											key[2],
+											worlds.ensure(key, candidate->metadata.world));
 							p.function = copy(text(r, "function"));
 							p.definition_source = copy(text(r, "source"));
 							p.body = copy(text(r, "body"));
@@ -809,9 +828,8 @@ namespace cxxlens::sdk::query
 					}
 				}
 			}
-			finite_population_state expression(observed_exceptional_exit& o,
-											   exceptional_exit_population& p,
-											   const refs& original)
+			finite_population_state
+			expression(observed_exceptional_exit& o, scope_population& p, const refs& original)
 			{
 				if (!agree(original, {"expression"}))
 					return finite_population_state::conflicting;
@@ -839,9 +857,8 @@ namespace cxxlens::sdk::query
 					return finite_population_state::partial;
 				return finite_population_state::complete;
 			}
-			finite_population_state target(observed_exceptional_exit& o,
-										   exceptional_exit_population& p,
-										   const refs& original)
+			finite_population_state
+			target(observed_exceptional_exit& o, scope_population& p, const refs& original)
 			{
 				if (!agree(original, {"target", "target_usr"}))
 					return finite_population_state::conflicting;
@@ -864,8 +881,7 @@ namespace cxxlens::sdk::query
 				// provider_local_key is opaque; it is not a raw-USR equality contract.
 				return finite_population_state::complete;
 			}
-			observed_exceptional_exit occurrence(const refs& original,
-												 exceptional_exit_population& p)
+			observed_exceptional_exit occurrence(const refs& original, scope_population& p)
 			{
 				b.charge(b.members, 1U, b.limits.maximum_members, "occurrences");
 				b.retain(sizeof(observed_exceptional_exit));
@@ -954,7 +970,7 @@ namespace cxxlens::sdk::query
 					gap(o, o.exit, "target-unavailable");
 				return o;
 			}
-			void populate(exceptional_exit_population& p)
+			void populate(scope_population& p)
 			{
 				std::map<std::string_view, const refs*, std::less<>> actual;
 				for (const auto* candidate : ordered_maps[7U])
@@ -962,8 +978,7 @@ namespace cxxlens::sdk::query
 					const auto& key = candidate->identity;
 					const auto& original = candidate->originals;
 					b.work();
-					if (!equal(key[1], p.universe) || !equal(key[2], p.variant) ||
-						!equal(key[3], p.interpretation))
+					if (!worlds.same(p.world, worlds.ensure(key, candidate->metadata.world)))
 						continue;
 					if (std::ranges::any_of(original,
 											[&](auto ref)

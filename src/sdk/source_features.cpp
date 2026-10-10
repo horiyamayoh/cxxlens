@@ -855,7 +855,13 @@ namespace cxxlens::sdk::query
 				{
 					meter.work();
 					std::uint64_t value = 14695981039346656037ULL;
-					for (std::size_t offset{}; offset < id.size(); ++offset)
+					meter.work(2U);
+					value ^= id.size();
+					value *= 1099511628211ULL;
+					meter.work();
+					// Sampling only narrows the bucket; equal() still checks the full ID.
+					const auto begin = id.size() - std::min(id.size(), std::size_t{8U});
+					for (std::size_t offset = begin; offset < id.size(); ++offset)
 					{
 						// Charge the actual byte read and hash update before either occurs.
 						meter.work(2U);
