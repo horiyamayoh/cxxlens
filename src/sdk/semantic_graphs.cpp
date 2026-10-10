@@ -426,7 +426,9 @@ namespace cxxlens::sdk::query
 						}
 						const auto append = [&](semantic_graph_edge edge,
 												std::string_view columns,
-												std::size_t index) -> std::optional<std::size_t>
+												std::size_t index,
+												bool direct_target =
+													false) -> std::optional<std::size_t>
 						{
 							if (edge.id.empty())
 							{
@@ -439,7 +441,8 @@ namespace cxxlens::sdk::query
 								gap("sdk.graph-source-missing", edge.id, edge.from);
 							if (edge.to.empty() || !nodes.contains(edge.to))
 								gap("sdk.graph-target-missing", edge.id, edge.to);
-							if (edge.resolution != "resolved" && edge.resolution != "direct")
+							if (edge.resolution != "resolved" && edge.resolution != "direct" &&
+								!(direct_target && edge.resolution == "syntactic_direct"))
 								gap("sdk.graph-edge-unresolved", edge.id, edge.resolution);
 							collect(edges, edge.id, columns, index);
 							const auto found = edges.find(edge.id);
@@ -560,7 +563,8 @@ namespace cxxlens::sdk::query
 											auto& columns = call_payloads[{index, target_index}];
 											columns = entries[index].payload + "\nTARGET\n" +
 												entries[target_index].payload;
-											if (const auto selected = append(edge, columns, index))
+											if (const auto selected =
+													append(edge, columns, index, true))
 											{
 												for (const auto origin : site.evidence)
 													if (origin != index)

@@ -192,6 +192,30 @@ int main()
 	const auto original_source =
 		result.evidence[graph(result, "calls").edges[0].evidence.front()].row.provenance;
 	require(!original_source.empty(), "annotations lost");
+	fixture native_direct;
+	native_direct.targets.front().values["output.resolution"].value =
+		std::string{"syntactic_direct"};
+	const auto native_projection = project(native_direct);
+	const auto& native_calls = graph(native_projection, "calls");
+	require(native_calls.state == q::semantic_graph_state::complete && !native_calls.closed &&
+				native_calls.edges.front().resolution == "syntactic_direct" &&
+				native_calls.edges.front().evidence.size() == 2U &&
+				!has_gap(native_calls, "sdk.graph-edge-unresolved"),
+			"native syntactic target became unresolved or claimed closure");
+	const auto native_query_projection = q::project_semantic_graphs(queries(native_direct), specs);
+	require(native_query_projection &&
+				graph(*native_query_projection, "calls").state ==
+					q::semantic_graph_state::complete &&
+				graph(*native_query_projection, "calls").closed,
+			"native target lost independently supplied query closure");
+	native_direct.includes.front().values["output.resolution"].value =
+		std::string{"syntactic_direct"};
+	native_direct.edges.front().values["output.resolution"].value = std::string{"syntactic_direct"};
+	const auto foreign_resolution = project(native_direct);
+	require(graph(foreign_resolution, "includes").state == q::semantic_graph_state::partial &&
+				graph(foreign_resolution, "types").state == q::semantic_graph_state::partial &&
+				graph(foreign_resolution, "calls").state == q::semantic_graph_state::complete,
+			"call-specific resolution promoted another relation vocabulary");
 	std::ranges::reverse(data.entities);
 	auto reordered_specs = specs;
 	std::ranges::reverse(reordered_specs);

@@ -58,6 +58,8 @@ namespace cxxlens::sdk::query
 	};
 	struct semantic_graph_edge
 	{
+		/// Preserve the observed resolution. A call-target `syntactic_direct` is
+		/// a resolved static target, without implying runtime execution or closure.
 		std::string id, from, to, kind, source_span, compile_unit, resolution;
 		std::vector<std::size_t> evidence;
 	};
