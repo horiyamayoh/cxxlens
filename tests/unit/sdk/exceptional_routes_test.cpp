@@ -297,7 +297,7 @@ namespace
 					true,
 					true};
 		}
-		q::application_query_results queries(bool sizes = false) const
+		q::application_query_results queries(bool sizes = false, bool complete = false) const
 		{
 			q::application_query_results out;
 			out.snapshot_id = "query:routes";
@@ -318,7 +318,7 @@ namespace
 					data->rows_validated = true;
 				}
 				data->status = q::execution_status::complete;
-				data->input_complete = false;
+				data->input_complete = complete;
 				data->snapshot = out.snapshot_id;
 				out.scans.push_back(
 					{std::string{names[i]}, {}, q::query_transfer_access::make(data)});
@@ -802,6 +802,150 @@ namespace
 		same_routes(
 			foreign_result, take(q::project_exceptional_routes(foreign.queries(true))), false);
 	}
+	void sampled_span_identity_controls()
+	{
+		const std::array<std::array<std::string, 2U>, 4U> identities{
+			std::array<std::string, 2U>{"D", "B"},
+			std::array<std::string, 2U>{"first:same-end", "later:same-end"},
+			std::array<std::string, 2U>{"Aé:same-end", "BĀ:same-end"},
+			std::array<std::string, 2U>{"A" + std::string(4096U, 's') + "same-end",
+										"B" + std::string(4096U, 's') + "same-end"}};
+		for (const auto& ids : identities)
+		{
+			fixture original;
+			const std::array<std::string_view, 2U> old{"span:definition", "span:body"};
+			for (auto& group : original.rows)
+				for (auto& row : group)
+					for (auto& [name, cell] : row.values)
+					{
+						(void)name;
+						if (cell.value)
+							if (auto* value = std::get_if<std::string>(&*cell.value))
+								for (std::size_t i{}; i < old.size(); ++i)
+									if (*value == old[i])
+										*value = ids[i];
+					}
+			// Distinct full IDs deliberately share length and their last eight
+			// bytes. They remain foreign candidates even on the raw input path.
+			for (unsigned i{}; i < 12U; ++i)
+			{
+				auto unrelated = original.rows[2].front();
+				auto id = ids.front();
+				id.front() = static_cast<char>('0' + i);
+				require(std::ranges::none_of(ids,
+											 [&](const auto& selected)
+											 {
+												 return id == selected;
+											 }),
+						"unrelated sampled fixture ID must differ from every selected ID");
+				set(unrelated, "span", detached_cell::utf8(id));
+				set(unrelated, "begin", detached_cell::unsigned_integer(99U));
+				set(unrelated, "end", detached_cell::unsigned_integer(100U));
+				original.rows[2].push_back(std::move(unrelated));
+			}
+			for (unsigned axis{}; axis < 3U; ++axis)
+			{
+				auto foreign = original.rows[2].front();
+				if (!axis)
+					foreign.presence.universe += ":foreign";
+				else if (axis == 1U)
+					foreign.presence.fragments.front() += ":foreign";
+				else
+					foreign.interpretation += ":foreign";
+				for (auto& edge : foreign.contributor_edges)
+				{
+					edge.condition = foreign.presence;
+					edge.interpretation = foreign.interpretation;
+				}
+				set(foreign, "begin", detached_cell::unsigned_integer(99U));
+				original.rows[2].push_back(std::move(foreign));
+			}
+			const auto input = original.queries(true, true);
+			q::projection_resource_usage measured;
+			const auto expected = take(q::project_exceptional_routes(input, {}, {}, measured));
+			require(expected.variants.size() == 1U &&
+						expected.variants.front().source_state == state::complete,
+					"sampled span buckets keep every exact ID and World axis");
+			same_routes(expected, take(q::project_exceptional_routes(original.input())), false);
+			q::finite_population_limits shared;
+			shared.evidence_ownership = q::projection_evidence_ownership::shared_immutable;
+			q::exceptional_route_projection survived;
+			{
+				const auto temporary = original.queries(true, true);
+				survived = take(q::project_exceptional_routes(temporary, shared));
+			}
+			same_routes(expected, survived);
+			auto moved = std::move(survived);
+			same_routes(expected, moved);
+			std::ranges::reverse(original.rows[2]);
+			same_routes(expected, take(q::project_exceptional_routes(original.input())), false);
+			for (const bool storage : {false, true})
+				for (const bool under : {false, true})
+				{
+					q::finite_population_limits limits;
+					if (storage)
+						limits.maximum_retained_bytes =
+							measured.retained_bytes_bound - static_cast<std::size_t>(under);
+					else
+						limits.maximum_operations =
+							measured.operations - static_cast<std::size_t>(under);
+					q::projection_resource_usage usage{1U, 1U};
+					const auto bounded = q::project_exceptional_routes(input, limits, {}, usage);
+					require(bool(bounded) == !under, "sampled span exact work/storage bounds");
+					if (bounded)
+						same_routes(expected, *bounded);
+					else
+						require(!usage.operations && !usage.retained_bytes_bound,
+								"failed sampled lookup publishes no successful usage");
+				}
+			auto missing = original;
+			std::erase_if(missing.rows[2],
+						  [&](const auto& row)
+						  {
+							  const auto& id =
+								  std::get<std::string>(*row.values.at("output.span").value);
+							  return id == ids.front();
+						  });
+			const auto absent = take(q::project_exceptional_routes(missing.queries(false, true)));
+			require(absent.variants.size() == 1U &&
+						absent.variants.front().source_state != state::complete,
+					"same suffix never replaces a missing exact source ID");
+			auto conflict = original;
+			auto contradictory = *std::ranges::find_if(
+				conflict.rows[2],
+				[&](const auto& row)
+				{
+					return row.presence.universe == "calls:test" &&
+						row.presence.fragments == std::vector<std::string>{"debug"} &&
+						row.interpretation == "clang22" &&
+						std::get<std::string>(*row.values.at("output.span").value) == ids.front();
+				});
+			set(contradictory, "begin", detached_cell::unsigned_integer(99U));
+			conflict.rows[2].push_back(std::move(contradictory));
+			const auto conflicting = take(q::project_exceptional_routes(conflict.input()));
+			require(conflicting.variants.front().source_state == state::conflicting,
+					"sampled lookup retains every conflicting full-key original");
+			q::projection_resource_usage usage{1U, 1U};
+			std::stop_source stop;
+			stop.request_stop();
+			require(!q::project_exceptional_routes(input, {}, stop.get_token(), usage) &&
+						!usage.operations && !usage.retained_bytes_bound,
+					"sampled identity lookup obeys cancellation and failure prefix");
+			same_routes(expected, take(q::project_exceptional_routes(input, {}, {}, usage)));
+			auto malformed = original;
+			auto& unused = *std::ranges::find_if(malformed.rows[2],
+												 [&](const auto& row)
+												 {
+													 const auto& id = std::get<std::string>(
+														 *row.values.at("output.span").value);
+													 return id != ids[0U] && id != ids[1U];
+												 });
+			set(unused, "span", detached_cell::utf8(std::string(1U, static_cast<char>(0xff))));
+			require(!q::project_exceptional_routes(malformed.input(), {}, {}, usage) &&
+						!usage.operations && !usage.retained_bytes_bound,
+					"unused sampled bucket cannot bypass full raw row admission");
+		}
+	}
 	void immutable_evidence_controls()
 	{
 		q::finite_population_limits shared;
@@ -1086,6 +1230,7 @@ namespace
 
 int main()
 {
+	sampled_span_identity_controls();
 	ordered_successor_evidence_controls();
 	immutable_evidence_controls();
 	routed_identity_controls();

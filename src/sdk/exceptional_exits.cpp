@@ -13,6 +13,7 @@
 #include "query_projection_plan_limits_internal.hpp"
 #include "query_projection_row_copy_internal.hpp"
 #include "query_projection_rows_internal.hpp"
+#include "query_projection_span_lookup_internal.hpp"
 #include "query_result_internal.hpp"
 namespace cxxlens::sdk::query
 {
@@ -81,7 +82,6 @@ namespace cxxlens::sdk::query
 			const auto* v = c && present(row, name) ? std::get_if<bool>(&*c->value) : nullptr;
 			return v ? std::optional{*v} : std::nullopt;
 		}
-		using identity = std::array<std::string, 4>;
 		using view_identity = std::array<std::string_view, 4>;
 		finite_population_state combine(finite_population_state a, finite_population_state b)
 		{
@@ -251,18 +251,49 @@ namespace cxxlens::sdk::query
 			budget& b;
 			exceptional_exit_input input;
 			exceptional_exit_projection output;
-			using identity_map = std::map<identity, refs, identity_less>;
+			using identity_map = detail::projection_span_lookup<budget, std::size_t>;
 			std::array<identity_map, 8> maps;
+			using ordered_entry = const identity_map::entry*;
+			std::array<std::vector<ordered_entry>, 8> ordered_maps;
 			projection(budget& limits, exceptional_exit_input rows)
-				: b(limits), input(rows), maps{identity_map{identity_less{&b}},
-											   identity_map{identity_less{&b}},
-											   identity_map{identity_less{&b}},
-											   identity_map{identity_less{&b}},
-											   identity_map{identity_less{&b}},
-											   identity_map{identity_less{&b}},
-											   identity_map{identity_less{&b}},
-											   identity_map{identity_less{&b}}}
+				: b(limits), input(rows), maps{identity_map{b},
+											   identity_map{b},
+											   identity_map{b},
+											   identity_map{b},
+											   identity_map{b},
+											   identity_map{b},
+											   identity_map{b},
+											   identity_map{b}}
 			{
+			}
+			void order_maps()
+			{
+				// Only these groups are iterated. Buckets identify candidates; the full
+				// unsigned-byte key keeps the original canonical traversal order.
+				for (const auto group : {4U, 5U, 7U})
+				{
+					b.work();
+					auto& ordered = ordered_maps[group];
+					for (const auto& [hash, alternatives] : maps[group].buckets)
+					{
+						(void)hash;
+						b.work();
+						for (const auto& candidate : alternatives)
+						{
+							b.work();
+							maps[group].append(ordered, &candidate);
+						}
+					}
+					// Pointer moves and their scratch allowance are paid separately from
+					// every actual full-key comparison.
+					b.work(2U * ordered.size() *
+						   (static_cast<std::size_t>(std::bit_width(ordered.size())) + 1U));
+					std::ranges::sort(ordered,
+									  [&](const auto* left, const auto* right)
+									  {
+										  return identity_less{&b}(left->identity, right->identity);
+									  });
+				}
 			}
 			using scope_identity = std::array<std::string, 5>;
 			struct scope_less
@@ -339,10 +370,7 @@ namespace cxxlens::sdk::query
 			const refs&
 			find(std::size_t group, std::string_view id, const exceptional_exit_population& p)
 			{
-				static const refs empty;
-				const auto at =
-					maps[group].find(view_identity{id, p.universe, p.variant, p.interpretation});
-				return at == maps[group].end() ? empty : at->second;
+				return maps[group].find(view_identity{id, p.universe, p.variant, p.interpretation});
 			}
 			void bind(refs& into, const refs& from)
 			{
@@ -624,8 +652,10 @@ namespace cxxlens::sdk::query
 				// The actual FunctionDecl range and its lexical body range differ.
 				// Only the original lowering's body FK associates the two carriers.
 				std::set<std::string_view> body_ids;
-				for (const auto& [key, original] : maps[7U])
+				for (const auto* candidate : ordered_maps[7U])
 				{
+					const auto& key = candidate->identity;
+					const auto& original = candidate->originals;
 					b.work();
 					if (!equal(key[1], p.universe) || !equal(key[2], p.variant) ||
 						!equal(key[3], p.interpretation))
@@ -700,8 +730,10 @@ namespace cxxlens::sdk::query
 			}
 			void discover()
 			{
-				for (const auto& [key, original] : maps[4U])
-					for (auto ref : original)
+				for (const auto* candidate : ordered_maps[4U])
+				{
+					const auto& key = candidate->identity;
+					for (auto ref : candidate->originals)
 					{
 						b.work();
 						const auto& r = row(ref);
@@ -729,17 +761,23 @@ namespace cxxlens::sdk::query
 							continue;
 						scope(key[0], text(r, "compile_unit"), r, key[2]);
 					}
-				for (const auto& [key, original] : maps[7U])
-					for (auto ref : original)
+				}
+				for (const auto* candidate : ordered_maps[7U])
+				{
+					const auto& key = candidate->identity;
+					for (auto ref : candidate->originals)
 					{
 						b.work();
 						const auto& r = row(ref);
 						scope(text(r, "scope_detail"), text(r, "compile_unit"), r, key[2]);
 					}
+				}
 				// A physical written body without its detail/census is an independent
 				// frontier, rather than a fabricated known-empty lowering.
-				for (const auto& [key, original] : maps[5U])
-					for (auto ref : original)
+				for (const auto* candidate : ordered_maps[5U])
+				{
+					const auto& key = candidate->identity;
+					for (auto ref : candidate->originals)
 					{
 						b.work();
 						const auto& r = row(ref);
@@ -769,6 +807,7 @@ namespace cxxlens::sdk::query
 							gap(p, p.body, "written-body-detail-missing");
 						}
 					}
+				}
 			}
 			finite_population_state expression(observed_exceptional_exit& o,
 											   exceptional_exit_population& p,
@@ -918,8 +957,10 @@ namespace cxxlens::sdk::query
 			void populate(exceptional_exit_population& p)
 			{
 				std::map<std::string_view, const refs*, std::less<>> actual;
-				for (const auto& [key, original] : maps[7U])
+				for (const auto* candidate : ordered_maps[7U])
 				{
+					const auto& key = candidate->identity;
+					const auto& original = candidate->originals;
 					b.work();
 					if (!equal(key[1], p.universe) || !equal(key[2], p.variant) ||
 						!equal(key[3], p.interpretation))
@@ -1246,8 +1287,8 @@ namespace cxxlens::sdk::query
 								  fail(relations[group], "identity-missing");
 						  });
 				}
-				std::set<view_identity, identity_less> needed_syntax{identity_less{&b}},
-					needed_sources{identity_less{&b}};
+				detail::projection_span_lookup<budget, std::size_t> needed_syntax{b},
+					needed_sources{b};
 				const auto add_needed =
 					[&](auto& into, const annotated_row& r, std::string_view field)
 				{
@@ -1257,21 +1298,19 @@ namespace cxxlens::sdk::query
 					for (const auto& variant : r.presence.fragments)
 					{
 						const view_identity key{id, r.presence.universe, variant, r.interpretation};
-						if (!into.contains(key))
-						{
-							b.retain(sizeof(view_identity) + 128U);
-							into.insert(key);
-						}
+						if (into.find(key).empty())
+							into.add(key, 0U);
 					}
 				};
 				const auto selected =
-					[&](const auto& from, const annotated_row& r, std::string_view field)
+					[&](auto& from, const annotated_row& r, std::string_view field)
 				{
 					const auto id = text(r, field);
 					for (const auto& variant : r.presence.fragments)
 					{
-						if (from.contains(
-								view_identity{id, r.presence.universe, variant, r.interpretation}))
+						if (!from.find(view_identity{
+										   id, r.presence.universe, variant, r.interpretation})
+								 .empty())
 							return true;
 					}
 					return false;
@@ -1478,17 +1517,16 @@ namespace cxxlens::sdk::query
 					{
 						b.work();
 						const auto id = text(*e.original, identifiers[e.group]);
-						b.retain(sizeof(identity) + sizeof(ref) + 512U +
-								 2U *
-									 (id.size() + e.original->presence.universe.size() +
-									  variant.size() + e.original->interpretation.size()));
-						work.maps[e.group][identity{std::string{id},
-													e.original->presence.universe,
-													variant,
-													e.original->interpretation}]
-							.push_back(ref);
+						// These views borrow stable input rows for the duration of projection.
+						// Detached output evidence may relocate while it is being appended.
+						work.maps[e.group].add(view_identity{id,
+															 e.original->presence.universe,
+															 variant,
+															 e.original->interpretation},
+											   ref);
 					}
 				}
+				work.order_maps();
 				work.finish();
 				return std::move(work.output);
 			}

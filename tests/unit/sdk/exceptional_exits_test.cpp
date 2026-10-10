@@ -660,7 +660,7 @@ namespace
 				suffix.insert(suffix.begin(), '0');
 			set(row,
 				"span",
-				detached_cell::utf8(std::string(common_bytes, 's') + "unused" + suffix));
+				detached_cell::utf8(std::string(common_bytes - 2U, 's') + suffix + "source:A"));
 			long_prefix.rows[2].push_back(std::move(row));
 		}
 		auto early_prefix = long_prefix;
@@ -693,11 +693,12 @@ namespace
 					"unreferenced prefix decoys changed selected original evidence");
 		require(measured.retained_bytes_bound == early_usage.retained_bytes_bound,
 				"visited-prefix work changed selected owned/index/temporary storage");
-		// Each unreferenced span must compare against a needed source key before
-		// being excluded. Equal-size decoys keep validation and output work equal;
-		// only the actual lookup can inspect their shared unsigned-byte prefix.
+		// Every decoy deliberately has the same size and final eight bytes as a
+		// needed source. Candidate filtering must still compare complete IDs before
+		// excluding it; equal-size decoys keep validation and output work equal.
 		require(measured.operations > early_usage.operations &&
-					measured.operations - early_usage.operations >= 2U * common_bytes * decoy_count,
+					measured.operations - early_usage.operations >=
+						2U * (common_bytes - 2U) * decoy_count,
 				"needed-source lookup did not charge its actually visited identity "
 				"prefix");
 		limits.cancelled = {};
@@ -1061,6 +1062,58 @@ namespace
 		}
 	}
 
+	void colliding_identity_controls()
+	{
+		fixture original;
+		const std::array old_ids{"span:scope",
+								 "span:throw",
+								 "span:body",
+								 "syntax:throw",
+								 "function:a",
+								 "detail:a",
+								 "body:a",
+								 "exit:throw",
+								 "exit:helper"};
+		std::array<std::string, old_ids.size()> ids;
+		for (std::size_t i{}; i < ids.size(); ++i)
+			ids[i] = std::string(120U, static_cast<char>('a' + i)) + "same:end";
+		for (auto& group : original.rows)
+			for (auto& row : group)
+				for (auto& [name, cell] : row.values)
+				{
+					(void)name;
+					if (!cell.value)
+						continue;
+					if (auto* value = std::get_if<std::string>(&*cell.value))
+						for (std::size_t i{}; i < ids.size(); ++i)
+							if (*value == old_ids[i])
+								*value = ids[i];
+				}
+		// Census byte sets must refer to the remapped complete exit identities.
+		original.census();
+		const auto raw = take(q::project_exceptional_exits(original.input()));
+		require(population(raw).state == state::complete && raw.populations.size() == 1U,
+				"equal-size/equal-suffix IDs merged independent source or exit membership");
+		q::finite_population_limits shared;
+		shared.evidence_ownership = q::projection_evidence_ownership::shared_immutable;
+		q::projection_resource_usage used, repeated;
+		const auto native = original.queries(true, true);
+		const auto projected = take(q::project_exceptional_exits(native, shared, {}, used));
+		complete_projection_parity(take(q::project_exceptional_exits(native)), projected);
+		for (auto& group : original.rows)
+			std::ranges::reverse(group);
+		complete_projection_parity(raw, take(q::project_exceptional_exits(original.input())));
+		shared.maximum_operations = used.operations;
+		shared.maximum_retained_bytes = used.retained_bytes_bound;
+		complete_projection_parity(
+			projected, take(q::project_exceptional_exits(native, shared, {}, repeated)));
+		--shared.maximum_operations;
+		const auto failed = q::project_exceptional_exits(native, shared, {}, repeated);
+		require(!failed && failed.error().code == "sdk.exceptional-exit-budget" &&
+					!repeated.operations && !repeated.retained_bytes_bound,
+				"colliding candidates ignored one-under work or exposed a partial projection");
+	}
+
 	void immutable_evidence_controls()
 	{
 		q::finite_population_limits shared_limits;
@@ -1300,6 +1353,7 @@ namespace
 int main(int argc, char** argv)
 {
 	immutable_evidence_controls();
+	colliding_identity_controls();
 	canonical_prefix_controls();
 	canonical_prefix_locale_controls();
 	if (argc == 2)

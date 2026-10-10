@@ -43,7 +43,14 @@ namespace cxxlens::sdk::query::detail
 		{
 			meter.work();
 			std::uint64_t value = 14695981039346656037ULL;
-			for (std::size_t i{}; i < id.size(); ++i)
+			// Buckets only narrow the candidates. Complete four-axis byte equality
+			// below admits every row, including arbitrary IDs with equal suffixes.
+			meter.work(2U);
+			value ^= static_cast<std::uint64_t>(id.size());
+			value *= 1099511628211ULL;
+			meter.work();
+			const auto start = id.size() > 8U ? id.size() - 8U : 0U;
+			for (std::size_t i = start; i < id.size(); ++i)
 			{
 				meter.work(2U);
 				value ^= static_cast<unsigned char>(id[i]);

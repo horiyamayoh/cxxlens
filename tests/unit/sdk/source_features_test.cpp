@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <tuple>
@@ -2083,8 +2084,344 @@ namespace
 	}
 } // namespace
 
+namespace
+{
+	fixture sampled_supporting_fixture(std::string_view prefix)
+	{
+		const auto original_id = [&](std::string_view group, char variant)
+		{
+			if (prefix == "short")
+				return std::string(1U, variant);
+			return std::string{group} + ":" + std::string{prefix} + ":" + variant + ":01234567";
+		};
+		std::array<fixture, 2U> members;
+		std::array<std::map<std::string, std::string, std::less<>>, 2U> ids;
+		for (std::size_t member{}; member < members.size(); ++member)
+		{
+			const auto variant = member ? 'z' : 'a';
+			for (const auto& [short_id, group] :
+				 std::array<std::pair<std::string_view, std::string_view>, 8U>{
+					 {{"F", "file"},
+					  {"P", "snapshot"},
+					  {"S", "span"},
+					  {"E", "entity"},
+					  {"D", "declaration"},
+					  {"T", "type"},
+					  {"N", "node"},
+					  {"X", "feature"}}})
+				ids[member].emplace(short_id, original_id(group, variant));
+			for (auto& group : members[member].rows)
+				for (auto& row : group)
+					for (auto& [name, cell] : row.values)
+					{
+						(void)name;
+						if (!cell.value)
+							continue;
+						if (auto* value = std::get_if<std::string>(&*cell.value))
+							if (const auto changed = ids[member].find(*value);
+								changed != ids[member].end())
+								*value = changed->second;
+					}
+			set(members[member].rows[8].front(), "ordinal", num(member));
+			set(members[member].rows[8].front(), "original_node_ordinal", num(member));
+		}
+		fixture result = std::move(members.front());
+		for (const std::size_t group : {1U, 2U, 3U, 4U, 6U, 7U, 8U})
+			result.rows[group].push_back(std::move(members[1U].rows[group].front()));
+		set(result.rows[5].front(), "declaration_count", num(2U));
+		set(result.rows[5].front(),
+			"declarations",
+			symbol_values({ids[0U].at("D"), ids[1U].at("D")}));
+		set(result.rows[9].front(), "feature_count", num(2U));
+		set(result.rows[9].front(),
+			"feature_ids",
+			symbol_values({ids[0U].at("X"), ids[1U].at("X")}));
+		set(result.rows[9].front(), "entered_file_count", num(2U));
+		set(result.rows[9].front(),
+			"entered_file_ids",
+			symbol_values({ids[0U].at("F"), ids[1U].at("F")}));
+		set(result.rows[9].front(),
+			"entered_source_snapshots",
+			symbol_values({ids[0U].at("P"), ids[1U].at("P")}));
+		set(result.rows[9][1U], "feature_ids", symbol_values({ids[0U].at("X")}));
+		set(members[1U].rows[9][1U], "feature_ids", symbol_values({ids[1U].at("X")}));
+		set(members[1U].rows[9][1U], "inventory", txt("FI:second"));
+		result.rows[9].push_back(std::move(members[1U].rows[9][1U]));
+		return result;
+	}
+
+	void sampled_supporting_lookup_controls()
+	{
+		const auto identifier = [](const q::annotated_row& row, std::string_view column)
+		{
+			return std::get<std::string>(*row.values.at("output." + std::string{column}).value);
+		};
+		constexpr std::array<std::pair<std::size_t, std::string_view>, 7U> groups{
+			{{1U, "snapshot"},
+			 {2U, "span"},
+			 {3U, "entity"},
+			 {4U, "declaration"},
+			 {6U, "type"},
+			 {7U, "node"},
+			 {8U, "feature"}}};
+		for (const auto& prefix :
+			 {std::string{"short"}, std::string{}, std::string{"日本語"}, std::string(1024U, 'p')})
+		{
+			auto original = sampled_supporting_fixture(prefix);
+			for (const auto& [group, column] : groups)
+			{
+				const auto left = identifier(original.rows[group][0U], column);
+				const auto right = identifier(original.rows[group][1U], column);
+				require(left != right && left.size() == right.size() &&
+							(left.size() <= 8U ||
+							 left.substr(left.size() - 8U) == right.substr(right.size() - 8U)),
+						"sampled lookup fixture lacks distinct full IDs in the same suffix bucket");
+				if (group == 8U)
+					continue;
+				for (const unsigned axis : {0U, 1U, 2U})
+				{
+					auto foreign = original.rows[group].front();
+					if (axis == 0U)
+					{
+						foreign.presence.universe = "foreign:universe";
+						foreign.contributor_edges.front().condition.universe =
+							foreign.presence.universe;
+					}
+					else if (axis == 1U)
+					{
+						foreign.presence.fragments = {"foreign:variant"};
+						foreign.contributor_edges.front().condition.fragments =
+							foreign.presence.fragments;
+					}
+					else
+					{
+						foreign.interpretation = "foreign:interpretation";
+						foreign.contributor_edges.front().interpretation = foreign.interpretation;
+					}
+					if (group == 1U)
+						set(foreign, "size", num(8U));
+					else if (group == 2U)
+						set(foreign, "begin", num(1U));
+					else if (group == 3U)
+						set(foreign, "kind", txt("variable"));
+					else if (group == 4U)
+						set(foreign, "source", txt("foreign:source"));
+					else if (group == 6U)
+						set(foreign, "constructor", txt("pointer"));
+					else
+						set(foreign, "kind", txt("DeclRefExpr"));
+					original.rows[group].push_back(std::move(foreign));
+				}
+			}
+			const auto input = original.queries(true, true);
+			q::projection_resource_usage measured;
+			const auto detached = take(q::project_source_features(input, {}, {}, measured));
+			require(detached.features.size() == 2U && detached.populations.size() == 3U &&
+						std::ranges::all_of(detached.features,
+											[](const auto& feature)
+											{
+												return feature.identity_state == state::complete &&
+													feature.source_state == state::complete &&
+													feature.context_state == state::complete &&
+													feature.entity_state == state::complete &&
+													feature.call_state == state::complete &&
+													feature.type_state == state::complete &&
+													feature.syntax_state == state::complete;
+											}) &&
+						std::ranges::all_of(detached.populations,
+											[](const auto& population)
+											{
+												return population.membership_state ==
+													state::complete &&
+													population.entry_state == state::complete &&
+													population.source_state == state::complete;
+											}),
+					"sample collisions or foreign worlds changed fully bound original tuples");
+			for (const auto& feature : detached.features)
+				for (const auto& [group, column, expected] :
+					 std::array<std::tuple<std::size_t, std::string_view, std::string_view>, 6U>{
+						 {{1U, "snapshot", feature.source_snapshot},
+						  {2U, "span", feature.source_span},
+						  {3U, "entity", feature.subject_entity},
+						  {4U, "declaration", feature.context_declaration},
+						  {6U, "type", feature.subject_type},
+						  {7U, "node", feature.syntax}}})
+				{
+					bool found{};
+					for (const auto index : feature.evidence)
+					{
+						const auto& evidence = detached.evidence.at(index);
+						if (evidence.relation_id != names[group])
+							continue;
+						const auto& row = evidence.original_row();
+						require(identifier(row, column) == expected &&
+									row.presence.universe == feature.universe &&
+									row.presence.fragments ==
+										std::vector<std::string>{feature.variant} &&
+									row.interpretation == feature.interpretation,
+								"sample collision borrowed another full ID or World as supporting "
+								"evidence");
+						found = true;
+					}
+					require(found,
+							"sample collision lost the requested original supporting evidence");
+				}
+			for (const auto& population : detached.populations)
+			{
+				std::vector<std::string> members;
+				for (const auto index : population.features)
+				{
+					const auto& feature = detached.features.at(index);
+					members.push_back(feature.feature);
+					require(
+						std::ranges::find(population.feature_ids, feature.feature) !=
+								population.feature_ids.end() &&
+							feature.universe == population.universe &&
+							feature.variant == population.variant &&
+							feature.interpretation == population.interpretation &&
+							(population.scope == "translation_unit" ||
+							 (feature.file == population.file &&
+							  feature.source_snapshot == population.source_snapshot)),
+						"sampled feature index borrowed an unrelated population member or World");
+				}
+				std::ranges::sort(members);
+				require(
+					members == population.feature_ids,
+					"sampled feature index duplicated or omitted an original population member");
+			}
+			const auto complete = membership_projection_form(detached);
+			const auto raw = take(q::project_source_features(original.input()));
+			require(membership_projection_form(raw, false) ==
+						membership_projection_form(detached, false),
+					"sample collisions changed raw/default complete DTO or original evidence");
+			q::finite_population_limits shared_limits;
+			shared_limits.evidence_ownership = q::projection_evidence_ownership::shared_immutable;
+			q::source_feature_projection survived;
+			{
+				const auto temporary = original.queries(true, true);
+				survived = take(q::project_source_features(temporary, shared_limits));
+			}
+			require(
+				membership_projection_form(survived) == complete,
+				"sample collisions changed shared DTO/evidence/source queries after owner expiry");
+			survived.source_queries.reset();
+			auto copied = survived;
+			survived = {};
+			auto moved = std::move(copied);
+			require(membership_projection_form(moved, false) ==
+						membership_projection_form(detached, false),
+					"sampled lookup depended on expired query, copied or moved projection owners");
+			for (auto& group : original.rows)
+				std::ranges::reverse(group);
+			const auto reordered_input = original.queries(true, true);
+			const auto reordered = take(q::project_source_features(reordered_input));
+			require(
+				membership_projection_form(reordered, false) ==
+					membership_projection_form(detached, false),
+				"sampled buckets changed deterministic complete DTO or canonical evidence order");
+			require(reordered.source_queries &&
+						reordered.source_queries->scans.size() == reordered_input.scans.size(),
+					"sampled lookup lost reordered original source queries");
+			for (std::size_t i{}; i < reordered_input.scans.size(); ++i)
+				require(reordered.source_queries->scans[i].result.canonical_form() ==
+							reordered_input.scans[i].result.canonical_form(),
+						"sampled lookup altered complete reordered original queries");
+			auto missing = sampled_supporting_fixture(prefix);
+			const auto absent = prefix == "short"
+				? std::string{"m"}
+				: std::string{"feature:"} + prefix + ":m:01234567";
+			for (auto& inventory : missing.rows[9])
+			{
+				const bool unit = identifier(inventory, "scope") == "translation_unit";
+				set(inventory,
+					"feature_ids",
+					symbol_values(
+						unit ? std::vector<std::string>{absent,
+														identifier(missing.rows[8][1U], "feature")}
+							 : std::vector<std::string>{absent}));
+			}
+			const auto incomplete = take(q::project_source_features(missing.queries(true, true)));
+			require(incomplete.features.size() == 2U &&
+						std::ranges::all_of(incomplete.populations,
+											[](const auto& population)
+											{
+												return population.membership_state !=
+													state::complete;
+											}),
+					"unlisted full ID borrowed membership from a same-suffix original feature");
+			for (const auto& population : incomplete.populations)
+			{
+				require(
+					population.features.size() ==
+						(population.scope == "translation_unit" ? 1U : 0U),
+					"absent sampled feature key retained an unrelated original feature reference");
+				for (const auto index : population.features)
+					require(std::ranges::find(population.feature_ids,
+											  incomplete.features.at(index).feature) !=
+								population.feature_ids.end(),
+							"same-suffix absent key borrowed an unlisted feature reference");
+			}
+			for (const bool storage : {false, true})
+				for (const bool one_under : {false, true})
+				{
+					q::finite_population_limits limits;
+					if (storage)
+						limits.maximum_retained_bytes =
+							measured.retained_bytes_bound - static_cast<std::size_t>(one_under);
+					else
+						limits.maximum_operations =
+							measured.operations - static_cast<std::size_t>(one_under);
+					q::projection_resource_usage usage{1U, 1U};
+					const auto bounded = q::project_source_features(input, limits, {}, usage);
+					require(static_cast<bool>(bounded) == !one_under,
+							"sample collision lookup ignored exact/one-under work or storage");
+					if (bounded)
+						require(membership_projection_form(*bounded) == complete &&
+									usage.operations == measured.operations &&
+									usage.retained_bytes_bound == measured.retained_bytes_bound,
+								"bounded sampled lookup changed complete DTO or measured usage");
+					else
+						require(!usage.operations && !usage.retained_bytes_bound,
+								"failed sampled lookup published successful usage");
+				}
+			std::size_t checkpoints{};
+			q::finite_population_limits counted;
+			counted.cancelled = [&]
+			{
+				++checkpoints;
+				return false;
+			};
+			require(bool(q::project_source_features(input, counted)) && checkpoints > 2U,
+					"sample collision checkpoint census failed");
+			std::size_t visited{};
+			std::stop_source stop;
+			q::finite_population_limits interrupted;
+			interrupted.cancelled = [&]
+			{
+				if (++visited == checkpoints / 2U)
+					stop.request_stop();
+				return false;
+			};
+			q::projection_resource_usage failed{1U, 1U};
+			const auto stopped =
+				q::project_source_features(input, interrupted, stop.get_token(), failed);
+			require(!stopped && stopped.error().code == "sdk.source-feature-cancelled" &&
+						visited == checkpoints / 2U && !failed.operations &&
+						!failed.retained_bytes_bound,
+					"real sampled-lookup stop escaped checkpoints or published failed usage");
+			q::projection_resource_usage retried;
+			const auto retry = take(q::project_source_features(input, {}, {}, retried));
+			require(membership_projection_form(retry) == complete &&
+						retried.operations == measured.operations &&
+						retried.retained_bytes_bound == measured.retained_bytes_bound,
+					"sampled lookup fresh retry inherited partial buckets or failed output");
+		}
+	}
+} // namespace
+
 int main()
 {
+	sampled_supporting_lookup_controls();
 	collision_membership_controls();
 	immutable_evidence_controls();
 	{

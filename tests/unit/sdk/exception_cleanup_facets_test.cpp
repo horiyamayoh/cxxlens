@@ -339,6 +339,273 @@ namespace
 						"specification-only query side channels match full API");
 		}
 	}
+	auto sampled_cleanup_fields(const q::observed_cleanup_emission& r)
+	{
+		return std::tie(r.exit,
+						r.lowering_variant,
+						r.scope_detail,
+						r.function,
+						r.compile_unit,
+						r.body,
+						r.definition_source,
+						r.universe,
+						r.variant,
+						r.interpretation,
+						r.declaration,
+						r.object,
+						r.declaration_source,
+						r.route,
+						r.profile,
+						r.target,
+						r.target_profile,
+						r.target_usr,
+						r.registration_ordinal,
+						r.emission_ordinal,
+						r.target_dtor_type,
+						r.emitter_methods,
+						r.destructor_target_excluded,
+						r.emission_state,
+						r.registration_state,
+						r.scope_state,
+						r.definition_source_state,
+						r.declaration_state,
+						r.declaration_source_state,
+						r.target_attribution_state,
+						r.target_state,
+						r.evidence,
+						r.gaps);
+	}
+	template <class Projection>
+	void same_sampled_cleanup(const Projection& expected,
+							  const Projection& actual,
+							  bool query_owners = true)
+	{
+		require(std::tie(expected.compile_units_complete,
+						 expected.detail_inputs_complete,
+						 expected.exit_inputs_complete,
+						 expected.declaration_inputs_complete,
+						 expected.unresolved) ==
+					std::tie(actual.compile_units_complete,
+							 actual.detail_inputs_complete,
+							 actual.exit_inputs_complete,
+							 actual.declaration_inputs_complete,
+							 actual.unresolved),
+				"sampled cleanup preserves every coverage and unresolved field");
+		require(expected.specifications.size() == actual.specifications.size(),
+				"sampled cleanup preserves every specification");
+		for (std::size_t i{}; i < expected.specifications.size(); ++i)
+			require(specification_fields(expected.specifications[i]) ==
+						specification_fields(actual.specifications[i]),
+					"sampled cleanup preserves full specification fields and references");
+		if constexpr (requires { expected.cleanups; })
+		{
+			require(expected.cleanups.size() == actual.cleanups.size(),
+					"sampled cleanup preserves every observed emission");
+			for (std::size_t i{}; i < expected.cleanups.size(); ++i)
+				require(sampled_cleanup_fields(expected.cleanups[i]) ==
+							sampled_cleanup_fields(actual.cleanups[i]),
+						"sampled cleanup preserves every emission field/state/reference/gap");
+		}
+		require(expected.evidence.size() == actual.evidence.size(),
+				"sampled cleanup preserves all original row owners");
+		for (std::size_t i{}; i < expected.evidence.size(); ++i)
+			require(expected.evidence[i].relation_id == actual.evidence[i].relation_id &&
+						expected.evidence[i].original_row().canonical_form() ==
+							actual.evidence[i].original_row().canonical_form(),
+					"sampled cleanup preserves complete raw annotations in canonical order");
+		if (!query_owners)
+			return;
+		require(bool(expected.source_queries) == bool(actual.source_queries),
+				"sampled cleanup preserves query owner presence");
+		if (!expected.source_queries)
+			return;
+		require(expected.source_queries->snapshot_id == actual.source_queries->snapshot_id &&
+					expected.source_queries->scans.size() == actual.source_queries->scans.size(),
+				"sampled cleanup preserves the complete query set");
+		for (std::size_t i{}; i < expected.source_queries->scans.size(); ++i)
+		{
+			const auto& left = expected.source_queries->scans[i];
+			const auto& right = actual.source_queries->scans[i];
+			require(left.relation_id == right.relation_id && left.logical_ir == right.logical_ir &&
+						left.result.canonical_form() == right.result.canonical_form(),
+					"sampled cleanup preserves every original query side channel");
+		}
+	}
+	void sampled_span_identity_controls()
+	{
+		const std::array<std::array<std::string, 3U>, 4U> identities{
+			std::array<std::string, 3U>{"D", "B", "O"},
+			std::array<std::string, 3U>{"first:same-end", "later:same-end", "third:same-end"},
+			std::array<std::string, 3U>{"Aé:same-end", "BĀ:same-end", "Cÿ:same-end"},
+			std::array<std::string, 3U>{"A" + std::string(4096U, 's') + "same-end",
+										"B" + std::string(4096U, 's') + "same-end",
+										"C" + std::string(4096U, 's') + "same-end"}};
+		for (const auto& ids : identities)
+		{
+			fixture original;
+			const std::array<std::string_view, 3U> old{
+				"span:definition", "span:body", "span:object"};
+			for (auto& group : original.rows)
+				for (auto& row : group)
+					for (auto& [name, cell] : row.values)
+					{
+						(void)name;
+						if (cell.value)
+							if (auto* value = std::get_if<std::string>(&*cell.value))
+								for (std::size_t i{}; i < old.size(); ++i)
+									if (*value == old[i])
+										*value = ids[i];
+					}
+			for (unsigned i{}; i < 12U; ++i)
+			{
+				auto unrelated = original.rows[2].front();
+				auto id = ids.front();
+				id.front() = static_cast<char>('0' + i);
+				require(std::ranges::none_of(ids,
+											 [&](const auto& selected)
+											 {
+												 return id == selected;
+											 }),
+						"unrelated sampled fixture ID must differ from every selected ID");
+				set(unrelated, "span", detached_cell::utf8(id));
+				set(unrelated, "begin", detached_cell::unsigned_integer(99U));
+				set(unrelated, "end", detached_cell::unsigned_integer(100U));
+				original.rows[2].push_back(std::move(unrelated));
+			}
+			for (unsigned axis{}; axis < 3U; ++axis)
+			{
+				auto foreign = original.rows[2].front();
+				if (!axis)
+					foreign.presence.universe += ":foreign";
+				else if (axis == 1U)
+					foreign.presence.fragments.front() += ":foreign";
+				else
+					foreign.interpretation += ":foreign";
+				for (auto& edge : foreign.contributor_edges)
+				{
+					edge.condition = foreign.presence;
+					edge.interpretation = foreign.interpretation;
+				}
+				set(foreign, "begin", detached_cell::unsigned_integer(99U));
+				original.rows[2].push_back(std::move(foreign));
+			}
+			const auto input = original.queries(true, true);
+			q::projection_resource_usage full_usage, narrow_usage;
+			const auto expected =
+				take(q::project_exception_cleanup_facets(input, {}, {}, full_usage));
+			const auto narrow =
+				take(q::project_function_exception_specifications(input, {}, {}, narrow_usage));
+			require(spec(expected).source_state == state::complete &&
+						cleanup(expected).definition_source_state == state::complete &&
+						cleanup(expected).declaration_source_state == state::complete,
+					"sampled suffix collision never borrows a foreign full ID or World");
+			same_sampled_cleanup(
+				expected, take(q::project_exception_cleanup_facets(original.input())), false);
+			same_sampled_cleanup(
+				narrow,
+				take(q::project_function_exception_specifications(original.input())),
+				false);
+			q::finite_population_limits shared;
+			shared.evidence_ownership = q::projection_evidence_ownership::shared_immutable;
+			q::exception_cleanup_projection survived;
+			{
+				const auto temporary = original.queries(true, true);
+				survived = take(q::project_exception_cleanup_facets(temporary, shared));
+			}
+			same_sampled_cleanup(expected, survived);
+			auto moved = std::move(survived);
+			same_sampled_cleanup(expected, moved);
+			std::ranges::reverse(original.rows[2]);
+			same_sampled_cleanup(
+				expected, take(q::project_exception_cleanup_facets(original.input())), false);
+			same_sampled_cleanup(
+				narrow,
+				take(q::project_function_exception_specifications(original.input())),
+				false);
+			for (const bool specifications : {false, true})
+				for (const bool storage : {false, true})
+					for (const bool under : {false, true})
+					{
+						const auto& measured = specifications ? narrow_usage : full_usage;
+						q::finite_population_limits limits;
+						if (storage)
+							limits.maximum_retained_bytes =
+								measured.retained_bytes_bound - static_cast<std::size_t>(under);
+						else
+							limits.maximum_operations =
+								measured.operations - static_cast<std::size_t>(under);
+						q::projection_resource_usage usage{1U, 1U};
+						if (specifications)
+						{
+							const auto bounded = q::project_function_exception_specifications(
+								input, limits, {}, usage);
+							require(bool(bounded) == !under,
+									"sampled specs exact work/storage bounds");
+							if (bounded)
+								same_sampled_cleanup(narrow, *bounded);
+						}
+						else
+						{
+							const auto bounded =
+								q::project_exception_cleanup_facets(input, limits, {}, usage);
+							require(bool(bounded) == !under,
+									"sampled cleanup exact work/storage bounds");
+							if (bounded)
+								same_sampled_cleanup(expected, *bounded);
+						}
+						if (under)
+							require(!usage.operations && !usage.retained_bytes_bound,
+									"failed sampled lookup publishes no successful usage");
+					}
+			auto missing = original;
+			std::erase_if(missing.rows[2],
+						  [&](const auto& row)
+						  {
+							  return std::get<std::string>(*row.values.at("output.span").value) ==
+								  ids.front();
+						  });
+			const auto absent = take(q::project_exception_cleanup_facets(missing.queries()));
+			require(spec(absent).source_state != state::complete,
+					"same suffix never replaces a missing exact specification source");
+			auto conflict = original;
+			auto contradictory = *std::ranges::find_if(
+				conflict.rows[2],
+				[&](const auto& row)
+				{
+					return row.presence.universe == "calls:test" &&
+						row.presence.fragments == std::vector<std::string>{"debug"} &&
+						row.interpretation == "clang22" &&
+						std::get<std::string>(*row.values.at("output.span").value) == ids.front();
+				});
+			set(contradictory, "begin", detached_cell::unsigned_integer(99U));
+			conflict.rows[2].push_back(std::move(contradictory));
+			const auto conflicting = take(q::project_exception_cleanup_facets(conflict.input()));
+			require(spec(conflicting).source_state == state::conflicting,
+					"sampled lookup retains every contradictory full-key source row");
+			q::projection_resource_usage usage{1U, 1U};
+			std::stop_source stop;
+			stop.request_stop();
+			require(
+				!q::project_function_exception_specifications(input, {}, stop.get_token(), usage) &&
+					!usage.operations && !usage.retained_bytes_bound,
+				"sampled specification lookup obeys cancellation and failure prefix");
+			same_sampled_cleanup(
+				narrow, take(q::project_function_exception_specifications(input, {}, {}, usage)));
+			auto malformed = original;
+			auto& unused = *std::ranges::find_if(
+				malformed.rows[2],
+				[&](const auto& row)
+				{
+					const auto& id = std::get<std::string>(*row.values.at("output.span").value);
+					return id != ids[0U] && id != ids[1U] && id != ids[2U];
+				});
+			set(unused, "span", detached_cell::utf8(std::string(1U, static_cast<char>(0xff))));
+			require(
+				!q::project_function_exception_specifications(malformed.input(), {}, {}, usage) &&
+					!usage.operations && !usage.retained_bytes_bound,
+				"unused sampled source never bypasses full specification input admission");
+		}
+	}
 	void ordered_identity_evidence_controls()
 	{
 		for (unsigned disposition{}; disposition < 5U; ++disposition)
@@ -677,6 +944,7 @@ int main(int argc, char** argv)
 		return 0;
 	}
 
+	sampled_span_identity_controls();
 	ordered_identity_evidence_controls();
 	specification_only_controls();
 
